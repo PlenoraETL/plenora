@@ -59,8 +59,16 @@ function QueryPreview({ nodes, edges, validationErrors = [] }) {
       lines.push(selectColumns.join(',\n'));
     }
 
-    // FROM clause
-    const firstNode = nodes[0];
+    // FROM clause - trova la prima tabella (nodo senza edges in ingresso da altre tabelle)
+    const tableNodes = nodes.filter(n => n.type === 'tableNode');
+    const targetNodeIds = new Set(edges.filter(e => {
+      const targetNode = nodes.find(n => n.id === e.target);
+      return targetNode?.type === 'tableNode';
+    }).map(e => e.target));
+    
+    // Prima tabella = quella che non è target di nessun join (o la prima se tutte sono target)
+    const firstNode = tableNodes.find(n => !targetNodeIds.has(n.id)) || tableNodes[0];
+    
     if (firstNode) {
       const fromTable = firstNode.data.table_name;
       const fromAlias = firstNode.data.alias;
@@ -77,6 +85,7 @@ function QueryPreview({ nodes, edges, validationErrors = [] }) {
         return;
       }
 
+      // Skip se target è il nodo risultato
       if (targetNode.type === 'resultNode') {
         return;
       }
@@ -87,16 +96,37 @@ function QueryPreview({ nodes, edges, validationErrors = [] }) {
       const sourceTableName = sourceNode.data.alias || sourceNode.data.table_name;
       const targetTableName = targetNode.data.alias || targetNode.data.table_name;
       
-      const sourceCol = edge.data?.source_column;
-      const targetCol = edge.data?.target_column;
-
-      if (!sourceCol || !targetCol) {
-        errors.push(`⚠️ Join incompleto: ${sourceTableName} → ${targetTableName}`);
+      // ✅ Controlla se è un join spaziale
+      const isSpatial = edge.data?.is_spatial || false;
+      
+      if (isSpatial) {
+        // Join spaziale
+        const spatialPredicate = edge.data?.spatial_predicate || 'ST_Intersects';
+        const sourceGeomCol = edge.data?.source_geom_column || 'geom';
+        const targetGeomCol = edge.data?.target_geom_column || 'geom';
+        const spatialDistance = edge.data?.spatial_distance;
+        
         lines.push(`${joinType} JOIN ${targetTable}${targetAlias ? ` AS ${targetAlias}` : ''}`);
-        lines.push(`  ON ... -- CONFIGURAZIONE JOIN MANCANTE`);
+        
+        // Costruisci la condizione spaziale
+        if (spatialPredicate === 'ST_DWithin' && spatialDistance) {
+          lines.push(`  ON ${spatialPredicate}(${sourceTableName}.${sourceGeomCol}, ${targetTableName}.${targetGeomCol}, ${spatialDistance})`);
+        } else {
+          lines.push(`  ON ${spatialPredicate}(${sourceTableName}.${sourceGeomCol}, ${targetTableName}.${targetGeomCol})`);
+        }
       } else {
-        lines.push(`${joinType} JOIN ${targetTable}${targetAlias ? ` AS ${targetAlias}` : ''}`);
-        lines.push(`  ON ${sourceTableName}.${sourceCol} = ${targetTableName}.${targetCol}`);
+        // Join normale (attributi)
+        const sourceCol = edge.data?.source_column;
+        const targetCol = edge.data?.target_column;
+
+        if (!sourceCol || !targetCol) {
+          errors.push(`⚠️ Join incompleto: ${sourceTableName} → ${targetTableName}`);
+          lines.push(`${joinType} JOIN ${targetTable}${targetAlias ? ` AS ${targetAlias}` : ''}`);
+          lines.push(`  ON ... -- CONFIGURAZIONE JOIN MANCANTE`);
+        } else {
+          lines.push(`${joinType} JOIN ${targetTable}${targetAlias ? ` AS ${targetAlias}` : ''}`);
+          lines.push(`  ON ${sourceTableName}.${sourceCol} = ${targetTableName}.${targetCol}`);
+        }
       }
     });
 
@@ -233,7 +263,13 @@ function QueryPreview({ nodes, edges, validationErrors = [] }) {
  * Syntax highlighting per SQL
  */
 function highlightSQL(sql) {
-  const keywords = ['SELECT', 'FROM', 'LEFT', 'RIGHT', 'INNER', 'OUTER', 'FULL', 'JOIN', 'ON', 'AS', 'WHERE', 'GROUP BY', 'ORDER BY', 'LIMIT', 'DISTINCT'];
+  const keywords = [
+    'SELECT', 'FROM', 'LEFT', 'RIGHT', 'INNER', 'OUTER', 'FULL', 'JOIN', 'ON', 'AS', 
+    'WHERE', 'GROUP BY', 'ORDER BY', 'LIMIT', 'DISTINCT',
+    // Funzioni spaziali PostGIS
+    'ST_Intersects', 'ST_Contains', 'ST_Within', 'ST_Touches', 'ST_Crosses', 
+    'ST_Overlaps', 'ST_DWithin', 'ST_Distance', 'ST_Buffer', 'ST_Centroid'
+  ];
   
   const lines = sql.split('\n');
   
@@ -244,9 +280,9 @@ function highlightSQL(sql) {
       const newParts = [];
       parts.forEach(part => {
         if (typeof part === 'string') {
-          const segments = part.split(new RegExp(`\\b(${keyword})\\b`, 'g'));
+          const segments = part.split(new RegExp(`\\b(${keyword})\\b`, 'gi'));
           segments.forEach((segment, i) => {
-            if (segment === keyword) {
+            if (segment.toUpperCase() === keyword.toUpperCase()) {
               newParts.push(
                 <span key={`${lineIdx}-${keyword}-${i}`} className="query-preview__sql-keyword">
                   {segment}

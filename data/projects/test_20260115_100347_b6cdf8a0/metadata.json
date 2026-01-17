@@ -5,7 +5,7 @@
   "project_type": "estrai",
   "default_connection_id": "catasto_20260112_094442_0da4f765",
   "created_at": "2026-01-15T10:03:47.776122",
-  "updated_at": "2026-01-15T11:06:00.186878",
+  "updated_at": "2026-01-17T06:47:25.846765",
   "columns_metadata": [
     {
       "name": "provincia",
@@ -17,11 +17,11 @@
     },
     {
       "name": "foglio",
-      "type": "int"
+      "type": "str"
     },
     {
       "name": "extent",
-      "type": "str"
+      "type": "geometry:polygon:4258"
     },
     {
       "name": "comune",
@@ -33,7 +33,7 @@
     },
     {
       "name": "fabbricato_vettorializzato",
-      "type": "real"
+      "type": "bool"
     },
     {
       "name": "in_elaborazione",
@@ -41,15 +41,15 @@
     },
     {
       "name": "download_dati_terreni",
-      "type": "real"
+      "type": "bool"
     },
     {
       "name": "download_dati_fabbricati",
-      "type": "real"
+      "type": "bool"
     },
     {
       "name": "download_particelle",
-      "type": "real"
+      "type": "bool"
     },
     {
       "name": "chiave",
@@ -57,7 +57,7 @@
     },
     {
       "name": "geom",
-      "type": "str"
+      "type": "geometry:polygon:4258"
     },
     {
       "name": "regione",
@@ -73,227 +73,227 @@
     },
     {
       "name": "particella",
-      "type": "int"
-    },
-    {
-      "name": "categoria",
-      "type": "real"
-    },
-    {
-      "name": "categoria_esri",
-      "type": "real"
-    },
-    {
-      "name": "geom_multy",
       "type": "str"
     },
     {
+      "name": "categoria",
+      "type": "str"
+    },
+    {
+      "name": "categoria_esri",
+      "type": "str"
+    },
+    {
+      "name": "geom_multy",
+      "type": "geometry:multipolygon"
+    },
+    {
       "name": "a07",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "a06",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "b05",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "c07",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "c05",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "c02",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "d04",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "d03",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "d07",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "e06",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "e05",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "f04",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "f03",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "a04",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "a02",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "a11",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "a10",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "c01",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "d06",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "f05",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "a08",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "a05",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "a03",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "a01",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "b08",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "b07",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "b06",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "b04",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "b03",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "b02",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "b01",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "a09",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "d01",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "c06",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "c04",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "c03",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "d05",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "d02",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "d10",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "e02",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "e01",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "d09",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "d08",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "e09",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "e08",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "e07",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "e04",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "e03",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "f02",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "f01",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "n_piani",
-      "type": "real"
+      "type": "int"
     },
     {
       "name": "gruppo_catastale",
-      "type": "real"
+      "type": "str"
     }
   ]
 }

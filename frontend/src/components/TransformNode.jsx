@@ -5,7 +5,7 @@ import '../styles/TransformNode.css';
 
 /**
  * TransformNode - Nodo per trasformazioni dati (MANIPOLA)
- * Supporta: Join, Formula, Filter, Aggregate, Concat
+ * Supporta: Join, Formula, Filter, Aggregate, Concat, Sort, Distinct + operazioni spaziali
  */
 const TransformNode = memo(({ data, id }) => {
   const { getEdges, getNodes } = useReactFlow();
@@ -21,8 +21,8 @@ const TransformNode = memo(({ data, id }) => {
     { value: 'aggregate', label: 'Aggregazione (GroupBy)', color: '#FF9800', category: 'base' },
     { value: 'filter', label: 'Filter (Filtra)', color: '#9C27B0', category: 'base' },
     { value: 'concat', label: 'Concat (Unisci)', color: '#F44336', category: 'base' },
-	{ value: 'sort', label: '↕️ Sort (Ordina)', color: '#607D8B', category: 'base' },
-	{ value: 'distinct', label: '🔹 Distinct (Univoci)', color: '#795548', category: 'base' },	
+    { value: 'sort', label: '↕️ Sort (Ordina)', color: '#607D8B', category: 'base' },
+    { value: 'distinct', label: '🔹 Distinct (Univoci)', color: '#795548', category: 'base' },
     // Spaziali
     { value: 'sjoin', label: '🌐 Spatial Join', color: '#E91E63', category: 'spatial' },
     { value: 'geo_buffer', label: '🔵 Buffer', color: '#E91E63', category: 'spatial' },
@@ -146,6 +146,40 @@ const TransformNode = memo(({ data, id }) => {
 
       if (inputColumns.length === 0) {
         formulaValidation = {
+          valid: false,
+          type: 'warning',
+          message: 'Input non ha colonne disponibili.'
+        };
+      }
+    }
+  }
+
+  // === VALIDAZIONE SORT/DISTINCT (singolo input) ===
+  let singleInputValidation = { valid: true, message: '' };
+  let singleInputColumns = [];
+
+  if (transform_op === 'sort' || transform_op === 'distinct') {
+    if (incomingEdges.length === 0) {
+      singleInputValidation = {
+        valid: false,
+        type: 'warning',
+        message: `Collega 1 sorgente dati per configurare ${transform_op === 'sort' ? "l'ordinamento" : 'la rimozione duplicati'}`
+      };
+    } else if (incomingEdges.length > 1) {
+      singleInputValidation = {
+        valid: false,
+        type: 'error',
+        message: `${transform_op === 'sort' ? 'Sort' : 'Distinct'} supporta solo 1 input!`
+      };
+    } else {
+      const singleInputNode = nodes.find(n => n.id === incomingEdges[0].source);
+      
+      if (singleInputNode?.data?.columns && singleInputNode.data.columns.length > 0) {
+        singleInputColumns = singleInputNode.data.columns.filter(c => c.visible !== false);
+      }
+      
+      if (singleInputColumns.length === 0) {
+        singleInputValidation = {
           valid: false,
           type: 'warning',
           message: 'Input non ha colonne disponibili.'
@@ -282,10 +316,11 @@ const TransformNode = memo(({ data, id }) => {
           });
         }
       }
-    } else if (transform_op === 'filter') {
-      if (inputColumns.length > 0) {
-        // Filter mantiene tutte le colonne con i loro tipi
-        outputColumns = inputColumns.map(c => ({ 
+    } else if (transform_op === 'filter' || transform_op === 'sort' || transform_op === 'distinct') {
+      // Queste operazioni mantengono tutte le colonne con i loro tipi
+      const cols = transform_op === 'filter' ? inputColumns : singleInputColumns;
+      if (cols.length > 0) {
+        outputColumns = cols.map(c => ({ 
           name: c.name,
           type: getColType(c),
           visible: true 
@@ -383,7 +418,7 @@ const TransformNode = memo(({ data, id }) => {
     if (data.onUpdateColumns && outputColumns.length > 0) {
       data.onUpdateColumns(id, outputColumns);
     }
-  }, [transform_op, config, incomingEdges.length, leftColumns.length, rightColumns.length, inputColumns.length]);
+  }, [transform_op, config, incomingEdges.length, leftColumns.length, rightColumns.length, inputColumns.length, singleInputColumns.length]);
 
   // Insert column name in formula
   const insertColumn = (columnName) => {
@@ -769,6 +804,226 @@ const TransformNode = memo(({ data, id }) => {
             <div className="transform-node__message transform-node__message--info">
               ℹ️ Aggregazione (GroupBy) - Configurazione avanzata in sviluppo
             </div>
+          </div>
+        )}
+
+        {/* === CONFIG SORT === */}
+        {transform_op === 'sort' && (
+          <div className="transform-node__config">
+            {!singleInputValidation.valid ? (
+              <div className={`transform-node__message transform-node__message--${singleInputValidation.type}`}>
+                ⚠️ {singleInputValidation.message}
+              </div>
+            ) : (
+              <>
+                {/* Colonne ordinamento */}
+                <div className="transform-node__config-group">
+                  <label className="transform-node__label">Colonne ordinamento:</label>
+                  
+                  {/* Lista colonne configurate */}
+                  {(config.sort_columns || []).map((sortCol, idx) => (
+                    <div key={idx} style={{
+                      display: 'flex',
+                      gap: '6px',
+                      marginBottom: '6px',
+                      alignItems: 'center'
+                    }}>
+                      <select
+                        value={sortCol.column || ''}
+                        onChange={(e) => {
+                          const newSortCols = [...(config.sort_columns || [])];
+                          newSortCols[idx] = { ...newSortCols[idx], column: e.target.value };
+                          updateConfig('sort_columns', newSortCols);
+                        }}
+                        className="transform-node__config-select"
+                        style={{ flex: 1 }}
+                      >
+                        <option value="">-- Seleziona --</option>
+                        {singleInputColumns.map((col, cidx) => (
+                          <option key={cidx} value={col.name}>
+                            {col.name}
+                          </option>
+                        ))}
+                      </select>
+                      
+                      <select
+                        value={sortCol.ascending ? 'asc' : 'desc'}
+                        onChange={(e) => {
+                          const newSortCols = [...(config.sort_columns || [])];
+                          newSortCols[idx] = { ...newSortCols[idx], ascending: e.target.value === 'asc' };
+                          updateConfig('sort_columns', newSortCols);
+                        }}
+                        className="transform-node__config-select"
+                        style={{ width: '80px' }}
+                      >
+                        <option value="asc">↑ ASC</option>
+                        <option value="desc">↓ DESC</option>
+                      </select>
+                      
+                      <button
+                        onClick={() => {
+                          const newSortCols = (config.sort_columns || []).filter((_, i) => i !== idx);
+                          updateConfig('sort_columns', newSortCols);
+                        }}
+                        style={{
+                          background: '#f44336',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '3px',
+                          padding: '4px 8px',
+                          cursor: 'pointer',
+                          fontSize: '12px'
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                  
+                  {/* Bottone aggiungi colonna */}
+                  <button
+                    onClick={() => {
+                      const newSortCols = [...(config.sort_columns || []), { column: '', ascending: true }];
+                      updateConfig('sort_columns', newSortCols);
+                    }}
+                    style={{
+                      background: '#607D8B',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      padding: '6px 12px',
+                      cursor: 'pointer',
+                      fontSize: '11px',
+                      marginTop: '4px'
+                    }}
+                  >
+                    + Aggiungi colonna
+                  </button>
+                </div>
+
+                {/* Posizione NULL */}
+                <div className="transform-node__config-group">
+                  <label className="transform-node__label">Posizione valori NULL:</label>
+                  <select
+                    value={config.na_position || 'last'}
+                    onChange={(e) => updateConfig('na_position', e.target.value)}
+                    className="transform-node__config-select"
+                  >
+                    <option value="last">Alla fine</option>
+                    <option value="first">All'inizio</option>
+                  </select>
+                </div>
+
+                {/* Riepilogo configurazione */}
+                {(config.sort_columns || []).length > 0 && (
+                  <div className="transform-node__confirm-box">
+                    <div className="transform-node__confirm-title">↕️ Configurazione Sort:</div>
+                    <div className="transform-node__confirm-content">
+                      {(config.sort_columns || []).map((sc, i) => (
+                        <div key={i}>
+                          {i + 1}. {sc.column || '?'} ({sc.ascending ? 'ASC ↑' : 'DESC ↓'})
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* === CONFIG DISTINCT === */}
+        {transform_op === 'distinct' && (
+          <div className="transform-node__config">
+            {!singleInputValidation.valid ? (
+              <div className={`transform-node__message transform-node__message--${singleInputValidation.type}`}>
+                ⚠️ {singleInputValidation.message}
+              </div>
+            ) : (
+              <>
+                {/* Modalità: tutte le colonne o subset */}
+                <div className="transform-node__config-group">
+                  <label className="transform-node__label">Considera duplicati su:</label>
+                  <select
+                    value={config.mode || 'all'}
+                    onChange={(e) => {
+                      updateConfig('mode', e.target.value);
+                      if (e.target.value === 'all') {
+                        updateConfig('subset', null);
+                      }
+                    }}
+                    className="transform-node__config-select"
+                  >
+                    <option value="all">Tutte le colonne</option>
+                    <option value="subset">Solo alcune colonne</option>
+                  </select>
+                </div>
+
+                {/* Selezione colonne subset */}
+                {config.mode === 'subset' && (
+                  <div className="transform-node__config-group">
+                    <label className="transform-node__label">Colonne da considerare:</label>
+                    <div style={{
+                      maxHeight: '120px',
+                      overflowY: 'auto',
+                      border: '1px solid #e0e0e0',
+                      borderRadius: '4px',
+                      padding: '6px'
+                    }}>
+                      {singleInputColumns.map((col, idx) => (
+                        <label key={idx} style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '3px 0',
+                          cursor: 'pointer',
+                          fontSize: '11px'
+                        }}>
+                          <input
+                            type="checkbox"
+                            checked={(config.subset || []).includes(col.name)}
+                            onChange={(e) => {
+                              const currentSubset = config.subset || [];
+                              let newSubset;
+                              if (e.target.checked) {
+                                newSubset = [...currentSubset, col.name];
+                              } else {
+                                newSubset = currentSubset.filter(c => c !== col.name);
+                              }
+                              updateConfig('subset', newSubset);
+                            }}
+                          />
+                          <span style={{ fontFamily: 'monospace' }}>{col.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Keep mode */}
+                <div className="transform-node__config-group">
+                  <label className="transform-node__label">In caso di duplicati, mantieni:</label>
+                  <select
+                    value={config.keep || 'first'}
+                    onChange={(e) => updateConfig('keep', e.target.value)}
+                    className="transform-node__config-select"
+                  >
+                    <option value="first">Prima occorrenza</option>
+                    <option value="last">Ultima occorrenza</option>
+                    <option value="false">Nessuna (rimuovi tutti)</option>
+                  </select>
+                </div>
+
+                {/* Riepilogo */}
+                <div className="transform-node__confirm-box">
+                  <div className="transform-node__confirm-title">🔹 Configurazione Distinct:</div>
+                  <div className="transform-node__confirm-content">
+                    Duplicati su: {config.mode === 'subset' ? (config.subset || []).join(', ') || 'nessuna colonna' : 'tutte le colonne'}<br/>
+                    Mantieni: {config.keep === 'first' ? 'prima' : config.keep === 'last' ? 'ultima' : 'nessuna'}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
 

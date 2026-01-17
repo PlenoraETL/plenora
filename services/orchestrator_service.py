@@ -57,93 +57,108 @@ class OrchestratorService:
         return {"success": False, "message": f"Tipo progetto '{metadata.project_type}' non supportato"}
 
     def _execute_extract(self, project_id: str, canvas: CanvasState) -> Dict[str, Any]:
-        """Esegue query SQL e salva il file."""
-        logger.info(f"Esecuzione progetto ESTRAI: {project_id}")
-        
-        result_node = next((n for n in canvas.nodes if n.type == "result"), None)
-        if not result_node:
-            return {"success": False, "message": "Nodo risultato non trovato"}
+            """Esegue query SQL e salva il file."""
+            logger.info(f"Esecuzione progetto ESTRAI: {project_id}")
+            
+            result_node = next((n for n in canvas.nodes if n.type == "result"), None)
+            if not result_node:
+                return {"success": False, "message": "Nodo risultato non trovato"}
 
-        # 1. Recupera connessione dal METADATA del progetto (non dai nodi)
-        metadata = self.project_service.get_project_metadata(project_id)
-        if not metadata or not metadata.default_connection_id:
-            return {"success": False, "message": "Il progetto non ha una connessione database associata"}
+            # 1. Recupera connessione dal METADATA del progetto (non dai nodi)
+            metadata = self.project_service.get_project_metadata(project_id)
+            if not metadata or not metadata.default_connection_id:
+                return {"success": False, "message": "Il progetto non ha una connessione database associata"}
 
-        connection = self.connection_service.get_connection(metadata.default_connection_id)
-        if not connection:
-            return {"success": False, "message": f"Connessione {metadata.default_connection_id} non trovata"}
+            connection = self.connection_service.get_connection(metadata.default_connection_id)
+            if not connection:
+                return {"success": False, "message": f"Connessione {metadata.default_connection_id} non trovata"}
 
-        # 2. Genera SQL tramite il generator (passando il tipo database)
-        try:
-            query_info = self.generator.generate_sql(
-                canvas.nodes, 
-                canvas.edges, 
-                result_node.id,
-                db_type=connection.type  # Passa il tipo database dalla connessione
-            )
-        except Exception as e:
-            return {"success": False, "message": f"Errore generazione SQL: {str(e)}"}
-
-        # 3. Esegue tramite l'executor
-        res = self.executor.execute_query(
-            connection=connection,
-            sql=query_info['sql'],
-            project_id=project_id,
-            output_filename=result_node.fileName or 'output',
-            output_format=result_node.format or 'csv',
-            params=query_info.get('params')
-        )
-        
-        # 4. Salva tipi colonne nel metadata del progetto
-        if res.get("success") and res.get("output_path"):
+            # 2. Genera SQL tramite il generator (passando il tipo database)
             try:
-                output_path = Path(res["output_path"])
-                
-                # Leggi il file per ottenere i tipi
-                if output_path.suffix.lower() == '.xlsx':
-                    df_for_types = pd.read_excel(output_path, nrows=1)
-                elif output_path.suffix.lower() == '.json':
-                    df_for_types = pd.read_json(output_path, orient='records', nrows=1)
-                else:
-                    df_for_types = pd.read_csv(output_path, nrows=1)
-                
-                # Calcola tipi semplificati (consistenti con DatabaseInspector)
-                columns_metadata = []
-                for col in df_for_types.columns:
-                    dtype = str(df_for_types[col].dtype)
-                    
-                    # Mappa dtype pandas ai nostri tipi standard
-                    # Tipi: int, real, str, bool, date, geometry:*
-                    if 'int' in dtype:
-                        simple_type = 'int'
-                    elif 'float' in dtype:
-                        simple_type = 'real'
-                    elif 'datetime' in dtype:
-                        simple_type = 'date'
-                    elif 'bool' in dtype:
-                        simple_type = 'bool'
-                    else:
-                        simple_type = 'str'
-                    
-                    columns_metadata.append({
-                        "name": col,
-                        "type": simple_type  # Usa 'type' per consistenza con frontend
-                    })
-                
-                # Salva nel metadata del progetto
-                self.project_service.update_project_columns_metadata(project_id, columns_metadata)
-                
-                # Aggiungi alla response
-                res['columns_metadata'] = columns_metadata
-                
-                logger.info(f"Salvati tipi per {len(columns_metadata)} colonne")
-                
+                query_info = self.generator.generate_sql(
+                    canvas.nodes, 
+                    canvas.edges, 
+                    result_node.id,
+                    db_type=connection.type  # Passa il tipo database dalla connessione
+                )
             except Exception as e:
-                logger.warning(f"Errore salvataggio tipi colonne: {e}")
-        
-        # Aggiungiamo l'SQL alla risposta per debug/frontend
-        res['query'] = query_info['sql']
-        return res
+                return {"success": False, "message": f"Errore generazione SQL: {str(e)}"}
+
+            # 3. Esegue tramite l'executor
+            res = self.executor.execute_query(
+                connection=connection,
+                sql=query_info['sql'],
+                project_id=project_id,
+                output_filename=result_node.fileName or 'output',
+                output_format=result_node.format or 'csv',
+                params=query_info.get('params')
+            )
+            
+            # 4. Salva tipi colonne nel metadata del progetto
+            # USA I TIPI DAL CANVAS (che sono corretti) invece di inferirli dal CSV
+            if res.get("success"):
+                try:
+                    # Costruisci mappa tipo dal canvas (nodi source)
+                    canvas_type_map = {}
+                    for node in canvas.nodes:
+                        if node.type == "source" and node.columns:
+                            for col in node.columns:
+                                col_name = col.alias or col.name
+                                col_type = col.type or "str"
+                                canvas_type_map[col_name] = col_type
+                        # Anche colonne calcolate
+                        if node.calculated_columns:
+                            for calc in node.calculated_columns:
+                                canvas_type_map[calc.get("name")] = calc.get("output_type", "str")
+                    
+                    # Leggi colonne dal file output per avere l'ordine corretto
+                    output_path = Path(res["output_path"])
+                    if output_path.suffix.lower() == '.xlsx':
+                        df_for_cols = pd.read_excel(output_path, nrows=0)
+                    elif output_path.suffix.lower() == '.json':
+                        df_for_cols = pd.read_json(output_path, orient='records', nrows=1)
+                    else:
+                        df_for_cols = pd.read_csv(output_path, nrows=0)
+                    
+                    # Costruisci columns_metadata usando tipi dal canvas
+                    columns_metadata = []
+                    for col in df_for_cols.columns:
+                        # Prima cerca nel canvas
+                        if col in canvas_type_map:
+                            col_type = canvas_type_map[col]
+                        else:
+                            # Fallback: inferisci dal dtype pandas
+                            dtype = str(df_for_cols[col].dtype)
+                            if 'int' in dtype:
+                                col_type = 'int'
+                            elif 'float' in dtype:
+                                col_type = 'real'
+                            elif 'datetime' in dtype:
+                                col_type = 'date'
+                            elif 'bool' in dtype:
+                                col_type = 'bool'
+                            else:
+                                col_type = 'str'
+                        
+                        columns_metadata.append({
+                            "name": col,
+                            "type": col_type
+                        })
+                    
+                    # Salva nel metadata del progetto
+                    self.project_service.update_project_columns_metadata(project_id, columns_metadata)
+                    
+                    # Aggiungi alla response
+                    res['columns_metadata'] = columns_metadata
+                    
+                    logger.info(f"Salvati tipi per {len(columns_metadata)} colonne (da canvas)")
+                    
+                except Exception as e:
+                    logger.warning(f"Errore salvataggio tipi colonne: {e}")
+            
+            # Aggiungiamo l'SQL alla risposta per debug/frontend
+            res['query'] = query_info['sql']
+            return res
 
     def _execute_manipulate(self, project_id: str, canvas: CanvasState, force_recalculate: bool = False) -> Dict[str, Any]:
         """Esegue la pipeline di manipolazione seguendo il grafo dei nodi."""

@@ -293,10 +293,6 @@ class SchemaInferenceService:
             return self._schema_formula(input_schemas, config, node.id)
         elif transform_op == "filter":
             return self._schema_filter(input_schemas, node.id)
-        elif op == "sort":
-            return self._op_sort(inputs[0] if inputs else pd.DataFrame(), node)
-        elif op == "distinct":
-            return self._op_distinct(inputs[0] if inputs else pd.DataFrame(), node)
         elif transform_op == "concat":
             return self._schema_concat(input_schemas, config, node.id)
         elif transform_op == "sort":
@@ -616,34 +612,22 @@ class SchemaInferenceService:
     
     def _schema_distinct(
         self, 
-        input_schemas: List[List[ColumnSchema]], 
+        input_schemas: List[List[ColumnSchema]],
         config: dict,
         node_id: str
     ) -> List[ColumnSchema]:
         """
-        Distinct: stesso schema o sottoinsieme se specificato subset
+        Distinct: stesso schema dell'input (rimuove solo righe duplicate)
         """
         if not input_schemas:
             return []
         
-        subset = config.get("subset", None)  # Lista colonne per distinct
-        
-        if subset:
-            # Solo colonne nel subset
-            input_by_name = {col.name: col for col in input_schemas[0]}
-            result = []
-            for col_name in subset:
-                if col_name in input_by_name:
-                    col = input_by_name[col_name]
-                    result.append(ColumnSchema(
-                        name=col.name,
-                        type=col.type,
-                        source_node=node_id,
-                        is_calculated=col.is_calculated
-                    ))
-            return result
-        
-        return self._schema_passthrough(input_schemas, node_id)
+        return [ColumnSchema(
+            name=col.name,
+            type=col.type,
+            source_node=node_id,
+            is_calculated=col.is_calculated
+        ) for col in input_schemas[0]]
     
     def _schema_rename(
         self, 
