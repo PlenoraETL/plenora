@@ -72,6 +72,73 @@ const ArricchisciEditorContent = () => {
     edgesRef.current = edges;
   }, [nodes, edges]);
 
+  // ===== PROPAGA COLONNE AL RESULT NODE =====
+  // Raccoglie colonne da project_source e api_enrich per mostrare formati geo
+  useEffect(() => {
+    const resultNode = nodes.find(n => n.type === 'result');
+    if (!resultNode) return;
+    
+    // Raccogli colonne da tutti i nodi
+    const availableColumns = [];
+    
+    for (const node of nodes) {
+      if (node.type === 'project_source' && node.data?.columns) {
+        for (const col of node.data.columns) {
+          // ProjectSourceNode: colonne sono oggetti {name, type, visible, ...}
+          if (typeof col === 'object' && col !== null) {
+            availableColumns.push({
+              name: col.name || col.alias || 'unknown',
+              type: col.type || col.dtype || 'str',
+              source: node.data?.source_project_id || 'source'
+            });
+          } else if (typeof col === 'string') {
+            availableColumns.push({
+              name: col,
+              type: 'str',
+              source: node.data?.source_project_id || 'source'
+            });
+          }
+        }
+      } else if (node.type === 'api_enrich' && node.data?.columns) {
+        for (const col of node.data.columns) {
+          // ApiEnrichNode: colonne sono oggetti {name, type, visible, fromApi}
+          if (typeof col === 'object' && col !== null) {
+            availableColumns.push({
+              name: col.name || 'unknown',
+              type: col.type || 'str',
+              source: 'api_enrich',
+              fromApi: col.fromApi || false
+            });
+          }
+        }
+      }
+    }
+    
+    // Deduplica per nome (mantieni l'ultima occorrenza che potrebbe avere tipo più preciso)
+    const uniqueColumns = [...new Map(availableColumns.map(col => [col.name, col])).values()];
+    
+    // Aggiorna solo se le colonne sono cambiate
+    const currentColumns = resultNode.data?.availableColumns || [];
+    const columnsChanged = JSON.stringify(uniqueColumns) !== JSON.stringify(currentColumns);
+    
+    if (columnsChanged && uniqueColumns.length > 0) {
+      setNodes((nds) =>
+        nds.map((node) => {
+          if (node.type === 'result') {
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                availableColumns: uniqueColumns
+              }
+            };
+          }
+          return node;
+        })
+      );
+    }
+  }, [nodes, setNodes]);
+
   // Gestione Delete/Backspace
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -125,8 +192,11 @@ const ArricchisciEditorContent = () => {
                 isArricchisci: true,
                 fileName: node.data?.fileName || 'output',
                 format: node.data?.format || 'csv',
+                availableColumns: node.data?.availableColumns || [],
+                geomColumn: node.data?.geomColumn || null,
                 onUpdateFileName: handleUpdateResultFileName,
                 onUpdateFormat: handleUpdateResultFormat,
+                onUpdateGeomColumn: handleUpdateResultGeomColumn,
                 onExecute: handleExecute,
                 onDelete: handleDeleteNode
               }
@@ -245,6 +315,23 @@ const ArricchisciEditorContent = () => {
     );
   }, [setNodes]);
 
+  const handleUpdateResultGeomColumn = useCallback((nodeId, geomColumn) => {
+    setNodes((nds) =>
+      nds.map((node) => {
+        if (node.id === nodeId) {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              geomColumn: geomColumn
+            }
+          };
+        }
+        return node;
+      })
+    );
+  }, [setNodes]);
+
   const handleDeleteNode = useCallback((nodeId) => {
     setNodes((nds) => nds.filter((node) => node.id !== nodeId));
     setEdges((eds) => eds.filter((edge) => 
@@ -267,15 +354,17 @@ const ArricchisciEditorContent = () => {
         isArricchisci: true,
         fileName: 'output',
         format: 'csv',
+        availableColumns: [],
         onUpdateFileName: handleUpdateResultFileName,
         onUpdateFormat: handleUpdateResultFormat,
+        onUpdateGeomColumn: handleUpdateResultGeomColumn,
         onExecute: handleExecute,
         onDelete: handleDeleteNode
       }
     };
 
     setNodes((nds) => nds.concat(newNode));
-  }, [setNodes, handleUpdateResultFileName, handleUpdateResultFormat, handleDeleteNode]);
+  }, [setNodes, handleUpdateResultFileName, handleUpdateResultFormat, handleUpdateResultGeomColumn, handleDeleteNode]);
 
   const handleSaveCanvas = useCallback(async () => {
     try {
@@ -428,8 +517,10 @@ const ArricchisciEditorContent = () => {
             isArricchisci: true,
             fileName: 'output',
             format: 'csv',
+            availableColumns: [],
             onUpdateFileName: handleUpdateResultFileName,
             onUpdateFormat: handleUpdateResultFormat,
+            onUpdateGeomColumn: handleUpdateResultGeomColumn,
             onExecute: handleExecute,
             onDelete: handleDeleteNode
           }
@@ -440,7 +531,7 @@ const ArricchisciEditorContent = () => {
         setNodes((nds) => nds.concat(newNode));
       }
     },
-    [screenToFlowPosition, setNodes, handleUpdateProjectSource, handleUpdateProjectSourceColumns, handleDeleteNode, handleUpdateResultFileName, handleUpdateResultFormat, handleExecute]
+    [screenToFlowPosition, setNodes, handleUpdateProjectSource, handleUpdateProjectSourceColumns, handleDeleteNode, handleUpdateResultFileName, handleUpdateResultFormat, handleUpdateResultGeomColumn, handleExecute]
   );
 
   const onEdgeContextMenu = useCallback((event, edge) => {

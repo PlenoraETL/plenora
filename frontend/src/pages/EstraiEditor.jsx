@@ -9,7 +9,7 @@ import ReactFlow, {
   addEdge
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { getProject, getCatalog, updateCanvas, listConnections, getConnectionTables, executeProjectQuery, previewProject } from '../api/client';
+import { getProject, getCatalog, updateCanvas, listConnections, getConnectionTables, executeProjectQuery, previewProject, getDownloadUrl } from '../api/client';
 import TableNode from '../components/TableNode';
 import JoinModal from '../components/JoinModal';
 import QueryPreview from '../components/QueryPreview';
@@ -1109,6 +1109,15 @@ function EstraiEditor() {
                         {executionResult.output_path}
                       </div>
                     </div>
+
+                    {/* ========== DOWNLOAD BUTTON ========== */}
+                    <a 
+                      href={getDownloadUrl(projectId)}
+                      className="execution-modal__download-btn"
+                      download
+                    >
+                      ⬇️ Scarica File
+                    </a>
 
                     {executionResult.query && (
                       <div className="execution-modal__query">

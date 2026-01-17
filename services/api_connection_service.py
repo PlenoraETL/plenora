@@ -961,48 +961,81 @@ class ApiConnectionService:
         output_filename = f"{filename}.{format}"
         output_path = output_dir / output_filename
         
+        # Formati geospaziali
+        geo_formats = ['geojson', 'gpkg', 'shp']
+        
         if format == 'csv':
             df.to_csv(output_path, index=False)
         elif format == 'xlsx':
             df.to_excel(output_path, index=False)
         elif format == 'parquet':
             df.to_parquet(output_path, index=False)
-        elif format == 'geojson':
+        elif format in geo_formats:
             # Cerca colonna geometry
             geom_col = None
             for col in df.columns:
-                if 'geometry' in col.lower():
+                if 'geometry' in col.lower() or col.lower() in ['geom', 'the_geom', 'shape']:
                     geom_col = col
                     break
             
             if geom_col:
                 import geopandas as gpd
                 from shapely.geometry import shape
+                from shapely import wkt, wkb
                 
                 geometries = []
                 for val in df[geom_col]:
                     if val is None:
                         geometries.append(None)
                     elif isinstance(val, str):
-                        try:
-                            geom_dict = json.loads(val)
-                            geometries.append(shape(geom_dict))
-                        except:
-                            geometries.append(None)
+                        # Prova GeoJSON
+                        if val.startswith('{'):
+                            try:
+                                geom_dict = json.loads(val)
+                                geometries.append(shape(geom_dict))
+                                continue
+                            except:
+                                pass
+                        # Prova WKT
+                        if any(val.upper().startswith(prefix) for prefix in ['POINT', 'LINE', 'POLYGON', 'MULTI', 'GEOMETRY']):
+                            try:
+                                geometries.append(wkt.loads(val))
+                                continue
+                            except:
+                                pass
+                        # Prova WKB hex
+                        if val.startswith('01') and len(val) > 20:
+                            try:
+                                geometries.append(wkb.loads(val, hex=True))
+                                continue
+                            except:
+                                pass
+                        geometries.append(None)
                     else:
                         geometries.append(None)
                 
                 gdf = gpd.GeoDataFrame(df.drop(columns=[geom_col]), geometry=geometries, crs="EPSG:4326")
-                gdf.to_file(output_path, driver='GeoJSON')
+                
+                # Salva nel formato richiesto
+                if format == 'geojson':
+                    gdf.to_file(output_path, driver='GeoJSON')
+                elif format == 'gpkg':
+                    gdf.to_file(output_path, driver='GPKG')
+                elif format == 'shp':
+                    gdf.to_file(output_path, driver='ESRI Shapefile')
+                    
+                logger.info(f" Output geospaziale salvato: {output_path}")
             else:
-                filename = f"{project_id}_{timestamp}.csv"
-                output_path = output_dir / filename
+                # Fallback a CSV se non trova geometrie
+                logger.warning(f"Nessuna colonna geometry trovata, fallback a CSV")
+                output_filename = f"{filename}.csv"
+                output_path = output_dir / output_filename
                 df.to_csv(output_path, index=False)
         else:
             df.to_csv(output_path, index=False)
         
         logger.info(f" Output salvato: {output_path}")
-        return filename
+        return output_filename
 
 
 # Singleton per uso globale

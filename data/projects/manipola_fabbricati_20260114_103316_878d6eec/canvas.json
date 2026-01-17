@@ -24,329 +24,460 @@
           {
             "name": "provincia",
             "type": "str",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "cod_comune",
             "type": "str",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "foglio",
-            "type": "str",
-            "visible": true
+            "type": "int",
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "comune",
             "type": "str",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "sezione",
-            "type": "str",
-            "visible": true
+            "type": "real",
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "particella",
-            "type": "str",
-            "visible": true
+            "type": "int",
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "chiave",
             "type": "str",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "categoria",
-            "type": "str",
-            "visible": true
+            "type": "real",
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "categoria_esri",
-            "type": "str",
-            "visible": true
+            "type": "real",
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "id",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "geom_multy",
-            "type": "geometry:multipolygon:4258",
-            "visible": true
+            "type": "str",
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "a07",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "a06",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "b05",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "c07",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "c05",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "c02",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "d04",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "d03",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "d07",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "e06",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "e05",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "f04",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "f03",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "a04",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "a02",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "a11",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "a10",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "c01",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "d06",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "f05",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "a08",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "a05",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "a03",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "a01",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "b08",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "b07",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "b06",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "b04",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "b03",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "b02",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "b01",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "a09",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "d01",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "c06",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "c04",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "c03",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "d05",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "d02",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "d10",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "e02",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "e01",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "d09",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "d08",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "e09",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "e08",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "e07",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "e04",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "e03",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "f02",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "f01",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "n_piani",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "gruppo_catastale",
             "type": "str",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           },
           {
             "name": "b",
-            "type": "geometry:polygon",
-            "visible": true
+            "type": "str",
+            "visible": true,
+            "source_node": "source_1768383218552",
+            "is_calculated": false
           }
         ]
       },
       "fileName": null,
       "format": null,
       "distinct": false,
-      "limit": null
+      "limit": null,
+      "group_by_enabled": false,
+      "group_by_columns": [],
+      "aggregations": []
     },
     {
       "id": "transform_1768457027974",
@@ -371,327 +502,457 @@
           {
             "name": "provincia",
             "type": "str",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "cod_comune",
             "type": "str",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "foglio",
-            "type": "str",
-            "visible": true
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "comune",
             "type": "str",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "sezione",
-            "type": "str",
-            "visible": true
+            "type": "real",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "particella",
-            "type": "str",
-            "visible": true
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "chiave",
             "type": "str",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "categoria",
-            "type": "str",
-            "visible": true
+            "type": "real",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "categoria_esri",
-            "type": "str",
-            "visible": true
+            "type": "real",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "id",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "geom_multy",
-            "type": "geometry:multipolygon:4258",
-            "visible": true
+            "type": "str",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "a07",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "a06",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "b05",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "c07",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "c05",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "c02",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "d04",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "d03",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "d07",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "e06",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "e05",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "f04",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "f03",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "a04",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "a02",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "a11",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "a10",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "c01",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "d06",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "f05",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "a08",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "a05",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "a03",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "a01",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "b08",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "b07",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "b06",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "b04",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "b03",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "b02",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "b01",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "a09",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "d01",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "c06",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "c04",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "c03",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "d05",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "d02",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "d10",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "e02",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "e01",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "d09",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "d08",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "e09",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "e08",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "e07",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "e04",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "e03",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "f02",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "f01",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "n_piani",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "gruppo_catastale",
             "type": "str",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "b",
-            "type": "geometry:polygon",
-            "visible": true
+            "type": "str",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
           },
           {
             "name": "prov_codComunne",
             "type": "real",
-            "visible": true
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": true
           }
         ],
         "transform_op": "formula",
@@ -703,14 +964,17 @@
       "fileName": null,
       "format": null,
       "distinct": false,
-      "limit": null
+      "limit": null,
+      "group_by_enabled": false,
+      "group_by_columns": [],
+      "aggregations": []
     },
     {
       "id": "result_1768531884355",
       "type": "result",
       "position": {
         "x": 1003.6642392598151,
-        "y": 97.9551468938146
+        "y": 98.50754358802942
       },
       "table_name": null,
       "alias": null,
@@ -724,13 +988,477 @@
       "api_id": null,
       "param_mapping": null,
       "data": {
+        "columns": [
+          {
+            "name": "provincia",
+            "type": "str",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "cod_comune",
+            "type": "str",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "foglio",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "comune",
+            "type": "str",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "sezione",
+            "type": "real",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "particella",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "chiave",
+            "type": "str",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "categoria",
+            "type": "real",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "categoria_esri",
+            "type": "real",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "id",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "geom_multy",
+            "type": "str",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "a07",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "a06",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "b05",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "c07",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "c05",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "c02",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "d04",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "d03",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "d07",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "e06",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "e05",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "f04",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "f03",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "a04",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "a02",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "a11",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "a10",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "c01",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "d06",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "f05",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "a08",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "a05",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "a03",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "a01",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "b08",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "b07",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "b06",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "b04",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "b03",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "b02",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "b01",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "a09",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "d01",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "c06",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "c04",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "c03",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "d05",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "d02",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "d10",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "e02",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "e01",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "d09",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "d08",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "e09",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "e08",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "e07",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "e04",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "e03",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "f02",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "f01",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "n_piani",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "gruppo_catastale",
+            "type": "str",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "b",
+            "type": "str",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": false
+          },
+          {
+            "name": "prov_codComunne",
+            "type": "real",
+            "visible": true,
+            "source_node": "transform_1768457027974",
+            "is_calculated": true
+          }
+        ],
         "fileName": "output",
-        "format": "geojson"
+        "format": "geojson",
+        "geomColumn": null,
+        "group_by_enabled": false,
+        "group_by_columns": [],
+        "aggregations": []
       },
       "fileName": null,
       "format": null,
       "distinct": false,
-      "limit": null
+      "limit": null,
+      "group_by_enabled": false,
+      "group_by_columns": [],
+      "aggregations": []
     }
   ],
   "edges": [

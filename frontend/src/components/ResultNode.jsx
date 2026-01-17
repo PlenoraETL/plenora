@@ -55,24 +55,39 @@ const ResultNode = memo(({ data, id }) => {
   // Verifica se il formato selezionato è geospaziale
   const isGeoFormat = ['geojson', 'gpkg', 'shp'].includes(format);
 
-  // Estrai colonne geometriche disponibili
-  const availableGeomColumns = (data.availableColumns || [])
-    .filter(col => isGeometryType(col.type))
-    .map(col => col.name || col.alias || col);
+  // Estrai colonne geometriche disponibili (DEDUPLICATO)
+  // Per MANIPOLA e ARRICCHISCI: usa data.availableColumns
+  // Per ESTRAI: usa data.columns
+  const geomSourceColumns = (isManipulate || isArricchisci)
+    ? (data.availableColumns || [])
+    : (data.columns || []);
+  
+  const availableGeomColumns = [...new Set(
+    geomSourceColumns
+      .filter(col => isGeometryType(col.type))
+      .map(col => col.name || col.alias || col)
+  )];
+  
+  // Flag: mostra formati geo solo se ci sono colonne geometriche
+  const hasGeometryColumns = availableGeomColumns.length > 0;
 
-  // Estrai tutte le colonne disponibili per GROUP BY (da data.columns per ESTRAI)
-  const availableColumns = (data.columns || []).map(col => ({
+  // Estrai tutte le colonne disponibili per GROUP BY (da data.columns per ESTRAI) - DEDUPLICATO
+  const availableColumnsRaw = (data.columns || []).map(col => ({
     name: col.alias || col.name,
     type: col.type || 'str',
     fullName: col.full_name || `${col.source_table}.${col.alias || col.name}`
   }));
+  // Rimuovi duplicati per nome
+  const availableColumns = [...new Map(availableColumnsRaw.map(col => [col.name, col])).values()];
 
-  // Colonne disponibili per MANIPOLA (da data.availableColumns)
-  const manipolaColumns = (data.availableColumns || []).map(col => ({
+  // Colonne disponibili per MANIPOLA (da data.availableColumns) - DEDUPLICATO
+  const manipolaColumnsRaw = (data.availableColumns || []).map(col => ({
     name: col.name || col,
     type: col.type || 'str',
     fullName: col.name || col
   }));
+  // Rimuovi duplicati per nome
+  const manipolaColumns = [...new Map(manipolaColumnsRaw.map(col => [col.name, col])).values()];
 
   // Colonne da usare per GROUP BY (ESTRAI usa availableColumns, MANIPOLA usa manipolaColumns)
   const groupByAvailableColumns = isManipulate ? manipolaColumns : availableColumns;
@@ -317,8 +332,8 @@ const ResultNode = memo(({ data, id }) => {
               </button>
             ))}
           </div>
-          {/* Formati geospaziali - solo per Manipola */}
-          {isManipulate && (
+          {/* Formati geospaziali - mostrati solo se ci sono colonne geometry */}
+          {hasGeometryColumns && (
             <>
               <div className="result-node__label result-node__label--geo">🌐 Formati geospaziali:</div>
               <div className="result-node__format-group">

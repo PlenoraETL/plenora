@@ -983,9 +983,9 @@
       "param_mapping": null,
       "data": {},
       "fileName": "output",
-      "format": "csv",
+      "format": "geojson",
       "distinct": false,
-      "limit": null,
+      "limit": 1,
       "group_by_enabled": false,
       "group_by_columns": [],
       "aggregations": []

@@ -458,6 +458,29 @@
   opacity: 0.9;
 }
 
+/* Download Button */
+.manipola-execution-modal__download-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  background: linear-gradient(135deg, #4CAF50 0%, #43A047 100%);
+  color: white;
+  border-radius: 8px;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 14px;
+  transition: all 0.2s;
+  margin: 15px 0;
+}
+
+.manipola-execution-modal__download-btn:hover {
+  background: linear-gradient(135deg, #43A047 0%, #388E3C 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4);
+  color: white;
+}
+
 /* ===================
    ANIMATIONS
    =================== */

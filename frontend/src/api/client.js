@@ -136,7 +136,6 @@ export const listApiConnections = async () => {
   return response.data;
 };
 
-
 /**
  * Ottiene una preview dei dati del progetto
  * @param {string} projectId - ID del progetto
@@ -148,6 +147,66 @@ export const previewProject = async (projectId, limit = 100) => {
     params: { limit }
   });
   return response.data;
+};
+
+// ===== DOWNLOAD API =====
+
+/**
+ * Ottiene l'URL di download per un progetto
+ * @param {string} projectId - ID del progetto
+ * @returns {string} - URL completo per il download
+ */
+export const getDownloadUrl = (projectId) => {
+  return `${API_BASE_URL}/projects/${projectId}/download`;
+};
+
+/**
+ * Ottiene informazioni sul file output di un progetto
+ * @param {string} projectId - ID del progetto
+ * @returns {Promise<Object>} - { has_output, filename, size_bytes, size_human, modified_at, download_url }
+ */
+export const getProjectOutputInfo = async (projectId) => {
+  const response = await api.get(`/projects/${projectId}/output-info`);
+  return response.data;
+};
+
+/**
+ * Scarica il file output di un progetto (trigger download nel browser)
+ * @param {string} projectId - ID del progetto
+ * @param {string} filename - Nome file opzionale per il download
+ */
+export const downloadProjectOutput = async (projectId, filename = null) => {
+  try {
+    const response = await api.get(`/projects/${projectId}/download`, {
+      responseType: 'blob'
+    });
+    
+    // Estrai filename dall'header Content-Disposition o usa quello fornito
+    let downloadFilename = filename;
+    const contentDisposition = response.headers['content-disposition'];
+    if (contentDisposition) {
+      const filenameMatch = contentDisposition.match(/filename="?([^";\n]+)"?/);
+      if (filenameMatch) {
+        downloadFilename = filenameMatch[1];
+      }
+    }
+    
+    // Crea blob URL e trigger download
+    const blob = new Blob([response.data]);
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = downloadFilename || `output_${projectId}`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Errore download:', error);
+    throw error;
+  }
 };
 
 export default api;

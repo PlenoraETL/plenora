@@ -18,7 +18,8 @@ import {
   getProject, 
   updateCanvas,
   executeProjectQuery,
-  previewProject
+  previewProject,
+  getDownloadUrl
 } from '../api/client';
 
 import ProjectSourceNode from '../components/ProjectSourceNode';
@@ -1027,6 +1028,15 @@ const ManipolaEditorContent = () => {
                         </div>
                       </div>
                     )}
+
+                    {/* ========== DOWNLOAD BUTTON ========== */}
+                    <a 
+                      href={getDownloadUrl(projectId)}
+                      className="manipola-execution-modal__download-btn"
+                      download
+                    >
+                      ⬇️ Scarica File
+                    </a>
 
                     {executionResult.columns && executionResult.columns.length > 0 && (
                       <div className="manipola-execution-modal__columns">

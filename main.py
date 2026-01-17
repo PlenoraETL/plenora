@@ -1,5 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse  # ← NUOVO IMPORT
 from pathlib import Path
 import shutil
 from config import settings
@@ -7,7 +8,7 @@ from utils.logger import get_logger
 
 from models import (
     TableCatalog, ProjectCreate, ProjectList, CanvasState,
-    ConnectionCreate, ConnectionUpdate, ConnectionList, DatabaseConnection, ConnectionTestResult,ExecuteRequest
+    ConnectionCreate, ConnectionUpdate, ConnectionList, DatabaseConnection, ConnectionTestResult, ExecuteRequest
 )
 from services.excel_service import ExcelService
 from services.project_service import ProjectService
@@ -323,6 +324,7 @@ def execute_project_pipeline(project_id: str, request: ExecuteRequest = None):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Errore interno del server: {str(e)}")
 
+
 @app.delete("/api/projects/{project_id}")
 def delete_project(project_id: str):
     """Elimina un progetto"""
@@ -332,6 +334,7 @@ def delete_project(project_id: str):
         raise HTTPException(404, f"Progetto '{project_id}' non trovato")
     
     return {"status": "deleted", "project_id": project_id}
+
 
 @app.get("/api/projects/{project_id}/canvas")
 async def get_project_canvas(project_id: str):
@@ -346,21 +349,8 @@ async def get_project_canvas(project_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-"""
-Endpoint FastAPI per API Connections
-Da aggiungere a main.py
-"""
 
-# ==================== IMPORTS ====================
-# Aggiungi questi import in cima a main.py:
-#
-# from api_connection_service import api_connection_service
-
-
-# ==================== ENDPOINTS ====================
-# Aggiungi questi endpoint in main.py:
-
-# ---------- API CONNECTIONS ----------
+# ==================== API CONNECTIONS ====================
 
 @app.get("/api/api-connections")
 def list_api_connections():
@@ -440,10 +430,8 @@ def test_api_connection(api_id: str, data: dict):
     result = api_connection_service.test_api_connection(api_id=api_id, test_params=test_params)
     return result
 
-# ============================================================
-# 1. ENDPOINT per main.py 
-#    Aggiungi dopo l'endpoint /api/projects/{project_id}/execute
-# ============================================================
+
+# ==================== PREVIEW ====================
 
 @app.get("/api/projects/{project_id}/preview")
 def preview_project_data(project_id: str, limit: int = 100):
@@ -482,6 +470,124 @@ def preview_project_data(project_id: str, limit: int = 100):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Errore interno: {str(e)}")
 
+
+# ==================== DOWNLOAD - NUOVO ====================
+
+def _format_file_size(size_bytes: int) -> str:
+    """Formatta dimensione file in formato leggibile."""
+    for unit in ['B', 'KB', 'MB', 'GB']:
+        if size_bytes < 1024:
+            return f"{size_bytes:.1f} {unit}"
+        size_bytes /= 1024
+    return f"{size_bytes:.1f} TB"
+
+
+@app.get("/api/projects/{project_id}/download")
+def download_project_output(project_id: str):
+    """
+    Scarica il file output di un progetto eseguito.
+    Restituisce il file più recente nella directory results/{project_id}/
+    """
+    try:
+        # Directory output del progetto
+        output_dir = settings.RESULTS_DIR / project_id
+        
+        if not output_dir.exists():
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Nessun output trovato per il progetto '{project_id}'. Esegui prima il progetto."
+            )
+        
+        # Cerca tutti i file nella directory (escludi sottocartelle)
+        output_files = [f for f in output_dir.iterdir() if f.is_file()]
+        
+        if not output_files:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Nessun file output trovato per il progetto '{project_id}'. Esegui prima il progetto."
+            )
+        
+        # Prendi il file più recente
+        output_file = max(output_files, key=lambda x: x.stat().st_mtime)
+        
+        # Determina il media type in base all'estensione
+        media_types = {
+            '.csv': 'text/csv',
+            '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            '.xls': 'application/vnd.ms-excel',
+            '.json': 'application/json',
+            '.geojson': 'application/geo+json',
+            '.gpkg': 'application/geopackage+sqlite3',
+            '.shp': 'application/x-shapefile',
+            '.zip': 'application/zip',
+            '.parquet': 'application/octet-stream',
+        }
+        
+        ext = output_file.suffix.lower()
+        media_type = media_types.get(ext, 'application/octet-stream')
+        
+        logger.info(f"Download file: {output_file} ({media_type})")
+        
+        return FileResponse(
+            path=str(output_file),
+            filename=output_file.name,
+            media_type=media_type
+        )
+        
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logger.error(f"Errore download: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Errore durante il download: {str(e)}")
+
+
+@app.get("/api/projects/{project_id}/output-info")
+def get_project_output_info(project_id: str):
+    """
+    Restituisce informazioni sul file output di un progetto.
+    Utile per sapere se esiste un output scaricabile.
+    """
+    try:
+        output_dir = settings.RESULTS_DIR / project_id
+        
+        if not output_dir.exists():
+            return {
+                "has_output": False,
+                "message": "Nessun output disponibile"
+            }
+        
+        output_files = [f for f in output_dir.iterdir() if f.is_file()]
+        
+        if not output_files:
+            return {
+                "has_output": False,
+                "message": "Nessun file output trovato"
+            }
+        
+        # Prendi il file più recente
+        output_file = max(output_files, key=lambda x: x.stat().st_mtime)
+        
+        import datetime
+        mtime = datetime.datetime.fromtimestamp(output_file.stat().st_mtime)
+        
+        return {
+            "has_output": True,
+            "filename": output_file.name,
+            "size_bytes": output_file.stat().st_size,
+            "size_human": _format_file_size(output_file.stat().st_size),
+            "modified_at": mtime.isoformat(),
+            "download_url": f"/api/projects/{project_id}/download"
+        }
+        
+    except Exception as e:
+        logger.error(f"Errore output-info: {str(e)}")
+        return {
+            "has_output": False,
+            "message": f"Errore: {str(e)}"
+        }
+
+
+# ==================== MAIN ====================
 
 if __name__ == "__main__":
     import uvicorn

@@ -68,6 +68,8 @@ class QueryExecutor:
                 output_path = self._save_json(rows, columns, project_results_dir, output_filename)
             elif output_format == "xlsx":
                 output_path = self._save_xlsx(rows, columns, project_results_dir, output_filename)
+            elif output_format in ("geojson", "gpkg", "shp"):
+                output_path = self._save_geo(rows, columns, project_results_dir, output_filename, output_format)
             else:
                 raise ValueError(f"Formato output '{output_format}' non supportato")
             
@@ -390,3 +392,139 @@ class QueryExecutor:
                 "Libreria 'openpyxl' richiesta per esportazione Excel. "
                 "Esegui: pip install openpyxl"
             )
+    
+    def _save_geo(
+        self, 
+        rows: List[tuple], 
+        columns: List[str], 
+        target_dir: Path, 
+        filename: str,
+        geo_format: str
+    ) -> Path:
+        """
+        Salva come formato geospaziale (GeoJSON, GeoPackage, Shapefile).
+        Cerca automaticamente colonne geometry (WKT o WKB).
+        """
+        import pandas as pd
+        import geopandas as gpd
+        from shapely import wkt, wkb
+        from shapely.geometry import shape
+        import json as json_module
+        
+        # Converti in DataFrame
+        data = []
+        for row in rows:
+            row_dict = {columns[i]: row[i] for i in range(len(columns))}
+            data.append(row_dict)
+        df = pd.DataFrame(data)
+        
+        if df.empty:
+            raise ValueError("Nessun dato da esportare")
+        
+        # Trova colonna geometria
+        geom_column = None
+        geom_candidates = ['geometry', 'geom', 'the_geom', 'wkb_geometry', 'shape']
+        
+        # Prima cerca colonne con nomi comuni
+        for col in geom_candidates:
+            if col in df.columns:
+                geom_column = col
+                break
+        
+        # Se non trovata, cerca colonne che sembrano contenere geometrie
+        if not geom_column:
+            for col in df.columns:
+                sample = df[col].dropna().iloc[0] if not df[col].dropna().empty else None
+                if sample:
+                    sample_str = str(sample)
+                    # Check se sembra WKT
+                    if any(sample_str.upper().startswith(prefix) for prefix in 
+                           ['POINT', 'LINESTRING', 'POLYGON', 'MULTIPOINT', 'MULTILINESTRING', 'MULTIPOLYGON', 'GEOMETRYCOLLECTION']):
+                        geom_column = col
+                        break
+                    # Check se sembra WKB (hex)
+                    if sample_str.startswith('01') and len(sample_str) > 20 and all(c in '0123456789abcdefABCDEF' for c in sample_str):
+                        geom_column = col
+                        break
+        
+        if not geom_column:
+            raise ValueError(
+                f"Nessuna colonna geometria trovata. "
+                f"Colonne disponibili: {list(df.columns)}. "
+                f"Usa CSV o JSON per dati non spaziali."
+            )
+        
+        logger.info(f"Usando colonna geometria: {geom_column}")
+        
+        # Converti geometrie
+        def parse_geometry(val):
+            if val is None or (isinstance(val, float) and pd.isna(val)):
+                return None
+            
+            val_str = str(val)
+            
+            # Prova WKT
+            try:
+                if any(val_str.upper().startswith(prefix) for prefix in 
+                       ['POINT', 'LINESTRING', 'POLYGON', 'MULTI', 'GEOMETRY']):
+                    return wkt.loads(val_str)
+            except Exception:
+                pass
+            
+            # Prova WKB hex
+            try:
+                if val_str.startswith('01') and len(val_str) > 20:
+                    return wkb.loads(val_str, hex=True)
+            except Exception:
+                pass
+            
+            # Prova WKB bytes
+            try:
+                if isinstance(val, (bytes, memoryview)):
+                    return wkb.loads(bytes(val))
+            except Exception:
+                pass
+            
+            # Prova GeoJSON
+            try:
+                if val_str.startswith('{'):
+                    geojson = json_module.loads(val_str)
+                    return shape(geojson)
+            except Exception:
+                pass
+            
+            logger.warning(f"Impossibile parsare geometria: {val_str[:50]}...")
+            return None
+        
+        # Applica parsing
+        df['_parsed_geom'] = df[geom_column].apply(parse_geometry)
+        
+        # Rimuovi righe senza geometria valida
+        valid_count = df['_parsed_geom'].notna().sum()
+        if valid_count == 0:
+            raise ValueError(f"Nessuna geometria valida trovata nella colonna '{geom_column}'")
+        
+        logger.info(f"Geometrie valide: {valid_count}/{len(df)}")
+        
+        # Crea GeoDataFrame
+        gdf = gpd.GeoDataFrame(
+            df.drop(columns=['_parsed_geom', geom_column]),
+            geometry=df['_parsed_geom'],
+            crs="EPSG:4326"  # Default WGS84, potrebbe essere sovrascritto
+        )
+        
+        # Salva nel formato richiesto
+        if geo_format == 'geojson':
+            output_path = target_dir / f"{filename}.geojson"
+            gdf.to_file(output_path, driver='GeoJSON')
+        elif geo_format == 'gpkg':
+            output_path = target_dir / f"{filename}.gpkg"
+            gdf.to_file(output_path, driver='GPKG')
+        elif geo_format == 'shp':
+            output_path = target_dir / f"{filename}.shp"
+            gdf.to_file(output_path, driver='ESRI Shapefile')
+        else:
+            raise ValueError(f"Formato geo '{geo_format}' non supportato")
+        
+        logger.info(f"File geospaziale salvato: {output_path}")
+        return output_path

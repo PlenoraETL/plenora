@@ -4,16 +4,18 @@
       "id": "project_source_1768457108766",
       "type": "project_source",
       "position": {
-        "x": 721.0,
-        "y": 202.5
+        "x": 725.5778586387937,
+        "y": 157.6369853398209
       },
       "table_name": null,
       "alias": null,
       "columns": [],
       "filters": [],
+      "calculated_columns": [],
       "connection_id": null,
       "source_project_id": null,
       "transform_op": null,
+      "transform_category": null,
       "api_id": null,
       "param_mapping": null,
       "data": {
@@ -31,7 +33,7 @@
           },
           {
             "name": "foglio",
-            "type": "str",
+            "type": "int",
             "visible": true
           },
           {
@@ -41,12 +43,12 @@
           },
           {
             "name": "sezione",
-            "type": "str",
+            "type": "real",
             "visible": true
           },
           {
             "name": "particella",
-            "type": "str",
+            "type": "int",
             "visible": true
           },
           {
@@ -56,12 +58,12 @@
           },
           {
             "name": "categoria",
-            "type": "str",
+            "type": "real",
             "visible": true
           },
           {
             "name": "categoria_esri",
-            "type": "str",
+            "type": "real",
             "visible": true
           },
           {
@@ -71,7 +73,7 @@
           },
           {
             "name": "geom_multy",
-            "type": "geometry:multipolygon",
+            "type": "str",
             "visible": true
           },
           {
@@ -335,6 +337,11 @@
             "visible": true
           },
           {
+            "name": "b",
+            "type": "str",
+            "visible": true
+          },
+          {
             "name": "prov_codComunne",
             "type": "real",
             "visible": true
@@ -344,22 +351,57 @@
       "fileName": null,
       "format": null,
       "distinct": false,
-      "limit": null
+      "limit": null,
+      "group_by_enabled": false,
+      "group_by_columns": [],
+      "aggregations": []
     },
     {
-      "id": "api_enrich_1768457109909",
-      "type": "api_enrich",
+      "id": "result_1768682117815",
+      "type": "result",
       "position": {
-        "x": 1221.5,
-        "y": 282.25
+        "x": 1955.1211149416063,
+        "y": 194.83158450266762
       },
       "table_name": null,
       "alias": null,
       "columns": [],
       "filters": [],
+      "calculated_columns": [],
       "connection_id": null,
       "source_project_id": null,
       "transform_op": null,
+      "transform_category": null,
+      "api_id": null,
+      "param_mapping": null,
+      "data": {
+        "fileName": "output",
+        "format": "csv"
+      },
+      "fileName": null,
+      "format": null,
+      "distinct": false,
+      "limit": null,
+      "group_by_enabled": false,
+      "group_by_columns": [],
+      "aggregations": []
+    },
+    {
+      "id": "api_enrich_1768682609745",
+      "type": "api_enrich",
+      "position": {
+        "x": 1329.2626288283732,
+        "y": 236.4723832383255
+      },
+      "table_name": null,
+      "alias": null,
+      "columns": [],
+      "filters": [],
+      "calculated_columns": [],
+      "connection_id": null,
+      "source_project_id": null,
+      "transform_op": null,
+      "transform_category": null,
       "api_id": null,
       "param_mapping": null,
       "data": {
@@ -378,7 +420,7 @@
           },
           {
             "name": "foglio",
-            "type": "str",
+            "type": "int",
             "visible": true,
             "fromApi": false
           },
@@ -390,13 +432,13 @@
           },
           {
             "name": "sezione",
-            "type": "str",
+            "type": "real",
             "visible": true,
             "fromApi": false
           },
           {
             "name": "particella",
-            "type": "str",
+            "type": "int",
             "visible": true,
             "fromApi": false
           },
@@ -408,13 +450,13 @@
           },
           {
             "name": "categoria",
-            "type": "str",
+            "type": "real",
             "visible": true,
             "fromApi": false
           },
           {
             "name": "categoria_esri",
-            "type": "str",
+            "type": "real",
             "visible": true,
             "fromApi": false
           },
@@ -426,7 +468,7 @@
           },
           {
             "name": "geom_multy",
-            "type": "geometry:multipolygon",
+            "type": "str",
             "visible": true,
             "fromApi": false
           },
@@ -738,6 +780,12 @@
           },
           {
             "name": "gruppo_catastale",
+            "type": "str",
+            "visible": true,
+            "fromApi": false
+          },
+          {
+            "name": "b",
             "type": "str",
             "visible": true,
             "fromApi": false
@@ -760,56 +808,31 @@
           "cod_comune": "cod_comune",
           "foglio": "foglio",
           "particella": "particella",
-          "sezione": "sezione"
+          "sezione": ""
         }
       },
       "fileName": null,
       "format": null,
       "distinct": false,
-      "limit": null
-    },
-    {
-      "id": "result_1768457146744",
-      "type": "result",
-      "position": {
-        "x": 1944.2281341040464,
-        "y": 297.8721129644921
-      },
-      "table_name": null,
-      "alias": null,
-      "columns": [],
-      "filters": [],
-      "connection_id": null,
-      "source_project_id": null,
-      "transform_op": null,
-      "api_id": null,
-      "param_mapping": null,
-      "data": {
-        "fileName": "output",
-        "format": "csv"
-      },
-      "fileName": null,
-      "format": null,
-      "distinct": false,
-      "limit": null
+      "limit": null,
+      "group_by_enabled": false,
+      "group_by_columns": [],
+      "aggregations": []
     }
   ],
   "edges": [
     {
-      "id": "reactflow__edge-project_source_1768457108766-api_enrich_1768457109909",
+      "id": "reactflow__edge-project_source_1768457108766-api_enrich_1768682609745",
       "source": "project_source_1768457108766",
-      "target": "api_enrich_1768457109909",
+      "target": "api_enrich_1768682609745",
       "join_type": "left",
       "source_column": "",
-      "target_column": ""
-    },
-    {
-      "id": "reactflow__edge-api_enrich_1768457109909-result_1768457146744",
-      "source": "api_enrich_1768457109909",
-      "target": "result_1768457146744",
-      "join_type": "left",
-      "source_column": "",
-      "target_column": ""
+      "target_column": "",
+      "is_spatial": false,
+      "spatial_predicate": null,
+      "source_geom_column": null,
+      "target_geom_column": null,
+      "spatial_distance": null
     }
   ]
 }
