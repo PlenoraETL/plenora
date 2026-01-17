@@ -15,9 +15,10 @@ import '../styles/ResultNode.css';
  * - data.distinct: (solo SQL) usa DISTINCT
  * - data.limit: (solo SQL) limite righe
  * - data.columns: (solo SQL) colonne output calcolate (con type)
- * - data.group_by_enabled: (solo SQL) abilita GROUP BY
- * - data.group_by_columns: (solo SQL) colonne di raggruppamento
- * - data.aggregations: (solo SQL) funzioni aggregate
+ * - data.availableColumns: (solo MANIPOLA) colonne disponibili
+ * - data.group_by_enabled: (SQL e MANIPOLA) abilita GROUP BY
+ * - data.group_by_columns: (SQL e MANIPOLA) colonne di raggruppamento
+ * - data.aggregations: (SQL e MANIPOLA) funzioni aggregate
  * - data.onUpdateFileName: callback modifica nome
  * - data.onUpdateFormat: callback modifica formato
  * - data.onToggleDistinct: callback toggle DISTINCT
@@ -59,15 +60,25 @@ const ResultNode = memo(({ data, id }) => {
     .filter(col => isGeometryType(col.type))
     .map(col => col.name || col.alias || col);
 
-  // Estrai tutte le colonne disponibili per GROUP BY (da data.columns)
+  // Estrai tutte le colonne disponibili per GROUP BY (da data.columns per ESTRAI)
   const availableColumns = (data.columns || []).map(col => ({
     name: col.alias || col.name,
     type: col.type || 'str',
     fullName: col.full_name || `${col.source_table}.${col.alias || col.name}`
   }));
 
+  // Colonne disponibili per MANIPOLA (da data.availableColumns)
+  const manipolaColumns = (data.availableColumns || []).map(col => ({
+    name: col.name || col,
+    type: col.type || 'str',
+    fullName: col.name || col
+  }));
+
+  // Colonne da usare per GROUP BY (ESTRAI usa availableColumns, MANIPOLA usa manipolaColumns)
+  const groupByAvailableColumns = isManipulate ? manipolaColumns : availableColumns;
+
   // Colonne numeriche per aggregazioni
-  const numericColumns = availableColumns.filter(col => 
+  const numericColumns = groupByAvailableColumns.filter(col => 
     col.type === 'int' || col.type === 'real'
   );
 
@@ -420,8 +431,8 @@ const ResultNode = memo(({ data, id }) => {
           </div>
         )}
 
-        {/* ✅ GROUP BY Section - solo Estrai */}
-        {isEstrai && availableColumns.length > 0 && (
+        {/* ✅ GROUP BY Section - ESTRAI e MANIPOLA */}
+        {(isEstrai || isManipulate) && (availableColumns.length > 0 || manipolaColumns.length > 0) && (
           <div className="result-node__section result-node__section--bordered">
             <div 
               className="result-node__groupby-header"
@@ -481,7 +492,7 @@ const ResultNode = memo(({ data, id }) => {
                         className="result-node__groupby-dropdown"
                       >
                         <option value="">+ Aggiungi colonna...</option>
-                        {availableColumns
+                        {groupByAvailableColumns
                           .filter(col => !groupByColumns.includes(col.name))
                           .map((col, idx) => (
                             <option key={idx} value={col.name}>
@@ -516,7 +527,7 @@ const ResultNode = memo(({ data, id }) => {
                             className="result-node__agg-select result-node__agg-select--col"
                           >
                             <option value="*">* (tutte)</option>
-                            {availableColumns.map((col, colIdx) => (
+                            {groupByAvailableColumns.map((col, colIdx) => (
                               <option key={colIdx} value={col.name}>{col.name}</option>
                             ))}
                           </select>
@@ -626,16 +637,30 @@ const ResultNode = memo(({ data, id }) => {
           </div>
         )}
 
-        {/* Bottone Esegui */}
-        {data.onExecute && (
-          <button
-            onClick={handleExecute}
-            className={`result-node__execute-btn result-node__execute-btn--${nodeVariant}`}
-          >
-            <span className="result-node__execute-icon">▶️</span>
-            <span>{executeLabel}</span>
-          </button>
-        )}
+        {/* Bottoni azione */}
+        <div className="result-node__actions">
+          {/* Bottone Preview (ESTRAI e MANIPOLA) */}
+          {(isEstrai || isManipulate) && data.onPreview && (
+            <button
+              onClick={() => data.onPreview(id)}
+              className={`result-node__preview-btn result-node__preview-btn--${nodeVariant}`}
+            >
+              <span className="result-node__preview-icon">👁️</span>
+              <span>Preview</span>
+            </button>
+          )}
+
+          {/* Bottone Esegui */}
+          {data.onExecute && (
+            <button
+              onClick={handleExecute}
+              className={`result-node__execute-btn result-node__execute-btn--${nodeVariant}`}
+            >
+              <span className="result-node__execute-icon">▶️</span>
+              <span>{executeLabel}</span>
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

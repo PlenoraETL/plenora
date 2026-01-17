@@ -22,41 +22,70 @@ function QueryPreview({ nodes, edges, validationErrors = [] }) {
     const lines = [];
     const errors = [];
 
-    // Trova nodo risultato per DISTINCT
+    // Trova nodo risultato
     const resultNode = nodes.find(n => n.type === 'resultNode');
     const useDistinct = resultNode?.data?.distinct || false;
+    
+    // ✅ GROUP BY configuration
+    const groupByEnabled = resultNode?.data?.group_by_enabled || false;
+    const groupByColumns = resultNode?.data?.group_by_columns || [];
+    const aggregations = resultNode?.data?.aggregations || [];
 
     // SELECT clause
-    lines.push(useDistinct ? 'SELECT DISTINCT' : 'SELECT');
-    const selectColumns = [];
-    
-    nodes.forEach(node => {
-      if (node.type !== 'tableNode') return;
+    if (groupByEnabled && (groupByColumns.length > 0 || aggregations.length > 0)) {
+      // SELECT con GROUP BY
+      lines.push('SELECT');
+      const selectColumns = [];
       
-      const tableName = node.data.alias || node.data.table_name;
-      
-      // Colonne normali visibili
-      const visibleColumns = node.data.columns?.filter(col => col.visible) || [];
-      visibleColumns.forEach(col => {
-        const columnExpr = col.alias 
-          ? `  ${tableName}.${col.name} AS ${col.alias}`
-          : `  ${tableName}.${col.name}`;
-        selectColumns.push(columnExpr);
+      // Colonne di raggruppamento
+      groupByColumns.forEach(col => {
+        selectColumns.push(`  ${col}`);
       });
       
-      // ✅ Colonne calcolate
-      const calculatedColumns = node.data.calculated_columns || [];
-      calculatedColumns.forEach(col => {
-        // Mostra SQL se disponibile, altrimenti placeholder
-        const sqlExpr = col.sql || `-- ${col.name} (colonna calcolata)`;
-        selectColumns.push(`  ${sqlExpr}`);
+      // Aggregazioni
+      aggregations.forEach(agg => {
+        const colExpr = agg.column === '*' ? '*' : agg.column;
+        const alias = agg.alias || `${agg.function.toLowerCase()}_${agg.column}`;
+        selectColumns.push(`  ${agg.function}(${colExpr}) AS ${alias}`);
       });
-    });
-
-    if (selectColumns.length === 0) {
-      lines.push('  *  -- Nessuna colonna selezionata');
+      
+      if (selectColumns.length === 0) {
+        lines.push('  *  -- Configura GROUP BY');
+      } else {
+        lines.push(selectColumns.join(',\n'));
+      }
     } else {
-      lines.push(selectColumns.join(',\n'));
+      // SELECT normale
+      lines.push(useDistinct ? 'SELECT DISTINCT' : 'SELECT');
+      const selectColumns = [];
+      
+      nodes.forEach(node => {
+        if (node.type !== 'tableNode') return;
+        
+        const tableName = node.data.alias || node.data.table_name;
+        
+        // Colonne normali visibili
+        const visibleColumns = node.data.columns?.filter(col => col.visible) || [];
+        visibleColumns.forEach(col => {
+          const columnExpr = col.alias 
+            ? `  ${tableName}.${col.name} AS ${col.alias}`
+            : `  ${tableName}.${col.name}`;
+          selectColumns.push(columnExpr);
+        });
+        
+        // Colonne calcolate
+        const calculatedColumns = node.data.calculated_columns || [];
+        calculatedColumns.forEach(col => {
+          const sqlExpr = col.sql || `-- ${col.name} (colonna calcolata)`;
+          selectColumns.push(`  ${sqlExpr}`);
+        });
+      });
+
+      if (selectColumns.length === 0) {
+        lines.push('  *  -- Nessuna colonna selezionata');
+      } else {
+        lines.push(selectColumns.join(',\n'));
+      }
     }
 
     // FROM clause - trova la prima tabella (nodo senza edges in ingresso da altre tabelle)
@@ -154,6 +183,11 @@ function QueryPreview({ nodes, edges, validationErrors = [] }) {
       whereConditions.slice(1).forEach(condition => {
         lines.push('  AND ' + condition);
       });
+    }
+
+    // ✅ GROUP BY clause
+    if (groupByEnabled && groupByColumns.length > 0) {
+      lines.push('GROUP BY ' + groupByColumns.join(', '));
     }
 
     // LIMIT clause
@@ -265,7 +299,9 @@ function QueryPreview({ nodes, edges, validationErrors = [] }) {
 function highlightSQL(sql) {
   const keywords = [
     'SELECT', 'FROM', 'LEFT', 'RIGHT', 'INNER', 'OUTER', 'FULL', 'JOIN', 'ON', 'AS', 
-    'WHERE', 'GROUP BY', 'ORDER BY', 'LIMIT', 'DISTINCT',
+    'WHERE', 'GROUP BY', 'ORDER BY', 'LIMIT', 'DISTINCT', 'HAVING',
+    // Funzioni aggregate
+    'COUNT', 'SUM', 'AVG', 'MIN', 'MAX',
     // Funzioni spaziali PostGIS
     'ST_Intersects', 'ST_Contains', 'ST_Within', 'ST_Touches', 'ST_Crosses', 
     'ST_Overlaps', 'ST_DWithin', 'ST_Distance', 'ST_Buffer', 'ST_Centroid'

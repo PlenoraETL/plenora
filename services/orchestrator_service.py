@@ -56,6 +56,318 @@ class OrchestratorService:
 
         return {"success": False, "message": f"Tipo progetto '{metadata.project_type}' non supportato"}
 
+    def execute_preview(self, project_id: str, limit: int = 100) -> Dict[str, Any]:
+        """
+        Esegue una preview dei dati senza salvare file.
+        Supporta sia progetti ESTRAI che MANIPOLA.
+        
+        Args:
+            project_id: ID del progetto
+            limit: numero massimo di righe da restituire
+            
+        Returns:
+            {
+                "success": True/False,
+                "columns": [{"name": "col1", "type": "str"}, ...],
+                "rows": [{...}, {...}, ...],
+                "total_count": N,
+                "preview_count": M,
+                "truncated": True/False
+            }
+        """
+        logger.info(f"Preview progetto: {project_id} (limit={limit})")
+        
+        metadata = self.project_service.get_project_metadata(project_id)
+        canvas = self.project_service.get_project_canvas(project_id)
+        
+        if not metadata or not canvas:
+            return {"success": False, "message": f"Progetto {project_id} non trovato"}
+        
+        if metadata.project_type == "estrai":
+            return self._preview_extract(project_id, canvas, limit)
+        elif metadata.project_type == "manipola":
+            return self._preview_manipulate(project_id, canvas, limit)
+        else:
+            return {"success": False, "message": f"Preview non supportata per tipo '{metadata.project_type}'"}
+
+    def _preview_extract(self, project_id: str, canvas: CanvasState, limit: int) -> Dict[str, Any]:
+        """Preview per progetti ESTRAI - esegue SQL con LIMIT"""
+        logger.info(f"Preview ESTRAI: {project_id}")
+        
+        result_node = next((n for n in canvas.nodes if n.type == "result"), None)
+        if not result_node:
+            return {"success": False, "message": "Nodo risultato non trovato"}
+        
+        # Recupera connessione
+        metadata = self.project_service.get_project_metadata(project_id)
+        if not metadata or not metadata.default_connection_id:
+            return {"success": False, "message": "Connessione database non configurata"}
+        
+        connection = self.connection_service.get_connection(metadata.default_connection_id)
+        if not connection:
+            return {"success": False, "message": f"Connessione {metadata.default_connection_id} non trovata"}
+        
+        try:
+            # Genera SQL
+            query_info = self.generator.generate_sql(
+                canvas.nodes, 
+                canvas.edges, 
+                result_node.id,
+                db_type=connection.type
+            )
+            
+            base_sql = query_info['sql']
+            
+            # Aggiungi LIMIT se non presente (per preview)
+            # Rimuovi eventuali LIMIT esistenti e aggiungi il nostro
+            import re
+            # Rimuovi LIMIT esistente
+            sql_no_limit = re.sub(r'\s+LIMIT\s+\d+\s*$', '', base_sql, flags=re.IGNORECASE)
+            preview_sql = f"{sql_no_limit} LIMIT {limit + 1}"  # +1 per sapere se ci sono più righe
+            
+            # Query per conteggio totale (senza LIMIT)
+            # Usa subquery per COUNT
+            count_sql = f"SELECT COUNT(*) as cnt FROM ({sql_no_limit}) AS subquery"
+            
+            logger.debug(f"Preview SQL: {preview_sql[:200]}...")
+            
+            # Esegui query preview
+            import pandas as pd
+            from sqlalchemy import create_engine, text
+            
+            # Costruisci connection string
+            if connection.type == 'postgresql':
+                conn_str = f"postgresql://{connection.username}:{connection.password}@{connection.host}:{connection.port}/{connection.database}"
+            elif connection.type == 'mysql':
+                conn_str = f"mysql+pymysql://{connection.username}:{connection.password}@{connection.host}:{connection.port}/{connection.database}"
+            elif connection.type == 'sqlserver':
+                conn_str = f"mssql+pyodbc://{connection.username}:{connection.password}@{connection.host}:{connection.port}/{connection.database}?driver=ODBC+Driver+17+for+SQL+Server"
+            else:
+                return {"success": False, "message": f"Tipo database '{connection.type}' non supportato per preview"}
+            
+            engine = create_engine(conn_str)
+            
+            with engine.connect() as conn:
+                # Esegui preview
+                df = pd.read_sql(text(preview_sql), conn)
+                
+                # Esegui count totale
+                try:
+                    count_result = conn.execute(text(count_sql))
+                    total_count = count_result.scalar() or 0
+                except Exception as e:
+                    logger.warning(f"Impossibile ottenere count totale: {e}")
+                    total_count = len(df)
+            
+            # Determina se troncato
+            truncated = len(df) > limit
+            if truncated:
+                df = df.head(limit)
+            
+            # Costruisci metadata colonne
+            columns = []
+            # Prova a recuperare tipi dal canvas
+            canvas_type_map = {}
+            for node in canvas.nodes:
+                if node.type == "source" and node.columns:
+                    for col in node.columns:
+                        col_name = col.alias or col.name
+                        canvas_type_map[col_name] = col.type or "str"
+            
+            for col in df.columns:
+                col_type = canvas_type_map.get(col, "str")
+                # Inferisci da pandas se non nel canvas
+                if col not in canvas_type_map:
+                    dtype = str(df[col].dtype)
+                    if 'int' in dtype:
+                        col_type = 'int'
+                    elif 'float' in dtype:
+                        col_type = 'real'
+                    elif 'datetime' in dtype:
+                        col_type = 'date'
+                    elif 'bool' in dtype:
+                        col_type = 'bool'
+                
+                columns.append({"name": col, "type": col_type})
+            
+            # Converti rows in lista di dict
+            rows = df.to_dict(orient='records')
+            
+            # Converti valori non serializzabili
+            import numpy as np
+            for row in rows:
+                for key, value in row.items():
+                    if pd.isna(value):
+                        row[key] = None
+                    elif isinstance(value, (np.integer, np.floating)):
+                        row[key] = value.item()
+                    elif isinstance(value, np.bool_):
+                        row[key] = bool(value)
+                    elif isinstance(value, (pd.Timestamp, np.datetime64)):
+                        row[key] = str(value)
+            
+            logger.info(f"Preview ESTRAI completata: {len(rows)} righe, {len(columns)} colonne")
+            
+            return {
+                "success": True,
+                "columns": columns,
+                "rows": rows,
+                "total_count": total_count,
+                "preview_count": len(rows),
+                "truncated": truncated,
+                "query": base_sql  # SQL originale senza LIMIT preview
+            }
+            
+        except Exception as e:
+            logger.error(f"Errore preview ESTRAI: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return {"success": False, "message": str(e)}
+
+    def _preview_manipulate(self, project_id: str, canvas: CanvasState, limit: int) -> Dict[str, Any]:
+        """Preview per progetti MANIPOLA - esegue pipeline e limita output"""
+        logger.info(f"Preview MANIPOLA: {project_id}")
+        
+        try:
+            # Esegui la pipeline normale (usa cache se disponibile)
+            # A. Caricamento DataFrames dalle sorgenti
+            dataframes = {}
+            source_nodes = [n for n in canvas.nodes if n.type == "project_source"]
+            
+            for node in source_nodes:
+                source_project_id = node.data.get('source_project_id') if node.data else None
+                
+                if not source_project_id:
+                    continue
+                
+                # Usa cache se disponibile
+                output_dir = self.results_base_dir / source_project_id
+                cached_files = list(output_dir.glob("*.*")) if output_dir.exists() else []
+                
+                if cached_files:
+                    cached_file = cached_files[0]
+                    file_ext = cached_file.suffix.lower()
+                    
+                    if file_ext == '.xlsx':
+                        dataframes[node.id] = pd.read_excel(cached_file)
+                    elif file_ext == '.json':
+                        dataframes[node.id] = pd.read_json(cached_file, orient='records')
+                    elif file_ext == '.parquet':
+                        dataframes[node.id] = pd.read_parquet(cached_file)
+                    else:
+                        dataframes[node.id] = pd.read_csv(cached_file)
+                    
+                    # Filtra colonne visible
+                    node_columns = node.data.get('columns', []) if node.data else []
+                    visible_columns = [col['name'] for col in node_columns if col.get('visible', True)]
+                    
+                    if visible_columns:
+                        available_cols = [col for col in visible_columns if col in dataframes[node.id].columns]
+                        if available_cols:
+                            dataframes[node.id] = dataframes[node.id][available_cols]
+                else:
+                    # Nessuna cache, esegui il progetto upstream
+                    upstream = self.execute_pipeline(source_project_id, force_recalculate=False)
+                    if not upstream.get("success"):
+                        return upstream
+                    
+                    file_path = Path(upstream["output_path"])
+                    file_ext = file_path.suffix.lower()
+                    
+                    if file_ext == '.xlsx':
+                        dataframes[node.id] = pd.read_excel(file_path)
+                    elif file_ext == '.json':
+                        dataframes[node.id] = pd.read_json(file_path, orient='records')
+                    else:
+                        dataframes[node.id] = pd.read_csv(file_path)
+            
+            if not dataframes:
+                return {"success": False, "message": "Nessun dato sorgente disponibile"}
+            
+            # B. Applica trasformazioni
+            transform_nodes = [n for n in canvas.nodes if n.type == "transform"]
+            
+            if not transform_nodes:
+                current_df = self._apply_default_joins(canvas, dataframes)
+            else:
+                current_df = None
+                for node in transform_nodes:
+                    incoming_edges = [e for e in canvas.edges if e.target == node.id]
+                    inputs = [dataframes[e.source] for e in incoming_edges if e.source in dataframes]
+                    
+                    if not inputs:
+                        continue
+                    
+                    current_df = self._dispatch_transform(node, inputs)
+                    dataframes[node.id] = current_df
+            
+            if current_df is None:
+                return {"success": False, "message": "Nessun dato prodotto dalla pipeline"}
+            
+            # C. Applica GROUP BY dal result node
+            result_node = next((n for n in canvas.nodes if n.type == "result"), None)
+            if result_node:
+                current_df = self._apply_result_node_groupby(current_df, result_node)
+            
+            # D. Limita e prepara output
+            total_count = len(current_df)
+            truncated = total_count > limit
+            
+            if truncated:
+                preview_df = current_df.head(limit)
+            else:
+                preview_df = current_df
+            
+            # Costruisci metadata colonne
+            columns = []
+            for col in preview_df.columns:
+                dtype = str(preview_df[col].dtype)
+                if 'int' in dtype:
+                    col_type = 'int'
+                elif 'float' in dtype:
+                    col_type = 'real'
+                elif 'datetime' in dtype:
+                    col_type = 'date'
+                elif 'bool' in dtype:
+                    col_type = 'bool'
+                else:
+                    col_type = 'str'
+                
+                columns.append({"name": col, "type": col_type})
+            
+            # Converti a lista di dict
+            rows = preview_df.to_dict(orient='records')
+            
+            # Converti valori non serializzabili
+            import numpy as np
+            for row in rows:
+                for key, value in row.items():
+                    if pd.isna(value):
+                        row[key] = None
+                    elif isinstance(value, (np.integer, np.floating)):
+                        row[key] = value.item()
+                    elif isinstance(value, np.bool_):
+                        row[key] = bool(value)
+                    elif isinstance(value, (pd.Timestamp, np.datetime64)):
+                        row[key] = str(value)
+            
+            logger.info(f"Preview MANIPOLA completata: {len(rows)} righe, {len(columns)} colonne")
+            
+            return {
+                "success": True,
+                "columns": columns,
+                "rows": rows,
+                "total_count": total_count,
+                "preview_count": len(rows),
+                "truncated": truncated
+            }
+            
+        except Exception as e:
+            logger.error(f"Errore preview MANIPOLA: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return {"success": False, "message": str(e)}
+
     def _execute_extract(self, project_id: str, canvas: CanvasState) -> Dict[str, Any]:
             """Esegue query SQL e salva il file."""
             logger.info(f"Esecuzione progetto ESTRAI: {project_id}")
@@ -297,7 +609,101 @@ class OrchestratorService:
         if current_df is None or not result_node:
             return {"success": False, "message": "Nessun dato prodotto dalla manipolazione"}
 
+        # ✅ Applica GROUP BY dal result node se configurato
+        current_df = self._apply_result_node_groupby(current_df, result_node)
+
         return self._save_manipulation_result(project_id, result_node, current_df, canvas)
+    
+    def _apply_result_node_groupby(self, df: pd.DataFrame, result_node: Node) -> pd.DataFrame:
+        """
+        Applica GROUP BY configurato nel result node (MANIPOLA).
+        
+        I campi sono in result_node.data:
+        - group_by_enabled: bool
+        - group_by_columns: List[str]
+        - aggregations: List[dict] con {column, function, alias}
+        
+        Returns:
+            DataFrame con GROUP BY applicato, o originale se non configurato
+        """
+        if not result_node.data:
+            return df
+            
+        group_by_enabled = result_node.data.get('group_by_enabled', False)
+        
+        if not group_by_enabled:
+            return df
+            
+        group_cols = result_node.data.get('group_by_columns', [])
+        aggregations = result_node.data.get('aggregations', [])
+        
+        if not group_cols and not aggregations:
+            logger.warning("GROUP BY abilitato ma nessuna configurazione - restituisco input")
+            return df
+        
+        logger.info(f"Applicando GROUP BY dal result node: columns={group_cols}, aggs={len(aggregations)}")
+        
+        try:
+            # Costruisci dizionario aggregazioni per pandas
+            # aggregations format: [{column: 'col', function: 'SUM', alias: 'sum_col'}, ...]
+            agg_dict = {}
+            rename_dict = {}
+            
+            for agg in aggregations:
+                # Supporta sia dict che oggetti Pydantic
+                if hasattr(agg, 'column'):
+                    col = agg.column
+                    func = agg.function.lower() if agg.function else 'count'
+                    alias = agg.alias
+                else:
+                    col = agg.get('column', '*')
+                    func = agg.get('function', 'COUNT').lower()
+                    alias = agg.get('alias')
+                
+                # COUNT(*) caso speciale
+                if col == '*':
+                    # Usa una colonna qualsiasi per count
+                    if len(df.columns) > 0:
+                        first_col = df.columns[0]
+                        agg_dict[first_col] = 'count'
+                        if alias:
+                            rename_dict[first_col] = alias
+                        else:
+                            rename_dict[first_col] = 'count_all'
+                else:
+                    if col in df.columns:
+                        agg_dict[col] = func
+                        if alias and alias != f"{func}_{col}":
+                            rename_dict[col] = alias
+                    else:
+                        logger.warning(f"Colonna {col} non trovata per aggregazione")
+            
+            if not agg_dict:
+                logger.warning("Nessuna aggregazione valida - restituisco input")
+                return df
+            
+            # Se non ci sono colonne di gruppo, aggrega tutto
+            if not group_cols:
+                result = df.agg(agg_dict).to_frame().T.reset_index(drop=True)
+            else:
+                # Verifica che le colonne di gruppo esistano
+                valid_group_cols = [c for c in group_cols if c in df.columns]
+                if not valid_group_cols:
+                    logger.warning(f"Nessuna colonna di GROUP BY valida: {group_cols}")
+                    return df
+                
+                result = df.groupby(valid_group_cols).agg(agg_dict).reset_index()
+            
+            # Rinomina colonne secondo gli alias
+            if rename_dict:
+                result = result.rename(columns=rename_dict)
+            
+            logger.info(f"GROUP BY completato: {result.shape[0]} righe, {result.shape[1]} colonne")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Errore GROUP BY dal result node: {e}")
+            return df
     
     def _apply_default_joins(self, canvas: CanvasState, dataframes: Dict[str, pd.DataFrame]) -> pd.DataFrame:
         """

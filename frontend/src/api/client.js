@@ -136,4 +136,42 @@ export const listApiConnections = async () => {
   return response.data;
 };
 
+
+/**
+ * Ottiene una preview dei dati del progetto
+ * @param {string} projectId - ID del progetto
+ * @param {number} limit - Numero massimo di righe (default 100)
+ * @returns {Promise<Object>} - { columns, rows, total_count, preview_count, truncated }
+ */
+export const previewProject = async (projectId, limit = 100) => {
+  const response = await fetch(
+    `${API_BASE_URL}/api/projects/${projectId}/preview?limit=${limit}`,
+    {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+  }
+
+  return response.json();
+};
+
+// ============================================================
+// Oppure se usi axios:
+// ============================================================
+
+export const previewProjectAxios = async (projectId, limit = 100) => {
+  const { data } = await axios.get(
+    `/api/projects/${projectId}/preview`,
+    { params: { limit } }
+  );
+  return data;
+};
+
 export default api;

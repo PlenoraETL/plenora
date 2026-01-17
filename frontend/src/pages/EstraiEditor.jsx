@@ -17,7 +17,8 @@ import ResultNode from '../components/ResultNode';
 import { validateCanvas } from '../utils/canvasValidation';
 import { calculateOutputColumnsRecursive } from '../utils/columnUtils';
 import '../styles/EstraiEditor.css';
-
+import PreviewModal from '../components/PreviewModal';
+import { previewProject } from '../api/client';  // Aggiungi questa export al client
 const nodeTypes = {
   tableNode: TableNode,
   resultNode: ResultNode
@@ -61,7 +62,11 @@ function EstraiEditor() {
   const [showExecutionModal, setShowExecutionModal] = useState(false);
   const [executionResult, setExecutionResult] = useState(null);
   const [isExecuting, setIsExecuting] = useState(false);
-
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [previewData, setPreviewData] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState(null);
+  
   useEffect(() => {
     loadData();
   }, []);
@@ -161,12 +166,19 @@ function EstraiEditor() {
               distinct: node.distinct || false,
               limit: node.limit || null,
               columns: node.columns || [],
+              // ✅ GROUP BY fields
+              group_by_enabled: node.group_by_enabled || false,
+              group_by_columns: node.group_by_columns || [],
+              aggregations: node.aggregations || [],
+              // Callbacks
               onUpdateFileName: handleUpdateResultFileName,
               onUpdateFormat: handleUpdateResultFormat,
               onToggleDistinct: handleToggleDistinct,
               onUpdateLimit: handleUpdateLimit,
+              onUpdateGroupBy: handleUpdateGroupBy,  // ✅ NEW
               onExecute: handleExecuteQuery,
-              onDelete: handleDeleteNode
+              onDelete: handleDeleteNode,
+			  onPreview: handlePreview
             }
           };
         } else {
@@ -406,7 +418,11 @@ function EstraiEditor() {
             format: node.data.format,
             distinct: node.data.distinct || false,
             limit: node.data.limit || null,
-            columns: outputColumns
+            columns: outputColumns,
+            // ✅ GROUP BY fields
+            group_by_enabled: node.data.group_by_enabled || false,
+            group_by_columns: node.data.group_by_columns || [],
+            aggregations: node.data.aggregations || []
           };
         } else {
           return {
@@ -461,6 +477,34 @@ function EstraiEditor() {
       setIsExecuting(false);
     }
   }, [projectId]);
+  
+  
+	const handlePreview = useCallback(async (nodeId) => {
+	  setShowPreviewModal(true);
+	  setPreviewLoading(true);
+	  setPreviewError(null);
+	  setPreviewData(null);
+	  
+	  try {
+		// Prima salva il canvas
+		await handleSave();
+		
+		// Poi chiama la preview API
+		const result = await previewProject(projectId, 100);
+		
+		if (result.success) {
+		  setPreviewData(result);
+		} else {
+		  setPreviewError(result.message || 'Errore generazione preview');
+		}
+	  } catch (error) {
+		console.error('[EstraiEditor] Errore preview:', error);
+		setPreviewError(error.message || 'Errore durante la preview');
+	  } finally {
+		setPreviewLoading(false);
+	  }
+	}, [projectId, handleSave]);  
+  
 
   const handleAddResultNode = useCallback(() => {
     if (nodes.some(n => n.type === 'resultNode')) {
@@ -477,12 +521,20 @@ function EstraiEditor() {
         format: 'csv',
         distinct: false,
         limit: null,
+        columns: [],
+        // ✅ GROUP BY fields
+        group_by_enabled: false,
+        group_by_columns: [],
+        aggregations: [],
+        // Callbacks
         onUpdateFileName: handleUpdateResultFileName,
         onUpdateFormat: handleUpdateResultFormat,
         onToggleDistinct: handleToggleDistinct,
         onUpdateLimit: handleUpdateLimit,
+        onUpdateGroupBy: handleUpdateGroupBy,  // ✅ NEW
         onExecute: handleExecuteQuery,
-        onDelete: handleDeleteNode
+        onDelete: handleDeleteNode,
+		onPreview: handlePreview
       }
     };
 
@@ -557,6 +609,26 @@ function EstraiEditor() {
     );
   }, [setNodes]);
 
+  // ✅ NEW: Handler per aggiornare configurazione GROUP BY
+  const handleUpdateGroupBy = useCallback((nodeId, groupByConfig) => {
+    setNodes((nds) =>
+      nds.map((node) => {
+        if (node.id === nodeId) {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              group_by_enabled: groupByConfig.group_by_enabled,
+              group_by_columns: groupByConfig.group_by_columns,
+              aggregations: groupByConfig.aggregations
+            }
+          };
+        }
+        return node;
+      })
+    );
+  }, [setNodes]);
+
   const handleSave = async () => {
     const validation = validateCanvas(nodes, edges);
     
@@ -587,7 +659,11 @@ function EstraiEditor() {
             format: node.data.format,
             distinct: node.data.distinct || false,
             limit: node.data.limit || null,
-            columns: outputColumns
+            columns: outputColumns,
+            // ✅ GROUP BY fields
+            group_by_enabled: node.data.group_by_enabled || false,
+            group_by_columns: node.data.group_by_columns || [],
+            aggregations: node.data.aggregations || []
           };
         } else {
           return {

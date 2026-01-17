@@ -263,9 +263,15 @@ const ManipolaEditorContent = () => {
                 format: node.data?.format || 'csv',
                 geomColumn: node.data?.geomColumn || null,
                 availableColumns: [], // Sarà aggiornato dall'useEffect
+                // ✅ GROUP BY fields
+                group_by_enabled: node.data?.group_by_enabled || false,
+                group_by_columns: node.data?.group_by_columns || [],
+                aggregations: node.data?.aggregations || [],
+                // Callbacks
                 onUpdateFileName: handleUpdateResultFileName,
                 onUpdateFormat: handleUpdateResultFormat,
                 onUpdateGeomColumn: handleUpdateGeomColumn,
+                onUpdateGroupBy: handleUpdateGroupBy,  // ✅ NEW
                 onExecute: handleExecute,
                 onDelete: handleDeleteNode
               }
@@ -432,6 +438,26 @@ const ManipolaEditorContent = () => {
     );
   }, [setNodes]);
 
+  // ✅ NEW: Handler per aggiornare configurazione GROUP BY
+  const handleUpdateGroupBy = useCallback((nodeId, groupByConfig) => {
+    setNodes((nds) =>
+      nds.map((node) => {
+        if (node.id === nodeId) {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              group_by_enabled: groupByConfig.group_by_enabled,
+              group_by_columns: groupByConfig.group_by_columns,
+              aggregations: groupByConfig.aggregations
+            }
+          };
+        }
+        return node;
+      })
+    );
+  }, [setNodes]);
+
   // Calcola colonne disponibili dai nodi sorgente (ProjectSource e Transform)
   const getAvailableColumns = useCallback(() => {
     const columns = [];
@@ -519,16 +545,22 @@ const ManipolaEditorContent = () => {
         fileName: 'output',
         format: 'csv',
         availableColumns: getAvailableColumns(),
+        // ✅ GROUP BY fields
+        group_by_enabled: false,
+        group_by_columns: [],
+        aggregations: [],
+        // Callbacks
         onUpdateFileName: handleUpdateResultFileName,
         onUpdateFormat: handleUpdateResultFormat,
         onUpdateGeomColumn: handleUpdateGeomColumn,
+        onUpdateGroupBy: handleUpdateGroupBy,  // ✅ NEW
         onExecute: handleExecute,
         onDelete: handleDeleteNode
       }
     };
 
     setNodes((nds) => nds.concat(newNode));
-  }, [setNodes, handleUpdateResultFileName, handleUpdateResultFormat, handleUpdateGeomColumn, handleDeleteNode, getAvailableColumns]);
+  }, [setNodes, handleUpdateResultFileName, handleUpdateResultFormat, handleUpdateGeomColumn, handleUpdateGroupBy, handleDeleteNode, getAvailableColumns]);
 
   // Salvataggio silenzioso (senza feedback UI)
   const handleSaveCanvasQuiet = useCallback(async () => {
@@ -548,7 +580,11 @@ const ManipolaEditorContent = () => {
             config: node.data?.config,
             fileName: node.data?.fileName,
             format: node.data?.format,
-            geomColumn: node.data?.geomColumn
+            geomColumn: node.data?.geomColumn,
+            // ✅ GROUP BY fields
+            group_by_enabled: node.data?.group_by_enabled,
+            group_by_columns: node.data?.group_by_columns,
+            aggregations: node.data?.aggregations
           }
         })),
         edges: currentEdges

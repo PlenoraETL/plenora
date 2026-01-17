@@ -277,9 +277,17 @@ class QueryGenerator:
         valid_agg_functions = {'COUNT', 'SUM', 'AVG', 'MIN', 'MAX', 'FIRST', 'LAST'}
         
         for agg in aggregations:
-            col = agg.get('column', '*')
-            func = agg.get('function', 'COUNT').upper()
-            alias = agg.get('alias', f"{func.lower()}_{col}")
+            # Supporta sia dict che oggetti Pydantic
+            if hasattr(agg, 'column'):
+                # Oggetto Pydantic
+                col = agg.column or '*'
+                func = (agg.function or 'COUNT').upper()
+                alias = agg.alias or f"{func.lower()}_{col}"
+            else:
+                # Dizionario
+                col = agg.get('column', '*')
+                func = agg.get('function', 'COUNT').upper()
+                alias = agg.get('alias', f"{func.lower()}_{col}")
             
             # Validazione funzione
             if func not in valid_agg_functions:

@@ -655,6 +655,62 @@
   color: #666;
   margin-top: 2px;
 }
+/* ============================================================
+   CONTAINER AZIONI (Preview + Esegui)
+   ============================================================ */
+.result-node__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* ============================================================
+   BOTTONE PREVIEW
+   ============================================================ */
+.result-node__preview-btn {
+  flex: 1;
+  padding: 10px;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+/* Colori preview per tipo progetto */
+.result-node__preview-btn--estrai {
+  background: linear-gradient(135deg, #42a5f5 0%, #1976d2 100%);
+}
+
+.result-node__preview-btn--manipola {
+  background: linear-gradient(135deg, #ab47bc 0%, #7b1fa2 100%);
+}
+
+.result-node__preview-btn:hover {
+  transform: translateY(-2px);
+}
+
+.result-node__preview-btn--estrai:hover {
+  box-shadow: 0 4px 12px rgba(25, 118, 210, 0.4);
+}
+
+.result-node__preview-btn--manipola:hover {
+  box-shadow: 0 4px 12px rgba(123, 31, 162, 0.4);
+}
+
+.result-node__preview-btn:active {
+  transform: translateY(0);
+}
+
+.result-node__preview-icon {
+  font-size: 14px;
+}
 
 /* ============================================================
    BOTTONE ESEGUI
@@ -711,6 +767,11 @@
 
 .result-node__execute-icon {
   font-size: 16px;
+}
+
+.result-node__actions .result-node__execute-btn {
+  flex: 1;
+  margin-top: 0; /* Rimuovi margin-top quando in flex container */
 }
 
 /* ============================================================

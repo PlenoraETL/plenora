@@ -440,6 +440,49 @@ def test_api_connection(api_id: str, data: dict):
     result = api_connection_service.test_api_connection(api_id=api_id, test_params=test_params)
     return result
 
+# ============================================================
+# 1. ENDPOINT per main.py 
+#    Aggiungi dopo l'endpoint /api/projects/{project_id}/execute
+# ============================================================
+
+@app.get("/api/projects/{project_id}/preview")
+def preview_project_data(project_id: str, limit: int = 100):
+    """
+    Esegue una preview dei dati del progetto (ESTRAI o MANIPOLA).
+    Restituisce le prime N righe senza salvare file.
+    
+    Parametri:
+    - limit: numero massimo di righe da restituire (default 100, max 1000)
+    """
+    try:
+        # Limita il massimo
+        limit = min(limit, 1000)
+        
+        # Ottieni metadata per sapere il tipo progetto
+        metadata = project_service.get_project_metadata(project_id)
+        if not metadata:
+            raise HTTPException(status_code=404, detail=f"Progetto '{project_id}' non trovato")
+        
+        # Esegui preview tramite orchestrator
+        result = orchestrator.execute_preview(project_id, limit=limit)
+        
+        if not result.get("success"):
+            raise HTTPException(
+                status_code=400, 
+                detail=result.get("message", "Errore generazione preview")
+            )
+        
+        return result
+        
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logger.error(f"Errore preview: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Errore interno: {str(e)}")
+
+
 if __name__ == "__main__":
     import uvicorn
     import nest_asyncio

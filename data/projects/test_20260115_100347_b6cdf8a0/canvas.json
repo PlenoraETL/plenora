@@ -410,7 +410,7 @@
       "id": "result_1768471194928",
       "type": "result",
       "position": {
-        "x": 2022.0,
+        "x": 2021.0,
         "y": 256.0
       },
       "table_name": null,
@@ -862,8 +862,10 @@
       "format": "csv",
       "distinct": false,
       "limit": 10,
-      "group_by_enabled": false,
-      "group_by_columns": [],
+      "group_by_enabled": true,
+      "group_by_columns": [
+        "particella"
+      ],
       "aggregations": []
     },
     {
