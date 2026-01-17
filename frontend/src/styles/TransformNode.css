@@ -494,3 +494,6 @@
 .transform-node__confirm-box--spatial .transform-node__confirm-content {
   color: #880E4F;
 }
+
+.transform-node--sort { --op-color: #607D8B; }
+.transform-node--distinct { --op-color: #795548; }

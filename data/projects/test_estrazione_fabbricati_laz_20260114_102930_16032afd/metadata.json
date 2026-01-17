@@ -5,7 +5,7 @@
   "project_type": "estrai",
   "default_connection_id": "catasto_20260112_094442_0da4f765",
   "created_at": "2026-01-14T10:29:30.862637",
-  "updated_at": "2026-01-16T03:43:41.501973",
+  "updated_at": "2026-01-17T05:52:58.994266",
   "columns_metadata": [
     {
       "name": "provincia",

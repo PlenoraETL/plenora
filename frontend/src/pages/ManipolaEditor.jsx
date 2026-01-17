@@ -23,6 +23,7 @@ import {
 import ProjectSourceNode from '../components/ProjectSourceNode';
 import TransformNode from '../components/TransformNode';
 import ResultNode from '../components/ResultNode';
+import { useSchemaInference } from '../hooks/useSchemaInference';
 import '../styles/ManipolaEditor.css';
 
 const nodeTypes = {
@@ -65,6 +66,14 @@ const ManipolaEditorContent = () => {
   const [executionResult, setExecutionResult] = useState(null);
   const [isExecuting, setIsExecuting] = useState(false);
   
+  // ===== SCHEMA INFERENCE =====
+  const { 
+    schemas, 
+    loading: schemasLoading, 
+    refreshSchemas, 
+    getNodeSchema 
+  } = useSchemaInference(projectId);
+  
   const nodesRef = useRef(nodes);
   const edgesRef = useRef(edges);
   
@@ -73,29 +82,82 @@ const ManipolaEditorContent = () => {
     edgesRef.current = edges;
   }, [nodes, edges]);
 
+  // ===== PROPAGA SCHEMI AI NODI TRANSFORM =====
+  // Quando cambiano gli schemi, aggiorna le colonne nei nodi transform
+  useEffect(() => {
+    if (!schemas || Object.keys(schemas).length === 0) return;
+    
+    setNodes((nds) =>
+      nds.map((node) => {
+        // Per ogni nodo, se ha uno schema inferito, aggiorna le colonne
+        const nodeSchema = schemas[node.id];
+        if (nodeSchema && nodeSchema.length > 0) {
+          // Converti schema in formato colonne
+          const columns = nodeSchema.map(col => ({
+            name: col.name,
+            type: col.type,
+            visible: true,
+            source_node: col.source_node,
+            is_calculated: col.is_calculated
+          }));
+          
+          // Aggiorna solo se diverso
+          const currentCols = JSON.stringify(node.data?.columns || []);
+          const newCols = JSON.stringify(columns);
+          
+          if (currentCols !== newCols) {
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                columns: columns
+              }
+            };
+          }
+        }
+        return node;
+      })
+    );
+  }, [schemas, setNodes]);
+
   // Aggiorna availableColumns nel ResultNode quando cambiano i nodi sorgente
   useEffect(() => {
     const resultNode = nodes.find(n => n.type === 'result');
     if (!resultNode) return;
     
-    // Raccogli colonne da tutti i nodi sorgente
+    // Raccogli colonne da tutti i nodi usando gli schemi inferiti
     const availableColumns = [];
+    
     for (const node of nodes) {
-      if (node.type === 'project_source' && node.data?.columns) {
-        for (const col of node.data.columns) {
-          availableColumns.push({
-            name: col.name || col,
-            type: col.type || 'str',
-            source: node.data?.source_project_id || 'source'
-          });
-        }
-      } else if (node.type === 'transform' && node.data?.columns) {
-        for (const col of node.data.columns) {
-          availableColumns.push({
-            name: col.name || col,
-            type: col.type || 'str',
-            source: 'transform'
-          });
+      const nodeSchema = schemas[node.id] || [];
+      for (const col of nodeSchema) {
+        availableColumns.push({
+          name: col.name,
+          type: col.type || 'str',
+          source: node.id
+        });
+      }
+    }
+    
+    // Fallback: se non ci sono schemi, usa i dati locali dei nodi
+    if (availableColumns.length === 0) {
+      for (const node of nodes) {
+        if (node.type === 'project_source' && node.data?.columns) {
+          for (const col of node.data.columns) {
+            availableColumns.push({
+              name: col.name || col,
+              type: col.type || 'str',
+              source: node.data?.source_project_id || 'source'
+            });
+          }
+        } else if (node.type === 'transform' && node.data?.columns) {
+          for (const col of node.data.columns) {
+            availableColumns.push({
+              name: col.name || col,
+              type: col.type || 'str',
+              source: 'transform'
+            });
+          }
         }
       }
     }
@@ -120,7 +182,32 @@ const ManipolaEditorContent = () => {
         })
       );
     }
-  }, [nodes, setNodes]);
+  }, [nodes, schemas, setNodes]);
+
+  // ===== REFRESH SCHEMI QUANDO CAMBIANO EDGES =====
+  // Debounce per evitare troppe chiamate
+  const refreshTimeoutRef = useRef(null);
+  
+  useEffect(() => {
+    if (refreshTimeoutRef.current) {
+      clearTimeout(refreshTimeoutRef.current);
+    }
+    
+    refreshTimeoutRef.current = setTimeout(() => {
+      if (projectId && edges.length > 0) {
+        // Prima salva, poi refresh schemi
+        handleSaveCanvasQuiet().then(() => {
+          refreshSchemas();
+        });
+      }
+    }, 500);
+    
+    return () => {
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
+      }
+    };
+  }, [edges.length, projectId]);
 
   // Gestione Delete/Backspace
   useEffect(() => {
@@ -200,7 +287,7 @@ const ManipolaEditorContent = () => {
               data: {
                 transform_op: node.data?.transform_op || 'join',
                 config: node.data?.config || {},
-                columns: node.data?.columns || [],
+                columns: node.data?.columns || [], // Sarà aggiornato dallo schema inference
                 onChange: (newData) => handleUpdateTransform(node.id, newData),
                 onUpdateColumns: handleUpdateProjectSourceColumns,
                 onDelete: handleDeleteNode
@@ -219,6 +306,11 @@ const ManipolaEditorContent = () => {
         p => (p.project_type || 'estrai') === 'estrai'
       );
       setAvailableSources(sqlProjects);
+      
+      // Refresh schemi dopo caricamento
+      setTimeout(() => {
+        refreshSchemas();
+      }, 100);
       
     } catch (err) {
       console.error("[ManipolaEditor] Errore caricamento:", err);
@@ -243,7 +335,12 @@ const ManipolaEditorContent = () => {
         return node;
       })
     );
-  }, [setNodes]);
+    
+    // Refresh schemi dopo cambio sorgente
+    setTimeout(() => {
+      handleSaveCanvasQuiet().then(() => refreshSchemas());
+    }, 100);
+  }, [setNodes, refreshSchemas]);
 
   const handleUpdateProjectSourceColumns = useCallback((nodeId, columns) => {
     setNodes((nds) =>
@@ -277,7 +374,12 @@ const ManipolaEditorContent = () => {
         return node;
       })
     );
-  }, [setNodes]);
+    
+    // Refresh schemi dopo cambio configurazione transform
+    setTimeout(() => {
+      handleSaveCanvasQuiet().then(() => refreshSchemas());
+    }, 300);
+  }, [setNodes, refreshSchemas]);
 
   const handleUpdateResultFileName = useCallback((nodeId, newFileName) => {
     setNodes((nds) =>
@@ -334,30 +436,43 @@ const ManipolaEditorContent = () => {
   const getAvailableColumns = useCallback(() => {
     const columns = [];
     
-    for (const node of nodesRef.current) {
-      if (node.type === 'project_source' && node.data?.columns) {
-        // Colonne da ProjectSource
-        for (const col of node.data.columns) {
-          columns.push({
-            name: col.name || col,
-            type: col.type || 'str',
-            source: node.data?.source_project_id || 'source'
-          });
-        }
-      } else if (node.type === 'transform' && node.data?.columns) {
-        // Colonne da TransformNode (se disponibili)
-        for (const col of node.data.columns) {
-          columns.push({
-            name: col.name || col,
-            type: col.type || 'str',
-            source: 'transform'
-          });
+    // Prima prova con gli schemi inferiti
+    for (const nodeId of Object.keys(schemas)) {
+      const nodeSchema = schemas[nodeId] || [];
+      for (const col of nodeSchema) {
+        columns.push({
+          name: col.name,
+          type: col.type || 'str',
+          source: nodeId
+        });
+      }
+    }
+    
+    // Fallback ai dati locali
+    if (columns.length === 0) {
+      for (const node of nodesRef.current) {
+        if (node.type === 'project_source' && node.data?.columns) {
+          for (const col of node.data.columns) {
+            columns.push({
+              name: col.name || col,
+              type: col.type || 'str',
+              source: node.data?.source_project_id || 'source'
+            });
+          }
+        } else if (node.type === 'transform' && node.data?.columns) {
+          for (const col of node.data.columns) {
+            columns.push({
+              name: col.name || col,
+              type: col.type || 'str',
+              source: 'transform'
+            });
+          }
         }
       }
     }
     
     return columns;
-  }, []);
+  }, [schemas]);
 
   const handleDeleteNode = useCallback((nodeId) => {
     setNodes((nds) => nds.filter((node) => node.id !== nodeId));
@@ -378,7 +493,7 @@ const ManipolaEditorContent = () => {
       data: {
         transform_op: 'join',
         config: {},
-        columns: [],
+        columns: [], // Sarà popolato dallo schema inference
         onChange: (newData) => handleUpdateTransform(newNodeId, newData),
         onUpdateColumns: handleUpdateProjectSourceColumns,
         onDelete: handleDeleteNode
@@ -415,10 +530,9 @@ const ManipolaEditorContent = () => {
     setNodes((nds) => nds.concat(newNode));
   }, [setNodes, handleUpdateResultFileName, handleUpdateResultFormat, handleUpdateGeomColumn, handleDeleteNode, getAvailableColumns]);
 
-  const handleSaveCanvas = useCallback(async () => {
+  // Salvataggio silenzioso (senza feedback UI)
+  const handleSaveCanvasQuiet = useCallback(async () => {
     try {
-      setSaving(true);
-      
       const currentNodes = nodesRef.current;
       const currentEdges = edgesRef.current;
       
@@ -433,7 +547,8 @@ const ManipolaEditorContent = () => {
             transform_op: node.data?.transform_op,
             config: node.data?.config,
             fileName: node.data?.fileName,
-            format: node.data?.format
+            format: node.data?.format,
+            geomColumn: node.data?.geomColumn
           }
         })),
         edges: currentEdges
@@ -442,12 +557,21 @@ const ManipolaEditorContent = () => {
       await updateCanvas(projectId, canvasToSave);
       
     } catch (error) {
+      console.error('[ManipolaEditor] Errore salvataggio canvas silenzioso:', error);
+    }
+  }, [projectId]);
+
+  const handleSaveCanvas = useCallback(async () => {
+    try {
+      setSaving(true);
+      await handleSaveCanvasQuiet();
+    } catch (error) {
       console.error('[ManipolaEditor] Errore salvataggio canvas:', error);
       alert('Errore durante il salvataggio');
     } finally {
       setSaving(false);
     }
-  }, [projectId]);
+  }, [handleSaveCanvasQuiet]);
 
   const handleExecute = useCallback(async (nodeId, options = {}) => {
     setShowExecutionModal(true);
@@ -490,7 +614,12 @@ const ManipolaEditorContent = () => {
 
   const onConnect = useCallback((params) => {
     setEdges((eds) => addEdge({ ...params, ...defaultEdgeOptions }, eds));
-  }, [setEdges]);
+    
+    // Refresh schemi dopo nuova connessione
+    setTimeout(() => {
+      handleSaveCanvasQuiet().then(() => refreshSchemas());
+    }, 100);
+  }, [setEdges, refreshSchemas]);
 
   const onDragStart = (event, project) => {
     event.dataTransfer.setData('application/reactflow', 'project_source');
@@ -533,8 +662,13 @@ const ManipolaEditorContent = () => {
       };
 
       setNodes((nds) => nds.concat(newNode));
+      
+      // Refresh schemi dopo aggiunta nodo
+      setTimeout(() => {
+        handleSaveCanvasQuiet().then(() => refreshSchemas());
+      }, 100);
     },
-    [screenToFlowPosition, setNodes, handleUpdateProjectSource, handleUpdateProjectSourceColumns, handleDeleteNode]
+    [screenToFlowPosition, setNodes, handleUpdateProjectSource, handleUpdateProjectSourceColumns, handleDeleteNode, refreshSchemas]
   );
 
   const onEdgeContextMenu = useCallback((event, edge) => {
@@ -579,6 +713,11 @@ const ManipolaEditorContent = () => {
         <div className="manipola-toolbar__center">
           <h2 className="manipola-toolbar__title">{project.metadata?.name}</h2>
           <span className="manipola-toolbar__badge">MANIPOLA</span>
+          {schemasLoading && (
+            <span className="manipola-toolbar__badge" style={{background: '#FF9800'}}>
+              ⏳ Aggiornamento schemi...
+            </span>
+          )}
         </div>
         
         <div className="manipola-toolbar__right">

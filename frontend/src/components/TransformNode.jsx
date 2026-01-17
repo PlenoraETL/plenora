@@ -21,6 +21,8 @@ const TransformNode = memo(({ data, id }) => {
     { value: 'aggregate', label: 'Aggregazione (GroupBy)', color: '#FF9800', category: 'base' },
     { value: 'filter', label: 'Filter (Filtra)', color: '#9C27B0', category: 'base' },
     { value: 'concat', label: 'Concat (Unisci)', color: '#F44336', category: 'base' },
+	{ value: 'sort', label: '↕️ Sort (Ordina)', color: '#607D8B', category: 'base' },
+	{ value: 'distinct', label: '🔹 Distinct (Univoci)', color: '#795548', category: 'base' },	
     // Spaziali
     { value: 'sjoin', label: '🌐 Spatial Join', color: '#E91E63', category: 'spatial' },
     { value: 'geo_buffer', label: '🔵 Buffer', color: '#E91E63', category: 'spatial' },

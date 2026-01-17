@@ -293,6 +293,10 @@ class SchemaInferenceService:
             return self._schema_formula(input_schemas, config, node.id)
         elif transform_op == "filter":
             return self._schema_filter(input_schemas, node.id)
+        elif op == "sort":
+            return self._op_sort(inputs[0] if inputs else pd.DataFrame(), node)
+        elif op == "distinct":
+            return self._op_distinct(inputs[0] if inputs else pd.DataFrame(), node)
         elif transform_op == "concat":
             return self._schema_concat(input_schemas, config, node.id)
         elif transform_op == "sort":

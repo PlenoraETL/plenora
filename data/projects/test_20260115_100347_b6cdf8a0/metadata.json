@@ -5,5 +5,295 @@
   "project_type": "estrai",
   "default_connection_id": "catasto_20260112_094442_0da4f765",
   "created_at": "2026-01-15T10:03:47.776122",
-  "updated_at": "2026-01-15T11:06:00.186878"
+  "updated_at": "2026-01-15T11:06:00.186878",
+  "columns_metadata": [
+    {
+      "name": "provincia",
+      "type": "str"
+    },
+    {
+      "name": "cod_comune",
+      "type": "str"
+    },
+    {
+      "name": "foglio",
+      "type": "int"
+    },
+    {
+      "name": "extent",
+      "type": "str"
+    },
+    {
+      "name": "comune",
+      "type": "str"
+    },
+    {
+      "name": "terreno_vettorializzato",
+      "type": "bool"
+    },
+    {
+      "name": "fabbricato_vettorializzato",
+      "type": "real"
+    },
+    {
+      "name": "in_elaborazione",
+      "type": "bool"
+    },
+    {
+      "name": "download_dati_terreni",
+      "type": "real"
+    },
+    {
+      "name": "download_dati_fabbricati",
+      "type": "real"
+    },
+    {
+      "name": "download_particelle",
+      "type": "real"
+    },
+    {
+      "name": "chiave",
+      "type": "str"
+    },
+    {
+      "name": "geom",
+      "type": "str"
+    },
+    {
+      "name": "regione",
+      "type": "str"
+    },
+    {
+      "name": "id",
+      "type": "int"
+    },
+    {
+      "name": "num_particelle_terreeni",
+      "type": "int"
+    },
+    {
+      "name": "particella",
+      "type": "int"
+    },
+    {
+      "name": "categoria",
+      "type": "real"
+    },
+    {
+      "name": "categoria_esri",
+      "type": "real"
+    },
+    {
+      "name": "geom_multy",
+      "type": "str"
+    },
+    {
+      "name": "a07",
+      "type": "real"
+    },
+    {
+      "name": "a06",
+      "type": "real"
+    },
+    {
+      "name": "b05",
+      "type": "real"
+    },
+    {
+      "name": "c07",
+      "type": "real"
+    },
+    {
+      "name": "c05",
+      "type": "real"
+    },
+    {
+      "name": "c02",
+      "type": "real"
+    },
+    {
+      "name": "d04",
+      "type": "real"
+    },
+    {
+      "name": "d03",
+      "type": "real"
+    },
+    {
+      "name": "d07",
+      "type": "real"
+    },
+    {
+      "name": "e06",
+      "type": "real"
+    },
+    {
+      "name": "e05",
+      "type": "real"
+    },
+    {
+      "name": "f04",
+      "type": "real"
+    },
+    {
+      "name": "f03",
+      "type": "real"
+    },
+    {
+      "name": "a04",
+      "type": "real"
+    },
+    {
+      "name": "a02",
+      "type": "real"
+    },
+    {
+      "name": "a11",
+      "type": "real"
+    },
+    {
+      "name": "a10",
+      "type": "real"
+    },
+    {
+      "name": "c01",
+      "type": "real"
+    },
+    {
+      "name": "d06",
+      "type": "real"
+    },
+    {
+      "name": "f05",
+      "type": "real"
+    },
+    {
+      "name": "a08",
+      "type": "real"
+    },
+    {
+      "name": "a05",
+      "type": "real"
+    },
+    {
+      "name": "a03",
+      "type": "real"
+    },
+    {
+      "name": "a01",
+      "type": "real"
+    },
+    {
+      "name": "b08",
+      "type": "real"
+    },
+    {
+      "name": "b07",
+      "type": "real"
+    },
+    {
+      "name": "b06",
+      "type": "real"
+    },
+    {
+      "name": "b04",
+      "type": "real"
+    },
+    {
+      "name": "b03",
+      "type": "real"
+    },
+    {
+      "name": "b02",
+      "type": "real"
+    },
+    {
+      "name": "b01",
+      "type": "real"
+    },
+    {
+      "name": "a09",
+      "type": "real"
+    },
+    {
+      "name": "d01",
+      "type": "real"
+    },
+    {
+      "name": "c06",
+      "type": "real"
+    },
+    {
+      "name": "c04",
+      "type": "real"
+    },
+    {
+      "name": "c03",
+      "type": "real"
+    },
+    {
+      "name": "d05",
+      "type": "real"
+    },
+    {
+      "name": "d02",
+      "type": "real"
+    },
+    {
+      "name": "d10",
+      "type": "real"
+    },
+    {
+      "name": "e02",
+      "type": "real"
+    },
+    {
+      "name": "e01",
+      "type": "real"
+    },
+    {
+      "name": "d09",
+      "type": "real"
+    },
+    {
+      "name": "d08",
+      "type": "real"
+    },
+    {
+      "name": "e09",
+      "type": "real"
+    },
+    {
+      "name": "e08",
+      "type": "real"
+    },
+    {
+      "name": "e07",
+      "type": "real"
+    },
+    {
+      "name": "e04",
+      "type": "real"
+    },
+    {
+      "name": "e03",
+      "type": "real"
+    },
+    {
+      "name": "f02",
+      "type": "real"
+    },
+    {
+      "name": "f01",
+      "type": "real"
+    },
+    {
+      "name": "n_piani",
+      "type": "real"
+    },
+    {
+      "name": "gruppo_catastale",
+      "type": "real"
+    }
+  ]
 }

@@ -321,6 +321,11 @@ class OrchestratorService:
             return self._op_concat(inputs, node)
         elif op == "filter":
             return self._op_filter(inputs[0] if inputs else pd.DataFrame(), node)
+        elif op == "sort":
+            return self._op_sort(inputs[0] if inputs else pd.DataFrame(), node)
+        elif op == "distinct":
+            return self._op_distinct(inputs[0] if inputs else pd.DataFrame(), node)            
+            
         # === OPERAZIONI SPAZIALI GEOPANDAS ===
         elif op == "sjoin":
             return self._op_sjoin(inputs, node)
@@ -575,6 +580,99 @@ class OrchestratorService:
             return result
         except Exception as e:
             logger.error(f"Errore filter: {e}")
+            return df
+    
+    def _op_sort(self, df: pd.DataFrame, node: Node) -> pd.DataFrame:
+        """
+        Ordina il DataFrame per una o più colonne.
+        Config atteso: {
+            'sort_columns': [
+                {'column': 'col1', 'ascending': True},
+                {'column': 'col2', 'ascending': False}
+            ],
+            'na_position': 'last'  # 'first' | 'last'
+        }
+        """
+        config = node.data.get('config', {}) if node.data else {}
+        sort_columns = config.get('sort_columns', [])
+        na_position = config.get('na_position', 'last')
+        
+        logger.debug(f"Sort columns: {sort_columns}")
+        logger.debug(f"NA position: {na_position}")
+        
+        if not sort_columns:
+            logger.warning("Nessuna colonna di ordinamento specificata - restituisco input")
+            return df
+        
+        try:
+            # Estrai nomi colonne e direzioni
+            columns = []
+            ascending = []
+            
+            for sort_item in sort_columns:
+                col_name = sort_item.get('column')
+                if col_name and col_name in df.columns:
+                    columns.append(col_name)
+                    ascending.append(sort_item.get('ascending', True))
+                else:
+                    logger.warning(f"Colonna '{col_name}' non trovata nel DataFrame")
+            
+            if not columns:
+                logger.warning("Nessuna colonna valida per ordinamento")
+                return df
+            
+            result = df.sort_values(
+                by=columns,
+                ascending=ascending,
+                na_position=na_position
+            ).reset_index(drop=True)
+            
+            logger.info(f"Sort completato: {len(result)} righe ordinate per {columns}")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Errore sort: {e}")
+            return df
+
+
+    def _op_distinct(self, df: pd.DataFrame, node: Node) -> pd.DataFrame:
+        """
+        Rimuove righe duplicate.
+        Config atteso: {
+            'subset': ['col1', 'col2'],  # colonne da considerare (null = tutte)
+            'keep': 'first'              # 'first' | 'last' | False (rimuove tutti i duplicati)
+        }
+        """
+        config = node.data.get('config', {}) if node.data else {}
+        subset = config.get('subset', None)  # None = tutte le colonne
+        keep = config.get('keep', 'first')
+        
+        logger.debug(f"Distinct subset: {subset}")
+        logger.debug(f"Keep: {keep}")
+        
+        try:
+            # Valida subset
+            if subset:
+                valid_subset = [col for col in subset if col in df.columns]
+                if not valid_subset:
+                    logger.warning("Nessuna colonna valida nel subset - uso tutte le colonne")
+                    valid_subset = None
+                else:
+                    subset = valid_subset
+            
+            # Converti keep se necessario
+            if keep == 'false' or keep is False:
+                keep = False
+            
+            original_count = len(df)
+            result = df.drop_duplicates(subset=subset, keep=keep).reset_index(drop=True)
+            removed_count = original_count - len(result)
+            
+            logger.info(f"Distinct completato: {removed_count} righe duplicate rimosse, {len(result)} righe rimaste")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Errore distinct: {e}")
             return df
     
     # ==========================================================================
