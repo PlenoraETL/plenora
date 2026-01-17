@@ -1,0 +1,58 @@
+{
+  "nodes": [
+    {
+      "id": "node_1",
+      "type": "source",
+      "table_name": "city",
+      "alias": "cities",
+      "position": {
+        "x": 100.0,
+        "y": 100.0
+      },
+      "columns": [
+        {
+          "name": "city_id",
+          "alias": "id",
+          "visible": true
+        },
+        {
+          "name": "name",
+          "alias": null,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "id": "node_2",
+      "type": "source",
+      "table_name": "site",
+      "alias": null,
+      "position": {
+        "x": 400.0,
+        "y": 100.0
+      },
+      "columns": [
+        {
+          "name": "site_id",
+          "alias": null,
+          "visible": true
+        },
+        {
+          "name": "city_id",
+          "alias": null,
+          "visible": true
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge_1",
+      "source": "node_1",
+      "target": "node_2",
+      "join_type": "left",
+      "source_column": "city_id",
+      "target_column": "city_id"
+    }
+  ]
+}

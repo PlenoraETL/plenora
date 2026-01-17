@@ -1,0 +1,267 @@
+{
+  "id": "test_estrazione_fabbricati_laz_20260114_102930_16032afd",
+  "name": "test_estrazione_fabbricati_lazio_M083",
+  "description": "",
+  "project_type": "estrai",
+  "default_connection_id": "catasto_20260112_094442_0da4f765",
+  "created_at": "2026-01-14T10:29:30.862637",
+  "updated_at": "2026-01-16T03:43:41.501973",
+  "columns_metadata": [
+    {
+      "name": "provincia",
+      "type": "str"
+    },
+    {
+      "name": "cod_comune",
+      "type": "str"
+    },
+    {
+      "name": "foglio",
+      "type": "int"
+    },
+    {
+      "name": "comune",
+      "type": "str"
+    },
+    {
+      "name": "sezione",
+      "type": "real"
+    },
+    {
+      "name": "particella",
+      "type": "int"
+    },
+    {
+      "name": "chiave",
+      "type": "str"
+    },
+    {
+      "name": "categoria",
+      "type": "real"
+    },
+    {
+      "name": "categoria_esri",
+      "type": "real"
+    },
+    {
+      "name": "id",
+      "type": "int"
+    },
+    {
+      "name": "geom_multy",
+      "type": "str"
+    },
+    {
+      "name": "a07",
+      "type": "int"
+    },
+    {
+      "name": "a06",
+      "type": "int"
+    },
+    {
+      "name": "b05",
+      "type": "int"
+    },
+    {
+      "name": "c07",
+      "type": "int"
+    },
+    {
+      "name": "c05",
+      "type": "int"
+    },
+    {
+      "name": "c02",
+      "type": "int"
+    },
+    {
+      "name": "d04",
+      "type": "int"
+    },
+    {
+      "name": "d03",
+      "type": "int"
+    },
+    {
+      "name": "d07",
+      "type": "int"
+    },
+    {
+      "name": "e06",
+      "type": "int"
+    },
+    {
+      "name": "e05",
+      "type": "int"
+    },
+    {
+      "name": "f04",
+      "type": "int"
+    },
+    {
+      "name": "f03",
+      "type": "int"
+    },
+    {
+      "name": "a04",
+      "type": "int"
+    },
+    {
+      "name": "a02",
+      "type": "int"
+    },
+    {
+      "name": "a11",
+      "type": "int"
+    },
+    {
+      "name": "a10",
+      "type": "int"
+    },
+    {
+      "name": "c01",
+      "type": "int"
+    },
+    {
+      "name": "d06",
+      "type": "int"
+    },
+    {
+      "name": "f05",
+      "type": "int"
+    },
+    {
+      "name": "a08",
+      "type": "int"
+    },
+    {
+      "name": "a05",
+      "type": "int"
+    },
+    {
+      "name": "a03",
+      "type": "int"
+    },
+    {
+      "name": "a01",
+      "type": "int"
+    },
+    {
+      "name": "b08",
+      "type": "int"
+    },
+    {
+      "name": "b07",
+      "type": "int"
+    },
+    {
+      "name": "b06",
+      "type": "int"
+    },
+    {
+      "name": "b04",
+      "type": "int"
+    },
+    {
+      "name": "b03",
+      "type": "int"
+    },
+    {
+      "name": "b02",
+      "type": "int"
+    },
+    {
+      "name": "b01",
+      "type": "int"
+    },
+    {
+      "name": "a09",
+      "type": "int"
+    },
+    {
+      "name": "d01",
+      "type": "int"
+    },
+    {
+      "name": "c06",
+      "type": "int"
+    },
+    {
+      "name": "c04",
+      "type": "int"
+    },
+    {
+      "name": "c03",
+      "type": "int"
+    },
+    {
+      "name": "d05",
+      "type": "int"
+    },
+    {
+      "name": "d02",
+      "type": "int"
+    },
+    {
+      "name": "d10",
+      "type": "int"
+    },
+    {
+      "name": "e02",
+      "type": "int"
+    },
+    {
+      "name": "e01",
+      "type": "int"
+    },
+    {
+      "name": "d09",
+      "type": "int"
+    },
+    {
+      "name": "d08",
+      "type": "int"
+    },
+    {
+      "name": "e09",
+      "type": "int"
+    },
+    {
+      "name": "e08",
+      "type": "int"
+    },
+    {
+      "name": "e07",
+      "type": "int"
+    },
+    {
+      "name": "e04",
+      "type": "int"
+    },
+    {
+      "name": "e03",
+      "type": "int"
+    },
+    {
+      "name": "f02",
+      "type": "int"
+    },
+    {
+      "name": "f01",
+      "type": "int"
+    },
+    {
+      "name": "n_piani",
+      "type": "int"
+    },
+    {
+      "name": "gruppo_catastale",
+      "type": "str"
+    },
+    {
+      "name": "b",
+      "type": "str"
+    }
+  ]
+}

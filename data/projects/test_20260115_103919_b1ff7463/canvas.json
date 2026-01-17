@@ -1,0 +1,477 @@
+{
+  "nodes": [
+    {
+      "id": "source_1768529147059",
+      "type": "project_source",
+      "position": {
+        "x": 229.71855337688982,
+        "y": -46.143541003140776
+      },
+      "table_name": null,
+      "alias": null,
+      "columns": [],
+      "filters": [],
+      "calculated_columns": [],
+      "connection_id": null,
+      "source_project_id": null,
+      "transform_op": null,
+      "transform_category": null,
+      "api_id": null,
+      "param_mapping": null,
+      "data": {
+        "source_project_id": "test_20260115_100347_b6cdf8a0",
+        "columns": [
+          {
+            "name": "particella",
+            "type": "str",
+            "visible": true
+          },
+          {
+            "name": "categoria",
+            "type": "str",
+            "visible": true
+          },
+          {
+            "name": "categoria_esri",
+            "type": "str",
+            "visible": true
+          },
+          {
+            "name": "geom_multy",
+            "type": "geometry:multipolygon",
+            "visible": true
+          },
+          {
+            "name": "a07",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "a06",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "b05",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "c07",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "c05",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "c02",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "d04",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "d03",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "d07",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "e06",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "e05",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "f04",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "f03",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "a04",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "a02",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "a11",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "a10",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "c01",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "d06",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "f05",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "a08",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "a05",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "a03",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "a01",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "b08",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "b07",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "b06",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "b04",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "b03",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "b02",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "b01",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "a09",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "d01",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "c06",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "c04",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "c03",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "d05",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "d02",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "d10",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "e02",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "e01",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "d09",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "d08",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "e09",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "e08",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "e07",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "e04",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "e03",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "f02",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "f01",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "n_piani",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "gruppo_catastale",
+            "type": "str",
+            "visible": true
+          },
+          {
+            "name": "provincia",
+            "type": "str",
+            "visible": true
+          },
+          {
+            "name": "cod_comune",
+            "type": "str",
+            "visible": true
+          },
+          {
+            "name": "foglio",
+            "type": "str",
+            "visible": true
+          },
+          {
+            "name": "extent",
+            "type": "geometry:polygon",
+            "visible": true
+          },
+          {
+            "name": "comune",
+            "type": "str",
+            "visible": true
+          },
+          {
+            "name": "terreno_vettorializzato",
+            "type": "bool",
+            "visible": true
+          },
+          {
+            "name": "fabbricato_vettorializzato",
+            "type": "bool",
+            "visible": true
+          },
+          {
+            "name": "in_elaborazione",
+            "type": "bool",
+            "visible": true
+          },
+          {
+            "name": "download_dati_terreni",
+            "type": "bool",
+            "visible": true
+          },
+          {
+            "name": "download_dati_fabbricati",
+            "type": "bool",
+            "visible": true
+          },
+          {
+            "name": "download_particelle",
+            "type": "bool",
+            "visible": true
+          },
+          {
+            "name": "chiave",
+            "type": "str",
+            "visible": true
+          },
+          {
+            "name": "geom",
+            "type": "geometry:polygon",
+            "visible": true
+          },
+          {
+            "name": "regione",
+            "type": "str",
+            "visible": true
+          },
+          {
+            "name": "id",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "num_particelle_terreeni",
+            "type": "int",
+            "visible": true
+          }
+        ]
+      },
+      "fileName": null,
+      "format": null,
+      "distinct": false,
+      "limit": null
+    },
+    {
+      "id": "transform_1768529150715",
+      "type": "transform",
+      "position": {
+        "x": 611.4037835901271,
+        "y": 15.376498775759288
+      },
+      "table_name": null,
+      "alias": null,
+      "columns": [],
+      "filters": [],
+      "calculated_columns": [],
+      "connection_id": null,
+      "source_project_id": null,
+      "transform_op": null,
+      "transform_category": null,
+      "api_id": null,
+      "param_mapping": null,
+      "data": {
+        "columns": [],
+        "transform_op": "geo_buffer",
+        "config": {
+          "geom_column": "geom"
+        }
+      },
+      "fileName": null,
+      "format": null,
+      "distinct": false,
+      "limit": null
+    },
+    {
+      "id": "result_1768529234290",
+      "type": "result",
+      "position": {
+        "x": 941.0735208545258,
+        "y": 62.06979244755378
+      },
+      "table_name": null,
+      "alias": null,
+      "columns": [],
+      "filters": [],
+      "calculated_columns": [],
+      "connection_id": null,
+      "source_project_id": null,
+      "transform_op": null,
+      "transform_category": null,
+      "api_id": null,
+      "param_mapping": null,
+      "data": {
+        "fileName": "output",
+        "format": "geojson"
+      },
+      "fileName": null,
+      "format": null,
+      "distinct": false,
+      "limit": null
+    }
+  ],
+  "edges": [
+    {
+      "id": "reactflow__edge-source_1768529147059-transform_1768529150715",
+      "source": "source_1768529147059",
+      "target": "transform_1768529150715",
+      "join_type": "left",
+      "source_column": "",
+      "target_column": "",
+      "is_spatial": false,
+      "spatial_predicate": null,
+      "source_geom_column": null,
+      "target_geom_column": null,
+      "spatial_distance": null
+    },
+    {
+      "id": "reactflow__edge-transform_1768529150715-result_1768529234290",
+      "source": "transform_1768529150715",
+      "target": "result_1768529234290",
+      "join_type": "left",
+      "source_column": "",
+      "target_column": "",
+      "is_spatial": false,
+      "spatial_predicate": null,
+      "source_geom_column": null,
+      "target_geom_column": null,
+      "spatial_distance": null
+    }
+  ]
+}

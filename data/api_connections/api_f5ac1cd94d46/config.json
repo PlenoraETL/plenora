@@ -1,0 +1,47 @@
+{
+  "id": "api_f5ac1cd94d46",
+  "name": "catasto_fabbricati",
+  "description": "servizio che ritorna il centroide di un fabbricato tramite le coordinate catastali",
+  "endpoint": {
+    "url": "http://analisi.re-val.it:5001/catasto_fabbricati/returnPolygonFabbricatiFromKey",
+    "method": "GET"
+  },
+  "auth": {
+    "type": "oauth2_password",
+    "token_url": "http://analisi.re-val.it:5001/token",
+    "username": "marco_bonamente",
+    "password": "secret"
+  },
+  "parameters": [
+    {
+      "name": "cod_comune",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "foglio",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "particella",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "sezione",
+      "type": "string",
+      "required": false
+    }
+  ],
+  "output_mapping": [
+    {
+      "path": "features[0].geometry",
+      "column": "geometry (MultiPolygon)",
+      "type": "geojson",
+      "selected": true
+    }
+  ],
+  "created_at": "2026-01-13T15:28:45.297139",
+  "updated_at": "2026-01-13T15:28:45.297139"
+}

@@ -1,0 +1,937 @@
+/**
+ * ApiConnectionManager.css
+ * Stili per la gestione connessioni API (modulo ARRICCHISCI)
+ * Convenzione: BEM (Block Element Modifier)
+ */
+
+/* ============================================================
+   VARIABILI CSS
+   ============================================================ */
+.api-manager {
+  --color-primary: #FF6B35;
+  --color-primary-dark: #E55A2B;
+  --color-secondary: #F7931E;
+  --color-success: #4CAF50;
+  --color-success-light: #e8f5e9;
+  --color-success-dark: #2e7d32;
+  --color-error: #f44336;
+  --color-error-light: #ffebee;
+  --color-error-dark: #c62828;
+  --color-warning: #FF9800;
+  --color-warning-light: #fff3e0;
+  --color-info: #2196F3;
+  --color-info-light: #e3f2fd;
+  --color-border: #e8e8e8;
+  --color-border-light: #f0f0f0;
+  --color-bg: #f5f7fa;
+  --color-bg-light: #f9f9f9;
+  --color-text: #333;
+  --color-text-muted: #666;
+  --color-text-light: #888;
+}
+
+/* ============================================================
+   PAGE CONTAINER & LOADING
+   ============================================================ */
+.api-manager {
+  min-height: 100vh;
+  background: var(--color-bg);
+}
+
+.api-manager__loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  font-size: 18px;
+  color: var(--color-text-muted);
+}
+
+/* ============================================================
+   HEADER
+   ============================================================ */
+.api-manager__header {
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
+  color: white;
+  padding: 25px 40px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+}
+
+.api-manager__header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.api-manager__header-left {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.api-manager__back-btn {
+  padding: 8px 16px;
+  background: rgba(255,255,255,0.2);
+  border: none;
+  border-radius: 6px;
+  color: white;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.api-manager__back-btn:hover {
+  background: rgba(255,255,255,0.3);
+}
+
+.api-manager__title {
+  margin: 0;
+  font-size: 24px;
+}
+
+.api-manager__subtitle {
+  margin: 5px 0 0 0;
+  opacity: 0.9;
+  font-size: 14px;
+}
+
+.api-manager__new-btn {
+  padding: 12px 24px;
+  background: white;
+  border: none;
+  border-radius: 8px;
+  color: var(--color-primary);
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 14px;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.api-manager__new-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+/* ============================================================
+   MAIN CONTENT
+   ============================================================ */
+.api-manager__main {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 30px 40px;
+}
+
+/* ============================================================
+   EMPTY STATE
+   ============================================================ */
+.api-manager__empty {
+  background: white;
+  padding: 60px;
+  border-radius: 12px;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.api-manager__empty-icon {
+  font-size: 64px;
+  margin-bottom: 20px;
+}
+
+.api-manager__empty-title {
+  margin: 0 0 10px 0;
+  color: var(--color-text);
+}
+
+.api-manager__empty-text {
+  color: var(--color-text-muted);
+  margin-bottom: 20px;
+}
+
+.api-manager__empty-btn {
+  padding: 12px 24px;
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* ============================================================
+   CARDS GRID
+   ============================================================ */
+.api-manager__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 20px;
+}
+
+/* ============================================================
+   API CARD
+   ============================================================ */
+.api-card {
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  border: 1px solid var(--color-border);
+  transition: box-shadow 0.2s;
+}
+
+.api-card:hover {
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+}
+
+.api-card__header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--color-border-light);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.api-card__icon {
+  font-size: 28px;
+}
+
+.api-card__name {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.api-card__type-badge {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 2px 8px;
+  background: var(--color-primary);
+  color: white;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.api-card__type-badge--generator {
+  background: var(--color-info);
+}
+
+.api-card__body {
+  padding: 16px 20px;
+}
+
+.api-card__description {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  margin-bottom: 12px;
+}
+
+.api-card__details {
+  background: var(--color-bg-light);
+  padding: 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: monospace;
+}
+
+.api-card__detail-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+}
+
+.api-card__detail-label {
+  color: var(--color-text-muted);
+}
+
+.api-card__detail-value {
+  color: var(--color-text);
+  word-break: break-all;
+}
+
+.api-card__outputs {
+  margin-top: 10px;
+}
+
+.api-card__outputs-label {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-bottom: 6px;
+}
+
+.api-card__outputs-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.api-card__output-badge {
+  padding: 3px 8px;
+  background: var(--color-success-light);
+  color: var(--color-success-dark);
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.api-card__footer {
+  padding: 12px 20px;
+  border-top: 1px solid var(--color-border-light);
+  display: flex;
+  gap: 10px;
+}
+
+.api-card__btn {
+  flex: 1;
+  padding: 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: opacity 0.2s;
+}
+
+.api-card__btn:hover {
+  opacity: 0.9;
+}
+
+.api-card__btn--edit {
+  background: var(--color-primary);
+  border: none;
+  color: white;
+}
+
+.api-card__btn--delete {
+  background: transparent;
+  border: 1px solid var(--color-error);
+  color: var(--color-error);
+}
+
+/* ============================================================
+   WIZARD MODAL
+   ============================================================ */
+.api-manager__wizard-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.api-manager__wizard {
+  background: white;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 700px;
+  max-height: 90vh;
+  overflow: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+
+.api-manager__wizard-header {
+  padding: 20px 25px;
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
+  color: white;
+  border-radius: 16px 16px 0 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.api-manager__wizard-title {
+  margin: 0;
+  font-size: 20px;
+}
+
+.api-manager__wizard-close {
+  background: rgba(255,255,255,0.2);
+  border: none;
+  color: white;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 20px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.api-manager__wizard-close:hover {
+  background: rgba(255,255,255,0.3);
+}
+
+/* Progress Steps */
+.api-manager__wizard-progress {
+  display: flex;
+  justify-content: center;
+  padding: 20px;
+  gap: 8px;
+  background: var(--color-bg-light);
+  flex-wrap: wrap;
+}
+
+.api-manager__step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  background: white;
+  border: 1px solid var(--color-border);
+}
+
+.api-manager__step--active {
+  background: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
+}
+
+.api-manager__step--completed {
+  background: var(--color-success-light);
+  color: var(--color-success-dark);
+  border-color: var(--color-success);
+}
+
+.api-manager__step-number {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: currentColor;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: bold;
+}
+
+.api-manager__step--active .api-manager__step-number {
+  background: white;
+  color: var(--color-primary);
+}
+
+/* Wizard Body & Footer */
+.api-manager__wizard-body {
+  padding: 25px;
+}
+
+.api-manager__wizard-footer {
+  padding: 20px 25px;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  justify-content: space-between;
+}
+
+.api-manager__wizard-btn {
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.api-manager__wizard-btn--secondary {
+  background: #f5f5f5;
+  border: none;
+  color: var(--color-text);
+}
+
+.api-manager__wizard-btn--primary {
+  background: var(--color-primary);
+  border: none;
+  color: white;
+}
+
+.api-manager__wizard-btn--primary:hover {
+  background: var(--color-primary-dark);
+}
+
+.api-manager__wizard-btn--success {
+  background: var(--color-success);
+  border: none;
+  color: white;
+}
+
+/* ============================================================
+   FORM ELEMENTS
+   ============================================================ */
+.api-manager__form-group {
+  margin-bottom: 20px;
+}
+
+.api-manager__form-label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.api-manager__form-input,
+.api-manager__form-select,
+.api-manager__form-textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+
+.api-manager__form-input:focus,
+.api-manager__form-select:focus,
+.api-manager__form-textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(255,107,53,0.1);
+}
+
+.api-manager__form-row {
+  display: grid;
+  gap: 15px;
+}
+
+.api-manager__form-row--2 {
+  grid-template-columns: 1fr 1fr;
+}
+
+.api-manager__form-row--3 {
+  grid-template-columns: 2fr 1fr;
+}
+
+/* ============================================================
+   TYPE CARDS (Step 0)
+   ============================================================ */
+.api-manager__type-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.api-manager__type-card {
+  padding: 24px;
+  border: 2px solid var(--color-border);
+  border-radius: 12px;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.2s;
+}
+
+.api-manager__type-card:hover {
+  border-color: var(--color-primary);
+}
+
+.api-manager__type-card--selected {
+  border-color: var(--color-primary);
+  background: rgba(255,107,53,0.05);
+}
+
+.api-manager__type-card-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+
+.api-manager__type-card-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.api-manager__type-card-desc {
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+/* ============================================================
+   AUTH TYPES
+   ============================================================ */
+.api-manager__auth-types {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.api-manager__auth-type {
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  text-align: center;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+
+.api-manager__auth-type:hover {
+  border-color: var(--color-primary);
+}
+
+.api-manager__auth-type--selected {
+  border-color: var(--color-primary);
+  background: rgba(255,107,53,0.1);
+}
+
+/* ============================================================
+   PARAMETERS
+   ============================================================ */
+.api-manager__params-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.api-manager__param-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 12px;
+  background: var(--color-bg-light);
+  border-radius: 8px;
+}
+
+.api-manager__param-input {
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.api-manager__param-select {
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.api-manager__param-checkbox {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.api-manager__param-delete {
+  background: none;
+  border: none;
+  color: var(--color-error);
+  cursor: pointer;
+  font-size: 18px;
+  padding: 4px;
+}
+
+.api-manager__add-param-btn {
+  padding: 10px;
+  background: var(--color-bg-light);
+  border: 2px dashed var(--color-border);
+  border-radius: 8px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s;
+}
+
+.api-manager__add-param-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+/* ============================================================
+   TEST SECTION
+   ============================================================ */
+.api-manager__test-section {
+  padding: 16px;
+  background: var(--color-bg-light);
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.api-manager__test-title {
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.api-manager__test-params {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.api-manager__test-param-row {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.api-manager__test-param-label {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.api-manager__test-param-input {
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.api-manager__test-btn {
+  width: 100%;
+  padding: 14px;
+  background: var(--color-info);
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.api-manager__test-btn:hover {
+  background: #1976D2;
+}
+
+.api-manager__test-btn:disabled {
+  background: #bbb;
+  cursor: not-allowed;
+}
+
+/* Test Result */
+.api-manager__test-result {
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 8px;
+}
+
+.api-manager__test-result--success {
+  background: var(--color-success-light);
+  border: 1px solid var(--color-success);
+}
+
+.api-manager__test-result--error {
+  background: var(--color-error-light);
+  border: 1px solid var(--color-error);
+}
+
+.api-manager__test-result-title {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.api-manager__test-result-title--success {
+  color: var(--color-success-dark);
+}
+
+.api-manager__test-result-title--error {
+  color: var(--color-error-dark);
+}
+
+.api-manager__test-result-message {
+  font-size: 13px;
+}
+
+/* ============================================================
+   OUTPUT FIELDS
+   ============================================================ */
+.api-manager__fields-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.api-manager__field-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  background: white;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+
+.api-manager__field-item:hover {
+  border-color: var(--color-primary);
+}
+
+.api-manager__field-item--selected {
+  background: var(--color-success-light);
+  border-color: var(--color-success);
+}
+
+.api-manager__field-checkbox {
+  width: 16px;
+  height: 16px;
+}
+
+.api-manager__field-name {
+  flex: 1;
+  font-family: monospace;
+}
+
+.api-manager__field-type {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  background: #e0e0e0;
+}
+
+.api-manager__field-type--geojson {
+  background: var(--color-info-light);
+  color: var(--color-info);
+}
+
+.api-manager__field-type--number {
+  background: #E8F5E9;
+  color: #2E7D32;
+}
+
+.api-manager__field-type--string {
+  background: #FFF3E0;
+  color: #E65100;
+}
+
+/* Selected Fields */
+.api-manager__selected-fields {
+  margin-top: 20px;
+}
+
+.api-manager__selected-title {
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.api-manager__selected-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.api-manager__selected-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  background: var(--color-bg-light);
+  border-radius: 6px;
+}
+
+.api-manager__selected-path {
+  flex: 1;
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.api-manager__selected-arrow {
+  color: var(--color-text-light);
+}
+
+.api-manager__selected-input {
+  padding: 6px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  font-size: 12px;
+  width: 120px;
+}
+
+/* ============================================================
+   INFO BOXES
+   ============================================================ */
+.api-manager__info-box {
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+.api-manager__info-box--info {
+  background: var(--color-info-light);
+  border-left: 4px solid var(--color-info);
+}
+
+.api-manager__info-box--warning {
+  background: var(--color-warning-light);
+  border-left: 4px solid var(--color-warning);
+}
+
+/* ============================================================
+   STATIC PARAMS (Generator)
+   ============================================================ */
+.api-manager__static-params {
+  margin-top: 16px;
+}
+
+.api-manager__static-param-row {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.api-manager__static-param-key {
+  padding: 8px 12px;
+  background: var(--color-bg-light);
+  border-radius: 6px;
+  font-family: monospace;
+  font-size: 12px;
+}
+
+.api-manager__static-param-input {
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+/* ============================================================
+   SECTION HEADERS
+   ============================================================ */
+.api-manager__section-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  color: var(--color-text);
+}
+
+.api-manager__section-subtitle {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  margin-bottom: 12px;
+}
+
+/* ============================================================
+   SCROLLBAR
+   ============================================================ */
+.api-manager__wizard::-webkit-scrollbar,
+.api-manager__fields-grid::-webkit-scrollbar {
+  width: 6px;
+}
+
+.api-manager__wizard::-webkit-scrollbar-track,
+.api-manager__fields-grid::-webkit-scrollbar-track {
+  background: #f0f0f0;
+  border-radius: 3px;
+}
+
+.api-manager__wizard::-webkit-scrollbar-thumb,
+.api-manager__fields-grid::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 3px;
+}
+
+.api-manager__wizard::-webkit-scrollbar-thumb:hover,
+.api-manager__fields-grid::-webkit-scrollbar-thumb:hover {
+  background: #aaa;
+}

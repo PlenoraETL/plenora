@@ -1,0 +1,845 @@
+{
+  "nodes": [
+    {
+      "id": "node_1768530850037",
+      "type": "source",
+      "position": {
+        "x": 602.0,
+        "y": 447.99999999999994
+      },
+      "table_name": "particelle_fabbricati_campania",
+      "alias": null,
+      "columns": [
+        {
+          "name": "provincia",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "cod_comune",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "foglio",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "comune",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "sezione",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "particella",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "chiave",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "categoria",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "categoria_esri",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "id",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "geom_multy",
+          "alias": null,
+          "visible": true,
+          "type": "geometry:multipolygon:4258"
+        },
+        {
+          "name": "a07",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "a06",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "b05",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "c07",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "c05",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "c02",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "d04",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "d03",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "d07",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "e06",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "e05",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "f04",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "f03",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "a04",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "a02",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "a11",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "a10",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "c01",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "d06",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "f05",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "a08",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "a05",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "a03",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "a01",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "b08",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "b07",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "b06",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "b04",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "b03",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "b02",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "b01",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "a09",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "d01",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "c06",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "c04",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "c03",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "d05",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "d02",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "d10",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "e02",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "e01",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "d09",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "d08",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "e09",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "e08",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "e07",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "e04",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "e03",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "f02",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "f01",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "n_piani",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "gruppo_catastale",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        }
+      ],
+      "filters": [],
+      "calculated_columns": [
+        {
+          "name": "b",
+          "expression": {
+            "function": "BUFFER",
+            "params": {
+              "column": "geom_multy",
+              "distance": 1
+            }
+          },
+          "sql": "ST_Buffer(geom_multy, 1) AS b",
+          "output_type": "geometry:polygon",
+          "is_manual": false
+        }
+      ],
+      "connection_id": null,
+      "source_project_id": null,
+      "transform_op": null,
+      "transform_category": null,
+      "api_id": null,
+      "param_mapping": null,
+      "data": {},
+      "fileName": null,
+      "format": null,
+      "distinct": false,
+      "limit": null
+    },
+    {
+      "id": "result_1768531076899",
+      "type": "result",
+      "position": {
+        "x": 1049.0,
+        "y": 183.0
+      },
+      "table_name": null,
+      "alias": null,
+      "columns": [
+        {
+          "name": "provincia",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "cod_comune",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "foglio",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "comune",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "sezione",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "particella",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "chiave",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "categoria",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "categoria_esri",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "id",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "geom_multy",
+          "alias": null,
+          "visible": true,
+          "type": "geometry:multipolygon:4258"
+        },
+        {
+          "name": "a07",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "a06",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "b05",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "c07",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "c05",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "c02",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "d04",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "d03",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "d07",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "e06",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "e05",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "f04",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "f03",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "a04",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "a02",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "a11",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "a10",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "c01",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "d06",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "f05",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "a08",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "a05",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "a03",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "a01",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "b08",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "b07",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "b06",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "b04",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "b03",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "b02",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "b01",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "a09",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "d01",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "c06",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "c04",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "c03",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "d05",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "d02",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "d10",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "e02",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "e01",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "d09",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "d08",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "e09",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "e08",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "e07",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "e04",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "e03",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "f02",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "f01",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "n_piani",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "gruppo_catastale",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "b",
+          "alias": null,
+          "visible": true,
+          "type": "geometry:polygon"
+        }
+      ],
+      "filters": [],
+      "calculated_columns": [],
+      "connection_id": null,
+      "source_project_id": null,
+      "transform_op": null,
+      "transform_category": null,
+      "api_id": null,
+      "param_mapping": null,
+      "data": {},
+      "fileName": "output",
+      "format": "csv",
+      "distinct": false,
+      "limit": 1
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge_1768531080423",
+      "source": "node_1768530850037",
+      "target": "result_1768531076899",
+      "join_type": "output",
+      "source_column": "",
+      "target_column": "",
+      "is_spatial": false,
+      "spatial_predicate": null,
+      "source_geom_column": null,
+      "target_geom_column": null,
+      "spatial_distance": null
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+import React from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import ProjectList from './pages/ProjectList';
+import EstraiEditor from './pages/EstraiEditor';
+import ManipolaEditor from './pages/ManipolaEditor';
+import ConnectionManager from './pages/ConnectionManager';
+import ApiConnectionManager from './pages/ApiConnectionManager';
+import ArricchisciEditor from './pages/ArricchisciEditor';
+
+function App() {
+  return (
+    <BrowserRouter>
+      <div className="app">
+		<Routes>
+		  <Route path="/" element={<ProjectList />} />
+		  <Route path="/project/:projectId" element={<EstraiEditor />} />
+		  <Route path="/connections" element={<ConnectionManager />} />
+		  <Route path="/editor/manipola/:id" element={<ManipolaEditor />} />
+		  <Route path="/api-connections" element={<ApiConnectionManager />} />
+		  <Route path="/arricchisci/:projectId" element={<ArricchisciEditor />} />
+		  <Route path="*" element={<Navigate to="/" replace />} />
+		</Routes>
+      </div>
+    </BrowserRouter>
+  );
+}
+
+export default App;

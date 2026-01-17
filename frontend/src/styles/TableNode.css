@@ -1,0 +1,453 @@
+/**
+ * TableNode.css
+ * Stili per il componente nodo tabella (modulo ESTRAI)
+ * Convenzione: BEM (Block Element Modifier)
+ */
+
+/* ============================================================
+   VARIABILI CSS
+   ============================================================ */
+.table-node {
+  --color-primary: #2196F3;
+  --color-primary-light: #e3f2fd;
+  --color-primary-dark: #1976D2;
+  --color-border: #e0e0e0;
+  --color-text: #333;
+  --color-text-muted: #666;
+  --color-text-light: #999;
+  --color-bg-light: #f5f5f5;
+  --color-error: #f44336;
+  --color-error-light: #ffcdd2;
+  
+  /* Colori per tipi colonna */
+  --color-type-int: #4CAF50;
+  --color-type-real: #FF9800;
+  --color-type-str: #9E9E9E;
+  --color-type-bool: #9C27B0;
+  --color-type-date: #2196F3;
+  --color-type-geometry: #E91E63;
+}
+
+/* ============================================================
+   CONTAINER PRINCIPALE
+   ============================================================ */
+.table-node {
+  background: white;
+  border: 1px solid var(--color-primary);
+  border-radius: 6px;
+  min-width: 200px;
+  max-width: 280px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  font-size: 12px;
+}
+
+/* ============================================================
+   HANDLES (connettori)
+   ============================================================ */
+.table-node__handle {
+  background: var(--color-primary) !important;
+  width: 10px !important;
+  height: 10px !important;
+  border: 2px solid white !important;
+}
+
+/* ============================================================
+   HEADER
+   ============================================================ */
+.table-node__header {
+  background: var(--color-primary);
+  color: white;
+  padding: 8px 10px;
+  border-radius: 5px 5px 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.table-node__header-content {
+  flex: 1;
+}
+
+.table-node__title {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.table-node__title--with-alias {
+  margin-bottom: 3px;
+}
+
+.table-node__title-icon {
+  margin-right: 4px;
+}
+
+/* Alias editabile */
+.table-node__alias-input {
+  width: 100%;
+  padding: 2px 6px;
+  font-size: 12px;
+  border: none;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.9);
+  box-sizing: border-box;
+}
+
+.table-node__alias-input:focus {
+  outline: none;
+  background: white;
+}
+
+.table-node__alias-display {
+  font-size: 12px;
+  opacity: 0.9;
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+.table-node__alias-display:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+
+.table-node__add-alias-btn {
+  margin-top: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  border-radius: 3px;
+  color: white;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.table-node__add-alias-btn:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+/* Bottone elimina */
+.table-node__delete-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 6px;
+  transition: background 0.2s;
+}
+
+.table-node__delete-btn:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+/* ============================================================
+   BODY - LISTA COLONNE
+   ============================================================ */
+.table-node__body {
+  padding: 6px;
+}
+
+.table-node__empty-message {
+  padding: 12px;
+  color: var(--color-text-light);
+  text-align: center;
+  font-style: italic;
+}
+
+/* ============================================================
+   COLONNA SINGOLA
+   ============================================================ */
+.table-node__column {
+  padding: 4px 6px;
+  margin: 2px 0;
+  background: var(--color-bg-light);
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--color-border);
+  font-size: 11px;
+  transition: opacity 0.2s, border-color 0.2s;
+}
+
+.table-node__column--hidden {
+  background: white;
+  border-color: var(--color-error-light);
+  opacity: 0.5;
+}
+
+.table-node__column-checkbox {
+  margin-right: 6px;
+  cursor: pointer;
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+/* ============================================================
+   ICONA TIPO COLONNA
+   ============================================================ */
+.table-node__column-type-icon {
+  font-size: 12px;
+  margin-right: 5px;
+  flex-shrink: 0;
+  cursor: help;
+  opacity: 0.85;
+  transition: opacity 0.2s, transform 0.2s;
+}
+
+.table-node__column-type-icon:hover {
+  opacity: 1;
+  transform: scale(1.15);
+}
+
+/* Icona geometria evidenziata */
+.table-node__column-type-icon--geo {
+  opacity: 1;
+}
+
+/* ============================================================
+   BADGE SRID (per colonne geometriche)
+   ============================================================ */
+.table-node__column-srid-badge {
+  background: var(--color-type-geometry);
+  color: white;
+  font-size: 8px;
+  font-weight: 600;
+  padding: 1px 4px;
+  border-radius: 3px;
+  margin-left: 4px;
+  flex-shrink: 0;
+  cursor: help;
+}
+
+/* ============================================================
+   NOME COLONNA
+   ============================================================ */
+.table-node__column-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table-node__column-name--hidden {
+  text-decoration: line-through;
+}
+
+/* ============================================================
+   ALIAS COLONNA
+   ============================================================ */
+.table-node__column-alias-editor {
+  display: flex;
+  align-items: center;
+  margin-left: 6px;
+  gap: 4px;
+}
+
+.table-node__column-alias-arrow {
+  color: var(--color-primary);
+  font-size: 10px;
+}
+
+.table-node__column-alias-input {
+  width: 60px;
+  padding: 2px 4px;
+  font-size: 10px;
+  border: 1px solid var(--color-primary);
+  border-radius: 2px;
+}
+
+.table-node__column-alias-input:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
+}
+
+.table-node__column-alias {
+  margin-left: 6px;
+  color: var(--color-primary);
+  font-size: 10px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 2px;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.table-node__column-alias:hover {
+  background: var(--color-primary-light);
+}
+
+.table-node__column-add-alias {
+  margin-left: 6px;
+  font-size: 9px;
+  color: var(--color-text-light);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 2px;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.table-node__column-add-alias:hover {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+/* ============================================================
+   BOTTONE ESPANDI/COLLASSA
+   ============================================================ */
+.table-node__expand-btn {
+  width: 100%;
+  margin-top: 6px;
+  padding: 6px;
+  background: var(--color-bg-light);
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  transition: background 0.2s;
+}
+
+.table-node__expand-btn:hover {
+  background: #eeeeee;
+}
+
+/* ============================================================
+   SEZIONE FILTRI
+   ============================================================ */
+.table-node__filters-section {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border);
+}
+
+.table-node__filters-btn {
+  width: 100%;
+  padding: 8px;
+  background: var(--color-bg-light);
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: all 0.2s;
+}
+
+.table-node__filters-btn:hover {
+  background: #eeeeee;
+}
+
+.table-node__filters-btn--active {
+  background: var(--color-primary-light);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+.table-node__filters-badge {
+  background: var(--color-primary);
+  color: white;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: bold;
+}
+/* ============================================================
+   SEZIONE COLONNE CALCOLATE
+   ============================================================ */
+.table-node__calculated-section {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border);
+}
+
+.table-node__calculated-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-bottom: 6px;
+  padding: 0 2px;
+}
+
+.table-node__calculated-badge {
+  background: #9C27B0;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: bold;
+}
+
+.table-node__calculated-list {
+  margin-bottom: 6px;
+}
+
+.table-node__calculated-item {
+  display: flex;
+  align-items: center;
+  padding: 4px 6px;
+  margin: 2px 0;
+  background: linear-gradient(135deg, #f3e5f5 0%, #e8eaf6 100%);
+  border: 1px solid #ce93d8;
+  border-radius: 3px;
+  font-size: 11px;
+}
+
+.table-node__calculated-icon {
+  margin-right: 5px;
+  font-size: 12px;
+}
+
+.table-node__calculated-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #7b1fa2;
+  font-weight: 500;
+}
+
+.table-node__calculated-delete {
+  background: transparent;
+  border: none;
+  color: #999;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 4px;
+  line-height: 1;
+  transition: color 0.2s;
+}
+
+.table-node__calculated-delete:hover {
+  color: #c62828;
+}
+
+.table-node__add-calculated-btn {
+  width: 100%;
+  padding: 6px 8px;
+  background: white;
+  border: 1px dashed #ce93d8;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 11px;
+  color: #9C27B0;
+  transition: all 0.2s;
+}
+
+.table-node__add-calculated-btn:hover {
+  background: #f3e5f5;
+  border-style: solid;
+}

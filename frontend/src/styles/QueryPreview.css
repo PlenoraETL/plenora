@@ -1,0 +1,201 @@
+/**
+ * QueryPreview.css
+ * Stili per il componente preview SQL (modulo ESTRAI)
+ * Convenzione: BEM (Block Element Modifier)
+ */
+
+/* ============================================================
+   VARIABILI CSS
+   ============================================================ */
+.query-preview {
+  --color-primary: #2196F3;
+  --color-success: #4CAF50;
+  --color-success-light: #e8f5e9;
+  --color-warning: #ffc107;
+  --color-warning-light: #fff3cd;
+  --color-error: #f44336;
+  --color-error-light: #ffebee;
+  --color-error-dark: #c62828;
+  --color-accent: #e91e63;
+  --color-border: #e0e0e0;
+  --color-bg-light: #f5f5f5;
+  --color-text: #333;
+  --color-text-muted: #666;
+  --color-text-light: #856404;
+}
+
+/* ============================================================
+   CONTAINER PRINCIPALE
+   ============================================================ */
+.query-preview {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: white;
+  border-top: 2px solid var(--color-border);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  transition: height 0.2s;
+}
+
+.query-preview--expanded {
+  height: 250px;
+}
+
+.query-preview--collapsed {
+  height: 40px;
+}
+
+/* ============================================================
+   HEADER
+   ============================================================ */
+.query-preview__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: var(--color-bg-light);
+  border-bottom: 1px solid var(--color-border);
+  cursor: pointer;
+}
+
+.query-preview__header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.query-preview__toggle-icon {
+  font-size: 16px;
+}
+
+.query-preview__title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.query-preview__stats {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-left: 8px;
+}
+
+/* ============================================================
+   BOTTONE COPIA
+   ============================================================ */
+.query-preview__copy-btn {
+  padding: 6px 12px;
+  background: var(--color-primary);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.2s;
+}
+
+.query-preview__copy-btn:hover {
+  background: #1976D2;
+}
+
+.query-preview__copy-btn--success {
+  background: var(--color-success);
+}
+
+/* ============================================================
+   CONTENT
+   ============================================================ */
+.query-preview__content {
+  flex: 1;
+  overflow: auto;
+  padding: 12px 16px;
+}
+
+/* ============================================================
+   ERRORI VALIDAZIONE
+   ============================================================ */
+.query-preview__errors {
+  background: var(--color-error-light);
+  border: 2px solid var(--color-error);
+  border-radius: 4px;
+  padding: 12px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.query-preview__errors-header {
+  font-weight: bold;
+  color: var(--color-error-dark);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.query-preview__errors-icon {
+  font-size: 18px;
+}
+
+.query-preview__error-item {
+  color: #b71c1c;
+  margin-left: 24px;
+  margin-top: 4px;
+}
+
+/* ============================================================
+   WARNING (join incompleti)
+   ============================================================ */
+.query-preview__warnings {
+  background: var(--color-warning-light);
+  border: 1px solid var(--color-warning);
+  border-radius: 4px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  font-size: 12px;
+}
+
+.query-preview__warning-item {
+  color: var(--color-text-light);
+}
+
+/* ============================================================
+   SQL CODE
+   ============================================================ */
+.query-preview__sql {
+  font-family: 'Monaco', 'Consolas', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 0;
+  color: var(--color-text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.query-preview__sql-keyword {
+  color: var(--color-accent);
+  font-weight: bold;
+}
+
+/* ============================================================
+   OUTPUT INFO
+   ============================================================ */
+.query-preview__output-info {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: var(--color-success-light);
+  border: 1px solid var(--color-success);
+  border-radius: 4px;
+  font-size: 12px;
+  color: #2e7d32;
+}
+
+.query-preview__output-label {
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+.query-preview__output-filename {
+  font-family: monospace;
+}

@@ -1,0 +1,306 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.app {
+  width: 100vw;
+  min-height: 100vh;  /* min-height invece di height */
+  overflow-x: hidden;
+  overflow-y: auto;   /* permette scroll verticale */
+}
+
+/* ===== PROJECT LIST ===== */
+
+.project-list {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #f5f5f5;
+}
+
+.project-list-header {
+  background: white;
+  padding: 20px 30px;
+  border-bottom: 1px solid #e0e0e0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.project-list-header h1 {
+  font-size: 24px;
+  font-weight: 600;
+  color: #333;
+}
+
+.project-list-content {
+  flex: 1;
+  padding: 30px;
+  overflow-y: auto;
+}
+
+.project-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.project-card {
+  background: white;
+  border-radius: 8px;
+  padding: 20px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid #e0e0e0;
+}
+
+.project-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+.project-card h3 {
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 8px;
+}
+
+.project-card p {
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 12px;
+}
+
+.project-card-meta {
+  font-size: 12px;
+  color: #999;
+}
+
+.btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-primary {
+  background: #2196F3;
+  color: white;
+}
+
+.btn-primary:hover {
+  background: #1976D2;
+}
+
+.btn-danger {
+  background: #f44336;
+  color: white;
+}
+
+.btn-danger:hover {
+  background: #d32f2f;
+}
+
+/* ===== CANVAS EDITOR ===== */
+
+.canvas-editor {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.canvas-toolbar {
+  height: 60px;
+  background: white;
+  border-bottom: 1px solid #e0e0e0;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.canvas-toolbar h2 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+}
+
+.canvas-toolbar-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.canvas-main {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.canvas-sidebar {
+  width: 380px;
+  background: white;
+  border-right: 1px solid #e0e0e0;
+  overflow-y: auto;
+}
+
+.canvas-area {
+  flex: 1;
+  position: relative;
+}
+
+/* ===== MODAL ===== */
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: white;
+  border-radius: 8px;
+  padding: 24px;
+  min-width: 400px;
+  max-width: 600px;
+}
+
+.modal h3 {
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 20px;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 6px;
+  color: #333;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.form-group textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+/* ===== LOADING ===== */
+
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-size: 16px;
+  color: #666;
+}
+
+.error {
+  color: #f44336;
+  padding: 20px;
+  text-align: center;
+}
+
+.project-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;  /* ← Allinea in alto */
+  margin-bottom: 8px;       /* ← Spazio sotto */
+}
+
+.project-type-badge {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: white;
+  white-space: nowrap;      /* ← Non va a capo */
+  order: 2;                 /* ← Mette badge a destra */
+  margin-top: -2px;         /* ← Incolla al titolo */
+}
+
+.project-type-badge.estrai { background: #4CAF50; }
+.project-type-badge.manipola { background: #2196F3; }
+.project-type-badge.arricchisci { background: #FF9800; }
+.project-type-badge.carica { background: #9C27B0; }
+
+h3 {
+  margin: 0 0 4px 0;  /* ← Spazio sotto titolo per descrizione */
+  order: 1;
+}
+
+.project-meta {
+  display: flex;
+  justify-content: space-between;  /* ← Spazio tra ID e bottone */
+  align-items: center;
+  margin-top: 12px;               /* ← Spazio sopra */
+  padding-top: 8px;               /* ← Separazione visiva */
+  border-top: 1px solid #eee;     /* ← Linea divisoria */
+}
+
+.project-meta span {
+  font-size: 12px;
+  color
+}
+
+.project-card {
+  padding-bottom: 16px;  /* ← Spazio finale */
+}
+
+.project-meta { 
+  margin-top: 12px; 
+  padding-top: 8px; 
+  border-top
+}
+
+.project-actions {
+    display: flex;
+    justify-content: center; /* Centra orizzontalmente */
+    align-items: center;     /* Centra verticalmente */
+    height: 60px;           /* Opzionale: serve solo se il div deve avere un'altezza specifica */
+}

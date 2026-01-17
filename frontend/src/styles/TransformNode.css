@@ -1,0 +1,496 @@
+/**
+ * TransformNode.css
+ * Stili per il componente nodo trasformazione (modulo MANIPOLA)
+ * Supporta: Join, Formula, Filter, Aggregate, Concat
+ * Convenzione: BEM (Block Element Modifier)
+ */
+
+/* ============================================================
+   VARIABILI CSS - Colori per tipo operazione
+   ============================================================ */
+.transform-node {
+  --color-join: #2196F3;
+  --color-formula: #4CAF50;
+  --color-aggregate: #FF9800;
+  --color-filter: #9C27B0;
+  --color-concat: #F44336;
+  --color-spatial: #E91E63;
+  --color-border: #e0e0e0;
+  --color-bg-light: #f5f5f5;
+  --color-bg-lighter: #fafafa;
+  --color-text: #333;
+  --color-text-muted: #666;
+  --color-text-light: #888;
+  --color-success: #4CAF50;
+  --color-success-light: #e8f5e9;
+  --color-warning: #FF9800;
+  --color-warning-light: #fff3e0;
+  --color-error: #f44336;
+  --color-error-light: #ffebee;
+  --color-spatial-light: #FCE4EC;
+}
+
+/* ============================================================
+   CONTAINER PRINCIPALE
+   ============================================================ */
+.transform-node {
+  background: white;
+  border: 1px solid var(--op-color, var(--color-join));
+  border-radius: 6px;
+  min-width: 240px;
+  max-width: 320px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  font-size: 12px;
+}
+
+/* Varianti colore */
+.transform-node--join { --op-color: var(--color-join); }
+.transform-node--formula { --op-color: var(--color-formula); }
+.transform-node--aggregate { --op-color: var(--color-aggregate); }
+.transform-node--filter { --op-color: var(--color-filter); }
+.transform-node--concat { --op-color: var(--color-concat); }
+/* Varianti spaziali */
+.transform-node--sjoin { --op-color: var(--color-spatial); }
+.transform-node--geo_buffer { --op-color: var(--color-spatial); }
+.transform-node--geo_centroid { --op-color: var(--color-spatial); }
+.transform-node--geo_area { --op-color: var(--color-spatial); }
+.transform-node--geo_clip { --op-color: var(--color-spatial); }
+
+/* ============================================================
+   HANDLE (connettori)
+   ============================================================ */
+.transform-node__handle {
+  background: var(--op-color, var(--color-join)) !important;
+  width: 10px !important;
+  height: 10px !important;
+  border: 2px solid white !important;
+}
+
+/* ============================================================
+   HEADER
+   ============================================================ */
+.transform-node__header {
+  background: var(--op-color, var(--color-join));
+  color: white;
+  padding: 8px 10px;
+  border-radius: 5px 5px 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.transform-node__title {
+  font-weight: 600;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.transform-node__delete-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 6px;
+  transition: background 0.2s;
+}
+
+.transform-node__delete-btn:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+/* ============================================================
+   BODY
+   ============================================================ */
+.transform-node__body {
+  padding: 12px;
+}
+
+/* ============================================================
+   SEZIONE TIPO OPERAZIONE
+   ============================================================ */
+.transform-node__section {
+  margin-bottom: 12px;
+}
+
+.transform-node__label {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-bottom: 4px;
+  font-weight: 500;
+  display: block;
+}
+
+.transform-node__select {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--op-color, var(--color-join));
+  border-radius: 4px;
+  font-size: 12px;
+  background: white;
+  cursor: pointer;
+  font-weight: 500;
+  color: var(--op-color, var(--color-join));
+}
+
+.transform-node__select:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
+}
+
+/* ============================================================
+   MESSAGGI VALIDAZIONE
+   ============================================================ */
+.transform-node__message {
+  padding: 12px;
+  border-radius: 4px;
+  font-size: 11px;
+  margin-bottom: 12px;
+}
+
+.transform-node__message--warning {
+  background: var(--color-warning-light);
+  border: 1px solid var(--color-warning);
+  color: #e65100;
+}
+
+.transform-node__message--error {
+  background: var(--color-error-light);
+  border: 1px solid var(--color-error);
+  color: #c62828;
+}
+
+.transform-node__message--success {
+  background: var(--color-success-light);
+  border: 1px solid var(--color-success);
+  color: #2e7d32;
+}
+
+.transform-node__message--info {
+  background: #e3f2fd;
+  border: 1px solid var(--color-join);
+  color: #1565C0;
+}
+
+.transform-node__message-hint {
+  font-size: 10px;
+  color: var(--color-text-light);
+  margin-top: 4px;
+}
+
+/* ============================================================
+   INFO BOX (nodi collegati)
+   ============================================================ */
+.transform-node__info-box {
+  padding: 8px 10px;
+  background: var(--color-bg-light);
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-bottom: 12px;
+}
+
+.transform-node__info-row {
+  margin-bottom: 4px;
+}
+
+.transform-node__info-row:last-child {
+  margin-bottom: 0;
+}
+
+.transform-node__info-label {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.transform-node__info-count {
+  font-size: 10px;
+  color: var(--color-text-light);
+  margin-left: 4px;
+}
+
+/* ============================================================
+   SEZIONE CONFIG - GENERALE
+   ============================================================ */
+.transform-node__config {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.transform-node__config-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ============================================================
+   INPUT E SELECT COMUNI
+   ============================================================ */
+.transform-node__input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  font-size: 12px;
+  box-sizing: border-box;
+}
+
+.transform-node__input:focus {
+  outline: none;
+  border-color: var(--op-color, var(--color-join));
+  box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.1);
+}
+
+.transform-node__input--monospace {
+  font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.transform-node__config-select {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  font-size: 11px;
+  background: white;
+}
+
+/* ============================================================
+   TEXTAREA FORMULA/FILTER
+   ============================================================ */
+.transform-node__textarea {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  resize: vertical;
+  min-height: 60px;
+  box-sizing: border-box;
+}
+
+.transform-node__textarea:focus {
+  outline: none;
+  border-color: var(--op-color, var(--color-join));
+}
+
+.transform-node__textarea::placeholder {
+  color: #aaa;
+}
+
+/* ============================================================
+   COLONNE CLICCABILI
+   ============================================================ */
+.transform-node__columns-hint {
+  font-size: 10px;
+  color: var(--color-text-light);
+  margin-bottom: 4px;
+}
+
+.transform-node__columns-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-height: 80px;
+  overflow-y: auto;
+  padding: 6px;
+  background: var(--color-bg-lighter);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+}
+
+.transform-node__column-chip {
+  padding: 3px 8px;
+  background: white;
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+  font-size: 10px;
+  font-family: monospace;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.transform-node__column-chip:hover {
+  background: var(--op-color, var(--color-join));
+  color: white;
+  border-color: var(--op-color, var(--color-join));
+}
+
+/* ============================================================
+   HELP BOX (operatori supportati)
+   ============================================================ */
+.transform-node__help-box {
+  padding: 8px 10px;
+  background: #f3e5f5;
+  border-radius: 4px;
+  font-size: 10px;
+  color: #6A1B9A;
+  border: 1px solid #9C27B0;
+}
+
+.transform-node__help-box--formula {
+  background: #e8f5e9;
+  color: #2e7d32;
+  border-color: var(--color-success);
+}
+
+.transform-node__help-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.transform-node__help-code {
+  font-family: monospace;
+}
+
+.transform-node__help-hint {
+  margin-top: 4px;
+  font-size: 9px;
+  color: var(--color-text-light);
+}
+
+/* ============================================================
+   CONFIRMATION BOX
+   ============================================================ */
+.transform-node__confirm-box {
+  padding: 10px;
+  background: var(--color-success-light);
+  border: 1px solid var(--color-success);
+  border-radius: 4px;
+  font-size: 11px;
+  color: #2e7d32;
+}
+
+.transform-node__confirm-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.transform-node__confirm-content {
+  font-family: monospace;
+  font-size: 10px;
+}
+
+.transform-node__confirm-hint {
+  color: var(--color-text-muted);
+  margin-top: 4px;
+}
+
+/* ============================================================
+   RADIO/CHECKBOX OPTIONS
+   ============================================================ */
+.transform-node__options-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: var(--color-bg-lighter);
+  border-radius: 4px;
+  border: 1px solid var(--color-border);
+}
+
+.transform-node__option-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.transform-node__option-label input {
+  margin: 0;
+}
+
+.transform-node__option-content {
+  flex: 1;
+}
+
+.transform-node__option-title {
+  font-weight: 600;
+}
+
+.transform-node__option-desc {
+  font-size: 10px;
+  color: var(--color-text-light);
+}
+
+/* ============================================================
+   JOIN TYPE SELECTOR
+   ============================================================ */
+.transform-node__join-types {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.transform-node__join-type {
+  display: flex;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  cursor: pointer;
+  background: white;
+  font-size: 10px;
+  transition: all 0.2s;
+}
+
+.transform-node__join-type:hover {
+  border-color: var(--color-join);
+}
+
+.transform-node__join-type--selected {
+  background: #e3f2fd;
+  border-color: var(--color-join);
+}
+
+.transform-node__join-type input {
+  margin-right: 6px;
+}
+
+/* ============================================================
+   SCROLLBAR PERSONALIZZATA
+   ============================================================ */
+.transform-node__columns-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.transform-node__columns-list::-webkit-scrollbar-track {
+  background: #f0f0f0;
+  border-radius: 2px;
+}
+
+.transform-node__columns-list::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 2px;
+}
+
+.transform-node__columns-list::-webkit-scrollbar-thumb:hover {
+  background: #aaa;
+}
+
+/* ============================================================
+   SPATIAL OPERATIONS
+   ============================================================ */
+.transform-node__confirm-box--spatial {
+  background: var(--color-spatial-light);
+  border-color: var(--color-spatial);
+  color: #AD1457;
+}
+
+.transform-node__confirm-box--spatial .transform-node__confirm-title {
+  color: #C2185B;
+}
+
+.transform-node__confirm-box--spatial .transform-node__confirm-content {
+  color: #880E4F;
+}
