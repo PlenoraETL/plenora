@@ -5,11 +5,5 @@
   "project_type": "estrai",
   "default_connection_id": "catasto_20260112_094442_0da4f765",
   "created_at": "2026-01-15T10:03:47.776122",
-  "updated_at": "2026-01-17T07:42:07.681749",
-  "columns_metadata": [
-    {
-      "name": "particella",
-      "type": "str"
-    }
-  ]
+  "updated_at": "2026-01-17T10:11:41.465057"
 }

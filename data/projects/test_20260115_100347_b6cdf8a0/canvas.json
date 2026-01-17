@@ -407,11 +407,141 @@
       "aggregations": []
     },
     {
-      "id": "result_1768471194928",
+      "id": "node_1768628584638",
+      "type": "source",
+      "position": {
+        "x": 834.9850019092823,
+        "y": 268.6580365352461
+      },
+      "table_name": "fogli",
+      "alias": null,
+      "columns": [
+        {
+          "name": "provincia",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "cod_comune",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "foglio",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "extent",
+          "alias": null,
+          "visible": true,
+          "type": "geometry:polygon:4258"
+        },
+        {
+          "name": "comune",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "terreno_vettorializzato",
+          "alias": null,
+          "visible": true,
+          "type": "bool"
+        },
+        {
+          "name": "fabbricato_vettorializzato",
+          "alias": null,
+          "visible": true,
+          "type": "bool"
+        },
+        {
+          "name": "in_elaborazione",
+          "alias": null,
+          "visible": true,
+          "type": "bool"
+        },
+        {
+          "name": "download_dati_terreni",
+          "alias": null,
+          "visible": true,
+          "type": "bool"
+        },
+        {
+          "name": "download_dati_fabbricati",
+          "alias": null,
+          "visible": true,
+          "type": "bool"
+        },
+        {
+          "name": "download_particelle",
+          "alias": null,
+          "visible": true,
+          "type": "bool"
+        },
+        {
+          "name": "chiave",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "geom",
+          "alias": null,
+          "visible": true,
+          "type": "geometry:polygon:4258"
+        },
+        {
+          "name": "regione",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "id",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "num_particelle_terreeni",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        }
+      ],
+      "filters": [
+        {
+          "column": "id",
+          "operator": "IN",
+          "value": "122783,263054"
+        }
+      ],
+      "calculated_columns": [],
+      "connection_id": null,
+      "source_project_id": null,
+      "transform_op": null,
+      "transform_category": null,
+      "api_id": null,
+      "param_mapping": null,
+      "data": {},
+      "fileName": null,
+      "format": null,
+      "distinct": false,
+      "limit": null,
+      "group_by_enabled": false,
+      "group_by_columns": [],
+      "aggregations": []
+    },
+    {
+      "id": "result_1768640982527",
       "type": "result",
       "position": {
-        "x": 2021.0,
-        "y": 256.0
+        "x": 2071.0,
+        "y": 208.0
       },
       "table_name": null,
       "alias": null,
@@ -861,138 +991,6 @@
       "fileName": "output",
       "format": "csv",
       "distinct": false,
-      "limit": 10,
-      "group_by_enabled": true,
-      "group_by_columns": [
-        "particella"
-      ],
-      "aggregations": []
-    },
-    {
-      "id": "node_1768628584638",
-      "type": "source",
-      "position": {
-        "x": 834.9850019092823,
-        "y": 268.6580365352461
-      },
-      "table_name": "fogli",
-      "alias": null,
-      "columns": [
-        {
-          "name": "provincia",
-          "alias": null,
-          "visible": true,
-          "type": "str"
-        },
-        {
-          "name": "cod_comune",
-          "alias": null,
-          "visible": true,
-          "type": "str"
-        },
-        {
-          "name": "foglio",
-          "alias": null,
-          "visible": true,
-          "type": "str"
-        },
-        {
-          "name": "extent",
-          "alias": null,
-          "visible": true,
-          "type": "geometry:polygon:4258"
-        },
-        {
-          "name": "comune",
-          "alias": null,
-          "visible": true,
-          "type": "str"
-        },
-        {
-          "name": "terreno_vettorializzato",
-          "alias": null,
-          "visible": true,
-          "type": "bool"
-        },
-        {
-          "name": "fabbricato_vettorializzato",
-          "alias": null,
-          "visible": true,
-          "type": "bool"
-        },
-        {
-          "name": "in_elaborazione",
-          "alias": null,
-          "visible": true,
-          "type": "bool"
-        },
-        {
-          "name": "download_dati_terreni",
-          "alias": null,
-          "visible": true,
-          "type": "bool"
-        },
-        {
-          "name": "download_dati_fabbricati",
-          "alias": null,
-          "visible": true,
-          "type": "bool"
-        },
-        {
-          "name": "download_particelle",
-          "alias": null,
-          "visible": true,
-          "type": "bool"
-        },
-        {
-          "name": "chiave",
-          "alias": null,
-          "visible": true,
-          "type": "str"
-        },
-        {
-          "name": "geom",
-          "alias": null,
-          "visible": true,
-          "type": "geometry:polygon:4258"
-        },
-        {
-          "name": "regione",
-          "alias": null,
-          "visible": true,
-          "type": "str"
-        },
-        {
-          "name": "id",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "num_particelle_terreeni",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        }
-      ],
-      "filters": [
-        {
-          "column": "id",
-          "operator": "IN",
-          "value": "122783,263054"
-        }
-      ],
-      "calculated_columns": [],
-      "connection_id": null,
-      "source_project_id": null,
-      "transform_op": null,
-      "transform_category": null,
-      "api_id": null,
-      "param_mapping": null,
-      "data": {},
-      "fileName": null,
-      "format": null,
-      "distinct": false,
       "limit": null,
       "group_by_enabled": false,
       "group_by_columns": [],
@@ -1000,19 +998,6 @@
     }
   ],
   "edges": [
-    {
-      "id": "edge_1768471198354",
-      "source": "node_1768471148169",
-      "target": "result_1768471194928",
-      "join_type": "output",
-      "source_column": "",
-      "target_column": "",
-      "is_spatial": false,
-      "spatial_predicate": null,
-      "source_geom_column": null,
-      "target_geom_column": null,
-      "spatial_distance": null
-    },
     {
       "id": "edge_1768628610422",
       "source": "node_1768628584638",
@@ -1024,6 +1009,19 @@
       "spatial_predicate": "ST_Intersects",
       "source_geom_column": "extent",
       "target_geom_column": "geom_multy",
+      "spatial_distance": null
+    },
+    {
+      "id": "edge_1768640986091",
+      "source": "node_1768471148169",
+      "target": "result_1768640982527",
+      "join_type": "output",
+      "source_column": "",
+      "target_column": "",
+      "is_spatial": false,
+      "spatial_predicate": null,
+      "source_geom_column": null,
+      "target_geom_column": null,
       "spatial_distance": null
     }
   ]

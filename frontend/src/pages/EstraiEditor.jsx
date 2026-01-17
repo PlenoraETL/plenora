@@ -9,16 +9,16 @@ import ReactFlow, {
   addEdge
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { getProject, getCatalog, updateCanvas, listConnections, getConnectionTables, executeProjectQuery } from '../api/client';
+import { getProject, getCatalog, updateCanvas, listConnections, getConnectionTables, executeProjectQuery, previewProject } from '../api/client';
 import TableNode from '../components/TableNode';
 import JoinModal from '../components/JoinModal';
 import QueryPreview from '../components/QueryPreview';
 import ResultNode from '../components/ResultNode';
+import PreviewModal from '../components/PreviewModal';
 import { validateCanvas } from '../utils/canvasValidation';
 import { calculateOutputColumnsRecursive } from '../utils/columnUtils';
 import '../styles/EstraiEditor.css';
-import PreviewModal from '../components/PreviewModal';
-import { previewProject } from '../api/client';  // Aggiungi questa export al client
+
 const nodeTypes = {
   tableNode: TableNode,
   resultNode: ResultNode
@@ -62,11 +62,13 @@ function EstraiEditor() {
   const [showExecutionModal, setShowExecutionModal] = useState(false);
   const [executionResult, setExecutionResult] = useState(null);
   const [isExecuting, setIsExecuting] = useState(false);
+
+  // ✅ State per Preview Modal
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [previewData, setPreviewData] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState(null);
-  
+
   useEffect(() => {
     loadData();
   }, []);
@@ -166,7 +168,7 @@ function EstraiEditor() {
               distinct: node.distinct || false,
               limit: node.limit || null,
               columns: node.columns || [],
-              // ✅ GROUP BY fields
+              // GROUP BY fields
               group_by_enabled: node.group_by_enabled || false,
               group_by_columns: node.group_by_columns || [],
               aggregations: node.aggregations || [],
@@ -175,10 +177,10 @@ function EstraiEditor() {
               onUpdateFormat: handleUpdateResultFormat,
               onToggleDistinct: handleToggleDistinct,
               onUpdateLimit: handleUpdateLimit,
-              onUpdateGroupBy: handleUpdateGroupBy,  // ✅ NEW
+              onUpdateGroupBy: handleUpdateGroupBy,
+              onPreview: handlePreview,
               onExecute: handleExecuteQuery,
-              onDelete: handleDeleteNode,
-			  onPreview: handlePreview
+              onDelete: handleDeleteNode
             }
           };
         } else {
@@ -214,7 +216,6 @@ function EstraiEditor() {
         const targetNode = loadedNodes.find(n => n.id === edge.target);
         const isSpatial = edge.is_spatial || false;
         
-        // Determina label e colore in base al tipo
         let label, strokeColor;
         if (targetNode?.type === 'resultNode') {
           label = 'output';
@@ -240,7 +241,6 @@ function EstraiEditor() {
             target_column: edge.target_column || '',
             source_table: edge.source_table,
             target_table: edge.target_table,
-            // Campi spaziali
             is_spatial: edge.is_spatial || false,
             spatial_predicate: edge.spatial_predicate || null,
             source_geom_column: edge.source_geom_column || null,
@@ -340,7 +340,6 @@ function EstraiEditor() {
     );
   }, [setNodes]);
 
-  // Handler per aggiungere colonna calcolata
   const handleAddCalculatedColumn = useCallback((nodeId, columnDef) => {
     setNodes((nds) =>
       nds.map((node) => {
@@ -359,7 +358,6 @@ function EstraiEditor() {
     );
   }, [setNodes]);
 
-  // Handler per rimuovere colonna calcolata
   const handleDeleteCalculatedColumn = useCallback((nodeId, columnIndex) => {
     setNodes((nds) =>
       nds.map((node) => {
@@ -384,6 +382,118 @@ function EstraiEditor() {
       edge.source !== nodeId && edge.target !== nodeId
     ));
   }, [setNodes, setEdges]);
+
+  // ✅ Handler per GROUP BY
+  const handleUpdateGroupBy = useCallback((nodeId, groupByConfig) => {
+    setNodes((nds) =>
+      nds.map((node) => {
+        if (node.id === nodeId) {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              group_by_enabled: groupByConfig.group_by_enabled,
+              group_by_columns: groupByConfig.group_by_columns,
+              aggregations: groupByConfig.aggregations
+            }
+          };
+        }
+        return node;
+      })
+    );
+  }, [setNodes]);
+
+  // ✅ Save senza alert (per preview)
+  const handleSaveQuiet = useCallback(async () => {
+    const currentNodes = nodesRef.current;
+    const currentEdges = edgesRef.current;
+    
+    const validation = validateCanvas(currentNodes, currentEdges);
+    
+    if (!validation.valid) {
+      throw new Error(
+        'Canvas non valido:\n' + 
+        validation.errors.map((e, i) => `${i + 1}. ${e}`).join('\n')
+      );
+    }
+    
+    const nodesToSave = currentNodes.map(node => {
+      if (node.type === 'resultNode') {
+        const outputColumns = calculateOutputColumnsRecursive(currentNodes, currentEdges, node.id);
+        
+        return {
+          id: node.id,
+          type: 'result',
+          position: node.position,
+          fileName: node.data.fileName,
+          format: node.data.format,
+          distinct: node.data.distinct || false,
+          limit: node.data.limit || null,
+          columns: outputColumns,
+          group_by_enabled: node.data.group_by_enabled || false,
+          group_by_columns: node.data.group_by_columns || [],
+          aggregations: node.data.aggregations || []
+        };
+      } else {
+        return {
+          id: node.id,
+          type: node.data.type || 'source',
+          table_name: node.data.table_name,
+          alias: node.alias,
+          position: node.position,
+          columns: node.data.columns || [],
+          filters: node.data.filters || [],
+          calculated_columns: node.data.calculated_columns || []
+        };
+      }
+    });
+    
+    const edgesToSave = currentEdges.map(edge => ({
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      join_type: edge.data?.join_type || 'left',
+      source_column: edge.data?.source_column || '',
+      target_column: edge.data?.target_column || '',
+      is_spatial: edge.data?.is_spatial || false,
+      spatial_predicate: edge.data?.spatial_predicate || null,
+      source_geom_column: edge.data?.source_geom_column || null,
+      target_geom_column: edge.data?.target_geom_column || null,
+      spatial_distance: edge.data?.spatial_distance || null
+    }));
+    
+    await updateCanvas(projectId, { 
+      nodes: nodesToSave, 
+      edges: edgesToSave 
+    });
+  }, [projectId]);
+
+  // ✅ Handler per Preview
+  const handlePreview = useCallback(async (nodeId, limit = 100) => {
+    setShowPreviewModal(true);
+    setPreviewLoading(true);
+    setPreviewError(null);
+    setPreviewData(null);
+    
+    try {
+      // Prima salva il canvas
+      await handleSaveQuiet();
+      
+      // Poi chiama la preview API con il limit specificato
+      const result = await previewProject(projectId, limit);
+      
+      if (result.success) {
+        setPreviewData(result);
+      } else {
+        setPreviewError(result.message || 'Errore generazione preview');
+      }
+    } catch (error) {
+      console.error('[EstraiEditor] Errore preview:', error);
+      setPreviewError(error.message || 'Errore durante la preview');
+    } finally {
+      setPreviewLoading(false);
+    }
+  }, [projectId, handleSaveQuiet]);
 
   const handleExecuteQuery = useCallback(async (resultNodeId) => {
     setShowExecutionModal(true);
@@ -419,7 +529,6 @@ function EstraiEditor() {
             distinct: node.data.distinct || false,
             limit: node.data.limit || null,
             columns: outputColumns,
-            // ✅ GROUP BY fields
             group_by_enabled: node.data.group_by_enabled || false,
             group_by_columns: node.data.group_by_columns || [],
             aggregations: node.data.aggregations || []
@@ -445,7 +554,6 @@ function EstraiEditor() {
         join_type: edge.data?.join_type || 'left',
         source_column: edge.data?.source_column || '',
         target_column: edge.data?.target_column || '',
-        // Campi spaziali
         is_spatial: edge.data?.is_spatial || false,
         spatial_predicate: edge.data?.spatial_predicate || null,
         source_geom_column: edge.data?.source_geom_column || null,
@@ -477,34 +585,6 @@ function EstraiEditor() {
       setIsExecuting(false);
     }
   }, [projectId]);
-  
-  
-	const handlePreview = useCallback(async (nodeId) => {
-	  setShowPreviewModal(true);
-	  setPreviewLoading(true);
-	  setPreviewError(null);
-	  setPreviewData(null);
-	  
-	  try {
-		// Prima salva il canvas
-		await handleSave();
-		
-		// Poi chiama la preview API
-		const result = await previewProject(projectId, 100);
-		
-		if (result.success) {
-		  setPreviewData(result);
-		} else {
-		  setPreviewError(result.message || 'Errore generazione preview');
-		}
-	  } catch (error) {
-		console.error('[EstraiEditor] Errore preview:', error);
-		setPreviewError(error.message || 'Errore durante la preview');
-	  } finally {
-		setPreviewLoading(false);
-	  }
-	}, [projectId, handleSave]);  
-  
 
   const handleAddResultNode = useCallback(() => {
     if (nodes.some(n => n.type === 'resultNode')) {
@@ -521,37 +601,28 @@ function EstraiEditor() {
         format: 'csv',
         distinct: false,
         limit: null,
-        columns: [],
-        // ✅ GROUP BY fields
         group_by_enabled: false,
         group_by_columns: [],
         aggregations: [],
-        // Callbacks
         onUpdateFileName: handleUpdateResultFileName,
         onUpdateFormat: handleUpdateResultFormat,
         onToggleDistinct: handleToggleDistinct,
         onUpdateLimit: handleUpdateLimit,
-        onUpdateGroupBy: handleUpdateGroupBy,  // ✅ NEW
+        onUpdateGroupBy: handleUpdateGroupBy,
+        onPreview: handlePreview,
         onExecute: handleExecuteQuery,
-        onDelete: handleDeleteNode,
-		onPreview: handlePreview
+        onDelete: handleDeleteNode
       }
     };
 
     setNodes((nds) => nds.concat(newNode));
-  }, [nodes, setNodes, handleDeleteNode, handleExecuteQuery]);
+  }, [nodes, setNodes, handleDeleteNode, handleExecuteQuery, handlePreview, handleUpdateGroupBy]);
 
   const handleUpdateResultFileName = useCallback((nodeId, newFileName) => {
     setNodes((nds) =>
       nds.map((node) => {
         if (node.id === nodeId) {
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              fileName: newFileName
-            }
-          };
+          return { ...node, data: { ...node.data, fileName: newFileName } };
         }
         return node;
       })
@@ -562,13 +633,7 @@ function EstraiEditor() {
     setNodes((nds) =>
       nds.map((node) => {
         if (node.id === nodeId) {
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              format: newFormat
-            }
-          };
+          return { ...node, data: { ...node.data, format: newFormat } };
         }
         return node;
       })
@@ -579,13 +644,7 @@ function EstraiEditor() {
     setNodes((nds) =>
       nds.map((node) => {
         if (node.id === nodeId) {
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              distinct: newDistinct
-            }
-          };
+          return { ...node, data: { ...node.data, distinct: newDistinct } };
         }
         return node;
       })
@@ -596,33 +655,7 @@ function EstraiEditor() {
     setNodes((nds) =>
       nds.map((node) => {
         if (node.id === nodeId) {
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              limit: newLimit
-            }
-          };
-        }
-        return node;
-      })
-    );
-  }, [setNodes]);
-
-  // ✅ NEW: Handler per aggiornare configurazione GROUP BY
-  const handleUpdateGroupBy = useCallback((nodeId, groupByConfig) => {
-    setNodes((nds) =>
-      nds.map((node) => {
-        if (node.id === nodeId) {
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              group_by_enabled: groupByConfig.group_by_enabled,
-              group_by_columns: groupByConfig.group_by_columns,
-              aggregations: groupByConfig.aggregations
-            }
-          };
+          return { ...node, data: { ...node.data, limit: newLimit } };
         }
         return node;
       })
@@ -647,58 +680,7 @@ function EstraiEditor() {
     setDisconnectedNodeIds([]);
     
     try {
-      const nodesToSave = nodes.map(node => {
-        if (node.type === 'resultNode') {
-          const outputColumns = calculateOutputColumnsRecursive(nodes, edges, node.id);
-          
-          return {
-            id: node.id,
-            type: 'result',
-            position: node.position,
-            fileName: node.data.fileName,
-            format: node.data.format,
-            distinct: node.data.distinct || false,
-            limit: node.data.limit || null,
-            columns: outputColumns,
-            // ✅ GROUP BY fields
-            group_by_enabled: node.data.group_by_enabled || false,
-            group_by_columns: node.data.group_by_columns || [],
-            aggregations: node.data.aggregations || []
-          };
-        } else {
-          return {
-            id: node.id,
-            type: node.data.type || 'source',
-            table_name: node.data.table_name,
-            alias: node.alias,
-            position: node.position,
-            columns: node.data.columns || [],
-            filters: node.data.filters || [],
-            calculated_columns: node.data.calculated_columns || []
-          };
-        }
-      });
-      
-      const edgesToSave = edges.map(edge => ({
-        id: edge.id,
-        source: edge.source,
-        target: edge.target,
-        join_type: edge.data?.join_type || 'left',
-        source_column: edge.data?.source_column || '',
-        target_column: edge.data?.target_column || '',
-        // Campi spaziali
-        is_spatial: edge.data?.is_spatial || false,
-        spatial_predicate: edge.data?.spatial_predicate || null,
-        source_geom_column: edge.data?.source_geom_column || null,
-        target_geom_column: edge.data?.target_geom_column || null,
-        spatial_distance: edge.data?.spatial_distance || null
-      }));
-      
-      await updateCanvas(projectId, { 
-        nodes: nodesToSave, 
-        edges: edgesToSave 
-      });
-      
+      await handleSaveQuiet();
       alert('Progetto salvato con successo!');
     } catch (error) {
       console.error('Errore salvataggio:', error);
@@ -742,7 +724,6 @@ function EstraiEditor() {
     const sourceNode = nodes.find(n => n.id === (editingEdge?.source || pendingEdge?.source));
     const targetNode = nodes.find(n => n.id === (editingEdge?.target || pendingEdge?.target));
     
-    // Determina label e stile in base al tipo di join
     const isSpatial = joinConfig.is_spatial;
     const label = isSpatial 
       ? `🌐 ${joinConfig.spatial_predicate?.replace('ST_', '') || 'spatial'}`
@@ -832,9 +813,7 @@ function EstraiEditor() {
           table_name: tableName,
           alias: null,
           type: 'source',
-          // Supporta sia il vecchio formato (stringa) che il nuovo ({name, type})
           columns: tableColumns.map(col => {
-            // Se col è già un oggetto con name, usalo direttamente
             if (typeof col === 'object' && col.name) {
               return {
                 name: col.name,
@@ -843,7 +822,6 @@ function EstraiEditor() {
                 visible: true
               };
             }
-            // Fallback per vecchio formato (stringa)
             return {
               name: col,
               type: 'str',
@@ -887,12 +865,10 @@ function EstraiEditor() {
     !tablesInCanvas.has(tableName)
   );
 
-  // Loading state
   if (loading) {
     return <div className="estrai-loading">Caricamento progetto...</div>;
   }
 
-  // Error state
   if (!project) {
     return (
       <div className="estrai-error">
@@ -907,7 +883,6 @@ function EstraiEditor() {
   const tableCount = Object.keys(catalog).length;
   const hasResultNode = nodes.some(n => n.type === 'resultNode');
 
-  // Nodi per il modal join
   const sourceNodeId = editingEdge?.source || pendingEdge?.source;
   const targetNodeId = editingEdge?.target || pendingEdge?.target;
   const sourceNode = nodes.find(n => n.id === sourceNodeId);
@@ -1185,6 +1160,18 @@ function EstraiEditor() {
           </div>
         </div>
       )}
+
+      {/* ===== PREVIEW MODAL ===== */}
+      <PreviewModal
+        isOpen={showPreviewModal}
+        onClose={() => setShowPreviewModal(false)}
+        onRefresh={(limit) => handlePreview(null, limit)}
+        data={previewData}
+        loading={previewLoading}
+        error={previewError}
+        title="Anteprima Query SQL"
+        projectType="estrai"
+      />
     </div>
   );
 }

@@ -9,28 +9,41 @@ import '../styles/PreviewModal.css';
  * Props:
  * - isOpen: boolean - controlla visibilità
  * - onClose: function - callback chiusura
+ * - onRefresh: function(limit) - callback per ricaricare con nuovo limit
  * - data: object - dati preview { columns, rows, total_count, preview_count, truncated }
  * - loading: boolean - stato caricamento
  * - error: string - eventuale errore
  * - title: string - titolo modal (opzionale)
  * - projectType: 'estrai' | 'manipola' - tipo progetto per styling
+ * - initialLimit: number - limite iniziale righe (default 100)
  */
 const PreviewModal = memo(({ 
   isOpen, 
   onClose, 
+  onRefresh,
   data, 
   loading = false, 
   error = null,
   title = 'Anteprima Dati',
-  projectType = 'estrai'
+  projectType = 'estrai',
+  initialLimit = 100
 }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [sortColumn, setSortColumn] = useState(null);
   const [sortDirection, setSortDirection] = useState('asc');
   const [searchTerm, setSearchTerm] = useState('');
   const [columnFilters, setColumnFilters] = useState({});
+  const [selectedLimit, setSelectedLimit] = useState(initialLimit);
   
   const rowsPerPage = 20;
+  const limitOptions = [10, 50, 100, 250, 500, 1000];
+
+  // Estrai dati (prima degli hooks che dipendono da essi)
+  const columns = data?.columns || [];
+  const rows = data?.rows || [];
+  const totalCount = data?.total_count || 0;
+  const previewCount = data?.preview_count || rows.length;
+  const truncated = data?.truncated || false;
 
   // Reset state quando cambia data
   useEffect(() => {
@@ -40,16 +53,6 @@ const PreviewModal = memo(({
     setSearchTerm('');
     setColumnFilters({});
   }, [data]);
-
-  // Non renderizzare se non aperto
-  if (!isOpen) return null;
-
-  // Estrai dati
-  const columns = data?.columns || [];
-  const rows = data?.rows || [];
-  const totalCount = data?.total_count || 0;
-  const previewCount = data?.preview_count || rows.length;
-  const truncated = data?.truncated || false;
 
   // Filtra righe per ricerca globale
   const filteredRows = useMemo(() => {
@@ -85,6 +88,9 @@ const PreviewModal = memo(({
       return sortDirection === 'asc' ? comparison : -comparison;
     });
   }, [filteredRows, sortColumn, sortDirection]);
+
+  // ✅ Early return DOPO tutti gli hooks
+  if (!isOpen) return null;
 
   // Paginazione
   const totalPages = Math.ceil(sortedRows.length / rowsPerPage);
@@ -221,7 +227,30 @@ const PreviewModal = memo(({
                   )}
                 </div>
                 
-                <div className="preview-modal__info">
+                <div className="preview-modal__toolbar-right">
+                  {/* Limit selector */}
+                  <div className="preview-modal__limit-selector">
+                    <label>Righe:</label>
+                    <select
+                      value={selectedLimit}
+                      onChange={(e) => setSelectedLimit(Number(e.target.value))}
+                      className="preview-modal__limit-select"
+                    >
+                      {limitOptions.map(opt => (
+                        <option key={opt} value={opt}>{opt}</option>
+                      ))}
+                    </select>
+                    {onRefresh && selectedLimit !== (data?.preview_count || initialLimit) && (
+                      <button
+                        className="preview-modal__refresh-btn"
+                        onClick={() => onRefresh(selectedLimit)}
+                        title="Ricarica con nuovo limite"
+                      >
+                        🔄
+                      </button>
+                    )}
+                  </div>
+                  
                   {searchTerm && (
                     <span className="preview-modal__filter-info">
                       Filtrate: {sortedRows.length} righe

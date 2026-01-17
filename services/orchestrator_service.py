@@ -117,6 +117,7 @@ class OrchestratorService:
             )
             
             base_sql = query_info['sql']
+            params = query_info.get('params', {})  # ✅ Recupera parametri
             
             # Aggiungi LIMIT se non presente (per preview)
             # Rimuovi eventuali LIMIT esistenti e aggiungi il nostro
@@ -130,13 +131,14 @@ class OrchestratorService:
             count_sql = f"SELECT COUNT(*) as cnt FROM ({sql_no_limit}) AS subquery"
             
             logger.debug(f"Preview SQL: {preview_sql[:200]}...")
+            logger.debug(f"Preview params: {params}")
             
             # Esegui query preview
             import pandas as pd
             from sqlalchemy import create_engine, text
             
             # Costruisci connection string
-            if connection.type == 'postgresql':
+            if connection.type in ('postgresql', 'postgres'):
                 conn_str = f"postgresql://{connection.username}:{connection.password}@{connection.host}:{connection.port}/{connection.database}"
             elif connection.type == 'mysql':
                 conn_str = f"mysql+pymysql://{connection.username}:{connection.password}@{connection.host}:{connection.port}/{connection.database}"
@@ -148,12 +150,12 @@ class OrchestratorService:
             engine = create_engine(conn_str)
             
             with engine.connect() as conn:
-                # Esegui preview
-                df = pd.read_sql(text(preview_sql), conn)
+                # Esegui preview con parametri
+                df = pd.read_sql(text(preview_sql), conn, params=params)
                 
                 # Esegui count totale
                 try:
-                    count_result = conn.execute(text(count_sql))
+                    count_result = conn.execute(text(count_sql), params)
                     total_count = count_result.scalar() or 0
                 except Exception as e:
                     logger.warning(f"Impossibile ottenere count totale: {e}")

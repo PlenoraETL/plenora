@@ -174,6 +174,57 @@
   background: #ccc;
 }
 
+/* Toolbar right section */
+.preview-modal__toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+/* Limit selector */
+.preview-modal__limit-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.preview-modal__limit-selector label {
+  font-size: 13px;
+  color: #666;
+  font-weight: 500;
+}
+
+.preview-modal__limit-select {
+  padding: 6px 10px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 13px;
+  background: white;
+  cursor: pointer;
+  min-width: 80px;
+}
+
+.preview-modal__limit-select:focus {
+  outline: none;
+  border-color: var(--preview-accent);
+}
+
+.preview-modal__refresh-btn {
+  padding: 6px 10px;
+  border: 1px solid var(--preview-accent);
+  border-radius: 6px;
+  background: var(--preview-accent);
+  color: white;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.preview-modal__refresh-btn:hover {
+  filter: brightness(1.1);
+  transform: scale(1.05);
+}
+
 .preview-modal__info {
   display: flex;
   align-items: center;
