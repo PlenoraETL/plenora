@@ -401,13 +401,16 @@
       "fileName": null,
       "format": null,
       "distinct": false,
-      "limit": null
+      "limit": null,
+      "group_by_enabled": false,
+      "group_by_columns": [],
+      "aggregations": []
     },
     {
       "id": "result_1768471194928",
       "type": "result",
       "position": {
-        "x": 2026.0,
+        "x": 2022.0,
         "y": 256.0
       },
       "table_name": null,
@@ -858,7 +861,10 @@
       "fileName": "output",
       "format": "csv",
       "distinct": false,
-      "limit": 1
+      "limit": 10,
+      "group_by_enabled": false,
+      "group_by_columns": [],
+      "aggregations": []
     },
     {
       "id": "node_1768628584638",
@@ -985,7 +991,10 @@
       "fileName": null,
       "format": null,
       "distinct": false,
-      "limit": null
+      "limit": null,
+      "group_by_enabled": false,
+      "group_by_columns": [],
+      "aggregations": []
     }
   ],
   "edges": [

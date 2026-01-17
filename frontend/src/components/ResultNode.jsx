@@ -15,10 +15,14 @@ import '../styles/ResultNode.css';
  * - data.distinct: (solo SQL) usa DISTINCT
  * - data.limit: (solo SQL) limite righe
  * - data.columns: (solo SQL) colonne output calcolate (con type)
+ * - data.group_by_enabled: (solo SQL) abilita GROUP BY
+ * - data.group_by_columns: (solo SQL) colonne di raggruppamento
+ * - data.aggregations: (solo SQL) funzioni aggregate
  * - data.onUpdateFileName: callback modifica nome
  * - data.onUpdateFormat: callback modifica formato
  * - data.onToggleDistinct: callback toggle DISTINCT
  * - data.onUpdateLimit: callback modifica LIMIT
+ * - data.onUpdateGroupBy: callback modifica GROUP BY config
  * - data.onExecute: callback esecuzione
  * - data.onDelete: callback eliminazione
  */
@@ -26,6 +30,7 @@ const ResultNode = memo(({ data, id }) => {
   const [isEditingFileName, setIsEditingFileName] = useState(false);
   const [tempFileName, setTempFileName] = useState(data.fileName || 'output');
   const [executionMode, setExecutionMode] = useState('cache');
+  const [showGroupBySection, setShowGroupBySection] = useState(false);
 
   // Determina il tipo di progetto
   const isManipulate = data.isManipulate || false;
@@ -41,6 +46,11 @@ const ResultNode = memo(({ data, id }) => {
   const distinct = data.distinct || false;
   const selectedGeomColumn = data.geomColumn || null;
 
+  // GROUP BY state
+  const groupByEnabled = data.group_by_enabled || false;
+  const groupByColumns = data.group_by_columns || [];
+  const aggregations = data.aggregations || [];
+
   // Verifica se il formato selezionato è geospaziale
   const isGeoFormat = ['geojson', 'gpkg', 'shp'].includes(format);
 
@@ -48,6 +58,18 @@ const ResultNode = memo(({ data, id }) => {
   const availableGeomColumns = (data.availableColumns || [])
     .filter(col => isGeometryType(col.type))
     .map(col => col.name || col.alias || col);
+
+  // Estrai tutte le colonne disponibili per GROUP BY (da data.columns)
+  const availableColumns = (data.columns || []).map(col => ({
+    name: col.alias || col.name,
+    type: col.type || 'str',
+    fullName: col.full_name || `${col.source_table}.${col.alias || col.name}`
+  }));
+
+  // Colonne numeriche per aggregazioni
+  const numericColumns = availableColumns.filter(col => 
+    col.type === 'int' || col.type === 'real'
+  );
 
   // Determina variante CSS
   const nodeVariant = isArricchisci ? 'arricchisci' : (isManipulate ? 'manipola' : 'estrai');
@@ -68,6 +90,14 @@ const ResultNode = memo(({ data, id }) => {
     { value: 'geojson', label: 'GeoJSON', icon: '🌐', category: 'geo' },
     { value: 'gpkg', label: 'GeoPackage', icon: '📦', category: 'geo' },
     { value: 'shp', label: 'Shapefile', icon: '🗺️', category: 'geo' }
+  ];
+
+  const aggregateFunctions = [
+    { value: 'COUNT', label: 'COUNT', desc: 'Conta' },
+    { value: 'SUM', label: 'SUM', desc: 'Somma' },
+    { value: 'AVG', label: 'AVG', desc: 'Media' },
+    { value: 'MIN', label: 'MIN', desc: 'Minimo' },
+    { value: 'MAX', label: 'MAX', desc: 'Massimo' }
   ];
 
   const standardFormats = formats.filter(f => f.category === 'standard');
@@ -103,6 +133,83 @@ const ResultNode = memo(({ data, id }) => {
     if (data.onUpdateLimit) {
       const limitValue = newLimit === '' ? null : parseInt(newLimit) || null;
       data.onUpdateLimit(id, limitValue);
+    }
+  };
+
+  // GROUP BY Handlers
+  const handleToggleGroupBy = () => {
+    if (data.onUpdateGroupBy) {
+      data.onUpdateGroupBy(id, {
+        group_by_enabled: !groupByEnabled,
+        group_by_columns: groupByEnabled ? [] : groupByColumns,
+        aggregations: groupByEnabled ? [] : aggregations
+      });
+    }
+  };
+
+  const handleAddGroupByColumn = (columnName) => {
+    if (!columnName || groupByColumns.includes(columnName)) return;
+    if (data.onUpdateGroupBy) {
+      data.onUpdateGroupBy(id, {
+        group_by_enabled: true,
+        group_by_columns: [...groupByColumns, columnName],
+        aggregations
+      });
+    }
+  };
+
+  const handleRemoveGroupByColumn = (columnName) => {
+    if (data.onUpdateGroupBy) {
+      data.onUpdateGroupBy(id, {
+        group_by_enabled: groupByEnabled,
+        group_by_columns: groupByColumns.filter(c => c !== columnName),
+        aggregations
+      });
+    }
+  };
+
+  const handleAddAggregation = () => {
+    if (data.onUpdateGroupBy) {
+      const newAgg = {
+        column: '*',
+        function: 'COUNT',
+        alias: `count_${aggregations.length + 1}`
+      };
+      data.onUpdateGroupBy(id, {
+        group_by_enabled: true,
+        group_by_columns: groupByColumns,
+        aggregations: [...aggregations, newAgg]
+      });
+    }
+  };
+
+  const handleUpdateAggregation = (index, field, value) => {
+    if (data.onUpdateGroupBy) {
+      const newAggregations = [...aggregations];
+      newAggregations[index] = { ...newAggregations[index], [field]: value };
+      
+      // Auto-genera alias se cambiano colonna o funzione
+      if (field === 'column' || field === 'function') {
+        const agg = newAggregations[index];
+        const colName = agg.column === '*' ? 'all' : agg.column;
+        newAggregations[index].alias = `${agg.function.toLowerCase()}_${colName}`;
+      }
+      
+      data.onUpdateGroupBy(id, {
+        group_by_enabled: groupByEnabled,
+        group_by_columns: groupByColumns,
+        aggregations: newAggregations
+      });
+    }
+  };
+
+  const handleRemoveAggregation = (index) => {
+    if (data.onUpdateGroupBy) {
+      data.onUpdateGroupBy(id, {
+        group_by_enabled: groupByEnabled,
+        group_by_columns: groupByColumns,
+        aggregations: aggregations.filter((_, i) => i !== index)
+      });
     }
   };
 
@@ -218,7 +325,7 @@ const ResultNode = memo(({ data, id }) => {
                 ))}
               </div>
               
-              {/* Selezione colonna geometria - appare quando formato geo selezionato */}
+              {/* Selezione colonna geometria */}
               {isGeoFormat && availableGeomColumns.length > 0 && (
                 <div className="result-node__geom-select">
                   <div className="result-node__label">📍 Colonna geometria:</div>
@@ -231,15 +338,9 @@ const ResultNode = memo(({ data, id }) => {
                       <option key={col} value={col}>{col}</option>
                     ))}
                   </select>
-                  {availableGeomColumns.length > 1 && (
-                    <div className="result-node__geom-hint">
-                      {availableGeomColumns.length} colonne geometriche disponibili
-                    </div>
-                  )}
                 </div>
               )}
               
-              {/* Warning se formato geo ma nessuna colonna geometrica */}
               {isGeoFormat && availableGeomColumns.length === 0 && (
                 <div className="result-node__geom-warning">
                   ⚠️ Nessuna colonna geometrica trovata
@@ -249,8 +350,8 @@ const ResultNode = memo(({ data, id }) => {
           )}
         </div>
 
-        {/* Colonne Output (solo SQL/Estrai) - ORA CON TIPI */}
-        {isEstrai && data.columns && data.columns.length > 0 && (
+        {/* Colonne Output (solo SQL/Estrai) */}
+        {isEstrai && data.columns && data.columns.length > 0 && !groupByEnabled && (
           <div className="result-node__section result-node__section--bordered">
             <div className="result-node__label result-node__label--with-badge">
               <span>📋 Colonne output:</span>
@@ -261,7 +362,6 @@ const ResultNode = memo(({ data, id }) => {
             <div className="result-node__columns-list">
               {data.columns.map((col, idx) => (
                 <div key={idx} className="result-node__column-item">
-                  {/* Icona tipo colonna */}
                   <span 
                     className={`result-node__column-type-icon ${isGeometryType(col.type) ? 'result-node__column-type-icon--geo' : ''}`}
                     title={getColumnTypeLabel(col.type)}
@@ -275,7 +375,6 @@ const ResultNode = memo(({ data, id }) => {
                   <span className="result-node__column-name">
                     {col.alias || col.name}
                   </span>
-                  {/* Badge SRID per geometrie */}
                   {isGeometryType(col.type) && getColumnSRID(col.type) && (
                     <span className="result-node__column-srid-badge" title={`EPSG:${getColumnSRID(col.type)}`}>
                       {getColumnSRID(col.type)}
@@ -292,12 +391,13 @@ const ResultNode = memo(({ data, id }) => {
           <div className="result-node__section result-node__section--bordered">
             <div className="result-node__label">⚙️ Opzioni query:</div>
 
-            {/* DISTINCT */}
-            <label className="result-node__checkbox-label">
+            {/* DISTINCT - disabilitato se GROUP BY attivo */}
+            <label className={`result-node__checkbox-label ${groupByEnabled ? 'result-node__checkbox-label--disabled' : ''}`}>
               <input
                 type="checkbox"
                 checked={distinct}
                 onChange={handleToggleDistinct}
+                disabled={groupByEnabled}
                 className="result-node__checkbox"
               />
               <span>DISTINCT (rimuovi duplicati)</span>
@@ -317,6 +417,161 @@ const ResultNode = memo(({ data, id }) => {
                 className="result-node__limit-input"
               />
             </div>
+          </div>
+        )}
+
+        {/* ✅ GROUP BY Section - solo Estrai */}
+        {isEstrai && availableColumns.length > 0 && (
+          <div className="result-node__section result-node__section--bordered">
+            <div 
+              className="result-node__groupby-header"
+              onClick={() => setShowGroupBySection(!showGroupBySection)}
+            >
+              <div className="result-node__label result-node__label--clickable">
+                <span>📊 GROUP BY (Raggruppamento)</span>
+                {groupByEnabled && (
+                  <span className="result-node__groupby-badge">Attivo</span>
+                )}
+              </div>
+              <span className="result-node__groupby-toggle">
+                {showGroupBySection ? '▼' : '▶'}
+              </span>
+            </div>
+
+            {showGroupBySection && (
+              <div className="result-node__groupby-content">
+                {/* Toggle abilitazione */}
+                <label className="result-node__checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={groupByEnabled}
+                    onChange={handleToggleGroupBy}
+                    className="result-node__checkbox"
+                  />
+                  <span>Abilita raggruppamento</span>
+                </label>
+
+                {groupByEnabled && (
+                  <>
+                    {/* Colonne di raggruppamento */}
+                    <div className="result-node__groupby-section">
+                      <div className="result-node__label">Raggruppa per:</div>
+                      
+                      {/* Lista colonne selezionate */}
+                      {groupByColumns.length > 0 && (
+                        <div className="result-node__groupby-selected">
+                          {groupByColumns.map((col, idx) => (
+                            <span key={idx} className="result-node__groupby-tag">
+                              {col}
+                              <button 
+                                onClick={() => handleRemoveGroupByColumn(col)}
+                                className="result-node__groupby-tag-remove"
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      
+                      {/* Dropdown per aggiungere colonna */}
+                      <select
+                        value=""
+                        onChange={(e) => handleAddGroupByColumn(e.target.value)}
+                        className="result-node__groupby-dropdown"
+                      >
+                        <option value="">+ Aggiungi colonna...</option>
+                        {availableColumns
+                          .filter(col => !groupByColumns.includes(col.name))
+                          .map((col, idx) => (
+                            <option key={idx} value={col.name}>
+                              {getColumnTypeIcon(col.type)} {col.name}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+
+                    {/* Aggregazioni */}
+                    <div className="result-node__groupby-section">
+                      <div className="result-node__label">Aggregazioni:</div>
+                      
+                      {/* Lista aggregazioni */}
+                      {aggregations.map((agg, idx) => (
+                        <div key={idx} className="result-node__aggregation-row">
+                          {/* Funzione */}
+                          <select
+                            value={agg.function}
+                            onChange={(e) => handleUpdateAggregation(idx, 'function', e.target.value)}
+                            className="result-node__agg-select result-node__agg-select--func"
+                          >
+                            {aggregateFunctions.map(f => (
+                              <option key={f.value} value={f.value}>{f.label}</option>
+                            ))}
+                          </select>
+                          
+                          {/* Colonna */}
+                          <select
+                            value={agg.column}
+                            onChange={(e) => handleUpdateAggregation(idx, 'column', e.target.value)}
+                            className="result-node__agg-select result-node__agg-select--col"
+                          >
+                            <option value="*">* (tutte)</option>
+                            {availableColumns.map((col, colIdx) => (
+                              <option key={colIdx} value={col.name}>{col.name}</option>
+                            ))}
+                          </select>
+                          
+                          {/* Alias */}
+                          <input
+                            type="text"
+                            value={agg.alias || ''}
+                            onChange={(e) => handleUpdateAggregation(idx, 'alias', e.target.value)}
+                            placeholder="alias"
+                            className="result-node__agg-alias"
+                          />
+                          
+                          {/* Rimuovi */}
+                          <button
+                            onClick={() => handleRemoveAggregation(idx)}
+                            className="result-node__agg-remove"
+                            title="Rimuovi aggregazione"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                      
+                      {/* Bottone aggiungi aggregazione */}
+                      <button
+                        onClick={handleAddAggregation}
+                        className="result-node__add-agg-btn"
+                      >
+                        + Aggiungi aggregazione
+                      </button>
+                    </div>
+
+                    {/* Preview colonne output con GROUP BY */}
+                    {(groupByColumns.length > 0 || aggregations.length > 0) && (
+                      <div className="result-node__groupby-preview">
+                        <div className="result-node__label">📋 Output previsto:</div>
+                        <div className="result-node__groupby-preview-list">
+                          {groupByColumns.map((col, idx) => (
+                            <span key={`g-${idx}`} className="result-node__preview-col result-node__preview-col--group">
+                              {col}
+                            </span>
+                          ))}
+                          {aggregations.map((agg, idx) => (
+                            <span key={`a-${idx}`} className="result-node__preview-col result-node__preview-col--agg">
+                              {agg.alias || `${agg.function}(${agg.column})`}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
           </div>
         )}
 

@@ -9,7 +9,7 @@ import ArricchisciEditor from './pages/ArricchisciEditor';
 
 function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <div className="app">
 		<Routes>
 		  <Route path="/" element={<ProjectList />} />

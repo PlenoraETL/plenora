@@ -64,11 +64,15 @@ class QueryGenerator:
         if not table_nodes:
             raise ValueError("Nessuna tabella connessa al nodo risultato")
         
+        # ✅ Estrai configurazione GROUP BY dal result_node
+        group_by_config = self._get_group_by_config(result_node)
+        
         # Genera SQL con parametri
         sql_parts = {
-            "select": self._generate_select(table_nodes, result_node),
+            "select": self._generate_select(table_nodes, result_node, group_by_config),
             "from": self._generate_from(table_nodes, edges),
-            "where": self._generate_where(table_nodes, params),  # Passa params
+            "where": self._generate_where(table_nodes, params),
+            "group_by": self._generate_group_by(group_by_config),
             "distinct": result_node.distinct if hasattr(result_node, 'distinct') else False,
             "limit": result_node.limit if hasattr(result_node, 'limit') else None
         }
@@ -82,6 +86,41 @@ class QueryGenerator:
             "tables_used": [n.table_name for n in table_nodes],
             "columns_count": len(self._get_visible_columns(table_nodes))
         }
+    
+    def _get_group_by_config(self, result_node: Node) -> Dict[str, Any]:
+        """
+        Estrae configurazione GROUP BY dal nodo risultato.
+        
+        Formato atteso nel result_node:
+        {
+            "group_by_enabled": true,
+            "group_by_columns": ["comune", "provincia"],
+            "aggregations": [
+                {"column": "area", "function": "SUM", "alias": "totale_area"},
+                {"column": "id", "function": "COUNT", "alias": "num_records"},
+                {"column": "*", "function": "COUNT", "alias": "conteggio"}
+            ]
+        }
+        """
+        config = {
+            "enabled": False,
+            "columns": [],
+            "aggregations": []
+        }
+        
+        # Prova a leggere da diversi attributi possibili
+        if hasattr(result_node, 'group_by_enabled') and result_node.group_by_enabled:
+            config["enabled"] = True
+            config["columns"] = getattr(result_node, 'group_by_columns', []) or []
+            config["aggregations"] = getattr(result_node, 'aggregations', []) or []
+        elif hasattr(result_node, 'data') and result_node.data:
+            data = result_node.data if isinstance(result_node.data, dict) else {}
+            if data.get('group_by_enabled'):
+                config["enabled"] = True
+                config["columns"] = data.get('group_by_columns', []) or []
+                config["aggregations"] = data.get('aggregations', []) or []
+        
+        return config
     
     def _get_next_param_name(self) -> str:
         """Genera nome parametro univoco incrementale"""
@@ -126,37 +165,46 @@ class QueryGenerator:
         
         return table_nodes
     
-    def _generate_select(self, table_nodes: List[Node], result_node: Node) -> str:
-        """Genera clausola SELECT con colonne visibili, alias e colonne calcolate.
-        Le colonne geometriche vengono convertite in WKT per uniformità."""
+    def _generate_select(
+        self, 
+        table_nodes: List[Node], 
+        result_node: Node,
+        group_by_config: Dict[str, Any] = None
+    ) -> str:
+        """
+        Genera clausola SELECT con colonne visibili, alias e colonne calcolate.
+        Se GROUP BY è attivo, genera SELECT con funzioni aggregate.
+        """
         columns = []
         
+        # ✅ Se GROUP BY è attivo, genera SELECT aggregato
+        if group_by_config and group_by_config.get("enabled"):
+            return self._generate_select_with_groupby(table_nodes, group_by_config)
+        
+        # SELECT normale (senza GROUP BY)
         for node in table_nodes:
             table_alias = node.alias or node.table_name
             
             # Colonne normali
             for col in node.columns:
                 if not col.visible:
-                    continue  # Salta colonne nascoste
+                    continue
                 
                 col_name = col.name
                 col_alias = col.alias
                 col_type = getattr(col, 'type', 'str') or 'str'
                 
-                # Validazione nome colonna (previene injection nei nomi)
                 if not self._is_valid_identifier(col_name):
                     raise ValueError(f"Nome colonna non valido: {col_name}")
                 
                 # Se è una colonna geometrica, wrappa con funzione WKT
                 if col_type.startswith('geometry'):
                     col_expr = self._wrap_geometry_as_wkt(f"{table_alias}.{col_name}")
-                    # Usa alias originale o nome colonna
                     output_alias = col_alias if col_alias else col_name
                     if not self._is_valid_identifier(output_alias):
                         raise ValueError(f"Alias colonna non valido: {output_alias}")
                     columns.append(f"{col_expr} AS {output_alias}")
                 else:
-                    # Colonna normale
                     if col_alias:
                         if not self._is_valid_identifier(col_alias):
                             raise ValueError(f"Alias colonna non valido: {col_alias}")
@@ -168,12 +216,9 @@ class QueryGenerator:
             calculated_columns = getattr(node, 'calculated_columns', None) or []
             for calc_col in calculated_columns:
                 try:
-                    # calc_col ha struttura: {name, expression, sql, output_type, is_manual}
                     if calc_col.get('is_manual') and calc_col.get('sql'):
-                        # Usa SQL manuale (già validato dall'utente)
                         sql_expr = calc_col['sql']
                     elif calc_col.get('expression'):
-                        # Traduci espressione in SQL per il db_type corrente
                         sql_expr = translate_calculated_column(
                             db_type=self.db_type,
                             column_name=calc_col['name'],
@@ -193,166 +238,204 @@ class QueryGenerator:
         
         return ", ".join(columns)
     
+    def _generate_select_with_groupby(
+        self, 
+        table_nodes: List[Node], 
+        group_by_config: Dict[str, Any]
+    ) -> str:
+        """
+        Genera SELECT con GROUP BY: colonne raggruppamento + funzioni aggregate.
+        
+        Esempio output:
+            comune, provincia, SUM(area) AS totale_area, COUNT(*) AS conteggio
+        """
+        columns = []
+        group_columns = group_by_config.get("columns", [])
+        aggregations = group_by_config.get("aggregations", [])
+        
+        # Mappa nomi tabella per trovare l'alias corretto
+        table_map = {}
+        for node in table_nodes:
+            table_alias = node.alias or node.table_name
+            for col in node.columns:
+                if col.visible:
+                    table_map[col.name] = table_alias
+        
+        # 1. Aggiungi colonne di raggruppamento
+        for col_name in group_columns:
+            if not self._is_valid_identifier(col_name):
+                raise ValueError(f"Nome colonna GROUP BY non valido: {col_name}")
+            
+            # Trova la tabella corretta per questa colonna
+            table_alias = table_map.get(col_name)
+            if table_alias:
+                columns.append(f"{table_alias}.{col_name}")
+            else:
+                columns.append(col_name)
+        
+        # 2. Aggiungi aggregazioni
+        valid_agg_functions = {'COUNT', 'SUM', 'AVG', 'MIN', 'MAX', 'FIRST', 'LAST'}
+        
+        for agg in aggregations:
+            col = agg.get('column', '*')
+            func = agg.get('function', 'COUNT').upper()
+            alias = agg.get('alias', f"{func.lower()}_{col}")
+            
+            # Validazione funzione
+            if func not in valid_agg_functions:
+                raise ValueError(f"Funzione aggregazione non valida: {func}")
+            
+            # Validazione alias
+            if not self._is_valid_identifier(alias):
+                raise ValueError(f"Alias aggregazione non valido: {alias}")
+            
+            # Costruisci espressione
+            if col == '*':
+                # COUNT(*) è speciale
+                if func != 'COUNT':
+                    raise ValueError(f"Solo COUNT può usare *, non {func}")
+                columns.append(f"COUNT(*) AS {alias}")
+            else:
+                if not self._is_valid_identifier(col):
+                    raise ValueError(f"Nome colonna aggregazione non valido: {col}")
+                
+                # Trova la tabella corretta
+                table_alias = table_map.get(col)
+                col_ref = f"{table_alias}.{col}" if table_alias else col
+                columns.append(f"{func}({col_ref}) AS {alias}")
+        
+        if not columns:
+            raise ValueError("Nessuna colonna per GROUP BY")
+        
+        return ", ".join(columns)
+    
+    def _generate_group_by(self, group_by_config: Dict[str, Any]) -> str:
+        """
+        Genera clausola GROUP BY.
+        
+        Returns:
+            Stringa con colonne (es: "comune, provincia") o stringa vuota se non attivo
+        """
+        if not group_by_config or not group_by_config.get("enabled"):
+            return ""
+        
+        columns = group_by_config.get("columns", [])
+        if not columns:
+            return ""
+        
+        # Validazione
+        for col in columns:
+            if not self._is_valid_identifier(col):
+                raise ValueError(f"Nome colonna GROUP BY non valido: {col}")
+        
+        return ", ".join(columns)
+    
     def _wrap_geometry_as_wkt(self, col_ref: str) -> str:
         """
         Wrappa una colonna geometrica con la funzione appropriata per convertirla in WKT.
-        
-        Args:
-            col_ref: Riferimento colonna (es. "table.geom")
-            
-        Returns:
-            Espressione SQL che converte la geometria in WKT
         """
-        # Funzioni per convertire geometrie in WKT per ogni DB
         wkt_functions = {
-            'postgres': f"ST_AsText({col_ref})",      # PostGIS
-            'mssql': f"{col_ref}.STAsText()",          # SQL Server
-            'mysql': f"ST_AsText({col_ref})",          # MySQL
-            'oracle': f"SDO_UTIL.TO_WKTGEOMETRY({col_ref})",  # Oracle Spatial
-            'sqlite': f"AsText({col_ref})",            # SpatiaLite
+            'postgres': 'ST_AsText',
+            'postgresql': 'ST_AsText',
+            'postgis': 'ST_AsText',
+            'mysql': 'ST_AsText',
+            'mariadb': 'ST_AsText',
+            'sqlite': 'AsText',
+            'spatialite': 'AsText',
+            'mssql': '{col}.STAsText()',
+            'sqlserver': '{col}.STAsText()',
+            'oracle': 'SDO_UTIL.TO_WKTGEOMETRY',
         }
         
-        return wkt_functions.get(self.db_type, f"ST_AsText({col_ref})")
+        db = self.db_type.lower() if self.db_type else 'postgres'
+        
+        if db in ('mssql', 'sqlserver'):
+            return wkt_functions[db].replace('{col}', col_ref)
+        
+        func = wkt_functions.get(db, 'ST_AsText')
+        return f"{func}({col_ref})"
     
     def _generate_from(self, table_nodes: List[Node], edges: List[Edge]) -> str:
-        """
-        Genera clausola FROM con JOIN
-        Strategia: prima tabella come FROM, le altre come JOIN
-        """
+        """Genera clausola FROM con eventuali JOIN"""
         if not table_nodes:
-            return ""
+            raise ValueError("Nessuna tabella selezionata")
         
-        # Prima tabella è il FROM principale
-        first_table = table_nodes[0]
+        # Prima tabella (FROM)
+        first_node = table_nodes[0]
+        from_clause = first_node.table_name
+        if first_node.alias:
+            from_clause += f" AS {first_node.alias}"
         
-        # Validazione nome tabella
-        if not self._is_valid_identifier(first_table.table_name):
-            raise ValueError(f"Nome tabella non valido: {first_table.table_name}")
-        
-        from_clause = first_table.table_name
-        if first_table.alias:
-            if not self._is_valid_identifier(first_table.alias):
-                raise ValueError(f"Alias tabella non valido: {first_table.alias}")
-            from_clause += f" AS {first_table.alias}"
-        
-        # Se c'è solo una tabella, finito
-        if len(table_nodes) == 1:
-            return from_clause
-        
-        # Altre tabelle come JOIN
-        joins = []
-        processed_tables = {first_table.id}
-        
+        # Altre tabelle (JOIN)
         for node in table_nodes[1:]:
-            # Trova edge che connette questa tabella
-            edge = self._find_edge_for_table(node.id, edges, processed_tables)
-            
-            if edge:
-                join_clause = self._create_join_clause(node, edge, table_nodes)
-                joins.append(join_clause)
-                processed_tables.add(node.id)
+            join_str = self._generate_join(node, edges, table_nodes)
+            from_clause += f"\n{join_str}"
         
-        # Assembla FROM + JOINs
-        result = from_clause
-        if joins:
-            result += "\n" + "\n".join(joins)
-        
-        return result
+        return from_clause
     
-    def _find_edge_for_table(
-        self, 
-        table_id: str, 
-        edges: List[Edge], 
-        processed_tables: set
-    ) -> Optional[Edge]:
-        """Trova edge che connette questa tabella a quelle già processate"""
-        for edge in edges:
-            if edge.target == table_id and edge.source in processed_tables:
-                return edge
-            if edge.source == table_id and edge.target in processed_tables:
-                return edge
-        return None
-    
-    def _create_join_clause(
+    def _generate_join(
         self, 
         node: Node, 
-        edge: Edge, 
+        edges: List[Edge], 
         all_nodes: List[Node]
     ) -> str:
-        """Crea clausola JOIN per una tabella (standard o spaziale)"""
-        # Validazione tipo join
-        valid_join_types = {'LEFT', 'RIGHT', 'INNER', 'OUTER'}
-        join_type = edge.join_type.upper() if edge.join_type else 'LEFT'
+        """Genera singola clausola JOIN"""
+        edge = next(
+            (e for e in edges if e.target == node.id or e.source == node.id),
+            None
+        )
         
-        if join_type not in valid_join_types:
-            raise ValueError(f"Tipo join non valido: {join_type}")
+        if not edge:
+            table_name = node.table_name
+            if node.alias:
+                return f"CROSS JOIN {table_name} AS {node.alias}"
+            return f"CROSS JOIN {table_name}"
         
-        # Nome tabella e alias
+        join_type = (edge.join_type or 'LEFT').upper()
+        if join_type not in ('LEFT', 'RIGHT', 'INNER', 'OUTER', 'FULL', 'CROSS'):
+            join_type = 'LEFT'
+        
         table_name = node.table_name
-        table_alias = node.alias or table_name
+        table_alias = node.alias or node.table_name
         
-        # Validazione
-        if not self._is_valid_identifier(table_name):
-            raise ValueError(f"Nome tabella non valido: {table_name}")
-        if node.alias and not self._is_valid_identifier(node.alias):
-            raise ValueError(f"Alias tabella non valido: {node.alias}")
+        source_node = next((n for n in all_nodes if n.id == edge.source), None)
+        source_alias = source_node.alias or source_node.table_name if source_node else 'unknown'
         
-        # Trova nodo sorgente (l'altra tabella del join)
-        source_node_id = edge.source if edge.target == node.id else edge.target
-        source_node = next((n for n in all_nodes if n.id == source_node_id), None)
-        
-        if not source_node:
-            raise ValueError(f"Nodo sorgente {source_node_id} non trovato per join")
-        
-        source_alias = source_node.alias or source_node.table_name
-        
-        # Verifica se è un join spaziale
+        # ✅ Controlla se è un join spaziale
         is_spatial = getattr(edge, 'is_spatial', False)
         
         if is_spatial:
-            # === JOIN SPAZIALE ===
             spatial_predicate = getattr(edge, 'spatial_predicate', 'ST_Intersects')
-            source_geom_col = getattr(edge, 'source_geom_column', 'geom')
-            target_geom_col = getattr(edge, 'target_geom_column', 'geom')
+            source_geom = getattr(edge, 'source_geom_column', 'geom')
+            target_geom = getattr(edge, 'target_geom_column', 'geom')
             spatial_distance = getattr(edge, 'spatial_distance', None)
             
-            # Validazione predicati spaziali
-            valid_predicates = {'ST_Intersects', 'ST_Within', 'ST_Contains', 'ST_DWithin', 'ST_Touches', 'ST_Overlaps'}
-            if spatial_predicate not in valid_predicates:
-                raise ValueError(f"Predicato spaziale non valido: {spatial_predicate}")
+            if not self._is_valid_identifier(source_geom):
+                raise ValueError(f"Colonna geometria non valida: {source_geom}")
+            if not self._is_valid_identifier(target_geom):
+                raise ValueError(f"Colonna geometria non valida: {target_geom}")
             
-            # Validazione colonne geometriche
-            if not self._is_valid_identifier(source_geom_col):
-                raise ValueError(f"Colonna geometrica non valida: {source_geom_col}")
-            if not self._is_valid_identifier(target_geom_col):
-                raise ValueError(f"Colonna geometrica non valida: {target_geom_col}")
-            
-            # Costruisci riferimenti geometria
-            if edge.target == node.id:
-                geom_a = f"{source_alias}.{source_geom_col}"
-                geom_b = f"{table_alias}.{target_geom_col}"
+            # Costruisci ON clause spaziale
+            if spatial_predicate == 'ST_DWithin' and spatial_distance:
+                on_clause = f"{spatial_predicate}({source_alias}.{source_geom}, {table_alias}.{target_geom}, {spatial_distance})"
             else:
-                geom_a = f"{table_alias}.{target_geom_col}"
-                geom_b = f"{source_alias}.{source_geom_col}"
-            
-            # Costruisci predicato
-            if spatial_predicate == 'ST_DWithin':
-                if spatial_distance is None:
-                    spatial_distance = 100  # Default
-                on_clause = f"{spatial_predicate}({geom_a}, {geom_b}, {spatial_distance})"
-            else:
-                on_clause = f"{spatial_predicate}({geom_a}, {geom_b})"
+                on_clause = f"{spatial_predicate}({source_alias}.{source_geom}, {table_alias}.{target_geom})"
         else:
-            # === JOIN STANDARD ===
-            source_col = edge.source_column or 'id'
-            target_col = edge.target_column or 'id'
+            # Join normale su attributi
+            source_col = edge.source_column
+            target_col = edge.target_column
+            
+            if not source_col or not target_col:
+                table_name = node.table_name
+                if node.alias:
+                    return f"{join_type} JOIN {table_name} AS {node.alias} ON 1=1 -- JOIN NON CONFIGURATO"
+                return f"{join_type} JOIN {table_name} ON 1=1 -- JOIN NON CONFIGURATO"
             
             if not self._is_valid_identifier(source_col):
                 raise ValueError(f"Colonna join non valida: {source_col}")
             if not self._is_valid_identifier(target_col):
                 raise ValueError(f"Colonna join non valida: {target_col}")
             
-            # Determina quale colonna appartiene a quale tabella
             if edge.target == node.id:
                 on_clause = f"{source_alias}.{source_col} = {table_alias}.{target_col}"
             else:
@@ -370,13 +453,6 @@ class QueryGenerator:
         """
         Genera clausola WHERE con filtri di tutti i nodi.
         USA PARAMETRI PREPARATI per prevenire SQL injection.
-        
-        Args:
-            table_nodes: Lista nodi tabella con filtri
-            params: Dizionario dove inserire i parametri (modificato in-place)
-            
-        Returns:
-            Stringa WHERE con placeholder (es: "col = :p_0 AND col2 > :p_1")
         """
         conditions = []
         
@@ -392,11 +468,9 @@ class QueryGenerator:
                 if not column or not operator:
                     continue
                 
-                # Validazione colonna
                 if not self._is_valid_identifier(column):
                     raise ValueError(f"Nome colonna filtro non valido: {column}")
                 
-                # Genera condizione SQL con parametri sicuri
                 condition = self._create_condition(table_alias, column, operator, value, params)
                 if condition:
                     conditions.append(condition)
@@ -414,38 +488,20 @@ class QueryGenerator:
         value: Any,
         params: Dict[str, Any]
     ) -> str:
-        """
-        Crea singola condizione WHERE con parametri sicuri.
-        
-        IMPORTANTE: I valori vengono passati come parametri, MAI interpolati nella stringa SQL.
-        
-        Args:
-            table_alias: Alias o nome tabella
-            column: Nome colonna
-            operator: Operatore SQL (=, !=, >, <, LIKE, IN, etc.)
-            value: Valore da confrontare
-            params: Dizionario parametri (modificato in-place)
-            
-        Returns:
-            Stringa condizione con placeholder (es: "table.col = :p_0")
-        """
+        """Crea singola condizione WHERE con parametri sicuri."""
         col_ref = f"{table_alias}.{column}"
         
-        # Validazione operatore (whitelist)
         valid_operators = {'=', '!=', '>', '<', '>=', '<=', 'LIKE', 'IN', 'IS NULL', 'IS NOT NULL'}
         if operator not in valid_operators:
             raise ValueError(f"Operatore non valido: {operator}")
         
-        # Operatori senza valore
         if operator == 'IS NULL':
             return f"{col_ref} IS NULL"
         
         if operator == 'IS NOT NULL':
             return f"{col_ref} IS NOT NULL"
         
-        # Operatore IN (lista di valori)
         if operator == 'IN':
-            # Se è una stringa con virgole, splittala in lista
             if isinstance(value, str) and ',' in value:
                 value = [v.strip() for v in value.split(',') if v.strip()]
             
@@ -453,7 +509,6 @@ class QueryGenerator:
                 placeholders = []
                 for v in value:
                     param_name = self._get_next_param_name()
-                    # Prova a convertire in intero se possibile
                     try:
                         params[param_name] = int(v) if isinstance(v, str) and v.isdigit() else v
                     except (ValueError, TypeError):
@@ -461,46 +516,31 @@ class QueryGenerator:
                     placeholders.append(f":{param_name}")
                 return f"{col_ref} IN ({', '.join(placeholders)})"
             else:
-                # Singolo valore
                 param_name = self._get_next_param_name()
-                # Prova a convertire in intero se possibile
                 try:
                     params[param_name] = int(value) if isinstance(value, str) and value.isdigit() else value
                 except (ValueError, TypeError):
                     params[param_name] = value
                 return f"{col_ref} IN (:{param_name})"
         
-        # Operatore LIKE
         if operator == 'LIKE':
             param_name = self._get_next_param_name()
-            # Aggiungi wildcard al valore, non alla query
             params[param_name] = f"%{value}%"
             return f"{col_ref} LIKE :{param_name}"
         
-        # Operatori di confronto standard: =, !=, >, <, >=, <=
         param_name = self._get_next_param_name()
         params[param_name] = value
         return f"{col_ref} {operator} :{param_name}"
     
     def _is_valid_identifier(self, name: str) -> bool:
-        """
-        Valida che un identificatore SQL (tabella, colonna, alias) sia sicuro.
-        
-        Regole:
-        - Solo lettere, numeri, underscore
-        - Non può iniziare con un numero
-        - Lunghezza massima 128 caratteri
-        - Non può essere una keyword SQL pericolosa
-        """
+        """Valida che un identificatore SQL sia sicuro."""
         if not name or len(name) > 128:
             return False
         
-        # Pattern: inizia con lettera o underscore, seguito da lettere/numeri/underscore
         import re
         if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', name):
             return False
         
-        # Blocca keyword SQL pericolose (case insensitive)
         dangerous_keywords = {
             'drop', 'delete', 'truncate', 'insert', 'update', 'alter',
             'create', 'exec', 'execute', 'union', 'grant', 'revoke'
@@ -514,12 +554,10 @@ class QueryGenerator:
         """Ottieni lista colonne visibili (incluse le calcolate)"""
         columns = []
         for node in table_nodes:
-            # Colonne normali
             for col in node.columns:
                 if col.visible:
                     columns.append(col.name)
             
-            # Colonne calcolate
             calculated_columns = getattr(node, 'calculated_columns', None) or []
             for calc_col in calculated_columns:
                 columns.append(calc_col.get('name', 'calculated'))
@@ -530,8 +568,8 @@ class QueryGenerator:
         """Assembla le parti SQL in una query completa"""
         query = "SELECT "
         
-        # DISTINCT
-        if sql_parts.get('distinct'):
+        # DISTINCT (non ha senso con GROUP BY, ma lo lasciamo per sicurezza)
+        if sql_parts.get('distinct') and not sql_parts.get('group_by'):
             query += "DISTINCT "
         
         # Colonne
@@ -544,7 +582,11 @@ class QueryGenerator:
         if sql_parts['where']:
             query += f"\nWHERE {sql_parts['where']}"
         
-        # LIMIT (validazione: deve essere intero positivo)
+        # ✅ GROUP BY
+        if sql_parts.get('group_by'):
+            query += f"\nGROUP BY {sql_parts['group_by']}"
+        
+        # LIMIT
         limit = sql_parts.get('limit')
         if limit is not None:
             if not isinstance(limit, int) or limit < 0:

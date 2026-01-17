@@ -120,6 +120,13 @@ class Filter(BaseModel):
     ]
     value: str = ""
 
+# ===== AGGREGATION CONFIG (per GROUP BY) =====
+class AggregationConfig(BaseModel):
+    """Configurazione singola aggregazione per GROUP BY"""
+    column: str  # Nome colonna o "*" per COUNT(*)
+    function: Literal["COUNT", "SUM", "AVG", "MIN", "MAX"] = "COUNT"
+    alias: Optional[str] = None  # Alias output (es. "totale_area")
+
 class Node(BaseModel):
     id: str
     type: Literal["source", "result", "project_source", "transform", "api_enrich"]
@@ -140,6 +147,7 @@ class Node(BaseModel):
     transform_op: Optional[Literal[
         # Base
         "merge", "join", "concat", "filter", "aggregate", "formula",
+        "sort", "distinct",  # ✅ Aggiunti
         # Spaziali
         "sjoin",  # Spatial join con GeoPandas
         # Geometriche
@@ -162,11 +170,16 @@ class Node(BaseModel):
     # Dizionario generico per configurazioni specifiche
     data: Optional[dict] = {} 
     
-    # Campi per nodo risultato (type="result") - COMUNE
+    # ===== Campi per nodo risultato (type="result") - COMUNE =====
     fileName: Optional[str] = None
     format: Optional[Literal["json", "csv", "xlsx", "geojson", "gpkg", "shp"]] = None
     distinct: Optional[bool] = False
     limit: Optional[int] = None
+    
+    # ✅ NUOVO: Campi GROUP BY per ESTRAI
+    group_by_enabled: Optional[bool] = False
+    group_by_columns: Optional[List[str]] = []  # Colonne di raggruppamento
+    aggregations: Optional[List[AggregationConfig]] = []  # Funzioni aggregate
 
 class Edge(BaseModel):
     """Connessione (join) tra due nodi o verso output"""
@@ -207,4 +220,4 @@ class ValidationResult(BaseModel):
     
 class ExecuteRequest(BaseModel):
     connection_id: Optional[str] = None
-    force_recalculate: bool = False  # ✅ Nuovo parametro
+    force_recalculate: bool = False

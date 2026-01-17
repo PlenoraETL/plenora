@@ -538,7 +538,10 @@
       "fileName": null,
       "format": null,
       "distinct": false,
-      "limit": null
+      "limit": null,
+      "group_by_enabled": false,
+      "group_by_columns": [],
+      "aggregations": []
     },
     {
       "id": "result_1768626104039",
@@ -1072,7 +1075,10 @@
       "fileName": null,
       "format": null,
       "distinct": false,
-      "limit": null
+      "limit": null,
+      "group_by_enabled": false,
+      "group_by_columns": [],
+      "aggregations": []
     },
     {
       "id": "source_1768628036481",
@@ -1604,7 +1610,10 @@
       "fileName": null,
       "format": null,
       "distinct": false,
-      "limit": null
+      "limit": null,
+      "group_by_enabled": false,
+      "group_by_columns": [],
+      "aggregations": []
     }
   ],
   "edges": [
