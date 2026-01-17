@@ -419,7 +419,7 @@
         {
           "name": "provincia",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "str"
         },
         {
@@ -878,12 +878,6 @@
         },
         {
           "name": "gruppo_catastale",
-          "alias": null,
-          "visible": true,
-          "type": "str"
-        },
-        {
-          "name": "provincia",
           "alias": null,
           "visible": true,
           "type": "str"

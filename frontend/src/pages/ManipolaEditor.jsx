@@ -17,12 +17,14 @@ import {
   listProjects, 
   getProject, 
   updateCanvas,
-  executeProjectQuery 
+  executeProjectQuery,
+  previewProject
 } from '../api/client';
 
 import ProjectSourceNode from '../components/ProjectSourceNode';
 import TransformNode from '../components/TransformNode';
 import ResultNode from '../components/ResultNode';
+import PreviewModal from '../components/PreviewModal';
 import { useSchemaInference } from '../hooks/useSchemaInference';
 import '../styles/ManipolaEditor.css';
 
@@ -65,6 +67,12 @@ const ManipolaEditorContent = () => {
   const [showExecutionModal, setShowExecutionModal] = useState(false);
   const [executionResult, setExecutionResult] = useState(null);
   const [isExecuting, setIsExecuting] = useState(false);
+  
+  // ✅ Stati per Preview Modal
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [previewData, setPreviewData] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState(null);
   
   // ===== SCHEMA INFERENCE =====
   const { 
@@ -184,6 +192,78 @@ const ManipolaEditorContent = () => {
     }
   }, [nodes, schemas, setNodes]);
 
+  // ===== AGGIORNA CALLBACKS NEI RESULT NODES =====
+  // Necessario perché handlePreview e handleExecute sono definiti dopo handleAddResultNode
+  useEffect(() => {
+    const resultNode = nodes.find(n => n.type === 'result');
+    if (!resultNode) return;
+    
+    // Verifica se i callbacks sono già impostati correttamente
+    if (resultNode.data.onPreview && resultNode.data.onExecute) return;
+    
+    setNodes((nds) =>
+      nds.map((node) => {
+        if (node.type === 'result' && (!node.data.onPreview || !node.data.onExecute)) {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              onPreview: (nodeId, limit) => {
+                // Questa funzione verrà chiamata con i valori correnti
+                setShowPreviewModal(true);
+                setPreviewLoading(true);
+                setPreviewError(null);
+                setPreviewData(null);
+                
+                handleSaveCanvasQuiet().then(() => {
+                  return previewProject(projectId, limit || 100);
+                }).then((result) => {
+                  if (result.success) {
+                    setPreviewData(result);
+                  } else {
+                    setPreviewError(result.message || 'Errore generazione preview');
+                  }
+                }).catch((error) => {
+                  console.error('[ManipolaEditor] Errore preview:', error);
+                  setPreviewError(error.message || 'Errore durante la preview');
+                }).finally(() => {
+                  setPreviewLoading(false);
+                });
+              },
+              onExecute: (nodeId, options) => {
+                setShowExecutionModal(true);
+                setIsExecuting(true);
+                setExecutionResult(null);
+                
+                const currentNodes = nodesRef.current;
+                
+                if (currentNodes.length === 0) {
+                  setExecutionResult({ success: false, message: 'Canvas vuoto.' });
+                  setIsExecuting(false);
+                  return;
+                }
+                
+                handleSaveCanvasQuiet().then(() => {
+                  return executeProjectQuery(projectId, options || {});
+                }).then((response) => {
+                  setExecutionResult(response);
+                }).catch((error) => {
+                  setExecutionResult({
+                    success: false,
+                    message: error.response?.data?.detail || error.message || 'Errore esecuzione'
+                  });
+                }).finally(() => {
+                  setIsExecuting(false);
+                });
+              }
+            }
+          };
+        }
+        return node;
+      })
+    );
+  }, [nodes, projectId, setNodes]);
+
   // ===== REFRESH SCHEMI QUANDO CAMBIANO EDGES =====
   // Debounce per evitare troppe chiamate
   const refreshTimeoutRef = useRef(null);
@@ -271,7 +351,8 @@ const ManipolaEditorContent = () => {
                 onUpdateFileName: handleUpdateResultFileName,
                 onUpdateFormat: handleUpdateResultFormat,
                 onUpdateGeomColumn: handleUpdateGeomColumn,
-                onUpdateGroupBy: handleUpdateGroupBy,  // ✅ NEW
+                onUpdateGroupBy: handleUpdateGroupBy,
+                onPreview: handlePreview,  // ✅ NEW
                 onExecute: handleExecute,
                 onDelete: handleDeleteNode
               }
@@ -549,12 +630,13 @@ const ManipolaEditorContent = () => {
         group_by_enabled: false,
         group_by_columns: [],
         aggregations: [],
-        // Callbacks
+        // Callbacks - questi verranno sovrascritti dall'useEffect che aggiorna availableColumns
         onUpdateFileName: handleUpdateResultFileName,
         onUpdateFormat: handleUpdateResultFormat,
         onUpdateGeomColumn: handleUpdateGeomColumn,
-        onUpdateGroupBy: handleUpdateGroupBy,  // ✅ NEW
-        onExecute: handleExecute,
+        onUpdateGroupBy: handleUpdateGroupBy,
+        onPreview: null,  // Sarà impostato dopo
+        onExecute: null,  // Sarà impostato dopo
         onDelete: handleDeleteNode
       }
     };
@@ -647,6 +729,33 @@ const ManipolaEditorContent = () => {
       setIsExecuting(false);
     }
   }, [projectId, handleSaveCanvas]);
+
+  // ✅ Handler per Preview
+  const handlePreview = useCallback(async (nodeId, limit = 100) => {
+    setShowPreviewModal(true);
+    setPreviewLoading(true);
+    setPreviewError(null);
+    setPreviewData(null);
+    
+    try {
+      // Prima salva il canvas
+      await handleSaveCanvasQuiet();
+      
+      // Poi chiama la preview API
+      const result = await previewProject(projectId, limit);
+      
+      if (result.success) {
+        setPreviewData(result);
+      } else {
+        setPreviewError(result.message || 'Errore generazione preview');
+      }
+    } catch (error) {
+      console.error('[ManipolaEditor] Errore preview:', error);
+      setPreviewError(error.message || 'Errore durante la preview');
+    } finally {
+      setPreviewLoading(false);
+    }
+  }, [projectId, handleSaveCanvasQuiet]);
 
   const onConnect = useCallback((params) => {
     setEdges((eds) => addEdge({ ...params, ...defaultEdgeOptions }, eds));
@@ -961,6 +1070,18 @@ const ManipolaEditorContent = () => {
           </div>
         </div>
       )}
+
+      {/* ===== PREVIEW MODAL ===== */}
+      <PreviewModal
+        isOpen={showPreviewModal}
+        onClose={() => setShowPreviewModal(false)}
+        onRefresh={(limit) => handlePreview(null, limit)}
+        data={previewData}
+        loading={previewLoading}
+        error={previewError}
+        title="Anteprima Pipeline Manipola"
+        projectType="manipola"
+      />
     </div>
   );
 };
