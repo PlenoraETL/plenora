@@ -21,8 +21,10 @@ import {
   previewProject,
   getDownloadUrl
 } from '../api/client';
+import { getFiles } from '../api/files';
 
 import ProjectSourceNode from '../components/ProjectSourceNode';
+import FileSourceNode from '../components/FileSourceNode';
 import TransformNode from '../components/TransformNode';
 import ResultNode from '../components/ResultNode';
 import PreviewModal from '../components/PreviewModal';
@@ -31,6 +33,7 @@ import '../styles/ManipolaEditor.css';
 
 const nodeTypes = {
   project_source: ProjectSourceNode,
+  file_source: FileSourceNode,
   transform: TransformNode,
   result: ResultNode,
 };
@@ -59,6 +62,7 @@ const ManipolaEditorContent = () => {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [availableSources, setAvailableSources] = useState([]);
+  const [availableFiles, setAvailableFiles] = useState([]);
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -157,6 +161,14 @@ const ManipolaEditorContent = () => {
               name: col.name || col,
               type: col.type || 'str',
               source: node.data?.source_project_id || 'source'
+            });
+          }
+        } else if (node.type === 'file_source' && node.data?.columns) {
+          for (const col of node.data.columns) {
+            availableColumns.push({
+              name: col.name || col,
+              type: col.type || 'str',
+              source: node.data?.file_source_id || 'file'
             });
           }
         } else if (node.type === 'transform' && node.data?.columns) {
@@ -381,6 +393,16 @@ const ManipolaEditorContent = () => {
                 onDelete: handleDeleteNode
               }
             };
+          } else if (node.type === 'file_source') {
+            return {
+              ...node,
+              data: {
+                file_source_id: node.data?.file_source_id || '',
+                columns: node.data?.columns || [],
+                onUpdateColumns: handleUpdateFileSourceColumns,
+                onDelete: handleDeleteNode
+              }
+            };
           }
           return node;
         });
@@ -389,11 +411,21 @@ const ManipolaEditorContent = () => {
         setEdges(projectData.canvas.edges || []);
       }
       
+      // Carica progetti SQL disponibili
       const projectsData = await listProjects();
       const sqlProjects = (projectsData.projects || []).filter(
         p => (p.project_type || 'estrai') === 'estrai'
       );
       setAvailableSources(sqlProjects);
+      
+      // Carica file esterni disponibili
+      try {
+        const filesData = await getFiles();
+        setAvailableFiles(filesData.files || []);
+      } catch (err) {
+        console.warn("[ManipolaEditor] Errore caricamento file esterni:", err);
+        setAvailableFiles([]);
+      }
       
       // Refresh schemi dopo caricamento
       setTimeout(() => {
@@ -446,6 +478,28 @@ const ManipolaEditorContent = () => {
       })
     );
   }, [setNodes]);
+
+  const handleUpdateFileSourceColumns = useCallback((nodeId, columns) => {
+    setNodes((nds) =>
+      nds.map((node) => {
+        if (node.id === nodeId) {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              columns: columns
+            }
+          };
+        }
+        return node;
+      })
+    );
+    
+    // Refresh schemi dopo aggiornamento colonne file
+    setTimeout(() => {
+      handleSaveCanvasQuiet().then(() => refreshSchemas());
+    }, 100);
+  }, [setNodes, refreshSchemas]);
 
   const handleUpdateTransform = useCallback((nodeId, newData) => {
     setNodes((nds) =>
@@ -657,10 +711,16 @@ const ManipolaEditorContent = () => {
           type: node.type,
           position: node.position,
           data: {
+            // Project source
             source_project_id: node.data?.source_project_id,
+            // File source
+            file_source_id: node.data?.file_source_id,
+            // Common
             columns: node.data?.columns,
+            // Transform
             transform_op: node.data?.transform_op,
             config: node.data?.config,
+            // Result
             fileName: node.data?.fileName,
             format: node.data?.format,
             geomColumn: node.data?.geomColumn,
@@ -709,9 +769,9 @@ const ManipolaEditorContent = () => {
         throw new Error('Aggiungi un nodo Output prima di eseguire.');
       }
       
-      const sourceNodes = currentNodes.filter(n => n.type === 'project_source');
+      const sourceNodes = currentNodes.filter(n => n.type === 'project_source' || n.type === 'file_source');
       if (sourceNodes.length === 0) {
-        throw new Error('Aggiungi almeno un progetto sorgente.');
+        throw new Error('Aggiungi almeno una sorgente dati (progetto o file).');
       }
       
       await handleSaveCanvas();
@@ -767,9 +827,9 @@ const ManipolaEditorContent = () => {
     }, 100);
   }, [setEdges, refreshSchemas]);
 
-  const onDragStart = (event, project) => {
-    event.dataTransfer.setData('application/reactflow', 'project_source');
-    event.dataTransfer.setData('projectData', JSON.stringify(project));
+  const onDragStart = (event, type, data) => {
+    event.dataTransfer.setData('application/reactflow', type);
+    event.dataTransfer.setData('itemData', JSON.stringify(data));
     event.dataTransfer.effectAllowed = 'move';
   };
 
@@ -783,38 +843,57 @@ const ManipolaEditorContent = () => {
       event.preventDefault();
 
       const type = event.dataTransfer.getData('application/reactflow');
-      const projectDataStr = event.dataTransfer.getData('projectData');
+      const itemDataStr = event.dataTransfer.getData('itemData');
 
-      if (!type || !projectDataStr) return;
+      if (!type || !itemDataStr) return;
 
-      const projectData = JSON.parse(projectDataStr);
+      const itemData = JSON.parse(itemDataStr);
       const position = screenToFlowPosition({ 
         x: event.clientX, 
         y: event.clientY 
       });
 
-      const newNodeId = `source_${Date.now()}`;
-      const newNode = {
-        id: newNodeId,
-        type: 'project_source',
-        position,
-        data: { 
-          source_project_id: projectData.id,
-          columns: [],
-          onChange: (val) => handleUpdateProjectSource(newNodeId, val),
-          onUpdateColumns: handleUpdateProjectSourceColumns,
-          onDelete: handleDeleteNode
-        }
-      };
+      let newNode;
 
-      setNodes((nds) => nds.concat(newNode));
-      
-      // Refresh schemi dopo aggiunta nodo
-      setTimeout(() => {
-        handleSaveCanvasQuiet().then(() => refreshSchemas());
-      }, 100);
+      if (type === 'project_source') {
+        const newNodeId = `source_${Date.now()}`;
+        newNode = {
+          id: newNodeId,
+          type: 'project_source',
+          position,
+          data: { 
+            source_project_id: itemData.id,
+            columns: [],
+            onChange: (val) => handleUpdateProjectSource(newNodeId, val),
+            onUpdateColumns: handleUpdateProjectSourceColumns,
+            onDelete: handleDeleteNode
+          }
+        };
+      } else if (type === 'file_source') {
+        const newNodeId = `file_${Date.now()}`;
+        newNode = {
+          id: newNodeId,
+          type: 'file_source',
+          position,
+          data: { 
+            file_source_id: itemData.id,
+            columns: [],
+            onUpdateColumns: handleUpdateFileSourceColumns,
+            onDelete: handleDeleteNode
+          }
+        };
+      }
+
+      if (newNode) {
+        setNodes((nds) => nds.concat(newNode));
+        
+        // Refresh schemi dopo aggiunta nodo
+        setTimeout(() => {
+          handleSaveCanvasQuiet().then(() => refreshSchemas());
+        }, 100);
+      }
     },
-    [screenToFlowPosition, setNodes, handleUpdateProjectSource, handleUpdateProjectSourceColumns, handleDeleteNode, refreshSchemas]
+    [screenToFlowPosition, setNodes, handleUpdateProjectSource, handleUpdateProjectSourceColumns, handleUpdateFileSourceColumns, handleDeleteNode, refreshSchemas]
   );
 
   const onEdgeContextMenu = useCallback((event, edge) => {
@@ -893,8 +972,9 @@ const ManipolaEditorContent = () => {
       <div className="manipola-main">
         {/* Sidebar */}
         <div className="manipola-sidebar">
+          {/* Sorgenti Progetto */}
           <div className="manipola-sidebar__header">
-            <h3 className="manipola-sidebar__title">Sorgenti Progetto</h3>
+            <h3 className="manipola-sidebar__title">📊 Sorgenti Progetto</h3>
             <p className="manipola-sidebar__subtitle">
               Trascina un progetto SQL nel canvas
             </p>
@@ -913,11 +993,48 @@ const ManipolaEditorContent = () => {
                   key={proj.id}
                   className="manipola-sidebar__source-item"
                   draggable
-                  onDragStart={(e) => onDragStart(e, proj)}
+                  onDragStart={(e) => onDragStart(e, 'project_source', proj)}
                 >
                   <span className="manipola-sidebar__source-icon">📊</span>
                   <span className="manipola-sidebar__source-name">{proj.name}</span>
                   <span className="manipola-sidebar__source-badge">SQL</span>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* File Esterni */}
+          <div className="manipola-sidebar__header manipola-sidebar__header--files">
+            <h3 className="manipola-sidebar__title">📁 File Esterni</h3>
+            <p className="manipola-sidebar__subtitle">
+              Trascina un file nel canvas
+            </p>
+          </div>
+          
+          <div className="manipola-sidebar__sources">
+            {availableFiles.length === 0 ? (
+              <div className="manipola-sidebar__empty">
+                Nessun file disponibile.
+                <br />
+                <a href="/files" style={{color: '#9C27B0'}}>Carica file esterni</a>
+              </div>
+            ) : (
+              availableFiles.map((file) => (
+                <div
+                  key={file.id}
+                  className="manipola-sidebar__source-item manipola-sidebar__source-item--file"
+                  draggable
+                  onDragStart={(e) => onDragStart(e, 'file_source', file)}
+                >
+                  <span className="manipola-sidebar__source-icon">
+                    {file.format === 'csv' ? '📄' : 
+                     file.format === 'xlsx' ? '📊' : 
+                     ['geojson', 'gpkg', 'shp', 'gdb'].includes(file.format) ? '🗺️' : '📁'}
+                  </span>
+                  <span className="manipola-sidebar__source-name">{file.name}</span>
+                  <span className="manipola-sidebar__source-badge manipola-sidebar__source-badge--file">
+                    {file.format?.toUpperCase()}
+                  </span>
                 </div>
               ))
             )}

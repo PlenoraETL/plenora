@@ -6,6 +6,7 @@ import ManipolaEditor from './pages/ManipolaEditor';
 import ConnectionManager from './pages/ConnectionManager';
 import ApiConnectionManager from './pages/ApiConnectionManager';
 import ArricchisciEditor from './pages/ArricchisciEditor';
+import FileManager from './pages/FileManager';
 
 function App() {
   return (
@@ -18,6 +19,7 @@ function App() {
 		  <Route path="/editor/manipola/:id" element={<ManipolaEditor />} />
 		  <Route path="/api-connections" element={<ApiConnectionManager />} />
 		  <Route path="/arricchisci/:projectId" element={<ArricchisciEditor />} />
+		  <Route path="/files" element={<FileManager />} />
 		  <Route path="*" element={<Navigate to="/" replace />} />
 		</Routes>
       </div>

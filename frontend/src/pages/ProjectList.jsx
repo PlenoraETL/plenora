@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { listProjects, createProject, deleteProject, listConnections, getProject, listApiConnections } from '../api/client';
+import { getFiles } from '../api/files';
 import '../styles/ProjectList.css';
 
 function ProjectList() {
   const [projects, setProjects] = useState([]);
   const [connections, setConnections] = useState([]);
   const [apiConnections, setApiConnections] = useState([]);
+  const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
@@ -23,16 +25,18 @@ function ProjectList() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [projectsData, connectionsData, apiConnectionsData] = await Promise.all([
+      const [projectsData, connectionsData, apiConnectionsData, filesData] = await Promise.all([
         listProjects(),
         listConnections(),
-        listApiConnections()
+        listApiConnections(),
+        getFiles().catch(() => ({ files: [] })) // Fallback se endpoint non esiste ancora
       ]);
       
       const projectsList = projectsData.projects || [];
       setProjects(projectsList);
       setConnections(connectionsData.connections || []);
       setApiConnections(apiConnectionsData.api_connections || []);
+      setFiles(filesData.files || []);
       
       // Carica origini per progetti manipola
       const manipolaProjects = projectsList.filter(p => p.project_type === 'manipola');
@@ -199,6 +203,12 @@ function ProjectList() {
           <div className="header__actions">
             <button
               className="header__btn"
+              onClick={() => navigate('/files')}
+            >
+              📁 File Esterni ({files.length})
+            </button>
+            <button
+              className="header__btn"
               onClick={() => navigate('/api-connections')}
             >
               🔗 API Esterne ({apiConnections.length})
@@ -241,6 +251,10 @@ function ProjectList() {
           <div className="stat-card stat-card--api">
             <div className="stat-card__label">API Esterne</div>
             <div className="stat-card__value">{apiConnections.length}</div>
+          </div>
+          <div className="stat-card stat-card--files">
+            <div className="stat-card__label">File Esterni</div>
+            <div className="stat-card__value">{files.length}</div>
           </div>
         </div>
 

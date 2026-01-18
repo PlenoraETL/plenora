@@ -308,7 +308,8 @@ class FileSourceService:
         name: str,
         description: str = "",
         layer: str = None,
-        sheet: str = None
+        sheet: str = None,
+        selected_columns: List[str] = None
     ) -> FileSource:
         """
         Crea file source da upload.
@@ -320,6 +321,7 @@ class FileSourceService:
             description: Descrizione
             layer: Layer da usare (per GDB/GPKG)
             sheet: Sheet da usare (per XLSX)
+            selected_columns: Lista colonne da importare (None = tutte)
         
         Returns:
             FileSource creato
@@ -379,16 +381,40 @@ class FileSourceService:
         try:
             if format_type == 'csv':
                 df = self._load_csv(saved_path)
+                # Filtra colonne se specificato
+                if selected_columns:
+                    valid_cols = [c for c in selected_columns if c in df.columns]
+                    if valid_cols:
+                        df = df[valid_cols]
+                        # Sovrascrivi il file con solo le colonne selezionate
+                        df.to_csv(saved_path, index=False)
+                        logger.info(f"Filtrate colonne CSV: {len(valid_cols)} di {len(df.columns)}")
                 columns = self._get_columns_info(df)
                 row_count = len(df)
             
             elif format_type == 'xlsx':
                 df = self._load_xlsx(saved_path, sheet)
+                # Filtra colonne se specificato
+                if selected_columns:
+                    valid_cols = [c for c in selected_columns if c in df.columns]
+                    if valid_cols:
+                        df = df[valid_cols]
+                        # Sovrascrivi il file con solo le colonne selezionate
+                        df.to_excel(saved_path, index=False, sheet_name=sheet or 'Sheet1')
+                        logger.info(f"Filtrate colonne XLSX: {len(valid_cols)} di {len(df.columns)}")
                 columns = self._get_columns_info(df)
                 row_count = len(df)
             
             elif format_type == 'json':
                 df = self._load_json(saved_path)
+                # Filtra colonne se specificato
+                if selected_columns:
+                    valid_cols = [c for c in selected_columns if c in df.columns]
+                    if valid_cols:
+                        df = df[valid_cols]
+                        # Sovrascrivi il file con solo le colonne selezionate
+                        df.to_json(saved_path, orient='records', indent=2)
+                        logger.info(f"Filtrate colonne JSON: {len(valid_cols)} di {len(df.columns)}")
                 columns = self._get_columns_info(df)
                 row_count = len(df)
             
@@ -396,6 +422,20 @@ class FileSourceService:
                 # Per geo, serve il layer
                 if layer or format_type in ['geojson', 'shp']:
                     gdf = self._load_geospatial(saved_path, layer)
+                    # Filtra colonne se specificato (mantieni sempre geometry)
+                    if selected_columns:
+                        valid_cols = [c for c in selected_columns if c in gdf.columns]
+                        # Assicurati che geometry sia sempre inclusa
+                        if 'geometry' not in valid_cols and 'geometry' in gdf.columns:
+                            valid_cols.append('geometry')
+                        if valid_cols:
+                            gdf = gdf[valid_cols]
+                            # Sovrascrivi il file geospaziale
+                            if format_type == 'geojson':
+                                gdf.to_file(saved_path, driver='GeoJSON')
+                            elif format_type == 'gpkg':
+                                gdf.to_file(saved_path, driver='GPKG', layer=layer)
+                            logger.info(f"Filtrate colonne GEO: {len(valid_cols)} di {len(gdf.columns)}")
                     columns = self._get_columns_info(pd.DataFrame(gdf), gdf)
                     row_count = len(gdf)
                     if gdf.crs:
@@ -629,6 +669,123 @@ class FileSourceService:
             total_count=total_count,
             preview_count=len(rows)
         )
+    
+    def preview_file_temp(self, file_content: BinaryIO, filename: str) -> dict:
+        """
+        Preview temporanea di un file per ottenere le colonne.
+        Non salva il file, lo legge solo per estrarre info colonne.
+        
+        Args:
+            file_content: Contenuto file (binary)
+            filename: Nome file originale
+        
+        Returns:
+            dict con columns e row_count
+        """
+        import tempfile
+        import os
+        
+        # Rileva formato
+        format_type = self._detect_format(filename)
+        
+        if format_type == 'unknown':
+            raise ValueError(f"Formato file non supportato: {filename}")
+        
+        # Crea file temporaneo
+        suffix = Path(filename).suffix
+        
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            shutil.copyfileobj(file_content, tmp)
+            tmp_path = Path(tmp.name)
+        
+        try:
+            columns = []
+            row_count = 0
+            
+            # Se è uno ZIP, estrai in temp
+            if format_type == 'zip':
+                tmp_dir = Path(tempfile.mkdtemp())
+                try:
+                    with zipfile.ZipFile(tmp_path, 'r') as zf:
+                        zf.extractall(tmp_dir)
+                    
+                    # Cerca file supportato
+                    for item in tmp_dir.iterdir():
+                        if item.is_dir() and item.suffix.lower() == '.gdb':
+                            format_type = 'gdb'
+                            tmp_path = item
+                            break
+                        elif item.suffix.lower() == '.shp':
+                            format_type = 'shp'
+                            tmp_path = item
+                            break
+                        elif item.suffix.lower() == '.gpkg':
+                            format_type = 'gpkg'
+                            tmp_path = item
+                            break
+                    
+                    # Cerca ricorsivamente
+                    if format_type == 'zip':
+                        for item in tmp_dir.rglob('*.gdb'):
+                            if item.is_dir():
+                                format_type = 'gdb'
+                                tmp_path = item
+                                break
+                        for item in tmp_dir.rglob('*.shp'):
+                            format_type = 'shp'
+                            tmp_path = item
+                            break
+                except Exception as e:
+                    shutil.rmtree(tmp_dir, ignore_errors=True)
+                    raise ValueError(f"Errore estrazione ZIP: {e}")
+            
+            # Leggi colonne in base al formato
+            if format_type == 'csv':
+                df = self._load_csv(tmp_path)
+                columns = self._get_columns_info(df)
+                row_count = len(df)
+            
+            elif format_type == 'xlsx':
+                # Leggi primo sheet
+                df = self._load_xlsx(tmp_path)
+                columns = self._get_columns_info(df)
+                row_count = len(df)
+            
+            elif format_type == 'json':
+                df = self._load_json(tmp_path)
+                columns = self._get_columns_info(df)
+                row_count = len(df)
+            
+            elif format_type in ['geojson', 'shp']:
+                gdf = self._load_geospatial(tmp_path)
+                columns = self._get_columns_info(pd.DataFrame(gdf), gdf)
+                row_count = len(gdf)
+            
+            elif format_type in ['gpkg', 'gdb']:
+                # Prova a leggere primo layer
+                layers = self.list_layers(tmp_path)
+                if layers:
+                    gdf = self._load_geospatial(tmp_path, layers[0])
+                    columns = self._get_columns_info(pd.DataFrame(gdf), gdf)
+                    row_count = len(gdf)
+            
+            return {
+                "columns": [{"name": c.name, "type": c.type} for c in columns],
+                "row_count": row_count,
+                "format": format_type
+            }
+        
+        finally:
+            # Cleanup file temporanei
+            if tmp_path.exists():
+                if tmp_path.is_dir():
+                    shutil.rmtree(tmp_path, ignore_errors=True)
+                else:
+                    os.unlink(tmp_path)
+            
+            # Cleanup directory temp se era uno zip
+            if format_type == 'zip' and 'tmp_dir' in locals():
+                shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 # Singleton

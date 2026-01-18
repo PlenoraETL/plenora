@@ -1,0 +1,151 @@
+{
+  "nodes": [
+    {
+      "id": "result_1768725066522",
+      "type": "result",
+      "position": {
+        "x": 1093.118805892416,
+        "y": 222.4316344831392
+      },
+      "table_name": null,
+      "alias": null,
+      "columns": [],
+      "filters": [],
+      "calculated_columns": [],
+      "connection_id": null,
+      "source_project_id": null,
+      "file_source_id": null,
+      "transform_op": null,
+      "transform_category": null,
+      "api_id": null,
+      "param_mapping": null,
+      "data": {
+        "fileName": "output",
+        "format": "csv",
+        "geomColumn": null,
+        "group_by_enabled": false,
+        "group_by_columns": [],
+        "aggregations": []
+      },
+      "fileName": null,
+      "format": null,
+      "distinct": false,
+      "limit": null,
+      "group_by_enabled": false,
+      "group_by_columns": [],
+      "aggregations": []
+    },
+    {
+      "id": "file_1768725161772",
+      "type": "file_source",
+      "position": {
+        "x": 322.3668640350123,
+        "y": 321.0589224966817
+      },
+      "table_name": null,
+      "alias": null,
+      "columns": [],
+      "filters": [],
+      "calculated_columns": [],
+      "connection_id": null,
+      "source_project_id": null,
+      "file_source_id": null,
+      "transform_op": null,
+      "transform_category": null,
+      "api_id": null,
+      "param_mapping": null,
+      "data": {
+        "file_source_id": "file_test_file_caricato_20260118_092337_dd28ed96",
+        "columns": [
+          {
+            "name": "provincia",
+            "type": "str",
+            "visible": true
+          },
+          {
+            "name": "cod_comune",
+            "type": "str",
+            "visible": true
+          },
+          {
+            "name": "foglio",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "comune",
+            "type": "str",
+            "visible": true
+          },
+          {
+            "name": "sezione",
+            "type": "real",
+            "visible": true
+          },
+          {
+            "name": "particella",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "chiave",
+            "type": "str",
+            "visible": true
+          },
+          {
+            "name": "id",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "geom_multy",
+            "type": "str",
+            "visible": true
+          },
+          {
+            "name": "buffer",
+            "type": "str",
+            "visible": true
+          },
+          {
+            "name": "centroide",
+            "type": "str",
+            "visible": true
+          },
+          {
+            "name": "tripletta",
+            "type": "str",
+            "visible": true
+          },
+          {
+            "name": "geometry (MultiPolygon)",
+            "type": "str",
+            "visible": true
+          }
+        ]
+      },
+      "fileName": null,
+      "format": null,
+      "distinct": false,
+      "limit": null,
+      "group_by_enabled": false,
+      "group_by_columns": [],
+      "aggregations": []
+    }
+  ],
+  "edges": [
+    {
+      "id": "reactflow__edge-file_1768725161772-result_1768725066522",
+      "source": "file_1768725161772",
+      "target": "result_1768725066522",
+      "join_type": "left",
+      "source_column": "",
+      "target_column": "",
+      "is_spatial": false,
+      "spatial_predicate": null,
+      "source_geom_column": null,
+      "target_geom_column": null,
+      "spatial_distance": null
+    }
+  ]
+}

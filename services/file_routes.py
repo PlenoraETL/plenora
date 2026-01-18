@@ -33,13 +33,47 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/api/files", tags=["File Sources"])
 
 
+@router.post("/preview-temp")
+async def preview_file_temp(
+    file: UploadFile = File(...)
+):
+    """
+    Preview temporanea di un file per ottenere le colonne disponibili.
+    Non salva il file, lo legge solo per estrarre info colonne.
+    
+    Usato nel frontend per mostrare le colonne selezionabili
+    prima di confermare l'upload.
+    
+    Returns:
+        - columns: Lista colonne con nome e tipo
+        - row_count: Numero totale righe
+        - format: Formato rilevato
+    """
+    try:
+        result = file_source_service.preview_file_temp(
+            file_content=file.file,
+            filename=file.filename
+        )
+        return result
+    
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+    except Exception as e:
+        logger.error(f"Errore preview temp: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Errore lettura file: {str(e)}")
+
+
 @router.post("/upload", response_model=FileSource)
 async def upload_file(
     file: UploadFile = File(...),
     name: str = Form(...),
     description: str = Form(""),
     layer: Optional[str] = Form(None),
-    sheet: Optional[str] = Form(None)
+    sheet: Optional[str] = Form(None),
+    selected_columns: Optional[str] = Form(None)
 ):
     """
     Upload un nuovo file e crea un File Source.
@@ -56,6 +90,11 @@ async def upload_file(
     Per GDB/GPKG con più layer, specifica il layer da usare.
     Per Excel con più fogli, specifica lo sheet da usare.
     Se non specificato e c'è un solo layer/sheet, viene usato automaticamente.
+    
+    Parametri opzionali:
+    - selected_columns: JSON array di nomi colonne da importare.
+      Se non specificato, importa tutte le colonne.
+      Esempio: '["id", "nome", "geometry"]'
     """
     try:
         # Verifica estensione
@@ -68,6 +107,15 @@ async def upload_file(
                 detail=f"Formato file non supportato. Formati validi: {', '.join(valid_extensions)}"
             )
         
+        # Parse selected_columns da JSON string
+        columns_list = None
+        if selected_columns:
+            import json
+            try:
+                columns_list = json.loads(selected_columns)
+            except json.JSONDecodeError:
+                logger.warning(f"Errore parsing selected_columns: {selected_columns}")
+        
         # Crea file source
         file_source = file_source_service.create_from_upload(
             file_content=file.file,
@@ -75,7 +123,8 @@ async def upload_file(
             name=name,
             description=description,
             layer=layer,
-            sheet=sheet
+            sheet=sheet,
+            selected_columns=columns_list
         )
         
         return file_source

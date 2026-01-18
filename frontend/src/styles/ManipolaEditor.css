@@ -209,6 +209,27 @@
   border-radius: 3px;
 }
 
+.manipola-sidebar__source-badge--file {
+  background: #EDE7F6;
+  color: #7B1FA2;
+}
+
+/* Header Files */
+.manipola-sidebar__header--files {
+  border-top: 1px solid #e0e0e0;
+  margin-top: 10px;
+}
+
+/* Source Item File */
+.manipola-sidebar__source-item--file {
+  border-color: #E1BEE7;
+}
+
+.manipola-sidebar__source-item--file:hover {
+  background: #F3E5F5;
+  border-color: #9C27B0;
+}
+
 /* Actions Section */
 .manipola-sidebar__actions {
   padding: 15px;
