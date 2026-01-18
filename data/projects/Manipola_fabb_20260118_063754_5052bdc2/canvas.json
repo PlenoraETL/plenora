@@ -1,0 +1,379 @@
+{
+  "nodes": [
+    {
+      "id": "source_1768714677162",
+      "type": "project_source",
+      "position": {
+        "x": 275.0,
+        "y": 230.0
+      },
+      "table_name": null,
+      "alias": null,
+      "columns": [],
+      "filters": [],
+      "calculated_columns": [],
+      "connection_id": null,
+      "source_project_id": null,
+      "transform_op": null,
+      "transform_category": null,
+      "api_id": null,
+      "param_mapping": null,
+      "data": {
+        "source_project_id": "Estrai_fabb_20260118_063223_d1abc348",
+        "columns": [
+          {
+            "name": "provincia",
+            "type": "str",
+            "visible": true,
+            "source_node": "source_1768714677162",
+            "is_calculated": false
+          },
+          {
+            "name": "cod_comune",
+            "type": "str",
+            "visible": true,
+            "source_node": "source_1768714677162",
+            "is_calculated": false
+          },
+          {
+            "name": "foglio",
+            "type": "str",
+            "visible": true,
+            "source_node": "source_1768714677162",
+            "is_calculated": false
+          },
+          {
+            "name": "comune",
+            "type": "str",
+            "visible": true,
+            "source_node": "source_1768714677162",
+            "is_calculated": false
+          },
+          {
+            "name": "sezione",
+            "type": "str",
+            "visible": true,
+            "source_node": "source_1768714677162",
+            "is_calculated": false
+          },
+          {
+            "name": "particella",
+            "type": "str",
+            "visible": true,
+            "source_node": "source_1768714677162",
+            "is_calculated": false
+          },
+          {
+            "name": "chiave",
+            "type": "str",
+            "visible": true,
+            "source_node": "source_1768714677162",
+            "is_calculated": false
+          },
+          {
+            "name": "id",
+            "type": "int",
+            "visible": true,
+            "source_node": "source_1768714677162",
+            "is_calculated": false
+          },
+          {
+            "name": "geom_multy",
+            "type": "geometry:multipolygon:4258",
+            "visible": true,
+            "source_node": "source_1768714677162",
+            "is_calculated": false
+          },
+          {
+            "name": "buffer",
+            "type": "geometry:polygon:4258",
+            "visible": true,
+            "source_node": "source_1768714677162",
+            "is_calculated": false
+          },
+          {
+            "name": "centroide",
+            "type": "geometry:point:3263",
+            "visible": true,
+            "source_node": "source_1768714677162",
+            "is_calculated": false
+          }
+        ]
+      },
+      "fileName": null,
+      "format": null,
+      "distinct": false,
+      "limit": null,
+      "group_by_enabled": false,
+      "group_by_columns": [],
+      "aggregations": []
+    },
+    {
+      "id": "transform_1768714686113",
+      "type": "transform",
+      "position": {
+        "x": 597.9897511800888,
+        "y": 159.1708698330051
+      },
+      "table_name": null,
+      "alias": null,
+      "columns": [],
+      "filters": [],
+      "calculated_columns": [],
+      "connection_id": null,
+      "source_project_id": null,
+      "transform_op": null,
+      "transform_category": null,
+      "api_id": null,
+      "param_mapping": null,
+      "data": {
+        "columns": [
+          {
+            "name": "provincia",
+            "type": "str",
+            "visible": true,
+            "source_node": "transform_1768714686113",
+            "is_calculated": false
+          },
+          {
+            "name": "cod_comune",
+            "type": "str",
+            "visible": true,
+            "source_node": "transform_1768714686113",
+            "is_calculated": false
+          },
+          {
+            "name": "foglio",
+            "type": "str",
+            "visible": true,
+            "source_node": "transform_1768714686113",
+            "is_calculated": false
+          },
+          {
+            "name": "comune",
+            "type": "str",
+            "visible": true,
+            "source_node": "transform_1768714686113",
+            "is_calculated": false
+          },
+          {
+            "name": "sezione",
+            "type": "str",
+            "visible": true,
+            "source_node": "transform_1768714686113",
+            "is_calculated": false
+          },
+          {
+            "name": "particella",
+            "type": "str",
+            "visible": true,
+            "source_node": "transform_1768714686113",
+            "is_calculated": false
+          },
+          {
+            "name": "chiave",
+            "type": "str",
+            "visible": true,
+            "source_node": "transform_1768714686113",
+            "is_calculated": false
+          },
+          {
+            "name": "id",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768714686113",
+            "is_calculated": false
+          },
+          {
+            "name": "geom_multy",
+            "type": "geometry:multipolygon:4258",
+            "visible": true,
+            "source_node": "transform_1768714686113",
+            "is_calculated": false
+          },
+          {
+            "name": "buffer",
+            "type": "geometry:polygon:4258",
+            "visible": true,
+            "source_node": "transform_1768714686113",
+            "is_calculated": false
+          },
+          {
+            "name": "centroide",
+            "type": "geometry:point:3263",
+            "visible": true,
+            "source_node": "transform_1768714686113",
+            "is_calculated": false
+          },
+          {
+            "name": "tripletta",
+            "type": "real",
+            "visible": true,
+            "source_node": "transform_1768714686113",
+            "is_calculated": true
+          }
+        ],
+        "transform_op": "formula",
+        "config": {
+          "formula": "cod_comune+'|'+foglio+'|'+particella",
+          "new_column": "tripletta"
+        }
+      },
+      "fileName": null,
+      "format": null,
+      "distinct": false,
+      "limit": null,
+      "group_by_enabled": false,
+      "group_by_columns": [],
+      "aggregations": []
+    },
+    {
+      "id": "result_1768714736768",
+      "type": "result",
+      "position": {
+        "x": 1039.5950976777017,
+        "y": 177.264251502344
+      },
+      "table_name": null,
+      "alias": null,
+      "columns": [],
+      "filters": [],
+      "calculated_columns": [],
+      "connection_id": null,
+      "source_project_id": null,
+      "transform_op": null,
+      "transform_category": null,
+      "api_id": null,
+      "param_mapping": null,
+      "data": {
+        "columns": [
+          {
+            "name": "provincia",
+            "type": "str",
+            "visible": true,
+            "source_node": "transform_1768714686113",
+            "is_calculated": false
+          },
+          {
+            "name": "cod_comune",
+            "type": "str",
+            "visible": true,
+            "source_node": "transform_1768714686113",
+            "is_calculated": false
+          },
+          {
+            "name": "foglio",
+            "type": "str",
+            "visible": true,
+            "source_node": "transform_1768714686113",
+            "is_calculated": false
+          },
+          {
+            "name": "comune",
+            "type": "str",
+            "visible": true,
+            "source_node": "transform_1768714686113",
+            "is_calculated": false
+          },
+          {
+            "name": "sezione",
+            "type": "str",
+            "visible": true,
+            "source_node": "transform_1768714686113",
+            "is_calculated": false
+          },
+          {
+            "name": "particella",
+            "type": "str",
+            "visible": true,
+            "source_node": "transform_1768714686113",
+            "is_calculated": false
+          },
+          {
+            "name": "chiave",
+            "type": "str",
+            "visible": true,
+            "source_node": "transform_1768714686113",
+            "is_calculated": false
+          },
+          {
+            "name": "id",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768714686113",
+            "is_calculated": false
+          },
+          {
+            "name": "geom_multy",
+            "type": "geometry:multipolygon:4258",
+            "visible": true,
+            "source_node": "transform_1768714686113",
+            "is_calculated": false
+          },
+          {
+            "name": "buffer",
+            "type": "geometry:polygon:4258",
+            "visible": true,
+            "source_node": "transform_1768714686113",
+            "is_calculated": false
+          },
+          {
+            "name": "centroide",
+            "type": "geometry:point:3263",
+            "visible": true,
+            "source_node": "transform_1768714686113",
+            "is_calculated": false
+          },
+          {
+            "name": "tripletta",
+            "type": "real",
+            "visible": true,
+            "source_node": "transform_1768714686113",
+            "is_calculated": true
+          }
+        ],
+        "fileName": "output",
+        "format": "csv",
+        "geomColumn": null,
+        "group_by_enabled": false,
+        "group_by_columns": [],
+        "aggregations": []
+      },
+      "fileName": null,
+      "format": null,
+      "distinct": false,
+      "limit": null,
+      "group_by_enabled": false,
+      "group_by_columns": [],
+      "aggregations": []
+    }
+  ],
+  "edges": [
+    {
+      "id": "reactflow__edge-source_1768714677162-transform_1768714686113",
+      "source": "source_1768714677162",
+      "target": "transform_1768714686113",
+      "join_type": "left",
+      "source_column": "",
+      "target_column": "",
+      "is_spatial": false,
+      "spatial_predicate": null,
+      "source_geom_column": null,
+      "target_geom_column": null,
+      "spatial_distance": null
+    },
+    {
+      "id": "reactflow__edge-transform_1768714686113-result_1768714736768",
+      "source": "transform_1768714686113",
+      "target": "result_1768714736768",
+      "join_type": "left",
+      "source_column": "",
+      "target_column": "",
+      "is_spatial": false,
+      "spatial_predicate": null,
+      "source_geom_column": null,
+      "target_geom_column": null,
+      "spatial_distance": null
+    }
+  ]
+}

@@ -284,7 +284,28 @@ class SqlFunctionTranslator:
             raise ValueError(f"Funzione {function_name} non supportata per {self.db_type.value}")
     
     def _qualify_column(self, column: str, table_alias: str = None) -> str:
-        """Qualifica una colonna con l'alias della tabella se presente"""
+        """
+        Qualifica una colonna con l'alias della tabella se presente.
+        NON qualifica se column è già un'espressione SQL (contiene parentesi o è già qualificata).
+        """
+        # Se column non è una stringa, restituisci come stringa
+        if not isinstance(column, str):
+            return str(column)
+        
+        # Se contiene parentesi, è già un'espressione SQL (es. ST_Centroid(...))
+        if '(' in column or ')' in column:
+            return column
+        
+        # Se contiene già un punto e non è solo table.column, potrebbe essere già qualificata
+        # o essere un'espressione complessa - non modificare
+        if '.' in column and column.count('.') > 0:
+            # Controlla se sembra già un nome qualificato semplice (es. "table.column")
+            parts = column.split('.')
+            if len(parts) == 2 and parts[0] and parts[1]:
+                # È già qualificato, non aggiungere altro
+                return column
+        
+        # Qualifica solo nomi colonna semplici
         if table_alias:
             return f"{table_alias}.{column}"
         return column

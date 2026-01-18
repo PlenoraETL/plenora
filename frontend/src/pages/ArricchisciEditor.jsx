@@ -16,7 +16,8 @@ import {
   listProjects, 
   getProject, 
   updateCanvas,
-  executeProjectQuery 
+  executeProjectQuery,
+  getDownloadUrl
 } from '../api/client';
 
 import ProjectSourceNode from '../components/ProjectSourceNode';
@@ -739,76 +740,80 @@ const ArricchisciEditorContent = () => {
               🔗 Esegui Arricchimento
             </h3>
 
-            {!executionResult ? (
-              <>
-                {isExecuting ? (
-                  <div className="arricchisci-execution-modal__loading">
-                    <div className="arricchisci-execution-modal__spinner">⏳</div>
-                    <p className="arricchisci-execution-modal__loading-text">
-                      Esecuzione arricchimento in corso...
-                    </p>
-                  </div>
-                ) : (
-                  <>
-                    <div>
-                      <label style={{ display: 'block', marginBottom: '10px', fontWeight: '500' }}>
-                        Formato output:
-                      </label>
-                      <div className="arricchisci-execution-modal__format-grid">
-                        {['csv', 'xlsx', 'geojson', 'parquet'].map(fmt => (
-                          <div
-                            key={fmt}
-                            className={`arricchisci-execution-modal__format-option ${exportFormat === fmt ? 'arricchisci-execution-modal__format-option--selected' : ''}`}
-                            onClick={() => setExportFormat(fmt)}
-                          >
-                            <div className="arricchisci-execution-modal__format-label">{fmt}</div>
-                          </div>
-                        ))}
+            {isExecuting ? (
+              <div className="arricchisci-execution-modal__loading">
+                <div className="arricchisci-execution-modal__spinner">⏳</div>
+                <p className="arricchisci-execution-modal__loading-text">
+                  Esecuzione arricchimento in corso...
+                </p>
+              </div>
+            ) : executionResult ? (
+              <div>
+                {executionResult.success ? (
+                  <div>
+                    <div className="arricchisci-execution-modal__success">
+                      <div className="arricchisci-execution-modal__success-icon">✅</div>
+                      <h4 className="arricchisci-execution-modal__success-title">
+                        Arricchimento completato!
+                      </h4>
+                      <p className="arricchisci-execution-modal__success-message">
+                        {executionResult.message || 'Arricchimento eseguito con successo'}
+                      </p>
+                    </div>
+
+                    <div className="arricchisci-execution-modal__stats">
+                      <div className="arricchisci-execution-modal__stat">
+                        <div className="arricchisci-execution-modal__stat-label">
+                          Righe processate
+                        </div>
+                        <div className="arricchisci-execution-modal__stat-value">
+                          {(executionResult.rows_count || executionResult.rows_processed || 0).toLocaleString()}
+                        </div>
+                      </div>
+                      <div className="arricchisci-execution-modal__stat">
+                        <div className="arricchisci-execution-modal__stat-label">
+                          Colonne output
+                        </div>
+                        <div className="arricchisci-execution-modal__stat-value">
+                          {executionResult.columns?.length || 0}
+                        </div>
                       </div>
                     </div>
 
-                    <div className="arricchisci-execution-modal__actions">
-                      <button 
-                        className="arricchisci-execution-modal__btn arricchisci-execution-modal__btn--cancel"
-                        onClick={() => setShowExecutionModal(false)}
-                      >
-                        Annulla
-                      </button>
-                      <button 
-                        className="arricchisci-execution-modal__btn arricchisci-execution-modal__btn--execute"
-                        onClick={() => handleExecute(null)}
-                      >
-                        ▶ Esegui
-                      </button>
-                    </div>
-                  </>
-                )}
-              </>
-            ) : (
-              <div>
-                {executionResult.success ? (
-                  <div className="arricchisci-execution-modal__success">
-                    <div className="arricchisci-execution-modal__success-icon">✅</div>
-                    <h4 className="arricchisci-execution-modal__success-title">
-                      Arricchimento completato!
-                    </h4>
-                    <p className="arricchisci-execution-modal__success-message">
-                      {executionResult.rows_count || executionResult.rows_processed || 0} righe processate
-                    </p>
-                    
-                    {executionResult.columns && executionResult.columns.length > 0 && (
-                      <div className="arricchisci-execution-modal__stats">
-                        <div className="arricchisci-execution-modal__stat">
-                          <div className="arricchisci-execution-modal__stat-label">Righe</div>
-                          <div className="arricchisci-execution-modal__stat-value">
-                            {(executionResult.rows_count || executionResult.rows_processed || 0).toLocaleString()}
-                          </div>
+                    {executionResult.output_file && (
+                      <div className="arricchisci-execution-modal__output">
+                        <div className="arricchisci-execution-modal__output-label">
+                          📄 File generato
                         </div>
-                        <div className="arricchisci-execution-modal__stat">
-                          <div className="arricchisci-execution-modal__stat-label">Colonne</div>
-                          <div className="arricchisci-execution-modal__stat-value">
-                            {executionResult.columns.length}
-                          </div>
+                        <div className="arricchisci-execution-modal__output-path">
+                          {executionResult.output_file}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ========== DOWNLOAD BUTTON ========== */}
+                    <a 
+                      href={getDownloadUrl(projectId)}
+                      className="arricchisci-execution-modal__download-btn"
+                      download
+                    >
+                      ⬇️ Scarica File
+                    </a>
+
+                    {executionResult.columns && executionResult.columns.length > 0 && (
+                      <div className="arricchisci-execution-modal__columns">
+                        <div className="arricchisci-execution-modal__columns-label">
+                          Colonne output ({executionResult.columns.length}):
+                        </div>
+                        <div className="arricchisci-execution-modal__columns-list">
+                          {executionResult.columns.map((col, idx) => (
+                            <span 
+                              key={idx} 
+                              className="arricchisci-execution-modal__column-tag"
+                            >
+                              {col}
+                            </span>
+                          ))}
                         </div>
                       </div>
                     )}
@@ -837,6 +842,40 @@ const ArricchisciEditorContent = () => {
                   </button>
                 </div>
               </div>
+            ) : (
+              <>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '10px', fontWeight: '500' }}>
+                    Formato output:
+                  </label>
+                  <div className="arricchisci-execution-modal__format-grid">
+                    {['csv', 'xlsx', 'geojson', 'parquet'].map(fmt => (
+                      <div
+                        key={fmt}
+                        className={`arricchisci-execution-modal__format-option ${exportFormat === fmt ? 'arricchisci-execution-modal__format-option--selected' : ''}`}
+                        onClick={() => setExportFormat(fmt)}
+                      >
+                        <div className="arricchisci-execution-modal__format-label">{fmt}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="arricchisci-execution-modal__actions">
+                  <button 
+                    className="arricchisci-execution-modal__btn arricchisci-execution-modal__btn--cancel"
+                    onClick={() => setShowExecutionModal(false)}
+                  >
+                    Annulla
+                  </button>
+                  <button 
+                    className="arricchisci-execution-modal__btn arricchisci-execution-modal__btn--execute"
+                    onClick={() => handleExecute(null)}
+                  >
+                    ▶ Esegui
+                  </button>
+                </div>
+              </>
             )}
           </div>
         </div>

@@ -254,11 +254,59 @@ function ColumnBuilderModal({
       return;
     }
 
+    // Determina output_type con SRID
+    let outputType = currentFunctionDef?.output_type || 'str';
+    let determinedSrid = null;
+    
+    // Se è una geometria, cerca di determinare l'SRID
+    if (outputType.startsWith('geometry')) {
+      
+      // CASO 1: La funzione corrente è TRANSFORM - usa direttamente il suo SRID
+      if (selectedFunction === 'TRANSFORM' && params.srid) {
+        determinedSrid = params.srid;
+      }
+      // CASO 2: C'è un'espressione annidata che è TRANSFORM
+      else if (useNested && nestedExpression?.function === 'TRANSFORM' && nestedExpression?.params?.srid) {
+        determinedSrid = nestedExpression.params.srid;
+      }
+      // CASO 3: Eredita SRID dalla colonna sorgente
+      else {
+        // Cerca la colonna geometry usata come input
+        const geomParamName = currentFunctionDef?.params?.find(p => p.type === 'column')?.name;
+        let inputColumnName = params[geomParamName];
+        
+        // Se il parametro colonna è un'espressione annidata, cerca nell'espressione annidata
+        if (!inputColumnName && useNested && nestedExpression?.params) {
+          const nestedGeomParam = catalog?.functions?.[nestedExpression.function]?.params?.find(p => p.type === 'column')?.name;
+          inputColumnName = nestedExpression.params[nestedGeomParam];
+        }
+        
+        if (inputColumnName) {
+          const inputColumn = columns.find(c => c.name === inputColumnName);
+          if (inputColumn && inputColumn.type) {
+            // Estrai SRID dalla colonna sorgente (formato: geometry:subtype:srid)
+            const sourceParts = inputColumn.type.split(':');
+            if (sourceParts.length >= 3) {
+              determinedSrid = sourceParts[2];
+            }
+          }
+        }
+      }
+      
+      // Aggiungi SRID all'output_type se determinato
+      if (determinedSrid) {
+        const outputParts = outputType.split(':');
+        if (outputParts.length < 3) {
+          outputType = `${outputType}:${determinedSrid}`;
+        }
+      }
+    }
+
     const columnDef = {
       name: columnName.trim(),
       expression: expression,
       sql: isManualEdit ? manualSql : sqlPreview,
-      output_type: currentFunctionDef?.output_type || 'str',
+      output_type: outputType,
       is_manual: isManualEdit
     };
 

@@ -1,0 +1,268 @@
+{
+  "nodes": [
+    {
+      "id": "project_source_1768714838167",
+      "type": "project_source",
+      "position": {
+        "x": 101.5,
+        "y": 195.5
+      },
+      "table_name": null,
+      "alias": null,
+      "columns": [],
+      "filters": [],
+      "calculated_columns": [],
+      "connection_id": null,
+      "source_project_id": null,
+      "transform_op": null,
+      "transform_category": null,
+      "api_id": null,
+      "param_mapping": null,
+      "data": {
+        "source_project_id": "Manipola_fabb_20260118_063754_5052bdc2",
+        "columns": [
+          {
+            "name": "provincia",
+            "type": "str",
+            "visible": true
+          },
+          {
+            "name": "cod_comune",
+            "type": "str",
+            "visible": true
+          },
+          {
+            "name": "foglio",
+            "type": "str",
+            "visible": true
+          },
+          {
+            "name": "comune",
+            "type": "str",
+            "visible": true
+          },
+          {
+            "name": "sezione",
+            "type": "str",
+            "visible": true
+          },
+          {
+            "name": "particella",
+            "type": "str",
+            "visible": true
+          },
+          {
+            "name": "chiave",
+            "type": "str",
+            "visible": true
+          },
+          {
+            "name": "id",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "geom_multy",
+            "type": "geometry:multipolygon:4258",
+            "visible": true
+          },
+          {
+            "name": "buffer",
+            "type": "geometry:polygon:4258",
+            "visible": true
+          },
+          {
+            "name": "centroide",
+            "type": "geometry:point:3263",
+            "visible": true
+          },
+          {
+            "name": "tripletta",
+            "type": "real",
+            "visible": true
+          }
+        ]
+      },
+      "fileName": null,
+      "format": null,
+      "distinct": false,
+      "limit": null,
+      "group_by_enabled": false,
+      "group_by_columns": [],
+      "aggregations": []
+    },
+    {
+      "id": "api_enrich_1768714841405",
+      "type": "api_enrich",
+      "position": {
+        "x": 454.13265155653335,
+        "y": 145.2540336644124
+      },
+      "table_name": null,
+      "alias": null,
+      "columns": [],
+      "filters": [],
+      "calculated_columns": [],
+      "connection_id": null,
+      "source_project_id": null,
+      "transform_op": null,
+      "transform_category": null,
+      "api_id": null,
+      "param_mapping": null,
+      "data": {
+        "columns": [
+          {
+            "name": "provincia",
+            "type": "str",
+            "visible": true,
+            "fromApi": false
+          },
+          {
+            "name": "cod_comune",
+            "type": "str",
+            "visible": true,
+            "fromApi": false
+          },
+          {
+            "name": "foglio",
+            "type": "str",
+            "visible": true,
+            "fromApi": false
+          },
+          {
+            "name": "comune",
+            "type": "str",
+            "visible": true,
+            "fromApi": false
+          },
+          {
+            "name": "sezione",
+            "type": "str",
+            "visible": true,
+            "fromApi": false
+          },
+          {
+            "name": "particella",
+            "type": "str",
+            "visible": true,
+            "fromApi": false
+          },
+          {
+            "name": "chiave",
+            "type": "str",
+            "visible": true,
+            "fromApi": false
+          },
+          {
+            "name": "id",
+            "type": "int",
+            "visible": true,
+            "fromApi": false
+          },
+          {
+            "name": "geom_multy",
+            "type": "geometry:multipolygon:4258",
+            "visible": true,
+            "fromApi": false
+          },
+          {
+            "name": "buffer",
+            "type": "geometry:polygon:4258",
+            "visible": true,
+            "fromApi": false
+          },
+          {
+            "name": "centroide",
+            "type": "geometry:point:3263",
+            "visible": true,
+            "fromApi": false
+          },
+          {
+            "name": "tripletta",
+            "type": "real",
+            "visible": true,
+            "fromApi": false
+          },
+          {
+            "name": "geometry (MultiPolygon)",
+            "type": "geometry",
+            "visible": true,
+            "fromApi": true
+          }
+        ],
+        "api_id": "api_f5ac1cd94d46",
+        "param_mapping": {
+          "cod_comune": "cod_comune",
+          "foglio": "foglio",
+          "particella": "particella",
+          "sezione": "sezione"
+        }
+      },
+      "fileName": null,
+      "format": null,
+      "distinct": false,
+      "limit": null,
+      "group_by_enabled": false,
+      "group_by_columns": [],
+      "aggregations": []
+    },
+    {
+      "id": "result_1768717165301",
+      "type": "result",
+      "position": {
+        "x": 1108.5653403201704,
+        "y": 207.36554763914728
+      },
+      "table_name": null,
+      "alias": null,
+      "columns": [],
+      "filters": [],
+      "calculated_columns": [],
+      "connection_id": null,
+      "source_project_id": null,
+      "transform_op": null,
+      "transform_category": null,
+      "api_id": null,
+      "param_mapping": null,
+      "data": {
+        "fileName": "output",
+        "format": "csv"
+      },
+      "fileName": null,
+      "format": null,
+      "distinct": false,
+      "limit": null,
+      "group_by_enabled": false,
+      "group_by_columns": [],
+      "aggregations": []
+    }
+  ],
+  "edges": [
+    {
+      "id": "reactflow__edge-project_source_1768714838167-api_enrich_1768714841405",
+      "source": "project_source_1768714838167",
+      "target": "api_enrich_1768714841405",
+      "join_type": "left",
+      "source_column": "",
+      "target_column": "",
+      "is_spatial": false,
+      "spatial_predicate": null,
+      "source_geom_column": null,
+      "target_geom_column": null,
+      "spatial_distance": null
+    },
+    {
+      "id": "reactflow__edge-api_enrich_1768714841405-result_1768717165301",
+      "source": "api_enrich_1768714841405",
+      "target": "result_1768717165301",
+      "join_type": "left",
+      "source_column": "",
+      "target_column": "",
+      "is_spatial": false,
+      "spatial_predicate": null,
+      "source_geom_column": null,
+      "target_geom_column": null,
+      "spatial_distance": null
+    }
+  ]
+}

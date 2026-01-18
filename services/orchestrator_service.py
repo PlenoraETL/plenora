@@ -171,10 +171,44 @@ class OrchestratorService:
             # Prova a recuperare tipi dal canvas
             canvas_type_map = {}
             for node in canvas.nodes:
-                if node.type == "source" and node.columns:
-                    for col in node.columns:
-                        col_name = col.alias or col.name
-                        canvas_type_map[col_name] = col.type or "str"
+                # Gestisci sia "source" che nodi tabella (potrebbero avere type diversi)
+                node_type = node.type if hasattr(node, 'type') else (node.get('type') if isinstance(node, dict) else None)
+                
+                # Colonne normali dalla tabella
+                node_columns = node.columns if hasattr(node, 'columns') else (node.get('columns') if isinstance(node, dict) else None)
+                if node_columns:
+                    for col in node_columns:
+                        if hasattr(col, 'alias'):
+                            col_name = col.alias or col.name
+                            col_type = col.type or "str"
+                        elif isinstance(col, dict):
+                            col_name = col.get('alias') or col.get('name')
+                            col_type = col.get('type', 'str')
+                        else:
+                            continue
+                        if col_name:
+                            canvas_type_map[col_name] = col_type
+                
+                # ✅ Colonne calcolate
+                calc_columns = None
+                if hasattr(node, 'calculated_columns'):
+                    calc_columns = node.calculated_columns
+                elif isinstance(node, dict):
+                    calc_columns = node.get('calculated_columns')
+                
+                if calc_columns:
+                    for calc_col in calc_columns:
+                        if hasattr(calc_col, 'name'):
+                            col_name = calc_col.name
+                            col_type = calc_col.output_type or "str"
+                        elif isinstance(calc_col, dict):
+                            col_name = calc_col.get('name')
+                            col_type = calc_col.get('output_type', 'str')
+                        else:
+                            continue
+                        if col_name:
+                            canvas_type_map[col_name] = col_type
+                            logger.debug(f"Colonna calcolata: {col_name} -> {col_type}")
             
             for col in df.columns:
                 col_type = canvas_type_map.get(col, "str")
@@ -320,20 +354,69 @@ class OrchestratorService:
             else:
                 preview_df = current_df
             
-            # Costruisci metadata colonne
+            # Costruisci mappa tipi dal canvas
+            canvas_type_map = {}
+            for node in canvas.nodes:
+                # Colonne dai nodi source
+                node_columns = None
+                if hasattr(node, 'data') and node.data:
+                    node_columns = node.data.get('columns') if isinstance(node.data, dict) else getattr(node.data, 'columns', None)
+                elif hasattr(node, 'columns'):
+                    node_columns = node.columns
+                
+                if node_columns:
+                    for col in node_columns:
+                        if isinstance(col, dict):
+                            col_name = col.get('alias') or col.get('name')
+                            col_type = col.get('type', 'str')
+                        elif hasattr(col, 'name'):
+                            col_name = col.alias if hasattr(col, 'alias') and col.alias else col.name
+                            col_type = col.type if hasattr(col, 'type') else 'str'
+                        else:
+                            continue
+                        if col_name:
+                            canvas_type_map[col_name] = col_type
+                
+                # Colonne calcolate
+                calc_columns = None
+                if hasattr(node, 'data') and node.data:
+                    calc_columns = node.data.get('calculated_columns') if isinstance(node.data, dict) else getattr(node.data, 'calculated_columns', None)
+                elif hasattr(node, 'calculated_columns'):
+                    calc_columns = node.calculated_columns
+                
+                if calc_columns:
+                    for calc_col in calc_columns:
+                        if isinstance(calc_col, dict):
+                            col_name = calc_col.get('name')
+                            col_type = calc_col.get('output_type', 'str')
+                        elif hasattr(calc_col, 'name'):
+                            col_name = calc_col.name
+                            col_type = calc_col.output_type if hasattr(calc_col, 'output_type') else 'str'
+                        else:
+                            continue
+                        if col_name:
+                            canvas_type_map[col_name] = col_type
+                            logger.debug(f"Colonna calcolata MANIPOLA: {col_name} -> {col_type}")
+            
+            # Costruisci metadata colonne con tipi dal canvas
             columns = []
             for col in preview_df.columns:
-                dtype = str(preview_df[col].dtype)
-                if 'int' in dtype:
-                    col_type = 'int'
-                elif 'float' in dtype:
-                    col_type = 'real'
-                elif 'datetime' in dtype:
-                    col_type = 'date'
-                elif 'bool' in dtype:
-                    col_type = 'bool'
-                else:
-                    col_type = 'str'
+                # Prima cerca nel canvas
+                col_type = canvas_type_map.get(col)
+                
+                # Se non trovato, inferisci da pandas
+                if not col_type:
+                    dtype = str(preview_df[col].dtype)
+                    if 'int' in dtype:
+                        col_type = 'int'
+                    elif 'float' in dtype:
+                        col_type = 'real'
+                    elif 'datetime' in dtype:
+                        col_type = 'date'
+                    elif 'bool' in dtype:
+                        col_type = 'bool'
+                    else:
+                        col_type = 'str'
                 
                 columns.append({"name": col, "type": col_type})
             

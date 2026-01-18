@@ -415,12 +415,9 @@ class ApiConnectionService:
         import time
         
         try:
-            # ===== CHECK CACHE =====
-            if not force_recalculate:
-                cached_result = self._check_enrichment_cache(project_id)
-                if cached_result:
-                    logger.info(f" Usando cache esistente per {project_id}")
-                    return cached_result
+            # NOTA: Non usiamo cache per Arricchisci stesso - eseguiamo sempre le chiamate API
+            # La cache si applica solo ai progetti UPSTREAM (Estrai/Manipola)
+            # force_recalculate controlla se rieseguire anche i progetti upstream
             
             nodes = canvas.get('nodes', [])
             edges = canvas.get('edges', [])
@@ -454,7 +451,7 @@ class ApiConnectionService:
                 
                 if node_type == 'project_source':
                     # Carica dati dal progetto sorgente
-                    result = self._load_source_project(node_data)
+                    result = self._load_source_project(node_data, force_recalculate=force_recalculate)
                     node_results[node_id] = result
                     
                 elif node_type == 'api_enrich':
@@ -603,6 +600,7 @@ class ApiConnectionService:
             
             return {
                 "success": True,
+                "rows_processed": len(df),
                 "rows_count": len(df),
                 "columns": list(df.columns),
                 "output_file": output_file.name,
@@ -612,15 +610,19 @@ class ApiConnectionService:
             logger.info(f" Errore lettura cache: {e}")
             return None
     
-    def _load_source_project(self, node_data: Dict):
+    def _load_source_project(self, node_data: Dict, force_recalculate: bool = False):
         """
         Carica dati dal progetto sorgente.
-        Usa la stessa logica di orchestrator_service per uniformità.
+        Se force_recalculate=True, riesegue prima il progetto sorgente.
         Cerca in: results_dir/source_project_id/
         """
         import pandas as pd
         
         source_project_id = node_data.get('source_project_id')
+        
+        logger.info(f"[DEBUG] node_data ricevuto: {node_data}")
+        logger.info(f"[DEBUG] source_project_id: {source_project_id}")
+        logger.info(f"[DEBUG] force_recalculate: {force_recalculate}")
         
         if not source_project_id:
             raise ValueError("source_project_id non specificato")
@@ -628,37 +630,69 @@ class ApiConnectionService:
         # Directory output - STESSA usata da Manipola (orchestrator)
         output_dir = self.results_dir / source_project_id
         
-        logger.info(f" Cercando output in: {output_dir}")
+        # Se force_recalculate o directory non esiste, riesegui il progetto sorgente
+        if force_recalculate or not output_dir.exists():
+            logger.info(f"[DEBUG] Riesecuzione progetto upstream: {source_project_id}")
+            
+            # Import qui per evitare import circolari
+            # Usa l'istanza globale definita in main.py
+            from main import orchestrator
+            
+            # Riesegui il progetto sorgente
+            upstream_result = orchestrator.execute_pipeline(
+                source_project_id, 
+                force_recalculate=force_recalculate
+            )
+            
+            if not upstream_result.get('success'):
+                error_msg = upstream_result.get('message', 'Errore sconosciuto')
+                raise ValueError(f"Errore esecuzione progetto sorgente '{source_project_id}': {error_msg}")
+            
+            logger.info(f"[DEBUG] Progetto upstream completato: {upstream_result.get('rows_count', 0)} righe")
+        
+        logger.info(f"[DEBUG] Cercando output in: {output_dir}")
+        logger.info(f"[DEBUG] Directory esiste: {output_dir.exists()}")
         
         if not output_dir.exists():
+            # Prova a listare cosa c'è nella results_dir
+            logger.info(f"[DEBUG] Contenuto results_dir ({self.results_dir}):")
+            if self.results_dir.exists():
+                for item in self.results_dir.iterdir():
+                    logger.info(f"[DEBUG]   - {item.name}")
             raise ValueError(f"Nessun file output trovato per progetto '{source_project_id}'")
         
         # Cerca file nella directory del progetto
         cached_files = list(output_dir.glob("*.*"))
+        logger.info(f"[DEBUG] File trovati: {[f.name for f in cached_files]}")
         
         if not cached_files:
             raise ValueError(f"Nessun file output trovato per progetto '{source_project_id}'")
         
         # Prendi il file più recente
         output_file = max(cached_files, key=lambda x: x.stat().st_mtime)
-        logger.info(f" Caricamento sorgente: {output_file}")
+        logger.info(f"[DEBUG] Caricamento sorgente: {output_file}")
         
         file_ext = output_file.suffix.lower()
         
         if file_ext == '.csv':
-            return pd.read_csv(output_file)
+            df = pd.read_csv(output_file)
         elif file_ext == '.xlsx':
-            return pd.read_excel(output_file)
+            df = pd.read_excel(output_file)
         elif file_ext == '.parquet':
-            return pd.read_parquet(output_file)
+            df = pd.read_parquet(output_file)
         elif file_ext == '.json':
-            return pd.read_json(output_file, orient='records')
+            df = pd.read_json(output_file, orient='records')
         elif file_ext == '.geojson':
             import geopandas as gpd
-            return gpd.read_file(output_file)
+            df = gpd.read_file(output_file)
         else:
             # Prova come CSV di default
-            return pd.read_csv(output_file)
+            df = pd.read_csv(output_file)
+        
+        logger.info(f"[DEBUG] DataFrame caricato: {len(df)} righe, {len(df.columns)} colonne")
+        logger.info(f"[DEBUG] Colonne: {list(df.columns)}")
+        
+        return df
     
     def _execute_api_generator(self, api_config: Dict):
         """Esegue API generator - una sola chiamata, genera DataFrame da response."""

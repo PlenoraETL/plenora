@@ -1,13 +1,13 @@
 {
   "nodes": [
     {
-      "id": "node_1768530850037",
+      "id": "node_1768714378960",
       "type": "source",
       "position": {
-        "x": 602.0,
-        "y": 447.99999999999994
+        "x": 183.9999999999999,
+        "y": 286.6804920892271
       },
-      "table_name": "particelle_fabbricati_campania",
+      "table_name": "particelle_fabbricati_lazio",
       "alias": null,
       "columns": [
         {
@@ -55,13 +55,13 @@
         {
           "name": "categoria",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "str"
         },
         {
           "name": "categoria_esri",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "str"
         },
         {
@@ -79,320 +79,326 @@
         {
           "name": "a07",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "a06",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "b05",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "c07",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "c05",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "c02",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "d04",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "d03",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "d07",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "e06",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "e05",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "f04",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "f03",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "a04",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "a02",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "a11",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "a10",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "c01",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "d06",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "f05",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "a08",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "a05",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "a03",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "a01",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "b08",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "b07",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "b06",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "b04",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "b03",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "b02",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "b01",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "a09",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "d01",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "c06",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "c04",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "c03",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "d05",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "d02",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "d10",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "e02",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "e01",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "d09",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "d08",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "e09",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "e08",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "e07",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "e04",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "e03",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "f02",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "f01",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "n_piani",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "int"
         },
         {
           "name": "gruppo_catastale",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "str"
         }
       ],
-      "filters": [],
+      "filters": [
+        {
+          "column": "cod_comune",
+          "operator": "=",
+          "value": "M083"
+        }
+      ],
       "calculated_columns": [
         {
-          "name": "b",
+          "name": "buffer",
           "expression": {
             "function": "BUFFER",
             "params": {
@@ -400,8 +406,26 @@
               "distance": 1
             }
           },
-          "sql": "ST_Buffer(geom_multy, 1) AS b",
-          "output_type": "geometry:polygon",
+          "sql": "ST_AsText(ST_Buffer(geom_multy, 1)) AS buffer",
+          "output_type": "geometry:polygon:4258",
+          "is_manual": false
+        },
+        {
+          "name": "centroide",
+          "expression": {
+            "function": "CENTROID",
+            "params": {
+              "column": {
+                "function": "TRANSFORM",
+                "params": {
+                  "column": "geom_multy",
+                  "srid": "3263"
+                }
+              }
+            }
+          },
+          "sql": "ST_AsText(ST_Centroid(ST_Transform(geom_multy, 3263))) AS centroide",
+          "output_type": "geometry:point:3263",
           "is_manual": false
         }
       ],
@@ -415,14 +439,17 @@
       "fileName": null,
       "format": null,
       "distinct": false,
-      "limit": null
+      "limit": null,
+      "group_by_enabled": false,
+      "group_by_columns": [],
+      "aggregations": []
     },
     {
-      "id": "result_1768531076899",
+      "id": "result_1768716857311",
       "type": "result",
       "position": {
-        "x": 1049.0,
-        "y": 183.0
+        "x": 696.8892799239012,
+        "y": 245.90017565831135
       },
       "table_name": null,
       "alias": null,
@@ -470,18 +497,6 @@
           "type": "str"
         },
         {
-          "name": "categoria",
-          "alias": null,
-          "visible": true,
-          "type": "str"
-        },
-        {
-          "name": "categoria_esri",
-          "alias": null,
-          "visible": true,
-          "type": "str"
-        },
-        {
           "name": "id",
           "alias": null,
           "visible": true,
@@ -494,322 +509,16 @@
           "type": "geometry:multipolygon:4258"
         },
         {
-          "name": "a07",
+          "name": "buffer",
           "alias": null,
           "visible": true,
-          "type": "int"
+          "type": "geometry:polygon:4258"
         },
         {
-          "name": "a06",
+          "name": "centroide",
           "alias": null,
           "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "b05",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "c07",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "c05",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "c02",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "d04",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "d03",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "d07",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "e06",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "e05",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "f04",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "f03",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "a04",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "a02",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "a11",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "a10",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "c01",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "d06",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "f05",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "a08",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "a05",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "a03",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "a01",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "b08",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "b07",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "b06",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "b04",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "b03",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "b02",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "b01",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "a09",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "d01",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "c06",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "c04",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "c03",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "d05",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "d02",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "d10",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "e02",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "e01",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "d09",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "d08",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "e09",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "e08",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "e07",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "e04",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "e03",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "f02",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "f01",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "n_piani",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "gruppo_catastale",
-          "alias": null,
-          "visible": true,
-          "type": "str"
-        },
-        {
-          "name": "b",
-          "alias": null,
-          "visible": true,
-          "type": "geometry:polygon"
+          "type": "geometry:point:3263"
         }
       ],
       "filters": [],
@@ -824,14 +533,17 @@
       "fileName": "output",
       "format": "csv",
       "distinct": false,
-      "limit": 1
+      "limit": 10,
+      "group_by_enabled": false,
+      "group_by_columns": [],
+      "aggregations": []
     }
   ],
   "edges": [
     {
-      "id": "edge_1768531080423",
-      "source": "node_1768530850037",
-      "target": "result_1768531076899",
+      "id": "edge_1768716859795",
+      "source": "node_1768714378960",
+      "target": "result_1768716857311",
       "join_type": "output",
       "source_column": "",
       "target_column": "",
