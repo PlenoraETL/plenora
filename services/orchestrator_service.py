@@ -290,6 +290,13 @@ class OrchestratorService:
                         dataframes[node.id] = pd.read_json(cached_file, orient='records')
                     elif file_ext == '.parquet':
                         dataframes[node.id] = pd.read_parquet(cached_file)
+                    elif file_ext in ['.geojson', '.gpkg']:
+                        import geopandas as gpd
+                        dataframes[node.id] = gpd.read_file(cached_file)
+                    elif file_ext == '.shp':
+                        import geopandas as gpd
+                        dataframes[node.id] = gpd.read_file(cached_file)
+                        logger.warning(f"⚠️ Shapefile caricato - nomi colonne potrebbero essere troncati a 10 caratteri!")
                     else:
                         dataframes[node.id] = pd.read_csv(cached_file)
                     
@@ -314,6 +321,13 @@ class OrchestratorService:
                         dataframes[node.id] = pd.read_excel(file_path)
                     elif file_ext == '.json':
                         dataframes[node.id] = pd.read_json(file_path, orient='records')
+                    elif file_ext in ['.geojson', '.gpkg']:
+                        import geopandas as gpd
+                        dataframes[node.id] = gpd.read_file(file_path)
+                    elif file_ext == '.shp':
+                        import geopandas as gpd
+                        dataframes[node.id] = gpd.read_file(file_path)
+                        logger.warning(f"⚠️ Shapefile caricato - nomi colonne potrebbero essere troncati a 10 caratteri!")
                     else:
                         dataframes[node.id] = pd.read_csv(file_path)
             
@@ -593,6 +607,9 @@ class OrchestratorService:
                         dataframes[node.id] = pd.read_json(cached_file, orient='records')
                     elif file_ext == '.parquet':
                         dataframes[node.id] = pd.read_parquet(cached_file)
+                    elif file_ext in ['.geojson', '.gpkg', '.shp']:
+                        import geopandas as gpd
+                        dataframes[node.id] = gpd.read_file(cached_file)
                     else:
                         dataframes[node.id] = pd.read_csv(cached_file)
                     
@@ -637,6 +654,9 @@ class OrchestratorService:
                     dataframes[node.id] = pd.read_excel(file_path)
                 elif file_ext == '.json':
                     dataframes[node.id] = pd.read_json(file_path, orient='records')
+                elif file_ext in ['.geojson', '.gpkg', '.shp']:
+                    import geopandas as gpd
+                    dataframes[node.id] = gpd.read_file(file_path)
                 else:
                     # Default CSV
                     dataframes[node.id] = pd.read_csv(file_path)

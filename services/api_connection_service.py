@@ -682,9 +682,14 @@ class ApiConnectionService:
             df = pd.read_parquet(output_file)
         elif file_ext == '.json':
             df = pd.read_json(output_file, orient='records')
-        elif file_ext == '.geojson':
+        elif file_ext in ['.geojson', '.gpkg']:
             import geopandas as gpd
             df = gpd.read_file(output_file)
+        elif file_ext == '.shp':
+            import geopandas as gpd
+            df = gpd.read_file(output_file)
+            # WARNING: Shapefile tronca nomi colonne a 10 caratteri
+            logger.warning(f"⚠️ File Shapefile caricato - i nomi colonne potrebbero essere troncati a 10 caratteri!")
         else:
             # Prova come CSV di default
             df = pd.read_csv(output_file)
