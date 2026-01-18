@@ -453,6 +453,11 @@ class ApiConnectionService:
                     # Carica dati dal progetto sorgente
                     result = self._load_source_project(node_data, force_recalculate=force_recalculate)
                     node_results[node_id] = result
+                
+                elif node_type == 'file_source':
+                    # Carica dati dal file esterno
+                    result = self._load_file_source(node_data)
+                    node_results[node_id] = result
                     
                 elif node_type == 'api_enrich':
                     # Esegui arricchimento API
@@ -698,6 +703,45 @@ class ApiConnectionService:
         logger.info(f"[DEBUG] Colonne: {list(df.columns)}")
         
         return df
+    
+    def _load_file_source(self, node_data: Dict):
+        """
+        Carica dati da un file esterno (FileSource).
+        Usa file_source_service per caricare il file.
+        """
+        import pandas as pd
+        
+        file_source_id = node_data.get('file_source_id')
+        
+        logger.info(f"[DEBUG] Caricamento file_source: {file_source_id}")
+        
+        if not file_source_id:
+            raise ValueError("file_source_id non specificato")
+        
+        try:
+            # Usa file_source_service per caricare il file
+            from services.file_source_service import file_source_service
+            
+            df, gdf = file_source_service.load_dataframe(file_source_id)
+            
+            # Filtra colonne visibili se specificato
+            node_columns = node_data.get('columns', [])
+            if node_columns:
+                visible_columns = [col['name'] for col in node_columns if col.get('visible', True)]
+                if visible_columns:
+                    available_cols = [col for col in visible_columns if col in df.columns]
+                    if available_cols:
+                        df = df[available_cols]
+                        logger.debug(f"Filtrate {len(available_cols)}/{len(node_columns)} colonne visibili")
+            
+            logger.info(f"[DEBUG] File source caricato: {len(df)} righe, {len(df.columns)} colonne")
+            logger.info(f"[DEBUG] Colonne: {list(df.columns)}")
+            
+            return df
+            
+        except Exception as e:
+            logger.error(f"Errore caricamento file source {file_source_id}: {e}")
+            raise ValueError(f"Errore caricamento file '{file_source_id}': {str(e)}")
     
     def _execute_api_generator(self, api_config: Dict):
         """Esegue API generator - una sola chiamata, genera DataFrame da response."""

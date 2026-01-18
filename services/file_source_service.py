@@ -140,6 +140,13 @@ class FileSourceService:
             
             sample = str(series.dropna().iloc[0])
             
+            # Check se sembra una geometria WKT
+            wkt_prefixes = ('POINT', 'LINESTRING', 'POLYGON', 'MULTIPOINT', 
+                           'MULTILINESTRING', 'MULTIPOLYGON', 'GEOMETRYCOLLECTION')
+            sample_upper = sample.strip().upper()
+            if any(sample_upper.startswith(prefix) for prefix in wkt_prefixes):
+                return 'geometry'
+            
             # Check se sembra una data
             if len(sample) >= 8 and any(c in sample for c in ['-', '/']):
                 try:
@@ -150,25 +157,83 @@ class FileSourceService:
             
             return 'str'
     
-    def _get_columns_info(self, df: pd.DataFrame, gdf: gpd.GeoDataFrame = None) -> List[ColumnInfo]:
+    def _get_columns_info(self, df: pd.DataFrame, gdf: gpd.GeoDataFrame = None, user_srid: int = None) -> List[ColumnInfo]:
         """Estrae info colonne da DataFrame."""
         columns = []
         
-        for col in df.columns:
-            col_type = self._infer_column_type(df[col])
+        # Mappa colonne geometriche dal GeoDataFrame
+        geom_columns = {}
+        if gdf is not None:
+            logger.debug(f"GeoDataFrame CRS: {gdf.crs}")
+            logger.debug(f"GeoDataFrame columns: {list(gdf.columns)}")
             
-            # Se è un GeoDataFrame e la colonna è geometry, aggiungi info CRS
-            if gdf is not None and col == 'geometry':
-                geom_type = self._detect_geometry_type(gdf)
-                if gdf.crs:
-                    srid = gdf.crs.to_epsg() or 4326
-                    col_type = f"{geom_type}:{srid}"
-                else:
-                    col_type = geom_type
+            # Trova tutte le colonne di tipo geometry
+            for col in gdf.columns:
+                try:
+                    col_dtype = str(gdf[col].dtype)
+                    logger.debug(f"Colonna '{col}' dtype: {col_dtype}")
+                    
+                    if col_dtype == 'geometry' or hasattr(gdf[col], 'geom_type'):
+                        geom_type = self._detect_geometry_type_for_column(gdf, col)
+                        logger.debug(f"Colonna '{col}' rilevata come geometry: {geom_type}")
+                        
+                        # Usa SRID dal file se presente, altrimenti usa user_srid
+                        if gdf.crs:
+                            srid = gdf.crs.to_epsg() or user_srid or 4326
+                            geom_columns[col] = f"{geom_type}:{srid}"
+                            logger.debug(f"Colonna '{col}' con SRID da file: {srid}")
+                        elif user_srid:
+                            geom_columns[col] = f"{geom_type}:{user_srid}"
+                            logger.debug(f"Colonna '{col}' con SRID utente: {user_srid}")
+                        else:
+                            geom_columns[col] = geom_type
+                            logger.debug(f"Colonna '{col}' senza CRS")
+                except Exception as e:
+                    logger.debug(f"Errore check colonna '{col}': {e}")
+        
+        for col in df.columns:
+            # Prima controlla se è una colonna geometrica nota
+            if col in geom_columns:
+                col_type = geom_columns[col]
+            else:
+                col_type = self._infer_column_type(df[col])
+                # Se è una colonna geometry rilevata da WKT e abbiamo user_srid, aggiungilo
+                if col_type == 'geometry' and user_srid:
+                    col_type = f"geometry:{user_srid}"
             
             columns.append(ColumnInfo(name=col, type=col_type))
         
+        logger.debug(f"Colonne finali: {[(c.name, c.type) for c in columns]}")
+        
         return columns
+    
+    def _detect_geometry_type_for_column(self, gdf: gpd.GeoDataFrame, col: str) -> str:
+        """Rileva tipo geometria per una specifica colonna."""
+        try:
+            geom_series = gdf[col]
+            if geom_series.empty:
+                return 'geometry'
+            
+            # Prendi il primo tipo non nullo
+            geom_types = geom_series.dropna().apply(lambda g: g.geom_type if g else None).dropna().unique()
+            
+            if len(geom_types) == 0:
+                return 'geometry'
+            
+            geom_type = geom_types[0].lower()
+            
+            type_map = {
+                'point': 'geometry:point',
+                'multipoint': 'geometry:multipoint',
+                'linestring': 'geometry:line',
+                'multilinestring': 'geometry:multiline',
+                'polygon': 'geometry:polygon',
+                'multipolygon': 'geometry:multipolygon'
+            }
+            
+            return type_map.get(geom_type, 'geometry')
+        except:
+            return 'geometry'
     
     # ==================== LIST LAYERS/SHEETS ====================
     
@@ -251,27 +316,45 @@ class FileSourceService:
         if not data_files:
             raise ValueError(f"Nessun file dati trovato per '{file_id}'")
         
-        # Per GDB è una cartella
+        # Cerca il file corretto in base al formato
         file_path = None
-        for f in data_files:
-            if f.suffix.lower() == '.gdb' or f.is_dir():
-                if f.name.endswith('.gdb'):
+        format_type = file_source.format
+        
+        if format_type == 'gdb':
+            # Per GDB cerca la cartella .gdb
+            for f in data_files:
+                if f.is_dir() and f.name.endswith('.gdb'):
                     file_path = f
                     break
-            else:
-                file_path = f
-                break
+        elif format_type == 'shp':
+            # Per SHP cerca specificamente il file .shp
+            for f in data_files:
+                if f.suffix.lower() == '.shp':
+                    file_path = f
+                    break
+        elif format_type == 'gpkg':
+            # Per GPKG cerca il file .gpkg
+            for f in data_files:
+                if f.suffix.lower() == '.gpkg':
+                    file_path = f
+                    break
+        else:
+            # Per altri formati prendi il primo file
+            file_path = data_files[0]
         
         if not file_path:
-            file_path = data_files[0]
+            # Fallback: prova a usare il path dal metadata
+            stored_path = self.FILES_DIR / file_source.file_path
+            if stored_path.exists():
+                file_path = stored_path
+            else:
+                file_path = data_files[0]
         
         # Usa layer/sheet dal parametro o dal metadata
         use_layer = layer or file_source.layer
         use_sheet = sheet or file_source.sheet
         
-        format_type = file_source.format
-        
-        logger.info(f"Caricamento file {file_id}: format={format_type}, layer={use_layer}, sheet={use_sheet}")
+        logger.info(f"Caricamento file {file_id}: format={format_type}, path={file_path}, layer={use_layer}, sheet={use_sheet}")
         
         # Carica in base al formato
         gdf = None
@@ -309,7 +392,8 @@ class FileSourceService:
         description: str = "",
         layer: str = None,
         sheet: str = None,
-        selected_columns: List[str] = None
+        selected_columns: List[str] = None,
+        srid: int = None
     ) -> FileSource:
         """
         Crea file source da upload.
@@ -322,6 +406,7 @@ class FileSourceService:
             layer: Layer da usare (per GDB/GPKG)
             sheet: Sheet da usare (per XLSX)
             selected_columns: Lista colonne da importare (None = tutte)
+            srid: SRID per colonne geometriche (None = auto-detect)
         
         Returns:
             FileSource creato
@@ -388,8 +473,8 @@ class FileSourceService:
                         df = df[valid_cols]
                         # Sovrascrivi il file con solo le colonne selezionate
                         df.to_csv(saved_path, index=False)
-                        logger.info(f"Filtrate colonne CSV: {len(valid_cols)} di {len(df.columns)}")
-                columns = self._get_columns_info(df)
+                        logger.info(f"Filtrate colonne CSV: {len(valid_cols)} colonne")
+                columns = self._get_columns_info(df, user_srid=srid)
                 row_count = len(df)
             
             elif format_type == 'xlsx':
@@ -401,8 +486,8 @@ class FileSourceService:
                         df = df[valid_cols]
                         # Sovrascrivi il file con solo le colonne selezionate
                         df.to_excel(saved_path, index=False, sheet_name=sheet or 'Sheet1')
-                        logger.info(f"Filtrate colonne XLSX: {len(valid_cols)} di {len(df.columns)}")
-                columns = self._get_columns_info(df)
+                        logger.info(f"Filtrate colonne XLSX: {len(valid_cols)} colonne")
+                columns = self._get_columns_info(df, user_srid=srid)
                 row_count = len(df)
             
             elif format_type == 'json':
@@ -414,8 +499,8 @@ class FileSourceService:
                         df = df[valid_cols]
                         # Sovrascrivi il file con solo le colonne selezionate
                         df.to_json(saved_path, orient='records', indent=2)
-                        logger.info(f"Filtrate colonne JSON: {len(valid_cols)} di {len(df.columns)}")
-                columns = self._get_columns_info(df)
+                        logger.info(f"Filtrate colonne JSON: {len(valid_cols)} colonne")
+                columns = self._get_columns_info(df, user_srid=srid)
                 row_count = len(df)
             
             elif format_type in ['geojson', 'gpkg', 'shp', 'gdb']:
@@ -435,11 +520,13 @@ class FileSourceService:
                                 gdf.to_file(saved_path, driver='GeoJSON')
                             elif format_type == 'gpkg':
                                 gdf.to_file(saved_path, driver='GPKG', layer=layer)
-                            logger.info(f"Filtrate colonne GEO: {len(valid_cols)} di {len(gdf.columns)}")
-                    columns = self._get_columns_info(pd.DataFrame(gdf), gdf)
+                            logger.info(f"Filtrate colonne GEO: {len(valid_cols)} colonne")
+                    columns = self._get_columns_info(pd.DataFrame(gdf), gdf, user_srid=srid)
                     row_count = len(gdf)
                     if gdf.crs:
                         crs = str(gdf.crs)
+                    elif srid:
+                        crs = f"EPSG:{srid}"
         
         except Exception as e:
             logger.warning(f"Errore inferenza colonne: {e}")
@@ -670,7 +757,7 @@ class FileSourceService:
             preview_count=len(rows)
         )
     
-    def preview_file_temp(self, file_content: BinaryIO, filename: str) -> dict:
+    def preview_file_temp(self, file_content: 'BinaryIO', filename: str) -> dict:
         """
         Preview temporanea di un file per ottenere le colonne.
         Non salva il file, lo legge solo per estrarre info colonne.
@@ -697,6 +784,8 @@ class FileSourceService:
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
             shutil.copyfileobj(file_content, tmp)
             tmp_path = Path(tmp.name)
+        
+        tmp_dir = None
         
         try:
             columns = []
@@ -736,7 +825,6 @@ class FileSourceService:
                             tmp_path = item
                             break
                 except Exception as e:
-                    shutil.rmtree(tmp_dir, ignore_errors=True)
                     raise ValueError(f"Errore estrazione ZIP: {e}")
             
             # Leggi colonne in base al formato
@@ -777,14 +865,14 @@ class FileSourceService:
         
         finally:
             # Cleanup file temporanei
-            if tmp_path.exists():
-                if tmp_path.is_dir():
-                    shutil.rmtree(tmp_path, ignore_errors=True)
-                else:
+            try:
+                if tmp_path.exists() and tmp_path.is_file():
                     os.unlink(tmp_path)
+            except:
+                pass
             
             # Cleanup directory temp se era uno zip
-            if format_type == 'zip' and 'tmp_dir' in locals():
+            if tmp_dir and tmp_dir.exists():
                 shutil.rmtree(tmp_dir, ignore_errors=True)
 
 

@@ -19,9 +19,10 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
  * @param {string} layer - Layer da usare (per GDB/GPKG)
  * @param {string} sheet - Sheet da usare (per XLSX)
  * @param {Array<string>} selectedColumns - Colonne da importare (null = tutte)
+ * @param {number} srid - SRID per colonne geometriche (null = auto)
  * @returns {Promise<Object>} FileSource creato
  */
-export const uploadFile = async (file, name, description = '', layer = '', sheet = '', selectedColumns = null) => {
+export const uploadFile = async (file, name, description = '', layer = '', sheet = '', selectedColumns = null, srid = null) => {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('name', name);
@@ -30,6 +31,9 @@ export const uploadFile = async (file, name, description = '', layer = '', sheet
   if (sheet) formData.append('sheet', sheet);
   if (selectedColumns && selectedColumns.length > 0) {
     formData.append('selected_columns', JSON.stringify(selectedColumns));
+  }
+  if (srid) {
+    formData.append('srid', String(srid));
   }
 
   const response = await fetch(`${API_BASE}/api/files/upload`, {

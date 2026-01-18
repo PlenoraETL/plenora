@@ -19,14 +19,17 @@ import {
   executeProjectQuery,
   getDownloadUrl
 } from '../api/client';
+import { getFiles } from '../api/files';
 
 import ProjectSourceNode from '../components/ProjectSourceNode';
+import FileSourceNode from '../components/FileSourceNode';
 import ApiEnrichNode from '../components/ApiEnrichNode';
 import ResultNode from '../components/ResultNode';
 import '../styles/ArricchisciEditor.css';
 
 const nodeTypes = {
   project_source: ProjectSourceNode,
+  file_source: FileSourceNode,
   api_enrich: ApiEnrichNode,
   result: ResultNode,
 };
@@ -55,6 +58,7 @@ const ArricchisciEditorContent = () => {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [availableSources, setAvailableSources] = useState([]);
+  const [availableFiles, setAvailableFiles] = useState([]);
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -74,7 +78,7 @@ const ArricchisciEditorContent = () => {
   }, [nodes, edges]);
 
   // ===== PROPAGA COLONNE AL RESULT NODE =====
-  // Raccoglie colonne da project_source e api_enrich per mostrare formati geo
+  // Raccoglie colonne da project_source, file_source e api_enrich per mostrare formati geo
   useEffect(() => {
     const resultNode = nodes.find(n => n.type === 'result');
     if (!resultNode) return;
@@ -97,6 +101,17 @@ const ArricchisciEditorContent = () => {
               name: col,
               type: 'str',
               source: node.data?.source_project_id || 'source'
+            });
+          }
+        }
+      } else if (node.type === 'file_source' && node.data?.columns) {
+        // FileSourceNode: colonne sono oggetti {name, type, visible}
+        for (const col of node.data.columns) {
+          if (typeof col === 'object' && col !== null) {
+            availableColumns.push({
+              name: col.name || 'unknown',
+              type: col.type || 'str',
+              source: node.data?.file_source_id || 'file'
             });
           }
         }
@@ -214,6 +229,17 @@ const ArricchisciEditorContent = () => {
                 onDelete: handleDeleteNode
               }
             };
+          } else if (node.type === 'file_source') {
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                file_source_id: node.data?.file_source_id || '',
+                columns: node.data?.columns || [],
+                onUpdateColumns: handleUpdateFileSourceColumns,
+                onDelete: handleDeleteNode
+              }
+            };
           } else if (node.type === 'api_enrich') {
             return {
               ...node,
@@ -239,6 +265,15 @@ const ArricchisciEditorContent = () => {
         p => p.project_type === 'estrai' || p.project_type === 'manipola'
       );
       setAvailableSources(sourceProjects);
+      
+      // Carica file esterni disponibili
+      try {
+        const filesData = await getFiles();
+        setAvailableFiles(filesData.files || []);
+      } catch (err) {
+        console.warn("[ArricchisciEditor] Errore caricamento file esterni:", err);
+        setAvailableFiles([]);
+      }
       
     } catch (err) {
       console.error("[ArricchisciEditor] Errore caricamento:", err);
@@ -266,6 +301,23 @@ const ArricchisciEditorContent = () => {
   }, [setNodes]);
 
   const handleUpdateProjectSourceColumns = useCallback((nodeId, columns) => {
+    setNodes((nds) =>
+      nds.map((node) => {
+        if (node.id === nodeId) {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              columns: columns
+            }
+          };
+        }
+        return node;
+      })
+    );
+  }, [setNodes]);
+
+  const handleUpdateFileSourceColumns = useCallback((nodeId, columns) => {
     setNodes((nds) =>
       nds.map((node) => {
         if (node.id === nodeId) {
@@ -380,10 +432,16 @@ const ArricchisciEditorContent = () => {
           type: node.type,
           position: node.position,
           data: {
+            // Project source
             source_project_id: node.data?.source_project_id,
+            // File source
+            file_source_id: node.data?.file_source_id,
+            // Common
             columns: node.data?.columns,
+            // API Enrich
             api_id: node.data?.api_id,
             param_mapping: node.data?.param_mapping,
+            // Result
             fileName: node.data?.fileName,
             format: node.data?.format
           }
@@ -413,9 +471,9 @@ const ArricchisciEditorContent = () => {
         throw new Error('Canvas vuoto. Aggiungi nodi prima di eseguire.');
       }
       
-      const sourceNodes = currentNodes.filter(n => n.type === 'project_source');
+      const sourceNodes = currentNodes.filter(n => n.type === 'project_source' || n.type === 'file_source');
       if (sourceNodes.length === 0) {
-        throw new Error('Aggiungi almeno un progetto sorgente.');
+        throw new Error('Aggiungi almeno una sorgente dati (progetto o file).');
       }
       
       const apiNodes = currentNodes.filter(n => n.type === 'api_enrich');
@@ -491,6 +549,18 @@ const ArricchisciEditorContent = () => {
             onDelete: handleDeleteNode
           }
         };
+      } else if (nodeType === 'file_source') {
+        newNode = {
+          id: newNodeId,
+          type: 'file_source',
+          position,
+          data: { 
+            file_source_id: nodeData.id,
+            columns: [],
+            onUpdateColumns: handleUpdateFileSourceColumns,
+            onDelete: handleDeleteNode
+          }
+        };
       } else if (nodeType === 'api_enrich') {
         newNode = {
           id: newNodeId,
@@ -532,7 +602,7 @@ const ArricchisciEditorContent = () => {
         setNodes((nds) => nds.concat(newNode));
       }
     },
-    [screenToFlowPosition, setNodes, handleUpdateProjectSource, handleUpdateProjectSourceColumns, handleDeleteNode, handleUpdateResultFileName, handleUpdateResultFormat, handleUpdateResultGeomColumn, handleExecute]
+    [screenToFlowPosition, setNodes, handleUpdateProjectSource, handleUpdateProjectSourceColumns, handleUpdateFileSourceColumns, handleDeleteNode, handleUpdateResultFileName, handleUpdateResultFormat, handleUpdateResultGeomColumn, handleExecute]
   );
 
   const onEdgeContextMenu = useCallback((event, edge) => {
@@ -633,6 +703,42 @@ const ArricchisciEditorContent = () => {
             )}
           </div>
 
+          {/* File Esterni */}
+          <div className="arricchisci-sidebar__section">
+            <div className="arricchisci-sidebar__section-title">
+              📁 File Esterni
+            </div>
+            
+            {availableFiles.length === 0 ? (
+              <div className="arricchisci-sidebar__empty">
+                Nessun file caricato.<br/>
+                Carica file dalla sezione File Manager.
+              </div>
+            ) : (
+              availableFiles.map((file) => {
+                const icon = file.format === 'csv' ? '📄' : 
+                           file.format === 'xlsx' ? '📊' : 
+                           ['geojson', 'gpkg', 'shp', 'gdb'].includes(file.format) ? '🗺️' : '📁';
+                return (
+                  <div
+                    key={file.id}
+                    className="arricchisci-sidebar__source-item arricchisci-sidebar__source-item--file"
+                    draggable
+                    onDragStart={(e) => onDragStart(e, 'file_source', file)}
+                  >
+                    <div className="arricchisci-sidebar__source-header">
+                      <span>{icon}</span>
+                      <span>{file.name}</span>
+                    </div>
+                    <div className="arricchisci-sidebar__source-type">
+                      {file.format?.toUpperCase()} • {file.row_count?.toLocaleString()} righe
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
           {/* API Enrichment */}
           <div className="arricchisci-sidebar__section">
             <div className="arricchisci-sidebar__section-title">
@@ -718,6 +824,7 @@ const ArricchisciEditorContent = () => {
               style={{ height: 100, background: '#f5f5f5' }}
               nodeColor={(node) => {
                 if (node.type === 'project_source') return '#4CAF50';
+                if (node.type === 'file_source') return '#3F51B5';
                 if (node.type === 'api_enrich') return '#FF6B35';
                 if (node.type === 'result') return '#2196F3';
                 return '#999';

@@ -165,11 +165,13 @@
 }
 
 .file-source-node__columns-list {
-  max-height: 200px;
+  max-height: 250px;
   overflow-y: auto;
+  overflow-x: hidden;
   background: #fff;
   border-radius: 4px;
   padding: 6px;
+  border: 1px solid var(--color-primary-lighter);
 }
 
 /* ============================================================

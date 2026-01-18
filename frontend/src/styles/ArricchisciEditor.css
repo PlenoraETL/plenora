@@ -205,6 +205,18 @@
   box-shadow: 0 2px 8px rgba(156, 39, 176, 0.3);
 }
 
+/* File Source Item */
+.arricchisci-sidebar__source-item--file {
+  background: linear-gradient(135deg, #E8EAF6 0%, #C5CAE9 100%);
+  border: 1px solid #9FA8DA;
+  color: #3F51B5;
+}
+
+.arricchisci-sidebar__source-item--file:hover {
+  transform: translateX(4px);
+  box-shadow: 0 2px 8px rgba(63, 81, 181, 0.3);
+}
+
 .arricchisci-sidebar__source-header {
   display: flex;
   align-items: center;

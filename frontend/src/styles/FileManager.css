@@ -788,3 +788,92 @@
   border-radius: 4px;
   font-family: monospace;
 }
+
+/* ============================================================
+   SRID SECTION
+   ============================================================ */
+.file-manager__srid-section {
+  margin: 20px 0;
+  padding: 15px;
+  background: #FFF8E1;
+  border: 1px solid #FFE082;
+  border-radius: 8px;
+}
+
+.file-manager__srid-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #F57C00;
+  margin-bottom: 10px;
+}
+
+.file-manager__srid-detected {
+  font-size: 12px;
+  font-weight: 500;
+  color: #4CAF50;
+  background: #E8F5E9;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.file-manager__srid-input-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.file-manager__srid-input {
+  padding: 10px 12px;
+  border: 1px solid #FFE082;
+  border-radius: 6px;
+  font-size: 14px;
+  background: white;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.file-manager__srid-input:focus {
+  outline: none;
+  border-color: #F57C00;
+  box-shadow: 0 0 0 2px rgba(245, 124, 0, 0.2);
+}
+
+.file-manager__srid-presets {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.file-manager__srid-preset {
+  padding: 6px 12px;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.file-manager__srid-preset:hover {
+  background: #f5f5f5;
+  border-color: #bbb;
+}
+
+.file-manager__srid-preset--active {
+  background: #F57C00;
+  color: white;
+  border-color: #F57C00;
+}
+
+.file-manager__srid-preset--active:hover {
+  background: #EF6C00;
+}
+
+.file-manager__srid-hint {
+  margin: 10px 0 0 0;
+  font-size: 12px;
+  color: #E65100;
+}

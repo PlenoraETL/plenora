@@ -193,7 +193,7 @@ const FileSourceNode = ({ id, data }) => {
             </span>
           </div>
           
-          <div className="file-source-node__columns-list">
+          <div className="file-source-node__columns-list nowheel">
             {data.columns.map((col, idx) => {
               const colType = normalizeColumnType(col);
               return (

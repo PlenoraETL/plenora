@@ -73,7 +73,8 @@ async def upload_file(
     description: str = Form(""),
     layer: Optional[str] = Form(None),
     sheet: Optional[str] = Form(None),
-    selected_columns: Optional[str] = Form(None)
+    selected_columns: Optional[str] = Form(None),
+    srid: Optional[str] = Form(None)
 ):
     """
     Upload un nuovo file e crea un File Source.
@@ -95,6 +96,8 @@ async def upload_file(
     - selected_columns: JSON array di nomi colonne da importare.
       Se non specificato, importa tutte le colonne.
       Esempio: '["id", "nome", "geometry"]'
+    - srid: SRID per colonne geometriche (es. 4326, 32632).
+      Usato quando il file non contiene info CRS (es. CSV con WKT).
     """
     try:
         # Verifica estensione
@@ -116,6 +119,14 @@ async def upload_file(
             except json.JSONDecodeError:
                 logger.warning(f"Errore parsing selected_columns: {selected_columns}")
         
+        # Parse SRID
+        srid_int = None
+        if srid:
+            try:
+                srid_int = int(srid)
+            except ValueError:
+                logger.warning(f"SRID non valido: {srid}")
+        
         # Crea file source
         file_source = file_source_service.create_from_upload(
             file_content=file.file,
@@ -124,7 +135,8 @@ async def upload_file(
             description=description,
             layer=layer,
             sheet=sheet,
-            selected_columns=columns_list
+            selected_columns=columns_list,
+            srid=srid_int
         )
         
         return file_source

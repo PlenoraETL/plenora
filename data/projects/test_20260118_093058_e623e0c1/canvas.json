@@ -5,7 +5,7 @@
       "type": "result",
       "position": {
         "x": 1093.118805892416,
-        "y": 222.4316344831392
+        "y": 221.52445746628803
       },
       "table_name": null,
       "alias": null,
@@ -20,6 +20,85 @@
       "api_id": null,
       "param_mapping": null,
       "data": {
+        "columns": [
+          {
+            "name": "provincia",
+            "type": "str",
+            "visible": true,
+            "source_node": "source_1768725827055",
+            "is_calculated": false
+          },
+          {
+            "name": "cod_comune",
+            "type": "str",
+            "visible": true,
+            "source_node": "source_1768725827055",
+            "is_calculated": false
+          },
+          {
+            "name": "foglio",
+            "type": "str",
+            "visible": true,
+            "source_node": "source_1768725827055",
+            "is_calculated": false
+          },
+          {
+            "name": "comune",
+            "type": "str",
+            "visible": true,
+            "source_node": "source_1768725827055",
+            "is_calculated": false
+          },
+          {
+            "name": "sezione",
+            "type": "str",
+            "visible": true,
+            "source_node": "source_1768725827055",
+            "is_calculated": false
+          },
+          {
+            "name": "particella",
+            "type": "str",
+            "visible": true,
+            "source_node": "source_1768725827055",
+            "is_calculated": false
+          },
+          {
+            "name": "chiave",
+            "type": "str",
+            "visible": true,
+            "source_node": "source_1768725827055",
+            "is_calculated": false
+          },
+          {
+            "name": "id",
+            "type": "int",
+            "visible": true,
+            "source_node": "source_1768725827055",
+            "is_calculated": false
+          },
+          {
+            "name": "geom_multy",
+            "type": "geometry:multipolygon:4258",
+            "visible": true,
+            "source_node": "source_1768725827055",
+            "is_calculated": false
+          },
+          {
+            "name": "buffer",
+            "type": "geometry:polygon:4258",
+            "visible": true,
+            "source_node": "source_1768725827055",
+            "is_calculated": false
+          },
+          {
+            "name": "centroide",
+            "type": "geometry:point:3263",
+            "visible": true,
+            "source_node": "source_1768725827055",
+            "is_calculated": false
+          }
+        ],
         "fileName": "output",
         "format": "csv",
         "geomColumn": null,
@@ -36,11 +115,11 @@
       "aggregations": []
     },
     {
-      "id": "file_1768725161772",
-      "type": "file_source",
+      "id": "source_1768725827055",
+      "type": "project_source",
       "position": {
-        "x": 322.3668640350123,
-        "y": 321.0589224966817
+        "x": -20.425934276096903,
+        "y": 234.48780761306182
       },
       "table_name": null,
       "alias": null,
@@ -55,72 +134,84 @@
       "api_id": null,
       "param_mapping": null,
       "data": {
-        "file_source_id": "file_test_file_caricato_20260118_092337_dd28ed96",
+        "source_project_id": "Estrai_fabb_20260118_063223_d1abc348",
         "columns": [
           {
             "name": "provincia",
             "type": "str",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768725827055",
+            "is_calculated": false
           },
           {
             "name": "cod_comune",
             "type": "str",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768725827055",
+            "is_calculated": false
           },
           {
             "name": "foglio",
-            "type": "int",
-            "visible": true
+            "type": "str",
+            "visible": true,
+            "source_node": "source_1768725827055",
+            "is_calculated": false
           },
           {
             "name": "comune",
             "type": "str",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768725827055",
+            "is_calculated": false
           },
           {
             "name": "sezione",
-            "type": "real",
-            "visible": true
+            "type": "str",
+            "visible": true,
+            "source_node": "source_1768725827055",
+            "is_calculated": false
           },
           {
             "name": "particella",
-            "type": "int",
-            "visible": true
+            "type": "str",
+            "visible": true,
+            "source_node": "source_1768725827055",
+            "is_calculated": false
           },
           {
             "name": "chiave",
             "type": "str",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768725827055",
+            "is_calculated": false
           },
           {
             "name": "id",
             "type": "int",
-            "visible": true
+            "visible": true,
+            "source_node": "source_1768725827055",
+            "is_calculated": false
           },
           {
             "name": "geom_multy",
-            "type": "str",
-            "visible": true
+            "type": "geometry:multipolygon:4258",
+            "visible": true,
+            "source_node": "source_1768725827055",
+            "is_calculated": false
           },
           {
             "name": "buffer",
-            "type": "str",
-            "visible": true
+            "type": "geometry:polygon:4258",
+            "visible": true,
+            "source_node": "source_1768725827055",
+            "is_calculated": false
           },
           {
             "name": "centroide",
-            "type": "str",
-            "visible": true
-          },
-          {
-            "name": "tripletta",
-            "type": "str",
-            "visible": true
-          },
-          {
-            "name": "geometry (MultiPolygon)",
-            "type": "str",
-            "visible": true
+            "type": "geometry:point:3263",
+            "visible": true,
+            "source_node": "source_1768725827055",
+            "is_calculated": false
           }
         ]
       },
@@ -135,8 +226,8 @@
   ],
   "edges": [
     {
-      "id": "reactflow__edge-file_1768725161772-result_1768725066522",
-      "source": "file_1768725161772",
+      "id": "reactflow__edge-source_1768725827055-result_1768725066522",
+      "source": "source_1768725827055",
       "target": "result_1768725066522",
       "join_type": "left",
       "source_column": "",

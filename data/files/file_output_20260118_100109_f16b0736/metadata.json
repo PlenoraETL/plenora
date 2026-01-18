@@ -1,8 +1,8 @@
 {
-  "id": "file_test_file_caricato_20260118_092337_dd28ed96",
-  "name": "test_file_caricato",
+  "id": "file_output_20260118_100109_f16b0736",
+  "name": "output",
   "description": "",
-  "file_path": "file_test_file_caricato_20260118_092337_dd28ed96\\data\\output.csv",
+  "file_path": "file_output_20260118_100109_f16b0736\\data\\output.csv",
   "original_filename": "output.csv",
   "format": "csv",
   "layer": null,
@@ -42,28 +42,24 @@
     },
     {
       "name": "geom_multy",
-      "type": "str"
+      "type": "geometry:4326"
     },
     {
       "name": "buffer",
-      "type": "str"
+      "type": "geometry:4326"
     },
     {
       "name": "centroide",
-      "type": "str"
+      "type": "geometry:4326"
     },
     {
       "name": "tripletta",
       "type": "str"
-    },
-    {
-      "name": "geometry (MultiPolygon)",
-      "type": "str"
     }
   ],
   "row_count": 10,
-  "file_size": 25127,
+  "file_size": 22566,
   "crs": null,
-  "created_at": "2026-01-18T09:23:37.783485",
-  "updated_at": "2026-01-18T09:23:37.783485"
+  "created_at": "2026-01-18T10:01:09.601502",
+  "updated_at": "2026-01-18T10:01:09.601502"
 }

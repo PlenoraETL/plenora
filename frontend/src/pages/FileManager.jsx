@@ -47,6 +47,9 @@ const FileManager = () => {
   const [availableColumns, setAvailableColumns] = useState([]);
   const [selectedColumns, setSelectedColumns] = useState([]);
   const [loadingColumns, setLoadingColumns] = useState(false);
+  const [detectedSrid, setDetectedSrid] = useState(null); // SRID rilevato dal file
+  const [userSrid, setUserSrid] = useState(''); // SRID impostato dall'utente
+  const [hasGeometryColumn, setHasGeometryColumn] = useState(false); // Se c'è una colonna geometry
   
   // Layer selection state
   const [pendingFile, setPendingFile] = useState(null);
@@ -131,6 +134,30 @@ const FileManager = () => {
         setAvailableColumns(preview.columns);
         // Seleziona tutte le colonne di default
         setSelectedColumns(preview.columns.map(col => col.name));
+        
+        // Controlla se ci sono colonne geometry e se hanno SRID
+        const geomColumns = preview.columns.filter(col => 
+          col.type && col.type.startsWith('geometry')
+        );
+        
+        setHasGeometryColumn(geomColumns.length > 0);
+        
+        // Cerca SRID nelle colonne geometry (formato: geometry:polygon:4326)
+        let foundSrid = null;
+        for (const col of geomColumns) {
+          const parts = col.type.split(':');
+          if (parts.length >= 3) {
+            const srid = parseInt(parts[2]);
+            if (!isNaN(srid) && srid > 0) {
+              foundSrid = srid;
+              break;
+            }
+          }
+        }
+        
+        setDetectedSrid(foundSrid);
+        setUserSrid(foundSrid ? String(foundSrid) : '4326'); // Default 4326 se non rilevato
+        
         setUploadStep(2);
       } else {
         setUploadError('Impossibile leggere le colonne del file');
@@ -148,6 +175,9 @@ const FileManager = () => {
     setUploadStep(1);
     setAvailableColumns([]);
     setSelectedColumns([]);
+    setDetectedSrid(null);
+    setUserSrid('');
+    setHasGeometryColumn(false);
   };
 
   // Toggle selezione colonna
@@ -191,13 +221,17 @@ const FileManager = () => {
         ? null // tutte le colonne
         : selectedColumns;
       
+      // Passa SRID solo se c'è una colonna geometry e l'utente ha specificato un valore
+      const sridToUse = hasGeometryColumn && userSrid ? parseInt(userSrid) : null;
+      
       const result = await uploadFile(
         uploadFile_, 
         uploadName, 
         uploadDescription, 
         uploadLayer, 
         uploadSheet,
-        columnsToImport
+        columnsToImport,
+        sridToUse
       );
       
       // Controlla se serve selezione layer/sheet
@@ -294,6 +328,9 @@ const FileManager = () => {
     setUploadStep(1);
     setAvailableColumns([]);
     setSelectedColumns([]);
+    setDetectedSrid(null);
+    setUserSrid('');
+    setHasGeometryColumn(false);
   };
 
   const resetLayerModal = () => {
@@ -673,6 +710,57 @@ const FileManager = () => {
                     </label>
                   ))}
                 </div>
+
+                {/* SRID Input - Solo se c'è una colonna geometry */}
+                {hasGeometryColumn && (
+                  <div className="file-manager__srid-section">
+                    <label className="file-manager__srid-label">
+                      🌍 Sistema di Riferimento (SRID)
+                      {detectedSrid && (
+                        <span className="file-manager__srid-detected">
+                          Rilevato: {detectedSrid}
+                        </span>
+                      )}
+                    </label>
+                    <div className="file-manager__srid-input-wrapper">
+                      <input
+                        type="number"
+                        className="file-manager__srid-input"
+                        value={userSrid}
+                        onChange={(e) => setUserSrid(e.target.value)}
+                        placeholder="Es. 4326 (WGS84), 32632 (UTM 32N)"
+                      />
+                      <div className="file-manager__srid-presets">
+                        <button 
+                          type="button"
+                          className={`file-manager__srid-preset ${userSrid === '4326' ? 'file-manager__srid-preset--active' : ''}`}
+                          onClick={() => setUserSrid('4326')}
+                        >
+                          WGS84
+                        </button>
+                        <button 
+                          type="button"
+                          className={`file-manager__srid-preset ${userSrid === '32632' ? 'file-manager__srid-preset--active' : ''}`}
+                          onClick={() => setUserSrid('32632')}
+                        >
+                          UTM 32N
+                        </button>
+                        <button 
+                          type="button"
+                          className={`file-manager__srid-preset ${userSrid === '3857' ? 'file-manager__srid-preset--active' : ''}`}
+                          onClick={() => setUserSrid('3857')}
+                        >
+                          Web Mercator
+                        </button>
+                      </div>
+                    </div>
+                    {!detectedSrid && (
+                      <p className="file-manager__srid-hint">
+                        ⚠️ SRID non rilevato automaticamente. Specifica il sistema di riferimento dei dati geometrici.
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 {uploadError && (
                   <div className="file-manager__form-error">

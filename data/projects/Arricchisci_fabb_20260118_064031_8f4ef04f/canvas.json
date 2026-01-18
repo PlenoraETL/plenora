@@ -1,11 +1,11 @@
 {
   "nodes": [
     {
-      "id": "project_source_1768714838167",
-      "type": "project_source",
+      "id": "file_source_1768734043267",
+      "type": "file_source",
       "position": {
-        "x": 101.5,
-        "y": 195.5
+        "x": -154.20057073861747,
+        "y": 463.49730756201313
       },
       "table_name": null,
       "alias": null,
@@ -14,12 +14,13 @@
       "calculated_columns": [],
       "connection_id": null,
       "source_project_id": null,
+      "file_source_id": null,
       "transform_op": null,
       "transform_category": null,
       "api_id": null,
       "param_mapping": null,
       "data": {
-        "source_project_id": "Manipola_fabb_20260118_063754_5052bdc2",
+        "file_source_id": "file_output_20260118_100109_f16b0736",
         "columns": [
           {
             "name": "provincia",
@@ -33,7 +34,7 @@
           },
           {
             "name": "foglio",
-            "type": "str",
+            "type": "int",
             "visible": true
           },
           {
@@ -43,12 +44,12 @@
           },
           {
             "name": "sezione",
-            "type": "str",
+            "type": "real",
             "visible": true
           },
           {
             "name": "particella",
-            "type": "str",
+            "type": "int",
             "visible": true
           },
           {
@@ -63,22 +64,22 @@
           },
           {
             "name": "geom_multy",
-            "type": "geometry:multipolygon:4258",
+            "type": "geometry:4326",
             "visible": true
           },
           {
             "name": "buffer",
-            "type": "geometry:polygon:4258",
+            "type": "geometry:4326",
             "visible": true
           },
           {
             "name": "centroide",
-            "type": "geometry:point:3263",
+            "type": "geometry:4326",
             "visible": true
           },
           {
             "name": "tripletta",
-            "type": "real",
+            "type": "str",
             "visible": true
           }
         ]
@@ -92,11 +93,11 @@
       "aggregations": []
     },
     {
-      "id": "api_enrich_1768714841405",
+      "id": "api_enrich_1768734045343",
       "type": "api_enrich",
       "position": {
-        "x": 454.13265155653335,
-        "y": 145.2540336644124
+        "x": 483.91057024081334,
+        "y": 481.222617033664
       },
       "table_name": null,
       "alias": null,
@@ -105,6 +106,7 @@
       "calculated_columns": [],
       "connection_id": null,
       "source_project_id": null,
+      "file_source_id": null,
       "transform_op": null,
       "transform_category": null,
       "api_id": null,
@@ -125,7 +127,7 @@
           },
           {
             "name": "foglio",
-            "type": "str",
+            "type": "int",
             "visible": true,
             "fromApi": false
           },
@@ -137,13 +139,13 @@
           },
           {
             "name": "sezione",
-            "type": "str",
+            "type": "real",
             "visible": true,
             "fromApi": false
           },
           {
             "name": "particella",
-            "type": "str",
+            "type": "int",
             "visible": true,
             "fromApi": false
           },
@@ -161,25 +163,25 @@
           },
           {
             "name": "geom_multy",
-            "type": "geometry:multipolygon:4258",
+            "type": "geometry:4326",
             "visible": true,
             "fromApi": false
           },
           {
             "name": "buffer",
-            "type": "geometry:polygon:4258",
+            "type": "geometry:4326",
             "visible": true,
             "fromApi": false
           },
           {
             "name": "centroide",
-            "type": "geometry:point:3263",
+            "type": "geometry:4326",
             "visible": true,
             "fromApi": false
           },
           {
             "name": "tripletta",
-            "type": "real",
+            "type": "str",
             "visible": true,
             "fromApi": false
           },
@@ -195,7 +197,7 @@
           "cod_comune": "cod_comune",
           "foglio": "foglio",
           "particella": "particella",
-          "sezione": "sezione"
+          "sezione": ""
         }
       },
       "fileName": null,
@@ -207,11 +209,11 @@
       "aggregations": []
     },
     {
-      "id": "result_1768717165301",
+      "id": "result_1768734070323",
       "type": "result",
       "position": {
-        "x": 1108.5653403201704,
-        "y": 207.36554763914728
+        "x": 1280.5068312020635,
+        "y": 344.6334675756485
       },
       "table_name": null,
       "alias": null,
@@ -220,6 +222,7 @@
       "calculated_columns": [],
       "connection_id": null,
       "source_project_id": null,
+      "file_source_id": null,
       "transform_op": null,
       "transform_category": null,
       "api_id": null,
@@ -239,9 +242,9 @@
   ],
   "edges": [
     {
-      "id": "reactflow__edge-project_source_1768714838167-api_enrich_1768714841405",
-      "source": "project_source_1768714838167",
-      "target": "api_enrich_1768714841405",
+      "id": "reactflow__edge-file_source_1768734043267-api_enrich_1768734045343",
+      "source": "file_source_1768734043267",
+      "target": "api_enrich_1768734045343",
       "join_type": "left",
       "source_column": "",
       "target_column": "",
@@ -252,9 +255,9 @@
       "spatial_distance": null
     },
     {
-      "id": "reactflow__edge-api_enrich_1768714841405-result_1768717165301",
-      "source": "api_enrich_1768714841405",
-      "target": "result_1768717165301",
+      "id": "reactflow__edge-api_enrich_1768734045343-result_1768734070323",
+      "source": "api_enrich_1768734045343",
+      "target": "result_1768734070323",
       "join_type": "left",
       "source_column": "",
       "target_column": "",
