@@ -30,24 +30,30 @@
 
 ## 🔴 PRIORITÀ ALTA
 
-### 1. Completare ARRICCHISCI (40% → 90%)
+### 1. Aggiungere FileGDB (.gdb) come formato di OUTPUT
+- [ ] ResultNode.jsx: aggiungere opzione "GDB" nei formati geospaziali
+- [ ] orchestrator_service.py: export in FileGDB con Fiona/GeoPandas
+- [ ] api_connection_service.py: export in FileGDB
+- [ ] Nota: richiede driver OpenFileGDB (lettura) o FileGDB (scrittura con SDK ESRI)
+
+### 2. Completare ARRICCHISCI (40% → 90%)
 - [ ] Completare ApiEnrichNode configurazione
 - [ ] Test pipeline completa file → API → output
 - [ ] Gestione errori API migliorata
 - [ ] Cache risultati API
 
-### 2. Upload su Database
+### 3. Upload su Database
 - [ ] Modulo UPLOAD nuovo
 - [ ] Scrivere output su tabella PostGIS
 - [ ] Append/Replace/Truncate modes
 - [ ] Mapping colonne
 
-### 3. Upload su Feature Service  
+### 4. Upload su Feature Service  
 - [ ] Pubblicare su ArcGIS Online/Portal
 - [ ] Autenticazione OAuth
 - [ ] Aggiornamento feature esistenti
 
-### 4. Scheduler
+### 5. Scheduler
 - [ ] UI creazione scheduler
 - [ ] Selezione progetti (Estrai → Manipola → Arricchisci → Upload)
 - [ ] Configura frequenza (cron)
