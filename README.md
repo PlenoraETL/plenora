@@ -13,7 +13,56 @@
 
 ---
 
-## ✅ COMPLETATI (questa sessione - 18 Gennaio 2026)
+## 🎯 PIANO DI LAVORO
+
+### FASE 1: REFACTORING (Prossima sessione)
+Pulizia codice, rimuovi duplicati, centralizza logica comune.
+
+**File da analizzare - Backend:**
+- [ ] `orchestrator_service.py`
+- [ ] `api_connection_service.py`
+- [ ] `file_source_service.py`
+- [ ] `query_executor.py`
+
+**File da analizzare - Frontend:**
+- [ ] `ManipolaEditor.jsx`
+- [ ] `ArricchisciEditor.jsx`
+- [ ] `ProjectSourceNode.jsx`
+- [ ] `FileSourceNode.jsx`
+- [ ] `ResultNode.jsx`
+
+**Obiettivi refactoring:**
+- [ ] Centralizzare logica caricamento dati (data_loader)
+- [ ] Centralizzare logica export (data_exporter)
+- [ ] Rimuovere codice duplicato tra Editor
+- [ ] Rimuovere codice duplicato tra Node components
+
+### FASE 2: TEST COMPLETO (Dopo refactoring)
+Eseguire tutti i 155 test del Piano Test v3, fix bug trovati.
+
+**Aree da testare:**
+- [ ] Dashboard e Gestione Progetti (15 test)
+- [ ] Modulo ESTRAI (35 test)
+- [ ] Modulo MANIPOLA (30 test)
+- [ ] Modulo FILE ESTERNI (15 test)
+- [ ] Modulo ARRICCHISCI (20 test)
+- [ ] Sicurezza (15 test)
+- [ ] UI/UX Generale (15 test)
+- [ ] DB Cross-Platform (10 test)
+
+### FASE 3: INCREMENTO FUNZIONALITÀ (Dopo stabilizzazione)
+Nuove feature solo su base stabile.
+
+**Priorità:**
+1. [ ] FileGDB (.gdb) come formato di OUTPUT
+2. [ ] Completare ARRICCHISCI (40% → 90%)
+3. [ ] Upload su Database PostGIS
+4. [ ] Upload su Feature Service ArcGIS
+5. [ ] Scheduler automazione pipeline
+
+---
+
+## ✅ COMPLETATI (18 Gennaio 2026)
 
 ### File Esterni - Integrazione Completa
 - ✅ FileManager con upload, selezione colonne, SRID manuale
@@ -28,41 +77,7 @@
 
 ---
 
-## 🔴 PRIORITÀ ALTA
-
-### 1. Aggiungere FileGDB (.gdb) come formato di OUTPUT
-- [ ] ResultNode.jsx: aggiungere opzione "GDB" nei formati geospaziali
-- [ ] orchestrator_service.py: export in FileGDB con Fiona/GeoPandas
-- [ ] api_connection_service.py: export in FileGDB
-- [ ] Nota: richiede driver OpenFileGDB (lettura) o FileGDB (scrittura con SDK ESRI)
-
-### 2. Completare ARRICCHISCI (40% → 90%)
-- [ ] Completare ApiEnrichNode configurazione
-- [ ] Test pipeline completa file → API → output
-- [ ] Gestione errori API migliorata
-- [ ] Cache risultati API
-
-### 3. Upload su Database
-- [ ] Modulo UPLOAD nuovo
-- [ ] Scrivere output su tabella PostGIS
-- [ ] Append/Replace/Truncate modes
-- [ ] Mapping colonne
-
-### 4. Upload su Feature Service  
-- [ ] Pubblicare su ArcGIS Online/Portal
-- [ ] Autenticazione OAuth
-- [ ] Aggiornamento feature esistenti
-
-### 5. Scheduler
-- [ ] UI creazione scheduler
-- [ ] Selezione progetti (Estrai → Manipola → Arricchisci → Upload)
-- [ ] Configura frequenza (cron)
-- [ ] Log esecuzioni
-- [ ] Notifiche errori
-
----
-
-## 🟠 PRIORITÀ MEDIA - Transformers Top 20 FME
+## 🟠 BACKLOG - Transformers Top 20 FME (da fare in FASE 3)
 
 | # | Transformer | Stato | Note |
 |---|-------------|-------|------|
@@ -91,48 +106,23 @@
 
 ---
 
-## 🟢 PRIORITÀ BASSA - Transformers GIS Extra
-
-| Transformer | Funzione |
-|-------------|----------|
-| AreaCalculator | Calcola area |
-| LengthCalculator | Calcola lunghezza |
-| CenterPointReplacer | Centroide |
-| HullReplacer | Convex hull |
-| BoundingBoxReplacer | Bounding box |
-| Offsetter | Offset linee/poligoni |
-| VoronoiDiagrammer | Voronoi |
-| Triangulator | Triangolazione |
-
----
-
 ## 🎯 TARGET ESRI CONFERENCE - Maggio 2026
 
-| Modulo | Target |
-|--------|--------|
-| Estrai | 98% |
-| Manipola | 95% |
-| Arricchisci | 90% |
-| File Esterni | 100% ✅ |
-| Upload | 100% |
-| Scheduler | 100% |
-| Transformers | 80% (16/20) |
+| Modulo | Attuale | Target |
+|--------|---------|--------|
+| Estrai | 98% | 98% |
+| Manipola | 95% | 95% |
+| Arricchisci | 40% | 90% |
+| File Esterni | 100% ✅ | 100% |
+| Upload | 0% | 100% |
+| Scheduler | 0% | 100% |
+| Transformers | 40% | 80% |
 
 **Obiettivo globale: ~90%**
 
 ---
 
-## 📁 File Modificati Oggi
-
-### Frontend
-- `FileManager.jsx` - Upload con SRID
-- `FileManager.css` - Stili SRID
-- `FileSourceNode.jsx` - Classe nowheel
-- `FileSourceNode.css` - Max-height scroll
-- `ManipolaEditor.jsx` - file_source_id serialization
-- `ArricchisciEditor.jsx` - Integrazione file esterni
-- `ArricchisciEditor.css` - Stili file esterni
-- `files.js` - Parametro SRID
+*Ultimo aggiornamento: 18 Gennaio 2026*
 
 ### Backend
 - `file_routes.py` - Parametro SRID
