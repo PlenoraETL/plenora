@@ -49,10 +49,18 @@ class Settings:
     # ==================== OUTPUT ====================
     
     # Formati output supportati
-    SUPPORTED_OUTPUT_FORMATS: List[str] = ["csv", "json", "xlsx", "parquet", "geojson"]
+    SUPPORTED_OUTPUT_FORMATS: List[str] = ["csv", "json", "xlsx", "parquet", "geojson", "gpkg", "shp", "gdb"]
     
     # Formato output default
     DEFAULT_OUTPUT_FORMAT: str = "csv"
+    
+    # ==================== FILE ESTERNI ====================
+    
+    # Formati file supportati per import
+    SUPPORTED_FILE_FORMATS: List[str] = ["csv", "xlsx", "json", "geojson", "gpkg", "shp", "gdb"]
+    
+    # Dimensione massima file upload (100 MB)
+    MAX_FILE_SIZE: int = 100 * 1024 * 1024
     
     # ==================== PROGETTI ====================
     
@@ -108,6 +116,13 @@ class Settings:
         return path
     
     @property
+    def FILES_DIR(self) -> Path:
+        """Directory file esterni (CSV, XLSX, GeoJSON, GDB, etc.)"""
+        path = self.DATA_DIR / "files"
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+    
+    @property
     def CATALOG_DIR(self) -> Path:
         """Directory catalogo tabelle"""
         path = self.DATA_DIR / "catalog"
@@ -145,6 +160,12 @@ class Settings:
         path.mkdir(parents=True, exist_ok=True)
         return path
     
+    def get_file_source_dir(self, file_id: str) -> Path:
+        """Ottieni directory di un file source."""
+        path = self.FILES_DIR / file_id
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+    
     # ==================== VALIDATION ====================
     
     def is_valid_db_type(self, db_type: str) -> bool:
@@ -158,6 +179,10 @@ class Settings:
     def is_valid_project_type(self, project_type: str) -> bool:
         """Verifica se il tipo progetto è supportato"""
         return project_type in self.SUPPORTED_PROJECT_TYPES
+    
+    def is_valid_file_format(self, format: str) -> bool:
+        """Verifica se il formato file è supportato per import"""
+        return format in self.SUPPORTED_FILE_FORMATS
 
 
 # Singleton
@@ -174,7 +199,9 @@ if __name__ == "__main__":
     print(f"RESULTS_DIR:         {settings.RESULTS_DIR}")
     print(f"API_CONNECTIONS_DIR: {settings.API_CONNECTIONS_DIR}")
     print(f"UPLOADS_DIR:         {settings.UPLOADS_DIR}")
+    print(f"FILES_DIR:           {settings.FILES_DIR}")
     print("-" * 50)
     print(f"DB_TIMEOUT:          {settings.DB_QUERY_TIMEOUT}s")
     print(f"API_TIMEOUT:         {settings.API_TIMEOUT}s")
+    print(f"MAX_FILE_SIZE:       {settings.MAX_FILE_SIZE / 1024 / 1024:.0f} MB")
     print("=" * 50)

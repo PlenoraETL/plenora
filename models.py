@@ -72,6 +72,67 @@ class ConnectionTestResult(BaseModel):
     message: str
     details: Optional[dict] = None
 
+
+# ===== FILE SOURCE (NUOVO) =====
+class FileSource(BaseModel):
+    """
+    Configurazione file esterno come sorgente dati.
+    Usato in MANIPOLA per caricare CSV, Excel, GeoJSON, GDB, etc.
+    """
+    id: str
+    name: str  # Nome descrittivo (es. "Catasto Comuni 2024")
+    description: str = ""
+    file_path: str  # Path relativo in data/files/{id}/
+    original_filename: str  # Nome file originale
+    format: Literal["csv", "xlsx", "json", "geojson", "gpkg", "shp", "gdb"]
+    layer: Optional[str] = None  # Per GDB/GPKG con più layer
+    sheet: Optional[str] = None  # Per XLSX con più fogli
+    columns: List[ColumnInfo] = []  # Colonne rilevate
+    row_count: int = 0
+    file_size: int = 0  # bytes
+    crs: Optional[str] = None  # Sistema di riferimento (es. "EPSG:4326")
+    created_at: datetime
+    updated_at: datetime
+
+
+class FileSourceCreate(BaseModel):
+    """Dati per creare un file source (dopo upload)"""
+    name: str
+    description: str = ""
+    layer: Optional[str] = None  # Per GDB/GPKG
+    sheet: Optional[str] = None  # Per XLSX
+
+
+class FileSourceUpdate(BaseModel):
+    """Dati per aggiornare un file source"""
+    name: Optional[str] = None
+    description: Optional[str] = None
+    layer: Optional[str] = None
+    sheet: Optional[str] = None
+
+
+class FileSourceList(BaseModel):
+    """Lista file source"""
+    files: List[FileSource]
+
+
+class FileSourceLayersResponse(BaseModel):
+    """Risposta con lista layer/sheet disponibili in un file"""
+    file_id: str
+    format: str
+    layers: List[str] = []  # Per GDB/GPKG
+    sheets: List[str] = []  # Per XLSX
+
+
+class FileSourcePreview(BaseModel):
+    """Preview dati di un file source"""
+    file_id: str
+    columns: List[ColumnInfo]
+    rows: List[dict]
+    total_count: int
+    preview_count: int
+
+
 # ===== METADATA PROGETTO =====
 class ProjectMetadata(BaseModel):
     id: str
@@ -129,7 +190,7 @@ class AggregationConfig(BaseModel):
 
 class Node(BaseModel):
     id: str
-    type: Literal["source", "result", "project_source", "transform", "api_enrich"]
+    type: Literal["source", "result", "project_source", "file_source", "transform", "api_enrich"]
     position: Position
     
     # Campi per nodi tabella (type="source") - Progetti ESTRAI
@@ -142,6 +203,9 @@ class Node(BaseModel):
     
     # Campi per nodi progetto (type="project_source") - Progetti MANIPOLA/ARRICCHISCI
     source_project_id: Optional[str] = None
+    
+    # Campi per nodi file (type="file_source") - Progetti MANIPOLA (NUOVO)
+    file_source_id: Optional[str] = None
     
     # Campi per nodi trasformazione (type="transform") - Progetti MANIPOLA
     transform_op: Optional[Literal[
@@ -172,7 +236,7 @@ class Node(BaseModel):
     
     # ===== Campi per nodo risultato (type="result") - COMUNE =====
     fileName: Optional[str] = None
-    format: Optional[Literal["json", "csv", "xlsx", "geojson", "gpkg", "shp"]] = None
+    format: Optional[Literal["json", "csv", "xlsx", "geojson", "gpkg", "shp", "gdb"]] = None
     distinct: Optional[bool] = False
     limit: Optional[int] = None
     

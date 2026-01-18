@@ -20,6 +20,7 @@ from services.orchestrator_service import OrchestratorService
 from services.api_connection_service import api_connection_service
 from services.functions_router import router as functions_router
 from services.schema_router import router as schema_router, init_schema_service
+from services.file_routes import router as files_router
 
 logger = get_logger(__name__)
 
@@ -28,6 +29,7 @@ app = FastAPI(title="Canvas Query Builder API")
 # Registra router
 app.include_router(functions_router)
 app.include_router(schema_router)
+app.include_router(files_router)
 
 # CORS per frontend React
 app.add_middleware(

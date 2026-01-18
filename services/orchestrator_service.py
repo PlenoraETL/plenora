@@ -331,6 +331,42 @@ class OrchestratorService:
                     else:
                         dataframes[node.id] = pd.read_csv(file_path)
             
+            # A.2 Caricamento DataFrames dai file esterni (file_source)
+            file_source_nodes = [n for n in canvas.nodes if n.type == "file_source"]
+            
+            logger.info(f"Preview: trovati {len(file_source_nodes)} file source")
+            
+            for node in file_source_nodes:
+                file_source_id = node.data.get('file_source_id') if node.data else None
+                
+                if not file_source_id:
+                    file_source_id = getattr(node, 'file_source_id', None)
+                
+                if not file_source_id:
+                    logger.warning(f"Nodo {node.id} non ha file_source_id configurato")
+                    continue
+                
+                try:
+                    from services.file_source_service import file_source_service
+                    
+                    df, gdf = file_source_service.load_dataframe(file_source_id)
+                    
+                    # Filtra colonne visible
+                    node_columns = node.data.get('columns', []) if node.data else []
+                    visible_columns = [col['name'] for col in node_columns if col.get('visible', True)]
+                    
+                    if visible_columns:
+                        available_cols = [col for col in visible_columns if col in df.columns]
+                        if available_cols:
+                            df = df[available_cols]
+                    
+                    dataframes[node.id] = df
+                    logger.info(f"Preview: caricato file source {file_source_id}: {len(df)} righe")
+                    
+                except Exception as e:
+                    logger.error(f"Errore caricamento file source preview: {e}")
+                    return {"success": False, "message": f"Errore file source: {str(e)}"}
+            
             if not dataframes:
                 return {"success": False, "message": "Nessun dato sorgente disponibile"}
             
@@ -680,7 +716,49 @@ class OrchestratorService:
                     "message": f"Errore caricamento progetto {source_project_id}: {str(e)}"
                 }
 
-        logger.info(f"Caricati {len(dataframes)} dataframes dalle sorgenti")
+        # A.2 Caricamento DataFrames dai file esterni (file_source)
+        file_source_nodes = [n for n in canvas.nodes if n.type == "file_source"]
+        
+        logger.info(f"Trovati {len(file_source_nodes)} file source")
+        
+        for node in file_source_nodes:
+            file_source_id = node.data.get('file_source_id') if node.data else None
+            
+            # Fallback: prova anche node.file_source_id
+            if not file_source_id:
+                file_source_id = getattr(node, 'file_source_id', None)
+            
+            if not file_source_id:
+                logger.warning(f"Nodo {node.id} non ha file_source_id configurato")
+                continue
+            
+            try:
+                from services.file_source_service import file_source_service
+                
+                df, gdf = file_source_service.load_dataframe(file_source_id)
+                
+                # Filtra colonne visible
+                node_columns = node.data.get('columns', []) if node.data else []
+                visible_columns = [col['name'] for col in node_columns if col.get('visible', True)]
+                
+                if visible_columns:
+                    available_cols = [col for col in visible_columns if col in df.columns]
+                    if available_cols:
+                        df = df[available_cols]
+                        logger.debug(f"Filtrate {len(available_cols)}/{len(node_columns)} colonne visibili")
+                
+                dataframes[node.id] = df
+                
+                logger.info(f"Caricato file source {file_source_id}: {len(df)} righe, {len(df.columns)} colonne")
+                
+            except Exception as e:
+                logger.error(f"Errore caricamento file source {file_source_id}: {e}")
+                return {
+                    "success": False,
+                    "message": f"Errore caricamento file '{file_source_id}': {str(e)}"
+                }
+
+        logger.info(f"Caricati {len(dataframes)} dataframes totali (progetti + file)")
         
         # B. Risoluzione dell'ordine di esecuzione
         transform_nodes = [n for n in canvas.nodes if n.type == "transform"]
