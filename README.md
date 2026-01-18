@@ -60,6 +60,20 @@ Nuove feature solo su base stabile.
 4. [ ] Upload su Feature Service ArcGIS
 5. [ ] Scheduler automazione pipeline
 
+### FASE 4: DOCUMENTAZIONE & MARKETING (Pre-ESRI Conference)
+Materiali per presentazione e promozione.
+
+**Video Demo:**
+- [ ] Script dettagliato (5-7 min)
+- [ ] Registrazione con OBS/Loom/Camtasia
+- [ ] Editing e sottotitoli
+
+**Brochure/Presentazione:**
+- [ ] Screenshot chiave da video
+- [ ] Brochure PDF (2-4 pagine)
+- [ ] Slide PowerPoint per conferenza
+- [ ] GIF animate per social/LinkedIn
+
 ---
 
 ## ✅ COMPLETATI (18 Gennaio 2026)
