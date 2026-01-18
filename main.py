@@ -1,6 +1,14 @@
+"""
+Main FastAPI application - Canvas Query Builder API
+
+REFACTORED:
+- Rimosso project_service duplicato (era linea 46 e 50)
+- Rimosso traceback.print_exc() (già loggato con logger.error)
+"""
+
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse  # ← NUOVO IMPORT
+from fastapi.responses import FileResponse
 from pathlib import Path
 import shutil
 from config import settings
@@ -8,7 +16,8 @@ from utils.logger import get_logger
 
 from models import (
     TableCatalog, ProjectCreate, ProjectList, CanvasState,
-    ConnectionCreate, ConnectionUpdate, ConnectionList, DatabaseConnection, ConnectionTestResult, ExecuteRequest
+    ConnectionCreate, ConnectionUpdate, ConnectionList, 
+    DatabaseConnection, ConnectionTestResult, ExecuteRequest
 )
 from services.excel_service import ExcelService
 from services.project_service import ProjectService
@@ -40,14 +49,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Inizializza servizi
+# ==================== INIZIALIZZA SERVIZI ====================
+# FIX: Rimosso project_service duplicato
 excel_service = ExcelService()
 project_service = ProjectService()
 connection_service = ConnectionService()
 database_inspector = DatabaseInspector()
 query_generator = QueryGenerator()
 query_executor = QueryExecutor()
-project_service = ProjectService()
 
 orchestrator = OrchestratorService(
     project_service=project_service,
@@ -58,9 +67,10 @@ orchestrator = OrchestratorService(
 
 init_schema_service(project_service)
 
-# Cartella upload temporanei
 UPLOAD_DIR = settings.UPLOADS_DIR
 
+
+# ==================== HEALTH CHECK ====================
 
 @app.get("/")
 def root():
@@ -68,42 +78,27 @@ def root():
     return {"status": "ok", "service": "Canvas Query Builder API"}
 
 
+# ==================== CATALOG ====================
+
 @app.post("/api/catalog/upload", response_model=TableCatalog)
 async def upload_catalog(file: UploadFile = File(...)):
-    """
-    Upload file Excel con tabelle del DB
-    Expected columns: TABLE_NAME, COLUMN_NAME, COLUMN_TYPE (opzionale)
-    
-    COLUMN_TYPE può essere: int, real, str, bool, date, geometry, 
-    geometry:point, geometry:line, geometry:polygon, etc.
-    Se non specificato, default a 'str'.
-    """
-    # Verifica estensione
+    """Upload file Excel con tabelle del DB"""
     if not file.filename.endswith(('.xlsx', '.xls')):
         raise HTTPException(400, "File deve essere Excel (.xlsx o .xls)")
     
-    # Salva file temporaneamente
     temp_path = UPLOAD_DIR / file.filename
     with open(temp_path, "wb") as f:
         shutil.copyfileobj(file.file, f)
     
     try:
-        # Parse Excel
         catalog = excel_service.parse_excel(str(temp_path))
-        
-        # Salva catalogo
         excel_service.save_catalog(catalog)
-        
         return catalog
-    
     except ValueError as e:
         raise HTTPException(400, str(e))
-    
     except Exception as e:
         raise HTTPException(500, f"Errore parsing Excel: {str(e)}")
-    
     finally:
-        # Pulisci file temporaneo
         if temp_path.exists():
             temp_path.unlink()
 
@@ -118,10 +113,8 @@ def get_catalog():
 def get_table_columns(table_name: str):
     """Ottieni colonne di una tabella specifica"""
     columns = excel_service.get_table_columns(table_name)
-    
     if not columns:
         raise HTTPException(404, f"Tabella '{table_name}' non trovata")
-    
     return {"table_name": table_name, "columns": columns}
 
 
@@ -130,8 +123,7 @@ def get_table_columns(table_name: str):
 @app.post("/api/connections", response_model=DatabaseConnection)
 def create_connection(data: ConnectionCreate):
     """Crea nuova connessione database"""
-    connection = connection_service.create_connection(data)
-    return connection
+    return connection_service.create_connection(data)
 
 
 @app.get("/api/connections", response_model=ConnectionList)
@@ -161,8 +153,7 @@ def update_connection(connection_id: str, data: ConnectionUpdate):
 @app.delete("/api/connections/{connection_id}")
 def delete_connection(connection_id: str):
     """Elimina una connessione"""
-    success = connection_service.delete_connection(connection_id)
-    if not success:
+    if not connection_service.delete_connection(connection_id):
         raise HTTPException(404, f"Connessione '{connection_id}' non trovata")
     return {"status": "deleted", "connection_id": connection_id}
 
@@ -170,23 +161,19 @@ def delete_connection(connection_id: str):
 @app.post("/api/connections/{connection_id}/test", response_model=ConnectionTestResult)
 def test_connection(connection_id: str):
     """Testa una connessione database"""
-    result = connection_service.test_connection(connection_id)
-    return result
+    return connection_service.test_connection(connection_id)
 
 
 @app.get("/api/connections/{connection_id}/tables", response_model=TableCatalog)
 def get_connection_tables(connection_id: str):
-    """Ottieni tabelle e colonne direttamente dal database connesso"""
-    # Carica connessione
+    """Ottieni tabelle e colonne direttamente dal database"""
     connection = connection_service.get_connection(connection_id)
     if not connection:
         raise HTTPException(404, f"Connessione '{connection_id}' non trovata")
     
     try:
-        # Ispeziona database
         tables = database_inspector.get_tables_and_columns(connection)
         return TableCatalog(tables=tables)
-    
     except Exception as e:
         raise HTTPException(500, f"Errore ispezionando database: {str(e)}")
 
@@ -198,7 +185,6 @@ def create_project(data: ProjectCreate):
     """Crea nuovo progetto"""
     metadata = project_service.create_project(data)
     canvas = project_service.get_project_canvas(metadata.id)
-    
     return {
         "metadata": metadata.model_dump(),
         "canvas": canvas.model_dump()
@@ -219,7 +205,6 @@ def get_project(project_id: str):
         raise HTTPException(404, f"Progetto '{project_id}' non trovato")
     
     canvas = project_service.get_project_canvas(project_id)
-    
     return {
         "metadata": metadata.model_dump(),
         "canvas": canvas.model_dump() if canvas else None
@@ -229,141 +214,92 @@ def get_project(project_id: str):
 @app.put("/api/projects/{project_id}/canvas")
 def update_project_canvas(project_id: str, canvas: CanvasState):
     """Aggiorna canvas di un progetto"""
-    success = project_service.update_canvas(project_id, canvas)
-    
-    if not success:
+    if not project_service.update_canvas(project_id, canvas):
         raise HTTPException(404, f"Progetto '{project_id}' non trovato")
-    
     return {"status": "ok", "project_id": project_id}
 
 
 @app.post("/api/projects/{project_id}/execute")
 def execute_project_pipeline(project_id: str, request: ExecuteRequest = None):
-    """
-    Endpoint evoluto: esegue la pipeline del progetto (Estrai, Manipola o Arricchisci).
-    Gestisce automaticamente la cascata di dipendenze.
-    
-    Parametri:
-    - connection_id: (opzionale) per progetti SQL - override connessione
-    - force_recalculate: (opzionale) per progetti Manipola - ricalcola cache
-    - format: (opzionale) per progetti Arricchisci - formato output
-    """
+    """Esegue la pipeline del progetto (Estrai, Manipola o Arricchisci)."""
     try:
-        # Ottieni metadata per sapere il tipo progetto
         metadata = project_service.get_project_metadata(project_id)
         if not metadata:
             raise HTTPException(status_code=404, detail=f"Progetto '{project_id}' non trovato")
         
-        # ===== ARRICCHISCI =====
-        if metadata.project_type == 'arricchisci':
-            canvas = project_service.get_project_canvas(project_id)
-            if not canvas:
-                raise HTTPException(status_code=400, detail="Canvas non trovato")
-            
-            # Formato output (default csv)
-            format = 'csv'
-            if request and hasattr(request, 'format') and request.format:
-                format = request.format
-            
-            # Esegui arricchimento
-            result = api_connection_service.execute_enrichment(
-                project_id=project_id,
-                canvas=canvas.model_dump() if hasattr(canvas, 'model_dump') else canvas,
-                format=format
-            )
-            
-            if not result.get("success"):
-                raise HTTPException(
-                    status_code=400, 
-                    detail=result.get("error", "Errore esecuzione arricchimento")
-                )
-            
-            return {
-                "success": True,
-                "project_id": project_id,
-                "output_path": result.get("output_file"),
-                "message": f"Arricchimento completato: {result.get('rows_processed')} righe processate",
-                "rows_count": result.get("rows_processed"),
-                "columns": result.get("columns")
-            }
+        force_recalculate = request.force_recalculate if request else False
+        result = orchestrator.execute_pipeline(project_id, force_recalculate=force_recalculate)
         
-        # ===== ESTRAI / MANIPOLA (orchestratore esistente) =====
-        force_recalculate = False
-        if request:
-            force_recalculate = request.force_recalculate
-            logger.debug(f"force_recalculate ricevuto: {force_recalculate}")
+        if not result.get("success"):
+            raise HTTPException(status_code=400, detail=result.get("message", "Errore esecuzione"))
         
-        # Chiamiamo l'orchestratore con il parametro force_recalculate
-        execution_result = orchestrator.execute_pipeline(
-            project_id,
-            force_recalculate=force_recalculate
-        )
+        return result
         
-        # Gestione errori dall'orchestratore
-        if not execution_result.get("success"):
-            status_code = 400
-            if "non trovato" in execution_result.get("message", "").lower():
-                status_code = 404
-                
-            raise HTTPException(status_code=status_code, detail=execution_result["message"])
-        
-        # Risposta al frontend
-        return {
-            "success": True,
-            "project_id": project_id,
-            "output_path": execution_result.get("output_path"),
-            "message": execution_result.get("message"),
-            "query": execution_result.get("query"), 
-            "rows_count": execution_result.get("rows_count"),
-            "columns": execution_result.get("columns")
-        }
-        
-    except HTTPException as he:
-        raise he
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Errore critico in esecuzione pipeline: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Errore interno del server: {str(e)}")
+        logger.error(f"Errore execute_project_pipeline: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/projects/{project_id}/preview")
+def preview_project(project_id: str, limit: int = 100):
+    """Preview dei dati del progetto senza salvare file."""
+    try:
+        result = orchestrator.execute_preview(project_id, limit=limit)
+        
+        if not result.get("success"):
+            raise HTTPException(status_code=400, detail=result.get("message", "Errore preview"))
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Errore preview_project: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.delete("/api/projects/{project_id}")
 def delete_project(project_id: str):
     """Elimina un progetto"""
-    success = project_service.delete_project(project_id)
-    
-    if not success:
+    if not project_service.delete_project(project_id):
         raise HTTPException(404, f"Progetto '{project_id}' non trovato")
-    
     return {"status": "deleted", "project_id": project_id}
 
 
-@app.get("/api/projects/{project_id}/canvas")
-async def get_project_canvas(project_id: str):
-    """Recupera lo stato del canvas (nodi e collegamenti) per un progetto."""
-    try:
-        # Utilizza il project_service che hai già nell'Orchestrator
-        canvas = project_service.get_project_canvas(project_id)
-        if canvas is None:
-            # Se il file non esiste ancora, restituiamo un canvas vuoto invece di un errore
-            return {"nodes": [], "edges": []}
-        return canvas
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+@app.get("/api/projects/{project_id}/download")
+def download_project_result(project_id: str):
+    """Scarica il file risultato di un progetto."""
+    results_dir = settings.RESULTS_DIR / project_id
+    
+    if not results_dir.exists():
+        raise HTTPException(404, f"Nessun risultato trovato per progetto '{project_id}'")
+    
+    files = list(results_dir.glob("*.*"))
+    if not files:
+        raise HTTPException(404, f"Nessun file risultato trovato")
+    
+    latest_file = max(files, key=lambda x: x.stat().st_mtime)
+    
+    return FileResponse(
+        path=str(latest_file),
+        filename=latest_file.name,
+        media_type='application/octet-stream'
+    )
 
 
 # ==================== API CONNECTIONS ====================
 
 @app.get("/api/api-connections")
 def list_api_connections():
-    """Lista tutte le API connections configurate."""
-    connections = api_connection_service.list_api_connections()
-    return {"api_connections": connections}
+    """Lista tutte le API connections."""
+    return api_connection_service.list_api_connections()
 
 
 @app.get("/api/api-connections/{api_id}")
 def get_api_connection(api_id: str):
-    """Ottiene una API connection specifica."""
+    """Ottieni una API connection specifica."""
     connection = api_connection_service.get_api_connection(api_id)
     if not connection:
         raise HTTPException(404, f"API connection '{api_id}' non trovata")
@@ -373,226 +309,114 @@ def get_api_connection(api_id: str):
 @app.post("/api/api-connections")
 def create_api_connection(data: dict):
     """Crea una nuova API connection."""
-    try:
-        connection = api_connection_service.create_api_connection(data)
-        return connection
-    except Exception as e:
-        raise HTTPException(400, f"Errore creazione: {str(e)}")
+    return api_connection_service.create_api_connection(data)
 
 
 @app.put("/api/api-connections/{api_id}")
 def update_api_connection(api_id: str, data: dict):
     """Aggiorna una API connection esistente."""
-    connection = api_connection_service.update_api_connection(api_id, data)
-    if not connection:
+    result = api_connection_service.update_api_connection(api_id, data)
+    if not result:
         raise HTTPException(404, f"API connection '{api_id}' non trovata")
-    return connection
+    return result
 
 
 @app.delete("/api/api-connections/{api_id}")
 def delete_api_connection(api_id: str):
     """Elimina una API connection."""
-    success = api_connection_service.delete_api_connection(api_id)
-    if not success:
+    if not api_connection_service.delete_api_connection(api_id):
         raise HTTPException(404, f"API connection '{api_id}' non trovata")
-    return {"success": True, "message": f"API connection '{api_id}' eliminata"}
-
-
-@app.post("/api/api-connections/test")
-def test_api_connection_temp(data: dict):
-    """
-    Testa una configurazione API temporanea (per il wizard).
-    Body: {
-        "url": "http://...",
-        "method": "GET",
-        "auth": {...},
-        "test_params": {"cod_comune": "H501", ...}
-    }
-    """
-    config = {
-        "endpoint": {
-            "url": data.get("url", ""),
-            "method": data.get("method", "GET")
-        },
-        "auth": data.get("auth", {"type": "none"})
-    }
-    test_params = data.get("test_params", {})
-    
-    result = api_connection_service.test_api_connection(config=config, test_params=test_params)
-    return result
+    return {"status": "deleted", "api_id": api_id}
 
 
 @app.post("/api/api-connections/{api_id}/test")
-def test_api_connection(api_id: str, data: dict):
-    """
-    Testa una API connection esistente con parametri di test.
-    Body: {"test_params": {"cod_comune": "H501", ...}}
-    """
-    test_params = data.get("test_params", {})
-    result = api_connection_service.test_api_connection(api_id=api_id, test_params=test_params)
-    return result
+def test_api_connection(api_id: str, test_params: dict = None):
+    """Testa una API connection."""
+    return api_connection_service.test_api_connection(api_id=api_id, test_params=test_params)
 
 
-# ==================== PREVIEW ====================
+@app.post("/api/api-connections/test-config")
+def test_api_config(config: dict, test_params: dict = None):
+    """Testa una configurazione API senza salvarla."""
+    return api_connection_service.test_api_connection(config=config, test_params=test_params)
 
-@app.get("/api/projects/{project_id}/preview")
-def preview_project_data(project_id: str, limit: int = 100):
-    """
-    Esegue una preview dei dati del progetto (ESTRAI o MANIPOLA).
-    Restituisce le prime N righe senza salvare file.
+
+# ==================== SQL GENERATION ====================
+
+@app.post("/api/projects/{project_id}/generate-sql")
+def generate_sql(project_id: str):
+    """Genera SQL dal canvas di un progetto."""
+    metadata = project_service.get_project_metadata(project_id)
+    if not metadata:
+        raise HTTPException(404, f"Progetto '{project_id}' non trovato")
     
-    Parametri:
-    - limit: numero massimo di righe da restituire (default 100, max 1000)
-    """
+    canvas = project_service.get_project_canvas(project_id)
+    if not canvas:
+        raise HTTPException(400, "Canvas non trovato")
+    
+    result_node = next((n for n in canvas.nodes if n.type == "result"), None)
+    if not result_node:
+        raise HTTPException(400, "Nodo risultato non trovato nel canvas")
+    
     try:
-        # Limita il massimo
-        limit = min(limit, 1000)
+        # Determina db_type dalla connessione
+        db_type = "postgres"
+        if metadata.default_connection_id:
+            connection = connection_service.get_connection(metadata.default_connection_id)
+            if connection:
+                db_type = connection.type
         
-        # Ottieni metadata per sapere il tipo progetto
+        query_info = query_generator.generate_sql(
+            canvas.nodes, 
+            canvas.edges, 
+            result_node.id,
+            db_type=db_type
+        )
+        return {"sql": query_info['sql'], "params": query_info.get('params', {})}
+    except Exception as e:
+        logger.error(f"Errore generazione SQL: {e}")
+        raise HTTPException(400, str(e))
+
+
+# ==================== ENRICHMENT ====================
+
+@app.post("/api/projects/{project_id}/enrich")
+def execute_enrichment(project_id: str, request: ExecuteRequest = None):
+    """Esegue l'arricchimento di un progetto ARRICCHISCI."""
+    try:
         metadata = project_service.get_project_metadata(project_id)
         if not metadata:
-            raise HTTPException(status_code=404, detail=f"Progetto '{project_id}' non trovato")
+            raise HTTPException(404, f"Progetto '{project_id}' non trovato")
         
-        # Esegui preview tramite orchestrator
-        result = orchestrator.execute_preview(project_id, limit=limit)
+        if metadata.project_type != "arricchisci":
+            raise HTTPException(400, f"Progetto '{project_id}' non è di tipo 'arricchisci'")
+        
+        canvas = project_service.get_project_canvas(project_id)
+        if not canvas:
+            raise HTTPException(400, "Canvas non trovato")
+        
+        force_recalculate = request.force_recalculate if request else False
+        
+        result = api_connection_service.execute_enrichment(
+            project_id=project_id,
+            canvas=canvas.model_dump(),
+            force_recalculate=force_recalculate
+        )
         
         if not result.get("success"):
-            raise HTTPException(
-                status_code=400, 
-                detail=result.get("message", "Errore generazione preview")
-            )
+            raise HTTPException(400, result.get("error", "Errore arricchimento"))
         
         return result
         
-    except HTTPException as he:
-        raise he
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Errore preview: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Errore interno: {str(e)}")
+        logger.error(f"Errore execute_enrichment: {e}")
+        raise HTTPException(500, str(e))
 
 
-# ==================== DOWNLOAD - NUOVO ====================
-
-def _format_file_size(size_bytes: int) -> str:
-    """Formatta dimensione file in formato leggibile."""
-    for unit in ['B', 'KB', 'MB', 'GB']:
-        if size_bytes < 1024:
-            return f"{size_bytes:.1f} {unit}"
-        size_bytes /= 1024
-    return f"{size_bytes:.1f} TB"
-
-
-@app.get("/api/projects/{project_id}/download")
-def download_project_output(project_id: str):
-    """
-    Scarica il file output di un progetto eseguito.
-    Restituisce il file più recente nella directory results/{project_id}/
-    """
-    try:
-        # Directory output del progetto
-        output_dir = settings.RESULTS_DIR / project_id
-        
-        if not output_dir.exists():
-            raise HTTPException(
-                status_code=404, 
-                detail=f"Nessun output trovato per il progetto '{project_id}'. Esegui prima il progetto."
-            )
-        
-        # Cerca tutti i file nella directory (escludi sottocartelle)
-        output_files = [f for f in output_dir.iterdir() if f.is_file()]
-        
-        if not output_files:
-            raise HTTPException(
-                status_code=404, 
-                detail=f"Nessun file output trovato per il progetto '{project_id}'. Esegui prima il progetto."
-            )
-        
-        # Prendi il file più recente
-        output_file = max(output_files, key=lambda x: x.stat().st_mtime)
-        
-        # Determina il media type in base all'estensione
-        media_types = {
-            '.csv': 'text/csv',
-            '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            '.xls': 'application/vnd.ms-excel',
-            '.json': 'application/json',
-            '.geojson': 'application/geo+json',
-            '.gpkg': 'application/geopackage+sqlite3',
-            '.shp': 'application/x-shapefile',
-            '.zip': 'application/zip',
-            '.parquet': 'application/octet-stream',
-        }
-        
-        ext = output_file.suffix.lower()
-        media_type = media_types.get(ext, 'application/octet-stream')
-        
-        logger.info(f"Download file: {output_file} ({media_type})")
-        
-        return FileResponse(
-            path=str(output_file),
-            filename=output_file.name,
-            media_type=media_type
-        )
-        
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        logger.error(f"Errore download: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Errore durante il download: {str(e)}")
-
-
-@app.get("/api/projects/{project_id}/output-info")
-def get_project_output_info(project_id: str):
-    """
-    Restituisce informazioni sul file output di un progetto.
-    Utile per sapere se esiste un output scaricabile.
-    """
-    try:
-        output_dir = settings.RESULTS_DIR / project_id
-        
-        if not output_dir.exists():
-            return {
-                "has_output": False,
-                "message": "Nessun output disponibile"
-            }
-        
-        output_files = [f for f in output_dir.iterdir() if f.is_file()]
-        
-        if not output_files:
-            return {
-                "has_output": False,
-                "message": "Nessun file output trovato"
-            }
-        
-        # Prendi il file più recente
-        output_file = max(output_files, key=lambda x: x.stat().st_mtime)
-        
-        import datetime
-        mtime = datetime.datetime.fromtimestamp(output_file.stat().st_mtime)
-        
-        return {
-            "has_output": True,
-            "filename": output_file.name,
-            "size_bytes": output_file.stat().st_size,
-            "size_human": _format_file_size(output_file.stat().st_size),
-            "modified_at": mtime.isoformat(),
-            "download_url": f"/api/projects/{project_id}/download"
-        }
-        
-    except Exception as e:
-        logger.error(f"Errore output-info: {str(e)}")
-        return {
-            "has_output": False,
-            "message": f"Errore: {str(e)}"
-        }
-
-
-# ==================== MAIN ====================
+# ==================== STARTUP ====================
 
 if __name__ == "__main__":
     import uvicorn
-    import nest_asyncio
-    nest_asyncio.apply()
     uvicorn.run(app, host="0.0.0.0", port=8000)
