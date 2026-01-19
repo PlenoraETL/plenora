@@ -9,14 +9,23 @@ import ReactFlow, {
   addEdge
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { getProject, getCatalog, updateCanvas, listConnections, getConnectionTables, executeProjectQuery, previewProject, getDownloadUrl } from '../api/client';
+import { 
+  getProject, 
+  getCatalog, 
+  updateCanvas, 
+  listConnections, 
+  getConnectionTables, 
+  getDownloadUrl 
+} from '../api/client';
 import TableNode from '../components/TableNode';
 import JoinModal from '../components/JoinModal';
 import QueryPreview from '../components/QueryPreview';
 import ResultNode from '../components/ResultNode';
 import PreviewModal from '../components/PreviewModal';
+import ExecutionModal from '../components/ExecutionModal';
 import { validateCanvas } from '../utils/canvasValidation';
 import { calculateOutputColumnsRecursive } from '../utils/columnUtils';
+import { usePreview, useExecution } from '../hooks';
 import '../styles/EstraiEditor.css';
 
 const nodeTypes = {
@@ -58,16 +67,83 @@ function EstraiEditor() {
   const [validationErrors, setValidationErrors] = useState([]);
   const [disconnectedNodeIds, setDisconnectedNodeIds] = useState([]);
 
-  // State per esecuzione query
-  const [showExecutionModal, setShowExecutionModal] = useState(false);
-  const [executionResult, setExecutionResult] = useState(null);
-  const [isExecuting, setIsExecuting] = useState(false);
+  // ===== HOOKS CUSTOM =====
+  
+  // Salvataggio silenzioso per preview
+  const handleSaveQuiet = useCallback(async () => {
+    const currentNodes = nodesRef.current;
+    const currentEdges = edgesRef.current;
+    
+    const validation = validateCanvas(currentNodes, currentEdges);
+    
+    if (!validation.valid) {
+      throw new Error(
+        'Canvas non valido:\n' + 
+        validation.errors.map((e, i) => `${i + 1}. ${e}`).join('\n')
+      );
+    }
+    
+    const nodesToSave = currentNodes.map(node => {
+      if (node.type === 'resultNode') {
+        const outputColumns = calculateOutputColumnsRecursive(currentNodes, currentEdges, node.id);
+        
+        return {
+          id: node.id,
+          type: 'result',
+          position: node.position,
+          fileName: node.data.fileName,
+          format: node.data.format,
+          distinct: node.data.distinct || false,
+          limit: node.data.limit || null,
+          columns: outputColumns,
+          group_by_enabled: node.data.group_by_enabled || false,
+          group_by_columns: node.data.group_by_columns || [],
+          aggregations: node.data.aggregations || []
+        };
+      } else {
+        return {
+          id: node.id,
+          type: node.data.type || 'source',
+          table_name: node.data.table_name,
+          alias: node.alias,
+          position: node.position,
+          columns: node.data.columns || [],
+          filters: node.data.filters || [],
+          calculated_columns: node.data.calculated_columns || []
+        };
+      }
+    });
+    
+    const edgesToSave = currentEdges.map(edge => ({
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      join_type: edge.data?.join_type || 'left',
+      source_column: edge.data?.source_column || '',
+      target_column: edge.data?.target_column || '',
+      is_spatial: edge.data?.is_spatial || false,
+      spatial_predicate: edge.data?.spatial_predicate || null,
+      source_geom_column: edge.data?.source_geom_column || null,
+      target_geom_column: edge.data?.target_geom_column || null,
+      spatial_distance: edge.data?.spatial_distance || null
+    }));
+    
+    await updateCanvas(projectId, { 
+      nodes: nodesToSave, 
+      edges: edgesToSave 
+    });
+  }, [projectId]);
 
-  // ✅ State per Preview Modal
-  const [showPreviewModal, setShowPreviewModal] = useState(false);
-  const [previewData, setPreviewData] = useState(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewError, setPreviewError] = useState(null);
+  // Hook Preview
+  const preview = usePreview(projectId, handleSaveQuiet);
+
+  // Hook Execution
+  const execution = useExecution(projectId, {
+    onBeforeExecute: handleSaveQuiet,
+    validateCanvas: () => validateCanvas(nodesRef.current, edgesRef.current)
+  });
+
+  // ===== EFFECTS =====
 
   useEffect(() => {
     loadData();
@@ -122,6 +198,8 @@ function EstraiEditor() {
     }
   }, [nodes, edges]);
 
+  // ===== DATA LOADING =====
+
   const loadData = async () => {
     try {
       setLoading(true);
@@ -156,6 +234,7 @@ function EstraiEditor() {
         setCatalog(catalogData.tables || {});
       }
       
+      // Carica nodi dal canvas salvato
       const loadedNodes = (projectData.canvas.nodes || []).map(node => {
         if (node.type === 'result') {
           return {
@@ -168,18 +247,16 @@ function EstraiEditor() {
               distinct: node.distinct || false,
               limit: node.limit || null,
               columns: node.columns || [],
-              // GROUP BY fields
               group_by_enabled: node.group_by_enabled || false,
               group_by_columns: node.group_by_columns || [],
               aggregations: node.aggregations || [],
-              // Callbacks
               onUpdateFileName: handleUpdateResultFileName,
               onUpdateFormat: handleUpdateResultFormat,
               onToggleDistinct: handleToggleDistinct,
               onUpdateLimit: handleUpdateLimit,
               onUpdateGroupBy: handleUpdateGroupBy,
-              onPreview: handlePreview,
-              onExecute: handleExecuteQuery,
+              onPreview: () => preview.handlePreview(),
+              onExecute: () => execution.handleExecute(),
               onDelete: handleDeleteNode
             }
           };
@@ -212,6 +289,7 @@ function EstraiEditor() {
         }
       });
       
+      // Carica edges
       const loadedEdges = (projectData.canvas.edges || []).map(edge => {
         const targetNode = loadedNodes.find(n => n.id === edge.target);
         const isSpatial = edge.is_spatial || false;
@@ -260,6 +338,8 @@ function EstraiEditor() {
       setLoading(false);
     }
   };
+
+  // ===== NODE HANDLERS =====
 
   const handleUpdateNodeAlias = useCallback((nodeId, newAlias) => {
     setNodes((nds) =>
@@ -383,7 +463,8 @@ function EstraiEditor() {
     ));
   }, [setNodes, setEdges]);
 
-  // ✅ Handler per GROUP BY
+  // ===== RESULT NODE HANDLERS =====
+
   const handleUpdateGroupBy = useCallback((nodeId, groupByConfig) => {
     setNodes((nds) =>
       nds.map((node) => {
@@ -402,221 +483,6 @@ function EstraiEditor() {
       })
     );
   }, [setNodes]);
-
-  // ✅ Save senza alert (per preview)
-  const handleSaveQuiet = useCallback(async () => {
-    const currentNodes = nodesRef.current;
-    const currentEdges = edgesRef.current;
-    
-    const validation = validateCanvas(currentNodes, currentEdges);
-    
-    if (!validation.valid) {
-      throw new Error(
-        'Canvas non valido:\n' + 
-        validation.errors.map((e, i) => `${i + 1}. ${e}`).join('\n')
-      );
-    }
-    
-    const nodesToSave = currentNodes.map(node => {
-      if (node.type === 'resultNode') {
-        const outputColumns = calculateOutputColumnsRecursive(currentNodes, currentEdges, node.id);
-        
-        return {
-          id: node.id,
-          type: 'result',
-          position: node.position,
-          fileName: node.data.fileName,
-          format: node.data.format,
-          distinct: node.data.distinct || false,
-          limit: node.data.limit || null,
-          columns: outputColumns,
-          group_by_enabled: node.data.group_by_enabled || false,
-          group_by_columns: node.data.group_by_columns || [],
-          aggregations: node.data.aggregations || []
-        };
-      } else {
-        return {
-          id: node.id,
-          type: node.data.type || 'source',
-          table_name: node.data.table_name,
-          alias: node.alias,
-          position: node.position,
-          columns: node.data.columns || [],
-          filters: node.data.filters || [],
-          calculated_columns: node.data.calculated_columns || []
-        };
-      }
-    });
-    
-    const edgesToSave = currentEdges.map(edge => ({
-      id: edge.id,
-      source: edge.source,
-      target: edge.target,
-      join_type: edge.data?.join_type || 'left',
-      source_column: edge.data?.source_column || '',
-      target_column: edge.data?.target_column || '',
-      is_spatial: edge.data?.is_spatial || false,
-      spatial_predicate: edge.data?.spatial_predicate || null,
-      source_geom_column: edge.data?.source_geom_column || null,
-      target_geom_column: edge.data?.target_geom_column || null,
-      spatial_distance: edge.data?.spatial_distance || null
-    }));
-    
-    await updateCanvas(projectId, { 
-      nodes: nodesToSave, 
-      edges: edgesToSave 
-    });
-  }, [projectId]);
-
-  // ✅ Handler per Preview
-  const handlePreview = useCallback(async (nodeId, limit = 100) => {
-    setShowPreviewModal(true);
-    setPreviewLoading(true);
-    setPreviewError(null);
-    setPreviewData(null);
-    
-    try {
-      // Prima salva il canvas
-      await handleSaveQuiet();
-      
-      // Poi chiama la preview API con il limit specificato
-      const result = await previewProject(projectId, limit);
-      
-      if (result.success) {
-        setPreviewData(result);
-      } else {
-        setPreviewError(result.message || 'Errore generazione preview');
-      }
-    } catch (error) {
-      console.error('[EstraiEditor] Errore preview:', error);
-      setPreviewError(error.message || 'Errore durante la preview');
-    } finally {
-      setPreviewLoading(false);
-    }
-  }, [projectId, handleSaveQuiet]);
-
-  const handleExecuteQuery = useCallback(async (resultNodeId) => {
-    setShowExecutionModal(true);
-    setIsExecuting(true);
-    setExecutionResult(null);
-
-    try {
-      const currentNodes = nodesRef.current;
-      const currentEdges = edgesRef.current;
-      
-      if (currentNodes.length === 0) {
-        throw new Error("Nessun nodo nel canvas");
-      }
-      
-      const validation = validateCanvas(currentNodes, currentEdges);
-      
-      if (!validation.valid) {
-        throw new Error(
-          'Canvas non valido. Errori:\n' + 
-          validation.errors.map((e, i) => `${i + 1}. ${e}`).join('\n')
-        );
-      }
-      
-      const nodesToSave = currentNodes.map(node => {
-        if (node.type === 'resultNode') {
-          const outputColumns = calculateOutputColumnsRecursive(currentNodes, currentEdges, node.id);
-          return {
-            id: node.id,
-            type: 'result',
-            position: node.position,
-            fileName: node.data.fileName,
-            format: node.data.format,
-            distinct: node.data.distinct || false,
-            limit: node.data.limit || null,
-            columns: outputColumns,
-            group_by_enabled: node.data.group_by_enabled || false,
-            group_by_columns: node.data.group_by_columns || [],
-            aggregations: node.data.aggregations || []
-          };
-        } else {
-          return {
-            id: node.id,
-            type: node.data.type || 'source',
-            table_name: node.data.table_name,
-            alias: node.alias,
-            position: node.position,
-            columns: node.data.columns || [],
-            filters: node.data.filters || [],
-            calculated_columns: node.data.calculated_columns || []
-          };
-        }
-      });
-      
-      const edgesToSave = currentEdges.map(edge => ({
-        id: edge.id,
-        source: edge.source,
-        target: edge.target,
-        join_type: edge.data?.join_type || 'left',
-        source_column: edge.data?.source_column || '',
-        target_column: edge.data?.target_column || '',
-        is_spatial: edge.data?.is_spatial || false,
-        spatial_predicate: edge.data?.spatial_predicate || null,
-        source_geom_column: edge.data?.source_geom_column || null,
-        target_geom_column: edge.data?.target_geom_column || null,
-        spatial_distance: edge.data?.spatial_distance || null
-      }));
-      
-      await updateCanvas(projectId, { 
-        nodes: nodesToSave, 
-        edges: edgesToSave 
-      });
-      
-      const projectData = await getProject(projectId);
-      const connectionId = projectData?.metadata?.default_connection_id;
-      
-      if (!connectionId) {
-        throw new Error("Nessuna connessione database associata a questo progetto.");
-      }
-
-      const result = await executeProjectQuery(projectId);
-      setExecutionResult(result);
-    } catch (error) {
-      console.error('Errore esecuzione:', error);
-      setExecutionResult({
-        success: false,
-        message: error.response?.data?.detail || error.message || 'Errore esecuzione query'
-      });
-    } finally {
-      setIsExecuting(false);
-    }
-  }, [projectId]);
-
-  const handleAddResultNode = useCallback(() => {
-    if (nodes.some(n => n.type === 'resultNode')) {
-      alert('Puoi avere solo un nodo risultato per progetto');
-      return;
-    }
-
-    const newNode = {
-      id: `result_${Date.now()}`,
-      type: 'resultNode',
-      position: { x: 400, y: 300 },
-      data: {
-        fileName: 'output',
-        format: 'csv',
-        distinct: false,
-        limit: null,
-        group_by_enabled: false,
-        group_by_columns: [],
-        aggregations: [],
-        onUpdateFileName: handleUpdateResultFileName,
-        onUpdateFormat: handleUpdateResultFormat,
-        onToggleDistinct: handleToggleDistinct,
-        onUpdateLimit: handleUpdateLimit,
-        onUpdateGroupBy: handleUpdateGroupBy,
-        onPreview: handlePreview,
-        onExecute: handleExecuteQuery,
-        onDelete: handleDeleteNode
-      }
-    };
-
-    setNodes((nds) => nds.concat(newNode));
-  }, [nodes, setNodes, handleDeleteNode, handleExecuteQuery, handlePreview, handleUpdateGroupBy]);
 
   const handleUpdateResultFileName = useCallback((nodeId, newFileName) => {
     setNodes((nds) =>
@@ -662,6 +528,40 @@ function EstraiEditor() {
     );
   }, [setNodes]);
 
+  const handleAddResultNode = useCallback(() => {
+    if (nodes.some(n => n.type === 'resultNode')) {
+      alert('Puoi avere solo un nodo risultato per progetto');
+      return;
+    }
+
+    const newNode = {
+      id: `result_${Date.now()}`,
+      type: 'resultNode',
+      position: { x: 400, y: 300 },
+      data: {
+        fileName: 'output',
+        format: 'csv',
+        distinct: false,
+        limit: null,
+        group_by_enabled: false,
+        group_by_columns: [],
+        aggregations: [],
+        onUpdateFileName: handleUpdateResultFileName,
+        onUpdateFormat: handleUpdateResultFormat,
+        onToggleDistinct: handleToggleDistinct,
+        onUpdateLimit: handleUpdateLimit,
+        onUpdateGroupBy: handleUpdateGroupBy,
+        onPreview: () => preview.handlePreview(),
+        onExecute: () => execution.handleExecute(),
+        onDelete: handleDeleteNode
+      }
+    };
+
+    setNodes((nds) => nds.concat(newNode));
+  }, [nodes, setNodes, handleDeleteNode, handleUpdateGroupBy, preview, execution]);
+
+  // ===== SAVE =====
+
   const handleSave = async () => {
     const validation = validateCanvas(nodes, edges);
     
@@ -687,6 +587,8 @@ function EstraiEditor() {
       alert('Errore salvataggio progetto');
     }
   };
+
+  // ===== EDGE HANDLERS =====
 
   const onConnect = useCallback((params) => {
     const targetNode = nodes.find(n => n.id === params.target);
@@ -770,7 +672,7 @@ function EstraiEditor() {
     setShowJoinModal(false);
     setPendingEdge(null);
     setEditingEdge(null);
-  }, [nodes, edges, pendingEdge, editingEdge, setEdges]);
+  }, [nodes, pendingEdge, editingEdge, setEdges]);
 
   const handleCancelJoin = useCallback(() => {
     setShowJoinModal(false);
@@ -785,6 +687,8 @@ function EstraiEditor() {
       setEditingEdge(null);
     }
   }, [editingEdge, setEdges]);
+
+  // ===== DRAG & DROP =====
 
   const onDrop = useCallback(
     (event) => {
@@ -844,13 +748,15 @@ function EstraiEditor() {
 
       setNodes((nds) => nds.concat(newNode));
     },
-    [reactFlowInstance, catalog, setNodes, handleUpdateNodeAlias, handleToggleColumn, handleUpdateColumnAlias, handleUpdateFilters, handleDeleteNode]
+    [reactFlowInstance, catalog, setNodes, handleUpdateNodeAlias, handleToggleColumn, handleUpdateColumnAlias, handleUpdateFilters, handleDeleteNode, projectConnection]
   );
 
   const onDragOver = useCallback((event) => {
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
   }, []);
+
+  // ===== RENDER HELPERS =====
 
   const handleBack = () => {
     navigate('/');
@@ -864,6 +770,8 @@ function EstraiEditor() {
   const availableTables = filteredTables.filter(tableName => 
     !tablesInCanvas.has(tableName)
   );
+
+  // ===== LOADING / ERROR STATES =====
 
   if (loading) {
     return <div className="estrai-loading">Caricamento progetto...</div>;
@@ -887,6 +795,8 @@ function EstraiEditor() {
   const targetNodeId = editingEdge?.target || pendingEdge?.target;
   const sourceNode = nodes.find(n => n.id === sourceNodeId);
   const targetNode = nodes.find(n => n.id === targetNodeId);
+
+  // ===== RENDER =====
 
   return (
     <div className="estrai-editor">
@@ -1057,127 +967,24 @@ function EstraiEditor() {
       )}
 
       {/* ===== EXECUTION MODAL ===== */}
-      {showExecutionModal && (
-        <div className="modal-overlay" onClick={() => setShowExecutionModal(false)}>
-          <div 
-            className="modal execution-modal" 
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="execution-modal__title">🚀 Esecuzione Query</h3>
-
-            {isExecuting ? (
-              <div className="execution-modal__loading">
-                <div className="execution-modal__spinner">⏳</div>
-                <p className="execution-modal__loading-text">
-                  Esecuzione query in corso...
-                </p>
-              </div>
-            ) : executionResult ? (
-              <div>
-                {executionResult.success ? (
-                  <div>
-                    <div className="execution-modal__success">
-                      <div className="execution-modal__success-title">
-                        ✓ Query eseguita con successo!
-                      </div>
-                      <div className="execution-modal__success-message">
-                        {executionResult.message}
-                      </div>
-                    </div>
-
-                    <div className="execution-modal__stats">
-                      <div className="execution-modal__stat">
-                        <div className="execution-modal__stat-label">Righe estratte</div>
-                        <div className="execution-modal__stat-value">
-                          {executionResult.rows_count?.toLocaleString()}
-                        </div>
-                      </div>
-                      <div className="execution-modal__stat">
-                        <div className="execution-modal__stat-label">Colonne</div>
-                        <div className="execution-modal__stat-value">
-                          {executionResult.columns?.length || 0}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="execution-modal__output">
-                      <div className="execution-modal__output-label">📄 File generato</div>
-                      <div className="execution-modal__output-file">
-                        {executionResult.output_file}
-                      </div>
-                      <div className="execution-modal__output-path">
-                        {executionResult.output_path}
-                      </div>
-                    </div>
-
-                    {/* ========== DOWNLOAD BUTTON ========== */}
-                    <a 
-                      href={getDownloadUrl(projectId)}
-                      className="execution-modal__download-btn"
-                      download
-                    >
-                      ⬇️ Scarica File
-                    </a>
-
-                    {executionResult.query && (
-                      <div className="execution-modal__query">
-                        <div className="execution-modal__query-label">
-                          Query SQL generata:
-                        </div>
-                        <pre className="execution-modal__query-code">
-                          {executionResult.query}
-                        </pre>
-                      </div>
-                    )}
-
-                    {executionResult.columns && executionResult.columns.length > 0 && (
-                      <div className="execution-modal__columns">
-                        <div className="execution-modal__columns-label">
-                          Colonne estratte ({executionResult.columns.length}):
-                        </div>
-                        <div className="execution-modal__columns-list">
-                          {executionResult.columns.map((col, idx) => (
-                            <span key={idx} className="execution-modal__column-tag">
-                              {col}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="execution-modal__error">
-                    <div className="execution-modal__error-title">
-                      ✗ Errore esecuzione query
-                    </div>
-                    <div className="execution-modal__error-message">
-                      {executionResult.message}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : null}
-
-            <div className="execution-modal__actions">
-              <button 
-                className="execution-modal__btn" 
-                onClick={() => setShowExecutionModal(false)}
-              >
-                Chiudi
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ExecutionModal
+        isOpen={execution.showModal}
+        onClose={() => execution.closeModal()}
+        isExecuting={execution.isExecuting}
+        result={execution.result}
+        downloadUrl={execution.downloadUrl}
+        title="🚀 Esecuzione Query"
+        projectType="estrai"
+      />
 
       {/* ===== PREVIEW MODAL ===== */}
       <PreviewModal
-        isOpen={showPreviewModal}
-        onClose={() => setShowPreviewModal(false)}
-        onRefresh={(limit) => handlePreview(null, limit)}
-        data={previewData}
-        loading={previewLoading}
-        error={previewError}
+        isOpen={preview.showModal}
+        onClose={preview.closeModal}
+        onRefresh={(limit) => preview.handlePreview(limit)}
+        data={preview.data}
+        loading={preview.loading}
+        error={preview.error}
         title="Anteprima Query SQL"
         projectType="estrai"
       />

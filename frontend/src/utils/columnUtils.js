@@ -5,6 +5,76 @@
  */
 
 /**
+ * Normalizza il tipo colonna per consistenza tra i vari componenti
+ * Supporta sia il vecchio formato (dtype: num/str/date/bool) 
+ * che il nuovo (type: int/real/str/bool/date/geometry:*)
+ * 
+ * NOTA: Questa funzione era duplicata in ProjectSourceNode, FileSourceNode, ArricchisciEditor
+ * 
+ * @param {Object|string} col - Colonna con proprietà type/dtype o stringa del tipo
+ * @returns {string} Tipo normalizzato
+ * 
+ * Uso:
+ * ```jsx
+ * const type = normalizeColumnType(col);
+ * // oppure
+ * const type = normalizeColumnType({ type: 'number' });
+ * ```
+ */
+export function normalizeColumnType(col) {
+  // Se è una stringa, usala direttamente
+  const rawType = typeof col === 'string' 
+    ? col 
+    : (col.type || col.dtype || 'str');
+  
+  // Mappa vecchi valori ai nuovi
+  const typeMap = {
+    'num': 'real',        // vecchio 'num' -> nuovo 'real'
+    'number': 'real',
+    'integer': 'int',
+    'float': 'real',
+    'double': 'real',
+    'string': 'str',
+    'text': 'str',
+    'boolean': 'bool',
+    'datetime': 'date',
+    'timestamp': 'date',
+  };
+  
+  const normalized = typeMap[rawType.toLowerCase()] || rawType.toLowerCase();
+  return normalized;
+}
+
+/**
+ * Mappa il tipo dell'API ai tipi standard del sistema
+ * Usato principalmente in ApiEnrichNode
+ * 
+ * @param {string} apiType - Tipo restituito dall'API
+ * @returns {string} Tipo standard
+ */
+export function mapApiTypeToStandard(apiType) {
+  const typeMap = {
+    'string': 'str',
+    'text': 'str',
+    'number': 'real',
+    'integer': 'int',
+    'float': 'real',
+    'double': 'real',
+    'boolean': 'bool',
+    'bool': 'bool',
+    'date': 'date',
+    'datetime': 'date',
+    'geojson': 'geometry',
+    'geometry': 'geometry',
+    'point': 'geometry:point',
+    'polygon': 'geometry:polygon',
+    'multipolygon': 'geometry:multipolygon',
+    'linestring': 'geometry:line',
+  };
+  return typeMap[(apiType || 'string').toLowerCase()] || 'str';
+}
+
+/**
  * Calcola le colonne finali che arrivano al nodo risultato
  * attraversando il grafo dei nodi e degli edges
  */
@@ -32,7 +102,7 @@ export function calculateOutputColumns(nodes, edges, resultNodeId) {
         .map(col => ({
           name: col.name,
           alias: col.alias,
-          type: col.type || 'str',  // ✅ Propaga il tipo
+          type: col.type || 'str',
           source_table: sourceNode.data.alias || sourceNode.data.table_name,
           full_name: `${sourceNode.data.alias || sourceNode.data.table_name}.${col.alias || col.name}`
         }));
@@ -84,7 +154,7 @@ export function calculateOutputColumnsRecursive(nodes, edges, resultNodeId) {
       
       allColumns.push(...visibleColumns);
       
-      // ✅ Colonne calcolate
+      // Colonne calcolate
       const calculatedColumns = (node.data.calculated_columns || [])
         .map(col => ({
           name: col.name,
@@ -223,4 +293,40 @@ export function getColumnSRID(type) {
 export function isGeometryType(type) {
   if (!type) return false;
   return type.toLowerCase().startsWith('geometry');
+}
+
+/**
+ * Estrae colonne visibili con formato standard
+ * Utile per raccogliere colonne da nodi di tipo diverso
+ * 
+ * @param {Object} node - Nodo React Flow
+ * @returns {Array} Array di colonne normalizzate
+ */
+export function extractVisibleColumns(node) {
+  if (!node?.data?.columns) return [];
+  
+  return node.data.columns
+    .filter(col => col.visible !== false)
+    .map(col => {
+      if (typeof col === 'string') {
+        return { name: col, type: 'str', visible: true };
+      }
+      return {
+        name: col.name || col.alias || 'unknown',
+        type: normalizeColumnType(col),
+        visible: col.visible !== false,
+        alias: col.alias || null
+      };
+    });
+}
+
+/**
+ * Deduplica array di colonne per nome
+ * Mantiene l'ultima occorrenza (che potrebbe avere tipo più preciso)
+ * 
+ * @param {Array} columns - Array di colonne
+ * @returns {Array} Array deduplicato
+ */
+export function deduplicateColumns(columns) {
+  return [...new Map(columns.map(col => [col.name, col])).values()];
 }

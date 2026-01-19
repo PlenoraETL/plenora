@@ -16,7 +16,6 @@ import {
   listProjects, 
   getProject, 
   updateCanvas,
-  executeProjectQuery,
   getDownloadUrl
 } from '../api/client';
 import { getFiles } from '../api/files';
@@ -25,6 +24,8 @@ import ProjectSourceNode from '../components/ProjectSourceNode';
 import FileSourceNode from '../components/FileSourceNode';
 import ApiEnrichNode from '../components/ApiEnrichNode';
 import ResultNode from '../components/ResultNode';
+import ExecutionModal from '../components/ExecutionModal';
+import { useExecution, useCanvasKeyboard } from '../hooks';
 import '../styles/ArricchisciEditor.css';
 
 const nodeTypes = {
@@ -53,7 +54,6 @@ const ArricchisciEditorContent = () => {
   const { projectId } = useParams();
   const navigate = useNavigate();
   const { screenToFlowPosition } = useReactFlow();
-  const reactFlowInstance = useReactFlow();
   
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -62,11 +62,6 @@ const ArricchisciEditorContent = () => {
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  
-  // Stati per modal esecuzione
-  const [showExecutionModal, setShowExecutionModal] = useState(false);
-  const [executionResult, setExecutionResult] = useState(null);
-  const [isExecuting, setIsExecuting] = useState(false);
   const [exportFormat, setExportFormat] = useState('csv');
   
   const nodesRef = useRef(nodes);
@@ -77,19 +72,96 @@ const ArricchisciEditorContent = () => {
     edgesRef.current = edges;
   }, [nodes, edges]);
 
-  // ===== PROPAGA COLONNE AL RESULT NODE =====
-  // Raccoglie colonne da project_source, file_source e api_enrich per mostrare formati geo
+  // ===== SALVATAGGIO =====
+  
+  const handleSaveCanvas = useCallback(async () => {
+    try {
+      setSaving(true);
+      
+      const currentNodes = nodesRef.current;
+      const currentEdges = edgesRef.current;
+      
+      const canvasToSave = {
+        nodes: currentNodes.map(node => ({
+          id: node.id,
+          type: node.type,
+          position: node.position,
+          data: {
+            source_project_id: node.data?.source_project_id,
+            file_source_id: node.data?.file_source_id,
+            columns: node.data?.columns,
+            api_id: node.data?.api_id,
+            param_mapping: node.data?.param_mapping,
+            fileName: node.data?.fileName,
+            format: node.data?.format
+          }
+        })),
+        edges: currentEdges
+      };
+      
+      await updateCanvas(projectId, canvasToSave);
+      
+    } catch (error) {
+      console.error('[ArricchisciEditor] Errore salvataggio canvas:', error);
+      alert('Errore durante il salvataggio');
+    } finally {
+      setSaving(false);
+    }
+  }, [projectId]);
+
+  // ===== CUSTOM HOOKS =====
+
+  // Hook Execution
+  const execution = useExecution(projectId, {
+    onBeforeExecute: async () => {
+      const currentNodes = nodesRef.current;
+      
+      if (currentNodes.length === 0) {
+        throw new Error('Canvas vuoto. Aggiungi nodi prima di eseguire.');
+      }
+      
+      const sourceNodes = currentNodes.filter(n => n.type === 'project_source' || n.type === 'file_source');
+      if (sourceNodes.length === 0) {
+        throw new Error('Aggiungi almeno una sorgente dati (progetto o file).');
+      }
+      
+      const apiNodes = currentNodes.filter(n => n.type === 'api_enrich');
+      if (apiNodes.length === 0) {
+        throw new Error('Aggiungi almeno un nodo API Enrich.');
+      }
+      
+      await handleSaveCanvas();
+    }
+  });
+
+  // Wrapper per passare formato export
+  const handleExecuteWithFormat = useCallback((options = {}) => {
+    execution.handleExecute({
+      ...options,
+      format: exportFormat
+    });
+  }, [execution, exportFormat]);
+
+  // Hook Keyboard (Delete/Backspace)
+  useCanvasKeyboard({
+    nodes,
+    edges,
+    onDeleteNode: handleDeleteNode,
+    setEdges
+  });
+
+  // ===== EFFECTS =====
+
+  // Propaga colonne al Result Node
   useEffect(() => {
     const resultNode = nodes.find(n => n.type === 'result');
     if (!resultNode) return;
     
-    // Raccogli colonne da tutti i nodi
     const availableColumns = [];
     
     for (const node of nodes) {
       if (node.type === 'project_source' && node.data?.columns) {
         for (const col of node.data.columns) {
-          // ProjectSourceNode: colonne sono oggetti {name, type, visible, ...}
           if (typeof col === 'object' && col !== null) {
             availableColumns.push({
               name: col.name || col.alias || 'unknown',
@@ -105,7 +177,6 @@ const ArricchisciEditorContent = () => {
           }
         }
       } else if (node.type === 'file_source' && node.data?.columns) {
-        // FileSourceNode: colonne sono oggetti {name, type, visible}
         for (const col of node.data.columns) {
           if (typeof col === 'object' && col !== null) {
             availableColumns.push({
@@ -117,7 +188,6 @@ const ArricchisciEditorContent = () => {
         }
       } else if (node.type === 'api_enrich' && node.data?.columns) {
         for (const col of node.data.columns) {
-          // ApiEnrichNode: colonne sono oggetti {name, type, visible, fromApi}
           if (typeof col === 'object' && col !== null) {
             availableColumns.push({
               name: col.name || 'unknown',
@@ -130,10 +200,8 @@ const ArricchisciEditorContent = () => {
       }
     }
     
-    // Deduplica per nome (mantieni l'ultima occorrenza che potrebbe avere tipo più preciso)
     const uniqueColumns = [...new Map(availableColumns.map(col => [col.name, col])).values()];
     
-    // Aggiorna solo se le colonne sono cambiate
     const currentColumns = resultNode.data?.availableColumns || [];
     const columnsChanged = JSON.stringify(uniqueColumns) !== JSON.stringify(currentColumns);
     
@@ -155,41 +223,11 @@ const ArricchisciEditorContent = () => {
     }
   }, [nodes, setNodes]);
 
-  // Gestione Delete/Backspace
-  useEffect(() => {
-    const handleKeyDown = (event) => {
-      const target = event.target;
-      if (target.tagName === 'INPUT' || 
-          target.tagName === 'TEXTAREA' || 
-          target.isContentEditable) {
-        return;
-      }
-      
-      if (event.key === 'Delete' || event.key === 'Backspace') {
-        const selectedNodes = nodes.filter(n => n.selected);
-        const selectedEdges = edges.filter(e => e.selected);
-        
-        if (selectedNodes.length > 0) {
-          selectedNodes.forEach(node => {
-            handleDeleteNode(node.id);
-          });
-        }
-        
-        if (selectedEdges.length > 0) {
-          setEdges((eds) => 
-            eds.filter(edge => !selectedEdges.find(e => e.id === edge.id))
-          );
-        }
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [nodes, edges, setEdges]);
-
   useEffect(() => {
     loadProjectAndSources();
   }, [projectId]);
+
+  // ===== DATA LOADING =====
 
   const loadProjectAndSources = async () => {
     try {
@@ -200,24 +238,7 @@ const ArricchisciEditorContent = () => {
       
       if (projectData.canvas && projectData.canvas.nodes) {
         const loadedNodes = projectData.canvas.nodes.map(node => {
-          if (node.type === 'result') {
-            return {
-              ...node,
-              data: {
-                ...node.data,
-                isArricchisci: true,
-                fileName: node.data?.fileName || 'output',
-                format: node.data?.format || 'csv',
-                availableColumns: node.data?.availableColumns || [],
-                geomColumn: node.data?.geomColumn || null,
-                onUpdateFileName: handleUpdateResultFileName,
-                onUpdateFormat: handleUpdateResultFormat,
-                onUpdateGeomColumn: handleUpdateResultGeomColumn,
-                onExecute: handleExecute,
-                onDelete: handleDeleteNode
-              }
-            };
-          } else if (node.type === 'project_source') {
+          if (node.type === 'project_source') {
             return {
               ...node,
               data: {
@@ -251,6 +272,22 @@ const ArricchisciEditorContent = () => {
                 onDelete: handleDeleteNode
               }
             };
+          } else if (node.type === 'result') {
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                isArricchisci: true,
+                fileName: node.data?.fileName || 'output',
+                format: node.data?.format || 'csv',
+                availableColumns: [],
+                onUpdateFileName: handleUpdateResultFileName,
+                onUpdateFormat: handleUpdateResultFormat,
+                onUpdateGeomColumn: handleUpdateResultGeomColumn,
+                onExecute: handleExecuteWithFormat,
+                onDelete: handleDeleteNode
+              }
+            };
           }
           return node;
         });
@@ -259,14 +296,12 @@ const ArricchisciEditorContent = () => {
         setEdges(projectData.canvas.edges || []);
       }
       
-      // Carica progetti disponibili (Estrai e Manipola)
       const projectsData = await listProjects();
       const sourceProjects = (projectsData.projects || []).filter(
-        p => p.project_type === 'estrai' || p.project_type === 'manipola'
+        p => ['estrai', 'manipola'].includes(p.project_type || 'estrai')
       );
       setAvailableSources(sourceProjects);
       
-      // Carica file esterni disponibili
       try {
         const filesData = await getFiles();
         setAvailableFiles(filesData.files || []);
@@ -283,17 +318,13 @@ const ArricchisciEditorContent = () => {
     }
   };
 
+  // ===== NODE HANDLERS =====
+
   const handleUpdateProjectSource = useCallback((nodeId, projectSourceId) => {
     setNodes((nds) =>
       nds.map((node) => {
         if (node.id === nodeId) {
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              source_project_id: projectSourceId
-            }
-          };
+          return { ...node, data: { ...node.data, source_project_id: projectSourceId } };
         }
         return node;
       })
@@ -304,13 +335,7 @@ const ArricchisciEditorContent = () => {
     setNodes((nds) =>
       nds.map((node) => {
         if (node.id === nodeId) {
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              columns: columns
-            }
-          };
+          return { ...node, data: { ...node.data, columns } };
         }
         return node;
       })
@@ -321,13 +346,7 @@ const ArricchisciEditorContent = () => {
     setNodes((nds) =>
       nds.map((node) => {
         if (node.id === nodeId) {
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              columns: columns
-            }
-          };
+          return { ...node, data: { ...node.data, columns } };
         }
         return node;
       })
@@ -338,13 +357,7 @@ const ArricchisciEditorContent = () => {
     setNodes((nds) =>
       nds.map((node) => {
         if (node.id === nodeId) {
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              fileName: newFileName
-            }
-          };
+          return { ...node, data: { ...node.data, fileName: newFileName } };
         }
         return node;
       })
@@ -355,46 +368,48 @@ const ArricchisciEditorContent = () => {
     setNodes((nds) =>
       nds.map((node) => {
         if (node.id === nodeId) {
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              format: newFormat
-            }
-          };
+          return { ...node, data: { ...node.data, format: newFormat } };
         }
         return node;
       })
     );
+    setExportFormat(newFormat);
   }, [setNodes]);
 
   const handleUpdateResultGeomColumn = useCallback((nodeId, geomColumn) => {
     setNodes((nds) =>
       nds.map((node) => {
         if (node.id === nodeId) {
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              geomColumn: geomColumn
-            }
-          };
+          return { ...node, data: { ...node.data, geomColumn } };
         }
         return node;
       })
     );
   }, [setNodes]);
 
-  const handleDeleteNode = useCallback((nodeId) => {
+  function handleDeleteNode(nodeId) {
     setNodes((nds) => nds.filter((node) => node.id !== nodeId));
-    setEdges((eds) => eds.filter((edge) => 
-      edge.source !== nodeId && edge.target !== nodeId
-    ));
-  }, [setNodes, setEdges]);
+    setEdges((eds) => eds.filter((edge) => edge.source !== nodeId && edge.target !== nodeId));
+  }
+
+  const handleAddApiEnrichNode = useCallback(() => {
+    const newNodeId = `api_enrich_${Date.now()}`;
+    const newNode = {
+      id: newNodeId,
+      type: 'api_enrich',
+      position: { x: Math.random() * 300 + 200, y: Math.random() * 200 + 100 },
+      data: {
+        api_id: '',
+        param_mapping: {},
+        columns: [],
+        onDelete: handleDeleteNode
+      }
+    };
+    setNodes((nds) => nds.concat(newNode));
+  }, [setNodes]);
 
   const handleAddResultNode = useCallback(() => {
-    const currentNodes = nodesRef.current;
-    if (currentNodes.some(n => n.type === 'result')) {
+    if (nodesRef.current.some(n => n.type === 'result')) {
       alert('Puoi avere solo un nodo risultato per progetto');
       return;
     }
@@ -411,100 +426,25 @@ const ArricchisciEditorContent = () => {
         onUpdateFileName: handleUpdateResultFileName,
         onUpdateFormat: handleUpdateResultFormat,
         onUpdateGeomColumn: handleUpdateResultGeomColumn,
-        onExecute: handleExecute,
+        onExecute: handleExecuteWithFormat,
         onDelete: handleDeleteNode
       }
     };
 
     setNodes((nds) => nds.concat(newNode));
-  }, [setNodes, handleUpdateResultFileName, handleUpdateResultFormat, handleUpdateResultGeomColumn, handleDeleteNode]);
+  }, [setNodes, handleUpdateResultFileName, handleUpdateResultFormat, handleUpdateResultGeomColumn, handleExecuteWithFormat]);
 
-  const handleSaveCanvas = useCallback(async () => {
-    try {
-      setSaving(true);
-      
-      const currentNodes = nodesRef.current;
-      const currentEdges = edgesRef.current;
-      
-      const canvasToSave = {
-        nodes: currentNodes.map(node => ({
-          id: node.id,
-          type: node.type,
-          position: node.position,
-          data: {
-            // Project source
-            source_project_id: node.data?.source_project_id,
-            // File source
-            file_source_id: node.data?.file_source_id,
-            // Common
-            columns: node.data?.columns,
-            // API Enrich
-            api_id: node.data?.api_id,
-            param_mapping: node.data?.param_mapping,
-            // Result
-            fileName: node.data?.fileName,
-            format: node.data?.format
-          }
-        })),
-        edges: currentEdges
-      };
-      
-      await updateCanvas(projectId, canvasToSave);
-      
-    } catch (error) {
-      console.error('[ArricchisciEditor] Errore salvataggio canvas:', error);
-      alert('Errore durante il salvataggio');
-    } finally {
-      setSaving(false);
-    }
-  }, [projectId]);
-
-  const handleExecute = useCallback(async (nodeId, options = {}) => {
-    setShowExecutionModal(true);
-    setIsExecuting(true);
-    setExecutionResult(null);
-    
-    try {
-      const currentNodes = nodesRef.current;
-      
-      if (currentNodes.length === 0) {
-        throw new Error('Canvas vuoto. Aggiungi nodi prima di eseguire.');
-      }
-      
-      const sourceNodes = currentNodes.filter(n => n.type === 'project_source' || n.type === 'file_source');
-      if (sourceNodes.length === 0) {
-        throw new Error('Aggiungi almeno una sorgente dati (progetto o file).');
-      }
-      
-      const apiNodes = currentNodes.filter(n => n.type === 'api_enrich');
-      if (apiNodes.length === 0) {
-        throw new Error('Aggiungi almeno un nodo API Enrich.');
-      }
-      
-      // Salva prima di eseguire
-      await handleSaveCanvas();
-      
-      // Esegui con formato selezionato e force_recalculate
-      const response = await executeProjectQuery(projectId, { 
-        format: exportFormat,
-        force_recalculate: options.force_recalculate || false
-      });
-      
-      setExecutionResult(response);
-      
-    } catch (error) {
-      console.error('[ArricchisciEditor] Errore esecuzione:', error);
-      setExecutionResult({
-        success: false,
-        message: error.response?.data?.detail || error.message || 'Errore esecuzione arricchimento'
-      });
-    } finally {
-      setIsExecuting(false);
-    }
-  }, [projectId, handleSaveCanvas, exportFormat]);
+  // ===== EDGE & DRAG HANDLERS =====
 
   const onConnect = useCallback((params) => {
     setEdges((eds) => addEdge({ ...params, ...defaultEdgeOptions }, eds));
+  }, [setEdges]);
+
+  const onEdgeContextMenu = useCallback((event, edge) => {
+    event.preventDefault();
+    if (window.confirm('Eliminare questo collegamento?')) {
+      setEdges((eds) => eds.filter((e) => e.id !== edge.id));
+    }
   }, [setEdges]);
 
   const onDragStart = (event, nodeType, nodeData = {}) => {
@@ -521,18 +461,12 @@ const ArricchisciEditorContent = () => {
   const onDrop = useCallback(
     (event) => {
       event.preventDefault();
-
       const nodeType = event.dataTransfer.getData('application/reactflow');
       const nodeDataStr = event.dataTransfer.getData('nodeData');
-
       if (!nodeType) return;
 
       const nodeData = nodeDataStr ? JSON.parse(nodeDataStr) : {};
-      const position = screenToFlowPosition({ 
-        x: event.clientX, 
-        y: event.clientY 
-      });
-
+      const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
       const newNodeId = `${nodeType}_${Date.now()}`;
       let newNode;
 
@@ -542,7 +476,7 @@ const ArricchisciEditorContent = () => {
           type: 'project_source',
           position,
           data: { 
-            source_project_id: nodeData.source_project_id,
+            source_project_id: nodeData.source_project_id || nodeData.id,
             columns: [],
             onChange: (val) => handleUpdateProjectSource(newNodeId, val),
             onUpdateColumns: handleUpdateProjectSourceColumns,
@@ -555,7 +489,7 @@ const ArricchisciEditorContent = () => {
           type: 'file_source',
           position,
           data: { 
-            file_source_id: nodeData.id,
+            file_source_id: nodeData.file_source_id || nodeData.id,
             columns: [],
             onUpdateColumns: handleUpdateFileSourceColumns,
             onDelete: handleDeleteNode
@@ -566,35 +500,7 @@ const ArricchisciEditorContent = () => {
           id: newNodeId,
           type: 'api_enrich',
           position,
-          data: {
-            api_id: '',
-            param_mapping: {},
-            columns: [],
-            onDelete: handleDeleteNode
-          }
-        };
-      } else if (nodeType === 'result') {
-        // Controlla se esiste già un nodo risultato
-        if (nodesRef.current.some(n => n.type === 'result')) {
-          alert('Puoi avere solo un nodo risultato per progetto');
-          return;
-        }
-        
-        newNode = {
-          id: newNodeId,
-          type: 'result',
-          position,
-          data: {
-            isArricchisci: true,
-            fileName: 'output',
-            format: 'csv',
-            availableColumns: [],
-            onUpdateFileName: handleUpdateResultFileName,
-            onUpdateFormat: handleUpdateResultFormat,
-            onUpdateGeomColumn: handleUpdateResultGeomColumn,
-            onExecute: handleExecute,
-            onDelete: handleDeleteNode
-          }
+          data: { api_id: '', param_mapping: {}, columns: [], onDelete: handleDeleteNode }
         };
       }
 
@@ -602,26 +508,17 @@ const ArricchisciEditorContent = () => {
         setNodes((nds) => nds.concat(newNode));
       }
     },
-    [screenToFlowPosition, setNodes, handleUpdateProjectSource, handleUpdateProjectSourceColumns, handleUpdateFileSourceColumns, handleDeleteNode, handleUpdateResultFileName, handleUpdateResultFormat, handleUpdateResultGeomColumn, handleExecute]
+    [screenToFlowPosition, setNodes, handleUpdateProjectSource, handleUpdateProjectSourceColumns, handleUpdateFileSourceColumns]
   );
 
-  const onEdgeContextMenu = useCallback((event, edge) => {
-    event.preventDefault();
-    if (window.confirm('Eliminare questo collegamento?')) {
-      setEdges((eds) => eds.filter((e) => e.id !== edge.id));
-    }
-  }, [setEdges]);
+  // ===== RENDER =====
 
-  const handleBack = () => {
-    navigate('/');
-  };
+  const handleBack = () => navigate('/');
 
-  // Loading state
   if (loading) {
-    return <div className="arricchisci-loading">⏳ Caricamento progetto...</div>;
+    return <div className="arricchisci-loading">Caricamento progetto...</div>;
   }
 
-  // Error state
   if (!project) {
     return (
       <div className="arricchisci-error">
@@ -633,14 +530,14 @@ const ArricchisciEditorContent = () => {
 
   return (
     <div className="arricchisci-editor">
-      {/* ===== TOOLBAR ===== */}
+      {/* TOOLBAR */}
       <div className="arricchisci-toolbar">
         <div className="arricchisci-toolbar__left">
-          <button 
-            className="arricchisci-toolbar__btn arricchisci-toolbar__btn--back"
-            onClick={handleBack}
-          >
+          <button className="arricchisci-toolbar__btn arricchisci-toolbar__btn--back" onClick={handleBack}>
             ← Indietro
+          </button>
+          <button className="arricchisci-toolbar__btn arricchisci-toolbar__btn--api" onClick={() => navigate('/api-connections')}>
+            🔌 Gestione API
           </button>
         </div>
         
@@ -650,160 +547,91 @@ const ArricchisciEditorContent = () => {
         </div>
         
         <div className="arricchisci-toolbar__right">
-          <button 
-            className="arricchisci-toolbar__btn arricchisci-toolbar__btn--save"
-            onClick={handleSaveCanvas}
-            disabled={saving}
-          >
-            {saving ? '⏳ Salvataggio...' : '💾 Salva'}
+          <button className="arricchisci-toolbar__btn arricchisci-toolbar__btn--api-node" onClick={handleAddApiEnrichNode}>
+            🔗 + API Enrich
           </button>
-          <button 
-            className="arricchisci-toolbar__btn arricchisci-toolbar__btn--execute"
-            onClick={() => setShowExecutionModal(true)}
-          >
-            ▶ Esegui
+          <button className="arricchisci-toolbar__btn arricchisci-toolbar__btn--output" onClick={handleAddResultNode}>
+            📁 Output
+          </button>
+          <button className="arricchisci-toolbar__btn arricchisci-toolbar__btn--save" onClick={handleSaveCanvas} disabled={saving}>
+            {saving ? 'Salvataggio...' : '💾 Salva'}
           </button>
         </div>
       </div>
 
-      {/* ===== MAIN CONTENT ===== */}
+      {/* MAIN */}
       <div className="arricchisci-main">
         {/* Sidebar */}
         <div className="arricchisci-sidebar">
-          {/* Sorgenti Dati */}
-          <div className="arricchisci-sidebar__section">
-            <div className="arricchisci-sidebar__section-title">
-              📊 Sorgente Dati
-            </div>
-            
+          <div className="arricchisci-sidebar__header">
+            <h3 className="arricchisci-sidebar__title">📊 Sorgenti Dati</h3>
+            <p className="arricchisci-sidebar__subtitle">Trascina un progetto nel canvas</p>
+          </div>
+          
+          <div className="arricchisci-sidebar__sources">
             {availableSources.length === 0 ? (
               <div className="arricchisci-sidebar__empty">
-                Nessun progetto disponibile.<br/>
-                Crea prima un progetto Estrai o Manipola.
+                Nessun progetto disponibile.<br />Crea prima un progetto Estrai o Manipola.
               </div>
             ) : (
               availableSources.map((proj) => (
                 <div
                   key={proj.id}
-                  className={`arricchisci-sidebar__source-item arricchisci-sidebar__source-item--${proj.project_type}`}
+                  className="arricchisci-sidebar__source-item"
                   draggable
-                  onDragStart={(e) => onDragStart(e, 'project_source', { 
-                    source_project_id: proj.id 
-                  })}
+                  onDragStart={(e) => onDragStart(e, 'project_source', { source_project_id: proj.id, id: proj.id })}
                 >
-                  <div className="arricchisci-sidebar__source-header">
-                    <span>{proj.project_type === 'manipola' ? '🔄' : '📥'}</span>
-                    <span>{proj.name}</span>
-                  </div>
-                  <div className="arricchisci-sidebar__source-type">
-                    {proj.project_type === 'manipola' ? 'Manipola' : 'Estrai'}
-                  </div>
+                  <span className="arricchisci-sidebar__source-icon">{proj.project_type === 'manipola' ? '🔄' : '📊'}</span>
+                  <span className="arricchisci-sidebar__source-name">{proj.name}</span>
+                  <span className={`arricchisci-sidebar__source-badge arricchisci-sidebar__source-badge--${proj.project_type || 'estrai'}`}>
+                    {(proj.project_type || 'estrai').toUpperCase()}
+                  </span>
                 </div>
               ))
             )}
           </div>
 
-          {/* File Esterni */}
-          <div className="arricchisci-sidebar__section">
-            <div className="arricchisci-sidebar__section-title">
-              📁 File Esterni
-            </div>
-            
+          <div className="arricchisci-sidebar__header arricchisci-sidebar__header--files">
+            <h3 className="arricchisci-sidebar__title">📁 File Esterni</h3>
+            <p className="arricchisci-sidebar__subtitle">Trascina un file nel canvas</p>
+          </div>
+          
+          <div className="arricchisci-sidebar__sources">
             {availableFiles.length === 0 ? (
               <div className="arricchisci-sidebar__empty">
-                Nessun file caricato.<br/>
-                Carica file dalla sezione File Manager.
+                Nessun file disponibile.<br /><a href="/files" style={{color: '#FF6B35'}}>Carica file esterni</a>
               </div>
             ) : (
-              availableFiles.map((file) => {
-                const icon = file.format === 'csv' ? '📄' : 
-                           file.format === 'xlsx' ? '📊' : 
-                           ['geojson', 'gpkg', 'shp', 'gdb'].includes(file.format) ? '🗺️' : '📁';
-                return (
-                  <div
-                    key={file.id}
-                    className="arricchisci-sidebar__source-item arricchisci-sidebar__source-item--file"
-                    draggable
-                    onDragStart={(e) => onDragStart(e, 'file_source', file)}
-                  >
-                    <div className="arricchisci-sidebar__source-header">
-                      <span>{icon}</span>
-                      <span>{file.name}</span>
-                    </div>
-                    <div className="arricchisci-sidebar__source-type">
-                      {file.format?.toUpperCase()} • {file.row_count?.toLocaleString()} righe
-                    </div>
-                  </div>
-                );
-              })
+              availableFiles.map((file) => (
+                <div
+                  key={file.id}
+                  className="arricchisci-sidebar__source-item arricchisci-sidebar__source-item--file"
+                  draggable
+                  onDragStart={(e) => onDragStart(e, 'file_source', { file_source_id: file.id, id: file.id })}
+                >
+                  <span className="arricchisci-sidebar__source-icon">
+                    {file.format === 'csv' ? '📄' : file.format === 'xlsx' ? '📊' : ['geojson', 'gpkg', 'shp', 'gdb'].includes(file.format) ? '🗺️' : '📁'}
+                  </span>
+                  <span className="arricchisci-sidebar__source-name">{file.name}</span>
+                  <span className="arricchisci-sidebar__source-badge arricchisci-sidebar__source-badge--file">{file.format?.toUpperCase()}</span>
+                </div>
+              ))
             )}
           </div>
 
-          {/* API Enrichment */}
-          <div className="arricchisci-sidebar__section">
-            <div className="arricchisci-sidebar__section-title">
-              🔗 Arricchimento
-            </div>
-            
-            <div
-              className="arricchisci-sidebar__api-item"
-              draggable
-              onDragStart={(e) => onDragStart(e, 'api_enrich', {})}
-            >
-              <div className="arricchisci-sidebar__api-header">
-                <span>🔗</span>
-                <span>API Enrich</span>
-              </div>
-              <div className="arricchisci-sidebar__api-desc">
-                Arricchisci con API esterna
-              </div>
-            </div>
-          </div>
-
-          {/* Output */}
-          <div className="arricchisci-sidebar__section">
-            <div className="arricchisci-sidebar__section-title">
-              📁 Output
-            </div>
-            
-            <div
-              className="arricchisci-sidebar__output-item"
-              draggable
-              onDragStart={(e) => onDragStart(e, 'result', {})}
-            >
-              <div className="arricchisci-sidebar__api-header">
-                <span>📁</span>
-                <span>Output</span>
-              </div>
-              <div className="arricchisci-sidebar__api-desc">
-                Risultato finale
-              </div>
-            </div>
-          </div>
-
-          {/* Help */}
-          <div className="arricchisci-sidebar__section">
-            <div className="arricchisci-sidebar__help">
-              <div className="arricchisci-sidebar__help-title">
-                💡 Come funziona
-              </div>
-              <ol className="arricchisci-sidebar__help-list">
-                <li>Trascina una sorgente dati</li>
-                <li>Aggiungi nodi API Enrich</li>
-                <li>Collega i nodi</li>
-                <li>Configura il mapping</li>
-                <li>Esegui!</li>
-              </ol>
-            </div>
+          <div className="arricchisci-sidebar__actions">
+            <h4 className="arricchisci-sidebar__actions-title">Azioni Rapide</h4>
+            <button className="arricchisci-sidebar__action-btn arricchisci-sidebar__action-btn--api" onClick={handleAddApiEnrichNode}>
+              🔗 Aggiungi API Enrich
+            </button>
+            <button className="arricchisci-sidebar__action-btn arricchisci-sidebar__action-btn--output" onClick={handleAddResultNode}>
+              📁 Aggiungi Output
+            </button>
           </div>
         </div>
 
-        {/* Canvas Area */}
-        <div 
-          className="arricchisci-canvas"
-          onDrop={onDrop} 
-          onDragOver={onDragOver}
-        >
+        {/* Canvas */}
+        <div className="arricchisci-canvas" onDrop={onDrop} onDragOver={onDragOver}>
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -836,157 +664,16 @@ const ArricchisciEditorContent = () => {
         </div>
       </div>
 
-      {/* ===== EXECUTION MODAL ===== */}
-      {showExecutionModal && (
-        <div className="modal-overlay" onClick={() => !isExecuting && setShowExecutionModal(false)}>
-          <div 
-            className="modal arricchisci-execution-modal" 
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="arricchisci-execution-modal__title">
-              🔗 Esegui Arricchimento
-            </h3>
-
-            {isExecuting ? (
-              <div className="arricchisci-execution-modal__loading">
-                <div className="arricchisci-execution-modal__spinner">⏳</div>
-                <p className="arricchisci-execution-modal__loading-text">
-                  Esecuzione arricchimento in corso...
-                </p>
-              </div>
-            ) : executionResult ? (
-              <div>
-                {executionResult.success ? (
-                  <div>
-                    <div className="arricchisci-execution-modal__success">
-                      <div className="arricchisci-execution-modal__success-icon">✅</div>
-                      <h4 className="arricchisci-execution-modal__success-title">
-                        Arricchimento completato!
-                      </h4>
-                      <p className="arricchisci-execution-modal__success-message">
-                        {executionResult.message || 'Arricchimento eseguito con successo'}
-                      </p>
-                    </div>
-
-                    <div className="arricchisci-execution-modal__stats">
-                      <div className="arricchisci-execution-modal__stat">
-                        <div className="arricchisci-execution-modal__stat-label">
-                          Righe processate
-                        </div>
-                        <div className="arricchisci-execution-modal__stat-value">
-                          {(executionResult.rows_count || executionResult.rows_processed || 0).toLocaleString()}
-                        </div>
-                      </div>
-                      <div className="arricchisci-execution-modal__stat">
-                        <div className="arricchisci-execution-modal__stat-label">
-                          Colonne output
-                        </div>
-                        <div className="arricchisci-execution-modal__stat-value">
-                          {executionResult.columns?.length || 0}
-                        </div>
-                      </div>
-                    </div>
-
-                    {executionResult.output_file && (
-                      <div className="arricchisci-execution-modal__output">
-                        <div className="arricchisci-execution-modal__output-label">
-                          📄 File generato
-                        </div>
-                        <div className="arricchisci-execution-modal__output-path">
-                          {executionResult.output_file}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* ========== DOWNLOAD BUTTON ========== */}
-                    <a 
-                      href={getDownloadUrl(projectId)}
-                      className="arricchisci-execution-modal__download-btn"
-                      download
-                    >
-                      ⬇️ Scarica File
-                    </a>
-
-                    {executionResult.columns && executionResult.columns.length > 0 && (
-                      <div className="arricchisci-execution-modal__columns">
-                        <div className="arricchisci-execution-modal__columns-label">
-                          Colonne output ({executionResult.columns.length}):
-                        </div>
-                        <div className="arricchisci-execution-modal__columns-list">
-                          {executionResult.columns.map((col, idx) => (
-                            <span 
-                              key={idx} 
-                              className="arricchisci-execution-modal__column-tag"
-                            >
-                              {col}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="arricchisci-execution-modal__error">
-                    <div className="arricchisci-execution-modal__error-icon">❌</div>
-                    <h4 className="arricchisci-execution-modal__error-title">
-                      Errore esecuzione
-                    </h4>
-                    <p className="arricchisci-execution-modal__error-message">
-                      {executionResult.message || executionResult.error || 'Errore sconosciuto'}
-                    </p>
-                  </div>
-                )}
-
-                <div className="arricchisci-execution-modal__actions">
-                  <button 
-                    className="arricchisci-execution-modal__btn arricchisci-execution-modal__btn--close"
-                    onClick={() => {
-                      setShowExecutionModal(false);
-                      setExecutionResult(null);
-                    }}
-                  >
-                    Chiudi
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '10px', fontWeight: '500' }}>
-                    Formato output:
-                  </label>
-                  <div className="arricchisci-execution-modal__format-grid">
-                    {['csv', 'xlsx', 'geojson', 'parquet'].map(fmt => (
-                      <div
-                        key={fmt}
-                        className={`arricchisci-execution-modal__format-option ${exportFormat === fmt ? 'arricchisci-execution-modal__format-option--selected' : ''}`}
-                        onClick={() => setExportFormat(fmt)}
-                      >
-                        <div className="arricchisci-execution-modal__format-label">{fmt}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="arricchisci-execution-modal__actions">
-                  <button 
-                    className="arricchisci-execution-modal__btn arricchisci-execution-modal__btn--cancel"
-                    onClick={() => setShowExecutionModal(false)}
-                  >
-                    Annulla
-                  </button>
-                  <button 
-                    className="arricchisci-execution-modal__btn arricchisci-execution-modal__btn--execute"
-                    onClick={() => handleExecute(null)}
-                  >
-                    ▶ Esegui
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
+      {/* EXECUTION MODAL */}
+      <ExecutionModal
+        isOpen={execution.showModal}
+        onClose={() => execution.closeModal()}
+        isExecuting={execution.isExecuting}
+        result={execution.result}
+        downloadUrl={execution.downloadUrl}
+        title="🔗 Esegui Arricchimento"
+        projectType="arricchisci"
+      />
     </div>
   );
 };

@@ -1,0 +1,9 @@
+{
+  "id": "test1_20260119_020250_027abb78",
+  "name": "test1",
+  "description": "",
+  "project_type": "estrai",
+  "default_connection_id": "catasto_20260119_020236_a2030f3e",
+  "created_at": "2026-01-19T02:02:50.919157",
+  "updated_at": "2026-01-19T02:12:19.041489"
+}

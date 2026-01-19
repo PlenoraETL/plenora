@@ -2,8 +2,6 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import ReactFlow, { 
   Background, 
   Controls, 
-  applyEdgeChanges, 
-  applyNodeChanges,
   addEdge,
   useReactFlow,
   ReactFlowProvider,
@@ -17,8 +15,6 @@ import {
   listProjects, 
   getProject, 
   updateCanvas,
-  executeProjectQuery,
-  previewProject,
   getDownloadUrl
 } from '../api/client';
 import { getFiles } from '../api/files';
@@ -28,7 +24,9 @@ import FileSourceNode from '../components/FileSourceNode';
 import TransformNode from '../components/TransformNode';
 import ResultNode from '../components/ResultNode';
 import PreviewModal from '../components/PreviewModal';
+import ExecutionModal from '../components/ExecutionModal';
 import { useSchemaInference } from '../hooks/useSchemaInference';
+import { usePreview, useExecution, useCanvasKeyboard } from '../hooks';
 import '../styles/ManipolaEditor.css';
 
 const nodeTypes = {
@@ -57,7 +55,6 @@ const ManipolaEditorContent = () => {
   const { id: projectId } = useParams();
   const navigate = useNavigate();
   const { screenToFlowPosition } = useReactFlow();
-  const reactFlowInstance = useReactFlow();
   
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -66,25 +63,12 @@ const ManipolaEditorContent = () => {
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [executing, setExecuting] = useState(false);
-  
-  // Stati per modal esecuzione
-  const [showExecutionModal, setShowExecutionModal] = useState(false);
-  const [executionResult, setExecutionResult] = useState(null);
-  const [isExecuting, setIsExecuting] = useState(false);
-  
-  // ✅ Stati per Preview Modal
-  const [showPreviewModal, setShowPreviewModal] = useState(false);
-  const [previewData, setPreviewData] = useState(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewError, setPreviewError] = useState(null);
   
   // ===== SCHEMA INFERENCE =====
   const { 
     schemas, 
     loading: schemasLoading, 
-    refreshSchemas, 
-    getNodeSchema 
+    refreshSchemas
   } = useSchemaInference(projectId);
   
   const nodesRef = useRef(nodes);
@@ -95,17 +79,87 @@ const ManipolaEditorContent = () => {
     edgesRef.current = edges;
   }, [nodes, edges]);
 
-  // ===== PROPAGA SCHEMI AI NODI TRANSFORM =====
-  // Quando cambiano gli schemi, aggiorna le colonne nei nodi transform
+  // ===== SALVATAGGIO SILENZIOSO =====
+  const handleSaveCanvasQuiet = useCallback(async () => {
+    try {
+      const currentNodes = nodesRef.current;
+      const currentEdges = edgesRef.current;
+      
+      const canvasToSave = {
+        nodes: currentNodes.map(node => ({
+          id: node.id,
+          type: node.type,
+          position: node.position,
+          data: {
+            source_project_id: node.data?.source_project_id,
+            file_source_id: node.data?.file_source_id,
+            columns: node.data?.columns,
+            transform_op: node.data?.transform_op,
+            config: node.data?.config,
+            fileName: node.data?.fileName,
+            format: node.data?.format,
+            geomColumn: node.data?.geomColumn,
+            group_by_enabled: node.data?.group_by_enabled,
+            group_by_columns: node.data?.group_by_columns,
+            aggregations: node.data?.aggregations
+          }
+        })),
+        edges: currentEdges
+      };
+      
+      await updateCanvas(projectId, canvasToSave);
+      
+    } catch (error) {
+      console.error('[ManipolaEditor] Errore salvataggio canvas silenzioso:', error);
+    }
+  }, [projectId]);
+
+  // ===== CUSTOM HOOKS =====
+  
+  // Hook Preview
+  const preview = usePreview(projectId, handleSaveCanvasQuiet);
+
+  // Hook Execution
+  const execution = useExecution(projectId, {
+    onBeforeExecute: async () => {
+      const currentNodes = nodesRef.current;
+      
+      if (currentNodes.length === 0) {
+        throw new Error('Canvas vuoto. Aggiungi nodi prima di eseguire.');
+      }
+      
+      const resultNode = currentNodes.find(n => n.type === 'result');
+      if (!resultNode) {
+        throw new Error('Aggiungi un nodo Output prima di eseguire.');
+      }
+      
+      const sourceNodes = currentNodes.filter(n => n.type === 'project_source' || n.type === 'file_source');
+      if (sourceNodes.length === 0) {
+        throw new Error('Aggiungi almeno una sorgente dati (progetto o file).');
+      }
+      
+      await handleSaveCanvas();
+    }
+  });
+
+  // Hook Keyboard (Delete/Backspace)
+  useCanvasKeyboard({
+    nodes,
+    edges,
+    onDeleteNode: handleDeleteNode,
+    setEdges
+  });
+
+  // ===== EFFECTS =====
+
+  // Propaga schemi ai nodi transform
   useEffect(() => {
     if (!schemas || Object.keys(schemas).length === 0) return;
     
     setNodes((nds) =>
       nds.map((node) => {
-        // Per ogni nodo, se ha uno schema inferito, aggiorna le colonne
         const nodeSchema = schemas[node.id];
         if (nodeSchema && nodeSchema.length > 0) {
-          // Converti schema in formato colonne
           const columns = nodeSchema.map(col => ({
             name: col.name,
             type: col.type,
@@ -114,7 +168,6 @@ const ManipolaEditorContent = () => {
             is_calculated: col.is_calculated
           }));
           
-          // Aggiorna solo se diverso
           const currentCols = JSON.stringify(node.data?.columns || []);
           const newCols = JSON.stringify(columns);
           
@@ -133,12 +186,11 @@ const ManipolaEditorContent = () => {
     );
   }, [schemas, setNodes]);
 
-  // Aggiorna availableColumns nel ResultNode quando cambiano i nodi sorgente
+  // Aggiorna availableColumns nel ResultNode
   useEffect(() => {
     const resultNode = nodes.find(n => n.type === 'result');
     if (!resultNode) return;
     
-    // Raccogli colonne da tutti i nodi usando gli schemi inferiti
     const availableColumns = [];
     
     for (const node of nodes) {
@@ -152,38 +204,21 @@ const ManipolaEditorContent = () => {
       }
     }
     
-    // Fallback: se non ci sono schemi, usa i dati locali dei nodi
+    // Fallback ai dati locali
     if (availableColumns.length === 0) {
       for (const node of nodes) {
-        if (node.type === 'project_source' && node.data?.columns) {
+        if ((node.type === 'project_source' || node.type === 'file_source' || node.type === 'transform') && node.data?.columns) {
           for (const col of node.data.columns) {
             availableColumns.push({
               name: col.name || col,
               type: col.type || 'str',
-              source: node.data?.source_project_id || 'source'
-            });
-          }
-        } else if (node.type === 'file_source' && node.data?.columns) {
-          for (const col of node.data.columns) {
-            availableColumns.push({
-              name: col.name || col,
-              type: col.type || 'str',
-              source: node.data?.file_source_id || 'file'
-            });
-          }
-        } else if (node.type === 'transform' && node.data?.columns) {
-          for (const col of node.data.columns) {
-            availableColumns.push({
-              name: col.name || col,
-              type: col.type || 'str',
-              source: 'transform'
+              source: node.data?.source_project_id || node.data?.file_source_id || 'transform'
             });
           }
         }
       }
     }
     
-    // Aggiorna solo se le colonne sono cambiate
     const currentColumns = resultNode.data?.availableColumns || [];
     const columnsChanged = JSON.stringify(availableColumns) !== JSON.stringify(currentColumns);
     
@@ -205,138 +240,11 @@ const ManipolaEditorContent = () => {
     }
   }, [nodes, schemas, setNodes]);
 
-  // ===== AGGIORNA CALLBACKS NEI RESULT NODES =====
-  // Necessario perché handlePreview e handleExecute sono definiti dopo handleAddResultNode
-  useEffect(() => {
-    const resultNode = nodes.find(n => n.type === 'result');
-    if (!resultNode) return;
-    
-    // Verifica se i callbacks sono già impostati correttamente
-    if (resultNode.data.onPreview && resultNode.data.onExecute) return;
-    
-    setNodes((nds) =>
-      nds.map((node) => {
-        if (node.type === 'result' && (!node.data.onPreview || !node.data.onExecute)) {
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              onPreview: (nodeId, limit) => {
-                // Questa funzione verrà chiamata con i valori correnti
-                setShowPreviewModal(true);
-                setPreviewLoading(true);
-                setPreviewError(null);
-                setPreviewData(null);
-                
-                handleSaveCanvasQuiet().then(() => {
-                  return previewProject(projectId, limit || 100);
-                }).then((result) => {
-                  if (result.success) {
-                    setPreviewData(result);
-                  } else {
-                    setPreviewError(result.message || 'Errore generazione preview');
-                  }
-                }).catch((error) => {
-                  console.error('[ManipolaEditor] Errore preview:', error);
-                  setPreviewError(error.message || 'Errore durante la preview');
-                }).finally(() => {
-                  setPreviewLoading(false);
-                });
-              },
-              onExecute: (nodeId, options) => {
-                setShowExecutionModal(true);
-                setIsExecuting(true);
-                setExecutionResult(null);
-                
-                const currentNodes = nodesRef.current;
-                
-                if (currentNodes.length === 0) {
-                  setExecutionResult({ success: false, message: 'Canvas vuoto.' });
-                  setIsExecuting(false);
-                  return;
-                }
-                
-                handleSaveCanvasQuiet().then(() => {
-                  return executeProjectQuery(projectId, options || {});
-                }).then((response) => {
-                  setExecutionResult(response);
-                }).catch((error) => {
-                  setExecutionResult({
-                    success: false,
-                    message: error.response?.data?.detail || error.message || 'Errore esecuzione'
-                  });
-                }).finally(() => {
-                  setIsExecuting(false);
-                });
-              }
-            }
-          };
-        }
-        return node;
-      })
-    );
-  }, [nodes, projectId, setNodes]);
-
-  // ===== REFRESH SCHEMI QUANDO CAMBIANO EDGES =====
-  // Debounce per evitare troppe chiamate
-  const refreshTimeoutRef = useRef(null);
-  
-  useEffect(() => {
-    if (refreshTimeoutRef.current) {
-      clearTimeout(refreshTimeoutRef.current);
-    }
-    
-    refreshTimeoutRef.current = setTimeout(() => {
-      if (projectId && edges.length > 0) {
-        // Prima salva, poi refresh schemi
-        handleSaveCanvasQuiet().then(() => {
-          refreshSchemas();
-        });
-      }
-    }, 500);
-    
-    return () => {
-      if (refreshTimeoutRef.current) {
-        clearTimeout(refreshTimeoutRef.current);
-      }
-    };
-  }, [edges.length, projectId]);
-
-  // Gestione Delete/Backspace
-  useEffect(() => {
-    const handleKeyDown = (event) => {
-      const target = event.target;
-      if (target.tagName === 'INPUT' || 
-          target.tagName === 'TEXTAREA' || 
-          target.isContentEditable) {
-        return;
-      }
-      
-      if (event.key === 'Delete' || event.key === 'Backspace') {
-        const selectedNodes = nodes.filter(n => n.selected);
-        const selectedEdges = edges.filter(e => e.selected);
-        
-        if (selectedNodes.length > 0) {
-          selectedNodes.forEach(node => {
-            handleDeleteNode(node.id);
-          });
-        }
-        
-        if (selectedEdges.length > 0) {
-          setEdges((eds) => 
-            eds.filter(edge => !selectedEdges.find(e => e.id === edge.id))
-          );
-        }
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [nodes, edges, setEdges]);
-
   useEffect(() => {
     loadProjectAndSources();
   }, [projectId]);
+
+  // ===== DATA LOADING =====
 
   const loadProjectAndSources = async () => {
     try {
@@ -345,50 +253,17 @@ const ManipolaEditorContent = () => {
       const projectData = await getProject(projectId);
       setProject(projectData);
       
+      // Carica canvas se presente
       if (projectData.canvas && projectData.canvas.nodes) {
         const loadedNodes = projectData.canvas.nodes.map(node => {
-          if (node.type === 'result') {
+          if (node.type === 'project_source') {
             return {
               ...node,
               data: {
-                isManipulate: true,
-                fileName: node.data?.fileName || 'output',
-                format: node.data?.format || 'csv',
-                geomColumn: node.data?.geomColumn || null,
-                availableColumns: [], // Sarà aggiornato dall'useEffect
-                // ✅ GROUP BY fields
-                group_by_enabled: node.data?.group_by_enabled || false,
-                group_by_columns: node.data?.group_by_columns || [],
-                aggregations: node.data?.aggregations || [],
-                // Callbacks
-                onUpdateFileName: handleUpdateResultFileName,
-                onUpdateFormat: handleUpdateResultFormat,
-                onUpdateGeomColumn: handleUpdateGeomColumn,
-                onUpdateGroupBy: handleUpdateGroupBy,
-                onPreview: handlePreview,  // ✅ NEW
-                onExecute: handleExecute,
-                onDelete: handleDeleteNode
-              }
-            };
-          } else if (node.type === 'project_source') {
-            return {
-              ...node,
-              data: {
+                ...node.data,
                 source_project_id: node.data?.source_project_id || '',
                 columns: node.data?.columns || [],
                 onChange: (val) => handleUpdateProjectSource(node.id, val),
-                onUpdateColumns: handleUpdateProjectSourceColumns,
-                onDelete: handleDeleteNode
-              }
-            };
-          } else if (node.type === 'transform') {
-            return {
-              ...node,
-              data: {
-                transform_op: node.data?.transform_op || 'join',
-                config: node.data?.config || {},
-                columns: node.data?.columns || [], // Sarà aggiornato dallo schema inference
-                onChange: (newData) => handleUpdateTransform(node.id, newData),
                 onUpdateColumns: handleUpdateProjectSourceColumns,
                 onDelete: handleDeleteNode
               }
@@ -397,9 +272,44 @@ const ManipolaEditorContent = () => {
             return {
               ...node,
               data: {
+                ...node.data,
                 file_source_id: node.data?.file_source_id || '',
                 columns: node.data?.columns || [],
                 onUpdateColumns: handleUpdateFileSourceColumns,
+                onDelete: handleDeleteNode
+              }
+            };
+          } else if (node.type === 'transform') {
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                transform_op: node.data?.transform_op || 'join',
+                config: node.data?.config || {},
+                columns: node.data?.columns || [],
+                onChange: (newData) => handleUpdateTransform(node.id, newData),
+                onUpdateColumns: handleUpdateProjectSourceColumns,
+                onDelete: handleDeleteNode
+              }
+            };
+          } else if (node.type === 'result') {
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                isManipulate: true,
+                fileName: node.data?.fileName || 'output',
+                format: node.data?.format || 'csv',
+                geomColumn: node.data?.geomColumn || '',
+                group_by_enabled: node.data?.group_by_enabled || false,
+                group_by_columns: node.data?.group_by_columns || [],
+                aggregations: node.data?.aggregations || [],
+                onUpdateFileName: handleUpdateResultFileName,
+                onUpdateFormat: handleUpdateResultFormat,
+                onUpdateGeomColumn: handleUpdateGeomColumn,
+                onUpdateGroupBy: handleUpdateGroupBy,
+                onPreview: () => preview.handlePreview(),
+                onExecute: (options) => execution.handleExecute(options),
                 onDelete: handleDeleteNode
               }
             };
@@ -440,6 +350,8 @@ const ManipolaEditorContent = () => {
     }
   };
 
+  // ===== NODE HANDLERS =====
+
   const handleUpdateProjectSource = useCallback((nodeId, projectSourceId) => {
     setNodes((nds) =>
       nds.map((node) => {
@@ -456,11 +368,10 @@ const ManipolaEditorContent = () => {
       })
     );
     
-    // Refresh schemi dopo cambio sorgente
     setTimeout(() => {
       handleSaveCanvasQuiet().then(() => refreshSchemas());
     }, 100);
-  }, [setNodes, refreshSchemas]);
+  }, [setNodes, refreshSchemas, handleSaveCanvasQuiet]);
 
   const handleUpdateProjectSourceColumns = useCallback((nodeId, columns) => {
     setNodes((nds) =>
@@ -495,11 +406,10 @@ const ManipolaEditorContent = () => {
       })
     );
     
-    // Refresh schemi dopo aggiornamento colonne file
     setTimeout(() => {
       handleSaveCanvasQuiet().then(() => refreshSchemas());
     }, 100);
-  }, [setNodes, refreshSchemas]);
+  }, [setNodes, refreshSchemas, handleSaveCanvasQuiet]);
 
   const handleUpdateTransform = useCallback((nodeId, newData) => {
     setNodes((nds) =>
@@ -517,23 +427,18 @@ const ManipolaEditorContent = () => {
       })
     );
     
-    // Refresh schemi dopo cambio configurazione transform
     setTimeout(() => {
       handleSaveCanvasQuiet().then(() => refreshSchemas());
     }, 300);
-  }, [setNodes, refreshSchemas]);
+  }, [setNodes, refreshSchemas, handleSaveCanvasQuiet]);
+
+  // ===== RESULT NODE HANDLERS =====
 
   const handleUpdateResultFileName = useCallback((nodeId, newFileName) => {
     setNodes((nds) =>
       nds.map((node) => {
         if (node.id === nodeId) {
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              fileName: newFileName
-            }
-          };
+          return { ...node, data: { ...node.data, fileName: newFileName } };
         }
         return node;
       })
@@ -544,13 +449,7 @@ const ManipolaEditorContent = () => {
     setNodes((nds) =>
       nds.map((node) => {
         if (node.id === nodeId) {
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              format: newFormat
-            }
-          };
+          return { ...node, data: { ...node.data, format: newFormat } };
         }
         return node;
       })
@@ -561,20 +460,13 @@ const ManipolaEditorContent = () => {
     setNodes((nds) =>
       nds.map((node) => {
         if (node.id === nodeId) {
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              geomColumn: geomColumn
-            }
-          };
+          return { ...node, data: { ...node.data, geomColumn } };
         }
         return node;
       })
     );
   }, [setNodes]);
 
-  // ✅ NEW: Handler per aggiornare configurazione GROUP BY
   const handleUpdateGroupBy = useCallback((nodeId, groupByConfig) => {
     setNodes((nds) =>
       nds.map((node) => {
@@ -594,54 +486,12 @@ const ManipolaEditorContent = () => {
     );
   }, [setNodes]);
 
-  // Calcola colonne disponibili dai nodi sorgente (ProjectSource e Transform)
-  const getAvailableColumns = useCallback(() => {
-    const columns = [];
-    
-    // Prima prova con gli schemi inferiti
-    for (const nodeId of Object.keys(schemas)) {
-      const nodeSchema = schemas[nodeId] || [];
-      for (const col of nodeSchema) {
-        columns.push({
-          name: col.name,
-          type: col.type || 'str',
-          source: nodeId
-        });
-      }
-    }
-    
-    // Fallback ai dati locali
-    if (columns.length === 0) {
-      for (const node of nodesRef.current) {
-        if (node.type === 'project_source' && node.data?.columns) {
-          for (const col of node.data.columns) {
-            columns.push({
-              name: col.name || col,
-              type: col.type || 'str',
-              source: node.data?.source_project_id || 'source'
-            });
-          }
-        } else if (node.type === 'transform' && node.data?.columns) {
-          for (const col of node.data.columns) {
-            columns.push({
-              name: col.name || col,
-              type: col.type || 'str',
-              source: 'transform'
-            });
-          }
-        }
-      }
-    }
-    
-    return columns;
-  }, [schemas]);
-
-  const handleDeleteNode = useCallback((nodeId) => {
+  function handleDeleteNode(nodeId) {
     setNodes((nds) => nds.filter((node) => node.id !== nodeId));
     setEdges((eds) => eds.filter((edge) => 
       edge.source !== nodeId && edge.target !== nodeId
     ));
-  }, [setNodes, setEdges]);
+  }
 
   const handleAddTransformNode = useCallback(() => {
     const newNodeId = `transform_${Date.now()}`;
@@ -655,7 +505,7 @@ const ManipolaEditorContent = () => {
       data: {
         transform_op: 'join',
         config: {},
-        columns: [], // Sarà popolato dallo schema inference
+        columns: [],
         onChange: (newData) => handleUpdateTransform(newNodeId, newData),
         onUpdateColumns: handleUpdateProjectSourceColumns,
         onDelete: handleDeleteNode
@@ -663,7 +513,7 @@ const ManipolaEditorContent = () => {
     };
 
     setNodes((nds) => nds.concat(newNode));
-  }, [setNodes, handleUpdateTransform, handleUpdateProjectSourceColumns, handleDeleteNode]);
+  }, [setNodes, handleUpdateTransform, handleUpdateProjectSourceColumns]);
 
   const handleAddResultNode = useCallback(() => {
     const currentNodes = nodesRef.current;
@@ -680,65 +530,24 @@ const ManipolaEditorContent = () => {
         isManipulate: true,
         fileName: 'output',
         format: 'csv',
-        availableColumns: getAvailableColumns(),
-        // ✅ GROUP BY fields
+        availableColumns: [],
         group_by_enabled: false,
         group_by_columns: [],
         aggregations: [],
-        // Callbacks - questi verranno sovrascritti dall'useEffect che aggiorna availableColumns
         onUpdateFileName: handleUpdateResultFileName,
         onUpdateFormat: handleUpdateResultFormat,
         onUpdateGeomColumn: handleUpdateGeomColumn,
         onUpdateGroupBy: handleUpdateGroupBy,
-        onPreview: null,  // Sarà impostato dopo
-        onExecute: null,  // Sarà impostato dopo
+        onPreview: () => preview.handlePreview(),
+        onExecute: (options) => execution.handleExecute(options),
         onDelete: handleDeleteNode
       }
     };
 
     setNodes((nds) => nds.concat(newNode));
-  }, [setNodes, handleUpdateResultFileName, handleUpdateResultFormat, handleUpdateGeomColumn, handleUpdateGroupBy, handleDeleteNode, getAvailableColumns]);
+  }, [setNodes, handleUpdateResultFileName, handleUpdateResultFormat, handleUpdateGeomColumn, handleUpdateGroupBy, preview, execution]);
 
-  // Salvataggio silenzioso (senza feedback UI)
-  const handleSaveCanvasQuiet = useCallback(async () => {
-    try {
-      const currentNodes = nodesRef.current;
-      const currentEdges = edgesRef.current;
-      
-      const canvasToSave = {
-        nodes: currentNodes.map(node => ({
-          id: node.id,
-          type: node.type,
-          position: node.position,
-          data: {
-            // Project source
-            source_project_id: node.data?.source_project_id,
-            // File source
-            file_source_id: node.data?.file_source_id,
-            // Common
-            columns: node.data?.columns,
-            // Transform
-            transform_op: node.data?.transform_op,
-            config: node.data?.config,
-            // Result
-            fileName: node.data?.fileName,
-            format: node.data?.format,
-            geomColumn: node.data?.geomColumn,
-            // ✅ GROUP BY fields
-            group_by_enabled: node.data?.group_by_enabled,
-            group_by_columns: node.data?.group_by_columns,
-            aggregations: node.data?.aggregations
-          }
-        })),
-        edges: currentEdges
-      };
-      
-      await updateCanvas(projectId, canvasToSave);
-      
-    } catch (error) {
-      console.error('[ManipolaEditor] Errore salvataggio canvas silenzioso:', error);
-    }
-  }, [projectId]);
+  // ===== SAVE =====
 
   const handleSaveCanvas = useCallback(async () => {
     try {
@@ -752,80 +561,24 @@ const ManipolaEditorContent = () => {
     }
   }, [handleSaveCanvasQuiet]);
 
-  const handleExecute = useCallback(async (nodeId, options = {}) => {
-    setShowExecutionModal(true);
-    setIsExecuting(true);
-    setExecutionResult(null);
-    
-    try {
-      const currentNodes = nodesRef.current;
-      
-      if (currentNodes.length === 0) {
-        throw new Error('Canvas vuoto. Aggiungi nodi prima di eseguire.');
-      }
-      
-      const resultNode = currentNodes.find(n => n.type === 'result');
-      if (!resultNode) {
-        throw new Error('Aggiungi un nodo Output prima di eseguire.');
-      }
-      
-      const sourceNodes = currentNodes.filter(n => n.type === 'project_source' || n.type === 'file_source');
-      if (sourceNodes.length === 0) {
-        throw new Error('Aggiungi almeno una sorgente dati (progetto o file).');
-      }
-      
-      await handleSaveCanvas();
-      
-      const response = await executeProjectQuery(projectId, options);
-      
-      setExecutionResult(response);
-      
-    } catch (error) {
-      console.error('[ManipolaEditor] Errore esecuzione pipeline:', error);
-      setExecutionResult({
-        success: false,
-        message: error.response?.data?.detail || error.message || 'Errore esecuzione pipeline'
-      });
-    } finally {
-      setIsExecuting(false);
-    }
-  }, [projectId, handleSaveCanvas]);
-
-  // ✅ Handler per Preview
-  const handlePreview = useCallback(async (nodeId, limit = 100) => {
-    setShowPreviewModal(true);
-    setPreviewLoading(true);
-    setPreviewError(null);
-    setPreviewData(null);
-    
-    try {
-      // Prima salva il canvas
-      await handleSaveCanvasQuiet();
-      
-      // Poi chiama la preview API
-      const result = await previewProject(projectId, limit);
-      
-      if (result.success) {
-        setPreviewData(result);
-      } else {
-        setPreviewError(result.message || 'Errore generazione preview');
-      }
-    } catch (error) {
-      console.error('[ManipolaEditor] Errore preview:', error);
-      setPreviewError(error.message || 'Errore durante la preview');
-    } finally {
-      setPreviewLoading(false);
-    }
-  }, [projectId, handleSaveCanvasQuiet]);
+  // ===== EDGE HANDLERS =====
 
   const onConnect = useCallback((params) => {
     setEdges((eds) => addEdge({ ...params, ...defaultEdgeOptions }, eds));
     
-    // Refresh schemi dopo nuova connessione
     setTimeout(() => {
       handleSaveCanvasQuiet().then(() => refreshSchemas());
     }, 100);
-  }, [setEdges, refreshSchemas]);
+  }, [setEdges, refreshSchemas, handleSaveCanvasQuiet]);
+
+  const onEdgeContextMenu = useCallback((event, edge) => {
+    event.preventDefault();
+    if (window.confirm('Eliminare questo collegamento?')) {
+      setEdges((eds) => eds.filter((e) => e.id !== edge.id));
+    }
+  }, [setEdges]);
+
+  // ===== DRAG & DROP =====
 
   const onDragStart = (event, type, data) => {
     event.dataTransfer.setData('application/reactflow', type);
@@ -887,32 +640,24 @@ const ManipolaEditorContent = () => {
       if (newNode) {
         setNodes((nds) => nds.concat(newNode));
         
-        // Refresh schemi dopo aggiunta nodo
         setTimeout(() => {
           handleSaveCanvasQuiet().then(() => refreshSchemas());
         }, 100);
       }
     },
-    [screenToFlowPosition, setNodes, handleUpdateProjectSource, handleUpdateProjectSourceColumns, handleUpdateFileSourceColumns, handleDeleteNode, refreshSchemas]
+    [screenToFlowPosition, setNodes, handleUpdateProjectSource, handleUpdateProjectSourceColumns, handleUpdateFileSourceColumns, refreshSchemas, handleSaveCanvasQuiet]
   );
 
-  const onEdgeContextMenu = useCallback((event, edge) => {
-    event.preventDefault();
-    if (window.confirm('Eliminare questo collegamento?')) {
-      setEdges((eds) => eds.filter((e) => e.id !== edge.id));
-    }
-  }, [setEdges]);
+  // ===== RENDER =====
 
   const handleBack = () => {
     navigate('/');
   };
 
-  // Loading state
   if (loading) {
     return <div className="manipola-loading">Caricamento progetto...</div>;
   }
 
-  // Error state
   if (!project) {
     return (
       <div className="manipola-error">
@@ -1086,126 +831,24 @@ const ManipolaEditorContent = () => {
       </div>
 
       {/* ===== EXECUTION MODAL ===== */}
-      {showExecutionModal && (
-        <div className="modal-overlay" onClick={() => setShowExecutionModal(false)}>
-          <div 
-            className="modal manipola-execution-modal" 
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="manipola-execution-modal__title">
-              🔄 Esecuzione Pipeline Manipola
-            </h3>
-
-            {isExecuting ? (
-              <div className="manipola-execution-modal__loading">
-                <div className="manipola-execution-modal__spinner">⏳</div>
-                <p className="manipola-execution-modal__loading-text">
-                  Esecuzione pipeline in corso...
-                </p>
-              </div>
-            ) : executionResult ? (
-              <div>
-                {executionResult.success ? (
-                  <div>
-                    <div className="manipola-execution-modal__success">
-                      <div className="manipola-execution-modal__success-title">
-                        ✓ Pipeline eseguita con successo!
-                      </div>
-                      <div className="manipola-execution-modal__success-message">
-                        {executionResult.message || 'Pipeline completata'}
-                      </div>
-                    </div>
-
-                    <div className="manipola-execution-modal__stats">
-                      <div className="manipola-execution-modal__stat">
-                        <div className="manipola-execution-modal__stat-label">
-                          Righe processate
-                        </div>
-                        <div className="manipola-execution-modal__stat-value">
-                          {executionResult.rows_count?.toLocaleString() || 'N/A'}
-                        </div>
-                      </div>
-                      <div className="manipola-execution-modal__stat">
-                        <div className="manipola-execution-modal__stat-label">
-                          Colonne output
-                        </div>
-                        <div className="manipola-execution-modal__stat-value">
-                          {executionResult.columns?.length || 0}
-                        </div>
-                      </div>
-                    </div>
-
-                    {executionResult.output_path && (
-                      <div className="manipola-execution-modal__output">
-                        <div className="manipola-execution-modal__output-label">
-                          📄 File generato
-                        </div>
-                        <div className="manipola-execution-modal__output-path">
-                          {executionResult.output_path}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* ========== DOWNLOAD BUTTON ========== */}
-                    <a 
-                      href={getDownloadUrl(projectId)}
-                      className="manipola-execution-modal__download-btn"
-                      download
-                    >
-                      ⬇️ Scarica File
-                    </a>
-
-                    {executionResult.columns && executionResult.columns.length > 0 && (
-                      <div className="manipola-execution-modal__columns">
-                        <div className="manipola-execution-modal__columns-label">
-                          Colonne output ({executionResult.columns.length}):
-                        </div>
-                        <div className="manipola-execution-modal__columns-list">
-                          {executionResult.columns.map((col, idx) => (
-                            <span 
-                              key={idx} 
-                              className="manipola-execution-modal__column-tag"
-                            >
-                              {col}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="manipola-execution-modal__error">
-                    <div className="manipola-execution-modal__error-title">
-                      ✗ Errore esecuzione pipeline
-                    </div>
-                    <div className="manipola-execution-modal__error-message">
-                      {executionResult.message}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : null}
-
-            <div className="manipola-execution-modal__actions">
-              <button 
-                className="manipola-execution-modal__btn" 
-                onClick={() => setShowExecutionModal(false)}
-              >
-                Chiudi
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ExecutionModal
+        isOpen={execution.showModal}
+        onClose={() => execution.closeModal()}
+        isExecuting={execution.isExecuting}
+        result={execution.result}
+        downloadUrl={execution.downloadUrl}
+        title="🔄 Esecuzione Pipeline Manipola"
+        projectType="manipola"
+      />
 
       {/* ===== PREVIEW MODAL ===== */}
       <PreviewModal
-        isOpen={showPreviewModal}
-        onClose={() => setShowPreviewModal(false)}
-        onRefresh={(limit) => handlePreview(null, limit)}
-        data={previewData}
-        loading={previewLoading}
-        error={previewError}
+        isOpen={preview.showModal}
+        onClose={preview.closeModal}
+        onRefresh={(limit) => preview.handlePreview(limit)}
+        data={preview.data}
+        loading={preview.loading}
+        error={preview.error}
         title="Anteprima Pipeline Manipola"
         projectType="manipola"
       />
