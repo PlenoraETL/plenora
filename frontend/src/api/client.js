@@ -1,13 +1,43 @@
 import axios from 'axios';
+import { API_ENDPOINT, API_TIMEOUT, DEFAULT_HEADERS } from './config';
 
-const API_BASE_URL = 'http://localhost:8000/api';
-
+/**
+ * Client API centralizzato con axios
+ * 
+ * Caratteristiche:
+ * - URL base configurato centralmente
+ * - Timeout configurabile
+ * - Interceptor per gestione errori consistente
+ */
 const api = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  baseURL: API_ENDPOINT,
+  timeout: API_TIMEOUT,
+  headers: DEFAULT_HEADERS,
 });
+
+// ===== INTERCEPTOR ERROR HANDLING =====
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    // Estrai messaggio errore in modo consistente
+    const message = 
+      error.response?.data?.detail || 
+      error.response?.data?.message || 
+      error.message || 
+      'Errore di comunicazione con il server';
+    
+    // Log per debug
+    console.error('[API Error]', {
+      url: error.config?.url,
+      method: error.config?.method,
+      status: error.response?.status,
+      message
+    });
+    
+    // Rigetta con errore standardizzato
+    return Promise.reject(new Error(message));
+  }
+);
 
 // ===== CATALOG API =====
 
@@ -15,7 +45,7 @@ export const uploadCatalog = async (file) => {
   const formData = new FormData();
   formData.append('file', file);
   
-  const response = await axios.post(`${API_BASE_URL}/catalog/upload`, formData, {
+  const response = await api.post('/catalog/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   });
   
@@ -157,7 +187,7 @@ export const previewProject = async (projectId, limit = 100) => {
  * @returns {string} - URL completo per il download
  */
 export const getDownloadUrl = (projectId) => {
-  return `${API_BASE_URL}/projects/${projectId}/download`;
+  return `${API_ENDPOINT}/projects/${projectId}/download`;
 };
 
 /**

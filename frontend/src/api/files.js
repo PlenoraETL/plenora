@@ -7,9 +7,39 @@
  * - Dettagli file
  * - Preview dati
  * - Eliminazione
+ * 
+ * Usa axios per consistenza con client.js
  */
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+import axios from 'axios';
+import { API_ENDPOINT, API_TIMEOUT } from './config';
+
+// Client axios dedicato per files API
+const filesApi = axios.create({
+  baseURL: `${API_ENDPOINT}/files`,
+  timeout: API_TIMEOUT,
+});
+
+// Interceptor per error handling consistente
+filesApi.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const message = 
+      error.response?.data?.detail || 
+      error.response?.data?.message || 
+      error.message || 
+      'Errore di comunicazione con il server';
+    
+    console.error('[Files API Error]', {
+      url: error.config?.url,
+      method: error.config?.method,
+      status: error.response?.status,
+      message
+    });
+    
+    return Promise.reject(new Error(message));
+  }
+);
 
 /**
  * Upload un nuovo file
@@ -36,17 +66,11 @@ export const uploadFile = async (file, name, description = '', layer = '', sheet
     formData.append('srid', String(srid));
   }
 
-  const response = await fetch(`${API_BASE}/api/files/upload`, {
-    method: 'POST',
-    body: formData,
+  const response = await filesApi.post('/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
   });
 
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || 'Errore upload file');
-  }
-
-  return response.json();
+  return response.data;
 };
 
 /**
@@ -54,13 +78,8 @@ export const uploadFile = async (file, name, description = '', layer = '', sheet
  * @returns {Promise<{files: Array}>}
  */
 export const getFiles = async () => {
-  const response = await fetch(`${API_BASE}/api/files`);
-  
-  if (!response.ok) {
-    throw new Error('Errore caricamento file');
-  }
-
-  return response.json();
+  const response = await filesApi.get('/');
+  return response.data;
 };
 
 /**
@@ -69,14 +88,8 @@ export const getFiles = async () => {
  * @returns {Promise<Object>} FileSource
  */
 export const getFile = async (fileId) => {
-  const response = await fetch(`${API_BASE}/api/files/${fileId}`);
-  
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || 'File non trovato');
-  }
-
-  return response.json();
+  const response = await filesApi.get(`/${fileId}`);
+  return response.data;
 };
 
 /**
@@ -86,38 +99,18 @@ export const getFile = async (fileId) => {
  * @returns {Promise<Object>} FileSource aggiornato
  */
 export const updateFile = async (fileId, data) => {
-  const response = await fetch(`${API_BASE}/api/files/${fileId}`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(data),
-  });
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || 'Errore aggiornamento');
-  }
-
-  return response.json();
+  const response = await filesApi.put(`/${fileId}`, data);
+  return response.data;
 };
 
 /**
  * Elimina file
  * @param {string} fileId - ID del file
- * @returns {Promise<void>}
+ * @returns {Promise<Object>}
  */
 export const deleteFile = async (fileId) => {
-  const response = await fetch(`${API_BASE}/api/files/${fileId}`, {
-    method: 'DELETE',
-  });
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || 'Errore eliminazione');
-  }
-
-  return response.json();
+  const response = await filesApi.delete(`/${fileId}`);
+  return response.data;
 };
 
 /**
@@ -126,14 +119,8 @@ export const deleteFile = async (fileId) => {
  * @returns {Promise<{layers: Array, sheets: Array}>}
  */
 export const getFileLayers = async (fileId) => {
-  const response = await fetch(`${API_BASE}/api/files/${fileId}/layers`);
-  
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || 'Errore caricamento layers');
-  }
-
-  return response.json();
+  const response = await filesApi.get(`/${fileId}/layers`);
+  return response.data;
 };
 
 /**
@@ -143,14 +130,10 @@ export const getFileLayers = async (fileId) => {
  * @returns {Promise<{columns: Array, rows: Array, total_count: number}>}
  */
 export const getFilePreview = async (fileId, limit = 100) => {
-  const response = await fetch(`${API_BASE}/api/files/${fileId}/preview?limit=${limit}`);
-  
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || 'Errore preview');
-  }
-
-  return response.json();
+  const response = await filesApi.get(`/${fileId}/preview`, {
+    params: { limit }
+  });
+  return response.data;
 };
 
 /**
@@ -159,14 +142,8 @@ export const getFilePreview = async (fileId, limit = 100) => {
  * @returns {Promise<{row_count: number}>}
  */
 export const getFileCount = async (fileId) => {
-  const response = await fetch(`${API_BASE}/api/files/${fileId}/count`);
-  
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || 'Errore conteggio');
-  }
-
-  return response.json();
+  const response = await filesApi.get(`/${fileId}/count`);
+  return response.data;
 };
 
 /**
@@ -179,17 +156,11 @@ export const previewFileTemp = async (file) => {
   const formData = new FormData();
   formData.append('file', file);
 
-  const response = await fetch(`${API_BASE}/api/files/preview-temp`, {
-    method: 'POST',
-    body: formData,
+  const response = await filesApi.post('/preview-temp', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
   });
 
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || 'Errore lettura file');
-  }
-
-  return response.json();
+  return response.data;
 };
 
 export default {

@@ -25,8 +25,8 @@ import TransformNode from '../components/TransformNode';
 import ResultNode from '../components/ResultNode';
 import PreviewModal from '../components/PreviewModal';
 import ExecutionModal from '../components/ExecutionModal';
-import { useSchemaInference } from '../hooks/useSchemaInference';
-import { usePreview, useExecution, useCanvasKeyboard } from '../hooks';
+import EditorSidebar from '../components/EditorSidebar';
+import { useSchemaInference, usePreview, useExecution, useCanvasKeyboard } from '../hooks';
 import '../styles/ManipolaEditor.css';
 
 const nodeTypes = {
@@ -80,7 +80,7 @@ const ManipolaEditorContent = () => {
   }, [nodes, edges]);
 
   // ===== SALVATAGGIO SILENZIOSO =====
-  const handleSaveCanvasQuiet = useCallback(async () => {
+  const handleSaveQuiet = useCallback(async () => {
     try {
       const currentNodes = nodesRef.current;
       const currentEdges = edgesRef.current;
@@ -117,7 +117,7 @@ const ManipolaEditorContent = () => {
   // ===== CUSTOM HOOKS =====
   
   // Hook Preview
-  const preview = usePreview(projectId, handleSaveCanvasQuiet);
+  const preview = usePreview(projectId, handleSaveQuiet);
 
   // Hook Execution
   const execution = useExecution(projectId, {
@@ -369,9 +369,9 @@ const ManipolaEditorContent = () => {
     );
     
     setTimeout(() => {
-      handleSaveCanvasQuiet().then(() => refreshSchemas());
+      handleSaveQuiet().then(() => refreshSchemas());
     }, 100);
-  }, [setNodes, refreshSchemas, handleSaveCanvasQuiet]);
+  }, [setNodes, refreshSchemas, handleSaveQuiet]);
 
   const handleUpdateProjectSourceColumns = useCallback((nodeId, columns) => {
     setNodes((nds) =>
@@ -407,9 +407,9 @@ const ManipolaEditorContent = () => {
     );
     
     setTimeout(() => {
-      handleSaveCanvasQuiet().then(() => refreshSchemas());
+      handleSaveQuiet().then(() => refreshSchemas());
     }, 100);
-  }, [setNodes, refreshSchemas, handleSaveCanvasQuiet]);
+  }, [setNodes, refreshSchemas, handleSaveQuiet]);
 
   const handleUpdateTransform = useCallback((nodeId, newData) => {
     setNodes((nds) =>
@@ -428,9 +428,9 @@ const ManipolaEditorContent = () => {
     );
     
     setTimeout(() => {
-      handleSaveCanvasQuiet().then(() => refreshSchemas());
+      handleSaveQuiet().then(() => refreshSchemas());
     }, 300);
-  }, [setNodes, refreshSchemas, handleSaveCanvasQuiet]);
+  }, [setNodes, refreshSchemas, handleSaveQuiet]);
 
   // ===== RESULT NODE HANDLERS =====
 
@@ -552,14 +552,14 @@ const ManipolaEditorContent = () => {
   const handleSaveCanvas = useCallback(async () => {
     try {
       setSaving(true);
-      await handleSaveCanvasQuiet();
+      await handleSaveQuiet();
     } catch (error) {
       console.error('[ManipolaEditor] Errore salvataggio canvas:', error);
       alert('Errore durante il salvataggio');
     } finally {
       setSaving(false);
     }
-  }, [handleSaveCanvasQuiet]);
+  }, [handleSaveQuiet]);
 
   // ===== EDGE HANDLERS =====
 
@@ -567,9 +567,9 @@ const ManipolaEditorContent = () => {
     setEdges((eds) => addEdge({ ...params, ...defaultEdgeOptions }, eds));
     
     setTimeout(() => {
-      handleSaveCanvasQuiet().then(() => refreshSchemas());
+      handleSaveQuiet().then(() => refreshSchemas());
     }, 100);
-  }, [setEdges, refreshSchemas, handleSaveCanvasQuiet]);
+  }, [setEdges, refreshSchemas, handleSaveQuiet]);
 
   const onEdgeContextMenu = useCallback((event, edge) => {
     event.preventDefault();
@@ -641,11 +641,11 @@ const ManipolaEditorContent = () => {
         setNodes((nds) => nds.concat(newNode));
         
         setTimeout(() => {
-          handleSaveCanvasQuiet().then(() => refreshSchemas());
+          handleSaveQuiet().then(() => refreshSchemas());
         }, 100);
       }
     },
-    [screenToFlowPosition, setNodes, handleUpdateProjectSource, handleUpdateProjectSourceColumns, handleUpdateFileSourceColumns, refreshSchemas, handleSaveCanvasQuiet]
+    [screenToFlowPosition, setNodes, handleUpdateProjectSource, handleUpdateProjectSourceColumns, handleUpdateFileSourceColumns, refreshSchemas, handleSaveQuiet]
   );
 
   // ===== RENDER =====
@@ -715,94 +715,41 @@ const ManipolaEditorContent = () => {
 
       {/* ===== MAIN CONTENT ===== */}
       <div className="manipola-main">
-        {/* Sidebar */}
-        <div className="manipola-sidebar">
-          {/* Sorgenti Progetto */}
-          <div className="manipola-sidebar__header">
-            <h3 className="manipola-sidebar__title">📊 Sorgenti Progetto</h3>
-            <p className="manipola-sidebar__subtitle">
-              Trascina un progetto SQL nel canvas
-            </p>
-          </div>
-          
-          <div className="manipola-sidebar__sources">
-            {availableSources.length === 0 ? (
-              <div className="manipola-sidebar__empty">
-                Nessun progetto SQL disponibile.
-                <br />
-                Crea prima un progetto di tipo Estrai.
-              </div>
-            ) : (
-              availableSources.map((proj) => (
-                <div
-                  key={proj.id}
-                  className="manipola-sidebar__source-item"
-                  draggable
-                  onDragStart={(e) => onDragStart(e, 'project_source', proj)}
-                >
-                  <span className="manipola-sidebar__source-icon">📊</span>
-                  <span className="manipola-sidebar__source-name">{proj.name}</span>
-                  <span className="manipola-sidebar__source-badge">SQL</span>
-                </div>
-              ))
-            )}
-          </div>
-
-          {/* File Esterni */}
-          <div className="manipola-sidebar__header manipola-sidebar__header--files">
-            <h3 className="manipola-sidebar__title">📁 File Esterni</h3>
-            <p className="manipola-sidebar__subtitle">
-              Trascina un file nel canvas
-            </p>
-          </div>
-          
-          <div className="manipola-sidebar__sources">
-            {availableFiles.length === 0 ? (
-              <div className="manipola-sidebar__empty">
-                Nessun file disponibile.
-                <br />
-                <a href="/files" style={{color: '#9C27B0'}}>Carica file esterni</a>
-              </div>
-            ) : (
-              availableFiles.map((file) => (
-                <div
-                  key={file.id}
-                  className="manipola-sidebar__source-item manipola-sidebar__source-item--file"
-                  draggable
-                  onDragStart={(e) => onDragStart(e, 'file_source', file)}
-                >
-                  <span className="manipola-sidebar__source-icon">
-                    {file.format === 'csv' ? '📄' : 
-                     file.format === 'xlsx' ? '📊' : 
-                     ['geojson', 'gpkg', 'shp', 'gdb'].includes(file.format) ? '🗺️' : '📁'}
-                  </span>
-                  <span className="manipola-sidebar__source-name">{file.name}</span>
-                  <span className="manipola-sidebar__source-badge manipola-sidebar__source-badge--file">
-                    {file.format?.toUpperCase()}
-                  </span>
-                </div>
-              ))
-            )}
-          </div>
-
-          <div className="manipola-sidebar__actions">
-            <h4 className="manipola-sidebar__actions-title">Azioni Rapide</h4>
-            
-            <button
-              className="manipola-sidebar__action-btn manipola-sidebar__action-btn--transform"
-              onClick={handleAddTransformNode}
-            >
-              + Aggiungi Transform
-            </button>
-            
-            <button
-              className="manipola-sidebar__action-btn manipola-sidebar__action-btn--output"
-              onClick={handleAddResultNode}
-            >
-              📁 Aggiungi Output
-            </button>
-          </div>
-        </div>
+        {/* Sidebar - Usa componente condiviso */}
+        <EditorSidebar
+          variant="manipola"
+          projects={availableSources}
+          files={availableFiles}
+          onDragStart={onDragStart}
+          projectsConfig={{
+            title: "📊 Sorgenti Progetto",
+            subtitle: "Trascina un progetto SQL nel canvas",
+            emptyMessage: "Nessun progetto SQL disponibile.",
+            emptyHint: "Crea prima un progetto di tipo Estrai.",
+            filterTypes: ['estrai', 'manipola']
+          }}
+          filesConfig={{
+            title: "📁 File Esterni",
+            subtitle: "Trascina un file nel canvas",
+            emptyMessage: "Nessun file disponibile.",
+            uploadLink: "/files",
+            uploadLinkText: "Carica file esterni"
+          }}
+          quickActions={[
+            {
+              label: "Aggiungi Transform",
+              icon: "+",
+              onClick: handleAddTransformNode,
+              variant: "transform"
+            },
+            {
+              label: "Aggiungi Output",
+              icon: "📁",
+              onClick: handleAddResultNode,
+              variant: "output"
+            }
+          ]}
+        />
 
         {/* Canvas Area */}
         <div 

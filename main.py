@@ -242,7 +242,7 @@ def execute_project_pipeline(project_id: str, request: ExecuteRequest = None):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/projects/{project_id}/preview")
+@app.get("/api/projects/{project_id}/preview")
 def preview_project(project_id: str, limit: int = 100):
     """Preview dei dati del progetto senza salvare file."""
     try:

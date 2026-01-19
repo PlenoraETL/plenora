@@ -654,8 +654,8 @@ const ResultNode = memo(({ data, id }) => {
 
         {/* Bottoni azione */}
         <div className="result-node__actions">
-          {/* Bottone Preview (ESTRAI e MANIPOLA) */}
-          {(isEstrai || isManipulate) && data.onPreview && (
+          {/* Bottone Preview (ESTRAI, MANIPOLA e ARRICCHISCI) */}
+          {data.onPreview && (
             <button
               onClick={() => data.onPreview(id)}
               className={`result-node__preview-btn result-node__preview-btn--${nodeVariant}`}

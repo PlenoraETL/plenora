@@ -25,7 +25,9 @@ import FileSourceNode from '../components/FileSourceNode';
 import ApiEnrichNode from '../components/ApiEnrichNode';
 import ResultNode from '../components/ResultNode';
 import ExecutionModal from '../components/ExecutionModal';
-import { useExecution, useCanvasKeyboard } from '../hooks';
+import PreviewModal from '../components/PreviewModal';
+import EditorSidebar from '../components/EditorSidebar';
+import { usePreview, useExecution, useCanvasKeyboard } from '../hooks';
 import '../styles/ArricchisciEditor.css';
 
 const nodeTypes = {
@@ -74,10 +76,9 @@ const ArricchisciEditorContent = () => {
 
   // ===== SALVATAGGIO =====
   
-  const handleSaveCanvas = useCallback(async () => {
+  // Salvataggio silenzioso (senza feedback UI) - usato da preview/execution
+  const handleSaveQuiet = useCallback(async () => {
     try {
-      setSaving(true);
-      
       const currentNodes = nodesRef.current;
       const currentEdges = edgesRef.current;
       
@@ -102,14 +103,27 @@ const ArricchisciEditorContent = () => {
       await updateCanvas(projectId, canvasToSave);
       
     } catch (error) {
+      console.error('[ArricchisciEditor] Errore salvataggio canvas silenzioso:', error);
+    }
+  }, [projectId]);
+
+  // Salvataggio con feedback UI
+  const handleSaveCanvas = useCallback(async () => {
+    try {
+      setSaving(true);
+      await handleSaveQuiet();
+    } catch (error) {
       console.error('[ArricchisciEditor] Errore salvataggio canvas:', error);
       alert('Errore durante il salvataggio');
     } finally {
       setSaving(false);
     }
-  }, [projectId]);
+  }, [handleSaveQuiet]);
 
   // ===== CUSTOM HOOKS =====
+
+  // Hook Preview
+  const preview = usePreview(projectId, handleSaveQuiet);
 
   // Hook Execution
   const execution = useExecution(projectId, {
@@ -130,7 +144,7 @@ const ArricchisciEditorContent = () => {
         throw new Error('Aggiungi almeno un nodo API Enrich.');
       }
       
-      await handleSaveCanvas();
+      await handleSaveQuiet();
     }
   });
 
@@ -151,6 +165,24 @@ const ArricchisciEditorContent = () => {
   });
 
   // ===== EFFECTS =====
+
+  // Propaga onPreview al Result Node quando preview hook è disponibile
+  useEffect(() => {
+    setNodes((nds) =>
+      nds.map((node) => {
+        if (node.type === 'result' && !node.data?.onPreview) {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              onPreview: () => preview.handlePreview()
+            }
+          };
+        }
+        return node;
+      })
+    );
+  }, [preview.handlePreview, setNodes]);
 
   // Propaga colonne al Result Node
   useEffect(() => {
@@ -284,6 +316,7 @@ const ArricchisciEditorContent = () => {
                 onUpdateFileName: handleUpdateResultFileName,
                 onUpdateFormat: handleUpdateResultFormat,
                 onUpdateGeomColumn: handleUpdateResultGeomColumn,
+                // onPreview verrà aggiunto tramite useEffect
                 onExecute: handleExecuteWithFormat,
                 onDelete: handleDeleteNode
               }
@@ -426,13 +459,14 @@ const ArricchisciEditorContent = () => {
         onUpdateFileName: handleUpdateResultFileName,
         onUpdateFormat: handleUpdateResultFormat,
         onUpdateGeomColumn: handleUpdateResultGeomColumn,
+        onPreview: () => preview.handlePreview(),
         onExecute: handleExecuteWithFormat,
         onDelete: handleDeleteNode
       }
     };
 
     setNodes((nds) => nds.concat(newNode));
-  }, [setNodes, handleUpdateResultFileName, handleUpdateResultFormat, handleUpdateResultGeomColumn, handleExecuteWithFormat]);
+  }, [setNodes, handleUpdateResultFileName, handleUpdateResultFormat, handleUpdateResultGeomColumn, preview, handleExecuteWithFormat]);
 
   // ===== EDGE & DRAG HANDLERS =====
 
@@ -561,74 +595,41 @@ const ArricchisciEditorContent = () => {
 
       {/* MAIN */}
       <div className="arricchisci-main">
-        {/* Sidebar */}
-        <div className="arricchisci-sidebar">
-          <div className="arricchisci-sidebar__header">
-            <h3 className="arricchisci-sidebar__title">📊 Sorgenti Dati</h3>
-            <p className="arricchisci-sidebar__subtitle">Trascina un progetto nel canvas</p>
-          </div>
-          
-          <div className="arricchisci-sidebar__sources">
-            {availableSources.length === 0 ? (
-              <div className="arricchisci-sidebar__empty">
-                Nessun progetto disponibile.<br />Crea prima un progetto Estrai o Manipola.
-              </div>
-            ) : (
-              availableSources.map((proj) => (
-                <div
-                  key={proj.id}
-                  className="arricchisci-sidebar__source-item"
-                  draggable
-                  onDragStart={(e) => onDragStart(e, 'project_source', { source_project_id: proj.id, id: proj.id })}
-                >
-                  <span className="arricchisci-sidebar__source-icon">{proj.project_type === 'manipola' ? '🔄' : '📊'}</span>
-                  <span className="arricchisci-sidebar__source-name">{proj.name}</span>
-                  <span className={`arricchisci-sidebar__source-badge arricchisci-sidebar__source-badge--${proj.project_type || 'estrai'}`}>
-                    {(proj.project_type || 'estrai').toUpperCase()}
-                  </span>
-                </div>
-              ))
-            )}
-          </div>
-
-          <div className="arricchisci-sidebar__header arricchisci-sidebar__header--files">
-            <h3 className="arricchisci-sidebar__title">📁 File Esterni</h3>
-            <p className="arricchisci-sidebar__subtitle">Trascina un file nel canvas</p>
-          </div>
-          
-          <div className="arricchisci-sidebar__sources">
-            {availableFiles.length === 0 ? (
-              <div className="arricchisci-sidebar__empty">
-                Nessun file disponibile.<br /><a href="/files" style={{color: '#FF6B35'}}>Carica file esterni</a>
-              </div>
-            ) : (
-              availableFiles.map((file) => (
-                <div
-                  key={file.id}
-                  className="arricchisci-sidebar__source-item arricchisci-sidebar__source-item--file"
-                  draggable
-                  onDragStart={(e) => onDragStart(e, 'file_source', { file_source_id: file.id, id: file.id })}
-                >
-                  <span className="arricchisci-sidebar__source-icon">
-                    {file.format === 'csv' ? '📄' : file.format === 'xlsx' ? '📊' : ['geojson', 'gpkg', 'shp', 'gdb'].includes(file.format) ? '🗺️' : '📁'}
-                  </span>
-                  <span className="arricchisci-sidebar__source-name">{file.name}</span>
-                  <span className="arricchisci-sidebar__source-badge arricchisci-sidebar__source-badge--file">{file.format?.toUpperCase()}</span>
-                </div>
-              ))
-            )}
-          </div>
-
-          <div className="arricchisci-sidebar__actions">
-            <h4 className="arricchisci-sidebar__actions-title">Azioni Rapide</h4>
-            <button className="arricchisci-sidebar__action-btn arricchisci-sidebar__action-btn--api" onClick={handleAddApiEnrichNode}>
-              🔗 Aggiungi API Enrich
-            </button>
-            <button className="arricchisci-sidebar__action-btn arricchisci-sidebar__action-btn--output" onClick={handleAddResultNode}>
-              📁 Aggiungi Output
-            </button>
-          </div>
-        </div>
+        {/* Sidebar - Usa componente condiviso */}
+        <EditorSidebar
+          variant="arricchisci"
+          projects={availableSources}
+          files={availableFiles}
+          onDragStart={onDragStart}
+          projectsConfig={{
+            title: "📊 Sorgenti Dati",
+            subtitle: "Trascina un progetto nel canvas",
+            emptyMessage: "Nessun progetto disponibile.",
+            emptyHint: "Crea prima un progetto Estrai o Manipola.",
+            filterTypes: ['estrai', 'manipola']
+          }}
+          filesConfig={{
+            title: "📁 File Esterni",
+            subtitle: "Trascina un file nel canvas",
+            emptyMessage: "Nessun file disponibile.",
+            uploadLink: "/files",
+            uploadLinkText: "Carica file esterni"
+          }}
+          quickActions={[
+            {
+              label: "Aggiungi API Enrich",
+              icon: "🔗",
+              onClick: handleAddApiEnrichNode,
+              variant: "api"
+            },
+            {
+              label: "Aggiungi Output",
+              icon: "📁",
+              onClick: handleAddResultNode,
+              variant: "output"
+            }
+          ]}
+        />
 
         {/* Canvas */}
         <div className="arricchisci-canvas" onDrop={onDrop} onDragOver={onDragOver}>
@@ -672,6 +673,18 @@ const ArricchisciEditorContent = () => {
         result={execution.result}
         downloadUrl={execution.downloadUrl}
         title="🔗 Esegui Arricchimento"
+        projectType="arricchisci"
+      />
+
+      {/* PREVIEW MODAL */}
+      <PreviewModal
+        isOpen={preview.showModal}
+        onClose={preview.closeModal}
+        onRefresh={(limit) => preview.handlePreview(limit)}
+        data={preview.data}
+        loading={preview.loading}
+        error={preview.error}
+        title="Anteprima Arricchimento"
         projectType="arricchisci"
       />
     </div>
