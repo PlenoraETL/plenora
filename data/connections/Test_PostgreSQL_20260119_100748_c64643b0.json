@@ -1,0 +1,13 @@
+{
+  "id": "Test_PostgreSQL_20260119_100748_c64643b0",
+  "name": "Test_PostgreSQL",
+  "description": "",
+  "type": "postgres",
+  "host": "localhost",
+  "port": 5432,
+  "database": "dataflow_test",
+  "username": "dataflow",
+  "password": "dataflow_test_2026",
+  "created_at": "2026-01-19T10:07:48.402720",
+  "updated_at": "2026-01-19T10:07:48.402720"
+}

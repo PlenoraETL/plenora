@@ -251,6 +251,70 @@ FUNCTION_CATALOG: Dict[str, FunctionDef] = {
             FunctionParam("separator", "string", False, "", "Separatore")
         ]
     ),
+    "SUBSTRING": FunctionDef(
+        name="SUBSTRING",
+        label="Sottostringa",
+        category=FunctionCategory.STRING,
+        description="Estrae una porzione di testo",
+        input_type="str",
+        output_type="str",
+        params=[
+            FunctionParam("column", "column", True, None, "Colonna testo"),
+            FunctionParam("start", "number", True, 1, "Posizione iniziale (da 1)"),
+            FunctionParam("length", "number", False, None, "Lunghezza (opzionale)")
+        ]
+    ),
+    
+    # --- DATA ---
+    "YEAR": FunctionDef(
+        name="YEAR",
+        label="Estrai Anno",
+        category=FunctionCategory.DATE,
+        description="Estrae l'anno da una data",
+        input_type="date",
+        output_type="int",
+        params=[
+            FunctionParam("column", "column", True, None, "Colonna data")
+        ]
+    ),
+    "MONTH": FunctionDef(
+        name="MONTH",
+        label="Estrai Mese",
+        category=FunctionCategory.DATE,
+        description="Estrae il mese da una data",
+        input_type="date",
+        output_type="int",
+        params=[
+            FunctionParam("column", "column", True, None, "Colonna data")
+        ]
+    ),
+    "DAY": FunctionDef(
+        name="DAY",
+        label="Estrai Giorno",
+        category=FunctionCategory.DATE,
+        description="Estrae il giorno da una data",
+        input_type="date",
+        output_type="int",
+        params=[
+            FunctionParam("column", "column", True, None, "Colonna data")
+        ]
+    ),
+    
+    # --- MATEMATICHE ---
+    "MATH": FunctionDef(
+        name="MATH",
+        label="Operazione Matematica",
+        category=FunctionCategory.NUMERIC,
+        description="Esegue operazioni aritmetiche tra colonne numeriche",
+        input_type="real",
+        output_type="real",
+        params=[
+            FunctionParam("column1", "column_numeric", True, None, "Prima colonna numerica"),
+            FunctionParam("operator", "operator", True, None, "Operatore (+, -, *, /)"),
+            FunctionParam("column2", "column_numeric", False, None, "Seconda colonna numerica (opzionale)"),
+            FunctionParam("value", "number", False, None, "Valore numerico (alternativo a column2)")
+        ]
+    ),
 }
 
 
@@ -549,6 +613,140 @@ class SqlFunctionTranslator:
                 return " || ".join(qualified_values)
         else:
             return f"CONCAT({', '.join(qualified_values)})"
+    
+    def _translate_substring(self, params: Dict, table_alias: str = None) -> str:
+        """Estrae una sottostringa"""
+        col = self._qualify_column(params["column"], table_alias)
+        start = params.get("start", 1)
+        length = params.get("length")
+        
+        if self.db_type == DbType.POSTGRES:
+            if length:
+                return f"SUBSTRING({col} FROM {start} FOR {length})"
+            else:
+                return f"SUBSTRING({col} FROM {start})"
+        elif self.db_type == DbType.MSSQL:
+            if length:
+                return f"SUBSTRING({col}, {start}, {length})"
+            else:
+                return f"SUBSTRING({col}, {start}, LEN({col}))"
+        elif self.db_type == DbType.MYSQL:
+            if length:
+                return f"SUBSTRING({col}, {start}, {length})"
+            else:
+                return f"SUBSTRING({col}, {start})"
+        elif self.db_type == DbType.ORACLE:
+            if length:
+                return f"SUBSTR({col}, {start}, {length})"
+            else:
+                return f"SUBSTR({col}, {start})"
+        elif self.db_type == DbType.SQLITE:
+            if length:
+                return f"SUBSTR({col}, {start}, {length})"
+            else:
+                return f"SUBSTR({col}, {start})"
+        else:
+            return f"SUBSTRING({col}, {start}, {length or 'NULL'})"
+    
+    # ============================================================
+    # FUNZIONI DATA
+    # ============================================================
+    
+    def _translate_year(self, params: Dict, table_alias: str = None) -> str:
+        """Estrae l'anno da una data"""
+        col = self._qualify_column(params["column"], table_alias)
+        
+        if self.db_type == DbType.POSTGRES:
+            return f"EXTRACT(YEAR FROM {col})"
+        elif self.db_type == DbType.MSSQL:
+            return f"YEAR({col})"
+        elif self.db_type == DbType.MYSQL:
+            return f"YEAR({col})"
+        elif self.db_type == DbType.ORACLE:
+            return f"EXTRACT(YEAR FROM {col})"
+        elif self.db_type == DbType.SQLITE:
+            return f"CAST(STRFTIME('%Y', {col}) AS INTEGER)"
+        else:
+            return f"EXTRACT(YEAR FROM {col})"
+    
+    def _translate_month(self, params: Dict, table_alias: str = None) -> str:
+        """Estrae il mese da una data"""
+        col = self._qualify_column(params["column"], table_alias)
+        
+        if self.db_type == DbType.POSTGRES:
+            return f"EXTRACT(MONTH FROM {col})"
+        elif self.db_type == DbType.MSSQL:
+            return f"MONTH({col})"
+        elif self.db_type == DbType.MYSQL:
+            return f"MONTH({col})"
+        elif self.db_type == DbType.ORACLE:
+            return f"EXTRACT(MONTH FROM {col})"
+        elif self.db_type == DbType.SQLITE:
+            return f"CAST(STRFTIME('%m', {col}) AS INTEGER)"
+        else:
+            return f"EXTRACT(MONTH FROM {col})"
+    
+    def _translate_day(self, params: Dict, table_alias: str = None) -> str:
+        """Estrae il giorno da una data"""
+        col = self._qualify_column(params["column"], table_alias)
+        
+        if self.db_type == DbType.POSTGRES:
+            return f"EXTRACT(DAY FROM {col})"
+        elif self.db_type == DbType.MSSQL:
+            return f"DAY({col})"
+        elif self.db_type == DbType.MYSQL:
+            return f"DAY({col})"
+        elif self.db_type == DbType.ORACLE:
+            return f"EXTRACT(DAY FROM {col})"
+        elif self.db_type == DbType.SQLITE:
+            return f"CAST(STRFTIME('%d', {col}) AS INTEGER)"
+        else:
+            return f"EXTRACT(DAY FROM {col})"
+    
+    def _translate_math(self, params: Dict, table_alias: str = None) -> str:
+        """
+        Esegue operazioni matematiche tra colonne numeriche.
+        
+        Supporta:
+        - column1 + column2
+        - column1 - column2
+        - column1 * column2
+        - column1 / column2
+        - column1 + value (numero fisso)
+        """
+        col1 = self._qualify_column(params["column1"], table_alias)
+        operator = params.get("operator") or "+"
+        
+        # Valida operatore
+        valid_operators = {'+', '-', '*', '/'}
+        if operator not in valid_operators:
+            raise ValueError(f"Operatore non valido: {operator}. Usa: +, -, *, /")
+        
+        # Determina il secondo operando (colonna o valore)
+        col2 = params.get("column2")
+        value = params.get("value")
+        
+        if col2:
+            second_operand = self._qualify_column(col2, table_alias)
+        elif value is not None:
+            second_operand = str(value)
+        else:
+            raise ValueError("Specificare column2 o value per l'operazione matematica")
+        
+        # Gestione divisione per zero
+        if operator == '/':
+            if self.db_type == DbType.POSTGRES:
+                return f"({col1} / NULLIF({second_operand}, 0))"
+            elif self.db_type == DbType.MSSQL:
+                return f"CASE WHEN {second_operand} = 0 THEN NULL ELSE {col1} / {second_operand} END"
+            elif self.db_type == DbType.MYSQL:
+                return f"IF({second_operand} = 0, NULL, {col1} / {second_operand})"
+            elif self.db_type == DbType.ORACLE:
+                return f"CASE WHEN {second_operand} = 0 THEN NULL ELSE {col1} / {second_operand} END"
+            else:
+                return f"({col1} / NULLIF({second_operand}, 0))"
+        
+        return f"({col1} {operator} {second_operand})"
 
 
 # ============================================================

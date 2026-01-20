@@ -253,26 +253,39 @@ class ConnectionService:
         try:
             import pyodbc
             
-            conn_string = (
-                f"DRIVER={{ODBC Driver 17 for SQL Server}};"
-                f"SERVER={conn.host},{conn.port};"
-                f"DATABASE={conn.database};"
-                f"UID={conn.username};"
-                f"PWD={conn.password}"
-            )
+            # Prova prima con Driver 18, poi con Driver 17
+            drivers = ["ODBC Driver 18 for SQL Server", "ODBC Driver 17 for SQL Server"]
             
-            connection = pyodbc.connect(conn_string, timeout=5)
-            cursor = connection.cursor()
-            cursor.execute("SELECT @@VERSION;")
-            version = cursor.fetchone()[0]
-            
-            cursor.close()
-            connection.close()
+            for driver in drivers:
+                try:
+                    conn_string = (
+                        f"DRIVER={{{driver}}};"
+                        f"SERVER={conn.host},{conn.port};"
+                        f"DATABASE={conn.database};"
+                        f"UID={conn.username};"
+                        f"PWD={conn.password};"
+                        f"TrustServerCertificate=yes"
+                    )
+                    
+                    connection = pyodbc.connect(conn_string, timeout=5)
+                    cursor = connection.cursor()
+                    cursor.execute("SELECT @@VERSION;")
+                    version = cursor.fetchone()[0]
+                    
+                    cursor.close()
+                    connection.close()
+                    
+                    return ConnectionTestResult(
+                        success=True,
+                        message=f"Connessione MS SQL Server riuscita (Driver: {driver})",
+                        details={"version": version[:100]}  # Truncate
+                    )
+                except pyodbc.InterfaceError:
+                    continue  # Prova il prossimo driver
             
             return ConnectionTestResult(
-                success=True,
-                message="Connessione MS SQL Server riuscita",
-                details={"version": version[:100]}  # Truncate
+                success=False,
+                message="Nessun driver ODBC per SQL Server trovato. Installa ODBC Driver 17 o 18 da Microsoft."
             )
         
         except ImportError:
@@ -288,17 +301,17 @@ class ConnectionService:
             )
     
     def _test_mysql(self, conn: DatabaseConnection) -> ConnectionTestResult:
-        """Test connessione MySQL"""
+        """Test connessione MySQL/MariaDB"""
         try:
-            import mysql.connector
+            import pymysql
             
-            connection = mysql.connector.connect(
+            connection = pymysql.connect(
                 host=conn.host,
                 port=conn.port,
                 database=conn.database,
                 user=conn.username,
                 password=conn.password,
-                connection_timeout=5
+                connect_timeout=5
             )
             
             cursor = connection.cursor()
@@ -310,14 +323,14 @@ class ConnectionService:
             
             return ConnectionTestResult(
                 success=True,
-                message="Connessione MySQL riuscita",
+                message="Connessione MySQL/MariaDB riuscita",
                 details={"version": version}
             )
         
         except ImportError:
             return ConnectionTestResult(
                 success=False,
-                message="Driver MySQL non installato. Installa con: pip install mysql-connector-python"
+                message="Driver MySQL (pymysql) non installato. Installa con: pip install pymysql"
             )
         
         except Exception as e:
@@ -328,18 +341,18 @@ class ConnectionService:
     
     def _test_oracle(self, conn: DatabaseConnection) -> ConnectionTestResult:
         """Test connessione Oracle"""
+        # Prova prima oracledb (nuovo), poi cx_Oracle (legacy)
         try:
-            import cx_Oracle
+            import oracledb
             
-            dsn = cx_Oracle.makedsn(conn.host, conn.port, service_name=conn.database)
-            connection = cx_Oracle.connect(
+            connection = oracledb.connect(
                 user=conn.username,
                 password=conn.password,
-                dsn=dsn
+                dsn=f"{conn.host}:{conn.port}/{conn.database}"
             )
             
             cursor = connection.cursor()
-            cursor.execute("SELECT * FROM v$version WHERE banner LIKE 'Oracle%'")
+            cursor.execute("SELECT banner FROM v$version WHERE banner LIKE 'Oracle%' AND ROWNUM = 1")
             version = cursor.fetchone()[0]
             
             cursor.close()
@@ -347,15 +360,46 @@ class ConnectionService:
             
             return ConnectionTestResult(
                 success=True,
-                message="Connessione Oracle riuscita",
+                message="Connessione Oracle riuscita (oracledb)",
                 details={"version": version}
             )
         
         except ImportError:
-            return ConnectionTestResult(
-                success=False,
-                message="Driver Oracle (cx_Oracle) non installato. Installa con: pip install cx_Oracle"
-            )
+            # Fallback a cx_Oracle
+            try:
+                import cx_Oracle
+                
+                dsn = cx_Oracle.makedsn(conn.host, conn.port, service_name=conn.database)
+                connection = cx_Oracle.connect(
+                    user=conn.username,
+                    password=conn.password,
+                    dsn=dsn
+                )
+                
+                cursor = connection.cursor()
+                cursor.execute("SELECT banner FROM v$version WHERE banner LIKE 'Oracle%' AND ROWNUM = 1")
+                version = cursor.fetchone()[0]
+                
+                cursor.close()
+                connection.close()
+                
+                return ConnectionTestResult(
+                    success=True,
+                    message="Connessione Oracle riuscita (cx_Oracle)",
+                    details={"version": version}
+                )
+            
+            except ImportError:
+                return ConnectionTestResult(
+                    success=False,
+                    message="Driver Oracle non installato. Installa con: pip install oracledb"
+                )
+            
+            except Exception as e:
+                return ConnectionTestResult(
+                    success=False,
+                    message=f"Errore connessione Oracle: {str(e)}"
+                )
         
         except Exception as e:
             return ConnectionTestResult(

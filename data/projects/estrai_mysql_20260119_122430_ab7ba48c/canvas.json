@@ -1,0 +1,167 @@
+{
+  "nodes": [
+    {
+      "id": "node_1768821973045",
+      "type": "source",
+      "position": {
+        "x": 796.0,
+        "y": 239.0
+      },
+      "table_name": "poi",
+      "alias": null,
+      "columns": [
+        {
+          "name": "id",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "osm_id",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "code",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "fclass",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "name",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "geometry_wkt",
+          "alias": null,
+          "visible": false,
+          "type": "str"
+        },
+        {
+          "name": "geometry_type",
+          "alias": null,
+          "visible": false,
+          "type": "str"
+        },
+        {
+          "name": "geometry",
+          "alias": null,
+          "visible": true,
+          "type": "geometry"
+        }
+      ],
+      "filters": [
+        {
+          "column": "id",
+          "operator": "IS NOT NULL",
+          "value": "1,2,3"
+        }
+      ],
+      "calculated_columns": [],
+      "connection_id": null,
+      "source_project_id": null,
+      "file_source_id": null,
+      "transform_op": null,
+      "transform_category": null,
+      "api_id": null,
+      "param_mapping": null,
+      "data": {},
+      "fileName": null,
+      "format": null,
+      "distinct": false,
+      "limit": null,
+      "group_by_enabled": false,
+      "group_by_columns": [],
+      "aggregations": []
+    },
+    {
+      "id": "result_1768821975085",
+      "type": "result",
+      "position": {
+        "x": 1624.0,
+        "y": 245.0
+      },
+      "table_name": null,
+      "alias": null,
+      "columns": [
+        {
+          "name": "id",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "osm_id",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "code",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "fclass",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "name",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "geometry",
+          "alias": null,
+          "visible": true,
+          "type": "geometry"
+        }
+      ],
+      "filters": [],
+      "calculated_columns": [],
+      "connection_id": null,
+      "source_project_id": null,
+      "file_source_id": null,
+      "transform_op": null,
+      "transform_category": null,
+      "api_id": null,
+      "param_mapping": null,
+      "data": {},
+      "fileName": "output_mysql",
+      "format": "xlsx",
+      "distinct": false,
+      "limit": null,
+      "group_by_enabled": false,
+      "group_by_columns": [],
+      "aggregations": []
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge_1768821978358",
+      "source": "node_1768821973045",
+      "target": "result_1768821975085",
+      "join_type": "output",
+      "source_column": "",
+      "target_column": "",
+      "is_spatial": false,
+      "spatial_predicate": null,
+      "source_geom_column": null,
+      "target_geom_column": null,
+      "spatial_distance": null
+    }
+  ]
+}

@@ -100,6 +100,7 @@ class QueryExecutor:
             "postgres": self._execute_postgres,
             "mssql": self._execute_mssql,
             "mysql": self._execute_mysql,
+            "oracle": self._execute_oracle,
             "sqlite": self._execute_sqlite,
         }
         
@@ -183,15 +184,27 @@ class QueryExecutor:
         """Esegui query su MS SQL Server con parametri sicuri."""
         import pyodbc
         
-        conn_string = (
-            f"DRIVER={{ODBC Driver 17 for SQL Server}};"
-            f"SERVER={conn.host},{conn.port};"
-            f"DATABASE={conn.database};"
-            f"UID={conn.username};"
-            f"PWD={conn.password}"
-        )
+        # Prova prima Driver 18, poi Driver 17
+        drivers = ["ODBC Driver 18 for SQL Server", "ODBC Driver 17 for SQL Server"]
+        connection = None
         
-        connection = pyodbc.connect(conn_string, timeout=30)
+        for driver in drivers:
+            try:
+                conn_string = (
+                    f"DRIVER={{{driver}}};"
+                    f"SERVER={conn.host},{conn.port};"
+                    f"DATABASE={conn.database};"
+                    f"UID={conn.username};"
+                    f"PWD={conn.password};"
+                    f"TrustServerCertificate=yes"
+                )
+                connection = pyodbc.connect(conn_string, timeout=30)
+                break
+            except pyodbc.InterfaceError:
+                continue
+        
+        if connection is None:
+            raise ValueError("Nessun driver ODBC per SQL Server trovato. Installa ODBC Driver 17 o 18.")
         
         try:
             cursor = connection.cursor()
@@ -203,7 +216,7 @@ class QueryExecutor:
             else:
                 cursor.execute(sql)
             
-            rows = cursor.fetchall()
+            rows = [tuple(row) for row in cursor.fetchall()]  # Converti Row in tuple
             columns = [desc[0] for desc in cursor.description]
             
             return rows, columns
@@ -217,16 +230,16 @@ class QueryExecutor:
         sql: str,
         params: Optional[Dict[str, Any]] = None
     ) -> Tuple[List[tuple], List[str]]:
-        """Esegui query su MySQL con parametri sicuri."""
-        import mysql.connector
+        """Esegui query su MySQL/MariaDB con parametri sicuri."""
+        import pymysql
         
-        connection = mysql.connector.connect(
+        connection = pymysql.connect(
             host=conn.host,
             port=conn.port,
             database=conn.database,
             user=conn.username,
             password=conn.password,
-            connection_timeout=30
+            connect_timeout=30
         )
         
         try:
@@ -241,6 +254,90 @@ class QueryExecutor:
         finally:
             cursor.close()
             connection.close()
+    
+    def _execute_oracle(
+        self, 
+        conn: DatabaseConnection, 
+        sql: str,
+        params: Optional[Dict[str, Any]] = None
+    ) -> Tuple[List[tuple], List[str]]:
+        """Esegui query su Oracle con parametri sicuri."""
+        connection = None
+        
+        # Prova prima oracledb (nuovo)
+        try:
+            import oracledb
+            dsn = f"{conn.host}:{conn.port}/{conn.database}"
+            logger.info(f"Oracle: tentativo connessione con oracledb a {dsn}")
+            connection = oracledb.connect(
+                user=conn.username,
+                password=conn.password,
+                dsn=dsn
+            )
+            
+            # Handler per convertire LOB in stringhe automaticamente
+            def output_type_handler(cursor, name, default_type, size, precision, scale):
+                if default_type == oracledb.DB_TYPE_CLOB:
+                    return cursor.var(oracledb.DB_TYPE_LONG, arraysize=cursor.arraysize)
+                if default_type == oracledb.DB_TYPE_BLOB:
+                    return cursor.var(oracledb.DB_TYPE_LONG_RAW, arraysize=cursor.arraysize)
+            
+            connection.outputtypehandler = output_type_handler
+            
+        except ImportError:
+            # Fallback a cx_Oracle (legacy)
+            try:
+                import cx_Oracle
+                dsn = cx_Oracle.makedsn(conn.host, conn.port, service_name=conn.database)
+                logger.info(f"Oracle: tentativo connessione con cx_Oracle")
+                connection = cx_Oracle.connect(
+                    user=conn.username,
+                    password=conn.password,
+                    dsn=dsn
+                )
+                
+                # Handler per cx_Oracle
+                def output_type_handler(cursor, name, default_type, size, precision, scale):
+                    if default_type == cx_Oracle.CLOB:
+                        return cursor.var(cx_Oracle.LONG_STRING, arraysize=cursor.arraysize)
+                    if default_type == cx_Oracle.BLOB:
+                        return cursor.var(cx_Oracle.LONG_BINARY, arraysize=cursor.arraysize)
+                
+                connection.outputtypehandler = output_type_handler
+                
+            except ImportError:
+                raise ValueError("Driver Oracle non installato. Installa con: pip install oracledb")
+        except Exception as e:
+            logger.error(f"Oracle: errore connessione oracledb: {e}")
+            raise
+        
+        if connection is None:
+            raise ValueError("Impossibile connettersi a Oracle")
+        
+        cursor = None
+        try:
+            cursor = connection.cursor()
+            # Aumenta il prefetch per performance
+            cursor.prefetchrows = 10000
+            cursor.arraysize = 10000
+            
+            logger.info(f"Oracle: esecuzione query")
+            cursor.execute(sql, params or {})
+            
+            columns = [desc[0] for desc in cursor.description]
+            rows = [tuple(row) for row in cursor.fetchall()]
+            
+            logger.info(f"Oracle: recuperate {len(rows)} righe")
+            return rows, columns
+            
+        except Exception as e:
+            logger.error(f"Oracle: errore esecuzione: {e}")
+            raise
+        finally:
+            if cursor:
+                cursor.close()
+            if connection:
+                connection.close()
     
     def _execute_sqlite(
         self, 

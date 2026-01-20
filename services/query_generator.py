@@ -468,6 +468,18 @@ class QueryGenerator:
             table_alias = node.alias or node.table_name
             filters = node.filters or []
             
+            # Costruisci mappa colonna -> tipo per questo nodo
+            column_type_map = {}
+            for col in node.columns:
+                col_name = col.name if hasattr(col, 'name') else col.get('name')
+                col_type = getattr(col, 'type', None) or (col.get('type') if isinstance(col, dict) else None) or 'str'
+                if col_name:
+                    column_type_map[col_name] = col_type
+            
+            # DEBUG: log della mappa tipi (rimuovere in produzione)
+            import logging
+            logging.getLogger(__name__).debug(f"Column type map for {table_alias}: {column_type_map}")
+            
             for filter_item in filters:
                 column = filter_item.column
                 operator = filter_item.operator
@@ -479,7 +491,13 @@ class QueryGenerator:
                 if not self._is_valid_identifier(column):
                     raise ValueError(f"Nome colonna filtro non valido: {column}")
                 
-                condition = self._create_condition(table_alias, column, operator, value, params)
+                # Ottieni il tipo colonna dalla mappa
+                column_type = column_type_map.get(column, 'str')
+                
+                # DEBUG: log del tipo colonna usato
+                logging.getLogger(__name__).debug(f"Filter on {column}: type={column_type}, db={self.db_type}")
+                
+                condition = self._create_condition(table_alias, column, operator, value, params, column_type)
                 if condition:
                     conditions.append(condition)
         
@@ -494,10 +512,33 @@ class QueryGenerator:
         column: str, 
         operator: str, 
         value: Any,
-        params: Dict[str, Any]
+        params: Dict[str, Any],
+        column_type: str = 'str'
     ) -> str:
-        """Crea singola condizione WHERE con parametri sicuri."""
+        """
+        Crea singola condizione WHERE con parametri sicuri.
+        
+        Gestisce specialmente:
+        - Oracle CLOB/NCLOB: wrappa con TO_CHAR() per permettere confronti
+        """
         col_ref = f"{table_alias}.{column}"
+        
+        # Per Oracle, wrappa colonne CLOB/NCLOB con TO_CHAR()
+        # Questo permette di usare operatori di confronto su tipi LOB
+        db = self.db_type.lower() if self.db_type else 'postgres'
+        
+        # Normalizza il tipo colonna per il confronto
+        col_type_upper = (column_type or '').upper()
+        
+        # Oracle CLOB detection: tipo esplicito CLOB/NCLOB/LONG
+        # oppure tipi testo generici che Oracle potrebbe aver mappato come CLOB
+        is_oracle_lob = (
+            db == 'oracle' and 
+            col_type_upper in ('CLOB', 'NCLOB', 'LONG', 'TEXT', 'TESTO', 'STRING', 'STR')
+        )
+        
+        if is_oracle_lob:
+            col_ref = f"TO_CHAR({table_alias}.{column})"
         
         valid_operators = {'=', '!=', '>', '<', '>=', '<=', 'LIKE', 'IN', 'IS NULL', 'IS NOT NULL'}
         if operator not in valid_operators:
@@ -594,11 +635,22 @@ class QueryGenerator:
         if sql_parts.get('group_by'):
             query += f"\nGROUP BY {sql_parts['group_by']}"
         
-        # LIMIT
+        # LIMIT - sintassi diversa per database
         limit = sql_parts.get('limit')
         if limit is not None:
             if not isinstance(limit, int) or limit < 0:
                 raise ValueError(f"LIMIT deve essere un intero positivo, ricevuto: {limit}")
-            query += f"\nLIMIT {limit}"
+            
+            db = self.db_type.lower() if self.db_type else 'postgres'
+            
+            if db == 'oracle':
+                # Oracle 12c+ usa FETCH FIRST
+                query += f"\nFETCH FIRST {limit} ROWS ONLY"
+            elif db in ('mssql', 'sqlserver'):
+                # SQL Server usa TOP (va inserito dopo SELECT)
+                query = query.replace("SELECT ", f"SELECT TOP {limit} ", 1)
+            else:
+                # PostgreSQL, MySQL, MariaDB, SQLite usano LIMIT
+                query += f"\nLIMIT {limit}"
         
         return query

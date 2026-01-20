@@ -217,12 +217,11 @@ class DatabaseInspector:
             
             # Raggruppa per tabella con tipi
             tables: Dict[str, List[ColumnInfo]] = {}
-            for table_name, column_name, data_type, udt_name, geometry_type, geometry_srid in rows:
+            for table_name, column_name, data_type, udt_name, geom_type, geom_srid in rows:
                 if table_name not in tables:
                     tables[table_name] = []
                 
-                # Determina il tipo (con SRID per geometrie)
-                col_type = self._map_postgres_type(data_type, udt_name, geometry_type, geometry_srid)
+                col_type = self._map_postgres_type(data_type, udt_name, geom_type, geom_srid)
                 
                 tables[table_name].append({
                     "name": column_name,
@@ -236,43 +235,30 @@ class DatabaseInspector:
         except Exception as e:
             raise Exception(f"Errore ispezionando PostgreSQL: {str(e)}")
     
-    def _map_postgres_type(self, data_type: str, udt_name: str, geometry_type: Optional[str], geometry_srid: Optional[int] = None) -> str:
-        """Mappa tipo PostgreSQL al nostro tipo standard.
-        Per geometrie: geometry:subtype:srid (es. geometry:polygon:4326)
-        """
-        data_type_lower = data_type.lower()
-        udt_name_lower = udt_name.lower() if udt_name else ''
-        
-        # Se è geometry PostGIS
-        if udt_name_lower == 'geometry' and geometry_type:
-            geom_type = geometry_type.upper()
-            srid_suffix = f":{geometry_srid}" if geometry_srid and geometry_srid > 0 else ""
-            
-            if 'POINT' in geom_type:
-                return f'geometry:point{srid_suffix}'
-            elif 'LINESTRING' in geom_type or 'LINE' in geom_type:
-                return f'geometry:line{srid_suffix}'
-            elif 'MULTIPOLYGON' in geom_type:
-                return f'geometry:multipolygon{srid_suffix}'
-            elif 'POLYGON' in geom_type:
-                return f'geometry:polygon{srid_suffix}'
-            elif 'MULTIPOINT' in geom_type:
-                return f'geometry:multipoint{srid_suffix}'
-            elif 'MULTILINESTRING' in geom_type:
-                return f'geometry:multiline{srid_suffix}'
-            else:
-                return f'geometry{srid_suffix}'
-        
-        # Se è geometry senza tipo specifico
-        if udt_name_lower == 'geometry':
+    def _map_postgres_type(self, data_type: str, udt_name: str, geom_type: Optional[str], geom_srid: Optional[int]) -> str:
+        """Mappa tipo PostgreSQL al nostro tipo standard"""
+        # Prima controlla se è una geometria PostGIS
+        if data_type == 'USER-DEFINED' and udt_name == 'geometry':
+            if geom_type and geom_srid:
+                geom_type_lower = geom_type.lower()
+                type_map = {
+                    'point': 'geometry:point',
+                    'linestring': 'geometry:line',
+                    'polygon': 'geometry:polygon',
+                    'multipoint': 'geometry:multipoint',
+                    'multilinestring': 'geometry:multiline',
+                    'multipolygon': 'geometry:multipolygon',
+                }
+                base_type = type_map.get(geom_type_lower, 'geometry')
+                return f"{base_type}:{geom_srid}"
             return 'geometry'
         
-        # Mapping standard
+        # Altrimenti mappa con la tabella standard
+        data_type_lower = data_type.lower()
         if data_type_lower in self.POSTGRES_TYPE_MAP:
             return self.POSTGRES_TYPE_MAP[data_type_lower]
         
-        # Default a string per tipi sconosciuti
-        return 'str'
+        return 'str'  # Default
     
     # ==================== MS SQL SERVER ====================
     
@@ -281,26 +267,41 @@ class DatabaseInspector:
         try:
             import pyodbc
             
-            conn_string = (
-                f"DRIVER={{ODBC Driver 17 for SQL Server}};"
-                f"SERVER={conn.host},{conn.port};"
-                f"DATABASE={conn.database};"
-                f"UID={conn.username};"
-                f"PWD={conn.password}"
-            )
+            # Prova prima Driver 18, poi Driver 17
+            drivers = ["ODBC Driver 18 for SQL Server", "ODBC Driver 17 for SQL Server"]
+            connection = None
             
-            connection = pyodbc.connect(conn_string, timeout=10)
+            for driver in drivers:
+                try:
+                    conn_string = (
+                        f"DRIVER={{{driver}}};"
+                        f"SERVER={conn.host},{conn.port};"
+                        f"DATABASE={conn.database};"
+                        f"UID={conn.username};"
+                        f"PWD={conn.password};"
+                        f"TrustServerCertificate=yes"
+                    )
+                    connection = pyodbc.connect(conn_string, timeout=10)
+                    break
+                except pyodbc.InterfaceError:
+                    continue
+            
+            if connection is None:
+                raise Exception("Nessun driver ODBC per SQL Server trovato")
+            
             cursor = connection.cursor()
             
             # Query con tipi
             query = """
                 SELECT 
-                    TABLE_NAME, 
-                    COLUMN_NAME,
-                    DATA_TYPE
-                FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_SCHEMA = 'dbo'
-                ORDER BY TABLE_NAME, ORDINAL_POSITION;
+                    t.name AS table_name,
+                    c.name AS column_name,
+                    ty.name AS data_type
+                FROM sys.tables t
+                INNER JOIN sys.columns c ON t.object_id = c.object_id
+                INNER JOIN sys.types ty ON c.user_type_id = ty.user_type_id
+                WHERE t.is_ms_shipped = 0
+                ORDER BY t.name, c.column_id;
             """
             
             cursor.execute(query)
@@ -311,21 +312,11 @@ class DatabaseInspector:
             
             # Raggruppa per tabella con tipi
             tables: Dict[str, List[ColumnInfo]] = {}
-            for row in rows:
-                table_name = row.TABLE_NAME
-                column_name = row.COLUMN_NAME
-                data_type = row.DATA_TYPE.lower()
-                
+            for table_name, column_name, data_type in rows:
                 if table_name not in tables:
                     tables[table_name] = []
                 
-                # Gestione speciale per geometry/geography
-                if data_type == 'geometry':
-                    col_type = 'geometry:geometry:0'  # SRID 0 per geometry locale
-                elif data_type == 'geography':
-                    col_type = 'geometry:geography:4326'  # geography usa sempre WGS84
-                else:
-                    col_type = self.MSSQL_TYPE_MAP.get(data_type, 'str')
+                col_type = self._map_mssql_type(data_type)
                 
                 tables[table_name].append({
                     "name": column_name,
@@ -339,48 +330,44 @@ class DatabaseInspector:
         except Exception as e:
             raise Exception(f"Errore ispezionando MS SQL Server: {str(e)}")
     
+    def _map_mssql_type(self, data_type: str) -> str:
+        """Mappa tipo MS SQL Server al nostro tipo standard"""
+        data_type_lower = data_type.lower()
+        
+        if data_type_lower in self.MSSQL_TYPE_MAP:
+            return self.MSSQL_TYPE_MAP[data_type_lower]
+        
+        return 'str'
+    
     # ==================== MYSQL ====================
     
     def _inspect_mysql(self, conn: DatabaseConnection) -> Dict[str, List[ColumnInfo]]:
-        """Ispeziona MySQL con supporto Spatial"""
+        """Ispeziona MySQL/MariaDB con supporto Spatial"""
         try:
-            import mysql.connector
+            import pymysql
             
-            connection = mysql.connector.connect(
+            connection = pymysql.connect(
                 host=conn.host,
                 port=conn.port,
                 database=conn.database,
                 user=conn.username,
                 password=conn.password,
-                connection_timeout=10
+                connect_timeout=10
             )
             
             cursor = connection.cursor()
             
-            # Query con tipi e SRID (MySQL 8+)
-            query = """
-                SELECT 
-                    TABLE_NAME, 
-                    COLUMN_NAME,
-                    DATA_TYPE,
-                    COLUMN_TYPE,
-                    SRS_ID
-                FROM INFORMATION_SCHEMA.COLUMNS
-                LEFT JOIN INFORMATION_SCHEMA.ST_GEOMETRY_COLUMNS 
-                    ON COLUMNS.TABLE_SCHEMA = ST_GEOMETRY_COLUMNS.TABLE_SCHEMA
-                    AND COLUMNS.TABLE_NAME = ST_GEOMETRY_COLUMNS.TABLE_NAME
-                    AND COLUMNS.COLUMN_NAME = ST_GEOMETRY_COLUMNS.COLUMN_NAME
-                WHERE COLUMNS.TABLE_SCHEMA = DATABASE()
-                ORDER BY COLUMNS.TABLE_NAME, COLUMNS.ORDINAL_POSITION;
-            """
+            # Detecta se è MariaDB o MySQL
+            cursor.execute("SELECT VERSION()")
+            version = cursor.fetchone()[0].lower()
+            is_mariadb = 'mariadb' in version
             
-            try:
-                cursor.execute(query)
-                rows = cursor.fetchall()
-                has_srid = True
-            except Exception:
-                # Fallback per MySQL < 8 senza ST_GEOMETRY_COLUMNS
-                query_fallback = """
+            rows = []
+            has_srid = False
+            
+            if is_mariadb:
+                # MariaDB: query semplice senza JOIN a GEOMETRY_COLUMNS
+                query = """
                     SELECT 
                         TABLE_NAME, 
                         COLUMN_NAME,
@@ -391,9 +378,45 @@ class DatabaseInspector:
                     WHERE TABLE_SCHEMA = DATABASE()
                     ORDER BY TABLE_NAME, ORDINAL_POSITION;
                 """
-                cursor.execute(query_fallback)
+                cursor.execute(query)
                 rows = cursor.fetchall()
                 has_srid = False
+            else:
+                # MySQL 8+: usa ST_GEOMETRY_COLUMNS
+                try:
+                    query = """
+                        SELECT 
+                            TABLE_NAME, 
+                            COLUMN_NAME,
+                            DATA_TYPE,
+                            COLUMN_TYPE,
+                            SRS_ID
+                        FROM INFORMATION_SCHEMA.COLUMNS
+                        LEFT JOIN INFORMATION_SCHEMA.ST_GEOMETRY_COLUMNS 
+                            ON COLUMNS.TABLE_SCHEMA = ST_GEOMETRY_COLUMNS.TABLE_SCHEMA
+                            AND COLUMNS.TABLE_NAME = ST_GEOMETRY_COLUMNS.TABLE_NAME
+                            AND COLUMNS.COLUMN_NAME = ST_GEOMETRY_COLUMNS.COLUMN_NAME
+                        WHERE COLUMNS.TABLE_SCHEMA = DATABASE()
+                        ORDER BY COLUMNS.TABLE_NAME, COLUMNS.ORDINAL_POSITION;
+                    """
+                    cursor.execute(query)
+                    rows = cursor.fetchall()
+                    has_srid = True
+                except Exception:
+                    # Fallback per MySQL < 8
+                    query = """
+                        SELECT 
+                            TABLE_NAME, 
+                            COLUMN_NAME,
+                            DATA_TYPE,
+                            COLUMN_TYPE,
+                            NULL as SRS_ID
+                        FROM INFORMATION_SCHEMA.COLUMNS
+                        WHERE TABLE_SCHEMA = DATABASE()
+                        ORDER BY TABLE_NAME, ORDINAL_POSITION;
+                    """
+                    cursor.execute(query)
+                    rows = cursor.fetchall()
             
             cursor.close()
             connection.close()
@@ -420,9 +443,9 @@ class DatabaseInspector:
             return tables
         
         except ImportError:
-            raise Exception("Driver MySQL non installato")
+            raise Exception("Driver MySQL (pymysql) non installato. Installa con: pip install pymysql")
         except Exception as e:
-            raise Exception(f"Errore ispezionando MySQL: {str(e)}")
+            raise Exception(f"Errore ispezionando MySQL/MariaDB: {str(e)}")
     
     def _map_mysql_type(self, data_type: str, column_type: str, srs_id: Optional[int] = None) -> str:
         """Mappa tipo MySQL al nostro tipo standard"""
@@ -450,14 +473,14 @@ class DatabaseInspector:
     
     def _inspect_oracle(self, conn: DatabaseConnection) -> Dict[str, List[ColumnInfo]]:
         """Ispeziona Oracle con supporto Spatial"""
+        # Prova prima oracledb (nuovo), poi cx_Oracle (legacy)
         try:
-            import cx_Oracle
+            import oracledb
             
-            dsn = cx_Oracle.makedsn(conn.host, conn.port, service_name=conn.database)
-            connection = cx_Oracle.connect(
+            connection = oracledb.connect(
                 user=conn.username,
                 password=conn.password,
-                dsn=dsn
+                dsn=f"{conn.host}:{conn.port}/{conn.database}"
             )
             
             cursor = connection.cursor()
@@ -496,7 +519,56 @@ class DatabaseInspector:
             return tables
         
         except ImportError:
-            raise Exception("Driver Oracle (cx_Oracle) non installato")
+            # Fallback a cx_Oracle
+            try:
+                import cx_Oracle
+                
+                dsn = cx_Oracle.makedsn(conn.host, conn.port, service_name=conn.database)
+                connection = cx_Oracle.connect(
+                    user=conn.username,
+                    password=conn.password,
+                    dsn=dsn
+                )
+                
+                cursor = connection.cursor()
+                
+                query = """
+                    SELECT 
+                        TABLE_NAME, 
+                        COLUMN_NAME,
+                        DATA_TYPE,
+                        DATA_PRECISION,
+                        DATA_SCALE
+                    FROM USER_TAB_COLUMNS
+                    ORDER BY TABLE_NAME, COLUMN_ID
+                """
+                
+                cursor.execute(query)
+                rows = cursor.fetchall()
+                
+                cursor.close()
+                connection.close()
+                
+                # Raggruppa per tabella con tipi
+                tables: Dict[str, List[ColumnInfo]] = {}
+                for table_name, column_name, data_type, precision, scale in rows:
+                    if table_name not in tables:
+                        tables[table_name] = []
+                    
+                    col_type = self._map_oracle_type(data_type, precision, scale)
+                    
+                    tables[table_name].append({
+                        "name": column_name,
+                        "type": col_type
+                    })
+                
+                return tables
+            
+            except ImportError:
+                raise Exception("Driver Oracle non installato. Installa con: pip install oracledb")
+            except Exception as e:
+                raise Exception(f"Errore ispezionando Oracle: {str(e)}")
+        
         except Exception as e:
             raise Exception(f"Errore ispezionando Oracle: {str(e)}")
     

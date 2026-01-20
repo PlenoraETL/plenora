@@ -1,0 +1,26 @@
+[
+  {
+    "id": 1,
+    "osm_id": "32338215",
+    "code": 2401,
+    "fclass": "hotel",
+    "name": "Domus Pacis Torre Rossa Park",
+    "geometry": "POINT(12.4247457 41.8918075)"
+  },
+  {
+    "id": 2,
+    "osm_id": "32631124",
+    "code": 2303,
+    "fclass": "cafe",
+    "name": "Giolitti",
+    "geometry": "POINT(12.4772481 41.9010573)"
+  },
+  {
+    "id": 3,
+    "osm_id": "245551190",
+    "code": 2101,
+    "fclass": "pharmacy",
+    "name": null,
+    "geometry": "POINT(12.5350022 41.8868119)"
+  }
+]

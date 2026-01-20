@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { validateCanvas } from '../utils/canvasValidation';
 
 /**
@@ -33,9 +33,21 @@ export function useCanvasValidation(nodes, edges, options = {}) {
     disconnectedNodeIds: []
   });
 
-  // Validazione manuale
+  // Ref per avere sempre i valori aggiornati (evita stale closure)
+  const nodesRef = useRef(nodes);
+  const edgesRef = useRef(edges);
+  
+  useEffect(() => {
+    nodesRef.current = nodes;
+    edgesRef.current = edges;
+  }, [nodes, edges]);
+
+  // Validazione manuale - usa ref per evitare stale closure
   const validate = useCallback(() => {
-    const result = validateCanvas(nodes, edges);
+    const currentNodes = nodesRef.current;
+    const currentEdges = edgesRef.current;
+    
+    const result = validateCanvas(currentNodes, currentEdges);
     setValidationResult(result);
     
     if (onValidationChange) {
@@ -43,7 +55,7 @@ export function useCanvasValidation(nodes, edges, options = {}) {
     }
     
     return result;
-  }, [nodes, edges, onValidationChange]);
+  }, [onValidationChange]);
 
   // Pulisci errori
   const clearErrors = useCallback(() => {
@@ -54,7 +66,17 @@ export function useCanvasValidation(nodes, edges, options = {}) {
     });
   }, []);
 
+  // Crea una stringa di "fingerprint" per rilevare cambiamenti reali
+  const nodesFingerprint = useMemo(() => {
+    return nodes.map(n => n.id).sort().join(',');
+  }, [nodes]);
+  
+  const edgesFingerprint = useMemo(() => {
+    return edges.map(e => `${e.source}-${e.target}`).sort().join(',');
+  }, [edges]);
+
   // Validazione automatica con debounce
+  // Dipende da fingerprint invece che dagli array interi
   useEffect(() => {
     if (!validateOnChange || nodes.length === 0) return;
 
@@ -63,7 +85,7 @@ export function useCanvasValidation(nodes, edges, options = {}) {
     }, debounceMs);
 
     return () => clearTimeout(timeoutId);
-  }, [nodes, edges, validateOnChange, debounceMs, validate]);
+  }, [nodesFingerprint, edgesFingerprint, validateOnChange, debounceMs, validate, nodes.length]);
 
   // Stile per nodi disconnessi
   const getNodeStyle = useCallback((nodeId) => {

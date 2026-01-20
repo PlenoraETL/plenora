@@ -1,0 +1,9 @@
+{
+  "id": "manipola_test_postgres_20260119_112936_28bb694a",
+  "name": "manipola_test_postgres",
+  "description": "",
+  "project_type": "manipola",
+  "default_connection_id": "",
+  "created_at": "2026-01-19T11:29:36.168970",
+  "updated_at": "2026-01-19T11:34:22.763470"
+}

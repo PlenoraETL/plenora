@@ -168,15 +168,22 @@ function ColumnBuilderModal({
     
     if (inputType === 'real' || inputType === 'int') {
       return columns.filter(c => {
-        const colType = c.type || c.dtype || '';
-        return ['real', 'int', 'float', 'integer', 'numeric', 'number'].includes(colType);
+        const colType = (c.type || c.dtype || '').toLowerCase();
+        return ['real', 'int', 'float', 'integer', 'numeric', 'number', 'double', 'decimal'].includes(colType);
       });
     }
     
     if (inputType === 'str') {
       return columns.filter(c => {
-        const colType = c.type || c.dtype || '';
-        return ['str', 'string', 'text', 'varchar'].includes(colType);
+        const colType = (c.type || c.dtype || '').toLowerCase();
+        return ['str', 'string', 'text', 'varchar', 'clob', 'nvarchar'].includes(colType);
+      });
+    }
+    
+    if (inputType === 'date') {
+      return columns.filter(c => {
+        const colType = (c.type || c.dtype || '').toLowerCase();
+        return ['date', 'datetime', 'timestamp', 'time'].includes(colType);
       });
     }
     
@@ -494,7 +501,7 @@ function ColumnBuilderModal({
                               )}
                             </>
                           ) : param.type === 'column_list' ? (
-                            /* ✅ NUOVO: Supporto per lista colonne (CONCAT) */
+                            /* ✅ Supporto per lista colonne (CONCAT) */
                             <>
                               <label>{param.description || param.name}:</label>
                               <div className="column-builder-column-list">
@@ -538,6 +545,43 @@ function ColumnBuilderModal({
                                     ))}
                                 </select>
                               </div>
+                            </>
+                          ) : param.type === 'column_numeric' ? (
+                            /* ✅ NUOVO: Supporto per colonne numeriche (MATH) */
+                            <>
+                              <label>{param.description || param.name}:</label>
+                              <select
+                                value={params[param.name] || ''}
+                                onChange={e => handleParamChange(param.name, e.target.value)}
+                                className="column-builder-select"
+                              >
+                                <option value="">-- Seleziona colonna numerica --</option>
+                                {columns
+                                  .filter(col => {
+                                    const colType = (col.type || col.dtype || '').toLowerCase();
+                                    return ['real', 'int', 'float', 'integer', 'numeric', 'number', 'double', 'decimal'].includes(colType);
+                                  })
+                                  .map(col => (
+                                    <option key={col.name} value={col.name}>
+                                      {getColumnTypeIcon(col.type || col.dtype)} {col.name}
+                                    </option>
+                                  ))}
+                              </select>
+                            </>
+                          ) : param.type === 'operator' ? (
+                            /* ✅ NUOVO: Supporto per operatori matematici */
+                            <>
+                              <label>{param.description || param.name}:</label>
+                              <select
+                                value={params[param.name] || '+'}
+                                onChange={e => handleParamChange(param.name, e.target.value)}
+                                className="column-builder-select column-builder-select--operator"
+                              >
+                                <option value="+">+ (Somma)</option>
+                                <option value="-">- (Sottrazione)</option>
+                                <option value="*">× (Moltiplicazione)</option>
+                                <option value="/">÷ (Divisione)</option>
+                              </select>
                             </>
                           ) : param.type === 'number' ? (
                             <>

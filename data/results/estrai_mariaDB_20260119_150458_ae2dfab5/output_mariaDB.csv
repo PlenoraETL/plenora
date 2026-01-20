@@ -1,0 +1,3 @@
+id,osm_id,code,fclass,name,geometry_wkt,geometry_type,geometry
+1,32338215,2401,hotel,Domus Pacis Torre Rossa Park,POINT (12.4247457 41.8918075),Point,POINT(12.4247457 41.8918075)
+2,32631124,2303,cafe,Giolitti,POINT (12.4772481 41.9010573),Point,POINT(12.4772481 41.9010573)
