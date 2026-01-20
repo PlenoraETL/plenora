@@ -61,15 +61,58 @@ Nuove feature solo su base stabile.
 
 **Priorità Alta:**
 1. [ ] FileGDB (.gdb) come formato di OUTPUT
-2. [ ] Completare ARRICCHISCI (40% → 90%)
+2. [ ] **Completare ARRICCHISCI (40% → 90%)** - Vedi sezione dedicata sotto
 3. [ ] Upload su Database PostGIS
 4. [ ] Upload su Feature Service ArcGIS
 5. [ ] Scheduler automazione pipeline
 
 **Priorità Media - Nuove Capabilities:**
 6. [ ] **Stream dati in input** - Connessione a flussi real-time (Kafka, MQTT, WebSocket)
-7. [ ] **Arricchisci con servizi esterni** - Chiamate a API/microservizi custom durante pipeline
-8. [ ] **Linguaggio naturale** - Generazione pipeline via LLM (es. "unisci i POI con i comuni e calcola il buffer di 500m")
+7. [ ] **Linguaggio naturale** - Generazione pipeline via LLM (es. "unisci i POI con i comuni e calcola il buffer di 500m")
+
+---
+
+## 🔌 ARRICCHISCI - Architettura Definita
+
+### Macro Categorie
+
+| Categoria | Descrizione | Esempio |
+|-----------|-------------|---------|
+| **1. API REST** | Chiamate HTTP a servizi esterni | Geocoding, Routing, Catasto, API custom |
+| **2. Eseguibili** | Script/programmi in una cartella | Python scripts, exe RETURN, modelli ML |
+| **3. Data Sources** | Dati da repository remoti | SharePoint, FTP, S3, Azure Blob |
+
+### Specifiche Tecniche
+
+**API REST:**
+- Modalità: Riga per riga + Batch (dove supportato)
+- Connettori pluggabili (registry)
+- Configurazione: URL, auth, mapping parametri
+
+**Eseguibili:**
+- Input: `/temp/input_{id}.json` (DataFrame serializzato)
+- Output: `/temp/output_{id}.json` (DataFrame arricchito)
+- Supporto: Python (.py), Executable (.exe), R (.R)
+
+**Data Sources:**
+- SharePoint: Microsoft 365 (OAuth2) + On-premise (NTLM/Kerberos)
+- FTP/SFTP: Autenticazione standard
+- Futuro: S3, Azure Blob, Google Drive
+
+### Piano Implementazione (~21h / 3 giorni)
+
+| # | Componente | Tempo | Status |
+|---|------------|-------|--------|
+| 1 | Base registry connettori | 2h | ☐ |
+| 2 | API REST generico | 3h | ☐ |
+| 3 | Geocoding (Nominatim) | 2h | ☐ |
+| 4 | Eseguibili (JSON in/out) | 3h | ☐ |
+| 5 | SharePoint 365 | 3h | ☐ |
+| 6 | SharePoint on-premise | 2h | ☐ |
+| 7 | FTP/SFTP | 2h | ☐ |
+| 8 | UI configurazione | 4h | ☐ |
+
+---
 
 ### FASE 4: DOCUMENTAZIONE & MARKETING (Pre-ESRI Conference)
 Materiali per presentazione e promozione.
