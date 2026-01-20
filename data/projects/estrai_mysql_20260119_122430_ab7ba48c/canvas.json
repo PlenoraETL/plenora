@@ -12,6 +12,42 @@
       "columns": [
         {
           "name": "id",
+          "alias": "poi_aree_id",
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "osm_id",
+          "alias": "poi_aree_osm_id",
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "code",
+          "alias": "poi_aree_code",
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "fclass",
+          "alias": "poi_aree_fclass",
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "name",
+          "alias": "poi_aree_name",
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "geometry",
+          "alias": "poi_aree_geometry",
+          "visible": true,
+          "type": "geometry"
+        },
+        {
+          "name": "id",
           "alias": null,
           "visible": true,
           "type": "int"
@@ -41,18 +77,6 @@
           "type": "str"
         },
         {
-          "name": "geometry_wkt",
-          "alias": null,
-          "visible": true,
-          "type": "str"
-        },
-        {
-          "name": "geometry_type",
-          "alias": null,
-          "visible": true,
-          "type": "str"
-        },
-        {
           "name": "geometry",
           "alias": null,
           "visible": true,
@@ -72,19 +96,20 @@
       "fileName": "output_mysql",
       "format": "xlsx",
       "distinct": false,
-      "limit": null,
+      "limit": 10,
+      "geomColumn": null,
       "group_by_enabled": false,
       "group_by_columns": [],
       "aggregations": []
     },
     {
-      "id": "node_1768881383253",
+      "id": "node_1768906552011",
       "type": "source",
       "position": {
-        "x": 556.3234296100536,
-        "y": -13.53522857451081
+        "x": 223.0,
+        "y": 21.0
       },
-      "table_name": "poi_aree",
+      "table_name": "poi",
       "alias": null,
       "columns": [
         {
@@ -120,13 +145,13 @@
         {
           "name": "geometry_wkt",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "str"
         },
         {
           "name": "geometry_type",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "str"
         },
         {
@@ -150,6 +175,85 @@
       "format": null,
       "distinct": false,
       "limit": null,
+      "geomColumn": null,
+      "group_by_enabled": false,
+      "group_by_columns": [],
+      "aggregations": []
+    },
+    {
+      "id": "node_1768906753279",
+      "type": "source",
+      "position": {
+        "x": 769.0,
+        "y": 51.0
+      },
+      "table_name": "poi_aree",
+      "alias": null,
+      "columns": [
+        {
+          "name": "id",
+          "alias": "poi_aree_id",
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "osm_id",
+          "alias": "poi_aree_osm_id",
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "code",
+          "alias": "poi_aree_code",
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "fclass",
+          "alias": "poi_aree_fclass",
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "name",
+          "alias": "poi_aree_name",
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "geometry_wkt",
+          "alias": null,
+          "visible": false,
+          "type": "str"
+        },
+        {
+          "name": "geometry_type",
+          "alias": null,
+          "visible": false,
+          "type": "str"
+        },
+        {
+          "name": "geometry",
+          "alias": "poi_aree_geometry",
+          "visible": true,
+          "type": "geometry"
+        }
+      ],
+      "filters": [],
+      "calculated_columns": [],
+      "connection_id": null,
+      "source_project_id": null,
+      "file_source_id": null,
+      "transform_op": null,
+      "transform_category": null,
+      "api_id": null,
+      "param_mapping": null,
+      "data": {},
+      "fileName": null,
+      "format": null,
+      "distinct": false,
+      "limit": null,
+      "geomColumn": null,
       "group_by_enabled": false,
       "group_by_columns": [],
       "aggregations": []
@@ -157,8 +261,21 @@
   ],
   "edges": [
     {
-      "id": "edge_1768881385055",
-      "source": "node_1768881383253",
+      "id": "edge_1768906796035",
+      "source": "node_1768906552011",
+      "target": "node_1768906753279",
+      "join_type": "left",
+      "source_column": "fclass",
+      "target_column": "fclass",
+      "is_spatial": true,
+      "spatial_predicate": "ST_Intersects",
+      "source_geom_column": "geometry",
+      "target_geom_column": "geometry",
+      "spatial_distance": null
+    },
+    {
+      "id": "edge_1768906799394",
+      "source": "node_1768906753279",
       "target": "result_1768821975085",
       "join_type": "output",
       "source_column": "",

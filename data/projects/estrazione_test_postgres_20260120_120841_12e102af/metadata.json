@@ -1,0 +1,9 @@
+{
+  "id": "estrazione_test_postgres_20260120_120841_12e102af",
+  "name": "estrazione_test_postgres",
+  "description": "",
+  "project_type": "estrai",
+  "default_connection_id": "Test_PostgreSQL_20260119_100748_c64643b0",
+  "created_at": "2026-01-20T12:08:41.715573",
+  "updated_at": "2026-01-20T12:10:50.072759"
+}

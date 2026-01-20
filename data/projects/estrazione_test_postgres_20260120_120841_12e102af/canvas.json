@@ -1,0 +1,177 @@
+{
+  "nodes": [
+    {
+      "id": "node_1768907337188",
+      "type": "source",
+      "position": {
+        "x": 293.70260329000575,
+        "y": -446.2081206946768
+      },
+      "table_name": "poi",
+      "alias": null,
+      "columns": [
+        {
+          "name": "id",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "osm_id",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "code",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "fclass",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "name",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "geometry",
+          "alias": null,
+          "visible": true,
+          "type": "geometry:point:4326"
+        }
+      ],
+      "filters": [],
+      "calculated_columns": [
+        {
+          "name": "buffer",
+          "expression": {
+            "function": "BUFFER",
+            "params": {
+              "column": {
+                "function": "TRANSFORM",
+                "params": {
+                  "column": "geometry",
+                  "srid": "32632"
+                }
+              },
+              "distance": 1
+            }
+          },
+          "sql": "ST_AsText(ST_Buffer(ST_Transform(geometry, 32632), 1)) AS buffer",
+          "output_type": "geometry:polygon:32632",
+          "is_manual": false
+        }
+      ],
+      "connection_id": null,
+      "source_project_id": null,
+      "file_source_id": null,
+      "transform_op": null,
+      "transform_category": null,
+      "api_id": null,
+      "param_mapping": null,
+      "data": {},
+      "fileName": null,
+      "format": null,
+      "distinct": false,
+      "limit": null,
+      "geomColumn": null,
+      "group_by_enabled": false,
+      "group_by_columns": [],
+      "aggregations": []
+    },
+    {
+      "id": "result_1768907341948",
+      "type": "result",
+      "position": {
+        "x": 776.0,
+        "y": -498.6000000000003
+      },
+      "table_name": null,
+      "alias": null,
+      "columns": [
+        {
+          "name": "id",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "osm_id",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "code",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "fclass",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "name",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "geometry",
+          "alias": null,
+          "visible": true,
+          "type": "geometry:point:4326"
+        },
+        {
+          "name": "buffer",
+          "alias": null,
+          "visible": true,
+          "type": "geometry:polygon:32632"
+        }
+      ],
+      "filters": [],
+      "calculated_columns": [],
+      "connection_id": null,
+      "source_project_id": null,
+      "file_source_id": null,
+      "transform_op": null,
+      "transform_category": null,
+      "api_id": null,
+      "param_mapping": null,
+      "data": {},
+      "fileName": "output",
+      "format": "csv",
+      "distinct": false,
+      "limit": null,
+      "geomColumn": null,
+      "group_by_enabled": false,
+      "group_by_columns": [],
+      "aggregations": []
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge_1768907345150",
+      "source": "node_1768907337188",
+      "target": "result_1768907341948",
+      "join_type": "output",
+      "source_column": "",
+      "target_column": "",
+      "is_spatial": false,
+      "spatial_predicate": null,
+      "source_geom_column": null,
+      "target_geom_column": null,
+      "spatial_distance": null
+    }
+  ]
+}
