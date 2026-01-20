@@ -55,18 +55,21 @@ const ResultNode = memo(({ data, id }) => {
   // Verifica se il formato selezionato è geospaziale
   const isGeoFormat = ['geojson', 'gpkg', 'shp'].includes(format);
 
-  // Estrai colonne geometriche disponibili (DEDUPLICATO)
+  // Estrai colonne geometriche disponibili
   // Per MANIPOLA e ARRICCHISCI: usa data.availableColumns
   // Per ESTRAI: usa data.columns
   const geomSourceColumns = (isManipulate || isArricchisci)
     ? (data.availableColumns || [])
     : (data.columns || []);
   
-  const availableGeomColumns = [...new Set(
-    geomSourceColumns
-      .filter(col => isGeometryType(col.type))
-      .map(col => col.name || col.alias || col)
-  )];
+  // Costruisci lista colonne geometriche con nome completo (tabella.colonna)
+  const availableGeomColumns = geomSourceColumns
+    .filter(col => isGeometryType(col.type))
+    .map(col => {
+      const displayName = col.alias || col.name || col;
+      // Per ESTRAI usa source_table, per MANIPOLA/ARRICCHISCI potrebbe non esserci
+      return col.source_table ? `${col.source_table}.${displayName}` : displayName;
+    });
   
   // Flag: mostra formati geo solo se ci sono colonne geometriche
   const hasGeometryColumns = availableGeomColumns.length > 0;

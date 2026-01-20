@@ -321,14 +321,15 @@ function JoinModal({ edge, sourceNode, targetNode, onSave, onCancel, isEditing =
             {/* Distanza (solo per ST_DWithin) */}
             {spatialPredicate === 'ST_DWithin' && (
               <div className="form-group">
-                <label>Distanza (metri)</label>
+                <label>Distanza (unità CRS: gradi per EPSG:4326, metri per CRS proiettati)</label>
                 <input
                   type="number"
                   value={spatialDistance}
                   onChange={(e) => setSpatialDistance(parseFloat(e.target.value) || 0)}
                   min="0"
-                  step="10"
+                  step="0.0001"
                   className="join-modal__input"
+                  placeholder="es. 0.001 ≈ 100m per EPSG:4326"
                 />
               </div>
             )}

@@ -4,8 +4,8 @@
       "id": "result_1768821975085",
       "type": "result",
       "position": {
-        "x": 1634.0,
-        "y": 242.0
+        "x": 1463.8513016450029,
+        "y": -389.0
       },
       "table_name": null,
       "alias": null,
@@ -57,30 +57,6 @@
           "alias": null,
           "visible": true,
           "type": "geometry"
-        },
-        {
-          "name": "centroide",
-          "alias": null,
-          "visible": true,
-          "type": "geometry:point:3857"
-        },
-        {
-          "name": "area",
-          "alias": null,
-          "visible": true,
-          "type": "real"
-        },
-        {
-          "name": "lunghezza",
-          "alias": null,
-          "visible": true,
-          "type": "real"
-        },
-        {
-          "name": "perimetro",
-          "alias": null,
-          "visible": true,
-          "type": "real"
         }
       ],
       "filters": [],
@@ -96,7 +72,7 @@
       "fileName": "output_mysql",
       "format": "xlsx",
       "distinct": false,
-      "limit": 10,
+      "limit": null,
       "group_by_enabled": false,
       "group_by_columns": [],
       "aggregations": []
@@ -105,8 +81,8 @@
       "id": "node_1768881383253",
       "type": "source",
       "position": {
-        "x": 587.0,
-        "y": 451.0
+        "x": 556.3234296100536,
+        "y": -13.53522857451081
       },
       "table_name": "poi_aree",
       "alias": null,
@@ -161,80 +137,7 @@
         }
       ],
       "filters": [],
-      "calculated_columns": [
-        {
-          "name": "centroide",
-          "expression": {
-            "function": "CENTROID",
-            "params": {
-              "column": {
-                "function": "TRANSFORM",
-                "params": {
-                  "column": "geometry",
-                  "srid": "3857"
-                }
-              }
-            }
-          },
-          "sql": "ST_AsText(ST_Centroid(ST_Transform(geometry, 3857))) AS centroide",
-          "output_type": "geometry:point:3857",
-          "is_manual": false
-        },
-        {
-          "name": "area",
-          "expression": {
-            "function": "AREA",
-            "params": {
-              "column": {
-                "function": "TRANSFORM",
-                "params": {
-                  "column": "geometry",
-                  "srid": "3857"
-                }
-              }
-            }
-          },
-          "sql": "ST_Area(ST_Transform(geometry, 3857)) AS area",
-          "output_type": "real",
-          "is_manual": false
-        },
-        {
-          "name": "lunghezza",
-          "expression": {
-            "function": "LENGTH",
-            "params": {
-              "column": {
-                "function": "TRANSFORM",
-                "params": {
-                  "column": "geometry",
-                  "srid": "3857"
-                }
-              }
-            }
-          },
-          "sql": "ST_Length(ST_Transform(geometry, 3857)) AS lunghezza",
-          "output_type": "real",
-          "is_manual": false
-        },
-        {
-          "name": "perimetro",
-          "expression": {
-            "function": "PERIMETER",
-            "params": {
-              "column": {
-                "function": "TRANSFORM",
-                "params": {
-                  "column": "geometry",
-                  "srid": "3857"
-                }
-              }
-            }
-          },
-          "sql": "ST_Perimeter(ST_Transform(geometry, 3857)) AS perimetro",
-          "output_type": "real",
-          "is_manual": false
-        }
-      ],
+      "calculated_columns": [],
       "connection_id": null,
       "source_project_id": null,
       "file_source_id": null,

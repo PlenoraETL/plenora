@@ -4,8 +4,8 @@
       "id": "result_1768835184176",
       "type": "result",
       "position": {
-        "x": 957.0,
-        "y": 33.0
+        "x": 946.0,
+        "y": 32.0
       },
       "table_name": null,
       "alias": null,
@@ -17,106 +17,52 @@
           "type": "int"
         },
         {
-          "name": "valore_float",
-          "alias": null,
-          "visible": true,
-          "type": "real"
-        },
-        {
-          "name": "valore_int",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "data_random",
-          "alias": null,
-          "visible": true,
-          "type": "date"
-        },
-        {
-          "name": "nome",
+          "name": "osm_id",
           "alias": null,
           "visible": true,
           "type": "str"
         },
         {
-          "name": "arrotonda",
-          "alias": null,
-          "visible": true,
-          "type": "real"
-        },
-        {
-          "name": "abs",
-          "alias": null,
-          "visible": true,
-          "type": "real"
-        },
-        {
-          "name": "ceil",
+          "name": "code",
           "alias": null,
           "visible": true,
           "type": "int"
         },
         {
-          "name": "fllor",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "upper",
+          "name": "fclass",
           "alias": null,
           "visible": true,
           "type": "str"
         },
         {
-          "name": "lower",
+          "name": "name",
           "alias": null,
           "visible": true,
           "type": "str"
         },
         {
-          "name": "trim",
+          "name": "type",
           "alias": null,
           "visible": true,
           "type": "str"
         },
         {
-          "name": "concat",
+          "name": "geometry_wkt",
           "alias": null,
           "visible": true,
           "type": "str"
         },
         {
-          "name": "substring",
+          "name": "geometry_type",
           "alias": null,
           "visible": true,
           "type": "str"
         },
         {
-          "name": "anno",
+          "name": "geometry",
           "alias": null,
           "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "mese",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "giorno",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "math",
-          "alias": null,
-          "visible": true,
-          "type": "real"
+          "type": "geometry"
         }
       ],
       "filters": [],
@@ -138,13 +84,13 @@
       "aggregations": []
     },
     {
-      "id": "node_1768883361149",
+      "id": "node_1768894843690",
       "type": "source",
       "position": {
-        "x": 551.7264251502345,
-        "y": 243.96484996235847
+        "x": 568.0,
+        "y": 305.0
       },
-      "table_name": "test_data_real",
+      "table_name": "edifici",
       "alias": null,
       "columns": [
         {
@@ -154,200 +100,62 @@
           "type": "int"
         },
         {
-          "name": "valore_float",
+          "name": "osm_id",
           "alias": null,
           "visible": true,
-          "type": "real"
+          "type": "str"
         },
         {
-          "name": "valore_int",
+          "name": "code",
           "alias": null,
           "visible": true,
           "type": "int"
         },
         {
-          "name": "data_random",
-          "alias": null,
-          "visible": true,
-          "type": "date"
-        },
-        {
-          "name": "nome",
+          "name": "fclass",
           "alias": null,
           "visible": true,
           "type": "str"
+        },
+        {
+          "name": "name",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "type",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "geometry_wkt",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "geometry_type",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "geometry",
+          "alias": null,
+          "visible": true,
+          "type": "geometry"
         }
       ],
-      "filters": [],
-      "calculated_columns": [
+      "filters": [
         {
-          "name": "arrotonda",
-          "expression": {
-            "function": "ROUND",
-            "params": {
-              "column": "valore_float",
-              "decimals": 0
-            }
-          },
-          "sql": "ROUND(valore_float::numeric, 0) AS arrotonda",
-          "output_type": "real",
-          "is_manual": false
-        },
-        {
-          "name": "abs",
-          "expression": {
-            "function": "ABS",
-            "params": {
-              "column": "valore_float"
-            }
-          },
-          "sql": "ABS(valore_float) AS abs",
-          "output_type": "real",
-          "is_manual": false
-        },
-        {
-          "name": "ceil",
-          "expression": {
-            "function": "CEIL",
-            "params": {
-              "column": "valore_float"
-            }
-          },
-          "sql": "CEIL(valore_float) AS ceil",
-          "output_type": "int",
-          "is_manual": false
-        },
-        {
-          "name": "fllor",
-          "expression": {
-            "function": "FLOOR",
-            "params": {
-              "column": "valore_float"
-            }
-          },
-          "sql": "FLOOR(valore_float) AS fllor",
-          "output_type": "int",
-          "is_manual": false
-        },
-        {
-          "name": "upper",
-          "expression": {
-            "function": "UPPER",
-            "params": {
-              "column": "nome"
-            }
-          },
-          "sql": "UPPER(nome) AS upper",
-          "output_type": "str",
-          "is_manual": false
-        },
-        {
-          "name": "lower",
-          "expression": {
-            "function": "LOWER",
-            "params": {
-              "column": "nome"
-            }
-          },
-          "sql": "LOWER(nome) AS lower",
-          "output_type": "str",
-          "is_manual": false
-        },
-        {
-          "name": "trim",
-          "expression": {
-            "function": "TRIM",
-            "params": {
-              "column": "nome"
-            }
-          },
-          "sql": "TRIM(nome) AS trim",
-          "output_type": "str",
-          "is_manual": false
-        },
-        {
-          "name": "concat",
-          "expression": {
-            "function": "CONCAT",
-            "params": {
-              "values": [
-                "valore_float",
-                "valore_int",
-                "nome"
-              ],
-              "separator": "-"
-            }
-          },
-          "sql": "CONCAT_WS('-', valore_float, valore_int, nome) AS concat",
-          "output_type": "str",
-          "is_manual": false
-        },
-        {
-          "name": "substring",
-          "expression": {
-            "function": "SUBSTRING",
-            "params": {
-              "column": "nome",
-              "start": 5,
-              "length": null
-            }
-          },
-          "sql": "SUBSTRING(nome FROM 5) AS substring",
-          "output_type": "str",
-          "is_manual": false
-        },
-        {
-          "name": "anno",
-          "expression": {
-            "function": "YEAR",
-            "params": {
-              "column": "data_random"
-            }
-          },
-          "sql": "EXTRACT(YEAR FROM data_random) AS anno",
-          "output_type": "int",
-          "is_manual": false
-        },
-        {
-          "name": "mese",
-          "expression": {
-            "function": "MONTH",
-            "params": {
-              "column": "data_random"
-            }
-          },
-          "sql": "EXTRACT(MONTH FROM data_random) AS mese",
-          "output_type": "int",
-          "is_manual": false
-        },
-        {
-          "name": "giorno",
-          "expression": {
-            "function": "DAY",
-            "params": {
-              "column": "data_random"
-            }
-          },
-          "sql": "EXTRACT(DAY FROM data_random) AS giorno",
-          "output_type": "int",
-          "is_manual": false
-        },
-        {
-          "name": "math",
-          "expression": {
-            "function": "MATH",
-            "params": {
-              "column1": "valore_int",
-              "operator": null,
-              "column2": "valore_int",
-              "value": null
-            }
-          },
-          "sql": "(valore_int + valore_int) AS math",
-          "output_type": "real",
-          "is_manual": false
+          "column": "fclass",
+          "operator": "=",
+          "value": "building"
         }
       ],
+      "calculated_columns": [],
       "connection_id": null,
       "source_project_id": null,
       "file_source_id": null,
@@ -367,8 +175,8 @@
   ],
   "edges": [
     {
-      "id": "edge_1768883362940",
-      "source": "node_1768883361149",
+      "id": "edge_1768894846447",
+      "source": "node_1768894843690",
       "target": "result_1768835184176",
       "join_type": "output",
       "source_column": "",

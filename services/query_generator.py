@@ -400,8 +400,12 @@ class QueryGenerator:
             return f"CROSS JOIN {table_name}"
         
         join_type = (edge.join_type or 'LEFT').upper()
-        if join_type not in ('LEFT', 'RIGHT', 'INNER', 'OUTER', 'FULL', 'CROSS'):
+        if join_type not in ('LEFT', 'RIGHT', 'INNER', 'OUTER', 'FULL', 'FULL OUTER', 'CROSS'):
             join_type = 'LEFT'
+        
+        # Normalizza FULL o OUTER -> FULL OUTER (sintassi SQL standard)
+        if join_type in ('FULL', 'OUTER'):
+            join_type = 'FULL OUTER'
         
         table_name = node.table_name
         table_alias = node.alias or node.table_name

@@ -66,13 +66,35 @@ export function useCanvasValidation(nodes, edges, options = {}) {
     });
   }, []);
 
-  // Crea una stringa di "fingerprint" per rilevare cambiamenti reali
+  // ✅ FIX: Crea fingerprint che include i DATI rilevanti per la validazione
   const nodesFingerprint = useMemo(() => {
-    return nodes.map(n => n.id).sort().join(',');
+    return nodes.map(n => {
+      // Per tableNode, includi: id, alias, colonne visibili con alias
+      if (n.type === 'tableNode') {
+        const visibleCols = (n.data?.columns || [])
+          .filter(c => c.visible)
+          .map(c => `${c.name}:${c.alias || ''}`)
+          .join('|');
+        return `${n.id}:${n.data?.alias || ''}:${visibleCols}`;
+      }
+      // Per resultNode, includi solo id
+      return n.id;
+    }).sort().join(',');
   }, [nodes]);
   
   const edgesFingerprint = useMemo(() => {
-    return edges.map(e => `${e.source}-${e.target}`).sort().join(',');
+    return edges.map(e => {
+      // Includi configurazione join: tipo, colonne, spatial
+      const joinType = e.data?.join_type || 'left';
+      const srcCol = e.data?.source_column || '';
+      const tgtCol = e.data?.target_column || '';
+      const isSpatial = e.data?.is_spatial ? 'S' : 'N';
+      const spatialPred = e.data?.spatial_predicate || '';
+      const srcGeom = e.data?.source_geom_column || '';
+      const tgtGeom = e.data?.target_geom_column || '';
+      
+      return `${e.source}-${e.target}:${joinType}:${srcCol}:${tgtCol}:${isSpatial}:${spatialPred}:${srcGeom}:${tgtGeom}`;
+    }).sort().join(',');
   }, [edges]);
 
   // Validazione automatica con debounce

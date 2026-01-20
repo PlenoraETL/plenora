@@ -78,6 +78,7 @@ function EstraiEditor() {
           format: node.data.format,
           distinct: node.data.distinct || false,
           limit: node.data.limit || null,
+          geomColumn: node.data.geomColumn || null,
           columns: outputColumns,
           group_by_enabled: node.data.group_by_enabled || false,
           group_by_columns: node.data.group_by_columns || [],
@@ -257,6 +258,7 @@ function EstraiEditor() {
       format: node.format || 'csv',
       distinct: node.distinct || false,
       limit: node.limit || null,
+      geomColumn: node.geomColumn || null,
       columns: node.columns || [],
       group_by_enabled: node.group_by_enabled || false,
       group_by_columns: node.group_by_columns || [],
@@ -265,6 +267,7 @@ function EstraiEditor() {
       onUpdateFormat: handleUpdateResultFormat,
       onToggleDistinct: handleToggleDistinct,
       onUpdateLimit: handleUpdateLimit,
+      onUpdateGeomColumn: handleUpdateGeomColumn,
       onUpdateGroupBy: handleUpdateGroupBy,
       onPreview: () => preview.handlePreview(),
       onExecute: () => execution.handleExecute(),
@@ -457,6 +460,15 @@ function EstraiEditor() {
     setNodes((nds) =>
       nds.map((node) => node.id === nodeId 
         ? { ...node, data: { ...node.data, limit: newLimit } } 
+        : node
+      )
+    );
+  }, [setNodes]);
+
+  const handleUpdateGeomColumn = useCallback((nodeId, newGeomColumn) => {
+    setNodes((nds) =>
+      nds.map((node) => node.id === nodeId 
+        ? { ...node, data: { ...node.data, geomColumn: newGeomColumn } } 
         : node
       )
     );

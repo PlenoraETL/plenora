@@ -239,6 +239,7 @@ class Node(BaseModel):
     format: Optional[Literal["json", "csv", "xlsx", "geojson", "gpkg", "shp", "gdb"]] = None
     distinct: Optional[bool] = False
     limit: Optional[int] = None
+    geomColumn: Optional[str] = None  # Colonna geometria per export geospaziale (es: "poi.geometry")
     
     # ✅ NUOVO: Campi GROUP BY per ESTRAI
     group_by_enabled: Optional[bool] = False

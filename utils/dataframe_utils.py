@@ -21,6 +21,8 @@ import numpy as np
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Union
 import json
+import zipfile
+import tempfile
 
 from utils.logger import get_logger
 
@@ -39,7 +41,7 @@ def load_dataframe_from_file(
     """
     Carica un DataFrame da file in vari formati.
     
-    Supporta: CSV, XLSX, JSON, Parquet, GeoJSON, GPKG, SHP
+    Supporta: CSV, XLSX, JSON, Parquet, GeoJSON, GPKG, SHP, ZIP (Shapefile/GDB)
     
     Args:
         file_path: Path del file da caricare
@@ -100,6 +102,11 @@ def load_dataframe_from_file(
                     df = gpd.read_file(file_path, layer=layers[0])
                 else:
                     raise ValueError(f"Nessun layer trovato in {file_path}")
+        
+        elif file_ext == '.zip':
+            # Gestione ZIP: può contenere Shapefile o GDB
+            df = _load_from_zip(file_path, sheet=sheet, layer=layer)
+        
         else:
             # Fallback: prova come CSV
             logger.warning(f"Formato {file_ext} non riconosciuto, provo come CSV")
@@ -111,6 +118,82 @@ def load_dataframe_from_file(
     except Exception as e:
         logger.error(f"Errore caricamento {file_path}: {e}")
         raise
+
+
+def _load_from_zip(
+    zip_path: Path,
+    sheet: Optional[str] = None,
+    layer: Optional[str] = None
+) -> pd.DataFrame:
+    """
+    Carica un DataFrame da un file ZIP.
+    
+    Gestisce:
+    - Shapefile zippati (.shp + .shx + .dbf + .prj + ...)
+    - FileGDB zippati (.gdb/)
+    - Singoli file zippati (CSV, JSON, ecc.)
+    
+    Args:
+        zip_path: Path del file ZIP
+        sheet: Nome foglio per Excel
+        layer: Nome layer per GDB/GPKG
+        
+    Returns:
+        DataFrame caricato
+    """
+    import geopandas as gpd
+    
+    with zipfile.ZipFile(zip_path, 'r') as zf:
+        names = zf.namelist()
+        
+        # Caso 1: Shapefile zippato
+        shp_files = [n for n in names if n.lower().endswith('.shp')]
+        if shp_files:
+            logger.debug(f"ZIP contiene Shapefile: {shp_files[0]}")
+            with tempfile.TemporaryDirectory() as tmpdir:
+                zf.extractall(tmpdir)
+                shp_path = Path(tmpdir) / shp_files[0]
+                df = gpd.read_file(shp_path)
+                logger.warning("⚠️ Shapefile caricato - nomi colonne potrebbero essere troncati a 10 caratteri!")
+            return df
+        
+        # Caso 2: FileGDB zippato
+        gdb_entries = [n for n in names if '.gdb/' in n or n.lower().endswith('.gdb')]
+        if gdb_entries:
+            logger.debug(f"ZIP contiene FileGDB")
+            with tempfile.TemporaryDirectory() as tmpdir:
+                zf.extractall(tmpdir)
+                # Trova la directory .gdb
+                gdb_dirs = list(Path(tmpdir).rglob('*.gdb'))
+                if gdb_dirs:
+                    gdb_path = gdb_dirs[0]
+                    if layer:
+                        df = gpd.read_file(gdb_path, layer=layer)
+                    else:
+                        import fiona
+                        layers = fiona.listlayers(gdb_path)
+                        if layers:
+                            df = gpd.read_file(gdb_path, layer=layers[0])
+                        else:
+                            raise ValueError(f"Nessun layer trovato in {gdb_path}")
+                    return df
+                else:
+                    raise ValueError("FileGDB non trovato nello ZIP")
+        
+        # Caso 3: Singolo file zippato
+        if len(names) == 1:
+            logger.debug(f"ZIP contiene singolo file: {names[0]}")
+            with tempfile.TemporaryDirectory() as tmpdir:
+                zf.extractall(tmpdir)
+                extracted = Path(tmpdir) / names[0]
+                # Carica ricorsivamente
+                df = load_dataframe_from_file(extracted, sheet=sheet, layer=layer)
+            return df
+        
+        # Caso 4: ZIP con più file non riconosciuto
+        raise ValueError(
+            f"Formato ZIP non riconosciuto. Contenuto: {names[:10]}{'...' if len(names) > 10 else ''}"
+        )
 
 
 def find_latest_output_file(output_dir: Union[str, Path]) -> Optional[Path]:
@@ -152,6 +235,8 @@ def save_dataframe(
     
     Supporta: CSV, XLSX, JSON, Parquet, GeoJSON, GPKG, SHP
     
+    Per SHP: restituisce un file ZIP contenente tutti i file dello Shapefile.
+    
     Args:
         df: DataFrame da salvare
         output_path: Path di output (senza estensione, verrà aggiunta)
@@ -160,7 +245,7 @@ def save_dataframe(
         crs: Sistema di riferimento per output geospaziali
         
     Returns:
-        Path del file salvato
+        Path del file salvato (ZIP per shapefile)
         
     Raises:
         ValueError: Se il formato non è supportato o manca geometria per formati geo
@@ -172,9 +257,8 @@ def save_dataframe(
     # Assicura che la directory esista
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
-    # Aggiungi estensione se non presente
-    if not output_path.suffix:
-        output_path = output_path.with_suffix(f'.{format}')
+    # Rimuovi estensione esistente per gestirla correttamente
+    base_path = output_path.with_suffix('')
     
     format_lower = format.lower()
     geo_formats = ['geojson', 'gpkg', 'shp']
@@ -183,20 +267,24 @@ def save_dataframe(
     
     try:
         if format_lower == 'csv':
-            df.to_csv(output_path, index=False)
+            final_path = base_path.with_suffix('.csv')
+            df.to_csv(final_path, index=False)
             
         elif format_lower == 'xlsx':
-            df.to_excel(output_path, index=False)
+            final_path = base_path.with_suffix('.xlsx')
+            df.to_excel(final_path, index=False)
             
         elif format_lower == 'json':
+            final_path = base_path.with_suffix('.json')
             # Sanitizza prima di salvare
             records = df.to_dict(orient='records')
             records = sanitize_for_json(records)
-            with open(output_path, 'w', encoding='utf-8') as f:
+            with open(final_path, 'w', encoding='utf-8') as f:
                 json.dump(records, f, indent=2, default=str, ensure_ascii=False)
                 
         elif format_lower == 'parquet':
-            df.to_parquet(output_path, index=False)
+            final_path = base_path.with_suffix('.parquet')
+            df.to_parquet(final_path, index=False)
             
         elif format_lower in geo_formats:
             # Auto-detect colonna geometria se non specificata
@@ -215,27 +303,69 @@ def save_dataframe(
             
             # Salva nel formato richiesto
             if format_lower == 'geojson':
-                gdf.to_file(output_path, driver='GeoJSON')
+                final_path = base_path.with_suffix('.geojson')
+                gdf.to_file(final_path, driver='GeoJSON')
+                
             elif format_lower == 'gpkg':
-                gdf.to_file(output_path, driver='GPKG')
+                final_path = base_path.with_suffix('.gpkg')
+                gdf.to_file(final_path, driver='GPKG')
+                
             elif format_lower == 'shp':
-                gdf.to_file(output_path, driver='ESRI Shapefile')
-                # Warning per limiti shapefile
-                long_cols = [c for c in df.columns if len(c) > 10]
-                if long_cols:
-                    logger.warning(
-                        f"⚠️ Shapefile: {len(long_cols)} colonne con nomi > 10 caratteri "
-                        f"saranno troncate: {long_cols[:5]}..."
-                    )
+                # Shapefile: salva in temp e zippa
+                final_path = _save_shapefile_as_zip(gdf, base_path, df.columns)
         else:
             raise ValueError(f"Formato '{format_lower}' non supportato")
         
-        logger.info(f"Salvato: {output_path} ({len(df)} righe)")
-        return output_path
+        logger.info(f"Salvato: {final_path} ({len(df)} righe)")
+        return final_path
         
     except Exception as e:
         logger.error(f"Errore salvataggio {output_path}: {e}")
         raise
+
+
+def _save_shapefile_as_zip(
+    gdf,
+    base_path: Path,
+    original_columns: List[str]
+) -> Path:
+    """
+    Salva un GeoDataFrame come Shapefile zippato.
+    
+    Args:
+        gdf: GeoDataFrame da salvare
+        base_path: Path base per il file (senza estensione)
+        original_columns: Colonne originali per warning troncamento
+        
+    Returns:
+        Path del file ZIP creato
+    """
+    # Usa il nome del file base come nome interno dello shapefile
+    shp_name = base_path.stem
+    
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Salva shapefile nella directory temporanea
+        shp_path = Path(tmpdir) / f"{shp_name}.shp"
+        gdf.to_file(shp_path, driver='ESRI Shapefile')
+        
+        # Crea ZIP con tutti i file dello shapefile
+        zip_path = base_path.with_suffix('.zip')
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+            # Aggiungi tutti i file generati (.shp, .shx, .dbf, .prj, .cpg, ecc.)
+            for f in Path(tmpdir).glob(f"{shp_name}.*"):
+                zf.write(f, f.name)
+                logger.debug(f"  Aggiunto a ZIP: {f.name}")
+        
+        # Warning per limiti shapefile
+        long_cols = [c for c in original_columns if len(str(c)) > 10]
+        if long_cols:
+            logger.warning(
+                f"⚠️ Shapefile: {len(long_cols)} colonne con nomi > 10 caratteri "
+                f"saranno troncate: {long_cols[:5]}..."
+            )
+    
+    logger.debug(f"Shapefile zippato: {zip_path}")
+    return zip_path
 
 
 # =============================================================================

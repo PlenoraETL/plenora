@@ -405,6 +405,7 @@ class SqlFunctionTranslator:
         elif self.db_type == DbType.MYSQL:
             return f"ST_Buffer({col}, {distance})"
         elif self.db_type == DbType.ORACLE:
+            # Oracle SDO_BUFFER richiede tolleranza come terzo parametro
             return f"SDO_GEOM.SDO_BUFFER({col}, {distance}, 0.005)"
         elif self.db_type == DbType.SQLITE:
             return f"Buffer({col}, {distance})"
@@ -473,7 +474,8 @@ class SqlFunctionTranslator:
             # MySQL non ha ST_Perimeter diretto
             return f"ST_Length(ST_ExteriorRing({col}))"
         elif self.db_type == DbType.ORACLE:
-            return f"SDO_GEOM.SDO_LENGTH(SDO_GEOM.SDO_BOUNDARY({col}))"
+            # Oracle: SDO_GEOM.SDO_LENGTH su un poligono restituisce il perimetro
+            return f"SDO_GEOM.SDO_LENGTH({col}, 0.005)"
         elif self.db_type == DbType.SQLITE:
             return f"Perimeter({col})"
         else:

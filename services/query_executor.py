@@ -37,7 +37,8 @@ class QueryExecutor:
         project_id: str,
         output_filename: str,
         output_format: str = "csv",
-        params: Optional[Dict[str, Any]] = None
+        params: Optional[Dict[str, Any]] = None,
+        geom_column: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Esegue query e salva risultati.
@@ -49,6 +50,7 @@ class QueryExecutor:
             output_filename: Nome file output (senza estensione)
             output_format: Formato output (csv, json, xlsx, geojson, gpkg, shp)
             params: Dizionario parametri per query preparate
+            geom_column: Nome colonna geometria per export geospaziale (opzionale)
             
         Returns:
             Dict con risultato esecuzione
@@ -69,7 +71,8 @@ class QueryExecutor:
             saved_path = save_dataframe(
                 df=df,
                 output_path=output_path,
-                format=output_format
+                format=output_format,
+                geom_column=geom_column
             )
             
             return {

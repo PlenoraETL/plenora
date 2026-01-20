@@ -138,13 +138,20 @@ class OrchestratorService:
         except Exception as e:
             return {"success": False, "message": f"Errore generazione SQL: {str(e)}"}
 
+        # Estrai nome colonna geometria (rimuovi prefisso tabella se presente)
+        # Es: "poi.geometry" -> "geometry", "landuse.land_geometry" -> "land_geometry"
+        geom_column = None
+        if result_node.geomColumn:
+            geom_column = result_node.geomColumn.split('.')[-1] if '.' in result_node.geomColumn else result_node.geomColumn
+
         res = self.executor.execute_query(
             connection=connection,
             sql=query_info['sql'],
             project_id=project_id,
             output_filename=result_node.fileName or 'output',
             output_format=result_node.format or 'csv',
-            params=query_info.get('params')
+            params=query_info.get('params'),
+            geom_column=geom_column
         )
         
         # Salva tipi colonne nel metadata

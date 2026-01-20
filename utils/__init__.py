@@ -7,6 +7,33 @@ Moduli:
 - logger: Logging strutturato (già esistente)
 """
 
+# ============================================================================
+# Configurazione PROJ_LIB per pyogrio/GDAL
+# DEVE essere PRIMA di qualsiasi import che usa GDAL/pyproj/geopandas
+# Risolve conflitto con PROJ_LIB di PostgreSQL/PostGIS
+# ============================================================================
+import os
+import sys
+
+def _configure_proj_lib():
+    """
+    Configura PROJ_LIB per usare la versione di Anaconda.
+    Necessario perché l'installer di PostGIS imposta PROJ_LIB sulla sua cartella,
+    che potrebbe non contenere proj.db o avere una versione incompatibile.
+    """
+    # Path Anaconda (Windows e Linux/Mac)
+    if sys.platform == 'win32':
+        anaconda_proj = os.path.join(sys.prefix, 'Library', 'share', 'proj')
+    else:
+        anaconda_proj = os.path.join(sys.prefix, 'share', 'proj')
+    
+    # Se esiste proj.db in Anaconda, usa quello
+    if os.path.exists(os.path.join(anaconda_proj, 'proj.db')):
+        os.environ['PROJ_LIB'] = anaconda_proj
+
+_configure_proj_lib()
+# ============================================================================
+
 from utils.dataframe_utils import (
     load_dataframe_from_file,
     save_dataframe,

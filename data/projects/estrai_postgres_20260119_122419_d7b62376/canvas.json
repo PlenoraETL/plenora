@@ -4,12 +4,48 @@
       "id": "result_1768821901541",
       "type": "result",
       "position": {
-        "x": 1597.0,
-        "y": 152.2588988734077
+        "x": 1592.0,
+        "y": 167.08416761835133
       },
       "table_name": null,
       "alias": null,
       "columns": [
+        {
+          "name": "id",
+          "alias": "land_id",
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "osm_id",
+          "alias": "land_osm_id",
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "code",
+          "alias": "land_code",
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "fclass",
+          "alias": "land_fclass",
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "name",
+          "alias": "land_name",
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "geometry",
+          "alias": "land_geometry",
+          "visible": true,
+          "type": "geometry:multipolygon:4326"
+        },
         {
           "name": "id",
           "alias": null,
@@ -17,88 +53,34 @@
           "type": "int"
         },
         {
-          "name": "valore_float",
-          "alias": null,
-          "visible": true,
-          "type": "real"
-        },
-        {
-          "name": "valore_int",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "data_random",
-          "alias": null,
-          "visible": true,
-          "type": "date"
-        },
-        {
-          "name": "nome",
+          "name": "osm_id",
           "alias": null,
           "visible": true,
           "type": "str"
         },
         {
-          "name": "arrotonda",
-          "alias": null,
-          "visible": true,
-          "type": "real"
-        },
-        {
-          "name": "valore_assoluto",
-          "alias": null,
-          "visible": true,
-          "type": "real"
-        },
-        {
-          "name": "arrotonda_eccesso",
+          "name": "code",
           "alias": null,
           "visible": true,
           "type": "int"
         },
         {
-          "name": "arrotonda_difetto",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "math",
-          "alias": null,
-          "visible": true,
-          "type": "real"
-        },
-        {
-          "name": "trim",
+          "name": "fclass",
           "alias": null,
           "visible": true,
           "type": "str"
         },
         {
-          "name": "anno",
+          "name": "name",
           "alias": null,
           "visible": true,
-          "type": "int"
+          "type": "str"
         },
         {
-          "name": "mese",
+          "name": "geometry",
           "alias": null,
           "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "giorno",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "math2",
-          "alias": null,
-          "visible": true,
-          "type": "real"
+          "type": "geometry:point:4326"
         }
       ],
       "filters": [],
@@ -111,22 +93,23 @@
       "api_id": null,
       "param_mapping": null,
       "data": {},
-      "fileName": "output_postgres",
-      "format": "xlsx",
+      "fileName": "output_postgres2",
+      "format": "csv",
       "distinct": false,
-      "limit": 5,
+      "limit": 10,
+      "geomColumn": "poi.geometry",
       "group_by_enabled": false,
       "group_by_columns": [],
       "aggregations": []
     },
     {
-      "id": "node_1768878689865",
+      "id": "node_1768903399333",
       "type": "source",
       "position": {
-        "x": 945.0,
-        "y": 250.0
+        "x": 439.0,
+        "y": 264.0
       },
-      "table_name": "test_data_real",
+      "table_name": "poi",
       "alias": null,
       "columns": [
         {
@@ -136,160 +119,38 @@
           "type": "int"
         },
         {
-          "name": "valore_float",
+          "name": "osm_id",
           "alias": null,
           "visible": true,
-          "type": "real"
+          "type": "str"
         },
         {
-          "name": "valore_int",
+          "name": "code",
           "alias": null,
           "visible": true,
           "type": "int"
         },
         {
-          "name": "data_random",
-          "alias": null,
-          "visible": true,
-          "type": "date"
-        },
-        {
-          "name": "nome",
+          "name": "fclass",
           "alias": null,
           "visible": true,
           "type": "str"
+        },
+        {
+          "name": "name",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "geometry",
+          "alias": null,
+          "visible": true,
+          "type": "geometry:point:4326"
         }
       ],
       "filters": [],
-      "calculated_columns": [
-        {
-          "name": "arrotonda",
-          "expression": {
-            "function": "ROUND",
-            "params": {
-              "column": "valore_float",
-              "decimals": 0
-            }
-          },
-          "sql": "ROUND(valore_float, 0) AS arrotonda",
-          "output_type": "real",
-          "is_manual": false
-        },
-        {
-          "name": "valore_assoluto",
-          "expression": {
-            "function": "ABS",
-            "params": {
-              "column": "valore_float"
-            }
-          },
-          "sql": "ABS(valore_float) AS valore_assoluto",
-          "output_type": "real",
-          "is_manual": false
-        },
-        {
-          "name": "arrotonda_eccesso",
-          "expression": {
-            "function": "CEIL",
-            "params": {
-              "column": "valore_float"
-            }
-          },
-          "sql": "CEIL(valore_float) AS arrotonda_eccesso",
-          "output_type": "int",
-          "is_manual": false
-        },
-        {
-          "name": "arrotonda_difetto",
-          "expression": {
-            "function": "FLOOR",
-            "params": {
-              "column": "valore_float"
-            }
-          },
-          "sql": "FLOOR(valore_float) AS arrotonda_difetto",
-          "output_type": "int",
-          "is_manual": false
-        },
-        {
-          "name": "math",
-          "expression": {
-            "function": "MATH",
-            "params": {
-              "column1": "valore_float",
-              "operator": null,
-              "column2": "valore_float",
-              "value": null
-            }
-          },
-          "sql": "(valore_float + valore_float) AS math",
-          "output_type": "real",
-          "is_manual": false
-        },
-        {
-          "name": "trim",
-          "expression": {
-            "function": "TRIM",
-            "params": {
-              "column": "nome"
-            }
-          },
-          "sql": "TRIM(nome) AS trim",
-          "output_type": "str",
-          "is_manual": false
-        },
-        {
-          "name": "anno",
-          "expression": {
-            "function": "YEAR",
-            "params": {
-              "column": "data_random"
-            }
-          },
-          "sql": "EXTRACT(YEAR FROM data_random) AS anno",
-          "output_type": "int",
-          "is_manual": false
-        },
-        {
-          "name": "mese",
-          "expression": {
-            "function": "MONTH",
-            "params": {
-              "column": "data_random"
-            }
-          },
-          "sql": "EXTRACT(MONTH FROM data_random) AS mese",
-          "output_type": "int",
-          "is_manual": false
-        },
-        {
-          "name": "giorno",
-          "expression": {
-            "function": "DAY",
-            "params": {
-              "column": "data_random"
-            }
-          },
-          "sql": "EXTRACT(DAY FROM data_random) AS giorno",
-          "output_type": "int",
-          "is_manual": false
-        },
-        {
-          "name": "math2",
-          "expression": {
-            "function": "MATH",
-            "params": {
-              "column1": "valore_int",
-              "operator": null,
-              "column2": "valore_int",
-              "value": null
-            }
-          },
-          "sql": "(valore_int + valore_int) AS math2",
-          "output_type": "real",
-          "is_manual": false
-        }
-      ],
+      "calculated_columns": [],
       "connection_id": null,
       "source_project_id": null,
       "file_source_id": null,
@@ -302,6 +163,73 @@
       "format": null,
       "distinct": false,
       "limit": null,
+      "geomColumn": null,
+      "group_by_enabled": false,
+      "group_by_columns": [],
+      "aggregations": []
+    },
+    {
+      "id": "node_1768904222581",
+      "type": "source",
+      "position": {
+        "x": 876.7026032900058,
+        "y": 311.74349177498516
+      },
+      "table_name": "landuse",
+      "alias": null,
+      "columns": [
+        {
+          "name": "id",
+          "alias": "land_id",
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "osm_id",
+          "alias": "land_osm_id",
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "code",
+          "alias": "land_code",
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "fclass",
+          "alias": "land_fclass",
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "name",
+          "alias": "land_name",
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "geometry",
+          "alias": "land_geometry",
+          "visible": true,
+          "type": "geometry:multipolygon:4326"
+        }
+      ],
+      "filters": [],
+      "calculated_columns": [],
+      "connection_id": null,
+      "source_project_id": null,
+      "file_source_id": null,
+      "transform_op": null,
+      "transform_category": null,
+      "api_id": null,
+      "param_mapping": null,
+      "data": {},
+      "fileName": null,
+      "format": null,
+      "distinct": false,
+      "limit": null,
+      "geomColumn": null,
       "group_by_enabled": false,
       "group_by_columns": [],
       "aggregations": []
@@ -309,8 +237,21 @@
   ],
   "edges": [
     {
-      "id": "edge_1768878692120",
-      "source": "node_1768878689865",
+      "id": "edge_1768904242043",
+      "source": "node_1768903399333",
+      "target": "node_1768904222581",
+      "join_type": "inner",
+      "source_column": "",
+      "target_column": "",
+      "is_spatial": true,
+      "spatial_predicate": "ST_DWithin",
+      "source_geom_column": "geometry",
+      "target_geom_column": "geometry",
+      "spatial_distance": 0.001
+    },
+    {
+      "id": "edge_1768904243900",
+      "source": "node_1768904222581",
       "target": "result_1768821901541",
       "join_type": "output",
       "source_column": "",
