@@ -4,10 +4,10 @@
 
 | Modulo | Completamento | Note |
 |--------|---------------|------|
-| **Estrai** | 98% ✅ | Completo, solo finiture |
-| **Manipola** | 95% ✅ | 24 trasformazioni (12 base + 12 spaziali) |
+| **Estrai** | 98% ✅ | 357/368 test passati (97%) |
+| **Manipola** | 95% ✅ | 24 trasformazioni, test da eseguire |
 | **Arricchisci** | 40% 🔄 | File esterni integrati, core da completare |
-| **File Esterni** | 100% ✅ | Upload, selezione colonne, SRID, integrato in tutti i moduli |
+| **File Esterni** | 100% ✅ | Upload, selezione colonne, SRID |
 | **Upload** | 0% ❌ | Da fare |
 | **Scheduler** | 0% ❌ | Da fare |
 
@@ -48,14 +48,13 @@ Pulizia codice, rimuovi duplicati, centralizza logica comune.
 Eseguire tutti i test del Piano Test, fix bug trovati.
 
 **Aree da testare:**
-- [ ] Dashboard e Gestione Progetti (15 test)
-- [ ] Modulo ESTRAI (35 test)
-- [ ] Modulo MANIPOLA (159 test) ← Aggiornato con tutte le trasformazioni
+- [x] Connessioni Database (5/5 DB) ✅ 100%
+- [x] Modulo ESTRAI (357/368 test) ✅ 97%
+- [ ] Modulo MANIPOLA (0/159 test) ☐ 0% - **PROSSIMO**
 - [ ] Modulo FILE ESTERNI (15 test)
 - [ ] Modulo ARRICCHISCI (20 test)
 - [ ] Sicurezza (15 test)
 - [ ] UI/UX Generale (15 test)
-- [ ] DB Cross-Platform (10 test)
 
 ### FASE 3: INCREMENTO FUNZIONALITÀ (Dopo stabilizzazione)
 Nuove feature solo su base stabile.
@@ -94,6 +93,18 @@ Materiali per presentazione e promozione.
 - ✅ Refactoring orchestrator_service.py in moduli separati
 - ✅ Piano test MANIPOLA aggiornato (159 test case)
 - ✅ Documentate tutte le 24 trasformazioni implementate
+
+### 19-20 Gennaio 2026 - TEST ESTRAI COMPLETATI ✅
+- ✅ **Matrice 1 - Connessioni**: 5/5 database (PostgreSQL, MySQL, MariaDB, SQL Server, Oracle)
+- ✅ **Matrice 2 - UI Canvas**: Drag&drop, preview, selezione colonne su tutti i DB
+- ✅ **Matrice 3 - Filtri WHERE**: Tutti i 10 operatori su tutti i 5 DB
+- ✅ **Matrice 4 - Colonne Calcolate**: 
+  - Geometriche: PostgreSQL 9/9, MySQL 2/9, MariaDB 3/9, SQL Server 8/9, Oracle 9/9
+  - Numeriche, Testo, Data, Math: 100% su tutti i DB
+- ✅ **Matrice 5 - Esecuzione/Output**: CSV, GeoJSON, GPKG, SHP su tutti i DB
+- ✅ **Matrice 6 - Tipi Dati**: INTEGER, VARCHAR, FLOAT, DATE, BOOLEAN, GEOMETRY su tutti i DB
+- ✅ **Matrice 7 - Join**: INNER, LEFT, RIGHT, FULL OUTER, Spatial Join su tutti i DB
+- ✅ **Copertura totale ESTRAI**: 357/368 test (97%)
 
 ### 18 Gennaio 2026
 - ✅ FileManager con upload, selezione colonne, SRID manuale
