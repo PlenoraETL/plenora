@@ -5,7 +5,7 @@
   "project_type": "estrai",
   "default_connection_id": "Test_Oracle_20260119_102947_809c09c7",
   "created_at": "2026-01-19T16:07:26.695398",
-  "updated_at": "2026-01-20T08:44:21.914476",
+  "updated_at": "2026-01-20T17:00:03.469706",
   "columns_metadata": [
     {
       "name": "ID",
@@ -28,16 +28,16 @@
       "type": "str"
     },
     {
-      "name": "GEOMETRY_W",
+      "name": "GEOMETRY_WKT",
       "type": "str"
     },
     {
-      "name": "GEOMETRY_T",
+      "name": "GEOMETRY_TYPE",
       "type": "str"
     },
     {
-      "name": "geometry",
-      "type": "str"
+      "name": "GEOMETRY",
+      "type": "geometry"
     }
   ]
 }

@@ -4,8 +4,8 @@
       "id": "result_1768837918086",
       "type": "result",
       "position": {
-        "x": 1130.0,
-        "y": 113.0
+        "x": 1197.0,
+        "y": 120.0
       },
       "table_name": null,
       "alias": null,
@@ -69,22 +69,23 @@
       "api_id": null,
       "param_mapping": null,
       "data": {},
-      "fileName": "output_oracle",
-      "format": "shp",
+      "fileName": "poi_aree_oracle",
+      "format": "csv",
       "distinct": false,
       "limit": null,
+      "geomColumn": null,
       "group_by_enabled": false,
       "group_by_columns": [],
       "aggregations": []
     },
     {
-      "id": "node_1768895003435",
+      "id": "node_1768924783755",
       "type": "source",
       "position": {
-        "x": 635.0,
-        "y": 255.0
+        "x": 806.0,
+        "y": 282.0
       },
-      "table_name": "POI",
+      "table_name": "POI_AREE",
       "alias": null,
       "columns": [
         {
@@ -136,13 +137,7 @@
           "type": "geometry"
         }
       ],
-      "filters": [
-        {
-          "column": "ID",
-          "operator": "=",
-          "value": "1"
-        }
-      ],
+      "filters": [],
       "calculated_columns": [],
       "connection_id": null,
       "source_project_id": null,
@@ -156,6 +151,7 @@
       "format": null,
       "distinct": false,
       "limit": null,
+      "geomColumn": null,
       "group_by_enabled": false,
       "group_by_columns": [],
       "aggregations": []
@@ -163,8 +159,8 @@
   ],
   "edges": [
     {
-      "id": "edge_1768895005460",
-      "source": "node_1768895003435",
+      "id": "edge_1768924785620",
+      "source": "node_1768924783755",
       "target": "result_1768837918086",
       "join_type": "output",
       "source_column": "",

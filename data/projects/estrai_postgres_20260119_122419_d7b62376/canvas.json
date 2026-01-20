@@ -12,42 +12,6 @@
       "columns": [
         {
           "name": "id",
-          "alias": "land_id",
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "osm_id",
-          "alias": "land_osm_id",
-          "visible": true,
-          "type": "str"
-        },
-        {
-          "name": "code",
-          "alias": "land_code",
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "fclass",
-          "alias": "land_fclass",
-          "visible": true,
-          "type": "str"
-        },
-        {
-          "name": "name",
-          "alias": "land_name",
-          "visible": true,
-          "type": "str"
-        },
-        {
-          "name": "geometry",
-          "alias": "land_geometry",
-          "visible": true,
-          "type": "geometry:multipolygon:4326"
-        },
-        {
-          "name": "id",
           "alias": null,
           "visible": true,
           "type": "int"
@@ -93,10 +57,10 @@
       "api_id": null,
       "param_mapping": null,
       "data": {},
-      "fileName": "output_postgres2",
-      "format": "csv",
+      "fileName": "poi_postgres",
+      "format": "shp",
       "distinct": false,
-      "limit": 10,
+      "limit": null,
       "geomColumn": "poi.geometry",
       "group_by_enabled": false,
       "group_by_columns": [],
@@ -167,91 +131,12 @@
       "group_by_enabled": false,
       "group_by_columns": [],
       "aggregations": []
-    },
-    {
-      "id": "node_1768904222581",
-      "type": "source",
-      "position": {
-        "x": 876.7026032900058,
-        "y": 311.74349177498516
-      },
-      "table_name": "landuse",
-      "alias": null,
-      "columns": [
-        {
-          "name": "id",
-          "alias": "land_id",
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "osm_id",
-          "alias": "land_osm_id",
-          "visible": true,
-          "type": "str"
-        },
-        {
-          "name": "code",
-          "alias": "land_code",
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "fclass",
-          "alias": "land_fclass",
-          "visible": true,
-          "type": "str"
-        },
-        {
-          "name": "name",
-          "alias": "land_name",
-          "visible": true,
-          "type": "str"
-        },
-        {
-          "name": "geometry",
-          "alias": "land_geometry",
-          "visible": true,
-          "type": "geometry:multipolygon:4326"
-        }
-      ],
-      "filters": [],
-      "calculated_columns": [],
-      "connection_id": null,
-      "source_project_id": null,
-      "file_source_id": null,
-      "transform_op": null,
-      "transform_category": null,
-      "api_id": null,
-      "param_mapping": null,
-      "data": {},
-      "fileName": null,
-      "format": null,
-      "distinct": false,
-      "limit": null,
-      "geomColumn": null,
-      "group_by_enabled": false,
-      "group_by_columns": [],
-      "aggregations": []
     }
   ],
   "edges": [
     {
-      "id": "edge_1768904242043",
+      "id": "edge_1768924730051",
       "source": "node_1768903399333",
-      "target": "node_1768904222581",
-      "join_type": "inner",
-      "source_column": "",
-      "target_column": "",
-      "is_spatial": true,
-      "spatial_predicate": "ST_DWithin",
-      "source_geom_column": "geometry",
-      "target_geom_column": "geometry",
-      "spatial_distance": 0.001
-    },
-    {
-      "id": "edge_1768904243900",
-      "source": "node_1768904222581",
       "target": "result_1768821901541",
       "join_type": "output",
       "source_column": "",

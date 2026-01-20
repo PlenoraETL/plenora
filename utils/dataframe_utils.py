@@ -287,6 +287,37 @@ def save_dataframe(
             df.to_parquet(final_path, index=False)
             
         elif format_lower in geo_formats:
+            # Gestione DataFrame vuoto - crea file geo vuoto ma valido
+            if len(df) == 0:
+                logger.warning(f"DataFrame vuoto, creazione {format_lower} vuoto")
+                if format_lower == 'geojson':
+                    final_path = base_path.with_suffix('.geojson')
+                    empty_geojson = {"type": "FeatureCollection", "features": []}
+                    with open(final_path, 'w', encoding='utf-8') as f:
+                        json.dump(empty_geojson, f)
+                elif format_lower == 'gpkg':
+                    final_path = base_path.with_suffix('.gpkg')
+                    import geopandas as gpd
+                    from shapely.geometry import Point
+                    empty_gdf = gpd.GeoDataFrame(
+                        {col: [] for col in df.columns}, 
+                        geometry=[], 
+                        crs="EPSG:4326"
+                    )
+                    empty_gdf.to_file(final_path, driver='GPKG')
+                elif format_lower == 'shp':
+                    final_path = base_path.with_suffix('.zip')
+                    import geopandas as gpd
+                    empty_gdf = gpd.GeoDataFrame(
+                        {col: [] for col in df.columns}, 
+                        geometry=[], 
+                        crs="EPSG:4326"
+                    )
+                    final_path = _save_shapefile_as_zip(empty_gdf, base_path, df.columns)
+                
+                logger.info(f"Salvato file vuoto: {final_path}")
+                return final_path
+            
             # Auto-detect colonna geometria se non specificata
             if geom_column is None:
                 geom_column = detect_geometry_column(df)
@@ -449,6 +480,7 @@ def sanitize_for_json(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     - numpy int/float → Python int/float
     - numpy bool → Python bool
     - Timestamp/datetime → stringa ISO
+    - Shapely geometry → WKT string
     
     Args:
         rows: Lista di dizionari da sanitizzare
@@ -456,6 +488,13 @@ def sanitize_for_json(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     Returns:
         Lista di dizionari sanitizzati
     """
+    # Import lazy per evitare dipendenze circolari
+    try:
+        from shapely.geometry.base import BaseGeometry
+        has_shapely = True
+    except ImportError:
+        has_shapely = False
+    
     for row in rows:
         for key, value in row.items():
             if pd.isna(value):
@@ -474,6 +513,9 @@ def sanitize_for_json(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                     row[key] = value.decode('utf-8')
                 except:
                     row[key] = value.hex()
+            # Gestione geometrie Shapely
+            elif has_shapely and isinstance(value, BaseGeometry):
+                row[key] = value.wkt if value and not value.is_empty else None
     
     return rows
 

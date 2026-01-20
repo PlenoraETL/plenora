@@ -1,278 +1,203 @@
-/**
- * TransformNode.css
- * Stili per il componente nodo trasformazione (modulo MANIPOLA)
- * Supporta: Join, Formula, Filter, Aggregate, Concat
- * Convenzione: BEM (Block Element Modifier)
- */
-
 /* ============================================================
-   VARIABILI CSS - Colori per tipo operazione
+   TransformNode.css - Stili completi per il nodo Trasformazione
    ============================================================ */
-.transform-node {
-  --color-join: #2196F3;
-  --color-formula: #4CAF50;
-  --color-aggregate: #FF9800;
-  --color-filter: #9C27B0;
-  --color-concat: #F44336;
-  --color-spatial: #E91E63;
-  --color-border: #e0e0e0;
-  --color-bg-light: #f5f5f5;
-  --color-bg-lighter: #fafafa;
-  --color-text: #333;
-  --color-text-muted: #666;
-  --color-text-light: #888;
-  --color-success: #4CAF50;
-  --color-success-light: #e8f5e9;
-  --color-warning: #FF9800;
-  --color-warning-light: #fff3e0;
-  --color-error: #f44336;
-  --color-error-light: #ffebee;
-  --color-spatial-light: #FCE4EC;
-}
 
 /* ============================================================
    CONTAINER PRINCIPALE
    ============================================================ */
 .transform-node {
-  background: white;
-  border: 1px solid var(--op-color, var(--color-join));
-  border-radius: 6px;
-  min-width: 240px;
-  max-width: 320px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
+  border: 2px solid #2196F3;
+  border-radius: 8px;
+  padding: 12px;
+  min-width: 280px;
+  max-width: 340px;
+  box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3);
   font-size: 12px;
 }
 
-/* Varianti colore */
-.transform-node--join { --op-color: var(--color-join); }
-.transform-node--formula { --op-color: var(--color-formula); }
-.transform-node--aggregate { --op-color: var(--color-aggregate); }
-.transform-node--filter { --op-color: var(--color-filter); }
-.transform-node--concat { --op-color: var(--color-concat); }
-/* Varianti spaziali */
-.transform-node--sjoin { --op-color: var(--color-spatial); }
-.transform-node--geo_buffer { --op-color: var(--color-spatial); }
-.transform-node--geo_centroid { --op-color: var(--color-spatial); }
-.transform-node--geo_area { --op-color: var(--color-spatial); }
-.transform-node--geo_clip { --op-color: var(--color-spatial); }
-
-/* ============================================================
-   HANDLE (connettori)
-   ============================================================ */
-.transform-node__handle {
-  background: var(--op-color, var(--color-join)) !important;
-  width: 10px !important;
-  height: 10px !important;
-  border: 2px solid white !important;
+/* Variante spaziale */
+.transform-node--spatial {
+  background: linear-gradient(135deg, #FCE4EC 0%, #F8BBD9 100%);
+  border-color: #E91E63;
+  box-shadow: 0 2px 8px rgba(233, 30, 99, 0.3);
 }
 
 /* ============================================================
    HEADER
    ============================================================ */
 .transform-node__header {
-  background: var(--op-color, var(--color-join));
-  color: white;
-  padding: 8px 10px;
-  border-radius: 5px 5px 0 0;
   display: flex;
-  align-items: center;
   justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
 }
 
 .transform-node__title {
-  font-weight: 600;
+  font-weight: bold;
+  color: #1565C0;
   font-size: 13px;
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
+.transform-node--spatial .transform-node__title {
+  color: #C2185B;
+}
+
 .transform-node__delete-btn {
-  background: rgba(255, 255, 255, 0.2);
+  background: transparent;
   border: none;
-  color: white;
-  width: 20px;
-  height: 20px;
-  border-radius: 3px;
+  color: #c62828;
   cursor: pointer;
-  font-size: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-left: 6px;
+  font-size: 16px;
+  padding: 2px 6px;
+  line-height: 1;
+  border-radius: 4px;
   transition: background 0.2s;
 }
 
 .transform-node__delete-btn:hover {
-  background: rgba(255, 255, 255, 0.35);
+  background: rgba(198, 40, 40, 0.1);
 }
 
 /* ============================================================
-   BODY
+   TABS PER CATEGORIA OPERAZIONI
+   ============================================================ */
+.transform-node__tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 6px;
+}
+
+.transform-node__tab {
+  flex: 1;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #666;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.transform-node__tab:hover {
+  background: rgba(255, 255, 255, 0.7);
+  color: #333;
+}
+
+.transform-node__tab--active {
+  background: #fff;
+  color: #1976D2;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+/* Tab Spaziale attiva */
+.transform-node__tab--active.transform-node__tab:last-child {
+  color: #E91E63;
+}
+
+/* ============================================================
+   BODY E SEZIONI
    ============================================================ */
 .transform-node__body {
-  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-/* ============================================================
-   SEZIONE TIPO OPERAZIONE
-   ============================================================ */
 .transform-node__section {
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
-.transform-node__label {
-  font-size: 11px;
-  color: var(--color-text-muted);
-  margin-bottom: 4px;
-  font-weight: 500;
-  display: block;
-}
-
-.transform-node__select {
-  width: 100%;
-  padding: 8px;
-  border: 1px solid var(--op-color, var(--color-join));
-  border-radius: 4px;
-  font-size: 12px;
-  background: white;
-  cursor: pointer;
-  font-weight: 500;
-  color: var(--op-color, var(--color-join));
-}
-
-.transform-node__select:focus {
-  outline: none;
-  box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
-}
-
-/* ============================================================
-   MESSAGGI VALIDAZIONE
-   ============================================================ */
-.transform-node__message {
-  padding: 12px;
-  border-radius: 4px;
-  font-size: 11px;
-  margin-bottom: 12px;
-}
-
-.transform-node__message--warning {
-  background: var(--color-warning-light);
-  border: 1px solid var(--color-warning);
-  color: #e65100;
-}
-
-.transform-node__message--error {
-  background: var(--color-error-light);
-  border: 1px solid var(--color-error);
-  color: #c62828;
-}
-
-.transform-node__message--success {
-  background: var(--color-success-light);
-  border: 1px solid var(--color-success);
-  color: #2e7d32;
-}
-
-.transform-node__message--info {
-  background: #e3f2fd;
-  border: 1px solid var(--color-join);
-  color: #1565C0;
-}
-
-.transform-node__message-hint {
-  font-size: 10px;
-  color: var(--color-text-light);
-  margin-top: 4px;
-}
-
-/* ============================================================
-   INFO BOX (nodi collegati)
-   ============================================================ */
-.transform-node__info-box {
-  padding: 8px 10px;
-  background: var(--color-bg-light);
-  border-radius: 4px;
-  font-size: 11px;
-  color: var(--color-text-muted);
-  margin-bottom: 12px;
-}
-
-.transform-node__info-row {
-  margin-bottom: 4px;
-}
-
-.transform-node__info-row:last-child {
-  margin-bottom: 0;
-}
-
-.transform-node__info-label {
-  font-weight: 600;
-  color: var(--color-text);
-}
-
-.transform-node__info-count {
-  font-size: 10px;
-  color: var(--color-text-light);
-  margin-left: 4px;
-}
-
-/* ============================================================
-   SEZIONE CONFIG - GENERALE
-   ============================================================ */
 .transform-node__config {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .transform-node__config-group {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
 /* ============================================================
-   INPUT E SELECT COMUNI
+   LABELS E INPUTS
    ============================================================ */
+.transform-node__label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #555;
+  margin-bottom: 2px;
+}
+
+.transform-node__select,
+.transform-node__config-select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #90CAF9;
+  border-radius: 4px;
+  background: #fff;
+  font-size: 12px;
+  color: #333;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.transform-node__select:hover,
+.transform-node__config-select:hover {
+  border-color: #42A5F5;
+}
+
+.transform-node__select:focus,
+.transform-node__config-select:focus {
+  outline: none;
+  border-color: #2196F3;
+  box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
+}
+
 .transform-node__input {
   width: 100%;
-  padding: 8px;
-  border: 1px solid var(--color-border);
+  padding: 8px 10px;
+  border: 1px solid #90CAF9;
   border-radius: 4px;
+  background: #fff;
   font-size: 12px;
+  color: #333;
   box-sizing: border-box;
 }
 
 .transform-node__input:focus {
   outline: none;
-  border-color: var(--op-color, var(--color-join));
-  box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.1);
+  border-color: #2196F3;
+  box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
 }
 
-.transform-node__input--monospace {
-  font-family: 'Consolas', 'Monaco', monospace;
-}
-
-.transform-node__config-select {
-  width: 100%;
-  padding: 8px;
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
+.transform-node__input--code {
+  font-family: 'Monaco', 'Consolas', monospace;
   font-size: 11px;
-  background: white;
 }
 
-/* ============================================================
-   TEXTAREA FORMULA/FILTER
-   ============================================================ */
 .transform-node__textarea {
   width: 100%;
-  padding: 8px;
-  border: 1px solid var(--color-border);
+  padding: 8px 10px;
+  border: 1px solid #90CAF9;
   border-radius: 4px;
+  background: #fff;
   font-size: 11px;
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: 'Monaco', 'Consolas', monospace;
+  color: #333;
   resize: vertical;
   min-height: 60px;
   box-sizing: border-box;
@@ -280,220 +205,396 @@
 
 .transform-node__textarea:focus {
   outline: none;
-  border-color: var(--op-color, var(--color-join));
-}
-
-.transform-node__textarea::placeholder {
-  color: #aaa;
+  border-color: #2196F3;
+  box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
 }
 
 /* ============================================================
-   COLONNE CLICCABILI
+   INFO BOX
    ============================================================ */
-.transform-node__columns-hint {
-  font-size: 10px;
-  color: var(--color-text-light);
-  margin-bottom: 4px;
-}
-
-.transform-node__columns-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  max-height: 80px;
-  overflow-y: auto;
-  padding: 6px;
-  background: var(--color-bg-lighter);
-  border: 1px solid var(--color-border);
+.transform-node__info-box {
+  background: rgba(255, 255, 255, 0.8);
   border-radius: 4px;
-}
-
-.transform-node__column-chip {
-  padding: 3px 8px;
-  background: white;
-  border: 1px solid var(--color-border);
-  border-radius: 3px;
-  font-size: 10px;
-  font-family: monospace;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.transform-node__column-chip:hover {
-  background: var(--op-color, var(--color-join));
-  color: white;
-  border-color: var(--op-color, var(--color-join));
-}
-
-/* ============================================================
-   HELP BOX (operatori supportati)
-   ============================================================ */
-.transform-node__help-box {
-  padding: 8px 10px;
-  background: #f3e5f5;
-  border-radius: 4px;
-  font-size: 10px;
-  color: #6A1B9A;
-  border: 1px solid #9C27B0;
-}
-
-.transform-node__help-box--formula {
-  background: #e8f5e9;
-  color: #2e7d32;
-  border-color: var(--color-success);
-}
-
-.transform-node__help-title {
-  font-weight: 600;
-  margin-bottom: 4px;
-}
-
-.transform-node__help-code {
-  font-family: monospace;
-}
-
-.transform-node__help-hint {
-  margin-top: 4px;
-  font-size: 9px;
-  color: var(--color-text-light);
-}
-
-/* ============================================================
-   CONFIRMATION BOX
-   ============================================================ */
-.transform-node__confirm-box {
-  padding: 10px;
-  background: var(--color-success-light);
-  border: 1px solid var(--color-success);
-  border-radius: 4px;
-  font-size: 11px;
-  color: #2e7d32;
-}
-
-.transform-node__confirm-title {
-  font-weight: 600;
-  margin-bottom: 4px;
-}
-
-.transform-node__confirm-content {
-  font-family: monospace;
-  font-size: 10px;
-}
-
-.transform-node__confirm-hint {
-  color: var(--color-text-muted);
-  margin-top: 4px;
-}
-
-/* ============================================================
-   RADIO/CHECKBOX OPTIONS
-   ============================================================ */
-.transform-node__options-group {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
   padding: 8px;
-  background: var(--color-bg-lighter);
-  border-radius: 4px;
-  border: 1px solid var(--color-border);
+  margin-bottom: 8px;
 }
 
-.transform-node__option-label {
+.transform-node__info-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  cursor: pointer;
+  gap: 6px;
   font-size: 11px;
+  padding: 2px 0;
 }
 
-.transform-node__option-label input {
-  margin: 0;
-}
-
-.transform-node__option-content {
-  flex: 1;
-}
-
-.transform-node__option-title {
+.transform-node__info-label {
   font-weight: 600;
+  color: #1565C0;
+  min-width: 50px;
 }
 
-.transform-node__option-desc {
+.transform-node__info-count {
+  color: #888;
   font-size: 10px;
-  color: var(--color-text-light);
+  margin-left: auto;
 }
 
 /* ============================================================
-   JOIN TYPE SELECTOR
+   JOIN TYPES (Radio buttons)
    ============================================================ */
 .transform-node__join-types {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
 }
 
 .transform-node__join-type {
   display: flex;
   align-items: center;
-  padding: 8px;
-  border: 1px solid var(--color-border);
+  gap: 4px;
+  padding: 6px 10px;
+  background: #fff;
+  border: 1px solid #ddd;
   border-radius: 4px;
   cursor: pointer;
-  background: white;
-  font-size: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #666;
   transition: all 0.2s;
 }
 
 .transform-node__join-type:hover {
-  border-color: var(--color-join);
+  border-color: #2196F3;
+  color: #333;
 }
 
 .transform-node__join-type--selected {
-  background: #e3f2fd;
-  border-color: var(--color-join);
+  background: #E3F2FD;
+  border-color: #2196F3;
+  color: #1565C0;
 }
 
-.transform-node__join-type input {
-  margin-right: 6px;
-}
-
-/* ============================================================
-   SCROLLBAR PERSONALIZZATA
-   ============================================================ */
-.transform-node__columns-list::-webkit-scrollbar {
-  width: 4px;
-}
-
-.transform-node__columns-list::-webkit-scrollbar-track {
-  background: #f0f0f0;
-  border-radius: 2px;
-}
-
-.transform-node__columns-list::-webkit-scrollbar-thumb {
-  background: #ccc;
-  border-radius: 2px;
-}
-
-.transform-node__columns-list::-webkit-scrollbar-thumb:hover {
-  background: #aaa;
+.transform-node__join-type input[type="radio"] {
+  display: none;
 }
 
 /* ============================================================
-   SPATIAL OPERATIONS
+   MESSAGES (Warning, Error, Success)
    ============================================================ */
+.transform-node__message {
+  padding: 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.transform-node__message--warning {
+  background: #FFF3E0;
+  color: #E65100;
+  border: 1px solid #FFB74D;
+}
+
+.transform-node__message--error {
+  background: #FFEBEE;
+  color: #C62828;
+  border: 1px solid #EF9A9A;
+}
+
+.transform-node__message--success {
+  background: #E8F5E9;
+  color: #2E7D32;
+  border: 1px solid #A5D6A7;
+}
+
+.transform-node__message-hint {
+  margin-top: 6px;
+  font-size: 10px;
+  opacity: 0.8;
+}
+
+/* ============================================================
+   CONFIRM BOX
+   ============================================================ */
+.transform-node__confirm-box {
+  background: #E8F5E9;
+  border: 1px solid #A5D6A7;
+  border-radius: 4px;
+  padding: 8px;
+  margin-top: 8px;
+}
+
 .transform-node__confirm-box--spatial {
-  background: var(--color-spatial-light);
-  border-color: var(--color-spatial);
-  color: #AD1457;
+  background: #FCE4EC;
+  border-color: #F48FB1;
+}
+
+.transform-node__confirm-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #2E7D32;
+  margin-bottom: 4px;
 }
 
 .transform-node__confirm-box--spatial .transform-node__confirm-title {
   color: #C2185B;
 }
 
-.transform-node__confirm-box--spatial .transform-node__confirm-content {
-  color: #880E4F;
+.transform-node__confirm-content {
+  font-size: 10px;
+  color: #555;
+  font-family: monospace;
+  line-height: 1.5;
 }
 
-.transform-node--sort { --op-color: #607D8B; }
-.transform-node--distinct { --op-color: #795548; }
+/* ============================================================
+   COLUMN CHIPS
+   ============================================================ */
+.transform-node__column-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-height: 100px;
+  overflow-y: auto;
+  padding: 4px;
+  background: #fff;
+  border-radius: 4px;
+}
+
+.transform-node__column-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: #E3F2FD;
+  border-radius: 12px;
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.transform-node__column-chip:hover {
+  background: #BBDEFB;
+}
+
+.transform-node__column-chip--selected {
+  background: #2196F3;
+  color: #fff;
+}
+
+.transform-node__column-chip--disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ============================================================
+   AGGREGATIONS
+   ============================================================ */
+.transform-node__aggregation-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.transform-node__aggregation-row select {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.transform-node__aggregation-row button {
+  padding: 6px 10px;
+  background: #f44336;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.transform-node__add-btn {
+  width: 100%;
+  padding: 8px;
+  background: #E3F2FD;
+  color: #1565C0;
+  border: 1px dashed #90CAF9;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.transform-node__add-btn:hover {
+  background: #BBDEFB;
+  border-style: solid;
+}
+
+/* ============================================================
+   FILTER ROWS
+   ============================================================ */
+.transform-node__filter-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.transform-node__filter-row select,
+.transform-node__filter-row input {
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.transform-node__filter-row select {
+  min-width: 80px;
+}
+
+.transform-node__filter-row input {
+  flex: 1;
+  min-width: 60px;
+}
+
+.transform-node__filter-row button {
+  padding: 6px 8px;
+  background: #f44336;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+/* ============================================================
+   HANDLES
+   ============================================================ */
+.transform-node__handle {
+  background: #2196F3 !important;
+  width: 10px !important;
+  height: 10px !important;
+}
+
+.transform-node--spatial .transform-node__handle {
+  background: #E91E63 !important;
+}
+
+/* ============================================================
+   SCROLLBAR
+   ============================================================ */
+.transform-node ::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.transform-node ::-webkit-scrollbar-track {
+  background: #f0f0f0;
+  border-radius: 2px;
+}
+
+.transform-node ::-webkit-scrollbar-thumb {
+  background: #90CAF9;
+  border-radius: 2px;
+}
+
+.transform-node ::-webkit-scrollbar-thumb:hover {
+  background: #64B5F6;
+}
+
+/* ============================================================
+   COLUMN INSERT BUTTONS (for Formula)
+   ============================================================ */
+.transform-node__columns-insert {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.transform-node__col-btn {
+  padding: 4px 8px;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 10px;
+  font-family: monospace;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.transform-node__col-btn:hover {
+  background: #E3F2FD;
+  border-color: #2196F3;
+}
+
+/* ============================================================
+   SORT OPTIONS
+   ============================================================ */
+.transform-node__sort-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.transform-node__sort-row select {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.transform-node__sort-direction {
+  display: flex;
+  gap: 2px;
+}
+
+.transform-node__sort-direction button {
+  padding: 6px 10px;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+
+.transform-node__sort-direction button:hover {
+  background: #f5f5f5;
+}
+
+.transform-node__sort-direction button.active {
+  background: #E3F2FD;
+  border-color: #2196F3;
+  color: #1565C0;
+}
+
+/* ============================================================
+   SPATIAL CONFIG
+   ============================================================ */
+.transform-node__spatial-info {
+  font-size: 10px;
+  color: #888;
+  margin-top: 4px;
+  font-style: italic;
+}
+
+.transform-node__distance-input {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.transform-node__distance-input input {
+  flex: 1;
+}
+
+.transform-node__distance-input span {
+  font-size: 11px;
+  color: #666;
+}

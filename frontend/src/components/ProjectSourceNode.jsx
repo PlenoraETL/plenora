@@ -59,6 +59,20 @@ const ProjectSourceNode = ({ id, data }) => {
       
       console.log(`[ProjectSourceNode] Caricato progetto: ${projectId}`, projectData);
       
+      // Estrai nome file output dal nodo result
+      let outputFileName = null;
+      if (projectData.canvas?.nodes) {
+        const resultNode = projectData.canvas.nodes.find(n => n.type === 'result');
+        if (resultNode?.fileName && resultNode?.format) {
+          outputFileName = `${resultNode.fileName}.${resultNode.format}`;
+        }
+      }
+      
+      // Salva il nome file nel progetto per visualizzarlo
+      if (outputFileName) {
+        projectData.output_file = outputFileName;
+      }
+      
       setSelectedProject(projectData);
       
       // Costruisci colonne con tipi normalizzati
@@ -361,18 +375,35 @@ const ProjectSourceNode = ({ id, data }) => {
           borderTop: '1px solid #C8E6C9',
           paddingTop: '6px'
         }}>
-          📋 {selectedProject.metadata?.name || selectedProject.name}
-          {selectedProject.metadata?.project_type && (
-            <span style={{
-              marginLeft: '6px',
-              padding: '1px 4px',
-              background: selectedProject.metadata.project_type === 'manipola' ? '#F3E5F5' : '#E8F5E9',
-              borderRadius: '3px',
-              color: selectedProject.metadata.project_type === 'manipola' ? '#7B1FA2' : '#2E7D32'
+          {/* Nome file output */}
+          {selectedProject.output_file && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              marginBottom: '4px',
+              fontFamily: 'monospace',
+              fontSize: '11px',
+              color: '#2E7D32'
             }}>
-              {selectedProject.metadata.project_type}
-            </span>
+              📄 {selectedProject.output_file}
+            </div>
           )}
+          
+          {/* Tipo progetto */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            📋 {selectedProject.metadata?.name || selectedProject.name}
+            {selectedProject.metadata?.project_type && (
+              <span style={{
+                padding: '1px 4px',
+                background: selectedProject.metadata.project_type === 'manipola' ? '#F3E5F5' : '#E8F5E9',
+                borderRadius: '3px',
+                color: selectedProject.metadata.project_type === 'manipola' ? '#7B1FA2' : '#2E7D32'
+              }}>
+                {selectedProject.metadata.project_type}
+              </span>
+            )}
+          </div>
         </div>
       )}
 

@@ -12,7 +12,7 @@ export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:80
 export const API_ENDPOINT = `${API_BASE_URL}/api`;
 
 // Timeout default per le richieste (in ms)
-export const API_TIMEOUT = 30000;
+export const API_TIMEOUT = 60000;
 
 // Headers default
 export const DEFAULT_HEADERS = {

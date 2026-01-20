@@ -10,6 +10,7 @@ SICUREZZA: Supporta parametri preparati per prevenire SQL injection.
 
 import csv
 import json
+import time
 import pandas as pd
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
@@ -55,18 +56,29 @@ class QueryExecutor:
         Returns:
             Dict con risultato esecuzione
         """
+        timings = {}
+        total_start = time.time()
+        
         try:
             project_results_dir = self.RESULTS_DIR / project_id
             project_results_dir.mkdir(parents=True, exist_ok=True)
             logger.info(f"Esecuzione query per progetto {project_id}")
             print(f"=== SQL QUERY ===\n{sql}\n=================")
-            # Esegui query in base al tipo DB
+            
+            # Esegui query in base al tipo DB (include connessione + esecuzione + fetch)
+            t_query = time.time()
             rows, columns = self._execute_by_db_type(connection, sql, params)
+            timings['query_total'] = time.time() - t_query
+            logger.info(f"⏱️ Query totale (connessione + esecuzione + fetch): {timings['query_total']:.2f}s")
             
             # Converti in DataFrame
+            t_df = time.time()
             df = pd.DataFrame(rows, columns=columns)
+            timings['dataframe'] = time.time() - t_df
+            logger.info(f"⏱️ Creazione DataFrame ({len(rows)} righe): {timings['dataframe']:.2f}s")
             
             # Salva usando utility centralizzata
+            t_save = time.time()
             output_path = project_results_dir / output_filename
             saved_path = save_dataframe(
                 df=df,
@@ -74,6 +86,11 @@ class QueryExecutor:
                 format=output_format,
                 geom_column=geom_column
             )
+            timings['save'] = time.time() - t_save
+            logger.info(f"⏱️ Salvataggio file ({output_format}): {timings['save']:.2f}s")
+            
+            timings['total'] = time.time() - total_start
+            logger.info(f"⏱️ TOTALE: {timings['total']:.2f}s")
             
             return {
                 "success": True,
@@ -81,7 +98,8 @@ class QueryExecutor:
                 "columns": columns,
                 "output_path": str(saved_path),
                 "project_id": project_id,
-                "message": f"Query eseguita. File: {saved_path.name}"
+                "message": f"Query eseguita. File: {saved_path.name}",
+                "timings": timings
             }
 
         except Exception as e:
@@ -166,7 +184,7 @@ class QueryExecutor:
             database=conn.database,
             user=conn.username,
             password=conn.password,
-            connect_timeout=30
+            connect_timeout=60
         )
         
         try:
@@ -205,7 +223,7 @@ class QueryExecutor:
                     f"PWD={conn.password};"
                     f"TrustServerCertificate=yes"
                 )
-                connection = pyodbc.connect(conn_string, timeout=30)
+                connection = pyodbc.connect(conn_string, timeout=60)
                 break
             except pyodbc.InterfaceError:
                 continue
@@ -240,22 +258,32 @@ class QueryExecutor:
         """Esegui query su MySQL/MariaDB con parametri sicuri."""
         import pymysql
         
+        # Timer connessione
+        t_conn = time.time()
         connection = pymysql.connect(
             host=conn.host,
             port=conn.port,
             database=conn.database,
             user=conn.username,
             password=conn.password,
-            connect_timeout=30
+            connect_timeout=60
         )
+        logger.info(f"⏱️ MySQL - Connessione: {time.time() - t_conn:.2f}s")
         
         try:
             cursor = connection.cursor()
             converted_sql = self._replace_placeholders(sql, 'pyformat')
-            cursor.execute(converted_sql, params)
             
+            # Timer esecuzione
+            t_exec = time.time()
+            cursor.execute(converted_sql, params)
+            logger.info(f"⏱️ MySQL - Esecuzione SQL: {time.time() - t_exec:.2f}s")
+            
+            # Timer fetch
+            t_fetch = time.time()
             rows = cursor.fetchall()
             columns = [desc[0] for desc in cursor.description]
+            logger.info(f"⏱️ MySQL - Fetch {len(rows)} righe: {time.time() - t_fetch:.2f}s")
             
             return rows, columns
         finally:
@@ -355,7 +383,7 @@ class QueryExecutor:
         """Esegui query su SQLite con parametri sicuri."""
         import sqlite3
         
-        connection = sqlite3.connect(conn.database, timeout=30)
+        connection = sqlite3.connect(conn.database, timeout=60)
         
         try:
             cursor = connection.cursor()

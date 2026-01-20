@@ -5,7 +5,7 @@
   "project_type": "estrai",
   "default_connection_id": "Test_MariaDB_20260119_102002_c1f16331",
   "created_at": "2026-01-19T15:04:58.812400",
-  "updated_at": "2026-01-20T08:39:37.805132",
+  "updated_at": "2026-01-20T16:13:58.945910",
   "columns_metadata": [
     {
       "name": "id",
@@ -28,19 +28,31 @@
       "type": "str"
     },
     {
-      "name": "type",
-      "type": "str"
-    },
-    {
-      "name": "geometry_w",
-      "type": "str"
-    },
-    {
-      "name": "geometry_t",
-      "type": "str"
-    },
-    {
       "name": "geometry",
+      "type": "geometry"
+    },
+    {
+      "name": "poi_aree_iid",
+      "type": "int"
+    },
+    {
+      "name": "poi_aree_osm_id",
+      "type": "str"
+    },
+    {
+      "name": "poi_aree_code",
+      "type": "int"
+    },
+    {
+      "name": "poi_aree_fclass",
+      "type": "str"
+    },
+    {
+      "name": "poi_aree_name",
+      "type": "str"
+    },
+    {
+      "name": "poi_aree_geometry",
       "type": "geometry"
     }
   ]

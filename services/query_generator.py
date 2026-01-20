@@ -427,11 +427,51 @@ class QueryGenerator:
             if not self._is_valid_identifier(target_geom):
                 raise ValueError(f"Colonna geometria non valida: {target_geom}")
             
-            # Costruisci ON clause spaziale
-            if spatial_predicate == 'ST_DWithin' and spatial_distance:
-                on_clause = f"{spatial_predicate}({source_alias}.{source_geom}, {table_alias}.{target_geom}, {spatial_distance})"
+            # Costruisci ON clause spaziale in base al tipo database
+            db = self.db_type.lower() if self.db_type else 'postgres'
+            
+            if db in ('mssql', 'sqlserver'):
+                # SQL Server usa sintassi metodo: geom.STIntersects(geom) = 1
+                predicate_map = {
+                    'ST_Intersects': 'STIntersects',
+                    'ST_Within': 'STWithin',
+                    'ST_Contains': 'STContains',
+                    'ST_Touches': 'STTouches',
+                    'ST_Overlaps': 'STOverlaps',
+                    'ST_DWithin': 'STDistance'  # SQL Server usa STDistance per DWithin
+                }
+                sql_method = predicate_map.get(spatial_predicate, 'STIntersects')
+                
+                if spatial_predicate == 'ST_DWithin' and spatial_distance:
+                    # SQL Server: geom.STDistance(geom) <= distance
+                    on_clause = f"{source_alias}.{source_geom}.{sql_method}({table_alias}.{target_geom}) <= {spatial_distance}"
+                else:
+                    # SQL Server: geom.STIntersects(geom) = 1
+                    on_clause = f"{source_alias}.{source_geom}.{sql_method}({table_alias}.{target_geom}) = 1"
+            
+            elif db == 'oracle':
+                # Oracle usa SDO_RELATE o SDO_WITHIN_DISTANCE
+                if spatial_predicate == 'ST_DWithin' and spatial_distance:
+                    on_clause = f"SDO_WITHIN_DISTANCE({source_alias}.{source_geom}, {table_alias}.{target_geom}, 'distance={spatial_distance}') = 'TRUE'"
+                elif spatial_predicate == 'ST_Intersects':
+                    on_clause = f"SDO_RELATE({source_alias}.{source_geom}, {table_alias}.{target_geom}, 'mask=ANYINTERACT') = 'TRUE'"
+                elif spatial_predicate == 'ST_Within':
+                    on_clause = f"SDO_RELATE({source_alias}.{source_geom}, {table_alias}.{target_geom}, 'mask=INSIDE+COVEREDBY') = 'TRUE'"
+                elif spatial_predicate == 'ST_Contains':
+                    on_clause = f"SDO_RELATE({source_alias}.{source_geom}, {table_alias}.{target_geom}, 'mask=CONTAINS+COVERS') = 'TRUE'"
+                elif spatial_predicate == 'ST_Touches':
+                    on_clause = f"SDO_RELATE({source_alias}.{source_geom}, {table_alias}.{target_geom}, 'mask=TOUCH') = 'TRUE'"
+                elif spatial_predicate == 'ST_Overlaps':
+                    on_clause = f"SDO_RELATE({source_alias}.{source_geom}, {table_alias}.{target_geom}, 'mask=OVERLAPBDYINTERSECT') = 'TRUE'"
+                else:
+                    on_clause = f"SDO_RELATE({source_alias}.{source_geom}, {table_alias}.{target_geom}, 'mask=ANYINTERACT') = 'TRUE'"
+            
             else:
-                on_clause = f"{spatial_predicate}({source_alias}.{source_geom}, {table_alias}.{target_geom})"
+                # PostgreSQL/PostGIS, MySQL, MariaDB usano sintassi funzione standard
+                if spatial_predicate == 'ST_DWithin' and spatial_distance:
+                    on_clause = f"{spatial_predicate}({source_alias}.{source_geom}, {table_alias}.{target_geom}, {spatial_distance})"
+                else:
+                    on_clause = f"{spatial_predicate}({source_alias}.{source_geom}, {table_alias}.{target_geom})"
         else:
             # Join normale su attributi
             source_col = edge.source_column

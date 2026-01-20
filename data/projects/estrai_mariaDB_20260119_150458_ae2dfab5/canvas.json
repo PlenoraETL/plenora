@@ -12,6 +12,42 @@
       "columns": [
         {
           "name": "id",
+          "alias": "poi_aree_iid",
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "osm_id",
+          "alias": "poi_aree_osm_id",
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "code",
+          "alias": "poi_aree_code",
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "fclass",
+          "alias": "poi_aree_fclass",
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "name",
+          "alias": "poi_aree_name",
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "geometry",
+          "alias": "poi_aree_geometry",
+          "visible": true,
+          "type": "geometry"
+        },
+        {
+          "name": "id",
           "alias": null,
           "visible": true,
           "type": "int"
@@ -41,24 +77,6 @@
           "type": "str"
         },
         {
-          "name": "type",
-          "alias": null,
-          "visible": true,
-          "type": "str"
-        },
-        {
-          "name": "geometry_wkt",
-          "alias": null,
-          "visible": true,
-          "type": "str"
-        },
-        {
-          "name": "geometry_type",
-          "alias": null,
-          "visible": true,
-          "type": "str"
-        },
-        {
           "name": "geometry",
           "alias": null,
           "visible": true,
@@ -76,21 +94,22 @@
       "param_mapping": null,
       "data": {},
       "fileName": "output_mariaDB",
-      "format": "shp",
+      "format": "csv",
       "distinct": false,
-      "limit": 10,
+      "limit": null,
+      "geomColumn": null,
       "group_by_enabled": false,
       "group_by_columns": [],
       "aggregations": []
     },
     {
-      "id": "node_1768894615177",
+      "id": "node_1768921241925",
       "type": "source",
       "position": {
-        "x": 598.0,
-        "y": 388.0
+        "x": 345.0,
+        "y": 254.0
       },
-      "table_name": "edifici",
+      "table_name": "poi",
       "alias": null,
       "columns": [
         {
@@ -124,26 +143,104 @@
           "type": "str"
         },
         {
-          "name": "type",
+          "name": "geometry_wkt",
           "alias": null,
+          "visible": false,
+          "type": "str"
+        },
+        {
+          "name": "geometry_type",
+          "alias": null,
+          "visible": false,
+          "type": "str"
+        },
+        {
+          "name": "geometry",
+          "alias": null,
+          "visible": true,
+          "type": "geometry"
+        }
+      ],
+      "filters": [
+        {
+          "column": "id",
+          "operator": "<",
+          "value": "100"
+        }
+      ],
+      "calculated_columns": [],
+      "connection_id": null,
+      "source_project_id": null,
+      "file_source_id": null,
+      "transform_op": null,
+      "transform_category": null,
+      "api_id": null,
+      "param_mapping": null,
+      "data": {},
+      "fileName": null,
+      "format": null,
+      "distinct": false,
+      "limit": null,
+      "geomColumn": null,
+      "group_by_enabled": false,
+      "group_by_columns": [],
+      "aggregations": []
+    },
+    {
+      "id": "node_1768921243156",
+      "type": "source",
+      "position": {
+        "x": 783.0,
+        "y": 351.0
+      },
+      "table_name": "poi_aree",
+      "alias": null,
+      "columns": [
+        {
+          "name": "id",
+          "alias": "poi_aree_iid",
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "osm_id",
+          "alias": "poi_aree_osm_id",
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "code",
+          "alias": "poi_aree_code",
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "fclass",
+          "alias": "poi_aree_fclass",
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "name",
+          "alias": "poi_aree_name",
           "visible": true,
           "type": "str"
         },
         {
           "name": "geometry_wkt",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "str"
         },
         {
           "name": "geometry_type",
           "alias": null,
-          "visible": true,
+          "visible": false,
           "type": "str"
         },
         {
           "name": "geometry",
-          "alias": null,
+          "alias": "poi_aree_geometry",
           "visible": true,
           "type": "geometry"
         }
@@ -162,6 +259,7 @@
       "format": null,
       "distinct": false,
       "limit": null,
+      "geomColumn": null,
       "group_by_enabled": false,
       "group_by_columns": [],
       "aggregations": []
@@ -169,8 +267,21 @@
   ],
   "edges": [
     {
-      "id": "edge_1768894616908",
-      "source": "node_1768894615177",
+      "id": "edge_1768921253290",
+      "source": "node_1768921241925",
+      "target": "node_1768921243156",
+      "join_type": "left",
+      "source_column": "fclass",
+      "target_column": "fclass",
+      "is_spatial": true,
+      "spatial_predicate": "ST_Touches",
+      "source_geom_column": "geometry",
+      "target_geom_column": "geometry",
+      "spatial_distance": null
+    },
+    {
+      "id": "edge_1768921255662",
+      "source": "node_1768921243156",
       "target": "result_1768831504967",
       "join_type": "output",
       "source_column": "",
