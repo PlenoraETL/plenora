@@ -534,10 +534,22 @@ class SqlFunctionTranslator:
     
     def _translate_round(self, params: Dict, table_alias: str = None) -> str:
         col = self._qualify_column(params["column"], table_alias)
-        decimals = params.get("decimals", 0)
+        decimals = params.get("decimals")
         
-        # ROUND è standard in tutti i DB
-        return f"ROUND({col}, {decimals})"
+        # Gestisci decimals None o non numerico
+        if decimals is None or decimals == '':
+            decimals = 0
+        else:
+            try:
+                decimals = int(decimals)
+            except (ValueError, TypeError):
+                decimals = 0
+        
+        # PostgreSQL richiede cast a numeric per ROUND con decimali
+        if self.db_type == DbType.POSTGRES:
+            return f"ROUND({col}::numeric, {decimals})"
+        else:
+            return f"ROUND({col}, {decimals})"
     
     def _translate_abs(self, params: Dict, table_alias: str = None) -> str:
         col = self._qualify_column(params["column"], table_alias)

@@ -4,10 +4,99 @@
       "id": "result_1768837918086",
       "type": "result",
       "position": {
-        "x": 1125.0,
-        "y": 113.0
+        "x": 1129.0,
+        "y": 112.0
       },
       "table_name": null,
+      "alias": null,
+      "columns": [
+        {
+          "name": "ID",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "OSM_ID",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "CODE",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "FCLASS",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "NAME",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "GEOMETRY_WKT",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "GEOMETRY_TYPE",
+          "alias": null,
+          "visible": true,
+          "type": "str"
+        },
+        {
+          "name": "GEOMETRY",
+          "alias": null,
+          "visible": true,
+          "type": "geometry"
+        },
+        {
+          "name": "centroide",
+          "alias": null,
+          "visible": true,
+          "type": "geometry:point"
+        },
+        {
+          "name": "buffer",
+          "alias": null,
+          "visible": true,
+          "type": "geometry:polygon"
+        }
+      ],
+      "filters": [],
+      "calculated_columns": [],
+      "connection_id": null,
+      "source_project_id": null,
+      "file_source_id": null,
+      "transform_op": null,
+      "transform_category": null,
+      "api_id": null,
+      "param_mapping": null,
+      "data": {},
+      "fileName": "output_oracle",
+      "format": "xlsx",
+      "distinct": false,
+      "limit": 10,
+      "group_by_enabled": false,
+      "group_by_columns": [],
+      "aggregations": []
+    },
+    {
+      "id": "node_1768883664209",
+      "type": "source",
+      "position": {
+        "x": 612.0,
+        "y": 301.0
+      },
+      "table_name": "POI_AREE",
       "alias": null,
       "columns": [
         {
@@ -60,90 +149,33 @@
         }
       ],
       "filters": [],
-      "calculated_columns": [],
-      "connection_id": null,
-      "source_project_id": null,
-      "file_source_id": null,
-      "transform_op": null,
-      "transform_category": null,
-      "api_id": null,
-      "param_mapping": null,
-      "data": {},
-      "fileName": "output_oracle",
-      "format": "csv",
-      "distinct": false,
-      "limit": null,
-      "group_by_enabled": false,
-      "group_by_columns": [],
-      "aggregations": []
-    },
-    {
-      "id": "node_1768840102762",
-      "type": "source",
-      "position": {
-        "x": 407.0,
-        "y": 253.0
-      },
-      "table_name": "POI",
-      "alias": null,
-      "columns": [
+      "calculated_columns": [
         {
-          "name": "ID",
-          "alias": null,
-          "visible": true,
-          "type": "int"
+          "name": "centroide",
+          "expression": {
+            "function": "CENTROID",
+            "params": {
+              "column": "GEOMETRY"
+            }
+          },
+          "sql": "ST_AsText(ST_Centroid(GEOMETRY)) AS centroide",
+          "output_type": "geometry:point",
+          "is_manual": false
         },
         {
-          "name": "OSM_ID",
-          "alias": null,
-          "visible": true,
-          "type": "str"
-        },
-        {
-          "name": "CODE",
-          "alias": null,
-          "visible": true,
-          "type": "int"
-        },
-        {
-          "name": "FCLASS",
-          "alias": null,
-          "visible": true,
-          "type": "str"
-        },
-        {
-          "name": "NAME",
-          "alias": null,
-          "visible": true,
-          "type": "str"
-        },
-        {
-          "name": "GEOMETRY_WKT",
-          "alias": null,
-          "visible": true,
-          "type": "str"
-        },
-        {
-          "name": "GEOMETRY_TYPE",
-          "alias": null,
-          "visible": true,
-          "type": "str"
-        },
-        {
-          "name": "GEOMETRY",
-          "alias": null,
-          "visible": true,
-          "type": "geometry"
+          "name": "buffer",
+          "expression": {
+            "function": "BUFFER",
+            "params": {
+              "column": "GEOMETRY",
+              "distance": 0.001
+            }
+          },
+          "sql": "ST_AsText(ST_Buffer(GEOMETRY, 0.001)) AS buffer",
+          "output_type": "geometry:polygon",
+          "is_manual": false
         }
       ],
-      "filters": [
-        {
-          "column": "FCLASS",
-          "operator": "IS NULL",
-          "value": "hotel,bar"
-        }
-      ],
-      "calculated_columns": [],
       "connection_id": null,
       "source_project_id": null,
       "file_source_id": null,
@@ -163,8 +195,8 @@
   ],
   "edges": [
     {
-      "id": "edge_1768840104749",
-      "source": "node_1768840102762",
+      "id": "edge_1768883666515",
+      "source": "node_1768883664209",
       "target": "result_1768837918086",
       "join_type": "output",
       "source_column": "",

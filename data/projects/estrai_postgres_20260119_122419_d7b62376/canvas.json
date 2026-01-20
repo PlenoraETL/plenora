@@ -4,8 +4,8 @@
       "id": "result_1768821901541",
       "type": "result",
       "position": {
-        "x": 1631.0,
-        "y": 296.2588988734077
+        "x": 1597.0,
+        "y": 152.2588988734077
       },
       "table_name": null,
       "alias": null,
@@ -17,64 +17,88 @@
           "type": "int"
         },
         {
-          "name": "osm_id",
+          "name": "valore_float",
           "alias": null,
           "visible": true,
-          "type": "str"
+          "type": "real"
         },
         {
-          "name": "code",
+          "name": "valore_int",
           "alias": null,
           "visible": true,
           "type": "int"
         },
         {
-          "name": "fclass",
+          "name": "data_random",
+          "alias": null,
+          "visible": true,
+          "type": "date"
+        },
+        {
+          "name": "nome",
           "alias": null,
           "visible": true,
           "type": "str"
         },
         {
-          "name": "name",
+          "name": "arrotonda",
+          "alias": null,
+          "visible": true,
+          "type": "real"
+        },
+        {
+          "name": "valore_assoluto",
+          "alias": null,
+          "visible": true,
+          "type": "real"
+        },
+        {
+          "name": "arrotonda_eccesso",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "arrotonda_difetto",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "math",
+          "alias": null,
+          "visible": true,
+          "type": "real"
+        },
+        {
+          "name": "trim",
           "alias": null,
           "visible": true,
           "type": "str"
         },
         {
-          "name": "geometry",
+          "name": "anno",
           "alias": null,
           "visible": true,
-          "type": "geometry:multipolygon:4326"
+          "type": "int"
         },
         {
-          "name": "perimetro_utm",
+          "name": "mese",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "giorno",
+          "alias": null,
+          "visible": true,
+          "type": "int"
+        },
+        {
+          "name": "math2",
           "alias": null,
           "visible": true,
           "type": "real"
-        },
-        {
-          "name": "area_utm",
-          "alias": null,
-          "visible": true,
-          "type": "real"
-        },
-        {
-          "name": "semplifica",
-          "alias": null,
-          "visible": true,
-          "type": "geometry:4326"
-        },
-        {
-          "name": "inviluppo",
-          "alias": null,
-          "visible": true,
-          "type": "geometry:polygon:4326"
-        },
-        {
-          "name": "bounding",
-          "alias": null,
-          "visible": true,
-          "type": "geometry:polygon:4326"
         }
       ],
       "filters": [],
@@ -88,7 +112,7 @@
       "param_mapping": null,
       "data": {},
       "fileName": "output_postgres",
-      "format": "json",
+      "format": "xlsx",
       "distinct": false,
       "limit": 5,
       "group_by_enabled": false,
@@ -96,13 +120,13 @@
       "aggregations": []
     },
     {
-      "id": "node_1768850716739",
+      "id": "node_1768878689865",
       "type": "source",
       "position": {
-        "x": 1163.9834931668436,
-        "y": 420.69074597282633
+        "x": 945.0,
+        "y": 250.0
       },
-      "table_name": "poi_aree",
+      "table_name": "test_data_real",
       "alias": null,
       "columns": [
         {
@@ -112,109 +136,157 @@
           "type": "int"
         },
         {
-          "name": "osm_id",
+          "name": "valore_float",
           "alias": null,
           "visible": true,
-          "type": "str"
+          "type": "real"
         },
         {
-          "name": "code",
+          "name": "valore_int",
           "alias": null,
           "visible": true,
           "type": "int"
         },
         {
-          "name": "fclass",
+          "name": "data_random",
+          "alias": null,
+          "visible": true,
+          "type": "date"
+        },
+        {
+          "name": "nome",
           "alias": null,
           "visible": true,
           "type": "str"
-        },
-        {
-          "name": "name",
-          "alias": null,
-          "visible": true,
-          "type": "str"
-        },
-        {
-          "name": "geometry",
-          "alias": null,
-          "visible": true,
-          "type": "geometry:multipolygon:4326"
         }
       ],
       "filters": [],
       "calculated_columns": [
         {
-          "name": "perimetro_utm",
+          "name": "arrotonda",
           "expression": {
-            "function": "PERIMETER",
+            "function": "ROUND",
             "params": {
-              "column": {
-                "function": "TRANSFORM",
-                "params": {
-                  "column": "geometry",
-                  "srid": "32632"
-                }
-              }
+              "column": "valore_float",
+              "decimals": 0
             }
           },
-          "sql": "ST_Perimeter(ST_Transform(geometry, 32632)) AS perimetro_utm",
+          "sql": "ROUND(valore_float, 0) AS arrotonda",
           "output_type": "real",
           "is_manual": false
         },
         {
-          "name": "area_utm",
+          "name": "valore_assoluto",
           "expression": {
-            "function": "AREA",
+            "function": "ABS",
             "params": {
-              "column": {
-                "function": "TRANSFORM",
-                "params": {
-                  "column": "geometry",
-                  "srid": "32632"
-                }
-              }
+              "column": "valore_float"
             }
           },
-          "sql": "ST_Area(ST_Transform(geometry, 32632)) AS area_utm",
+          "sql": "ABS(valore_float) AS valore_assoluto",
           "output_type": "real",
           "is_manual": false
         },
         {
-          "name": "semplifica",
+          "name": "arrotonda_eccesso",
           "expression": {
-            "function": "SIMPLIFY",
+            "function": "CEIL",
             "params": {
-              "column": "geometry",
-              "tolerance": 0.0001
+              "column": "valore_float"
             }
           },
-          "sql": "ST_AsText(ST_Simplify(geometry, 0.0001)) AS semplifica",
-          "output_type": "geometry:4326",
+          "sql": "CEIL(valore_float) AS arrotonda_eccesso",
+          "output_type": "int",
           "is_manual": false
         },
         {
-          "name": "inviluppo",
+          "name": "arrotonda_difetto",
           "expression": {
-            "function": "CONVEX_HULL",
+            "function": "FLOOR",
             "params": {
-              "column": "geometry"
+              "column": "valore_float"
             }
           },
-          "sql": "ST_AsText(ST_ConvexHull(geometry)) AS inviluppo",
-          "output_type": "geometry:polygon:4326",
+          "sql": "FLOOR(valore_float) AS arrotonda_difetto",
+          "output_type": "int",
           "is_manual": false
         },
         {
-          "name": "bounding",
+          "name": "math",
           "expression": {
-            "function": "ENVELOPE",
+            "function": "MATH",
             "params": {
-              "column": "geometry"
+              "column1": "valore_float",
+              "operator": null,
+              "column2": "valore_float",
+              "value": null
             }
           },
-          "sql": "ST_AsText(ST_Envelope(geometry)) AS bounding",
-          "output_type": "geometry:polygon:4326",
+          "sql": "(valore_float + valore_float) AS math",
+          "output_type": "real",
+          "is_manual": false
+        },
+        {
+          "name": "trim",
+          "expression": {
+            "function": "TRIM",
+            "params": {
+              "column": "nome"
+            }
+          },
+          "sql": "TRIM(nome) AS trim",
+          "output_type": "str",
+          "is_manual": false
+        },
+        {
+          "name": "anno",
+          "expression": {
+            "function": "YEAR",
+            "params": {
+              "column": "data_random"
+            }
+          },
+          "sql": "EXTRACT(YEAR FROM data_random) AS anno",
+          "output_type": "int",
+          "is_manual": false
+        },
+        {
+          "name": "mese",
+          "expression": {
+            "function": "MONTH",
+            "params": {
+              "column": "data_random"
+            }
+          },
+          "sql": "EXTRACT(MONTH FROM data_random) AS mese",
+          "output_type": "int",
+          "is_manual": false
+        },
+        {
+          "name": "giorno",
+          "expression": {
+            "function": "DAY",
+            "params": {
+              "column": "data_random"
+            }
+          },
+          "sql": "EXTRACT(DAY FROM data_random) AS giorno",
+          "output_type": "int",
+          "is_manual": false
+        },
+        {
+          "name": "math2",
+          "expression": {
+            "function": "MATH",
+            "params": {
+              "column1": "valore_int",
+              "operator": null,
+              "column2": "valore_int",
+              "value": null
+            }
+          },
+          "sql": "(valore_int + valore_int) AS math2",
+          "output_type": "real",
           "is_manual": false
         }
       ],
@@ -237,8 +309,8 @@
   ],
   "edges": [
     {
-      "id": "edge_1768850718517",
-      "source": "node_1768850716739",
+      "id": "edge_1768878692120",
+      "source": "node_1768878689865",
       "target": "result_1768821901541",
       "join_type": "output",
       "source_column": "",

@@ -379,18 +379,23 @@ def infer_column_types(df: pd.DataFrame) -> List[Dict[str, str]]:
     columns = []
     
     for col in df.columns:
-        dtype = str(df[col].dtype)
+        dtype = str(df[col].dtype).lower()
         
         if 'int' in dtype:
             col_type = 'int'
-        elif 'float' in dtype:
+        elif 'float' in dtype or 'numeric' in dtype or 'decimal' in dtype or 'double' in dtype:
             col_type = 'real'
         elif 'bool' in dtype:
             col_type = 'bool'
-        elif 'datetime' in dtype:
+        elif 'datetime' in dtype or 'timestamp' in dtype:
             col_type = 'date'
-        elif 'geometry' in dtype.lower():
+        elif 'date' in dtype:
+            col_type = 'date'
+        elif 'geometry' in dtype:
             col_type = 'geometry'
+        elif 'object' in dtype:
+            # Object può essere stringa o tipo misto - controlla i valori
+            col_type = 'str'
         else:
             col_type = 'str'
         

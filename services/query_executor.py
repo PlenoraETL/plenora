@@ -57,7 +57,7 @@ class QueryExecutor:
             project_results_dir = self.RESULTS_DIR / project_id
             project_results_dir.mkdir(parents=True, exist_ok=True)
             logger.info(f"Esecuzione query per progetto {project_id}")
-            
+            print(f"=== SQL QUERY ===\n{sql}\n=================")
             # Esegui query in base al tipo DB
             rows, columns = self._execute_by_db_type(connection, sql, params)
             
@@ -121,15 +121,19 @@ class QueryExecutor:
         Args:
             sql: Query con placeholder :name
             style: 'pyformat' | 'named' | 'qmark'
+            
+        NOTA: Ignora :: che PostgreSQL usa per i cast (es: col::numeric)
         """
         import re
         
         if style == 'pyformat':
             # :name -> %(name)s
-            return re.sub(r':([a-zA-Z_][a-zA-Z0-9_]*)', r'%(\1)s', sql)
+            # Usa negative lookbehind per ignorare :: (cast PostgreSQL)
+            return re.sub(r'(?<!:):([a-zA-Z_][a-zA-Z0-9_]*)', r'%(\1)s', sql)
         elif style == 'qmark':
             # Per MSSQL: :name -> ?
-            return re.sub(r':[a-zA-Z_][a-zA-Z0-9_]*', '?', sql)
+            # Usa negative lookbehind per ignorare ::
+            return re.sub(r'(?<!:):[a-zA-Z_][a-zA-Z0-9_]*', '?', sql)
         
         # 'named' - già nel formato corretto
         return sql

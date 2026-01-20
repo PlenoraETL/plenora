@@ -5,51 +5,5 @@
   "project_type": "estrai",
   "default_connection_id": "Test_PostgreSQL_20260119_100748_c64643b0",
   "created_at": "2026-01-19T12:24:19.415803",
-  "updated_at": "2026-01-19T20:40:56.793047",
-  "columns_metadata": [
-    {
-      "name": "id",
-      "type": "int"
-    },
-    {
-      "name": "osm_id",
-      "type": "str"
-    },
-    {
-      "name": "code",
-      "type": "int"
-    },
-    {
-      "name": "fclass",
-      "type": "str"
-    },
-    {
-      "name": "name",
-      "type": "str"
-    },
-    {
-      "name": "geometry",
-      "type": "geometry:multipolygon:4326"
-    },
-    {
-      "name": "perimetro_utm",
-      "type": "real"
-    },
-    {
-      "name": "area_utm",
-      "type": "real"
-    },
-    {
-      "name": "semplifica",
-      "type": "geometry:4326"
-    },
-    {
-      "name": "inviluppo",
-      "type": "geometry:polygon:4326"
-    },
-    {
-      "name": "bounding",
-      "type": "geometry:polygon:4326"
-    }
-  ]
+  "updated_at": "2026-01-20T04:30:37.317687"
 }
