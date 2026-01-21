@@ -448,13 +448,18 @@ class ManipolaExecutor:
     # =========================================================================
 
     def _build_canvas_type_map(self, canvas: CanvasState) -> Dict[str, str]:
-        """Costruisce una mappa nome_colonna -> tipo dal canvas."""
+        """
+        Costruisce una mappa nome_colonna -> tipo dal canvas.
+        Include anche varianti con suffissi _L e _R per gestire i JOIN.
+        """
         canvas_type_map = {}
         
         for node in canvas.nodes:
             columns = None
             if hasattr(node, 'columns') and node.columns:
                 columns = node.columns
+            elif node.data and 'columns' in node.data:
+                columns = node.data['columns']
             
             if columns:
                 for col in columns:
@@ -469,8 +474,15 @@ class ManipolaExecutor:
                     
                     if col_name:
                         canvas_type_map[col_name] = col_type
+                        # Aggiungi varianti con suffissi _L e _R per gestire i JOIN
+                        canvas_type_map[f"{col_name}_L"] = col_type
+                        canvas_type_map[f"{col_name}_R"] = col_type
+                    
                     if original_name and original_name != col_name:
                         canvas_type_map[original_name] = col_type
+                        # Aggiungi varianti con suffissi _L e _R
+                        canvas_type_map[f"{original_name}_L"] = col_type
+                        canvas_type_map[f"{original_name}_R"] = col_type
             
             # Colonne calcolate
             calculated = None
@@ -488,20 +500,39 @@ class ManipolaExecutor:
                     
                     if calc_name:
                         canvas_type_map[calc_name] = calc_type
+                        # Anche per le calcolate, aggiungi varianti
+                        canvas_type_map[f"{calc_name}_L"] = calc_type
+                        canvas_type_map[f"{calc_name}_R"] = calc_type
         
         return canvas_type_map
 
     def _build_columns_with_canvas_types(self, df: pd.DataFrame, canvas_type_map: Dict[str, str]) -> List[Dict[str, str]]:
-        """Costruisce lista colonne con tipi dal canvas."""
+        """
+        Costruisce lista colonne con tipi dal canvas.
+        Gestisce colonne con suffissi _L/_R cercando anche il nome base.
+        """
         columns = []
         canvas_type_map_lower = {k.lower(): v for k, v in canvas_type_map.items()}
         
         for col in df.columns:
+            col_type = None
+            
+            # 1. Cerca match esatto
             if col in canvas_type_map:
                 col_type = canvas_type_map[col]
+            # 2. Cerca match case-insensitive
             elif col.lower() in canvas_type_map_lower:
                 col_type = canvas_type_map_lower[col.lower()]
-            else:
+            # 3. Se ha suffisso _L o _R, cerca il nome base
+            elif col.endswith('_L') or col.endswith('_R'):
+                base_name = col[:-2]  # Rimuovi _L o _R
+                if base_name in canvas_type_map:
+                    col_type = canvas_type_map[base_name]
+                elif base_name.lower() in canvas_type_map_lower:
+                    col_type = canvas_type_map_lower[base_name.lower()]
+            
+            # 4. Fallback: inferisci dal dtype pandas
+            if col_type is None:
                 dtype = str(df[col].dtype)
                 if 'int' in dtype:
                     col_type = 'int'
@@ -512,8 +543,36 @@ class ManipolaExecutor:
                 elif 'datetime' in dtype:
                     col_type = 'date'
                 else:
-                    col_type = 'str'
+                    # Ultimo tentativo: controlla se il contenuto sembra geometria WKT
+                    col_type = self._detect_geometry_from_content(df, col)
             
             columns.append({'name': col, 'type': col_type})
         
         return columns
+
+    def _detect_geometry_from_content(self, df: pd.DataFrame, col_name: str) -> str:
+        """
+        Rileva se una colonna contiene geometrie WKT analizzando il contenuto.
+        Ritorna 'geometry' se rilevato, altrimenti 'str'.
+        """
+        try:
+            # Prendi il primo valore non-null
+            sample = df[col_name].dropna().head(1)
+            if sample.empty:
+                return 'str'
+            
+            value = str(sample.iloc[0])
+            
+            # Pattern WKT comuni
+            wkt_prefixes = ('POINT', 'LINESTRING', 'POLYGON', 'MULTIPOINT', 
+                           'MULTILINESTRING', 'MULTIPOLYGON', 'GEOMETRYCOLLECTION')
+            
+            value_upper = value.upper().strip()
+            for prefix in wkt_prefixes:
+                if value_upper.startswith(prefix):
+                    return 'geometry'
+            
+            return 'str'
+            
+        except Exception:
+            return 'str'

@@ -21,7 +21,7 @@ import { getFiles } from '../api/files';
 
 import ProjectSourceNode from '../components/ProjectSourceNode';
 import FileSourceNode from '../components/FileSourceNode';
-import TransformNode from '../components/TransformNode';
+import TransformNode from '../components/transforms/TransformNode';
 import ResultNode from '../components/ResultNode';
 import PreviewModal from '../components/PreviewModal';
 import ExecutionModal from '../components/ExecutionModal';
@@ -186,35 +186,62 @@ const ManipolaEditorContent = () => {
     );
   }, [schemas, setNodes]);
 
-  // Aggiorna availableColumns nel ResultNode
+  // ===== FIX: Aggiorna availableColumns nel ResultNode - SOLO dal nodo collegato =====
   useEffect(() => {
     const resultNode = nodes.find(n => n.type === 'result');
     if (!resultNode) return;
     
+    // Trova l'edge che entra nel ResultNode
+    const incomingEdge = edges.find(e => e.target === resultNode.id);
+    
+    if (!incomingEdge) {
+      // Nessun nodo collegato, svuota le colonne disponibili
+      const currentColumns = resultNode.data?.availableColumns || [];
+      if (currentColumns.length > 0) {
+        setNodes((nds) =>
+          nds.map((node) => {
+            if (node.type === 'result') {
+              return {
+                ...node,
+                data: {
+                  ...node.data,
+                  availableColumns: []
+                }
+              };
+            }
+            return node;
+          })
+        );
+      }
+      return;
+    }
+    
+    // Trova il nodo sorgente (quello collegato al ResultNode)
+    const sourceNodeId = incomingEdge.source;
+    
+    // Prendi le colonne SOLO dal nodo collegato
     const availableColumns = [];
     
-    for (const node of nodes) {
-      const nodeSchema = schemas[node.id] || [];
+    // Prima prova dallo schema inference (più affidabile)
+    const nodeSchema = schemas[sourceNodeId] || [];
+    if (nodeSchema.length > 0) {
       for (const col of nodeSchema) {
         availableColumns.push({
           name: col.name,
           type: col.type || 'str',
-          source: node.id
+          source: sourceNodeId
         });
       }
-    }
-    
-    // Fallback ai dati locali
-    if (availableColumns.length === 0) {
-      for (const node of nodes) {
-        if ((node.type === 'project_source' || node.type === 'file_source' || node.type === 'transform') && node.data?.columns) {
-          for (const col of node.data.columns) {
-            availableColumns.push({
-              name: col.name || col,
-              type: col.type || 'str',
-              source: node.data?.source_project_id || node.data?.file_source_id || 'transform'
-            });
-          }
+    } else {
+      // Fallback: prendi dai dati locali del nodo
+      const sourceNode = nodes.find(n => n.id === sourceNodeId);
+      if (sourceNode && sourceNode.data?.columns) {
+        for (const col of sourceNode.data.columns) {
+          availableColumns.push({
+            name: col.name || col,
+            type: col.type || 'str',
+            source: sourceNodeId
+          });
         }
       }
     }
@@ -222,7 +249,7 @@ const ManipolaEditorContent = () => {
     const currentColumns = resultNode.data?.availableColumns || [];
     const columnsChanged = JSON.stringify(availableColumns) !== JSON.stringify(currentColumns);
     
-    if (columnsChanged && availableColumns.length > 0) {
+    if (columnsChanged) {
       setNodes((nds) =>
         nds.map((node) => {
           if (node.type === 'result') {
@@ -238,7 +265,7 @@ const ManipolaEditorContent = () => {
         })
       );
     }
-  }, [nodes, schemas, setNodes]);
+  }, [nodes, edges, schemas, setNodes]);
 
   useEffect(() => {
     loadProjectAndSources();

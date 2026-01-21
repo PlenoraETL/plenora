@@ -1,208 +1,11 @@
 {
   "nodes": [
     {
-      "id": "source_1768938427050",
+      "id": "source_1768955651650",
       "type": "project_source",
       "position": {
-        "x": 481.5100174428534,
-        "y": 27.275746855267386
-      },
-      "table_name": null,
-      "alias": null,
-      "columns": [],
-      "filters": [],
-      "calculated_columns": [],
-      "connection_id": null,
-      "source_project_id": null,
-      "file_source_id": null,
-      "transform_op": null,
-      "transform_category": null,
-      "api_id": null,
-      "param_mapping": null,
-      "data": {
-        "source_project_id": "estrai_postgres_20260119_122419_d7b62376",
-        "columns": [
-          {
-            "name": "id",
-            "type": "int",
-            "visible": true,
-            "source_node": "source_1768938427050",
-            "is_calculated": false
-          },
-          {
-            "name": "osm_id",
-            "type": "str",
-            "visible": true,
-            "source_node": "source_1768938427050",
-            "is_calculated": false
-          },
-          {
-            "name": "code",
-            "type": "int",
-            "visible": true,
-            "source_node": "source_1768938427050",
-            "is_calculated": false
-          },
-          {
-            "name": "fclass",
-            "type": "str",
-            "visible": true,
-            "source_node": "source_1768938427050",
-            "is_calculated": false
-          },
-          {
-            "name": "name",
-            "type": "str",
-            "visible": true,
-            "source_node": "source_1768938427050",
-            "is_calculated": false
-          },
-          {
-            "name": "geometry",
-            "type": "geometry:point:4326",
-            "visible": true,
-            "source_node": "source_1768938427050",
-            "is_calculated": false
-          }
-        ]
-      },
-      "fileName": null,
-      "format": null,
-      "distinct": false,
-      "limit": null,
-      "geomColumn": null,
-      "group_by_enabled": false,
-      "group_by_columns": [],
-      "aggregations": []
-    },
-    {
-      "id": "transform_1768938472254",
-      "type": "transform",
-      "position": {
-        "x": 883.7180705772432,
-        "y": 18.163868292007308
-      },
-      "table_name": null,
-      "alias": null,
-      "columns": [],
-      "filters": [],
-      "calculated_columns": [],
-      "connection_id": null,
-      "source_project_id": null,
-      "file_source_id": null,
-      "transform_op": null,
-      "transform_category": null,
-      "api_id": null,
-      "param_mapping": null,
-      "data": {
-        "columns": [
-          {
-            "name": "id_L",
-            "type": "int",
-            "visible": true,
-            "source_node": "transform_1768938472254",
-            "is_calculated": false
-          },
-          {
-            "name": "osm_id_L",
-            "type": "str",
-            "visible": true,
-            "source_node": "transform_1768938472254",
-            "is_calculated": false
-          },
-          {
-            "name": "code",
-            "type": "int",
-            "visible": true,
-            "source_node": "transform_1768938472254",
-            "is_calculated": false
-          },
-          {
-            "name": "fclass_L",
-            "type": "str",
-            "visible": true,
-            "source_node": "transform_1768938472254",
-            "is_calculated": false
-          },
-          {
-            "name": "name_L",
-            "type": "str",
-            "visible": true,
-            "source_node": "transform_1768938472254",
-            "is_calculated": false
-          },
-          {
-            "name": "geometry_L",
-            "type": "geometry:point:4326",
-            "visible": true,
-            "source_node": "transform_1768938472254",
-            "is_calculated": false
-          },
-          {
-            "name": "ID_R",
-            "type": "int",
-            "visible": true,
-            "source_node": "transform_1768938472254",
-            "is_calculated": false
-          },
-          {
-            "name": "OSM_ID_R",
-            "type": "str",
-            "visible": true,
-            "source_node": "transform_1768938472254",
-            "is_calculated": false
-          },
-          {
-            "name": "CODE_R",
-            "type": "int",
-            "visible": true,
-            "source_node": "transform_1768938472254",
-            "is_calculated": false
-          },
-          {
-            "name": "FCLASS_R",
-            "type": "str",
-            "visible": true,
-            "source_node": "transform_1768938472254",
-            "is_calculated": false
-          },
-          {
-            "name": "NAME_R",
-            "type": "str",
-            "visible": true,
-            "source_node": "transform_1768938472254",
-            "is_calculated": false
-          },
-          {
-            "name": "GEOMETRY_R",
-            "type": "geometry",
-            "visible": true,
-            "source_node": "transform_1768938472254",
-            "is_calculated": false
-          }
-        ],
-        "transform_op": "join",
-        "config": {
-          "how": "inner",
-          "left_on": "code",
-          "right_on": "CODE"
-        }
-      },
-      "fileName": null,
-      "format": null,
-      "distinct": false,
-      "limit": null,
-      "geomColumn": null,
-      "group_by_enabled": false,
-      "group_by_columns": [],
-      "aggregations": []
-    },
-    {
-      "id": "source_1768938563180",
-      "type": "project_source",
-      "position": {
-        "x": 467.6768008051355,
-        "y": 389.38813752998914
+        "x": 952.9978396926704,
+        "y": 26.958621876380803
       },
       "table_name": null,
       "alias": null,
@@ -223,42 +26,42 @@
             "name": "ID",
             "type": "int",
             "visible": true,
-            "source_node": "source_1768938563180",
+            "source_node": "source_1768955651650",
             "is_calculated": false
           },
           {
             "name": "OSM_ID",
             "type": "str",
             "visible": true,
-            "source_node": "source_1768938563180",
+            "source_node": "source_1768955651650",
             "is_calculated": false
           },
           {
             "name": "CODE",
             "type": "int",
             "visible": true,
-            "source_node": "source_1768938563180",
+            "source_node": "source_1768955651650",
             "is_calculated": false
           },
           {
             "name": "FCLASS",
             "type": "str",
             "visible": true,
-            "source_node": "source_1768938563180",
+            "source_node": "source_1768955651650",
             "is_calculated": false
           },
           {
             "name": "NAME",
             "type": "str",
             "visible": true,
-            "source_node": "source_1768938563180",
+            "source_node": "source_1768955651650",
             "is_calculated": false
           },
           {
             "name": "GEOMETRY",
             "type": "geometry",
             "visible": true,
-            "source_node": "source_1768938563180",
+            "source_node": "source_1768955651650",
             "is_calculated": false
           }
         ]
@@ -273,11 +76,11 @@
       "aggregations": []
     },
     {
-      "id": "result_1768938646754",
-      "type": "result",
+      "id": "transform_1768959170342",
+      "type": "transform",
       "position": {
-        "x": 1219.9453158458946,
-        "y": -65.51792180531787
+        "x": 1311.2714021301545,
+        "y": 39.34922984818962
       },
       "table_name": null,
       "alias": null,
@@ -294,93 +97,141 @@
       "data": {
         "columns": [
           {
-            "name": "id_L",
+            "name": "ID",
             "type": "int",
             "visible": true,
-            "source_node": "transform_1768938472254",
+            "source_node": "transform_1768959170342",
             "is_calculated": false
           },
           {
-            "name": "osm_id_L",
+            "name": "OSM_ID",
             "type": "str",
             "visible": true,
-            "source_node": "transform_1768938472254",
+            "source_node": "transform_1768959170342",
             "is_calculated": false
           },
           {
-            "name": "code",
+            "name": "CODE",
             "type": "int",
             "visible": true,
-            "source_node": "transform_1768938472254",
+            "source_node": "transform_1768959170342",
             "is_calculated": false
           },
           {
-            "name": "fclass_L",
+            "name": "FCLASS",
             "type": "str",
             "visible": true,
-            "source_node": "transform_1768938472254",
+            "source_node": "transform_1768959170342",
             "is_calculated": false
           },
           {
-            "name": "name_L",
+            "name": "NAME",
             "type": "str",
             "visible": true,
-            "source_node": "transform_1768938472254",
+            "source_node": "transform_1768959170342",
             "is_calculated": false
           },
           {
-            "name": "geometry_L",
-            "type": "geometry:point:4326",
-            "visible": true,
-            "source_node": "transform_1768938472254",
-            "is_calculated": false
-          },
-          {
-            "name": "ID_R",
-            "type": "int",
-            "visible": true,
-            "source_node": "transform_1768938472254",
-            "is_calculated": false
-          },
-          {
-            "name": "OSM_ID_R",
-            "type": "str",
-            "visible": true,
-            "source_node": "transform_1768938472254",
-            "is_calculated": false
-          },
-          {
-            "name": "CODE_R",
-            "type": "int",
-            "visible": true,
-            "source_node": "transform_1768938472254",
-            "is_calculated": false
-          },
-          {
-            "name": "FCLASS_R",
-            "type": "str",
-            "visible": true,
-            "source_node": "transform_1768938472254",
-            "is_calculated": false
-          },
-          {
-            "name": "NAME_R",
-            "type": "str",
-            "visible": true,
-            "source_node": "transform_1768938472254",
-            "is_calculated": false
-          },
-          {
-            "name": "GEOMETRY_R",
+            "name": "GEOMETRY",
             "type": "geometry",
             "visible": true,
-            "source_node": "transform_1768938472254",
+            "source_node": "transform_1768959170342",
             "is_calculated": false
+          },
+          {
+            "name": "centroid",
+            "type": "geometry:point",
+            "visible": true,
+            "source_node": "transform_1768959170342",
+            "is_calculated": true
           }
         ],
-        "fileName": "test_join",
-        "format": "geojson",
-        "geomColumn": "geometry_L",
+        "transform_op": "geo_centroid",
+        "config": {}
+      },
+      "fileName": null,
+      "format": null,
+      "distinct": false,
+      "limit": null,
+      "geomColumn": null,
+      "group_by_enabled": false,
+      "group_by_columns": [],
+      "aggregations": []
+    },
+    {
+      "id": "result_1768959183625",
+      "type": "result",
+      "position": {
+        "x": 1676.063613326076,
+        "y": 77.08698091594724
+      },
+      "table_name": null,
+      "alias": null,
+      "columns": [],
+      "filters": [],
+      "calculated_columns": [],
+      "connection_id": null,
+      "source_project_id": null,
+      "file_source_id": null,
+      "transform_op": null,
+      "transform_category": null,
+      "api_id": null,
+      "param_mapping": null,
+      "data": {
+        "columns": [
+          {
+            "name": "ID",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768959170342",
+            "is_calculated": false
+          },
+          {
+            "name": "OSM_ID",
+            "type": "str",
+            "visible": true,
+            "source_node": "transform_1768959170342",
+            "is_calculated": false
+          },
+          {
+            "name": "CODE",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1768959170342",
+            "is_calculated": false
+          },
+          {
+            "name": "FCLASS",
+            "type": "str",
+            "visible": true,
+            "source_node": "transform_1768959170342",
+            "is_calculated": false
+          },
+          {
+            "name": "NAME",
+            "type": "str",
+            "visible": true,
+            "source_node": "transform_1768959170342",
+            "is_calculated": false
+          },
+          {
+            "name": "GEOMETRY",
+            "type": "geometry",
+            "visible": true,
+            "source_node": "transform_1768959170342",
+            "is_calculated": false
+          },
+          {
+            "name": "centroid",
+            "type": "geometry:point",
+            "visible": true,
+            "source_node": "transform_1768959170342",
+            "is_calculated": true
+          }
+        ],
+        "fileName": "output_c",
+        "format": "shp",
+        "geomColumn": "centroid",
         "group_by_enabled": false,
         "group_by_columns": [],
         "aggregations": []
@@ -397,9 +248,9 @@
   ],
   "edges": [
     {
-      "id": "reactflow__edge-source_1768938427050-transform_1768938472254",
-      "source": "source_1768938427050",
-      "target": "transform_1768938472254",
+      "id": "reactflow__edge-source_1768955651650-transform_1768959170342",
+      "source": "source_1768955651650",
+      "target": "transform_1768959170342",
       "join_type": "left",
       "source_column": "",
       "target_column": "",
@@ -410,22 +261,9 @@
       "spatial_distance": null
     },
     {
-      "id": "reactflow__edge-source_1768938563180-transform_1768938472254",
-      "source": "source_1768938563180",
-      "target": "transform_1768938472254",
-      "join_type": "left",
-      "source_column": "",
-      "target_column": "",
-      "is_spatial": false,
-      "spatial_predicate": null,
-      "source_geom_column": null,
-      "target_geom_column": null,
-      "spatial_distance": null
-    },
-    {
-      "id": "reactflow__edge-transform_1768938472254-result_1768938646754",
-      "source": "transform_1768938472254",
-      "target": "result_1768938646754",
+      "id": "reactflow__edge-transform_1768959170342-result_1768959183625",
+      "source": "transform_1768959170342",
+      "target": "result_1768959183625",
       "join_type": "left",
       "source_column": "",
       "target_column": "",

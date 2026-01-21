@@ -8,7 +8,7 @@ import '../styles/ExecutionModal.css';
  * - isOpen: boolean - mostra/nasconde modal
  * - onClose: function - callback chiusura
  * - isExecuting: boolean - stato caricamento
- * - result: object - risultato esecuzione { success, message, rows_count, columns, output_file, output_path, query }
+ * - result: object - risultato esecuzione { success, message, rows_count, columns, columns_count, output_file, output_path, query }
  * - downloadUrl: string - URL per download file
  * - title: string - titolo modal
  * - projectType: 'estrai' | 'manipola' | 'arricchisci' - per styling
@@ -31,6 +31,17 @@ function ExecutionModal({
   };
 
   const variantClass = `execution-modal--${projectType}`;
+
+  // Calcola il numero di colonne: usa columns_count se disponibile, altrimenti columns.length
+  const getColumnsCount = () => {
+    if (result?.columns_count !== undefined) {
+      return result.columns_count;
+    }
+    if (result?.columns?.length !== undefined) {
+      return result.columns.length;
+    }
+    return 0;
+  };
 
   return (
     <div className="execution-modal__overlay" onClick={handleOverlayClick}>
@@ -78,7 +89,7 @@ function ExecutionModal({
                       Colonne output
                     </div>
                     <div className="execution-modal__stat-value">
-                      {result.columns?.length || 0}
+                      {getColumnsCount()}
                     </div>
                   </div>
                 </div>

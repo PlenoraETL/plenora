@@ -145,6 +145,10 @@ class SchemaInferenceService:
         elif node.type == "project_source":
             schema = self._infer_project_source_schema(node)
         
+        # === NODO FILE_SOURCE (file esterno) ===
+        elif node.type == "file_source":
+            schema = self._infer_file_source_schema(node)
+        
         # === NODO TRANSFORM ===
         elif node.type == "transform":
             # Recupera schemi degli input
@@ -263,6 +267,26 @@ class SchemaInferenceService:
             logger.error(f"Errore lettura metadata {source_project_id}: {e}")
             return []
     
+    def _infer_file_source_schema(self, node) -> List[ColumnSchema]:
+        """
+        Schema per nodo file_source (file esterno GeoJSON, GPKG, SHP, CSV).
+        Legge le colonne da node.data.columns.
+        """
+        columns = []
+        
+        if node.data and node.data.get("columns"):
+            for col in node.data["columns"]:
+                if col.get("visible", True):
+                    columns.append(ColumnSchema(
+                        name=col.get("name", ""),
+                        type=col.get("type", "str"),
+                        source_node=node.id,
+                        is_calculated=False
+                    ))
+        
+        logger.debug(f"FileSource {node.id}: {len(columns)} colonne")
+        return columns
+    
     def _infer_transform_schema(
         self, 
         node, 
@@ -301,8 +325,14 @@ class SchemaInferenceService:
             return self._schema_distinct(input_schemas, config, node.id)
         elif transform_op == "rename":
             return self._schema_rename(input_schemas, config, node.id)
-        elif transform_op == "drop":
+        elif transform_op == "drop" or transform_op == "drop_columns":
             return self._schema_drop(input_schemas, config, node.id)
+        elif transform_op == "fill_na":
+            return self._schema_passthrough(input_schemas, node.id)
+        elif transform_op == "replace":
+            return self._schema_passthrough(input_schemas, node.id)
+        elif transform_op == "split_column":
+            return self._schema_split_column(input_schemas, config, node.id)
         # Operazioni geometriche
         elif transform_op == "geo_buffer":
             return self._schema_geo_buffer(input_schemas, config, node.id)
@@ -312,6 +342,20 @@ class SchemaInferenceService:
             return self._schema_geo_area(input_schemas, config, node.id)
         elif transform_op == "geo_clip":
             return self._schema_geo_clip(input_schemas, config, node.id)
+        elif transform_op == "geo_dissolve":
+            return self._schema_geo_dissolve(input_schemas, config, node.id)
+        elif transform_op == "geo_simplify":
+            return self._schema_passthrough(input_schemas, node.id)
+        elif transform_op == "geo_convex_hull":
+            return self._schema_geo_convex_hull(input_schemas, config, node.id)
+        elif transform_op == "geo_reproject":
+            return self._schema_passthrough(input_schemas, node.id)
+        elif transform_op == "geo_intersection":
+            return self._schema_geo_overlay(input_schemas, config, node.id, "intersection")
+        elif transform_op == "geo_union":
+            return self._schema_geo_overlay(input_schemas, config, node.id, "union")
+        elif transform_op == "geo_difference":
+            return self._schema_geo_overlay(input_schemas, config, node.id, "difference")
         elif transform_op == "geo_to_crs":
             return self._schema_passthrough(input_schemas, node.id)
         else:
@@ -528,12 +572,15 @@ class SchemaInferenceService:
         new_col = config.get("new_column", "calculated")
         output_type = config.get("output_type", "real")  # Default numerico
         
-        result.append(ColumnSchema(
-            name=new_col,
-            type=output_type,
-            source_node=node_id,
-            is_calculated=True
-        ))
+        # Verifica che non esista già
+        existing_names = {col.name for col in result}
+        if new_col and new_col not in existing_names:
+            result.append(ColumnSchema(
+                name=new_col,
+                type=output_type,
+                source_node=node_id,
+                is_calculated=True
+            ))
         
         return result
     
@@ -637,12 +684,15 @@ class SchemaInferenceService:
     ) -> List[ColumnSchema]:
         """
         Rename: stesso schema con nomi cambiati
-        Config: {"columns": {"old_name": "new_name", ...}}
+        Config: {"columns": {"old_name": "new_name", ...}} or {"old_name": "x", "new_name": "y"}
         """
         if not input_schemas:
             return []
         
+        # Supporta entrambi i formati di config
         rename_map = config.get("columns", {})
+        if not rename_map and config.get("old_name") and config.get("new_name"):
+            rename_map = {config["old_name"]: config["new_name"]}
         
         result = []
         for col in input_schemas[0]:
@@ -683,6 +733,38 @@ class SchemaInferenceService:
         
         return result
     
+    def _schema_split_column(
+        self, 
+        input_schemas: List[List[ColumnSchema]], 
+        config: dict,
+        node_id: str
+    ) -> List[ColumnSchema]:
+        """
+        Split Column: input + nuove colonne dalla divisione
+        """
+        if not input_schemas:
+            return []
+        
+        result = [ColumnSchema(
+            name=col.name,
+            type=col.type,
+            source_node=node_id,
+            is_calculated=col.is_calculated
+        ) for col in input_schemas[0]]
+        
+        # Aggiungi nuove colonne
+        new_columns = config.get("new_columns", [])
+        for col_name in new_columns:
+            if col_name and col_name not in {c.name for c in result}:
+                result.append(ColumnSchema(
+                    name=col_name,
+                    type="str",
+                    source_node=node_id,
+                    is_calculated=True
+                ))
+        
+        return result
+    
     # =========================================================================
     # SCHEMA PER OPERAZIONI GEOMETRICHE
     # =========================================================================
@@ -694,30 +776,47 @@ class SchemaInferenceService:
         node_id: str
     ) -> List[ColumnSchema]:
         """
-        Buffer: stesso schema, geometria diventa polygon
+        Buffer: input + nuova colonna buffer (geometry:polygon)
+        
+        Se output_column è diverso da geom_column, aggiunge una nuova colonna.
+        Se sono uguali, sostituisce la geometria esistente.
         """
         if not input_schemas:
             return []
         
         geom_col = config.get("geom_column", "geometry")
+        output_col = config.get("output_column", "buffer_geom")
         
-        result = []
-        for col in input_schemas[0]:
-            if col.name == geom_col:
-                # Buffer produce sempre polygon
+        # Copia tutte le colonne esistenti
+        result = [ColumnSchema(
+            name=col.name,
+            type=col.type,
+            source_node=node_id,
+            is_calculated=col.is_calculated
+        ) for col in input_schemas[0]]
+        
+        # Se output_column è diverso, aggiungi nuova colonna
+        if output_col and output_col != geom_col:
+            # Verifica che non esista già
+            existing_names = {col.name for col in result}
+            if output_col not in existing_names:
                 result.append(ColumnSchema(
-                    name=col.name,
+                    name=output_col,
                     type="geometry:polygon",
                     source_node=node_id,
                     is_calculated=True
                 ))
-            else:
-                result.append(ColumnSchema(
-                    name=col.name,
-                    type=col.type,
-                    source_node=node_id,
-                    is_calculated=col.is_calculated
-                ))
+        else:
+            # Sostituisci la geometria esistente
+            for i, col in enumerate(result):
+                if col.name == geom_col:
+                    result[i] = ColumnSchema(
+                        name=col.name,
+                        type="geometry:polygon",
+                        source_node=node_id,
+                        is_calculated=True
+                    )
+                    break
         
         return result
     
@@ -728,29 +827,45 @@ class SchemaInferenceService:
         node_id: str
     ) -> List[ColumnSchema]:
         """
-        Centroid: stesso schema, geometria diventa point
+        Centroid: input + nuova colonna centroid (geometry:point)
+        
+        Se output_column è diverso da geom_column, aggiunge una nuova colonna.
         """
         if not input_schemas:
             return []
         
         geom_col = config.get("geom_column", "geometry")
+        output_col = config.get("output_column", "centroid")
         
-        result = []
-        for col in input_schemas[0]:
-            if col.name == geom_col:
+        # Copia tutte le colonne esistenti
+        result = [ColumnSchema(
+            name=col.name,
+            type=col.type,
+            source_node=node_id,
+            is_calculated=col.is_calculated
+        ) for col in input_schemas[0]]
+        
+        # Se output_column è diverso, aggiungi nuova colonna
+        if output_col and output_col != geom_col:
+            existing_names = {col.name for col in result}
+            if output_col not in existing_names:
                 result.append(ColumnSchema(
-                    name=col.name,
+                    name=output_col,
                     type="geometry:point",
                     source_node=node_id,
                     is_calculated=True
                 ))
-            else:
-                result.append(ColumnSchema(
-                    name=col.name,
-                    type=col.type,
-                    source_node=node_id,
-                    is_calculated=col.is_calculated
-                ))
+        else:
+            # Sostituisci la geometria esistente
+            for i, col in enumerate(result):
+                if col.name == geom_col:
+                    result[i] = ColumnSchema(
+                        name=col.name,
+                        type="geometry:point",
+                        source_node=node_id,
+                        is_calculated=True
+                    )
+                    break
         
         return result
     
@@ -773,13 +888,17 @@ class SchemaInferenceService:
             is_calculated=col.is_calculated
         ) for col in input_schemas[0]]
         
-        area_col = config.get("output_column", "area")
-        result.append(ColumnSchema(
-            name=area_col,
-            type="real",
-            source_node=node_id,
-            is_calculated=True
-        ))
+        area_col = config.get("output_column", "area_m2")
+        
+        # Verifica che non esista già
+        existing_names = {col.name for col in result}
+        if area_col not in existing_names:
+            result.append(ColumnSchema(
+                name=area_col,
+                type="real",
+                source_node=node_id,
+                is_calculated=True
+            ))
         
         return result
     
@@ -796,6 +915,126 @@ class SchemaInferenceService:
             return []
         
         return self._schema_passthrough(input_schemas, node_id)
+    
+    def _schema_geo_dissolve(
+        self, 
+        input_schemas: List[List[ColumnSchema]], 
+        config: dict,
+        node_id: str
+    ) -> List[ColumnSchema]:
+        """
+        Dissolve: colonna group by + geometria
+        """
+        if not input_schemas:
+            return []
+        
+        by_column = config.get("by_column")
+        geom_col = config.get("geom_column", "geometry")
+        
+        result = []
+        
+        # Se c'è group by, includi quella colonna
+        if by_column:
+            for col in input_schemas[0]:
+                if col.name == by_column:
+                    result.append(ColumnSchema(
+                        name=col.name,
+                        type=col.type,
+                        source_node=node_id,
+                        is_calculated=False
+                    ))
+                    break
+        
+        # Aggiungi colonna geometria
+        result.append(ColumnSchema(
+            name=geom_col,
+            type="geometry",
+            source_node=node_id,
+            is_calculated=True
+        ))
+        
+        return result
+    
+    def _schema_geo_convex_hull(
+        self, 
+        input_schemas: List[List[ColumnSchema]], 
+        config: dict,
+        node_id: str
+    ) -> List[ColumnSchema]:
+        """
+        Convex Hull: input + nuova colonna convex_hull (geometry:polygon)
+        """
+        if not input_schemas:
+            return []
+        
+        geom_col = config.get("geom_column", "geometry")
+        output_col = config.get("output_column", "convex_hull")
+        
+        result = [ColumnSchema(
+            name=col.name,
+            type=col.type,
+            source_node=node_id,
+            is_calculated=col.is_calculated
+        ) for col in input_schemas[0]]
+        
+        # Aggiungi nuova colonna se diversa
+        if output_col and output_col != geom_col:
+            existing_names = {col.name for col in result}
+            if output_col not in existing_names:
+                result.append(ColumnSchema(
+                    name=output_col,
+                    type="geometry:polygon",
+                    source_node=node_id,
+                    is_calculated=True
+                ))
+        
+        return result
+    
+    def _schema_geo_overlay(
+        self, 
+        input_schemas: List[List[ColumnSchema]], 
+        config: dict,
+        node_id: str,
+        overlay_type: str
+    ) -> List[ColumnSchema]:
+        """
+        Overlay operations (intersection, union, difference): 
+        Combina colonne da entrambi gli input + geometria risultante
+        """
+        if len(input_schemas) < 2:
+            return input_schemas[0] if input_schemas else []
+        
+        left_schema = input_schemas[0]
+        right_schema = input_schemas[1]
+        
+        result = []
+        
+        # Colonne da sinistra
+        for col in left_schema:
+            result.append(ColumnSchema(
+                name=col.name,
+                type=col.type,
+                source_node=node_id,
+                is_calculated=col.is_calculated
+            ))
+        
+        # Colonne da destra (con suffisso per evitare conflitti)
+        left_names = {col.name for col in left_schema}
+        for col in right_schema:
+            # Skip geometry columns from right (result uses combined geometry)
+            if col.type.startswith("geometry"):
+                continue
+            new_name = col.name
+            if new_name in left_names:
+                new_name = f"{col.name}_2"
+            result.append(ColumnSchema(
+                name=new_name,
+                type=col.type,
+                source_node=node_id,
+                is_calculated=col.is_calculated
+            ))
+        
+        return result
     
     # =========================================================================
     # UTILITY

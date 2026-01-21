@@ -30,7 +30,7 @@ class SpatialOperations:
     # SPATIAL JOIN
     # =========================================================================
     
-    def op_sjoin(self, inputs: List[pd.DataFrame], node: Node) -> pd.DataFrame:
+    def op_sjoin(self, inputs: List[pd.DataFrame], node: Node) -> gpd.GeoDataFrame:
         """Spatial join tra due GeoDataFrame."""
         if len(inputs) < 2:
             return inputs[0] if inputs else pd.DataFrame()
@@ -52,12 +52,11 @@ class SpatialOperations:
             if 'index_right' in result.columns:
                 result = result.drop(columns=['index_right'])
             
-            # Converti geometry in WKT
-            if 'geometry' in result.columns:
-                result['geometry'] = result['geometry'].apply(geometry_to_wkt)
+            # NON convertire geometry in WKT - mantieni come GeoDataFrame
+            # La conversione avverrà nel salvataggio se necessario (es. CSV)
             
-            logger.info(f"Spatial Join completato: {len(result)} righe")
-            return pd.DataFrame(result)
+            logger.info(f"Spatial Join completato: {len(result)} righe, CRS: {result.crs}")
+            return result  # Ritorna GeoDataFrame
             
         except Exception as e:
             logger.error(f"Errore Spatial Join: {e}")
@@ -67,12 +66,22 @@ class SpatialOperations:
     # BUFFER
     # =========================================================================
     
-    def op_geo_buffer(self, df: pd.DataFrame, node: Node) -> pd.DataFrame:
-        """Crea buffer intorno alle geometrie."""
+    def op_geo_buffer(self, df: pd.DataFrame, node: Node) -> gpd.GeoDataFrame:
+        """
+        Crea buffer intorno alle geometrie.
+        
+        La colonna output_column conterrà la geometria buffer come vera geometria,
+        non come stringa WKT. Questo permette di esportarla correttamente.
+        """
         config = node.data.get('config', {}) if node.data else {}
         geom_column = config.get('geom_column')
         distance = config.get('distance', 100)
         output_column = config.get('output_column', 'buffer_geom')
+        cap_style = config.get('cap_style', 'round')
+        
+        # Mappa cap_style da stringa a intero per Shapely
+        cap_style_map = {'round': 1, 'flat': 2, 'square': 3}
+        cap_style_int = cap_style_map.get(cap_style, 1)
         
         try:
             gdf = to_geodataframe(df, geom_column)
@@ -85,7 +94,8 @@ class SpatialOperations:
             else:
                 gdf_projected = gdf
             
-            buffer_geom = gdf_projected.geometry.buffer(distance)
+            # Calcola buffer
+            buffer_geom = gdf_projected.geometry.buffer(distance, cap_style=cap_style_int)
             
             # Riproietta al CRS originale
             if original_crs and original_crs.is_geographic:
@@ -93,22 +103,31 @@ class SpatialOperations:
                 buffer_gdf = buffer_gdf.to_crs(original_crs)
                 buffer_geom = buffer_gdf.geometry
             
-            result = df.copy()
-            result[output_column] = buffer_geom.apply(geometry_to_wkt)
+            # Crea risultato con ENTRAMBE le geometrie
+            result = gdf.copy()
             
-            logger.info(f"Buffer completato: colonna '{output_column}' aggiunta")
-            return result
+            # Aggiungi buffer_geom come VERA geometria (GeoSeries), non WKT
+            result[output_column] = buffer_geom.values
+            
+            logger.info(f"Buffer completato: colonna '{output_column}' aggiunta con {len(buffer_geom)} geometrie")
+            return result  # Ritorna GeoDataFrame
             
         except Exception as e:
             logger.error(f"Errore Buffer: {e}")
+            import traceback
+            traceback.print_exc()
             return df
 
     # =========================================================================
     # CENTROID
     # =========================================================================
     
-    def op_geo_centroid(self, df: pd.DataFrame, node: Node) -> pd.DataFrame:
-        """Calcola centroide delle geometrie."""
+    def op_geo_centroid(self, df: pd.DataFrame, node: Node) -> gpd.GeoDataFrame:
+        """
+        Calcola centroide delle geometrie.
+        
+        La colonna output_column conterrà il centroide come vera geometria.
+        """
         config = node.data.get('config', {}) if node.data else {}
         geom_column = config.get('geom_column')
         output_column = config.get('output_column', 'centroid')
@@ -117,11 +136,14 @@ class SpatialOperations:
             gdf = to_geodataframe(df, geom_column)
             centroids = gdf.geometry.centroid
             
-            result = df.copy()
-            result[output_column] = centroids.apply(geometry_to_wkt)
+            # Crea risultato
+            result = gdf.copy()
+            
+            # Aggiungi centroid come VERA geometria, non WKT
+            result[output_column] = centroids.values
             
             logger.info(f"Centroid completato: colonna '{output_column}' aggiunta")
-            return result
+            return result  # Ritorna GeoDataFrame
             
         except Exception as e:
             logger.error(f"Errore Centroid: {e}")
@@ -131,7 +153,7 @@ class SpatialOperations:
     # AREA
     # =========================================================================
     
-    def op_geo_area(self, df: pd.DataFrame, node: Node) -> pd.DataFrame:
+    def op_geo_area(self, df: pd.DataFrame, node: Node) -> gpd.GeoDataFrame:
         """Calcola area in metri quadrati."""
         config = node.data.get('config', {}) if node.data else {}
         geom_column = config.get('geom_column')
@@ -147,11 +169,11 @@ class SpatialOperations:
             else:
                 gdf_projected = gdf
             
-            result = df.copy()
+            result = gdf.copy()
             result[output_column] = gdf_projected.geometry.area
             
             logger.info(f"Area completato: colonna '{output_column}' aggiunta")
-            return result
+            return result  # Ritorna GeoDataFrame
             
         except Exception as e:
             logger.error(f"Errore Area: {e}")
@@ -161,7 +183,7 @@ class SpatialOperations:
     # CLIP
     # =========================================================================
     
-    def op_geo_clip(self, inputs: List[pd.DataFrame], node: Node) -> pd.DataFrame:
+    def op_geo_clip(self, inputs: List[pd.DataFrame], node: Node) -> gpd.GeoDataFrame:
         """Ritaglia geometrie usando una maschera."""
         if len(inputs) < 2:
             return inputs[0] if inputs else pd.DataFrame()
@@ -178,11 +200,10 @@ class SpatialOperations:
             
             result = gpd.clip(input_gdf, mask_gdf)
             
-            if 'geometry' in result.columns:
-                result['geometry'] = result['geometry'].apply(geometry_to_wkt)
+            # NON convertire geometry in WKT
             
             logger.info(f"Clip completato: {len(result)} righe")
-            return pd.DataFrame(result)
+            return result  # Ritorna GeoDataFrame
             
         except Exception as e:
             logger.error(f"Errore Clip: {e}")
@@ -192,7 +213,7 @@ class SpatialOperations:
     # DISSOLVE
     # =========================================================================
     
-    def op_geo_dissolve(self, df: pd.DataFrame, node: Node) -> pd.DataFrame:
+    def op_geo_dissolve(self, df: pd.DataFrame, node: Node) -> gpd.GeoDataFrame:
         """Dissolve: unisce geometrie per attributo."""
         config = node.data.get('config', {}) if node.data else {}
         geom_column = config.get('geom_column')
@@ -208,11 +229,10 @@ class SpatialOperations:
                 # Dissolve tutto in una singola geometria
                 result = gdf.dissolve(aggfunc=aggfunc).reset_index()
             
-            if 'geometry' in result.columns:
-                result['geometry'] = result['geometry'].apply(geometry_to_wkt)
+            # NON convertire geometry in WKT
             
             logger.info(f"Dissolve completato: {len(result)} righe")
-            return pd.DataFrame(result)
+            return result  # Ritorna GeoDataFrame
             
         except Exception as e:
             logger.error(f"Errore Dissolve: {e}")
@@ -222,7 +242,7 @@ class SpatialOperations:
     # INTERSECTION
     # =========================================================================
     
-    def op_geo_intersection(self, inputs: List[pd.DataFrame], node: Node) -> pd.DataFrame:
+    def op_geo_intersection(self, inputs: List[pd.DataFrame], node: Node) -> gpd.GeoDataFrame:
         """Intersezione geometrica tra due layer."""
         if len(inputs) < 2:
             return inputs[0] if inputs else pd.DataFrame()
@@ -239,11 +259,10 @@ class SpatialOperations:
             
             result = gpd.overlay(left_gdf, right_gdf, how='intersection')
             
-            if 'geometry' in result.columns:
-                result['geometry'] = result['geometry'].apply(geometry_to_wkt)
+            # NON convertire geometry in WKT
             
             logger.info(f"Intersection completato: {len(result)} righe")
-            return pd.DataFrame(result)
+            return result  # Ritorna GeoDataFrame
             
         except Exception as e:
             logger.error(f"Errore Intersection: {e}")
@@ -253,7 +272,7 @@ class SpatialOperations:
     # UNION (geometrica)
     # =========================================================================
     
-    def op_geo_union(self, inputs: List[pd.DataFrame], node: Node) -> pd.DataFrame:
+    def op_geo_union(self, inputs: List[pd.DataFrame], node: Node) -> gpd.GeoDataFrame:
         """Unione geometrica di due layer."""
         if len(inputs) < 2:
             return inputs[0] if inputs else pd.DataFrame()
@@ -270,11 +289,10 @@ class SpatialOperations:
             
             result = gpd.overlay(left_gdf, right_gdf, how='union')
             
-            if 'geometry' in result.columns:
-                result['geometry'] = result['geometry'].apply(geometry_to_wkt)
+            # NON convertire geometry in WKT
             
             logger.info(f"Union geometrica completata: {len(result)} righe")
-            return pd.DataFrame(result)
+            return result  # Ritorna GeoDataFrame
             
         except Exception as e:
             logger.error(f"Errore Union geometrica: {e}")
@@ -284,7 +302,7 @@ class SpatialOperations:
     # DIFFERENCE
     # =========================================================================
     
-    def op_geo_difference(self, inputs: List[pd.DataFrame], node: Node) -> pd.DataFrame:
+    def op_geo_difference(self, inputs: List[pd.DataFrame], node: Node) -> gpd.GeoDataFrame:
         """Differenza geometrica (A - B)."""
         if len(inputs) < 2:
             return inputs[0] if inputs else pd.DataFrame()
@@ -301,11 +319,10 @@ class SpatialOperations:
             
             result = gpd.overlay(left_gdf, right_gdf, how='difference')
             
-            if 'geometry' in result.columns:
-                result['geometry'] = result['geometry'].apply(geometry_to_wkt)
+            # NON convertire geometry in WKT
             
             logger.info(f"Difference completato: {len(result)} righe")
-            return pd.DataFrame(result)
+            return result  # Ritorna GeoDataFrame
             
         except Exception as e:
             logger.error(f"Errore Difference: {e}")
@@ -315,7 +332,7 @@ class SpatialOperations:
     # SIMPLIFY
     # =========================================================================
     
-    def op_geo_simplify(self, df: pd.DataFrame, node: Node) -> pd.DataFrame:
+    def op_geo_simplify(self, df: pd.DataFrame, node: Node) -> gpd.GeoDataFrame:
         """Semplifica geometrie (Douglas-Peucker)."""
         config = node.data.get('config', {}) if node.data else {}
         geom_column = config.get('geom_column')
@@ -325,15 +342,11 @@ class SpatialOperations:
         try:
             gdf = to_geodataframe(df, geom_column)
             
-            simplified = gdf.geometry.simplify(tolerance, preserve_topology=preserve_topology)
-            
-            result = df.copy()
-            # Sostituisci la geometria originale con quella semplificata
-            geom_col_name = geom_column or 'geometry'
-            result[geom_col_name] = simplified.apply(geometry_to_wkt)
+            # Semplifica e aggiorna la geometria principale
+            gdf['geometry'] = gdf.geometry.simplify(tolerance, preserve_topology=preserve_topology)
             
             logger.info(f"Simplify completato: tolerance={tolerance}")
-            return result
+            return gdf  # Ritorna GeoDataFrame
             
         except Exception as e:
             logger.error(f"Errore Simplify: {e}")
@@ -343,8 +356,12 @@ class SpatialOperations:
     # CONVEX HULL
     # =========================================================================
     
-    def op_geo_convex_hull(self, df: pd.DataFrame, node: Node) -> pd.DataFrame:
-        """Calcola inviluppo convesso delle geometrie."""
+    def op_geo_convex_hull(self, df: pd.DataFrame, node: Node) -> gpd.GeoDataFrame:
+        """
+        Calcola inviluppo convesso delle geometrie.
+        
+        La colonna output_column conterrà il convex hull come vera geometria.
+        """
         config = node.data.get('config', {}) if node.data else {}
         geom_column = config.get('geom_column')
         output_column = config.get('output_column', 'convex_hull')
@@ -354,11 +371,14 @@ class SpatialOperations:
             
             convex_hulls = gdf.geometry.convex_hull
             
-            result = df.copy()
-            result[output_column] = convex_hulls.apply(geometry_to_wkt)
+            # Crea risultato
+            result = gdf.copy()
+            
+            # Aggiungi convex_hull come VERA geometria, non WKT
+            result[output_column] = convex_hulls.values
             
             logger.info(f"Convex Hull completato: colonna '{output_column}' aggiunta")
-            return result
+            return result  # Ritorna GeoDataFrame
             
         except Exception as e:
             logger.error(f"Errore Convex Hull: {e}")
@@ -368,7 +388,7 @@ class SpatialOperations:
     # REPROJECT
     # =========================================================================
     
-    def op_geo_reproject(self, df: pd.DataFrame, node: Node) -> pd.DataFrame:
+    def op_geo_reproject(self, df: pd.DataFrame, node: Node) -> gpd.GeoDataFrame:
         """Riproietta geometrie in un nuovo CRS."""
         config = node.data.get('config', {}) if node.data else {}
         geom_column = config.get('geom_column')
@@ -381,14 +401,11 @@ class SpatialOperations:
                 # Se non ha CRS, assumiamo WGS84
                 gdf = gdf.set_crs('EPSG:4326')
             
-            reprojected = gdf.to_crs(target_crs)
+            original_crs = gdf.crs
+            result = gdf.to_crs(target_crs)
             
-            result = df.copy()
-            geom_col_name = geom_column or 'geometry'
-            result[geom_col_name] = reprojected.geometry.apply(geometry_to_wkt)
-            
-            logger.info(f"Reproject completato: {gdf.crs} -> {target_crs}")
-            return result
+            logger.info(f"Reproject completato: {original_crs} -> {target_crs}")
+            return result  # Ritorna GeoDataFrame
             
         except Exception as e:
             logger.error(f"Errore Reproject: {e}")

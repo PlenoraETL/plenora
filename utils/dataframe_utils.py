@@ -318,19 +318,66 @@ def save_dataframe(
                 logger.info(f"Salvato file vuoto: {final_path}")
                 return final_path
             
-            # Auto-detect colonna geometria se non specificata
-            if geom_column is None:
-                geom_column = detect_geometry_column(df)
+            # Gestisci GeoDataFrame già pronto
+            import geopandas as gpd
+            from shapely import wkt
+            from shapely.geometry.base import BaseGeometry
             
-            if geom_column is None:
-                raise ValueError(
-                    f"Nessuna colonna geometria trovata per formato {format_lower}. "
-                    f"Colonne disponibili: {list(df.columns)}. "
-                    f"Usa CSV o JSON per dati non spaziali."
-                )
-            
-            # Converti a GeoDataFrame
-            gdf = to_geodataframe(df, geom_column, crs=crs)
+            if isinstance(df, gpd.GeoDataFrame):
+                gdf = df.copy()
+                
+                # Se è specificata una colonna geometry diversa da quella attiva, usala
+                if geom_column and geom_column != gdf.geometry.name and geom_column in gdf.columns:
+                    logger.debug(f"Switching geometry column: {gdf.geometry.name} -> {geom_column}")
+                    
+                    # Controlla se la colonna è già geometry o è WKT string
+                    col_data = gdf[geom_column]
+                    
+                    if col_data.dtype == 'object':
+                        # Potrebbe essere WKT string - prova a convertire
+                        first_valid = col_data.dropna().iloc[0] if len(col_data.dropna()) > 0 else None
+                        if first_valid and isinstance(first_valid, str):
+                            # È WKT - converti in geometry
+                            logger.debug(f"Converting WKT column '{geom_column}' to geometry")
+                            gdf[geom_column] = col_data.apply(lambda x: wkt.loads(x) if pd.notna(x) and isinstance(x, str) else x)
+                        elif first_valid and isinstance(first_valid, BaseGeometry):
+                            # È già geometry (array di oggetti Shapely)
+                            logger.debug(f"Column '{geom_column}' contains Shapely objects")
+                    
+                    # Imposta come geometry attiva
+                    gdf = gdf.set_geometry(geom_column)
+                    logger.debug(f"Geometry column set to: {geom_column}")
+                
+                # IMPORTANTE: Converti tutte le altre colonne geometry in WKT
+                # GeoPandas non supporta multiple geometry columns per export
+                active_geom_name = gdf.geometry.name
+                for col in gdf.columns:
+                    if col != active_geom_name:
+                        col_data = gdf[col]
+                        # Controlla se è una colonna con oggetti Shapely
+                        if len(col_data.dropna()) > 0:
+                            first_valid = col_data.dropna().iloc[0]
+                            if isinstance(first_valid, BaseGeometry):
+                                logger.debug(f"Converting geometry column '{col}' to WKT for export")
+                                gdf[col] = col_data.apply(lambda x: x.wkt if isinstance(x, BaseGeometry) else x)
+                
+                if gdf.crs is None:
+                    gdf = gdf.set_crs(crs)
+                logger.debug(f"Usando GeoDataFrame, geometry: {gdf.geometry.name}, CRS: {gdf.crs}")
+            else:
+                # Auto-detect colonna geometria se non specificata
+                if geom_column is None:
+                    geom_column = detect_geometry_column(df)
+                
+                if geom_column is None:
+                    raise ValueError(
+                        f"Nessuna colonna geometria trovata per formato {format_lower}. "
+                        f"Colonne disponibili: {list(df.columns)}. "
+                        f"Usa CSV o JSON per dati non spaziali."
+                    )
+                
+                # Converti a GeoDataFrame
+                gdf = to_geodataframe(df, geom_column, crs=crs)
             
             # Salva nel formato richiesto
             if format_lower == 'geojson':
