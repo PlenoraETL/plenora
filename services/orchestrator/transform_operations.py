@@ -82,6 +82,156 @@ class TransformOperations:
             return inputs[0]
 
     # =========================================================================
+    # FORMULA
+    # =========================================================================
+    
+    def op_formula(self, df: pd.DataFrame, node: Node) -> pd.DataFrame:
+        """
+        Crea una nuova colonna calcolata con un'espressione.
+        
+        Supporta:
+        - Operazioni matematiche: col * 2, col1 + col2
+        - Concatenazione stringhe: col1 + '_' + col2
+        - Funzioni stringa: col.str.upper(), col.str.len()
+        """
+        config = node.data.get('config', {}) if node.data else {}
+        formula = config.get('formula', '').strip()
+        new_column = config.get('new_column', 'calculated').strip()
+        
+        if not formula:
+            logger.warning("Formula: nessuna espressione specificata")
+            return df
+        
+        if not new_column:
+            new_column = 'calculated'
+        
+        try:
+            result = df.copy()
+            
+            # Rileva se è una concatenazione di stringhe (contiene '+' e stringhe letterali come '_')
+            if "'" in formula or '"' in formula:
+                # Concatenazione stringhe - sostituisci nomi colonne con df['col'].astype(str)
+                eval_formula = formula
+                for col in result.columns:
+                    # Sostituisci nome colonna con accesso DataFrame
+                    if col in eval_formula:
+                        eval_formula = eval_formula.replace(col, f"result['{col}'].astype(str)")
+                
+                result[new_column] = eval(eval_formula)
+                logger.info(f"Formula (concat): {new_column} = {formula}")
+                return result
+            
+            # Prova prima con eval di pandas (per operazioni matematiche)
+            try:
+                result[new_column] = result.eval(formula)
+                logger.info(f"Formula completata: {new_column} = {formula}")
+                return result
+            except Exception as e:
+                logger.debug(f"Formula eval pandas fallito: {e}")
+            
+            # Fallback: sostituisci nomi colonne e usa eval Python
+            eval_formula = formula
+            for col in sorted(result.columns, key=len, reverse=True):  # Ordina per lunghezza decrescente
+                if col in eval_formula:
+                    eval_formula = eval_formula.replace(col, f"result['{col}']")
+            
+            result[new_column] = eval(eval_formula)
+            logger.info(f"Formula (eval): {new_column} = {formula}")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Errore Formula '{formula}': {e}")
+            return df
+
+    # =========================================================================
+    # AGGREGATE (Group By)
+    # =========================================================================
+    
+    def op_aggregate(self, df: pd.DataFrame, node: Node) -> pd.DataFrame:
+        """
+        Raggruppa dati e applica funzioni di aggregazione.
+        
+        Config:
+        - group_by: lista colonne per raggruppamento
+        - aggregations: lista di {column, function} dove function è count, sum, avg, min, max
+        """
+        config = node.data.get('config', {}) if node.data else {}
+        group_by = config.get('group_by', [])
+        aggregations = config.get('aggregations', [])
+        
+        if not group_by:
+            logger.warning("Aggregate: nessuna colonna group_by specificata")
+            return df
+        
+        # Filtra solo colonne esistenti
+        group_by = [c for c in group_by if c in df.columns]
+        if not group_by:
+            logger.warning("Aggregate: nessuna colonna group_by valida")
+            return df
+        
+        try:
+            # Se non ci sono aggregazioni specificate, fai solo count
+            if not aggregations:
+                result = df.groupby(group_by).size().reset_index(name='count')
+                logger.info(f"Aggregate (count): {len(df)} -> {len(result)} righe")
+                return result
+            
+            # Costruisci dizionario aggregazioni per pandas
+            agg_dict = {}
+            for agg in aggregations:
+                col = agg.get('column')
+                func = agg.get('function', 'count').lower()
+                
+                if col not in df.columns:
+                    continue
+                
+                # Mappa funzioni
+                func_map = {
+                    'count': 'count',
+                    'sum': 'sum',
+                    'avg': 'mean',
+                    'mean': 'mean',
+                    'min': 'min',
+                    'max': 'max',
+                    'first': 'first',
+                    'last': 'last'
+                }
+                
+                pandas_func = func_map.get(func, 'count')
+                
+                # Gestisci multiple aggregazioni sulla stessa colonna
+                if col in agg_dict:
+                    if isinstance(agg_dict[col], list):
+                        agg_dict[col].append(pandas_func)
+                    else:
+                        agg_dict[col] = [agg_dict[col], pandas_func]
+                else:
+                    agg_dict[col] = pandas_func
+            
+            if not agg_dict:
+                # Fallback a count se nessuna aggregazione valida
+                result = df.groupby(group_by).size().reset_index(name='count')
+            else:
+                # Usa named aggregations per avere nomi colonne descrittivi
+                named_aggs = {}
+                for col, func in agg_dict.items():
+                    if isinstance(func, list):
+                        # Multiple funzioni sulla stessa colonna
+                        for f in func:
+                            named_aggs[f"{col}_{f}"] = (col, f)
+                    else:
+                        named_aggs[f"{col}_{func}"] = (col, func)
+                
+                result = df.groupby(group_by).agg(**named_aggs).reset_index()
+            
+            logger.info(f"Aggregate completato: {len(df)} -> {len(result)} righe, group_by={group_by}")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Errore Aggregate: {e}")
+            return df
+
+    # =========================================================================
     # UNION
     # =========================================================================
     
@@ -103,11 +253,40 @@ class TransformOperations:
     # =========================================================================
     
     def op_filter(self, df: pd.DataFrame, node: Node) -> pd.DataFrame:
-        """Filtra righe in base a condizioni."""
+        """
+        Filtra righe in base a condizioni.
+        
+        Supporta due formati:
+        1. config.condition: stringa pandas query (es: "colonna > 100 & colonna2 == 'valore'")
+        2. config.conditions: array di oggetti [{column, operator, value}] (legacy)
+        """
         config = node.data.get('config', {}) if node.data else {}
+        
+        # Formato 1: stringa pandas query (dal nuovo frontend)
+        condition_str = config.get('condition', '').strip()
+        if condition_str:
+            try:
+                # Usa pandas query() per filtrare
+                result = df.query(condition_str).reset_index(drop=True)
+                logger.info(f"Filter (query): {len(df)} -> {len(result)} righe | Condizione: {condition_str}")
+                return result
+            except Exception as e:
+                logger.error(f"Errore Filter query '{condition_str}': {e}")
+                # Se la query fallisce, prova con eval
+                try:
+                    mask = df.eval(condition_str)
+                    result = df[mask].reset_index(drop=True)
+                    logger.info(f"Filter (eval): {len(df)} -> {len(result)} righe | Condizione: {condition_str}")
+                    return result
+                except Exception as e2:
+                    logger.error(f"Errore Filter eval '{condition_str}': {e2}")
+                    return df
+        
+        # Formato 2: array di condizioni (legacy)
         conditions = config.get('conditions', [])
         
         if not conditions:
+            logger.warning("Filter: nessuna condizione specificata")
             return df
         
         try:
@@ -121,7 +300,7 @@ class TransformOperations:
                 if col not in df.columns:
                     continue
                 
-                if op == '==':
+                if op == '==' or op == '=':
                     mask &= df[col] == value
                 elif op == '!=':
                     mask &= df[col] != value
@@ -133,7 +312,7 @@ class TransformOperations:
                     mask &= df[col] < value
                 elif op == '<=':
                     mask &= df[col] <= value
-                elif op == 'contains':
+                elif op == 'contains' or op == 'like':
                     mask &= df[col].astype(str).str.contains(str(value), na=False)
                 elif op == 'is_null':
                     mask &= df[col].isna()
@@ -141,7 +320,7 @@ class TransformOperations:
                     mask &= df[col].notna()
             
             result = df[mask].reset_index(drop=True)
-            logger.info(f"Filter: {len(df)} -> {len(result)} righe")
+            logger.info(f"Filter (conditions): {len(df)} -> {len(result)} righe")
             return result
             
         except Exception as e:
@@ -176,9 +355,22 @@ class TransformOperations:
     def op_sort(self, df: pd.DataFrame, node: Node) -> pd.DataFrame:
         """Ordina DataFrame."""
         config = node.data.get('config', {}) if node.data else {}
-        sort_by = config.get('sort_by', [])
+        # Supporta sia sort_by che sort_columns
+        sort_by = config.get('sort_by', []) or config.get('sort_columns', [])
+        
+        logger.info(f"Sort config: {config}")
         
         if not sort_by:
+            # Prova formato alternativo: column + ascending direttamente nel config
+            col = config.get('column') or config.get('sort_column')
+            if col and col in df.columns:
+                asc = config.get('ascending', True)
+                if isinstance(asc, str):
+                    asc = asc.lower() not in ['desc', 'false']
+                result = df.sort_values(by=col, ascending=asc).reset_index(drop=True)
+                logger.info(f"Sort completato: {col} {'ASC' if asc else 'DESC'}")
+                return result
+            logger.warning("Sort: nessuna colonna specificata")
             return df
         
         try:
@@ -189,10 +381,15 @@ class TransformOperations:
                 col = s.get('column')
                 if col in df.columns:
                     columns.append(col)
-                    ascending.append(s.get('ascending', True))
+                    asc = s.get('ascending', True)
+                    if isinstance(asc, str):
+                        asc = asc.lower() not in ['desc', 'false']
+                    ascending.append(asc)
             
             if columns:
-                return df.sort_values(by=columns, ascending=ascending).reset_index(drop=True)
+                result = df.sort_values(by=columns, ascending=ascending).reset_index(drop=True)
+                logger.info(f"Sort completato: {columns} {ascending}")
+                return result
             return df
         except Exception as e:
             logger.error(f"Errore Sort: {e}")

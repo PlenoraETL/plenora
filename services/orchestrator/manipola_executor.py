@@ -283,6 +283,8 @@ class ManipolaExecutor:
         base_ops = {
             'join': self.transform_ops.op_join,
             'union': self.transform_ops.op_union,
+            'formula': self.transform_ops.op_formula,
+            'aggregate': self.transform_ops.op_aggregate,
             'filter': self.transform_ops.op_filter,
             'select': self.transform_ops.op_select,
             'sort': self.transform_ops.op_sort,

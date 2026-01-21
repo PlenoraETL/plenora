@@ -1,5 +1,6 @@
 /**
  * SortConfig.jsx - Configurazione per operazione Sort
+ * Versione con UI migliorata
  */
 import React from 'react';
 
@@ -17,64 +18,82 @@ const SortConfig = ({
     );
   }
 
+  const sortColumns = config.sort_columns || [];
+
+  const updateSortColumn = (idx, field, value) => {
+    const newSortCols = [...sortColumns];
+    newSortCols[idx] = { ...newSortCols[idx], [field]: value };
+    updateConfig('sort_columns', newSortCols);
+  };
+
+  const removeSortColumn = (idx) => {
+    const newSortCols = sortColumns.filter((_, i) => i !== idx);
+    updateConfig('sort_columns', newSortCols);
+  };
+
+  const addSortColumn = () => {
+    const newSortCols = [...sortColumns, { column: '', ascending: true }];
+    updateConfig('sort_columns', newSortCols);
+  };
+
   return (
     <div className="transform-node__config">
       {/* Colonne ordinamento */}
       <div className="transform-node__config-group">
-        <label className="transform-node__label">Colonne ordinamento:</label>
+        <label className="transform-node__label">📊 Colonne ordinamento:</label>
         
-        {/* Lista colonne configurate */}
-        {(config.sort_columns || []).map((sortCol, idx) => (
-          <div key={idx} className="transform-node__sort-row">
-            <select
-              value={sortCol.column || ''}
-              onChange={(e) => {
-                const newSortCols = [...(config.sort_columns || [])];
-                newSortCols[idx] = { ...newSortCols[idx], column: e.target.value };
-                updateConfig('sort_columns', newSortCols);
-              }}
-              className="transform-node__config-select"
-              style={{ flex: 1 }}
-            >
-              <option value="">-- Seleziona --</option>
-              {inputColumns.map((col, cidx) => (
-                <option key={cidx} value={col.name}>{col.name}</option>
-              ))}
-            </select>
-            
-            <select
-              value={sortCol.ascending ? 'asc' : 'desc'}
-              onChange={(e) => {
-                const newSortCols = [...(config.sort_columns || [])];
-                newSortCols[idx] = { ...newSortCols[idx], ascending: e.target.value === 'asc' };
-                updateConfig('sort_columns', newSortCols);
-              }}
-              className="transform-node__config-select"
-              style={{ width: '80px' }}
-            >
-              <option value="asc">↑ ASC</option>
-              <option value="desc">↓ DESC</option>
-            </select>
-            
-            <button
-              onClick={() => {
-                const newSortCols = (config.sort_columns || []).filter((_, i) => i !== idx);
-                updateConfig('sort_columns', newSortCols);
-              }}
-              className="transform-node__btn-remove"
-            >
-              ✕
-            </button>
-          </div>
-        ))}
+        <div className="transform-node__sort-list">
+          {sortColumns.map((sortCol, idx) => (
+            <div key={idx} className="transform-node__sort-card">
+              <div className="transform-node__sort-card-header">
+                <span className="transform-node__sort-card-num">#{idx + 1}</span>
+                <button
+                  type="button"
+                  onClick={() => removeSortColumn(idx)}
+                  className="transform-node__sort-card-remove"
+                  title="Rimuovi"
+                >
+                  ✕
+                </button>
+              </div>
+              
+              <div className="transform-node__sort-card-body">
+                <select
+                  value={sortCol.column || ''}
+                  onChange={(e) => updateSortColumn(idx, 'column', e.target.value)}
+                  className="transform-node__select"
+                >
+                  <option value="">-- Seleziona colonna --</option>
+                  {inputColumns.map((col, cidx) => (
+                    <option key={cidx} value={col.name}>{col.name}</option>
+                  ))}
+                </select>
+                
+                <div className="transform-node__sort-direction-btns">
+                  <button
+                    type="button"
+                    className={`transform-node__sort-dir-btn ${sortCol.ascending ? 'transform-node__sort-dir-btn--active' : ''}`}
+                    onClick={() => updateSortColumn(idx, 'ascending', true)}
+                  >
+                    ↑ ASC
+                  </button>
+                  <button
+                    type="button"
+                    className={`transform-node__sort-dir-btn ${!sortCol.ascending ? 'transform-node__sort-dir-btn--active' : ''}`}
+                    onClick={() => updateSortColumn(idx, 'ascending', false)}
+                  >
+                    ↓ DESC
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
         
-        {/* Bottone aggiungi colonna */}
         <button
-          onClick={() => {
-            const newSortCols = [...(config.sort_columns || []), { column: '', ascending: true }];
-            updateConfig('sort_columns', newSortCols);
-          }}
-          className="transform-node__btn-add"
+          type="button"
+          onClick={addSortColumn}
+          className="transform-node__add-btn"
         >
           + Aggiungi colonna
         </button>
@@ -86,7 +105,7 @@ const SortConfig = ({
         <select
           value={config.na_position || 'last'}
           onChange={(e) => updateConfig('na_position', e.target.value)}
-          className="transform-node__config-select"
+          className="transform-node__select"
         >
           <option value="last">Alla fine</option>
           <option value="first">All'inizio</option>
@@ -94,13 +113,13 @@ const SortConfig = ({
       </div>
 
       {/* Riepilogo */}
-      {(config.sort_columns || []).length > 0 && (
+      {sortColumns.filter(sc => sc.column).length > 0 && (
         <div className="transform-node__confirm-box">
-          <div className="transform-node__confirm-title">↕️ Configurazione Sort:</div>
+          <div className="transform-node__confirm-title">↕️ Ordinamento:</div>
           <div className="transform-node__confirm-content">
-            {(config.sort_columns || []).map((sc, i) => (
+            {sortColumns.filter(sc => sc.column).map((sc, i) => (
               <div key={i}>
-                {i + 1}. {sc.column || '?'} ({sc.ascending ? 'ASC ↑' : 'DESC ↓'})
+                {i + 1}. {sc.column} ({sc.ascending ? 'ASC ↑' : 'DESC ↓'})
               </div>
             ))}
           </div>

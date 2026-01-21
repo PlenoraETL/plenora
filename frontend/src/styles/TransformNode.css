@@ -598,3 +598,281 @@
   font-size: 11px;
   color: #666;
 }
+/* ============================================================
+   AGGREGATE CONFIG - Chips e Cards
+   ============================================================ */
+
+/* Container per chips selezionabili */
+.transform-node__chips-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+/* Chip singolo */
+.transform-node__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  background: #f5f5f5;
+  border: 1px solid #ddd;
+  border-radius: 16px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #555;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.transform-node__chip:hover {
+  background: #e3f2fd;
+  border-color: #90caf9;
+  color: #1976d2;
+}
+
+.transform-node__chip--selected {
+  background: #1976d2;
+  border-color: #1565c0;
+  color: #fff;
+}
+
+.transform-node__chip--selected:hover {
+  background: #1565c0;
+  color: #fff;
+}
+
+.transform-node__chip-check {
+  font-size: 10px;
+  font-weight: bold;
+}
+
+/* Info selezione */
+.transform-node__selected-info {
+  font-size: 10px;
+  color: #666;
+  margin-top: 4px;
+  font-style: italic;
+}
+
+/* Lista aggregazioni */
+.transform-node__agg-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+/* Card aggregazione */
+.transform-node__agg-card {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.transform-node__agg-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  background: #f5f5f5;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.transform-node__agg-card-num {
+  font-size: 10px;
+  font-weight: 600;
+  color: #1976d2;
+}
+
+.transform-node__agg-card-remove {
+  background: none;
+  border: none;
+  color: #999;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.transform-node__agg-card-remove:hover {
+  background: #ffebee;
+  color: #c62828;
+}
+
+.transform-node__agg-card-body {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.transform-node__agg-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.transform-node__agg-field label {
+  font-size: 10px;
+  color: #666;
+  font-weight: 500;
+}
+
+.transform-node__agg-field select {
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 11px;
+  background: #fff;
+}
+
+.transform-node__agg-field select:focus {
+  outline: none;
+  border-color: #2196F3;
+  box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
+}
+
+/* ============================================================
+   SORT CONFIG - Cards e Direction Buttons
+   ============================================================ */
+
+/* Lista sort */
+.transform-node__sort-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+/* Card sort - riusa stile aggregate */
+.transform-node__sort-card {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.transform-node__sort-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  background: #f5f5f5;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.transform-node__sort-card-num {
+  font-size: 10px;
+  font-weight: 600;
+  color: #1976d2;
+}
+
+.transform-node__sort-card-remove {
+  background: none;
+  border: none;
+  color: #999;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.transform-node__sort-card-remove:hover {
+  background: #ffebee;
+  color: #c62828;
+}
+
+.transform-node__sort-card-body {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Bottoni direzione ASC/DESC */
+.transform-node__sort-direction-btns {
+  display: flex;
+  gap: 4px;
+}
+
+.transform-node__sort-dir-btn {
+  flex: 1;
+  padding: 6px 10px;
+  background: #f5f5f5;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.transform-node__sort-dir-btn:hover {
+  background: #e3f2fd;
+  border-color: #90caf9;
+}
+
+.transform-node__sort-dir-btn--active {
+  background: #1976d2;
+  border-color: #1565c0;
+  color: #fff;
+}
+
+.transform-node__sort-dir-btn--active:hover {
+  background: #1565c0;
+}
+
+/* ============================================================
+   TOGGLE BUTTONS (per Distinct e altre operazioni)
+   ============================================================ */
+
+.transform-node__toggle-btns {
+  display: flex;
+  gap: 4px;
+}
+
+.transform-node__toggle-btns--vertical {
+  flex-direction: column;
+}
+
+.transform-node__toggle-btn {
+  flex: 1;
+  padding: 8px 12px;
+  background: #f5f5f5;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+}
+
+.transform-node__toggle-btn:hover {
+  background: #e3f2fd;
+  border-color: #90caf9;
+  color: #1976d2;
+}
+
+.transform-node__toggle-btn--active {
+  background: #1976d2;
+  border-color: #1565c0;
+  color: #fff;
+}
+
+.transform-node__toggle-btn--active:hover {
+  background: #1565c0;
+  color: #fff;
+}

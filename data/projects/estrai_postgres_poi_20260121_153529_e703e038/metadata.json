@@ -1,0 +1,35 @@
+{
+  "id": "estrai_postgres_poi_20260121_153529_e703e038",
+  "name": "estrai_postgres_poi",
+  "description": "",
+  "project_type": "estrai",
+  "default_connection_id": "Test_PostgreSQL_20260119_100748_c64643b0",
+  "created_at": "2026-01-21T15:35:29.081324",
+  "updated_at": "2026-01-21T17:51:13.721673",
+  "columns_metadata": [
+    {
+      "name": "id",
+      "type": "int"
+    },
+    {
+      "name": "osm_id",
+      "type": "str"
+    },
+    {
+      "name": "code",
+      "type": "int"
+    },
+    {
+      "name": "fclass",
+      "type": "str"
+    },
+    {
+      "name": "name",
+      "type": "str"
+    },
+    {
+      "name": "geometry",
+      "type": "geometry:point:4326"
+    }
+  ]
+}
