@@ -23,7 +23,11 @@ class TransformOperations:
     # =========================================================================
     
     def op_join(self, inputs: List[pd.DataFrame], node: Node) -> pd.DataFrame:
-        """Join tra due DataFrame."""
+        """
+        Join tra due DataFrame.
+        Aggiunge suffissi _L e _R a TUTTE le colonne (tranne la colonna di join)
+        per evitare ambiguità.
+        """
         if len(inputs) < 2:
             return inputs[0] if inputs else pd.DataFrame()
         
@@ -33,15 +37,48 @@ class TransformOperations:
         how = config.get('how', 'inner')
         
         try:
+            left_df = inputs[0].copy()
+            right_df = inputs[1].copy()
+            
+            # Rinomina TUTTE le colonne con suffissi _L e _R (tranne la colonna di join)
+            left_rename = {}
+            for col in left_df.columns:
+                if col != left_on:  # Non rinominare la colonna di join
+                    left_rename[col] = f"{col}_L"
+            
+            right_rename = {}
+            for col in right_df.columns:
+                if col != right_on:  # Non rinominare la colonna di join
+                    right_rename[col] = f"{col}_R"
+            
+            left_df = left_df.rename(columns=left_rename)
+            right_df = right_df.rename(columns=right_rename)
+            
+            # Aggiorna i nomi delle colonne di join dopo il rename
+            left_join_col = left_on  # Resta uguale, non l'abbiamo rinominata
+            right_join_col = right_on  # Resta uguale, non l'abbiamo rinominata
+            
+            # Esegui il merge
             result = pd.merge(
-                inputs[0], inputs[1],
-                left_on=left_on, right_on=right_on,
-                how=how, suffixes=('', '_right')
+                left_df, right_df,
+                left_on=left_join_col, 
+                right_on=right_join_col,
+                how=how,
+                suffixes=('', '_dup')  # Fallback per eventuali duplicati residui
             )
-            logger.info(f"Join completato: {len(result)} righe")
+            
+            # Se left_on != right_on, rimuovi la colonna di join duplicata dal right
+            # (pandas la tiene entrambe se hanno nomi diversi)
+            if left_on != right_on and right_on in result.columns:
+                result = result.drop(columns=[right_on])
+            
+            logger.info(f"Join completato: {len(result)} righe, {len(result.columns)} colonne")
             return result
+            
         except Exception as e:
             logger.error(f"Errore Join: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return inputs[0]
 
     # =========================================================================
