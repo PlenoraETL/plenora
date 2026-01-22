@@ -1,6 +1,10 @@
 /**
  * useTransformValidation.js
  * Hook per gestire tutte le validazioni dei nodi Transform
+ * 
+ * FIX 2026-01-22: Risolto bug propagazione schema a cascata
+ * - getEdges() e getNodes() ora chiamati FUORI da useMemo
+ * - Dipendenze cambiate da funzioni a valori effettivi
  */
 
 import { useMemo } from 'react';
@@ -21,10 +25,12 @@ export const useTransformValidation = ({
   getEdges,
   getNodes
 }) => {
+  // FIX: Chiama le funzioni FUORI da useMemo per ottenere i valori correnti
+  // Questo permette a React di rilevare i cambiamenti nei dati
+  const edges = getEdges();
+  const nodes = getNodes();
+  
   return useMemo(() => {
-    const edges = getEdges();
-    const nodes = getNodes();
-    
     // Edge in ingresso ordinati
     const incomingEdges = edges
       .filter(e => e.target === nodeId)
@@ -266,7 +272,7 @@ export const useTransformValidation = ({
     }
     
     return result;
-  }, [transform_op, nodeId, getEdges, getNodes]);
+  }, [transform_op, nodeId, edges, nodes]);  // FIX: dipendenze corrette (valori, non funzioni)
 };
 
 export default useTransformValidation;
