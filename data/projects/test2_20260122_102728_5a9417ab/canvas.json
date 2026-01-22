@@ -1,0 +1,441 @@
+{
+  "nodes": [
+    {
+      "id": "source_1769074052328",
+      "type": "project_source",
+      "position": {
+        "x": 379.0409231768242,
+        "y": 158.23281836932324
+      },
+      "table_name": null,
+      "alias": null,
+      "columns": [],
+      "filters": [],
+      "calculated_columns": [],
+      "connection_id": null,
+      "source_project_id": null,
+      "file_source_id": null,
+      "transform_op": null,
+      "transform_category": null,
+      "api_id": null,
+      "param_mapping": null,
+      "data": {
+        "source_project_id": "estrai_oracle_20260119_160726_d4a75c27",
+        "columns": [
+          {
+            "name": "id",
+            "type": "int",
+            "visible": true,
+            "source_node": "source_1769074052328",
+            "is_calculated": false
+          },
+          {
+            "name": "osm_id",
+            "type": "str",
+            "visible": true,
+            "source_node": "source_1769074052328",
+            "is_calculated": false
+          },
+          {
+            "name": "code",
+            "type": "int",
+            "visible": true,
+            "source_node": "source_1769074052328",
+            "is_calculated": false
+          },
+          {
+            "name": "fclass",
+            "type": "str",
+            "visible": true,
+            "source_node": "source_1769074052328",
+            "is_calculated": false
+          },
+          {
+            "name": "name",
+            "type": "str",
+            "visible": true,
+            "source_node": "source_1769074052328",
+            "is_calculated": false
+          },
+          {
+            "name": "geometry_wkt",
+            "type": "str",
+            "visible": true,
+            "source_node": "source_1769074052328",
+            "is_calculated": false
+          },
+          {
+            "name": "geometry_type",
+            "type": "str",
+            "visible": true,
+            "source_node": "source_1769074052328",
+            "is_calculated": false
+          },
+          {
+            "name": "geometry",
+            "type": "geometry",
+            "visible": true,
+            "source_node": "source_1769074052328",
+            "is_calculated": false
+          }
+        ]
+      },
+      "fileName": null,
+      "format": null,
+      "distinct": false,
+      "limit": null,
+      "geomColumn": null,
+      "group_by_enabled": false,
+      "group_by_columns": [],
+      "aggregations": []
+    },
+    {
+      "id": "source_1769074053324",
+      "type": "project_source",
+      "position": {
+        "x": 372.14782588104333,
+        "y": -238.97043107046505
+      },
+      "table_name": null,
+      "alias": null,
+      "columns": [],
+      "filters": [],
+      "calculated_columns": [],
+      "connection_id": null,
+      "source_project_id": null,
+      "file_source_id": null,
+      "transform_op": null,
+      "transform_category": null,
+      "api_id": null,
+      "param_mapping": null,
+      "data": {
+        "source_project_id": "estrai_postgres_20260119_122419_d7b62376",
+        "columns": [
+          {
+            "name": "id",
+            "type": "int",
+            "visible": true,
+            "source_node": "source_1769074053324",
+            "is_calculated": false
+          },
+          {
+            "name": "osm_id",
+            "type": "str",
+            "visible": true,
+            "source_node": "source_1769074053324",
+            "is_calculated": false
+          },
+          {
+            "name": "code",
+            "type": "int",
+            "visible": true,
+            "source_node": "source_1769074053324",
+            "is_calculated": false
+          },
+          {
+            "name": "fclass",
+            "type": "str",
+            "visible": true,
+            "source_node": "source_1769074053324",
+            "is_calculated": false
+          },
+          {
+            "name": "name",
+            "type": "str",
+            "visible": true,
+            "source_node": "source_1769074053324",
+            "is_calculated": false
+          },
+          {
+            "name": "geometry",
+            "type": "geometry:point:4326",
+            "visible": true,
+            "source_node": "source_1769074053324",
+            "is_calculated": false
+          }
+        ]
+      },
+      "fileName": null,
+      "format": null,
+      "distinct": false,
+      "limit": null,
+      "geomColumn": null,
+      "group_by_enabled": false,
+      "group_by_columns": [],
+      "aggregations": []
+    },
+    {
+      "id": "transform_1769074061772",
+      "type": "transform",
+      "position": {
+        "x": 845.8600928456956,
+        "y": -145.03815359028366
+      },
+      "table_name": null,
+      "alias": null,
+      "columns": [],
+      "filters": [],
+      "calculated_columns": [],
+      "connection_id": null,
+      "source_project_id": null,
+      "file_source_id": null,
+      "transform_op": null,
+      "transform_category": null,
+      "api_id": null,
+      "param_mapping": null,
+      "data": {
+        "columns": [
+          {
+            "name": "id_L",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "osm_id_L",
+            "type": "str",
+            "visible": true
+          },
+          {
+            "name": "code_L",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "fclass",
+            "type": "str",
+            "visible": true
+          },
+          {
+            "name": "name_L",
+            "type": "str",
+            "visible": true
+          },
+          {
+            "name": "geometry_wkt_L",
+            "type": "str",
+            "visible": true
+          },
+          {
+            "name": "geometry_type_L",
+            "type": "str",
+            "visible": true
+          },
+          {
+            "name": "geometry_L",
+            "type": "geometry",
+            "visible": true
+          },
+          {
+            "name": "id_R",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "osm_id_R",
+            "type": "str",
+            "visible": true
+          },
+          {
+            "name": "code_R",
+            "type": "int",
+            "visible": true
+          },
+          {
+            "name": "name_R",
+            "type": "str",
+            "visible": true
+          },
+          {
+            "name": "geometry_R",
+            "type": "geometry:point:4326",
+            "visible": true
+          }
+        ],
+        "transform_op": "join",
+        "config": {
+          "left_on": "fclass",
+          "right_on": "fclass",
+          "how": "left",
+          "swapped": true
+        }
+      },
+      "fileName": null,
+      "format": null,
+      "distinct": false,
+      "limit": null,
+      "geomColumn": null,
+      "group_by_enabled": false,
+      "group_by_columns": [],
+      "aggregations": []
+    },
+    {
+      "id": "result_1769075680068",
+      "type": "result",
+      "position": {
+        "x": 1296.0653388031249,
+        "y": -122.57454429488712
+      },
+      "table_name": null,
+      "alias": null,
+      "columns": [],
+      "filters": [],
+      "calculated_columns": [],
+      "connection_id": null,
+      "source_project_id": null,
+      "file_source_id": null,
+      "transform_op": null,
+      "transform_category": null,
+      "api_id": null,
+      "param_mapping": null,
+      "data": {
+        "columns": [
+          {
+            "name": "id_L",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1769074061772",
+            "is_calculated": false
+          },
+          {
+            "name": "osm_id_L",
+            "type": "str",
+            "visible": true,
+            "source_node": "transform_1769074061772",
+            "is_calculated": false
+          },
+          {
+            "name": "code_L",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1769074061772",
+            "is_calculated": false
+          },
+          {
+            "name": "fclass",
+            "type": "str",
+            "visible": true,
+            "source_node": "transform_1769074061772",
+            "is_calculated": false
+          },
+          {
+            "name": "name_L",
+            "type": "str",
+            "visible": true,
+            "source_node": "transform_1769074061772",
+            "is_calculated": false
+          },
+          {
+            "name": "geometry_L",
+            "type": "geometry:point:4326",
+            "visible": true,
+            "source_node": "transform_1769074061772",
+            "is_calculated": false
+          },
+          {
+            "name": "id_R",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1769074061772",
+            "is_calculated": false
+          },
+          {
+            "name": "osm_id_R",
+            "type": "str",
+            "visible": true,
+            "source_node": "transform_1769074061772",
+            "is_calculated": false
+          },
+          {
+            "name": "code_R",
+            "type": "int",
+            "visible": true,
+            "source_node": "transform_1769074061772",
+            "is_calculated": false
+          },
+          {
+            "name": "name_R",
+            "type": "str",
+            "visible": true,
+            "source_node": "transform_1769074061772",
+            "is_calculated": false
+          },
+          {
+            "name": "geometry_wkt_R",
+            "type": "str",
+            "visible": true,
+            "source_node": "transform_1769074061772",
+            "is_calculated": false
+          },
+          {
+            "name": "geometry_type_R",
+            "type": "str",
+            "visible": true,
+            "source_node": "transform_1769074061772",
+            "is_calculated": false
+          },
+          {
+            "name": "geometry_R",
+            "type": "geometry",
+            "visible": true,
+            "source_node": "transform_1769074061772",
+            "is_calculated": false
+          }
+        ],
+        "fileName": "output",
+        "format": "csv",
+        "group_by_enabled": false,
+        "group_by_columns": [],
+        "aggregations": []
+      },
+      "fileName": null,
+      "format": null,
+      "distinct": false,
+      "limit": null,
+      "geomColumn": null,
+      "group_by_enabled": false,
+      "group_by_columns": [],
+      "aggregations": []
+    }
+  ],
+  "edges": [
+    {
+      "id": "reactflow__edge-source_1769074053324-transform_1769074061772",
+      "source": "source_1769074053324",
+      "target": "transform_1769074061772",
+      "join_type": "left",
+      "source_column": "",
+      "target_column": "",
+      "is_spatial": false,
+      "spatial_predicate": null,
+      "source_geom_column": null,
+      "target_geom_column": null,
+      "spatial_distance": null
+    },
+    {
+      "id": "reactflow__edge-source_1769074052328-transform_1769074061772",
+      "source": "source_1769074052328",
+      "target": "transform_1769074061772",
+      "join_type": "left",
+      "source_column": "",
+      "target_column": "",
+      "is_spatial": false,
+      "spatial_predicate": null,
+      "source_geom_column": null,
+      "target_geom_column": null,
+      "spatial_distance": null
+    },
+    {
+      "id": "reactflow__edge-transform_1769074061772-result_1769075680068",
+      "source": "transform_1769074061772",
+      "target": "result_1769075680068",
+      "join_type": "left",
+      "source_column": "",
+      "target_column": "",
+      "is_spatial": false,
+      "spatial_predicate": null,
+      "source_geom_column": null,
+      "target_geom_column": null,
+      "spatial_distance": null
+    }
+  ]
+}

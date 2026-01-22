@@ -1,8 +1,12 @@
 /**
  * JoinConfig.jsx - Configurazione per operazione Join
+ * 
+ * AGGIORNATO 2026-01-22: Aggiunto SourceSwapper per controllare ordine LEFT/RIGHT
+ * Posizione: /components/transforms/base/JoinConfig.jsx
  */
 import React from 'react';
 import { getColumnTypeIcon } from '../../../utils/columnUtils';
+import SourceSwapper from '../SourceSwapper';
 
 const JoinConfig = ({ 
   config, 
@@ -15,6 +19,17 @@ const JoinConfig = ({
   getNodeLabel,
   nodeId
 }) => {
+  // Gestione swap
+  const swapped = config.swapped || false;
+  
+  // Se swapped, invertiamo le colonne per i dropdown
+  const displayLeftColumns = swapped ? rightColumns : leftColumns;
+  const displayRightColumns = swapped ? leftColumns : rightColumns;
+
+  const handleSwap = () => {
+    updateConfig('swapped', !swapped);
+  };
+
   if (!validation.valid) {
     return (
       <div className={`transform-node__message transform-node__message--${validation.type}`}>
@@ -25,17 +40,18 @@ const JoinConfig = ({
 
   return (
     <div className="transform-node__config">
-      {/* Info nodi collegati */}
-      <div className="transform-node__info-box">
-        <div className="transform-node__info-row">
-          <span className="transform-node__info-label">LEFT:</span> {getNodeLabel(leftNode)}
-          <span className="transform-node__info-count">({leftColumns.length} col)</span>
-        </div>
-        <div className="transform-node__info-row">
-          <span className="transform-node__info-label">RIGHT:</span> {getNodeLabel(rightNode)}
-          <span className="transform-node__info-count">({rightColumns.length} col)</span>
-        </div>
-      </div>
+      {/* Source Swapper */}
+      <SourceSwapper
+        leftNode={leftNode}
+        rightNode={rightNode}
+        leftLabel="L"
+        rightLabel="R"
+        leftCount={leftColumns.length}
+        rightCount={rightColumns.length}
+        swapped={swapped}
+        onSwap={handleSwap}
+        getNodeLabel={getNodeLabel}
+      />
 
       {/* Tipo JOIN */}
       <div className="transform-node__config-group">
@@ -68,7 +84,7 @@ const JoinConfig = ({
           className="transform-node__config-select"
         >
           <option value="">-- Seleziona --</option>
-          {leftColumns.map((col, idx) => (
+          {displayLeftColumns.map((col, idx) => (
             <option key={idx} value={col.name}>
               {getColumnTypeIcon(col.type || col.dtype)} {col.name}
             </option>
@@ -85,7 +101,7 @@ const JoinConfig = ({
           className="transform-node__config-select"
         >
           <option value="">-- Seleziona --</option>
-          {rightColumns.map((col, idx) => (
+          {displayRightColumns.map((col, idx) => (
             <option key={idx} value={col.name}>
               {getColumnTypeIcon(col.type || col.dtype)} {col.name}
             </option>
@@ -99,6 +115,7 @@ const JoinConfig = ({
           <div className="transform-node__confirm-title">✓ Configurazione:</div>
           <div className="transform-node__confirm-content">
             {config.how?.toUpperCase() || 'LEFT'} JOIN ON {config.left_on} = {config.right_on}
+            {swapped && <><br/>↔️ Sorgenti invertite</>}
           </div>
         </div>
       )}

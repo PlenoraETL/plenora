@@ -3,6 +3,9 @@
  * 
  * Versione refactored: la logica UI di ogni operazione è in componenti separati
  * in /transforms/base/ e /transforms/spatial/
+ * 
+ * AGGIORNATO 2026-01-22: Props aggiuntive per sjoin, geo_clip per SourceSwapper
+ * Posizione: /components/transforms/TransformNode.jsx
  */
 import React, { memo, useState, useEffect } from 'react';
 import { Handle, Position, useReactFlow } from 'reactflow';
@@ -366,13 +369,18 @@ const TransformNode = memo(({ data, id }) => {
           />
         );
 
-      // Spatial - two inputs
+      // Spatial - two inputs (AGGIORNATO: props aggiuntive per SourceSwapper)
       case 'sjoin':
         return (
           <ConfigComponent
             {...commonProps}
+            leftNode={validationData.leftNode}
+            rightNode={validationData.rightNode}
+            leftColumns={validationData.leftColumns}
+            rightColumns={validationData.rightColumns}
             leftGeomColumns={validationData.leftGeomColumns}
             rightGeomColumns={validationData.rightGeomColumns}
+            getNodeLabel={validationData.getNodeLabel}
           />
         );
 
@@ -380,8 +388,13 @@ const TransformNode = memo(({ data, id }) => {
         return (
           <ConfigComponent
             {...commonProps}
+            leftNode={validationData.leftNode}
+            rightNode={validationData.rightNode}
+            leftColumns={validationData.leftColumns}
+            rightColumns={validationData.rightColumns}
             leftGeomColumns={validationData.leftGeomColumns}
             rightGeomColumns={validationData.rightGeomColumns}
+            getNodeLabel={validationData.getNodeLabel}
           />
         );
 
@@ -391,8 +404,13 @@ const TransformNode = memo(({ data, id }) => {
         return (
           <ConfigComponent
             {...commonProps}
+            leftNode={validationData.leftNode}
+            rightNode={validationData.rightNode}
+            leftColumns={validationData.leftColumns}
+            rightColumns={validationData.rightColumns}
             leftGeomColumns={validationData.leftGeomColumns}
             rightGeomColumns={validationData.rightGeomColumns}
+            getNodeLabel={validationData.getNodeLabel}
             operationType={transform_op}
           />
         );

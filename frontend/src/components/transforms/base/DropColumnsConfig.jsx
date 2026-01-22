@@ -1,7 +1,8 @@
 /**
  * DropColumnsConfig.jsx - Configurazione per operazione Drop Columns
  * 
- * FIX 2026-01-22: UI migliorata con chips cliccabili invece di checkbox
+ * AGGIORNATO 2026-01-22: UI migliorata con chips invece di checkbox
+ * Posizione: /components/transforms/base/DropColumnsConfig.jsx
  */
 import React from 'react';
 

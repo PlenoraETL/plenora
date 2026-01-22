@@ -5,6 +5,8 @@
  * FIX 2026-01-22: Risolto bug propagazione schema a cascata
  * - getEdges() e getNodes() ora chiamati FUORI da useMemo
  * - Dipendenze cambiate da funzioni a valori effettivi
+ * 
+ * Posizione: /components/transforms/useTransformValidation.js
  */
 
 import { useMemo } from 'react';
@@ -40,11 +42,20 @@ export const useTransformValidation = ({
     const getNodeLabel = (node) => {
       if (!node) return 'Unknown';
       if (node.type === 'project_source') {
-        const projectId = node.data?.source_project_id;
-        return projectId ? `Progetto ${projectId.substring(0, 8)}...` : 'Progetto non selezionato';
+        // Prova prima il nome leggibile, poi fallback all'ID
+        return node.data?.projectName 
+            || node.data?.metadata?.name
+            || node.data?.name 
+            || node.data?.label 
+            || node.data?.source_project_id 
+            || 'Non selezionato';
+      }
+      if (node.type === 'file_source') {
+        return node.data?.fileName || 'File';
       }
       if (node.type === 'transform') {
-        return `Transform (${node.data?.transform_op || 'unknown'})`;
+        const op = node.data?.transform_op || 'transform';
+        return op.charAt(0).toUpperCase() + op.slice(1);
       }
       return node.data?.label || node.id;
     };
