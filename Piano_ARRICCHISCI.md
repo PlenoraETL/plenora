@@ -745,9 +745,458 @@ pipeline_optimizer = {
 
 ---
 
-## 12. Task Asincroni (Celery + Redis)
+## 12. Modelli Remoti (RETURN / Università)
 
-### 6.1 Docker Compose
+### 12.1 Scenario
+
+I modelli ML dei progetti RETURN potrebbero risiedere su server delle università:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         URBY-ETL                                │
+│                    (server ICSC)                                │
+└─────────────────────────────────────────────────────────────────┘
+          │                    │                    │
+          ▼                    ▼                    ▼
+   ┌────────────┐      ┌────────────┐      ┌────────────┐
+   │ Server     │      │ Server     │      │ Server     │
+   │ UniGe      │      │ PoliMi     │      │ UniBo      │
+   │            │      │            │      │            │
+   │ /predict   │      │ /analyze   │      │ /classify  │
+   │ (FastAPI)  │      │ (Flask)    │      │ (FastAPI)  │
+   └────────────┘      └────────────┘      └────────────┘
+        │                    │                    │
+   Modello Stima       Modello Rischio      Modello 
+   Valore Immobili     Idrogeologico        Classificazione
+```
+
+### 12.2 Soluzione: Standard API Comune
+
+Le università espongono i loro modelli come **API REST** seguendo uno standard comune definito da URBY-ETL/RETURN.
+
+**Vantaggi:**
+- Ogni università gestisce il proprio server/modello
+- URBY-ETL li consuma come qualsiasi altra API
+- Nessuna installazione richiesta sulle uni (solo esporre API)
+- Scalabile: nuovi modelli = nuovi endpoint
+
+### 12.3 Specifica API Standard per Modelli RETURN
+
+```yaml
+# return-model-api-spec.yaml
+# Specifica OpenAPI che le università devono implementare
+
+openapi: 3.0.0
+info:
+  title: RETURN Model API Standard
+  description: |
+    Specifica standard per esporre modelli ML nel progetto RETURN.
+    Implementare questa API per rendere il modello compatibile con URBY-ETL.
+  version: 1.0.0
+  contact:
+    name: RETURN Project
+    email: return@example.it
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      description: Verifica che il servizio sia attivo
+      responses:
+        200:
+          description: Servizio attivo
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "healthy"
+                  model_version:
+                    type: string
+                    example: "2.1.0"
+
+  /info:
+    get:
+      summary: Informazioni sul modello
+      description: Ritorna metadati del modello (input/output attesi)
+      responses:
+        200:
+          description: Metadati modello
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelInfo'
+
+  /predict:
+    post:
+      summary: Esegue predizione
+      description: |
+        Endpoint principale. Accetta un batch di dati e ritorna predizioni.
+        Supporta sia singola riga che batch.
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PredictRequest'
+      responses:
+        200:
+          description: Predizioni completate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PredictResponse'
+        400:
+          description: Input non valido
+        401:
+          description: Non autorizzato
+        500:
+          description: Errore interno
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  schemas:
+    ModelInfo:
+      type: object
+      properties:
+        name:
+          type: string
+          example: "Modello Stima Valore Immobiliare"
+        version:
+          type: string
+          example: "2.1.0"
+        description:
+          type: string
+        provider:
+          type: string
+          example: "Università di Genova - DIME"
+        input_schema:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldSchema'
+        output_schema:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldSchema'
+        limits:
+          type: object
+          properties:
+            max_batch_size:
+              type: integer
+              example: 100
+            timeout_seconds:
+              type: integer
+              example: 300
+
+    FieldSchema:
+      type: object
+      properties:
+        name:
+          type: string
+          example: "superficie_mq"
+        type:
+          type: string
+          enum: [string, number, integer, boolean, date, geometry]
+        required:
+          type: boolean
+        description:
+          type: string
+
+    PredictRequest:
+      type: object
+      required:
+        - data
+      properties:
+        data:
+          type: array
+          description: Array di oggetti da processare
+          items:
+            type: object
+          example:
+            - id: 1
+              superficie_mq: 85
+              piano: 3
+              zona_omi: "B1"
+            - id: 2
+              superficie_mq: 120
+              piano: 1
+              zona_omi: "C2"
+        parameters:
+          type: object
+          description: Parametri opzionali del modello
+          example:
+            confidence_threshold: 0.8
+
+    PredictResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        predictions:
+          type: array
+          items:
+            type: object
+          example:
+            - id: 1
+              valore_stimato: 285000
+              confidence: 0.92
+              range_min: 270000
+              range_max: 300000
+            - id: 2
+              valore_stimato: 180000
+              confidence: 0.87
+              range_min: 165000
+              range_max: 195000
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              index:
+                type: integer
+              error:
+                type: string
+        metadata:
+          type: object
+          properties:
+            rows_processed:
+              type: integer
+            execution_time_ms:
+              type: integer
+            model_version:
+              type: string
+```
+
+### 12.4 Template URBY-ETL per Modello Remoto
+
+Quando un'università implementa l'API, si crea un template per importarla:
+
+```json
+{
+  "_meta": {
+    "schema_version": "1.0",
+    "template_id": "return_unige_stima_valore",
+    "template_type": "remote_model",
+    "category": "ml_model",
+    "icon": "🧠",
+    "tags": ["return", "ml", "valutazione", "immobiliare"],
+    "provider": "Università di Genova",
+    "project": "RETURN"
+  },
+  
+  "display": {
+    "name": "Modello Stima Valore Immobiliare (UniGe)",
+    "short_description": "Stima il valore di mercato di immobili residenziali",
+    "long_description": "Modello ML sviluppato da UniGe nell'ambito del progetto RETURN. Utilizza caratteristiche dell'immobile e dati OMI per stimare il valore di mercato.",
+    "use_cases": [
+      "Valutazione portafoglio immobiliare",
+      "Stima preliminare per acquisizioni",
+      "Analisi di mercato"
+    ],
+    "limitations": [
+      "Solo immobili residenziali",
+      "Copertura: Nord Italia",
+      "Max 100 immobili per chiamata"
+    ],
+    "docs_url": "https://return.unige.it/docs/modello-stima"
+  },
+
+  "config": {
+    "api_type": "enricher",
+    "endpoint": {
+      "url": "https://return.unige.it/api/v1/predict",
+      "method": "POST"
+    },
+    "auth": {
+      "type": "api_key",
+      "key_name": "X-API-Key",
+      "location": "header"
+    },
+    "options": {
+      "timeout": 300,
+      "batch_mode": {
+        "enabled": true,
+        "max_items": 100,
+        "input_field": "data"
+      },
+      "retry_on_error": true,
+      "retry_max": 3
+    }
+  },
+
+  "parameters": [
+    {
+      "name": "superficie_mq",
+      "label": "Superficie (mq)",
+      "type": "number",
+      "required": true,
+      "mapping_hint": "superficie|area|mq|sqm"
+    },
+    {
+      "name": "piano",
+      "label": "Piano",
+      "type": "integer",
+      "required": true,
+      "mapping_hint": "piano|floor"
+    },
+    {
+      "name": "zona_omi",
+      "label": "Zona OMI",
+      "type": "string",
+      "required": true,
+      "mapping_hint": "zona_omi|cod_zona|omi"
+    },
+    {
+      "name": "anno_costruzione",
+      "label": "Anno costruzione",
+      "type": "integer",
+      "required": false,
+      "mapping_hint": "anno|year|costruzione"
+    },
+    {
+      "name": "stato_conservazione",
+      "label": "Stato conservazione",
+      "type": "string",
+      "required": false,
+      "mapping_hint": "stato|conservazione|condition"
+    }
+  ],
+
+  "output_mapping": [
+    {
+      "path": "predictions[*].valore_stimato",
+      "column": "valore_stimato",
+      "type": "real",
+      "description": "Valore di mercato stimato (€)"
+    },
+    {
+      "path": "predictions[*].confidence",
+      "column": "confidence",
+      "type": "real",
+      "description": "Confidenza della stima (0-1)"
+    },
+    {
+      "path": "predictions[*].range_min",
+      "column": "valore_min",
+      "type": "real",
+      "description": "Limite inferiore range stima"
+    },
+    {
+      "path": "predictions[*].range_max",
+      "column": "valore_max",
+      "type": "real",
+      "description": "Limite superiore range stima"
+    }
+  ],
+
+  "test_data": {
+    "data": [
+      {
+        "superficie_mq": 85,
+        "piano": 3,
+        "zona_omi": "B1",
+        "anno_costruzione": 1980
+      }
+    ]
+  }
+}
+```
+
+### 12.5 Flusso: Come un'Università Pubblica un Modello
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ 1. SVILUPPO (Università)                                        │
+│    - Sviluppa modello ML                                        │
+│    - Wrappa in API REST seguendo lo standard RETURN             │
+│    - Testa con /health e /predict                               │
+└─────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ 2. REGISTRAZIONE (Coordinamento RETURN)                         │
+│    - Università comunica URL endpoint                           │
+│    - Fornisce documentazione (input/output)                     │
+│    - Riceve API key per tracking                                │
+└─────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ 3. CREAZIONE TEMPLATE (URBY-ETL)                                │
+│    - Crea JSON template per il modello                          │
+│    - Aggiunge a libreria template                               │
+│    - Disponibile a tutti gli utenti URBY-ETL                    │
+└─────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ 4. UTILIZZO (Utente finale)                                     │
+│    - Importa template "Modello UniGe"                          │
+│    - Configura mapping colonne                                  │
+│    - Esegue arricchimento                                       │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 12.6 Auto-Discovery da /info
+
+Se l'API implementa `/info`, URBY-ETL può auto-configurarsi:
+
+```python
+# Flusso auto-discovery
+1. Utente inserisce solo URL base: https://return.unige.it/api/v1
+2. URBY chiama GET /info
+3. Riceve schema input/output
+4. Genera automaticamente il template
+5. Utente deve solo mappare le colonne
+```
+
+### 12.7 Marketplace Modelli RETURN
+
+In futuro, una UI dedicata:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ 🧠 Marketplace Modelli RETURN                                   │
+├─────────────────────────────────────────────────────────────────┤
+│ 🔍 [Cerca modello...                              ]             │
+│                                                                 │
+│ ┌─ VALUTAZIONE IMMOBILIARE ────────────────────────────────┐   │
+│ │                                                          │   │
+│ │  🧠 Stima Valore Immobili          UniGe    ⭐ v2.1     │   │
+│ │     Input: superficie, piano, zona_omi                  │   │
+│ │     Output: valore_stimato, confidence                  │   │
+│ │                                         [+ Aggiungi]    │   │
+│ │                                                          │   │
+│ │  🧠 Analisi Comparativa             PoliMi   ⭐ v1.3     │   │
+│ │     Input: coordinate, tipologia                        │   │
+│ │     Output: comparabili[], prezzo_medio                 │   │
+│ │                                         [+ Aggiungi]    │   │
+│ └──────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│ ┌─ RISCHIO ────────────────────────────────────────────────┐   │
+│ │                                                          │   │
+│ │  🧠 Rischio Idrogeologico           UniBo    ⭐ v1.0     │   │
+│ │     Input: geometry, elevation                          │   │
+│ │     Output: risk_score, flood_probability               │   │
+│ │                                         [+ Aggiungi]    │   │
+│ └──────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 13. Task Asincroni (Celery + Redis)
+
+### 13.1 Docker Compose
 
 ```yaml
 # Aggiunta a docker-compose.yml
@@ -781,7 +1230,7 @@ volumes:
   redis_data:
 ```
 
-### 6.2 Task Model
+### 13.2 Task Model
 
 ```python
 # models/task.py
@@ -817,7 +1266,7 @@ class Task:
     config: Dict[str, Any]
 ```
 
-### 6.3 API Endpoints
+### 13.3 API Endpoints
 
 ```python
 # routes/tasks.py
@@ -845,9 +1294,9 @@ async def get_task_result(task_id: str) -> FileResponse:
 
 ---
 
-## 13. Stato Attuale vs Target
+## 14. Stato Attuale vs Target
 
-### 13.1 Già Implementato ✅
+### 14.1 Già Implementato ✅
 
 | Componente | Note |
 |------------|------|
@@ -862,7 +1311,7 @@ async def get_task_result(task_id: str) -> FileResponse:
 | JSON Path Extraction | Navigazione nested |
 | GeoJSON Support | FeatureCollection |
 
-### 13.2 Da Implementare ❌
+### 14.2 Da Implementare ❌
 
 | # | Componente | Effort | Priorità |
 |---|------------|--------|----------|
@@ -882,48 +1331,54 @@ async def get_task_result(task_id: str) -> FileResponse:
 | 11 | Deduplicazione chiamate | 3h | 🔴 |
 | 12 | Preview su campione | 2h | 🔴 |
 | 13 | Validazione input pre-chiamata | 2h | 🟡 |
-| **ESEGUIBILI** |||||
-| 14 | Executor base | 3h | 🟡 |
-| 15 | Timeout + Kill | 1h | 🟡 |
-| 16 | Gestione dipendenze (venv) | 3h | 🟡 |
-| 17 | Sandbox Docker | 2h | 🟢 |
+| **MODELLI REMOTI (RETURN)** |||||
+| 14 | Specifica API Standard | 2h | 🔴 |
+| 15 | Template tipo "remote_model" | 2h | 🔴 |
+| 16 | Auto-discovery da /info | 3h | 🟡 |
+| 17 | UI Marketplace modelli | 4h | 🟢 |
+| **ESEGUIBILI LOCALI** |||||
+| 18 | Executor base | 3h | 🟡 |
+| 19 | Timeout + Kill | 1h | 🟡 |
+| 20 | Gestione dipendenze (venv) | 3h | 🟡 |
+| 21 | Sandbox Docker | 2h | 🟢 |
 | **DATA SOURCES** |||||
-| 18 | SharePoint 365 | 3h | 🟢 |
-| 19 | FTP/SFTP | 2h | 🟢 |
+| 22 | SharePoint 365 | 3h | 🟢 |
+| 23 | FTP/SFTP | 2h | 🟢 |
 | **SICUREZZA** |||||
-| 20 | Encryption credenziali | 2h | 🔴 |
-| 21 | Variabili ambiente secrets | 2h | 🔴 |
+| 24 | Encryption credenziali | 2h | 🔴 |
+| 25 | Variabili ambiente secrets | 2h | 🔴 |
 | **MONITORING** |||||
-| 22 | Tracking utilizzo API | 3h | 🟡 |
-| 23 | Alert quote | 2h | 🟡 |
-| 24 | Dashboard utilizzo | 3h | 🟢 |
+| 26 | Tracking utilizzo API | 3h | 🟡 |
+| 27 | Alert quote | 2h | 🟡 |
+| 28 | Dashboard utilizzo | 3h | 🟢 |
 | **SCHEDULER** |||||
-| 25 | Celery Beat config | 2h | 🟡 |
-| 26 | UI schedulazione | 3h | 🟢 |
+| 29 | Celery Beat config | 2h | 🟡 |
+| 30 | UI schedulazione | 3h | 🟢 |
 | **FRONTEND** |||||
-| 27 | UI Template Library | 4h | 🔴 |
-| 28 | Progress tracking | 2h | 🔴 |
-| 29 | Annulla task | 1h | 🟡 |
-| | **TOTALE** | **~58h** | **~7-8 giorni** |
+| 31 | UI Template Library | 4h | 🔴 |
+| 32 | Progress tracking | 2h | 🔴 |
+| 33 | Annulla task | 1h | 🟡 |
+| | **TOTALE** | **~69h** | **~9 giorni** |
 
 ---
 
-## 14. Piano Fasi
+## 15. Piano Fasi
 
 | Fase | Contenuto | Effort | Output |
 |------|-----------|--------|--------|
-| **1** | Infrastruttura (1-4) + Sicurezza (20-21) | 12h | Task asincroni + credenziali sicure |
+| **1** | Infrastruttura (1-4) + Sicurezza (24-25) | 12h | Task asincroni + credenziali sicure |
 | **2** | REST base (5-9) + Gestione exec (10-13) | 15h | Template + deduplica + preview |
-| **3** | UI (27-29) + OpenAPI Import (6) | 9h | Importa RE-VAL con 1 click |
-| **4** | Eseguibili (14-17) | 9h | Python/exe con venv + sandbox |
-| **5** | Monitoring (22-24) + Scheduler (25-26) | 13h | Dashboard + esecuzioni programmate |
-| **6** | Data Sources (18-19) | 5h | SharePoint + FTP |
+| **3** | UI (31-33) + OpenAPI Import (6) | 9h | Importa RE-VAL con 1 click |
+| **4** | Modelli Remoti RETURN (14-17) | 11h | Specifica + template + marketplace |
+| **5** | Eseguibili locali (18-21) | 9h | Python/exe con venv + sandbox |
+| **6** | Monitoring (26-28) + Scheduler (29-30) | 13h | Dashboard + esecuzioni programmate |
+| **7** | Data Sources (22-23) | 5h | SharePoint + FTP |
 
 ---
 
-## 15. Demo ESRI (13-14 Maggio 2026)
+## 16. Demo ESRI (13-14 Maggio 2026)
 
-### 15.1 Scenario Demo
+### 16.1 Scenario Demo
 
 1. **Carica dataset immobili** (da ESTRAI)
 2. **Arricchisci con Nominatim** → Geocoding indirizzi
@@ -931,7 +1386,7 @@ async def get_task_result(task_id: str) -> FileResponse:
 4. **Esegui modello RETURN** → Predizione ML
 5. **Esporta risultato** → GeoJSON per ArcGIS
 
-### 15.2 Requisiti Minimi per Demo
+### 16.2 Requisiti Minimi per Demo
 
 | Componente | Stato | Priorità |
 |------------|-------|----------|
@@ -944,21 +1399,23 @@ async def get_task_result(task_id: str) -> FileResponse:
 | Deduplicazione chiamate | ☐ | 🔴 |
 | Preview su campione | ☐ | 🔴 |
 | Gestione errori con report | ☐ | 🟡 |
+| Specifica API modelli RETURN | ☐ | 🔴 |
+| Template modello remoto | ☐ | 🟡 |
 | Eseguibili (almeno Python) | ☐ | 🟡 |
 | Dashboard utilizzo API | ☐ | 🟢 |
 | Scheduler | ☐ | 🟢 |
 
 ---
 
-## 16. Note Tecniche
+## 17. Note Tecniche
 
-### 16.1 Rate Limiting
+### 17.1 Rate Limiting
 
 - Nominatim: 1 req/sec (gratuito)
 - RE-VAL: configurabile
 - Default: 5 req/sec
 
-### 16.2 Retry Policy
+### 17.2 Retry Policy
 
 ```python
 retry_config = {
@@ -968,13 +1425,13 @@ retry_config = {
 }
 ```
 
-### 16.3 Caching
+### 17.3 Caching
 
 - Cache risposte API per evitare chiamate duplicate
 - Chiave: hash(endpoint + parametri)
 - TTL: configurabile (default 1h)
 
-### 16.4 Limiti Consigliati
+### 17.4 Limiti Consigliati
 
 | Parametro | Valore Default | Note |
 |-----------|----------------|------|
@@ -986,7 +1443,7 @@ retry_config = {
 
 ---
 
-## 17. Changelog
+## 18. Changelog
 
 | Data | Modifica |
 |------|----------|
@@ -999,4 +1456,8 @@ retry_config = {
 | | Aggiunti: tracking costi/quote, dashboard |
 | | Aggiunti: scheduler Celery Beat, trigger eventi |
 | | Aggiunti: dipendenze eseguibili, venv management |
-| | Piano rivisto: 6 fasi, ~58h totali |
+| | Aggiunta sezione Modelli Remoti RETURN |
+| | Specifica API standard per università |
+| | Template remote_model + auto-discovery |
+| | Marketplace modelli RETURN |
+| | Piano rivisto: 7 fasi, ~69h totali |
