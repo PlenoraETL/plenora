@@ -5,7 +5,7 @@
   "project_type": "estrai",
   "default_connection_id": "Test_PostgreSQL_20260119_100748_c64643b0",
   "created_at": "2026-01-19T12:24:19.415803",
-  "updated_at": "2026-01-20T17:01:45.583959",
+  "updated_at": "2026-01-21T21:10:39.818850",
   "columns_metadata": [
     {
       "name": "id",

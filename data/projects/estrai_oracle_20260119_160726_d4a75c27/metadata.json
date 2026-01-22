@@ -5,38 +5,38 @@
   "project_type": "estrai",
   "default_connection_id": "Test_Oracle_20260119_102947_809c09c7",
   "created_at": "2026-01-19T16:07:26.695398",
-  "updated_at": "2026-01-20T17:00:03.469706",
+  "updated_at": "2026-01-22T04:52:19.081342",
   "columns_metadata": [
     {
-      "name": "ID",
+      "name": "id",
       "type": "int"
     },
     {
-      "name": "OSM_ID",
+      "name": "osm_id",
       "type": "str"
     },
     {
-      "name": "CODE",
+      "name": "code",
       "type": "int"
     },
     {
-      "name": "FCLASS",
+      "name": "fclass",
       "type": "str"
     },
     {
-      "name": "NAME",
+      "name": "name",
       "type": "str"
     },
     {
-      "name": "GEOMETRY_WKT",
+      "name": "geometry_wkt",
       "type": "str"
     },
     {
-      "name": "GEOMETRY_TYPE",
+      "name": "geometry_type",
       "type": "str"
     },
     {
-      "name": "GEOMETRY",
+      "name": "geometry",
       "type": "geometry"
     }
   ]

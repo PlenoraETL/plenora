@@ -1,11 +1,100 @@
 {
   "nodes": [
     {
-      "id": "result_1769015697089",
+      "id": "source_1769054050894",
+      "type": "project_source",
+      "position": {
+        "x": 366.15625,
+        "y": 33.0
+      },
+      "table_name": null,
+      "alias": null,
+      "columns": [],
+      "filters": [],
+      "calculated_columns": [],
+      "connection_id": null,
+      "source_project_id": null,
+      "file_source_id": null,
+      "transform_op": null,
+      "transform_category": null,
+      "api_id": null,
+      "param_mapping": null,
+      "data": {
+        "source_project_id": "estrai_oracle_20260119_160726_d4a75c27",
+        "columns": [
+          {
+            "name": "id",
+            "type": "int",
+            "visible": true,
+            "source_node": "source_1769054050894",
+            "is_calculated": false
+          },
+          {
+            "name": "osm_id",
+            "type": "str",
+            "visible": true,
+            "source_node": "source_1769054050894",
+            "is_calculated": false
+          },
+          {
+            "name": "code",
+            "type": "int",
+            "visible": true,
+            "source_node": "source_1769054050894",
+            "is_calculated": false
+          },
+          {
+            "name": "fclass",
+            "type": "str",
+            "visible": true,
+            "source_node": "source_1769054050894",
+            "is_calculated": false
+          },
+          {
+            "name": "name",
+            "type": "str",
+            "visible": true,
+            "source_node": "source_1769054050894",
+            "is_calculated": false
+          },
+          {
+            "name": "geometry_wkt",
+            "type": "str",
+            "visible": true,
+            "source_node": "source_1769054050894",
+            "is_calculated": false
+          },
+          {
+            "name": "geometry_type",
+            "type": "str",
+            "visible": true,
+            "source_node": "source_1769054050894",
+            "is_calculated": false
+          },
+          {
+            "name": "geometry",
+            "type": "geometry",
+            "visible": true,
+            "source_node": "source_1769054050894",
+            "is_calculated": false
+          }
+        ]
+      },
+      "fileName": null,
+      "format": null,
+      "distinct": false,
+      "limit": null,
+      "geomColumn": null,
+      "group_by_enabled": false,
+      "group_by_columns": [],
+      "aggregations": []
+    },
+    {
+      "id": "result_1769054052702",
       "type": "result",
       "position": {
-        "x": 1858.9021614492046,
-        "y": -423.9215223778232
+        "x": 695.5,
+        "y": 83.5
       },
       "table_name": null,
       "alias": null,
@@ -22,45 +111,59 @@
       "data": {
         "columns": [
           {
-            "name": "ID",
+            "name": "id",
             "type": "int",
             "visible": true,
-            "source_node": "transform_1769016711684",
+            "source_node": "source_1769054050894",
             "is_calculated": false
           },
           {
-            "name": "OSM_ID",
+            "name": "osm_id",
             "type": "str",
             "visible": true,
-            "source_node": "transform_1769016711684",
+            "source_node": "source_1769054050894",
             "is_calculated": false
           },
           {
-            "name": "CODE",
+            "name": "code",
             "type": "int",
             "visible": true,
-            "source_node": "transform_1769016711684",
+            "source_node": "source_1769054050894",
             "is_calculated": false
           },
           {
-            "name": "FCLASS",
+            "name": "fclass",
             "type": "str",
             "visible": true,
-            "source_node": "transform_1769016711684",
+            "source_node": "source_1769054050894",
             "is_calculated": false
           },
           {
-            "name": "NAME",
+            "name": "name",
             "type": "str",
             "visible": true,
-            "source_node": "transform_1769016711684",
+            "source_node": "source_1769054050894",
             "is_calculated": false
           },
           {
-            "name": "GEOMETRY",
+            "name": "geometry_wkt",
+            "type": "str",
+            "visible": true,
+            "source_node": "source_1769054050894",
+            "is_calculated": false
+          },
+          {
+            "name": "geometry_type",
+            "type": "str",
+            "visible": true,
+            "source_node": "source_1769054050894",
+            "is_calculated": false
+          },
+          {
+            "name": "geometry",
             "type": "geometry",
             "visible": true,
-            "source_node": "transform_1769016711684",
+            "source_node": "source_1769054050894",
             "is_calculated": false
           }
         ],
@@ -79,183 +182,13 @@
       "group_by_enabled": false,
       "group_by_columns": [],
       "aggregations": []
-    },
-    {
-      "id": "source_1769016355320",
-      "type": "project_source",
-      "position": {
-        "x": 940.8928089983151,
-        "y": -448.96113898317407
-      },
-      "table_name": null,
-      "alias": null,
-      "columns": [],
-      "filters": [],
-      "calculated_columns": [],
-      "connection_id": null,
-      "source_project_id": null,
-      "file_source_id": null,
-      "transform_op": null,
-      "transform_category": null,
-      "api_id": null,
-      "param_mapping": null,
-      "data": {
-        "source_project_id": "estrai_oracle_20260119_160726_d4a75c27",
-        "columns": [
-          {
-            "name": "ID",
-            "type": "int",
-            "visible": true,
-            "source_node": "source_1769016355320",
-            "is_calculated": false
-          },
-          {
-            "name": "OSM_ID",
-            "type": "str",
-            "visible": true,
-            "source_node": "source_1769016355320",
-            "is_calculated": false
-          },
-          {
-            "name": "CODE",
-            "type": "int",
-            "visible": true,
-            "source_node": "source_1769016355320",
-            "is_calculated": false
-          },
-          {
-            "name": "FCLASS",
-            "type": "str",
-            "visible": true,
-            "source_node": "source_1769016355320",
-            "is_calculated": false
-          },
-          {
-            "name": "NAME",
-            "type": "str",
-            "visible": true,
-            "source_node": "source_1769016355320",
-            "is_calculated": false
-          },
-          {
-            "name": "GEOMETRY",
-            "type": "geometry",
-            "visible": true,
-            "source_node": "source_1769016355320",
-            "is_calculated": false
-          }
-        ]
-      },
-      "fileName": null,
-      "format": null,
-      "distinct": false,
-      "limit": null,
-      "geomColumn": null,
-      "group_by_enabled": false,
-      "group_by_columns": [],
-      "aggregations": []
-    },
-    {
-      "id": "transform_1769016711684",
-      "type": "transform",
-      "position": {
-        "x": 1388.5787043112766,
-        "y": -440.42068942844026
-      },
-      "table_name": null,
-      "alias": null,
-      "columns": [],
-      "filters": [],
-      "calculated_columns": [],
-      "connection_id": null,
-      "source_project_id": null,
-      "file_source_id": null,
-      "transform_op": null,
-      "transform_category": null,
-      "api_id": null,
-      "param_mapping": null,
-      "data": {
-        "columns": [
-          {
-            "name": "ID",
-            "type": "int",
-            "visible": true,
-            "source_node": "transform_1769016711684",
-            "is_calculated": false
-          },
-          {
-            "name": "OSM_ID",
-            "type": "str",
-            "visible": true,
-            "source_node": "transform_1769016711684",
-            "is_calculated": false
-          },
-          {
-            "name": "CODE",
-            "type": "int",
-            "visible": true,
-            "source_node": "transform_1769016711684",
-            "is_calculated": false
-          },
-          {
-            "name": "FCLASS",
-            "type": "str",
-            "visible": true,
-            "source_node": "transform_1769016711684",
-            "is_calculated": false
-          },
-          {
-            "name": "NAME",
-            "type": "str",
-            "visible": true,
-            "source_node": "transform_1769016711684",
-            "is_calculated": false
-          },
-          {
-            "name": "GEOMETRY",
-            "type": "geometry",
-            "visible": true,
-            "source_node": "transform_1769016711684",
-            "is_calculated": false
-          }
-        ],
-        "transform_op": "distinct",
-        "config": {
-          "mode": "subset",
-          "subset": [
-            "FCLASS"
-          ],
-          "keep": "last"
-        }
-      },
-      "fileName": null,
-      "format": null,
-      "distinct": false,
-      "limit": null,
-      "geomColumn": null,
-      "group_by_enabled": false,
-      "group_by_columns": [],
-      "aggregations": []
     }
   ],
   "edges": [
     {
-      "id": "reactflow__edge-source_1769016355320-transform_1769016711684",
-      "source": "source_1769016355320",
-      "target": "transform_1769016711684",
-      "join_type": "left",
-      "source_column": "",
-      "target_column": "",
-      "is_spatial": false,
-      "spatial_predicate": null,
-      "source_geom_column": null,
-      "target_geom_column": null,
-      "spatial_distance": null
-    },
-    {
-      "id": "reactflow__edge-transform_1769016711684-result_1769015697089",
-      "source": "transform_1769016711684",
-      "target": "result_1769015697089",
+      "id": "reactflow__edge-source_1769054050894-result_1769054052702",
+      "source": "source_1769054050894",
+      "target": "result_1769054052702",
       "join_type": "left",
       "source_column": "",
       "target_column": "",

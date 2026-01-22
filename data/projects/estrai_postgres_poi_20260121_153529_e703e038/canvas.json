@@ -124,7 +124,7 @@
       "param_mapping": null,
       "data": {},
       "fileName": "output",
-      "format": "csv",
+      "format": "geojson",
       "distinct": false,
       "limit": null,
       "geomColumn": null,

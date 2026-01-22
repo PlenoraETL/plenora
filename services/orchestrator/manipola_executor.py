@@ -283,6 +283,7 @@ class ManipolaExecutor:
         base_ops = {
             'join': self.transform_ops.op_join,
             'union': self.transform_ops.op_union,
+            'concat': self.transform_ops.op_union,  # alias per union
             'formula': self.transform_ops.op_formula,
             'aggregate': self.transform_ops.op_aggregate,
             'filter': self.transform_ops.op_filter,
@@ -313,7 +314,7 @@ class ManipolaExecutor:
         }
         
         # Operazioni che richiedono multipli input
-        multi_input_ops = {'join', 'union', 'sjoin', 'geo_clip', 'geo_intersection', 'geo_union', 'geo_difference'}
+        multi_input_ops = {'join', 'union', 'concat', 'sjoin', 'geo_clip', 'geo_intersection', 'geo_union', 'geo_difference'}
         
         # Cerca handler
         handler = base_ops.get(transform_op) or spatial_ops.get(transform_op)

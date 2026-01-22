@@ -266,6 +266,18 @@ class TransformOperations:
         condition_str = config.get('condition', '').strip()
         if condition_str:
             try:
+                # Gestione speciale per str.contains e altre operazioni stringa
+                if '.str.' in condition_str:
+                    # Aggiungi na=False se non presente per evitare errori con NULL
+                    eval_str = condition_str
+                    if '.str.contains(' in eval_str and 'na=' not in eval_str:
+                        eval_str = eval_str.replace('.str.contains(', '.str.contains(na=False, pat=')
+                    # Usa eval Python con df come contesto
+                    mask = eval(f"df.{eval_str}" if not eval_str.startswith('df.') else eval_str, {'df': df})
+                    result = df[mask].reset_index(drop=True)
+                    logger.info(f"Filter (str): {len(df)} -> {len(result)} righe | Condizione: {condition_str}")
+                    return result
+                
                 # Usa pandas query() per filtrare
                 result = df.query(condition_str).reset_index(drop=True)
                 logger.info(f"Filter (query): {len(df)} -> {len(result)} righe | Condizione: {condition_str}")

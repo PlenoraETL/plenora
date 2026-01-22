@@ -95,17 +95,20 @@ export function calculateOutputColumns(nodes, edges, resultNodeId) {
     const sourceNode = nodes.find(n => n.id === edge.source);
     if (!sourceNode) continue;
 
-    // Se è un nodo tabella, prende le colonne visibili
+    // Se è un nodo tabella, prende le colonne visibili - NORMALIZZA A LOWERCASE
     if (sourceNode.type === 'tableNode') {
       const visibleColumns = (sourceNode.data.columns || [])
         .filter(col => col.visible)
-        .map(col => ({
-          name: col.name,
-          alias: col.alias,
-          type: col.type || 'str',
-          source_table: sourceNode.data.alias || sourceNode.data.table_name,
-          full_name: `${sourceNode.data.alias || sourceNode.data.table_name}.${col.alias || col.name}`
-        }));
+        .map(col => {
+          const normalizedName = col.name.toLowerCase();
+          return {
+            name: normalizedName,
+            alias: col.alias,
+            type: col.type || 'str',
+            source_table: sourceNode.data.alias || sourceNode.data.table_name,
+            full_name: `${sourceNode.data.alias || sourceNode.data.table_name}.${col.alias || normalizedName}`
+          };
+        });
       
       allColumns.push(...visibleColumns);
     }
@@ -141,29 +144,35 @@ export function calculateOutputColumnsRecursive(nodes, edges, resultNodeId) {
     if (node.type === 'tableNode') {
       const tableName = node.data.alias || node.data.table_name;
       
-      // Colonne normali visibili
+      // Colonne normali visibili - NORMALIZZA NOMI A LOWERCASE PER CONSISTENZA
       const visibleColumns = (node.data.columns || [])
         .filter(col => col.visible)
-        .map(col => ({
-          name: col.name,
-          alias: col.alias,
-          type: col.type || 'str',
-          source_table: tableName,
-          full_name: `${tableName}.${col.alias || col.name}`
-        }));
+        .map(col => {
+          const normalizedName = col.name.toLowerCase();
+          return {
+            name: normalizedName,
+            alias: col.alias,
+            type: col.type || 'str',
+            source_table: tableName,
+            full_name: `${tableName}.${col.alias || normalizedName}`
+          };
+        });
       
       allColumns.push(...visibleColumns);
       
-      // Colonne calcolate
+      // Colonne calcolate - NORMALIZZA NOMI A LOWERCASE
       const calculatedColumns = (node.data.calculated_columns || [])
-        .map(col => ({
-          name: col.name,
-          alias: null,
-          type: col.output_type || 'str',
-          source_table: tableName,
-          full_name: `${tableName}.${col.name}`,
-          isCalculated: true
-        }));
+        .map(col => {
+          const normalizedName = col.name.toLowerCase();
+          return {
+            name: normalizedName,
+            alias: null,
+            type: col.output_type || 'str',
+            source_table: tableName,
+            full_name: `${tableName}.${normalizedName}`,
+            isCalculated: true
+          };
+        });
       
       allColumns.push(...calculatedColumns);
     }
@@ -309,10 +318,10 @@ export function extractVisibleColumns(node) {
     .filter(col => col.visible !== false)
     .map(col => {
       if (typeof col === 'string') {
-        return { name: col, type: 'str', visible: true };
+        return { name: col.toLowerCase(), type: 'str', visible: true };
       }
       return {
-        name: col.name || col.alias || 'unknown',
+        name: (col.name || col.alias || 'unknown').toLowerCase(),
         type: normalizeColumnType(col),
         visible: col.visible !== false,
         alias: col.alias || null

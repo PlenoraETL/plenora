@@ -336,7 +336,7 @@ const ManipolaEditorContent = () => {
                 onUpdateGeomColumn: handleUpdateGeomColumn,
                 onUpdateGroupBy: handleUpdateGroupBy,
                 onPreview: () => preview.handlePreview(),
-                onExecute: (options) => execution.handleExecute(options),
+                onExecute: (nodeId, options) => execution.handleExecute(options),
                 onDelete: handleDeleteNode
               }
             };
@@ -566,7 +566,7 @@ const ManipolaEditorContent = () => {
         onUpdateGeomColumn: handleUpdateGeomColumn,
         onUpdateGroupBy: handleUpdateGroupBy,
         onPreview: () => preview.handlePreview(),
-        onExecute: (options) => execution.handleExecute(options),
+        onExecute: (nodeId, options) => execution.handleExecute(options),
         onDelete: handleDeleteNode
       }
     };

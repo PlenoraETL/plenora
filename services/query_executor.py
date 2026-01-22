@@ -359,7 +359,8 @@ class QueryExecutor:
             logger.info(f"Oracle: esecuzione query")
             cursor.execute(sql, params or {})
             
-            columns = [desc[0] for desc in cursor.description]
+            # FIX: Normalizza nomi colonne a lowercase per consistenza con altri DB
+            columns = [desc[0].lower() for desc in cursor.description]
             rows = [tuple(row) for row in cursor.fetchall()]
             
             logger.info(f"Oracle: recuperate {len(rows)} righe")

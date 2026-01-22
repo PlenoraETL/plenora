@@ -90,12 +90,16 @@ class EstraiExecutor:
         try:
             canvas_type_map = self.build_canvas_type_map(canvas)
             
+            # FIX: Crea anche versione case-insensitive della mappa
+            canvas_type_map_lower = {k.lower(): v for k, v in canvas_type_map.items()}
+            
             output_path = Path(res["output_path"])
             df_for_cols = load_dataframe_from_file(output_path)
             
             columns_metadata = []
             for col in df_for_cols.columns:
-                col_type = canvas_type_map.get(col, 'str')
+                # FIX: Prova prima esatto, poi lowercase, poi uppercase
+                col_type = canvas_type_map.get(col) or canvas_type_map_lower.get(col.lower()) or 'str'
                 columns_metadata.append({"name": col, "type": col_type})
             
             self.project_service.update_project_columns_metadata(project_id, columns_metadata)
