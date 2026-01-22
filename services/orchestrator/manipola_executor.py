@@ -219,10 +219,13 @@ class ManipolaExecutor:
                 from services.file_source_service import file_source_service
                 df, gdf = file_source_service.load_dataframe(file_source_id)
                 
+                # FIX: Usa GeoDataFrame se disponibile per preservare geometria
+                data = gdf if gdf is not None else df
+                
                 node_columns = node.data.get('columns', []) if node.data else []
-                df = filter_visible_columns(df, node_columns)
-                dataframes[node.id] = df
-                logger.info(f"Caricato file source {file_source_id}: {len(df)} righe")
+                data = filter_visible_columns(data, node_columns)
+                dataframes[node.id] = data
+                logger.info(f"Caricato file source {file_source_id}: {len(data)} righe")
                 
             except Exception as e:
                 logger.error(f"Errore caricamento file source {file_source_id}: {e}")
@@ -284,9 +287,9 @@ class ManipolaExecutor:
             'join': self.transform_ops.op_join,
             'union': self.transform_ops.op_union,
             'concat': self.transform_ops.op_union,  # alias per union
+            'filter': self.transform_ops.op_filter,
             'formula': self.transform_ops.op_formula,
             'aggregate': self.transform_ops.op_aggregate,
-            'filter': self.transform_ops.op_filter,
             'select': self.transform_ops.op_select,
             'sort': self.transform_ops.op_sort,
             'distinct': self.transform_ops.op_distinct,

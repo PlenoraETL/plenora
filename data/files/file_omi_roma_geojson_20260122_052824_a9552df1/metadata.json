@@ -1,0 +1,41 @@
+{
+  "id": "file_omi_roma_geojson_20260122_052824_a9552df1",
+  "name": "omi_roma_geojson",
+  "description": "",
+  "file_path": "file_omi_roma_geojson_20260122_052824_a9552df1\\data\\omi_roma.geojson",
+  "original_filename": "omi_roma.geojson",
+  "format": "geojson",
+  "layer": null,
+  "sheet": null,
+  "columns": [
+    {
+      "name": "id",
+      "type": "int"
+    },
+    {
+      "name": "cod_com",
+      "type": "str"
+    },
+    {
+      "name": "cod_zona",
+      "type": "str"
+    },
+    {
+      "name": "nome",
+      "type": "str"
+    },
+    {
+      "name": "cod_com_cod_zona",
+      "type": "str"
+    },
+    {
+      "name": "geometry",
+      "type": "geometry:multipolygon:4326"
+    }
+  ],
+  "row_count": 234,
+  "file_size": 216844,
+  "crs": "EPSG:4326",
+  "created_at": "2026-01-22T05:28:24.779715",
+  "updated_at": "2026-01-22T05:28:24.779715"
+}
