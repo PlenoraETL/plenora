@@ -1,7 +1,7 @@
 # 🔌 ARRICCHISCI - Piano di Sviluppo Completo
 
-**Data:** 2026-01-22  
-**Stato attuale:** ~70%  
+**Data:** 2026-01-23  
+**Stato attuale:** ~80%  
 **Target:** 95% per conferenza ESRI (13-14 maggio 2026)
 
 ---
@@ -84,11 +84,13 @@ ARRICCHISCI è il modulo di DataFlow Manager per l'arricchimento dati da fonti e
 ```
 backend/
 ├── celery_app.py              # Config Celery
+├── routes/
+│   └── templates.py           # ✅ GET /api/templates
 ├── tasks/
 │   ├── __init__.py
 │   ├── rest_task.py           # Task chiamate REST
-│   ├── executable_task.py     # Task eseguibili
-│   └── datasource_task.py     # Task download
+│   ├── executable_task.py     # Task eseguibili (da fare)
+│   └── datasource_task.py     # Task download (da fare)
 ├── services/
 │   ├── task_service.py        # CRUD task
 │   └── template_service.py    # Gestione template
@@ -96,25 +98,24 @@ backend/
     └── task.py                # Task model
 
 data/
-├── api_templates/
-│   ├── _builtin/              # Nominatim, OSRM...
-│   └── _imported/             # OpenAPI importati (RE-VAL)
+├── api_templates.json         # ✅ Template preconfigurati (8 template)
+├── api_connections/           # Connettori salvati
 └── executables/
-    └── _registry/             # Script registrati
+    └── _registry/             # Script registrati (da fare)
 
 frontend/
 ├── components/
-│   ├── ApiEnrichNode.jsx      # ✅ Esistente
-│   ├── ExecutableNode.jsx     # Da creare
-│   ├── DataSourceNode.jsx     # Da creare
-│   └── TemplateLibrary/       # Da creare
-│       ├── TemplateModal.jsx
-│       ├── OpenAPIImport.jsx
-│       └── TemplateCard.jsx
-└── pages/
-    └── ApiConnectionManager.jsx  # ✅ Esistente (da estendere)
+│   └── arricchisci/
+│       ├── TemplateLibraryModal.jsx   # ✅ Libreria template
+│       ├── OpenAPIImportModal.jsx     # ✅ Import OpenAPI
+│       ├── ExecutableConfigModal.jsx  # ✅ Config eseguibili
+│       └── DataSourceConfigModal.jsx  # ✅ Config data sources
+├── pages/
+│   └── ApiConnectionManager.jsx       # ✅ "Connettori Esterni"
+└── styles/
+    └── ApiConnectionManager.css       # ✅ Stili completi
 
-docker-compose.yml             # + Redis service
+docker-compose.yml             # + Redis service (da fare)
 ```
 
 ---
@@ -1302,7 +1303,7 @@ async def get_task_result(task_id: str) -> FileResponse:
 |------------|------|
 | ArricchisciEditor | Canvas completo |
 | ApiEnrichNode | Mapping parametri, validazione |
-| ApiConnectionManager | Wizard 5 step |
+| **Connettori Esterni** (ex ApiConnectionManager) | Wizard 5 step, rinominato |
 | CRUD API Connections | Create, Update, Delete |
 | Test API | Con selezione campi output |
 | Auth None / API Key / OAuth2 | Funzionante |
@@ -1310,55 +1311,64 @@ async def get_task_result(task_id: str) -> FileResponse:
 | Generator | API che genera dataset |
 | JSON Path Extraction | Navigazione nested |
 | GeoJSON Support | FeatureCollection |
+| **Template Library UI** | Modal con ricerca/filtri, carica da JSON |
+| **Template Schema JSON** | `data/api_templates.json` + endpoint FastAPI |
+| **OpenAPI Import UI** | Modal per importare da URL/file |
+| **Template Nominatim** | Geocoding + Reverse nel JSON |
+| **ExecutableConfigModal** | Wizard 5 step per .py/.exe |
+| **DataSourceConfigModal** | Wizard 4 step per SharePoint/FTP/S3 |
+| **Categorie Complete** | API REST + Eseguibili + Data Sources |
 
 ### 14.2 Da Implementare ❌
 
-| # | Componente | Effort | Priorità |
-|---|------------|--------|----------|
-| **INFRASTRUTTURA** |||||
-| 1 | Docker Compose (Redis) | 1h | 🔴 |
-| 2 | Setup Celery + Beat | 3h | 🔴 |
-| 3 | Task Model (DB) | 2h | 🔴 |
-| 4 | API Tasks (CRUD) | 2h | 🔴 |
-| **API REST** |||||
-| 5 | Template Schema | 1h | 🔴 |
-| 6 | Import OpenAPI | 3h | 🔴 |
-| 7 | Template Nominatim | 1h | 🟡 |
-| 8 | Batch parallelo | 2h | 🟡 |
-| 9 | Batch API native | 2h | 🟡 |
-| **GESTIONE ESECUZIONE** |||||
-| 10 | Gestione errori per riga | 2h | 🔴 |
-| 11 | Deduplicazione chiamate | 3h | 🔴 |
-| 12 | Preview su campione | 2h | 🔴 |
-| 13 | Validazione input pre-chiamata | 2h | 🟡 |
-| **MODELLI REMOTI (RETURN)** |||||
-| 14 | Specifica API Standard | 2h | 🔴 |
-| 15 | Template tipo "remote_model" | 2h | 🔴 |
-| 16 | Auto-discovery da /info | 3h | 🟡 |
-| 17 | UI Marketplace modelli | 4h | 🟢 |
-| **ESEGUIBILI LOCALI** |||||
-| 18 | Executor base | 3h | 🟡 |
-| 19 | Timeout + Kill | 1h | 🟡 |
-| 20 | Gestione dipendenze (venv) | 3h | 🟡 |
-| 21 | Sandbox Docker | 2h | 🟢 |
-| **DATA SOURCES** |||||
-| 22 | SharePoint 365 | 3h | 🟢 |
-| 23 | FTP/SFTP | 2h | 🟢 |
-| **SICUREZZA** |||||
-| 24 | Encryption credenziali | 2h | 🔴 |
-| 25 | Variabili ambiente secrets | 2h | 🔴 |
-| **MONITORING** |||||
-| 26 | Tracking utilizzo API | 3h | 🟡 |
-| 27 | Alert quote | 2h | 🟡 |
-| 28 | Dashboard utilizzo | 3h | 🟢 |
-| **SCHEDULER** |||||
-| 29 | Celery Beat config | 2h | 🟡 |
-| 30 | UI schedulazione | 3h | 🟢 |
-| **FRONTEND** |||||
-| 31 | UI Template Library | 4h | 🔴 |
-| 32 | Progress tracking | 2h | 🔴 |
-| 33 | Annulla task | 1h | 🟡 |
-| | **TOTALE** | **~69h** | **~9 giorni** |
+| # | Componente | Effort | Priorità | Stato |
+|---|------------|--------|----------|-------|
+| **INFRASTRUTTURA** ||||||
+| 1 | Docker Compose (Redis) | 1h | 🔴 | ❌ |
+| 2 | Setup Celery + Beat | 3h | 🔴 | ❌ |
+| 3 | Task Model (DB) | 2h | 🔴 | ❌ |
+| 4 | API Tasks (CRUD) | 2h | 🔴 | ❌ |
+| **API REST** ||||||
+| 5 | Template Schema | 1h | 🔴 | ✅ **FATTO** |
+| 6 | Import OpenAPI (UI) | 3h | 🔴 | ✅ **FATTO** |
+| 7 | Template Nominatim | 1h | 🟡 | ✅ **FATTO** |
+| 8 | Batch parallelo | 2h | 🟡 | ❌ |
+| 9 | Batch API native | 2h | 🟡 | ❌ |
+| **GESTIONE ESECUZIONE** ||||||
+| 10 | Gestione errori per riga | 2h | 🔴 | ❌ |
+| 11 | Deduplicazione chiamate | 3h | 🔴 | ❌ |
+| 12 | Preview su campione | 2h | 🔴 | ❌ |
+| 13 | Validazione input pre-chiamata | 2h | 🟡 | ❌ |
+| **MODELLI REMOTI (RETURN)** ||||||
+| 14 | Specifica API Standard | 2h | 🔴 | ❌ |
+| 15 | Template tipo "remote_model" | 2h | 🔴 | ❌ |
+| 16 | Auto-discovery da /info | 3h | 🟡 | ❌ |
+| 17 | UI Marketplace modelli | 4h | 🟢 | ❌ |
+| **ESEGUIBILI LOCALI** ||||||
+| 18 | Executor base (backend) | 3h | 🟡 | ❌ |
+| 19 | Timeout + Kill | 1h | 🟡 | ❌ |
+| 20 | Gestione dipendenze (venv) | 3h | 🟡 | ❌ |
+| 21 | Sandbox Docker | 2h | 🟢 | ❌ |
+| 18b | **ExecutableConfigModal (UI)** | 2h | 🟡 | ✅ **FATTO** |
+| **DATA SOURCES** ||||||
+| 22 | SharePoint 365 (backend) | 3h | 🟢 | ❌ |
+| 23 | FTP/SFTP (backend) | 2h | 🟢 | ❌ |
+| 22b | **DataSourceConfigModal (UI)** | 2h | 🟢 | ✅ **FATTO** |
+| **SICUREZZA** ||||||
+| 24 | Encryption credenziali | 2h | 🔴 | ❌ |
+| 25 | Variabili ambiente secrets | 2h | 🔴 | ❌ |
+| **MONITORING** ||||||
+| 26 | Tracking utilizzo API | 3h | 🟡 | ❌ |
+| 27 | Alert quote | 2h | 🟡 | ❌ |
+| 28 | Dashboard utilizzo | 3h | 🟢 | ❌ |
+| **SCHEDULER** ||||||
+| 29 | Celery Beat config | 2h | 🟡 | ❌ |
+| 30 | UI schedulazione | 3h | 🟢 | ❌ |
+| **FRONTEND** ||||||
+| 31 | UI Template Library | 4h | 🔴 | ✅ **FATTO** |
+| 32 | Progress tracking | 2h | 🔴 | ❌ |
+| 33 | Annulla task | 1h | 🟡 | ❌ |
+| | **TOTALE RIMANENTE** | **~55h** | **~7 giorni** | |
 
 ---
 
@@ -1393,15 +1403,19 @@ async def get_task_result(task_id: str) -> FileResponse:
 | Canvas ArricchisciEditor | ✅ | - |
 | ApiEnrichNode funzionante | ✅ | - |
 | Wizard configurazione API | ✅ | - |
-| Template Nominatim pronto | ☐ | 🔴 |
-| Import OpenAPI (RE-VAL) | ☐ | 🔴 |
+| Template Nominatim pronto | ✅ | - |
+| Import OpenAPI (RE-VAL) UI | ✅ | - |
+| UI Template Library | ✅ | - |
+| UI Eseguibili | ✅ | - |
+| UI Data Sources | ✅ | - |
 | Progress bar durante esecuzione | ☐ | 🔴 |
 | Deduplicazione chiamate | ☐ | 🔴 |
 | Preview su campione | ☐ | 🔴 |
 | Gestione errori con report | ☐ | 🟡 |
 | Specifica API modelli RETURN | ☐ | 🔴 |
 | Template modello remoto | ☐ | 🟡 |
-| Eseguibili (almeno Python) | ☐ | 🟡 |
+| Eseguibili backend (almeno Python) | ☐ | 🟡 |
+| Data Sources backend | ☐ | 🟢 |
 | Dashboard utilizzo API | ☐ | 🟢 |
 | Scheduler | ☐ | 🟢 |
 
@@ -1461,3 +1475,13 @@ retry_config = {
 | | Template remote_model + auto-discovery |
 | | Marketplace modelli RETURN |
 | | Piano rivisto: 7 fasi, ~69h totali |
+| **2026-01-23** | **Rinominato "API Esterne" → "Connettori Esterni"** |
+| | **Implementato Template Library UI** (carica da JSON) |
+| | **Implementato `api_templates.json`** + endpoint FastAPI `/api/templates` |
+| | **Implementato OpenAPIImportModal** |
+| | **Implementato ExecutableConfigModal** (wizard 5 step) |
+| | **Implementato DataSourceConfigModal** (wizard 4 step) |
+| | **Aggiunta categoria "datasource"** ai filtri |
+| | Template Nominatim, OSRM, RE-VAL, RETURN nel JSON |
+| | Stato aggiornato: 70% → 80% |
+| | Effort rimanente: ~69h → ~55h |
