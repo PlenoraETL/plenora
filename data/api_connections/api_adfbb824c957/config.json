@@ -1,0 +1,78 @@
+{
+  "id": "api_adfbb824c957",
+  "name": "OpenMeteo Weather",
+  "description": "",
+  "api_type": "enricher",
+  "endpoint": {
+    "url": "https://api.open-meteo.com/v1/forecast",
+    "method": "GET"
+  },
+  "auth": {
+    "type": "none"
+  },
+  "custom_headers": {},
+  "parameters": [
+    {
+      "name": "latitude",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "longitude",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "current_weather",
+      "type": "string",
+      "required": true
+    }
+  ],
+  "static_parameters": {},
+  "output_mapping": [
+    {
+      "path": "current_weather_units.windspeed",
+      "column": "windspeed",
+      "type": "string",
+      "selected": true
+    },
+    {
+      "path": "latitude",
+      "column": "latitude",
+      "type": "number",
+      "selected": true
+    },
+    {
+      "path": "longitude",
+      "column": "longitude",
+      "type": "number",
+      "selected": true
+    },
+    {
+      "path": "timezone",
+      "column": "timezone",
+      "type": "string",
+      "selected": true
+    },
+    {
+      "path": "current_weather_units.winddirection",
+      "column": "winddirection",
+      "type": "string",
+      "selected": true
+    },
+    {
+      "path": "current_weather",
+      "column": "current_weather",
+      "type": "object",
+      "selected": true
+    },
+    {
+      "path": "current_weather_units.temperature",
+      "column": "temperature",
+      "type": "string",
+      "selected": true
+    }
+  ],
+  "created_at": "2026-01-22T16:18:59.012669",
+  "updated_at": "2026-01-22T16:18:59.012669"
+}

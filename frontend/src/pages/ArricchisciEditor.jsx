@@ -674,6 +674,10 @@ const ArricchisciEditorContent = () => {
         downloadUrl={execution.downloadUrl}
         title="🔗 Esegui Arricchimento"
         projectType="arricchisci"
+        progress={execution.progress}
+        progressMessage={execution.progressMessage}
+        taskStatus={execution.taskStatus}
+        onCancel={execution.cancelTask}
       />
 
       {/* PREVIEW MODAL */}

@@ -1,0 +1,71 @@
+{
+  "id": "api_a5d272d3d90f",
+  "name": "Nominatim Geocoding",
+  "description": "",
+  "api_type": "enricher",
+  "endpoint": {
+    "url": "https://nominatim.openstreetmap.org/search",
+    "method": "GET"
+  },
+  "auth": {
+    "type": "none"
+  },
+  "custom_headers": {},
+  "parameters": [
+    {
+      "name": "q",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "format",
+      "type": "string",
+      "required": true,
+      "mode": "fixed"
+    },
+    {
+      "name": "limit",
+      "type": "string",
+      "required": true,
+      "mode": "fixed"
+    }
+  ],
+  "static_parameters": {
+    "limit": "1",
+    "format": "json"
+  },
+  "output_mapping": [
+    {
+      "path": "[0].lon",
+      "column": "lon",
+      "type": "string",
+      "selected": true
+    },
+    {
+      "path": "[0].lat",
+      "column": "lat",
+      "type": "string",
+      "selected": true
+    },
+    {
+      "path": "[0].place_rank",
+      "column": "place_rank",
+      "type": "integer",
+      "selected": true
+    },
+    {
+      "path": "[0].importance",
+      "column": "importance",
+      "type": "number",
+      "selected": true
+    },
+    {
+      "path": "[0].display_name",
+      "column": "display_name",
+      "type": "string",
+      "selected": true
+    }
+  ],
+  "created_at": "2026-01-22T16:20:40.750444",
+  "updated_at": "2026-01-23T02:57:58.095411"
+}

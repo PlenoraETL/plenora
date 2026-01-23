@@ -3,6 +3,8 @@ API Connection Service - Gestisce connessioni API esterne per arricchimento dati
 
 REFACTORED: Usa utils/dataframe_utils.py e utils/geo_utils.py
 per eliminare codice duplicato.
+
+UPDATED: Aggiunto supporto per headers custom e parsing risposta JSON per test.
 """
 
 import os
@@ -103,6 +105,7 @@ class ApiConnectionService:
                 "method": data.get("method", "GET")
             },
             "auth": data.get("auth", {"type": "none"}),
+            "custom_headers": data.get("custom_headers", {}),  # NEW: Headers custom
             "parameters": data.get("parameters", []),
             "static_parameters": data.get("static_parameters", {}),
             "output_mapping": data.get("output_mapping", []),
@@ -130,7 +133,7 @@ class ApiConnectionService:
             
             # Aggiorna campi
             updatable_fields = ['name', 'description', 'api_type', 'parameters', 
-                              'static_parameters', 'output_mapping']
+                              'static_parameters', 'output_mapping', 'custom_headers']
             for field in updatable_fields:
                 if field in data:
                     config[field] = data[field]
@@ -171,7 +174,7 @@ class ApiConnectionService:
             return False
 
     # =========================================================================
-    # TEST API
+    # TEST API - UPDATED with JSON parsing
     # =========================================================================
     
     def test_api_connection(self, api_id: str = None, config: Dict = None, test_params: Dict = None) -> Dict:
@@ -187,11 +190,12 @@ class ApiConnectionService:
         url = config.get("endpoint", {}).get("url", "")
         method = config.get("endpoint", {}).get("method", "GET").upper()
         auth = config.get("auth", {})
+        custom_headers = config.get("custom_headers", {})
         
         if not url:
             return {"success": False, "error": "URL non configurato"}
         
-        headers = self._prepare_headers(auth)
+        headers = self._prepare_headers(auth, custom_headers)
         params = dict(test_params or {})
         
         # API Key in query param
@@ -204,14 +208,173 @@ class ApiConnectionService:
             else:
                 response = requests.post(url, json=params, headers=headers, timeout=30)
             
-            return {
+            # Parse JSON response and extract available fields
+            result = {
                 "success": response.status_code == 200,
                 "status_code": response.status_code,
                 "response_preview": response.text[:500] if response.text else "",
                 "headers": dict(response.headers)
             }
+            
+            # Se success, prova a parsare JSON ed estrarre i campi
+            if response.status_code == 200:
+                content_type = response.headers.get('Content-Type', '')
+                if 'application/json' in content_type:
+                    try:
+                        json_data = response.json()
+                        available_fields = self._extract_available_fields(json_data)
+                        result["available_fields"] = available_fields
+                        result["response_data"] = json_data  # Per debug
+                    except json.JSONDecodeError:
+                        result["success"] = False
+                        result["error"] = "Risposta non è JSON valido"
+                else:
+                    result["success"] = False
+                    result["error"] = f"Content-Type non è JSON: {content_type}. Verifica l'URL e i parametri."
+            
+            return result
+            
+        except requests.exceptions.Timeout:
+            return {"success": False, "error": "Timeout: l'API non ha risposto entro 30 secondi"}
+        except requests.exceptions.ConnectionError as e:
+            return {"success": False, "error": f"Errore di connessione: {str(e)}"}
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    def _extract_available_fields(self, data: Any, prefix: str = "", max_depth: int = 3) -> List[Dict]:
+        """
+        Estrae i campi disponibili da una risposta JSON.
+        Ritorna una lista di {name, path, type, sample_value}
+        """
+        fields = []
+        
+        if max_depth <= 0:
+            return fields
+        
+        # Caso: array - analizza il primo elemento
+        if isinstance(data, list):
+            if len(data) > 0:
+                first_item = data[0]
+                # Se è un array alla root, indica che ogni elemento ha questi campi
+                if not prefix:
+                    # GeoJSON FeatureCollection check
+                    if isinstance(first_item, dict) and first_item.get('type') == 'Feature':
+                        return self._extract_geojson_fields(data)
+                    fields.extend(self._extract_available_fields(first_item, "[0]", max_depth - 1))
+                else:
+                    fields.extend(self._extract_available_fields(first_item, f"{prefix}[0]", max_depth - 1))
+            return fields
+        
+        # Caso: GeoJSON FeatureCollection
+        if isinstance(data, dict) and data.get('type') == 'FeatureCollection':
+            return self._extract_geojson_fields(data)
+        
+        # Caso: oggetto
+        if isinstance(data, dict):
+            for key, value in data.items():
+                field_path = f"{prefix}.{key}" if prefix else key
+                field_type = self._get_field_type(value)
+                
+                # Aggiungi il campo
+                fields.append({
+                    "name": key,
+                    "path": field_path,
+                    "type": field_type,
+                    "sample_value": self._get_sample_value(value)
+                })
+                
+                # Se è un oggetto nested, estrai anche i suoi campi
+                if isinstance(value, dict) and not self._is_geometry(value):
+                    fields.extend(self._extract_available_fields(value, field_path, max_depth - 1))
+                elif isinstance(value, list) and len(value) > 0:
+                    if isinstance(value[0], dict):
+                        fields.extend(self._extract_available_fields(value[0], f"{field_path}[0]", max_depth - 1))
+        
+        return fields
+    
+    def _extract_geojson_fields(self, data: Any) -> List[Dict]:
+        """Estrae campi da GeoJSON FeatureCollection."""
+        fields = []
+        
+        features = data.get('features', []) if isinstance(data, dict) else data
+        if not features or not isinstance(features, list):
+            return fields
+        
+        first_feature = features[0]
+        if not isinstance(first_feature, dict):
+            return fields
+        
+        # Geometry
+        if first_feature.get('geometry'):
+            fields.append({
+                "name": "geometry",
+                "path": "features[].geometry",
+                "type": "geojson",
+                "sample_value": first_feature['geometry'].get('type', 'Unknown')
+            })
+        
+        # Properties
+        properties = first_feature.get('properties', {})
+        if isinstance(properties, dict):
+            for key, value in properties.items():
+                fields.append({
+                    "name": key,
+                    "path": f"features[].properties.{key}",
+                    "type": self._get_field_type(value),
+                    "sample_value": self._get_sample_value(value)
+                })
+        
+        # ID
+        if 'id' in first_feature:
+            fields.insert(0, {
+                "name": "id",
+                "path": "features[].id",
+                "type": self._get_field_type(first_feature['id']),
+                "sample_value": self._get_sample_value(first_feature['id'])
+            })
+        
+        return fields
+    
+    def _is_geometry(self, value: Any) -> bool:
+        """Verifica se un valore è una geometria GeoJSON."""
+        if not isinstance(value, dict):
+            return False
+        return value.get('type') in ['Point', 'LineString', 'Polygon', 
+                                      'MultiPoint', 'MultiLineString', 'MultiPolygon',
+                                      'GeometryCollection']
+    
+    def _get_field_type(self, value: Any) -> str:
+        """Determina il tipo di un campo."""
+        if value is None:
+            return "null"
+        if isinstance(value, bool):
+            return "boolean"
+        if isinstance(value, int):
+            return "integer"
+        if isinstance(value, float):
+            return "number"
+        if isinstance(value, str):
+            return "string"
+        if isinstance(value, list):
+            return "array"
+        if isinstance(value, dict):
+            if self._is_geometry(value):
+                return "geojson"
+            return "object"
+        return "unknown"
+    
+    def _get_sample_value(self, value: Any, max_len: int = 50) -> str:
+        """Restituisce un valore di esempio come stringa."""
+        if value is None:
+            return "null"
+        if isinstance(value, (dict, list)):
+            if self._is_geometry(value):
+                return value.get('type', 'Geometry')
+            return f"[{len(value)} items]" if isinstance(value, list) else "{...}"
+        sample = str(value)
+        if len(sample) > max_len:
+            return sample[:max_len] + "..."
+        return sample
 
     # =========================================================================
     # EXECUTE ENRICHMENT
@@ -298,67 +461,87 @@ class ApiConnectionService:
             result_data = result_node.get('data', {}) if result_node else {}
             
             output_format = result_data.get('format', format) or format
-            output_filename = result_data.get('fileName', 'output') or 'output'
+            output_name = result_data.get('name', 'output')
             
-            final_node_id = execution_order[-1] if execution_order else None
-            final_df = node_results.get(final_node_id)
+            # Trova ultimo DataFrame
+            final_df = None
+            if result_node:
+                final_df = node_results.get(result_node['id'])
             
-            if final_df is None or (hasattr(final_df, 'empty') and final_df.empty):
-                return {"success": False, "error": "Nessun risultato finale"}
+            if final_df is None:
+                # Trova ultimo nodo con risultato
+                for node_id in reversed(execution_order):
+                    if node_id in node_results and isinstance(node_results[node_id], pd.DataFrame):
+                        final_df = node_results[node_id]
+                        break
             
-            # Salva output usando utility centralizzata
+            if final_df is None:
+                return {"success": False, "error": "Nessun risultato generato"}
+            
+            # Salva output
             output_dir = self.results_dir / project_id
             output_dir.mkdir(parents=True, exist_ok=True)
+            
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_filename = f"{output_name}_{timestamp}.{output_format}"
             output_path = output_dir / output_filename
             
-            saved_path = save_dataframe(
-                df=final_df,
-                output_path=output_path,
-                format=output_format
-            )
+            save_dataframe(final_df, output_path, output_format)
             
             return {
                 "success": True,
-                "rows_processed": len(final_df),
+                "output_file": str(output_path),
+                "output_path": str(output_path),
+                "rows": len(final_df),
+                "rows_count": len(final_df),  # Per ExecutionModal
+                "rows_processed": len(final_df),  # Alias
                 "columns": list(final_df.columns),
-                "output_file": saved_path.name
+                "columns_count": len(final_df.columns),
+                "message": f"Arricchimento completato: {len(final_df)} righe processate"
             }
             
         except Exception as e:
-            logger.error(f"Errore enrichment: {str(e)}")
+            logger.error(f"Errore esecuzione enrichment {project_id}: {e}", exc_info=True)
             return {"success": False, "error": str(e)}
-
-    # =========================================================================
-    # HELPERS
-    # =========================================================================
     
     def _get_execution_order(self, nodes: List[Dict], edges: List[Dict]) -> List[str]:
-        """Calcola ordine topologico dei nodi."""
+        """Calcola ordine topologico per esecuzione."""
+        from collections import deque
+        
+        graph = {n['id']: [] for n in nodes}
         in_degree = {n['id']: 0 for n in nodes}
-        adj = {n['id']: [] for n in nodes}
         
         for edge in edges:
-            source, target = edge['source'], edge['target']
-            if source in adj and target in in_degree:
-                adj[source].append(target)
+            source = edge.get('source')
+            target = edge.get('target')
+            if source in graph and target in in_degree:
+                graph[source].append(target)
                 in_degree[target] += 1
         
-        queue = [n_id for n_id, deg in in_degree.items() if deg == 0]
+        queue = deque([n for n, d in in_degree.items() if d == 0])
         order = []
         
         while queue:
-            node_id = queue.pop(0)
-            order.append(node_id)
-            for neighbor in adj.get(node_id, []):
+            node = queue.popleft()
+            order.append(node)
+            for neighbor in graph[node]:
                 in_degree[neighbor] -= 1
                 if in_degree[neighbor] == 0:
                     queue.append(neighbor)
         
         return order
     
-    def _prepare_headers(self, auth: Dict) -> Dict:
+    def _prepare_headers(self, auth: Dict, custom_headers: Dict = None) -> Dict:
         """Prepara headers per chiamata API."""
-        headers = {"Accept": "application/json"}
+        headers = {
+            "Accept": "application/json",
+            "User-Agent": "URBY-ETL/1.0"  # Default User-Agent
+        }
+        
+        # Aggiungi headers custom
+        if custom_headers:
+            headers.update(custom_headers)
+        
         auth_type = auth.get('type', 'none')
         
         if auth_type == 'oauth2_password':
@@ -452,13 +635,14 @@ class ApiConnectionService:
         url = endpoint.get('url', '')
         method = endpoint.get('method', 'GET').upper()
         auth = api_config.get('auth', {})
+        custom_headers = api_config.get('custom_headers', {})
         static_params = api_config.get('static_parameters', {})
         output_mapping = api_config.get('output_mapping', [])
         
         if not url:
             raise ValueError("URL API non configurato")
         
-        headers = self._prepare_headers(auth)
+        headers = self._prepare_headers(auth, custom_headers)
         params = dict(static_params)
         
         if auth.get('type') == 'api_key' and auth.get('location') == 'query':
@@ -521,6 +705,7 @@ class ApiConnectionService:
         url = endpoint.get('url', '')
         method = endpoint.get('method', 'GET').upper()
         auth = api_config.get('auth', {})
+        custom_headers = api_config.get('custom_headers', {})
         output_mapping = api_config.get('output_mapping', [])
         
         if not url:
@@ -532,7 +717,7 @@ class ApiConnectionService:
             if col_name not in result_df.columns:
                 result_df[col_name] = None
         
-        headers = self._prepare_headers(auth)
+        headers = self._prepare_headers(auth, custom_headers)
         
         rate_limit = api_config.get('options', {}).get('rate_limit', 5)
         delay = 1.0 / rate_limit if rate_limit > 0 else 0
@@ -542,8 +727,10 @@ class ApiConnectionService:
         
         for idx, row in df.iterrows():
             try:
-                # Costruisci parametri
-                params = {}
+                # Costruisci parametri - PRIMA i fissi, poi i mappati
+                params = dict(api_config.get('static_parameters', {}))  # Parametri fissi
+                
+                # Aggiungi parametri mappati dalle colonne
                 for api_param, df_column in param_mapping.items():
                     if df_column and df_column in row:
                         value = row[df_column]
@@ -552,6 +739,8 @@ class ApiConnectionService:
                 # API Key in query
                 if auth.get('type') == 'api_key' and auth.get('location') == 'query':
                     params[auth.get('key_name', 'apiKey')] = auth.get('key_value', '')
+                
+                logger.debug(f"Riga {idx}: chiamata {method} {url} con params={params}")
                 
                 # Chiamata API
                 if method == 'GET':
@@ -567,6 +756,7 @@ class ApiConnectionService:
                         result_df.at[idx, col_name] = self._extract_json_value(data, path)
                     success_count += 1
                 else:
+                    logger.warning(f"Riga {idx}: HTTP {response.status_code} - {response.text[:200]}")
                     error_count += 1
                 
                 if delay > 0:

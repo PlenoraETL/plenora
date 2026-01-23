@@ -14,6 +14,7 @@ USO:
     output_dir = settings.get_project_output_dir("my_project_id")
 """
 
+import os
 from pathlib import Path
 from typing import List
 
@@ -37,6 +38,26 @@ class Settings:
     
     # Tipi database supportati
     SUPPORTED_DB_TYPES: List[str] = ["postgres", "mssql", "mysql", "oracle", "sqlite"]
+    
+    # ==================== CELERY / REDIS ====================
+    
+    # URL broker Redis (default: localhost)
+    CELERY_BROKER_URL: str = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
+    
+    # URL result backend Redis
+    CELERY_RESULT_BACKEND: str = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
+    
+    # Timeout task default (secondi) - 1 ora
+    CELERY_TASK_TIMEOUT: int = 3600
+    
+    # Numero massimo retry per task falliti
+    CELERY_MAX_RETRIES: int = 3
+    
+    # Intervallo polling progress (secondi)
+    TASK_PROGRESS_POLL_INTERVAL: int = 1
+    
+    # TTL risultati task in Redis (secondi) - 24 ore
+    CELERY_RESULT_EXPIRES: int = 86400
     
     # ==================== API ====================
     
@@ -77,6 +98,17 @@ class Settings:
     
     # Numero massimo righe preview
     MAX_PREVIEW_ROWS: int = 1000
+    
+    # ==================== TASK ENRICHMENT ====================
+    
+    # Righe massime per batch parallelo
+    ENRICHMENT_BATCH_SIZE: int = 100
+    
+    # Worker paralleli per enrichment
+    ENRICHMENT_MAX_WORKERS: int = 5
+    
+    # Cache TTL per deduplicazione (secondi) - 1 ora
+    ENRICHMENT_CACHE_TTL: int = 3600
     
     # ==================== DIRECTORY PROPERTIES ====================
     
@@ -136,6 +168,13 @@ class Settings:
         path.mkdir(parents=True, exist_ok=True)
         return path
     
+    @property
+    def TASKS_DIR(self) -> Path:
+        """Directory per file temporanei task"""
+        path = self.DATA_DIR / "tasks"
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+    
     # ==================== HELPER METHODS ====================
     
     def get_project_dir(self, project_id: str) -> Path:
@@ -163,6 +202,12 @@ class Settings:
     def get_file_source_dir(self, file_id: str) -> Path:
         """Ottieni directory di un file source."""
         path = self.FILES_DIR / file_id
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+    
+    def get_task_dir(self, task_id: str) -> Path:
+        """Ottieni directory per un task specifico."""
+        path = self.TASKS_DIR / task_id
         path.mkdir(parents=True, exist_ok=True)
         return path
     
@@ -200,8 +245,15 @@ if __name__ == "__main__":
     print(f"API_CONNECTIONS_DIR: {settings.API_CONNECTIONS_DIR}")
     print(f"UPLOADS_DIR:         {settings.UPLOADS_DIR}")
     print(f"FILES_DIR:           {settings.FILES_DIR}")
+    print(f"TASKS_DIR:           {settings.TASKS_DIR}")
     print("-" * 50)
     print(f"DB_TIMEOUT:          {settings.DB_QUERY_TIMEOUT}s")
     print(f"API_TIMEOUT:         {settings.API_TIMEOUT}s")
     print(f"MAX_FILE_SIZE:       {settings.MAX_FILE_SIZE / 1024 / 1024:.0f} MB")
+    print("-" * 50)
+    print("🔴 CELERY / REDIS")
+    print(f"BROKER_URL:          {settings.CELERY_BROKER_URL}")
+    print(f"RESULT_BACKEND:      {settings.CELERY_RESULT_BACKEND}")
+    print(f"TASK_TIMEOUT:        {settings.CELERY_TASK_TIMEOUT}s")
+    print(f"RESULT_EXPIRES:      {settings.CELERY_RESULT_EXPIRES}s")
     print("=" * 50)

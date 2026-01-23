@@ -8,10 +8,16 @@ import '../styles/ExecutionModal.css';
  * - isOpen: boolean - mostra/nasconde modal
  * - onClose: function - callback chiusura
  * - isExecuting: boolean - stato caricamento
- * - result: object - risultato esecuzione { success, message, rows_count, columns, columns_count, output_file, output_path, query }
+ * - result: object - risultato esecuzione
  * - downloadUrl: string - URL per download file
  * - title: string - titolo modal
  * - projectType: 'estrai' | 'manipola' | 'arricchisci' - per styling
+ * 
+ * Props per task asincroni (Arricchisci):
+ * - progress: number - percentuale 0-100
+ * - progressMessage: string - messaggio avanzamento
+ * - taskStatus: string - stato task (pending/progress/success/failure/revoked)
+ * - onCancel: function - callback per annullare task
  */
 function ExecutionModal({ 
   isOpen, 
@@ -20,7 +26,12 @@ function ExecutionModal({
   result, 
   downloadUrl,
   title = '🚀 Esecuzione',
-  projectType = 'estrai'
+  projectType = 'estrai',
+  // Nuove props per task asincroni
+  progress = 0,
+  progressMessage = '',
+  taskStatus = null,
+  onCancel = null
 }) {
   if (!isOpen) return null;
 
@@ -31,8 +42,9 @@ function ExecutionModal({
   };
 
   const variantClass = `execution-modal--${projectType}`;
+  const isAsync = projectType === 'arricchisci';
 
-  // Calcola il numero di colonne: usa columns_count se disponibile, altrimenti columns.length
+  // Calcola il numero di colonne
   const getColumnsCount = () => {
     if (result?.columns_count !== undefined) {
       return result.columns_count;
@@ -43,18 +55,61 @@ function ExecutionModal({
     return 0;
   };
 
+  // Colore progress bar in base allo stato
+  const getProgressColor = () => {
+    if (taskStatus === 'failure') return '#f44336';
+    if (taskStatus === 'revoked') return '#ff9800';
+    if (taskStatus === 'success') return '#4caf50';
+    return projectType === 'arricchisci' ? '#FF6B35' : '#2196f3';
+  };
+
   return (
     <div className="execution-modal__overlay" onClick={handleOverlayClick}>
       <div className={`execution-modal ${variantClass}`} onClick={(e) => e.stopPropagation()}>
         <h3 className="execution-modal__title">{title}</h3>
 
-        {/* Loading State */}
+        {/* Loading State con Progress Bar */}
         {isExecuting && (
           <div className="execution-modal__loading">
-            <div className="execution-modal__spinner">⏳</div>
-            <p className="execution-modal__loading-text">
-              Esecuzione in corso...
-            </p>
+            {isAsync ? (
+              <>
+                {/* Progress Bar per task asincroni */}
+                <div className="execution-modal__progress-container">
+                  <div className="execution-modal__progress-bar">
+                    <div 
+                      className="execution-modal__progress-fill"
+                      style={{ 
+                        width: `${progress}%`,
+                        backgroundColor: getProgressColor()
+                      }}
+                    />
+                  </div>
+                  <div className="execution-modal__progress-text">
+                    {progress}%
+                  </div>
+                </div>
+                
+                {/* Messaggio avanzamento */}
+                <p className="execution-modal__progress-message">
+                  {progressMessage || 'Elaborazione in corso...'}
+                </p>
+                
+                {/* Stato task */}
+                <div className="execution-modal__task-status">
+                  {taskStatus === 'pending' && '⏳ In coda...'}
+                  {taskStatus === 'progress' && '⚙️ In esecuzione...'}
+                  {taskStatus === 'started' && '🚀 Avviato...'}
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Spinner classico per task sincroni */}
+                <div className="execution-modal__spinner">⏳</div>
+                <p className="execution-modal__loading-text">
+                  Esecuzione in corso...
+                </p>
+              </>
+            )}
           </div>
         )}
 
@@ -92,6 +147,16 @@ function ExecutionModal({
                       {getColumnsCount()}
                     </div>
                   </div>
+                  {result.elapsed_time && (
+                    <div className="execution-modal__stat">
+                      <div className="execution-modal__stat-label">
+                        Tempo esecuzione
+                      </div>
+                      <div className="execution-modal__stat-value">
+                        {result.elapsed_time}s
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Output File Info */}
@@ -151,9 +216,11 @@ function ExecutionModal({
             ) : (
               /* Error State */
               <div className="execution-modal__error">
-                <div className="execution-modal__error-icon">❌</div>
+                <div className="execution-modal__error-icon">
+                  {taskStatus === 'revoked' ? '🛑' : '❌'}
+                </div>
                 <h4 className="execution-modal__error-title">
-                  Errore esecuzione
+                  {taskStatus === 'revoked' ? 'Task annullato' : 'Errore esecuzione'}
                 </h4>
                 <p className="execution-modal__error-message">
                   {result.message || result.error || 'Errore sconosciuto'}
@@ -165,12 +232,22 @@ function ExecutionModal({
 
         {/* Actions */}
         <div className="execution-modal__actions">
+          {/* Pulsante Annulla (solo durante esecuzione asincrona) */}
+          {isExecuting && isAsync && onCancel && (
+            <button 
+              className="execution-modal__btn execution-modal__btn--cancel"
+              onClick={onCancel}
+            >
+              🛑 Annulla
+            </button>
+          )}
+          
           <button 
             className="execution-modal__btn execution-modal__btn--close"
             onClick={onClose}
-            disabled={isExecuting}
+            disabled={isExecuting && !isAsync}
           >
-            Chiudi
+            {isExecuting ? 'Esegui in Background' : 'Chiudi'}
           </button>
         </div>
       </div>

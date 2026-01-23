@@ -1,0 +1,161 @@
+{
+  "version": "1.0",
+  "updated_at": "2025-01-23",
+  "templates": [
+    {
+      "_meta": { 
+        "id": "nominatim_forward", 
+        "category": "geocoding", 
+        "version": "1.0" 
+      },
+      "display": {
+        "name": "Nominatim - Geocoding",
+        "short_description": "Converte indirizzi in coordinate GPS (OpenStreetMap)",
+        "icon": "🌍",
+        "pricing": "Gratuito",
+        "limitations": ["Max 1 req/sec", "Richiede User-Agent"]
+      },
+      "config": {
+        "api_type": "enricher",
+        "endpoint": { "url": "https://nominatim.openstreetmap.org/search", "method": "GET" },
+        "auth": { "type": "none" },
+        "options": { "rate_limit": 1, "timeout": 30, "retry_on_error": true, "retry_max": 3 }
+      },
+      "parameters": [
+        { "name": "q", "label": "Indirizzo", "type": "string", "required": true, "mapping_hint": "indirizzo|address|via" },
+        { "name": "format", "type": "string", "default": "json", "hidden": true },
+        { "name": "limit", "type": "number", "default": "1", "hidden": true }
+      ],
+      "output_mapping": [
+        { "path": "[0].lat", "column": "lat", "type": "number" },
+        { "path": "[0].lon", "column": "lon", "type": "number" },
+        { "path": "[0].display_name", "column": "indirizzo_completo", "type": "string" }
+      ],
+      "test_data": { "q": "Piazza del Duomo, Milano" }
+    },
+    {
+      "_meta": { 
+        "id": "nominatim_reverse", 
+        "category": "geocoding", 
+        "version": "1.0" 
+      },
+      "display": {
+        "name": "Nominatim - Reverse Geocoding",
+        "short_description": "Converte coordinate in indirizzi (OpenStreetMap)",
+        "icon": "🌍",
+        "pricing": "Gratuito",
+        "limitations": ["Max 1 req/sec"]
+      },
+      "config": {
+        "api_type": "enricher",
+        "endpoint": { "url": "https://nominatim.openstreetmap.org/reverse", "method": "GET" },
+        "auth": { "type": "none" },
+        "options": { "rate_limit": 1, "timeout": 30 }
+      },
+      "parameters": [
+        { "name": "lat", "label": "Latitudine", "type": "number", "required": true, "mapping_hint": "lat|latitude" },
+        { "name": "lon", "label": "Longitudine", "type": "number", "required": true, "mapping_hint": "lon|longitude|lng" },
+        { "name": "format", "type": "string", "default": "json", "hidden": true }
+      ],
+      "output_mapping": [
+        { "path": "display_name", "column": "indirizzo", "type": "string" },
+        { "path": "address.road", "column": "via", "type": "string" },
+        { "path": "address.city", "column": "citta", "type": "string" },
+        { "path": "address.postcode", "column": "cap", "type": "string" }
+      ],
+      "test_data": { "lat": "45.4642", "lon": "9.1900" }
+    },
+    {
+      "_meta": { 
+        "id": "osrm_route", 
+        "category": "routing", 
+        "version": "1.0" 
+      },
+      "display": {
+        "name": "OSRM - Calcolo Percorso",
+        "short_description": "Calcola distanza e tempo tra due punti",
+        "icon": "🚗",
+        "pricing": "Gratuito (demo server)",
+        "limitations": ["Solo automobile", "Server demo con limiti"]
+      },
+      "config": {
+        "api_type": "enricher",
+        "endpoint": { "url": "https://router.project-osrm.org/route/v1/driving/{lon1},{lat1};{lon2},{lat2}", "method": "GET" },
+        "auth": { "type": "none" },
+        "options": { "rate_limit": 5, "timeout": 30 }
+      },
+      "parameters": [
+        { "name": "lon1", "label": "Longitudine partenza", "type": "number", "required": true },
+        { "name": "lat1", "label": "Latitudine partenza", "type": "number", "required": true },
+        { "name": "lon2", "label": "Longitudine arrivo", "type": "number", "required": true },
+        { "name": "lat2", "label": "Latitudine arrivo", "type": "number", "required": true }
+      ],
+      "output_mapping": [
+        { "path": "routes[0].distance", "column": "distanza_m", "type": "number" },
+        { "path": "routes[0].duration", "column": "durata_sec", "type": "number" }
+      ],
+      "test_data": { "lon1": "9.19", "lat1": "45.46", "lon2": "9.22", "lat2": "45.48" }
+    },
+    {
+      "_meta": { 
+        "id": "overpass_poi", 
+        "category": "custom", 
+        "version": "1.0" 
+      },
+      "display": {
+        "name": "Overpass - POI Query",
+        "short_description": "Estrai punti di interesse da OpenStreetMap",
+        "icon": "📍",
+        "pricing": "Gratuito",
+        "limitations": ["Query complesse possono essere lente"]
+      },
+      "config": {
+        "api_type": "generator",
+        "endpoint": { "url": "https://overpass-api.de/api/interpreter", "method": "POST" },
+        "auth": { "type": "none" },
+        "options": { "rate_limit": 2, "timeout": 120 }
+      },
+      "parameters": [
+        { "name": "data", "label": "Query Overpass", "type": "string", "required": true }
+      ],
+      "output_mapping": [
+        { "path": "elements[*].lat", "column": "lat", "type": "number" },
+        { "path": "elements[*].lon", "column": "lon", "type": "number" },
+        { "path": "elements[*].tags.name", "column": "nome", "type": "string" },
+        { "path": "elements[*].tags.amenity", "column": "tipo", "type": "string" }
+      ],
+      "test_data": { "data": "[out:json];node[amenity=hospital](44.4,11.3,44.5,11.4);out;" }
+    },
+    {
+      "_meta": { 
+        "id": "openmeteo_weather", 
+        "category": "custom", 
+        "version": "1.0" 
+      },
+      "display": {
+        "name": "Open-Meteo - Meteo Attuale",
+        "short_description": "Dati meteo correnti per coordinate",
+        "icon": "🌤️",
+        "pricing": "Gratuito",
+        "limitations": ["Max 10000 req/giorno"]
+      },
+      "config": {
+        "api_type": "enricher",
+        "endpoint": { "url": "https://api.open-meteo.com/v1/forecast", "method": "GET" },
+        "auth": { "type": "none" },
+        "options": { "rate_limit": 10, "timeout": 30 }
+      },
+      "parameters": [
+        { "name": "latitude", "label": "Latitudine", "type": "number", "required": true, "mapping_hint": "lat|latitude" },
+        { "name": "longitude", "label": "Longitudine", "type": "number", "required": true, "mapping_hint": "lon|longitude" },
+        { "name": "current_weather", "type": "boolean", "default": true, "hidden": true }
+      ],
+      "output_mapping": [
+        { "path": "current_weather.temperature", "column": "temperatura", "type": "number" },
+        { "path": "current_weather.windspeed", "column": "vento_kmh", "type": "number" },
+        { "path": "current_weather.weathercode", "column": "codice_meteo", "type": "number" }
+      ],
+      "test_data": { "latitude": 45.4642, "longitude": 9.1900 }
+    }
+  ]
+}

@@ -205,8 +205,11 @@ function ApiEnrichNode({ id, data, selected }) {
       return { valid: false, message: 'Seleziona un\'API' };
     }
     if (selectedApi?.parameters) {
-      const requiredParams = selectedApi.parameters.filter(p => p.required);
-      const missingParams = requiredParams.filter(p => !paramMapping[p.name]);
+      // Considera solo i parametri mappabili (non fissi) e required
+      const requiredMappableParams = selectedApi.parameters.filter(
+        p => p.required && p.mode !== 'fixed'
+      );
+      const missingParams = requiredMappableParams.filter(p => !paramMapping[p.name]);
       if (missingParams.length > 0) {
         return { 
           valid: false, 
@@ -267,14 +270,37 @@ function ApiEnrichNode({ id, data, selected }) {
           </div>
         )}
 
-        {/* Mapping parametri */}
-        {selectedApi?.parameters && selectedApi.parameters.length > 0 && (
+        {/* Parametri fissi (solo visualizzazione) */}
+        {selectedApi?.parameters && selectedApi.parameters.filter(p => p.mode === 'fixed').length > 0 && (
           <div className="api-enrich-node__section">
             <label className="api-enrich-node__label api-enrich-node__label--spacing">
-              Mapping parametri:
+              📌 Parametri fissi:
+            </label>
+            <div className="api-enrich-node__fixed-params">
+              {selectedApi.parameters
+                .filter(p => p.mode === 'fixed')
+                .map(param => (
+                  <div key={param.name} className="api-enrich-node__fixed-param">
+                    <span className="api-enrich-node__fixed-name">{param.name}</span>
+                    <span className="api-enrich-node__fixed-value">
+                      = {selectedApi.static_parameters?.[param.name] || '?'}
+                    </span>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
+
+        {/* Mapping parametri (solo quelli mappabili) */}
+        {selectedApi?.parameters && selectedApi.parameters.filter(p => p.mode !== 'fixed').length > 0 && (
+          <div className="api-enrich-node__section">
+            <label className="api-enrich-node__label api-enrich-node__label--spacing">
+              📥 Mapping parametri:
             </label>
             
-            {selectedApi.parameters.map(param => (
+            {selectedApi.parameters
+              .filter(param => param.mode !== 'fixed')
+              .map(param => (
               <div key={param.name} className="api-enrich-node__mapping-row">
                 <div className="api-enrich-node__param-info">
                   <span className={`api-enrich-node__param-badge ${

@@ -4,6 +4,7 @@ Main FastAPI application - Canvas Query Builder API
 REFACTORED:
 - Rimosso project_service duplicato (era linea 46 e 50)
 - Rimosso traceback.print_exc() (già loggato con logger.error)
+- AGGIUNTO: Router tasks per task asincroni (Celery)
 """
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
@@ -30,6 +31,14 @@ from services.api_connection_service import api_connection_service
 from services.functions_router import router as functions_router
 from services.schema_router import router as schema_router, init_schema_service
 from services.file_routes import router as files_router
+from routes.tasks import router as tasks_router  # NUOVO: Task asincroni
+from routes.templates import router as templates_router
+
+import os
+# Fix SSL certificate issue caused by PostgreSQL
+os.environ.pop('REQUESTS_CA_BUNDLE', None)
+os.environ.pop('SSL_CERT_FILE', None)
+os.environ.pop('CURL_CA_BUNDLE', None)
 
 logger = get_logger(__name__)
 
@@ -39,6 +48,8 @@ app = FastAPI(title="Canvas Query Builder API")
 app.include_router(functions_router)
 app.include_router(schema_router)
 app.include_router(files_router)
+app.include_router(tasks_router)  # NUOVO: /api/tasks/*
+app.include_router(templates_router)
 
 # CORS per frontend React
 app.add_middleware(
@@ -294,7 +305,7 @@ def download_project_result(project_id: str):
 @app.get("/api/api-connections")
 def list_api_connections():
     """Lista tutte le API connections."""
-    return api_connection_service.list_api_connections()
+    return {"api_connections": api_connection_service.list_api_connections()}
 
 
 @app.get("/api/api-connections/{api_id}")
@@ -335,9 +346,18 @@ def test_api_connection(api_id: str, test_params: dict = None):
     return api_connection_service.test_api_connection(api_id=api_id, test_params=test_params)
 
 
-@app.post("/api/api-connections/test-config")
-def test_api_config(config: dict, test_params: dict = None):
+@app.post("/api/api-connections/test")
+def test_api_config(data: dict):
     """Testa una configurazione API senza salvarla."""
+    config = {
+        "endpoint": {
+            "url": data.get("url"),
+            "method": data.get("method", "GET")
+        },
+        "auth": data.get("auth", {"type": "none"}),
+        "custom_headers": data.get("custom_headers", {})  # NEW: supporto headers custom
+    }
+    test_params = data.get("test_params", {})
     return api_connection_service.test_api_connection(config=config, test_params=test_params)
 
 
@@ -382,7 +402,11 @@ def generate_sql(project_id: str):
 
 @app.post("/api/projects/{project_id}/enrich")
 def execute_enrichment(project_id: str, request: ExecuteRequest = None):
-    """Esegue l'arricchimento di un progetto ARRICCHISCI."""
+    """
+    Esegue l'arricchimento di un progetto ARRICCHISCI (sincrono).
+    
+    Per esecuzione asincrona con progress, usare POST /api/tasks
+    """
     try:
         metadata = project_service.get_project_metadata(project_id)
         if not metadata:
@@ -412,6 +436,56 @@ def execute_enrichment(project_id: str, request: ExecuteRequest = None):
         raise
     except Exception as e:
         logger.error(f"Errore execute_enrichment: {e}")
+        raise HTTPException(500, str(e))
+
+
+# ==================== ENRICHMENT ASYNC ====================
+
+@app.post("/api/projects/{project_id}/enrich-async")
+def execute_enrichment_async(project_id: str, request: ExecuteRequest = None):
+    """
+    Esegue l'arricchimento in modo ASINCRONO con Celery.
+    
+    Ritorna immediatamente un task_id che può essere usato
+    per monitorare il progress via GET /api/tasks/{task_id}
+    """
+    from services.task_service import task_service
+    
+    try:
+        metadata = project_service.get_project_metadata(project_id)
+        if not metadata:
+            raise HTTPException(404, f"Progetto '{project_id}' non trovato")
+        
+        if metadata.project_type != "arricchisci":
+            raise HTTPException(400, f"Progetto '{project_id}' non è di tipo 'arricchisci'")
+        
+        canvas = project_service.get_project_canvas(project_id)
+        if not canvas:
+            raise HTTPException(400, "Canvas non trovato")
+        
+        force_recalculate = request.force_recalculate if request else False
+        output_format = getattr(request, 'format', 'csv') if request else 'csv'
+        
+        # Crea task asincrono
+        task_info = task_service.create_enrichment_task(
+            project_id=project_id,
+            canvas=canvas.model_dump(),
+            output_format=output_format,
+            force_recalculate=force_recalculate
+        )
+        
+        return {
+            "success": True,
+            "async": True,
+            "task_id": task_info.task_id,
+            "status": task_info.status.value,
+            "message": "Task avviato. Usa GET /api/tasks/{task_id} per monitorare il progress."
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Errore execute_enrichment_async: {e}")
         raise HTTPException(500, str(e))
 
 
