@@ -30,17 +30,21 @@ API
 - ``list_resource_shares(resource_table, resource_id)``
     → lista group_id che condividono la risorsa
 - ``build_visible_where_clause(resource_table, resource_alias='r')``
-    → frammento SQL `(r.group_id = ? OR EXISTS (...))` con parametri
+    → frammento SQL `(r.group_id = %s OR EXISTS (...))` con parametri
 - ``MAGIC_ALL`` → costante "*"
 """
 
 from __future__ import annotations
 
-import sqlite3
 from typing import Iterable, Optional
 
-import app.config  # noqa: F401  garantisce caricamento .env
-from app.config import settings
+from app.db.pg_connection import (
+    fetchone as _pg_fetchone,
+    fetchall as _pg_fetchall,
+    execute as _pg_execute,
+    get_connection as _pg_get_conn,
+    put_connection as _pg_put_conn,
+)
 
 
 # ============================================================
@@ -64,12 +68,9 @@ _SHAREABLE: dict[str, tuple[str, str]] = {
 # UTILS
 # ============================================================
 
-def _conn() -> sqlite3.Connection:
-    db_path = settings.DATA_DIR / "config.db"
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
+def _conn():
+    """Ritorna una connessione dal pool PostgreSQL."""
+    return _pg_get_conn()
 
 
 def _validate_table(resource_table: str) -> tuple[str, str]:
@@ -119,10 +120,10 @@ def build_visible_where_clause(
     """
     share_table, fk = _validate_table(resource_table)
     clause = (
-        f"({resource_alias}.group_id = ? "
+        f"({resource_alias}.group_id = %s "
         f"OR EXISTS (SELECT 1 FROM {share_table} s "
         f"WHERE s.{fk} = {resource_alias}.id "
-        f"AND (s.group_id = ? OR s.group_id = '{MAGIC_ALL}')))"
+        f"AND (s.group_id = %s OR s.group_id = '{MAGIC_ALL}')))"
     )
     return clause, []
 
@@ -152,16 +153,16 @@ def visible_resource_ids(
         # Owned + shared
         cur = conn.execute(
             f"""
-            SELECT id FROM {resource_table} WHERE group_id = ?
+            SELECT id FROM {resource_table} WHERE group_id = %s
             UNION
             SELECT {fk} FROM {share_table}
-            WHERE group_id = ? OR group_id = ?
+            WHERE group_id = %s OR group_id = %s
             """,
             (user_group_id, user_group_id, MAGIC_ALL),
         )
         return {row[0] for row in cur.fetchall()}
     finally:
-        conn.close()
+        _pg_put_conn(conn)
 
 
 def is_resource_visible(
@@ -186,7 +187,7 @@ def is_resource_visible(
         # Owner check (se non già fornito)
         if resource_owner_group_id is None:
             cur = conn.execute(
-                f"SELECT group_id FROM {resource_table} WHERE id = ?",
+                f"SELECT group_id FROM {resource_table} WHERE id = %s",
                 (resource_id,),
             )
             row = cur.fetchone()
@@ -201,15 +202,15 @@ def is_resource_visible(
         cur = conn.execute(
             f"""
             SELECT 1 FROM {share_table}
-            WHERE {fk} = ?
-              AND (group_id = ? OR group_id = ?)
+            WHERE {fk} = %s
+              AND (group_id = %s OR group_id = %s)
             LIMIT 1
             """,
             (resource_id, user_group_id, MAGIC_ALL),
         )
         return cur.fetchone() is not None
     finally:
-        conn.close()
+        _pg_put_conn(conn)
 
 
 # ============================================================
@@ -225,12 +226,12 @@ def list_resource_shares(resource_table: str, resource_id: str) -> list[str]:
     conn = _conn()
     try:
         cur = conn.execute(
-            f"SELECT group_id FROM {share_table} WHERE {fk} = ? ORDER BY group_id",
+            f"SELECT group_id FROM {share_table} WHERE {fk} = %s ORDER BY group_id",
             (resource_id,),
         )
         return [row[0] for row in cur.fetchall()]
     finally:
-        conn.close()
+        _pg_put_conn(conn)
 
 
 def add_resource_share(
@@ -244,13 +245,13 @@ def add_resource_share(
     conn = _conn()
     try:
         cur = conn.execute(
-            f"INSERT OR IGNORE INTO {share_table} ({fk}, group_id) VALUES (?, ?)",
+            f"INSERT INTO {share_table} ({fk}, group_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
             (resource_id, group_id),
         )
         conn.commit()
         return cur.rowcount > 0
     finally:
-        conn.close()
+        _pg_put_conn(conn)
 
 
 def remove_resource_share(
@@ -263,13 +264,13 @@ def remove_resource_share(
     conn = _conn()
     try:
         cur = conn.execute(
-            f"DELETE FROM {share_table} WHERE {fk} = ? AND group_id = ?",
+            f"DELETE FROM {share_table} WHERE {fk} = %s AND group_id = %s",
             (resource_id, group_id),
         )
         conn.commit()
         return cur.rowcount > 0
     finally:
-        conn.close()
+        _pg_put_conn(conn)
 
 
 def set_resource_shares(
@@ -288,16 +289,17 @@ def set_resource_shares(
     share_table, fk = _validate_table(resource_table)
     conn = _conn()
     try:
-        conn.execute("BEGIN")
-        conn.execute(f"DELETE FROM {share_table} WHERE {fk} = ?", (resource_id,))
-        for gid in set(group_ids):
-            conn.execute(
-                f"INSERT OR IGNORE INTO {share_table} ({fk}, group_id) VALUES (?, ?)",
-                (resource_id, gid),
-            )
+        with conn.cursor() as cur:
+            cur.execute(f"DELETE FROM {share_table} WHERE {fk} = %s", (resource_id,))
+            for gid in set(group_ids):
+                cur.execute(
+                    f"INSERT INTO {share_table} ({fk}, group_id) VALUES (%s, %s) "
+                    f"ON CONFLICT DO NOTHING",
+                    (resource_id, gid),
+                )
         conn.commit()
     except Exception:
         conn.rollback()
         raise
     finally:
-        conn.close()
+        _pg_put_conn(conn)
