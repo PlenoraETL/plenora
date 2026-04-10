@@ -1,0 +1,199 @@
+"""
+Router API per il modulo Connections.
+
+Endpoint CRUD per le connessioni database.
+
+Endpoints:
+- POST   /api/connections                       → crea connessione      [admin+]
+- GET    /api/connections                       → lista connessioni     [auth]
+- PUT    /api/connections/{id}                  → aggiorna connessione  [admin+]
+- DELETE /api/connections/{id}                  → elimina connessione   [admin+]
+- POST   /api/connections/{id}/test             → testa connessione     [auth]
+- GET    /api/connections/{id}/tables           → tabelle/viste DB      [auth]
+
+Auth model uniforme:
+- Ogni endpoint dichiara la sua dependency in signature (no router-level deps).
+- Group ownership check via `assert_group_access(resource, user)`.
+"""
+
+from fastapi import APIRouter, HTTPException, Depends
+
+from app.utils.logger import get_logger
+from app.core.auth.auth import (
+    get_current_user,
+    require_not_esecutore,
+    require_admin,
+    assert_group_access,
+    assert_resource_visible,
+    assert_can_modify,
+    compute_can_edit,
+    CurrentUser,
+    group_filter,
+)
+from app.utils.router_utils import require_service
+from app.shared.sharing import visible_resource_ids
+from .models import (
+    DatabaseConnection,
+    ConnectionCreate,
+    ConnectionUpdate,
+    ConnectionList,
+    ConnectionTestResult,
+)
+
+logger = get_logger(__name__)
+
+router = APIRouter(tags=["connections"])
+
+# Servizi inizializzati da main.py
+_connection_service = None
+_database_inspector = None
+
+
+def init_connections(connection_service, database_inspector):
+    """Inizializza il modulo. Chiamare da main.py dopo setup."""
+    global _connection_service, _database_inspector
+    _connection_service = connection_service
+    _database_inspector = database_inspector
+
+
+# ==================== CONNESSIONI DATABASE ====================
+
+@router.post("/connections", response_model=DatabaseConnection)
+def create_connection(
+    data: ConnectionCreate,
+    current_user: CurrentUser = Depends(require_admin),
+):
+    """Crea nuova connessione database. Solo admin/superadmin."""
+    require_service(_connection_service, "ConnectionService")
+    conn = _connection_service.create_connection(
+        data,
+        group_id=current_user.group_id,
+        created_by=current_user.user_id,
+    )
+    conn.can_edit = compute_can_edit(conn, current_user)
+    return conn
+
+
+@router.get("/connections", response_model=ConnectionList)
+def list_connections(current_user: CurrentUser = Depends(require_not_esecutore)):
+    """Lista connessioni visibili: owned dal gruppo + condivise via allowed_groups.
+    Ogni record include `can_edit` calcolato per l'utente corrente."""
+    require_service(_connection_service, "ConnectionService")
+    is_super = current_user.role == "superadmin"
+
+    all_resources = _connection_service.list_connections(group_id=None)
+
+    if not is_super:
+        visible_ids = visible_resource_ids(
+            'connections',
+            current_user.group_id,
+            is_superadmin=False,
+        )
+        all_resources.connections = [
+            c for c in all_resources.connections if c.id in visible_ids
+        ]
+
+    # Calcola can_edit per ogni record
+    for c in all_resources.connections:
+        c.can_edit = compute_can_edit(c, current_user)
+
+    return all_resources
+
+
+@router.put("/connections/{connection_id}", response_model=DatabaseConnection)
+def update_connection(
+    connection_id: str,
+    data: ConnectionUpdate,
+    current_user: CurrentUser = Depends(require_admin),
+):
+    """Aggiorna connessione esistente. Solo admin/superadmin del gruppo, e
+    solo se non creata da un superadmin (hierarchical ownership)."""
+    require_service(_connection_service, "ConnectionService")
+    existing = _connection_service.get_connection(connection_id)
+    assert_can_modify(existing, current_user, "Connessione")
+    conn = _connection_service.update_connection(connection_id, data)
+    if conn:
+        conn.can_edit = compute_can_edit(conn, current_user)
+    return conn
+
+
+@router.delete("/connections/{connection_id}")
+def delete_connection(
+    connection_id: str,
+    current_user: CurrentUser = Depends(require_admin),
+):
+    """Elimina una connessione. Solo admin/superadmin del gruppo, e solo
+    se non creata da un superadmin (hierarchical ownership).
+
+    Cascade check: rifiuta con 409 se la connessione è usata come
+    `connection_id` di uno o più progetti (i progetti si romperebbero
+    al prossimo run).
+    """
+    require_service(_connection_service, "ConnectionService")
+    existing = _connection_service.get_connection(connection_id)
+    assert_can_modify(existing, current_user, "Connessione")
+
+    # Check dipendenze: progetti che usano questa connessione
+    import app.db.db_service as _db
+    using_projects = _db.fetchall(
+        "SELECT id, name, project_type FROM projects WHERE connection_id = ?",
+        (connection_id,)
+    )
+    if using_projects:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "connection_in_use",
+                "message": (
+                    f"Connessione usata in {len(using_projects)} progetto/i. "
+                    f"Rimuoverla dai progetti prima di cancellarla."
+                ),
+                "projects": [
+                    {"id": p["id"], "name": p["name"], "project_type": p["project_type"]}
+                    for p in using_projects
+                ],
+            },
+        )
+
+    _connection_service.delete_connection(connection_id)
+    return {"status": "deleted", "connection_id": connection_id}
+
+
+@router.post("/connections/{connection_id}/test", response_model=ConnectionTestResult)
+def test_connection(
+    connection_id: str,
+    current_user: CurrentUser = Depends(require_not_esecutore),
+):
+    """Testa una connessione database. Visibile a chi vede la risorsa (owned + shared)."""
+    require_service(_connection_service, "ConnectionService")
+    existing = _connection_service.get_connection(connection_id)
+    assert_resource_visible(existing, "connections", current_user, "Connessione")
+    return _connection_service.test_connection(connection_id)
+
+
+@router.get("/connections/{connection_id}/tables")
+def get_connection_tables(
+    connection_id: str,
+    current_user: CurrentUser = Depends(require_not_esecutore),
+):
+    """Ottieni tabelle e viste del database (esplora schema). Read-only su risorsa visibile."""
+    require_service(_connection_service, "ConnectionService")
+    require_service(_database_inspector, "DatabaseInspector")
+    connection = _connection_service.get_connection(connection_id)
+    assert_resource_visible(connection, "connections", current_user, "Connessione")
+
+    try:
+        tables = _database_inspector.get_tables_and_columns(connection)
+
+        # Viste — in try/except per non bloccare se il DB non le supporta
+        views = {}
+        try:
+            views = _database_inspector.get_views_and_columns(connection)
+        except Exception as e:
+            logger.warning(f"Impossibile recuperare viste per {connection_id}: {e}")
+
+        return {"tables": tables, "views": views}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"Errore ispezionando database: {str(e)}")

@@ -1,242 +1,27 @@
-import axios from 'axios';
-import { API_ENDPOINT, API_TIMEOUT, DEFAULT_HEADERS } from './config';
-
 /**
- * Client API centralizzato con axios
- * 
- * Caratteristiche:
- * - URL base configurato centralmente
- * - Timeout configurabile
- * - Interceptor per gestione errori consistente
+ * client.js — Shim di backward compatibility
+ *
+ * Questo file esiste per non rompere gli import esistenti che referenziano
+ * direttamente 'api/client'. Tutti i nuovi import devono usare 'api/index'
+ * o i moduli specifici (api/projects, api/connections, etc.).
+ *
+ * @deprecated Importa da '../api' o dal modulo specifico.
+ *
+ * Esempio migrazione:
+ *   // Prima
+ *   import { getProject, listConnections } from '../api/client';
+ *   // Dopo
+ *   import { getProject } from '../api/projects';
+ *   import { listConnections } from '../api/connections';
+ *   // Oppure tutto da index:
+ *   import { getProject, listConnections } from '../api';
  */
-const api = axios.create({
-  baseURL: API_ENDPOINT,
-  timeout: API_TIMEOUT,
-  headers: DEFAULT_HEADERS,
-});
 
-// ===== INTERCEPTOR ERROR HANDLING =====
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    // Estrai messaggio errore in modo consistente
-    const message = 
-      error.response?.data?.detail || 
-      error.response?.data?.message || 
-      error.message || 
-      'Errore di comunicazione con il server';
-    
-    // Log per debug
-    console.error('[API Error]', {
-      url: error.config?.url,
-      method: error.config?.method,
-      status: error.response?.status,
-      message
-    });
-    
-    // Rigetta con errore standardizzato
-    return Promise.reject(new Error(message));
-  }
-);
+export { default }           from './http';
+export { default as api }    from './http';
 
-// ===== CATALOG API =====
-
-export const uploadCatalog = async (file) => {
-  const formData = new FormData();
-  formData.append('file', file);
-  
-  const response = await api.post('/catalog/upload', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
-  });
-  
-  return response.data;
-};
-
-export const getCatalog = async () => {
-  const response = await api.get('/catalog/tables');
-  return response.data;
-};
-
-export const getTableColumns = async (tableName) => {
-  const response = await api.get(`/catalog/tables/${tableName}`);
-  return response.data;
-};
-
-// ===== CONNECTIONS API =====
-
-export const createConnection = async (data) => {
-  const response = await api.post('/connections', data);
-  return response.data;
-};
-
-export const listConnections = async () => {
-  const response = await api.get('/connections');
-  return response.data;
-};
-
-export const getConnection = async (connectionId) => {
-  const response = await api.get(`/connections/${connectionId}`);
-  return response.data;
-};
-
-export const updateConnection = async (connectionId, data) => {
-  const response = await api.put(`/connections/${connectionId}`, data);
-  return response.data;
-};
-
-export const deleteConnection = async (connectionId) => {
-  const response = await api.delete(`/connections/${connectionId}`);
-  return response.data;
-};
-
-export const testConnection = async (connectionId) => {
-  const response = await api.post(`/connections/${connectionId}/test`);
-  return response.data;
-};
-
-export const getConnectionTables = async (connectionId) => {
-  const response = await api.get(`/connections/${connectionId}/tables`);
-  return response.data;
-};
-
-// ===== PROJECTS API =====
-
-export const createProject = async (name, description = '', type = 'estrai', connectionId = null) => {
-  try {
-    const response = await api.post('/projects', { 
-      name, 
-      description, 
-      project_type: type,
-      default_connection_id: connectionId 
-    });
-    
-    if (type === 'estrai' && connectionId) {
-      const projectId = response.data.metadata.id;
-      const initialCanvas = { nodes: [], edges: [] };
-      await api.put(`/projects/${projectId}/canvas`, initialCanvas);
-    }
-    
-    return response.data;
-  } catch (error) {
-    console.error("Errore API createProject:", error.response?.data);
-    throw error;
-  }
-};
-
-export const listProjects = async () => {
-  const response = await api.get('/projects');
-  return response.data;
-};
-
-export const getProject = async (projectId) => {
-  const response = await api.get(`/projects/${projectId}`);
-  return response.data;
-};
-
-export const updateCanvas = async (projectId, canvas) => {
-  const response = await api.put(`/projects/${projectId}/canvas`, canvas);
-  return response.data;
-};
-
-export const deleteProject = async (projectId) => {
-  const response = await api.delete(`/projects/${projectId}`);
-  return response.data;
-};
-
-// ✅ MODIFICATO: Supporta sia connectionId (per SQL) che options (per Manipola)
-export const executeProjectQuery = async (projectId, optionsOrConnectionId = null) => {
-  let payload = {};
-  
-  // Se è un oggetto, sono options da Manipola
-  if (optionsOrConnectionId && typeof optionsOrConnectionId === 'object') {
-    const { force_recalculate = false } = optionsOrConnectionId;
-    payload = { force_recalculate };
-  } 
-  // Se è una stringa, è connectionId da SQL
-  else if (optionsOrConnectionId && typeof optionsOrConnectionId === 'string') {
-    payload = { connection_id: optionsOrConnectionId };
-  }
-  
-  const response = await api.post(`/projects/${projectId}/execute`, payload);
-  return response.data;
-};
-
-export const listApiConnections = async () => {
-  const response = await api.get('/api-connections');
-  return response.data;
-};
-
-/**
- * Ottiene una preview dei dati del progetto
- * @param {string} projectId - ID del progetto
- * @param {number} limit - Numero massimo di righe (default 100)
- * @returns {Promise<Object>} - { columns, rows, total_count, preview_count, truncated }
- */
-export const previewProject = async (projectId, limit = 100) => {
-  const response = await api.get(`/projects/${projectId}/preview`, {
-    params: { limit }
-  });
-  return response.data;
-};
-
-// ===== DOWNLOAD API =====
-
-/**
- * Ottiene l'URL di download per un progetto
- * @param {string} projectId - ID del progetto
- * @returns {string} - URL completo per il download
- */
-export const getDownloadUrl = (projectId) => {
-  return `${API_ENDPOINT}/projects/${projectId}/download`;
-};
-
-/**
- * Ottiene informazioni sul file output di un progetto
- * @param {string} projectId - ID del progetto
- * @returns {Promise<Object>} - { has_output, filename, size_bytes, size_human, modified_at, download_url }
- */
-export const getProjectOutputInfo = async (projectId) => {
-  const response = await api.get(`/projects/${projectId}/output-info`);
-  return response.data;
-};
-
-/**
- * Scarica il file output di un progetto (trigger download nel browser)
- * @param {string} projectId - ID del progetto
- * @param {string} filename - Nome file opzionale per il download
- */
-export const downloadProjectOutput = async (projectId, filename = null) => {
-  try {
-    const response = await api.get(`/projects/${projectId}/download`, {
-      responseType: 'blob'
-    });
-    
-    // Estrai filename dall'header Content-Disposition o usa quello fornito
-    let downloadFilename = filename;
-    const contentDisposition = response.headers['content-disposition'];
-    if (contentDisposition) {
-      const filenameMatch = contentDisposition.match(/filename="?([^";\n]+)"?/);
-      if (filenameMatch) {
-        downloadFilename = filenameMatch[1];
-      }
-    }
-    
-    // Crea blob URL e trigger download
-    const blob = new Blob([response.data]);
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = downloadFilename || `output_${projectId}`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
-    
-    return { success: true };
-  } catch (error) {
-    console.error('Errore download:', error);
-    throw error;
-  }
-};
-
-export default api;
+export * from './connections';
+export * from './projects';
+export * from './tasks';
+export * from './enrichment';
+export * from './apiConnections';

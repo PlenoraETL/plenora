@@ -1,0 +1,793 @@
+"""
+Generatore DDL multi-database per il modulo CARICA.
+
+Architettura
+============
+Questo modulo genera le istruzioni DDL (CREATE TABLE, CREATE INDEX,
+DROP TABLE) specifiche per ogni dialetto SQL supportato.
+
+Responsabilità:
+- Mapping tipi Python/Pandas → tipi SQL nativi per ogni database
+- Generazione CREATE TABLE con colonne geometriche e SRID
+- Creazione indici spaziali (PostGIS, Oracle SDO, SQL Server, MySQL)
+- Generazione DROP TABLE IF EXISTS / TRUNCATE
+- Qualificazione nomi tabella con schema (schema.tabella)
+
+Database supportati:
+- PostgreSQL (PostGIS): geometry(tipo, SRID) + CREATE INDEX USING GIST
+- Oracle: SDO_GEOMETRY + INSERT INTO USER_SDO_GEOM_METADATA + MDSYS index
+- SQL Server: geometry + CREATE SPATIAL INDEX con bounding box
+- MySQL/MariaDB: GEOMETRY SRID N + CREATE SPATIAL INDEX
+
+Convenzione: tutti i metodi sono statici o di classe per facilitare
+il testing in isolamento. Nessun effetto collaterale.
+"""
+
+from typing import Any, Dict, List, Optional, Tuple
+
+from app.core.carica.models import ColumnMapping
+
+
+# ============================================================================
+# MAPPING TIPI PANDAS → SQL PER OGNI DATABASE
+# ============================================================================
+
+# Mappa dtype Pandas/Python → tipo SQL
+# I tipi geometrici sono gestiti separatamente tramite ColumnMapping.is_geometry
+PANDAS_TO_SQL = {
+    "postgres": {
+        "int64": "BIGINT",
+        "int32": "INTEGER",
+        "int16": "SMALLINT",
+        "int8": "SMALLINT",
+        "float64": "DOUBLE PRECISION",
+        "float32": "REAL",
+        "bool": "BOOLEAN",
+        "object": "TEXT",
+        "str": "TEXT",
+        "string": "TEXT",
+        "datetime64[ns]": "TIMESTAMP",
+        "datetime64": "TIMESTAMP",
+        "date": "DATE",
+        "category": "TEXT",
+    },
+    "oracle": {
+        "int64": "NUMBER(19)",
+        "int32": "NUMBER(10)",
+        "int16": "NUMBER(5)",
+        "int8": "NUMBER(3)",
+        "float64": "NUMBER",
+        "float32": "FLOAT",
+        "bool": "NUMBER(1)",
+        "object": "CLOB",
+        "str": "VARCHAR2(4000)",
+        "string": "VARCHAR2(4000)",
+        "datetime64[ns]": "TIMESTAMP",
+        "datetime64": "TIMESTAMP",
+        "date": "DATE",
+        "category": "VARCHAR2(4000)",
+    },
+    "mssql": {
+        "int64": "BIGINT",
+        "int32": "INT",
+        "int16": "SMALLINT",
+        "int8": "TINYINT",
+        "float64": "FLOAT",
+        "float32": "REAL",
+        "bool": "BIT",
+        "object": "NVARCHAR(MAX)",
+        "str": "NVARCHAR(MAX)",
+        "string": "NVARCHAR(MAX)",
+        "datetime64[ns]": "DATETIME2",
+        "datetime64": "DATETIME2",
+        "date": "DATE",
+        "category": "NVARCHAR(MAX)",
+    },
+    "mysql": {
+        "int64": "BIGINT",
+        "int32": "INT",
+        "int16": "SMALLINT",
+        "int8": "TINYINT",
+        "float64": "DOUBLE",
+        "float32": "FLOAT",
+        "bool": "TINYINT(1)",
+        "object": "LONGTEXT",
+        "str": "TEXT",
+        "string": "TEXT",
+        "datetime64[ns]": "DATETIME",
+        "datetime64": "DATETIME",
+        "date": "DATE",
+        "category": "TEXT",
+    },
+}
+
+# Alias per MariaDB (stessa sintassi MySQL)
+PANDAS_TO_SQL["mariadb"] = PANDAS_TO_SQL["mysql"]
+
+
+# ============================================================================
+# MAPPING TIPI URBY INTERNI → SQL
+# ============================================================================
+
+# Quando il tipo viene dal canvas (tipi interni URBY), usiamo questa mappa
+URBY_TO_SQL = {
+    "postgres": {
+        "int": "BIGINT",
+        "real": "DOUBLE PRECISION",
+        "str": "TEXT",
+        "bool": "BOOLEAN",
+        "date": "TIMESTAMP",
+    },
+    "oracle": {
+        "int": "NUMBER(19)",
+        "real": "NUMBER",
+        "str": "VARCHAR2(4000)",
+        "bool": "NUMBER(1)",
+        "date": "TIMESTAMP",
+    },
+    "mssql": {
+        "int": "BIGINT",
+        "real": "FLOAT",
+        "str": "NVARCHAR(MAX)",
+        "bool": "BIT",
+        "date": "DATETIME2",
+    },
+    "mysql": {
+        "int": "BIGINT",
+        "real": "DOUBLE",
+        "str": "TEXT",
+        "bool": "TINYINT(1)",
+        "date": "DATETIME",
+    },
+}
+URBY_TO_SQL["mariadb"] = URBY_TO_SQL["mysql"]
+
+
+class DDLGenerator:
+    """Generatore DDL multi-database.
+
+    Uso:
+        gen = DDLGenerator("postgres")
+        ddl = gen.generate_create_table(
+            schema="public",
+            table="immobili",
+            columns=[ColumnMapping(...)],
+            srid=4326
+        )
+    """
+
+    def __init__(self, db_type: str):
+        """
+        Args:
+            db_type: tipo database ("postgres", "oracle", "mssql", "mysql", "mariadb")
+        """
+        self.db_type = db_type.lower()
+        if self.db_type not in PANDAS_TO_SQL:
+            raise ValueError(f"Database type '{db_type}' non supportato. "
+                           f"Supportati: {list(PANDAS_TO_SQL.keys())}")
+
+    # ========================================================================
+    # QUALIFICAZIONE NOMI
+    # ========================================================================
+
+    def qualified_table_name(self, schema: str, table: str) -> str:
+        """Genera il nome tabella qualificato con schema.
+
+        PostgreSQL/MSSQL: "schema"."tabella"
+        Oracle: "SCHEMA"."TABELLA" (uppercase)
+        MySQL/MariaDB: `schema`.`tabella` (backtick)
+        """
+        # B-BE-60: strip spazi da schema e table per evitare nomi SQL malformati
+        table = table.strip() if table else table
+        schema = schema.strip() if schema else schema
+        if self.db_type in ("mysql", "mariadb"):
+            if schema:
+                return f"`{schema}`.`{table}`"
+            return f"`{table}`"
+        elif self.db_type == "oracle":
+            schema_upper = schema.upper() if schema else ""
+            table_upper = table.upper()
+            if schema_upper:
+                return f'"{schema_upper}"."{table_upper}"'
+            return f'"{table_upper}"'
+        else:
+            # postgres, mssql
+            if schema:
+                return f'"{schema}"."{table}"'
+            return f'"{table}"'
+
+    def quote_column(self, name: str) -> str:
+        """Quota un nome di colonna."""
+        if self.db_type in ("mysql", "mariadb"):
+            return f"`{name}`"
+        elif self.db_type == "oracle":
+            return f'"{name.upper()}"'
+        else:
+            return f'"{name}"'
+
+    # ========================================================================
+    # RISOLUZIONE TIPI
+    # ========================================================================
+
+    def resolve_column_type(self, mapping: ColumnMapping, pandas_dtype: str = "") -> str:
+        """Risolve il tipo SQL per una colonna.
+
+        Priorità:
+        1. Se mapping.dest_type è già specificato dall'utente → usa quello
+        2. Se mapping.is_geometry → tipo geometria specifico per DB
+        3. Se mapping.dest_type è un tipo URBY interno → converte
+        4. Altrimenti → usa pandas_dtype per la conversione
+
+        Args:
+            mapping: mappatura colonna
+            pandas_dtype: dtype Pandas della colonna sorgente (fallback)
+
+        Returns:
+            Tipo SQL nativo per il database.
+        """
+        # Geometria
+        if mapping.is_geometry:
+            return self._geometry_type(mapping.srid or 4326)
+
+        # Se il dtype reale del DataFrame è object (tipi misti: numeri + stringhe),
+        # forza TEXT/VARCHAR indipendentemente dal tipo dichiarato nel mapping.
+        # Caso tipico: colonna "numero" con valori 95, 100, "26A"
+        dtype_str_check = str(pandas_dtype).lower().strip()
+        if dtype_str_check == "object":
+            type_map = PANDAS_TO_SQL.get(self.db_type, PANDAS_TO_SQL["postgres"])
+            return type_map.get("object", "TEXT")
+
+        # Tipo esplicito dall'utente (già SQL)
+        if mapping.dest_type and mapping.dest_type.upper() not in (
+            "INT", "REAL", "STR", "BOOL", "DATE", "GEOMETRY", ""
+        ):
+            return mapping.dest_type
+
+        # Tipo URBY interno (dal canvas)
+        base_type = mapping.dest_type.split(":")[0].lower() if mapping.dest_type else ""
+        if base_type in URBY_TO_SQL.get(self.db_type, {}):
+            return URBY_TO_SQL[self.db_type][base_type]
+
+        # Fallback: pandas dtype
+        dtype_str = str(pandas_dtype).lower()
+        type_map = PANDAS_TO_SQL.get(self.db_type, PANDAS_TO_SQL["postgres"])
+
+        # Prova match esatto, poi parziale
+        if dtype_str in type_map:
+            return type_map[dtype_str]
+        for key, val in type_map.items():
+            if key in dtype_str:
+                return val
+
+        # Default: TEXT/CLOB/NVARCHAR(MAX)
+        return type_map.get("object", "TEXT")
+
+    def _geometry_type(self, srid: int) -> str:
+        """Genera il tipo geometria specifico per database.
+
+        PostgreSQL (PostGIS): geometry(Geometry, 4326)
+        Oracle: SDO_GEOMETRY (SRID gestito via metadata)
+        SQL Server: geometry (SRID gestito nel valore)
+        MySQL: GEOMETRY SRID 4326 (MySQL 8.0+)
+        """
+        if self.db_type == "postgres":
+            return f"geometry(Geometry, {srid})"
+        elif self.db_type == "oracle":
+            return "SDO_GEOMETRY"
+        elif self.db_type == "mssql":
+            return "geometry"
+        elif self.db_type in ("mysql", "mariadb"):
+            return f"GEOMETRY /*!80003 SRID {srid} */"
+        return "geometry"
+
+    # ========================================================================
+    # GENERAZIONE CREATE TABLE
+    # ========================================================================
+
+    def generate_create_table(
+        self,
+        schema: str,
+        table: str,
+        columns: List[ColumnMapping],
+        pandas_dtypes: Optional[Dict[str, str]] = None,
+    ) -> str:
+        """Genera l'istruzione CREATE TABLE completa.
+
+        Args:
+            schema: nome schema destinazione
+            table: nome tabella destinazione
+            columns: lista mappature colonne
+            pandas_dtypes: dizionario {col_name: pandas_dtype} per fallback tipi
+
+        Returns:
+            Stringa SQL CREATE TABLE.
+        """
+        pandas_dtypes = pandas_dtypes or {}
+        full_name = self.qualified_table_name(schema, table)
+
+        col_defs = []
+        for col in columns:
+            if col.skip:
+                continue
+            quoted_name = self.quote_column(col.dest_column)
+            dtype = str(pandas_dtypes.get(col.source_column, "") or pandas_dtypes.get(col.dest_column, ""))
+            sql_type = self.resolve_column_type(col, dtype)
+            col_defs.append(f"    {quoted_name} {sql_type}")
+
+        cols_sql = ",\n".join(col_defs)
+        return f"CREATE TABLE {full_name} (\n{cols_sql}\n)"
+
+    # ========================================================================
+    # GENERAZIONE INDICI SPAZIALI
+    # ========================================================================
+
+    def generate_spatial_index(
+        self,
+        schema: str,
+        table: str,
+        geometry_column: str,
+        srid: int = 4326,
+    ) -> List[str]:
+        """Genera le istruzioni per creare l'indice spaziale.
+
+        Ogni database ha la sua sintassi specifica. Può restituire
+        più istruzioni (es. Oracle: metadata + index).
+
+        Returns:
+            Lista di istruzioni SQL da eseguire in ordine.
+        """
+        # B-BE-60: strip spazi da table/schema/geometry_column per evitare
+        # nomi indice e tabella malformati (es. "idx_test_c01 _geometry_spatial")
+        table = table.strip()
+        schema = schema.strip() if schema else schema
+        geometry_column = geometry_column.strip()
+        full_name = self.qualified_table_name(schema, table)
+        geom_col = self.quote_column(geometry_column)
+        index_name = f"idx_{table}_{geometry_column}_spatial"
+
+        if self.db_type == "postgres":
+            return [
+                f"CREATE INDEX {index_name} ON {full_name} USING GIST ({geom_col})"
+            ]
+
+        elif self.db_type == "oracle":
+            # Oracle richiede: 1) INSERT metadata, 2) CREATE INDEX
+            schema_upper = schema.upper() if schema else "USER"
+            table_upper = table.upper()
+            geom_upper = geometry_column.upper()
+            return [
+                # Metadata per Oracle Spatial
+                f"""INSERT INTO USER_SDO_GEOM_METADATA (TABLE_NAME, COLUMN_NAME, DIMINFO, SRID)
+VALUES (
+    '{table_upper}',
+    '{geom_upper}',
+    SDO_DIM_ARRAY(
+        SDO_DIM_ELEMENT('X', -180, 180, 0.005),
+        SDO_DIM_ELEMENT('Y', -90, 90, 0.005)
+    ),
+    {srid}
+)""",
+                # Index
+                f"""CREATE INDEX {index_name} ON {full_name}({geom_col})
+INDEXTYPE IS MDSYS.SPATIAL_INDEX""",
+            ]
+
+        elif self.db_type == "mssql":
+            return [
+                f"""CREATE SPATIAL INDEX {index_name}
+ON {full_name}({geom_col})
+WITH (
+    BOUNDING_BOX = (xmin=-180, ymin=-90, xmax=180, ymax=90)
+)"""
+            ]
+
+        elif self.db_type in ("mysql", "mariadb"):
+            return [
+                f"CREATE SPATIAL INDEX {index_name} ON {full_name}({geom_col})"
+            ]
+
+        return []
+
+    # ========================================================================
+    # GENERAZIONE DROP / TRUNCATE
+    # ========================================================================
+
+    def generate_drop_table(self, schema: str, table: str) -> str:
+        """Genera DROP TABLE IF EXISTS."""
+        full_name = self.qualified_table_name(schema, table)
+
+        if self.db_type == "oracle":
+            # Oracle non supporta IF EXISTS prima di 23c
+            table_upper = table.upper()
+            schema_check = f"AND owner = '{schema.upper()}'" if schema else ""
+            return f"""
+BEGIN
+    EXECUTE IMMEDIATE 'DROP TABLE {full_name} CASCADE CONSTRAINTS';
+EXCEPTION
+    WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN RAISE; END IF;
+END;"""
+        else:
+            return f"DROP TABLE IF EXISTS {full_name}"
+
+    def generate_truncate(self, schema: str, table: str) -> str:
+        """Genera TRUNCATE TABLE."""
+        full_name = self.qualified_table_name(schema, table)
+        return f"TRUNCATE TABLE {full_name}"
+
+    # ========================================================================
+    # GENERAZIONE INSERT
+    # ========================================================================
+
+    def generate_insert(
+        self,
+        schema: str,
+        table: str,
+        columns: List[ColumnMapping],
+    ) -> Tuple[str, List[str]]:
+        """Genera l'istruzione INSERT INTO con parametri preparati.
+
+        Returns:
+            Tupla (sql_template, param_names) dove sql_template contiene
+            placeholder (:param_name) per SQLAlchemy text().
+        """
+        full_name = self.qualified_table_name(schema, table)
+
+        active_cols = [c for c in columns if not c.skip]
+        col_names = [self.quote_column(c.dest_column) for c in active_cols]
+        param_names = [c.dest_column for c in active_cols]
+
+        placeholders = []
+        for col in active_cols:
+            if col.is_geometry:
+                placeholders.append(
+                    self._geometry_placeholder(col.dest_column, col.srid or 4326)
+                )
+            else:
+                placeholders.append(f":{col.dest_column}")
+
+        cols_sql = ", ".join(col_names)
+        vals_sql = ", ".join(placeholders)
+
+        sql = f"INSERT INTO {full_name} ({cols_sql}) VALUES ({vals_sql})"
+        return sql, param_names
+
+    def _geometry_placeholder(self, param_name: str, srid: int) -> str:
+        """Genera il placeholder per un valore geometria.
+
+        Converte WKT → tipo geometria nativo del database.
+        Il valore passato sarà sempre WKT (es. "POINT(12.5 41.9)").
+
+        PostgreSQL: ST_GeomFromText(:geom, 4326)
+        Oracle: SDO_GEOMETRY(:geom, 4326)
+        SQL Server: geometry::STGeomFromText(:geom, 4326)
+        MySQL: ST_GeomFromText(:geom, 4326)
+        """
+        if self.db_type == "postgres":
+            return f"ST_GeomFromText(:{param_name}, {srid})"
+        elif self.db_type == "oracle":
+            return f"SDO_GEOMETRY(:{param_name}, {srid})"
+        elif self.db_type == "mssql":
+            return f"geometry::STGeomFromText(:{param_name}, {srid})"
+        elif self.db_type in ("mysql", "mariadb"):
+            return f"ST_GeomFromText(:{param_name}, {srid})"
+        return f":{param_name}"
+
+    # ========================================================================
+    # GENERAZIONE UPSERT (multi-database)
+    # ========================================================================
+
+    def generate_upsert(
+        self,
+        schema: str,
+        table: str,
+        columns: List[ColumnMapping],
+        match_columns: List[str],
+        update_columns: Optional[List[str]] = None,
+    ) -> Tuple[str, List[str]]:
+        """Genera l'istruzione UPSERT specifica per database.
+
+        PostgreSQL: INSERT ... ON CONFLICT ... DO UPDATE
+        Oracle: MERGE INTO ... USING DUAL ON ... WHEN MATCHED/NOT MATCHED
+        SQL Server: MERGE INTO ... USING (VALUES ...) ON ... WHEN MATCHED/NOT MATCHED
+        MySQL: INSERT ... ON DUPLICATE KEY UPDATE
+
+        Args:
+            schema: schema destinazione
+            table: tabella destinazione
+            columns: mappature colonne
+            match_columns: colonne per il match (conflict/merge key)
+            update_columns: colonne da aggiornare (vuoto = tutte non-match)
+
+        Returns:
+            Tupla (sql_template, param_names) con placeholder SQLAlchemy.
+        """
+        full_name = self.qualified_table_name(schema, table)
+        active_cols = [c for c in columns if not c.skip]
+        col_names = [self.quote_column(c.dest_column) for c in active_cols]
+        param_names = [c.dest_column for c in active_cols]
+
+        # Colonne da aggiornare (tutte tranne match, o lista esplicita)
+        if update_columns:
+            update_cols = [c for c in active_cols
+                         if c.dest_column in update_columns]
+        else:
+            update_cols = [c for c in active_cols
+                         if c.dest_column not in match_columns]
+
+        if self.db_type == "postgres":
+            return self._upsert_postgres(
+                full_name, active_cols, match_columns, update_cols, param_names
+            )
+        elif self.db_type == "oracle":
+            return self._upsert_oracle(
+                full_name, active_cols, match_columns, update_cols, param_names
+            )
+        elif self.db_type == "mssql":
+            return self._upsert_mssql(
+                full_name, active_cols, match_columns, update_cols, param_names
+            )
+        elif self.db_type in ("mysql", "mariadb"):
+            return self._upsert_mysql(
+                full_name, active_cols, match_columns, update_cols, param_names
+            )
+        else:
+            raise ValueError(f"UPSERT non supportato per {self.db_type}")
+
+    def _upsert_postgres(self, full_name, cols, match_cols, update_cols, params):
+        """INSERT ... ON CONFLICT (match) DO UPDATE SET ..."""
+        col_names = ", ".join(self.quote_column(c.dest_column) for c in cols)
+        placeholders = []
+        for c in cols:
+            if c.is_geometry:
+                placeholders.append(self._geometry_placeholder(c.dest_column, c.srid or 4326))
+            else:
+                placeholders.append(f":{c.dest_column}")
+        vals = ", ".join(placeholders)
+
+        conflict_keys = ", ".join(self.quote_column(m) for m in match_cols)
+        updates = ", ".join(
+            f"{self.quote_column(c.dest_column)} = EXCLUDED.{self.quote_column(c.dest_column)}"
+            for c in update_cols
+        )
+
+        sql = (
+            f"INSERT INTO {full_name} ({col_names}) VALUES ({vals}) "
+            f"ON CONFLICT ({conflict_keys}) DO UPDATE SET {updates}"
+        )
+        return sql, params
+
+    def _upsert_oracle(self, full_name, cols, match_cols, update_cols, params):
+        """MERGE INTO ... USING DUAL ON ... WHEN MATCHED/NOT MATCHED."""
+        match_cond = " AND ".join(
+            f"dest.{self.quote_column(m)} = :{m}" for m in match_cols
+        )
+        update_set = ", ".join(
+            f"dest.{self.quote_column(c.dest_column)} = :{c.dest_column}"
+            for c in update_cols
+        )
+        insert_cols = ", ".join(self.quote_column(c.dest_column) for c in cols)
+        insert_vals = []
+        for c in cols:
+            if c.is_geometry:
+                insert_vals.append(self._geometry_placeholder(c.dest_column, c.srid or 4326))
+            else:
+                insert_vals.append(f":{c.dest_column}")
+        insert_vals_sql = ", ".join(insert_vals)
+
+        sql = f"""MERGE INTO {full_name} dest
+USING DUAL ON ({match_cond})
+WHEN MATCHED THEN UPDATE SET {update_set}
+WHEN NOT MATCHED THEN INSERT ({insert_cols}) VALUES ({insert_vals_sql})"""
+        return sql, params
+
+    def _upsert_mssql(self, full_name, cols, match_cols, update_cols, params):
+        """MERGE INTO ... USING (VALUES ...) ON ... WHEN MATCHED/NOT MATCHED."""
+        src_cols = ", ".join(f"src.{self.quote_column(c.dest_column)}" for c in cols)
+        val_placeholders = []
+        for c in cols:
+            if c.is_geometry:
+                val_placeholders.append(self._geometry_placeholder(c.dest_column, c.srid or 4326))
+            else:
+                val_placeholders.append(f":{c.dest_column}")
+        vals = ", ".join(val_placeholders)
+        src_col_aliases = ", ".join(self.quote_column(c.dest_column) for c in cols)
+
+        match_cond = " AND ".join(
+            f"target.{self.quote_column(m)} = src.{self.quote_column(m)}"
+            for m in match_cols
+        )
+        update_set = ", ".join(
+            f"target.{self.quote_column(c.dest_column)} = src.{self.quote_column(c.dest_column)}"
+            for c in update_cols
+        )
+        insert_cols = ", ".join(self.quote_column(c.dest_column) for c in cols)
+
+        sql = f"""MERGE INTO {full_name} AS target
+USING (SELECT {vals}) AS src({src_col_aliases})
+ON ({match_cond})
+WHEN MATCHED THEN UPDATE SET {update_set}
+WHEN NOT MATCHED THEN INSERT ({insert_cols}) VALUES ({src_cols});"""
+        return sql, params
+
+    def _upsert_mysql(self, full_name, cols, match_cols, update_cols, params):
+        """INSERT ... ON DUPLICATE KEY UPDATE ..."""
+        col_names = ", ".join(self.quote_column(c.dest_column) for c in cols)
+        placeholders = []
+        for c in cols:
+            if c.is_geometry:
+                placeholders.append(self._geometry_placeholder(c.dest_column, c.srid or 4326))
+            else:
+                placeholders.append(f":{c.dest_column}")
+        vals = ", ".join(placeholders)
+
+        updates = ", ".join(
+            f"{self.quote_column(c.dest_column)} = VALUES({self.quote_column(c.dest_column)})"
+            for c in update_cols
+        )
+
+        sql = (
+            f"INSERT INTO {full_name} ({col_names}) VALUES ({vals}) "
+            f"ON DUPLICATE KEY UPDATE {updates}"
+        )
+        return sql, params
+
+    # ========================================================================
+    # GENERAZIONE UPDATE
+    # ========================================================================
+
+    def generate_update(
+        self,
+        schema: str,
+        table: str,
+        update_columns: List[ColumnMapping],
+        match_columns: List[str],
+    ) -> Tuple[str, List[str]]:
+        """Genera UPDATE ... SET ... WHERE (match).
+
+        Args:
+            schema: schema destinazione
+            table: tabella destinazione
+            update_columns: colonne da aggiornare
+            match_columns: colonne per il WHERE
+
+        Returns:
+            Tupla (sql_template, param_names).
+        """
+        full_name = self.qualified_table_name(schema, table)
+
+        set_parts = []
+        params = []
+        for col in update_columns:
+            if col.is_geometry:
+                set_parts.append(
+                    f"{self.quote_column(col.dest_column)} = "
+                    f"{self._geometry_placeholder(col.dest_column, col.srid or 4326)}"
+                )
+            else:
+                set_parts.append(
+                    f"{self.quote_column(col.dest_column)} = :{col.dest_column}"
+                )
+            params.append(col.dest_column)
+
+        where_parts = []
+        for m in match_columns:
+            where_parts.append(f"{self.quote_column(m)} = :match_{m}")
+            params.append(f"match_{m}")
+
+        set_sql = ", ".join(set_parts)
+        where_sql = " AND ".join(where_parts)
+
+        sql = f"UPDATE {full_name} SET {set_sql} WHERE {where_sql}"
+        return sql, params
+
+    # ========================================================================
+    # HELPER: LISTA SCHEMA E TABELLE
+    # ========================================================================
+
+    def query_list_schemas(self) -> str:
+        """Genera la query per elencare gli schema disponibili."""
+        if self.db_type == "postgres":
+            return """
+                SELECT schema_name
+                FROM information_schema.schemata
+                WHERE schema_name NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+                ORDER BY schema_name
+            """
+        elif self.db_type == "oracle":
+            return "SELECT username FROM all_users ORDER BY username"
+        elif self.db_type == "mssql":
+            return """
+                SELECT schema_name
+                FROM information_schema.schemata
+                WHERE schema_name NOT IN ('sys', 'INFORMATION_SCHEMA', 'guest')
+                ORDER BY schema_name
+            """
+        elif self.db_type in ("mysql", "mariadb"):
+            return "SHOW DATABASES"
+        return ""
+
+    def query_list_tables(self, schema: str) -> str:
+        """Genera la query per elencare le tabelle in uno schema."""
+        if self.db_type == "postgres":
+            return f"""
+                SELECT table_name
+                FROM information_schema.tables
+                WHERE table_schema = '{schema}'
+                  AND table_type = 'BASE TABLE'
+                ORDER BY table_name
+            """
+        elif self.db_type == "oracle":
+            return f"""
+                SELECT table_name
+                FROM all_tables
+                WHERE owner = '{schema.upper()}'
+                ORDER BY table_name
+            """
+        elif self.db_type == "mssql":
+            return f"""
+                SELECT table_name
+                FROM information_schema.tables
+                WHERE table_schema = '{schema}'
+                  AND table_type = 'BASE TABLE'
+                ORDER BY table_name
+            """
+        elif self.db_type in ("mysql", "mariadb"):
+            return f"SHOW TABLES FROM `{schema}`"
+        return ""
+
+    def query_table_exists(self, schema: str, table: str) -> str:
+        """Genera la query per verificare se una tabella esiste."""
+        if self.db_type == "postgres":
+            return f"""
+                SELECT COUNT(*) FROM information_schema.tables
+                WHERE table_schema = '{schema}' AND table_name = '{table}'
+            """
+        elif self.db_type == "oracle":
+            return f"""
+                SELECT COUNT(*) FROM all_tables
+                WHERE owner = '{schema.upper()}' AND table_name = '{table.upper()}'
+            """
+        elif self.db_type == "mssql":
+            return f"""
+                SELECT COUNT(*) FROM information_schema.tables
+                WHERE table_schema = '{schema}' AND table_name = '{table}'
+            """
+        elif self.db_type in ("mysql", "mariadb"):
+            return f"""
+                SELECT COUNT(*) FROM information_schema.tables
+                WHERE table_schema = '{schema}' AND table_name = '{table}'
+            """
+        return "SELECT 0"
+
+    def query_table_columns(self, schema: str, table: str) -> str:
+        """Genera la query per elencare le colonne di una tabella."""
+        if self.db_type == "postgres":
+            return f"""
+                SELECT column_name, data_type
+                FROM information_schema.columns
+                WHERE table_schema = '{schema}' AND table_name = '{table}'
+                ORDER BY ordinal_position
+            """
+        elif self.db_type == "oracle":
+            return f"""
+                SELECT column_name, data_type
+                FROM all_tab_columns
+                WHERE owner = '{schema.upper()}' AND table_name = '{table.upper()}'
+                ORDER BY column_id
+            """
+        elif self.db_type == "mssql":
+            return f"""
+                SELECT column_name, data_type
+                FROM information_schema.columns
+                WHERE table_schema = '{schema}' AND table_name = '{table}'
+                ORDER BY ordinal_position
+            """
+        elif self.db_type in ("mysql", "mariadb"):
+            return f"""
+                SELECT column_name, data_type
+                FROM information_schema.columns
+                WHERE table_schema = '{schema}' AND table_name = '{table}'
+                ORDER BY ordinal_position
+            """
+        return ""

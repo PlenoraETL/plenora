@@ -11,35 +11,11 @@
  * Usa axios per consistenza con client.js
  */
 
-import axios from 'axios';
-import { API_ENDPOINT, API_TIMEOUT } from './config';
-
-// Client axios dedicato per files API
-const filesApi = axios.create({
-  baseURL: `${API_ENDPOINT}/files`,
-  timeout: API_TIMEOUT,
-});
-
-// Interceptor per error handling consistente
-filesApi.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    const message = 
-      error.response?.data?.detail || 
-      error.response?.data?.message || 
-      error.message || 
-      'Errore di comunicazione con il server';
-    
-    console.error('[Files API Error]', {
-      url: error.config?.url,
-      method: error.config?.method,
-      status: error.response?.status,
-      message
-    });
-    
-    return Promise.reject(new Error(message));
-  }
-);
+/**
+ * Usa http (istanza axios condivisa) invece di un client dedicato.
+ * Auth, error handling e logout 401 sono già gestiti dagli interceptor di http.js.
+ */
+import http from './http';
 
 /**
  * Upload un nuovo file
@@ -66,9 +42,7 @@ export const uploadFile = async (file, name, description = '', layer = '', sheet
     formData.append('srid', String(srid));
   }
 
-  const response = await filesApi.post('/upload', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
-  });
+  const response = await http.post('/files/upload', formData);
 
   return response.data;
 };
@@ -78,7 +52,7 @@ export const uploadFile = async (file, name, description = '', layer = '', sheet
  * @returns {Promise<{files: Array}>}
  */
 export const getFiles = async () => {
-  const response = await filesApi.get('/');
+  const response = await http.get('/files/');
   return response.data;
 };
 
@@ -88,7 +62,7 @@ export const getFiles = async () => {
  * @returns {Promise<Object>} FileSource
  */
 export const getFile = async (fileId) => {
-  const response = await filesApi.get(`/${fileId}`);
+  const response = await http.get(`/files/${fileId}`);
   return response.data;
 };
 
@@ -98,8 +72,24 @@ export const getFile = async (fileId) => {
  * @param {Object} data - Dati da aggiornare {name, description, layer, sheet}
  * @returns {Promise<Object>} FileSource aggiornato
  */
-export const updateFile = async (fileId, data) => {
-  const response = await filesApi.put(`/${fileId}`, data);
+/**
+ * Upload file multi-layer (GPKG, GDB): crea N FileSource separati, uno per layer.
+ * @param {File} file - File da uploadare
+ * @param {string} name - Nome base (ogni FileSource si chiamerà name_layername)
+ * @param {string} description - Descrizione opzionale
+ * @param {Array<{layer: string, selected_columns: string[]|null}>} layersConfig - Configurazione per ogni layer
+ * @param {number|null} srid - SRID opzionale
+ * @returns {Promise<Array>} Lista di FileSource creati
+ */
+export const uploadMultiLayer = async (file, name, description = '', layersConfig = [], srid = null) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('name', name);
+  formData.append('description', description);
+  formData.append('layers_config', JSON.stringify(layersConfig));
+  if (srid) formData.append('srid', String(srid));
+
+  const response = await http.post('/files/upload-multi-layer', formData);
   return response.data;
 };
 
@@ -109,7 +99,7 @@ export const updateFile = async (fileId, data) => {
  * @returns {Promise<Object>}
  */
 export const deleteFile = async (fileId) => {
-  const response = await filesApi.delete(`/${fileId}`);
+  const response = await http.delete(`/files/${fileId}`);
   return response.data;
 };
 
@@ -119,7 +109,7 @@ export const deleteFile = async (fileId) => {
  * @returns {Promise<{layers: Array, sheets: Array}>}
  */
 export const getFileLayers = async (fileId) => {
-  const response = await filesApi.get(`/${fileId}/layers`);
+  const response = await http.get(`/files/${fileId}/layers`);
   return response.data;
 };
 
@@ -130,19 +120,9 @@ export const getFileLayers = async (fileId) => {
  * @returns {Promise<{columns: Array, rows: Array, total_count: number}>}
  */
 export const getFilePreview = async (fileId, limit = 100) => {
-  const response = await filesApi.get(`/${fileId}/preview`, {
+  const response = await http.get(`/files/${fileId}/preview`, {
     params: { limit }
   });
-  return response.data;
-};
-
-/**
- * Ottieni conteggio righe
- * @param {string} fileId - ID del file
- * @returns {Promise<{row_count: number}>}
- */
-export const getFileCount = async (fileId) => {
-  const response = await filesApi.get(`/${fileId}/count`);
   return response.data;
 };
 
@@ -152,13 +132,13 @@ export const getFileCount = async (fileId) => {
  * @param {File} file - File da analizzare
  * @returns {Promise<{columns: Array, row_count: number}>}
  */
-export const previewFileTemp = async (file) => {
+export const previewFileTemp = async (file, layer = null, sheet = null) => {
   const formData = new FormData();
   formData.append('file', file);
+  if (layer) formData.append('layer', layer);
+  if (sheet) formData.append('sheet', sheet);
 
-  const response = await filesApi.post('/preview-temp', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
-  });
+  const response = await http.post('/files/preview-temp', formData);
 
   return response.data;
 };
@@ -167,10 +147,8 @@ export default {
   uploadFile,
   getFiles,
   getFile,
-  updateFile,
   deleteFile,
   getFileLayers,
   getFilePreview,
-  getFileCount,
   previewFileTemp,
 };

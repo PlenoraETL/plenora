@@ -1,0 +1,655 @@
+{
+  "version": "1.0",
+  "updated_at": "2026-01-26",
+  "templates": [
+    {
+      "_meta": {
+        "id": "nominatim-geocoding",
+        "category": "geocoding",
+        "tags": [
+          "geocoding",
+          "openstreetmap",
+          "free",
+          "coordinates"
+        ]
+      },
+      "display": {
+        "name": "Nominatim - Geocoding",
+        "short_description": "Converte indirizzi in coordinate GPS (OpenStreetMap)",
+        "icon": "🌍",
+        "docs_url": "https://nominatim.org/release-docs/latest/api/Search/",
+        "pricing": "Gratuito (1 req/sec)",
+        "limitations": [
+          "Rate limit 1 richiesta/secondo",
+          "Richiede User-Agent"
+        ]
+      },
+      "config": {
+        "api_type": "enricher",
+        "endpoint": {
+          "url": "https://nominatim.openstreetmap.org/search",
+          "method": "GET"
+        },
+        "auth": {
+          "type": "none"
+        },
+        "static_parameters": {
+          "format": "json",
+          "limit": "1"
+        },
+        "options": {
+          "rate_limit": 1,
+          "timeout": 30,
+          "retry_count": 3
+        }
+      },
+      "parameters": [
+        {
+          "name": "q",
+          "type": "string",
+          "required": true,
+          "description": "Indirizzo da geocodificare",
+          "example": "Via Roma 1, Milano"
+        }
+      ],
+      "output_mapping": [
+        {
+          "path": "[0].display_name",
+          "column": "display_name",
+          "description": "Indirizzo completo formattato"
+        },
+        {
+          "path": "[0].lat",
+          "column": "lat",
+          "description": "Latitudine"
+        },
+        {
+          "path": "[0].lon",
+          "column": "lon",
+          "description": "Longitudine"
+        }
+      ]
+    },
+    {
+      "_meta": {
+        "id": "nominatim-reverse",
+        "category": "geocoding",
+        "tags": [
+          "geocoding",
+          "reverse",
+          "openstreetmap",
+          "free"
+        ]
+      },
+      "display": {
+        "name": "Nominatim - Reverse Geocoding",
+        "short_description": "Converte coordinate GPS in indirizzi",
+        "icon": "📍",
+        "docs_url": "https://nominatim.org/release-docs/latest/api/Reverse/",
+        "pricing": "Gratuito (1 req/sec)",
+        "limitations": [
+          "Rate limit 1 richiesta/secondo"
+        ]
+      },
+      "config": {
+        "api_type": "enricher",
+        "endpoint": {
+          "url": "https://nominatim.openstreetmap.org/reverse",
+          "method": "GET"
+        },
+        "auth": {
+          "type": "none"
+        },
+        "static_parameters": {
+          "format": "json"
+        },
+        "options": {
+          "rate_limit": 1,
+          "timeout": 30,
+          "retry_count": 3
+        }
+      },
+      "parameters": [
+        {
+          "name": "lat",
+          "type": "number",
+          "required": true,
+          "description": "Latitudine"
+        },
+        {
+          "name": "lon",
+          "type": "number",
+          "required": true,
+          "description": "Longitudine"
+        }
+      ],
+      "output_mapping": [
+        {
+          "path": "display_name",
+          "column": "indirizzo",
+          "description": "Indirizzo completo"
+        },
+        {
+          "path": "address.road",
+          "column": "via",
+          "description": "Nome via"
+        },
+        {
+          "path": "address.house_number",
+          "column": "civico",
+          "description": "Numero civico"
+        },
+        {
+          "path": "address.city",
+          "column": "citta",
+          "description": "Città"
+        },
+        {
+          "path": "address.postcode",
+          "column": "cap",
+          "description": "CAP"
+        }
+      ]
+    },
+    {
+      "_meta": {
+        "id": "openmeteo-weather",
+        "category": "custom",
+        "tags": [
+          "weather",
+          "meteo",
+          "free",
+          "forecast"
+        ]
+      },
+      "display": {
+        "name": "Open-Meteo - Meteo Attuale",
+        "short_description": "Ottiene dati meteo per una posizione GPS",
+        "icon": "🌤️",
+        "docs_url": "https://open-meteo.com/en/docs",
+        "pricing": "Gratuito (10000 req/giorno)",
+        "limitations": []
+      },
+      "config": {
+        "api_type": "enricher",
+        "endpoint": {
+          "url": "https://api.open-meteo.com/v1/forecast",
+          "method": "GET"
+        },
+        "auth": {
+          "type": "none"
+        },
+        "static_parameters": {
+          "current_weather": "true",
+          "timezone": "Europe/Rome"
+        },
+        "options": {
+          "rate_limit": 10,
+          "timeout": 30,
+          "retry_count": 3
+        }
+      },
+      "parameters": [
+        {
+          "name": "latitude",
+          "type": "number",
+          "required": true,
+          "description": "Latitudine"
+        },
+        {
+          "name": "longitude",
+          "type": "number",
+          "required": true,
+          "description": "Longitudine"
+        }
+      ],
+      "output_mapping": [
+        {
+          "path": "current_weather.temperature",
+          "column": "temperatura_c",
+          "description": "Temperatura in °C"
+        },
+        {
+          "path": "current_weather.windspeed",
+          "column": "vento_kmh",
+          "description": "Velocità vento km/h"
+        },
+        {
+          "path": "current_weather.winddirection",
+          "column": "direzione_vento",
+          "description": "Direzione vento in gradi"
+        },
+        {
+          "path": "current_weather.weathercode",
+          "column": "codice_meteo",
+          "description": "Codice condizione meteo"
+        }
+      ]
+    },
+    {
+      "_meta": {
+        "id": "openmeteo-elevation",
+        "category": "custom",
+        "tags": [
+          "elevation",
+          "altitude",
+          "dem",
+          "free"
+        ]
+      },
+      "display": {
+        "name": "Open-Meteo - Elevazione",
+        "short_description": "Ottiene altitudine per coordinate GPS",
+        "icon": "⛰️",
+        "docs_url": "https://open-meteo.com/en/docs/elevation-api",
+        "pricing": "Gratuito",
+        "limitations": []
+      },
+      "config": {
+        "api_type": "enricher",
+        "endpoint": {
+          "url": "https://api.open-meteo.com/v1/elevation",
+          "method": "GET"
+        },
+        "auth": {
+          "type": "none"
+        },
+        "static_parameters": {},
+        "options": {
+          "rate_limit": 10,
+          "timeout": 30,
+          "retry_count": 3
+        }
+      },
+      "parameters": [
+        {
+          "name": "latitude",
+          "type": "number",
+          "required": true,
+          "description": "Latitudine"
+        },
+        {
+          "name": "longitude",
+          "type": "number",
+          "required": true,
+          "description": "Longitudine"
+        }
+      ],
+      "output_mapping": [
+        {
+          "path": "elevation[0]",
+          "column": "elevazione_m",
+          "description": "Altitudine in metri"
+        }
+      ]
+    },
+    {
+      "_meta": {
+        "id": "ipapi-geolocation",
+        "category": "geocoding",
+        "tags": [
+          "ip",
+          "geolocation",
+          "free"
+        ]
+      },
+      "display": {
+        "name": "IP-API - Geolocalizzazione IP",
+        "short_description": "Ottiene posizione geografica da indirizzo IP",
+        "icon": "🌐",
+        "docs_url": "https://ip-api.com/docs/",
+        "pricing": "Gratuito (45 req/min)",
+        "limitations": [
+          "Solo HTTP (non HTTPS) per versione gratuita"
+        ]
+      },
+      "config": {
+        "api_type": "enricher",
+        "endpoint": {
+          "url": "http://ip-api.com/json/{ip}",
+          "method": "GET"
+        },
+        "auth": {
+          "type": "none"
+        },
+        "static_parameters": {},
+        "options": {
+          "rate_limit": 0.75,
+          "timeout": 30,
+          "retry_count": 3
+        }
+      },
+      "parameters": [
+        {
+          "name": "ip",
+          "type": "string",
+          "required": true,
+          "description": "Indirizzo IP (es: 8.8.8.8)"
+        }
+      ],
+      "output_mapping": [
+        {
+          "path": "country",
+          "column": "paese",
+          "description": "Paese"
+        },
+        {
+          "path": "regionName",
+          "column": "regione",
+          "description": "Regione"
+        },
+        {
+          "path": "city",
+          "column": "citta",
+          "description": "Città"
+        },
+        {
+          "path": "lat",
+          "column": "lat",
+          "description": "Latitudine"
+        },
+        {
+          "path": "lon",
+          "column": "lon",
+          "description": "Longitudine"
+        },
+        {
+          "path": "isp",
+          "column": "isp",
+          "description": "Provider Internet"
+        }
+      ]
+    },
+    {
+      "_meta": {
+        "id": "osrm-routing",
+        "category": "routing",
+        "tags": [
+          "routing",
+          "distance",
+          "driving",
+          "free"
+        ]
+      },
+      "display": {
+        "name": "OSRM - Calcolo Percorso",
+        "short_description": "Calcola distanza e tempo tra due punti",
+        "icon": "🚗",
+        "docs_url": "http://project-osrm.org/docs/v5.24.0/api/",
+        "pricing": "Demo server gratuito",
+        "limitations": [
+          "Server demo, usare con cautela in produzione"
+        ]
+      },
+      "config": {
+        "api_type": "enricher",
+        "endpoint": {
+          "url": "http://router.project-osrm.org/route/v1/driving/{coordinates}",
+          "method": "GET"
+        },
+        "auth": {
+          "type": "none"
+        },
+        "static_parameters": {
+          "overview": "false"
+        },
+        "options": {
+          "rate_limit": 1,
+          "timeout": 60,
+          "retry_count": 2
+        }
+      },
+      "parameters": [
+        {
+          "name": "coordinates",
+          "type": "string",
+          "required": true,
+          "description": "Coordinate formato: lon1,lat1;lon2,lat2"
+        }
+      ],
+      "output_mapping": [
+        {
+          "path": "routes[0].distance",
+          "column": "distanza_m",
+          "description": "Distanza in metri"
+        },
+        {
+          "path": "routes[0].duration",
+          "column": "durata_sec",
+          "description": "Durata in secondi"
+        }
+      ]
+    },
+    {
+      "_meta": {
+        "id": "restcountries",
+        "category": "custom",
+        "tags": [
+          "countries",
+          "reference",
+          "free",
+          "population"
+        ]
+      },
+      "display": {
+        "name": "REST Countries - Info Paese",
+        "short_description": "Informazioni su un paese (popolazione, capitale)",
+        "icon": "🏳️",
+        "docs_url": "https://restcountries.com/",
+        "pricing": "Gratuito",
+        "limitations": []
+      },
+      "config": {
+        "api_type": "enricher",
+        "endpoint": {
+          "url": "https://restcountries.com/v3.1/name/{name}",
+          "method": "GET"
+        },
+        "auth": {
+          "type": "none"
+        },
+        "static_parameters": {
+          "fullText": "true"
+        },
+        "options": {
+          "rate_limit": 10,
+          "timeout": 30,
+          "retry_count": 3
+        }
+      },
+      "parameters": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "description": "Nome del paese (in inglese)"
+        }
+      ],
+      "output_mapping": [
+        {
+          "path": "[0].capital[0]",
+          "column": "capitale",
+          "description": "Nome capitale"
+        },
+        {
+          "path": "[0].population",
+          "column": "popolazione",
+          "description": "Popolazione"
+        },
+        {
+          "path": "[0].area",
+          "column": "area_km2",
+          "description": "Area in km²"
+        },
+        {
+          "path": "[0].region",
+          "column": "regione_mondo",
+          "description": "Regione del mondo"
+        },
+        {
+          "path": "[0].flag",
+          "column": "bandiera_emoji",
+          "description": "Emoji bandiera"
+        }
+      ]
+    },
+    {
+      "_meta": {
+        "id": "zippopotam-cap",
+        "category": "custom",
+        "tags": [
+          "cap",
+          "postcode",
+          "italy",
+          "free"
+        ]
+      },
+      "display": {
+        "name": "Zippopotam - Info CAP Italia",
+        "short_description": "Informazioni su un codice postale italiano",
+        "icon": "📮",
+        "docs_url": "https://api.zippopotam.us/",
+        "pricing": "Gratuito",
+        "limitations": []
+      },
+      "config": {
+        "api_type": "enricher",
+        "endpoint": {
+          "url": "https://api.zippopotam.us/it/{postcode}",
+          "method": "GET"
+        },
+        "auth": {
+          "type": "none"
+        },
+        "static_parameters": {},
+        "options": {
+          "rate_limit": 10,
+          "timeout": 30,
+          "retry_count": 3
+        }
+      },
+      "parameters": [
+        {
+          "name": "postcode",
+          "type": "string",
+          "required": true,
+          "description": "Codice postale (CAP)"
+        }
+      ],
+      "output_mapping": [
+        {
+          "path": "places[0].place name",
+          "column": "localita",
+          "description": "Nome località"
+        },
+        {
+          "path": "places[0].state",
+          "column": "regione",
+          "description": "Regione"
+        },
+        {
+          "path": "places[0].latitude",
+          "column": "lat",
+          "description": "Latitudine"
+        },
+        {
+          "path": "places[0].longitude",
+          "column": "lon",
+          "description": "Longitudine"
+        }
+      ]
+    },
+    {
+      "_meta": {
+        "id": "italiameteo-observations",
+        "category": "custom",
+        "tags": [
+          "meteo",
+          "italia",
+          "stazioni",
+          "generator",
+          "free",
+          "temperatura",
+          "precipitazione",
+          "vento",
+          "umidita",
+          "pressione"
+        ]
+      },
+      "display": {
+        "name": "ItaliaMeteo - Osservazioni Meteo",
+        "short_description": "Genera layer con stazioni meteo italiane (temp, pioggia, vento, umidità, pressione)",
+        "icon": "🇮🇹",
+        "docs_url": "https://meteohub.agenziaitaliameteo.it/",
+        "pricing": "Gratuito (licenza CC-BY)",
+        "limitations": [
+          "Temperatura in Kelvin (sottrarre 273.15 per °C)",
+          "Pressione in Pa",
+          "Vento in m/s",
+          "Prodotti: B12101=Temp, B13011=Precip, B13003=Umidità, B11002=Vento, B10004=Pressione"
+        ]
+      },
+      "config": {
+        "api_type": "generator",
+        "endpoint": {
+          "url": "https://meteohub.agenziaitaliameteo.it/api/observations",
+          "method": "GET"
+        },
+        "auth": {
+          "type": "none"
+        },
+        "static_parameters": {
+          "reliabilityCheck": "true",
+          "last": "true"
+        },
+        "options": {
+          "rate_limit": 1,
+          "timeout": 120,
+          "retry_count": 2
+        }
+      },
+      "parameters": [
+        {
+          "name": "q",
+          "type": "string",
+          "required": true,
+          "description": "Query (modifica date e product)",
+          "default": "reftime: >={{NOW-2h}},<={{NOW}};product:B12101;license:CCBY_COMPLIANT;timerange:254,0,0;level:103,2000,0,0",
+          "example": "reftime: >={{NOW-2h}},<={{NOW}};product:B12101;license:CCBY_COMPLIANT;timerange:254,0,0;level:103,2000,0,0"
+        }
+      ],
+      "output_mapping": [
+        {
+          "path": "data[].stat.lat",
+          "column": "lat",
+          "description": "Latitudine stazione"
+        },
+        {
+          "path": "data[].stat.lon",
+          "column": "lon",
+          "description": "Longitudine stazione"
+        },
+        {
+          "path": "data[].stat.net",
+          "column": "rete",
+          "description": "Rete di appartenenza"
+        },
+        {
+          "path": "data[].stat.details[0].val",
+          "column": "nome_stazione",
+          "description": "Nome stazione meteo"
+        },
+        {
+          "path": "data[].prod[0].val[0].val",
+          "column": "valore",
+          "description": "Valore osservato"
+        },
+        {
+          "path": "data[].prod[0].val[0].ref",
+          "column": "timestamp",
+          "description": "Data/ora rilevazione"
+        }
+      ]
+    }
+  ]
+}

@@ -1,629 +1,793 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { listProjects, createProject, deleteProject, listConnections, getProject, listApiConnections } from '../api/client';
+/**
+ * ProjectList.jsx — Home page / Dashboard progetti
+ * Redesign con sidebar + hex canvas background
+ * Route: /
+ */
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useToast } from '../hooks/useToast';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { listProjects, createProject, deleteProject, listConnections, listApiConnections,
+         listEseguibili, deleteEseguibile } from '../api';
+
+import { listFeatureConnections } from '../api/features';
 import { getFiles } from '../api/files';
+import { listSchedules } from '../api/schedules';
+import http from '../api/http';
+import { useHexCanvas } from '../utils/hexCanvas';
+import PublishEseguibileModal from '../components/eseguibili/PublishEseguibileModal';
+import EseguibileExecuteWizard from '../components/eseguibili/EseguibileExecuteWizard';
+import AppSidebar from '../components/AppSidebar';
+import { can, role } from '../utils/permissions';
 import '../styles/ProjectList.css';
 
+// ── Main component ───────────────────────────────────────────────────────
 function ProjectList() {
-  const [projects, setProjects] = useState([]);
-  const [connections, setConnections] = useState([]);
-  const [apiConnections, setApiConnections] = useState([]);
-  const [files, setFiles] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
-  const [newProjectName, setNewProjectName] = useState('');
-  const [newProjectDesc, setNewProjectDesc] = useState('');
-  const [newProjectType, setNewProjectType] = useState('estrai');
-  const [newProjectConnectionId, setNewProjectConnectionId] = useState('');
-  const [projectSources, setProjectSources] = useState({});
+  const toast    = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
+  const { user, logout } = useAuth();
 
+  // State
+  const [projects,          setProjects]          = useState([]);
+  const [connections,       setConnections]       = useState([]);
+  const [arcgisConnections, setArcgisConnections] = useState([]);
+  const [apiConnections,    setApiConnections]    = useState([]);
+  const [files,             setFiles]             = useState([]);
+  const [schedules,         setSchedules]         = useState([]);
+  const [loading,           setLoading]           = useState(true);
+  const [creating,          setCreating]          = useState(false);
+  const [showModal,         setShowModal]         = useState(false);
+  const [nl2Input,   setNl2Input]   = useState('');
+  const [nl2Loading, setNl2Loading] = useState(false);
+  const [nl2Error,   setNl2Error]   = useState(null);
+  const [nl2Preview, setNl2Preview] = useState(null);  // risultato pipeline {project_ids, warnings}
+  const [nl2ConnId,  setNl2ConnId]  = useState('');    // connessione selezionata
+  const [nl2Modal,   setNl2Modal]   = useState(false); // modal aperto
+  const [publishProject, setPublishProject] = useState(null); // progetto da pubblicare come eseguibile
+  const [eseguibili, setEseguibili] = useState([]);            // lista eseguibili (catene on-demand)
+  const [executeEseguibileId, setExecuteEseguibileId] = useState(null); // id eseguibile da lanciare nel wizard
+  const [showEsegSelector, setShowEsegSelector] = useState(false);      // selettore progetto sorgente per nuovo eseguibile
+  const [esegSelectorSearch, setEsegSelectorSearch] = useState('');
+  const [nl2Logs,    setNl2Logs]    = useState([]);    // log progressivi
+  const nl2LogsRef = useRef(null);                     // ref per autoscroll
+  const [newProjectName,    setNewProjectName]    = useState('');
+  const [newProjectDesc,    setNewProjectDesc]    = useState('');
+  const [newProjectType,    setNewProjectType]    = useState('estrai');
+  const [newProjectConnId,  setNewProjectConnId]  = useState('');
+  const [projectSources,    setProjectSources]    = useState({});
+  const [projectFileSources,setProjectFileSources]= useState({});
+  const [search,            setSearch]            = useState('');
+  const [theme,             setTheme]             = useState(() => {
+    const saved = localStorage.getItem('plenora-theme');
+    const initial = saved || document.documentElement.getAttribute('data-theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', initial);
+    return initial;
+  });
+
+
+  const canvasRef = useRef(null);
+  useHexCanvas(canvasRef);
+
+  // ── NL2Pipeline polling — controllo lifecycle ────────────────────────────
+  // Ref usata per:
+  //   - cancellare il polling quando il componente smonta
+  //   - cancellare un polling vecchio se l'utente clicca "Genera" di nuovo
+  //   - cancellare quando l'utente chiude il modal
+  // Usa AbortController, supportato nativamente da axios via `signal`.
+  const nl2AbortRef = useRef(null);
+  const POLL_INTERVAL_MS = 2000;
+  const POLL_MAX_ITERATIONS = 300;  // 300 × 2s = 10 minuti max
+
+  // Cancella il polling NL2 quando il componente smonta
   useEffect(() => {
-    loadData();
+    return () => {
+      nl2AbortRef.current?.abort();
+    };
   }, []);
+
+  // NL2Pipeline — chiama il backend e fa polling sui log
+  const handleNl2Generate = async (load = false) => {
+    if (!nl2Input.trim() || !nl2ConnId) return;
+
+    // Cancella eventuale polling precedente prima di partire
+    nl2AbortRef.current?.abort();
+    const controller = new AbortController();
+    nl2AbortRef.current = controller;
+
+    setNl2Loading(true);
+    setNl2Error(null);
+    setNl2Logs([]);
+    setNl2Preview(null);
+    setNl2Modal(true);
+
+    try {
+      // Avvia task — usa il client http (interceptor gestisce auth + 401)
+      const startResp = await http.post(
+        '/nl2pipeline',
+        { query: nl2Input, connection_id: nl2ConnId, load },
+        { signal: controller.signal }
+      );
+      const { run_id } = startResp.data;
+
+      // Polling con timeout massimo (safety net contro loop infinito)
+      let done = false;
+      let iterations = 0;
+      while (!done && !controller.signal.aborted) {
+        if (iterations++ >= POLL_MAX_ITERATIONS) {
+          throw new Error(
+            `Timeout polling NL2: nessuna risposta dopo ${POLL_MAX_ITERATIONS * POLL_INTERVAL_MS / 1000}s`
+          );
+        }
+        await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
+        if (controller.signal.aborted) break;
+
+        const pollResp = await http.get(
+          `/nl2pipeline/${run_id}`,
+          { signal: controller.signal }
+        );
+        const data = pollResp.data;
+
+        if (data.logs) {
+          setNl2Logs(data.logs);
+          // Autoscroll
+          setTimeout(() => {
+            if (nl2LogsRef.current) nl2LogsRef.current.scrollTop = nl2LogsRef.current.scrollHeight;
+          }, 50);
+        }
+
+        if (data.status === 'success') {
+          setNl2Preview(data.result);
+          if (!load) {
+            // Ricarica lista progetti
+            loadProjects();
+          }
+          done = true;
+        } else if (data.status === 'failure') {
+          throw new Error(data.error || 'Pipeline fallita');
+        }
+      }
+    } catch (err) {
+      // AbortError è normale (modal chiuso o nuovo polling avviato), non logghiamo
+      if (err.name === 'AbortError' || err.name === 'CanceledError' || controller.signal.aborted) {
+        return;
+      }
+      setNl2Error(err.message);
+      setNl2Logs(prev => [...prev, { msg: `❌ ${err.message}`, ts: new Date().toISOString() }]);
+    } finally {
+      // Solo se questo controller è ancora quello attivo (no race con un nuovo handleNl2Generate)
+      if (nl2AbortRef.current === controller) {
+        setNl2Loading(false);
+      }
+    }
+  };
+
+  const toggleTheme = () => {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('plenora-theme', next);
+    setTheme(next);
+  };
+
+  // Load data
+  useEffect(() => { loadData(); }, []);
+
+  // Quando si arriva sulla dashboard con un hash (es. /#estrai), scrolliamo
+  // alla sezione corrispondente. Aspettiamo che `loading` sia false così
+  // le sezioni sono già renderizzate. Funziona sia all'arrivo iniziale sia
+  // ai click successivi nella sidebar (che cambiano l'hash).
+  useEffect(() => {
+    if (loading) return;
+    const hash = location.hash?.replace('#', '');
+    if (!hash) return;
+    // Defer di un tick per assicurarsi che il DOM sia montato
+    const t = setTimeout(() => {
+      const el = document.getElementById(`pl-section-${hash}`);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
+    return () => clearTimeout(t);
+  }, [loading, location.hash]);
 
   const loadData = async () => {
     try {
       setLoading(true);
-      const [projectsData, connectionsData, apiConnectionsData, filesData] = await Promise.all([
-        listProjects(),
-        listConnections(),
-        listApiConnections(),
-        getFiles().catch(() => ({ files: [] })) // Fallback se endpoint non esiste ancora
-      ]);
-      
+      const [projectsData, connectionsData, apiConnData, filesData, schedulesData, arcgisData, eseguibiliData] =
+        await Promise.all([
+          listProjects(),
+          listConnections(),
+          listApiConnections(),
+          getFiles().catch(() => ({ files: [] })),
+          listSchedules().catch(() => ({ schedules: [], total: 0 })),
+          listFeatureConnections().catch(() => ({ connections: [] })),
+          listEseguibili().catch(() => []),
+        ]);
+
       const projectsList = projectsData.projects || [];
       setProjects(projectsList);
       setConnections(connectionsData.connections || []);
-      setApiConnections(apiConnectionsData.api_connections || []);
+      setArcgisConnections(arcgisData.connections || arcgisData || []);
+      setApiConnections(apiConnData.api_connections || []);
       setFiles(filesData.files || []);
-      
-      // Carica origini per progetti manipola
-      const manipolaProjects = projectsList.filter(p => p.project_type === 'manipola');
-      
-      if (manipolaProjects.length > 0) {
-        const sourcesMap = {};
-        
-        await Promise.all(
-          manipolaProjects.map(async (project) => {
-            try {
-              const projectData = await getProject(project.id);
-              
-              if (projectData.canvas?.nodes) {
-                const sourceNodes = projectData.canvas.nodes.filter(
-                  n => n.type === 'project_source'
-                );
-                
-                const sourceIds = sourceNodes
-                  .map(n => n.data?.source_project_id || n.source_project_id)
-                  .filter(Boolean);
-                
-                sourcesMap[project.id] = sourceIds;
-              }
-            } catch (err) {
-              console.error(`Errore caricamento origini per ${project.id}:`, err);
-              sourcesMap[project.id] = [];
-            }
-          })
-        );
-        
-        setProjectSources(sourcesMap);
-      }
-      
-    } catch (error) {
-      console.error('Errore caricamento dati:', error);
-      alert('Errore caricamento dati');
+      setSchedules(schedulesData.schedules || []);
+      setEseguibili(Array.isArray(eseguibiliData) ? eseguibiliData : (eseguibiliData?.items || []));
+
+      const sourcesMap = {};
+      const fileSourcesMap = {};
+      projectsList.forEach(p => {
+        if (p.project_type === 'manipola') {
+          if (p.source_project_ids)  sourcesMap[p.id]     = p.source_project_ids;
+          if (p.file_source_ids)     fileSourcesMap[p.id] = p.file_source_ids;
+        }
+      });
+      setProjectSources(sourcesMap);
+      setProjectFileSources(fileSourcesMap);
+    } catch (err) {
+      console.error('Errore caricamento dati:', err);
+      toast.error('Errore caricamento dati');
     } finally {
       setLoading(false);
     }
   };
 
   const handleCreateProject = async () => {
-    if (!newProjectName.trim()) {
-      alert('Inserisci un nome per il progetto');
-      return;
+    if (creating) return;
+    if (!newProjectName.trim()) { toast.warning('Inserisci un nome'); return; }
+    if (newProjectType === 'estrai' && !newProjectConnId) {
+      toast.warning('Seleziona una connessione'); return;
     }
-    
-    if (newProjectType === 'estrai' && !newProjectConnectionId) {
-      alert('Seleziona una connessione per il progetto SQL');
-      return;
-    }
-    
+    setCreating(true);
     try {
-      await createProject(
-        newProjectName, 
-        newProjectDesc, 
-        newProjectType, 
-        newProjectConnectionId
-      );
-      
+      await createProject(newProjectName, newProjectDesc, newProjectType, newProjectConnId);
       setShowModal(false);
-      setNewProjectName('');
-      setNewProjectDesc('');
-      setNewProjectConnectionId('');
+      setNewProjectName(''); setNewProjectDesc(''); setNewProjectConnId('');
       loadData();
-    } catch (error) {
-      alert('Errore durante la creazione: ' + (error.response?.data?.detail || error.message));
-    }
+    } catch (err) {
+      toast.error('Errore creazione: ' + (err.response?.data?.detail || err.message));
+    } finally { setCreating(false); }
   };
 
-  const handleDeleteProject = async (projectId, projectName) => {
-    if (!confirm(`Eliminare il progetto "${projectName}"?`)) return;
+  const handleDeleteProject = async (id, name) => {
+    if (!confirm(`Eliminare "${name}"?`)) return;
     try {
-      await deleteProject(projectId);
+      await deleteProject(id);
       loadData();
-    } catch (error) {
-      console.error('Errore eliminazione progetto:', error);
-      alert('Errore eliminazione progetto');
+    } catch (err) {
+      // 409: il progetto ha dipendenze (eseguibili e/o progetti downstream)
+      if (err?.response?.status === 409) {
+        const detail = err.response.data?.detail || {};
+        if (detail.error === 'project_has_dependencies' || detail.error === 'project_has_eseguibili') {
+          const eseguibili = detail.eseguibili || [];
+          const dependents = detail.dependent_projects || [];
+          const parts = [];
+          if (eseguibili.length) {
+            parts.push(`${eseguibili.length} eseguibile/i (${eseguibili.map(e => e.name).join(', ')})`);
+          }
+          if (dependents.length) {
+            parts.push(`${dependents.length} progetto/i che lo usa/no come sorgente (${dependents.map(p => p.name).join(', ')})`);
+          }
+          toast.error(
+            `Impossibile eliminare "${name}": ${parts.join(' e ')}. Rimuovili prima.`,
+            10000
+          );
+          return;
+        }
+      }
+      toast.error('Errore eliminazione: ' + (err?.response?.data?.detail || err.message));
     }
   };
 
-  const handleOpenProject = (project) => {
-    if (project.project_type === 'manipola') {
-      navigate(`/editor/manipola/${project.id}`);
-    } else if (project.project_type === 'arricchisci') {
-      navigate(`/arricchisci/${project.id}`);
-    } else {
-      navigate(`/project/${project.id}`);
+  const isAdmin       = role.isAdminOrAbove(user);
+  const canCreateProj = can.createProject(user);
+
+  const handleDeleteEseguibile = async (id, name) => {
+    if (!confirm(`Eliminare l'eseguibile "${name}"?`)) return;
+    try {
+      await deleteEseguibile(id);
+      toast.success('Eseguibile eliminato');
+      loadData();
+    } catch (err) {
+      toast.error('Errore eliminazione: ' + (err?.response?.data?.detail || err.message));
     }
   };
 
-  const handleManageConnections = () => {
-    navigate('/connections');
+  const openEsegSelector = () => {
+    setEsegSelectorSearch('');
+    setShowEsegSelector(true);
+  };
+
+  const handleOpenProject = (p) => {
+    if (p.project_type === 'manipola')   navigate(`/editor/manipola/${p.id}`);
+    else if (p.project_type === 'arricchisci') navigate(`/arricchisci/${p.id}`);
+    else navigate(`/project/${p.id}`);
   };
 
   const openModalForType = (type) => {
     setNewProjectType(type);
-    setNewProjectName('');
-    setNewProjectDesc('');
-    setNewProjectConnectionId('');
+    setNewProjectName(''); setNewProjectDesc(''); setNewProjectConnId('');
     setShowModal(true);
   };
 
-  // Helpers
-  const getConnectionForProject = (connectionId) => {
-    return connections.find(c => c.id === connectionId);
-  };
+  const getConn = id =>
+    connections.find(c => c.id === id) || arcgisConnections.find(c => c.id === id);
 
-  const getProjectById = (projectId) => {
-    return projects.find(p => p.id === projectId);
-  };
+  const getProjectById = id => projects.find(p => p.id === id);
 
-  const getSourceProjectsForManipola = (projectId) => {
-    const sourceIds = projectSources[projectId] || [];
-    return sourceIds
-      .map(id => getProjectById(id))
-      .filter(Boolean);
-  };
+  const getSourceProjects = pid => (projectSources[pid] || []).map(getProjectById).filter(Boolean);
 
-  const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('it-IT', { 
-      day: '2-digit', 
-      month: 'short', 
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+  const getScheduleCount = useCallback(
+    pid => schedules.filter(s => s.pipeline?.project_id === pid).length,
+    [schedules]
+  );
+
+  const activeSchedules = useMemo(() => schedules.filter(s => s.schedule?.enabled), [schedules]);
+
+  const formatDate = (d) => {
+    if (!d) return 'N/A';
+    return new Date(d).toLocaleDateString('it-IT', {
+      day: '2-digit', month: 'short', year: 'numeric',
+      hour: '2-digit', minute: '2-digit'
     });
   };
 
-  // Separa progetti per tipo
-  const estraiProjects = projects.filter(p => p.project_type === 'estrai' || (!p.project_type));
-  const manipolaProjects = projects.filter(p => p.project_type === 'manipola');
-  const arricchisciProjects = projects.filter(p => p.project_type === 'arricchisci');
+  const estraiProjects     = useMemo(() => projects.filter(p => p.project_type === 'estrai' || !p.project_type), [projects]);
+  const manipolaProjects   = useMemo(() => projects.filter(p => p.project_type === 'manipola'), [projects]);
+  const arricchisciProjects= useMemo(() => projects.filter(p => p.project_type === 'arricchisci'), [projects]);
 
-  // Loading
+  const filterBySearch = (list) =>
+    search.trim()
+      ? list.filter(p => p.name.toLowerCase().includes(search.toLowerCase()))
+      : list;
+
   if (loading) {
     return (
-      <div className="loading">
-        <div className="loading__content">
-          <div className="loading__icon">⏳</div>
-          Caricamento progetti...
+      <div className="pl pl--loading">
+        <div className="pl__loading-inner">
+          <div className="pl__loading-icon">⬡</div>
+          Caricamento...
         </div>
       </div>
     );
   }
 
   return (
-    <div className="project-list-page">
-      {/* ===== HEADER ===== */}
-      <header className="header">
-        <div className="header__container">
-          <div>
-            <h1 className="header__title">
-              <span className="header__title-icon">🔮</span>
-              Visual ETL Builder
-            </h1>
-            <p className="header__subtitle">
-              Estrai, trasforma e manipola i tuoi dati visualmente
-            </p>
+    <div className="pl" data-theme-local={theme}>
+
+      {/* ── SIDEBAR ───────────────────────────────────────── */}
+      <AppSidebar
+        counts={{
+          projects: projects.length,
+          connections: connections.length + arcgisConnections.length,
+          apiConnections: apiConnections.length,
+          files: files.length,
+          schedules: activeSchedules.length,
+        }}
+      />
+
+      {/* ── MAIN ──────────────────────────────────────────── */}
+      <div className="pl__main">
+
+        {/* Topbar */}
+        <header className="pl__topbar">
+          <div className="pl__page-title">Dashboard</div>
+          <div className="pl__topbar-right">
+            <div className="pl__search-box">
+              <span className="pl__search-icon">⌕</span>
+              <input
+                placeholder="Cerca progetti..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+            </div>
+            <div className="pl__theme-toggle">
+              <div
+                className={`pl__theme-opt ${theme === 'dark' ? 'pl__theme-opt--on' : ''}`}
+                onClick={() => theme !== 'dark' && toggleTheme()}
+              >🌙 Scuro</div>
+              <div
+                className={`pl__theme-opt ${theme === 'light' ? 'pl__theme-opt--on' : ''}`}
+                onClick={() => theme !== 'light' && toggleTheme()}
+              >☀️ Chiaro</div>
+            </div>
+            <button type="button" className="pl__btn pl__btn--ghost" onClick={loadData}>⟳ Aggiorna</button>
+            {canCreateProj && (
+              <button type="button" className="pl__btn pl__btn--primary" onClick={() => setShowModal(true)}>＋ Nuovo Progetto</button>
+            )}
           </div>
-          
-          <div className="header__actions">
-            <button
-              className="header__btn"
-              onClick={() => navigate('/files')}
+        </header>
+
+        {/* Content */}
+        <div className="pl__content">
+          <canvas ref={canvasRef} className="pl__hex-bg" />
+
+          {/* ── NL2Pipeline bar ── */}
+          <div className="pl__nl2-bar" style={{position:'relative',zIndex:1}}>
+            <div className="pl__nl2-icon">✦</div>
+            <input
+              className="pl__nl2-input"
+              placeholder="Descrivi la pipeline... Es: 'ESTRAI contratti attivi CALCOLA canone al mq ARRICCHISCI con OMI'"
+              value={nl2Input}
+              onChange={e => setNl2Input(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && nl2Input.trim() && !nl2Loading && nl2ConnId)
+                  handleNl2Generate(true);
+              }}
+              disabled={nl2Loading}
+            />
+            <select
+              value={nl2ConnId}
+              onChange={e => setNl2ConnId(e.target.value)}
+              disabled={nl2Loading}
+              title="Connessione DB"
+              style={{
+                height: 36, padding: '0 10px', borderRadius: 8,
+                border: '1px solid var(--pl-border)',
+                background: nl2ConnId ? 'rgba(75,139,255,0.08)' : 'var(--pl-surface-2)',
+                color: nl2ConnId ? 'var(--pl-accent)' : 'var(--pl-text-sub)',
+                fontSize: 12.5, cursor: 'pointer', flexShrink: 0, minWidth: 140,
+              }}
             >
-              📁 File Esterni ({files.length})
-            </button>
-            <button
-              className="header__btn"
-              onClick={() => navigate('/api-connections')}
-            >
-              🔗 API Esterne ({apiConnections.length})
-            </button>
-            <button
-              className="header__btn"
-              onClick={handleManageConnections}
-            >
-              🔌 Connessioni ({connections.length})
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* ===== MAIN CONTENT ===== */}
-      <main className="main-content">
-        
-        {/* ===== STATISTICHE RAPIDE ===== */}
-        <div className="stats-grid">
-          <div className="stat-card stat-card--total">
-            <div className="stat-card__label">Progetti Totali</div>
-            <div className="stat-card__value">{projects.length}</div>
-          </div>
-          <div className="stat-card stat-card--estrai">
-            <div className="stat-card__label">Progetti Estrai</div>
-            <div className="stat-card__value">{estraiProjects.length}</div>
-          </div>
-          <div className="stat-card stat-card--manipola">
-            <div className="stat-card__label">Progetti Manipola</div>
-            <div className="stat-card__value">{manipolaProjects.length}</div>
-          </div>
-          <div className="stat-card stat-card--arricchisci">
-            <div className="stat-card__label">Progetti Arricchisci</div>
-            <div className="stat-card__value">{arricchisciProjects.length}</div>
-          </div>
-          <div className="stat-card stat-card--connections">
-            <div className="stat-card__label">Connessioni DB</div>
-            <div className="stat-card__value">{connections.length}</div>
-          </div>
-          <div className="stat-card stat-card--api">
-            <div className="stat-card__label">API Esterne</div>
-            <div className="stat-card__value">{apiConnections.length}</div>
-          </div>
-          <div className="stat-card stat-card--files">
-            <div className="stat-card__label">File Esterni</div>
-            <div className="stat-card__value">{files.length}</div>
-          </div>
-        </div>
-
-        {/* ===== SEZIONE ESTRAI ===== */}
-        <section className="section">
-          <div className="section__header">
-            <div className="section__title-wrapper">
-              <div className="section__icon section__icon--estrai">📥</div>
-              <div>
-                <h2 className="section__title">Estrai (SQL Query)</h2>
-                <p className="section__subtitle">Estrai dati dai database con query visuali</p>
-              </div>
-            </div>
-            <button
-              className="section__btn section__btn--estrai"
-              onClick={() => openModalForType('estrai')}
-            >
-              + Nuovo Estrai
-            </button>
-          </div>
-
-          {estraiProjects.length === 0 ? (
-            <div className="empty-state">
-              <div className="empty-state__icon">📥</div>
-              <h3 className="empty-state__title">Nessun progetto Estrai</h3>
-              <p className="empty-state__text">Crea il tuo primo progetto per estrarre dati dal database</p>
-            </div>
-          ) : (
-            <div className="cards-grid">
-              {estraiProjects.map((project) => {
-                const conn = getConnectionForProject(project.default_connection_id);
-                return (
-                  <div
-                    key={project.id}
-                    className="project-card"
-                    onClick={() => handleOpenProject(project)}
-                  >
-                    <div className="project-card__header project-card__header--estrai">
-                      <div className="project-card__header-content">
-                        <span className="project-card__badge project-card__badge--estrai">
-                          SQL
-                        </span>
-                        <h3 className="project-card__title project-card__title--estrai">
-                          {project.name}
-                        </h3>
-                      </div>
-                    </div>
-                    
-                    <div className="project-card__body">
-                      <p className="project-card__description">
-                        {project.description || 'Nessuna descrizione'}
-                      </p>
-                      
-                      <div className="project-card__info-grid">
-                        <div>
-                          <div className="project-card__info-label">Connessione</div>
-                          <div className="project-card__info-value">
-                            {conn ? (
-                              <>
-                                <span>🐘</span>
-                                {conn.name}
-                              </>
-                            ) : (
-                              <span className="project-card__info-value--muted">N/A</span>
-                            )}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="project-card__info-label">Creato</div>
-                          <div className="project-card__info-value">
-                            {formatDate(project.created_at)}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="project-card__footer">
-                      <button
-                        className="project-card__btn project-card__btn--open project-card__btn--open-estrai"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpenProject(project);
-                        }}
-                      >
-                        ✏️ Apri Editor
-                      </button>
-                      <button
-                        className="project-card__btn project-card__btn--delete"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteProject(project.id, project.name);
-                        }}
-                      >
-                        🗑️ Elimina
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
-
-        {/* ===== SEZIONE MANIPOLA ===== */}
-        <section className="section">
-          <div className="section__header">
-            <div className="section__title-wrapper">
-              <div className="section__icon section__icon--manipola">🔄</div>
-              <div>
-                <h2 className="section__title">Manipola (Pipeline Pandas)</h2>
-                <p className="section__subtitle">Trasforma e combina dati con operazioni visuali</p>
-              </div>
-            </div>
-            <button
-              className="section__btn section__btn--manipola"
-              onClick={() => openModalForType('manipola')}
-            >
-              + Nuovo Manipola
-            </button>
-          </div>
-
-          {manipolaProjects.length === 0 ? (
-            <div className="empty-state">
-              <div className="empty-state__icon">🔄</div>
-              <h3 className="empty-state__title">Nessun progetto Manipola</h3>
-              <p className="empty-state__text">Crea un progetto per trasformare e combinare i dati estratti</p>
-            </div>
-          ) : (
-            <div className="cards-grid">
-              {manipolaProjects.map((project) => {
-                const sourceProjects = getSourceProjectsForManipola(project.id);
-                
-                return (
-                  <div
-                    key={project.id}
-                    className="project-card"
-                    onClick={() => handleOpenProject(project)}
-                  >
-                    <div className="project-card__header project-card__header--manipola">
-                      <div className="project-card__header-content">
-                        <span className="project-card__badge project-card__badge--manipola">
-                          PANDAS
-                        </span>
-                        <h3 className="project-card__title project-card__title--manipola">
-                          {project.name}
-                        </h3>
-                      </div>
-                    </div>
-                    
-                    <div className="project-card__body">
-                      <p className="project-card__description project-card__description--short">
-                        {project.description || 'Nessuna descrizione'}
-                      </p>
-                      
-                      {sourceProjects.length > 0 ? (
-                        <div className="project-card__sources">
-                          <div className="project-card__sources-label">
-                            📥 Origini ({sourceProjects.length}):
-                          </div>
-                          <div className="project-card__sources-list">
-                            {sourceProjects.map((src, idx) => (
-                              <span key={idx} className="project-card__source-tag">
-                                {src.name}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="project-card__no-sources">
-                          ⚠️ Nessuna origine configurata
-                        </div>
-                      )}
-                      
-                      <div className="project-card__info-grid">
-                        <div>
-                          <div className="project-card__info-label">Tipo</div>
-                          <div className="project-card__info-value project-card__info-value--manipola">
-                            🔄 Pipeline
-                          </div>
-                        </div>
-                        <div>
-                          <div className="project-card__info-label">Creato</div>
-                          <div className="project-card__info-value">
-                            {formatDate(project.created_at)}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="project-card__footer">
-                      <button
-                        className="project-card__btn project-card__btn--open project-card__btn--open-manipola"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpenProject(project);
-                        }}
-                      >
-                        ✏️ Apri Editor
-                      </button>
-                      <button
-                        className="project-card__btn project-card__btn--delete"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteProject(project.id, project.name);
-                        }}
-                      >
-                        🗑️ Elimina
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
-
-        {/* ===== SEZIONE ARRICCHISCI ===== */}
-        <section className="section">
-          <div className="section__header">
-            <div className="section__title-wrapper">
-              <div className="section__icon section__icon--arricchisci">🔗</div>
-              <div>
-                <h2 className="section__title">Arricchisci</h2>
-                <p className="section__subtitle">Arricchisci i dati chiamando API esterne</p>
-              </div>
-            </div>
-            <button
-              className="section__btn section__btn--arricchisci"
-              onClick={() => openModalForType('arricchisci')}
-            >
-              + Nuovo Arricchisci
-            </button>
-          </div>
-
-          {arricchisciProjects.length === 0 ? (
-            <div className="empty-state empty-state--arricchisci">
-              <div className="empty-state__icon">🔗</div>
-              <h3 className="empty-state__title">Nessun progetto Arricchisci</h3>
-              <p className="empty-state__text">Arricchisci i tuoi dati con informazioni da API esterne</p>
-            </div>
-          ) : (
-            <div className="cards-grid">
-              {arricchisciProjects.map(project => (
-                <div
-                  key={project.id}
-                  className="project-card"
-                  onClick={() => handleOpenProject(project)}
-                >
-                  <div className="project-card__header project-card__header--arricchisci">
-                    <div className="project-card__header-content project-card__header-content--arricchisci">
-                      <span className="project-card__header-icon">🔗</span>
-                      <h3 className="project-card__title project-card__title--arricchisci">
-                        {project.name}
-                      </h3>
-                    </div>
-                  </div>
-
-                  <div className="project-card__body">
-                    <p className="project-card__description">
-                      {project.description || 'Nessuna descrizione'}
-                    </p>
-                    
-                    <div className="project-card__info-grid">
-                      <div>
-                        <div className="project-card__info-label">Tipo</div>
-                        <div className="project-card__info-value project-card__info-value--arricchisci">
-                          🔗 API Enrichment
-                        </div>
-                      </div>
-                      <div>
-                        <div className="project-card__info-label">Creato</div>
-                        <div className="project-card__info-value">
-                          {formatDate(project.created_at)}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="project-card__footer">
-                    <button
-                      className="project-card__btn project-card__btn--open project-card__btn--open-arricchisci"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleOpenProject(project);
-                      }}
-                    >
-                      ✏️ Apri Editor
-                    </button>
-                    <button
-                      className="project-card__btn project-card__btn--delete"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteProject(project.id, project.name);
-                      }}
-                    >
-                      🗑️ Elimina
-                    </button>
-                  </div>
-                </div>
+              <option value="">🔌 Connessione...</option>
+              {(connections || []).filter(c => c.category !== 'arcgis').map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
               ))}
+            </select>
+            <button
+              className="pl__nl2-btn"
+              disabled={!nl2Input.trim() || !nl2ConnId || nl2Loading}
+              onClick={() => handleNl2Generate(true)}>
+              {nl2Loading ? '◌' : '→'}
+            </button>
+            {nl2Error && <div className="pl__nl2-error">{nl2Error}</div>}
+          </div>
+
+          {/* Modal NL2Pipeline — log progressivi + preview risultato */}
+          {nl2Modal && (
+            <div className="pl__nl2-overlay" onClick={() => !nl2Loading && setNl2Modal(false)}>
+              <div className="pl__nl2-modal" onClick={e => e.stopPropagation()}>
+                <div className="pl__nl2-modal-header">
+                  <span className="pl__nl2-modal-icon">✦</span>
+                  <span className="pl__nl2-modal-title">
+                    {nl2Loading ? 'Generazione in corso...' : nl2Preview ? 'Pipeline generata' : 'NL2Pipeline'}
+                  </span>
+                  {!nl2Loading && (
+                    <button className="pl__nl2-modal-close" onClick={() => { setNl2Modal(false); setNl2Preview(null); setNl2Logs([]); }}>✕</button>
+                  )}
+                </div>
+
+                <div className="pl__nl2-modal-body">
+                  {/* Log progressivi */}
+                  <div ref={nl2LogsRef} style={{
+                    background: 'var(--pl-surface-2)', borderRadius: 8, padding: '10px 14px',
+                    fontFamily: 'monospace', fontSize: 11.5, maxHeight: 220, overflowY: 'auto',
+                    marginBottom: nl2Preview ? 16 : 0,
+                  }}>
+                    {nl2Logs.length === 0 && <div style={{color:'var(--pl-text-sub)'}}>In coda...</div>}
+                    {nl2Logs.map((log, i) => (
+                      <div key={i} style={{
+                        color: log.msg.startsWith('❌') ? '#ef4444'
+                             : log.msg.startsWith('✅') || log.msg.startsWith('🎉') ? '#22c55e'
+                             : log.msg.startsWith('⚠') ? '#f59e0b'
+                             : 'var(--pl-text-sub)',
+                        lineHeight: 1.6,
+                      }}>
+                        {log.msg}
+                      </div>
+                    ))}
+                    {nl2Loading && <div style={{color:'var(--pl-accent)'}}>▌</div>}
+                  </div>
+
+                  {/* Preview risultato — progetti creati */}
+                  {nl2Preview && nl2Preview.project_ids && (
+                    <div style={{marginTop: 16}}>
+                      <div style={{fontSize: 12, fontWeight: 600, color: 'var(--pl-text-sub)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em'}}>
+                        Progetti creati
+                      </div>
+                      {[
+                        { type: 'estrai',    icon: '↓', label: 'ESTRAI',    color: '#4B8BFF', rgb: '75,139,255'  },
+                        { type: 'manipola',  icon: '⚙', label: 'MANIPOLA',  color: '#9B6DFF', rgb: '155,109,255' },
+                        { type: 'arricchisci', icon: '◈', label: 'ARRICCHISCI', color: '#34C17A', rgb: '52,193,122' },
+                      ].map(({ type, icon, label, color, rgb }) => {
+                        const pid = nl2Preview.project_ids[type];
+                        if (!pid) return null;
+                        return (
+                          <div key={type} style={{
+                            display: 'flex', alignItems: 'center', gap: 10,
+                            padding: '8px 12px', borderRadius: 8, marginBottom: 6,
+                            background: `rgba(${rgb},0.08)`,
+                            border: `1px solid ${color}33`,
+                          }}>
+                            <span style={{fontSize: 16, color}}>{icon}</span>
+                            <span style={{fontSize: 12.5, fontWeight: 600, color}}>{label}</span>
+                            <span style={{fontSize: 11.5, color: 'var(--pl-text-sub)', marginLeft: 4}}>{pid}</span>
+                            <button
+                              onClick={() => {
+                                setNl2Modal(false);
+                                loadProjects();
+                                if (type === 'estrai') navigate(`/project/${pid}`);
+                                else if (type === 'manipola') navigate(`/editor/manipola/${pid}`);
+                                else navigate(`/arricchisci/${pid}`);
+                              }}
+                              style={{
+                                marginLeft: 'auto', fontSize: 11.5, padding: '3px 10px',
+                                borderRadius: 6, border: `1px solid ${color}55`,
+                                background: 'transparent', color, cursor: 'pointer',
+                              }}>
+                              Apri →
+                            </button>
+                          </div>
+                        );
+                      })}
+                      {nl2Preview.warnings?.length > 0 && nl2Preview.warnings.map((w, i) => (
+                        <div key={i} style={{fontSize: 11.5, color: '#f59e0b', marginTop: 6}}>⚠ {w}</div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="pl__nl2-modal-footer">
+                  <button className="pl__btn pl__btn--ghost" onClick={() => { setNl2Modal(false); setNl2Preview(null); setNl2Logs([]); }}>
+                    {nl2Loading ? 'Annulla' : 'Chiudi'}
+                  </button>
+                  {!nl2Loading && (!nl2Preview || Object.keys(nl2Preview?.project_ids || {}).length === 0) && (
+                    <button className="pl__btn pl__btn--primary" onClick={() => { setNl2Preview(null); setNl2Logs([]); handleNl2Generate(true); }}>
+                      ＋ Crea progetti su Plenora
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           )}
-        </section>
-      </main>
 
-      {/* ===== FOOTER ===== */}
-      <footer className="footer">
-        Visual ETL Builder • UrbyetOrbit S.R.L.S.
-      </footer>
+          {/* Stats */}
+          <div className="pl__stats-row">
+            {[
+              { val: projects.length,                                   label: 'Progetti',    accent: 'var(--pl-blue)' },
+              { val: estraiProjects.length,                             label: 'Estrai',      accent: 'var(--pl-estrai)' },
+              { val: manipolaProjects.length,                           label: 'Manipola',    accent: 'var(--pl-manipola)' },
+              { val: arricchisciProjects.length,                        label: 'Arricchisci', accent: 'var(--pl-arricch)' },
+              { val: eseguibili.length,                                 label: 'Eseguibili',  accent: 'var(--pl-blue)',
+                onClick: () => document.getElementById('pl-section-eseguibili')?.scrollIntoView({ behavior: 'smooth' }) },
+              { val: connections.length + arcgisConnections.length,     label: 'Connessioni', accent: 'var(--pl-blue)' },
+              { val: activeSchedules.length,                            label: 'Schedule',    accent: 'var(--pl-estrai)', onClick: () => navigate('/schedules') },
+              { val: apiConnections.length,                             label: 'API Esterne', accent: 'var(--pl-manipola)' },
+              { val: files.length,                                      label: 'File',        accent: 'var(--pl-arricch)', onClick: () => navigate('/files') },
+            ].map(({ val, label, accent, onClick }) => (
+              <div
+                key={label}
+                className={`pl__stat ${onClick ? 'pl__stat--clickable' : ''}`}
+                style={{ '--stat-accent': accent }}
+                onClick={onClick}
+              >
+                <div className="pl__stat-val">{val}</div>
+                <div className="pl__stat-label">{label}</div>
+              </div>
+            ))}
+          </div>
 
-      {/* ===== MODAL CREAZIONE ===== */}
+          {/* ── ESTRAI ── */}
+          <ProjectSection
+            id="pl-section-estrai"
+            chipClass="pl__chip--estrai"
+            chipLabel="↓ Estrai"
+            subtitle="Estrazione da sorgenti SQL e GIS"
+            onNew={() => openModalForType('estrai')}
+            canCreate={canCreateProj}
+            empty={filterBySearch(estraiProjects).length === 0}
+            emptyIcon="↓"
+            emptyTitle="Nessun progetto Estrai"
+            emptyText="Crea il tuo primo progetto per estrarre dati"
+          >
+            {filterBySearch(estraiProjects).map(project => {
+              const conn = getConn(project.default_connection_id);
+              return (
+                <ProjectCard
+                  key={project.id}
+                  project={project}
+                  accentClass="pl__card-accent--estrai"
+                  modLabel="↓ Estrai"
+                  meta={[
+                    { key: 'Connessione', val: conn ? conn.name : 'N/A', ok: !!conn },
+                    { key: 'Creato',      val: formatDate(project.created_at) },
+                  ]}
+                  scheduleCount={getScheduleCount(project.id)}
+                  onOpen={() => handleOpenProject(project)}
+                  onDelete={() => handleDeleteProject(project.id, project.name)}
+                  onSchedule={() => navigate(`/schedules?project_id=${project.id}`)}
+                />
+              );
+            })}
+          </ProjectSection>
+
+          {/* ── MANIPOLA ── */}
+          <ProjectSection
+            id="pl-section-manipola"
+            chipClass="pl__chip--manipola"
+            chipLabel="⚙ Manipola"
+            subtitle="Trasformazione e join spaziale"
+            onNew={() => openModalForType('manipola')}
+            canCreate={canCreateProj}
+            empty={filterBySearch(manipolaProjects).length === 0}
+            emptyIcon="⚙"
+            emptyTitle="Nessun progetto Manipola"
+            emptyText="Crea un pipeline di trasformazione"
+          >
+            {filterBySearch(manipolaProjects).map(project => {
+              const srcProjects = getSourceProjects(project.id);
+              const fileIds = projectFileSources[project.id] || [];
+              const fileNames = fileIds.map(id => files.find(f => f.id === id)?.name).filter(Boolean);
+              const srcCount = srcProjects.length + fileNames.length;
+              return (
+                <ProjectCard
+                  key={project.id}
+                  project={project}
+                  accentClass="pl__card-accent--manipola"
+                  modLabel="⚙ Manipola"
+                  meta={[
+                    { key: 'Sorgenti', val: `${srcCount} progett${srcCount !== 1 ? 'i' : 'o'}` },
+                    { key: 'Creato',   val: formatDate(project.created_at) },
+                  ]}
+                  scheduleCount={getScheduleCount(project.id)}
+                  onOpen={() => handleOpenProject(project)}
+                  onDelete={() => handleDeleteProject(project.id, project.name)}
+                  onSchedule={() => navigate(`/schedules?project_id=${project.id}`)}
+                />
+              );
+            })}
+          </ProjectSection>
+
+          {/* ── ARRICCHISCI ── */}
+          <ProjectSection
+            id="pl-section-arricchisci"
+            chipClass="pl__chip--arricchisci"
+            chipLabel="◈ Arricchisci"
+            subtitle="API enrichment geospaziale"
+            onNew={() => openModalForType('arricchisci')}
+            canCreate={canCreateProj}
+            empty={filterBySearch(arricchisciProjects).length === 0}
+            emptyIcon="◈"
+            emptyTitle="Nessun progetto Arricchisci"
+            emptyText="Crea un nuovo pipeline di arricchimento"
+          >
+            {filterBySearch(arricchisciProjects).map(project => (
+              <ProjectCard
+                key={project.id}
+                project={project}
+                accentClass="pl__card-accent--arricchisci"
+                modLabel="◈ Arricchisci"
+                meta={[
+                  { key: 'API', val: 'Enrichment' },
+                  { key: 'Creato', val: formatDate(project.created_at) },
+                ]}
+                scheduleCount={getScheduleCount(project.id)}
+                onOpen={() => handleOpenProject(project)}
+                onDelete={() => handleDeleteProject(project.id, project.name)}
+                onSchedule={() => navigate(`/schedules?project_id=${project.id}`)}
+              />
+            ))}
+          </ProjectSection>
+
+          {/* ── ESEGUIBILI ── */}
+          <section id="pl-section-eseguibili" className="pl__section">
+            <div className="pl__section-header">
+              <div className="pl__section-title-wrap">
+                <span className="pl__chip" style={{
+                  background: 'rgba(124,58,237,0.15)', color: '#a78bfa',
+                  borderColor: 'rgba(124,58,237,0.4)'
+                }}>🚀 Eseguibili</span>
+                <span className="pl__section-sub">Catene on-demand — l'utente carica un file e ottiene il risultato</span>
+              </div>
+              {isAdmin && (
+                <button
+                  type="button"
+                  className="pl__btn pl__btn--ghost pl__btn--sm"
+                  onClick={openEsegSelector}
+                  title="Pubblica un progetto Arricchisci come eseguibile"
+                >＋ Nuovo</button>
+              )}
+            </div>
+
+            {filterBySearch(eseguibili).length === 0 ? (
+              <div className="pl__empty">
+                <canvas className="pl__empty-hex" />
+                <div className="pl__empty-icon">🚀</div>
+                <div className="pl__empty-title">Nessun eseguibile pubblicato</div>
+                <div className="pl__empty-text">
+                  {isAdmin
+                    ? 'Pubblica un progetto Arricchisci come eseguibile usando il pulsante 📢 sulla sua card o "+ Nuovo" qui sopra.'
+                    : 'Chiedi a un amministratore di pubblicare una catena come eseguibile.'}
+                </div>
+              </div>
+            ) : (
+              <div className="pl__cards-grid">
+                {filterBySearch(eseguibili).map(item => (
+                  <EseguibileCard
+                    key={item.id}
+                    item={item}
+                    isAdmin={isAdmin}
+                    onExecute={() => setExecuteEseguibileId(item.id)}
+                    onDelete={() => handleDeleteEseguibile(item.id, item.name)}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+
+        </div>{/* /content */}
+      </div>{/* /main */}
+
+      {/* ── MODAL ──────────────────────────────────────────── */}
       {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3 className="modal__title">
-              {newProjectType === 'estrai' ? '📥' : newProjectType === 'manipola' ? '🔄' : '🔗'}
-              Nuovo progetto {newProjectType === 'estrai' ? 'Estrai' : newProjectType === 'manipola' ? 'Manipola' : 'Arricchisci'}
+        <div className="pl__modal-overlay" onClick={() => setShowModal(false)}>
+          <div className="pl__modal" onClick={e => e.stopPropagation()}>
+            <h3 className="pl__modal-title">
+              {newProjectType === 'estrai' ? '↓' : newProjectType === 'manipola' ? '⚙' : '◈'}
+              &nbsp;Nuovo progetto {newProjectType === 'estrai' ? 'Estrai' : newProjectType === 'manipola' ? 'Manipola' : 'Arricchisci'}
             </h3>
 
-            {/* Nome */}
-            <div className="modal__field">
-              <label className="modal__label">Nome progetto *</label>
+            {/* Tipo selector */}
+            <div className="pl__modal-field">
+              <label className="pl__modal-label">Tipo</label>
+              <div className="pl__modal-type-row">
+                {['estrai','manipola','arricchisci'].map(t => (
+                  <button
+                    key={t}
+                    type="button"
+                    className={`pl__modal-type-btn pl__modal-type-btn--${t} ${newProjectType === t ? 'pl__modal-type-btn--on' : ''}`}
+                    onClick={() => setNewProjectType(t)}
+                  >
+                    {t === 'estrai' ? '↓ Estrai' : t === 'manipola' ? '⚙ Manipola' : '◈ Arricchisci'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="pl__modal-field">
+              <label className="pl__modal-label">Nome *</label>
               <input
                 type="text"
-                className="modal__input"
+                className="pl__modal-input"
                 value={newProjectName}
-                onChange={(e) => setNewProjectName(e.target.value)}
-                placeholder="Es. 'Estrazione Fabbricati'"
+                onChange={e => setNewProjectName(e.target.value)}
+                placeholder="Es. 'Catasto Campania Q2'"
+                autoFocus
               />
             </div>
 
-            {/* Descrizione */}
-            <div className="modal__field">
-              <label className="modal__label">Descrizione</label>
+            <div className="pl__modal-field">
+              <label className="pl__modal-label">Descrizione</label>
               <textarea
-                className="modal__textarea"
+                className="pl__modal-textarea"
                 value={newProjectDesc}
-                onChange={(e) => setNewProjectDesc(e.target.value)}
+                onChange={e => setNewProjectDesc(e.target.value)}
                 placeholder="Descrizione opzionale..."
                 rows={2}
               />
             </div>
 
-            {/* Connessione (solo per Estrai) */}
             {newProjectType === 'estrai' && (
-              <div className="modal__field">
-                <label className="modal__label">Connessione Database *</label>
+              <div className="pl__modal-field">
+                <label className="pl__modal-label">Connessione *</label>
                 <select
-                  className="modal__select"
-                  value={newProjectConnectionId}
-                  onChange={(e) => setNewProjectConnectionId(e.target.value)}
+                  className="pl__modal-select"
+                  value={newProjectConnId}
+                  onChange={e => setNewProjectConnId(e.target.value)}
                 >
                   <option value="">-- Seleziona connessione --</option>
-                  {connections.map(c => (
-                    <option key={c.id} value={c.id}>
-                      🐘 {c.name} ({c.database})
-                    </option>
-                  ))}
+                  {connections.length > 0 && (
+                    <optgroup label="Database">
+                      {connections.map(c => <option key={c.id} value={c.id}>{c.name} ({c.database})</option>)}
+                    </optgroup>
+                  )}
+                  {arcgisConnections.length > 0 && (
+                    <optgroup label="ArcGIS Server">
+                      {arcgisConnections.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </optgroup>
+                  )}
                 </select>
-                {connections.length === 0 && (
-                  <p className="modal__error">
-                    ⚠️ Nessuna connessione disponibile. 
-                    <span 
-                      className="modal__error-link"
-                      onClick={() => {
-                        setShowModal(false);
-                        handleManageConnections();
-                      }}
-                    >
+                {connections.length === 0 && arcgisConnections.length === 0 && (
+                  <p className="pl__modal-error">
+                    Nessuna connessione.{' '}
+                    <span className="pl__modal-error-link" onClick={() => { setShowModal(false); navigate('/connections'); }}>
                       Creane una
                     </span>
                   </p>
@@ -631,34 +795,301 @@ function ProjectList() {
               </div>
             )}
 
-            {/* Info per Manipola */}
             {newProjectType === 'manipola' && (
-              <div className="modal__info modal__info--manipola">
+              <div className="pl__modal-info pl__modal-info--manipola">
                 💡 I progetti Manipola usano come input i risultati dei progetti Estrai.
-                Assicurati di avere almeno un progetto Estrai eseguito.
               </div>
             )}
 
-            {/* Actions */}
-            <div className="modal__actions">
-              <button
-                className="modal__btn modal__btn--cancel"
-                onClick={() => setShowModal(false)}
-              >
+            {newProjectType === 'arricchisci' && (
+              <div className="pl__modal-info pl__modal-info--arricchisci">
+                💡 I progetti Arricchisci chiamano API esterne per arricchire i dati estratti.
+              </div>
+            )}
+
+            <div className="pl__modal-actions">
+              <button type="button" className="pl__modal-btn pl__modal-btn--cancel" onClick={() => setShowModal(false)}>
                 Annulla
               </button>
               <button
-                className={`modal__btn modal__btn--submit modal__btn--submit-${newProjectType}`}
+                type="button"
+                className={`pl__modal-btn pl__modal-btn--submit pl__modal-btn--${newProjectType}`}
                 onClick={handleCreateProject}
+                disabled={creating}
               >
-                Crea Progetto
+                {creating ? 'Creazione...' : 'Crea Progetto'}
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* ── PUBLISH ESEGUIBILE MODAL ────────────────────────── */}
+      {publishProject && (
+        <PublishEseguibileModal
+          project={publishProject}
+          onClose={() => setPublishProject(null)}
+          onSuccess={() => {
+            toast.success('Eseguibile pubblicato — visibile nella sezione 🚀 Eseguibili');
+            loadData();
+          }}
+        />
+      )}
+
+      {/* ── WIZARD ESECUZIONE ESEGUIBILE ─────────────────────── */}
+      {executeEseguibileId && (
+        <EseguibileExecuteWizard
+          eseguibileId={executeEseguibileId}
+          onClose={() => setExecuteEseguibileId(null)}
+        />
+      )}
+
+      {/* ── SELETTORE PROGETTO SORGENTE PER NUOVO ESEGUIBILE ── */}
+      {showEsegSelector && (
+        <div className="pl__modal-overlay" onClick={(e) => e.target === e.currentTarget && setShowEsegSelector(false)}>
+          <div className="pl__modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 560 }}>
+            <h3 className="pl__modal-title">📢 Pubblica come Eseguibile</h3>
+            <p style={{ fontSize: 13, color: 'var(--pl-text-sub)', marginTop: -4, marginBottom: 14 }}>
+              Seleziona un progetto Arricchisci da pubblicare come catena on-demand.
+            </p>
+
+            <div className="pl__modal-field">
+              <input
+                type="text"
+                className="pl__modal-input"
+                placeholder="Cerca progetto Arricchisci..."
+                value={esegSelectorSearch}
+                onChange={(e) => setEsegSelectorSearch(e.target.value)}
+                autoFocus
+              />
+            </div>
+
+            <div style={{ maxHeight: 360, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {arricchisciProjects.length === 0 ? (
+                <div style={{ padding: 24, textAlign: 'center', color: 'var(--pl-text-sub)', fontSize: 13 }}>
+                  Nessun progetto Arricchisci disponibile.<br />
+                  <span style={{ fontSize: 11.5 }}>Crea prima un progetto Arricchisci.</span>
+                </div>
+              ) : (
+                arricchisciProjects
+                  .filter(p => !esegSelectorSearch || (p.name || '').toLowerCase().includes(esegSelectorSearch.toLowerCase()))
+                  .map(p => (
+                    <div
+                      key={p.id}
+                      onClick={() => {
+                        setShowEsegSelector(false);
+                        setPublishProject(p);
+                      }}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 12,
+                        padding: '10px 14px', borderRadius: 8, cursor: 'pointer',
+                        border: '1px solid var(--pl-border)',
+                        background: 'var(--pl-surface-2)',
+                        transition: 'all 0.15s',
+                      }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.borderColor = 'rgba(124,58,237,0.5)';
+                        e.currentTarget.style.background = 'rgba(124,58,237,0.06)';
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.borderColor = 'var(--pl-border)';
+                        e.currentTarget.style.background = 'var(--pl-surface-2)';
+                      }}
+                    >
+                      <span style={{ fontSize: 18, color: '#a78bfa' }}>◈</span>
+                      <div style={{ flexGrow: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--pl-text)' }}>{p.name}</div>
+                        {p.description && (
+                          <div style={{ fontSize: 11.5, color: 'var(--pl-text-sub)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {p.description}
+                          </div>
+                        )}
+                      </div>
+                      <span style={{ color: 'var(--pl-text-sub)', fontSize: 16 }}>→</span>
+                    </div>
+                  ))
+              )}
+            </div>
+
+            <div className="pl__modal-actions" style={{ marginTop: 16 }}>
+              <button type="button" className="pl__modal-btn pl__modal-btn--cancel" onClick={() => setShowEsegSelector(false)}>
+                Annulla
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
+}
+
+// ── Section wrapper ──────────────────────────────────────────────────────
+function ProjectSection({ id, chipClass, chipLabel, subtitle, onNew, canCreate = true, empty, emptyIcon, emptyTitle, emptyText, children }) {
+  return (
+    <section id={id} className="pl__section">
+      <div className="pl__section-header">
+        <div className="pl__section-title-wrap">
+          <span className={`pl__chip ${chipClass}`}>{chipLabel}</span>
+          <span className="pl__section-sub">{subtitle}</span>
+        </div>
+        {canCreate && (
+          <button type="button" className="pl__btn pl__btn--ghost pl__btn--sm" onClick={onNew}>＋ Nuovo</button>
+        )}
+      </div>
+
+      {empty ? (
+        <div className="pl__empty">
+          <canvas className="pl__empty-hex" />
+          <div className="pl__empty-icon">{emptyIcon}</div>
+          <div className="pl__empty-title">{emptyTitle}</div>
+          <div className="pl__empty-text">{emptyText}</div>
+        </div>
+      ) : (
+        <div className="pl__cards-grid">{children}</div>
+      )}
+    </section>
+  );
+}
+
+// ── Project card ─────────────────────────────────────────────────────────
+function ProjectCard({ project, accentClass, modLabel, meta, scheduleCount, onOpen, onDelete, onSchedule }) {
+  const lastRun = project.last_run_at;
+  const status  = project.last_status;
+
+  const statusLabel = status === 'success' ? 'Completato'
+    : status === 'running' ? 'In esecuzione'
+    : status === 'error'   ? 'Errore'
+    : 'Idle';
+  const statusMod = status === 'success' ? 'pl__status--ok'
+    : status === 'error' ? 'pl__status--err'
+    : '';
+
+  return (
+    <div className="pl__card" onClick={onOpen}>
+      <div className={`pl__card-accent ${accentClass}`} />
+      <div className="pl__card-body">
+        <div className="pl__card-header-row">
+          <div className="pl__card-name">{project.name}</div>
+          <span className="pl__card-mod">{modLabel}</span>
+        </div>
+        <div className="pl__card-desc">{project.description || 'Nessuna descrizione'}</div>
+        <div className="pl__card-meta">
+          {meta.map(({ key, val }) => (
+            <div key={key}>
+              <div className="pl__meta-key">{key}</div>
+              <div className="pl__meta-val">{val}</div>
+            </div>
+          ))}
+        </div>
+        <div className="pl__card-footer">
+          <span className={`pl__status ${statusMod}`}>{statusLabel}</span>
+          <div className="pl__card-actions">
+            {scheduleCount > 0 && (
+              <button type="button" className="pl__btn pl__btn--ghost pl__btn--sm pl__btn--schedule"
+                onClick={e => { e.stopPropagation(); onSchedule(); }}
+                title="Schedule automatici"
+              >
+                ⏰ <span className="pl__schedule-badge">{scheduleCount}</span>
+              </button>
+            )}
+            <button type="button" className="pl__btn pl__btn--ghost pl__btn--sm"
+              onClick={e => { e.stopPropagation(); onDelete(); }}
+            >🗑</button>
+            <button type="button" className="pl__btn pl__btn--primary pl__btn--sm"
+              onClick={e => { e.stopPropagation(); onOpen(); }}
+            >Apri →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Eseguibile card ──────────────────────────────────────────────────────
+function EseguibileCard({ item, isAdmin, onExecute, onDelete }) {
+  const fmt = (item.default_output_format || 'xlsx').toUpperCase();
+  return (
+    <div className="pl__card" onClick={onExecute}>
+      <div className="pl__card-accent" style={{ background: 'linear-gradient(180deg,#a78bfa,#7c3aed)' }} />
+      <div className="pl__card-body">
+        <div className="pl__card-header-row">
+          <div className="pl__card-name">{item.name}</div>
+          <span className="pl__card-mod" style={{ background: 'rgba(124,58,237,0.15)', color: '#a78bfa' }}>🚀 {fmt}</span>
+        </div>
+        <div className="pl__card-desc">{item.description || 'Nessuna descrizione'}</div>
+        <div className="pl__card-meta">
+          <div>
+            <div className="pl__meta-key">Colonne attese</div>
+            <div className="pl__meta-val">{item.expected_columns_count ?? '—'}</div>
+          </div>
+          <div>
+            <div className="pl__meta-key">Output</div>
+            <div className="pl__meta-val">{fmt}</div>
+          </div>
+        </div>
+        <div className="pl__card-footer">
+          <span className="pl__status">On-demand</span>
+          <div className="pl__card-actions">
+            {isAdmin && (
+              <button type="button" className="pl__btn pl__btn--ghost pl__btn--sm"
+                onClick={e => { e.stopPropagation(); onDelete(); }}
+                title="Elimina eseguibile"
+              >🗑</button>
+            )}
+            <button type="button" className="pl__btn pl__btn--primary pl__btn--sm"
+              onClick={e => { e.stopPropagation(); onExecute(); }}
+            >▶ Esegui</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Empty hex canvas ─────────────────────────────────────────────────────
+function useEmptyHexCanvases(theme) {
+  useEffect(() => {
+    const draw = (canvas) => {
+      if (!canvas) return;
+      const isDark = (theme || document.documentElement.getAttribute('data-theme')) !== 'light';
+      const W = canvas.offsetWidth  || 280;
+      const H = canvas.offsetHeight || 120;
+      canvas.width  = W; canvas.height = H;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, W, H);
+      const ac = isDark
+        ? [[75,139,255],[52,193,122],[155,109,255]]
+        : [[37,99,235],[22,163,74],[124,58,237]];
+      const rng = s => { let x = Math.sin(s+1)*43758.5453; return x-Math.floor(x); };
+      const R = 14;
+      const hexW = R * Math.sqrt(3), hexH = R * 2;
+      const cols = Math.ceil(W/hexW)+1, rows = Math.ceil(H/(hexH*0.75))+1;
+      for (let col=0; col<cols; col++) for (let row=0; row<rows; row++) {
+        const cx = col*hexW+(row%2===0?0:hexW/2), cy = row*hexH*0.75;
+        const dx=(cx-W/2)/(W/2), dy=(cy-H/2)/(H/2);
+        const dist = Math.sqrt(dx*dx+dy*dy);
+        const seed = col*13+row*7;
+        const jitter = (rng(seed)-0.5)*0.4;
+        const op = Math.min(1, Math.max(0, (1-dist*0.85)+jitter*(1-dist)));
+        if (op<0.04) continue;
+        ctx.beginPath();
+        for (let i=0;i<6;i++){const a=(Math.PI/180)*(60*i-30);i===0?ctx.moveTo(cx+R*Math.cos(a),cy+R*Math.sin(a)):ctx.lineTo(cx+R*Math.cos(a),cy+R*Math.sin(a));}
+        ctx.closePath();
+        const a=ac[Math.abs(col+row)%3];
+        ctx.strokeStyle=`rgba(${a[0]},${a[1]},${a[2]},${(op*0.22).toFixed(2)})`;
+        ctx.lineWidth=0.8; ctx.stroke();
+      }
+    };
+    document.querySelectorAll('.pl__empty-hex').forEach(draw);
+  });
+}
+
+// Hook invoked at module level via useEffect in the main component would be cleaner,
+// but for simplicity just call it inline via a small wrapper
+function EmptyHexDrawer({ theme }) {
+  useEmptyHexCanvases(theme);
+  return null;
 }
 
 export default ProjectList;
