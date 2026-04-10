@@ -69,9 +69,10 @@ class ConnectionService:
             group_id=row.get("group_id", ""),
             created_at=row.get("created_at"),
             updated_at=row.get("updated_at"),
+            created_by=row.get("created_by"),
         )
 
-    def create_connection(self, data: ConnectionCreate, group_id: str = None) -> DatabaseConnection:
+    def create_connection(self, data: ConnectionCreate, group_id: str = None, created_by: str = None) -> DatabaseConnection:
         group_id = group_id or self.DEFAULT_GROUP
         connection_id = self._generate_connection_id(data.name)
         extra = {"description": getattr(data, "description", "")}
@@ -87,14 +88,21 @@ class ConnectionService:
             username=data.username,
             password=_encrypt_password(data.password),
             extra=extra,
+            created_by=created_by,
         )
         logger.info(f"Connessione creata: {connection_id}", op="create_connection")
         row = db.get_connection_config(connection_id)
         return self._row_to_connection(row)
 
     def list_connections(self, group_id: str = None) -> ConnectionList:
-        group_id = group_id or self.DEFAULT_GROUP
-        rows = db.list_connections(group_id)
+        # group_id=None → no filter (usato da superadmin e dalla path allowed_groups)
+        if group_id is None:
+            import app.db.config_db_service as _cfg_db
+            rows = _cfg_db.fetchall(
+                "SELECT id, group_id, name, db_type, host, port, database, db_schema, username, created_at FROM connections ORDER BY name"
+            )
+        else:
+            rows = db.list_connections(group_id)
         connections = []
         for row in rows:
             full_row = db.get_connection_config(row["id"])
@@ -118,8 +126,15 @@ class ConnectionService:
             "username": "username", "password": "password",
         }
         db_fields = {field_map[k]: v for k, v in update_fields.items() if k in field_map}
+        # Bugfix: il frontend riceve la password mascherata "***" nelle list/get
+        # e la rispedisce inalterata se l'utente non la modifica. Skipparla per
+        # non sovrascrivere la vera password salvata.
         if "password" in db_fields:
-            db_fields["password"] = _encrypt_password(db_fields["password"])
+            pwd = db_fields["password"]
+            if pwd is None or pwd == "" or pwd == "***":
+                db_fields.pop("password")
+            else:
+                db_fields["password"] = _encrypt_password(pwd)
         if "description" in update_fields:
             import json
             extra = row.get("extra") or {}
@@ -176,22 +191,125 @@ class ConnectionService:
             return ConnectionTestResult(success=False, message=f"Errore PostgreSQL: {str(e)}")
 
     def _test_mssql(self, conn):
+        """
+        Test connessione SQL Server.
+
+        Strategia:
+        - Filtra i driver disponibili sul sistema (`pyodbc.drivers()`).
+        - Per ogni driver disponibile prova varianti di Encrypt:
+          * Driver 18: Encrypt=Optional (Default ora è Mandatory che vuole TLS)
+          * Driver 18: Encrypt=No (server senza TLS)
+          * Driver 17: senza Encrypt (driver legacy, default no encryption)
+          * "SQL Server" (driver vintage MS, ultimo fallback)
+        - Riporta il PRIMO errore reale (non IM002 di driver mancanti).
+        """
         try:
             import pyodbc
-            for driver in ["ODBC Driver 18 for SQL Server", "ODBC Driver 17 for SQL Server"]:
+        except ImportError:
+            return ConnectionTestResult(success=False, message="pyodbc non installato: pip install pyodbc")
+
+        installed = set(pyodbc.drivers())
+        if not any("SQL Server" in d for d in installed):
+            return ConnectionTestResult(
+                success=False,
+                message=(
+                    "Nessun driver ODBC per SQL Server installato sul sistema. "
+                    "Installa 'ODBC Driver 18 for SQL Server' da Microsoft."
+                ),
+            )
+
+        # SECURITY: escape dei separatori ODBC (`;`, `{`, `}`) nei valori utente.
+        # Senza escape, un username come "admin;Encrypt=No" inietta parametri
+        # arbitrari nella connection string, bypassando Encrypt/TrustServerCertificate.
+        # ODBC usa `{` `}` per delimitare valori che contengono `;`.
+        def _odbc_escape(val: str) -> str:
+            if not val:
+                return val
+            if ';' in val or '{' in val or '}' in val:
+                return '{' + val.replace('}', '}}') + '}'
+            return val
+
+        base = (
+            f"SERVER={_odbc_escape(conn.host)},{conn.port};"
+            f"DATABASE={_odbc_escape(conn.database)};"
+            f"UID={_odbc_escape(conn.username)};"
+            f"PWD={_odbc_escape(conn.password)};"
+            f"TrustServerCertificate=yes"
+        )
+
+        all_attempts = [
+            ("ODBC Driver 18 for SQL Server", f"DRIVER={{ODBC Driver 18 for SQL Server}};{base};Encrypt=Optional"),
+            ("ODBC Driver 18 for SQL Server", f"DRIVER={{ODBC Driver 18 for SQL Server}};{base};Encrypt=No"),
+            ("ODBC Driver 17 for SQL Server", f"DRIVER={{ODBC Driver 17 for SQL Server}};{base}"),
+            ("SQL Server",                    f"DRIVER={{SQL Server}};{base}"),
+        ]
+
+        # Filtra solo i driver effettivamente installati per evitare IM002 fittizi
+        attempts = [(d, cs) for d, cs in all_attempts if d in installed]
+        if not attempts:
+            return ConnectionTestResult(
+                success=False,
+                message=f"Nessuna combinazione driver/encrypt compatibile con quelli installati: {sorted(installed)}",
+            )
+
+        errors = []
+        try:
+            for driver_name, cs in attempts:
                 try:
-                    cs = f"DRIVER={{{driver}}};SERVER={conn.host},{conn.port};DATABASE={conn.database};UID={conn.username};PWD={conn.password};TrustServerCertificate=yes"
                     c = pyodbc.connect(cs, timeout=5)
                     cur = c.cursor()
                     cur.execute("SELECT @@VERSION;")
                     version = cur.fetchone()[0]
                     cur.close(); c.close()
-                    return ConnectionTestResult(success=True, message=f"MS SQL riuscita ({driver})", details={"version": version[:100]})
-                except pyodbc.InterfaceError:
+                    return ConnectionTestResult(
+                        success=True,
+                        message=f"MS SQL riuscita ({driver_name})",
+                        details={"version": version[:100]},
+                    )
+                except Exception as e:
+                    # Filtra IM002 (driver non installato): non aiuta capire il problema
+                    err_msg = str(e)
+                    if "IM002" not in err_msg:
+                        errors.append(f"[{driver_name}] {err_msg}")
                     continue
-            return ConnectionTestResult(success=False, message="Nessun driver ODBC trovato.")
-        except ImportError:
-            return ConnectionTestResult(success=False, message="pyodbc non installato: pip install pyodbc")
+
+            # Fallback finale: pymssql (usa FreeTDS, più tollerante con server vecchi
+            # che hanno problemi di handshake TLS/TDS con i driver Microsoft moderni).
+            try:
+                import pymssql
+                try:
+                    c = pymssql.connect(
+                        server=conn.host,
+                        port=conn.port,
+                        user=conn.username,
+                        password=conn.password,
+                        database=conn.database,
+                        timeout=5,
+                        login_timeout=5,
+                    )
+                    cur = c.cursor()
+                    cur.execute("SELECT @@VERSION")
+                    version = cur.fetchone()[0]
+                    cur.close(); c.close()
+                    return ConnectionTestResult(
+                        success=True,
+                        message="MS SQL riuscita (pymssql / FreeTDS)",
+                        details={"version": version[:100]},
+                    )
+                except Exception as e:
+                    errors.append(f"[pymssql] {e}")
+            except ImportError:
+                errors.append("[pymssql non installato] Per server vecchi installa: pip install pymssql")
+
+            return ConnectionTestResult(
+                success=False,
+                message=(
+                    f"Connessione SQL Server fallita su tutti i driver disponibili. "
+                    f"Primo errore: {errors[0] if errors else 'sconosciuto'}. "
+                    f"Tentativi totali: {len(errors)}."
+                ),
+                details={"errors": errors},
+            )
         except Exception as e:
             return ConnectionTestResult(success=False, message=f"Errore MS SQL: {str(e)}")
 

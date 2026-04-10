@@ -308,7 +308,10 @@ def op_filter(
         elif operator == '<=':
             mask = col <= value
         elif operator == 'contains':
-            mask = col.astype(str).str.contains(str(value), case=False, na=False)
+            # SECURITY: regex=False tratta il valore come stringa letterale.
+            # Prima: regex=True (default) → un utente poteva iniettare pattern
+            # catastrofici come ((a+)+)+b causando ReDoS (CPU hang sul worker).
+            mask = col.astype(str).str.contains(str(value), case=False, na=False, regex=False)
         elif operator == 'startswith':
             mask = col.astype(str).str.startswith(str(value), na=False)
         elif operator == 'endswith':
@@ -870,10 +873,13 @@ def op_fill_na(
     
     try:
         if method in ['ffill', 'bfill']:
+            # FIX: fillna(method=) è deprecato in pandas 2.0+.
+            # Usare ffill()/bfill() direttamente.
+            fill_func = 'ffill' if method == 'ffill' else 'bfill'
             if column and column in result.columns:
-                result[column] = result[column].fillna(method=method)
+                result[column] = getattr(result[column], fill_func)()
             else:
-                result = result.fillna(method=method)
+                result = getattr(result, fill_func)()
         else:
             if column and column in result.columns:
                 result[column] = result[column].fillna(value)
@@ -1486,7 +1492,8 @@ def _evaluate_condition(col_values, operator: str, value: str):
             return num_col <= numeric_val
     
     elif operator == 'contains':
-        return col_values.astype(str).str.contains(str(value), case=False, na=False)
+        # SECURITY: regex=False (anti-ReDoS). Vedi commento in op_filter.
+        return col_values.astype(str).str.contains(str(value), case=False, na=False, regex=False)
     
     elif operator == 'startswith':
         return col_values.astype(str).str.startswith(str(value), na=False)

@@ -536,8 +536,15 @@ def delete_comparison_keys(canvas_id: str, node_id: str = None) -> None:
 # CONNECTIONS
 # ============================================================
 
-def get_connection_config(conn_id: str) -> Optional[Dict]:
-    row = fetchone("SELECT * FROM connections WHERE id = ?", (conn_id,))
+def get_connection_config(conn_id: str, group_id: str = None) -> Optional[Dict]:
+    """Recupera configurazione connessione. group_id=None → no filter (backward compat)."""
+    if group_id:
+        row = fetchone(
+            "SELECT * FROM connections WHERE id = ? AND group_id = ?",
+            (conn_id, group_id)
+        )
+    else:
+        row = fetchone("SELECT * FROM connections WHERE id = ?", (conn_id,))
     if row and row.get("extra"):
         row["extra"] = json.loads(row["extra"])
     return row
@@ -584,13 +591,20 @@ def delete_connection(conn_id: str) -> bool:
 # FILE SOURCES
 # ============================================================
 
-def get_file_source(file_id: str, include_data: bool = False) -> Optional[Dict]:
+def get_file_source(file_id: str, include_data: bool = False, group_id: str = None) -> Optional[Dict]:
+    """Recupera file source. group_id=None → no filter (backward compat)."""
+    gid_clause = " AND group_id = ?" if group_id else ""
+    gid_params = (group_id,) if group_id else ()
     if include_data:
-        row = fetchone("SELECT * FROM file_sources WHERE id = ?", (file_id,))
+        row = fetchone(
+            f"SELECT * FROM file_sources WHERE id = ?{gid_clause}",
+            (file_id,) + gid_params
+        )
     else:
         row = fetchone(
-            "SELECT id, group_id, name, original_filename, format, size_bytes, metadata, created_at FROM file_sources WHERE id = ?",
-            (file_id,)
+            f"SELECT id, group_id, name, original_filename, format, size_bytes, metadata, created_at "
+            f"FROM file_sources WHERE id = ?{gid_clause}",
+            (file_id,) + gid_params
         )
     if row and row.get("metadata"):
         row["metadata"] = json.loads(row["metadata"])
@@ -640,8 +654,15 @@ def delete_file_source(file_id: str) -> bool:
 # DATASOURCES
 # ============================================================
 
-def get_datasource(ds_id: str) -> Optional[Dict]:
-    row = fetchone("SELECT * FROM datasources WHERE id = ?", (ds_id,))
+def get_datasource(ds_id: str, group_id: str = None) -> Optional[Dict]:
+    """Recupera datasource. group_id=None → no filter (backward compat)."""
+    if group_id:
+        row = fetchone(
+            "SELECT * FROM datasources WHERE id = ? AND group_id = ?",
+            (ds_id, group_id)
+        )
+    else:
+        row = fetchone("SELECT * FROM datasources WHERE id = ?", (ds_id,))
     if row and row.get("config"):
         row["config"] = json.loads(row["config"])
     return row
@@ -695,8 +716,15 @@ def delete_datasource(ds_id: str) -> bool:
 # API CONNECTIONS
 # ============================================================
 
-def get_api_connection(api_id: str) -> Optional[Dict]:
-    row = fetchone("SELECT * FROM api_connections WHERE id = ?", (api_id,))
+def get_api_connection(api_id: str, group_id: str = None) -> Optional[Dict]:
+    """Recupera API connection. group_id=None → no filter (backward compat)."""
+    if group_id:
+        row = fetchone(
+            "SELECT * FROM api_connections WHERE id = ? AND group_id = ?",
+            (api_id, group_id)
+        )
+    else:
+        row = fetchone("SELECT * FROM api_connections WHERE id = ?", (api_id,))
     if row and row.get("config"):
         row["config"] = json.loads(row["config"])
     return row

@@ -100,6 +100,16 @@ class ManipolaExecutor:
     def execute(self, project_id: str, canvas: CanvasState, force_recalculate: bool = False, run_id: str = None) -> Dict[str, Any]:
         """Esegue la pipeline completa: carica sorgenti, trasforma, salva."""
         logger.info(f"Esecuzione MANIPOLA: {project_id}", op="execute", project_id=project_id)
+
+        # SECURITY: memorizza il group_id del progetto corrente per i check
+        # cross-tenant in _carica_sorgenti_progetto / _carica_sorgenti_file.
+        try:
+            import app.db.db_service as _db
+            _proj_row = _db.get_project(project_id)
+            self._current_group_id = _proj_row.get("group_id") if _proj_row else None
+        except Exception:
+            self._current_group_id = None
+
         _step_start = _time.time()
         dataframes = {}
 
@@ -233,7 +243,13 @@ class ManipolaExecutor:
     # =========================================================================
 
     def _carica_sorgenti_progetto(self, canvas, dataframes, force_recalculate, run_id: str = None):
-        """Carica DataFrame dai progetti sorgente (type=project_source)."""
+        """Carica DataFrame dai progetti sorgente (type=project_source).
+
+        SECURITY: verifica che ogni source_project_id appartenga allo stesso
+        gruppo del progetto corrente. Senza questo check, un utente potrebbe
+        inserire nel canvas un source_project_id di un altro tenant e
+        esfiltrare i dati durante l'esecuzione della pipeline.
+        """
         source_nodes = [n for n in canvas.nodes if n.type == "project_source"]
 
         for node in source_nodes:
@@ -241,6 +257,43 @@ class ManipolaExecutor:
             if not source_project_id:
                 logger.warning(f"Nodo {node.id}: source_project_id mancante")
                 continue
+
+            # Cross-tenant isolation: il progetto sorgente deve appartenere
+            # allo stesso gruppo del progetto corrente. Questa è la difesa
+            # a livello executor (defense-in-depth) — il canvas potrebbe
+            # contenere ID arbitrari inseriti da un attaccante.
+            try:
+                import app.db.db_service as _db
+                # Recupera group_id del progetto corrente dal run_id context
+                from app.utils.logger import get_run_id as _get_run_id
+                _current_run_id = run_id or _get_run_id()
+                # Fallback: cerca il progetto che sta eseguendo tramite il primo
+                # nodo non-source nel canvas
+                _executing_project_group = None
+                if hasattr(self, '_executing_group_id'):
+                    _executing_project_group = self._executing_group_id
+                else:
+                    # Cerca il progetto corrente dal canvas context
+                    # Il project_id è passato a execute() → salvalo come attributo
+                    _executing_project_group = getattr(self, '_current_group_id', None)
+
+                if _executing_project_group:
+                    _source_row = _db.get_project(source_project_id)
+                    if _source_row:
+                        _source_group = _source_row.get("group_id", "")
+                        if _source_group != _executing_project_group:
+                            logger.error(
+                                f"[SECURITY] Cross-tenant access blocked: progetto {source_project_id} "
+                                f"(group={_source_group}) referenziato da progetto di group={_executing_project_group}",
+                                op="execute"
+                            )
+                            return {
+                                "success": False,
+                                "message": f"Accesso negato: il progetto sorgente '{source_project_id}' "
+                                           f"appartiene a un gruppo diverso."
+                            }
+            except Exception as _sec_err:
+                logger.warning(f"Cross-tenant check fallito (non bloccante): {_sec_err}")
 
             # Cerca risultato nel DB (preferito) o filesystem (fallback)
             if not force_recalculate:

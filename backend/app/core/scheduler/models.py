@@ -268,12 +268,12 @@ class ScheduleCreate(BaseModel):
     Step 6: riepilogo → conferma
     """
     # Step 1
-    project_id: str
+    project_id: str = Field(..., min_length=1, max_length=100)
 
     # Step 2
-    cron_expression: str
-    timezone: str = "Europe/Rome"
-    description: str = ""
+    cron_expression: str = Field(..., min_length=5, max_length=100)
+    timezone: str = Field("Europe/Rome", max_length=50)
+    description: str = Field("", max_length=2000)
 
     # Step 3
     use_cache: bool = False
@@ -282,19 +282,69 @@ class ScheduleCreate(BaseModel):
     destination: Optional[ScheduleDestination] = None
 
     # Step 5
-    max_retries: int = 3
+    max_retries: int = Field(3, ge=0, le=10)
     retry_backoff_seconds: List[int] = [60, 300, 900]
     append_conflicts: Literal["skip", "force", "abort"] = "skip"
     log_skipped_rows: bool = True
-    concurrency_max_queue: int = 3
+    concurrency_max_queue: int = Field(3, ge=1, le=20)
 
     # Campi flat opzionali dal frontend (usati dal validator sotto)
-    connection_id: Optional[str] = None
-    schema_name: Optional[str] = None
-    table_name: Optional[str] = None
-    write_mode: Optional[str] = None
-    batch_size: Optional[int] = None
-    match_columns: Optional[Any] = None  # stringa "col1,col2" o lista
+    connection_id: Optional[str] = Field(None, max_length=100)
+    schema_name: Optional[str] = Field(None, max_length=255)
+    table_name: Optional[str] = Field(None, max_length=255)
+    write_mode: Optional[str] = Field(None, max_length=50)
+    batch_size: Optional[int] = Field(None, ge=1, le=100000)
+    match_columns: Optional[List[str]] = None  # lista di nomi colonna
+
+    @model_validator(mode="before")
+    @classmethod
+    def flatten_nested_payload(cls, data: Any) -> Any:
+        """
+        Backward-compat: il wizard frontend invia il payload in forma NESTED:
+            {
+              "project_id": "...",
+              "schedule": {"cron_expression": "...", "timezone": "...", "description": "..."},
+              "execution": {"use_cache": false},
+              "destination": {...} o null,
+              "on_error": {"max_retries": 3, "retry_backoff_seconds": [...], "append_conflicts": "skip", "log_skipped_rows": true},
+              "concurrency": {"max_queue_size": 3}
+            }
+        Mentre il modello ScheduleCreate è FLAT. Questo validator appiattisce
+        automaticamente i campi nested al top level prima della validazione.
+        """
+        if not isinstance(data, dict):
+            return data
+
+        # schedule.* → top level
+        sched = data.get("schedule")
+        if isinstance(sched, dict):
+            for k in ("cron_expression", "timezone", "description"):
+                if k in sched and k not in data:
+                    data[k] = sched[k]
+
+        # execution.* → top level
+        exe = data.get("execution")
+        if isinstance(exe, dict):
+            if "use_cache" in exe and "use_cache" not in data:
+                data["use_cache"] = exe["use_cache"]
+            # concurrency_max_queue arriva da execution.concurrency_max_queue oppure
+            # da concurrency.max_queue_size (i due wizard step)
+            if "concurrency_max_queue" in exe and "concurrency_max_queue" not in data:
+                data["concurrency_max_queue"] = exe["concurrency_max_queue"]
+
+        # on_error.* → top level
+        on_err = data.get("on_error")
+        if isinstance(on_err, dict):
+            for k in ("max_retries", "retry_backoff_seconds", "append_conflicts", "log_skipped_rows"):
+                if k in on_err and k not in data:
+                    data[k] = on_err[k]
+
+        # concurrency.max_queue_size → concurrency_max_queue (top level)
+        conc = data.get("concurrency")
+        if isinstance(conc, dict) and "max_queue_size" in conc and "concurrency_max_queue" not in data:
+            data["concurrency_max_queue"] = conc["max_queue_size"]
+
+        return data
 
     @model_validator(mode="after")
     def build_destination_from_flat_fields(self) -> "ScheduleCreate":

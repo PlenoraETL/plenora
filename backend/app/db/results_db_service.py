@@ -111,14 +111,29 @@ def get_result(result_id: str) -> Optional[Dict]:
     )
 
 
-def get_result_data(result_id: str) -> Optional[bytes]:
-    row = fetchone("SELECT data FROM results WHERE id = ?", (result_id,))
+def get_result_data(result_id: str, group_id: str = None) -> Optional[bytes]:
+    """Recupera blob risultato. group_id=None → no filter (backward compat)."""
+    if group_id:
+        row = fetchone(
+            "SELECT data FROM results WHERE id = ? AND group_id = ?",
+            (result_id, group_id)
+        )
+    else:
+        row = fetchone("SELECT data FROM results WHERE id = ?", (result_id,))
     return row["data"] if row else None
 
 
-def get_latest_result(project_id: str) -> Optional[Dict]:
+def get_latest_result(project_id: str, group_id: str = None) -> Optional[Dict]:
+    """Recupera ultimo risultato per progetto. group_id=None → no filter."""
+    if group_id:
+        return fetchone(
+            "SELECT id, project_id, group_id, filename, format, size_bytes, rows_count, created_at "
+            "FROM results WHERE project_id = ? AND group_id = ? ORDER BY created_at DESC LIMIT 1",
+            (project_id, group_id)
+        )
     return fetchone(
-        "SELECT id, project_id, group_id, filename, format, size_bytes, rows_count, created_at FROM results WHERE project_id = ? ORDER BY created_at DESC LIMIT 1",
+        "SELECT id, project_id, group_id, filename, format, size_bytes, rows_count, created_at "
+        "FROM results WHERE project_id = ? ORDER BY created_at DESC LIMIT 1",
         (project_id,)
     )
 

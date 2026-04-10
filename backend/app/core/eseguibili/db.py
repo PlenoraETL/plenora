@@ -72,9 +72,19 @@ def create_eseguibile(
     return get_eseguibile(eid)
 
 
-def get_eseguibile(eid: str) -> Optional[Dict[str, Any]]:
-    """Ritorna l'eseguibile con canvas e expected_columns deserializzati."""
-    row = db.fetchone("SELECT * FROM eseguibili WHERE id = ?", (eid,))
+def get_eseguibile(eid: str, group_id: str = None) -> Optional[Dict[str, Any]]:
+    """Ritorna l'eseguibile con canvas e expected_columns deserializzati.
+
+    group_id=None → no filter (backward compat per uso interno).
+    Passare group_id dal router per defense-in-depth multi-tenant.
+    """
+    if group_id:
+        row = db.fetchone(
+            "SELECT * FROM eseguibili WHERE id = ? AND group_id = ?",
+            (eid, group_id)
+        )
+    else:
+        row = db.fetchone("SELECT * FROM eseguibili WHERE id = ?", (eid,))
     return _parse_row(row)
 
 

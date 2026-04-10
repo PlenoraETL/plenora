@@ -259,27 +259,36 @@ class DefaultEngineFactory:
         Returns:
             Connection string SQLAlchemy completa.
         """
+        # SECURITY: URL-encode username E password. Prima solo la password era
+        # encodata. Se username contiene '@', ':', '/' (es. email-based auth),
+        # la URL SQLAlchemy risulta malformata:
+        #   postgresql://user@domain:pass@host → il primo @ chiude la sezione auth.
+        usr = quote_plus(conn.username)
         pwd = quote_plus(conn.password)
 
         if conn.type in ("postgres", "postgresql"):
             return (
-                f"postgresql+psycopg2://{conn.username}:{pwd}"
+                f"postgresql+psycopg2://{usr}:{pwd}"
                 f"@{conn.host}:{conn.port}/{conn.database}"
             )
         elif conn.type == "mysql":
             return (
-                f"mysql+pymysql://{conn.username}:{pwd}"
+                f"mysql+pymysql://{usr}:{pwd}"
                 f"@{conn.host}:{conn.port}/{conn.database}"
             )
         elif conn.type == "mssql":
+            # Encrypt=Optional: ODBC Driver 18 di default richiede TLS valido,
+            # con Optional accetta sia server con TLS che senza, e con
+            # TrustServerCertificate=yes accetta self-signed.
             return (
-                f"mssql+pyodbc://{conn.username}:{pwd}"
+                f"mssql+pyodbc://{usr}:{pwd}"
                 f"@{conn.host}:{conn.port}/{conn.database}"
-                f"?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes"
+                f"?driver=ODBC+Driver+18+for+SQL+Server"
+                f"&TrustServerCertificate=yes&Encrypt=Optional"
             )
         elif conn.type == "oracle":
             return (
-                f"oracle+oracledb://{conn.username}:{pwd}"
+                f"oracle+oracledb://{usr}:{pwd}"
                 f"@{conn.host}:{conn.port}/?service_name={conn.database}"
             )
         elif conn.type == "sqlite":
@@ -493,15 +502,16 @@ class QueryExecutor:
             try:
                 from app.config import settings
                 timeout_s  = settings.DB_QUERY_TIMEOUT          # secondi (es. 30)
-                timeout_ms = timeout_s * 1000                    # millisecondi
+                # SECURITY: cast a int per prevenire injection se config contaminata
+                timeout_ms = int(timeout_s) * 1000
 
                 if connection.type in ("postgres", "postgresql"):
-                    # PostgreSQL: statement_timeout in ms
-                    conn.execute(text(f"SET statement_timeout = {timeout_ms}"))
+                    # PostgreSQL: statement_timeout in ms — parametrizzato
+                    conn.execute(text("SET statement_timeout = :t"), {"t": timeout_ms})
 
                 elif connection.type == "mysql":
-                    # MySQL 5.7.8+: max_execution_time in ms (solo SELECT)
-                    conn.execute(text(f"SET SESSION max_execution_time = {timeout_ms}"))
+                    # MySQL 5.7.8+: max_execution_time in ms (solo SELECT) — parametrizzato
+                    conn.execute(text("SET SESSION max_execution_time = :t"), {"t": timeout_ms})
 
                 elif connection.type == "oracle":
                     # Oracle: callTimeout in ms sull'oggetto connessione nativo

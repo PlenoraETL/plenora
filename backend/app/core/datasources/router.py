@@ -78,7 +78,7 @@ def _ds_error_to_http(e: DataSourceError) -> HTTPException:
         return HTTPException(403, str(e))
     if isinstance(e, DataSourceConnectionError):
         return HTTPException(502, str(e))
-    return HTTPException(500, str(e))
+    return HTTPException(500, "Errore interno del server")
 
 
 # =============================================================================
@@ -99,7 +99,7 @@ def create_datasource(data: DataSourceCreate, current_user: CurrentUser = Depend
         return ds
     except Exception as e:
         logger.error(f"[GESTITO] Errore creazione Data Source: {e}")
-        raise HTTPException(500, str(e))
+        raise HTTPException(500, "Errore interno del server")
 
 
 @router.get("", response_model=DataSourceList)
@@ -245,7 +245,7 @@ def list_files(
         raise _ds_error_to_http(e)
     except Exception as e:
         logger.error(f"[GESTITO] Errore list_files {ds_id}: {e}")
-        raise HTTPException(500, str(e))
+        raise HTTPException(500, "Errore interno del server")
 
 
 @router.get("/{ds_id}/files/download")
@@ -283,7 +283,7 @@ def download_file(
         raise _ds_error_to_http(e)
     except Exception as e:
         logger.error(f"[GESTITO] Errore download {ds_id}/{path}: {e}")
-        raise HTTPException(500, str(e))
+        raise HTTPException(500, "Errore interno del server")
 
 
 @router.post("/{ds_id}/files/upload", status_code=201)
@@ -306,6 +306,6 @@ def upload_file(
         raise _ds_error_to_http(e)
     except Exception as e:
         logger.error(f"[GESTITO] Errore upload {ds_id}/{path}: {e}")
-        raise HTTPException(500, str(e))
+        raise HTTPException(500, "Errore interno del server")
 
 

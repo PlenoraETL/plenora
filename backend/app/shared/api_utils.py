@@ -412,7 +412,11 @@ def get_arcgis_token(auth: Dict) -> Optional[str]:
     elif client_mode == "ip":
         payload["ip"] = auth.get("ip", "")
 
-    verify_ssl = auth.get("verify_ssl", False)
+    # SECURITY: default cambiato da False a True. Prima, il default disabilitava
+    # SSL, permettendo MITM su richieste ArcGIS token (username+password in chiaro).
+    # Gli utenti con server ArcGIS self-signed possono ancora impostare
+    # verify_ssl=false nella configurazione del connettore.
+    verify_ssl = auth.get("verify_ssl", True)
     try:
         # Silenzia l'InsecureRequestWarning quando l'utente disabilita
         # esplicitamente la verifica SSL (alcuni server ArcGIS interni hanno

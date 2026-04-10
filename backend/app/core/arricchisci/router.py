@@ -325,7 +325,7 @@ async def validate_enrichment(
         raise
     except Exception as e:
         logger.error(f"[CRASH] Errore validazione: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Errore interno del server")
 
 
 @enrichment_router.post("/estimate", response_model=EstimateResponse)
@@ -378,7 +378,7 @@ async def estimate_enrichment(
         raise
     except Exception as e:
         logger.error(f"[CRASH] Errore stima: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Errore interno del server")
 
 
 # =============================================================================
@@ -411,7 +411,7 @@ def list_api_connections(category: str = None, connection_type: str = None, curr
         return {"api_connections": all_conns}
     except Exception as e:
         logger.error(f"[CRASH] Errore lista API connections: {e}", exc_info=True)
-        raise HTTPException(500, str(e))
+        raise HTTPException(500, "Errore interno del server")
 
 
 @api_connections_router.get("/api-connections/{api_id}")
@@ -426,7 +426,7 @@ def get_api_connection(api_id: str, current_user: CurrentUser = Depends(require_
         raise
     except Exception as e:
         logger.error(f"[CRASH] Errore lettura API connection {api_id}: {e}", exc_info=True)
-        raise HTTPException(500, str(e))
+        raise HTTPException(500, "Errore interno del server")
 
 
 @api_connections_router.post("/api-connections")
@@ -441,7 +441,7 @@ def create_api_connection(data: dict, current_user: CurrentUser = Depends(requir
         return connection
     except Exception as e:
         logger.error(f"[CRASH] Errore creazione API connection: {e}", exc_info=True)
-        raise HTTPException(500, str(e))
+        raise HTTPException(500, "Errore interno del server")
 
 
 @api_connections_router.put("/api-connections/{api_id}")
@@ -466,7 +466,7 @@ def update_api_connection(api_id: str, data: dict, current_user: CurrentUser = D
         raise
     except Exception as e:
         logger.error(f"[CRASH] Errore aggiornamento API connection {api_id}: {e}", exc_info=True)
-        raise HTTPException(500, str(e))
+        raise HTTPException(500, "Errore interno del server")
 
 
 @api_connections_router.delete("/api-connections/{api_id}")
@@ -550,7 +550,7 @@ def test_api_config(
         raise
     except Exception as e:
         logger.error(f"[CRASH] Errore test API config: {e}", exc_info=True)
-        raise HTTPException(500, str(e))
+        raise HTTPException(500, "Errore interno del server")
 
 
 @api_connections_router.post("/api-connections/{api_id}/test")
@@ -573,7 +573,7 @@ def test_api_connection(
         raise
     except Exception as e:
         logger.error(f"[CRASH] Errore test API connection {api_id}: {e}", exc_info=True)
-        raise HTTPException(500, str(e))
+        raise HTTPException(500, "Errore interno del server")
 
 
 # =============================================================================
@@ -609,7 +609,7 @@ def get_templates(current_user: CurrentUser = Depends(require_not_esecutore)):
         return {"success": True, "count": len(templates), "templates": templates}
     except Exception as e:
         logger.error(f"[CRASH] Errore lista template: {e}", exc_info=True)
-        raise HTTPException(500, str(e))
+        raise HTTPException(500, "Errore interno del server")
 
 
 # =============================================================================
@@ -880,7 +880,7 @@ def execute_enrichment_async(
         raise
     except Exception as e:
         logger.error(f"[CRASH] Errore execute_enrichment_async: {e}", exc_info=True)
-        raise HTTPException(500, str(e))
+        raise HTTPException(500, "Errore interno del server")
 
 
 # =============================================================================

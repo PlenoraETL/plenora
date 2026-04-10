@@ -181,7 +181,7 @@ def execute_enrichment_task(
             elif node_type == "api_enrich":
                 api_id = node_data.get("api_id")
                 api_config = api_connections.get(api_id)
-                
+
                 if not api_config:
                     logger.error(
                         f"[GESTITO] [Task {task_id}] API '{api_id}' non trovata nel canvas "                        f"del progetto {project_id}"
@@ -194,7 +194,17 @@ def execute_enrichment_task(
                         "enrichment_stats": enrichment_stats,
                         "error_report": error_report_file,
                     }
-                
+
+                # ── execute_if: skip condizionale ──
+                from app.core.arricchisci.parallel import should_execute_node
+                _input_edge_check = next((e for e in edges if e["target"] == node_id), None)
+                _input_df_check = node_results.get(_input_edge_check["source"]) if _input_edge_check else None
+                if not should_execute_node(node_data, _input_df_check):
+                    logger.info(f"[Task {task_id}] Nodo {node_id} skippato (execute_if)")
+                    update_task_progress(self, node_progress, f"Nodo {node_id} skippato (condizione)")
+                    node_results[node_id] = _input_df_check
+                    continue
+
                 # ── EXECUTABLE: esegue processore locale (file→file) ──
                 if api_config.get("connection_type") == "executable":
                     api_name = api_config.get("name", api_id)

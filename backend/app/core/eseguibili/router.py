@@ -17,9 +17,19 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
 from typing import List, Optional
 
-from app.core.auth.auth import get_current_user, CurrentUser, group_filter
+from app.core.auth.auth import (
+    get_current_user,
+    require_admin,
+    assert_group_access,
+    assert_resource_visible,
+    assert_can_modify,
+    compute_can_edit,
+    CurrentUser,
+    group_filter,
+)
 from app.config import settings
 from app.utils.logger import get_logger
+from app.shared.sharing import visible_resource_ids
 
 from . import db as eseguibili_db
 from . import service as eseguibili_service
@@ -33,21 +43,23 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/eseguibili", tags=["eseguibili"])
 
 
-def _require_admin(user: CurrentUser) -> None:
-    """Solo admin/superadmin possono creare/modificare/eliminare eseguibili."""
-    if user.role not in ("admin", "superadmin"):
-        raise HTTPException(
-            status_code=403,
-            detail="Solo gli admin del gruppo possono pubblicare o modificare eseguibili"
-        )
-
-
 def _check_group_access(eseguibile: dict, user: CurrentUser) -> None:
-    """Verifica che l'utente possa accedere all'eseguibile (stesso gruppo o superadmin)."""
-    if user.role == "superadmin":
-        return
-    if eseguibile.get("group_id") != user.group_id:
-        raise HTTPException(status_code=403, detail="Accesso negato: eseguibile di altro gruppo")
+    """Hierarchical ownership (operazioni di SCRITTURA): solo admin del gruppo
+    proprietario, e solo se non creato da un superadmin."""
+    assert_can_modify(eseguibile, user, "Eseguibile")
+
+
+def _check_visible(eseguibile: dict, user: CurrentUser) -> None:
+    """Visibility check (operazioni di LETTURA: get / analyze / execute):
+    owned + condivisi via allowed_groups."""
+    assert_resource_visible(eseguibile, "eseguibili", user, "Eseguibile")
+
+
+def _inject_can_edit(record: dict, user: CurrentUser) -> dict:
+    """Inietta can_edit nel dict eseguibile in-place (per response models)."""
+    if record is not None:
+        record["can_edit"] = compute_can_edit(record, user)
+    return record
 
 
 # ──────────────────────────────────────────────────────────────
@@ -56,9 +68,23 @@ def _check_group_access(eseguibile: dict, user: CurrentUser) -> None:
 
 @router.get("", response_model=List[EseguibileSummary])
 def list_eseguibili(current_user: CurrentUser = Depends(get_current_user)):
-    """Lista gli eseguibili visibili all'utente (del suo gruppo)."""
-    gid = group_filter(current_user)
-    rows = eseguibili_db.list_eseguibili(group_id=gid)
+    """Lista eseguibili visibili: owned dal gruppo + condivisi via allowed_groups.
+    Ogni record include `can_edit` calcolato per l'utente corrente."""
+    is_super = current_user.role == "superadmin"
+
+    rows = eseguibili_db.list_eseguibili(group_id=None)
+
+    if not is_super:
+        visible_ids = visible_resource_ids(
+            'eseguibili',
+            current_user.group_id,
+            is_superadmin=False,
+        )
+        rows = [r for r in rows if r["id"] in visible_ids]
+
+    # Inietta can_edit in ogni dict (il response_model lo serializza)
+    for r in rows:
+        r["can_edit"] = compute_can_edit(r, current_user)
     return rows
 
 
@@ -69,14 +95,13 @@ def list_eseguibili(current_user: CurrentUser = Depends(get_current_user)):
 @router.post("", response_model=EseguibileDetails)
 def create_eseguibile(
     payload: EseguibileCreate,
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(require_admin)
 ):
     """Crea un eseguibile clonando il canvas di un progetto arricchisci esistente.
 
     Solo gli admin del gruppo possono pubblicare. Il progetto sorgente deve appartenere
     allo stesso gruppo dell'admin (o qualsiasi gruppo se superadmin).
     """
-    _require_admin(current_user)
     try:
         record = eseguibili_service.create_from_project(
             source_project_id=payload.source_project_id,
@@ -86,13 +111,15 @@ def create_eseguibile(
             description=payload.description or "",
             default_output_format=payload.default_output_format,
             default_output_name=payload.default_output_name,
+            icon=payload.icon,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"[CRASH] Errore creazione eseguibile: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Errore interno del server")
 
+    _inject_can_edit(record, current_user)
     return _to_details(record)
 
 
@@ -105,10 +132,10 @@ def get_eseguibile(
     eseguibile_id: str,
     current_user: CurrentUser = Depends(get_current_user)
 ):
+    """Dettaglio eseguibile. Read-only su risorsa visibile (owned + shared)."""
     record = eseguibili_db.get_eseguibile(eseguibile_id)
-    if not record:
-        raise HTTPException(status_code=404, detail="Eseguibile non trovato")
-    _check_group_access(record, current_user)
+    _check_visible(record, current_user)
+    _inject_can_edit(record, current_user)
     return _to_details(record)
 
 
@@ -120,12 +147,9 @@ def get_eseguibile(
 def update_eseguibile(
     eseguibile_id: str,
     payload: EseguibileUpdate,
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(require_admin)
 ):
-    _require_admin(current_user)
     record = eseguibili_db.get_eseguibile(eseguibile_id)
-    if not record:
-        raise HTTPException(status_code=404, detail="Eseguibile non trovato")
     _check_group_access(record, current_user)
 
     updated = eseguibili_db.update_eseguibile(
@@ -134,7 +158,9 @@ def update_eseguibile(
         description=payload.description,
         default_output_format=payload.default_output_format,
         default_output_name=payload.default_output_name,
+        icon=payload.icon,
     )
+    _inject_can_edit(updated, current_user)
     return _to_details(updated)
 
 
@@ -145,12 +171,9 @@ def update_eseguibile(
 @router.delete("/{eseguibile_id}")
 def delete_eseguibile(
     eseguibile_id: str,
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(require_admin)
 ):
-    _require_admin(current_user)
     record = eseguibili_db.get_eseguibile(eseguibile_id)
-    if not record:
-        raise HTTPException(status_code=404, detail="Eseguibile non trovato")
     _check_group_access(record, current_user)
 
     ok = eseguibili_db.delete_eseguibile(eseguibile_id)
@@ -176,11 +199,10 @@ async def analyze_upload(
 
     Il file viene salvato in una cartella temp. Il file_id ritornato viene poi usato
     nel successivo POST /execute. I file temp vengono eliminati dopo l'esecuzione.
+    Read-only su eseguibile visibile (owned + shared).
     """
     record = eseguibili_db.get_eseguibile(eseguibile_id)
-    if not record:
-        raise HTTPException(status_code=404, detail="Eseguibile non trovato")
-    _check_group_access(record, current_user)
+    _check_visible(record, current_user)
 
     # Salva in temp dir
     tmp_dir = settings.DATA_DIR / "temp" / "eseguibili_uploads"
@@ -226,7 +248,7 @@ async def analyze_upload(
         raise
     except Exception as e:
         logger.error(f"[CRASH] Errore analyze upload: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Errore interno del server")
 
 
 # ──────────────────────────────────────────────────────────────
@@ -241,11 +263,10 @@ def execute_eseguibile(
 ):
     """Esegue un eseguibile: rinomina colonne secondo il mapping, clona il canvas,
     sostituisce la sorgente con il file caricato e lancia il task di enrichment.
+    Read-only sull'eseguibile (anche viewer e gruppi destinatari di share possono eseguire).
     """
     record = eseguibili_db.get_eseguibile(eseguibile_id)
-    if not record:
-        raise HTTPException(status_code=404, detail="Eseguibile non trovato")
-    _check_group_access(record, current_user)
+    _check_visible(record, current_user)
 
     # Recupera il file dal cache upload
     upload = _UPLOAD_CACHE.get(payload.file_id)
@@ -269,7 +290,7 @@ def execute_eseguibile(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"[CRASH] Errore execute eseguibile: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Errore interno del server")
     finally:
         # Cleanup: elimina file temp e voce cache
         try:
@@ -295,9 +316,11 @@ def _to_details(record: dict) -> dict:
         "expected_columns": record.get("expected_columns") or [],
         "default_output_format": record.get("default_output_format", "xlsx"),
         "default_output_name": record.get("default_output_name"),
+        "icon": record.get("icon"),
         "source_canvas_id": record.get("source_canvas_id"),
         "group_id": record["group_id"],
         "created_by": record["created_by"],
         "created_at": record["created_at"],
         "updated_at": record["updated_at"],
+        "can_edit": record.get("can_edit"),
     }

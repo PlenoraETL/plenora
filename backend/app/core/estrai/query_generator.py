@@ -728,7 +728,12 @@ class QueryGenerator:
             is_aggregate = any(col_upper.startswith(f"{fn}(") for fn in aggregate_functions)
 
             if is_aggregate:
-                # Espressione aggregata: usa così com'è
+                # Espressione aggregata: valida la struttura base prima dell'interpolazione.
+                # Pattern atteso: FUNC(identifier) — es. COUNT(*), SUM(area), AVG(col1)
+                # Rifiuta input che contengono SQL injection keywords.
+                import re as _re
+                if not _re.match(r'^[A-Z_]+\([a-zA-Z0-9_.*\s,]+\)$', col.strip()):
+                    raise ValueError(f"Espressione aggregata ORDER BY non valida: {col}")
                 parti.append(f"{col} {direction}")
             else:
                 # Colonna normale: qualifica con alias tabella
@@ -855,6 +860,9 @@ class QueryGenerator:
         qualified_table_name = self._qualify_table_name(raw_name) if first_node.type != 'datasource_node' else raw_name
         from_clause = qualified_table_name
         if first_node.alias:
+            # SECURITY: alias viene dal canvas (utente). Senza validazione,
+            # un utente potrebbe iniettare SQL via alias (es. "t1 WHERE 1=2--").
+            self._safe_identifier(first_node.alias, "Alias tabella FROM")
             from_clause += f" AS {first_node.alias}"
 
         # Traccia nodi già nel FROM per scegliere l'edge corretto
@@ -971,6 +979,8 @@ class QueryGenerator:
         # Assembla la clausola JOIN
         join_str = f"{join_type} JOIN {qualified_table_name}"
         if node.alias:
+            # SECURITY: alias validato come identifier (anti SQL injection)
+            self._safe_identifier(node.alias, "Alias tabella JOIN")
             join_str += f" AS {node.alias}"
         join_str += f" ON {on_clause}"
 
@@ -1020,9 +1030,22 @@ class QueryGenerator:
                     geom1=geom1, geom2=geom2
                 )
         except (ValueError, KeyError, AttributeError):
-            # Fallback: sintassi PostGIS standard
+            # Fallback: sintassi PostGIS standard.
+            # SECURITY: spatial_distance e spatial_predicate vengono dal canvas
+            # (utente) → vanno sanitizzati prima dell'interpolazione nel SQL.
+            _VALID_SPATIAL_PREDICATES = {
+                'ST_Intersects', 'ST_Contains', 'ST_Within', 'ST_Touches',
+                'ST_Overlaps', 'ST_Crosses', 'ST_DWithin', 'ST_Equals',
+                'ST_Disjoint', 'ST_Covers', 'ST_CoveredBy',
+            }
+            if spatial_predicate not in _VALID_SPATIAL_PREDICATES:
+                raise ValueError(f"Predicato spaziale non valido: {spatial_predicate}")
             if spatial_predicate == 'ST_DWithin' and spatial_distance:
-                return f"ST_DWithin({geom1}, {geom2}, {spatial_distance})"
+                try:
+                    safe_distance = float(spatial_distance)
+                except (ValueError, TypeError):
+                    raise ValueError(f"Distanza spaziale non numerica: {spatial_distance}")
+                return f"ST_DWithin({geom1}, {geom2}, {safe_distance})"
             return f"{spatial_predicate}({geom1}, {geom2})"
 
     def _genera_on_attributivo(
@@ -1329,7 +1352,27 @@ class QueryGenerator:
                 r')',
                 re.IGNORECASE
             )
-        return bool(cls._SQL_FUNCTION_RE.match(value.strip()))
+        # SECURITY: fullmatch (non match) per evitare che un prefisso valido
+        # seguito da SQL injection passi il check.
+        # Prima: match() matchava solo l'inizio → "GETDATE(); DROP TABLE--" passava.
+        # Ora: fullmatch() richiede che TUTTA la stringa sia una funzione valida.
+        # Per le funzioni con argomenti (DATEADD, etc.) il pattern termina con \(
+        # che non matcha con fullmatch. Usiamo match() + lunghezza safe check.
+        stripped = value.strip()
+        if not cls._SQL_FUNCTION_RE.match(stripped):
+            return False
+        # Dopo il match del prefisso, verifica che il resto sia solo caratteri
+        # safe per argomenti di funzione SQL (digits, spazi, virgole, parentesi,
+        # apici singoli, nomi colonna). Rifiuta ; -- UNION SELECT ecc.
+        import re as _re
+        _UNSAFE_SQL_PATTERN = _re.compile(
+            r'(;|--|\bUNION\b|\bSELECT\b|\bDROP\b|\bINSERT\b|\bUPDATE\b|\bDELETE\b'
+            r'|\bEXEC\b|\bEXECUTE\b|\bALTER\b|\bCREATE\b)',
+            _re.IGNORECASE
+        )
+        if _UNSAFE_SQL_PATTERN.search(stripped):
+            return False
+        return True
 
     def _translate_date_function(self, value: str) -> str:
         """
@@ -1417,8 +1460,14 @@ class QueryGenerator:
         if re.match(r'GETDATE\s*\(\s*\)|GETUTCDATE\s*\(\s*\)|SYSDATETIME\s*\(\s*\)|NOW\s*\(\s*\)|SYSDATE|SYSTIMESTAMP', v, re.IGNORECASE):
             return dialect['now']
 
-        # Fallback: inietta il valore così com'è (meglio che un errore)
-        return v
+        # Fallback SICURO: rifiuta funzioni SQL non riconosciute invece di
+        # iniettarle raw. Prima: "return v" iniettava il valore intero nel SQL.
+        # Se _is_sql_function ha matchato il prefisso ma nessun translate
+        # pattern lo riconosce, è meglio errore che injection.
+        raise ValueError(
+            f"Funzione SQL '{v[:50]}' riconosciuta come funzione ma non traducibile "
+            f"per il dialetto '{db}'. Usare una funzione supportata."
+        )
 
     def _crea_condizione_in(self, col_ref: str, value: Any, params: Dict[str, Any]) -> str:
         """

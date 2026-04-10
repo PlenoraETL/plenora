@@ -4,7 +4,7 @@ Modelli Pydantic per il modulo Projects.
 CRUD progetti URBY-ETL con gestione canvas e metadata.
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional, Literal
 from datetime import datetime
 
@@ -23,10 +23,10 @@ class ProjectMetadata(BaseModel):
 
 class ProjectCreate(BaseModel):
     """Dati per creare un nuovo progetto."""
-    name: str
-    description: str = ""
+    name: str = Field(..., min_length=1, max_length=255)
+    description: str = Field("", max_length=2000)
     project_type: Literal["estrai", "manipola", "arricchisci"] = "estrai"
-    default_connection_id: Optional[str] = None
+    default_connection_id: Optional[str] = Field(None, max_length=100)
 
 
 class ProjectList(BaseModel):

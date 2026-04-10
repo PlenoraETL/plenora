@@ -26,10 +26,21 @@ Sicurezza:
     Le password sono oscurate ('***') nelle risposte API.
 """
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel
 from typing import Optional, List
 
+from app.core.auth.auth import (
+    get_current_user,
+    require_not_esecutore,
+    require_admin,
+    assert_group_access,
+    assert_resource_visible,
+    assert_can_modify,
+    compute_can_edit,
+    CurrentUser,
+    group_filter,
+)
 from app.core.features.models import (
     ArcGISConnection,
     ArcGISCreate,
@@ -70,40 +81,89 @@ def _mask_password(conn: ArcGISConnection) -> dict:
 # CRUD CONNESSIONI
 # =============================================================================
 
+def _check_arcgis_owner(connection_id: str, current_user: CurrentUser) -> ArcGISConnection:
+    """
+    Helper per operazioni di SCRITTURA: carica la connessione e verifica
+    hierarchical ownership (assert_can_modify).
+    Solleva 404 se non esiste, 403 se non del gruppo o creata da un superadmin
+    quando l'utente corrente è solo admin di gruppo.
+    """
+    conn = get_service().get_connection(connection_id)
+    assert_can_modify(conn, current_user, "Connessione ArcGIS")
+    return conn
+
+
+def _check_arcgis_access(connection_id: str, current_user: CurrentUser) -> ArcGISConnection:
+    """
+    Helper per operazioni di LETTURA (test, browse, schema, query): carica
+    la connessione e verifica visibilità (owned + shared via allowed_groups).
+    Solleva 404 se non esiste, 403 se non visibile.
+    """
+    conn = get_service().get_connection(connection_id)
+    assert_resource_visible(conn, "arcgis_connections", current_user, "Connessione ArcGIS")
+    return conn
+
+
 @router.post("/connections", response_model=dict)
-async def create_connection(data: ArcGISCreate):
-    """Crea una nuova connessione ArcGIS."""
+async def create_connection(data: ArcGISCreate, current_user: CurrentUser = Depends(require_admin)):
+    """Crea una nuova connessione ArcGIS. Solo admin/superadmin."""
     try:
-        connection = get_service().create_connection(data)
+        connection = get_service().create_connection(
+            data,
+            group_id=current_user.group_id,
+            created_by=current_user.user_id,
+        )
+        if connection is not None:
+            connection.can_edit = compute_can_edit(connection, current_user)
         return _mask_password(connection)
     except Exception as e:
         raise HTTPException(status_code=500, detail="Errore interno del server")
 
 
 @router.get("/connections", response_model=dict)
-async def list_connections():
-    """Lista tutte le connessioni ArcGIS."""
+async def list_connections(current_user: CurrentUser = Depends(require_not_esecutore)):
+    """Lista connessioni ArcGIS visibili: owned dal gruppo + condivise via allowed_groups.
+    Ogni record include `can_edit` calcolato per l'utente corrente."""
+    from app.shared.sharing import visible_resource_ids
+
     try:
-        result = get_service().list_connections()
-        return {
-            "connections": [_mask_password(c) for c in result.connections]
-        }
+        is_super = current_user.role == "superadmin"
+
+        result = get_service().list_connections(group_id=None)
+
+        if not is_super:
+            visible_ids = visible_resource_ids(
+                'arcgis_connections',
+                current_user.group_id,
+                is_superadmin=False,
+            )
+            result.connections = [c for c in result.connections if c.id in visible_ids]
+
+        for c in result.connections:
+            c.can_edit = compute_can_edit(c, current_user)
+
+        return {"connections": [_mask_password(c) for c in result.connections]}
     except Exception as e:
         raise HTTPException(status_code=500, detail="Errore interno del server")
 
 
 @router.put("/connections/{connection_id}", response_model=dict)
-async def update_connection(connection_id: str, data: ArcGISUpdate):
-    """Aggiorna una connessione ArcGIS esistente."""
+async def update_connection(connection_id: str, data: ArcGISUpdate, current_user: CurrentUser = Depends(require_admin)):
+    """Aggiorna una connessione ArcGIS esistente. Solo admin/superadmin del gruppo,
+    e solo se non creata da un superadmin (hierarchical ownership)."""
+    _check_arcgis_owner(connection_id, current_user)
     connection = get_service().update_connection(connection_id, data)
     if not connection:
         raise HTTPException(status_code=404, detail="Connessione non trovata")
+    connection.can_edit = compute_can_edit(connection, current_user)
     return _mask_password(connection)
 
 
 @router.delete("/connections/{connection_id}")
-async def delete_connection(connection_id: str):
-    """Elimina una connessione ArcGIS."""
+async def delete_connection(connection_id: str, current_user: CurrentUser = Depends(require_admin)):
+    """Elimina una connessione ArcGIS. Solo admin/superadmin del gruppo,
+    e solo se non creata da un superadmin (hierarchical ownership)."""
+    _check_arcgis_owner(connection_id, current_user)
     deleted = get_service().delete_connection(connection_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Connessione non trovata")
@@ -111,8 +171,9 @@ async def delete_connection(connection_id: str):
 
 
 @router.post("/connections/{connection_id}/test", response_model=dict)
-async def test_connection(connection_id: str):
-    """Testa una connessione ArcGIS."""
+async def test_connection(connection_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
+    """Testa una connessione ArcGIS. Qualsiasi utente del gruppo."""
+    _check_arcgis_access(connection_id, current_user)
     try:
         result = get_service().test_connection(connection_id)
         return result.model_dump()
@@ -125,35 +186,31 @@ async def test_connection(connection_id: str):
 # =============================================================================
 
 @router.get("/connections/{connection_id}/services")
-async def browse_services(connection_id: str):
-    """
-    Lista i Feature Service disponibili nella connessione.
-    
-    Equivalente a 'lista tabelle' per un database.
-    Per ArcGIS Online: usa Content API.
-    Per ArcGIS Server: naviga il catalogo REST.
-    """
+async def browse_services(connection_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
+    """Lista i Feature Service disponibili nella connessione."""
+    _check_arcgis_access(connection_id, current_user)
     try:
         services = get_service().browse_services(connection_id)
         return {"services": services}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except ConnectionError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail="Servizio esterno non raggiungibile")
     except Exception as e:
         raise HTTPException(status_code=500, detail="Errore interno del server")
 
 
 @router.get("/connections/{connection_id}/folders")
-async def list_folders(connection_id: str):
+async def list_folders(connection_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
     """Lista le cartelle dell'utente nella connessione ArcGIS."""
+    _check_arcgis_access(connection_id, current_user)
     try:
         folders = get_service().list_folders(connection_id)
         return {"folders": folders}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except ConnectionError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail="Servizio esterno non raggiungibile")
     except Exception as e:
         raise HTTPException(status_code=500, detail="Errore interno del server")
 
@@ -162,19 +219,17 @@ async def list_folders(connection_id: str):
 async def browse_layers(
     connection_id: str,
     service_url: str = Query(..., description="URL del FeatureServer"),
+    current_user: CurrentUser = Depends(require_not_esecutore),
 ):
-    """
-    Lista i layer di un Feature Service.
-    
-    Equivalente a 'lista colonne' per una tabella.
-    """
+    """Lista i layer di un Feature Service."""
+    _check_arcgis_access(connection_id, current_user)
     try:
         layers = get_service().browse_layers(connection_id, service_url)
         return {"layers": layers}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except ConnectionError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail="Servizio esterno non raggiungibile")
     except Exception as e:
         raise HTTPException(status_code=500, detail="Errore interno del server")
 
@@ -183,19 +238,17 @@ async def browse_layers(
 async def get_layer_schema(
     connection_id: str,
     layer_url: str = Query(..., description="URL del layer (es. .../FeatureServer/0)"),
+    current_user: CurrentUser = Depends(require_not_esecutore),
 ):
-    """
-    Recupera lo schema di un layer (campi + metadata).
-    
-    Equivalente a DatabaseInspector.get_tables_and_columns().
-    """
+    """Recupera lo schema di un layer (campi + metadata)."""
+    _check_arcgis_access(connection_id, current_user)
     try:
         schema = get_service().get_layer_schema(connection_id, layer_url)
         return schema
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except ConnectionError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail="Servizio esterno non raggiungibile")
     except Exception as e:
         raise HTTPException(status_code=500, detail="Errore interno del server")
 
@@ -211,13 +264,10 @@ async def query_preview(
     where: str = Query("1=1"),
     out_fields: str = Query("*"),
     max_features: int = Query(50, description="Max features per preview"),
+    current_user: CurrentUser = Depends(require_not_esecutore),
 ):
-    """
-    Preview dati da un layer (max N features).
-    
-    Restituisce righe e colonne per preview nella UI,
-    equivalente a preview SQL in ESTRAI.
-    """
+    """Preview dati da un layer (max N features)."""
+    _check_arcgis_access(connection_id, current_user)
     try:
         rows, columns = get_service().query_layer(
             connection_id, layer_url,
@@ -290,14 +340,9 @@ def _resolve_input_path(input_path: str, project_id: str) -> str:
 
 
 @router.post("/write")
-async def write_features(request: WriteRequest):
-    """
-    Scrittura su Feature Service esistente (add/update/delete).
-    
-    Per add/update: legge il file da input_path (o da project_id), converte in Esri JSON,
-    e invia al layer.
-    Per delete: usa object_ids o where.
-    """
+async def write_features(request: WriteRequest, current_user: CurrentUser = Depends(require_not_esecutore)):
+    """Scrittura su Feature Service esistente (add/update/delete)."""
+    _check_arcgis_access(request.connection_id, current_user)
     try:
         resolved_path = _resolve_input_path(request.input_path, request.project_id)
         
@@ -318,13 +363,13 @@ async def write_features(request: WriteRequest):
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except ConnectionError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail="Servizio esterno non raggiungibile")
     except Exception as e:
         raise HTTPException(status_code=500, detail="Errore interno del server")
 
 
 @router.post("/create-service")
-async def create_service(request: CreateServiceRequest):
+async def create_service(request: CreateServiceRequest, current_user: CurrentUser = Depends(require_not_esecutore)):
     """
     Crea un nuovo Feature Service su ArcGIS Online.
     
@@ -332,12 +377,13 @@ async def create_service(request: CreateServiceRequest):
     1. Legge il file da input_path (o project_id)
     2. Crea il servizio con schema dal DataFrame
     3. Carica i dati nel layer
-    
+
     Restituisce URL del nuovo servizio e conteggio features caricate.
     """
+    _check_arcgis_access(request.connection_id, current_user)
     try:
         resolved_path = _resolve_input_path(request.input_path, request.project_id)
-        
+
         result = get_service().create_service(
             connection_id=request.connection_id,
             service_name=request.service_name,
@@ -353,6 +399,6 @@ async def create_service(request: CreateServiceRequest):
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except ConnectionError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail="Servizio esterno non raggiungibile")
     except Exception as e:
         raise HTTPException(status_code=500, detail="Errore interno del server")

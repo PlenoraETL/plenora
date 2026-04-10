@@ -871,7 +871,7 @@ def delete_group(group_id: str,
     try:
         report = cfg_db.delete_group_cascade(group_id)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Errore durante l'eliminazione: {e}")
+        raise HTTPException(status_code=500, detail="Errore interno del server")
 
     return {"deleted": True, "group_id": group_id, "report": report}
 

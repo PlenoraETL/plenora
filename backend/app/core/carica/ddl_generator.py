@@ -707,87 +707,104 @@ WHEN NOT MATCHED THEN INSERT ({insert_cols}) VALUES ({src_cols});"""
             return "SHOW DATABASES"
         return ""
 
-    def query_list_tables(self, schema: str) -> str:
-        """Genera la query per elencare le tabelle in uno schema."""
+    def query_list_tables(self, schema: str) -> tuple:
+        """Genera query parametrizzata per elencare le tabelle.
+
+        Returns: (sql_con_placeholder, params_dict)
+
+        SECURITY: schema viene dal frontend → PARAMETRIZZATO, non inline.
+        Prima: f-string con '{schema}' → SQL injection.
+        """
         if self.db_type == "postgres":
-            return f"""
+            return ("""
                 SELECT table_name
                 FROM information_schema.tables
-                WHERE table_schema = '{schema}'
+                WHERE table_schema = :schema
                   AND table_type = 'BASE TABLE'
                 ORDER BY table_name
-            """
+            """, {"schema": schema})
         elif self.db_type == "oracle":
-            return f"""
+            return ("""
                 SELECT table_name
                 FROM all_tables
-                WHERE owner = '{schema.upper()}'
+                WHERE owner = :schema
                 ORDER BY table_name
-            """
+            """, {"schema": schema.upper()})
         elif self.db_type == "mssql":
-            return f"""
+            return ("""
                 SELECT table_name
                 FROM information_schema.tables
-                WHERE table_schema = '{schema}'
+                WHERE table_schema = :schema
                   AND table_type = 'BASE TABLE'
                 ORDER BY table_name
-            """
+            """, {"schema": schema})
         elif self.db_type in ("mysql", "mariadb"):
-            return f"SHOW TABLES FROM `{schema}`"
-        return ""
+            # MySQL SHOW TABLES non supporta parametri bind.
+            # Validazione strict del nome schema (solo alfanumerici + underscore).
+            import re
+            if not re.match(r'^[a-zA-Z0-9_]+$', schema):
+                raise ValueError(f"Nome schema non valido per MySQL: {schema}")
+            return (f"SHOW TABLES FROM `{schema}`", {})
+        return ("SELECT NULL WHERE 1=0", {})
 
-    def query_table_exists(self, schema: str, table: str) -> str:
-        """Genera la query per verificare se una tabella esiste."""
+    def query_table_exists(self, schema: str, table: str) -> tuple:
+        """Genera query parametrizzata per verificare se una tabella esiste.
+
+        Returns: (sql, params)
+        """
         if self.db_type == "postgres":
-            return f"""
+            return ("""
                 SELECT COUNT(*) FROM information_schema.tables
-                WHERE table_schema = '{schema}' AND table_name = '{table}'
-            """
+                WHERE table_schema = :schema AND table_name = :table
+            """, {"schema": schema, "table": table})
         elif self.db_type == "oracle":
-            return f"""
+            return ("""
                 SELECT COUNT(*) FROM all_tables
-                WHERE owner = '{schema.upper()}' AND table_name = '{table.upper()}'
-            """
+                WHERE owner = :schema AND table_name = :table
+            """, {"schema": schema.upper(), "table": table.upper()})
         elif self.db_type == "mssql":
-            return f"""
+            return ("""
                 SELECT COUNT(*) FROM information_schema.tables
-                WHERE table_schema = '{schema}' AND table_name = '{table}'
-            """
+                WHERE table_schema = :schema AND table_name = :table
+            """, {"schema": schema, "table": table})
         elif self.db_type in ("mysql", "mariadb"):
-            return f"""
+            return ("""
                 SELECT COUNT(*) FROM information_schema.tables
-                WHERE table_schema = '{schema}' AND table_name = '{table}'
-            """
-        return "SELECT 0"
+                WHERE table_schema = :schema AND table_name = :table
+            """, {"schema": schema, "table": table})
+        return ("SELECT 0", {})
 
-    def query_table_columns(self, schema: str, table: str) -> str:
-        """Genera la query per elencare le colonne di una tabella."""
+    def query_table_columns(self, schema: str, table: str) -> tuple:
+        """Genera query parametrizzata per elencare le colonne.
+
+        Returns: (sql, params)
+        """
         if self.db_type == "postgres":
-            return f"""
+            return ("""
                 SELECT column_name, data_type
                 FROM information_schema.columns
-                WHERE table_schema = '{schema}' AND table_name = '{table}'
+                WHERE table_schema = :schema AND table_name = :table
                 ORDER BY ordinal_position
-            """
+            """, {"schema": schema, "table": table})
         elif self.db_type == "oracle":
-            return f"""
+            return ("""
                 SELECT column_name, data_type
                 FROM all_tab_columns
-                WHERE owner = '{schema.upper()}' AND table_name = '{table.upper()}'
+                WHERE owner = :schema AND table_name = :table
                 ORDER BY column_id
-            """
+            """, {"schema": schema.upper(), "table": table.upper()})
         elif self.db_type == "mssql":
-            return f"""
+            return ("""
                 SELECT column_name, data_type
                 FROM information_schema.columns
-                WHERE table_schema = '{schema}' AND table_name = '{table}'
+                WHERE table_schema = :schema AND table_name = :table
                 ORDER BY ordinal_position
-            """
+            """, {"schema": schema, "table": table})
         elif self.db_type in ("mysql", "mariadb"):
-            return f"""
+            return ("""
                 SELECT column_name, data_type
                 FROM information_schema.columns
-                WHERE table_schema = '{schema}' AND table_name = '{table}'
+                WHERE table_schema = :schema AND table_name = :table
                 ORDER BY ordinal_position
-            """
-        return ""
+            """, {"schema": schema, "table": table})
+        return ("SELECT NULL WHERE 1=0", {})

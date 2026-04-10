@@ -29,7 +29,15 @@ Registrazione: montato in main.py come:
 from fastapi import APIRouter, HTTPException, Query, Depends
 from typing import Optional
 from app.utils.logger import get_logger
-from app.core.auth.auth import get_current_user, CurrentUser, group_filter
+from app.core.auth.auth import (
+    get_current_user,
+    require_not_esecutore,
+    require_admin,
+    require_schedule_owner,
+    assert_group_access,
+    CurrentUser,
+    group_filter,
+)
 import app.db.db_service as db
 
 logger = get_logger(__name__)
@@ -50,7 +58,7 @@ router = APIRouter(prefix="/schedules", tags=["schedules"])
 # ==================== HEALTHCHECK (prima delle route con {id}) ====================
 
 @router.get("/healthcheck", response_model=BeatHealthcheck)
-async def beat_healthcheck():
+async def beat_healthcheck(current_user: CurrentUser = Depends(require_not_esecutore)):
     """
     Verifica se Celery Beat (UrbyBeatScheduler) è attivo.
     Legge il heartbeat dalla tabella beat_heartbeat in SQLite.
@@ -99,7 +107,7 @@ async def beat_healthcheck():
 # ==================== LISTA + CREAZIONE ====================
 
 @router.get("", response_model=ScheduleList)
-async def list_schedules(project_id: Optional[str] = Query(None, description="Filtra per progetto"), current_user: CurrentUser = Depends(get_current_user)):
+async def list_schedules(project_id: Optional[str] = Query(None, description="Filtra per progetto"), current_user: CurrentUser = Depends(require_not_esecutore)):
     """
     Lista tutti gli schedule, ordinati per data aggiornamento.
     
@@ -119,9 +127,9 @@ async def list_schedules(project_id: Optional[str] = Query(None, description="Fi
 
 
 @router.post("", response_model=ScheduleConfig)
-async def create_schedule(data: ScheduleCreate, current_user: CurrentUser = Depends(get_current_user)):
+async def create_schedule(data: ScheduleCreate, current_user: CurrentUser = Depends(require_admin)):
     """
-    Crea un nuovo schedule dai dati del wizard (6 step).
+    Crea un nuovo schedule dai dati del wizard (6 step). Solo admin/superadmin.
     
     Verifica che il progetto esista e ne legge nome e tipo.
     """
@@ -156,7 +164,8 @@ async def create_schedule(data: ScheduleCreate, current_user: CurrentUser = Depe
             schedule_data=data,
             project_name=metadata.name,
             project_type=metadata.project_type,
-            group_id=current_user.group_id  # sempre il gruppo dell'utente che crea
+            group_id=current_user.group_id,  # sempre il gruppo dell'utente che crea
+            created_by=current_user.user_id,  # owner per require_schedule_owner
         )
         
         return schedule
@@ -171,16 +180,13 @@ async def create_schedule(data: ScheduleCreate, current_user: CurrentUser = Depe
 # ==================== SINGOLO SCHEDULE ====================
 
 @router.get("/{schedule_id}", response_model=ScheduleConfig)
-async def get_schedule(schedule_id: str, current_user: CurrentUser = Depends(get_current_user)):
+async def get_schedule(schedule_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
     """Dettaglio di uno schedule specifico."""
     from app.core.scheduler.schedule_service import ScheduleService
     try:
         service = ScheduleService()
         row = db.get_schedule(schedule_id)
-        if not row:
-            raise HTTPException(status_code=404, detail=f"Schedule '{schedule_id}' non trovato")
-        if current_user.role != "superadmin" and row.get('group_id') != current_user.group_id:
-            raise HTTPException(status_code=403, detail="Accesso negato")
+        assert_group_access(row, current_user, f"Schedule '{schedule_id}'")
         schedule = service.get_schedule(schedule_id)
         return schedule
     except HTTPException:
@@ -191,24 +197,17 @@ async def get_schedule(schedule_id: str, current_user: CurrentUser = Depends(get
 
 
 @router.put("/{schedule_id}", response_model=ScheduleConfig)
-async def update_schedule(schedule_id: str, data: ScheduleUpdate, current_user: CurrentUser = Depends(get_current_user)):
+async def update_schedule(schedule_id: str, data: ScheduleUpdate, current_user: CurrentUser = Depends(require_schedule_owner)):
     """
     Modifica uno schedule esistente (wizard precompilato).
-    
-    Solo i campi non-null vengono aggiornati.
+
+    Solo owner o admin/superadmin. Solo i campi non-null vengono aggiornati.
     """
     from app.core.scheduler.schedule_service import ScheduleService
-    
+
     try:
         service = ScheduleService()
-        
-        # Verifica ownership
-        row = db.get_schedule(schedule_id)
-        if not row:
-            raise HTTPException(status_code=404, detail=f"Schedule '{schedule_id}' non trovato")
-        if current_user.role != "superadmin" and row.get('group_id') != current_user.group_id:
-            raise HTTPException(status_code=403, detail="Accesso negato")
-        
+
         # Se cambia progetto, verifica che esista
         if data.project_id:
             from app.services.project_service import ProjectService
@@ -234,16 +233,11 @@ async def update_schedule(schedule_id: str, data: ScheduleUpdate, current_user: 
 
 
 @router.delete("/{schedule_id}")
-async def delete_schedule(schedule_id: str, current_user: CurrentUser = Depends(get_current_user)):
-    """Elimina uno schedule e i suoi log."""
+async def delete_schedule(schedule_id: str, current_user: CurrentUser = Depends(require_schedule_owner)):
+    """Elimina uno schedule e i suoi log. Solo owner o admin/superadmin."""
     from app.core.scheduler.schedule_service import ScheduleService
     try:
         service = ScheduleService()
-        row = db.get_schedule(schedule_id)
-        if not row:
-            raise HTTPException(status_code=404, detail=f"Schedule '{schedule_id}' non trovato")
-        if current_user.role != "superadmin" and row.get('group_id') != current_user.group_id:
-            raise HTTPException(status_code=403, detail="Accesso negato")
         service.delete_schedule(schedule_id)
         return {"status": "deleted", "schedule_id": schedule_id}
     except HTTPException:
@@ -256,16 +250,11 @@ async def delete_schedule(schedule_id: str, current_user: CurrentUser = Depends(
 # ==================== TOGGLE + RUN MANUALE ====================
 
 @router.patch("/{schedule_id}/toggle", response_model=ScheduleConfig)
-async def toggle_schedule(schedule_id: str, data: ScheduleToggle, current_user: CurrentUser = Depends(get_current_user)):
-    """Abilita o disabilita uno schedule."""
+async def toggle_schedule(schedule_id: str, data: ScheduleToggle, current_user: CurrentUser = Depends(require_schedule_owner)):
+    """Abilita o disabilita uno schedule. Solo owner o admin/superadmin."""
     from app.core.scheduler.schedule_service import ScheduleService
     try:
         service = ScheduleService()
-        row = db.get_schedule(schedule_id)
-        if not row:
-            raise HTTPException(status_code=404, detail=f"Schedule '{schedule_id}' non trovato")
-        if current_user.role != "superadmin" and row.get('group_id') != current_user.group_id:
-            raise HTTPException(status_code=403, detail="Accesso negato")
         # Verifica prima se esiste
         existing = service.get_schedule(schedule_id)
         if not existing:
@@ -288,7 +277,7 @@ async def toggle_schedule(schedule_id: str, data: ScheduleToggle, current_user: 
 
 
 @router.post("/{schedule_id}/run")
-async def run_schedule_now(schedule_id: str, current_user: CurrentUser = Depends(get_current_user)):
+async def run_schedule_now(schedule_id: str, current_user: CurrentUser = Depends(require_schedule_owner)):
     """
     Esegui uno schedule immediatamente (manuale).
     
@@ -305,11 +294,6 @@ async def run_schedule_now(schedule_id: str, current_user: CurrentUser = Depends
         raise HTTPException(status_code=404, detail=f"Schedule '{schedule_id}' non trovato")
     
     try:
-        row = db.get_schedule(schedule_id)
-        if not row:
-            raise HTTPException(status_code=404, detail=f"Schedule '{schedule_id}' non trovato")
-        if current_user.role != "superadmin" and row.get('group_id') != current_user.group_id:
-            raise HTTPException(status_code=403, detail="Accesso negato")
         # Setta subito "queued" — metodo leggero, non incrementa contatori
         service.set_runtime_status(schedule_id, status="queued")
         
@@ -344,7 +328,8 @@ async def run_schedule_now(schedule_id: str, current_user: CurrentUser = Depends
 @router.get("/{schedule_id}/download")
 async def download_schedule_output(
     schedule_id: str,
-    run: str = Query(None, description="Timestamp specifico (YYYYMMDD_HHMMSS). Se omesso, scarica l'ultimo.")
+    run: str = Query(None, description="Timestamp specifico (YYYYMMDD_HHMMSS). Se omesso, scarica l'ultimo."),
+    current_user: CurrentUser = Depends(require_not_esecutore),
 ):
     """
     Scarica il file output di uno schedule.
@@ -368,6 +353,12 @@ async def download_schedule_output(
 
         if not schedule:
             raise HTTPException(status_code=404, detail=f"Schedule '{schedule_id}' non trovato")
+
+        # SECURITY: verifica che lo schedule appartenga al gruppo dell'utente
+        import app.db.db_service as _db
+        _sched_row = _db.get_schedule(schedule_id)
+        if _sched_row:
+            assert_group_access(_sched_row, current_user, f"Schedule '{schedule_id}'")
 
         project_id = schedule.pipeline.project_id
 
@@ -403,7 +394,7 @@ async def download_schedule_output(
 
 
 @router.get("/{schedule_id}/runs")
-async def list_schedule_runs(schedule_id: str):
+async def list_schedule_runs(schedule_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
     """
     Lista tutte le esecuzioni archiviate di uno schedule.
     
@@ -417,6 +408,12 @@ async def list_schedule_runs(schedule_id: str):
 
         if not schedule:
             raise HTTPException(status_code=404, detail=f"Schedule '{schedule_id}' non trovato")
+
+        # SECURITY: group isolation check
+        import app.db.db_service as _db
+        _sched_row = _db.get_schedule(schedule_id)
+        if _sched_row:
+            assert_group_access(_sched_row, current_user, f"Schedule '{schedule_id}'")
 
         project_id = schedule.pipeline.project_id
         schedule_short = schedule_id.replace("schedule_", "")[:12]
@@ -471,7 +468,8 @@ async def get_schedule_logs(
     schedule_id: str,
     page: int = Query(1, ge=1, description="Pagina"),
     page_size: int = Query(20, ge=1, le=100, description="Risultati per pagina"),
-    status: Optional[str] = Query(None, description="Filtra per status: COMPLETED, PARTIAL, FAILED")
+    status: Optional[str] = Query(None, description="Filtra per status: COMPLETED, PARTIAL, FAILED"),
+    current_user: CurrentUser = Depends(require_not_esecutore),
 ):
     """Log esecuzioni di uno schedule (paginati, più recenti prima)."""
     from app.core.scheduler.schedule_service import ScheduleService

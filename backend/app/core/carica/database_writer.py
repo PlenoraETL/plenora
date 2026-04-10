@@ -180,12 +180,12 @@ class DatabaseWriter(DestinationWriter):
 
     def table_exists(self) -> bool:
         """Verifica se la tabella destinazione esiste."""
-        query = self.ddl.query_table_exists(
+        query, params = self.ddl.query_table_exists(
             self.config.schema_name, self.config.table_name
         )
         try:
             with self.engine.connect() as conn:
-                result = conn.execute(text(query))
+                result = conn.execute(text(query), params)
                 count = result.scalar()
                 if count is None:
                     return False
@@ -202,12 +202,12 @@ class DatabaseWriter(DestinationWriter):
 
     def get_existing_columns(self) -> List[Dict[str, str]]:
         """Recupera le colonne della tabella destinazione."""
-        query = self.ddl.query_table_columns(
+        query, params = self.ddl.query_table_columns(
             self.config.schema_name, self.config.table_name
         )
         try:
             with self.engine.connect() as conn:
-                result = conn.execute(text(query))
+                result = conn.execute(text(query), params)
                 return [
                     {"name": row[0], "type": str(row[1])}
                     for row in result
@@ -229,10 +229,10 @@ class DatabaseWriter(DestinationWriter):
 
     def get_tables(self, schema_name: str) -> List[str]:
         """Recupera la lista delle tabelle in uno schema."""
-        query = self.ddl.query_list_tables(schema_name)
+        query, params = self.ddl.query_list_tables(schema_name)
         try:
             with self.engine.connect() as conn:
-                result = conn.execute(text(query))
+                result = conn.execute(text(query), params)
                 return [str(row[0]) for row in result]
         except Exception as e:
             logger.error(f"[CRASH] Errore recupero tabelle: {e}", exc_info=True)

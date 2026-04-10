@@ -266,11 +266,11 @@ async def auto_mapping(request: AutoMappingRequest, current_user: CurrentUser = 
                 db_type = connection.get("type", "postgres")
                 engine = _create_engine(connection)
                 ddl = DDLGenerator(db_type)
-                query = ddl.query_table_columns(request.schema_name, request.table_name)
+                query, params = ddl.query_table_columns(request.schema_name, request.table_name)
 
                 from sqlalchemy import text
                 with engine.connect() as conn:
-                    result = conn.execute(text(query))
+                    result = conn.execute(text(query), params)
                     existing_columns = [
                         {"name": row[0], "type": str(row[1])}
                         for row in result

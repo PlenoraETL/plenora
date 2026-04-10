@@ -659,7 +659,16 @@ class ApiConnectionService:
         """
         import time
         self._preview_limit = preview_limit  # usato da _load_file_source
-        
+
+        # SECURITY: memorizza group_id del progetto corrente per i check
+        # cross-tenant in _load_source_project.
+        try:
+            import app.db.db_service as _db
+            _proj_row = _db.get_project(project_id)
+            self._current_group_id = _proj_row.get("group_id") if _proj_row else None
+        except Exception:
+            self._current_group_id = None
+
         try:
             nodes = canvas.get('nodes', [])
             edges = canvas.get('edges', [])
@@ -677,115 +686,192 @@ class ApiConnectionService:
             # Ordine di esecuzione topologico
             execution_order = self._get_execution_order(nodes, edges)
             logger.info(f"Ordine esecuzione: {execution_order}")
-            
-            # Esegui nodi in ordine
+
+            # ── Raggruppamento nodi per esecuzione parallela ──
+            from app.core.arricchisci.parallel import (
+                compute_parallel_groups, execute_parallel_enrichers, should_execute_node,
+            )
+            groups = compute_parallel_groups(execution_order, nodes, edges)
+            logger.info(f"Gruppi di esecuzione: {[(t, len(ids)) for t, ids in groups]}")
+
+            node_map = {n['id']: n for n in nodes}
             node_results = {}
-            
-            for node_id in execution_order:
-                node = next((n for n in nodes if n['id'] == node_id), None)
-                if not node:
-                    continue
-                
-                node_type = node.get('type')
-                node_data = node  # leggi campi flat direttamente
-                
-                logger.info(f"Esecuzione nodo: {node_id} ({node_type})")
-                
-                if node_type == 'project_source':
-                    result = self._load_source_project(node_data, force_recalculate)
-                    node_results[node_id] = result
-                
-                elif node_type == 'file_source':
-                    # Controlla se il nodo downstream è un executable
-                    downstream_edges = [e for e in edges if e['source'] == node_id]
-                    is_for_executable = False
-                    for de in downstream_edges:
-                        target_node = next((n for n in nodes if n['id'] == de['target']), None)
-                        if target_node and target_node.get('type') == 'api_enrich':
-                            target_api_id = _nd(target_node, 'api_id')
-                            target_api_config = api_connections.get(target_api_id, {})
-                            if target_api_config.get('connection_type') == 'executable':
-                                is_for_executable = True
-                                break
-                    
-                    if is_for_executable:
-                        # Passa un marker — _execute_executable risolverà il path via _resolve_file_source_path
-                        node_results[node_id] = {"_passthrough_file_source": True, "file_source_id": _nd(node, 'file_source_id')}
-                    else:
-                        result = self._load_file_source(node_data)
-                        node_results[node_id] = result
-                
-                elif node_type == 'staticValues':
-                    result = self._load_static_values(node_data)
-                    node_results[node_id] = result
-                    
-                elif node_type == 'api_enrich':
-                    api_id = _nd(node, 'api_id')
-                    api_config = api_connections.get(api_id)
-                    
-                    if not api_config:
-                        return {"success": False, "error": f"API '{api_id}' non trovata"}
-                    
-                    # ── EXECUTABLE: esegue processore locale (file→file) ──
-                    if api_config.get('connection_type') == 'executable':
-                        result = self._execute_executable(
-                            node_data, api_config, nodes, edges, node_id, project_id
-                        )
-                        if isinstance(result, dict) and not result.get('success', True):
-                            return result
-                        node_results[node_id] = result
-                    else:
-                        api_type = api_config.get('api_type', 'enricher')
-                        
-                        if api_type == 'generator':
-                            # Cerca eventuale input (es. da StaticValues)
-                            input_edge = next((e for e in edges if e['target'] == node_id), None)
-                            input_df = None
-                            if input_edge:
-                                input_df = node_results.get(input_edge['source'])
-                            result = self._execute_api_generator(api_config, input_df)
+            processed = set()
+
+            def _run_single_enricher(node_data, api_conns, in_df):
+                """Esegue un singolo nodo enricher. Usato sia in sequenziale che come callback parallelo."""
+                api_id = _nd(node_data, 'api_id')
+                api_config = api_conns.get(api_id)
+                if not api_config:
+                    raise ValueError(f"API '{api_id}' non trovata")
+                api_type = api_config.get('api_type', 'enricher')
+                if api_type == 'generator':
+                    return self._execute_api_generator(api_config, in_df)
+                param_mapping = _nd(node_data, 'param_mapping', {})
+                return self._execute_api_enricher(in_df, api_config, param_mapping)
+
+            for step_type, step_node_ids in groups:
+                if step_type == "single":
+                    # ── Nodo singolo (sorgente, result, o enricher isolato) ──
+                    node_id = step_node_ids[0]
+                    node = node_map.get(node_id)
+                    if not node:
+                        continue
+                    node_type = node.get('type')
+                    node_data = node
+                    logger.info(f"Esecuzione nodo: {node_id} ({node_type})")
+
+                    if node_type == 'project_source':
+                        node_results[node_id] = self._load_source_project(node_data, force_recalculate)
+
+                    elif node_type == 'file_source':
+                        downstream_edges = [e for e in edges if e['source'] == node_id]
+                        is_for_executable = False
+                        for de in downstream_edges:
+                            target_node = node_map.get(de['target'])
+                            if target_node and target_node.get('type') == 'api_enrich':
+                                target_api_id = _nd(target_node, 'api_id')
+                                target_api_config = api_connections.get(target_api_id, {})
+                                if target_api_config.get('connection_type') == 'executable':
+                                    is_for_executable = True
+                                    break
+                        if is_for_executable:
+                            node_results[node_id] = {"_passthrough_file_source": True, "file_source_id": _nd(node, 'file_source_id')}
                         else:
-                            input_edge = next((e for e in edges if e['target'] == node_id), None)
-                            if not input_edge:
-                                return {"success": False, "error": f"Nodo {node_id} non ha input"}
-                            
-                            input_df = node_results.get(input_edge['source'])
-                            if input_df is None:
-                                return {"success": False, "error": f"Dati input non trovati per {node_id}"}
-                            
-                            param_mapping = _nd(node, 'param_mapping', {})
+                            node_results[node_id] = self._load_file_source(node_data)
+
+                    elif node_type == 'staticValues':
+                        node_results[node_id] = self._load_static_values(node_data)
+
+                    elif node_type == 'api_enrich':
+                        api_id = _nd(node, 'api_id')
+                        api_config = api_connections.get(api_id)
+                        if not api_config:
+                            return {"success": False, "error": f"API '{api_id}' non trovata"}
+
+                        input_edge = next((e for e in edges if e['target'] == node_id), None)
+                        input_df = node_results.get(input_edge['source']) if input_edge else None
+
+                        # ── execute_if check (per-riga) ──
+                        from app.core.arricchisci.parallel import get_execute_mask
+                        exec_mask = get_execute_mask(node_data, input_df)
+                        all_skip = not exec_mask.any() if isinstance(exec_mask, pd.Series) else not exec_mask
+
+                        if all_skip:
+                            logger.info(f"Nodo {node_id} skippato per tutte le righe (execute_if)")
+                            node_results[node_id] = input_df
+                        elif api_config.get('connection_type') == 'executable':
+                            result = self._execute_executable(node_data, api_config, nodes, edges, node_id, project_id)
+                            if isinstance(result, dict) and not result.get('success', True):
+                                return result
+                            node_results[node_id] = result
+                        else:
+                            all_exec = exec_mask.all() if isinstance(exec_mask, pd.Series) else exec_mask
                             try:
-                                result = self._execute_api_enricher(input_df, api_config, param_mapping)
+                                if all_exec:
+                                    node_results[node_id] = _run_single_enricher(node_data, api_connections, input_df)
+                                else:
+                                    # Per-row split: esegui solo righe matching
+                                    df_exec = input_df[exec_mask]
+                                    df_skip = input_df[~exec_mask]
+                                    result_exec = _run_single_enricher(node_data, api_connections, df_exec)
+                                    if isinstance(result_exec, pd.DataFrame):
+                                        new_cols = [c for c in result_exec.columns if c not in df_skip.columns]
+                                        for c in new_cols:
+                                            df_skip = df_skip.copy()
+                                            df_skip[c] = None
+                                        node_results[node_id] = pd.concat([result_exec, df_skip]).sort_index()
+                                    else:
+                                        node_results[node_id] = input_df
+                                    logger.info(f"Nodo {node_id}: {exec_mask.sum()}/{len(exec_mask)} righe eseguite (execute_if per-riga)")
                             except ValueError as e:
                                 return {"success": False, "error": str(e)}
-                        
-                        node_results[node_id] = result
 
-                    # Snapshot intermediate.db dopo api_enrich (non bloccante)
+                        # Snapshot intermediate
+                        if run_id:
+                            try:
+                                import pandas as _pd
+                                from app.core.intermediate.writer import write_node as _write_node
+                                _df = node_results.get(node_id)
+                                if isinstance(_df, _pd.DataFrame) and not _df.empty:
+                                    _write_node(run_id=run_id, node_id=node_id, node_type="api_enrich",
+                                                rows=_df.to_dict(orient="records"),
+                                                col_schema=_df.dtypes.astype(str).to_dict(),
+                                                exec_time=0.0, status="ok")
+                            except Exception as _iex:
+                                logger.warning(f"Intermediate write {node_id} fallita: {_iex}")
+
+                    elif node_type == 'result':
+                        input_edge = next((e for e in edges if e['target'] == node_id), None)
+                        if input_edge:
+                            input_df = node_results.get(input_edge['source'])
+                            if input_df is not None:
+                                node_results[node_id] = input_df
+
+                else:
+                    # ── Gruppo parallelo di api_enrich ──
+                    # Trova l'input_df comune: output del predecessore del primo nodo del gruppo
+                    first_node_id = step_node_ids[0]
+                    input_edge = next((e for e in edges if e['target'] == first_node_id), None)
+                    input_df = node_results.get(input_edge['source']) if input_edge else None
+
+                    if input_df is None:
+                        # Fallback: prova a trovare l'ultimo risultato disponibile
+                        for prev_id in reversed(execution_order):
+                            if prev_id in node_results and isinstance(node_results[prev_id], pd.DataFrame):
+                                input_df = node_results[prev_id]
+                                break
+
+                    if input_df is None:
+                        return {"success": False, "error": f"Input non trovato per gruppo parallelo {step_node_ids}"}
+
+                    # Filtra nodi executable dal gruppo (non parallelizzabili)
+                    parallel_ids = []
+                    for nid in step_node_ids:
+                        nd = node_map.get(nid)
+                        api_id = _nd(nd, 'api_id')
+                        api_cfg = api_connections.get(api_id, {})
+                        if api_cfg.get('connection_type') == 'executable':
+                            # Esegui executable in sequenza prima del gruppo parallelo
+                            if should_execute_node(nd, input_df):
+                                result = self._execute_executable(nd, api_cfg, nodes, edges, nid, project_id)
+                                if isinstance(result, dict) and not result.get('success', True):
+                                    return result
+                                node_results[nid] = result
+                            else:
+                                node_results[nid] = input_df
+                        else:
+                            parallel_ids.append(nid)
+
+                    if parallel_ids:
+                        logger.info(f"Esecuzione parallela: {len(parallel_ids)} nodi enricher")
+                        group_results, group_error = execute_parallel_enrichers(
+                            node_ids=parallel_ids,
+                            input_df=input_df,
+                            node_map=node_map,
+                            api_connections=api_connections,
+                            execute_single_fn=_run_single_enricher,
+                        )
+                        node_results.update(group_results)
+
+                        # Se errore non bloccante, logga e continua
+                        if group_error:
+                            logger.warning(f"Errore in gruppo parallelo (non bloccante): {group_error}")
+
+                    # Snapshot intermediate per ogni nodo del gruppo
                     if run_id:
                         try:
                             import pandas as _pd
                             from app.core.intermediate.writer import write_node as _write_node
-                            _df = node_results.get(node_id)
-                            if isinstance(_df, _pd.DataFrame) and not _df.empty:
-                                _write_node(
-                                    run_id=run_id,
-                                    node_id=node_id,
-                                    node_type="api_enrich",
-                                    rows=_df.to_dict(orient="records"),
-                                    col_schema=_df.dtypes.astype(str).to_dict(),
-                                    exec_time=0.0,
-                                    status="ok",
-                                )
+                            for nid in step_node_ids:
+                                _df = node_results.get(nid)
+                                if isinstance(_df, _pd.DataFrame) and not _df.empty:
+                                    _write_node(run_id=run_id, node_id=nid, node_type="api_enrich",
+                                                rows=_df.to_dict(orient="records"),
+                                                col_schema=_df.dtypes.astype(str).to_dict(),
+                                                exec_time=0.0, status="ok")
                         except Exception as _iex:
-                            logger.warning(f"Intermediate write nodo {node_id} fallita (non bloccante): {_iex}")
-
-                elif node_type == 'result':
-                    input_edge = next((e for e in edges if e['target'] == node_id), None)
-                    if input_edge:
-                        input_df = node_results.get(input_edge['source'])
-                        if input_df is not None:
-                            node_results[node_id] = input_df
+                            logger.warning(f"Intermediate write gruppo fallita: {_iex}")
             
             # Trova output finale
             result_node = next((n for n in nodes if n.get('type') == 'result'), None)
@@ -908,11 +994,25 @@ class ApiConnectionService:
         return _shared_get_oauth2_token(auth)
     
     def _load_source_project(self, node_data: Dict, force_recalculate: bool = False) -> pd.DataFrame:
-        """Carica dati dal progetto sorgente."""
+        """Carica dati dal progetto sorgente.
+
+        SECURITY: verifica cross-tenant isolation — il progetto sorgente
+        deve appartenere allo stesso gruppo del progetto corrente.
+        """
         source_project_id = node_data.get('source_project_id')
-        
+
         if not source_project_id:
             raise ValueError("source_project_id non specificato")
+
+        # Cross-tenant isolation check
+        if hasattr(self, '_current_group_id') and self._current_group_id:
+            import app.db.db_service as _db
+            _src_row = _db.get_project(source_project_id)
+            if _src_row and _src_row.get("group_id") != self._current_group_id:
+                raise ValueError(
+                    f"Accesso negato: progetto sorgente '{source_project_id}' "
+                    f"appartiene a un gruppo diverso"
+                )
         
         output_dir = self.results_dir / source_project_id
         

@@ -196,4 +196,4 @@ def get_connection_tables(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(500, f"Errore ispezionando database: {str(e)}")
+        raise HTTPException(500, "Errore interno del server")
