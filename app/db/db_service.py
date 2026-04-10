@@ -1,18 +1,12 @@
 """
 Database Service — facade di compatibilità per URBY-ETL.
 
-Dopo la ristrutturazione in tre DB separati, questo modulo
-mantiene la stessa API pubblica delegando ai nuovi service:
-
-  - config_db_service  → SQLite #1 (config.db)
-  - results_db_service → SQLite #2 (results.db)
+Migrato da 3 SQLite separati a un singolo PostgreSQL.
+Questo modulo mantiene la stessa API pubblica delegando ai service
+specifici che ora usano tutti pg_connection come backend.
 
 Il codice esistente che importa da app.db.db_service continua
 a funzionare senza modifiche.
-
-Per nuovo codice preferire i service specifici:
-  from app.db import config_db_service as cfg_db
-  from app.db import results_db_service as res_db
 """
 
 # Re-export completo da config_db_service (SQLite #1)
@@ -42,10 +36,9 @@ from app.db.results_db_service import (
 
 
 def init_all_dbs():
-    """Inizializza SQLite #1 e #2. Chiamato da main.py all'avvio."""
-    import app.db.config_db_service as cfg
-    import app.db.results_db_service as res
-    cfg.init_db()
-    res.init_db()
+    """Inizializza PostgreSQL. Chiamato da main.py all'avvio."""
+    from app.db.pg_connection import init_db as pg_init
+    pg_init()
+    # intermediate.db: anche questo va su PostgreSQL
     import app.core.intermediate.db as idb
     idb.init_db()

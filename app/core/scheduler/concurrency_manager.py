@@ -103,58 +103,59 @@ class ConcurrencyManager:
         Prima: SELECT + INSERT OR REPLACE non atomici → due thread che
         leggevano value=2 sovrascrivevano entrambi a value=3 invece di 4.
         """
-        conn = db.get_connection()
+        # PostgreSQL: usa pool connection con cursor esplicito
+        from app.db.pg_connection import get_connection, put_connection
+        conn = get_connection()
         try:
-            conn.execute(
-                "INSERT OR IGNORE INTO scheduler_locks (key, value, expires_at) "
-                "VALUES (?, '0', NULL)",
-                (key,)
-            )
-            cur = conn.execute(
-                "UPDATE scheduler_locks SET value = CAST(value AS INTEGER) + 1 "
-                "WHERE key = ? RETURNING value",
-                (key,)
-            )
-            row = cur.fetchone()
-            cur.close()
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO scheduler_locks (key, value, expires_at) "
+                    "VALUES (%s, '0', NULL) ON CONFLICT DO NOTHING",
+                    (key,)
+                )
+                cur.execute(
+                    "UPDATE scheduler_locks SET value = CAST(value AS INTEGER) + 1 "
+                    "WHERE key = %s RETURNING value",
+                    (key,)
+                )
+                row = cur.fetchone()
             conn.commit()
-            return int(row[0]) if row else 0
+            return int(row["value"]) if row else 0
         except Exception:
             try:
                 conn.rollback()
             except Exception:
                 pass
             raise
+        finally:
+            put_connection(conn)
 
     def _decr(self, key: str) -> int:
         """Decrementa contatore atomicamente. Rimuove se arriva a 0.
 
-        Stesso pattern atomic di _incr: UPDATE ... RETURNING + WHERE che
-        impedisce di scendere sotto zero (idempotente).
+        Stesso pattern atomic di _incr: UPDATE ... RETURNING.
         """
-        conn = db.get_connection()
+        from app.db.pg_connection import get_connection, put_connection
+        conn = get_connection()
         try:
-            cur = conn.execute(
-                "UPDATE scheduler_locks SET value = CAST(value AS INTEGER) - 1 "
-                "WHERE key = ? AND CAST(value AS INTEGER) > 0 RETURNING value",
-                (key,)
-            )
-            row = cur.fetchone()
-            cur.close()
-            if row is None:
-                # Riga non esiste o counter era già 0
-                conn.commit()
-                return 0
-            new_val = int(row[0])
-            if new_val == 0:
-                # Cleanup riga vuota. Race-safe: il WHERE condizionale
-                # previene la cancellazione se nel mentre un altro thread
-                # ha rincrementato.
-                conn.execute(
-                    "DELETE FROM scheduler_locks "
-                    "WHERE key = ? AND CAST(value AS INTEGER) = 0",
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE scheduler_locks SET value = CAST(value AS INTEGER) - 1 "
+                    "WHERE key = %s AND CAST(value AS INTEGER) > 0 RETURNING value",
                     (key,)
                 )
+                row = cur.fetchone()
+            if row is None:
+                conn.commit()
+                return 0
+            new_val = int(row["value"])
+            if new_val == 0:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "DELETE FROM scheduler_locks "
+                        "WHERE key = %s AND CAST(value AS INTEGER) = 0",
+                        (key,)
+                    )
             conn.commit()
             return new_val
         except Exception:
@@ -163,6 +164,8 @@ class ConcurrencyManager:
             except Exception:
                 pass
             raise
+        finally:
+            put_connection(conn)
 
     def _delete(self, key: str):
         db.execute("DELETE FROM scheduler_locks WHERE key = ?", (key,))

@@ -1,28 +1,27 @@
 """
-Config DB Service — accesso a SQLite #1 (config.db).
+Config DB Service — accesso a PostgreSQL (ex SQLite config.db).
 
 Contiene: groups, users, projects, connections, file_sources,
           datasources, arcgis_connections, api_connections,
-          schedules, beat_heartbeat, app_settings, comparison_keys,
-          comparison_keys.
+          schedules, beat_heartbeat, app_settings, comparison_keys.
 
-Thread-safe tramite threading.local() per le connessioni.
+Migrato da SQLite a PostgreSQL: usa pg_connection pool.
+Le funzioni base (fetchone, fetchall, execute, transaction) sono
+delegate a pg_connection. Le funzioni CRUD restano qui.
 """
 
-import sqlite3
-import threading
 import json
-from contextlib import contextmanager
-from pathlib import Path
 from typing import Any, Dict, List, Optional
-from app.config import settings
 from app.utils.logger import get_logger
 
+# Importa tutto da pg_connection (rimpiazza sqlite3 thread-local)
+from app.db.pg_connection import (
+    fetchone, fetchall, execute, executemany,
+    transaction, get_connection, put_connection,
+    close_connection, init_db as _pg_init_db,
+)
+
 logger = get_logger(__name__)
-
-DB_PATH = Path(settings.DATA_DIR) / "config.db"
-
-_local = threading.local()
 
 # Whitelist campi aggiornabili per tabella
 _ALLOWED_UPDATE_FIELDS = {
@@ -51,118 +50,15 @@ def _safe_set_clause(table: str, fields: dict) -> tuple:
             f"Campi non consentiti per UPDATE {table}: {invalid}. "
             f"Consentiti: {allowed}"
         )
-    set_clause = ", ".join(f"{k} = ?" for k in fields)
+    # PostgreSQL usa %s come placeholder (pg_connection._adapt_params converte ? → %s,
+    # ma qui costruiamo direttamente con %s per chiarezza)
+    set_clause = ", ".join(f"{k} = %s" for k in fields)
     return set_clause, tuple(fields.values())
 
 
-@contextmanager
-def transaction():
-    conn = get_connection()
-    conn.execute("BEGIN")
-    try:
-        yield conn
-        conn.execute("COMMIT")
-    except Exception:
-        conn.execute("ROLLBACK")
-        raise
-
-
-def get_connection() -> sqlite3.Connection:
-    if not hasattr(_local, "conn") or _local.conn is None:
-        _local.conn = sqlite3.connect(
-            str(DB_PATH),
-            timeout=30,
-            check_same_thread=False,
-        )
-        _local.conn.row_factory = sqlite3.Row
-        _local.conn.execute("PRAGMA journal_mode=WAL")
-        _local.conn.execute("PRAGMA foreign_keys=ON")
-        _local.conn.execute("PRAGMA busy_timeout=5000")
-    return _local.conn
-
-
-def close_connection() -> None:
-    """Chiude la connessione thread-local a config.db, se aperta.
-
-    Da chiamare in `finally` dei task Celery a vita lunga per evitare leak
-    di file descriptor e database lock nei worker pool che ricicclano i thread.
-    """
-    conn = getattr(_local, "conn", None)
-    if conn is not None:
-        try:
-            conn.close()
-        except Exception:
-            pass
-        _local.conn = None
-
-
-def _run_migrations(conn: sqlite3.Connection) -> None:
-    """
-    Applica migration incrementali — aggiunge colonne mancanti a DB esistenti.
-    Pattern: prova a leggere la colonna, se fallisce la aggiunge.
-    Per aggiungere nuove migration in futuro: aggiungere un blocco try/except.
-    """
-    pending = [
-        # Icona personalizzabile per eseguibili (fallback ▶ se NULL)
-        "ALTER TABLE eseguibili ADD COLUMN icon TEXT",
-    ]
-
-    for sql in pending:
-        try:
-            conn.execute(sql)
-            conn.commit()
-            logger.info(f"Migration applicata: {sql}", op="migration")
-        except Exception as e:
-            logger.warning(f"Migration fallita (non bloccante): {sql} — {e}", op="migration")
-
-
 def init_db():
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    schema_path = Path(__file__).parent / "config_schema.sql"
-    conn = get_connection()
-    if schema_path.exists():
-        schema = schema_path.read_text(encoding="utf-8")
-        conn.executescript(schema)
-        conn.commit()
-        logger.info(f"Config DB inizializzato: {DB_PATH}", op="init_db")
-    else:
-        logger.warning("config_schema.sql non trovato", op="init_db")
-    # Applica migration incrementali (gestisce DB esistenti senza la nuova colonna)
-    _run_migrations(conn)
-
-
-# ============================================================
-# HELPERS
-# ============================================================
-
-def _row_to_dict(row: sqlite3.Row) -> Dict:
-    return dict(row) if row else {}
-
-
-def fetchone(sql: str, params: tuple = ()) -> Optional[Dict]:
-    conn = get_connection()
-    cur = conn.execute(sql, params)
-    row = cur.fetchone()
-    return _row_to_dict(row) if row else None
-
-
-def fetchall(sql: str, params: tuple = ()) -> List[Dict]:
-    conn = get_connection()
-    cur = conn.execute(sql, params)
-    return [_row_to_dict(r) for r in cur.fetchall()]
-
-
-def execute(sql: str, params: tuple = ()) -> sqlite3.Cursor:
-    conn = get_connection()
-    cur = conn.execute(sql, params)
-    conn.commit()
-    return cur
-
-
-def executemany(sql: str, params_list: List[tuple]) -> None:
-    conn = get_connection()
-    conn.executemany(sql, params_list)
-    conn.commit()
+    """Verifica connessione PostgreSQL. Le tabelle sono già su PG."""
+    _pg_init_db()
 
 
 # ============================================================
@@ -322,20 +218,14 @@ def delete_group_cascade(group_id: str) -> dict:
     except Exception as e:
         _log.warning(f"Cascade delete users fallito: {e}")
 
-    # 8. log.db — runs e log entries per group_id
+    # 8. logs + log_runs (ora su PostgreSQL, stessa connessione)
     try:
-        from app.config import settings as _settings
-        import sqlite3 as _sqlite3
-        log_path = _settings.LOGS_DIR / _settings.LOG_DB_FILE
-        if log_path.exists():
-            with _sqlite3.connect(str(log_path)) as lconn:
-                lconn.execute("PRAGMA journal_mode=WAL")
-                cur = lconn.execute("DELETE FROM logs WHERE group_id = ?", (group_id,))
-                report["log_entries"] = cur.rowcount
-                cur = lconn.execute("DELETE FROM runs WHERE group_id = ?", (group_id,))
-                report["log_runs"] = cur.rowcount
+        cur = execute("DELETE FROM logs WHERE group_id = ?", (group_id,))
+        report["log_entries"] = cur.rowcount
+        cur = execute("DELETE FROM log_runs WHERE group_id = ?", (group_id,))
+        report["log_runs"] = cur.rowcount
     except Exception as e:
-        _log.warning(f"Cascade delete log.db fallito: {e}")
+        _log.warning(f"Cascade delete logs fallito: {e}")
 
     # 9. Elimina il gruppo
     try:
@@ -380,7 +270,7 @@ def create_user(user_id: str, username: str, password_hash: str, group_id: str,
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc).isoformat()
     execute(
-        "INSERT INTO users (id, username, password_hash, email, group_id, role, is_active, created_at, updated_at) VALUES (?,?,?,?,?,?,1,?,?)",
+        "INSERT INTO users (id, username, password_hash, email, group_id, role, is_active, created_at, updated_at) VALUES (?,?,?,?,?,?,TRUE,?,?)",
         (user_id, username, password_hash, email, group_id, role, now, now)
     )
     return get_user(user_id)
@@ -519,7 +409,9 @@ def save_comparison_keys(canvas_id: str, node_id: str, group_id: str,
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc).isoformat()
     execute(
-        "INSERT OR REPLACE INTO comparison_keys (canvas_id, node_id, group_id, key_columns, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+        "INSERT INTO comparison_keys (canvas_id, node_id, group_id, key_columns, created_at, updated_at) "
+        "VALUES (?,?,?,?,?,?) ON CONFLICT (canvas_id, node_id) DO UPDATE SET "
+        "group_id=EXCLUDED.group_id, key_columns=EXCLUDED.key_columns, updated_at=EXCLUDED.updated_at",
         (canvas_id, node_id, group_id, json.dumps(key_columns), now, now)
     )
 
@@ -629,7 +521,10 @@ def save_file_source(file_id: str, group_id: str, name: str, original_filename: 
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc).isoformat()
     execute(
-        "INSERT OR REPLACE INTO file_sources (id, group_id, name, original_filename, format, data, size_bytes, metadata, created_at, updated_at, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO file_sources (id, group_id, name, original_filename, format, data, size_bytes, metadata, created_at, updated_at, created_by) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT (id) DO UPDATE SET "
+        "name=EXCLUDED.name, original_filename=EXCLUDED.original_filename, format=EXCLUDED.format, "
+        "data=EXCLUDED.data, size_bytes=EXCLUDED.size_bytes, metadata=EXCLUDED.metadata, updated_at=EXCLUDED.updated_at",
         (file_id, group_id, name, original_filename, fmt, data, len(data),
          json.dumps(metadata or {}), now, now, created_by)
     )
@@ -680,7 +575,9 @@ def save_datasource(ds_id: str, group_id: str, name: str, ds_type: str, config: 
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc).isoformat()
     execute(
-        "INSERT OR REPLACE INTO datasources (id, group_id, name, ds_type, config, created_at, updated_at, created_by) VALUES (?,?,?,?,?,?,?,?)",
+        "INSERT INTO datasources (id, group_id, name, ds_type, config, created_at, updated_at, created_by) "
+        "VALUES (?,?,?,?,?,?,?,?) ON CONFLICT (id) DO UPDATE SET "
+        "name=EXCLUDED.name, ds_type=EXCLUDED.ds_type, config=EXCLUDED.config, updated_at=EXCLUDED.updated_at",
         (ds_id, group_id, name, ds_type, json.dumps(config), now, now, created_by)
     )
     return get_datasource(ds_id)
@@ -746,7 +643,9 @@ def save_api_connection(api_id: str, group_id: str, config: dict,
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc).isoformat()
     execute(
-        "INSERT OR REPLACE INTO api_connections (id, group_id, config, created_at, updated_at, created_by) VALUES (?,?,?,?,?,?)",
+        "INSERT INTO api_connections (id, group_id, config, created_at, updated_at, created_by) "
+        "VALUES (?,?,?,?,?,?) ON CONFLICT (id) DO UPDATE SET "
+        "config=EXCLUDED.config, updated_at=EXCLUDED.updated_at",
         (api_id, group_id, json.dumps(config), now, now, created_by)
     )
     return get_api_connection(api_id)
@@ -804,9 +703,12 @@ def save_schedule(schedule_id: str, group_id: str, project_id: str, name: str,
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc).isoformat()
     execute(
-        "INSERT OR REPLACE INTO schedules (id, group_id, project_id, name, cron_expression, is_enabled, config, created_at, updated_at, created_by) VALUES (?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO schedules (id, group_id, project_id, name, cron_expression, is_enabled, config, created_at, updated_at, created_by) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT (id) DO UPDATE SET "
+        "name=EXCLUDED.name, cron_expression=EXCLUDED.cron_expression, is_enabled=EXCLUDED.is_enabled, "
+        "config=EXCLUDED.config, updated_at=EXCLUDED.updated_at",
         (schedule_id, group_id, project_id, name, cron_expression,
-         1 if is_enabled else 0, json.dumps(config or {}), now, now, created_by)
+         is_enabled, json.dumps(config or {}), now, now, created_by)
     )
     return get_schedule(schedule_id)
 
@@ -816,7 +718,7 @@ def update_schedule(schedule_id: str, **fields) -> Optional[Dict]:
     if "config" in fields and isinstance(fields["config"], dict):
         fields["config"] = json.dumps(fields["config"])
     if "is_enabled" in fields:
-        fields["is_enabled"] = 1 if fields["is_enabled"] else 0
+        fields["is_enabled"] = bool(fields["is_enabled"])
     fields["updated_at"] = datetime.now(timezone.utc).isoformat()
     set_clause, vals = _safe_set_clause("schedules", fields)
     execute(f"UPDATE schedules SET {set_clause} WHERE id = ?", vals + (schedule_id,))
@@ -835,7 +737,7 @@ def delete_schedule(schedule_id: str) -> bool:
 def update_beat_heartbeat() -> None:
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc).isoformat()
-    execute("INSERT OR REPLACE INTO beat_heartbeat (id, ts) VALUES ('beat', ?)", (now,))
+    execute("INSERT INTO beat_heartbeat (id, ts) VALUES ('beat', ?) ON CONFLICT (id) DO UPDATE SET ts=EXCLUDED.ts", (now,))
 
 
 def get_beat_heartbeat() -> Optional[str]:
@@ -854,7 +756,7 @@ def get_setting(key: str, default: Any = None) -> Any:
 
 def set_setting(key: str, value: Any) -> None:
     execute(
-        "INSERT OR REPLACE INTO app_settings (key, value) VALUES (?,?)",
+        "INSERT INTO app_settings (key, value) VALUES (?,?) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value",
         (key, str(value))
     )
 
@@ -866,7 +768,7 @@ def get_app_setting(key: str) -> Optional[str]:
 
 def set_app_setting(key: str, value: str) -> None:
     execute(
-        "INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)",
+        "INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value",
         (key, value)
     )
 

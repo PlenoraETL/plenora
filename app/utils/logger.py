@@ -61,7 +61,6 @@ def get_steps() -> list:
     return list(getattr(_log_context, "steps", []))
 
 import re
-import sqlite3
 import sys
 import traceback
 from datetime import datetime
@@ -233,81 +232,16 @@ _db_lock = Lock()
 # SQLITE HANDLER
 # =============================================================================
 
-class SQLiteLogHandler(logging.Handler):
-    """Handler logging che scrive su SQLite."""
+class PostgresLogHandler(logging.Handler):
+    """Handler logging che scrive su PostgreSQL via pg_connection pool."""
 
-    def __init__(self, db_path: Path):
+    def __init__(self):
         super().__init__(logging.INFO)
-        self.db_path = db_path
-        self._init_db()
-
-    def _get_conn(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(str(self.db_path), timeout=settings.LOG_DB_CONNECT_TIMEOUT)
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute(f"PRAGMA busy_timeout={settings.LOG_DB_BUSY_TIMEOUT}")
-        return conn
-
-    def _init_db(self):
-        with self._get_conn() as conn:
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS logs (
-                    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                    ts         TEXT    NOT NULL,
-                    level      TEXT    NOT NULL,
-                    module     TEXT    NOT NULL,
-                    op         TEXT    DEFAULT '',
-                    msg        TEXT    NOT NULL,
-                    project_id TEXT    DEFAULT '',
-                    group_id   TEXT    DEFAULT '',
-                    run_id     TEXT    DEFAULT '',
-                    node_id    TEXT    DEFAULT '',
-                    details    TEXT    DEFAULT '',
-                    error      TEXT    DEFAULT ''
-                )
-            """)
-
-            # Migrazione: aggiunge run_id/node_id se il DB esiste già senza queste colonne.
-            # DEVE venire PRIMA della creazione degli indici su run_id/node_id.
-            existing = {r[1] for r in conn.execute("PRAGMA table_info(logs)")}
-            if "run_id" not in existing:
-                conn.execute("ALTER TABLE logs ADD COLUMN run_id TEXT DEFAULT ''")
-            if "node_id" not in existing:
-                conn.execute("ALTER TABLE logs ADD COLUMN node_id TEXT DEFAULT ''")
-
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_ts         ON logs(ts)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_level      ON logs(level)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_module     ON logs(module)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_project_id ON logs(project_id)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_group_id   ON logs(group_id)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_run_id     ON logs(run_id)")
-
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS runs (
-                    run_id          TEXT    PRIMARY KEY,
-                    project_id      TEXT    NOT NULL,
-                    group_id        TEXT    DEFAULT '',
-                    module          TEXT    DEFAULT '',
-                    triggered_by    TEXT    DEFAULT 'manual',
-                    ts_start        TEXT    NOT NULL,
-                    ts_end          TEXT    DEFAULT NULL,
-                    status          TEXT    DEFAULT 'running',
-                    rows_in         INTEGER DEFAULT 0,
-                    rows_out        INTEGER DEFAULT 0,
-                    duration_ms     INTEGER DEFAULT 0,
-                    error_node_id   TEXT    DEFAULT NULL,
-                    error_module    TEXT    DEFAULT NULL,
-                    error_message   TEXT    DEFAULT NULL,
-                    steps           TEXT    DEFAULT '[]',
-                    debug_payload   TEXT    DEFAULT NULL
-                )
-            """)
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_runs_project_id ON runs(project_id)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_runs_status     ON runs(status)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_runs_ts_start   ON runs(ts_start)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_runs_group_id   ON runs(group_id)")
+        # Le tabelle logs e log_runs sono già create dallo schema PG
 
     def emit(self, record: logging.LogRecord):
         try:
+            from app.db.pg_connection import execute as pg_execute
             ts = datetime.fromtimestamp(record.created).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]
             level = record.levelname
             module = _resolve_module(record.name)
@@ -318,7 +252,7 @@ class SQLiteLogHandler(logging.Handler):
             run_id = getattr(record, "run_id", "") or get_run_id() or ""
             node_id = getattr(record, "node_id", "") or ""
             details_raw = getattr(record, "details", None)
-            details = json.dumps(details_raw, ensure_ascii=False, default=str) if details_raw else ""
+            details = json.dumps(details_raw, ensure_ascii=False, default=str) if details_raw else None
             if details:
                 details = _sanitize_log_text(details)
             error = ""
@@ -327,24 +261,13 @@ class SQLiteLogHandler(logging.Handler):
                     "".join(traceback.format_exception(*record.exc_info)).strip()
                 )
 
-            with _db_lock:
-                with self._get_conn() as conn:
-                    conn.execute(
-                        "INSERT INTO logs (ts, level, module, op, msg, project_id, group_id, run_id, node_id, details, error) "
-                        "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                        (ts, level, module, op, msg, project_id, group_id, run_id, node_id, details, error)
-                    )
-                    # Pulizia automatica se supera il limite
-                    count = conn.execute("SELECT COUNT(*) FROM logs").fetchone()[0]
-                    if count > LOG_DB_MAX_ROWS:
-                        conn.execute(
-                            "DELETE FROM logs WHERE id IN "
-                            "(SELECT id FROM logs ORDER BY id ASC LIMIT ?)",
-                            (count - LOG_DB_MAX_ROWS,)
-                        )
+            pg_execute(
+                "INSERT INTO logs (ts, level, module, op, msg, project_id, group_id, run_id, node_id, details, error) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                (ts, level, module, op, msg, project_id, group_id, run_id, node_id, details, error)
+            )
         except Exception:
             self.handleError(record)
-
 
     def open_run(
         self,
@@ -354,21 +277,20 @@ class SQLiteLogHandler(logging.Handler):
         module: str = "",
         triggered_by: str = "manual",
     ) -> None:
-        """Apre una nuova run su log.db — status 'running'."""
+        """Apre una nuova run — status 'running'."""
+        from app.db.pg_connection import execute as pg_execute
         ts_start = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]
-        with _db_lock:
-            with self._get_conn() as conn:
-                conn.execute(
-                    "INSERT OR IGNORE INTO runs "
-                    "(run_id, project_id, group_id, module, triggered_by, ts_start, status) "
-                    "VALUES (?,?,?,?,?,?,'running')",
-                    (run_id, project_id, group_id, module, triggered_by, ts_start),
-                )
+        pg_execute(
+            "INSERT INTO log_runs "
+            "(run_id, project_id, group_id, module, triggered_by, ts_start, status) "
+            "VALUES (%s,%s,%s,%s,%s,%s,'running') ON CONFLICT DO NOTHING",
+            (run_id, project_id, group_id, module, triggered_by, ts_start),
+        )
 
     def close_run(
         self,
         run_id: str,
-        status: str,                        # 'success' | 'failure'
+        status: str,
         rows_in: int = 0,
         rows_out: int = 0,
         duration_ms: int = 0,
@@ -379,30 +301,29 @@ class SQLiteLogHandler(logging.Handler):
         debug_payload: dict = None,
     ) -> None:
         """Chiude una run aggiornando tutti i campi di esito."""
+        from app.db.pg_connection import execute as pg_execute
         ts_end = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]
         steps_json = json.dumps(steps or [], ensure_ascii=False, default=str)
         payload_json = json.dumps(debug_payload, ensure_ascii=False, default=str) if debug_payload else None
-        with _db_lock:
-            with self._get_conn() as conn:
-                conn.execute(
-                    """UPDATE runs SET
-                        ts_end        = ?,
-                        status        = ?,
-                        rows_in       = ?,
-                        rows_out      = ?,
-                        duration_ms   = ?,
-                        steps         = ?,
-                        error_node_id = ?,
-                        error_module  = ?,
-                        error_message = ?,
-                        debug_payload = ?
-                    WHERE run_id = ?""",
-                    (
-                        ts_end, status, rows_in, rows_out, duration_ms,
-                        steps_json, error_node_id, error_module, error_message,
-                        payload_json, run_id,
-                    ),
-                )
+        pg_execute(
+            """UPDATE log_runs SET
+                ts_end        = %s,
+                status        = %s,
+                rows_in       = %s,
+                rows_out      = %s,
+                duration_ms   = %s,
+                steps         = %s,
+                error_node_id = %s,
+                error_module  = %s,
+                error_message = %s,
+                debug_payload = %s
+            WHERE run_id = %s""",
+            (
+                ts_end, status, rows_in, rows_out, duration_ms,
+                steps_json, error_node_id, error_module, error_message,
+                payload_json, run_id,
+            ),
+        )
 
 
 def _resolve_module(name: str) -> str:
@@ -412,12 +333,10 @@ def _resolve_module(name: str) -> str:
     return name.split(".")[-1] if "." in name else name
 
 
-def _get_db_handler() -> SQLiteLogHandler:
+def _get_db_handler() -> PostgresLogHandler:
     global _db_handler
     if _db_handler is None:
-        logs_dir = settings.LOGS_DIR
-        logs_dir.mkdir(parents=True, exist_ok=True)
-        _db_handler = SQLiteLogHandler(logs_dir / LOG_DB_FILE)
+        _db_handler = PostgresLogHandler()
     return _db_handler
 
 
