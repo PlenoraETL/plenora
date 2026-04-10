@@ -1,0 +1,1486 @@
+{
+  "_meta": {
+    "version": "1.0.0",
+    "description": "Registry funzioni SQL multi-database per URBY-ETL",
+    "supported_databases": [
+      "postgres",
+      "mssql",
+      "mysql",
+      "oracle",
+      "sqlite"
+    ]
+  },
+  "spatial": {
+    "ST_Buffer": {
+      "description": "Crea buffer attorno a geometria",
+      "category": "spatial",
+      "params": [
+        {
+          "name": "geom",
+          "type": "geometry",
+          "required": true
+        },
+        {
+          "name": "distance",
+          "type": "number",
+          "required": true
+        },
+        {
+          "name": "segments",
+          "type": "integer",
+          "required": false,
+          "default": 8
+        }
+      ],
+      "returns": "geometry",
+      "dialects": {
+        "postgres": "ST_Buffer({geom}, {distance})",
+        "mssql": "{geom}.STBuffer({distance})",
+        "mysql": "ST_Buffer({geom}, {distance})",
+        "oracle": "SDO_GEOM.SDO_BUFFER({geom}, {distance}, 0.005)",
+        "sqlite": "Buffer({geom}, {distance})"
+      }
+    },
+    "ST_Intersects": {
+      "description": "Verifica se due geometrie si intersecano",
+      "category": "spatial",
+      "params": [
+        {
+          "name": "geom1",
+          "type": "geometry",
+          "required": true
+        },
+        {
+          "name": "geom2",
+          "type": "geometry",
+          "required": true
+        }
+      ],
+      "returns": "boolean",
+      "dialects": {
+        "postgres": "ST_Intersects({geom1}, {geom2})",
+        "mssql": "{geom1}.STIntersects({geom2}) = 1",
+        "mysql": "ST_Intersects({geom1}, {geom2})",
+        "oracle": "SDO_RELATE({geom1}, {geom2}, 'mask=ANYINTERACT') = 'TRUE'",
+        "sqlite": "Intersects({geom1}, {geom2})"
+      }
+    },
+    "ST_Contains": {
+      "description": "Verifica se geom1 contiene geom2",
+      "category": "spatial",
+      "params": [
+        {
+          "name": "geom1",
+          "type": "geometry",
+          "required": true
+        },
+        {
+          "name": "geom2",
+          "type": "geometry",
+          "required": true
+        }
+      ],
+      "returns": "boolean",
+      "dialects": {
+        "postgres": "ST_Contains({geom1}, {geom2})",
+        "mssql": "{geom1}.STContains({geom2}) = 1",
+        "mysql": "ST_Contains({geom1}, {geom2})",
+        "oracle": "SDO_RELATE({geom1}, {geom2}, 'mask=CONTAINS') = 'TRUE'",
+        "sqlite": "Contains({geom1}, {geom2})"
+      }
+    },
+    "ST_Within": {
+      "description": "Verifica se geom1 \u00e8 contenuta in geom2",
+      "category": "spatial",
+      "params": [
+        {
+          "name": "geom1",
+          "type": "geometry",
+          "required": true
+        },
+        {
+          "name": "geom2",
+          "type": "geometry",
+          "required": true
+        }
+      ],
+      "returns": "boolean",
+      "dialects": {
+        "postgres": "ST_Within({geom1}, {geom2})",
+        "mssql": "{geom1}.STWithin({geom2}) = 1",
+        "mysql": "ST_Within({geom1}, {geom2})",
+        "oracle": "SDO_RELATE({geom1}, {geom2}, 'mask=INSIDE') = 'TRUE'",
+        "sqlite": "Within({geom1}, {geom2})"
+      }
+    },
+    "ST_DWithin": {
+      "description": "Verifica se due geometrie sono entro una distanza",
+      "category": "spatial",
+      "params": [
+        {
+          "name": "geom1",
+          "type": "geometry",
+          "required": true
+        },
+        {
+          "name": "geom2",
+          "type": "geometry",
+          "required": true
+        },
+        {
+          "name": "distance",
+          "type": "number",
+          "required": true
+        }
+      ],
+      "returns": "boolean",
+      "dialects": {
+        "postgres": "ST_DWithin({geom1}, {geom2}, {distance})",
+        "mssql": "{geom1}.STDistance({geom2}) <= {distance}",
+        "mysql": "ST_Distance({geom1}, {geom2}) <= {distance}",
+        "oracle": "SDO_WITHIN_DISTANCE({geom1}, {geom2}, 'distance={distance}') = 'TRUE'",
+        "sqlite": "Distance({geom1}, {geom2}) <= {distance}"
+      }
+    },
+    "ST_Distance": {
+      "description": "Calcola distanza tra due geometrie",
+      "category": "spatial",
+      "params": [
+        {
+          "name": "geom1",
+          "type": "geometry",
+          "required": true
+        },
+        {
+          "name": "geom2",
+          "type": "geometry",
+          "required": true
+        }
+      ],
+      "returns": "number",
+      "dialects": {
+        "postgres": "ST_Distance({geom1}, {geom2})",
+        "mssql": "{geom1}.STDistance({geom2})",
+        "mysql": "ST_Distance({geom1}, {geom2})",
+        "oracle": "SDO_GEOM.SDO_DISTANCE({geom1}, {geom2}, 0.005)",
+        "sqlite": "Distance({geom1}, {geom2})"
+      }
+    },
+    "ST_Area": {
+      "description": "Calcola area di un poligono",
+      "category": "spatial",
+      "params": [
+        {
+          "name": "geom",
+          "type": "geometry",
+          "required": true
+        }
+      ],
+      "returns": "number",
+      "dialects": {
+        "postgres": "ST_Area({geom})",
+        "mssql": "{geom}.STArea()",
+        "mysql": "ST_Area({geom})",
+        "oracle": "SDO_GEOM.SDO_AREA({geom}, 0.005)",
+        "sqlite": "Area({geom})"
+      }
+    },
+    "ST_Length": {
+      "description": "Calcola lunghezza di una linea",
+      "category": "spatial",
+      "params": [
+        {
+          "name": "geom",
+          "type": "geometry",
+          "required": true
+        }
+      ],
+      "returns": "number",
+      "dialects": {
+        "postgres": "ST_Length({geom})",
+        "mssql": "{geom}.STLength()",
+        "mysql": "ST_Length({geom})",
+        "oracle": "SDO_GEOM.SDO_LENGTH({geom}, 0.005)",
+        "sqlite": "GLength({geom})"
+      }
+    },
+    "ST_Centroid": {
+      "description": "Calcola centroide di una geometria",
+      "category": "spatial",
+      "params": [
+        {
+          "name": "geom",
+          "type": "geometry",
+          "required": true
+        }
+      ],
+      "returns": "geometry",
+      "dialects": {
+        "postgres": "ST_Centroid({geom})",
+        "mssql": "{geom}.STCentroid()",
+        "mysql": "ST_Centroid({geom})",
+        "oracle": "SDO_GEOM.SDO_CENTROID({geom}, 0.005)",
+        "sqlite": "Centroid({geom})"
+      }
+    },
+    "ST_Union": {
+      "description": "Unione di due geometrie",
+      "category": "spatial",
+      "params": [
+        {
+          "name": "geom1",
+          "type": "geometry",
+          "required": true
+        },
+        {
+          "name": "geom2",
+          "type": "geometry",
+          "required": true
+        }
+      ],
+      "returns": "geometry",
+      "dialects": {
+        "postgres": "ST_Union({geom1}, {geom2})",
+        "mssql": "{geom1}.STUnion({geom2})",
+        "mysql": "ST_Union({geom1}, {geom2})",
+        "oracle": "SDO_GEOM.SDO_UNION({geom1}, {geom2}, 0.005)",
+        "sqlite": "GUnion({geom1}, {geom2})"
+      }
+    },
+    "ST_Intersection": {
+      "description": "Intersezione di due geometrie",
+      "category": "spatial",
+      "params": [
+        {
+          "name": "geom1",
+          "type": "geometry",
+          "required": true
+        },
+        {
+          "name": "geom2",
+          "type": "geometry",
+          "required": true
+        }
+      ],
+      "returns": "geometry",
+      "dialects": {
+        "postgres": "ST_Intersection({geom1}, {geom2})",
+        "mssql": "{geom1}.STIntersection({geom2})",
+        "mysql": "ST_Intersection({geom1}, {geom2})",
+        "oracle": "SDO_GEOM.SDO_INTERSECTION({geom1}, {geom2}, 0.005)",
+        "sqlite": "Intersection({geom1}, {geom2})"
+      }
+    },
+    "ST_Difference": {
+      "description": "Differenza tra due geometrie",
+      "category": "spatial",
+      "params": [
+        {
+          "name": "geom1",
+          "type": "geometry",
+          "required": true
+        },
+        {
+          "name": "geom2",
+          "type": "geometry",
+          "required": true
+        }
+      ],
+      "returns": "geometry",
+      "dialects": {
+        "postgres": "ST_Difference({geom1}, {geom2})",
+        "mssql": "{geom1}.STDifference({geom2})",
+        "mysql": "ST_Difference({geom1}, {geom2})",
+        "oracle": "SDO_GEOM.SDO_DIFFERENCE({geom1}, {geom2}, 0.005)",
+        "sqlite": "Difference({geom1}, {geom2})"
+      }
+    },
+    "ST_Transform": {
+      "description": "Trasforma geometria in altro SRID",
+      "category": "spatial",
+      "params": [
+        {
+          "name": "geom",
+          "type": "geometry",
+          "required": true
+        },
+        {
+          "name": "srid",
+          "type": "integer",
+          "required": true
+        }
+      ],
+      "returns": "geometry",
+      "dialects": {
+        "postgres": "ST_Transform({geom}, {srid})",
+        "mssql": "{geom}.STTransform({srid})",
+        "mysql": "ST_Transform({geom}, {srid})",
+        "oracle": "SDO_CS.TRANSFORM({geom}, {srid})",
+        "sqlite": "Transform({geom}, {srid})"
+      }
+    },
+    "ST_SetSRID": {
+      "description": "Imposta SRID senza trasformare",
+      "category": "spatial",
+      "params": [
+        {
+          "name": "geom",
+          "type": "geometry",
+          "required": true
+        },
+        {
+          "name": "srid",
+          "type": "integer",
+          "required": true
+        }
+      ],
+      "returns": "geometry",
+      "dialects": {
+        "postgres": "ST_SetSRID({geom}, {srid})",
+        "mssql": "{geom}.STSrid = {srid}",
+        "mysql": "ST_SRID({geom}, {srid})",
+        "oracle": "SDO_CS.TRANSFORM({geom}, {srid})",
+        "sqlite": "SetSRID({geom}, {srid})"
+      }
+    },
+    "ST_AsText": {
+      "description": "Converte geometria in WKT",
+      "category": "spatial",
+      "params": [
+        {
+          "name": "geom",
+          "type": "geometry",
+          "required": true
+        }
+      ],
+      "returns": "string",
+      "dialects": {
+        "postgres": "ST_AsText({geom})",
+        "mssql": "{geom}.STAsText()",
+        "mysql": "ST_AsText({geom})",
+        "oracle": "SDO_UTIL.TO_WKTGEOMETRY({geom})",
+        "sqlite": "AsText({geom})"
+      }
+    },
+    "ST_GeomFromText": {
+      "description": "Crea geometria da WKT",
+      "category": "spatial",
+      "params": [
+        {
+          "name": "wkt",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "srid",
+          "type": "integer",
+          "required": false,
+          "default": 4326
+        }
+      ],
+      "returns": "geometry",
+      "dialects": {
+        "postgres": "ST_GeomFromText({wkt}, {srid})",
+        "mssql": "geometry::STGeomFromText({wkt}, {srid})",
+        "mysql": "ST_GeomFromText({wkt}, {srid})",
+        "oracle": "SDO_GEOMETRY({wkt}, {srid})",
+        "sqlite": "GeomFromText({wkt}, {srid})"
+      }
+    },
+    "ST_MakePoint": {
+      "description": "Crea punto da coordinate",
+      "category": "spatial",
+      "params": [
+        {
+          "name": "x",
+          "type": "number",
+          "required": true
+        },
+        {
+          "name": "y",
+          "type": "number",
+          "required": true
+        },
+        {
+          "name": "srid",
+          "type": "integer",
+          "required": false,
+          "default": 4326
+        }
+      ],
+      "returns": "geometry",
+      "dialects": {
+        "postgres": "ST_SetSRID(ST_MakePoint({x}, {y}), {srid})",
+        "mssql": "geometry::Point({x}, {y}, {srid})",
+        "mysql": "ST_SRID(POINT({x}, {y}), {srid})",
+        "oracle": "SDO_GEOMETRY(2001, {srid}, SDO_POINT_TYPE({x}, {y}, NULL), NULL, NULL)",
+        "sqlite": "MakePoint({x}, {y}, {srid})"
+      }
+    },
+    "ST_X": {
+      "description": "Estrae coordinata X da punto",
+      "category": "spatial",
+      "params": [
+        {
+          "name": "geom",
+          "type": "geometry",
+          "required": true
+        }
+      ],
+      "returns": "number",
+      "dialects": {
+        "postgres": "ST_X({geom})",
+        "mssql": "{geom}.STX",
+        "mysql": "ST_X({geom})",
+        "oracle": "SDO_GEOM.SDO_POINTONSURFACE({geom}, 0.005).SDO_POINT.X",
+        "sqlite": "X({geom})"
+      }
+    },
+    "ST_Y": {
+      "description": "Estrae coordinata Y da punto",
+      "category": "spatial",
+      "params": [
+        {
+          "name": "geom",
+          "type": "geometry",
+          "required": true
+        }
+      ],
+      "returns": "number",
+      "dialects": {
+        "postgres": "ST_Y({geom})",
+        "mssql": "{geom}.STY",
+        "mysql": "ST_Y({geom})",
+        "oracle": "SDO_GEOM.SDO_POINTONSURFACE({geom}, 0.005).SDO_POINT.Y",
+        "sqlite": "Y({geom})"
+      }
+    },
+    "ST_IsValid": {
+      "description": "Verifica se geometria \u00e8 valida",
+      "category": "spatial",
+      "params": [
+        {
+          "name": "geom",
+          "type": "geometry",
+          "required": true
+        }
+      ],
+      "returns": "boolean",
+      "dialects": {
+        "postgres": "ST_IsValid({geom})",
+        "mssql": "{geom}.STIsValid() = 1",
+        "mysql": "ST_IsValid({geom})",
+        "oracle": "SDO_GEOM.VALIDATE_GEOMETRY_WITH_CONTEXT({geom}, 0.005) = 'TRUE'",
+        "sqlite": "IsValid({geom})"
+      }
+    },
+    "ST_MakeValid": {
+      "description": "Ripara geometria invalida",
+      "category": "spatial",
+      "params": [
+        {
+          "name": "geom",
+          "type": "geometry",
+          "required": true
+        }
+      ],
+      "returns": "geometry",
+      "dialects": {
+        "postgres": "ST_MakeValid({geom})",
+        "mssql": "{geom}.MakeValid()",
+        "mysql": "ST_MakeValid({geom})",
+        "oracle": "SDO_UTIL.RECTIFY_GEOMETRY({geom}, 0.005)",
+        "sqlite": "MakeValid({geom})"
+      }
+    },
+    "ST_Simplify": {
+      "description": "Semplifica geometria con tolleranza",
+      "category": "spatial",
+      "params": [
+        {
+          "name": "geom",
+          "type": "geometry",
+          "required": true
+        },
+        {
+          "name": "tolerance",
+          "type": "number",
+          "required": true
+        }
+      ],
+      "returns": "geometry",
+      "dialects": {
+        "postgres": "ST_Simplify({geom}, {tolerance})",
+        "mssql": "{geom}.Reduce({tolerance})",
+        "mysql": "ST_Simplify({geom}, {tolerance})",
+        "oracle": "SDO_UTIL.SIMPLIFY({geom}, {tolerance})",
+        "sqlite": "Simplify({geom}, {tolerance})"
+      }
+    },
+    "ST_ConvexHull": {
+      "description": "Calcola convex hull di geometria",
+      "category": "spatial",
+      "params": [
+        {
+          "name": "geom",
+          "type": "geometry",
+          "required": true
+        }
+      ],
+      "returns": "geometry",
+      "dialects": {
+        "postgres": "ST_ConvexHull({geom})",
+        "mssql": "{geom}.STConvexHull()",
+        "mysql": "ST_ConvexHull({geom})",
+        "oracle": "SDO_GEOM.SDO_CONVEXHULL({geom}, 0.005)",
+        "sqlite": "ConvexHull({geom})"
+      }
+    },
+    "ST_Envelope": {
+      "description": "Calcola bounding box di geometria",
+      "category": "spatial",
+      "params": [
+        {
+          "name": "geom",
+          "type": "geometry",
+          "required": true
+        }
+      ],
+      "returns": "geometry",
+      "dialects": {
+        "postgres": "ST_Envelope({geom})",
+        "mssql": "{geom}.STEnvelope()",
+        "mysql": "ST_Envelope({geom})",
+        "oracle": "SDO_GEOM.SDO_MBR({geom})",
+        "sqlite": "Envelope({geom})"
+      }
+    },
+    "ST_Touches": {
+      "description": "Returns true if the geometries have at least one point in common but their interiors do not intersect",
+      "params": [
+        {
+          "name": "geom1",
+          "type": "geometry",
+          "required": true
+        },
+        {
+          "name": "geom2",
+          "type": "geometry",
+          "required": true
+        }
+      ],
+      "returns": "boolean",
+      "dialects": {
+        "postgres": "ST_Touches({geom1}, {geom2})",
+        "mssql": "{geom1}.STTouches({geom2}) = 1",
+        "mysql": "ST_Touches({geom1}, {geom2})",
+        "oracle": "SDO_RELATE({geom1}, {geom2}, 'mask=TOUCH') = 'TRUE'",
+        "sqlite": "Touches({geom1}, {geom2})"
+      }
+    },
+    "ST_Overlaps": {
+      "description": "Returns true if the geometries share space but are not completely contained by each other",
+      "params": [
+        {
+          "name": "geom1",
+          "type": "geometry",
+          "required": true
+        },
+        {
+          "name": "geom2",
+          "type": "geometry",
+          "required": true
+        }
+      ],
+      "returns": "boolean",
+      "dialects": {
+        "postgres": "ST_Overlaps({geom1}, {geom2})",
+        "mssql": "{geom1}.STOverlaps({geom2}) = 1",
+        "mysql": "ST_Overlaps({geom1}, {geom2})",
+        "oracle": "SDO_RELATE({geom1}, {geom2}, 'mask=OVERLAPBDYINTERSECT+OVERLAPBDYDISJOINT') = 'TRUE'",
+        "sqlite": "Overlaps({geom1}, {geom2})"
+      }
+    }
+  },
+  "aggregate": {
+    "ST_Union_Agg": {
+      "description": "Unione aggregata di geometrie",
+      "category": "spatial_aggregate",
+      "params": [
+        {
+          "name": "geom",
+          "type": "geometry",
+          "required": true
+        }
+      ],
+      "returns": "geometry",
+      "is_aggregate": true,
+      "dialects": {
+        "postgres": "ST_Union({geom})",
+        "mssql": "geometry::UnionAggregate({geom})",
+        "mysql": "ST_Union({geom})",
+        "oracle": "SDO_AGGR_UNION(SDOAGGRTYPE({geom}, 0.005))",
+        "sqlite": "GUnion({geom})"
+      }
+    },
+    "ST_Collect": {
+      "description": "Raccoglie geometrie in GeometryCollection",
+      "category": "spatial_aggregate",
+      "params": [
+        {
+          "name": "geom",
+          "type": "geometry",
+          "required": true
+        }
+      ],
+      "returns": "geometry",
+      "is_aggregate": true,
+      "dialects": {
+        "postgres": "ST_Collect({geom})",
+        "mssql": "geometry::CollectionAggregate({geom})",
+        "mysql": "ST_Collect({geom})",
+        "oracle": "SDO_AGGR_CONCAT_LINES({geom})",
+        "sqlite": "Collect({geom})"
+      }
+    },
+    "ST_Extent": {
+      "description": "Bounding box aggregato",
+      "category": "spatial_aggregate",
+      "params": [
+        {
+          "name": "geom",
+          "type": "geometry",
+          "required": true
+        }
+      ],
+      "returns": "geometry",
+      "is_aggregate": true,
+      "dialects": {
+        "postgres": "ST_Extent({geom})::geometry",
+        "mssql": "geometry::EnvelopeAggregate({geom})",
+        "mysql": "ST_Envelope(ST_Collect({geom}))",
+        "oracle": "SDO_AGGR_MBR({geom})",
+        "sqlite": "Extent({geom})"
+      }
+    }
+  },
+  "string": {
+    "CONCAT": {
+      "description": "Concatena stringhe",
+      "category": "string",
+      "params": [
+        {
+          "name": "values",
+          "type": "variadic",
+          "required": true
+        }
+      ],
+      "returns": "string",
+      "dialects": {
+        "postgres": "CONCAT({values})",
+        "mssql": "CONCAT({values})",
+        "mysql": "CONCAT({values})",
+        "oracle": "{values:join:' || '}",
+        "sqlite": "{values:join:' || '}"
+      }
+    },
+    "UPPER": {
+      "description": "Converte in maiuscolo",
+      "category": "string",
+      "params": [
+        {
+          "name": "value",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "returns": "string",
+      "dialects": {
+        "postgres": "UPPER({value})",
+        "mssql": "UPPER({value})",
+        "mysql": "UPPER({value})",
+        "oracle": "UPPER({value})",
+        "sqlite": "UPPER({value})"
+      }
+    },
+    "LOWER": {
+      "description": "Converte in minuscolo",
+      "category": "string",
+      "params": [
+        {
+          "name": "value",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "returns": "string",
+      "dialects": {
+        "postgres": "LOWER({value})",
+        "mssql": "LOWER({value})",
+        "mysql": "LOWER({value})",
+        "oracle": "LOWER({value})",
+        "sqlite": "LOWER({value})"
+      }
+    },
+    "TRIM": {
+      "description": "Rimuove spazi",
+      "category": "string",
+      "params": [
+        {
+          "name": "value",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "returns": "string",
+      "dialects": {
+        "postgres": "TRIM({value})",
+        "mssql": "LTRIM(RTRIM({value}))",
+        "mysql": "TRIM({value})",
+        "oracle": "TRIM({value})",
+        "sqlite": "TRIM({value})"
+      }
+    },
+    "SUBSTRING": {
+      "description": "Estrae sottostringa",
+      "category": "string",
+      "params": [
+        {
+          "name": "value",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "start",
+          "type": "integer",
+          "required": true
+        },
+        {
+          "name": "length",
+          "type": "integer",
+          "required": false
+        }
+      ],
+      "returns": "string",
+      "dialects": {
+        "postgres": "SUBSTRING({value} FROM {start} FOR {length})",
+        "mssql": "SUBSTRING({value}, {start}, {length})",
+        "mysql": "SUBSTRING({value}, {start}, {length})",
+        "oracle": "SUBSTR({value}, {start}, {length})",
+        "sqlite": "SUBSTR({value}, {start}, {length})"
+      }
+    },
+    "REPLACE": {
+      "description": "Sostituisce testo",
+      "category": "string",
+      "params": [
+        {
+          "name": "value",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "search",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "replace",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "returns": "string",
+      "dialects": {
+        "postgres": "REPLACE({value}, {search}, {replace})",
+        "mssql": "REPLACE({value}, {search}, {replace})",
+        "mysql": "REPLACE({value}, {search}, {replace})",
+        "oracle": "REPLACE({value}, {search}, {replace})",
+        "sqlite": "REPLACE({value}, {search}, {replace})"
+      }
+    },
+    "LEFT": {
+      "description": "Primi N caratteri",
+      "category": "string",
+      "params": [
+        {
+          "name": "value",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "length",
+          "type": "integer",
+          "required": true
+        }
+      ],
+      "returns": "string",
+      "dialects": {
+        "postgres": "LEFT({value}, {length})",
+        "mssql": "LEFT({value}, {length})",
+        "mysql": "LEFT({value}, {length})",
+        "oracle": "SUBSTR({value}, 1, {length})",
+        "sqlite": "SUBSTR({value}, 1, {length})"
+      }
+    },
+    "RIGHT": {
+      "description": "Ultimi N caratteri",
+      "category": "string",
+      "params": [
+        {
+          "name": "value",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "length",
+          "type": "integer",
+          "required": true
+        }
+      ],
+      "returns": "string",
+      "dialects": {
+        "postgres": "RIGHT({value}, {length})",
+        "mssql": "RIGHT({value}, {length})",
+        "mysql": "RIGHT({value}, {length})",
+        "oracle": "SUBSTR({value}, -{length})",
+        "sqlite": "SUBSTR({value}, -{length})"
+      }
+    },
+    "POSITION": {
+      "description": "Trova posizione di una sottostringa",
+      "category": "string",
+      "params": [
+        {
+          "name": "search",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "value",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "returns": "integer",
+      "dialects": {
+        "postgres": "POSITION({search} IN {value})",
+        "mssql": "CHARINDEX({search}, {value})",
+        "mysql": "LOCATE({search}, {value})",
+        "oracle": "INSTR({value}, {search})",
+        "sqlite": "INSTR({value}, {search})"
+      }
+    },
+    "LTRIM": {
+      "description": "Rimuove spazi a sinistra",
+      "category": "string",
+      "params": [
+        {
+          "name": "value",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "returns": "string",
+      "dialects": {
+        "postgres": "LTRIM({value})",
+        "mssql": "LTRIM({value})",
+        "mysql": "LTRIM({value})",
+        "oracle": "LTRIM({value})",
+        "sqlite": "LTRIM({value})"
+      }
+    },
+    "RTRIM": {
+      "description": "Rimuove spazi a destra",
+      "category": "string",
+      "params": [
+        {
+          "name": "value",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "returns": "string",
+      "dialects": {
+        "postgres": "RTRIM({value})",
+        "mssql": "RTRIM({value})",
+        "mysql": "RTRIM({value})",
+        "oracle": "RTRIM({value})",
+        "sqlite": "RTRIM({value})"
+      }
+    },
+    "LENGTH": {
+      "description": "Lunghezza stringa",
+      "category": "string",
+      "params": [
+        {
+          "name": "value",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "returns": "integer",
+      "dialects": {
+        "postgres": "LENGTH({value})",
+        "mssql": "LEN({value})",
+        "mysql": "LENGTH({value})",
+        "oracle": "LENGTH({value})",
+        "sqlite": "LENGTH({value})"
+      }
+    }
+  },
+  "numeric": {
+    "ROUND": {
+      "description": "Arrotonda numero",
+      "category": "numeric",
+      "params": [
+        {
+          "name": "value",
+          "type": "number",
+          "required": true
+        },
+        {
+          "name": "decimals",
+          "type": "integer",
+          "required": false,
+          "default": 0
+        }
+      ],
+      "returns": "number",
+      "dialects": {
+        "postgres": "ROUND({value}::numeric, {decimals})",
+        "mssql": "ROUND({value}, {decimals})",
+        "mysql": "ROUND({value}, {decimals})",
+        "oracle": "ROUND({value}, {decimals})",
+        "sqlite": "ROUND({value}, {decimals})"
+      }
+    },
+    "ABS": {
+      "description": "Valore assoluto",
+      "category": "numeric",
+      "params": [
+        {
+          "name": "value",
+          "type": "number",
+          "required": true
+        }
+      ],
+      "returns": "number",
+      "dialects": {
+        "postgres": "ABS({value})",
+        "mssql": "ABS({value})",
+        "mysql": "ABS({value})",
+        "oracle": "ABS({value})",
+        "sqlite": "ABS({value})"
+      }
+    },
+    "CEIL": {
+      "description": "Arrotonda per eccesso",
+      "category": "numeric",
+      "params": [
+        {
+          "name": "value",
+          "type": "number",
+          "required": true
+        }
+      ],
+      "returns": "number",
+      "dialects": {
+        "postgres": "CEIL({value})",
+        "mssql": "CEILING({value})",
+        "mysql": "CEIL({value})",
+        "oracle": "CEIL({value})",
+        "sqlite": "CEIL({value})"
+      }
+    },
+    "FLOOR": {
+      "description": "Arrotonda per difetto",
+      "category": "numeric",
+      "params": [
+        {
+          "name": "value",
+          "type": "number",
+          "required": true
+        }
+      ],
+      "returns": "number",
+      "dialects": {
+        "postgres": "FLOOR({value})",
+        "mssql": "FLOOR({value})",
+        "mysql": "FLOOR({value})",
+        "oracle": "FLOOR({value})",
+        "sqlite": "FLOOR({value})"
+      }
+    },
+    "MOD": {
+      "description": "Resto della divisione",
+      "category": "numeric",
+      "params": [
+        {
+          "name": "value",
+          "type": "number",
+          "required": true
+        },
+        {
+          "name": "divisor",
+          "type": "number",
+          "required": true
+        }
+      ],
+      "returns": "number",
+      "dialects": {
+        "postgres": "MOD({value}, {divisor})",
+        "mssql": "({value} % {divisor})",
+        "mysql": "MOD({value}, {divisor})",
+        "oracle": "MOD({value}, {divisor})",
+        "sqlite": "({value} % {divisor})"
+      }
+    },
+    "POWER": {
+      "description": "Potenza",
+      "category": "numeric",
+      "params": [
+        {
+          "name": "value",
+          "type": "number",
+          "required": true
+        },
+        {
+          "name": "exponent",
+          "type": "number",
+          "required": true
+        }
+      ],
+      "returns": "number",
+      "dialects": {
+        "postgres": "POWER({value}, {exponent})",
+        "mssql": "POWER({value}, {exponent})",
+        "mysql": "POWER({value}, {exponent})",
+        "oracle": "POWER({value}, {exponent})",
+        "sqlite": "POWER({value}, {exponent})"
+      }
+    },
+    "SQRT": {
+      "description": "Radice quadrata",
+      "category": "numeric",
+      "params": [
+        {
+          "name": "value",
+          "type": "number",
+          "required": true
+        }
+      ],
+      "returns": "number",
+      "dialects": {
+        "postgres": "SQRT({value})",
+        "mssql": "SQRT({value})",
+        "mysql": "SQRT({value})",
+        "oracle": "SQRT({value})",
+        "sqlite": "SQRT({value})"
+      }
+    },
+    "SIGN": {
+      "description": "Segno del numero (-1, 0, 1)",
+      "category": "numeric",
+      "params": [
+        {
+          "name": "value",
+          "type": "number",
+          "required": true
+        }
+      ],
+      "returns": "integer",
+      "dialects": {
+        "postgres": "SIGN({value})",
+        "mssql": "SIGN({value})",
+        "mysql": "SIGN({value})",
+        "oracle": "SIGN({value})",
+        "sqlite": "SIGN({value})"
+      }
+    },
+    "GREATEST": {
+      "description": "Massimo tra valori",
+      "category": "numeric",
+      "params": [
+        {
+          "name": "values",
+          "type": "variadic",
+          "required": true
+        }
+      ],
+      "returns": "number",
+      "dialects": {
+        "postgres": "GREATEST({values})",
+        "mssql": "GREATEST({values})",
+        "mysql": "GREATEST({values})",
+        "oracle": "GREATEST({values})",
+        "sqlite": "MAX({values})"
+      }
+    },
+    "LEAST": {
+      "description": "Minimo tra valori",
+      "category": "numeric",
+      "params": [
+        {
+          "name": "values",
+          "type": "variadic",
+          "required": true
+        }
+      ],
+      "returns": "number",
+      "dialects": {
+        "postgres": "LEAST({values})",
+        "mssql": "LEAST({values})",
+        "mysql": "LEAST({values})",
+        "oracle": "LEAST({values})",
+        "sqlite": "MIN({values})"
+      }
+    },
+    "COALESCE": {
+      "description": "Primo valore non null",
+      "category": "numeric",
+      "params": [
+        {
+          "name": "values",
+          "type": "variadic",
+          "required": true
+        }
+      ],
+      "returns": "any",
+      "dialects": {
+        "postgres": "COALESCE({values})",
+        "mssql": "COALESCE({values})",
+        "mysql": "COALESCE({values})",
+        "oracle": "COALESCE({values})",
+        "sqlite": "COALESCE({values})"
+      }
+    },
+    "NULLIF": {
+      "description": "Restituisce NULL se valori uguali",
+      "category": "numeric",
+      "params": [
+        {
+          "name": "value1",
+          "type": "any",
+          "required": true
+        },
+        {
+          "name": "value2",
+          "type": "any",
+          "required": true
+        }
+      ],
+      "returns": "any",
+      "dialects": {
+        "postgres": "NULLIF({value1}, {value2})",
+        "mssql": "NULLIF({value1}, {value2})",
+        "mysql": "NULLIF({value1}, {value2})",
+        "oracle": "NULLIF({value1}, {value2})",
+        "sqlite": "NULLIF({value1}, {value2})"
+      }
+    }
+  },
+  "date": {
+    "NOW": {
+      "description": "Data/ora corrente",
+      "category": "date",
+      "params": [],
+      "returns": "datetime",
+      "dialects": {
+        "postgres": "NOW()",
+        "mssql": "GETDATE()",
+        "mysql": "NOW()",
+        "oracle": "SYSDATE",
+        "sqlite": "datetime('now')"
+      }
+    },
+    "CURRENT_DATE": {
+      "description": "Data corrente",
+      "category": "date",
+      "params": [],
+      "returns": "date",
+      "dialects": {
+        "postgres": "CURRENT_DATE",
+        "mssql": "CAST(GETDATE() AS DATE)",
+        "mysql": "CURDATE()",
+        "oracle": "TRUNC(SYSDATE)",
+        "sqlite": "date('now')"
+      }
+    },
+    "DATE_DIFF": {
+      "description": "Differenza tra date",
+      "category": "date",
+      "params": [
+        {
+          "name": "date1",
+          "type": "date",
+          "required": true
+        },
+        {
+          "name": "date2",
+          "type": "date",
+          "required": true
+        },
+        {
+          "name": "unit",
+          "type": "string",
+          "required": false,
+          "default": "day"
+        }
+      ],
+      "returns": "integer",
+      "dialects": {
+        "postgres": "DATE_PART('{unit}', {date1} - {date2})",
+        "mssql": "DATEDIFF({unit}, {date2}, {date1})",
+        "mysql": "DATEDIFF({date1}, {date2})",
+        "oracle": "{date1} - {date2}",
+        "sqlite": "julianday({date1}) - julianday({date2})"
+      }
+    },
+    "DATE_ADD": {
+      "description": "Aggiunge intervallo a data",
+      "category": "date",
+      "params": [
+        {
+          "name": "date",
+          "type": "date",
+          "required": true
+        },
+        {
+          "name": "interval",
+          "type": "integer",
+          "required": true
+        },
+        {
+          "name": "unit",
+          "type": "string",
+          "required": false,
+          "default": "day"
+        }
+      ],
+      "returns": "date",
+      "dialects": {
+        "postgres": "{date} + INTERVAL '{interval} {unit}'",
+        "mssql": "DATEADD({unit}, {interval}, {date})",
+        "mysql": "DATE_ADD({date}, INTERVAL {interval} {unit})",
+        "oracle": "{date} + INTERVAL '{interval}' {unit}",
+        "sqlite": "datetime({date}, '+{interval} {unit}')"
+      }
+    },
+    "DATE_TRUNC": {
+      "description": "Tronca data a unita specificata",
+      "category": "date",
+      "params": [
+        {
+          "name": "unit",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "date",
+          "type": "date",
+          "required": true
+        }
+      ],
+      "returns": "date",
+      "dialects": {
+        "postgres": "DATE_TRUNC('{unit}', {date})",
+        "mssql": "DATETRUNC({unit}, {date})",
+        "mysql": "DATE_FORMAT({date}, '%Y-%m-01')",
+        "oracle": "TRUNC({date}, '{unit}')",
+        "sqlite": "date({date}, 'start of {unit}')"
+      }
+    },
+    "DATE_FORMAT": {
+      "description": "Formatta data come stringa",
+      "category": "date",
+      "params": [
+        {
+          "name": "date",
+          "type": "date",
+          "required": true
+        },
+        {
+          "name": "format",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "returns": "string",
+      "dialects": {
+        "postgres": "TO_CHAR({date}, {format})",
+        "mssql": "FORMAT({date}, {format})",
+        "mysql": "DATE_FORMAT({date}, {format})",
+        "oracle": "TO_CHAR({date}, {format})",
+        "sqlite": "STRFTIME({format}, {date})"
+      }
+    },
+    "EXTRACT": {
+      "description": "Estrae parte da data",
+      "category": "date",
+      "params": [
+        {
+          "name": "part",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "date",
+          "type": "date",
+          "required": true
+        }
+      ],
+      "returns": "integer",
+      "dialects": {
+        "postgres": "EXTRACT({part} FROM {date})",
+        "mssql": "DATEPART({part}, {date})",
+        "mysql": "EXTRACT({part} FROM {date})",
+        "oracle": "EXTRACT({part} FROM {date})",
+        "sqlite": "strftime('%{part:sqlite_format}', {date})"
+      }
+    }
+  },
+  "conditional": {
+    "CASE_WHEN": {
+      "description": "Espressione condizionale",
+      "category": "conditional",
+      "params": [
+        {
+          "name": "condition",
+          "type": "boolean",
+          "required": true
+        },
+        {
+          "name": "then_value",
+          "type": "any",
+          "required": true
+        },
+        {
+          "name": "else_value",
+          "type": "any",
+          "required": false
+        }
+      ],
+      "returns": "any",
+      "dialects": {
+        "postgres": "CASE WHEN {condition} THEN {then_value} ELSE {else_value} END",
+        "mssql": "CASE WHEN {condition} THEN {then_value} ELSE {else_value} END",
+        "mysql": "CASE WHEN {condition} THEN {then_value} ELSE {else_value} END",
+        "oracle": "CASE WHEN {condition} THEN {then_value} ELSE {else_value} END",
+        "sqlite": "CASE WHEN {condition} THEN {then_value} ELSE {else_value} END"
+      }
+    },
+    "IIF": {
+      "description": "If inline",
+      "category": "conditional",
+      "params": [
+        {
+          "name": "condition",
+          "type": "boolean",
+          "required": true
+        },
+        {
+          "name": "true_value",
+          "type": "any",
+          "required": true
+        },
+        {
+          "name": "false_value",
+          "type": "any",
+          "required": true
+        }
+      ],
+      "returns": "any",
+      "dialects": {
+        "postgres": "CASE WHEN {condition} THEN {true_value} ELSE {false_value} END",
+        "mssql": "IIF({condition}, {true_value}, {false_value})",
+        "mysql": "IF({condition}, {true_value}, {false_value})",
+        "oracle": "CASE WHEN {condition} THEN {true_value} ELSE {false_value} END",
+        "sqlite": "IIF({condition}, {true_value}, {false_value})"
+      }
+    }
+  },
+  "cast": {
+    "TO_INTEGER": {
+      "description": "Converte in intero",
+      "category": "cast",
+      "params": [
+        {
+          "name": "value",
+          "type": "any",
+          "required": true
+        }
+      ],
+      "returns": "integer",
+      "dialects": {
+        "postgres": "CAST({value} AS INTEGER)",
+        "mssql": "CAST({value} AS INT)",
+        "mysql": "CAST({value} AS SIGNED)",
+        "oracle": "CAST({value} AS NUMBER)",
+        "sqlite": "CAST({value} AS INTEGER)"
+      }
+    },
+    "TO_FLOAT": {
+      "description": "Converte in decimale",
+      "category": "cast",
+      "params": [
+        {
+          "name": "value",
+          "type": "any",
+          "required": true
+        }
+      ],
+      "returns": "number",
+      "dialects": {
+        "postgres": "CAST({value} AS DOUBLE PRECISION)",
+        "mssql": "CAST({value} AS FLOAT)",
+        "mysql": "CAST({value} AS DECIMAL(18,6))",
+        "oracle": "CAST({value} AS NUMBER)",
+        "sqlite": "CAST({value} AS REAL)"
+      }
+    },
+    "TO_STRING": {
+      "description": "Converte in stringa",
+      "category": "cast",
+      "params": [
+        {
+          "name": "value",
+          "type": "any",
+          "required": true
+        }
+      ],
+      "returns": "string",
+      "dialects": {
+        "postgres": "CAST({value} AS TEXT)",
+        "mssql": "CAST({value} AS NVARCHAR(MAX))",
+        "mysql": "CAST({value} AS CHAR)",
+        "oracle": "TO_CHAR({value})",
+        "sqlite": "CAST({value} AS TEXT)"
+      }
+    },
+    "TO_DATE": {
+      "description": "Converte in data",
+      "category": "cast",
+      "params": [
+        {
+          "name": "value",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "format",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "returns": "date",
+      "dialects": {
+        "postgres": "TO_DATE({value}, {format})",
+        "mssql": "CONVERT(DATE, {value})",
+        "mysql": "STR_TO_DATE({value}, {format})",
+        "oracle": "TO_DATE({value}, {format})",
+        "sqlite": "date({value})"
+      }
+    }
+  }
+}
