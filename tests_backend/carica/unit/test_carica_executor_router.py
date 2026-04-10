@@ -195,11 +195,6 @@ class TestCaricaRouter:
         res = router_client.get("/connections")
         assert res.status_code in (200, 401, 404)
 
-    def test_validate_endpoint(self, router_client):
-        """POST /carica/validate → status 200 o 422."""
-        res = router_client.post("/carica/validate", json={})
-        assert res.status_code in (200, 401, 404, 422)
-
     def test_schemas_endpoint(self, router_client):
         """GET /schemas → 200 o 404."""
         res = router_client.get("/schemas/conn-1")

@@ -22,6 +22,7 @@ class EseguibileCreate(BaseModel):
     description: Optional[str] = ""
     default_output_format: str = "xlsx"    # xlsx, csv, json, geojson, ecc.
     default_output_name: Optional[str] = None  # se None → "{name}_{timestamp}"
+    icon: Optional[str] = None             # emoji/carattere mostrato sulla card (fallback: ▶)
 
 
 class EseguibileUpdate(BaseModel):
@@ -30,6 +31,7 @@ class EseguibileUpdate(BaseModel):
     description: Optional[str] = None
     default_output_format: Optional[str] = None
     default_output_name: Optional[str] = None
+    icon: Optional[str] = None
 
 
 class EseguibileSummary(BaseModel):
@@ -38,11 +40,13 @@ class EseguibileSummary(BaseModel):
     name: str
     description: Optional[str] = ""
     default_output_format: str
+    icon: Optional[str] = None
     group_id: str
     created_by: str
     created_at: str
     updated_at: str
     expected_columns_count: int = 0
+    can_edit: Optional[bool] = None  # calcolato per l'utente corrente
 
 
 class EseguibileDetails(BaseModel):
@@ -53,11 +57,13 @@ class EseguibileDetails(BaseModel):
     expected_columns: List[ExpectedColumn]
     default_output_format: str
     default_output_name: Optional[str] = None
+    icon: Optional[str] = None
     source_canvas_id: Optional[str] = None
     group_id: str
     created_by: str
     created_at: str
     updated_at: str
+    can_edit: Optional[bool] = None  # calcolato per l'utente corrente
 
 
 class ColumnMappingEntry(BaseModel):

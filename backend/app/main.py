@@ -57,7 +57,17 @@ logger = get_logger(__name__)
 
 # ==================== APP ====================
 
-app = FastAPI(title="URBY-ETL API")
+# In produzione (ENVIRONMENT=production) disabilita /docs e /openapi.json
+# per non esporre lo schema API pubblicamente. In sviluppo restano attivi.
+import os as _os
+_is_prod = _os.getenv("ENVIRONMENT", _os.getenv("ENV", "development")).lower() in ("production", "prod")
+
+app = FastAPI(
+    title="URBY-ETL API",
+    docs_url=None if _is_prod else "/docs",
+    redoc_url=None if _is_prod else "/redoc",
+    openapi_url=None if _is_prod else "/openapi.json",
+)
 
 app.add_middleware(
     CORSMiddleware,

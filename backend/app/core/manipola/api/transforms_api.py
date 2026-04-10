@@ -7,16 +7,17 @@ Endpoints:
 - GET /api/transforms/registry → registry completo (trasformazioni + categorie)
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from typing import Dict, Any
 
 from app.core.manipola.plugin_executor import get_executor
+from app.core.auth.auth import get_current_user, require_not_esecutore, CurrentUser
 
 router = APIRouter(prefix="/transforms", tags=["transforms"])
 
 
 @router.get("/registry")
-def get_registry() -> Dict[str, Any]:
+def get_registry(current_user: CurrentUser = Depends(require_not_esecutore)) -> Dict[str, Any]:
     """
     Ritorna il registry completo delle trasformazioni.
 

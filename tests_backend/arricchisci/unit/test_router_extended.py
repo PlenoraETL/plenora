@@ -119,17 +119,6 @@ class TestTemplatesRouter:
         client, _ = make_client()
         assert client.get("/templates").status_code in (200, 404, 500)
 
-    def test_list_categories(self):
-        client, _ = make_client()
-        assert client.get("/templates/categories").status_code in (200, 404, 500)
-
-    def test_get_template_singolo(self):
-        client, _ = make_client()
-        assert client.get("/templates/nominatim").status_code in (200, 404, 500)
-
-    def test_get_template_inesistente(self):
-        client, _ = make_client()
-        assert client.get("/templates/TEMPLATE_XYZ_INESISTENTE").status_code in (200, 404, 500)
 
 
 class TestEnrichmentValidate:

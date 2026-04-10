@@ -94,51 +94,6 @@ def client_no_service():
 
 
 # ============================================================================
-# POST /carica/validate  (lines 318-341)
-# ============================================================================
-
-class TestValidateConfig:
-
-    def _base_payload(self):
-        return {
-            "connection_id": "conn-1",
-            "node_data": {"write_mode": "create", "table_name": "t"},
-            "source_columns": [{"name": "id", "type": "int"}],
-            "total_rows": 10,
-        }
-
-    def test_success_with_executor(self, client):
-        """Uses _executor when available."""
-        import app.core.carica.router as mod
-        mod._executor.validate_config.return_value = {"is_valid": True, "errors": []}
-        res = client.post("/carica/validate", json=self._base_payload())
-        assert res.status_code == 200
-        assert res.json()["is_valid"] is True
-
-    def test_success_without_executor(self, client_no_service):
-        """Falls back to a new CaricaExecutor when _executor is None."""
-        with patch("app.core.carica.router.CaricaExecutor") as mock_cls:
-            mock_cls.return_value.validate_config.return_value = {"is_valid": False, "errors": ["x"]}
-            res = client_no_service.post("/carica/validate", json=self._base_payload())
-        assert res.status_code == 200
-        assert res.json()["is_valid"] is False
-
-    def test_empty_columns_still_works(self, client):
-        import app.core.carica.router as mod
-        mod._executor.validate_config.return_value = {"is_valid": True, "errors": []}
-        payload = self._base_payload()
-        payload["source_columns"] = []
-        res = client.post("/carica/validate", json=payload)
-        assert res.status_code == 200
-
-    def test_exception_returns_500(self, client):
-        import app.core.carica.router as mod
-        mod._executor.validate_config.side_effect = RuntimeError("boom")
-        res = client.post("/carica/validate", json=self._base_payload())
-        assert res.status_code == 500
-
-
-# ============================================================================
 # POST /carica/check-conflicts  (lines 356-447)
 # ============================================================================
 

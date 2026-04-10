@@ -218,49 +218,6 @@ class TestTemplates:
         res = client.get("/templates")
         assert res.status_code == 500
 
-    @patch("app.core.arricchisci.router._load_templates")
-    def test_get_categories(self, mock_lt):
-        mock_lt.return_value = [
-            {"_meta": {"id": "t1", "category": "geocoding"}},
-            {"_meta": {"id": "t2", "category": "geocoding"}},
-            {"_meta": {"id": "t3", "category": "enrichment"}},
-        ]
-        client, _, _ = make_client()
-        res = client.get("/templates/categories")
-        assert res.status_code == 200
-        body = res.json()
-        assert body["success"] is True
-        cats = body["categories"]
-        assert len(cats) == 2
-
-    @patch("app.core.arricchisci.router._load_templates", side_effect=RuntimeError("boom"))
-    def test_get_categories_crash_500(self, _):
-        client, _, _ = make_client()
-        res = client.get("/templates/categories")
-        assert res.status_code == 500
-
-    @patch("app.core.arricchisci.router._load_templates")
-    def test_get_template_found(self, mock_lt):
-        mock_lt.return_value = [
-            {"_meta": {"id": "nominatim", "category": "geocoding"}, "name": "Nominatim"},
-        ]
-        client, _, _ = make_client()
-        res = client.get("/templates/nominatim")
-        assert res.status_code == 200
-        assert res.json()["success"] is True
-
-    @patch("app.core.arricchisci.router._load_templates")
-    def test_get_template_not_found_404(self, mock_lt):
-        mock_lt.return_value = []
-        client, _, _ = make_client()
-        res = client.get("/templates/nonexistent")
-        assert res.status_code == 404
-
-    @patch("app.core.arricchisci.router._load_templates", side_effect=RuntimeError("boom"))
-    def test_get_template_crash_500(self, _):
-        client, _, _ = make_client()
-        res = client.get("/templates/x")
-        assert res.status_code == 500
 
 
 # ---------------------------------------------------------------------------

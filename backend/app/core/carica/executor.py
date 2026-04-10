@@ -348,9 +348,11 @@ class CaricaExecutor:
         elif db_type == "mysql" or db_type == "mariadb":
             url = f"mysql+pymysql://{username}:{password}@{host}:{port}/{database}"
         elif db_type == "mssql":
+            # Encrypt=Optional per supportare server senza TLS valido (sviluppo, on-prem legacy)
             url = (
                 f"mssql+pyodbc://{username}:{password}@{host}:{port}/{database}"
-                f"?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes"
+                f"?driver=ODBC+Driver+18+for+SQL+Server"
+                f"&TrustServerCertificate=yes&Encrypt=Optional"
             )
         elif db_type == "oracle":
             url = f"oracle+oracledb://{username}:{password}@{host}:{port}/{database}"

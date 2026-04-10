@@ -211,27 +211,6 @@ class TestListConnections:
 
 
 # =============================================================================
-# GET /features/connections/{id}
-# =============================================================================
-
-class TestGetConnection:
-
-    def test_get_200(self, client_and_svc):
-        client, mock_svc = client_and_svc
-        conn = _make_connection()
-        mock_svc.get_connection.return_value = conn
-        res = client.get(f"/features/connections/{conn.id}")
-        assert res.status_code == 200
-        assert res.json()["password"] == "***"
-
-    def test_get_404(self, client_and_svc):
-        client, mock_svc = client_and_svc
-        mock_svc.get_connection.return_value = None
-        res = client.get("/features/connections/nonexistent")
-        assert res.status_code == 404
-
-
-# =============================================================================
 # PUT /features/connections/{id}
 # =============================================================================
 

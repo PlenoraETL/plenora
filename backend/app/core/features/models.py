@@ -24,21 +24,22 @@ from datetime import datetime
 class ArcGISConnection(BaseModel):
     """
     Configurazione completa di una connessione ArcGIS.
-    
+
     Tipi di server:
     - arcgis_online: ArcGIS Online (https://www.arcgis.com)
     - arcgis_enterprise: ArcGIS Enterprise/Portal
     - arcgis_server: ArcGIS Server standalone (senza Portal)
-    
+
     Tipi di autenticazione:
     - token: username/password → token REST
     - public: nessuna autenticazione (servizi pubblici)
     """
     id: str
+    group_id: str = "default"
     name: str
     description: str = ""
     server_url: str = Field(
-        ..., 
+        ...,
         description="URL base del server (es. https://services.arcgis.com/xxx)"
     )
     server_type: Literal["arcgis_online", "arcgis_enterprise", "arcgis_server"] = "arcgis_server"
@@ -53,6 +54,8 @@ class ArcGISConnection(BaseModel):
     )
     created_at: datetime
     updated_at: datetime
+    created_by: Optional[str] = None
+    can_edit: Optional[bool] = None
 
 
 class ArcGISCreate(BaseModel):

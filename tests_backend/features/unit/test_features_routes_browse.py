@@ -91,51 +91,6 @@ class TestBrowseServices:
 
 
 # =============================================================================
-# GET /features/connections/{id}/services/search
-# =============================================================================
-
-class TestSearchServices:
-
-    def test_success_default_params(self, client_and_svc):
-        client, mock_svc = client_and_svc
-        mock_svc.search_services.return_value = [{"name": "Found"}]
-        res = client.get("/features/connections/conn1/services/search")
-        assert res.status_code == 200
-        assert len(res.json()["services"]) == 1
-        # Default params: q="", scope="user"
-        call_kwargs = mock_svc.search_services.call_args
-        assert call_kwargs.kwargs.get("query") == ""
-        assert call_kwargs.kwargs.get("scope") == "user"
-
-    def test_with_query_params(self, client_and_svc):
-        client, mock_svc = client_and_svc
-        mock_svc.search_services.return_value = []
-        res = client.get("/features/connections/conn1/services/search?q=catasto&scope=org")
-        assert res.status_code == 200
-        call_kwargs = mock_svc.search_services.call_args
-        assert call_kwargs.kwargs.get("query") == "catasto"
-        assert call_kwargs.kwargs.get("scope") == "org"
-
-    def test_value_error_404(self, client_and_svc):
-        client, mock_svc = client_and_svc
-        mock_svc.search_services.side_effect = ValueError("non trovata")
-        res = client.get("/features/connections/missing/services/search")
-        assert res.status_code == 404
-
-    def test_connection_error_502(self, client_and_svc):
-        client, mock_svc = client_and_svc
-        mock_svc.search_services.side_effect = ConnectionError("refused")
-        res = client.get("/features/connections/conn1/services/search")
-        assert res.status_code == 502
-
-    def test_generic_error_500(self, client_and_svc):
-        client, mock_svc = client_and_svc
-        mock_svc.search_services.side_effect = RuntimeError("crash")
-        res = client.get("/features/connections/conn1/services/search")
-        assert res.status_code == 500
-
-
-# =============================================================================
 # GET /features/connections/{id}/layers
 # =============================================================================
 

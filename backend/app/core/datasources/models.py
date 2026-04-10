@@ -94,6 +94,8 @@ class DataSource(BaseModel):
     group_id: str = ""
     created_at: datetime
     updated_at: datetime
+    created_by: Optional[str] = None
+    can_edit: Optional[bool] = None
 
 
 class DataSourceList(BaseModel):

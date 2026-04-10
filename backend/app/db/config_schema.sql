@@ -67,10 +67,12 @@ CREATE TABLE IF NOT EXISTS connections (
     password  TEXT,
     extra     TEXT,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    created_by TEXT REFERENCES users(id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_connections_group ON connections(group_id);
+CREATE INDEX IF NOT EXISTS idx_connections_group      ON connections(group_id);
+CREATE INDEX IF NOT EXISTS idx_connections_created_by ON connections(created_by);
 
 CREATE TABLE IF NOT EXISTS file_sources (
     id                TEXT PRIMARY KEY,
@@ -95,10 +97,12 @@ CREATE TABLE IF NOT EXISTS datasources (
     ds_type    TEXT NOT NULL,
     config     TEXT NOT NULL,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    created_by TEXT REFERENCES users(id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_datasources_group ON datasources(group_id);
+CREATE INDEX IF NOT EXISTS idx_datasources_group      ON datasources(group_id);
+CREATE INDEX IF NOT EXISTS idx_datasources_created_by ON datasources(created_by);
 
 CREATE TABLE IF NOT EXISTS arcgis_connections (
     id            TEXT PRIMARY KEY,
@@ -114,20 +118,24 @@ CREATE TABLE IF NOT EXISTS arcgis_connections (
     client_secret TEXT DEFAULT '',
     token_url     TEXT DEFAULT '',
     created_at    TEXT NOT NULL,
-    updated_at    TEXT NOT NULL
+    updated_at    TEXT NOT NULL,
+    created_by    TEXT REFERENCES users(id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_arcgis_connections_group ON arcgis_connections(group_id);
+CREATE INDEX IF NOT EXISTS idx_arcgis_connections_group      ON arcgis_connections(group_id);
+CREATE INDEX IF NOT EXISTS idx_arcgis_connections_created_by ON arcgis_connections(created_by);
 
 CREATE TABLE IF NOT EXISTS api_connections (
     id         TEXT PRIMARY KEY,
     group_id   TEXT NOT NULL REFERENCES groups(id),
     config     TEXT NOT NULL,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    created_by TEXT REFERENCES users(id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_api_connections_group ON api_connections(group_id);
+CREATE INDEX IF NOT EXISTS idx_api_connections_group      ON api_connections(group_id);
+CREATE INDEX IF NOT EXISTS idx_api_connections_created_by ON api_connections(created_by);
 
 CREATE TABLE IF NOT EXISTS schedules (
     id              TEXT PRIMARY KEY,
@@ -141,11 +149,13 @@ CREATE TABLE IF NOT EXISTS schedules (
     last_status     TEXT,
     next_run        TEXT,
     created_at      TEXT NOT NULL,
-    updated_at      TEXT NOT NULL
+    updated_at      TEXT NOT NULL,
+    created_by      TEXT REFERENCES users(id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_schedules_group   ON schedules(group_id);
-CREATE INDEX IF NOT EXISTS idx_schedules_enabled ON schedules(is_enabled);
+CREATE INDEX IF NOT EXISTS idx_schedules_group      ON schedules(group_id);
+CREATE INDEX IF NOT EXISTS idx_schedules_enabled    ON schedules(is_enabled);
+CREATE INDEX IF NOT EXISTS idx_schedules_created_by ON schedules(created_by);
 
 CREATE TABLE IF NOT EXISTS beat_heartbeat (
     id TEXT PRIMARY KEY,
@@ -170,6 +180,7 @@ CREATE TABLE IF NOT EXISTS eseguibili (
     expected_columns      TEXT,                       -- JSON: [{name, type, required, used_by}]
     default_output_format TEXT NOT NULL DEFAULT 'xlsx',
     default_output_name   TEXT,
+    icon                  TEXT,                       -- emoji/carattere visualizzato sulla card (fallback: ▶)
     source_canvas_id      TEXT,                       -- tracking progetto originale (nullable)
     group_id              TEXT NOT NULL REFERENCES groups(id),
     created_by            TEXT NOT NULL REFERENCES users(id),
@@ -178,4 +189,65 @@ CREATE TABLE IF NOT EXISTS eseguibili (
 );
 
 CREATE INDEX IF NOT EXISTS idx_eseguibili_group ON eseguibili(group_id);
+
+-- ============================================================
+-- ALLOWED_GROUPS — tabelle di join per cross-group sharing.
+-- Una risorsa appartiene al suo gruppo proprietario (resource.group_id)
+-- E può essere condivisa con altri gruppi tramite righe in queste tabelle.
+-- "ALL" è rappresentato dalla riga magica `group_id = '*'`.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS connection_shares (
+    connection_id TEXT NOT NULL,
+    group_id      TEXT NOT NULL,
+    created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now')),
+    PRIMARY KEY (connection_id, group_id),
+    FOREIGN KEY (connection_id) REFERENCES connections(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_connection_shares_group ON connection_shares(group_id);
+
+CREATE TABLE IF NOT EXISTS datasource_shares (
+    datasource_id TEXT NOT NULL,
+    group_id      TEXT NOT NULL,
+    created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now')),
+    PRIMARY KEY (datasource_id, group_id),
+    FOREIGN KEY (datasource_id) REFERENCES datasources(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_datasource_shares_group ON datasource_shares(group_id);
+
+CREATE TABLE IF NOT EXISTS eseguibile_shares (
+    eseguibile_id TEXT NOT NULL,
+    group_id      TEXT NOT NULL,
+    created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now')),
+    PRIMARY KEY (eseguibile_id, group_id),
+    FOREIGN KEY (eseguibile_id) REFERENCES eseguibili(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_eseguibile_shares_group ON eseguibile_shares(group_id);
+
+CREATE TABLE IF NOT EXISTS api_connection_shares (
+    api_connection_id TEXT NOT NULL,
+    group_id          TEXT NOT NULL,
+    created_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now')),
+    PRIMARY KEY (api_connection_id, group_id),
+    FOREIGN KEY (api_connection_id) REFERENCES api_connections(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_api_connection_shares_group ON api_connection_shares(group_id);
+
+CREATE TABLE IF NOT EXISTS arcgis_connection_shares (
+    arcgis_connection_id TEXT NOT NULL,
+    group_id             TEXT NOT NULL,
+    created_at           TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now')),
+    PRIMARY KEY (arcgis_connection_id, group_id),
+    FOREIGN KEY (arcgis_connection_id) REFERENCES arcgis_connections(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_arcgis_connection_shares_group ON arcgis_connection_shares(group_id);
+
+CREATE TABLE IF NOT EXISTS file_source_shares (
+    file_source_id TEXT NOT NULL,
+    group_id       TEXT NOT NULL,
+    created_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now')),
+    PRIMARY KEY (file_source_id, group_id),
+    FOREIGN KEY (file_source_id) REFERENCES file_sources(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_file_source_shares_group ON file_source_shares(group_id);
 

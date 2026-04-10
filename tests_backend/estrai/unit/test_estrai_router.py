@@ -20,7 +20,7 @@ from fastapi import FastAPI
 
 pytestmark = pytest.mark.unit
 
-from app.core.estrai.router import functions_router, sql_router, init_estrai
+from app.core.estrai.router import functions_router
 from app.db.sql_functions import get_function_catalog
 
 
@@ -33,23 +33,12 @@ def app():
     """App FastAPI minimale con solo i router ESTRAI."""
     _app = FastAPI()
     _app.include_router(functions_router)
-    _app.include_router(sql_router)
     return _app
 
 
 @pytest.fixture
 def client(app):
     return TestClient(app)
-
-
-@pytest.fixture
-def mock_services():
-    """Mock di tutti i servizi usati dal router."""
-    project_service = MagicMock()
-    connection_service = MagicMock()
-    query_generator = MagicMock()
-    init_estrai(project_service, connection_service, query_generator)
-    return project_service, connection_service, query_generator
 
 
 # =============================================================================
@@ -82,38 +71,6 @@ class TestGetCatalog:
         data = res.json()
         cats = data.get("categories", {})
         assert "geometric" in cats or "numeric" in cats
-
-
-# =============================================================================
-# GET /functions/supported/{db_type}
-# =============================================================================
-
-class TestGetSupportedFunctions:
-
-    @pytest.mark.parametrize("db_type", ["postgres", "mssql", "mysql", "oracle", "sqlite"])
-    def test_db_valido_status_200(self, client, db_type):
-        res = client.get(f"/functions/supported/{db_type}")
-        assert res.status_code == 200
-
-    def test_db_invalido_status_400(self, client):
-        """Mutation target: DB non valido → 400, non 200."""
-        res = client.get("/functions/supported/db2_inesistente")
-        assert res.status_code == 400
-
-    def test_risposta_ha_supported(self, client):
-        res = client.get("/functions/supported/postgres")
-        data = res.json()
-        assert "supported" in data
-
-    def test_risposta_ha_db_type(self, client):
-        res = client.get("/functions/supported/postgres")
-        data = res.json()
-        assert data.get("db_type") == "postgres"
-
-    def test_risposta_ha_unsupported(self, client):
-        res = client.get("/functions/supported/postgres")
-        data = res.json()
-        assert "unsupported" in data
 
 
 # =============================================================================
@@ -164,77 +121,6 @@ class TestTranslateEndpoint:
             "params": {"column": "col"},
         })
         assert res.status_code == 400
-
-
-# =============================================================================
-# POST /projects/{id}/generate-sql
-# =============================================================================
-
-class TestGenerateSql:
-
-    def test_progetto_non_trovato_404(self, client, mock_services):
-        project_service, _, _ = mock_services
-        project_service.get_project_metadata.return_value = None
-
-        res = client.post("/projects/progetto_inesistente/generate-sql")
-        assert res.status_code == 404
-
-    def test_canvas_non_trovato_400(self, client, mock_services):
-        project_service, _, _ = mock_services
-        project_service.get_project_metadata.return_value = MagicMock(
-            default_connection_id="conn-1"
-        )
-        project_service.get_project_canvas.return_value = None
-
-        res = client.post("/projects/proj-1/generate-sql")
-        assert res.status_code == 400
-
-    def test_nodo_result_mancante_400(self, client, mock_services):
-        project_service, _, _ = mock_services
-        project_service.get_project_metadata.return_value = MagicMock(
-            default_connection_id="conn-1"
-        )
-        canvas = MagicMock()
-        canvas.nodes = []  # nessun nodo result
-        project_service.get_project_canvas.return_value = canvas
-
-        res = client.post("/projects/proj-1/generate-sql")
-        assert res.status_code == 400
-
-    def test_generate_sql_success(self, client, mock_services):
-        project_service, connection_service, query_generator = mock_services
-
-        # Mock metadata
-        project_service.get_project_metadata.return_value = MagicMock(
-            default_connection_id="conn-1"
-        )
-
-        # Mock canvas con nodo result
-        result_node = MagicMock()
-        result_node.type = "result"
-        result_node.id = "result-1"
-        canvas = MagicMock()
-        canvas.nodes = [result_node]
-        canvas.edges = []
-        project_service.get_project_canvas.return_value = canvas
-
-        # Mock connessione
-        conn = MagicMock()
-        conn.type = "postgres"
-        conn.db_schema = None
-        connection_service.get_connection.return_value = conn
-
-        # Mock generatore SQL
-        query_generator.generate_sql.return_value = {
-            "sql": "SELECT id FROM tab",
-            "params": {},
-        }
-
-        res = client.post("/projects/proj-1/generate-sql")
-        assert res.status_code == 200
-        data = res.json()
-        assert "sql" in data
-        assert "SELECT" in data["sql"]
 
 
 # =============================================================================

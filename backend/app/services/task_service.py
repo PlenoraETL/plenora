@@ -79,7 +79,13 @@ class TaskInfo:
 
 class TaskService:
     """Servizio per gestione task asincroni."""
-    
+
+    # Cache locale task_id → project_id per risolvere il project_id
+    # anche quando il task è in stato PENDING (Celery non ha ancora metadata).
+    # Risolve la race condition: frontend fa polling subito dopo la creazione
+    # ma il worker non ha ancora scritto project_id nel result backend.
+    _task_project_cache: Dict[str, str] = {}
+
     def __init__(self):
         self.app = celery_app
     
@@ -122,7 +128,10 @@ class TaskService:
         )
 
         logger.info(f"Creato task enrichment: {result.id} per progetto {project_id}")
-        
+
+        # Cache per risolvere project_id durante PENDING (prima che il worker scriva metadata)
+        self._task_project_cache[result.id] = project_id
+
         return TaskInfo(
             task_id=result.id,
             task_type=TaskType.ENRICHMENT,
@@ -169,7 +178,8 @@ class TaskService:
         )
         
         logger.info(f"Creato task carica: {result.id} per progetto {project_id}")
-        
+        self._task_project_cache[result.id] = project_id
+
         return TaskInfo(
             task_id=result.id,
             task_type=TaskType.CARICA,
@@ -198,6 +208,7 @@ class TaskService:
             triggered_by=triggered_by,
         )
         logger.info(f"Creato task execute: {result.id} per progetto {project_id}")
+        self._task_project_cache[result.id] = project_id
         return TaskInfo(
             task_id=result.id,
             task_type=TaskType.EXECUTE,
@@ -220,6 +231,7 @@ class TaskService:
             limit=limit,
         )
         logger.info(f"Creato task preview: {result.id} per progetto {project_id}")
+        self._task_project_cache[result.id] = project_id
         return TaskInfo(
             task_id=result.id,
             task_type=TaskType.PREVIEW,
@@ -294,6 +306,9 @@ class TaskService:
         project_id = ""
         if isinstance(task_result, dict):
             project_id = task_result.get("project_id", "")
+        # Fallback alla cache locale (risolve PENDING prima che il worker scriva metadata)
+        if not project_id:
+            project_id = self._task_project_cache.get(task_id, "")
         
         # Determina task_type dal nome del task Celery
         # Nomi registrati: "pipeline.execute", "pipeline.preview", "carica.execute", "tasks.execute_enrichment"

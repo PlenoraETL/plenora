@@ -1,151 +1,41 @@
 """
-Intermediate DB — accesso a SQLite #3 (intermediate.db).
+Intermediate DB — accesso a PostgreSQL (ex SQLite intermediate.db).
 
-Gestisce connessioni, inizializzazione schema e operazioni
-sulle tabelle fisse (runs, node_meta).
-Le tabelle dinamiche run_{run_id}_{node_id} vengono create
-dal writer task a runtime.
-
-Thread-safe tramite threading.local().
-Begin Concurrent abilitato per scritture parallele da più writer.
+Gestisce runs, node_meta e tabelle dinamiche run_{run_id}_{node_id}.
+Migrato da SQLite a PostgreSQL: usa pg_connection pool.
 """
 
-import sqlite3
-import threading
 import json
 import re
-from contextlib import contextmanager
-from pathlib import Path
 from typing import Dict, List, Optional
 
-from app.config import settings
 from app.utils.logger import get_logger
+
+# Importa da pg_connection (stesso pool di config/results)
+from app.db.pg_connection import (
+    fetchone, fetchall, execute, executemany,
+    get_connection, put_connection, close_connection as _pg_close,
+    transaction,
+)
 
 logger = get_logger(__name__)
 
-DB_PATH = Path(settings.DATA_DIR) / "intermediate.db"
-
-_local = threading.local()
-
-
-def get_connection() -> sqlite3.Connection:
-    if not hasattr(_local, "conn") or _local.conn is None:
-        _local.conn = sqlite3.connect(
-            str(DB_PATH),
-            timeout=30,
-            check_same_thread=False,
-        )
-        _local.conn.row_factory = sqlite3.Row
-        _local.conn.execute("PRAGMA journal_mode=WAL")
-        _local.conn.execute("PRAGMA synchronous=NORMAL")
-        _local.conn.execute("PRAGMA busy_timeout=5000")
-        _local.conn.execute("PRAGMA wal_autocheckpoint=1000")
-    return _local.conn
-
 
 def close_connection() -> None:
+    """No-op per PostgreSQL: il pool gestisce le connessioni.
+
+    Mantiene compatibilità con i task Celery che chiamano
+    close_connection() in finally.
     """
-    Chiude esplicitamente la connessione SQLite del thread corrente.
-    FIX BUG-7: evita il threading.local leak nei worker Celery a lunga vita.
-    Chiamare alla fine di ogni task Celery (in finally block).
-    """
-    conn = getattr(_local, "conn", None)
-    if conn is not None:
-        try:
-            conn.close()
-        except Exception as e:
-            logger.debug("close_connection: chiusura connessione fallita: %s", e)
-        _local.conn = None
+    _pg_close()
 
 
 def init_db():
-    """Inizializza intermediate.db con lo schema fisso."""
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    schema_path = Path(__file__).parent.parent.parent / "db" / "intermediate_schema.sql"
-    conn = get_connection()
-    if schema_path.exists():
-        schema = schema_path.read_text(encoding="utf-8")
-        conn.executescript(schema)
-        conn.commit()
-        logger.info(f"Intermediate DB inizializzato: {DB_PATH}", op="init_db")
-    else:
-        # Crea schema minimo inline come fallback
-        conn.executescript("""
-            PRAGMA journal_mode=WAL;
-            PRAGMA synchronous=NORMAL;
-            PRAGMA busy_timeout=5000;
-
-            CREATE TABLE IF NOT EXISTS runs (
-                run_id              TEXT PRIMARY KEY,
-                canvas_id           TEXT NOT NULL,
-                group_id            TEXT NOT NULL,
-                timestamp           TEXT NOT NULL,
-                status              TEXT NOT NULL DEFAULT 'running',
-                pinned              INTEGER NOT NULL DEFAULT 0,
-                total_rows_in       INTEGER,
-                total_rows_out      INTEGER,
-                total_rows_dropped  INTEGER,
-                total_nodes         INTEGER,
-                nodes_ok            INTEGER DEFAULT 0,
-                nodes_error         INTEGER DEFAULT 0,
-                nodes_skipped       INTEGER DEFAULT 0,
-                total_exec_time     REAL,
-                input_hash          TEXT,
-                output_hash         TEXT
-            );
-
-            CREATE TABLE IF NOT EXISTS node_meta (
-                run_id      TEXT NOT NULL,
-                node_id     TEXT NOT NULL,
-                node_type   TEXT,
-                row_count   INTEGER,
-                col_schema  TEXT,
-                exec_time   REAL,
-                status      TEXT,
-                error_msg   TEXT,
-                PRIMARY KEY (run_id, node_id)
-            );
-        """)
-        conn.commit()
-        logger.info(f"Intermediate DB inizializzato (schema inline): {DB_PATH}", op="init_db")
+    """No-op per PostgreSQL: tabelle runs/node_meta già create."""
+    logger.info("Intermediate DB: PostgreSQL (tabelle già presenti)", op="init_db")
 
 
-@contextmanager
-def transaction():
-    conn = get_connection()
-    conn.execute("BEGIN")
-    try:
-        yield conn
-        conn.execute("COMMIT")
-    except Exception as e:
-        logger.debug("transaction: rollback per errore: %s", e)
-        conn.execute("ROLLBACK")
-        raise
-
-
-def _row_to_dict(row: sqlite3.Row) -> Dict:
-    return dict(row) if row else {}
-
-
-def fetchone(sql: str, params: tuple = ()) -> Optional[Dict]:
-    conn = get_connection()
-    cur = conn.execute(sql, params)
-    row = cur.fetchone()
-    return _row_to_dict(row) if row else None
-
-
-def fetchall(sql: str, params: tuple = ()) -> List[Dict]:
-    conn = get_connection()
-    cur = conn.execute(sql, params)
-    return [_row_to_dict(r) for r in cur.fetchall()]
-
-
-def execute(sql: str, params: tuple = ()) -> sqlite3.Cursor:
-    conn = get_connection()
-    cur = conn.execute(sql, params)
-    conn.commit()
-    return cur
-
+# fetchone, fetchall, execute sono importati da pg_connection (top del file)
 
 # ============================================================
 # RUNS
@@ -215,7 +105,7 @@ def pin_run(run_id: str, group_id: str, pinned: bool = True) -> bool:
     """Pinna o spinna una run. Verifica group_id per sicurezza."""
     cur = execute(
         "UPDATE runs SET pinned = ? WHERE run_id = ? AND group_id = ?",
-        (1 if pinned else 0, run_id, group_id)
+        (pinned, run_id, group_id)
     )
     return cur.rowcount > 0
 
@@ -229,9 +119,13 @@ def upsert_node_meta(run_id: str, node_id: str, node_type: str = None,
                      exec_time: float = None, status: str = None,
                      error_msg: str = None) -> None:
     execute(
-        """INSERT OR REPLACE INTO node_meta
+        """INSERT INTO node_meta
            (run_id, node_id, node_type, row_count, col_schema, exec_time, status, error_msg)
-           VALUES (?,?,?,?,?,?,?,?)""",
+           VALUES (?,?,?,?,?,?,?,?)
+           ON CONFLICT (run_id, node_id) DO UPDATE SET
+           node_type=EXCLUDED.node_type, row_count=EXCLUDED.row_count,
+           col_schema=EXCLUDED.col_schema, exec_time=EXCLUDED.exec_time,
+           status=EXCLUDED.status, error_msg=EXCLUDED.error_msg""",
         (run_id, node_id, node_type, row_count,
          json.dumps(col_schema) if col_schema else None,
          exec_time, status, error_msg)
@@ -361,9 +255,8 @@ def insert_node_rows(run_id: str, node_id: str,
         safe_row = {re.sub(r"[^a-zA-Z0-9_]", "_", k): _to_sqlite(v) for k, v in row.items()}
         data.append(tuple(safe_row.get(c) for c in cols))
 
-    conn = get_connection()
-    conn.executemany(sql, data)
-    conn.commit()
+    # Usa pg_connection.executemany (pool-based)
+    executemany(sql, data)
 
 
 def drop_run_tables(run_id: str) -> int:
@@ -383,25 +276,23 @@ def drop_run_tables(run_id: str) -> int:
     # Pattern strict per nomi tabella validi (lettere/numeri/underscore, max 200 char)
     valid_name = re.compile(r"^[a-zA-Z0-9_]{1,200}$")
 
-    conn = get_connection()
-    tables = conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE ?",
+    # PostgreSQL: query information_schema invece di sqlite_master
+    tables = fetchall(
+        "SELECT table_name FROM information_schema.tables "
+        "WHERE table_schema = 'plenora' AND table_name LIKE ?",
         (f"{prefix}%",)
-    ).fetchall()
+    )
 
     count = 0
     for t in tables:
-        table_name = t[0]
-        # Re-validation: anche se viene da sqlite_master, rifiutiamo nomi non
-        # conformi al pattern. Mai interpolare un nome non validato in DDL.
+        table_name = t["table_name"]
         if not valid_name.match(table_name) or not table_name.startswith(prefix):
             logger.warning(
                 f"drop_run_tables: nome tabella sospetto skippato: {table_name!r}"
             )
             continue
-        conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+        execute(f"DROP TABLE IF EXISTS {table_name}")
         count += 1
-    conn.commit()
     return count
 
 
@@ -420,13 +311,13 @@ def get_node_table_rows(run_id: str, node_id: str,
         return []
 
     table_name = _safe_table_name(run_id, node_id)
-    conn = get_connection()
 
-    # Verifica che la tabella esista
-    exists = conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+    # Verifica che la tabella esista (PostgreSQL information_schema)
+    exists = fetchone(
+        "SELECT table_name FROM information_schema.tables "
+        "WHERE table_schema = 'plenora' AND table_name = ?",
         (table_name,)
-    ).fetchone()
+    )
     if not exists:
         return []
 
@@ -434,8 +325,7 @@ def get_node_table_rows(run_id: str, node_id: str,
     if limit:
         sql += f" LIMIT {int(limit)}"
 
-    cur = conn.execute(sql)
-    return [_row_to_dict(r) for r in cur.fetchall()]
+    return fetchall(sql)
 
 
 # ============================================================

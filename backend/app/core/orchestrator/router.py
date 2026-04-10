@@ -384,7 +384,6 @@ def cleanup_task_completely(task_id: str, current_user: CurrentUser = Depends(ge
     """
     from app.services.task_service import task_service
     import app.db.results_db_service as _results_db
-    import sqlite3
     import shutil
 
     # 1. Estrai project_id dal task (se presente)
@@ -435,13 +434,10 @@ def cleanup_task_completely(task_id: str, current_user: CurrentUser = Depends(ge
         except Exception as e:
             logger.warning(f"cleanup: errore rimozione results_dir: {e}")
 
-        # 4. Elimina log entries con questo project_id
+        # 4. Elimina log entries con questo project_id (PostgreSQL)
         try:
-            log_db_path = settings.LOGS_DIR / "log.db"
-            if log_db_path.exists():
-                with sqlite3.connect(str(log_db_path), timeout=5) as conn:
-                    conn.execute("DELETE FROM logs WHERE project_id = ?", (project_id,))
-                    conn.commit()
+            from app.db.pg_connection import execute as _pg_exec
+            _pg_exec("DELETE FROM logs WHERE project_id = ?", (project_id,))
         except Exception as e:
             logger.warning(f"cleanup: errore delete logs: {e}")
 

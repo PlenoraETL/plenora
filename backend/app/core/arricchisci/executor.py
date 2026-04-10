@@ -111,6 +111,16 @@ class EnrichExecutor:
                     "columns": result.get("columns", []),
                     "message": f"Arricchimento completato: {result.get('rows_processed', 0)} righe processate"
                 }
+
+                # Allinea columns_metadata del progetto allo schema reale del DataFrame finale.
+                # Fix desincronizzazione UI/DB del nodo result — il file xlsx era già corretto
+                # ma columns_metadata restava stale e rompeva il riuso come project_source.
+                try:
+                    cm = result.get("columns_metadata") or []
+                    if cm:
+                        self.project_service.update_project_columns_metadata(project_id, cm)
+                except Exception as _cme:
+                    logger.warning(f"Impossibile salvare columns_metadata: {_cme}")
         else:
             res = {
                 "success": False,
@@ -196,6 +206,14 @@ class EnrichExecutor:
 
                     input_edge = next((e for e in edges if e["target"] == node_id), None)
                     input_df = node_results.get(input_edge["source"]) if input_edge else None
+
+                    # ── execute_if: skip condizionale ──
+                    from app.core.arricchisci.parallel import should_execute_node
+                    if not should_execute_node(node_data, input_df):
+                        logger.info(f"Preview: nodo {node_id} skippato (execute_if)")
+                        node_results[node_id] = input_df
+                        result_df = input_df
+                        continue
 
                     if api_config.get("api_type", "enricher") == "generator" or input_df is None:
                         result_df = api_connection_service._execute_api_generator(api_config, input_df)

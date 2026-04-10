@@ -59,22 +59,10 @@ class DBConnectionCleanupMiddleware(BaseHTTPMiddleware):
 
     @staticmethod
     def _close_connections() -> None:
-        """Chiude tutte le connessioni thread-local del thread corrente.
+        """No-op per PostgreSQL: il connection pool gestisce il lifecycle.
 
-        Lavora SOLO sul `threading.local()` del thread chiamante. Non tocca
-        connessioni di altri thread (es. worker Celery, background task).
-        Idempotente: chiamare due volte non ha effetto.
+        Con SQLite thread-local serviva chiudere esplicitamente.
+        Con il pool psycopg2, le connessioni vengono restituite automaticamente
+        dai wrapper fetchone/fetchall/execute in pg_connection.py.
         """
-        # config.db
-        try:
-            from app.db.config_db_service import close_connection as _close_cfg
-            _close_cfg()
-        except Exception as e:
-            logger.warning(f"DB cleanup middleware: close config_db fallito: {e}")
-
-        # intermediate.db
-        try:
-            from app.core.intermediate.db import close_connection as _close_idb
-            _close_idb()
-        except Exception as e:
-            logger.warning(f"DB cleanup middleware: close intermediate_db fallito: {e}")
+        pass

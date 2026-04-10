@@ -1,35 +1,20 @@
 """
-Router API per la consultazione dei log — lettura da SQLite (log.db).
-
-Endpoints:
-- GET  /api/logs          → log paginati con filtri
-- GET  /api/logs/stats    → statistiche aggregate
-- POST /api/logs/clear    → svuota log
+Router API per la consultazione dei log — lettura da PostgreSQL.
 """
 
 import json
-import sqlite3
-from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 from app.config import settings
 from app.core.auth.auth import get_current_user, require_not_esecutore, CurrentUser, require_admin, group_filter
+from app.db.pg_connection import fetchone as _fetchone, fetchall as _fetchall, execute as _execute
 
 router = APIRouter(prefix="/logs", tags=["logs"])
 
-LOG_DB_PATH = settings.LOGS_DIR / "log.db"
 
-
-def _get_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(str(LOG_DB_PATH), timeout=5)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    return conn
-
-
-def _row_to_dict(row: sqlite3.Row) -> dict:
-    d = dict(row)
+def _row_to_dict(row: dict) -> dict:
+    d = dict(row) if row else {}
     # Deserializza details JSON
     if d.get("details"):
         try:
@@ -53,9 +38,6 @@ def get_logs(
     limit:  int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
 ):
-    if not LOG_DB_PATH.exists():
-        return {"entries": [], "total": 0, "limit": limit, "offset": offset, "has_more": False}
-
     conditions = []
     params = []
 
@@ -102,12 +84,12 @@ def get_logs(
 
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
-    with _get_conn() as conn:
-        total = conn.execute(f"SELECT COUNT(*) FROM logs {where}", params).fetchone()[0]
-        rows = conn.execute(
-            f"SELECT * FROM logs {where} ORDER BY id DESC LIMIT ? OFFSET ?",
-            params + [limit, offset]
-        ).fetchall()
+    total_row = _fetchone(f"SELECT COUNT(*) as c FROM logs {where}", tuple(params))
+    total = total_row["c"] if total_row else 0
+    rows = _fetchall(
+        f"SELECT * FROM logs {where} ORDER BY id DESC LIMIT ? OFFSET ?",
+        tuple(params) + (limit, offset)
+    )
 
     entries = [_row_to_dict(r) for r in rows]
 
@@ -125,43 +107,35 @@ def get_log_stats(
     after: Optional[str] = Query(None),
     current_user: CurrentUser = Depends(require_not_esecutore),
 ):
-    if not LOG_DB_PATH.exists():
-        return {"total": 0, "by_level": {}, "by_module": {}, "by_operation": {}, "recent_errors": []}
-
     conditions = []
     params = []
     if after:
         conditions.append("ts >= ?")
         params.append(after)
-    # Filtro per gruppo (superadmin vede tutto)
     if current_user.role != "superadmin":
         conditions.append("(group_id = ? OR group_id = '')")
         params.append(current_user.group_id)
 
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    p = tuple(params)
 
-    with _get_conn() as conn:
-        total = conn.execute(f"SELECT COUNT(*) FROM logs {where}", params).fetchone()[0]
+    total_row = _fetchone(f"SELECT COUNT(*) as c FROM logs {where}", p)
+    total = total_row["c"] if total_row else 0
 
-        by_level = {r["level"]: r["cnt"] for r in conn.execute(
-            f"SELECT level, COUNT(*) as cnt FROM logs {where} GROUP BY level", params
-        )}
-
-        by_module = {r["module"]: r["cnt"] for r in conn.execute(
-            f"SELECT module, COUNT(*) as cnt FROM logs {where} GROUP BY module ORDER BY cnt DESC LIMIT 20", params
-        )}
-
-        # Nota: l'ulteriore `WHERE op != ''` va combinato con `where` già presente
-        op_where = f"{where} AND op != ''" if where else "WHERE op != ''"
-        by_op = {r["op"]: r["cnt"] for r in conn.execute(
-            f"SELECT op, COUNT(*) as cnt FROM logs {op_where} GROUP BY op ORDER BY cnt DESC LIMIT 20", params
-        )}
-
-        err_where = f"{where} AND level = 'ERROR'" if where else "WHERE level = 'ERROR'"
-        recent_errors = [_row_to_dict(r) for r in conn.execute(
-            f"SELECT * FROM logs {err_where} ORDER BY id DESC LIMIT 10",
-            params
-        )]
+    by_level = {r["level"]: r["cnt"] for r in _fetchall(
+        f"SELECT level, COUNT(*) as cnt FROM logs {where} GROUP BY level", p
+    )}
+    by_module = {r["module"]: r["cnt"] for r in _fetchall(
+        f"SELECT module, COUNT(*) as cnt FROM logs {where} GROUP BY module ORDER BY cnt DESC LIMIT 20", p
+    )}
+    op_where = f"{where} AND op != ''" if where else "WHERE op != ''"
+    by_op = {r["op"]: r["cnt"] for r in _fetchall(
+        f"SELECT op, COUNT(*) as cnt FROM logs {op_where} GROUP BY op ORDER BY cnt DESC LIMIT 20", p
+    )}
+    err_where = f"{where} AND level = 'ERROR'" if where else "WHERE level = 'ERROR'"
+    recent_errors = [_row_to_dict(r) for r in _fetchall(
+        f"SELECT * FROM logs {err_where} ORDER BY id DESC LIMIT 10", p
+    )]
 
     return {
         "total": total,
@@ -179,13 +153,10 @@ def clear_logs(current_user: CurrentUser = Depends(require_admin)):
     superadmin → svuota tutti i log e tutte le run
     admin      → svuota solo i log e le run del proprio gruppo
     """
-    if LOG_DB_PATH.exists():
-        with _get_conn() as conn:
-            if current_user.role == "superadmin":
-                conn.execute("DELETE FROM logs")
-                conn.execute("DELETE FROM runs")
-            else:
-                conn.execute("DELETE FROM logs WHERE group_id = ? OR group_id = ''", (current_user.group_id,))
-                conn.execute("DELETE FROM runs WHERE group_id = ?", (current_user.group_id,))
-            conn.commit()
+    if current_user.role == "superadmin":
+        _execute("DELETE FROM logs")
+        _execute("DELETE FROM log_runs")
+    else:
+        _execute("DELETE FROM logs WHERE group_id = ? OR group_id = ''", (current_user.group_id,))
+        _execute("DELETE FROM log_runs WHERE group_id = ?", (current_user.group_id,))
     return {"status": "ok", "message": "Log e run svuotati"}

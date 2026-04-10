@@ -30,6 +30,7 @@ def _ensure_default_group():
 def _row_to_connection(row: dict) -> ArcGISConnection:
     return ArcGISConnection(
         id=row["id"],
+        group_id=row.get("group_id") or DEFAULT_GROUP,
         name=row["name"],
         description=row.get("description") or "",
         server_url=row["server_url"],
@@ -42,6 +43,7 @@ def _row_to_connection(row: dict) -> ArcGISConnection:
         token_url=row.get("token_url") or None,
         created_at=datetime.fromisoformat(row["created_at"]),
         updated_at=datetime.fromisoformat(row["updated_at"]),
+        created_by=row.get("created_by"),
     )
 
 
@@ -53,7 +55,8 @@ def _generate_id(name: str) -> str:
     return f"arcgis_{safe_name}_{timestamp}_{short_uuid}"
 
 
-def create_connection_db(data: ArcGISCreate) -> ArcGISConnection:
+def create_connection_db(data: ArcGISCreate, group_id: str = DEFAULT_GROUP,
+                          created_by: str = None) -> ArcGISConnection:
     _ensure_default_group()
     connection_id = _generate_id(data.name)
     now = datetime.now().isoformat()
@@ -72,24 +75,39 @@ def create_connection_db(data: ArcGISCreate) -> ArcGISConnection:
     db.execute("""
         INSERT INTO arcgis_connections
         (id, group_id, name, description, server_url, server_type, auth_type,
-         username, password, client_id, client_secret, token_url, created_at, updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-    """, (connection_id, DEFAULT_GROUP, data.name, data.description or "",
+         username, password, client_id, client_secret, token_url, created_at, updated_at, created_by)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    """, (connection_id, group_id, data.name, data.description or "",
           data.server_url, server_type, data.auth_type,
           data.username or "", data.password or "",
           data.client_id or "", data.client_secret or "",
-          data.token_url or "", now, now))
+          data.token_url or "", now, now, created_by))
 
-    logger.info(f"Connessione ArcGIS creata: {connection_id}", op="create")
+    logger.info(f"Connessione ArcGIS creata: {connection_id} (group {group_id})", op="create")
     return _row_to_connection(dict(db.fetchone("SELECT * FROM arcgis_connections WHERE id = ?", (connection_id,))))
 
 
-def list_connections_db() -> ArcGISList:
-    rows = db.fetchall("SELECT * FROM arcgis_connections ORDER BY updated_at DESC")
+def list_connections_db(group_id: Optional[str] = None) -> ArcGISList:
+    """
+    Lista connessioni ArcGIS.
+    - group_id None     -> tutte (uso superadmin)
+    - group_id "abc"    -> solo del gruppo
+    """
+    if group_id is None:
+        rows = db.fetchall("SELECT * FROM arcgis_connections ORDER BY updated_at DESC")
+    else:
+        rows = db.fetchall(
+            "SELECT * FROM arcgis_connections WHERE group_id = ? ORDER BY updated_at DESC",
+            (group_id,),
+        )
     return ArcGISList(connections=[_row_to_connection(dict(r)) for r in rows])
 
 
 def get_connection_db(connection_id: str) -> Optional[ArcGISConnection]:
+    """
+    Ritorna la connessione (senza filtro gruppo).
+    Il group check va fatto dal chiamante con `assert_group_access`.
+    """
     row = db.fetchone("SELECT * FROM arcgis_connections WHERE id = ?", (connection_id,))
     return _row_to_connection(dict(row)) if row else None
 
@@ -100,6 +118,14 @@ def update_connection_db(connection_id: str, data: ArcGISUpdate) -> Optional[Arc
 
     update_data = data.model_dump(exclude_unset=True)
     now = datetime.now().isoformat()
+
+    # Bugfix: il frontend riceve i campi sensibili mascherati come "***" nelle
+    # list/get e li rispedisce inalterati se l'utente non li modifica.
+    # Skipparli per non sovrascrivere i valori reali con la maschera.
+    _SENSITIVE = {"password", "client_secret"}
+    for sf in list(update_data.keys()):
+        if sf in _SENSITIVE and update_data.get(sf) in (None, "", "***"):
+            del update_data[sf]
 
     field_map = {
         "name": "name", "description": "description", "server_url": "server_url",

@@ -1,91 +1,25 @@
 """
-Results DB Service — accesso a SQLite #2 (results.db).
+Results DB Service — accesso a PostgreSQL (ex SQLite results.db).
 
 Contiene: results (output pipeline), execution_logs.
-Dati in crescita — soggetti a retention policy.
-
-Thread-safe tramite threading.local() per le connessioni.
+Migrato a PostgreSQL: usa pg_connection pool.
 """
 
-import sqlite3
-import threading
-from contextlib import contextmanager
-from pathlib import Path
 from typing import Dict, List, Optional
-from app.config import settings
 from app.utils.logger import get_logger
+
+# Importa tutto da pg_connection
+from app.db.pg_connection import (
+    fetchone, fetchall, execute,
+    transaction, close_connection,
+)
 
 logger = get_logger(__name__)
 
-DB_PATH = Path(settings.DATA_DIR) / "results.db"
-
-_local = threading.local()
-
-
-@contextmanager
-def transaction():
-    conn = get_connection()
-    conn.execute("BEGIN")
-    try:
-        yield conn
-        conn.execute("COMMIT")
-    except Exception:
-        conn.execute("ROLLBACK")
-        raise
-
-
-def get_connection() -> sqlite3.Connection:
-    if not hasattr(_local, "conn") or _local.conn is None:
-        _local.conn = sqlite3.connect(
-            str(DB_PATH),
-            timeout=30,
-            check_same_thread=False,
-        )
-        _local.conn.row_factory = sqlite3.Row
-        _local.conn.execute("PRAGMA journal_mode=WAL")
-        _local.conn.execute("PRAGMA busy_timeout=5000")
-    return _local.conn
-
 
 def init_db():
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    schema_path = Path(__file__).parent / "results_schema.sql"
-    conn = get_connection()
-    if schema_path.exists():
-        schema = schema_path.read_text(encoding="utf-8")
-        conn.executescript(schema)
-        conn.commit()
-        logger.info(f"Results DB inizializzato: {DB_PATH}", op="init_db")
-    else:
-        logger.warning("results_schema.sql non trovato", op="init_db")
-
-
-# ============================================================
-# HELPERS
-# ============================================================
-
-def _row_to_dict(row: sqlite3.Row) -> Dict:
-    return dict(row) if row else {}
-
-
-def fetchone(sql: str, params: tuple = ()) -> Optional[Dict]:
-    conn = get_connection()
-    cur = conn.execute(sql, params)
-    row = cur.fetchone()
-    return _row_to_dict(row) if row else None
-
-
-def fetchall(sql: str, params: tuple = ()) -> List[Dict]:
-    conn = get_connection()
-    cur = conn.execute(sql, params)
-    return [_row_to_dict(r) for r in cur.fetchall()]
-
-
-def execute(sql: str, params: tuple = ()) -> sqlite3.Cursor:
-    conn = get_connection()
-    cur = conn.execute(sql, params)
-    conn.commit()
-    return cur
+    """No-op per PostgreSQL: tabelle già create."""
+    pass
 
 
 # ============================================================
@@ -98,8 +32,12 @@ def save_result(result_id: str, project_id: str, group_id: str,
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc).isoformat()
     execute(
-        "INSERT OR REPLACE INTO results (id, project_id, group_id, filename, format, data, size_bytes, rows_count, created_at, created_by) VALUES (?,?,?,?,?,?,?,?,?,?)",
-        (result_id, project_id, group_id, filename, fmt, data, len(data), rows_count, now, created_by)
+        "INSERT INTO results (id, project_id, group_id, filename, format, data, "
+        "size_bytes, rows_count, created_at, created_by) VALUES (?,?,?,?,?,?,?,?,?,?) "
+        "ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data, size_bytes=EXCLUDED.size_bytes, "
+        "rows_count=EXCLUDED.rows_count, created_at=EXCLUDED.created_at",
+        (result_id, project_id, group_id, filename, fmt,
+         data, len(data) if data else 0, rows_count, now, created_by)
     )
     return get_result(result_id)
 
@@ -120,7 +58,13 @@ def get_result_data(result_id: str, group_id: str = None) -> Optional[bytes]:
         )
     else:
         row = fetchone("SELECT data FROM results WHERE id = ?", (result_id,))
-    return row["data"] if row else None
+    if not row:
+        return None
+    data = row.get("data")
+    # PostgreSQL BYTEA: psycopg2 ritorna memoryview, convertiamo a bytes
+    if isinstance(data, memoryview):
+        return bytes(data)
+    return data
 
 
 def get_latest_result(project_id: str, group_id: str = None) -> Optional[Dict]:
@@ -140,7 +84,8 @@ def get_latest_result(project_id: str, group_id: str = None) -> Optional[Dict]:
 
 def list_results(project_id: str) -> List[Dict]:
     return fetchall(
-        "SELECT id, project_id, filename, format, size_bytes, rows_count, created_at FROM results WHERE project_id = ? ORDER BY created_at DESC",
+        "SELECT id, project_id, filename, format, size_bytes, rows_count, created_at "
+        "FROM results WHERE project_id = ? ORDER BY created_at DESC",
         (project_id,)
     )
 
@@ -162,42 +107,41 @@ def delete_results_for_project(project_id: str) -> int:
 
 def log_execution(log_id: str, group_id: str, project_id: str = None,
                   schedule_id: str = None, status: str = "running",
-                  triggered_by: str = "manual") -> Dict:
+                  message: str = None, triggered_by: str = None) -> Dict:
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc).isoformat()
     execute(
-        "INSERT INTO execution_logs (id, group_id, project_id, schedule_id, status, started_at, triggered_by) VALUES (?,?,?,?,?,?,?)",
-        (log_id, group_id, project_id, schedule_id, status, now, triggered_by)
+        "INSERT INTO execution_logs (id, group_id, project_id, schedule_id, status, "
+        "started_at, message, triggered_by) VALUES (?,?,?,?,?,?,?,?)",
+        (log_id, group_id, project_id, schedule_id, status, now, message, triggered_by)
     )
-    return fetchone("SELECT * FROM execution_logs WHERE id = ?", (log_id,))
+    return {"id": log_id, "status": status}
 
 
-def update_log(log_id: str, status: str, rows_count: int = None,
+def update_log(log_id: str, status: str, finished_at: str = None,
+               duration_s: float = None, rows_count: int = None,
                message: str = None, error: str = None) -> None:
-    from datetime import datetime, timezone, datetime as dt
-    now = datetime.now(timezone.utc).isoformat()
-    row = fetchone("SELECT started_at FROM execution_logs WHERE id = ?", (log_id,))
-    duration = None
-    if row:
-        try:
-            start = dt.fromisoformat(row["started_at"])
-            end = dt.fromisoformat(now)
-            duration = (end - start).total_seconds()
-        except Exception:
-            pass
+    from datetime import datetime, timezone
+    finished = finished_at or datetime.now(timezone.utc).isoformat()
     execute(
-        "UPDATE execution_logs SET status=?, finished_at=?, duration_s=?, rows_count=?, message=?, error=? WHERE id=?",
-        (status, now, duration, rows_count, message, error, log_id)
+        "UPDATE execution_logs SET status=?, finished_at=?, duration_s=?, "
+        "rows_count=?, message=?, error=? WHERE id=?",
+        (status, finished, duration_s, rows_count, message, error, log_id)
     )
 
 
-def list_logs(group_id: str, project_id: str = None, limit: int = 100) -> List[Dict]:
+def list_logs(project_id: str = None, group_id: str = None,
+              limit: int = 50, offset: int = 0) -> List[Dict]:
+    conditions = []
+    params = []
     if project_id:
-        return fetchall(
-            "SELECT * FROM execution_logs WHERE group_id = ? AND project_id = ? ORDER BY started_at DESC LIMIT ?",
-            (group_id, project_id, limit)
-        )
+        conditions.append("project_id = ?")
+        params.append(project_id)
+    if group_id:
+        conditions.append("group_id = ?")
+        params.append(group_id)
+    where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
     return fetchall(
-        "SELECT * FROM execution_logs WHERE group_id = ? ORDER BY started_at DESC LIMIT ?",
-        (group_id, limit)
+        f"SELECT * FROM execution_logs {where} ORDER BY started_at DESC LIMIT ? OFFSET ?",
+        tuple(params) + (limit, offset)
     )

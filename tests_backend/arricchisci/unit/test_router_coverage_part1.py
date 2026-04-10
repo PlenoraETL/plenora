@@ -310,69 +310,6 @@ class TestValidateEnrichment:
 
 
 # ---------------------------------------------------------------------------
-# preview_enrichment (lines 265-301)
-# ---------------------------------------------------------------------------
-
-class TestPreviewEnrichment:
-
-    def test_api_not_found_404(self):
-        client, _, api = make_client()
-        with patch("app.core.arricchisci.api_connector.api_connection_service") as mock_svc:
-            mock_svc.get_api_connection.return_value = None
-            res = client.post("/enrichment/preview", json={
-                "project_id": "p1", "api_id": "bad",
-                "param_mapping": {}, "sample_size": 5,
-            })
-        assert res.status_code == 404
-
-    @patch("app.core.arricchisci.router._load_data", return_value=None)
-    def test_no_data_404(self, _):
-        client, _, api = make_client()
-        with patch("app.core.arricchisci.api_connector.api_connection_service") as mock_svc:
-            mock_svc.get_api_connection.return_value = {"id": "a1"}
-            res = client.post("/enrichment/preview", json={
-                "project_id": "p1", "api_id": "a1",
-                "param_mapping": {}, "sample_size": 5,
-            })
-        assert res.status_code == 404
-
-    @patch("app.core.arricchisci.router._load_data")
-    def test_preview_with_inline_data(self, mock_ld):
-        """When request.data is provided, should use it directly instead of _load_data."""
-        client, _, api = make_client()
-        mock_result = MagicMock()
-        mock_result.to_dict.return_value = {
-            "sample_size": 2, "success_count": 2, "error_count": 0,
-            "success_rate": 100.0, "avg_time_per_row_ms": 10.0,
-            "estimated_total_time_seconds": 1.0,
-            "estimated_total_time_formatted": "1s",
-            "estimated_api_calls": 2, "unique_param_combinations": 2,
-            "preview_data": [{"a": 1}], "errors": [], "warnings": [],
-        }
-        with patch("app.core.arricchisci.api_connector.api_connection_service") as mock_svc, \
-             patch("app.core.arricchisci.enrichment_service.EnrichmentExecutor") as MockExec:
-            mock_svc.get_api_connection.return_value = {"id": "a1"}
-            MockExec.return_value.preview.return_value = mock_result
-            res = client.post("/enrichment/preview", json={
-                "project_id": "p1", "api_id": "a1",
-                "param_mapping": {}, "sample_size": 2,
-                "data": [{"city": "Roma"}, {"city": "Milano"}],
-            })
-        assert res.status_code == 200
-        mock_ld.assert_not_called()
-
-    def test_preview_crash_returns_500(self):
-        client, _, api = make_client()
-        with patch("app.core.arricchisci.api_connector.api_connection_service") as mock_svc:
-            mock_svc.get_api_connection.side_effect = RuntimeError("boom")
-            res = client.post("/enrichment/preview", json={
-                "project_id": "p1", "api_id": "a1",
-                "param_mapping": {}, "sample_size": 5,
-            })
-        assert res.status_code == 500
-
-
-# ---------------------------------------------------------------------------
 # estimate_enrichment (lines 313-349)
 # ---------------------------------------------------------------------------
 

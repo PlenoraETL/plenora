@@ -28,6 +28,8 @@ class FileSource(BaseModel):
     crs: Optional[str] = None
     created_at: datetime
     updated_at: datetime
+    created_by: Optional[str] = None
+    can_edit: Optional[bool] = None  # calcolato per l'utente corrente
 
 
 class FileSourceCreate(BaseModel):

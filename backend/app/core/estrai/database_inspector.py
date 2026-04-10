@@ -148,27 +148,38 @@ class DefaultConnectionFactory:
         """
         Connessione SQL Server via pyodbc.
 
-        Prova prima ODBC Driver 18, poi fallback su Driver 17.
-        TrustServerCertificate=yes per ambienti di sviluppo.
+        Driver 18 ha cambiato i default: Encrypt=Mandatory.
+        Per supportare server senza TLS valido (sviluppo, on-prem legacy)
+        usiamo Encrypt=Optional + TrustServerCertificate=yes.
+        Fallback automatico su Driver 17 per ambienti vecchi.
         """
         import pyodbc
-        drivers = ["ODBC Driver 18 for SQL Server", "ODBC Driver 17 for SQL Server"]
-
-        for driver in drivers:
+        base = (
+            f"SERVER={conn.host},{conn.port};"
+            f"DATABASE={conn.database};"
+            f"UID={conn.username};"
+            f"PWD={conn.password};"
+            f"TrustServerCertificate=yes"
+        )
+        attempts = [
+            f"DRIVER={{ODBC Driver 18 for SQL Server}};{base};Encrypt=Optional",
+            f"DRIVER={{ODBC Driver 18 for SQL Server}};{base};Encrypt=No",
+            f"DRIVER={{ODBC Driver 17 for SQL Server}};{base}",
+        ]
+        last_error = None
+        for cs in attempts:
             try:
-                conn_string = (
-                    f"DRIVER={{{driver}}};"
-                    f"SERVER={conn.host},{conn.port};"
-                    f"DATABASE={conn.database};"
-                    f"UID={conn.username};"
-                    f"PWD={conn.password};"
-                    f"TrustServerCertificate=yes"
-                )
-                return pyodbc.connect(conn_string, timeout=10)
-            except pyodbc.InterfaceError:
+                return pyodbc.connect(cs, timeout=10)
+            except pyodbc.InterfaceError as e:
+                last_error = e
+                continue
+            except Exception as e:
+                last_error = e
                 continue
 
-        raise ConnectionError("Nessun driver ODBC per SQL Server trovato")
+        raise ConnectionError(
+            f"Nessun driver ODBC per SQL Server riuscito. Ultimo errore: {last_error}"
+        )
 
     def _connetti_mysql(self, conn: DatabaseConnection) -> Any:
         """Connessione MySQL/MariaDB via pymysql."""
@@ -319,20 +330,22 @@ class SQLQueries:
     # --- MySQL ---
     # Versione con SRID: usa JOIN su ST_GEOMETRY_COLUMNS (disponibile in MySQL 8+).
     # La versione semplice viene usata come fallback per MariaDB e MySQL < 8.
+    # NB: alias `c` e `g` per evitare ambiguità sulle colonne TABLE_NAME/COLUMN_NAME
+    # presenti in entrambe le tabelle (l'errore ER_NON_UNIQ_ERROR 1052).
     MYSQL_COLUMNS_WITH_SRID = """
-        SELECT 
-            TABLE_NAME, 
-            COLUMN_NAME,
-            DATA_TYPE,
-            COLUMN_TYPE,
-            SRS_ID
-        FROM INFORMATION_SCHEMA.COLUMNS
-        LEFT JOIN INFORMATION_SCHEMA.ST_GEOMETRY_COLUMNS 
-            ON COLUMNS.TABLE_SCHEMA = ST_GEOMETRY_COLUMNS.TABLE_SCHEMA
-            AND COLUMNS.TABLE_NAME = ST_GEOMETRY_COLUMNS.TABLE_NAME
-            AND COLUMNS.COLUMN_NAME = ST_GEOMETRY_COLUMNS.COLUMN_NAME
-        WHERE COLUMNS.TABLE_SCHEMA = DATABASE()
-        ORDER BY COLUMNS.TABLE_NAME, COLUMNS.ORDINAL_POSITION;
+        SELECT
+            c.TABLE_NAME,
+            c.COLUMN_NAME,
+            c.DATA_TYPE,
+            c.COLUMN_TYPE,
+            g.SRS_ID
+        FROM INFORMATION_SCHEMA.COLUMNS c
+        LEFT JOIN INFORMATION_SCHEMA.ST_GEOMETRY_COLUMNS g
+            ON c.TABLE_SCHEMA = g.TABLE_SCHEMA
+            AND c.TABLE_NAME = g.TABLE_NAME
+            AND c.COLUMN_NAME = g.COLUMN_NAME
+        WHERE c.TABLE_SCHEMA = DATABASE()
+        ORDER BY c.TABLE_NAME, c.ORDINAL_POSITION;
     """
 
     MYSQL_COLUMNS_SIMPLE = """

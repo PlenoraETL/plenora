@@ -280,9 +280,3 @@ class TestScheduleLogs:
             res = client.get("/schedules/sched-001/logs")
         assert res.status_code in (200, 404, 500)
 
-    def test_get_log_singolo_404(self):
-        client = make_client()
-        with patch("app.core.scheduler.log_service.ScheduleLogService") as mock_ls:
-            mock_ls.return_value.get_log.return_value = None
-            res = client.get("/schedules/sched-001/logs/log-inesistente")
-        assert res.status_code in (404, 500)

@@ -33,6 +33,7 @@ def create_from_project(
     description: str = "",
     default_output_format: str = "xlsx",
     default_output_name: Optional[str] = None,
+    icon: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Crea un eseguibile clonando il canvas di un progetto arricchisci.
 
@@ -99,6 +100,7 @@ def create_from_project(
         default_output_format=default_output_format,
         default_output_name=default_output_name,
         source_canvas_id=source_project_id,
+        icon=icon,
     )
     logger.info(
         f"Eseguibile creato: {record['id']} ({name}) da progetto {source_project_id}",

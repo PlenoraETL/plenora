@@ -21,7 +21,6 @@ from app.core.estrai.executor import (
     _traduci_errore_sql,
     _is_user_error_message,
 )
-from app.core.estrai.router import functions_router, sql_router, init_estrai
 from app.shared.models import Node, Column, Edge, Position, CanvasState
 
 

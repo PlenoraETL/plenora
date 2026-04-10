@@ -30,7 +30,6 @@ from app.core.orchestrator.router import (
     pipeline_router,
     init_orchestrator,
     _mime_for_filename,
-    _human_size,
 )
 
 
@@ -103,35 +102,6 @@ class TestMimeForFilename:
 
     def test_parquet(self):
         assert _mime_for_filename("data.parquet") == "application/octet-stream"
-
-
-# =============================================================================
-# _human_size
-# =============================================================================
-
-class TestHumanSize:
-
-    def test_bytes(self):
-        assert _human_size(512) == "512.0 B"
-
-    def test_kilobytes(self):
-        result = _human_size(2048)
-        assert "KB" in result
-
-    def test_megabytes(self):
-        result = _human_size(5 * 1024 * 1024)
-        assert "MB" in result
-
-    def test_gigabytes(self):
-        result = _human_size(3 * 1024 ** 3)
-        assert "GB" in result
-
-    def test_terabytes(self):
-        result = _human_size(2 * 1024 ** 4)
-        assert "TB" in result
-
-    def test_zero(self):
-        assert _human_size(0) == "0.0 B"
 
 
 # =============================================================================
@@ -277,87 +247,3 @@ class TestDownloadProjectResult:
         assert res.status_code == 404
 
 
-# =============================================================================
-# GET /projects/{id}/output-info
-# =============================================================================
-
-class TestGetProjectOutputInfo:
-
-    def test_output_info_from_db(self, tmp_path):
-        client = make_client()
-        db_row = {
-            "id": "res-1",
-            "filename": "output.csv",
-            "size_bytes": 2048,
-            "created_at": "2026-01-01T00:00:00",
-        }
-        with patch("app.core.orchestrator.router.settings") as mock_s, \
-             patch("app.db.db_service.get_latest_result", return_value=db_row):
-            mock_s.RESULTS_DIR = tmp_path / "results"
-            res = client.get("/api/projects/proj-1/output-info")
-        assert res.status_code == 200
-        data = res.json()
-        assert data["has_output"] is True
-        assert data["filename"] == "output.csv"
-        assert "KB" in data["size_human"]
-
-    def test_output_info_fs_fallback(self, tmp_path):
-        results_dir = tmp_path / "results" / "proj-1"
-        results_dir.mkdir(parents=True)
-        f = results_dir / "out.json"
-        f.write_text('{"hello": 1}')
-        client = make_client()
-        with patch("app.core.orchestrator.router.settings") as mock_s, \
-             patch("app.db.db_service.get_latest_result", return_value=None):
-            mock_s.RESULTS_DIR = tmp_path / "results"
-            res = client.get("/api/projects/proj-1/output-info")
-        assert res.status_code == 200
-        data = res.json()
-        assert data["has_output"] is True
-        assert data["filename"] == "out.json"
-        assert "/download" in data["download_url"]
-
-    def test_output_info_no_output(self, tmp_path):
-        client = make_client()
-        with patch("app.core.orchestrator.router.settings") as mock_s, \
-             patch("app.db.db_service.get_latest_result", return_value=None):
-            mock_s.RESULTS_DIR = tmp_path / "results"
-            res = client.get("/api/projects/proj-1/output-info")
-        assert res.status_code == 200
-        data = res.json()
-        assert data["has_output"] is False
-
-    def test_output_info_db_error_falls_to_fs(self, tmp_path):
-        """
-        When DB lookup raises, the endpoint catches it and falls back to FS.
-        NOTE: logger.debug is missing from StructuredLogger, so this currently
-        returns 500. We patch the logger to work around the latent bug.
-        """
-        results_dir = tmp_path / "results" / "proj-1"
-        results_dir.mkdir(parents=True)
-        (results_dir / "data.csv").write_text("a\n1")
-        client = make_client()
-        with patch("app.core.orchestrator.router.settings") as mock_s, \
-             patch("app.db.db_service.get_latest_result", side_effect=RuntimeError("db fail")), \
-             patch("app.core.orchestrator.router.logger") as mock_logger:
-            mock_s.RESULTS_DIR = tmp_path / "results"
-            res = client.get("/api/projects/proj-1/output-info")
-        assert res.status_code == 200
-        data = res.json()
-        assert data["has_output"] is True
-
-    def test_output_info_db_size_none(self, tmp_path):
-        client = make_client()
-        db_row = {
-            "id": "res-1",
-            "filename": "x.csv",
-            "size_bytes": None,
-            "created_at": None,
-        }
-        with patch("app.core.orchestrator.router.settings") as mock_s, \
-             patch("app.db.db_service.get_latest_result", return_value=db_row):
-            mock_s.RESULTS_DIR = tmp_path / "results"
-            res = client.get("/api/projects/proj-1/output-info")
-        assert res.status_code == 200
-        data = res.json()
-        assert data["size_bytes"] == 0

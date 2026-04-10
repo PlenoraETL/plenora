@@ -28,7 +28,7 @@ from app.core.auth.auth import (
     _check_rate_limit, _record_failed_login, _clear_failed_logins,
     get_current_user, require_admin,
     CurrentUser, LoginRequest, TokenResponse, UserCreate,
-    ChangePasswordRequest, SECRET_KEY, ALGORITHM,
+    SECRET_KEY, ALGORITHM,
     LOGIN_MAX_ATTEMPTS, LOGIN_WINDOW_SECONDS,
     _failed_attempts, _rate_lock,
 )
@@ -506,11 +506,6 @@ class TestModelli:
     def test_user_create_role_default(self):
         uc = UserCreate(username="u", password="p", group_id="g")
         assert uc.role == "user"
-
-    def test_change_password_request(self):
-        cp = ChangePasswordRequest(old_password="old", new_password="new")
-        assert cp.old_password == "old"
-        assert cp.new_password == "new"
 
 
 # =============================================================================

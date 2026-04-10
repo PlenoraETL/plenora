@@ -8,7 +8,7 @@ Endpoints:
 - POST /api/functions/translate              → traduce espressione in SQL
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Dict, Any, Optional
 
@@ -16,6 +16,7 @@ from app.db.sql_functions import (
     get_function_catalog,
     translate_calculated_column,
 )
+from app.core.auth.auth import get_current_user, require_not_esecutore, CurrentUser
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -43,7 +44,7 @@ class TranslateResponse(BaseModel):
 # ==================== CATALOGO FUNZIONI ====================
 
 @functions_router.get("/catalog")
-async def get_catalog() -> Dict[str, Any]:
+async def get_catalog(current_user: CurrentUser = Depends(require_not_esecutore)) -> Dict[str, Any]:
     """Catalogo completo funzioni SQL disponibili."""
     catalog = get_function_catalog()
     
@@ -69,7 +70,7 @@ async def get_catalog() -> Dict[str, Any]:
 
 
 @functions_router.post("/translate", response_model=TranslateResponse)
-async def translate_expression(request: TranslateRequest) -> TranslateResponse:
+async def translate_expression(request: TranslateRequest, current_user: CurrentUser = Depends(require_not_esecutore)) -> TranslateResponse:
     """Traduce un'espressione astratta in SQL per un tipo di database specifico."""
     try:
         if request.expression is not None:

@@ -170,45 +170,6 @@ class TestListRuns:
 
 
 # =============================================================================
-# DELETE /schedules/{id}/logs
-# =============================================================================
-
-class TestDeleteLogs:
-
-    def test_delete_logs_success(self):
-        """Successful log deletion."""
-        client = make_client()
-        config = make_config()
-        with patch("app.core.scheduler.schedule_service.ScheduleService") as mock_svc, \
-             patch("app.core.scheduler.log_service.ScheduleLogService") as mock_ls:
-            mock_svc.return_value.get_schedule.return_value = config
-            mock_ls.return_value.delete_schedule_logs.return_value = 5
-            res = client.delete("/schedules/sched-001/logs")
-        assert res.status_code == 200
-        assert res.json()["deleted"] == 5
-
-    def test_delete_logs_schedule_not_found_404(self):
-        """Schedule not found => 404."""
-        client = make_client()
-        with patch("app.core.scheduler.schedule_service.ScheduleService") as mock_svc, \
-             patch("app.core.scheduler.log_service.ScheduleLogService"):
-            mock_svc.return_value.get_schedule.return_value = None
-            res = client.delete("/schedules/sched-001/logs")
-        assert res.status_code == 404
-
-    def test_delete_logs_generic_error_500(self):
-        """Unexpected error => 500."""
-        client = make_client()
-        config = make_config()
-        with patch("app.core.scheduler.schedule_service.ScheduleService") as mock_svc, \
-             patch("app.core.scheduler.log_service.ScheduleLogService") as mock_ls:
-            mock_svc.return_value.get_schedule.return_value = config
-            mock_ls.return_value.delete_schedule_logs.side_effect = RuntimeError("IO err")
-            res = client.delete("/schedules/sched-001/logs")
-        assert res.status_code == 500
-
-
-# =============================================================================
 # GET /schedules/{id}/logs
 # =============================================================================
 
@@ -241,59 +202,6 @@ class TestGetLogsExtra:
             mock_svc.return_value.schedule_exists.return_value = True
             mock_ls.return_value.get_logs.side_effect = RuntimeError("DB fail")
             res = client.get("/schedules/sched-001/logs")
-        assert res.status_code == 500
-
-
-# =============================================================================
-# GET /schedules/{id}/logs/{log_id}
-# =============================================================================
-
-class TestGetLogDetailExtra:
-
-    def test_log_detail_success(self):
-        """Successful log detail retrieval."""
-        client = make_client()
-        entry = ScheduleLogEntry(
-            log_id="log-001",
-            schedule_id="sched-001",
-            timestamp=datetime.now(timezone.utc),
-            event="PIPELINE_COMPLETED",
-        )
-        with patch("app.core.scheduler.log_service.ScheduleLogService") as mock_ls:
-            mock_ls.return_value.get_log.return_value = entry
-            res = client.get("/schedules/sched-001/logs/log-001")
-        assert res.status_code == 200
-        assert res.json()["log_id"] == "log-001"
-
-    def test_log_detail_not_found_404(self):
-        """Log not found => 404."""
-        client = make_client()
-        with patch("app.core.scheduler.log_service.ScheduleLogService") as mock_ls:
-            mock_ls.return_value.get_log.return_value = None
-            res = client.get("/schedules/sched-001/logs/log-999")
-        assert res.status_code == 404
-
-    def test_log_detail_schedule_id_mismatch_404(self):
-        """Log belongs to different schedule => 404."""
-        client = make_client()
-        entry = ScheduleLogEntry(
-            log_id="log-001",
-            schedule_id="sched-OTHER",
-            timestamp=datetime.now(timezone.utc),
-            event="PIPELINE_COMPLETED",
-        )
-        with patch("app.core.scheduler.log_service.ScheduleLogService") as mock_ls:
-            mock_ls.return_value.get_log.return_value = entry
-            res = client.get("/schedules/sched-001/logs/log-001")
-        assert res.status_code == 404
-        assert "non appartiene" in res.json()["detail"]
-
-    def test_log_detail_generic_error_500(self):
-        """Unexpected error => 500."""
-        client = make_client()
-        with patch("app.core.scheduler.log_service.ScheduleLogService") as mock_ls:
-            mock_ls.return_value.get_log.side_effect = RuntimeError("unexpected")
-            res = client.get("/schedules/sched-001/logs/log-001")
         assert res.status_code == 500
 
 

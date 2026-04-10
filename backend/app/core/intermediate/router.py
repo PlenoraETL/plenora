@@ -13,7 +13,13 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from app.core.auth.auth import get_current_user, CurrentUser, group_filter
+from app.core.auth.auth import (
+    get_current_user,
+    require_not_esecutore,
+    assert_group_access,
+    CurrentUser,
+    group_filter,
+)
 from app.core.intermediate import db as idb
 from app.utils.logger import get_logger
 
@@ -82,13 +88,10 @@ def _run_to_summary(run: dict) -> RunSummary:
     )
 
 
-def _check_run_access(run_id: str, group_id: str, is_superadmin: bool = False) -> dict:
+def _check_run_access(run_id: str, current_user: CurrentUser) -> dict:
     """Verifica che la run esista e appartenga al gruppo. Ritorna run dict."""
     run = idb.get_run(run_id)
-    if not run:
-        raise HTTPException(status_code=404, detail=f"Run {run_id} non trovata")
-    if not is_superadmin and run["group_id"] != group_id:
-        raise HTTPException(status_code=403, detail="Accesso negato")
+    assert_group_access(run, current_user, f"Run {run_id}")
     return run
 
 
@@ -100,7 +103,7 @@ def _check_run_access(run_id: str, group_id: str, is_superadmin: bool = False) -
 def list_runs(
     canvas_id: str,
     limit: int = Query(default=50, ge=1, le=200),
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_not_esecutore),
 ):
     """Lista run per canvas, ordinate dalla più recente."""
     try:
@@ -126,14 +129,14 @@ def get_node_data(
     run_id: str,
     node_id: str,
     limit: int = Query(default=100, ge=1, le=5000),
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_not_esecutore),
 ):
     """
     Righe del nodo da intermediate.db.
     Ritorna max `limit` righe (default 100).
     """
     try:
-        _check_run_access(run_id, current_user.group_id, is_superadmin=current_user.role == "superadmin")
+        _check_run_access(run_id, current_user)
         rows = idb.get_node_table_rows(
             run_id=run_id,
             node_id=node_id,
@@ -162,15 +165,15 @@ def get_node_data(
 def compare_runs_l1(
     run_id_a: str = Query(...),
     run_id_b: str = Query(...),
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_not_esecutore),
 ):
     """
     Confronto L1 tra due run — solo hash aggregati e contatori.
     Veloce, non legge le tabelle dinamiche.
     """
     try:
-        run_a = _check_run_access(run_id_a, current_user.group_id, is_superadmin=current_user.role == "superadmin")
-        run_b = _check_run_access(run_id_b, current_user.group_id, is_superadmin=current_user.role == "superadmin")
+        run_a = _check_run_access(run_id_a, current_user)
+        run_b = _check_run_access(run_id_b, current_user)
 
         delta_rows_in = None
         delta_rows_out = None
@@ -213,7 +216,7 @@ def compare_runs_l2(
     run_id_a: str = Query(...),
     run_id_b: str = Query(...),
     node_id: str = Query(...),
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_not_esecutore),
 ):
     """
     Confronto L2 tra due run sullo stesso nodo.
@@ -221,8 +224,8 @@ def compare_runs_l2(
     confrontando tramite _row_hash.
     """
     try:
-        _check_run_access(run_id_a, current_user.group_id, is_superadmin=current_user.role == "superadmin")
-        _check_run_access(run_id_b, current_user.group_id, is_superadmin=current_user.role == "superadmin")
+        _check_run_access(run_id_a, current_user)
+        _check_run_access(run_id_b, current_user)
 
         # Legge gli hash dalle due tabelle dinamiche
         from app.core.intermediate.db import _safe_table_name
@@ -282,7 +285,7 @@ def compare_runs_l2(
 def pin_run(
     run_id: str,
     body: PinRequest,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_not_esecutore),
 ):
     """Pinna o spinna una run — le run pinnate sono escluse dalla retention FIFO."""
     try:
