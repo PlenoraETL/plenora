@@ -89,6 +89,16 @@ def _assert_task_group(task_id: str, current_user) -> None:
     meta = ProjectService().get_project_metadata(project_id)
     if meta:
         assert_group_access(meta, current_user, f"Task '{task_id}'")
+    elif project_id.startswith("exec_"):
+        # Task da eseguibile: il project_id è un eseguibile_id, non un project_id.
+        # Verifica accesso tramite la tabella eseguibili (owned + shared).
+        from app.core.eseguibili import db as eseguibili_db
+        from app.core.eseguibili.router import _check_visible
+        record = eseguibili_db.get_eseguibile(project_id)
+        if record:
+            _check_visible(record, current_user)
+        elif current_user.role not in ("admin", "superadmin"):
+            raise HTTPException(404, "Task non trovato")
     elif current_user.role not in ("admin", "superadmin"):
         raise HTTPException(404, "Task non trovato")
 
