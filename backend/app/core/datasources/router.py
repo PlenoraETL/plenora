@@ -1,5 +1,5 @@
 """
-URBY-ETL — Router Data Source
+PLENORA-ETL — Router Data Source
 
 Endpoints CRUD per la gestione dei Data Source e operazioni sui file.
 
@@ -25,6 +25,7 @@ from app.utils.logger import get_logger
 from app.core.auth.auth import (
     get_current_user,
     require_not_esecutore,
+    require_user_or_above,
     require_admin,
     assert_group_access,
     assert_resource_visible,
@@ -183,24 +184,25 @@ def delete_datasource(ds_id: str, current_user: CurrentUser = Depends(require_ad
 def _find_projects_using_datasource(ds_id: str) -> List[Dict[str, str]]:
     """Cerca progetti il cui canvas contiene un nodo che referenzia ds_id.
 
-    Scansiona la tabella projects e parsa il canvas JSON per trovare
-    nodi con `datasource_id` o `data.datasource_id` uguale a ds_id.
-    Costo: O(N) sui progetti, ma N è piccolo (decine, non milioni).
+    Fix N+1: era 1 + N query (list + get_project per ognuno). Ora fa UNA sola
+    query che carica id, name, project_type, canvas in un solo colpo.
     """
     import app.db.db_service as _db
-    rows = _db.fetchall("SELECT id, name, project_type FROM projects")
+    rows = _db.fetchall("SELECT id, name, project_type, canvas FROM projects")
     using = []
     for row in rows:
         try:
-            full = _db.get_project(row["id"])
-            if not full:
-                continue
-            canvas = full.get("canvas") or {}
+            canvas = row.get("canvas") or {}
+            if isinstance(canvas, str):
+                import json as _json
+                try:
+                    canvas = _json.loads(canvas)
+                except Exception:
+                    continue
             nodes = canvas.get("nodes") or [] if isinstance(canvas, dict) else []
             for n in nodes:
                 if not isinstance(n, dict):
                     continue
-                # Cerca datasource_id sia top-level che dentro data{}
                 top_ds = n.get("datasource_id")
                 nested = n.get("data") or {}
                 nested_ds = nested.get("datasource_id") if isinstance(nested, dict) else None
@@ -212,7 +214,6 @@ def _find_projects_using_datasource(ds_id: str) -> List[Dict[str, str]]:
                     })
                     break
         except Exception:
-            # Su un singolo progetto rotto, continuiamo
             continue
     return using
 
@@ -291,7 +292,7 @@ def upload_file(
     ds_id: str,
     path: str = Query(..., description="Percorso destinazione relativo alla root"),
     file: UploadFile = File(...),
-    current_user: CurrentUser = Depends(require_not_esecutore),
+    current_user: CurrentUser = Depends(require_user_or_above),
 ):
     """
     Carica un file nel Data Source.
@@ -300,6 +301,23 @@ def upload_file(
     assert_group_access(_svc().get_datasource(ds_id), current_user, "Data Source")
     try:
         content = file.file.read()
+        # Difesa malware: il file finisce su SharePoint/SFTP/FS esterno
+        # condiviso e persistente. Block-only mode: qualsiasi formato
+        # business legittimo passa, eseguibili (PE/ELF/Mach-O/shebang)
+        # sono rifiutati con 400.
+        from app.utils.mime_validator import (
+            MimeMismatchError, validate_no_executable,
+        )
+        try:
+            validate_no_executable(
+                content=content, filename=file.filename or path,
+            )
+        except MimeMismatchError as e:
+            logger.warning(
+                f"Upload datasource rifiutato (MIME): ds={ds_id} "
+                f"path={path!r} user={current_user.username}: {e}"
+            )
+            raise HTTPException(status_code=400, detail=str(e))
         _svc().write_file(ds_id, path, content)
         return {"ok": True, "path": path, "size": len(content)}
     except DataSourceError as e:

@@ -14,7 +14,8 @@ Endpoint:
 import os
 import tempfile
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, BackgroundTasks
+from fastapi.responses import FileResponse
 from typing import List, Optional
 
 from app.core.auth.auth import (
@@ -184,9 +185,91 @@ def delete_eseguibile(
 # ANALYZE UPLOAD
 # ──────────────────────────────────────────────────────────────
 
-# Cache in-memory dei file caricati (Phase 1: processo singolo)
-# In futuro: salvarli su disco con TTL, o usare Redis
-_UPLOAD_CACHE: dict = {}
+# ──────────────────────────────────────────────────────────────
+# Upload metadata store (su disco, multi-worker safe)
+# ──────────────────────────────────────────────────────────────
+# Era in-memory (_UPLOAD_CACHE) ma non funzionava con piu worker uvicorn:
+# il dict non era condiviso tra processi → analyze e execute potevano
+# finire su worker diversi e il secondo non trovava l'entry.
+# Soluzione: salva i metadata come file .meta.json accanto al file temp.
+
+def _upload_meta_path(file_id: str) -> Path:
+    """Percorso del file metadata per un upload."""
+    tmp_dir = settings.DATA_DIR / "temp" / "eseguibili_uploads"
+    # Sanitizza file_id per evitare path traversal
+    safe_id = "".join(c for c in file_id if c.isalnum() or c in "-_")
+    return tmp_dir / f"{safe_id}.meta.json"
+
+
+def _save_upload_meta(file_id: str, meta: dict) -> None:
+    """Salva metadata dell'upload su disco (multi-worker safe)."""
+    path = _upload_meta_path(file_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    import json as _json
+    path.write_text(_json.dumps(meta), encoding="utf-8")
+
+
+def _load_upload_meta(file_id: str) -> Optional[dict]:
+    """Carica metadata di un upload da disco. Ritorna None se non esiste."""
+    path = _upload_meta_path(file_id)
+    if not path.exists():
+        return None
+    try:
+        import json as _json
+        return _json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def _delete_upload_meta(file_id: str) -> None:
+    """Elimina il file metadata dopo l'uso."""
+    path = _upload_meta_path(file_id)
+    try:
+        if path.exists():
+            path.unlink()
+    except Exception:
+        pass
+
+
+# ─ Task ownership metadata ──────────────────────────────────────────────
+# Tracking task_id → (eseguibile_id, user_id) per autorizzare il download.
+# Scritto al momento dell'execute, letto al download, cancellato al cleanup.
+def _task_owner_path(task_id: str) -> Path:
+    safe_id = "".join(c for c in task_id if c.isalnum() or c in "-_")
+    return settings.ESEGUIBILI_OUTPUTS_DIR / ".owners" / f"{safe_id}.json"
+
+
+def _save_task_owner(task_id: str, eseguibile_id: str, user_id: str) -> None:
+    from datetime import datetime, timezone
+    import json as _json
+    path = _task_owner_path(task_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(_json.dumps({
+        "task_id": task_id,
+        "eseguibile_id": eseguibile_id,
+        "user_id": user_id,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }), encoding="utf-8")
+
+
+def _load_task_owner(task_id: str) -> Optional[dict]:
+    path = _task_owner_path(task_id)
+    if not path.exists():
+        return None
+    try:
+        import json as _json
+        return _json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def _delete_task_owner(task_id: str) -> None:
+    try:
+        path = _task_owner_path(task_id)
+        if path.exists():
+            path.unlink()
+    except Exception:
+        pass
 
 
 @router.post("/{eseguibile_id}/analyze-upload", response_model=AnalyzeUploadResponse)
@@ -214,8 +297,32 @@ async def analyze_upload(
     )
     try:
         content = await file.read()
+        # Block-only mode: il file viene salvato su disk e parsato dal
+        # workflow eseguibile. Bloccare eseguibili reali e' la difesa
+        # primaria (un binary su disk poi eseguito sarebbe RCE). Allowlist
+        # stretta romperebbe i formati custom degli eseguibili (.dxf, .geojson, ...).
+        from app.utils.mime_validator import (
+            MimeMismatchError, validate_no_executable,
+        )
+        try:
+            validate_no_executable(
+                content=content, filename=file.filename or "upload",
+            )
+        except MimeMismatchError as e:
+            logger.warning(
+                f"Upload eseguibile analyze rifiutato (MIME): "
+                f"eseguibile={eseguibile_id} user={current_user.username}: {e}"
+            )
+            tmp_file.close()
+            try:
+                os.unlink(tmp_file.name)
+            except Exception:
+                pass
+            raise HTTPException(status_code=400, detail=str(e))
         tmp_file.write(content)
+    finally:
         tmp_file.close()
+    try:
         tmp_path = tmp_file.name
 
         try:
@@ -232,13 +339,13 @@ async def analyze_upload(
                 pass
             raise HTTPException(status_code=400, detail=str(e))
 
-        # Cache del path temp per l'execute successivo
-        _UPLOAD_CACHE[result["file_id"]] = {
+        # Salva metadata su disco (multi-worker safe: visibile a tutti i worker uvicorn)
+        _save_upload_meta(result["file_id"], {
             "path": result["file_path"],
             "filename": result["filename"],
             "eseguibile_id": eseguibile_id,
             "user_id": current_user.user_id,
-        }
+        })
 
         # Rimuovi il file_path dal response (non serve al frontend)
         result.pop("file_path", None)
@@ -268,8 +375,8 @@ def execute_eseguibile(
     record = eseguibili_db.get_eseguibile(eseguibile_id)
     _check_visible(record, current_user)
 
-    # Recupera il file dal cache upload
-    upload = _UPLOAD_CACHE.get(payload.file_id)
+    # Recupera metadata upload da disco (multi-worker safe)
+    upload = _load_upload_meta(payload.file_id)
     if not upload:
         raise HTTPException(
             status_code=400,
@@ -277,6 +384,15 @@ def execute_eseguibile(
         )
     if upload["eseguibile_id"] != eseguibile_id:
         raise HTTPException(status_code=400, detail="File upload non corrisponde all'eseguibile")
+    # Authz: il file_id deve appartenere allo stesso utente che l'ha caricato.
+    # Senza questo check, se un attacker conosce un file_id valido di un altro
+    # utente puo' eseguire l'eseguibile con i suoi dati (data exfil / abuso).
+    upload_user = upload.get("user_id")
+    if upload_user and upload_user != current_user.user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="File upload appartiene a un altro utente"
+        )
 
     try:
         result = eseguibili_service.execute(
@@ -286,29 +402,199 @@ def execute_eseguibile(
             output_format=payload.output_format,
             output_name=payload.output_name,
         )
+        # Persist ownership del task per il download endpoint: senza
+        # questo file un attacker che indovina un task_id valido puo'
+        # scaricare l'output di un'esecuzione non sua.
+        try:
+            _task_id = None
+            if isinstance(result, dict):
+                _task_id = result.get("task_id") or (result.get("task") or {}).get("task_id")
+            elif hasattr(result, "task_id"):
+                _task_id = getattr(result, "task_id")
+            if _task_id:
+                _save_task_owner(_task_id, eseguibile_id, current_user.user_id)
+        except Exception as _me:
+            logger.warning(f"save task owner meta failed: {_me}")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"[CRASH] Errore execute eseguibile: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Errore interno del server")
     finally:
-        # Cleanup: elimina file temp e voce cache
+        # Cleanup: elimina file temp + metadata
         try:
             if os.path.exists(upload["path"]):
                 os.unlink(upload["path"])
         except Exception:
             pass
-        _UPLOAD_CACHE.pop(payload.file_id, None)
+        _delete_upload_meta(payload.file_id)
 
     return result
+
+
+# ──────────────────────────────────────────────────────────────
+# DOWNLOAD OUTPUT
+# ──────────────────────────────────────────────────────────────
+
+@router.get("/{eseguibile_id}/download/{task_id}")
+def download_eseguibile_output(
+    eseguibile_id: str,
+    task_id: str,
+    background_tasks: BackgroundTasks,
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Scarica il file di output prodotto da un'esecuzione dell'eseguibile.
+
+    Il file vive in ESEGUIBILI_OUTPUTS_DIR/{task_id}/ ed e' stato creato dal task
+    Celery (execute_enrichment_task con is_eseguibile=True). Dopo l'invio il file
+    viene rimosso. Un celery beat periodico pulisce eventuali file orfani (> 2h).
+    """
+    record = eseguibili_db.get_eseguibile(eseguibile_id)
+    _check_visible(record, current_user)
+
+    # Sanitizza task_id per evitare path traversal
+    safe_task_id = "".join(c for c in task_id if c.isalnum() or c in "-_")
+    if not safe_task_id or safe_task_id != task_id:
+        raise HTTPException(status_code=400, detail="task_id non valido")
+
+    # Authz: verifica che il task_id sia stato effettivamente generato da
+    # QUESTO eseguibile e da QUESTO utente. Senza questo check, chiunque
+    # veda un eseguibile condiviso e conosca/indovini un task_id valido
+    # puo' scaricare l'output di un'esecuzione altrui.
+    owner_meta = _load_task_owner(safe_task_id)
+    if owner_meta is None:
+        # Metadata assente: task vecchio o cleanup gia' fatto.
+        # Fail-closed: non consentire l'accesso se non siamo sicuri.
+        if current_user.role != "superadmin":
+            raise HTTPException(
+                status_code=404,
+                detail="Output non trovato o scaduto (ownership metadata assente)"
+            )
+    else:
+        if owner_meta.get("eseguibile_id") != eseguibile_id:
+            raise HTTPException(status_code=404, detail="Task non appartiene a questo eseguibile")
+        if owner_meta.get("user_id") != current_user.user_id and current_user.role != "superadmin":
+            raise HTTPException(
+                status_code=403,
+                detail="Output non accessibile (task eseguito da un altro utente)"
+            )
+
+    # Lookup dell'output su object storage (S3 via cloud_backends).
+    # Multi-host safe: backend e worker possono essere su macchine diverse.
+    from app.core.eseguibili import storage as _eseg_storage
+    try:
+        keys = _eseg_storage.find_keys(safe_task_id)
+    except Exception as e:
+        logger.warning(f"Lookup storage eseguibili fallito: {e}")
+        keys = []
+
+    if not keys:
+        raise HTTPException(
+            status_code=404,
+            detail="Output non trovato. Il file potrebbe essere scaduto o il task non ancora completato.",
+        )
+
+    # Tipicamente 1 file per task (convention).
+    key = keys[0]
+    filename = key.rsplit("/", 1)[-1]
+
+    try:
+        stream = _eseg_storage.open_stream(key)
+    except Exception as e:
+        logger.error(f"[CRASH] open_stream eseguibile {key}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Errore apertura stream output")
+
+    def _cleanup_after_send():
+        try:
+            _eseg_storage.delete_by_task(safe_task_id)
+        except Exception as e:
+            logger.warning(f"Cleanup storage post-download fallito per {safe_task_id}: {e}")
+        try:
+            _delete_task_owner(safe_task_id)
+        except Exception:
+            pass
+
+    background_tasks.add_task(_cleanup_after_send)
+
+    size = stream.get("size") or 0
+    headers = {
+        "Cache-Control": "no-store, no-cache, must-revalidate",
+        "Content-Disposition": f'attachment; filename="{filename}"',
+    }
+    if size:
+        headers["Content-Length"] = str(size)
+
+    from fastapi.responses import StreamingResponse
+    return StreamingResponse(
+        stream["body"],
+        media_type="application/octet-stream",
+        headers=headers,
+    )
 
 
 # ──────────────────────────────────────────────────────────────
 # HELPER
 # ──────────────────────────────────────────────────────────────
 
+def _detect_file_based_output(canvas: dict) -> tuple:
+    """Ispeziona il canvas per determinare se il flusso finisce con un
+    file-processor (connection_type == `rest_file`).
+
+    Strategia:
+    1. Prova il pattern canonico: trova il `result` node e guarda il suo
+       predecessore (via edge in ingresso).
+    2. Fallback: scan dei nodi api_enrich che non hanno outgoing edges
+       (sink del DAG) → primo match.
+
+    Ritorna `(is_file_based: bool, ext: Optional[str])` dove `ext` è
+    l'estensione SENZA il punto (es. `"zip"`), presa da
+    `node.response.output_extension` o `node.data.response.output_extension`.
+    Default `"zip"` se il nodo è file-based ma non specifica un'estensione.
+    """
+    nodes = canvas.get("nodes") or []
+    edges = canvas.get("edges") or []
+
+    candidate = None
+    result_node = next((n for n in nodes if n.get("type") == "result"), None)
+    if result_node:
+        in_edge = next(
+            (e for e in edges if e.get("target") == result_node.get("id")),
+            None,
+        )
+        if in_edge:
+            src_id = in_edge.get("source")
+            candidate = next((n for n in nodes if n.get("id") == src_id), None)
+
+    if not candidate:
+        # Fallback: api_enrich sink (nessun outgoing edge)
+        has_outgoing = {e.get("source") for e in edges}
+        sinks = [
+            n for n in nodes
+            if n.get("type") == "api_enrich" and n.get("id") not in has_outgoing
+        ]
+        candidate = sinks[0] if sinks else None
+
+    if not candidate or candidate.get("type") != "api_enrich":
+        return False, None
+
+    data = candidate.get("data") or {}
+    ctype = candidate.get("connection_type") or data.get("connection_type")
+    if ctype != "rest_file":
+        return False, None
+
+    response = candidate.get("response") or data.get("response") or {}
+    raw_ext = response.get("output_extension") if isinstance(response, dict) else None
+    if isinstance(raw_ext, str) and raw_ext.strip():
+        ext = raw_ext.lstrip(".").strip()
+    else:
+        ext = "zip"
+    return True, ext
+
+
 def _to_details(record: dict) -> dict:
     """Converte un record DB in EseguibileDetails response."""
+    canvas = record.get("canvas") or {}
+    is_file_based, inferred_ext = _detect_file_based_output(canvas)
     return {
         "id": record["id"],
         "name": record["name"],
@@ -323,4 +609,6 @@ def _to_details(record: dict) -> dict:
         "created_at": record["created_at"],
         "updated_at": record["updated_at"],
         "can_edit": record.get("can_edit"),
+        "output_is_file_based": is_file_based,
+        "inferred_output_extension": inferred_ext,
     }

@@ -1,5 +1,5 @@
 """
-URBY-ETL — Router per gestione allowed_groups (cross-group sharing).
+PLENORA-ETL — Router per gestione allowed_groups (cross-group sharing).
 
 Espone endpoint REST per leggere/modificare le righe di sharing delle
 risorse condivisibili. **SOLO superadmin** può modificare gli share:

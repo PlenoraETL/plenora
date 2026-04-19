@@ -13,7 +13,7 @@ Endpoints:
 - GET  /api/tasks/{id}/download          → download risultato task
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Query
 from fastapi.responses import FileResponse
 from pathlib import Path
 from pydantic import BaseModel, field_validator
@@ -135,6 +135,7 @@ def execute_project_pipeline(project_id: str, request: ExecuteRequest = None, cu
         task_info = task_service.create_pipeline_task(
             project_id=project_id,
             force_recalculate=force_recalculate,
+            user_id=current_user.user_id,  # N9: re-check permessi al pickup
         )
         result = task_info.to_dict()
         result["async"] = True  # segnala a useExecution di avviare il polling
@@ -145,16 +146,27 @@ def execute_project_pipeline(project_id: str, request: ExecuteRequest = None, cu
 
 
 @pipeline_router.get("/{project_id}/preview")
-def preview_project(project_id: str, limit: int = 100, current_user: CurrentUser = Depends(require_not_esecutore)):
+def preview_project(
+    project_id: str,
+    limit: int = Query(100, ge=1, le=10000, description="Numero righe preview (cap 10k per evitare OOM worker)"),
+    current_user: CurrentUser = Depends(require_not_esecutore),
+):
     """Avvia preview come task Celery asincrono.
 
     SECURITY: assert_group_access per cross-tenant isolation.
+    N5 (2026-04-17): `limit` ha cap 10k per prevenire DoS via OOM worker.
+    Un attacker con `?limit=999999999` senza cap materializzava milioni di
+    righe in RAM del worker Celery -> crash + rifiuto servizio altri job.
     """
     require_service(_orchestrator, "OrchestratorService")
     _assert_project_group(project_id, current_user)
     try:
         from app.services.task_service import task_service
-        task_info = task_service.create_preview_task(project_id=project_id, limit=limit)
+        task_info = task_service.create_preview_task(
+            project_id=project_id,
+            limit=limit,
+            user_id=current_user.user_id,  # N9
+        )
         result = task_info.to_dict()
         result["async"] = True
         return result
@@ -180,14 +192,16 @@ def download_project_result(project_id: str, file: Optional[str] = None, current
     try:
         results_dir = settings.RESULTS_DIR / project_id
 
-        if not results_dir.exists():
-            raise HTTPException(404, f"Nessun risultato trovato per progetto '{project_id}'")
-
         if file:
+            if not results_dir.exists():
+                raise HTTPException(404, f"File '{file}' non trovato per progetto '{project_id}'")
+            from app.shared.path_policy import assert_path_within
             safe_name = Path(file).name
-            target = (results_dir / safe_name).resolve()
-            # Protezione path traversal: verifica che il file sia dentro results_dir
-            if not str(target).startswith(str(results_dir.resolve())):
+            try:
+                target = assert_path_within(
+                    results_dir / safe_name, [results_dir]
+                )
+            except ValueError:
                 raise HTTPException(403, "Accesso negato")
             if not target.exists():
                 raise HTTPException(404, f"File '{safe_name}' non trovato per progetto '{project_id}'")
@@ -197,15 +211,41 @@ def download_project_result(project_id: str, file: Optional[str] = None, current
                 media_type=_mime_for_filename(safe_name),
             )
 
-        files = list(results_dir.glob("*.*"))
-        if not files:
-            raise HTTPException(404, "Nessun file risultato trovato")
+        # Fast-path legacy: se il filesystem ha risultati (progetti pre-R#1
+        # mai migrati al result store moderno — DB BYTEA o S3), servi
+        # il file più recente senza toccare il result store.
+        if results_dir.exists():
+            files = list(results_dir.glob("*.*"))
+            if files:
+                latest_file = max(files, key=lambda x: x.stat().st_mtime)
+                return FileResponse(
+                    path=str(latest_file),
+                    filename=latest_file.name,
+                    media_type=_mime_for_filename(latest_file.name),
+                )
 
-        latest_file = max(files, key=lambda x: x.stat().st_mtime)
-        return FileResponse(
-            path=str(latest_file),
-            filename=latest_file.name,
-            media_type=_mime_for_filename(latest_file.name),
+        # Fallback post-R#1: i result blob vivono nel DB, il file temp è
+        # già stato cancellato da `save_result_blob`. Recupera l'ultimo
+        # result dal service DB e ritorna i bytes inline.
+        from app.db import results_db_service
+        from fastapi.responses import Response
+
+        latest = results_db_service.get_latest_result(project_id)
+        if not latest:
+            raise HTTPException(404, f"Nessun risultato trovato per progetto '{project_id}'")
+
+        blob = results_db_service.get_result_data(latest["id"])
+        if blob is None:
+            raise HTTPException(404, f"Blob risultato non disponibile per progetto '{project_id}'")
+
+        filename = latest.get("filename") or f"{project_id}.{latest.get('format', 'csv')}"
+        return Response(
+            content=blob,
+            media_type=_mime_for_filename(filename),
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Length": str(len(blob)),
+            },
         )
     except HTTPException:
         raise
@@ -252,8 +292,30 @@ class TaskStatusResponse(BaseModel):
 
 @tasks_router.post("", response_model=TaskStatusResponse)
 def create_task(request: CreateTaskRequest, current_user: CurrentUser = Depends(require_not_esecutore)):
-    """Crea e avvia un nuovo task asincrono."""
+    """Crea e avvia un nuovo task asincrono.
+
+    SECURITY: verifica che `request.project_id` appartenga al gruppo
+    dell'utente PRIMA di creare qualsiasi task. Senza questo check, un
+    utente autenticato puo' accodare task su progetti di altri tenant
+    conoscendone l'id (cross-tenant data exfil).
+    """
     from app.services.task_service import task_service
+    from app.shared.authz_helpers import (
+        assert_project_access, assert_canvas_resources_access,
+    )
+
+    # Authz guard cross-tenant su project_id
+    assert_project_access(request.project_id, current_user)
+    # Authz guard sui nodi del canvas: blocca canvas costruiti ad arte
+    # che referenziano file_source/project_source di altri tenant.
+    # Validare qui significa che il task Celery riceve un canvas gia'
+    # verificato lato HTTP.
+    assert_canvas_resources_access(
+        request.canvas if isinstance(request.canvas, dict) else (
+            request.canvas.model_dump() if hasattr(request.canvas, "model_dump") else {}
+        ),
+        current_user,
+    )
 
     try:
         if request.task_type == TaskType.ENRICHMENT:
@@ -261,18 +323,23 @@ def create_task(request: CreateTaskRequest, current_user: CurrentUser = Depends(
                 project_id=request.project_id,
                 canvas=request.canvas,
                 output_format=request.output_format,
-                force_recalculate=request.force_recalculate
+                force_recalculate=request.force_recalculate,
+                user_id=current_user.user_id,  # N9
             )
         elif request.task_type == TaskType.CARICA:
             if not request.carica_node_data:
                 raise HTTPException(status_code=400, detail="carica_node_data è obbligatorio per task CARICA")
+            # N11: arricchisci canvas_types da project columns_metadata
+            from app.shared.canvas_types_enricher import enrich_canvas_types_from_metadata
+            enrich_canvas_types_from_metadata(request.carica_node_data, request.project_id)
             task_info = task_service.create_carica_task(
                 project_id=request.project_id,
                 canvas=request.canvas,
                 carica_node_data=request.carica_node_data,
                 output_format=request.output_format,
                 force_recalculate=request.force_recalculate,
-                triggered_by=request.triggered_by
+                triggered_by=request.triggered_by,
+                user_id=current_user.user_id,  # N9
             )
         else:
             raise HTTPException(status_code=400, detail=f"Tipo task '{request.task_type}' non supportato")
@@ -384,15 +451,17 @@ def cleanup_task_completely(task_id: str, current_user: CurrentUser = Depends(ge
     """
     from app.services.task_service import task_service
     import app.db.results_db_service as _results_db
-    import shutil
 
-    # 1. Estrai project_id dal task (se presente)
+    # 1. Estrai project_id + result_id dal task (se presenti)
     project_id = None
+    task_result_payload: dict = {}
     try:
         task_info = task_service.get_task_status(task_id)
         project_id = task_info.project_id
-        if not project_id and task_info.result:
-            project_id = task_info.result.get("project_id")
+        if task_info.result:
+            task_result_payload = task_info.result or {}
+            if not project_id:
+                project_id = task_result_payload.get("project_id")
     except Exception as e:
         logger.warning(f"cleanup: impossibile leggere task_info: {e}")
 
@@ -417,31 +486,66 @@ def cleanup_task_completely(task_id: str, current_user: CurrentUser = Depends(ge
     else:
         assert_group_access(_meta, current_user, f"Task '{task_id}'")
 
-    # 2. Elimina i risultati salvati (results.db) per questo project_id
-    if project_id:
-        try:
-            n = _results_db.delete_results_for_project(project_id)
-            if n:
-                logger.info(f"cleanup: eliminate {n} righe da results.db per {project_id}")
-        except Exception as e:
-            logger.warning(f"cleanup: errore delete_results_for_project: {e}")
+    # ──────────────────────────────────────────────────────────────
+    # Cleanup scoped AL SINGOLO task_id (NON all'intero progetto!)
+    # Rimuoviamo:
+    #   - il record `result` collegato a questo task_id
+    #   - le righe logs / log_runs con run_id == task_id
+    #   - il file output specifico (se registrato nel payload)
+    # NON tocchiamo `RESULTS_DIR/{project_id}` ne' altri risultati del
+    # progetto: un cleanup wide sarebbe data-loss grave (un click su
+    # "cleanup task" distruggerebbe lo storico dell'intero progetto).
+    # ──────────────────────────────────────────────────────────────
 
-        # 3. Elimina file su disco eventualmente persistenti
-        try:
-            results_dir = settings.RESULTS_DIR / project_id
-            if results_dir.exists():
-                shutil.rmtree(results_dir, ignore_errors=True)
-        except Exception as e:
-            logger.warning(f"cleanup: errore rimozione results_dir: {e}")
+    # 3. Result row: solo il record di questo task, non tutti del progetto
+    try:
+        result_id = task_result_payload.get("result_id")
+        if result_id:
+            deleted = _results_db.delete_result(result_id)
+            if deleted:
+                logger.info(f"cleanup: result_id '{result_id}' eliminato (task {task_id})")
+        else:
+            # Nessun result_id nel payload: non cancelliamo nulla da results
+            # per non rischiare di toccare record di altri task.
+            logger.debug(f"cleanup: task {task_id} senza result_id nel payload, skip results")
+    except Exception as e:
+        logger.warning(f"cleanup: errore delete_result: {e}")
 
-        # 4. Elimina log entries con questo project_id (PostgreSQL)
-        try:
-            from app.db.pg_connection import execute as _pg_exec
-            _pg_exec("DELETE FROM logs WHERE project_id = ?", (project_id,))
-        except Exception as e:
-            logger.warning(f"cleanup: errore delete logs: {e}")
+    # 4. File output specifico del task (se persistito su disco)
+    # Il task Celery salva il nome file in `output_file`. Proviamo a
+    # rimuoverlo se presente dentro RESULTS_DIR/{project_id}/ — ma NON
+    # rimuoviamo l'intera directory, che e' condivisa tra task.
+    try:
+        output_file = task_result_payload.get("output_file")
+        if output_file:
+            from pathlib import Path as _P
+            candidate = settings.RESULTS_DIR / project_id / output_file
+            root = (settings.RESULTS_DIR / project_id).resolve()
+            try:
+                resolved = candidate.resolve()
+                resolved.relative_to(root)
+                if resolved.is_file():
+                    resolved.unlink()
+                    logger.info(f"cleanup: file output rimosso: {resolved.name}")
+            except ValueError:
+                logger.warning(f"cleanup: output_file fuori da RESULTS_DIR, skip")
+    except Exception as e:
+        logger.warning(f"cleanup: errore rimozione output_file: {e}")
 
-    # 5. Forget del result Celery (libera Redis)
+    # 5. Logs scoped al run_id (per convenzione coincide con task_id)
+    #    + log_runs: cleanup esplicito per non lasciare orfani.
+    try:
+        from app.db.pg_connection import execute as _pg_exec
+        _pg_exec("DELETE FROM logs WHERE run_id = ?", (task_id,))
+    except Exception as e:
+        logger.warning(f"cleanup: errore delete logs WHERE run_id: {e}")
+    try:
+        from app.db.pg_connection import execute as _pg_exec
+        _pg_exec("DELETE FROM log_runs WHERE run_id = ?", (task_id,))
+    except Exception as e:
+        logger.warning(f"cleanup: errore delete log_runs: {e}")
+
+    # 6. Forget del result Celery (libera Redis)
     try:
         from celery.result import AsyncResult
         ar = AsyncResult(task_id, app=task_service.app)
@@ -453,40 +557,169 @@ def cleanup_task_completely(task_id: str, current_user: CurrentUser = Depends(ge
 
 
 @tasks_router.get("/{task_id}/download")
-def download_task_result(task_id: str, current_user: CurrentUser = Depends(get_current_user)):
-    """Scarica il file risultato di un task dal DB SQLite.
+def download_task_result(
+    task_id: str,
+    background_tasks: BackgroundTasks,
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Scarica il file risultato di un task.
+
+    Per i task degli eseguibili (is_eseguibile=True) l'output vive su
+    object storage (eseguibili-outputs/{task_id}/) — streamming S3 + cleanup
+    post-send via background_task. Per tutti gli altri task il reader
+    `get_result_data(result_id)` risolve lo storage trasparente:
+      - DB BYTEA se il result era < RESULT_S3_THRESHOLD_BYTES
+      - S3 object se sopra (via storage_key della row results)
+    In entrambi i casi il payload viene streammato al client.
 
     SECURITY: verifica ownership via project_id del task.
     """
+    import time as _time
+    _t_start = _time.perf_counter()
+
     _assert_task_group(task_id, current_user)
     from app.services.task_service import task_service
-    from fastapi.responses import Response as _Response
+    from fastapi.responses import (
+        Response as _Response,
+        FileResponse,
+        StreamingResponse as _StreamingResponse,
+    )
     import app.db.db_service as _db
+    from app.config import settings as _settings
 
     try:
         task_info = task_service.get_task_status(task_id)
+        _t_celery = _time.perf_counter()
 
         if task_info.status.value != "success":
             raise HTTPException(status_code=400, detail=f"Task non completato (stato: {task_info.status.value})")
 
+        # ── FAST-PATH ESEGUIBILE: streaming da object storage (S3) ──
+        # Sanitizza task_id contro path traversal / injection in prefix.
+        safe_task_id = "".join(c for c in task_id if c.isalnum() or c in "-_")
+        if safe_task_id == task_id:
+            from app.core.eseguibili import storage as _eseg_storage
+            try:
+                _keys = _eseg_storage.find_keys(safe_task_id)
+            except Exception as _e:
+                logger.warning(f"lookup eseguibili storage fallito: {_e}")
+                _keys = []
+
+            if _keys:
+                # Tipicamente 1 file per task. Se multipli, primo e' OK
+                # (convention: un solo output per task eseguibile).
+                _key = _keys[0]
+                _filename = _key.rsplit("/", 1)[-1]
+                try:
+                    _stream = _eseg_storage.open_stream(_key)
+                except Exception as _e:
+                    logger.error(f"[CRASH] open_stream eseguibile {_key}: {_e}")
+                    raise HTTPException(status_code=500, detail="Errore apertura stream output")
+
+                def _cleanup_after_send(_tid=safe_task_id):
+                    try:
+                        _eseg_storage.delete_by_task(_tid)
+                    except Exception as _e:
+                        logger.warning(f"Cleanup post-download S3 fallito per {_tid}: {_e}")
+
+                background_tasks.add_task(_cleanup_after_send)
+                _size = _stream.get("size") or 0
+                logger.info(
+                    f"download task {task_id}: fast-path eseguibile (S3 stream) "
+                    f"celery={_t_celery - _t_start:.3f}s "
+                    f"size={_size / (1024*1024):.2f}MB "
+                    f"key={_key}"
+                )
+                _headers = {
+                    "Cache-Control": "no-store, no-cache, must-revalidate",
+                    "Content-Disposition": f'attachment; filename="{_filename}"',
+                }
+                if _size:
+                    _headers["Content-Length"] = str(_size)
+                return _StreamingResponse(
+                    _stream["body"],
+                    media_type=_mime_for_filename(_filename),
+                    headers=_headers,
+                )
+
+        # ── FALLBACK: lettura dal result persistito (DB BYTEA o S3) ──
+        # Ogni task_id ha il proprio result_id nel payload Celery. Usiamo
+        # quello per leggere ESATTAMENTE il result generato da questo task,
+        # NON `get_latest_result(project_id)`: due task sullo stesso
+        # project condividono il "latest" e si scambierebbero l'output
+        # in base a chi completa per ultimo (race cross-task).
         result = task_info.result or {}
         project_id = result.get("project_id")
         if not project_id:
             raise HTTPException(status_code=404, detail="project_id non trovato nel risultato del task")
 
-        # Leggi dal DB
-        row = _db.get_latest_result(project_id)
-        if not row:
-            raise HTTPException(status_code=404, detail="Nessun risultato trovato nel DB per questo progetto")
+        result_id = result.get("result_id")
+        if not result_id:
+            # Senza result_id il task non e' downloadabile: il payload
+            # Celery e' incompleto (probabile TTL scaduto o task molto
+            # vecchio). 410 Gone esplicito invece di 404 ambiguo.
+            logger.warning(
+                f"download task {task_id}: result_id assente nel payload, "
+                f"restituisco 410 Gone"
+            )
+            raise HTTPException(
+                status_code=410,
+                detail=(
+                    "Il risultato di questo task non e' piu' disponibile. "
+                    "Rilancia la pipeline per generare un nuovo output."
+                ),
+            )
 
-        data = _db.get_result_data(row["id"])
-        if not data:
-            raise HTTPException(status_code=404, detail="Dati risultato non trovati")
+        from app.core.artifacts import ArtifactResolver, ArtifactResolutionError
+        try:
+            blob = ArtifactResolver().fetch_run_blob(
+                result_id=result_id,
+                expected_project_id=project_id,
+            )
+        except ArtifactResolutionError as e:
+            logger.error(
+                f"download task {task_id}: risoluzione blob fallita: {e}"
+            )
+            raise HTTPException(
+                status_code=404,
+                detail="Risultato del task non trovato (mismatch project_id)",
+            )
 
-        return _Response(
-            content=data,
-            media_type=_mime_for_filename(row["filename"]),
-            headers={"Content-Disposition": f'attachment; filename="{row["filename"]}"'},
+        _t_blob = _time.perf_counter()
+
+        # Sanitizza filename per prevenire header injection (CRLF)
+        safe_filename = blob.filename.replace("\r", "").replace("\n", "").replace('"', "'")
+
+        # StreamingResponse + chunked yield: evita di mantenere il
+        # blob intero in memoria nel buffer di Starlette/uvicorn e
+        # abbassa il time-to-first-byte percepito dal client. Per blob
+        # grandi (50+ MB di output Excel/parquet) il pattern
+        # `Response(content=blob.data)` faceva una copia completa del
+        # buffer prima di iniziare il send, raddoppiando l'occupazione
+        # di RAM e ritardando l'inizio del download.
+        _CHUNK = 1 << 20  # 1 MB
+        data = blob.data
+        total = len(data)
+
+        def _stream_chunks():
+            for i in range(0, total, _CHUNK):
+                yield data[i:i + _CHUNK]
+
+        _t_done = _time.perf_counter()
+        logger.info(
+            f"download task {task_id}: timing celery={_t_celery - _t_start:.3f}s "
+            f"blob_fetch={_t_blob - _t_celery:.3f}s "
+            f"prep={_t_done - _t_blob:.3f}s "
+            f"size={total / (1024*1024):.2f}MB filename={safe_filename}"
+        )
+
+        return _StreamingResponse(
+            _stream_chunks(),
+            media_type=_mime_for_filename(blob.filename),
+            headers={
+                "Content-Disposition": f'attachment; filename="{safe_filename}"',
+                "Content-Length": str(total),
+            },
         )
 
     except HTTPException:

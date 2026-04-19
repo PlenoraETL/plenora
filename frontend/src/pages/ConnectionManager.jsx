@@ -1,408 +1,541 @@
-import React, { useState, useEffect } from 'react';
+/**
+ * ConnectionManager.jsx — Gestione connessioni database e ArcGIS
+ * Redesign Plenora: sidebar layout, hex bg, nuovo design system
+ * Route: /connections
+ */
+import React, { useState, useEffect, useRef } from 'react';
+import { useToast } from '../hooks/useToast';
 import { useNavigate } from 'react-router-dom';
-import { 
-  listConnections, 
-  createConnection, 
-  updateConnection, 
-  deleteConnection,
-  testConnection 
-} from '../api/client';
+import { useAuth } from '../context/AuthContext';
+import {
+  listConnections, createConnection, updateConnection,
+  deleteConnection, testConnection
+} from '../api';
+import {
+  listFeatureConnections, createFeatureConnection,
+  updateFeatureConnection, deleteFeatureConnection, testFeatureConnection
+} from '../api/features';
+import { useHexCanvas } from '../utils/hexCanvas';
+import AllowedGroupsSelector from '../components/shared/AllowedGroupsSelector';
+import AppSidebar from '../components/AppSidebar';
+import ModalWrapper, { ModalButton } from '../components/common/ModalWrapper';
+import { can, role } from '../utils/permissions';
 import '../styles/ConnectionManager.css';
 
+const ALL_TYPES = [
+  { value: 'postgres', label: '🐘 PostgreSQL',   color: '#4B8BFF', colorRgb: '75,139,255',  defaultPort: 5432, defaultSchema: 'public', category: 'database' },
+  { value: 'mssql',    label: '🔷 MS SQL Server', color: '#EF4444', colorRgb: '239,68,68',   defaultPort: 1433, defaultSchema: 'dbo',    category: 'database' },
+  { value: 'mysql',    label: '🐬 MySQL',         color: '#4BA3D8', colorRgb: '75,163,216',  defaultPort: 3306, defaultSchema: '',       category: 'database' },
+  { value: 'oracle',   label: '🔴 Oracle',        color: '#F97316', colorRgb: '249,115,22',  defaultPort: 1521, defaultSchema: '',       category: 'database' },
+  { value: 'sqlite',   label: '📁 SQLite',        color: '#6B7280', colorRgb: '107,114,128', defaultPort: 0,    defaultSchema: '',       category: 'database' },
+  { value: 'arcgis',   label: '🌐 ArcGIS Server', color: '#F5A623', colorRgb: '245,166,35',  defaultPort: 0,    defaultSchema: '',       category: 'arcgis'   },
+];
+
+// ── Theme toggle ─────────────────────────────────────────────────────────
+function ThemeToggle() {
+  const [theme, setTheme] = useState(() => {
+    const saved = localStorage.getItem('plenora-theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', saved);
+    return saved;
+  });
+  const toggle = (t) => {
+    document.documentElement.setAttribute('data-theme', t);
+    localStorage.setItem('plenora-theme', t);
+    setTheme(t);
+  };
+  return (
+    <div className="cm__theme-toggle">
+      <div className={`cm__theme-opt ${theme === 'dark'  ? 'cm__theme-opt--on' : ''}`} onClick={() => toggle('dark')}>🌙 Scuro</div>
+      <div className={`cm__theme-opt ${theme === 'light' ? 'cm__theme-opt--on' : ''}`} onClick={() => toggle('light')}>☀️ Chiaro</div>
+    </div>
+  );
+}
+
+// ── Main component ───────────────────────────────────────────────────────
 function ConnectionManager() {
+  const toast    = useToast();
   const navigate = useNavigate();
-  const [connections, setConnections] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
+  const { user, logout } = useAuth();
+  const canvasRef = useRef(null);
+  useHexCanvas(canvasRef);
+
+  const [allConnections,    setAllConnections]    = useState([]);
+  const [loading,           setLoading]           = useState(true);
+  const [showModal,         setShowModal]         = useState(false);
   const [editingConnection, setEditingConnection] = useState(null);
-  const [testingConnection, setTestingConnection] = useState(null);
-  const [testResults, setTestResults] = useState({});
-  
+  const [editingCategory,   setEditingCategory]   = useState(null);
+  const [testingId,         setTestingId]         = useState(null);
+  const [saving,            setSaving]            = useState(false);
+  const [testResults,       setTestResults]       = useState({});
+  const [activeTab,         setActiveTab]         = useState('all');
+  const [sharingConnection, setSharingConnection] = useState(null);  // conn in sharing modal (solo super)
+
+  const isSuperadmin    = role.isSuperadmin(user);
+  const canCreateConnection = can.createConnection(user);
+
   const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-    type: 'postgres',
-    host: '',
-    port: 5432,
-    database: '',
-    username: '',
-    password: ''
+    name: '', description: '', type: 'postgres',
+    host: '', port: 5432, database: '', db_schema: 'public',
+    username: '', password: '',
+    server_url: '', auth_type: 'public', client_id: '', client_secret: '',
   });
 
-  const dbTypes = [
-    { value: 'postgres', label: '🐘 PostgreSQL', color: '#336791' },
-    { value: 'mssql', label: '🔷 MS SQL Server', color: '#CC2927' },
-    { value: 'mysql', label: '🐬 MySQL', color: '#4479A1' },
-    { value: 'oracle', label: '🔴 Oracle', color: '#F80000' },
-    { value: 'sqlite', label: '📁 SQLite', color: '#003B57' }
-  ];
-
-  useEffect(() => {
-    loadConnections();
-  }, []);
+  useEffect(() => { loadConnections(); }, []);
 
   const loadConnections = async () => {
     try {
       setLoading(true);
-      const data = await listConnections();
-      setConnections(data.connections || []);
-    } catch (error) {
-      console.error('Errore caricamento connessioni:', error);
-      alert('Errore caricamento connessioni');
+      const [dbData, arcData] = await Promise.all([
+        listConnections().catch(() => ({ connections: [] })),
+        listFeatureConnections().catch(() => ({ connections: [] })),
+      ]);
+      const dbConns  = (dbData.connections || []).map(c => ({ ...c, _category: 'database', _typeInfo: ALL_TYPES.find(t => t.value === c.type) || ALL_TYPES[0] }));
+      const arcConns = (arcData.connections || arcData || []).map(c => ({ ...c, type: 'arcgis', _category: 'arcgis', _typeInfo: ALL_TYPES.find(t => t.value === 'arcgis') }));
+      setAllConnections([...dbConns, ...arcConns]);
+    } catch (err) {
+      console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleOpenModal = (connection = null) => {
-    if (connection) {
-      setEditingConnection(connection);
-      setFormData({
-        name: connection.name,
-        description: connection.description || '',
-        type: connection.type,
-        host: connection.host,
-        port: connection.port,
-        database: connection.database,
-        username: connection.username,
-        password: connection.password || ''
-      });
+  const handleOpenModal = (conn = null) => {
+    if (conn) {
+      setEditingConnection(conn);
+      setEditingCategory(conn._category);
+      if (conn._category === 'arcgis') {
+        setFormData({ name: conn.name || '', description: '', type: 'arcgis', host: '', port: 0, database: '', db_schema: '', username: conn.username || '', password: conn.password || '', server_url: conn.server_url || '', auth_type: conn.auth_type || 'public', client_id: conn.client_id || '', client_secret: conn.client_secret || '' });
+      } else {
+        setFormData({ name: conn.name || '', description: conn.description || '', type: conn.type || 'postgres', host: conn.host || '', port: conn.port || 5432, database: conn.database || '', db_schema: conn.db_schema || '', username: conn.username || '', password: conn.password || '', server_url: '', auth_type: 'public', client_id: '', client_secret: '' });
+      }
     } else {
-      setEditingConnection(null);
-      setFormData({
-        name: '',
-        description: '',
-        type: 'postgres',
-        host: '',
-        port: 5432,
-        database: '',
-        username: '',
-        password: ''
-      });
+      setEditingConnection(null); setEditingCategory(null);
+      setFormData({ name: '', description: '', type: 'postgres', host: '', port: 5432, database: '', db_schema: 'public', username: '', password: '', server_url: '', auth_type: 'public', client_id: '', client_secret: '' });
     }
     setShowModal(true);
   };
 
-  const handleCloseModal = () => {
-    setShowModal(false);
-    setEditingConnection(null);
+  const handleCloseModal = () => { setShowModal(false); setEditingConnection(null); setEditingCategory(null); };
+
+  const handleTypeChange = (type) => {
+    const info = ALL_TYPES.find(t => t.value === type);
+    setFormData(prev => ({ ...prev, type, port: info?.defaultPort || 0, db_schema: info?.defaultSchema || '' }));
   };
 
   const handleSubmit = async () => {
-    if (!formData.name.trim() || !formData.host.trim() || !formData.database.trim()) {
-      alert('Compila i campi obbligatori: nome, host, database');
-      return;
-    }
-
+    if (saving) return;
+    const typeInfo = ALL_TYPES.find(t => t.value === formData.type);
+    const isArcgis = typeInfo?.category === 'arcgis';
+    if (!formData.name.trim()) { toast.warning('Il nome è obbligatorio'); return; }
+    if (isArcgis && !formData.server_url.trim()) { toast.warning("URL server obbligatorio"); return; }
+    if (!isArcgis && (!formData.host.trim() || !formData.database.trim())) { toast.warning('Host e database obbligatori'); return; }
+    setSaving(true);
     try {
-      if (editingConnection) {
-        await updateConnection(editingConnection.id, formData);
+      if (isArcgis) {
+        const p = { name: formData.name, server_url: formData.server_url, auth_type: formData.auth_type, username: formData.username, password: formData.password, client_id: formData.client_id, client_secret: formData.client_secret };
+        editingConnection && editingCategory === 'arcgis' ? await updateFeatureConnection(editingConnection.id, p) : await createFeatureConnection(p);
       } else {
-        await createConnection(formData);
+        const p = { name: formData.name, description: formData.description, type: formData.type, host: formData.host, port: formData.port, database: formData.database, db_schema: formData.db_schema, username: formData.username, password: formData.password };
+        editingConnection && editingCategory === 'database' ? await updateConnection(editingConnection.id, p) : await createConnection(p);
       }
-      setShowModal(false);
-      setEditingConnection(null);
-      loadConnections();
-    } catch (error) {
-      console.error('Errore salvataggio connessione:', error);
-      alert('Errore salvataggio connessione');
-    }
+      handleCloseModal(); loadConnections();
+    } catch (err) {
+      toast.error(`Errore: ${err.message}`);
+    } finally { setSaving(false); }
   };
 
-  const handleDelete = async (connectionId, connectionName) => {
-    if (!confirm(`Eliminare la connessione "${connectionName}"?`)) return;
+  const handleDelete = async (conn) => {
+    if (!confirm(`Eliminare "${conn.name}"?`)) return;
     try {
-      await deleteConnection(connectionId);
+      conn._category === 'arcgis' ? await deleteFeatureConnection(conn.id) : await deleteConnection(conn.id);
       loadConnections();
-    } catch (error) {
-      console.error('Errore eliminazione connessione:', error);
-      alert('Errore eliminazione connessione');
-    }
+    } catch { toast.error('Errore eliminazione'); }
   };
 
-  const handleTest = async (connectionId) => {
-    setTestingConnection(connectionId);
+  const handleTest = async (conn) => {
+    setTestingId(conn.id);
     try {
-      const result = await testConnection(connectionId);
-      setTestResults(prev => ({ ...prev, [connectionId]: result }));
-    } catch (error) {
-      console.error('Errore test connessione:', error);
-      setTestResults(prev => ({ 
-        ...prev, 
-        [connectionId]: { success: false, message: 'Errore durante il test della connessione' }
-      }));
-    } finally {
-      setTestingConnection(null);
-    }
+      const result = conn._category === 'arcgis' ? await testFeatureConnection(conn.id) : await testConnection(conn.id);
+      setTestResults(prev => ({ ...prev, [conn.id]: result }));
+    } catch {
+      setTestResults(prev => ({ ...prev, [conn.id]: { success: false, message: 'Errore durante il test' } }));
+    } finally { setTestingId(null); }
   };
 
-  const handleTypeChange = (type) => {
-    const defaultPorts = { postgres: 5432, mssql: 1433, mysql: 3306, oracle: 1521, sqlite: 0 };
-    setFormData({ ...formData, type, port: defaultPorts[type] || 5432 });
-  };
+  const currentTypeInfo = ALL_TYPES.find(t => t.value === formData.type);
+  const isArcgis = currentTypeInfo?.category === 'arcgis';
 
-  if (loading) {
-    return (
-      <div className="connection-manager__loading">
-        Caricamento connessioni...
-      </div>
-    );
-  }
+  const dbConns  = allConnections.filter(c => c._category === 'database');
+  const arcConns = allConnections.filter(c => c._category === 'arcgis');
+  const visibleDb  = activeTab === 'arcgis'    ? [] : dbConns;
+  const visibleArc = activeTab === 'database'  ? [] : arcConns;
+
+  if (loading) return (
+    <div className="cm cm--loading">
+      <div className="cm__loading-inner"><div className="cm__loading-icon">⬡</div>Caricamento...</div>
+    </div>
+  );
 
   return (
-    <div className="connection-manager">
-      {/* Header */}
-      <header className="connection-manager__header">
-        <div className="connection-manager__header-content">
-          <div className="connection-manager__header-left">
-            <button onClick={() => navigate(-1)} className="connection-manager__back-btn">
-              ← Indietro
-            </button>
-            <div>
-              <h1 className="connection-manager__title">🔌 Connessioni Database</h1>
-              <p className="connection-manager__subtitle">
-                Gestisci le connessioni ai database per i tuoi progetti ETL
-              </p>
-            </div>
+    <div className="cm">
+
+      {/* ── SIDEBAR ── */}
+      <AppSidebar counts={{ connections: allConnections.length }} />
+
+      {/* ── MAIN ── */}
+      <div className="cm__main">
+        <header className="cm__topbar">
+          <button type="button" className="cm__back-btn" onClick={() => navigate(-1)}>← Indietro</button>
+          <div className="cm__page-title">Connessioni</div>
+          <div className="cm__topbar-right">
+            <ThemeToggle />
+            {canCreateConnection && (
+              <button type="button" className="cm__btn cm__btn--primary" onClick={() => handleOpenModal()}>＋ Nuova Connessione</button>
+            )}
           </div>
-          <button onClick={() => handleOpenModal()} className="connection-manager__new-btn">
-            + Nuova connessione
-          </button>
+        </header>
+
+        <div className="cm__content">
+          <canvas ref={canvasRef} className="cm__hex-bg" />
+
+          {/* Tabs */}
+          <div className="cm__tabs">
+            {[
+              { key: 'all',      label: 'Tutte',    count: allConnections.length },
+              { key: 'database', label: 'Database', count: dbConns.length },
+              { key: 'arcgis',   label: 'ArcGIS',   count: arcConns.length },
+            ].map(t => (
+              <button key={t.key} type="button" className={`cm__tab ${activeTab === t.key ? 'cm__tab--active' : ''}`} onClick={() => setActiveTab(t.key)}>
+                {t.label} <span className="cm__tab-count">{t.count}</span>
+              </button>
+            ))}
+          </div>
+
+          {allConnections.length === 0 ? (
+            <EmptyState
+              onNew={() => handleOpenModal()}
+              canCreate={canCreateConnection}
+            />
+          ) : (
+            <>
+              {visibleDb.length > 0 && (
+                <ConnTable
+                  title="Connessioni Database"
+                  subtitle="PostgreSQL, MS SQL Server, Oracle, MySQL, SQLite"
+                  connections={visibleDb}
+                  testResults={testResults}
+                  testingId={testingId}
+                  onTest={handleTest}
+                  onEdit={handleOpenModal}
+                  onDelete={handleDelete}
+                  onShare={setSharingConnection}
+                  isSuperadmin={isSuperadmin}
+                  arcgis={false}
+                />
+              )}
+              {visibleArc.length > 0 && (
+                <ConnTable
+                  title="Connessioni ArcGIS"
+                  subtitle="Feature Server e Map Service"
+                  connections={visibleArc}
+                  testResults={testResults}
+                  testingId={testingId}
+                  onTest={handleTest}
+                  onEdit={handleOpenModal}
+                  onDelete={handleDelete}
+                  onShare={setSharingConnection}
+                  isSuperadmin={isSuperadmin}
+                  arcgis={true}
+                />
+              )}
+              {/* Test errors */}
+              {Object.entries(testResults).map(([id, result]) => {
+                if (!result || result.success) return null;
+                const conn = allConnections.find(c => c.id === id);
+                if (!conn) return null;
+                return (
+                  <div key={id} className="cm__test-error">
+                    <strong>✗ {conn.name}:</strong> {result.message}
+                  </div>
+                );
+              })}
+            </>
+          )}
         </div>
-      </header>
+      </div>
 
-      {/* Content */}
-      <main className="connection-manager__main">
-        {connections.length === 0 ? (
-          <div className="connection-manager__empty">
-            <div className="connection-manager__empty-icon">🔌</div>
-            <h3 className="connection-manager__empty-title">Nessuna connessione configurata</h3>
-            <p className="connection-manager__empty-text">Crea la tua prima connessione per iniziare</p>
-            <button onClick={() => handleOpenModal()} className="connection-manager__empty-btn">
-              Crea prima connessione
-            </button>
-          </div>
-        ) : (
-          <div className="connection-manager__grid">
-            {connections.map((conn) => {
-              const dbType = dbTypes.find(t => t.value === conn.type);
-              const isTestingThis = testingConnection === conn.id;
-              const testResult = testResults[conn.id];
-              
-              return (
-                <div key={conn.id} className="connection-card">
-                  {/* Card Header */}
-                  <div className="connection-card__header">
-                    <span className="connection-card__icon">{dbType?.label.split(' ')[0]}</span>
-                    <div>
-                      <h3 className="connection-card__name">{conn.name}</h3>
-                      <span 
-                        className="connection-card__type-badge"
-                        style={{ background: dbType?.color }}
-                      >
-                        {dbType?.label.split(' ').slice(1).join(' ')}
-                      </span>
-                    </div>
-                  </div>
+      {/* ── CONTEXT AI MODAL ── */}
 
-                  {/* Card Body */}
-                  <div className="connection-card__body">
-                    {conn.description && (
-                      <p className="connection-card__description">{conn.description}</p>
-                    )}
-                    
-                    <div className="connection-card__details">
-                      <div className="connection-card__detail-row">
-                        <span className="connection-card__detail-label">Host:</span>
-                        <span className="connection-card__detail-value">{conn.host}:{conn.port}</span>
-                      </div>
-                      <div className="connection-card__detail-row">
-                        <span className="connection-card__detail-label">Database:</span>
-                        <span className="connection-card__detail-value">{conn.database}</span>
-                      </div>
-                      <div className="connection-card__detail-row">
-                        <span className="connection-card__detail-label">Username:</span>
-                        <span className="connection-card__detail-value">{conn.username}</span>
-                      </div>
-                    </div>
-
-                    {/* Test Result */}
-                    {testResult && (
-                      <div className={`connection-card__test-result connection-card__test-result--${testResult.success ? 'success' : 'error'}`}>
-                        <div className={`connection-card__test-title connection-card__test-title--${testResult.success ? 'success' : 'error'}`}>
-                          {testResult.success ? '✓ Test riuscito' : '✗ Test fallito'}
-                        </div>
-                        <div className={`connection-card__test-message--${testResult.success ? 'success' : 'error'}`}>
-                          {testResult.message}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Card Footer */}
-                  <div className="connection-card__footer">
-                    <button
-                      onClick={() => handleTest(conn.id)}
-                      disabled={isTestingThis}
-                      className="connection-card__btn connection-card__btn--test"
-                    >
-                      {isTestingThis ? '⏳ Testing...' : '🔍 Test'}
-                    </button>
-                    <button
-                      onClick={() => handleOpenModal(conn)}
-                      className="connection-card__btn connection-card__btn--edit"
-                    >
-                      ✏️ Modifica
-                    </button>
-                    <button
-                      onClick={() => handleDelete(conn.id, conn.name)}
-                      className="connection-card__btn connection-card__btn--delete"
-                    >
-                      🗑️ Elimina
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </main>
-
-      {/* Modal */}
+      {/* ── MODAL ── */}
       {showModal && (
-        <div className="connection-manager__modal-overlay" onClick={handleCloseModal}>
-          <div className="connection-manager__modal" onClick={e => e.stopPropagation()}>
-            <h3 className="connection-manager__modal-title">
-              {editingConnection ? 'Modifica Connessione' : 'Nuova Connessione'}
-            </h3>
-
-            {/* Nome */}
-            <div className="connection-manager__form-group">
-              <label className="connection-manager__form-label">Nome connessione *</label>
-              <input
-                type="text"
-                value={formData.name}
-                onChange={e => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Es. 'Database Produzione'"
-                className="connection-manager__form-input"
-              />
-            </div>
-
-            {/* Descrizione */}
-            <div className="connection-manager__form-group">
-              <label className="connection-manager__form-label">Descrizione</label>
-              <textarea
-                value={formData.description}
-                onChange={e => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Descrizione opzionale..."
-                rows={2}
-                className="connection-manager__form-textarea"
-              />
-            </div>
-
-            {/* Tipo Database */}
-            <div className="connection-manager__form-group">
-              <label className="connection-manager__form-label">Tipo Database *</label>
-              <div className="connection-manager__db-types">
-                {dbTypes.map(type => (
-                  <label
-                    key={type.value}
-                    className={`connection-manager__db-type ${formData.type === type.value ? 'connection-manager__db-type--selected' : ''}`}
-                    style={{
-                      borderColor: formData.type === type.value ? type.color : '#ddd',
-                      background: formData.type === type.value ? `${type.color}15` : 'white'
-                    }}
+        <ModalWrapper
+          isOpen={true}
+          onClose={handleCloseModal}
+          title={editingConnection ? 'Modifica Connessione' : 'Nuova Connessione'}
+          icon={editingConnection ? '✏️' : '＋'}
+          size="md"
+          closeOnOverlay={!saving}
+          closeOnEsc={!saving}
+          footer={
+            <>
+              <ModalButton variant="secondary" onClick={handleCloseModal} disabled={saving}>Annulla</ModalButton>
+              <ModalButton variant="primary" onClick={handleSubmit} loading={saving}>
+                {editingConnection ? 'Salva Modifiche' : 'Crea Connessione'}
+              </ModalButton>
+            </>
+          }
+        >
+            {/* Tipo */}
+            <div className="cm__modal-field">
+              <label className="cm__modal-label">Tipo</label>
+              <div className="cm__db-types">
+                {ALL_TYPES.map(t => (
+                  <button
+                    key={t.value} type="button"
+                    className={`cm__db-type-btn ${formData.type === t.value ? 'cm__db-type-btn--on' : ''}`}
+                    style={formData.type === t.value ? { borderColor: t.color, background: `rgba(${t.colorRgb},0.10)`, color: t.color } : {}}
+                    onClick={() => handleTypeChange(t.value)}
                   >
-                    <input
-                      type="radio"
-                      name="dbType"
-                      value={type.value}
-                      checked={formData.type === type.value}
-                      onChange={e => handleTypeChange(e.target.value)}
-                    />
-                    <span>{type.label}</span>
-                  </label>
+                    {t.label}
+                  </button>
                 ))}
               </div>
             </div>
 
-            {/* Host e Porta */}
-            <div className="connection-manager__form-group">
-              <div className="connection-manager__form-row connection-manager__form-row--2-1">
-                <div>
-                  <label className="connection-manager__form-label">Host *</label>
-                  <input
-                    type="text"
-                    value={formData.host}
-                    onChange={e => setFormData({ ...formData, host: e.target.value })}
-                    placeholder="localhost o IP"
-                    className="connection-manager__form-input"
-                  />
-                </div>
-                <div>
-                  <label className="connection-manager__form-label">Porta *</label>
-                  <input
-                    type="number"
-                    value={formData.port}
-                    onChange={e => setFormData({ ...formData, port: parseInt(e.target.value) || 0 })}
-                    className="connection-manager__form-input"
-                  />
-                </div>
+            {/* Nome */}
+            <div className="cm__modal-field">
+              <label className="cm__modal-label">Nome connessione *</label>
+              <input type="text" className="cm__modal-input" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="Es. 'Archibus ICSC'" autoFocus />
+            </div>
+
+            {/* Descrizione (solo DB) */}
+            {!isArcgis && (
+              <div className="cm__modal-field">
+                <label className="cm__modal-label">Descrizione</label>
+                <input type="text" className="cm__modal-input" value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} placeholder="Descrizione opzionale..." />
               </div>
-            </div>
+            )}
 
-            {/* Database */}
-            <div className="connection-manager__form-group">
-              <label className="connection-manager__form-label">Database *</label>
-              <input
-                type="text"
-                value={formData.database}
-                onChange={e => setFormData({ ...formData, database: e.target.value })}
-                placeholder="Nome database"
-                className="connection-manager__form-input"
-              />
-            </div>
-
-            {/* Username e Password */}
-            <div className="connection-manager__form-group">
-              <div className="connection-manager__form-row connection-manager__form-row--1-1">
-                <div>
-                  <label className="connection-manager__form-label">Username</label>
-                  <input
-                    type="text"
-                    value={formData.username}
-                    onChange={e => setFormData({ ...formData, username: e.target.value })}
-                    placeholder="Username"
-                    className="connection-manager__form-input"
-                  />
+            {/* Campi DB */}
+            {!isArcgis && (
+              <>
+                <div className="cm__form-row cm__form-row--2-1">
+                  <div className="cm__modal-field" style={{margin:0}}>
+                    <label className="cm__modal-label">Host *</label>
+                    <input type="text" className="cm__modal-input" value={formData.host} onChange={e => setFormData({ ...formData, host: e.target.value })} placeholder="localhost" />
+                  </div>
+                  <div className="cm__modal-field" style={{margin:0}}>
+                    <label className="cm__modal-label">Porta</label>
+                    <input type="number" className="cm__modal-input" value={formData.port} onChange={e => setFormData({ ...formData, port: parseInt(e.target.value)||0 })} />
+                  </div>
                 </div>
-                <div>
-                  <label className="connection-manager__form-label">Password</label>
-                  <input
-                    type="password"
-                    value={formData.password}
-                    onChange={e => setFormData({ ...formData, password: e.target.value })}
-                    placeholder="••••••••"
-                    className="connection-manager__form-input"
-                  />
+                <div className="cm__form-row cm__form-row--2-1" style={{marginTop:14}}>
+                  <div className="cm__modal-field" style={{margin:0}}>
+                    <label className="cm__modal-label">Database *</label>
+                    <input type="text" className="cm__modal-input" value={formData.database} onChange={e => setFormData({ ...formData, database: e.target.value })} placeholder="nome_database" />
+                  </div>
+                  <div className="cm__modal-field" style={{margin:0}}>
+                    <label className="cm__modal-label">Schema</label>
+                    <input type="text" className="cm__modal-input" value={formData.db_schema} onChange={e => setFormData({ ...formData, db_schema: e.target.value })} placeholder={formData.type === 'mssql' ? 'dbo' : 'public'} />
+                  </div>
                 </div>
-              </div>
-            </div>
+                <div className="cm__form-row cm__form-row--1-1" style={{marginTop:14}}>
+                  <div className="cm__modal-field" style={{margin:0}}>
+                    <label className="cm__modal-label">Username</label>
+                    <input type="text" className="cm__modal-input" value={formData.username} onChange={e => setFormData({ ...formData, username: e.target.value })} />
+                  </div>
+                  <div className="cm__modal-field" style={{margin:0}}>
+                    <label className="cm__modal-label">Password</label>
+                    <input type="password" className="cm__modal-input" value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} placeholder="••••••••" />
+                  </div>
+                </div>
+              </>
+            )}
 
-            {/* Actions */}
-            <div className="connection-manager__form-actions">
-              <button onClick={handleCloseModal} className="connection-manager__form-btn connection-manager__form-btn--cancel">
-                Annulla
-              </button>
-              <button onClick={handleSubmit} className="connection-manager__form-btn connection-manager__form-btn--submit">
-                {editingConnection ? 'Salva Modifiche' : 'Crea Connessione'}
-              </button>
-            </div>
-          </div>
-        </div>
+            {/* Campi ArcGIS */}
+            {isArcgis && (
+              <>
+                <div className="cm__modal-field">
+                  <label className="cm__modal-label">URL Server ArcGIS *</label>
+                  <input type="text" className="cm__modal-input" value={formData.server_url} onChange={e => setFormData({ ...formData, server_url: e.target.value })} placeholder="https://server/arcgis/rest/services" />
+                  <div className="cm__modal-hint">ArcGIS Online: https://www.arcgis.com</div>
+                </div>
+                <div className="cm__modal-field">
+                  <label className="cm__modal-label">Autenticazione</label>
+                  <div className="cm__auth-types">
+                    {[
+                      { value: 'public', label: '🔓 Pubblico', color: '#34C17A', rgb: '52,193,122' },
+                      { value: 'token',  label: '🔐 Token',    color: '#F5A623', rgb: '245,166,35' },
+                      { value: 'oauth2', label: '🔑 OAuth2',   color: '#4B8BFF', rgb: '75,139,255' },
+                    ].map(a => (
+                      <button key={a.value} type="button"
+                        className={`cm__db-type-btn ${formData.auth_type === a.value ? 'cm__db-type-btn--on' : ''}`}
+                        style={formData.auth_type === a.value ? { borderColor: a.color, background: `rgba(${a.rgb},0.10)`, color: a.color } : {}}
+                        onClick={() => setFormData({ ...formData, auth_type: a.value })}
+                      >{a.label}</button>
+                    ))}
+                  </div>
+                </div>
+                {formData.auth_type === 'token' && (
+                  <div className="cm__form-row cm__form-row--1-1">
+                    <div className="cm__modal-field" style={{margin:0}}><label className="cm__modal-label">Username</label><input type="text" className="cm__modal-input" value={formData.username} onChange={e => setFormData({ ...formData, username: e.target.value })} /></div>
+                    <div className="cm__modal-field" style={{margin:0}}><label className="cm__modal-label">Password</label><input type="password" className="cm__modal-input" value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} placeholder="••••••••" /></div>
+                  </div>
+                )}
+                {formData.auth_type === 'oauth2' && (
+                  <div className="cm__form-row cm__form-row--1-1">
+                    <div className="cm__modal-field" style={{margin:0}}><label className="cm__modal-label">Client ID</label><input type="text" className="cm__modal-input" value={formData.client_id} onChange={e => setFormData({ ...formData, client_id: e.target.value })} placeholder="Es. PrKizU4tc3X..." /></div>
+                    <div className="cm__modal-field" style={{margin:0}}><label className="cm__modal-label">Client Secret</label><input type="password" className="cm__modal-input" value={formData.client_secret} onChange={e => setFormData({ ...formData, client_secret: e.target.value })} placeholder="••••••••" /></div>
+                  </div>
+                )}
+              </>
+            )}
+
+        </ModalWrapper>
+      )}
+
+      {/* ── SHARE MODAL (solo superadmin) ── */}
+      {sharingConnection && (
+        <ModalWrapper
+          isOpen={true}
+          onClose={() => setSharingConnection(null)}
+          title="Condividi connessione"
+          icon="🔗"
+          subtitle={sharingConnection.name}
+          size="md"
+        >
+          <AllowedGroupsSelector
+            embedded
+            resourceType={sharingConnection._category === 'arcgis' ? 'arcgis_connections' : 'connections'}
+            resourceId={sharingConnection.id}
+            onClose={() => setSharingConnection(null)}
+          />
+        </ModalWrapper>
       )}
     </div>
   );
 }
+
+// ── Empty state ─────────────────────────────────────────────────────────
+function EmptyState({ onNew, canCreate = true }) {
+  return (
+    <div className="cm__empty">
+      <div className="cm__empty-icon">🔌</div>
+      <div className="cm__empty-title">Nessuna connessione</div>
+      <div className="cm__empty-text">
+        {canCreate
+          ? 'Crea la tua prima connessione per iniziare ad estrarre dati'
+          : 'Nessuna connessione disponibile. Contatta un amministratore.'}
+      </div>
+      {canCreate && (
+        <button type="button" className="cm__btn cm__btn--primary" onClick={onNew} style={{marginTop:16}}>＋ Crea connessione</button>
+      )}
+    </div>
+  );
+}
+
+// ── Connection Table ────────────────────────────────────────────────────
+function ConnTable({ title, subtitle, connections, testResults, testingId, onTest, onEdit, onDelete, onShare, isSuperadmin, arcgis }) {
+  return (
+    <div className="cm__section">
+      <div className="cm__section-header">
+        <div className="cm__section-title">{title}</div>
+        <div className="cm__section-sub">{subtitle}</div>
+      </div>
+      <div className="cm__table-wrap">
+        <table className="cm__table">
+          <thead>
+            <tr>
+              <th>Nome</th>
+              <th>Tipo</th>
+              <th>{arcgis ? 'URL Server' : 'Host / Database'}</th>
+              <th>{arcgis ? 'Autenticazione' : 'Schema'}</th>
+              <th>Stato</th>
+              <th className="cm__th-actions">Azioni</th>
+            </tr>
+          </thead>
+          <tbody>
+            {connections.map(conn => {
+              const info       = conn._typeInfo;
+              const testResult = testResults[conn.id];
+              const isTesting  = testingId === conn.id;
+              const canEdit    = conn.can_edit !== false;
+              return (
+                <tr key={conn.id} className="cm__tr">
+                  <td>
+                    <div className="cm__conn-name">
+                      {conn.name}
+                      {!canEdit && (
+                        <span
+                          title="Solo un superadmin può modificare questa risorsa"
+                          style={{ marginLeft: 6, opacity: 0.7, cursor: 'help' }}
+                        >
+                          🔒
+                        </span>
+                      )}
+                    </div>
+                    {conn.description && <div className="cm__conn-desc">{conn.description}</div>}
+                  </td>
+                  <td>
+                    <span className="cm__type-badge" style={{ color: info?.color, background: `rgba(${info?.colorRgb},0.08)`, borderColor: `rgba(${info?.colorRgb},0.22)` }}>
+                      {info?.label || conn.type}
+                    </span>
+                  </td>
+                  <td>
+                    {arcgis ? (
+                      <span className="cm__conn-detail">{conn.server_url}</span>
+                    ) : (
+                      <>
+                        <div className="cm__conn-detail">{conn.host}:{conn.port}</div>
+                        <div className="cm__conn-detail-sub">{conn.database}</div>
+                      </>
+                    )}
+                  </td>
+                  <td>
+                    <span className="cm__conn-detail">
+                      {arcgis ? (conn.auth_type || 'public') : (conn.db_schema || '—')}
+                    </span>
+                  </td>
+                  <td>
+                    {testResult ? (
+                      <span className={`cm__status-dot ${testResult.success ? 'cm__status-ok' : 'cm__status-err'}`}>
+                        {testResult.success ? 'OK' : 'Errore'}
+                      </span>
+                    ) : (
+                      <span className="cm__status-dot cm__status-none">Non testata</span>
+                    )}
+                  </td>
+                  <td>
+                    <div className="cm__actions">
+                      <button type="button" className="cm__btn cm__btn--ghost cm__btn--sm" onClick={() => onTest(conn)} disabled={isTesting}>
+                        {isTesting ? '⏳' : '🔌 Test'}
+                      </button>
+                      {canEdit && (
+                        <button type="button" className="cm__btn cm__btn--ghost cm__btn--sm" onClick={() => onEdit(conn)}>✏️ Modifica</button>
+                      )}
+                      {isSuperadmin && (
+                        <button
+                          type="button"
+                          className="cm__btn cm__btn--ghost cm__btn--sm"
+                          title="Gestisci condivisione cross-gruppo"
+                          onClick={() => onShare(conn)}
+                        >🔗</button>
+                      )}
+                      {canEdit && (
+                        <button type="button" className="cm__btn cm__btn--danger cm__btn--sm" onClick={() => onDelete(conn)}>🗑</button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ── Empty state ─────────────────────────────────────────────────────────
 
 export default ConnectionManager;

@@ -1,7 +1,7 @@
 {
   "$schema": "./transforms_registry_schema.json",
   "version": "2.0",
-  "description": "Registry trasformazioni MANIPOLA - URBY-ETL (Full DynamicConfig)",
+  "description": "Registry trasformazioni MANIPOLA - PLENORA-ETL (Full DynamicConfig)",
   "last_updated": "2026-01-28",
   "transforms": {
     "join": {
@@ -628,6 +628,24 @@
             }
           ],
           "default": "round"
+        },
+        {
+          "id": "metric_crs",
+          "type": "string",
+          "label": "CRS metrico custom (EPSG)",
+          "description": "Override del CRS per calcolo metrico. Vuoto = auto-UTM. Utile per dataset multi-zona (es. EPSG:3035 per LAEA Europa).",
+          "default": ""
+        },
+        {
+          "id": "output_crs",
+          "type": "select",
+          "label": "CRS output geometrie",
+          "description": "'same' mantiene il CRS input (default), 'metric' lascia il CRS metrico usato per il calcolo (no roundtrip).",
+          "options": [
+            {"value": "same", "label": "Stesso CRS dell'input"},
+            {"value": "metric", "label": "CRS metrico (no roundtrip)"}
+          ],
+          "default": "same"
         }
       ],
       "output": {
@@ -656,6 +674,24 @@
           "type": "string",
           "label": "Nome colonna output",
           "default": "centroid"
+        },
+        {
+          "id": "metric_crs",
+          "type": "string",
+          "label": "CRS metrico custom (EPSG)",
+          "description": "Override del CRS per calcolo centroide. Vuoto = auto-UTM.",
+          "default": ""
+        },
+        {
+          "id": "output_crs",
+          "type": "select",
+          "label": "CRS output geometrie",
+          "description": "'same' mantiene il CRS input (default), 'metric' lascia il CRS metrico.",
+          "options": [
+            {"value": "same", "label": "Stesso CRS dell'input"},
+            {"value": "metric", "label": "CRS metrico (no roundtrip)"}
+          ],
+          "default": "same"
         }
       ],
       "output": {
@@ -684,6 +720,13 @@
           "type": "string",
           "label": "Nome colonna output",
           "default": "area_m2"
+        },
+        {
+          "id": "metric_crs",
+          "type": "string",
+          "label": "CRS metrico custom (EPSG)",
+          "description": "Override del CRS per calcolo area. Vuoto = auto-UTM.",
+          "default": ""
         }
       ],
       "output": {
@@ -1512,6 +1555,13 @@
           "type": "string",
           "label": "Nome colonna distanza",
           "default": "distance_m"
+        },
+        {
+          "id": "metric_crs",
+          "type": "string",
+          "label": "CRS metrico custom (EPSG)",
+          "description": "Override del CRS per calcolo distanza. Vuoto = auto-UTM.",
+          "default": ""
         }
       ],
       "output": {
@@ -1556,6 +1606,24 @@
           "type": "string",
           "label": "Nome colonna distanza",
           "default": "distance_m"
+        },
+        {
+          "id": "metric_crs",
+          "type": "string",
+          "label": "CRS metrico custom (EPSG)",
+          "description": "Override del CRS per calcolo distanza. Vuoto = auto-UTM.",
+          "default": ""
+        },
+        {
+          "id": "output_crs",
+          "type": "select",
+          "label": "CRS output geometrie",
+          "description": "'same' mantiene il CRS input (default), 'metric' lascia il CRS metrico.",
+          "options": [
+            {"value": "same", "label": "Stesso CRS dell'input"},
+            {"value": "metric", "label": "CRS metrico (no roundtrip)"}
+          ],
+          "default": "same"
         }
       ],
       "output": {
@@ -1585,6 +1653,13 @@
           "type": "string",
           "label": "Nome colonna output",
           "default": "length_m"
+        },
+        {
+          "id": "metric_crs",
+          "type": "string",
+          "label": "CRS metrico custom (EPSG)",
+          "description": "Override del CRS per calcolo lunghezza. Vuoto = auto-UTM.",
+          "default": ""
         }
       ],
       "output": {
@@ -1613,6 +1688,13 @@
           "type": "string",
           "label": "Nome colonna output",
           "default": "perimeter_m"
+        },
+        {
+          "id": "metric_crs",
+          "type": "string",
+          "label": "CRS metrico custom (EPSG)",
+          "description": "Override del CRS per calcolo perimetro. Vuoto = auto-UTM.",
+          "default": ""
         }
       ],
       "output": {

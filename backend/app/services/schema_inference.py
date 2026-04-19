@@ -22,7 +22,7 @@ Algoritmo di propagazione:
 3. Gestisce casi speciali: JOIN (merge colonne), GROUP BY (solo aggregati),
    trasformazioni che aggiungono/rimuovono/rinominano colonne
 
-Tipi interni URBY propagati: int, real, str, bool, date, geometry, geometry:point,
+Tipi interni PLENORA propagati: int, real, str, bool, date, geometry, geometry:point,
 geometry:polygon, geometry:line, con SRID opzionale (geometry:point:4326).
 
 Cache: i risultati vengono cachati per evitare ricalcoli durante la stessa
@@ -207,17 +207,20 @@ class SchemaInferenceService:
         # Colonne dal database
         node_columns = node.columns or []
         for col in node_columns:
-            if col.visible:  # Solo colonne visibili
-                columns.append(ColumnSchema(
-                    name=col.alias or col.name,  # Usa alias se presente
-                    type=col.type or "str",
-                    source_node=node.id,
-                    is_calculated=False
-                ))
-        
+            if col is None or not getattr(col, "visible", True):
+                continue
+            columns.append(ColumnSchema(
+                name=col.alias or col.name,  # Usa alias se presente
+                type=col.type or "str",
+                source_node=node.id,
+                is_calculated=False
+            ))
+
         # Colonne calcolate
         calculated = node.calculated_columns or []
         for calc in calculated:
+            if not isinstance(calc, dict):
+                continue
             columns.append(ColumnSchema(
                 name=calc.get("name", "calculated"),
                 type=calc.get("output_type", "str"),
@@ -482,11 +485,20 @@ class SchemaInferenceService:
                 is_calculated=col.is_calculated
             ))
         
-        # Colonne da destra con suffisso _R (esclusa join key se uguale)
+        # Colonne da destra con suffisso _R, ESCLUSA la join key:
+        #   - se left_on == right_on: la join key di destra e' un duplicato
+        #     della sinistra (gia' inclusa senza suffisso) → skip
+        #   - se left_on != right_on: la join key di destra resta nel
+        #     risultato col suo nome originale (senza _R) — e' una colonna
+        #     significativa, non un attributo collaterale.
+        # Pre-fix bug: la condizione ternaria aveva entrambi i rami uguali
+        # (`f"{col.name}_R" if ... else f"{col.name}_R"`), quindi la join
+        # key di destra finiva sempre come `id_right_R`, confondendo il
+        # downstream sul nome reale della colonna.
         for col in right_schema:
             if col.name == right_on and left_on == right_on:
                 continue  # Skip duplicato join key
-            new_name = f"{col.name}_R" if col.name != right_on else f"{col.name}_R"
+            new_name = col.name if col.name == right_on else f"{col.name}_R"
             result.append(ColumnSchema(
                 name=new_name,
                 type=col.type,
@@ -1341,6 +1353,8 @@ class SchemaInferenceService:
         
         input_schemas = []
         for edge in incoming_edges:
+            if not getattr(edge, "source", None):
+                continue
             source_node = nodes_by_id.get(edge.source)
             if source_node:
                 schema = self._infer_node_schema(

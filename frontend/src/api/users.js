@@ -1,9 +1,14 @@
 /**
- * users.js — API client per gestione utenti e gruppi
+ * users.js — API client per gestione utenti, gruppi e profilo personale
  */
 import http from './http';
 
-// ── Utenti ────────────────────────────────────────────────────────────────
+// ── Profilo personale ─────────────────────────────────────────────────────
+export const getMe           = ()              => http.get('/auth/me').then(r => r.data);
+export const changeMyPassword = (oldPwd, newPwd) =>
+  http.post('/auth/change-password', { old_password: oldPwd, new_password: newPwd }).then(r => r.data);
+
+// ── Utenti (admin only) ───────────────────────────────────────────────────
 export const listUsers       = ()              => http.get('/auth/users').then(r => r.data);
 export const createUser      = (data)          => http.post('/auth/users', data).then(r => r.data);
 export const updateUser      = (id, data)      => http.put(`/auth/users/${id}`, data).then(r => r.data);

@@ -1,5 +1,5 @@
 """
-Router API per il modulo Scheduler URBY-ETL.
+Router API per il modulo Scheduler PLENORA-ETL.
 
 Architettura
 ============
@@ -48,6 +48,7 @@ from app.core.scheduler.models import (
     ScheduleUpdate,
     ScheduleList,
     ScheduleToggle,
+    ScheduleCatchupUpdate,
     ScheduleLogList,
     BeatHealthcheck,
 )
@@ -60,7 +61,7 @@ router = APIRouter(prefix="/schedules", tags=["schedules"])
 @router.get("/healthcheck", response_model=BeatHealthcheck)
 async def beat_healthcheck(current_user: CurrentUser = Depends(require_not_esecutore)):
     """
-    Verifica se Celery Beat (UrbyBeatScheduler) è attivo.
+    Verifica se Celery Beat (PlenoraBeatScheduler) è attivo.
     Legge il heartbeat dalla tabella beat_heartbeat in SQLite.
     """
     try:
@@ -76,13 +77,25 @@ async def beat_healthcheck(current_user: CurrentUser = Depends(require_not_esecu
             age = (datetime.now(timezone.utc) - beat_time).total_seconds()
 
             # Conta schedule attivi
-            schedules_count = db.fetchone("SELECT COUNT(*) as n FROM schedules WHERE is_enabled = 1")["n"]
+            schedules_count = db.fetchone("SELECT COUNT(*) as n FROM schedules WHERE is_enabled = TRUE")["n"]
 
             if age < 180:
+                # Check task bloccate
+                from app.config import settings
+                hard_limit = settings.CELERY_SCHEDULE_HARD_LIMIT
+                stuck_count = db.fetchone(
+                    "SELECT COUNT(*) as n FROM schedules "
+                    "WHERE last_status = 'running' "
+                    "AND last_run IS NOT NULL "
+                    "AND last_run < NOW() - INTERVAL '%s seconds'",
+                    (hard_limit,)
+                )["n"]
+                stuck_msg = f" — {stuck_count} task bloccate" if stuck_count > 0 else ""
+                beat_status = "warning" if stuck_count > 0 else "ok"
                 return BeatHealthcheck(
-                    status="ok",
+                    status=beat_status,
                     last_beat=beat_time,
-                    message=f"Beat attivo ({int(age)}s fa) — {schedules_count} schedule attivi"
+                    message=f"Beat attivo ({int(age)}s fa) — {schedules_count} schedule attivi{stuck_msg}"
                 )
             else:
                 return BeatHealthcheck(
@@ -186,8 +199,12 @@ async def get_schedule(schedule_id: str, current_user: CurrentUser = Depends(req
     try:
         service = ScheduleService()
         row = db.get_schedule(schedule_id)
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Schedule '{schedule_id}' non trovato")
         assert_group_access(row, current_user, f"Schedule '{schedule_id}'")
         schedule = service.get_schedule(schedule_id)
+        if not schedule:
+            raise HTTPException(status_code=404, detail=f"Schedule '{schedule_id}' non trovato")
         return schedule
     except HTTPException:
         raise
@@ -208,15 +225,12 @@ async def update_schedule(schedule_id: str, data: ScheduleUpdate, current_user: 
     try:
         service = ScheduleService()
 
-        # Se cambia progetto, verifica che esista
+        # Se cambia progetto, verifica che esista E appartenga al gruppo
+        # dell'utente (altrimenti un owner di uno schedule del gruppo A
+        # puo' ricollegarlo a un progetto del gruppo B).
         if data.project_id:
-            from app.services.project_service import ProjectService
-            project_service = ProjectService()
-            if not project_service.project_exists(data.project_id):
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Progetto '{data.project_id}' non trovato"
-                )
+            from app.shared.authz_helpers import assert_project_access
+            assert_project_access(data.project_id, current_user)
         
         schedule = service.update_schedule(schedule_id, data)
         
@@ -273,6 +287,33 @@ async def toggle_schedule(schedule_id: str, data: ScheduleToggle, current_user: 
         raise
     except Exception as e:
         logger.error(f"[GESTITO] Errore toggle schedule {schedule_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Errore interno del server")
+
+
+@router.patch("/{schedule_id}/catchup", response_model=ScheduleConfig)
+async def update_schedule_catchup(
+    schedule_id: str,
+    data: ScheduleCatchupUpdate,
+    current_user: CurrentUser = Depends(require_schedule_owner),
+):
+    """Abilita/disabilita il catchup dei missed run per uno schedule
+    e/o modifica la grace window (C3 fix 3). Solo owner o admin/superadmin."""
+    from app.core.scheduler.schedule_service import ScheduleService
+    try:
+        service = ScheduleService()
+        result = service.update_catchup_config(
+            schedule_id, enabled=data.enabled, grace_hours=data.grace_hours,
+        )
+        if result is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Schedule '{schedule_id}' non trovato",
+            )
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[GESTITO] Errore update catchup {schedule_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Errore interno del server")
 
 
@@ -333,24 +374,20 @@ async def download_schedule_output(
 ):
     """
     Scarica il file output di uno schedule.
-    
-    - Senza parametri: scarica l'ultima esecuzione (file più recente in runs/)
+
+    - Senza parametri: scarica l'ultima esecuzione (file piu' recente in runs/)
     - Con ?run=20260208_104600: scarica una specifica esecuzione
-    
-    Se non ci sono runs archiviati, scarica il file dalla cartella base del progetto.
+
+    Logica core delegata a `ScheduleRunsCatalog` (R#5 Step B); qui restano
+    solo: ACL HTTP (group_access), traduzione eccezioni in HTTPException,
+    costruzione FileResponse.
     """
     from app.core.scheduler.schedule_service import ScheduleService
-    from app.config import settings
+    from app.core.scheduler.runs_catalog import ScheduleRunsCatalog
     from fastapi.responses import FileResponse
-    import zipfile
     try:
-        from app.db import results_db_service
-        import io
-        from fastapi.responses import StreamingResponse as _SR
-
         service = ScheduleService()
         schedule = service.get_schedule(schedule_id)
-
         if not schedule:
             raise HTTPException(status_code=404, detail=f"Schedule '{schedule_id}' non trovato")
 
@@ -361,30 +398,59 @@ async def download_schedule_output(
             assert_group_access(_sched_row, current_user, f"Schedule '{schedule_id}'")
 
         project_id = schedule.pipeline.project_id
+        catalog = ScheduleRunsCatalog()
 
-        # FIX: leggi da results.db invece del filesystem legacy
-        result_meta = results_db_service.get_latest_result(project_id)
-        if not result_meta:
-            raise HTTPException(status_code=404, detail="Nessun risultato disponibile per questo schedule")
+        # Branch 1: run specifica via ?run=... — sanitize + lookup nel catalog
+        if run:
+            try:
+                run_dir = catalog.get_run_dir(project_id, schedule_id, run)
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Parametro 'run' non valido")
+            except FileNotFoundError:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Run '{run}' non trovata per schedule '{schedule_id}'",
+                )
+            out_file = catalog.first_file_in(run_dir)
+            if out_file is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Nessun file nella run '{run}'",
+                )
+            return FileResponse(
+                path=str(out_file),
+                filename=out_file.name,
+                media_type="application/octet-stream",
+                headers={"Content-Disposition": f'attachment; filename="{out_file.name}"'},
+            )
 
-        result_data = results_db_service.get_result_data(result_meta["id"])
-        if not result_data:
-            raise HTTPException(status_code=404, detail="Dati risultato non disponibili")
-
-        filename = result_meta.get("filename", f"{project_id}_output.csv")
-        fmt = result_meta.get("format", "csv")
-        media_types = {
-            "csv":     "text/csv",
-            "gpkg":    "application/geopackage+sqlite3",
-            "geojson": "application/geo+json",
-            "xlsx":    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        }
-        media_type = media_types.get(fmt, "application/octet-stream")
-
-        return _SR(
-            io.BytesIO(result_data),
-            media_type=media_type,
-            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        # Branch 2: senza parametro `run` → latest run archiviata di
+        # QUESTO schedule. Niente `get_latest_result(project_id)`, che
+        # ritornerebbe l'ultimo del progetto includendo anche altri
+        # schedule o esecuzioni manuali (race cross-schedule).
+        latest_run = catalog.latest_run_dir(project_id, schedule_id)
+        if latest_run is None:
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    f"Nessuna run archiviata per lo schedule '{schedule_id}'. "
+                    f"Esegui lo schedule almeno una volta per generare un output."
+                ),
+            )
+        out_file = catalog.first_file_in(latest_run)
+        if out_file is None:
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    f"La run piu' recente '{latest_run.name}' dello schedule "
+                    f"'{schedule_id}' non contiene file"
+                ),
+            )
+        return FileResponse(
+            path=str(out_file),
+            filename=out_file.name,
+            media_type="application/octet-stream",
+            headers={"Content-Disposition": f'attachment; filename="{out_file.name}"'},
         )
     except HTTPException:
         raise
@@ -397,15 +463,15 @@ async def download_schedule_output(
 async def list_schedule_runs(schedule_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
     """
     Lista tutte le esecuzioni archiviate di uno schedule.
-    
+
     Ritorna i timestamp delle esecuzioni con i file disponibili.
+    Logica core delegata a `ScheduleRunsCatalog` (R#5 Step B).
     """
     from app.core.scheduler.schedule_service import ScheduleService
-    from app.config import settings
+    from app.core.scheduler.runs_catalog import ScheduleRunsCatalog
     try:
         service = ScheduleService()
         schedule = service.get_schedule(schedule_id)
-
         if not schedule:
             raise HTTPException(status_code=404, detail=f"Schedule '{schedule_id}' non trovato")
 
@@ -416,34 +482,30 @@ async def list_schedule_runs(schedule_id: str, current_user: CurrentUser = Depen
             assert_group_access(_sched_row, current_user, f"Schedule '{schedule_id}'")
 
         project_id = schedule.pipeline.project_id
-        schedule_short = schedule_id.replace("schedule_", "")[:12]
-        runs_dir = settings.RESULTS_DIR / project_id / "runs" / schedule_short
+        catalog = ScheduleRunsCatalog()
+        runs = catalog.list_runs(project_id, schedule_id)
 
-        if not runs_dir.exists():
-            return {"schedule_id": schedule_id, "runs": []}
-
-        runs = []
-        for run_folder in sorted(runs_dir.iterdir(), reverse=True):
-            if run_folder.is_dir():
-                files = [
-                    {
-                        "name": f.name,
-                        "size_bytes": f.stat().st_size,
-                        "size_human": _format_size(f.stat().st_size)
-                    }
-                    for f in run_folder.iterdir() if f.is_file()
-                ]
-                runs.append({
-                    "timestamp": run_folder.name,
-                    "files": files,
-                    "total_size": sum(f["size_bytes"] for f in files)
-                })
-    
+        # Serializza in JSON HTTP-friendly. `_format_size` resta nel router
+        # perche' e' un dettaglio di presentazione, non logica core.
         return {
             "schedule_id": schedule_id,
             "project_id": project_id,
             "runs_count": len(runs),
-            "runs": runs
+            "runs": [
+                {
+                    "timestamp": r.timestamp,
+                    "files": [
+                        {
+                            "name": f.name,
+                            "size_bytes": f.size_bytes,
+                            "size_human": _format_size(f.size_bytes),
+                        }
+                        for f in r.files
+                    ],
+                    "total_size": r.total_size_bytes,
+                }
+                for r in runs
+            ],
         }
     except HTTPException:
         raise

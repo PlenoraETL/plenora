@@ -1,5 +1,5 @@
 """
-URBY-ETL — Data Source Backend: FTP
+PLENORA-ETL — Data Source Backend: FTP
 Supporta FTP attivo/passivo con TLS opzionale (FTPS).
 Usa solo la stdlib: ftplib (nessuna dipendenza esterna).
 
@@ -74,6 +74,13 @@ class FTPDataSource(DataSourceInterface):
                         f"Root path FTP non accessibile: {root!r} — {e}"
                     )
         except ftplib.all_errors as e:
+            # Chiudi connessione se è stata aperta ma l'inizializzazione è fallita
+            if self._ftp:
+                try:
+                    self._ftp.quit()
+                except Exception:
+                    pass
+                self._ftp = None
             raise DataSourceConnectionError(f"Connessione FTP fallita: {e}") from e
 
     def disconnect(self) -> None:

@@ -1,0 +1,345 @@
+/* AllowedGroupsSelector — usa i token Plenora per adattarsi a dark/light */
+
+.ags {
+  border: 1px solid var(--plen-border, rgba(255, 255, 255, 0.10));
+  border-radius: 10px;
+  padding: 14px 16px;
+  background: var(--plen-surface-2, rgba(255, 255, 255, 0.03));
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+  color: var(--plen-text, #DDE4F2);
+}
+
+/* Variante "embedded": il componente vive dentro un modal che ha già
+ * il proprio titolo e bordo → no card-in-card. */
+.ags--embedded {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin-top: 0;
+  gap: 14px;
+}
+
+.ags--placeholder {
+  opacity: 0.7;
+}
+
+.ags__title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--plen-text, #DDE4F2);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.ags__hint {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--plen-text-sub, #7D8BA8);
+}
+
+.ags__loading,
+.ags__empty {
+  font-size: 13.5px;
+  color: var(--plen-text, #DDE4F2);
+  padding: 16px 8px;
+  text-align: center;
+  background: var(--plen-surface-3, rgba(255, 255, 255, 0.04));
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+.ags__error {
+  font-size: 13px;
+  color: var(--plen-err, #F87171);
+  background: rgba(248, 113, 113, 0.12);
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  border-radius: 6px;
+  padding: 9px 13px;
+  font-weight: 500;
+}
+
+/* ── Toggle "tutti i gruppi" ────────────────────────────────────────── */
+
+.ags__all-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 13px 15px;
+  background: rgba(75, 139, 255, 0.08);
+  border: 1px solid rgba(75, 139, 255, 0.30);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.ags__all-toggle:hover {
+  background: rgba(75, 139, 255, 0.14);
+  border-color: rgba(75, 139, 255, 0.50);
+}
+
+.ags__all-toggle--on {
+  background: rgba(75, 139, 255, 0.18);
+  border-color: rgba(75, 139, 255, 0.65);
+}
+
+.ags__all-toggle input[type="checkbox"] {
+  accent-color: var(--plen-blue, #4B8BFF);
+  cursor: pointer;
+  margin-top: 2px;
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+}
+
+.ags__all-toggle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ags__all-toggle-text strong {
+  font-size: 14px;
+  color: var(--plen-text, #DDE4F2);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.ags__all-toggle-text span {
+  font-size: 12.5px;
+  color: var(--plen-text-sub, #7D8BA8);
+  line-height: 1.45;
+}
+
+/* ── Sezione lista (contenitore che può essere "muted" quando "tutti" è on) ── */
+
+.ags__list-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: opacity 0.2s ease;
+}
+
+.ags__list-section--muted {
+  opacity: 0.5;
+}
+
+.ags__list-hint {
+  font-size: 12px;
+  color: var(--plen-text-sub, #7D8BA8);
+  font-style: italic;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border-left: 2px solid var(--plen-border-hi, rgba(255, 255, 255, 0.12));
+  border-radius: 4px;
+}
+
+.ags__item--disabled {
+  cursor: not-allowed;
+}
+
+.ags__item--disabled:hover {
+  background: inherit;
+}
+
+/* ── Header lista (contatore + select-all visibili) ─────────────────── */
+
+.ags__list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 2px;
+}
+
+.ags__list-counter {
+  font-size: 13px;
+  color: var(--plen-text, #DDE4F2);
+  font-weight: 600;
+}
+
+.ags__list-toggle-all {
+  background: transparent;
+  border: 1px solid rgba(75, 139, 255, 0.40);
+  color: var(--plen-blue, #4B8BFF);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 11px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.ags__list-toggle-all:hover:not(:disabled) {
+  background: rgba(75, 139, 255, 0.12);
+  border-color: rgba(75, 139, 255, 0.65);
+}
+
+.ags__list-toggle-all:disabled {
+  opacity: 0.40;
+  cursor: not-allowed;
+}
+
+/* ── Search ─────────────────────────────────────────────────────────── */
+
+.ags__search {
+  width: 100%;
+  background: var(--plen-surface, rgba(0, 0, 0, 0.20));
+  border: 1px solid var(--plen-border-hi, rgba(255, 255, 255, 0.12));
+  border-radius: 6px;
+  padding: 9px 13px;
+  font-size: 13.5px;
+  color: var(--plen-text, #DDE4F2);
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
+  font-family: inherit;
+}
+
+.ags__search::placeholder {
+  color: var(--plen-text-sub, #7D8BA8);
+  opacity: 0.7;
+}
+
+.ags__search:focus {
+  border-color: rgba(75, 139, 255, 0.65);
+  background: var(--plen-surface, rgba(0, 0, 0, 0.30));
+}
+
+/* ── Lista gruppi ───────────────────────────────────────────────────── */
+
+.ags__list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 5px;
+  background: var(--plen-surface, rgba(0, 0, 0, 0.20));
+  border: 1px solid var(--plen-border, rgba(255, 255, 255, 0.08));
+  border-radius: 7px;
+}
+
+/* Scrollbar stilizzata */
+.ags__list::-webkit-scrollbar {
+  width: 8px;
+}
+.ags__list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.ags__list::-webkit-scrollbar-thumb {
+  background: var(--plen-border-hi, rgba(255, 255, 255, 0.12));
+  border-radius: 4px;
+}
+.ags__list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.ags__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 13px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.ags__item:hover {
+  background: var(--plen-surface-2, rgba(255, 255, 255, 0.05));
+}
+
+.ags__item--on {
+  background: rgba(75, 139, 255, 0.16);
+  border-color: rgba(75, 139, 255, 0.45);
+}
+
+.ags__item input[type="checkbox"] {
+  accent-color: var(--plen-blue, #4B8BFF);
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.ags__item-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ags__item-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--plen-text, #DDE4F2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.35;
+}
+
+.ags__item-id {
+  font-family: var(--plen-font-mono, ui-monospace, "SF Mono", Menlo, monospace);
+  font-size: 11px;
+  color: var(--plen-text-sub, #7D8BA8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
+
+.ags__item-check {
+  color: var(--plen-blue, #4B8BFF);
+  font-size: 15px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* ── Action buttons ─────────────────────────────────────────────────── */
+
+.ags__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--plen-border, rgba(255, 255, 255, 0.08));
+}
+
+.ags__btn {
+  border: 1px solid var(--plen-border-hi, rgba(255, 255, 255, 0.14));
+  background: transparent;
+  color: var(--plen-text, #DDE4F2);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 9px 18px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+  font-family: inherit;
+}
+
+.ags__btn:disabled {
+  opacity: 0.40;
+  cursor: not-allowed;
+}
+
+.ags__btn--ghost:hover:not(:disabled) {
+  background: var(--plen-surface-2, rgba(255, 255, 255, 0.06));
+  border-color: var(--plen-text-sub, rgba(255, 255, 255, 0.25));
+}
+
+.ags__btn--primary {
+  background: var(--plen-blue, #4B8BFF);
+  border-color: var(--plen-blue, #4B8BFF);
+  color: #fff;
+}
+
+.ags__btn--primary:hover:not(:disabled) {
+  background: var(--plen-blue-mid, #2563EB);
+  border-color: var(--plen-blue-mid, #2563EB);
+}

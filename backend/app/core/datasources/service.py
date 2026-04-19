@@ -1,5 +1,5 @@
 """
-URBY-ETL — Data Source Service
+PLENORA-ETL — Data Source Service
 CRUD configurazioni Data Source → SQLite (db_service).
 Scan state → filesystem (dati di runtime effimeri).
 """
@@ -7,7 +7,7 @@ Scan state → filesystem (dati di runtime effimeri).
 import json
 import uuid
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from app.config import settings
@@ -49,20 +49,47 @@ class DataSourceService:
 
     def list_datasources(self, group_id: str = None) -> DataSourceList:
         # group_id=None → no filter (superadmin o path allowed_groups)
+        # Fix N+1: fetch tutte le row in una query, parse config in memoria
+        import app.db.config_db_service as _cfg_db
         if group_id is None:
-            import app.db.config_db_service as _cfg_db
             rows = _cfg_db.fetchall(
-                "SELECT id, group_id, name, ds_type, created_at FROM datasources ORDER BY name"
+                "SELECT * FROM datasources ORDER BY name"
             )
         else:
-            import app.db.db_service as db
-            rows = db.list_datasources(group_id)
+            rows = _cfg_db.fetchall(
+                "SELECT * FROM datasources WHERE group_id = %s ORDER BY name",
+                (group_id,)
+            )
         result = []
         for row in rows:
-            config = self._get_full_config(row["id"])
+            config = self._row_to_config(row)
             if config:
                 result.append(self._to_model(config, redact=True))
         return DataSourceList(datasources=result)
+
+    def _row_to_config(self, row: dict) -> Optional[dict]:
+        """Estrae il config dict da una row già fetchata (no re-query).
+
+        Equivalente in-memory di _get_full_config() ma senza re-fetch dal DB.
+        Usato da list_datasources per evitare N+1 query.
+        """
+        if not row:
+            return None
+        config = row.get("config") or {}
+        if isinstance(config, str):
+            try:
+                config = json.loads(config)
+            except json.JSONDecodeError as e:
+                logger.warning(f"Config corrotta per datasource {row.get('id')}: {e}")
+                return None
+        if not isinstance(config, dict):
+            return None
+        # Decifra campi sensibili at-rest
+        _decrypt_dict_fields(config, _SENSITIVE_FIELDS)
+        # Inietta group_id e created_by dal record DB (stesso logic di _get_full_config)
+        config["group_id"] = row.get("group_id", "")
+        config["created_by"] = row.get("created_by")
+        return config
 
     def get_datasource(self, ds_id: str) -> Optional[DataSource]:
         config = self._get_full_config(ds_id)
@@ -74,7 +101,7 @@ class DataSourceService:
                           created_by: str = None) -> DataSource:
         import app.db.db_service as db
         ds_id = self._generate_id(data.name)
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
 
         config = {
             "id": ds_id,
@@ -138,7 +165,7 @@ class DataSourceService:
             if sf in updates and updates[sf] == "***":
                 del updates[sf]
         config.update(updates)
-        config["updated_at"] = datetime.now().isoformat()
+        config["updated_at"] = datetime.now(timezone.utc).isoformat()
 
         # Re-cifra i campi sensibili prima di salvare. Lavoro su una copia
         # per non mutare il dict che _to_model deve usare per la redaction.
@@ -240,8 +267,7 @@ class DataSourceService:
             # Ora: log a ERROR + rinomina il file corrotto in `.broken.<ts>`
             # così la prossima chiamata vede "no scan state" e riparte pulita.
             # L'admin trova il file corrotto sul disco se vuole investigare.
-            from datetime import datetime
-            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
             broken_path = path.with_name(f"{path.name}.broken.{ts}")
             try:
                 path.rename(broken_path)
@@ -295,16 +321,18 @@ class DataSourceService:
     def mark_as_processed(self, ds_id: str, filename: str, pipeline_id: str) -> None:
         from app.core.datasources.models import ProcessedEntry, SnapshotEntry
         state = self.get_scan_state(ds_id)
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         state.last_check = now
 
-        if filename not in {p.name for p in state.processed}:
+        processed_names = {p.name for p in state.processed}
+        snapshot_names = {s.name for s in state.snapshot}
+        if filename not in processed_names:
             state.processed.append(ProcessedEntry(
                 name=filename, processed_at=now, pipeline_id=pipeline_id,
             ))
         try:
             fi = self.file_info(ds_id, filename)
-            if filename not in {s.name for s in state.snapshot}:
+            if filename not in snapshot_names:
                 state.snapshot.append(SnapshotEntry(
                     name=filename, size=fi.size, modified=fi.modified_date.isoformat(),
                 ))
@@ -365,7 +393,7 @@ class DataSourceService:
         return self._scan_dir / f"{ds_id}.json"
 
     def _generate_id(self, name: str) -> str:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         short_uuid = str(uuid.uuid4())[:8]
         safe = "".join(c for c in name if c.isalnum() or c in (" ", "_")).strip()
         safe = safe.replace(" ", "_")[:30]
@@ -382,7 +410,7 @@ class DataSourceService:
                 try:
                     d[ts_field] = datetime.fromisoformat(d[ts_field])
                 except ValueError:
-                    d[ts_field] = datetime.now()
+                    d[ts_field] = datetime.now(timezone.utc)
         return DataSource(**{k: v for k, v in d.items() if k in DataSource.model_fields})
 
 

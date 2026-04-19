@@ -112,6 +112,22 @@ export function calculateOutputColumns(nodes, edges, resultNodeId) {
       
       allColumns.push(...visibleColumns);
     }
+
+    // Se è un nodo Feature Layer (ArcGIS)
+    if (sourceNode.type === 'featureLayerNode') {
+      const layerName = sourceNode.data.layer_name || 'feature';
+      const visibleColumns = (sourceNode.data.columns || [])
+        .filter(col => col.visible)
+        .map(col => ({
+          name: col.name,
+          alias: col.alias,
+          type: col.type || 'str',
+          source_table: layerName,
+          full_name: `${layerName}.${col.alias || col.name}`
+        }));
+      
+      allColumns.push(...visibleColumns);
+    }
   }
 
   // Rimuovi duplicati in base a full_name
@@ -175,6 +191,23 @@ export function calculateOutputColumnsRecursive(nodes, edges, resultNodeId) {
         });
       
       allColumns.push(...calculatedColumns);
+    }
+
+    // Se è un nodo Feature Layer (ArcGIS), raccoglie le colonne visibili
+    if (node.type === 'featureLayerNode') {
+      const layerName = node.data.layer_name || 'feature';
+      
+      const visibleColumns = (node.data.columns || [])
+        .filter(col => col.visible)
+        .map(col => ({
+          name: col.name,
+          alias: col.alias,
+          type: col.type || 'str',
+          source_table: layerName,
+          full_name: `${layerName}.${col.alias || col.name}`
+        }));
+      
+      allColumns.push(...visibleColumns);
     }
 
     // Trova tutti gli edges che arrivano a questo nodo

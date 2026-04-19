@@ -1,0 +1,14 @@
+[Unit]
+Description=PLENORA-ETL Backend (uvicorn)
+After=network.target redis.service
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/plenora-etl/backend
+ExecStart=/home/ubuntu/plenora-etl/backend/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 5004 --workers 2
+Restart=always
+RestartSec=5
+EnvironmentFile=/home/ubuntu/plenora-etl/backend/.env
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,15 @@
+[Unit]
+Description=PLENORA-ETL weekly restore verification (Sun 03:00 UTC)
+
+[Timer]
+# Domenica 03:00 UTC: dopo il backup delle 02:00 UTC + RandomizedDelaySec
+# del backup (max +5min) = dump del Sabato/Domenica gia' su S3 e firm.
+OnCalendar=Sun *-*-* 03:00:00
+# Se il server era spento, recupera al boot successivo.
+Persistent=true
+# Spread con altri timer nel minuto (best practice).
+RandomizedDelaySec=600
+Unit=plenora-backup-test.service
+
+[Install]
+WantedBy=timers.target

@@ -1,5 +1,5 @@
 """
-Servizio CRUD per gli schedule URBY-ETL.
+Servizio CRUD per gli schedule PLENORA-ETL.
 
 Architettura
 ============
@@ -17,11 +17,69 @@ Storage: tabella `schedules` in urbyetorbit.db
 import json
 import threading
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
 from app.config import settings
 from app.utils.logger import get_logger
+
+
+# =============================================================================
+# FUNZIONE PURA — detect_missed_run (C3 fix 3)
+# =============================================================================
+#
+# Estratta come funzione a livello-modulo (non metodo di ScheduleService)
+# per essere banalmente testabile e riusabile dal beat scheduler senza
+# dover istanziare un service completo. Zero side-effect, solo logica.
+
+
+def detect_missed_run(
+    cron_expression: str,
+    last_run: Optional[datetime],
+    now: datetime,
+    grace_hours: int = 24,
+) -> Optional[datetime]:
+    """Rileva se c'e' un run mancante da recuperare per uno schedule.
+
+    Args:
+        cron_expression: espressione cron standard a 5 campi.
+        last_run: timestamp dell'ultima esecuzione riuscita, o None
+            se lo schedule non e' mai stato eseguito.
+        now: istante corrente (deve essere tz-aware).
+        grace_hours: finestra massima per il recupero. Oltre questa,
+            il missed e' considerato "troppo vecchio" e scartato
+            (evita di recuperare run obsoleti dopo outage lunghi).
+
+    Returns:
+        Il timestamp dell'`expected_last` cron tick da recuperare,
+        oppure None se non c'e' niente da recuperare:
+        - last_run is None (primo run di sempre)
+        - last_run >= expected_last (nessun tick perso)
+        - expected_last piu' vecchio di grace_hours (troppo obsoleto)
+        - cron expression invalida (graceful fallback)
+    """
+    if last_run is None:
+        return None
+
+    try:
+        from croniter import croniter
+    except ImportError:
+        return None
+
+    try:
+        cron = croniter(cron_expression, now)
+        expected_last = cron.get_prev(datetime)
+    except Exception:
+        return None
+
+    if last_run >= expected_last:
+        return None
+
+    # Grace window check: se l'expected_last e' troppo vecchio, skip.
+    if (now - expected_last).total_seconds() > grace_hours * 3600:
+        return None
+
+    return expected_last
 from app.core.scheduler.models import (
     ScheduleConfig,
     ScheduleCreate,
@@ -44,7 +102,7 @@ logger = get_logger(__name__)
 
 class ScheduleService:
     """
-    Servizio CRUD per schedule URBY-ETL.
+    Servizio CRUD per schedule PLENORA-ETL.
     Storage su SQLite tramite db_service.
     RedBeat rimosso — il beat scheduler custom legge da SQLite.
     """
@@ -260,6 +318,31 @@ class ScheduleService:
     # TOGGLE ENABLE/DISABLE
     # =========================================================================
 
+    def update_catchup_config(
+        self,
+        schedule_id: str,
+        enabled: bool,
+        grace_hours: int = 24,
+    ) -> Optional[ScheduleConfig]:
+        """Aggiorna il catchup config di uno schedule (C3 fix 3).
+
+        Ritorna None se lo schedule non esiste.
+        """
+        config = self.get_schedule(schedule_id)
+        if not config:
+            return None
+
+        config.schedule.catchup_missed_runs = enabled
+        config.schedule.catchup_grace_hours = grace_hours
+        config.updated_at = datetime.now(timezone.utc)
+
+        db.update_schedule(schedule_id, config=config.model_dump(mode='json'))
+        logger.info(
+            f"Schedule {schedule_id} catchup aggiornato: "
+            f"enabled={enabled}, grace_hours={grace_hours}"
+        )
+        return config
+
     def toggle_schedule(self, schedule_id: str, enabled: bool) -> Optional[ScheduleConfig]:
         """Abilita o disabilita uno schedule."""
         config = self.get_schedule(schedule_id)
@@ -309,6 +392,10 @@ class ScheduleService:
         except Exception as e:
             logger.warning(f"Schedule eliminato ma errore pulizia log: {e}")
 
+        # Cleanup lock in-memory per evitare accumulo di lock orfani
+        with self._schedule_locks_lock:
+            self._schedule_locks.pop(schedule_id, None)
+
         return True
 
     # =========================================================================
@@ -338,17 +425,25 @@ class ScheduleService:
             return config
 
     def check_orphans(self) -> List[str]:
-        """Verifica tutti gli schedule e segna come orfani quelli con progetto eliminato."""
-        from app.services.project_service import ProjectService
-        project_service = ProjectService()
+        """Verifica tutti gli schedule e segna come orfani quelli con progetto eliminato.
+
+        Fix N+1: era un loop con project_exists() per ogni schedule. Ora fa una
+        sola query per avere tutti i project_id esistenti.
+        """
+        import app.db.db_service as _db
 
         orphaned = []
         schedule_list = self.list_schedules()
 
+        # Fetch tutti gli ID progetto esistenti in un set
+        existing_project_ids = {
+            row["id"] for row in _db.fetchall("SELECT id FROM projects")
+        }
+
         for schedule in schedule_list.schedules:
             if schedule.runtime.status == "orphan":
                 continue
-            if not project_service.project_exists(schedule.pipeline.project_id):
+            if schedule.pipeline.project_id not in existing_project_ids:
                 self.mark_as_orphan(schedule.id)
                 orphaned.append(schedule.id)
 

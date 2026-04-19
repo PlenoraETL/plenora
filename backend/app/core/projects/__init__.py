@@ -1,5 +1,5 @@
 """
-Modulo Projects — CRUD progetti URBY-ETL.
+Modulo Projects — CRUD progetti PLENORA-ETL.
 """
 
 from .models import ProjectMetadata, ProjectCreate, ProjectList

@@ -1,0 +1,26 @@
+[Unit]
+Description=PLENORA-ETL weekly restore verification on throwaway DB
+Documentation=file:/home/ubuntu/plenora-etl/backend/scripts/test_restore.py
+After=network-online.target
+Wants=network-online.target
+# Se vuoi alerting su failure, aggiungi qui un OnFailure= verso una
+# unit notification (es. plenora-backup-notify.service che chiama un
+# webhook Slack). Vedi deploy/systemd/README.md.
+# OnFailure=plenora-backup-notify.service
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/plenora-etl/backend
+
+Environment=AWS_REGION=eu-south-1
+Environment=BACKUP_BUCKET=plenora-backup-112011134642-eu-south-1-an
+
+# C1: secrets via SSM (stesso pattern di plenora-backup.service).
+ExecStart=/home/ubuntu/plenora-etl/backend/venv/bin/python3 /home/ubuntu/plenora-etl/backend/scripts/load_secrets.py /home/ubuntu/plenora-etl/backend/scripts/test_restore.py
+
+# Safety net: 2 ore massimo (download dump + restore + sanity + cleanup).
+TimeoutStartSec=7200
+StandardOutput=journal
+StandardError=journal

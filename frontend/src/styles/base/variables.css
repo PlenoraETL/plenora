@@ -1,0 +1,295 @@
+/**
+ * URBY-ETL Design System - CSS Variables
+ * 
+ * Questo file definisce tutti i token di design usati nell'applicazione.
+ * Importare questo file all'inizio di ogni stylesheet per usare le variabili.
+ * 
+ * Uso: var(--color-primary) o var(--spacing-md)
+ */
+
+:root {
+  /* ===== COLORS - Primary ===== */
+  --color-primary: #3b82f6;
+  --color-primary-dark: #2563eb;
+  --color-primary-light: #dbeafe;
+  --color-primary-50: #eff6ff;
+  --color-primary-700: #1d4ed8;
+
+  /* ===== COLORS - Secondary (Purple - Manipola) ===== */
+
+  /* ===== COLORS - Accent (Teal - Arricchisci) ===== */
+  --color-accent: #009688;
+
+  /* ===== COLORS - Semantic ===== */
+  --color-success: #10b981;
+  --color-success-dark: #059669;
+  --color-success-light: #d1fae5;
+
+  --color-warning: #f59e0b;
+  --color-warning-dark: #d97706;
+  --color-warning-light: #fef3c7;
+
+  --color-danger: #ef4444;
+  --color-danger-dark: #dc2626;
+  --color-danger-light: #fee2e2;
+
+  --color-info: #3b82f6;
+  --color-info-dark: #2563eb;
+  --color-info-light: #dbeafe;
+
+  /* ===== COLORS - Grays ===== */
+  --color-gray-50: #f9fafb;
+  --color-gray-100: #f3f4f6;
+  --color-gray-150: #eef0f2;
+  --color-gray-200: #e5e7eb;
+  --color-gray-300: #d1d5db;
+  --color-gray-350: #b0b8c1;
+  --color-gray-400: #9ca3af;
+  --color-gray-500: #6b7280;
+  --color-gray-600: #4b5563;
+  --color-gray-700: #374151;
+  --color-gray-800: #1f2937;
+
+  /* ===== COLORS - Background ===== */
+  --color-bg-primary: #ffffff;
+  --color-bg-secondary: #f9fafb;
+  --color-bg-tertiary: #f3f4f6;
+  --color-bg-hover: #e5e7eb;
+
+  /* ===== COLORS - Text ===== */
+  --color-text-primary: #1f2937;
+  --color-text-secondary: #4b5563;
+  --color-text-disabled:   #9ca3af;
+  --color-text-tertiary: #9ca3af;
+  --color-text-muted: #6b7280;
+
+  /* ===== COLORS - Border ===== */
+  --color-border: #e5e7eb;
+  --color-border-light: #f3f4f6;
+
+  /* ===== SPACING ===== */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+
+  /* ===== BORDER RADIUS ===== */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 9999px;
+
+  /* ===== FONT SIZES ===== */
+  --font-size-xs: 12px;
+  --font-size-sm: 14px;
+  --font-size-md: 16px;
+  --font-size-lg: 18px;
+  --font-size-xl: 20px;
+  --font-size-2xl: 24px;
+
+  /* ===== FONT WEIGHTS ===== */
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  /* ===== LINE HEIGHTS ===== */
+
+  /* ===== SHADOWS ===== */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+
+  /* ===== TRANSITIONS ===== */
+  --transition-fast: 0.1s ease;
+  --transition-normal: 0.2s ease;
+  --transition-slow: 0.3s ease;
+
+  /* ===== Z-INDEX ===== *
+   * Gerarchia (dal basso verso l'alto):
+   *   --z-sidebar         200   sidebar/drawer laterali
+   *   --z-dropdown        800   popover, tooltip, menu contestuali
+   *   --z-modal           1000  contenuto modal standard + backdrop
+   *   --z-modal-backdrop  1000  (alias storico, stesso livello)
+   *   --z-modal-priority  10000 modal "critici" (validation, conferme, wizard full-screen)
+   *   --z-toast           20000 notifiche — sempre sopra tutto
+   * Uso `var(--z-modal, 1000)` con fallback: se la variabile non e' ancora
+   * caricata (teoria, ma non dovrebbe mai capitare), resta il valore vecchio.
+   */
+  --z-sidebar: 200;
+  --z-dropdown: 800;
+  --z-modal: 1000;
+  --z-modal-backdrop: 1000;
+  --z-modal-priority: 10000;
+  --z-toast: 20000;
+
+  /* ===== EDITOR SPECIFIC ===== */
+  --color-estrai: #2196F3;
+  --color-manipola: #9C27B0;
+  --color-manipola-dark: #5B21B6;
+
+  /* Colore GEO (teal/verde geospaziale) */
+  --color-geo:             #00897B;
+  --color-geo-light:       #E0F2F1;
+  --color-geo-dark:        #00695C;
+
+  --color-arricchisci: #009688;
+
+  /* ===== NODE COLORS ===== */
+  --color-node-source:    #4CAF50;
+  --color-node-transform: #9C27B0;
+  --color-node-result: #FF9800;
+  --color-node-api: #00BCD4;
+  --color-node-file: #607D8B;
+  --color-node-static: #795548;
+
+  /* ===== EDGE COLORS ===== */
+  --color-edge-spatial: #E91E63;
+
+  /* ===== SIDEBAR ===== */
+  --sidebar-width: 280px;
+  --sidebar-collapsed-width: 60px;
+  --sidebar-bg: #f8fafc;
+
+  /* ===== HEADER ===== */
+  --header-height: 60px;
+
+  /* ── Danger variants ── */
+  --color-danger-light:       #ffebee;
+  --color-danger-bg:          #fef2f2;
+  --color-danger-border:      #ffcdd2;
+  --color-error-light:         #ffcdd2;
+  --color-danger-dark:        #c62828;
+
+  /* ── Success variants ── */
+  --color-success-bg:         #e8f5e9;
+  --color-success-border:     #c8e6c9;
+
+  /* ── Primary variants ── */
+  --color-primary-100:        #bbdefb;
+  --color-primary-200:        #90caf9;
+  --color-primary-600:        #1976d2;
+  --color-primary-700:        #1565c0;
+
+  /* ── Neutral grays (scala completa) ── */
+  --color-gray-50:            #f8f9fa;
+  --color-gray-150:           #f0f0f0;
+  --color-gray-250:           #e8e8e8;
+
+  /* ── Slate ── */
+  --color-slate-200:          #e2e8f0;
+  --color-slate-400:          #94a3b8;
+  --color-slate-500:          #64748b;
+
+  /* ── Warning variants ── */
+  --color-warning-dark:       #f57c00;
+  --color-warning-bg:         #fff8e1;
+
+  /* ── Indigo (template/wizard/Schedule) ── */
+  --color-indigo-500:         #3F51B5;
+  --color-indigo:             #6366f1;
+  --color-indigo-dark:        #5e35b1;
+  --color-indigo-bg:          #f3e8ff;
+
+  /* ── Feature Layer (arancio caldo) ── */
+  --color-feature-layer:      #e67e22;
+  --color-feature-layer-dark: #f39c12;
+
+  /* ============================================================
+     LIVELLO 2 — TOKEN UI SEMANTICI
+     Modificare questi valori per cambiare tema senza toccare i componenti
+     ============================================================ */
+
+  /* Bottone PRIMARY — azione principale (override per modulo sotto) */
+  /* Bottone SECONDARY — azione secondaria */
+  --btn-secondary-bg:      white;
+  --btn-secondary-text:    var(--color-text-primary);
+  --btn-secondary-border:  var(--color-border);
+
+  /* Bottone DANGER — elimina/rimuovi */
+  --btn-danger-bg:         var(--color-danger);
+  --btn-danger-text:       white;
+
+  /* Bottone SUCCESS — conferma/esegui */
+  --btn-success-bg:        var(--color-success);
+  --btn-success-text:      white;
+
+  /* Bottone CANCEL/GHOST — annulla */
+  --btn-cancel-bg:         transparent;
+  --btn-cancel-text:       var(--color-text-tertiary);
+
+  /* Gradient header modali — TUTTI CHIARI */
+  --gradient-header-estrai:      linear-gradient(135deg, #e3f2fd 0%, var(--color-bg-secondary) 100%);
+  --gradient-header-manipola:    linear-gradient(135deg, #f3e5f5 0%, var(--color-bg-secondary) 100%);
+  --gradient-header-arricchisci: linear-gradient(135deg, #fff3e0 0%, var(--color-bg-secondary) 100%);
+  --gradient-header-carica:      linear-gradient(135deg, #ede9fe 0%, var(--color-bg-secondary) 100%);
+  --gradient-header-datasource:  linear-gradient(135deg, #dcfce7 0%, var(--color-bg-secondary) 100%);
+  --gradient-header-geo:         linear-gradient(135deg, #ccfbf1 0%, var(--color-bg-secondary) 100%);
+  --gradient-header-file:        linear-gradient(135deg, #e2e8f0 0%, var(--color-bg-secondary) 100%);
+  --gradient-header-indigo:      linear-gradient(135deg, #e0e7ff 0%, var(--color-bg-secondary) 100%);
+
+  /* Colori tipo dato — globali */
+  --color-type-bool:       #7B1FA2;
+  --color-type-bool-light: #F3E5F5;
+  --color-type-int:        var(--color-success-dark);
+  --color-type-int-light:  var(--color-success-light);
+  --color-type-str:        #9E9E9E;
+  --color-type-str-light:  #F5F5F5;
+  --color-type-date:       #E65100;
+  --color-type-date-light: #FFF3E0;
+  --color-type-geometry:   var(--color-geo);
+  --color-type-geometry-light: var(--color-geo-light);
+  --color-type-real:       var(--color-node-result);
+  --color-format-csv:      var(--color-success);
+  --color-format-json:     var(--color-node-result);
+  --color-format-shp:      #673AB7;
+  --color-format-gpkg:     var(--color-manipola);
+  --color-format-geojson:  var(--color-geo);
+  --color-format-xlsx:     var(--color-primary);
+
+
+  /* Varianti tipo dato mancanti */
+  --color-type-num:        var(--color-success);
+  --color-type-num-light:  var(--color-success-light);
+  --color-type-geo:        var(--color-geo);
+  --color-type-geo-light:  var(--color-geo-light);
+  --color-type-bool-bg:    var(--color-type-bool-light);
+  --color-type-str-bg:     var(--color-type-str-light);
+  --color-type-date-bg:    var(--color-type-date-light);
+  --color-type-geo-bg:     var(--color-type-geometry-light);
+  --color-type-num-bg:     var(--color-type-int-light);
+
+  /* Sfumature primario */
+  --color-primary-lighter:  rgba(59, 130, 246, 0.15);
+  --color-primary-lightest: rgba(59, 130, 246, 0.07);
+
+  /* Shadow e radius condivisi (acm e dsm hanno stesso valore) */
+  --shadow-sm:   0 2px 8px rgba(0,0,0,0.08);
+  --shadow-lg:   0 8px 32px rgba(0,0,0,0.12);
+  --radius-xl:   12px;
+
+
+  /* ===== COLORS - Aggiunta post-analisi (C5) ===== */
+
+  /* Colori modulo Arricchisci (arancio) */
+  --color-arricchisci:         #FF6B35;
+  --color-arricchisci-dark:    #E65100;
+  --color-arricchisci-light:   #FFF3E0;
+  --color-arricchisci-secondary: #F7931E;
+
+  /* Colori modulo DataSource (verde scuro) */
+  --color-datasource:          #2E7D32;
+  --color-datasource-dark:     #1B5E20;
+  --color-datasource-accent:   #43A047;
+  --color-datasource-light:    rgba(46, 125, 50, 0.1);
+
+  --color-carica: #7c3aed;             /* Viola — nodo CARICA */
+  --color-edge-carica: #7c3aed;        /* Edge → nodo carica */
+}
+
+/* ===== DARK MODE (future) ===== */
+@media (prefers-color-scheme: dark) {
+}

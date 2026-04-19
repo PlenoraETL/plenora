@@ -106,10 +106,10 @@ PANDAS_TO_SQL["mariadb"] = PANDAS_TO_SQL["mysql"]
 
 
 # ============================================================================
-# MAPPING TIPI URBY INTERNI → SQL
+# MAPPING TIPI PLENORA INTERNI → SQL
 # ============================================================================
 
-# Quando il tipo viene dal canvas (tipi interni URBY), usiamo questa mappa
+# Quando il tipo viene dal canvas (tipi interni PLENORA), usiamo questa mappa
 URBY_TO_SQL = {
     "postgres": {
         "int": "BIGINT",
@@ -215,7 +215,7 @@ class DDLGenerator:
         Priorità:
         1. Se mapping.dest_type è già specificato dall'utente → usa quello
         2. Se mapping.is_geometry → tipo geometria specifico per DB
-        3. Se mapping.dest_type è un tipo URBY interno → converte
+        3. Se mapping.dest_type è un tipo PLENORA interno → converte
         4. Altrimenti → usa pandas_dtype per la conversione
 
         Args:
@@ -243,7 +243,7 @@ class DDLGenerator:
         ):
             return mapping.dest_type
 
-        # Tipo URBY interno (dal canvas)
+        # Tipo PLENORA interno (dal canvas)
         base_type = mapping.dest_type.split(":")[0].lower() if mapping.dest_type else ""
         if base_type in URBY_TO_SQL.get(self.db_type, {}):
             return URBY_TO_SQL[self.db_type][base_type]
@@ -290,6 +290,7 @@ class DDLGenerator:
         table: str,
         columns: List[ColumnMapping],
         pandas_dtypes: Optional[Dict[str, str]] = None,
+        max_lengths: Optional[Dict[str, int]] = None,
     ) -> str:
         """Genera l'istruzione CREATE TABLE completa.
 
@@ -298,11 +299,19 @@ class DDLGenerator:
             table: nome tabella destinazione
             columns: lista mappature colonne
             pandas_dtypes: dizionario {col_name: pandas_dtype} per fallback tipi
+            max_lengths: dizionario {col_name: max_char_length} opzionale,
+                calcolato dal DataFrame sorgente (`df[col].str.len().max()`).
+                Su Oracle, abilita l'auto-promozione VARCHAR2(4000) → CLOB
+                per colonne stringa con contenuto > 4000 char, evitando
+                `ORA-12899 value too large for column` (C5 fix 2).
+                Ignorato per altri dialetti che hanno gia' tipi stringa
+                illimitati (Postgres TEXT, MSSQL NVARCHAR(MAX), MySQL TEXT).
 
         Returns:
             Stringa SQL CREATE TABLE.
         """
         pandas_dtypes = pandas_dtypes or {}
+        max_lengths = max_lengths or {}
         full_name = self.qualified_table_name(schema, table)
 
         col_defs = []
@@ -312,6 +321,18 @@ class DDLGenerator:
             quoted_name = self.quote_column(col.dest_column)
             dtype = str(pandas_dtypes.get(col.source_column, "") or pandas_dtypes.get(col.dest_column, ""))
             sql_type = self.resolve_column_type(col, dtype)
+
+            # C5 fix 2: auto-promote Oracle VARCHAR2(4000) → CLOB se la
+            # colonna supera la soglia. Controlla sia source_column che
+            # dest_column per robustezza contro mapping con rename.
+            if self.db_type == "oracle" and "VARCHAR2(4000)" in sql_type.upper():
+                col_max = max(
+                    int(max_lengths.get(col.source_column, 0) or 0),
+                    int(max_lengths.get(col.dest_column, 0) or 0),
+                )
+                if col_max > 4000:
+                    sql_type = "CLOB"
+
             col_defs.append(f"    {quoted_name} {sql_type}")
 
         cols_sql = ",\n".join(col_defs)
@@ -352,9 +373,15 @@ class DDLGenerator:
 
         elif self.db_type == "oracle":
             # Oracle richiede: 1) INSERT metadata, 2) CREATE INDEX
+            import re as _re
+            # Validazione identificatori Oracle (solo alfanumerico + underscore)
+            _ident = _re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
             schema_upper = schema.upper() if schema else "USER"
             table_upper = table.upper()
             geom_upper = geometry_column.upper()
+            for _id in (table_upper, geom_upper):
+                if not _ident.match(_id):
+                    raise ValueError(f"Oracle identifier non valido: {_id}")
             return [
                 # Metadata per Oracle Spatial
                 f"""INSERT INTO USER_SDO_GEOM_METADATA (TABLE_NAME, COLUMN_NAME, DIMINFO, SRID)
@@ -410,9 +437,140 @@ END;"""
         else:
             return f"DROP TABLE IF EXISTS {full_name}"
 
+    # Alias semantico: il writer per stage+swap vuole sottolineare
+    # "drop defensivo di una shadow eventualmente orfana", non un
+    # drop generico. L'implementazione e' la stessa.
+    def generate_drop_if_exists(self, schema: str, table: str) -> str:
+        return self.generate_drop_table(schema, table)
+
+    # ========================================================================
+    # GENERAZIONE STAGE+SWAP (C5 fix 3)
+    # ========================================================================
+
+    def generate_create_like(
+        self, schema: str, src_table: str, stg_table: str
+    ) -> str:
+        """Crea una shadow table vuota con struttura derivata dal target.
+
+        Preservazione per dialetto:
+        - Postgres: LIKE ... INCLUDING ALL → colonne + indexes +
+          constraints + defaults + storage (completo).
+        - MySQL: LIKE nativo → colonne + indexes (NO FK — limitazione
+          MySQL documentata).
+        - Oracle: CREATE AS SELECT WHERE 1=0 → solo colonne + NOT NULL
+          derivati. Indexes/constraints NON preservati (limitazione
+          documentata nel flow stage+swap).
+        - MSSQL: SELECT INTO WHERE 1=0 → solo colonne (stessa
+          limitazione Oracle).
+
+        Per il caso d'uso TRUNCATE_INSERT + ALL_OR_NOTHING la
+        limitazione Oracle/MSSQL e' accettabile: l'operatore sceglie
+        stage+swap consapevolmente per tabelle grandi, dove il costo
+        di ricostruire indexes post-swap e' comunque minore del
+        rischio UNDO saturation.
+        """
+        src_full = self.qualified_table_name(schema, src_table)
+        stg_full = self.qualified_table_name(schema, stg_table)
+
+        if self.db_type == "postgres":
+            return f"CREATE TABLE {stg_full} (LIKE {src_full} INCLUDING ALL)"
+
+        if self.db_type in ("mysql", "mariadb"):
+            return f"CREATE TABLE {stg_full} LIKE {src_full}"
+
+        if self.db_type == "oracle":
+            return f"CREATE TABLE {stg_full} AS SELECT * FROM {src_full} WHERE 1=0"
+
+        if self.db_type == "mssql":
+            return f"SELECT * INTO {stg_full} FROM {src_full} WHERE 1=0"
+
+        raise ValueError(
+            f"generate_create_like non supportato per db_type={self.db_type}"
+        )
+
+    def generate_swap_rename(
+        self, schema: str, src_table: str, stg_table: str
+    ) -> List[str]:
+        """Statements per 3-way swap: src→backup, stg→src.
+
+        Il drop del backup e' responsabilita' del writer (post-swap).
+        La shadow `{src}__bak` e' l'unica "orfana" possibile se il
+        processo crasha a meta'; il writer la elimina defensivamente
+        all'inizio di ogni stage+swap via generate_drop_if_exists.
+
+        Atomicita' per dialetto:
+        - Postgres: 2 ALTER TABLE RENAME. Caller li wrappa in
+          BEGIN/COMMIT → atomico.
+        - MySQL: UNA RENAME TABLE con 2 coppie → atomica by design.
+        - Oracle: 2 ALTER TABLE RENAME. Ogni DDL e' auto-commit →
+          finestra di inconsistenza sub-secondo (documentata).
+        - MSSQL: 2 sp_rename. Caller wrappa in BEGIN TRAN → atomico.
+        """
+        src_full = self.qualified_table_name(schema, src_table)
+        stg_full = self.qualified_table_name(schema, stg_table)
+        backup_name = f"{src_table}__bak"
+
+        if self.db_type == "postgres":
+            backup_id = f'"{backup_name}"'
+            src_id = f'"{src_table}"'
+            return [
+                f'ALTER TABLE {src_full} RENAME TO {backup_id}',
+                f'ALTER TABLE {stg_full} RENAME TO {src_id}',
+            ]
+
+        if self.db_type in ("mysql", "mariadb"):
+            backup_full = self.qualified_table_name(schema, backup_name)
+            return [
+                f"RENAME TABLE {src_full} TO {backup_full}, "
+                f"{stg_full} TO {src_full}"
+            ]
+
+        if self.db_type == "oracle":
+            backup_id = f'"{backup_name.upper()}"'
+            src_id = f'"{src_table.upper()}"'
+            return [
+                f"ALTER TABLE {src_full} RENAME TO {backup_id}",
+                f"ALTER TABLE {stg_full} RENAME TO {src_id}",
+            ]
+
+        if self.db_type == "mssql":
+            # sp_rename: il nuovo nome e' unqualified (stesso schema)
+            src_qualified_str = f"{schema}.{src_table}" if schema else src_table
+            stg_qualified_str = f"{schema}.{stg_table}" if schema else stg_table
+            return [
+                f"EXEC sp_rename '{src_qualified_str}', '{backup_name}'",
+                f"EXEC sp_rename '{stg_qualified_str}', '{src_table}'",
+            ]
+
+        raise ValueError(
+            f"generate_swap_rename non supportato per db_type={self.db_type}"
+        )
+
     def generate_truncate(self, schema: str, table: str) -> str:
-        """Genera TRUNCATE TABLE."""
+        """Genera SQL per svuotare la tabella.
+
+        Oracle E MySQL: usano `DELETE FROM` (DML, transazionale). Su
+        entrambi `TRUNCATE TABLE` e' DDL con implicit commit: se un
+        INSERT successivo fallisce il rollback NON puo' ripristinare
+        le righe cancellate → perdita dati deterministica nel flow
+        truncate_insert + ALL_OR_NOTHING. Con DELETE FROM la
+        transazione copre sia cancellazione che inserimento.
+        Performance inferiore su tabelle grandi e' un trade-off
+        accettato per safety (C5 fix 1, esteso a MySQL in fix 1b).
+
+        Postgres e SQL Server: TRUNCATE TABLE e' transazionale nella
+        stessa connection, niente problema di auto-commit.
+        """
         full_name = self.qualified_table_name(schema, table)
+
+        # Dialetti con TRUNCATE TABLE = DDL implicit-commit.
+        # Oracle: tutti i TRUNCATE sono DDL auto-commit.
+        # MySQL:  TRUNCATE su InnoDB = DDL con implicit commit
+        #         (vedi MySQL ref "TRUNCATE TABLE is classified as a
+        #         DDL statement rather than a DML statement").
+        if self.db_type in ("oracle", "mysql"):
+            return f"DELETE FROM {full_name}"
+
         return f"TRUNCATE TABLE {full_name}"
 
     # ========================================================================

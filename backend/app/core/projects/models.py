@@ -1,7 +1,7 @@
 """
 Modelli Pydantic per il modulo Projects.
 
-CRUD progetti URBY-ETL con gestione canvas e metadata.
+CRUD progetti PLENORA-ETL con gestione canvas e metadata.
 """
 
 from pydantic import BaseModel, Field
@@ -10,7 +10,7 @@ from datetime import datetime
 
 
 class ProjectMetadata(BaseModel):
-    """Metadati di un progetto URBY-ETL."""
+    """Metadati di un progetto PLENORA-ETL."""
     id: str
     name: str
     description: str = ""

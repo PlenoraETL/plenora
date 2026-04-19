@@ -116,6 +116,63 @@ def _ensure_active_geometry(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
 
 
 # =============================================================================
+# CRS HELPERS — supporto parametri opt-in output_crs / metric_crs
+# =============================================================================
+# Opt-in API: gli operator metrici (buffer/centroid/area/length/perimeter/
+# distance/nearest) accettano due parametri opzionali per controllare
+# esplicitamente il CRS di calcolo e il CRS di output geometrico.
+#
+#   metric_crs:
+#     - None (default) -> auto-UTM via get_utm_crs_for_geometry se l'input
+#                         e' in CRS geografico, altrimenti nessuna reproject
+#     - "EPSG:xxxx"    -> usa quel CRS per il calcolo metrico (utile per
+#                         dataset multi-zona: Lambert conformico, LAEA)
+#   output_crs (solo operator con output geometrico):
+#     - "same"  (default) -> ritorna geometrie nel CRS dell'input
+#     - "metric"          -> ritorna geometrie nel metric_crs usato
+#                            (evita roundtrip)
+#     - "EPSG:xxxx"       -> riproietta esplicitamente al CRS specificato
+#
+# Invariante backward-compat: omettere entrambi e' identico al comportamento
+# pre-refactor.
+
+
+def _resolve_metric_crs(
+    gdf: gpd.GeoDataFrame, metric_crs: Optional[str]
+) -> Optional[str]:
+    """CRS da usare per il calcolo metrico.
+
+    Returns:
+        - metric_crs (stripped) se passato non-vuoto
+        - auto-UTM se gdf e' in CRS geografico
+        - None se gdf e' gia' in CRS metrico (nessuna reproject necessaria)
+    """
+    if metric_crs:
+        s = metric_crs.strip() if isinstance(metric_crs, str) else None
+        if s:
+            return s
+    if gdf.crs is not None and gdf.crs.is_geographic:
+        return get_utm_crs_for_geometry(gdf)
+    return None
+
+
+def _resolve_output_geom_crs(
+    original_crs, metric_used: Optional[str], output_crs: str
+) -> Optional[str]:
+    """CRS finale per le geometrie di output.
+
+    - "same" (default): CRS dell'input (retrocompat)
+    - "metric": metric_used se presente, altrimenti original_crs
+    - "EPSG:xxxx": interpretato come CRS target
+    """
+    if output_crs is None or output_crs == "same":
+        return original_crs
+    if output_crs == "metric":
+        return metric_used if metric_used is not None else original_crs
+    return output_crs
+
+
+# =============================================================================
 # JOIN SPAZIALE
 # Unisce due GeoDataFrame per relazione spaziale (intersects, contains, within).
 # =============================================================================
@@ -178,50 +235,53 @@ def op_geo_buffer(
     geom_column: str,
     distance: float,
     output_column: str = "buffer_geom",
-    cap_style: str = "round"
+    cap_style: str = "round",
+    metric_crs: Optional[str] = None,
+    output_crs: str = "same",
 ) -> gpd.GeoDataFrame:
     """
     Crea buffer attorno alle geometrie.
-    
+
     Args:
         df: DataFrame/GeoDataFrame input
         geom_column: Colonna geometria sorgente
-        distance: Distanza buffer in metri
+        distance: Distanza buffer in unita' del CRS metrico (metri se auto-UTM)
         output_column: Nome colonna output
         cap_style: Stile terminazione (round, flat, square)
-        
+        metric_crs: CRS per calcolo metrico. None -> auto-UTM se geografico.
+        output_crs: "same" (default, CRS input), "metric" (no roundtrip),
+                    "EPSG:xxxx" (riproiezione esplicita)
+
     Returns:
         GeoDataFrame con colonna buffer
     """
     cap_style_map = {'round': 1, 'flat': 2, 'square': 3}
     cap_style_int = cap_style_map.get(cap_style, 1)
-    
+
     try:
         gdf = df if isinstance(df, gpd.GeoDataFrame) else to_geodataframe(df, geom_column)
         original_crs = gdf.crs
 
-        # Riproietta in metrico se CRS è geografico
-        if original_crs and original_crs.is_geographic:
-            utm_crs = get_utm_crs_for_geometry(gdf)
-            gdf_projected = gdf.to_crs(utm_crs)
+        metric_used = _resolve_metric_crs(gdf, metric_crs)
+        if metric_used is not None:
+            gdf_projected = gdf.to_crs(metric_used)
         else:
             gdf_projected = gdf
-        
-        # Calcola buffer
+
         buffer_geom = gdf_projected.geometry.buffer(distance, cap_style=cap_style_int)
-        
-        # Riproietta al CRS originale
-        if original_crs and original_crs.is_geographic:
-            buffer_gdf = gpd.GeoDataFrame(geometry=buffer_geom, crs=gdf_projected.crs)
-            buffer_gdf = buffer_gdf.to_crs(original_crs)
-            buffer_geom = buffer_gdf.geometry
-        
+
+        target_crs = _resolve_output_geom_crs(original_crs, metric_used, output_crs)
+        current_geom_crs = metric_used if metric_used is not None else original_crs
+        if target_crs is not None and str(target_crs) != str(current_geom_crs):
+            buffer_gdf = gpd.GeoDataFrame(geometry=buffer_geom, crs=current_geom_crs)
+            buffer_geom = buffer_gdf.to_crs(target_crs).geometry
+
         result = gdf.copy()
         result[output_column] = buffer_geom.values
-        
+
         logger.info(f"Buffer completato: {distance}m, output={output_column}")
         return result
-        
+
     except Exception as e:
         logger.error(f"[CRASH] Errore Buffer: {e}", exc_info=True)
         return df
@@ -235,16 +295,20 @@ def op_geo_buffer(
 def op_geo_centroid(
     df: DataFrame,
     geom_column: str,
-    output_column: str = "centroid"
+    output_column: str = "centroid",
+    metric_crs: Optional[str] = None,
+    output_crs: str = "same",
 ) -> gpd.GeoDataFrame:
     """
     Calcola il centroide delle geometrie.
-    
+
     Args:
         df: DataFrame input
         geom_column: Colonna geometria sorgente
         output_column: Nome colonna output
-        
+        metric_crs: CRS per calcolo metrico. None -> auto-UTM se geografico.
+        output_crs: "same" | "metric" | "EPSG:xxxx"
+
     Returns:
         GeoDataFrame con colonna centroide
     """
@@ -252,17 +316,18 @@ def op_geo_centroid(
         gdf = df if isinstance(df, gpd.GeoDataFrame) else to_geodataframe(df, geom_column)
         original_crs = gdf.crs
 
-        # Riproietta in metrico se CRS è geografico — evita UserWarning di GeoPandas
-        # ("Geometry is in a geographic CRS. Results from centroid are likely incorrect")
-        if original_crs and original_crs.is_geographic:
-            utm_crs = get_utm_crs_for_geometry(gdf)
-            gdf_projected = gdf.to_crs(utm_crs)
-            centroids_projected = gdf_projected.geometry.centroid
-            # Riporta i centroidi al CRS originale
-            centroid_gdf = gpd.GeoDataFrame(geometry=centroids_projected, crs=utm_crs)
-            centroids = centroid_gdf.to_crs(original_crs).geometry
+        metric_used = _resolve_metric_crs(gdf, metric_crs)
+        if metric_used is not None:
+            gdf_projected = gdf.to_crs(metric_used)
+            centroids = gdf_projected.geometry.centroid
         else:
             centroids = gdf.geometry.centroid
+
+        target_crs = _resolve_output_geom_crs(original_crs, metric_used, output_crs)
+        current_geom_crs = metric_used if metric_used is not None else original_crs
+        if target_crs is not None and str(target_crs) != str(current_geom_crs):
+            centroid_gdf = gpd.GeoDataFrame(geometry=centroids, crs=current_geom_crs)
+            centroids = centroid_gdf.to_crs(target_crs).geometry
 
         result = gdf.copy()
         result[output_column] = centroids.values
@@ -283,26 +348,27 @@ def op_geo_centroid(
 def op_geo_area(
     df: DataFrame,
     geom_column: str,
-    output_column: str = "area_m2"
+    output_column: str = "area_m2",
+    metric_crs: Optional[str] = None,
 ) -> gpd.GeoDataFrame:
     """
-    Calcola l'area in metri quadrati.
-    
+    Calcola l'area in unita' quadrate del CRS metrico (m^2 di default).
+
     Args:
         df: DataFrame input
         geom_column: Colonna geometria sorgente
         output_column: Nome colonna output
-        
+        metric_crs: CRS per calcolo area. None -> auto-UTM se geografico.
+
     Returns:
         GeoDataFrame con colonna area
     """
     try:
         gdf = df if isinstance(df, gpd.GeoDataFrame) else to_geodataframe(df, geom_column)
 
-        # Riproietta in metrico se necessario
-        if gdf.crs and gdf.crs.is_geographic:
-            utm_crs = get_utm_crs_for_geometry(gdf)
-            gdf_projected = gdf.to_crs(utm_crs)
+        metric_used = _resolve_metric_crs(gdf, metric_crs)
+        if metric_used is not None:
+            gdf_projected = gdf.to_crs(metric_used)
         else:
             gdf_projected = gdf
 
@@ -573,11 +639,14 @@ def op_geo_simplify(
     Returns:
         GeoDataFrame con geometrie semplificate
     """
+    if tolerance is None or tolerance <= 0:
+        raise ValueError(f"Simplify tolerance deve essere > 0, ricevuto: {tolerance}")
+
     try:
         gdf = df if isinstance(df, gpd.GeoDataFrame) else to_geodataframe(df, geom_column)
 
         gdf['geometry'] = gdf.geometry.simplify(tolerance, preserve_topology=preserve_topology)
-        
+
         logger.info(f"Simplify completato: tolerance={tolerance}")
         return gdf
         
@@ -717,20 +786,21 @@ def op_geo_distance(
     dfs: List[DataFrame],
     left_geom_column: str,
     right_geom_column: str,
-    output_column: str = "distance_m"
+    output_column: str = "distance_m",
+    metric_crs: Optional[str] = None,
 ) -> gpd.GeoDataFrame:
     """
     Calcola la distanza tra geometrie di due layer.
 
     Per ogni riga del layer sinistro, calcola la distanza minima
-    verso le geometrie del layer destro. Auto-riproiezione in UTM
-    per ottenere distanze in metri.
+    verso le geometrie del layer destro nel CRS metrico scelto.
 
     Args:
         dfs: Lista [layer_sinistro, layer_destro]
         left_geom_column: Colonna geometria del layer sinistro
         right_geom_column: Colonna geometria del layer destro
         output_column: Nome colonna distanza output
+        metric_crs: CRS per calcolo distanza. None -> auto-UTM se geografico.
 
     Returns:
         GeoDataFrame del layer sinistro con colonna distanza
@@ -746,16 +816,20 @@ def op_geo_distance(
         # Allinea CRS
         left_gdf, right_gdf = ensure_same_crs(left_gdf, right_gdf)
 
-        # Riproietta in metrico se CRS è geografico
-        if left_gdf.crs and left_gdf.crs.is_geographic:
-            utm_crs = get_utm_crs_for_geometry(left_gdf)
-            left_proj = left_gdf.to_crs(utm_crs)
-            right_proj = right_gdf.to_crs(utm_crs)
+        metric_used = _resolve_metric_crs(left_gdf, metric_crs)
+        if metric_used is not None:
+            left_proj = left_gdf.to_crs(metric_used)
+            right_proj = right_gdf.to_crs(metric_used)
         else:
             left_proj = left_gdf
             right_proj = right_gdf
 
         # Unisci tutte le geometrie del right in un unico oggetto per distanza
+        if len(right_proj) == 0:
+            logger.warning("Distance: right_gdf vuoto, output column = None")
+            result = left_gdf.copy()
+            result[output_column] = None
+            return result
         right_union = right_proj.geometry.unary_union
 
         result = left_gdf.copy()
@@ -779,7 +853,9 @@ def op_geo_nearest(
     left_geom_column: str,
     right_geom_column: str,
     max_distance: Optional[float] = None,
-    output_column: str = "distance_m"
+    output_column: str = "distance_m",
+    metric_crs: Optional[str] = None,
+    output_crs: str = "same",
 ) -> gpd.GeoDataFrame:
     """
     Nearest neighbor join tra due layer.
@@ -791,9 +867,10 @@ def op_geo_nearest(
         dfs: Lista [layer_sinistro, layer_destro]
         left_geom_column: Colonna geometria del layer sinistro
         right_geom_column: Colonna geometria del layer destro
-        max_distance: Distanza massima in unità del CRS proiettato (metri).
-                      Se None, nessun limite.
+        max_distance: Distanza massima in unità del CRS metrico scelto.
         output_column: Nome colonna distanza output
+        metric_crs: CRS per calcolo distanza. None -> auto-UTM se geografico.
+        output_crs: "same" | "metric" | "EPSG:xxxx"
 
     Returns:
         GeoDataFrame con attributi del vicino più prossimo e distanza
@@ -806,15 +883,18 @@ def op_geo_nearest(
         left_gdf = dfs[0] if isinstance(dfs[0], gpd.GeoDataFrame) else to_geodataframe(dfs[0], left_geom_column)
         right_gdf = dfs[1] if isinstance(dfs[1], gpd.GeoDataFrame) else to_geodataframe(dfs[1], right_geom_column)
 
+        if len(left_gdf) == 0 or len(right_gdf) == 0:
+            logger.warning(f"Nearest: input vuoto (left={len(left_gdf)}, right={len(right_gdf)})")
+            return left_gdf
+
         # Allinea CRS
         left_gdf, right_gdf = ensure_same_crs(left_gdf, right_gdf)
 
-        # Riproietta in metrico se CRS è geografico
         original_crs = left_gdf.crs
-        if original_crs and original_crs.is_geographic:
-            utm_crs = get_utm_crs_for_geometry(left_gdf)
-            left_proj = left_gdf.to_crs(utm_crs)
-            right_proj = right_gdf.to_crs(utm_crs)
+        metric_used = _resolve_metric_crs(left_gdf, metric_crs)
+        if metric_used is not None:
+            left_proj = left_gdf.to_crs(metric_used)
+            right_proj = right_gdf.to_crs(metric_used)
         else:
             left_proj = left_gdf
             right_proj = right_gdf
@@ -832,9 +912,10 @@ def op_geo_nearest(
         if 'index_right' in result.columns:
             result = result.drop(columns=['index_right'])
 
-        # Riproietta al CRS originale
-        if original_crs and original_crs.is_geographic:
-            result = result.to_crs(original_crs)
+        target_crs = _resolve_output_geom_crs(original_crs, metric_used, output_crs)
+        current_geom_crs = metric_used if metric_used is not None else original_crs
+        if target_crs is not None and str(target_crs) != str(current_geom_crs):
+            result = result.to_crs(target_crs)
 
         # Assicura geometria attiva valida
         result = _ensure_active_geometry(result)
@@ -855,17 +936,17 @@ def op_geo_nearest(
 def op_geo_length(
     df: DataFrame,
     geom_column: str,
-    output_column: str = "length_m"
+    output_column: str = "length_m",
+    metric_crs: Optional[str] = None,
 ) -> gpd.GeoDataFrame:
     """
-    Calcola la lunghezza di geometrie lineari in metri.
-
-    Auto-riproiezione in CRS metrico (UTM) se l'input è in gradi.
+    Calcola la lunghezza di geometrie lineari in unita' del CRS metrico.
 
     Args:
         df: DataFrame input
         geom_column: Colonna geometria sorgente
         output_column: Nome colonna output
+        metric_crs: CRS per calcolo lunghezza. None -> auto-UTM se geografico.
 
     Returns:
         GeoDataFrame con colonna lunghezza
@@ -873,10 +954,9 @@ def op_geo_length(
     try:
         gdf = df if isinstance(df, gpd.GeoDataFrame) else to_geodataframe(df, geom_column)
 
-        # Riproietta in metrico se necessario
-        if gdf.crs and gdf.crs.is_geographic:
-            utm_crs = get_utm_crs_for_geometry(gdf)
-            gdf_projected = gdf.to_crs(utm_crs)
+        metric_used = _resolve_metric_crs(gdf, metric_crs)
+        if metric_used is not None:
+            gdf_projected = gdf.to_crs(metric_used)
         else:
             gdf_projected = gdf
 
@@ -899,18 +979,17 @@ def op_geo_length(
 def op_geo_perimeter(
     df: DataFrame,
     geom_column: str,
-    output_column: str = "perimeter_m"
+    output_column: str = "perimeter_m",
+    metric_crs: Optional[str] = None,
 ) -> gpd.GeoDataFrame:
     """
-    Calcola il perimetro di geometrie poligonali in metri.
-
-    Usa la lunghezza del bordo esterno del poligono.
-    Auto-riproiezione in CRS metrico (UTM) se l'input è in gradi.
+    Calcola il perimetro di geometrie poligonali in unita' del CRS metrico.
 
     Args:
         df: DataFrame input
         geom_column: Colonna geometria sorgente
         output_column: Nome colonna output
+        metric_crs: CRS per calcolo perimetro. None -> auto-UTM se geografico.
 
     Returns:
         GeoDataFrame con colonna perimetro
@@ -918,10 +997,9 @@ def op_geo_perimeter(
     try:
         gdf = df if isinstance(df, gpd.GeoDataFrame) else to_geodataframe(df, geom_column)
 
-        # Riproietta in metrico se necessario
-        if gdf.crs and gdf.crs.is_geographic:
-            utm_crs = get_utm_crs_for_geometry(gdf)
-            gdf_projected = gdf.to_crs(utm_crs)
+        metric_used = _resolve_metric_crs(gdf, metric_crs)
+        if metric_used is not None:
+            gdf_projected = gdf.to_crs(metric_used)
         else:
             gdf_projected = gdf
 
@@ -1368,6 +1446,12 @@ def op_geo_count_points_in_polygons(
     try:
         poly_gdf = dfs[0] if isinstance(dfs[0], gpd.GeoDataFrame) else to_geodataframe(dfs[0], polygon_geom_column)
         point_gdf = dfs[1] if isinstance(dfs[1], gpd.GeoDataFrame) else to_geodataframe(dfs[1], point_geom_column)
+
+        if len(poly_gdf) == 0 or len(point_gdf) == 0:
+            logger.warning(f"CountPointsInPolygons: input vuoto (poly={len(poly_gdf)}, point={len(point_gdf)})")
+            result = poly_gdf.copy()
+            result[count_column] = 0
+            return result
 
         # Allinea CRS
         poly_gdf, point_gdf = ensure_same_crs(poly_gdf, point_gdf)

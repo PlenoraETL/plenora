@@ -67,11 +67,34 @@ class PluginExecutor:
         Args:
             registry_path: path al file transforms_registry.json.
                           Se None, usa il path di default nella stessa directory.
+
+        Raises:
+            ValueError: se `registry_path` e' passato e punta fuori dal
+                        perimetro di `app/core/manipola/`.
         """
+        _allowed_root = Path(__file__).parent.resolve()
+
         if registry_path is None:
-            registry_path = Path(__file__).parent / "transforms_registry.json"
+            registry_path = _allowed_root / "transforms_registry.json"
         else:
-            registry_path = Path(registry_path)
+            # Difesa in profondità: registry_path deve restare dentro
+            # app/core/manipola/. Il registry JSON definisce quali
+            # funzioni Python il plugin executor importera' via
+            # importlib.import_module: e' il vero input-sensitive del
+            # modulo, non il codice delle transform. Senza questo guard,
+            # un call site futuro che accettasse un path da request body
+            # farebbe caricare un JSON arbitrario dal filesystem e
+            # aprirebbe la catena: JSON controllato → function name
+            # controllato → importlib su dotted path (confinato al
+            # namespace app.core.manipola.transforms, ma comunque
+            # indesiderato). Il check e' fail-closed: fuori perimetro
+            # → ValueError, niente fallback silenzioso.
+            registry_path = Path(registry_path).resolve()
+            if not registry_path.is_relative_to(_allowed_root):
+                raise ValueError(
+                    f"registry_path fuori dal perimetro di "
+                    f"{_allowed_root}: {registry_path}"
+                )
 
         self.registry_path = registry_path
         self.registry: Dict[str, Dict] = {}      # transform_id → config completa

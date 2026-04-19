@@ -1,0 +1,940 @@
+/**
+ * ParameterInput.css - Stili per i controlli parametri
+ */
+
+.parameter-input {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.parameter-input__label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.parameter-input__required {
+  color: #dc3545;
+  font-weight: 700;
+}
+
+.parameter-input__info {
+  cursor: help;
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.parameter-input__control {
+  width: 100%;
+}
+
+.parameter-input__field {
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 13px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: white;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.parameter-input__field:focus {
+  outline: none;
+  border-color: var(--color-manipola);
+  box-shadow: 0 0 0 2px rgba(156, 39, 176, 0.1);
+}
+
+.parameter-input__field--textarea {
+  min-height: var(--header-height);
+  resize: vertical;
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 12px;
+}
+
+/* Checkbox */
+.parameter-input__checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.parameter-input__checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.parameter-input__checkbox-label {
+  font-size: 13px;
+  color: var(--color-text-primary);
+}
+
+/* Column Selector Multiple */
+.column-selector--multiple {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.column-selector__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-height: 24px;
+}
+
+.column-selector__tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  background: var(--color-manipola);
+  color: white;
+  font-size: 11px;
+  border-radius: 3px;
+}
+
+.column-selector__tag-remove {
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0.8;
+}
+
+.column-selector__tag-remove:hover {
+  opacity: 1;
+}
+
+/* Expression */
+.parameter-input__expression {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.parameter-input__expression-help {
+  font-size: 10px;
+  color: var(--color-gray-400);
+  padding: 4px;
+  background: var(--color-bg-secondary);
+  border-radius: 3px;
+  max-height: 40px;
+  overflow: auto;
+}
+
+/* String List */
+.string-list-input {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.string-list-input__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-height: 24px;
+}
+
+.string-list-input__tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  background: var(--color-slate-200);
+  color: var(--color-text-primary);
+  font-size: 11px;
+  border-radius: 3px;
+}
+
+.string-list-input__tag-remove {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.string-list-input__tag-remove:hover {
+  color: #dc3545;
+}
+
+.string-list-input__add {
+  display: flex;
+  gap: 4px;
+}
+
+.string-list-input__add input {
+  flex: 1;
+  padding: 4px 8px;
+  font-size: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+}
+
+.string-list-input__add button {
+  padding: 4px 10px;
+  background: var(--color-manipola);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.string-list-input__add button:hover {
+  background: var(--color-type-bool);
+}
+
+/* Aggregation List */
+.aggregation-list-input {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.aggregation-list-input__row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.aggregation-list-input__row select {
+  flex: 1;
+  padding: 4px 6px;
+  font-size: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+}
+
+.aggregation-list-input__remove {
+  padding: 4px 8px;
+  background: #f8d7da;
+  color: #dc3545;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.aggregation-list-input__remove:hover {
+  background: #dc3545;
+  color: white;
+}
+
+.aggregation-list-input__add {
+  padding: 6px 10px;
+  background: var(--color-gray-50);
+  color: var(--color-text-muted);
+  border: 1px dashed var(--color-border);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  text-align: center;
+}
+
+.aggregation-list-input__add:hover {
+  background: var(--color-slate-200);
+  border-color: var(--color-manipola);
+  color: var(--color-manipola);
+}
+/* ===========================================
+   MASKING LIST INPUT 
+   =========================================== */
+
+.masking-list-input {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.masking-list-input__item {
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid #dde3ea;
+  border-radius: 6px;
+  padding: 6px;
+}
+
+.masking-list-input__row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.masking-list-input__col-select {
+  flex: 1;
+  padding: 4px 6px;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 4px;
+  font-size: 11px;
+  background: white;
+}
+
+.masking-list-input__type-select {
+  flex: 1;
+  padding: 4px 6px;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 4px;
+  font-size: 11px;
+  background: white;
+}
+
+.masking-list-input__remove {
+  background: none;
+  border: 1px solid transparent;
+  color: var(--color-danger);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.masking-list-input__remove:hover {
+  background: #fef0f0;
+  border-color: var(--color-danger);
+}
+
+.masking-list-input__custom {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px dashed #dde3ea;
+}
+
+.masking-list-input__custom label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--color-slate-500);
+}
+
+.masking-list-input__num {
+  width: 44px;
+  padding: 3px 4px;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 4px;
+  font-size: 11px;
+  text-align: center;
+}
+
+.masking-list-input__char {
+  width: 30px;
+  padding: 3px 4px;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 4px;
+  font-size: 11px;
+  text-align: center;
+}
+
+.masking-list-input__add {
+  background: none;
+  border: 1px dashed var(--color-slate-400);
+  border-radius: 6px;
+  padding: 6px;
+  color: var(--color-slate-500);
+  cursor: pointer;
+  font-size: 11px;
+  text-align: center;
+  transition: all 0.15s;
+}
+
+.masking-list-input__add:hover {
+  border-color: var(--color-indigo);
+  color: var(--color-indigo);
+  background: rgba(99, 102, 241, 0.04);
+}
+/* ===========================================
+   MASKING LIST INPUT 
+   =========================================== */
+
+.masking-list-input {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.masking-list-input__item {
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid #dde3ea;
+  border-radius: 6px;
+  padding: 6px;
+}
+
+.masking-list-input__row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.masking-list-input__col-select {
+  flex: 1;
+  padding: 4px 6px;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 4px;
+  font-size: 11px;
+  background: white;
+}
+
+.masking-list-input__type-select {
+  flex: 1;
+  padding: 4px 6px;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 4px;
+  font-size: 11px;
+  background: white;
+}
+
+.masking-list-input__remove {
+  background: none;
+  border: 1px solid transparent;
+  color: var(--color-danger);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.masking-list-input__remove:hover {
+  background: #fef0f0;
+  border-color: var(--color-danger);
+}
+
+.masking-list-input__custom {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px dashed #dde3ea;
+}
+
+.masking-list-input__custom label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--color-slate-500);
+}
+
+.masking-list-input__num {
+  width: 44px;
+  padding: 3px 4px;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 4px;
+  font-size: 11px;
+  text-align: center;
+}
+
+.masking-list-input__char {
+  width: 30px;
+  padding: 3px 4px;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 4px;
+  font-size: 11px;
+  text-align: center;
+}
+
+.masking-list-input__add {
+  background: none;
+  border: 1px dashed var(--color-slate-400);
+  border-radius: 6px;
+  padding: 6px;
+  color: var(--color-slate-500);
+  cursor: pointer;
+  font-size: 11px;
+  text-align: center;
+  transition: all 0.15s;
+}
+
+.masking-list-input__add:hover {
+  border-color: var(--color-indigo);
+  color: var(--color-indigo);
+  background: rgba(99, 102, 241, 0.04);
+}
+
+/* ===========================================
+   CONDITION LIST INPUT (Case When)
+   =========================================== */
+
+.condition-list-input {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.condition-list-input__item {
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid #dde3ea;
+  border-radius: 6px;
+  padding: 6px;
+}
+
+.condition-list-input__row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.condition-list-input__op-select {
+  flex: 0 0 auto;
+  width: 110px;
+  padding: 4px 6px;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 4px;
+  font-size: 11px;
+  background: white;
+}
+
+.condition-list-input__value {
+  flex: 1;
+  padding: 4px 6px;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.condition-list-input__remove {
+  background: none;
+  border: 1px solid transparent;
+  color: var(--color-danger);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.condition-list-input__remove:hover {
+  background: #fef0f0;
+  border-color: var(--color-danger);
+}
+
+.condition-list-input__result-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px dashed #dde3ea;
+}
+
+.condition-list-input__arrow {
+  color: var(--color-indigo);
+  font-size: 14px;
+  font-weight: bold;
+  padding: 0 4px;
+}
+
+.condition-list-input__result {
+  flex: 1;
+  padding: 4px 6px;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 4px;
+  font-size: 11px;
+  background: #f0fdf4;
+}
+
+.condition-list-input__add {
+  background: none;
+  border: 1px dashed var(--color-slate-400);
+  border-radius: 6px;
+  padding: 6px;
+  color: var(--color-slate-500);
+  cursor: pointer;
+  font-size: 11px;
+  text-align: center;
+  transition: all 0.15s;
+}
+
+.condition-list-input__add:hover {
+  border-color: var(--color-indigo);
+  color: var(--color-indigo);
+  background: rgba(99, 102, 241, 0.04);
+}
+/* ===========================================
+   RENAME LIST INPUT
+   =========================================== */
+
+.rename-list-input {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rename-list-input__row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.rename-list-input__select {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 4px;
+  font-size: 12px;
+  background: white;
+  min-width: 0;
+}
+
+.rename-list-input__select:focus {
+  outline: none;
+  border-color: var(--color-manipola);
+}
+
+.rename-list-input__arrow {
+  color: var(--color-manipola);
+  font-size: 14px;
+  font-weight: bold;
+  padding: 0 2px;
+  flex-shrink: 0;
+}
+
+.rename-list-input__input {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 4px;
+  font-size: 12px;
+  min-width: 0;
+}
+
+.rename-list-input__input:focus {
+  outline: none;
+  border-color: var(--color-manipola);
+}
+
+.rename-list-input__remove {
+  background: none;
+  border: 1px solid transparent;
+  color: var(--color-danger);
+  cursor: pointer;
+  font-size: 16px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.rename-list-input__remove:hover {
+  background: #fef0f0;
+  border-color: var(--color-danger);
+}
+
+.rename-list-input__add {
+  background: none;
+  border: 1px dashed var(--color-slate-400);
+  border-radius: 6px;
+  padding: 8px;
+  color: var(--color-slate-500);
+  cursor: pointer;
+  font-size: 12px;
+  text-align: center;
+  transition: all 0.15s;
+}
+
+.rename-list-input__add:hover {
+  border-color: var(--color-manipola);
+  color: var(--color-manipola);
+  background: rgba(156, 39, 176, 0.04);
+}
+
+.rename-list-input__buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.rename-list-input__buttons .rename-list-input__add {
+  flex: 1;
+}
+
+.rename-list-input__add--load-all {
+  border-color: var(--color-primary);
+  color: var(--color-primary-700);
+}
+
+.rename-list-input__add--load-all:hover {
+  border-color: var(--color-primary-600);
+  color: var(--color-primary-700);
+  background: rgba(33, 150, 243, 0.06);
+}
+
+/* CSV Paste button */
+.rename-list-input__add--csv {
+  border-color: var(--color-success);
+  color: var(--color-datasource);
+}
+
+.rename-list-input__add--csv:hover {
+  border-color: #388E3C;
+  color: var(--color-datasource-dark);
+  background: rgba(76, 175, 80, 0.06);
+}
+
+.rename-list-input__add--csv-active {
+  border-color: #388E3C;
+  background: rgba(76, 175, 80, 0.1);
+  color: var(--color-datasource-dark);
+}
+
+/* CSV Paste Panel */
+.rename-list-input__csv-panel {
+  margin-top: 6px;
+  padding: 10px;
+  background: #f8faf8;
+  border: 1px solid var(--color-success-border);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rename-list-input__csv-hint {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+.rename-list-input__csv-hint code {
+  background: rgba(0, 0, 0, 0.06);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 10px;
+}
+
+.rename-list-input__csv-textarea {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--color-success-border);
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  line-height: 1.5;
+  resize: vertical;
+  box-sizing: border-box;
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+}
+
+.rename-list-input__csv-textarea:focus {
+  outline: none;
+  border-color: var(--color-success);
+  box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.15);
+}
+
+.rename-list-input__csv-textarea::placeholder {
+  color: var(--color-gray-350);
+}
+
+.rename-list-input__csv-error {
+  font-size: 10px;
+  color: var(--color-danger-dark);
+  background: var(--color-danger-light);
+  border: 1px solid #ef9a9a;
+  border-radius: 4px;
+  padding: 6px 8px;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.rename-list-input__csv-apply {
+  padding: 8px 12px;
+  background: var(--color-success);
+  color: var(--color-bg-primary);
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.rename-list-input__csv-apply:hover {
+  background: #388E3C;
+}
+
+.rename-list-input__csv-apply:disabled {
+  background: var(--color-success-border);
+  color: var(--color-text-tertiary);
+  cursor: not-allowed;
+}
+/* ===========================================
+   COLUMN ORDER INPUT (Drag & Drop)
+   =========================================== */
+
+.column-order-input {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.column-order-input__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 2px 0;
+}
+
+.column-order-input__count {
+  font-size: 10px;
+  color: var(--color-slate-400);
+}
+
+.column-order-input__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 2px;
+}
+
+.column-order-input__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  background: white;
+  border: 1px solid var(--color-slate-200);
+  border-radius: 4px;
+  cursor: grab;
+  transition: all 0.15s;
+  font-size: 12px;
+  user-select: none;
+}
+
+.column-order-input__item:hover {
+  border-color: var(--color-manipola);
+  background: #faf5ff;
+}
+
+.column-order-input__item--dragging {
+  opacity: 0.4;
+  border-style: dashed;
+}
+
+.column-order-input__item--over {
+  border-color: var(--color-manipola);
+  border-top: 2px solid var(--color-manipola);
+  margin-top: -1px;
+}
+
+.column-order-input__grip {
+  color: #cbd5e1;
+  font-size: 14px;
+  cursor: grab;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.column-order-input__item:hover .column-order-input__grip {
+  color: var(--color-manipola);
+}
+
+.column-order-input__pos {
+  font-size: 10px;
+  color: var(--color-slate-400);
+  font-weight: 600;
+  min-width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.column-order-input__name {
+  flex: 1;
+  font-weight: 500;
+  color: var(--color-gray-700);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.column-order-input__type {
+  font-size: 10px;
+  color: var(--color-slate-400);
+  background: var(--color-gray-50);
+  padding: 1px 5px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.column-order-input__buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.column-order-input__item:hover .column-order-input__buttons {
+  opacity: 1;
+}
+
+.column-order-input__btn {
+  width: 18px;
+  height: 14px;
+  border: none;
+  border-radius: 2px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 8px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-slate-400);
+  line-height: 1;
+}
+
+.column-order-input__btn:hover:not(:disabled) {
+  background: var(--color-manipola);
+  color: white;
+}
+
+.column-order-input__btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+/* ============================================================
+   CLASSI MANCANTI — Fase 13 Bucket 2
+   ============================================================ */
+
+/* Base column-selector (senza modificatore --multiple) */
+.column-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Parametri extra per concat aggregation (separatore) */
+.aggregation-list-input__concat-params {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.aggregation-list-input__concat-params input {
+  padding: 4px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  width: 70px;
+}

@@ -70,3 +70,25 @@ export const downloadTaskOutput = async (taskId, filename = null) => {
 
   downloadBlob(response, filename, `task_${taskId}_output`);
 };
+
+/**
+ * Cleanup completo di un task: elimina result file/blob, log entries e
+ * revoca il record Celery sul server. Pensato per il ruolo "esecutore"
+ * che richiede privacy GDPR-style: la UI kiosk chiama questo endpoint
+ * subito dopo aver scaricato il risultato così non resta traccia.
+ *
+ * Tollerante agli errori: il backend fa best-effort, non lancia
+ * eccezioni se uno dei layer di cleanup fallisce. Qui catturiamo
+ * comunque per non bloccare la UX in caso di errore di rete.
+ *
+ * @param {string} taskId
+ * @returns {Promise<void>}
+ */
+export const cleanupTaskCompletely = async (taskId) => {
+  try {
+    await http.delete(`/tasks/${taskId}/full-cleanup`);
+  } catch (e) {
+    // Best-effort: il cleanup è una pulizia "soft", non blocca la UX
+    console.warn('[cleanupTaskCompletely] errore cleanup:', e?.message || e);
+  }
+};

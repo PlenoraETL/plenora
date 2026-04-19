@@ -86,8 +86,8 @@ def should_execute_node(node_data: Dict, input_df: Any) -> bool:
 
     col, expected, negate = parsed
 
-    if not isinstance(input_df, pd.DataFrame) or col not in input_df.columns:
-        return negate  # colonna assente: condizione = falsa (o vera se negata)
+    if not isinstance(input_df, pd.DataFrame) or col not in input_df.columns or len(input_df) == 0:
+        return negate  # colonna assente o df vuoto: condizione = falsa (o vera se negata)
 
     actual = str(input_df[col].iloc[0]).strip().lower()
     match = actual == expected
@@ -128,17 +128,45 @@ def compute_parallel_groups(
     execution_order: List[str],
     nodes: List[Dict],
     edges: List[Dict],
+    api_connections: Optional[Dict[str, Dict]] = None,
 ) -> List[Tuple[str, List[str]]]:
     """Raggruppa i nodi dell'execution_order in step sequenziali o paralleli.
 
     Ritorna una lista di (step_type, [node_ids]):
       - ("single", [node_id])      → nodo sorgente/result, eseguire singolarmente
-      - ("parallel", [node_ids])    → gruppo di api_enrich eseguibili in parallelo
+      - ("parallel", [node_ids])   → gruppo di api_enrich eseguibili in parallelo
 
-    Un gruppo parallelo contiene api_enrich nodes consecutivi il cui
-    param_mapping NON referenzia colonne prodotte da altri nodi nel
-    STESSO gruppo. In pratica: se tutti leggono solo X,Y (prodotte dal
-    catasto, che e prima del gruppo), possono girare in parallelo.
+    **Check di raggruppamento**: un nodo api_enrich B va nel batch corrente
+    se NESSUNA delle sue colonne lette (param_mapping) e' prodotta da un
+    nodo gia' nel batch. Il check e' solo sulle COLONNE, non sul grafo.
+
+    Motivazione: in molti canvas la topologia e' una catena lineare
+    (static → A → B → C → ...) anche quando logicamente i nodi api_enrich
+    sono indipendenti — ciascuno aggiunge colonne disgiunte leggendo sempre
+    dallo stesso set iniziale (es. X, Y dal catasto). Se rispettassimo il
+    DAG, questi pattern finirebbero in batch da 1 e perderemmo qualunque
+    parallelismo. La semantica "tutti i nodi del batch condividono lo
+    stesso input_df" e' implementata dal caller (vedi task Celery:
+    _run_single_node con input_override).
+
+    **File-processor** (`connection_type == 'rest_file'`):
+    non parallelizzabili col modello fan-out degli enricher. Quando
+    `api_connections` e' fornito, i nodi `api_enrich` con connector di tipo
+    file-processor vengono emessi come step ("single", [nid]) separato:
+    flush del batch corrente, emissione del nodo singolo, ripartenza
+    eventuale di un nuovo batch dopo. Questo garantisce che il
+    file-processor veda il `node_results[upstream]` gia' popolato col
+    DataFrame mergiato del batch precedente — condizione necessaria per
+    la materializzazione upstream DataFrame→file fatta in
+    `_resolve_input_path_for_file_processor` (api_connector.py).
+
+    Se `api_connections` non e' passato, il comportamento e' quello legacy
+    (file-processor trattati come gli altri enricher — fa crashare il
+    chaining enricher→rest_file ma resta compat per i call site non ancora
+    aggiornati).
+
+    Il parametro `edges` e' accettato per compat ma non usato — potrebbe
+    servire in futuro per check di safety opzionali.
     """
     node_map = {n["id"]: n for n in nodes}
 
@@ -158,11 +186,36 @@ def compute_parallel_groups(
     current_batch: List[str] = []
     current_batch_produces: Set[str] = set()
 
+    def _is_file_processor(n: Dict) -> bool:
+        """True se il nodo e' api_enrich con connector rest_file.
+
+        Richiede `api_connections` nel closure: senza, ritorna sempre False
+        (compat legacy). `api_id` puo' stare al root del nodo o dentro `data`.
+        """
+        if api_connections is None or n.get("type") != "api_enrich":
+            return False
+        api_id = n.get("api_id") or (n.get("data") or {}).get("api_id")
+        if not api_id:
+            return False
+        cfg = api_connections.get(api_id) or {}
+        return cfg.get("connection_type") == "rest_file"
+
     for node_id in execution_order:
         node = node_map.get(node_id)
         if not node:
             continue
         ntype = node.get("type")
+
+        # File-processor: non batchabile. Flush del batch corrente e
+        # emissione come single, cosi' a runtime riceve il DataFrame
+        # mergiato del batch precedente via node_results[upstream].
+        if _is_file_processor(node):
+            if current_batch:
+                groups.append(("parallel", list(current_batch)))
+                current_batch = []
+                current_batch_produces = set()
+            groups.append(("single", [node_id]))
+            continue
 
         if ntype != "api_enrich":
             # Flush batch corrente
@@ -172,7 +225,7 @@ def compute_parallel_groups(
                 current_batch_produces = set()
             groups.append(("single", [node_id]))
         else:
-            # api_enrich: check se dipende da colonne prodotte dal batch corrente
+            # api_enrich: check solo su colonne prodotte dal batch corrente
             node_consumes = consumed.get(node_id, set())
             depends_on_batch = bool(node_consumes & current_batch_produces)
 
@@ -237,8 +290,8 @@ def execute_parallel_enrichers(
                 result_df = execute_single_fn(node, api_connections, input_df)
             else:
                 # Split: esegui solo le righe che matchano, le altre passthrough
-                df_exec = input_df[mask]
-                df_skip = input_df[~mask]
+                df_exec = input_df[mask].copy()
+                df_skip = input_df[~mask].copy()
                 result_exec = execute_single_fn(node, api_connections, df_exec)
                 # Aggiungi colonne mancanti alle righe skippate (None)
                 if isinstance(result_exec, pd.DataFrame):
@@ -266,15 +319,18 @@ def execute_parallel_enrichers(
             first_error = err
         node_results[nid] = res
     else:
+        import threading as _threading
+        _lock = _threading.Lock()
         workers = min(len(node_ids), max_workers)
         logger.info(f"Esecuzione parallela: {len(node_ids)} nodi, {workers} workers")
         with ThreadPoolExecutor(max_workers=workers) as pool:
             futures = {pool.submit(run_one, nid): nid for nid in node_ids}
             for future in as_completed(futures):
                 nid, res, err = future.result()
-                if err and not first_error:
-                    first_error = err
-                node_results[nid] = res
+                with _lock:
+                    if err and not first_error:
+                        first_error = err
+                    node_results[nid] = res
 
     # Non bloccare su errori singoli se continue_on_error e attivo
     # (il caller decide come gestire)

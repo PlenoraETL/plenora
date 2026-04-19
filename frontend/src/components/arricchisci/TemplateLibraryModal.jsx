@@ -1,14 +1,107 @@
+/**
+ * TemplateLibraryModal.jsx — Libreria template API predefiniti
+ * Redesign Plenora design system — 4-column grid gallery
+ */
+import { getTemplates } from '../../api/templates';
 import React, { useState, useEffect, useMemo } from 'react';
+import ModalWrapper from '../common/ModalWrapper';
+import './TemplateLibraryModal.css';
 
-// Categorie con icone
 const CATEGORIES = {
-  all: { label: 'Tutte', icon: '📋' },
-  geocoding: { label: 'Geocoding', icon: '🌍' },
-  routing: { label: 'Routing', icon: '🚗' },
-  catasto: { label: 'Catasto', icon: '🏠' },
-  ml_model: { label: 'Modelli ML', icon: '🧠' },
-  custom: { label: 'Altri', icon: '📄' }
+  all:       { label: 'Tutti',      icon: '⊞' },
+  geocoding: { label: 'Geocoding',  icon: '🌍' },
+  routing:   { label: 'Routing',    icon: '🚗' },
+  catasto:   { label: 'Catasto',    icon: '🏠' },
+  ml_model:  { label: 'Modelli ML', icon: '🧠' },
+  custom:    { label: 'Altri',      icon: '📄' },
 };
+
+// Dark-mode friendly palette — accent bar + icon bg tint
+const CATEGORY_COLORS = {
+  geocoding: { accent: '#38BDF8', tint: 'rgba(56,189,248,0.08)' },
+  routing:   { accent: '#FBBF24', tint: 'rgba(251,191,36,0.08)'  },
+  catasto:   { accent: '#34D399', tint: 'rgba(52,211,153,0.08)'  },
+  ml_model:  { accent: '#A78BFA', tint: 'rgba(167,139,250,0.08)' },
+  custom:    { accent: '#94A3B8', tint: 'rgba(148,163,184,0.08)' },
+};
+
+function TemplateCard({ template, onSelect }) {
+  const cat = template._meta?.category || 'custom';
+  const colors = CATEGORY_COLORS[cat] || CATEGORY_COLORS.custom;
+  const isGenerator = template.config?.api_type === 'generator';
+  const params = (template.parameters || []).filter(p => !p.hidden);
+  const outputs = template.output_mapping || [];
+  const hasAuth = template.config?.auth?.type && template.config.auth.type !== 'none';
+
+  return (
+    <div className="tlc" onClick={() => onSelect(template)}>
+      {/* Accent bar */}
+      <div className="tlc__bar" style={{ background: colors.accent }} />
+
+      {/* Icon */}
+      <div className="tlc__icon-wrap" style={{ background: colors.tint }}>
+        <span className="tlc__icon">{template.display?.icon || '📄'}</span>
+      </div>
+
+      {/* Text */}
+      <div className="tlc__body">
+        <div className="tlc__name">{template.display?.name}</div>
+        <div className="tlc__desc">{template.display?.short_description}</div>
+      </div>
+
+      {/* Footer */}
+      <div className="tlc__foot">
+        <span className={`tlc__type ${isGenerator ? 'tlc__type--gen' : 'tlc__type--enr'}`}>
+          {isGenerator ? '⚡ Gen' : '🔗 Enr'}
+        </span>
+        {hasAuth && <span className="tlc__auth">🔐</span>}
+      </div>
+
+      {/* Hover overlay */}
+      <div className="tlc__overlay">
+        <div className="tlc__ol-inner">
+          <div className="tlc__ol-name">{template.display?.name}</div>
+
+          {params.length > 0 && (
+            <div className="tlc__ol-section">
+              <div className="tlc__ol-label">📥 Input</div>
+              <div className="tlc__ol-chips">
+                {params.slice(0, 4).map(p => (
+                  <span key={p.name} className="tlc__chip tlc__chip--in">{p.name}{p.required ? '*' : ''}</span>
+                ))}
+                {params.length > 4 && <span className="tlc__chip tlc__chip--more">+{params.length - 4}</span>}
+              </div>
+            </div>
+          )}
+
+          {outputs.length > 0 && (
+            <div className="tlc__ol-section">
+              <div className="tlc__ol-label">📤 Output</div>
+              <div className="tlc__ol-chips">
+                {outputs.slice(0, 4).map(o => (
+                  <span key={o.column} className="tlc__chip tlc__chip--out">{o.column}</span>
+                ))}
+                {outputs.length > 4 && <span className="tlc__chip tlc__chip--more">+{outputs.length - 4}</span>}
+              </div>
+            </div>
+          )}
+
+          {template.display?.pricing && (
+            <div className="tlc__ol-pricing">💰 {template.display.pricing}</div>
+          )}
+          {template.display?.limitations?.length > 0 && (
+            <div className="tlc__ol-limits">⚠️ {template.display.limitations[0]}</div>
+          )}
+
+          <button type="button" className="tlc__ol-btn"
+            onClick={e => { e.stopPropagation(); onSelect(template); }}>
+            Usa questo template →
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function TemplateLibraryModal({ onClose, onSelectTemplate }) {
   const [templates, setTemplates] = useState([]);
@@ -16,249 +109,98 @@ function TemplateLibraryModal({ onClose, onSelectTemplate }) {
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [expandedTemplate, setExpandedTemplate] = useState(null);
 
-  // Carica template dal backend
   useEffect(() => {
-    const loadTemplates = async () => {
+    const load = async () => {
       try {
         setLoading(true);
-        const response = await fetch('http://localhost:8000/api/templates');
-        
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-        
-        const data = await response.json();
-        
-        if (data.success) {
-          setTemplates(data.templates || []);
-        } else {
-          throw new Error(data.error || 'Errore caricamento template');
-        }
-      } catch (err) {
-        console.error('Errore caricamento template:', err);
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
+        const data = await getTemplates();
+        if (data.success) setTemplates(data.templates || []);
+        else throw new Error(data.error || 'Errore caricamento template');
+      } catch (err) { setError(err.message); }
+      finally { setLoading(false); }
     };
-
-    loadTemplates();
+    load();
   }, []);
 
-  // Filtra template
-  const filteredTemplates = useMemo(() => {
-    return templates.filter(t => {
-      const matchesSearch = searchQuery === '' || 
-        t.display?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        t.display?.short_description?.toLowerCase().includes(searchQuery.toLowerCase());
-      
-      const matchesCategory = selectedCategory === 'all' || 
-        t._meta?.category === selectedCategory;
-      
-      return matchesSearch && matchesCategory;
-    });
-  }, [templates, searchQuery, selectedCategory]);
-
-  // Raggruppa per categoria
-  const groupedTemplates = useMemo(() => {
-    const groups = {};
-    
-    filteredTemplates.forEach(t => {
-      const cat = t._meta?.category || 'custom';
-      if (!groups[cat]) {
-        groups[cat] = [];
-      }
-      groups[cat].push(t);
-    });
-    
-    return groups;
-  }, [filteredTemplates]);
-
-  // Seleziona template
-  const handleSelectTemplate = (template) => {
-    onSelectTemplate(template);
-    onClose();
-  };
+  const filtered = useMemo(() => templates.filter(t => {
+    const q = searchQuery.toLowerCase();
+    const matchSearch = !q ||
+      t.display?.name?.toLowerCase().includes(q) ||
+      t.display?.short_description?.toLowerCase().includes(q);
+    const matchCat = selectedCategory === 'all' || t._meta?.category === selectedCategory;
+    return matchSearch && matchCat;
+  }), [templates, searchQuery, selectedCategory]);
 
   return (
-    <div className="template-modal__overlay" onClick={onClose}>
-      <div className="template-modal" onClick={e => e.stopPropagation()}>
-        {/* Header */}
-        <div className="template-modal__header">
-          <h2 className="template-modal__title">🌐 Libreria Template API</h2>
-          <button onClick={onClose} className="template-modal__close">×</button>
-        </div>
-
+    <ModalWrapper
+      isOpen={true}
+      onClose={onClose}
+      title="Libreria Template"
+      subtitle="Template API predefiniti pronti all'uso"
+      icon="🌐"
+      size="lg"
+    >
         {/* Toolbar */}
-        <div className="template-modal__toolbar">
-          <div className="template-modal__search">
-            <span className="template-modal__search-icon">🔍</span>
-            <input
-              type="text"
-              value={searchQuery}
+        <div className="tlm__toolbar">
+          <div className="tlm__search">
+            <span className="tlm__search-icon">🔍</span>
+            <input type="text" value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Cerca template..."
-              className="template-modal__search-input"
-            />
+              placeholder="Cerca template…"
+              className="tlm__search-input" autoComplete="off" />
+            {searchQuery && (
+              <button type="button" className="tlm__search-clear" onClick={() => setSearchQuery('')}>✕</button>
+            )}
           </div>
-          <div className="template-modal__filters">
-            {Object.entries(CATEGORIES).map(([catId, catInfo]) => (
-              <button
-                key={catId}
-                onClick={() => setSelectedCategory(catId)}
-                className={`template-modal__filter-btn ${selectedCategory === catId ? 'template-modal__filter-btn--active' : ''}`}
-                title={catInfo.label}
-              >
-                {catInfo.icon}
-              </button>
-            ))}
+          <div className="tlm__cats">
+            {Object.entries(CATEGORIES).map(([id, cat]) => {
+              const count = id === 'all' ? templates.length : templates.filter(t => t._meta?.category === id).length;
+              return (
+                <button key={id} type="button"
+                  className={`tlm__cat${selectedCategory === id ? ' tlm__cat--active' : ''}`}
+                  onClick={() => setSelectedCategory(id)}>
+                  <span>{cat.icon}</span>
+                  <span>{cat.label}</span>
+                  <span className="tlm__cat-count">{count}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
         {/* Content */}
-        <div className="template-modal__content">
+        <div className="tlm__content">
           {loading ? (
-            <div className="template-modal__loading">
-              <span>⏳</span> Caricamento template...
+            <div className="tlm__empty">
+              <div className="tlm__spinner" />
+              <div>Caricamento template…</div>
             </div>
           ) : error ? (
-            <div className="template-modal__error">
-              <span>❌</span> Errore: {error}
-              <button onClick={() => window.location.reload()} className="template-modal__retry-btn">
-                🔄 Riprova
-              </button>
+            <div className="tlm__empty">
+              <div className="tlm__empty-icon">❌</div>
+              <div>Errore: {error}</div>
             </div>
-          ) : filteredTemplates.length === 0 ? (
-            <div className="template-modal__empty">
-              <span>📭</span> Nessun template trovato
+          ) : filtered.length === 0 ? (
+            <div className="tlm__empty">
+              <div className="tlm__empty-icon">🔭</div>
+              <div>Nessun template trovato</div>
             </div>
           ) : (
-            Object.entries(groupedTemplates).map(([category, categoryTemplates]) => (
-              <div key={category} className="template-modal__category">
-                <h3 className="template-modal__category-title">
-                  {CATEGORIES[category]?.icon} {CATEGORIES[category]?.label || category}
-                </h3>
-                <div className="template-modal__grid">
-                  {categoryTemplates.map(template => (
-                    <div 
-                      key={template._meta?.id}
-                      className={`template-card ${expandedTemplate === template._meta?.id ? 'template-card--expanded' : ''}`}
-                    >
-                      {/* Card Header */}
-                      <div 
-                        className="template-card__header"
-                        onClick={() => setExpandedTemplate(
-                          expandedTemplate === template._meta?.id ? null : template._meta?.id
-                        )}
-                      >
-                        <span className="template-card__icon">{template.display?.icon || '📄'}</span>
-                        <div className="template-card__info">
-                          <h4 className="template-card__name">{template.display?.name}</h4>
-                          <p className="template-card__desc">{template.display?.short_description}</p>
-                        </div>
-                        <span className="template-card__expand">
-                          {expandedTemplate === template._meta?.id ? '▼' : '▶'}
-                        </span>
-                      </div>
-
-                      {/* Card Details (expanded) */}
-                      {expandedTemplate === template._meta?.id && (
-                        <div className="template-card__details">
-                          {/* Meta info */}
-                          <div className="template-card__meta">
-                            <span className="template-card__meta-item">
-                              <span className="template-card__label">Tipo:</span>
-                              <span className={`template-card__badge ${template.config?.api_type === 'generator' ? 'template-card__badge--generator' : ''}`}>
-                                {template.config?.api_type === 'generator' ? 'Generatore' : 'Arricchitore'}
-                              </span>
-                            </span>
-                            {template.config?.auth?.type !== 'none' && (
-                              <span className="template-card__meta-item">
-                                <span className="template-card__label">Auth:</span>
-                                <span className="template-card__badge">🔐 {template.config?.auth?.type}</span>
-                              </span>
-                            )}
-                            {template.config?.options?.rate_limit && (
-                              <span className="template-card__meta-item">
-                                <span className="template-card__label">Rate:</span>
-                                {template.config.options.rate_limit} req/s
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Parametri */}
-                          <div className="template-card__section">
-                            <span className="template-card__label">Parametri input:</span>
-                            <div className="template-card__params">
-                              {template.parameters?.filter(p => !p.hidden).map(p => (
-                                <span key={p.name} className="template-card__param">
-                                  {p.name}{p.required ? '*' : ''}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-
-                          {/* Output */}
-                          <div className="template-card__section">
-                            <span className="template-card__label">Campi output:</span>
-                            <div className="template-card__params">
-                              {template.output_mapping?.map(o => (
-                                <span key={o.column} className="template-card__param template-card__param--output">
-                                  {o.column}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-
-                          {/* Limitations */}
-                          {template.display?.limitations?.length > 0 && (
-                            <div className="template-card__limitations">
-                              <span className="template-card__label">⚠️ Limitazioni:</span>
-                              <ul>
-                                {template.display.limitations.map((l, i) => (
-                                  <li key={i}>{l}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-
-                          {/* Pricing */}
-                          {template.display?.pricing && (
-                            <div className="template-card__pricing">
-                              <span className="template-card__label">💰</span>
-                              {template.display.pricing}
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Use Button */}
-                      <div className="template-card__footer">
-                        <button 
-                          onClick={() => handleSelectTemplate(template)}
-                          className="template-card__use-btn"
-                        >
-                          + Usa questo template
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))
+            <div className="tlm__grid">
+              {filtered.map(t => (
+                <TemplateCard key={t._meta?.id} template={t}
+                  onSelect={t => { onSelectTemplate(t); onClose(); }} />
+              ))}
+            </div>
           )}
         </div>
 
-        {/* Footer */}
-        <div className="template-modal__footer">
-          <p className="template-modal__hint">
-            💡 I template preconfigurano URL, parametri e mapping. Potrai personalizzarli nel wizard.
-          </p>
+        {/* Hint bar */}
+        <div className="tlm__hint">
+          💡 Passa il mouse su una card per i dettagli · Click per selezionare
         </div>
-      </div>
-    </div>
+    </ModalWrapper>
   );
 }
 

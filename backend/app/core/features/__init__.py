@@ -1,5 +1,5 @@
 """
-Modulo Features — Connettore ArcGIS Feature Service per URBY-ETL.
+Modulo Features — Connettore ArcGIS Feature Service per PLENORA-ETL.
 
 Fornisce lettura/scrittura bidirezionale verso ArcGIS Server, Enterprise e Online
 tramite REST API dirette (senza dipendenza dal pacchetto arcgis Python).

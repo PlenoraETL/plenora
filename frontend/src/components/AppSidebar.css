@@ -1,0 +1,244 @@
+/* AppSidebar — sidebar di navigazione condivisa
+ * Usa i token Plenora per supportare dark/light. */
+
+.app-sidebar {
+  width: 260px;
+  flex-shrink: 0;
+  background: var(--plen-surface, #0C0F18);
+  border-right: 1px solid var(--plen-border, rgba(255, 255, 255, 0.06));
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  font-family: var(--plen-font-body, 'Inter', sans-serif);
+  color: var(--plen-text, #DDE4F2);
+  z-index: 10;
+}
+
+/* ── Logo ─────────────────────────────────────────────────────────── */
+
+.app-sidebar__logo {
+  padding: 22px 22px 18px 22px;
+  border-bottom: 1px solid var(--plen-border, rgba(255, 255, 255, 0.06));
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.app-sidebar__sub {
+  font-size: 11px;
+  color: var(--plen-text-sub, #7D8BA8);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-left: 2px;
+  font-weight: 500;
+}
+
+/* ── Sezione navigazione ─────────────────────────────────────────── */
+
+.app-sidebar__nav {
+  flex: 1;
+  padding: 18px 14px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.app-sidebar__nav-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--plen-text-sub, #7D8BA8);
+  padding: 10px 12px 6px 12px;
+  opacity: 0.85;
+}
+
+.app-sidebar__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 7px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--plen-text, #DDE4F2);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  user-select: none;
+}
+
+.app-sidebar__item:hover {
+  background: var(--plen-surface-2, rgba(255, 255, 255, 0.03));
+}
+
+.app-sidebar__item--active {
+  background: rgba(75, 139, 255, 0.14);
+  color: var(--plen-blue, #4B8BFF);
+  font-weight: 600;
+}
+
+.app-sidebar__item--active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  width: 3px;
+  height: 18px;
+  background: var(--plen-blue, #4B8BFF);
+  border-radius: 0 3px 3px 0;
+  margin-left: -14px;
+}
+
+/* Pallino colorato a sinistra di ogni voce */
+.app-sidebar__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--plen-text-sub, #7D8BA8);
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+.app-sidebar__dot--estrai      { background: var(--plen-estrai,      #34C17A); opacity: 1; }
+.app-sidebar__dot--manipola    { background: var(--plen-manipola,    #9B6DFF); opacity: 1; }
+.app-sidebar__dot--arricchisci { background: var(--plen-arricchisci, #F5A623); opacity: 1; }
+.app-sidebar__dot--eseguibili  { background: var(--plen-blue,        #4B8BFF); opacity: 1; }
+
+/* Badge contatori (numerico) */
+.app-sidebar__count {
+  margin-left: auto;
+  background: var(--plen-surface-2, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--plen-border, rgba(255, 255, 255, 0.08));
+  color: var(--plen-text-sub, #7D8BA8);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 10px;
+  min-width: 22px;
+  text-align: center;
+}
+
+.app-sidebar__item--active .app-sidebar__count {
+  background: rgba(75, 139, 255, 0.18);
+  border-color: rgba(75, 139, 255, 0.40);
+  color: var(--plen-blue, #4B8BFF);
+}
+
+/* ── Footer utente ────────────────────────────────────────────────── */
+
+.app-sidebar__footer {
+  padding: 12px 14px 18px 14px;
+  border-top: 1px solid var(--plen-border, rgba(255, 255, 255, 0.06));
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.app-sidebar__user-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  transition: background 0.12s;
+}
+
+.app-sidebar__user-row--admin {
+  cursor: pointer;
+}
+
+.app-sidebar__user-row--admin:hover {
+  background: var(--plen-surface-2, rgba(255, 255, 255, 0.04));
+}
+
+.app-sidebar__avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--plen-blue, #4B8BFF), var(--plen-manipola, #9B6DFF));
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.app-sidebar__avatar--admin {
+  background: linear-gradient(135deg, #7c3aed, #a855f7);
+  font-size: 16px;
+}
+
+.app-sidebar__user-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.app-sidebar__user-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--plen-text, #DDE4F2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-sidebar__user-role {
+  font-size: 11px;
+  color: var(--plen-text-sub, #7D8BA8);
+  text-transform: lowercase;
+  letter-spacing: 0.2px;
+}
+
+.app-sidebar__icon-btn,
+.app-sidebar__logout-btn {
+  background: transparent;
+  border: 1px solid var(--plen-border, rgba(255, 255, 255, 0.10));
+  color: var(--plen-text-sub, #7D8BA8);
+  font-size: 14px;
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+}
+
+.app-sidebar__icon-btn:hover {
+  background: var(--plen-surface-2, rgba(255, 255, 255, 0.05));
+  border-color: var(--plen-blue, #4B8BFF);
+  color: var(--plen-blue, #4B8BFF);
+}
+
+.app-sidebar__logout-btn:hover {
+  background: var(--plen-err, #F87171);
+  color: #fff;
+  border-color: var(--plen-err, #F87171);
+}
+
+/* ── Scrollbar custom ─────────────────────────────────────────────── */
+
+.app-sidebar__nav::-webkit-scrollbar {
+  width: 6px;
+}
+.app-sidebar__nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+.app-sidebar__nav::-webkit-scrollbar-thumb {
+  background: var(--plen-border-hi, rgba(255, 255, 255, 0.10));
+  border-radius: 3px;
+}
+.app-sidebar__nav::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.20);
+}
+
+/* Position relative per ::before active marker */
+.app-sidebar__item {
+  position: relative;
+}

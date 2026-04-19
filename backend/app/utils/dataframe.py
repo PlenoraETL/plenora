@@ -1,6 +1,6 @@
 import re
 """
-Utility centralizzate per operazioni su DataFrame in URBY-ETL.
+Utility centralizzate per operazioni su DataFrame in PLENORA-ETL.
 
 Architettura
 ============
@@ -30,6 +30,7 @@ Uso:
     )
 """
 
+import io
 import json
 import tempfile
 import zipfile
@@ -97,8 +98,12 @@ def load_dataframe_from_file(
             # Leggi JSON con json.load per preservare stringhe con underscore
             # (pd.read_json converte "119_00074" in 11900074.0 perché _ è separatore migliaia)
             import json
-            with open(file_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+            except UnicodeDecodeError:
+                with open(file_path, 'r', encoding='utf-8-sig') as f:
+                    data = json.load(f)
             df = pd.DataFrame(data)
             
             # Applica inferenza tipi selettiva: converti a numerico solo colonne "pure"
@@ -111,8 +116,10 @@ def load_dataframe_from_file(
                     if not has_underscore:
                         # Prova conversione a numerico
                         converted = pd.to_numeric(df[col], errors='coerce')
-                        # Accetta solo se >80% dei non-null sono convertiti
-                        if converted.notna().sum() > df[col].notna().sum() * 0.8:
+                        original_count = df[col].notna().sum()
+                        converted_count = converted.notna().sum()
+                        # Accetta solo se TUTTI i non-null sono convertiti (no data loss)
+                        if original_count > 0 and converted_count == original_count:
                             df[col] = converted
             
         elif estensione == ".parquet":
@@ -232,6 +239,7 @@ def _carica_da_zip(
         ValueError: Se il formato ZIP non è riconosciuto.
     """
     import geopandas as gpd
+    from app.utils.zip_safe import safe_extractall
 
     with zipfile.ZipFile(zip_path, "r") as zf:
         contenuto = zf.namelist()
@@ -240,7 +248,7 @@ def _carica_da_zip(
         shp_files = [n for n in contenuto if n.lower().endswith(".shp")]
         if shp_files:
             with tempfile.TemporaryDirectory() as tmpdir:
-                zf.extractall(tmpdir)
+                safe_extractall(zf, tmpdir)
                 shp_path = Path(tmpdir) / shp_files[0]
                 df = gpd.read_file(shp_path)
                 logger.warning(
@@ -253,7 +261,7 @@ def _carica_da_zip(
         gdb_entries = [n for n in contenuto if ".gdb/" in n or n.lower().endswith(".gdb")]
         if gdb_entries:
             with tempfile.TemporaryDirectory() as tmpdir:
-                zf.extractall(tmpdir)
+                safe_extractall(zf, tmpdir)
                 gdb_dirs = list(Path(tmpdir).rglob("*.gdb"))
                 if not gdb_dirs:
                     raise ValueError("FileGDB non trovato nello ZIP")
@@ -262,7 +270,7 @@ def _carica_da_zip(
         # Caso 3: Singolo file zippato — caricamento ricorsivo
         if len(contenuto) == 1:
             with tempfile.TemporaryDirectory() as tmpdir:
-                zf.extractall(tmpdir)
+                safe_extractall(zf, tmpdir)
                 file_estratto = Path(tmpdir) / contenuto[0]
                 return load_dataframe_from_file(file_estratto, sheet=sheet, layer=layer)
 
@@ -344,7 +352,10 @@ def save_dataframe(
 
         if formato == "csv":
             final_path = base_path.with_suffix(".csv")
-            df.to_csv(final_path, index=False)
+            # UTF-8 esplicito: pandas ha utf-8 come default ma il contratto
+            # deve essere leggibile. Il reader in _read_csv_safe prova prima
+            # utf-8 -> coerenza write/read a prova di locale di sistema.
+            df.to_csv(final_path, index=False, encoding="utf-8")
 
         elif formato == "xlsx":
             final_path = base_path.with_suffix(".xlsx")
@@ -392,6 +403,96 @@ def save_dataframe(
     except Exception as e:
         logger.error(f"[CRASH] Errore salvataggio {output_path}: {e}", exc_info=True)
         raise
+
+
+def save_dataframe_to_bytes(
+    df: pd.DataFrame,
+    format: str = "csv",
+    geom_column: Optional[str] = None,
+    crs: str = "EPSG:4326",
+) -> bytes:
+    """Serializza un DataFrame in bytes in-memory (nessun disk I/O).
+
+    Formati supportati in-memory: csv, xlsx, json, parquet, geojson.
+    Formati NON supportati (richiedono filesystem per tool binari):
+      - gpkg  (SQLite-based, il driver OGR vuole un path)
+      - shp   (multi-file .shp/.shx/.dbf/.prj zippati)
+    Per questi formati usa la versione path-based `save_dataframe`.
+
+    Complementare a `save_dataframe`: stesso contract output (bytes che
+    il reader corrispondente sa decodificare 1:1), ma senza passaggio
+    per DATA_DIR/temp. Usato dai 4 callsite che poi fanno save_result_blob
+    o eseguibili.storage.save (uno-step in-memory → destinazione finale).
+
+    Args:
+        df: DataFrame (o GeoDataFrame) da serializzare
+        format: 'csv'|'xlsx'|'json'|'parquet'|'geojson'
+        geom_column: colonna geometria per geojson (auto-detect se None)
+        crs: CRS per output geospaziali (default WGS84)
+
+    Returns:
+        bytes — content pronto per upload DB blob / S3 / altro sink.
+
+    Raises:
+        ValueError: formato non supportato o filesystem-only (gpkg, shp)
+    """
+    from app.utils.geo import to_geodataframe, detect_geometry_column
+
+    formato = format.lower()
+
+    if formato == "csv":
+        buf = io.StringIO()
+        # encoding='utf-8' esplicito per coerenza col contract checker
+        # (AST test cerca il kwarg su qualsiasi to_csv con arg positional).
+        # Nel caso StringIO pandas ignora l'encoding effettivo (il buf e'
+        # text-mode), noi lo applichiamo a getvalue().encode() sotto.
+        df.to_csv(buf, index=False, encoding="utf-8")
+        return buf.getvalue().encode("utf-8")
+
+    if formato == "xlsx":
+        buf = io.BytesIO()
+        # Engine di default (openpyxl) supporta BytesIO. Per file >MAX zip
+        # standard (rarissimo in pipeline tabulari) il path-based ha il
+        # fallback xlsxwriter+zip64; qui se emerge errore lo propaghiamo.
+        df.to_excel(buf, index=False)
+        return buf.getvalue()
+
+    if formato == "json":
+        records = sanitize_for_json(df.to_dict(orient="records"))
+        return json.dumps(records, indent=2, default=str, ensure_ascii=False).encode("utf-8")
+
+    if formato == "parquet":
+        buf = io.BytesIO()
+        df.to_parquet(buf, index=False)
+        return buf.getvalue()
+
+    if formato == "geojson":
+        # Converti a GeoDataFrame se necessario (stesso pattern del
+        # path-based `_salva_formato_geo`).
+        if geom_column is None:
+            geom_column = detect_geometry_column(df)
+        try:
+            import geopandas as gpd
+        except ImportError:
+            raise ValueError("geopandas non installato: formato geojson non disponibile")
+        if not isinstance(df, gpd.GeoDataFrame):
+            if not geom_column:
+                raise ValueError("geojson: serve una colonna geometria")
+            gdf = to_geodataframe(df, geom_column, crs)
+        else:
+            gdf = df
+            if geom_column and gdf.geometry.name != geom_column:
+                gdf = gdf.set_geometry(geom_column)
+        # GeoDataFrame.to_json() ritorna stringa GeoJSON ottimizzata.
+        return gdf.to_json().encode("utf-8")
+
+    if formato in ("gpkg", "shp"):
+        raise ValueError(
+            f"Formato '{formato}' richiede filesystem (tool binari / multi-file). "
+            f"Usa save_dataframe(path-based) invece di save_dataframe_to_bytes."
+        )
+
+    raise ValueError(f"Formato '{formato}' non supportato")
 
 
 def _sanitize_layer_name(name: str) -> str:
@@ -475,11 +576,14 @@ def _salva_formato_geo(
                 import geopandas as gpd
                 from shapely.geometry import Point
                 df = df.copy()
-                df["geometry"] = df.apply(
-                    lambda row: Point(row[lon_col], row[lat_col])
-                    if pd.notna(row[lon_col]) and pd.notna(row[lat_col]) else None,
-                    axis=1,
-                )
+                # Vectorized: niente df.apply row-by-row
+                lons = pd.to_numeric(df[lon_col], errors='coerce')
+                lats = pd.to_numeric(df[lat_col], errors='coerce')
+                valid = lons.notna() & lats.notna()
+                df["geometry"] = [
+                    Point(lon, lat) if v else None
+                    for lon, lat, v in zip(lons, lats, valid)
+                ]
                 geom_column = "geometry"
                 logger.info(
                     f"Auto-creata colonna geometry da lat='{lat_col}' lon='{lon_col}' "
@@ -529,7 +633,8 @@ def _switch_colonna_geometria(gdf, geom_column: str):
 
     col_data = gdf[geom_column]
     if col_data.dtype == "object":
-        primo_valido = col_data.dropna().iloc[0] if not col_data.dropna().empty else None
+        _non_null = col_data.dropna()
+        primo_valido = _non_null.iloc[0] if not _non_null.empty else None
         if primo_valido and isinstance(primo_valido, str):
             # Converte WKT in oggetti geometria
             gdf[geom_column] = col_data.apply(
@@ -560,11 +665,11 @@ def _converti_geometrie_secondarie_in_wkt(gdf):
         if col == nome_geometria_attiva:
             continue
 
-        col_data = gdf[col]
-        if col_data.dropna().empty:
+        col_data = gdf[col].dropna()
+        if col_data.empty:
             continue
 
-        primo_valido = col_data.dropna().iloc[0]
+        primo_valido = col_data.iloc[0]
         if isinstance(primo_valido, BaseGeometry):
             gdf[col] = col_data.apply(
                 lambda x: x.wkt if isinstance(x, BaseGeometry) else x
@@ -847,7 +952,7 @@ def infer_column_types(df: pd.DataFrame) -> List[Dict[str, str]]:
     """
     Inferisce i tipi delle colonne di un DataFrame.
 
-    Mappa i dtype pandas ai tipi URBY-ETL:
+    Mappa i dtype pandas ai tipi PLENORA-ETL:
         int* → "int", float/numeric → "real", bool → "bool",
         datetime/timestamp → "date", geometry → "geometry",
         object/altro → "str"

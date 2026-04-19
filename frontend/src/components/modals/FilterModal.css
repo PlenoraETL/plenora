@@ -1,0 +1,195 @@
+/* ═══════════════════════════════════════════════════════════════
+   FilterModal.css — Plenora design system
+   Prefix: .filter-modal
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Info box ───────────────────────────────────────────────────── */
+.filter-modal__info-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: rgba(52,193,122,0.06);
+  border: 1px solid rgba(52,193,122,0.18);
+  border-radius: 7px;
+  margin-bottom: 16px;
+  font-size: 12.5px;
+  color: var(--plen-text-sub, #7D8BA8);
+}
+[data-theme='light'] .filter-modal__info-box {
+  background: rgba(52,193,122,0.05);
+  color: #4A5568;
+}
+
+.filter-modal__info-label {
+  font-weight: 600;
+  color: var(--plen-text, #DDE4F2);
+}
+[data-theme='light'] .filter-modal__info-label { color: #0F1729; }
+
+.filter-modal__info-count {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: var(--plen-text-dim, #3F4D68);
+}
+
+/* ── Filter list ────────────────────────────────────────────────── */
+.filter-modal__filters-list { margin-bottom: 12px; }
+
+.filter-modal__filter-item {
+  padding: 12px;
+  margin-bottom: 10px;
+  background: var(--plen-surface-2, #111525);
+  border: 1px solid var(--plen-border-hi, rgba(255,255,255,0.08));
+  border-radius: 8px;
+}
+[data-theme='light'] .filter-modal__filter-item {
+  background: #F4F7FD;
+  border-color: rgba(0,0,0,0.07);
+}
+.filter-modal__filter-item:last-child { margin-bottom: 0; }
+
+/* ── Form group ─────────────────────────────────────────────────── */
+.filter-modal .form-group { margin-bottom: 10px; }
+.filter-modal .form-group:last-of-type { margin-bottom: 0; }
+
+.filter-modal .form-group label {
+  display: block;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--plen-text-dim, #3F4D68);
+  margin-bottom: 5px;
+}
+
+.filter-modal .form-group select,
+.filter-modal .form-group input {
+  width: 100%;
+  padding: 7px 10px;
+  font-size: 12.5px;
+  font-family: 'Inter', sans-serif;
+  background: var(--plen-surface, #0C0F18);
+  border: 1px solid var(--plen-border-hi, rgba(255,255,255,0.11));
+  border-radius: 6px;
+  color: var(--plen-text, #DDE4F2);
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+}
+[data-theme='light'] .filter-modal .form-group select,
+[data-theme='light'] .filter-modal .form-group input {
+  background: #FFFFFF;
+  border-color: rgba(0,0,0,0.10);
+  color: #0F1729;
+}
+.filter-modal .form-group select:focus,
+.filter-modal .form-group input:focus {
+  border-color: #34C17A;
+  box-shadow: 0 0 0 2px rgba(52,193,122,0.15);
+}
+
+/* ── Remove button ──────────────────────────────────────────────── */
+.filter-modal__remove-btn {
+  margin-top: 10px;
+  padding: 5px 11px;
+  background: rgba(248,113,113,0.08);
+  border: 1px solid rgba(248,113,113,0.2);
+  border-radius: 6px;
+  color: #F87171;
+  cursor: pointer;
+  font-size: 11.5px;
+  font-family: 'Inter', sans-serif;
+  transition: all 0.12s;
+}
+.filter-modal__remove-btn:hover {
+  background: rgba(248,113,113,0.15);
+  border-color: rgba(248,113,113,0.35);
+}
+
+/* ── Add filter button ──────────────────────────────────────────── */
+.filter-modal__add-btn {
+  width: 100%;
+  margin-bottom: 14px;
+  padding: 8px;
+  background: transparent;
+  border: 1px dashed rgba(52,193,122,0.3);
+  border-radius: 7px;
+  color: #34C17A;
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
+  transition: all 0.12s;
+}
+.filter-modal__add-btn:hover {
+  background: rgba(52,193,122,0.06);
+  border-style: solid;
+}
+
+/* ── SQL preview ────────────────────────────────────────────────── */
+.filter-modal__preview {
+  background: var(--plen-surface-2, #111525);
+  border: 1px solid var(--plen-border-hi, rgba(255,255,255,0.08));
+  border-radius: 7px;
+  padding: 10px 12px;
+  margin-top: 4px;
+}
+[data-theme='light'] .filter-modal__preview {
+  background: #F4F7FD;
+  border-color: rgba(0,0,0,0.07);
+}
+
+.filter-modal__preview-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--plen-text-dim, #3F4D68);
+  margin-bottom: 7px;
+}
+
+.filter-modal__preview-sql {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  line-height: 1.7;
+  word-break: break-word;
+  color: var(--plen-text-sub, #7D8BA8);
+}
+[data-theme='light'] .filter-modal__preview-sql { color: #4A5568; }
+
+.filter-modal__sql-keyword {
+  color: #4B8BFF;
+  font-weight: 600;
+}
+
+.filter-modal__sql-operator {
+  color: #34C17A;
+  font-weight: 600;
+}
+
+/* ── Type hint ──────────────────────────────────────────────────── */
+.filter-modal__type-hint {
+  font-weight: 400;
+  color: var(--plen-text-dim, #3F4D68);
+  font-size: 10px;
+  font-family: 'DM Mono', monospace;
+}
+
+/* ── Value hint ─────────────────────────────────────────────────── */
+.filter-modal__value-hint {
+  margin-top: 6px;
+  padding: 6px 10px;
+  background: rgba(251,191,36,0.06);
+  border: 1px solid rgba(251,191,36,0.2);
+  border-radius: 5px;
+  font-size: 11px;
+  color: #FBBF24;
+  font-family: 'Inter', sans-serif;
+}
+[data-theme='light'] .filter-modal__value-hint {
+  background: rgba(251,191,36,0.08);
+  color: #92610a;
+}

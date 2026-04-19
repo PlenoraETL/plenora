@@ -1,0 +1,65 @@
+# Dependabot — update automatici per dipendenze Python + GitHub Actions.
+#
+# Docs: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+#
+# Cosa fa:
+#   - Scansiona requirements*.txt (pip) weekly, apre PR su update disponibili
+#   - Scansiona workflow YAML (github-actions) weekly
+#   - Raggruppa minor+patch per ridurre il rumore PR
+#   - Ignora aggiornamenti patch di boto3 (aggiorna quasi quotidianamente,
+#     diventa noise: lascia minor/major per review manuale consapevole)
+#
+# Cosa NON fa:
+#   - Non auto-merge niente (scelta umana)
+#   - Non tocca pacchetti transitive (solo top-level in requirements)
+#   - Non fa security audit (affianca pip-audit/Trivy in CI, separato)
+
+version: 2
+updates:
+  # ---------------------------------------------------------------------------
+  # Python deps (requirements.txt + requirements-dev.txt auto-discovered)
+  # ---------------------------------------------------------------------------
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Rome"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "python"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    groups:
+      # Minor + patch in un'unica PR per settimana → review piu' rapida
+      python-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      # boto3 rilascia versioni quasi ogni giorno. Troppo rumore sulle patch.
+      # Le minor/major restano tracciate (novita' API AWS rilevanti).
+      - dependency-name: "boto3"
+        update-types: ["version-update:semver-patch"]
+      - dependency-name: "botocore"
+        update-types: ["version-update:semver-patch"]
+
+  # ---------------------------------------------------------------------------
+  # GitHub Actions (workflow futuri in .github/workflows/*.yml)
+  # ---------------------------------------------------------------------------
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Rome"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: "ci"

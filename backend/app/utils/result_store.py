@@ -1,5 +1,5 @@
 """
-URBY-ETL — Result Store
+PLENORA-ETL — Result Store
 Helper per salvare i risultati pipeline nel DB SQLite.
 I file vengono scritti in tempdir, salvati nel DB, poi eliminati.
 """
@@ -7,7 +7,7 @@ I file vengono scritti in tempdir, salvati nel DB, poi eliminati.
 import os
 import uuid
 from pathlib import Path
-from typing import Optional
+from typing import Dict, Optional
 
 from app.utils.logger import get_logger
 
@@ -21,7 +21,7 @@ DEFAULT_RESULTS_RETENTION = 10
 def get_temp_output_path(filename: str) -> Path:
     """Ritorna un path in data/temp per scrivere il file risultato."""
     from app.config import settings
-    tmp_dir = Path(settings.DATA_DIR) / "temp" / f"urby_{os.getpid()}_{os.urandom(4).hex()}"
+    tmp_dir = Path(settings.DATA_DIR) / "temp" / f"plenora_{os.getpid()}_{os.urandom(4).hex()}"
     tmp_dir.mkdir(parents=True, exist_ok=True)
     return tmp_dir / filename
 
@@ -67,19 +67,46 @@ def _apply_results_retention(project_id: str) -> None:
         logger.warning(f"Errore retention risultati ({project_id}): {e}", op="retention")
 
 
+class ResultSaveError(Exception):
+    """Errore fatale durante il salvataggio di un risultato pipeline.
+
+    Sollevata da save_result_blob* quando la persistenza fallisce in modo
+    non recuperabile. Casi tipici:
+      - DB rifiuta l'insert (vincolo FK, connection, ecc.)
+      - S3 upload fallisce (permessi, rete, bucket)
+      - Retention non recuperabile post-save
+    Il caller (tipicamente un task Celery) DEVE far fallire il task,
+    altrimenti l'utente scaricherebbe un risultato stantio credendo
+    che sia il nuovo.
+    """
+
+
 def save_result_blob(project_id: str, path: Path, fmt: str,
                      rows_count: int = None, group_id: str = None) -> str:
     """
-    Salva il blob del file risultato nel DB SQLite.
+    Salva il risultato (file su disco) come DB blob o S3 object.
+
+    FS-4b: dispatch threshold identico a save_result_blob_from_bytes:
+      - file_size < RESULT_S3_THRESHOLD_BYTES (default 50MB) -> DB BYTEA
+      - file_size >= threshold -> S3 via storage.upload(path, key).
+        Vantaggio path-based: boto3 upload_file streamma dal disk
+        (zero RAM per file grossi, auto-multipart sopra 8MB).
+
     Applica la retention policy dopo il salvataggio.
-    Elimina il file temp dopo il salvataggio.
+    Elimina il file temp solo dopo che il blob/S3 e' stato scritto.
 
     Args:
         group_id: gruppo dell'utente proprietario del progetto.
                   Se None, viene letto dal progetto nel DB come fallback.
 
-    Returns: result_id generato
+    Returns: result_id generato (sempre non vuoto se il metodo ritorna)
+
+    Raises:
+        ResultSaveError: se il salvataggio nel DB fallisce. Il file temp viene
+            lasciato sul disco (non cancellato) per consentire un retry manuale
+            o il recovery da parte del caller.
     """
+    _saved = False
     try:
         import app.db.db_service as db
         from app.config import settings
@@ -91,35 +118,326 @@ def save_result_blob(project_id: str, path: Path, fmt: str,
             resolved_group_id = (project.get("group_id") if project else None) or settings.DEFAULT_GROUP
 
         result_id = str(uuid.uuid4())
-        blob = path.read_bytes()
 
-        db.save_result(
-            result_id=result_id,
-            project_id=project_id,
-            group_id=resolved_group_id,
-            filename=path.name,
-            fmt=fmt,
-            data=blob,
-            rows_count=rows_count,
+        try:
+            file_size = path.stat().st_size
+        except OSError as _ose:
+            raise ResultSaveError(f"Impossibile leggere dimensione file {path}: {_ose}")
+
+        # Threshold: sotto -> DB blob (transazionale, veloce).
+        # Sopra -> S3 via storage.upload(path) che streamma dal disk
+        # (zero RAM spike, auto-multipart sopra 8MB via boto3 S3Transfer).
+        s3_threshold = int(
+            settings.get("RESULT_S3_THRESHOLD_BYTES", 50 * 1024 * 1024)
         )
 
-        # Applica retention dopo il salvataggio
+        if file_size < s3_threshold:
+            # DB blob path: size < threshold, load in memoria e save transazionale.
+            blob = path.read_bytes()
+            db.save_result(
+                result_id=result_id,
+                project_id=project_id,
+                group_id=resolved_group_id,
+                filename=path.name,
+                fmt=fmt,
+                data=blob,
+                rows_count=rows_count,
+            )
+        else:
+            # S3 path: upload streaming dal disk (no RAM load del file).
+            # Ordine: S3 prima (no row DB orfana se upload fallisce).
+            storage_key = f"results/{project_id}/{result_id}.bin"
+            try:
+                from app.shared.cloud_backends import get_object_storage
+                storage = get_object_storage()
+                storage.upload(path, storage_key)
+            except Exception as _se:
+                raise ResultSaveError(
+                    f"Upload S3 fallito per result {result_id} ({path.name}): {_se}"
+                ) from _se
+
+            db.save_result(
+                result_id=result_id,
+                project_id=project_id,
+                group_id=resolved_group_id,
+                filename=path.name,
+                fmt=fmt,
+                data=None,
+                rows_count=rows_count,
+                storage_key=storage_key,
+                size_bytes=file_size,
+            )
+            logger.info(
+                f"[FS-4] Result {result_id} su S3 (file-based, "
+                f"{file_size // (1024*1024)} MB >= threshold "
+                f"{s3_threshold // (1024*1024)} MB): {storage_key}"
+            )
+
+        _saved = True
+
+        # Applica retention dopo il salvataggio.
         _apply_results_retention(project_id)
 
         return result_id
 
     except Exception as e:
-        logger.warning(f"Errore salvataggio risultato nel DB ({project_id}): {e}")
-        return ""
+        # Prima era un warning silenzioso → il task Celery non se ne accorgeva
+        # e ritornava success=True pur non avendo salvato nulla, lasciando
+        # l'utente a scaricare blob stantii. Ora failiamo esplicitamente.
+        logger.error(
+            f"[CRASH] save_result_blob fallito per project_id={project_id} "
+            f"file={path.name}: {e}",
+            exc_info=True,
+        )
+        raise ResultSaveError(
+            f"Salvataggio risultato nel DB fallito per {project_id}: {e}"
+        ) from e
     finally:
-        # Elimina sempre il file temp
-        try:
-            if path.exists():
-                path.unlink()
-            if path.parent.exists() and not any(path.parent.iterdir()):
-                path.parent.rmdir()
-        except Exception as e:
-            logger.warning("Cleanup file temp fallito per %s: %s", project_id, e)
+        # Elimina il file temp SOLO se salvato con successo (DB BYTEA o S3).
+        # Se _saved=False il file resta in temp per ispezione/recovery manuale.
+        if _saved:
+            try:
+                if path.exists():
+                    path.unlink()
+                if path.parent.exists() and not any(path.parent.iterdir()):
+                    path.parent.rmdir()
+            except Exception as e:
+                logger.warning("Cleanup file temp fallito per %s: %s", project_id, e)
+
+
+def save_result_blob_from_bytes(
+    project_id: str,
+    data: bytes,
+    filename: str,
+    fmt: str,
+    rows_count: int = None,
+    group_id: str = None,
+) -> str:
+    """Salva result bytes. Dispatch automatico DB blob vs S3 sulla soglia.
+
+    Threshold config: `RESULT_S3_THRESHOLD_BYTES` (default 50 MB).
+      - size < threshold -> DB blob (BYTEA). Veloce, transazionale,
+        retention gestita lato app.
+      - size >= threshold -> S3 (via cloud_backends). La row DB tiene
+        solo metadata + storage_key; get_result_data risolve trasparente.
+
+    Hard cap S3: `MAX_RESULT_S3_SIZE` (default 5 GB, limite S3 single PUT).
+    Sopra il cap: ResultSaveError (file troppo grosso — da questo caso
+    in su serve multipart upload, out of scope).
+
+    Args:
+        data: bytes gia' serializzati
+        filename: nome visibile nel metadata DB (es. "report.csv")
+
+    Returns: result_id generato.
+
+    Raises: ResultSaveError se fallisce DB/S3 o size supera hard cap.
+    """
+    try:
+        import app.db.db_service as db
+        from app.config import settings
+
+        size = len(data)
+
+        # Threshold: sotto -> DB blob (piccolo, transazionale).
+        # Sopra -> object storage (S3/Azure/GCS via cloud_backends).
+        # Nessun hard cap: upload_bytes usa auto-chunking (S3 multipart,
+        # Azure block, GCS resumable). Il limite reale e' la RAM del
+        # processo (se `data` entra in memoria, puo' essere uploadato).
+        s3_threshold = int(
+            settings.get("RESULT_S3_THRESHOLD_BYTES", 50 * 1024 * 1024)
+        )
+
+        # Risolvi group_id
+        resolved_group_id = group_id
+        if not resolved_group_id:
+            project = db.get_project(project_id)
+            resolved_group_id = (project.get("group_id") if project else None) or settings.DEFAULT_GROUP
+
+        result_id = str(uuid.uuid4())
+
+        if size < s3_threshold:
+            # DB blob path — piccolo, in-transaction.
+            db.save_result(
+                result_id=result_id,
+                project_id=project_id,
+                group_id=resolved_group_id,
+                filename=filename,
+                fmt=fmt,
+                data=data,
+                rows_count=rows_count,
+            )
+        else:
+            # S3 path — upload prima, poi salva row con storage_key (ordine
+            # importante: se upload fallisce, non abbiamo row orfana).
+            storage_key = f"results/{project_id}/{result_id}.bin"
+            try:
+                from app.shared.cloud_backends import get_object_storage
+                storage = get_object_storage()
+                storage.upload_bytes(data, storage_key)
+            except Exception as _se:
+                raise ResultSaveError(
+                    f"Upload S3 fallito per result {result_id}: {_se}"
+                ) from _se
+
+            db.save_result(
+                result_id=result_id,
+                project_id=project_id,
+                group_id=resolved_group_id,
+                filename=filename,
+                fmt=fmt,
+                data=None,
+                rows_count=rows_count,
+                storage_key=storage_key,
+                size_bytes=size,
+            )
+            logger.info(
+                f"[FS-4] Result {result_id} su S3 ({size // (1024*1024)} MB "
+                f">= threshold {s3_threshold // (1024*1024)} MB): {storage_key}"
+            )
+
+        # Retention post-save (stesso pattern del path-based).
+        _apply_results_retention(project_id)
+
+        return result_id
+
+    except ResultSaveError:
+        raise
+    except Exception as e:
+        logger.error(
+            f"[CRASH] save_result_blob_from_bytes fallito per project_id={project_id} "
+            f"filename={filename}: {e}",
+            exc_info=True,
+        )
+        raise ResultSaveError(
+            f"Salvataggio risultato in-memory fallito per {project_id}: {e}"
+        ) from e
+
+
+def save_pipeline_result(
+    project_id: str,
+    df,
+    output_format: str,
+    filename_stem: str,
+    rows_count: Optional[int] = None,
+    group_id: Optional[str] = None,
+    geom_column: Optional[str] = None,
+    crs: str = "EPSG:4326",
+) -> Dict[str, str]:
+    """Salva un DataFrame come result pipeline. Un solo entry point.
+
+    Dispatch interno:
+      - formati in-memory-safe (csv/xlsx/json/parquet/geojson):
+        save_dataframe_to_bytes + save_result_blob_from_bytes. Nessun
+        file creato o toccato su DATA_DIR/temp.
+      - formati filesystem-only (gpkg/shp): save_dataframe crea un
+        tempfile in TemporaryDirectory (OS /tmp), save_result_blob
+        lo persiste (DB o S3 in base alla size), poi unlink garantito
+        dal context manager. Il file esiste transitoriamente
+        (millisecondi tipicamente).
+
+    Storage finale (dispatch delegato a save_result_blob*):
+      - size < RESULT_S3_THRESHOLD_BYTES -> DB BYTEA (transazionale)
+      - size >= threshold -> S3 via cloud_backends (auto-chunking)
+    I caller vedono la stessa API (ritorna result_id opaco); il reader
+    get_result_data risolve trasparente.
+
+    Disk-write residue (documentate, NON eliminate):
+      - gpkg: driver GDAL/OGR richiede un path, non accetta BytesIO.
+        Non eliminabile senza cambiare libreria.
+      - shp: multi-file (shp+shx+dbf+prj+cpg) zippati in .zip. OGR
+        genera file-by-file, il packaging in zip e' fatto da
+        `save_dataframe._salva_formato_geo`. Non eliminabile.
+      - Streaming ESTRAI csv/parquet: NON passa da qui (path dedicato
+        in `query_executor._execute_streaming_to_file`). Residuo su
+        tempfile legittimo: chunk-by-chunk da cursor DB, evita OOM per
+        result set grandi.
+
+    Callers (ESTRAI non-streaming/MANIPOLA/ARRICCHISCI/features/
+    enrichment non-eseguibili) chiamano SOLO questa funzione. Niente
+    if/else duplicato caller-side.
+
+    Args:
+        filename_stem: nome SENZA estensione (es. "report"). L'estensione
+            viene derivata da output_format.
+
+    Returns:
+        dict {"result_id": str, "output_filename": str}
+    """
+    from app.utils.dataframe import (
+        save_dataframe, save_dataframe_to_bytes,
+    )
+
+    fmt_lower = (output_format or "").lower()
+    filename = f"{filename_stem}.{fmt_lower}"
+
+    if fmt_lower in ("gpkg", "shp"):
+        # Filesystem-only: serializzatori che richiedono path
+        # (driver OGR per gpkg, multi-file zip per shp).
+        # Cleanup hardening: TemporaryDirectory context manager garantisce
+        # rmtree al `__exit__` indipendentemente da exception path,
+        # senza affidarsi a save_result_blob.finally. Directory in OS
+        # `/tmp` (auto-pulita a reboot) invece di DATA_DIR/temp.
+        # Upload via save_result_blob_from_bytes (bytes-based, no
+        # cleanup sovrapposto al nostro).
+        import tempfile as _tf
+        with _tf.TemporaryDirectory(
+            prefix="urby_gpkg_shp_",
+            ignore_cleanup_errors=True,
+        ) as tmp_dir:
+            tmp_path = Path(tmp_dir) / filename
+            saved_path = save_dataframe(df, tmp_path, output_format, geom_column, crs)
+            # Per shp `save_dataframe` ritorna .zip invece di .shp — allinea.
+            actual_fmt = saved_path.suffix.lstrip(".") if fmt_lower == "shp" else fmt_lower
+            data = saved_path.read_bytes()
+            result_id = save_result_blob_from_bytes(
+                project_id=project_id,
+                data=data,
+                filename=saved_path.name,
+                fmt=actual_fmt,
+                rows_count=rows_count,
+                group_id=group_id,
+            )
+            output_filename = saved_path.name
+        # Context exit: tmp_dir + contenuto rimossi (idempotent, no-throw).
+        return {"result_id": result_id, "output_filename": output_filename}
+
+    # In-memory path: zero touch su DATA_DIR/temp.
+    data = save_dataframe_to_bytes(df, fmt_lower, geom_column=geom_column, crs=crs)
+    result_id = save_result_blob_from_bytes(
+        project_id=project_id,
+        data=data,
+        filename=filename,
+        fmt=fmt_lower,
+        rows_count=rows_count,
+        group_id=group_id,
+    )
+    return {"result_id": result_id, "output_filename": filename}
+
+
+def get_result_as_bytes(project_id: str) -> Optional[bytes]:
+    """Equivalente in-memory di `get_result_as_tempfile`: ritorna bytes direttamente.
+
+    Usato per leggere l'ultimo result di un project_source senza
+    materializzarlo su disco. Il caller decide come parsarlo
+    (pd.read_csv(BytesIO(data)), pd.read_parquet(BytesIO(data)), ecc.).
+
+    Il backend storage (DB BYTEA vs S3 object) e' trasparente: la
+    risoluzione avviene in db.get_result_data che scarica da S3 se
+    storage_key e' presente sulla row.
+
+    Returns: bytes del result, o None se il project non ha result
+    (o se il download S3 fallisce — log warning in quel caso).
+    """
+    try:
+        import app.db.db_service as db
+        row = db.get_latest_result(project_id)
+        if not row:
+            return None
+        return db.get_result_data(row["id"])
+    except Exception as e:
+        logger.warning(f"Errore lettura blob result ({project_id}): {e}")
+        return None
 
 
 def get_result_as_tempfile(project_id: str) -> Optional[Path]:
@@ -144,7 +462,7 @@ def get_result_as_tempfile(project_id: str) -> Optional[Path]:
         from app.config import settings
         tmp_dir = Path(settings.DATA_DIR) / "temp"
         tmp_dir.mkdir(parents=True, exist_ok=True)
-        tmp_path = tmp_dir / f"urby_cached_{os.urandom(4).hex()}{suffix}"
+        tmp_path = tmp_dir / f"plenora_cached_{os.urandom(4).hex()}{suffix}"
         tmp_path.write_bytes(data)
         return tmp_path
     except Exception as e:

@@ -1,5 +1,5 @@
 """
-Execution Manager per lo Scheduler URBY-ETL.
+Execution Manager per lo Scheduler PLENORA-ETL.
 
 Architettura
 ============
@@ -23,9 +23,11 @@ Nota: l'orchestrator viene chiamato con skip_carica=True perché lo scheduler
 gestisce CARICA con la propria configurazione (dallo schedule, non dal canvas).
 """
 
+import threading
 import time
 import uuid as _uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Dict, Any, Optional
 from app.config import settings
 from app.utils.logger import get_logger, open_run, close_run, set_run_context, append_step
@@ -59,8 +61,11 @@ class ExecutionManager:
         self.log_service = ScheduleLogService()
         self.concurrency = ConcurrencyManager()
         self.policy = PolicyEngine()
-        # ConnectionService singleton — riusata in _get_orchestrator, _pre_check_connection, _execute_carica
+        # ConnectionService singleton — riusata in _get_orchestrator,
+        # _pre_check_connection, _execute_carica
         self._connection_service = None
+        from app.core.scheduler.artifact_store import ScheduleArtifactStore
+        self._artifact_store = ScheduleArtifactStore()
 
     def _get_connection_service(self):
         """ConnectionService lazy singleton per questa istanza di ExecutionManager."""
@@ -102,22 +107,140 @@ class ExecutionManager:
         )
     
     # =========================================================================
+    # HEARTBEAT LOCK (C3 fix 4)
+    # =========================================================================
+
+    def _start_lock_heartbeat(self, schedule_id: str, interval: float = None) -> Dict[str, Any]:
+        """Lancia un thread daemon che rinfresca periodicamente il lock
+        scheduler fino a `_stop_lock_heartbeat()`.
+
+        Motivazione: il TTL del lock e' corto (10min) per permettere
+        recovery veloce su SIGKILL del worker. Finche' la pipeline
+        e' attiva, il worker rinfresca il TTL via questo thread.
+        Se il worker muore, il thread daemon muore con lui, non
+        rinfresca piu', e il lock scade entro il TTL invece di
+        restare appeso.
+
+        Lock lost handling (C3 follow-up fix A): se `refresh_lock`
+        ritorna False (lock scaduto/rilasciato), il thread tenta
+        re-acquire atomico. Se riesce → WARNING, continua;
+        se fallisce → ERROR + flag `state["lock_lost"] = True` cosi'
+        execute() puo' includere il warning nel risultato.
+
+        Args:
+            schedule_id: schedule il cui lock va tenuto vivo.
+            interval: secondi tra due refresh. Default letto da
+                `settings.SCHEDULE_LOCK_HEARTBEAT_INTERVAL_SECONDS`.
+
+        Returns:
+            Stato opaco (dict) da passare a `_stop_lock_heartbeat`.
+            Chiavi pubblicate: `stop_event`, `thread`, `lock_lost`.
+        """
+        if interval is None:
+            interval = float(settings.SCHEDULE_LOCK_HEARTBEAT_INTERVAL_SECONDS)
+
+        stop_event = threading.Event()
+        state: Dict[str, Any] = {
+            "stop_event": stop_event,
+            "lock_lost": False,
+        }
+
+        def _heartbeat_loop():
+            # Usa stop_event.wait(timeout) invece di time.sleep: il
+            # wait ritorna immediatamente True se stop_event e' settato,
+            # cosi' lo stop e' deterministico e non aspettiamo l'intero
+            # interval prima di fermarci.
+            while not stop_event.wait(interval):
+                try:
+                    ok = self.concurrency.refresh_lock(schedule_id)
+                except Exception as e:
+                    # Transient DB blip: logga warning ma continua
+                    # (il prossimo tick riprovera').
+                    logger.warning(
+                        f"[HEARTBEAT] refresh_lock exception per "
+                        f"{schedule_id}: {e}"
+                    )
+                    continue
+
+                if ok:
+                    continue
+
+                # refresh_lock ritornato False: il lock e' scaduto o
+                # rilasciato. Tenta re-acquire — se riesce, nessuno ha
+                # ripreso nel frattempo; se fallisce, un altro processo
+                # sta potenzialmente eseguendo lo stesso schedule.
+                try:
+                    reacquired = self.concurrency.try_acquire(schedule_id)
+                except Exception as e:
+                    logger.warning(
+                        f"[HEARTBEAT] re-acquire exception per "
+                        f"{schedule_id}: {e}"
+                    )
+                    continue
+
+                if reacquired == "acquired":
+                    logger.warning(
+                        f"[HEARTBEAT] Lock {schedule_id} temporaneamente "
+                        f"perso, riacquisito con successo. "
+                        f"Possibile blip DB/TTL expired, no concorrenza."
+                    )
+                else:
+                    # Un altro processo detiene il lock. Segnaliamo
+                    # nello state cosi' execute() puo' portarlo nel
+                    # result come warning di esecuzione non piu' protetta.
+                    state["lock_lost"] = True
+                    logger.error(
+                        f"[HEARTBEAT] Lock {schedule_id} perso e non "
+                        f"riacquisibile (try_acquire={reacquired}). "
+                        f"Esecuzione concorrente possibile — run marcato."
+                    )
+
+        thread = threading.Thread(
+            target=_heartbeat_loop,
+            daemon=True,
+            name=f"heartbeat-{schedule_id}",
+        )
+        state["thread"] = thread
+        thread.start()
+        return state
+
+    def _stop_lock_heartbeat(self, state: Dict[str, Any]) -> None:
+        """Segnala lo stop al thread heartbeat e aspetta la sua fine.
+
+        Idempotente: chiamarlo due volte non solleva.
+        Timeout del join: 5s — se il thread non finisce per qualche
+        motivo (es. refresh_lock e' appeso su DB), non blocchiamo
+        il finally di execute() indefinitamente.
+        """
+        if not state:
+            return
+        stop_event = state.get("stop_event")
+        thread = state.get("thread")
+        if stop_event is not None:
+            stop_event.set()
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=5.0)
+
+    # =========================================================================
     # ESECUZIONE PRINCIPALE
     # =========================================================================
-    
+
     def execute(
         self,
         schedule_id: str,
         triggered_by: str = "cron",
-        retry_attempt: int = 0
+        retry_attempt: int = 0,
+        scheduled_for: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Esegue una pipeline schedulata — metodo principale.
-        
+
         Args:
             schedule_id: ID dello schedule da eseguire
-            triggered_by: "cron" o "manual"
+            triggered_by: "cron", "manual", o "catchup"
             retry_attempt: Numero tentativo corrente (0 = primo)
+            scheduled_for: ISO8601 del tick logico per catchup run
+                (None per run normali). Propagato al log per lineage.
         
         Returns:
             Dict con risultato esecuzione:
@@ -139,28 +262,23 @@ class ExecutionManager:
             return {"success": False, "status": "failed", "message": "Schedule non trovato"}
 
         project_id = config.pipeline.project_id
-        logger.info(f"Esecuzione schedule {schedule_id} → progetto {project_id} (tentativo {retry_attempt})")
-
-        # --- Leggi group_id del progetto ---
-        _group_id = ""
-        try:
-            from app.services.project_service import ProjectService as _PS
-            _meta = _PS().get_project_metadata(project_id)
-            _group_id = getattr(_meta, "group_id", "") if _meta else ""
-        except Exception:
-            pass
-
-        # --- Apri run su log.db ---
-        open_run(
-            run_id=run_id,
-            project_id=project_id,
-            group_id=_group_id,
-            module=config.pipeline.project_type if config else "scheduler",
-            triggered_by=triggered_by,
+        # C3 round 3 fix 2: log esplicito di scheduled_for per lineage
+        # dei catchup run. Distingue "run eseguito alle 10:00 per il
+        # tick delle 06:00" (catchup) da "run alle 10:00 per le 10:00"
+        # (cron normale o manuale).
+        _scheduled_for_display = scheduled_for or "now"
+        logger.info(
+            f"Esecuzione schedule {schedule_id} → progetto {project_id} "
+            f"(tentativo {retry_attempt}, triggered_by={triggered_by}, "
+            f"scheduled_for={_scheduled_for_display})"
         )
-        set_run_context(run_id=run_id, project_id=project_id)
 
-        # --- 1b. Verifica progetto esiste e appartiene allo stesso gruppo ---
+        # --- 1. Validazioni PRIMA di open_run ---
+        # I check su project_meta e group isolation devono precedere
+        # `open_run`: se un check fallisce e il run e' gia' aperto, un
+        # `return` senza `close_run` lascia il record in stato 'running'
+        # per sempre (orphan run che sporca la dashboard e inquina il
+        # check di task bloccate).
         from app.services.project_service import ProjectService
         import app.db.db_service as _db
         project_service = ProjectService()
@@ -185,22 +303,57 @@ class ExecutionManager:
 
             return {"success": False, "status": "orphan", "message": "Progetto eliminato"}
 
-        # Group isolation: lo schedule non può eseguire un progetto di un altro gruppo
-        if schedule_group_id and project_meta.group_id and project_meta.group_id != schedule_group_id:
+        # Group isolation, FAIL-CLOSED.
+        # Ogni assenza di group_id (schedule senza gruppo, progetto
+        # senza gruppo) e' un errore di consistenza che blocca
+        # l'esecuzione, non un caso da ignorare. Un check del tipo
+        # `if a and b and a != b` sarebbe fail-OPEN: lo short-circuit
+        # del primo `and` lascerebbe passare l'esecuzione cross-tenant
+        # se uno dei due lati ha group_id None/vuoto.
+        proj_group_id = getattr(project_meta, "group_id", None) or None
+
+        def _isolation_failure(reason: str) -> dict:
             logger.error(
-                f"Group isolation violation: schedule {schedule_id} (group={schedule_group_id}) "
-                f"tenta di eseguire progetto {project_id} (group={project_meta.group_id})"
+                f"Group isolation violation: schedule {schedule_id} "
+                f"(schedule_group={schedule_group_id!r}, project={project_id}, "
+                f"project_group={proj_group_id!r}) — {reason}"
             )
             entry = self.log_service.create_log_entry(
                 schedule_id=schedule_id,
                 event="PIPELINE_FAILED",
                 triggered_by=triggered_by,
                 level="ERROR",
-                error_message="Accesso negato: il progetto appartiene a un gruppo diverso",
-                pipeline_info={"project_id": project_id}
+                error_message=f"Accesso negato (group isolation): {reason}",
+                pipeline_info={"project_id": project_id},
             )
             self.log_service.write_log(entry)
-            return {"success": False, "status": "failed", "message": "Accesso negato: group isolation"}
+            return {
+                "success": False,
+                "status": "failed",
+                "message": f"Accesso negato: group isolation — {reason}",
+            }
+
+        if not schedule_group_id:
+            return _isolation_failure("schedule senza group_id")
+        if not proj_group_id:
+            return _isolation_failure(
+                f"progetto {project_id} senza group_id"
+            )
+        if proj_group_id != schedule_group_id:
+            return _isolation_failure(
+                "schedule e progetto appartengono a gruppi diversi"
+            )
+
+        # --- 2. Validazioni passate: ora e' sicuro aprire il run ---
+        _group_id = getattr(project_meta, "group_id", "") or ""
+        open_run(
+            run_id=run_id,
+            project_id=project_id,
+            group_id=_group_id,
+            module=config.pipeline.project_type if config else "scheduler",
+            triggered_by=triggered_by,
+        )
+        set_run_context(run_id=run_id, project_id=project_id)
         
         # --- 2. Concurrency check ---
         lock_result = self.concurrency.try_acquire(
@@ -232,7 +385,13 @@ class ExecutionManager:
         
         # --- Lock acquisito, procediamo ---
         self.schedule_service.set_runtime_status(schedule_id, "running")
-        
+
+        # Avvia heartbeat del lock (C3 fix 4): il TTL del lock e' corto
+        # (10min), un thread daemon rinfresca mentre la pipeline e' attiva.
+        # Su SIGKILL del worker, il thread muore senza rinfrescare, e il
+        # lock scade entro TTL invece di restare orfano fino al hard limit.
+        heartbeat_state = self._start_lock_heartbeat(schedule_id)
+
         try:
             # --- 3. Pre-check connessione CARICA ---
             if config.destination and config.pre_check.verify_destination_connection:
@@ -258,29 +417,77 @@ class ExecutionManager:
             )
             
             pipeline_duration = int((time.time() - pipeline_start) * 1000)
-            
-            if not result.get("success"):
+
+            if not result.success:
                 raise ExecutionError(
-                    result.get("message", "Pipeline fallita"),
+                    result.message or "Pipeline fallita",
                     step="PIPELINE"
                 )
-            
-            # Aggiungi step pipeline al log
-            rows = result.get("row_count", result.get("rows", 0))
+
+            # Aggiungi step pipeline al log.
+            # `result.rows_count` legge direttamente la chiave che TUTTI
+            # gli executor scrivono (estrai/manipola/arricchisci/features);
+            # il vecchio `result.get("row_count", result.get("rows", 0))`
+            # leggeva chiavi che nessun executor scriveva → telemetria
+            # sempre 0.
+            rows = result.rows_count or 0
             steps.append(LogStep(
                 step=config.pipeline.project_type.upper(),
                 status="success",
                 duration_ms=pipeline_duration,
                 rows=rows
             ))
-            
-            # Step OUTPUT (file salvato dall'orchestrator)
-            output_file = result.get("file", result.get("output_file", ""))
-            
+
+            # Step OUTPUT (file salvato dall'orchestrator).
+            # `output_path` e' la chiave canonica (scritta da tutti gli
+            # executor); Path.name estrae il basename per l'archivio.
+            output_path_str = result.output_path or ""
+            output_file = Path(output_path_str).name if output_path_str else ""
+
+            # Arricchisci salva direttamente come blob nel DB (via
+            # save_result_blob) senza scrivere in results/{project_id}/.
+            # Se non c'e' output_path ma il result ha un artifact
+            # risolvibile (result_id), lo materializziamo qui su
+            # filesystem prima di archiviare, altrimenti lo scheduler
+            # archivierebbe una cartella vuota e la lista runs sarebbe
+            # sempre vuota.
+            if not output_file:
+                try:
+                    from app.core.artifacts import (
+                        ArtifactResolver, ArtifactResolutionError,
+                    )
+                    ref = result.to_run_artifact_ref()
+                    if ref is not None:
+                        materialized = ArtifactResolver().materialize_run(ref)
+                        with materialized as m:
+                            if m.path:
+                                # Copia nella project output dir con nome
+                                # basename del blob materializzato.
+                                import shutil as _shutil
+                                from app.config import settings as _s
+                                dest_dir = Path(_s.RESULTS_DIR) / project_id
+                                dest_dir.mkdir(parents=True, exist_ok=True)
+                                dest_path = dest_dir / Path(m.path).name
+                                _shutil.copy2(m.path, dest_path)
+                                output_file = dest_path.name
+                                logger.info(
+                                    f"Output materializzato da blob per "
+                                    f"archive: {dest_path}"
+                                )
+                except ArtifactResolutionError as _re:
+                    logger.warning(
+                        f"Materializzazione blob per archive fallita: {_re}"
+                    )
+                except Exception as _me:
+                    logger.warning(
+                        f"Errore materializzazione output per archive: {_me}",
+                        exc_info=True,
+                    )
+
             # --- 4b. Archivia output in cartella timestamped ---
             # L'orchestrator salva in results/{project_id}/ (sovrascrive)
             # Lo scheduler copia in results/{project_id}/runs/{schedule}/{timestamp}/
-            archived_path = self._archive_output(
+            archived_path = self._artifact_store.archive(
                 project_id=project_id,
                 schedule_id=schedule_id,
                 output_file=output_file
@@ -299,7 +506,7 @@ class ExecutionManager:
             
             if config.destination:
                 carica_start = time.time()
-                carica_result = self._execute_carica(config, result)
+                carica_result = self._execute_carica(config, result, scheduled_for=scheduled_for)
                 carica_duration = int((time.time() - carica_start) * 1000)
                 
                 if carica_result.get("success"):
@@ -351,7 +558,11 @@ class ExecutionManager:
                 total_duration_ms=total_duration,
                 schedule_info={
                     "cron_expression": config.schedule.cron_expression,
-                    "scheduled_at": datetime.now(timezone.utc).isoformat()
+                    "scheduled_at": datetime.now(timezone.utc).isoformat(),
+                    # C3 round 3 fix 2: scheduled_for = tick logico
+                    # recuperato (catchup) o None per run normali.
+                    # Persistito nel log per lineage audit.
+                    "scheduled_for": scheduled_for,
                 },
                 pipeline_info={
                     "project_id": project_id,
@@ -361,7 +572,8 @@ class ExecutionManager:
                 execution_info={
                     "use_cache": config.execution.use_cache,
                     "pre_check_passed": True,
-                    "retry_attempt": retry_attempt
+                    "retry_attempt": retry_attempt,
+                    "scheduled_for": scheduled_for,
                 }
             )
             log_path = self.log_service.write_log(entry)
@@ -385,48 +597,87 @@ class ExecutionManager:
             )
 
             logger.info(f"Schedule {schedule_id} completato: {decision['status']} in {total_duration}ms")
-            
+
+            # C3 round 3 fix 1: propaga lock_lost al result se il
+            # thread heartbeat ha rilevato perdita del lock durante
+            # l'esecuzione (lock scaduto + re-acquire fallito = un
+            # altro processo potrebbe aver eseguito in parallelo).
+            lock_lost = bool(heartbeat_state.get("lock_lost", False))
+            if lock_lost:
+                logger.warning(
+                    f"[LOCK_LOST] Schedule {schedule_id}: heartbeat ha "
+                    f"rilevato perdita del lock durante l'esecuzione. "
+                    f"Possibile concorrenza — verificare eventuali run "
+                    f"duplicati per lo stesso schedule_id."
+                )
+
             return {
                 "success": True,
                 "status": decision["status"],
                 "message": f"Pipeline completata in {total_duration}ms",
                 "log_file": log_path,
-                "rows_written": rows_written
+                "rows_written": rows_written,
+                "lock_lost": lock_lost,
             }
-        
-        except ExecutionError as e:
-            return self._handle_failure(
-                config=config,
-                schedule_id=schedule_id,
-                triggered_by=triggered_by,
-                retry_attempt=retry_attempt,
-                error_message=str(e),
-                steps=steps,
-                start_time=start_time,
-                run_id=run_id,
-            )
-        
+
         except Exception as e:
-            logger.error(f"[CRASH] Errore inatteso schedule {schedule_id}: {e}", exc_info=True)
-            return self._handle_failure(
+            # Unico ramo per ExecutionError (step esplicito) e Exception
+            # (errore inatteso): i due casi differiscono solo per il
+            # prefisso del messaggio e il log [CRASH] su quello inatteso.
+            if isinstance(e, ExecutionError):
+                err_msg = str(e)
+            else:
+                logger.error(
+                    f"[CRASH] Errore inatteso schedule {schedule_id}: {e}",
+                    exc_info=True,
+                )
+                err_msg = f"Errore inatteso: {e}"
+            # Propagazione lock_lost anche nel failure branch: se il
+            # lock era perso e la pipeline e' poi fallita, l'operatore
+            # deve poter distinguere fail "pulito" da fail "con
+            # concorrenza potenzialmente attiva".
+            lock_lost = bool(heartbeat_state.get("lock_lost", False))
+            if lock_lost:
+                logger.warning(
+                    f"[LOCK_LOST] Schedule {schedule_id}: lock perso "
+                    f"durante esecuzione fallita."
+                )
+            failure_result = self._handle_failure(
                 config=config,
                 schedule_id=schedule_id,
                 triggered_by=triggered_by,
                 retry_attempt=retry_attempt,
-                error_message=f"Errore inatteso: {str(e)}",
+                error_message=err_msg,
                 steps=steps,
                 start_time=start_time,
                 run_id=run_id,
+                scheduled_for=scheduled_for,
             )
+            if isinstance(failure_result, dict):
+                failure_result["lock_lost"] = lock_lost
+            return failure_result
         
         finally:
-            # Rilascia sempre il lock
-            self.concurrency.release(schedule_id)
-            # FIX: chiudi le connessioni SQLite thread-local del worker Celery.
-            # Stesso pattern di carica_task: senza questa pulizia, ogni
-            # esecuzione lascia connessioni aperte nel thread.local del worker
-            # Celery. Dopo molte esecuzioni il file descriptor si esaurisce o
-            # il DB resta locked → SQLITE_BUSY.
+            # Ferma prima il thread heartbeat (C3 fix 4) cosi' non
+            # rinfresca piu' il lock mentre lo stiamo rilasciando.
+            try:
+                self._stop_lock_heartbeat(heartbeat_state)
+            except Exception as hb_err:
+                logger.warning(f"[GESTITO] Errore stop heartbeat {schedule_id}: {hb_err}")
+            # Rilascia sempre il lock — con retry se DB temporaneamente down
+            try:
+                self.concurrency.release(schedule_id)
+            except Exception as release_err:
+                logger.error(f"[GESTITO] Errore rilascio lock {schedule_id}: {release_err}")
+                try:
+                    time.sleep(1)
+                    self.concurrency.release(schedule_id)
+                except Exception:
+                    logger.error(f"[CRITICO] Lock {schedule_id} non rilasciato, scadrà per TTL")
+            # Chiudi le connessioni SQLite thread-local del worker Celery:
+            # senza questa pulizia ogni esecuzione lascia conn aperte nel
+            # thread.local del worker e dopo molte run il file descriptor
+            # si esaurisce o il DB resta locked (SQLITE_BUSY).
             try:
                 from app.core.intermediate.db import close_connection as _close_idb
                 _close_idb()
@@ -471,81 +722,15 @@ class ExecutionManager:
             return False
     
     # =========================================================================
-    # ARCHIVIAZIONE OUTPUT
-    # =========================================================================
-    
-    def _archive_output(
-        self,
-        project_id: str,
-        schedule_id: str,
-        output_file: str = ""
-    ) -> Optional[str]:
-        """
-        Copia i file output in una cartella timestamped per evitare sovrascrittura.
-        
-        L'orchestrator salva in:
-            results/{project_id}/*.parquet|csv|xlsx  (sovrascrive)
-        
-        Lo scheduler copia TUTTI i file in:
-            results/{project_id}/runs/{schedule_short}/{YYYYMMDD_HHMMSS}/
-        
-        Se output_file è specificato, copia solo quello.
-        Se vuoto, copia tutti i file nella cartella (esclusa sottocartella runs/).
-        
-        Returns:
-            Path della cartella archiviata (relativo a RESULTS_DIR), o None se fallisce.
-        """
-        try:
-            import shutil
-            from app.config import settings
-
-            project_output_dir = settings.RESULTS_DIR / project_id
-
-            if not project_output_dir.exists():
-                logger.warning(f"Cartella output non trovata: {project_output_dir}")
-                return None
-            
-            # Trova i file da archiviare
-            if output_file and (project_output_dir / output_file).is_file():
-                files_to_copy = [project_output_dir / output_file]
-            else:
-                # Copia tutti i file nella root (escludi sottocartelle come runs/)
-                files_to_copy = [
-                    f for f in project_output_dir.iterdir()
-                    if f.is_file()
-                ]
-
-            if not files_to_copy:
-                logger.warning(f"Nessun file da archiviare in {project_output_dir}")
-                return None
-
-            # Cartella destinazione: results/{project_id}/runs/{schedule_short}/{timestamp}/
-            timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-            schedule_short = schedule_id.replace("schedule_", "")[:12]
-
-            archive_dir = project_output_dir / "runs" / schedule_short / timestamp
-            archive_dir.mkdir(parents=True, exist_ok=True)
-
-            copied = []
-            for src_file in files_to_copy:
-                dest = archive_dir / src_file.name
-                shutil.copy2(str(src_file), str(dest))
-                copied.append(src_file.name)
-
-            relative = str(archive_dir.relative_to(settings.RESULTS_DIR))
-            logger.info(f"Output archiviato: {relative} ({len(copied)} file: {', '.join(copied)})")
-
-            return relative
-
-        except Exception as e:
-            logger.warning(f"Errore archiviazione output: {e}", exc_info=True)
-            return None
-    
-    # =========================================================================
     # ESECUZIONE CARICA
     # =========================================================================
     
-    def _execute_carica(self, config: ScheduleConfig, pipeline_result: dict) -> dict:
+    def _execute_carica(
+        self,
+        config: ScheduleConfig,
+        pipeline_result: dict,
+        scheduled_for: Optional[str] = None,
+    ) -> dict:
         """
         Esegue il caricamento su database con la configurazione dello schedule.
 
@@ -555,6 +740,16 @@ class ExecutionManager:
 
         Differenza rispetto al canvas: usa connection_id/table_name dello schedule,
         non quelli del nodo CARICA nel canvas (skip_carica=True in execute_pipeline).
+
+        N15: se `scheduled_for` e' impostato, deriva una chiave idempotency
+        deterministica `schedule-{schedule_id}-{scheduled_for}-carica` e la
+        passa all'executor come run_id. Su retry dello stesso tick scheduled,
+        la stessa chiave viene ricostruita -> guard scatta -> no duplicati.
+
+        Residuo: per cron "normali" senza scheduled_for, il run_id resta
+        None e il guard e' no-op. Per chiudere anche quel caso, il beat
+        scheduler dovrebbe sempre valorizzare scheduled_for col tick
+        logico.
         """
         dest = config.destination
         logger.info(
@@ -564,41 +759,56 @@ class ExecutionManager:
         )
 
         try:
-            # 1. Recupera il file output della pipeline
-            from app.utils.result_store import get_result_as_tempfile
+            # Risoluzione artefatto centralizzata via PipelineArtifact +
+            # ArtifactResolver. Ordine di preferenza:
+            # inline_df → result_id (con verify project_id, hard fail su
+            # mismatch) → output_path. Niente latest-by-project: due
+            # esecuzioni parallele sullo stesso project si scambierebbero
+            # silenziosamente l'output sulla tabella di destinazione.
             from app.utils.dataframe import load_dataframe_from_file
-            from pathlib import Path
+            from app.core.artifacts import (
+                ArtifactResolver,
+                ArtifactResolutionError,
+                PipelineArtifact,
+            )
 
             project_id = config.pipeline.project_id
 
-            # Prima prova dal result_store (DB)
-            file_path = get_result_as_tempfile(project_id)
-
-            # Fallback: path diretto restituito dall'orchestrator
-            if not file_path:
-                raw_path = pipeline_result.get("output_path", "")
-                if raw_path and Path(raw_path).exists():
-                    file_path = Path(raw_path)
-
-            if not file_path or not file_path.exists():
+            artifact = PipelineArtifact.from_executor_result(
+                pipeline_result, project_id=project_id
+            )
+            if artifact.artifact_kind == "none":
                 logger.error(
-                    f"File output non trovato per progetto {project_id}",
+                    f"[GESTITO] CARICA scheduler: nessun artefatto specifico "
+                    f"della run per project={project_id} (no inline df, no "
+                    f"result_id, no output_path). Abort.",
                     op="carica"
                 )
-                return {"success": False, "error": "File output pipeline non trovato"}
+                return {
+                    "success": False,
+                    "error": "Artefatto della run non disponibile per CARICA",
+                }
 
-            df = load_dataframe_from_file(file_path)
-
-            # Pulizia file temp estratto dal DB
             try:
-                import os as _os
-                if "urby_cached_" in str(file_path):
-                    _os.unlink(str(file_path))
-            except Exception:
-                pass
+                materialized = ArtifactResolver().materialize_run(
+                    artifact.to_run_artifact_ref()
+                )
+            except ArtifactResolutionError as e:
+                logger.error(
+                    f"[GESTITO] CARICA scheduler: risoluzione artefatto "
+                    f"fallita per project={project_id}: {e}",
+                    op="carica"
+                )
+                return {"success": False, "error": str(e)}
 
-            if df is None or df.empty:
-                return {"success": False, "error": "DataFrame output vuoto o non caricabile"}
+            with materialized as m:
+                if m.df is not None:
+                    df = m.df
+                else:
+                    df = load_dataframe_from_file(m.path)
+
+            if df.empty:
+                return {"success": False, "error": "DataFrame output vuoto"}
 
             # 2. Costruisci node_data compatibile con CaricaExecutor.execute()
             #    usando la configurazione della destinazione dello schedule
@@ -620,16 +830,32 @@ class ExecutionManager:
 
             carica_executor = CaricaExecutor(connection_service=self._get_connection_service())
 
+            # N15: chiave idempotency deterministica sul tick scheduled
+            # (stabile su retry dello stesso tick). None se scheduled_for
+            # non e' disponibile -> nessuna protezione sul guard executor
+            # (residuo documentato).
+            carica_run_id = (
+                f"schedule-{config.id}-{scheduled_for}-carica"
+                if scheduled_for else None
+            )
+
             write_result = carica_executor.execute(
                 df=df,
                 node_data=node_data,
                 project_id=project_id,
                 triggered_by="scheduler",
+                run_id=carica_run_id,
             )
 
             # 4. Traduci WriteResult nel formato atteso dall'execution_manager
             from app.core.carica.models import WriteStatus
-            success = write_result.status in (WriteStatus.SUCCESS, WriteStatus.PARTIAL)
+            # N15: SKIPPED_IDEMPOTENT e' success (no-op sicuro su retry).
+            # Se non incluso qui, il guard causa retry loop infiniti.
+            success = write_result.status in (
+                WriteStatus.SUCCESS,
+                WriteStatus.PARTIAL,
+                WriteStatus.SKIPPED_IDEMPOTENT,
+            )
 
             if not success:
                 error_msg = write_result.error_message or f"Scrittura fallita: {write_result.status.value}"
@@ -672,9 +898,14 @@ class ExecutionManager:
         steps: list,
         start_time: float,
         run_id: str = "",
+        scheduled_for: Optional[str] = None,
     ) -> dict:
         """
         Gestisce un fallimento: decide se fare retry o arrendersi.
+
+        N15: `scheduled_for` viene propagato nei retry kwargs cosi' la
+        chiave idempotency di CARICA (derivata da schedule_id + scheduled_for)
+        resta stabile attraverso i retry dello stesso tick schedulato.
         """
         total_duration = int((time.time() - start_time) * 1000)
         
@@ -755,12 +986,18 @@ class ExecutionManager:
             # Schedula il retry come task Celery con countdown
             try:
                 from workers.tasks.schedule_task import schedule_pipeline_task
+                # N15: propaga scheduled_for nei retry cosi' la chiave
+                # idempotency di CARICA resta stabile sul tick (altrimenti
+                # il retry perde il contesto e il guard non scatta).
+                _retry_kwargs = {
+                    "triggered_by": triggered_by,
+                    "retry_attempt": retry_attempt + 1,
+                }
+                if scheduled_for:
+                    _retry_kwargs["scheduled_for"] = scheduled_for
                 schedule_pipeline_task.apply_async(
                     args=[schedule_id],
-                    kwargs={
-                        "triggered_by": triggered_by,
-                        "retry_attempt": retry_attempt + 1
-                    },
+                    kwargs=_retry_kwargs,
                     countdown=decision["wait_seconds"]
                 )
                 logger.info(f"Retry schedulato: {schedule_id} tra {decision['wait_seconds']}s")

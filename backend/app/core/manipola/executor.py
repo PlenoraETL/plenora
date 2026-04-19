@@ -10,8 +10,8 @@ PluginExecutor, e salva il risultato nel formato richiesto.
 Flusso: Carica sorgenti → Applica trasformazioni → GROUP BY → Salva output
 """
 
-import traceback
 import re
+import threading
 import time as _time
 import pandas as pd
 from pathlib import Path
@@ -19,17 +19,63 @@ from typing import Dict, Any, List, Optional
 
 from app.models import CanvasState, Node
 from app.config import settings
+from app.services.project_lineage import ProjectLineageCycleError
 from app.utils.logger import get_logger, append_step
-from app.utils.result_store import get_temp_output_path, save_result_blob, get_result_as_tempfile
+from app.utils.result_store import save_pipeline_result
 from app.utils.dataframe import (
-    load_dataframe_from_file, save_dataframe, filter_visible_columns,
-    sanitize_for_json, find_latest_output_file
+    load_dataframe_from_file, filter_visible_columns,
+    sanitize_for_json, find_latest_output_file,
 )
 from app.utils.geo import detect_geometry_column, extract_srid_from_column_type
 from app.utils.template_variables import process_static_fields
 from .plugin_executor import get_executor
 
 logger = get_logger(__name__)
+
+
+# =============================================================================
+# C3 round 3 fix 3: cycle detection runtime cross-project
+# =============================================================================
+#
+# Thread-local chain di project_id attualmente in esecuzione. Usata come
+# defense-in-depth contro cicli nei project_source: se _carica_sorgenti_progetto
+# sta per invocare orchestrator_callback su un progetto gia' presente nella
+# chain, stiamo chiudendo un ciclo A→B→A → ProjectLineageCycleError con chain
+# readable.
+#
+# Why threading.local: ogni worker Celery gira i suoi task in thread/processo
+# separato; il chain e' per-thread cosi' due esecuzioni parallele non si
+# vedono a vicenda.
+#
+# Why runtime check in aggiunta al save-time check: ProjectService.update_canvas
+# blocca la creazione di canvas ciclici, ma non copre canvas legacy creati
+# prima del fix, bypass del service (direct DB edit), o race save-vs-execute.
+_manipola_execution_chain = threading.local()
+
+
+def _get_execution_chain() -> List[str]:
+    if not hasattr(_manipola_execution_chain, "projects"):
+        _manipola_execution_chain.projects = []
+    return _manipola_execution_chain.projects
+
+
+def _push_to_execution_chain(project_id: str) -> None:
+    _get_execution_chain().append(project_id)
+
+
+def _pop_from_execution_chain(project_id: str) -> None:
+    chain = _get_execution_chain()
+    if chain and chain[-1] == project_id:
+        chain.pop()
+
+
+def _assert_no_lineage_cycle_on_chain(source_project_id: str) -> None:
+    """Solleva ProjectLineageCycleError se source_project_id e' gia'
+    nella chain di esecuzione corrente (stiamo chiudendo un ciclo)."""
+    chain = _get_execution_chain()
+    if source_project_id in chain:
+        cycle_chain = chain[chain.index(source_project_id):] + [source_project_id]
+        raise ProjectLineageCycleError(cycle_chain)
 
 def _nf(node, key, default=None):
     """Legge un campo flat dal nodo Pydantic, con fallback su node.data (backward compat)."""
@@ -97,37 +143,78 @@ class ManipolaExecutor:
     # ESECUZIONE COMPLETA
     # =========================================================================
 
-    def execute(self, project_id: str, canvas: CanvasState, force_recalculate: bool = False, run_id: str = None) -> Dict[str, Any]:
-        """Esegue la pipeline completa: carica sorgenti, trasforma, salva."""
-        logger.info(f"Esecuzione MANIPOLA: {project_id}", op="execute", project_id=project_id)
+    def _init_security_context(self, project_id: str, *, strict: bool) -> None:
+        """Memorizza `_current_group_id` del progetto corrente per i
+        check cross-tenant in `_carica_sorgenti_progetto` /
+        `_carica_sorgenti_file`.
 
-        # SECURITY: memorizza il group_id del progetto corrente per i check
-        # cross-tenant in _carica_sorgenti_progetto / _carica_sorgenti_file.
+        - `strict=True` (execute): se il group_id non e' determinabile
+          solleva ValueError fail-closed (l'esecuzione persiste output
+          e va legata a un tenant).
+        - `strict=False` (preview): in caso di lookup fallito setta
+          None e prosegue. Senza questa init, i source loader fail-closed
+          silently e il preview ritorna "Nessun dato sorgente disponibile"
+          anche su canvas validi.
+        """
         try:
             import app.db.db_service as _db
             _proj_row = _db.get_project(project_id)
             self._current_group_id = _proj_row.get("group_id") if _proj_row else None
-        except Exception:
+        except Exception as e:
+            logger.error(f"[GESTITO] Impossibile determinare group_id per {project_id}: {e}")
             self._current_group_id = None
+
+        if strict and self._current_group_id is None:
+            raise ValueError(f"group_id non determinabile per progetto {project_id}")
+
+    def execute(self, project_id: str, canvas: CanvasState, force_recalculate: bool = False, run_id: str = None) -> Dict[str, Any]:
+        """Esegue la pipeline completa: carica sorgenti, trasforma, salva."""
+        logger.info(f"Esecuzione MANIPOLA: {project_id}", op="execute", project_id=project_id)
+
+        self._init_security_context(project_id, strict=True)
+
+        # C3 round 3 fix 3: push del project_id sulla chain di
+        # esecuzione corrente. _carica_sorgenti_progetto verifica la
+        # chain prima di chiamare orchestrator_callback per rilevare
+        # cicli A → B → A (defense-in-depth contro canvas legacy).
+        _push_to_execution_chain(project_id)
 
         _step_start = _time.time()
         dataframes = {}
 
-        for loader in [
-            lambda: self._carica_sorgenti_progetto(canvas, dataframes, force_recalculate, run_id=run_id),
-            lambda: self._carica_sorgenti_file(canvas, dataframes),
-            lambda: self._carica_sorgenti_statiche(canvas, dataframes),
-        ]:
-            err = loader()
-            if err:
-                append_step({
-                    "module":      "manipola",
-                    "status":      "failure",
-                    "rows_out":    0,
-                    "duration_ms": int((_time.time() - _step_start) * 1000),
-                    "error":       err.get("message"),
-                })
-                return err
+        try:
+            for loader in [
+                lambda: self._carica_sorgenti_progetto(canvas, dataframes, force_recalculate, run_id=run_id),
+                lambda: self._carica_sorgenti_file(canvas, dataframes),
+                lambda: self._carica_sorgenti_statiche(canvas, dataframes),
+            ]:
+                err = loader()
+                if err:
+                    append_step({
+                        "module":      "manipola",
+                        "status":      "failure",
+                        "rows_out":    0,
+                        "duration_ms": int((_time.time() - _step_start) * 1000),
+                        "error":       err.get("message"),
+                    })
+                    return err
+        except ProjectLineageCycleError as cycle_err:
+            # Ciclo cross-project rilevato a runtime (defense-in-depth
+            # per canvas legacy che sfuggono al check di update_canvas).
+            logger.error(
+                f"[SECURITY] Ciclo project_source rilevato a runtime: {cycle_err}",
+                op="execute", project_id=project_id,
+            )
+            append_step({
+                "module":      "manipola",
+                "status":      "failure",
+                "rows_out":    0,
+                "duration_ms": int((_time.time() - _step_start) * 1000),
+                "error":       str(cycle_err),
+            })
+            return {"success": False, "message": str(cycle_err)}
+        finally:
+            _pop_from_execution_chain(project_id)
 
         logger.info(f"Caricati {len(dataframes)} DataFrame", op="execute", project_id=project_id)
         try:
@@ -175,17 +262,24 @@ class ManipolaExecutor:
 
         res = self._salva_risultato(project_id, result_node, current_df, canvas)
 
-        # Allinea columns_metadata del progetto allo schema reale del DataFrame finale.
-        # Fix desincronizzazione UI/DB del nodo result — l'output file è corretto ma
-        # columns_metadata restava stale e rompeva il riuso come project_source.
+        # Allinea columns_metadata del progetto allo schema reale del
+        # DataFrame finale: senza, l'output file resta corretto ma il
+        # metadata stale rompe il riuso come project_source.
+        # Usa l'helper condiviso (retry transient + raise non-transient):
+        # i fallimenti propagano a Celery che marca FAILED. Pre-fix il
+        # try/except warning rendeva impossibile distinguere "tutto ok"
+        # da "ok ma metadata stale" downstream.
         if res.get("success"):
-            try:
-                _col_meta = [
-                    {"name": c, "type": str(current_df[c].dtype)} for c in current_df.columns
-                ]
-                self.project_service.update_project_columns_metadata(project_id, _col_meta)
-            except Exception as _cme:
-                logger.warning(f"Impossibile salvare columns_metadata: {_cme}")
+            from app.shared.columns_metadata import save_columns_metadata_with_retry
+            _col_meta = [
+                {"name": c, "type": str(current_df[c].dtype)} for c in current_df.columns
+            ]
+            save_columns_metadata_with_retry(
+                project_service=self.project_service,
+                project_id=project_id,
+                columns_metadata=_col_meta,
+                logger=logger,
+            )
 
         # --- Step tracking ---
         append_step({
@@ -205,6 +299,11 @@ class ManipolaExecutor:
         """Preview: stessa pipeline dell'execute ma senza salvataggio."""
         logger.info(f"Preview MANIPOLA: {project_id}", op="preview", project_id=project_id)
         try:
+            # Stesso tenant binding di execute(). `strict=False` perche'
+            # preview non persiste output: se il lookup DB fallisce
+            # procediamo con _current_group_id=None e i loader fail-closed.
+            self._init_security_context(project_id, strict=False)
+
             dataframes = {}
             self._carica_sorgenti_progetto(canvas, dataframes, force_recalculate=False)
             self._carica_sorgenti_file(canvas, dataframes)
@@ -252,84 +351,100 @@ class ManipolaExecutor:
         """
         source_nodes = [n for n in canvas.nodes if n.type == "project_source"]
 
+        # Tenant binding obbligatorio fail-closed: `_current_group_id`
+        # viene settato da `_init_security_context` chiamato da
+        # execute() / preview(). Se manca rifiutiamo l'esecuzione.
+        executing_group_id = getattr(self, "_current_group_id", None)
+        if not executing_group_id:
+            logger.error(
+                "[SECURITY] manipola._carica_sorgenti_progetto: "
+                "_current_group_id assente, fail-closed"
+            )
+            return {
+                "success": False,
+                "message": "Contesto di sicurezza non determinabile (group_id mancante)",
+            }
+
+        from app.core.artifacts import (
+            ArtifactResolver,
+            ArtifactResolutionError,
+            LatestProjectArtifactRef,
+            MaterializedArtifact,
+        )
+
         for node in source_nodes:
             source_project_id = _nf(node, 'source_project_id')
             if not source_project_id:
                 logger.warning(f"Nodo {node.id}: source_project_id mancante")
                 continue
 
-            # Cross-tenant isolation: il progetto sorgente deve appartenere
-            # allo stesso gruppo del progetto corrente. Questa è la difesa
-            # a livello executor (defense-in-depth) — il canvas potrebbe
-            # contenere ID arbitrari inseriti da un attaccante.
-            try:
-                import app.db.db_service as _db
-                # Recupera group_id del progetto corrente dal run_id context
-                from app.utils.logger import get_run_id as _get_run_id
-                _current_run_id = run_id or _get_run_id()
-                # Fallback: cerca il progetto che sta eseguendo tramite il primo
-                # nodo non-source nel canvas
-                _executing_project_group = None
-                if hasattr(self, '_executing_group_id'):
-                    _executing_project_group = self._executing_group_id
-                else:
-                    # Cerca il progetto corrente dal canvas context
-                    # Il project_id è passato a execute() → salvalo come attributo
-                    _executing_project_group = getattr(self, '_current_group_id', None)
-
-                if _executing_project_group:
-                    _source_row = _db.get_project(source_project_id)
-                    if _source_row:
-                        _source_group = _source_row.get("group_id", "")
-                        if _source_group != _executing_project_group:
-                            logger.error(
-                                f"[SECURITY] Cross-tenant access blocked: progetto {source_project_id} "
-                                f"(group={_source_group}) referenziato da progetto di group={_executing_project_group}",
-                                op="execute"
-                            )
-                            return {
-                                "success": False,
-                                "message": f"Accesso negato: il progetto sorgente '{source_project_id}' "
-                                           f"appartiene a un gruppo diverso."
-                            }
-            except Exception as _sec_err:
-                logger.warning(f"Cross-tenant check fallito (non bloccante): {_sec_err}")
-
-            # Cerca risultato nel DB (preferito) o filesystem (fallback)
+            # Cross-tenant isolation delegata a `ArtifactResolver
+            # .materialize_latest`: il check fail-closed solleva
+            # `ArtifactResolutionError` per progetto inesistente / gruppo
+            # diverso / errore DB. NON catturare con warn "non bloccante":
+            # sarebbe fail-OPEN, l'errore deve risalire al caller.
             if not force_recalculate:
-                cached_file = get_result_as_tempfile(source_project_id)
-                if not cached_file:
-                    # fallback filesystem pre-migrazione
+                try:
+                    materialized = ArtifactResolver().materialize_latest(
+                        LatestProjectArtifactRef(project_id=source_project_id),
+                        expected_group_id=executing_group_id,
+                    )
+                except ArtifactResolutionError as _sec_err:
+                    logger.error(
+                        f"[SECURITY] Cross-tenant access blocked: "
+                        f"progetto sorgente {source_project_id} non risolvibile "
+                        f"per group={executing_group_id}: {_sec_err}",
+                        op="execute",
+                    )
+                    return {
+                        "success": False,
+                        "message": (
+                            f"Accesso negato: il progetto sorgente "
+                            f"'{source_project_id}' appartiene a un gruppo diverso."
+                        ),
+                    }
+
+                if materialized is None:
+                    # Compat residuo: progetti pre-R#1 con output solo
+                    # su disco, mai migrato al result store (DB/S3).
+                    # Emette warning quando scatta per misurare in prod
+                    # se e' ancora vivo.
                     output_dir = self.results_base_dir / source_project_id
-                    cached_file = find_latest_output_file(output_dir)
-                if cached_file:
+                    fs_file = find_latest_output_file(output_dir)
+                    if fs_file:
+                        logger.warning(
+                            f"[COMPAT-RESIDUE] manipola._carica_sorgenti_progetto: "
+                            f"filesystem fallback scattato per "
+                            f"source_project={source_project_id} file={fs_file} — "
+                            f"progetto upstream senza blob DB, pre-migrazione"
+                        )
+                        materialized = MaterializedArtifact(
+                            path=Path(fs_file), is_temporary=False
+                        )
+
+                if materialized is not None:
                     try:
-                        df = load_dataframe_from_file(cached_file)
+                        with materialized as m:
+                            df = load_dataframe_from_file(m.path)
                         node_columns = _nf(node, 'columns', [])
                         df = filter_visible_columns(df, node_columns)
-                        # Deduplicazione colonne: mantieni prima occorrenza
                         df = df.loc[:, ~df.columns.duplicated(keep='first')]
-                        # Preserva CRS: se il nodo ha colonne geometriche con SRID,
-                        # converte subito in GeoDataFrame con CRS corretto
-                        # così le trasformazioni spaziali downstream non perdono il CRS
                         df = _applica_crs_da_colonne(df, node_columns)
                         dataframes[node.id] = df
-                        try:
-                            import os as _os
-                            _os.unlink(str(cached_file))
-                        except Exception as _e:
-                            # Warning (non debug): se la pulizia fallisce
-                            # ripetutamente accumula file temp sul disco e
-                            # serve un alert visibile per gli admin.
-                            logger.warning(
-                                f"Pulizia file temp fallita per {cached_file}: {_e}"
-                            )
                         continue
                     except Exception as e:
                         logger.warning(f"Errore cache: {e}, procedo con ricalcolo")
 
             if not self.orchestrator_callback:
                 return {"success": False, "message": "Orchestrator callback non configurato"}
+
+            # C3 round 3 fix 3: cycle detection PRIMA di riesegue upstream.
+            # Se source_project_id e' gia' nella chain di esecuzione, stiamo
+            # per chiudere un ciclo A→B→A invocando orchestrator_callback
+            # ricorsivamente. Senza questo check, stack overflow garantito
+            # su canvas legacy con dipendenze circolari che il check al save
+            # di update_canvas non ha intercettato.
+            _assert_no_lineage_cycle_on_chain(source_project_id)
 
             # Genera un run_id fresco per il progetto upstream (ESTRAI),
             # così i suoi dati intermedi vengono tracciati in intermediate.db
@@ -356,96 +471,176 @@ class ManipolaExecutor:
                 logger.warning(f"Apertura run upstream {source_project_id} fallita (non bloccante): {_oe}")
                 upstream_run_id = None
 
+            # `orchestrator_callback` e' `OrchestratorService.execute_pipeline`
+            # (vedi orchestrator/service.py:83) che ritorna `PipelineArtifact`
+            # — dict-subclass con typed property. Usiamo le proprieta'
+            # tipizzate (`upstream.success`/`upstream.message`/
+            # `upstream.rows_count`/`upstream.output_path`) invece di `.get()`
+            # raw per coerenza con il modello artifact unificato.
             upstream = self.orchestrator_callback(source_project_id, force_recalculate=True, run_id=upstream_run_id)
 
             # Chiudi run upstream
             if upstream_run_id:
                 try:
-                    import time as _t
                     from app.utils.logger import close_run
                     from app.core.intermediate.writer import close_run as idb_close_run
-                    status = "success" if upstream.get("success") else "failure"
+                    status = "success" if upstream.success else "failure"
                     close_run(
                         run_id=upstream_run_id,
                         status=status,
-                        rows_out=upstream.get("rows_count", 0) or 0,
+                        rows_out=upstream.rows_count or 0,
                         duration_ms=0,
                         steps=[],
-                        error_message=upstream.get("message") if not upstream.get("success") else None,
+                        error_message=upstream.message if not upstream.success else None,
                     )
                     idb_close_run(
                         run_id=upstream_run_id, input_hash="", output_hash="",
-                        total_exec_time=0.0, success=upstream.get("success", False),
+                        total_exec_time=0.0, success=upstream.success,
                     )
                 except Exception as _ce:
                     logger.warning(f"Chiusura run upstream {source_project_id} fallita (non bloccante): {_ce}")
-            if not upstream.get("success"):
+            if not upstream.success:
                 return upstream
 
-            # Legge il risultato upstream: prima dal DB, poi dal path temporaneo restituito
-            file_path = None
-            raw_output_path = upstream.get("output_path", "")
+            # Legge il risultato upstream via ArtifactResolver.
+            # Tenant binding fail-closed con expected_group_id: il check
+            # cross-tenant viene applicato anche post-recompute, non solo
+            # nel ramo cached del primo blocco.
+            materialized = None
+            raw_output_path = upstream.output_path or ""
             if raw_output_path and Path(raw_output_path).exists():
-                file_path = Path(raw_output_path)
-            
-            if not file_path:
-                # Fallback: leggi dal DB
-                file_path = get_result_as_tempfile(source_project_id)
+                materialized = MaterializedArtifact(
+                    path=Path(raw_output_path), is_temporary=False
+                )
+            if materialized is None:
+                try:
+                    materialized = ArtifactResolver().materialize_latest(
+                        LatestProjectArtifactRef(project_id=source_project_id),
+                        expected_group_id=executing_group_id,
+                    )
+                except ArtifactResolutionError as _sec_err:
+                    logger.error(
+                        f"[SECURITY] Cross-tenant access blocked post-recompute: "
+                        f"{source_project_id} per group={executing_group_id}: {_sec_err}",
+                        op="execute",
+                    )
+                    return {
+                        "success": False,
+                        "message": (
+                            f"Accesso negato: il progetto sorgente "
+                            f"'{source_project_id}' appartiene a un gruppo diverso."
+                        ),
+                    }
 
-            if not file_path or not file_path.exists():
+            if materialized is None or materialized.path is None:
                 return {"success": False, "message": f"Risultato upstream non trovato per: {source_project_id}"}
 
             try:
-                df = load_dataframe_from_file(file_path)
+                with materialized as m:
+                    df = load_dataframe_from_file(m.path)
                 node_columns = _nf(node, 'columns', [])
                 df = filter_visible_columns(df, node_columns)
-                # Deduplicazione colonne: mantieni prima occorrenza
                 df = df.loc[:, ~df.columns.duplicated(keep='first')]
-                # Preserva CRS: se il nodo ha colonne geometriche con SRID,
-                # converte subito in GeoDataFrame con CRS corretto
                 df = _applica_crs_da_colonne(df, node_columns)
                 dataframes[node.id] = df
-                # Pulizia temp file se generato da DB
-                try:
-                    import os as _os
-                    if "urby_cached_" in str(file_path):
-                        _os.unlink(str(file_path))
-                except Exception as _e:
-                    logger.debug(f"Pulizia file temp fallita (non critico): {_e}")
             except Exception as e:
                 return {"success": False, "message": f"Errore progetto {source_project_id}: {e}"}
 
         return None
 
     def _carica_sorgenti_file(self, canvas, dataframes):
-        """Carica DataFrame dai nodi file_source. Preferisce GeoDataFrame se disponibile."""
+        """Carica DataFrame dai nodi file_source via SourceLoader.
+
+        Visibility check cross-tenant + preserve del GeoDataFrame
+        sono entrambi garantiti dal loader unico, niente duplicazione
+        inline.
+        """
         file_nodes = [n for n in canvas.nodes if n.type == "file_source"]
+        if not file_nodes:
+            return None
+
+        from app.core.artifacts import (
+            SourceLoader,
+            SourceLoadingError,
+            SourceRef,
+        )
+
+        current_group_id = getattr(self, "_current_group_id", None)
+        if not current_group_id:
+            logger.error(
+                "[SECURITY] group_id corrente sconosciuto, rifiuto "
+                "caricamento file_source (fail-closed)"
+            )
+            return {
+                "success": False,
+                "message": "Contesto di sicurezza non determinabile",
+            }
+
+        loader = SourceLoader()
+
         for node in file_nodes:
             fid = _nf(node, 'file_source_id')
             if not fid:
                 continue
+
+            ref = SourceRef.from_node_data(
+                'file_source',
+                {'file_source_id': fid},
+            )
             try:
-                from app.services.file_service import file_source_service
-                df, gdf = file_source_service.load_dataframe(fid)
-                data = gdf if gdf is not None else df
-                node_columns = _nf(node, 'columns', [])
-                data = filter_visible_columns(data, node_columns)
-                dataframes[node.id] = data
+                data = loader.load(ref, expected_group_id=current_group_id)
+            except SourceLoadingError as e:
+                # Visibility block o errore di materializzazione: il
+                # loader produce gia' un messaggio nel formato atteso
+                # ("Accesso negato: il file sorgente '...'"), lo
+                # propaghiamo come-is nel dict di errore.
+                return {"success": False, "message": str(e)}
             except Exception as e:
                 return {"success": False, "message": f"Errore file '{fid}': {e}"}
+
+            node_columns = _nf(node, 'columns', [])
+            data = filter_visible_columns(data, node_columns)
+            # Preserva CRS: SourceLoader ritorna gia' un GeoDataFrame se
+            # `file_source_service.load_dataframe` ne ha prodotto uno,
+            # ma per i file dove il CRS era ricostruito dai metadati del
+            # nodo (geometry:subtype:SRID nelle column definitions) serve
+            # ancora l'upgrade DataFrame→GeoDataFrame qui. Allineato al
+            # branch project_source (linea 432). Idempotente: no-op se
+            # `data` e' gia' un GeoDataFrame.
+            data = _applica_crs_da_colonne(data, node_columns)
+            dataframes[node.id] = data
+
         return None
 
     def _carica_sorgenti_statiche(self, canvas, dataframes):
-        """Carica DataFrame dai nodi StaticValues (1 riga con valori definiti dall'utente)."""
+        """Carica DataFrame dai nodi StaticValues via SourceLoader.
+
+        Wrapper sottile sopra `SourceLoader._load_static`. Il template
+        processing (`process_static_fields`) vive nel loader unico;
+        qui resta solo l'iterazione sui nodi del canvas.
+        """
         static_nodes = [n for n in canvas.nodes if n.type == "staticValues"]
+        if not static_nodes:
+            return None
+
+        from app.core.artifacts import SourceLoader, SourceRef
+
+        # Static branch e' processing puro: non tocca DB ne' file. Il
+        # group_id e' richiesto solo dalla guardia del loader; usiamo
+        # il _current_group_id se disponibile, oppure un placeholder.
+        current_group_id = getattr(self, "_current_group_id", None) or "_static_"
+        loader = SourceLoader()
+
         for node in static_nodes:
             try:
                 fields = _nf(node, 'fields', [])
-                if not fields:
-                    dataframes[node.id] = pd.DataFrame([{}])
-                    continue
-                processed_values = process_static_fields(fields)
-                dataframes[node.id] = pd.DataFrame([processed_values])
+                ref = SourceRef.from_node_data(
+                    'staticValues',
+                    {'fields': fields},
+                )
+                dataframes[node.id] = loader.load(
+                    ref, expected_group_id=current_group_id
+                )
             except Exception as e:
                 return {"success": False, "message": f"Errore StaticValues: {e}"}
         return None
@@ -506,13 +701,7 @@ class ManipolaExecutor:
             
             incoming.sort(key=edge_sort_key)
             inputs = [dataframes[e.source] for e in incoming if e.source in dataframes]
-            
-            # Log dettagliato per operazioni multi-input
-            if len(incoming) > 1:
-                for idx, edge in enumerate(incoming):
-                    handle = get_target_handle(edge)
-                    source_cols = list(dataframes.get(edge.source, {}).columns)[:5] if edge.source in dataframes else []
-            
+
             if not inputs:
                 logger.warning(f"Nodo {node.id} senza input, skip")
                 continue
@@ -531,7 +720,6 @@ class ManipolaExecutor:
             # Snapshot intermediate.db (non bloccante)
             if run_id and current_df is not None:
                 try:
-                    import time as _t
                     from app.core.intermediate.writer import write_node as _write_node
                     _col_schema = current_df.dtypes.astype(str).to_dict()
                     _write_node(
@@ -695,8 +883,8 @@ class ManipolaExecutor:
                 alias = agg.get('alias', f"{col}_{func}")
 
                 if func == 'count':
-                    # FIX B-BE-MANIPOLA-01: COUNT(*) tramite size() — non
-                    # dipende da nessuna colonna, non perde il gruppo
+                    # COUNT(*) via groupby().size() — non dipende da una
+                    # colonna specifica, non perde righe sul gruppo.
                     count_aliases.append(alias)
                 elif func in ['sum', 'mean', 'min', 'max', 'std']:
                     if col in df.columns:
@@ -743,7 +931,6 @@ class ManipolaExecutor:
             if srid:
                 crs = f"EPSG:{srid}"
 
-        output_path = get_temp_output_path(f"{filename}.{fmt}")
         try:
             # Leggi group_id del progetto per isolamento corretto dei risultati
             group_id = None
@@ -754,14 +941,27 @@ class ManipolaExecutor:
             except Exception:
                 pass
 
-            # save_dataframe restituisce il path effettivo (es. .zip per shp)
-            saved_path = save_dataframe(df, output_path, fmt, geom_col, crs)
-            actual_fmt = saved_path.suffix.lstrip(".") if fmt == "shp" else fmt
-            save_result_blob(project_id, saved_path, actual_fmt, len(df), group_id=group_id)
+            # Single entry-point: in-memory per csv/xlsx/json/parquet/
+            # geojson (zero temp), filesystem fallback interno per
+            # gpkg/shp. Nessun if/else duplicato caller-side.
+            saved = save_pipeline_result(
+                project_id=project_id,
+                df=df,
+                output_format=fmt,
+                filename_stem=filename,
+                rows_count=len(df),
+                group_id=group_id,
+                geom_column=geom_col,
+                crs=crs,
+            )
             return {
-                "success": True, "output_path": str(saved_path), "format": actual_fmt,
-                "rows_count": len(df), "columns_count": len(df.columns),
-                "message": f"Salvato {len(df)} righe in {saved_path.name}"
+                "success": True,
+                "output_path": saved["output_filename"],
+                "format": fmt.lower(),
+                "rows_count": len(df),
+                "columns_count": len(df.columns),
+                "result_id": saved["result_id"],
+                "message": f"Salvato {len(df)} righe in {saved['output_filename']}"
             }
         except Exception as e:
             return {"success": False, "message": f"Errore salvataggio: {e}"}

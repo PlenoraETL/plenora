@@ -1,0 +1,262 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   AdminBackupsPage.css — Pannello backup DB (solo superadmin)
+   Token con prefisso --ab-
+───────────────────────────────────────────────────────────────────────── */
+
+/* ── Root container: stesso pattern di FileManager/UserManager ── */
+.ab {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  overflow: hidden;
+  background: #07090F;
+  color: #DDE4F2;
+  font-family: 'Inter', 'Segoe UI', sans-serif;
+  font-size: 13px;
+}
+[data-theme='light'] .ab {
+  background: #EFF2F9;
+  color: #0B1120;
+}
+
+.ab *, .ab *::before, .ab *::after {
+  box-sizing: border-box;
+}
+
+.ab__main {
+  flex: 1;
+  min-width: 0;        /* previene overflow orizzontale con tabella */
+  padding: 24px 32px;
+  overflow-y: auto;
+}
+
+/* ── Header ── */
+.ab__header {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 16px; flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+.ab__title {
+  margin: 0 0 4px 0;
+  font-family: 'Syne', 'Trebuchet MS', sans-serif;
+  font-size: 26px; font-weight: 700;
+  color: #DDE4F2;
+  letter-spacing: -0.5px;
+}
+[data-theme='light'] .ab__title { color: #0B1120; }
+
+.ab__subtitle {
+  font-size: 13px;
+  color: #7D8BA8;
+}
+.ab__subtitle code {
+  padding: 1px 6px;
+  background: rgba(75,139,255,0.10);
+  border: 1px solid rgba(75,139,255,0.25);
+  border-radius: 4px;
+  font-family: 'DM Mono', 'Consolas', monospace;
+  font-size: 12px;
+  color: #4B8BFF;
+}
+
+.ab__header-actions {
+  display: flex; gap: 8px; align-items: center;
+}
+
+.ab__btn {
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  font-family: inherit; font-size: 13px; font-weight: 500;
+  cursor: pointer;
+  transition: opacity .15s ease, transform .1s ease;
+}
+.ab__btn:disabled { opacity: .5; cursor: not-allowed; }
+.ab__btn:not(:disabled):hover { transform: translateY(-1px); }
+
+.ab__btn--primary {
+  background: linear-gradient(135deg, #4B8BFF, #2563EB);
+  color: white;
+  border-color: #2563EB;
+}
+.ab__btn--secondary {
+  background: rgba(255,255,255,0.04);
+  color: #DDE4F2;
+  border-color: rgba(255,255,255,0.11);
+}
+[data-theme='light'] .ab__btn--secondary {
+  background: rgba(0,0,0,0.04);
+  color: #0B1120;
+  border-color: rgba(0,0,0,0.13);
+}
+
+/* ── Card status/schedule ── */
+.ab__cards {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px; margin-bottom: 24px;
+}
+.ab__card {
+  padding: 14px 18px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: #0C0F18;
+}
+[data-theme='light'] .ab__card {
+  background: #FFFFFF;
+  border-color: rgba(0,0,0,0.07);
+}
+
+.ab__card--ok    { border-left: 3px solid #34D399; }
+.ab__card--err   { border-left: 3px solid #F87171; }
+.ab__card--info  { border-left: 3px solid #4B8BFF; }
+.ab__card--muted { border-left: 3px solid #7D8BA8; }
+
+.ab__card-title {
+  font-family: 'Syne', 'Trebuchet MS', sans-serif;
+  font-size: 15px; font-weight: 700;
+  margin-bottom: 8px;
+}
+.ab__card-body {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #7D8BA8;
+}
+.ab__card-body strong {
+  color: #DDE4F2;
+  font-weight: 500;
+}
+[data-theme='light'] .ab__card-body strong { color: #0B1120; }
+
+.ab__log-details {
+  margin-top: 10px;
+  font-family: 'DM Mono', 'Consolas', monospace;
+  font-size: 11px;
+}
+.ab__log-details summary {
+  cursor: pointer;
+  color: #4B8BFF;
+  padding: 4px 0;
+}
+.ab__log-tail {
+  margin: 6px 0 0 0;
+  padding: 10px;
+  background: #07090F;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 4px;
+  max-height: 200px;
+  overflow: auto;
+  color: #B8C1D6;
+  white-space: pre-wrap;
+}
+[data-theme='light'] .ab__log-tail {
+  background: #F5F7FB;
+  border-color: rgba(0,0,0,0.07);
+  color: #4A5678;
+}
+
+/* ── Lista backup ── */
+.ab__list-title {
+  font-family: 'Syne', 'Trebuchet MS', sans-serif;
+  font-size: 18px; font-weight: 700;
+  margin: 0 0 12px 0;
+}
+.ab__count {
+  color: #7D8BA8;
+  font-weight: 400;
+  font-size: 14px;
+}
+
+.ab__table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #0C0F18;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  overflow: hidden;
+}
+[data-theme='light'] .ab__table {
+  background: #FFFFFF;
+  border-color: rgba(0,0,0,0.07);
+}
+.ab__table th {
+  text-align: left;
+  padding: 10px 14px;
+  font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;
+  font-weight: 600;
+  color: #7D8BA8;
+  background: #111525;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+[data-theme='light'] .ab__table th {
+  background: #F5F7FB;
+  border-bottom-color: rgba(0,0,0,0.07);
+}
+.ab__table td {
+  padding: 10px 14px;
+  font-size: 13px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+[data-theme='light'] .ab__table td {
+  border-bottom-color: rgba(0,0,0,0.04);
+}
+.ab__table tr:last-child td { border-bottom: none; }
+
+.ab__key {
+  font-family: 'DM Mono', 'Consolas', monospace;
+  font-size: 12px;
+  color: #4B8BFF;
+}
+
+.ab__storage-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border: 1px solid;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  background: transparent;
+}
+
+.ab__loading, .ab__empty {
+  padding: 32px;
+  text-align: center;
+  color: #7D8BA8;
+  background: #0C0F18;
+  border: 1px dashed rgba(255,255,255,0.08);
+  border-radius: 8px;
+}
+[data-theme='light'] .ab__loading,
+[data-theme='light'] .ab__empty {
+  background: #FFFFFF;
+  border-color: rgba(0,0,0,0.07);
+}
+
+/* ── Note operative ── */
+.ab__notes {
+  margin-top: 32px;
+  padding: 16px 20px;
+  border-radius: 8px;
+  background: rgba(75,139,255,0.04);
+  border: 1px solid rgba(75,139,255,0.12);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.ab__notes h3 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  color: #4B8BFF;
+  font-family: 'Syne', sans-serif;
+}
+.ab__notes ul { margin: 0; padding-left: 20px; color: #7D8BA8; }
+.ab__notes strong { color: #DDE4F2; font-weight: 500; }
+[data-theme='light'] .ab__notes strong { color: #0B1120; }
+.ab__notes code {
+  padding: 1px 5px;
+  background: rgba(75,139,255,0.10);
+  border-radius: 3px;
+  font-family: 'DM Mono', 'Consolas', monospace;
+  font-size: 12px;
+  color: #4B8BFF;
+}
+
+.ab__list { margin-bottom: 24px; }

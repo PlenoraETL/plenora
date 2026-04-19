@@ -1,0 +1,171 @@
+"""
+persist.py — Persistenza di un ImdfBundle estratto su disco.
+
+Estratto da workers.tasks.enrichment_task per isolare la logica di move
+verso `IMDF_BUNDLES_DIR/{task_id}/` e garantire tramite `try/finally` il
+cleanup SEMPRE della tmp_dir — anche su errori di `shutil.move` che in
+passato lasciavano orfani tipo `/tmp/imdf_XXXX/` su disco.
+
+Uso:
+    from app.core.imdf.loader import extract_imdf_zip
+    from app.core.imdf.persist import persist_imdf_bundle_to_disk
+
+    bundle = extract_imdf_zip(str(zip_path))
+    result = persist_imdf_bundle_to_disk(bundle, task_id, project_id)
+    # bundle.tmp_dir è stata cancellata in ogni caso
+"""
+from __future__ import annotations
+
+import json
+import shutil
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, Optional
+
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
+
+
+def _count_features(p: Path) -> Optional[int]:
+    """Conta feature in un GeoJSON senza caricarlo interamente come oggetto.
+    Ritorna None su errore/file mancante."""
+    try:
+        if not p.exists():
+            return None
+        data = json.loads(p.read_text(encoding="utf-8"))
+        feats = data.get("features")
+        return len(feats) if isinstance(feats, list) else None
+    except Exception as e:
+        logger.warning(f"_count_features {p.name}: {e}")
+        return None
+
+
+def persist_imdf_bundle_to_disk(
+    bundle,
+    task_id: str,
+    project_id: Optional[str],
+    dest_root: Optional[Path] = None,
+) -> Dict[str, Any]:
+    """Sposta il contenuto di `bundle.tmp_dir` in
+    `IMDF_BUNDLES_DIR/{task_id}/` e scrive `plenora_metadata.json` nella
+    root della destinazione.
+
+    - **Garantisce** che `bundle.tmp_dir` sia cancellata in OGNI caso
+      (happy path o errore), tramite un `try/finally`. Questo previene
+      gli orfani storici tipo `/tmp/imdf_XXXX/` rimasti dopo crash del
+      worker a metà del move.
+    - Se la destinazione esiste già viene rimossa prima di creare la
+      nuova (idempotenza su retry del task).
+    - Il `plenora_metadata.json` include `site_id`, counts layer dai
+      geojson, validation_summary, timestamp `saved_at`.
+
+    Args:
+        bundle:      ImdfBundle (da `extract_imdf_zip`)
+        task_id:     id univoco che nomina la cartella di destinazione
+        project_id:  project_id del canvas (per filtering lato list)
+        dest_root:   override del root di destinazione (per test)
+
+    Returns:
+        dict con chiavi:
+            - path: str del dest_root finale
+            - meta: dict del plenora_metadata scritto
+
+    Raises:
+        Propaga eventuali eccezioni da shutil.move / write. La tmp_dir è
+        comunque cancellata dal finally.
+    """
+    if dest_root is None:
+        # Import tardivo per rispettare i monkeypatch di test
+        from app.config import settings as _settings
+        root = _settings.IMDF_BUNDLES_DIR / task_id
+    else:
+        root = Path(dest_root)
+    try:
+        if root.exists():
+            shutil.rmtree(root, ignore_errors=True)
+        root.mkdir(parents=True, exist_ok=True)
+
+        if bundle.tmp_dir and bundle.tmp_dir.exists():
+            # Materializzo la lista perche' `iterdir` e' un generator lazy:
+            # se modifichiamo la directory durante l'iterazione (con
+            # shutil.move) potremmo saltare elementi o ricevere OSError.
+            for item in list(bundle.tmp_dir.iterdir()):
+                target = root / item.name
+                shutil.move(str(item), str(target))
+
+        # ── metadata ──────────────────────────────────────────────
+        meta: Dict[str, Any] = {
+            "project_id":    project_id,
+            "task_id":       task_id,
+            "site_id":       bundle.site_id,
+            "saved_at":      datetime.now(timezone.utc).isoformat(),
+            "has_gdb":       bundle.gdb_path is not None,
+            "has_ifc":       bundle.ifc_path is not None,
+            "has_renderers": bundle.renderers_path is not None,
+        }
+
+        # Validation summary: leggiamo dalla DESTINAZIONE perché il move
+        # ha già trasferito validation.json (i path dentro `bundle`
+        # puntavano alla vecchia tmp_dir, ormai vuota).
+        try:
+            val_path = root / "validation.json"
+            if val_path.exists():
+                val = json.loads(val_path.read_text(encoding="utf-8")) or {}
+                meta["validation_summary"] = {
+                    "passed":         val.get("passed"),
+                    "total_errors":   val.get("total_errors"),
+                    "total_warnings": val.get("total_warnings"),
+                }
+        except Exception as ve:
+            logger.warning(f"[{task_id}] validation_summary read: {ve}")
+
+        # Counts layer (fallback per il list endpoint se il bundle li ha
+        # in formato geojson riconoscibile). Cerca in {site_id}/*.geojson.
+        if bundle.site_id:
+            site_dir = root / bundle.site_id
+            if site_dir.is_dir():
+                bc = _count_features(site_dir / "building.geojson")
+                lc = _count_features(site_dir / "level.geojson")
+                uc = _count_features(site_dir / "unit.geojson")
+                if bc is not None: meta["building_count"] = bc
+                if lc is not None: meta["level_count"] = lc
+                if uc is not None: meta["unit_count"] = uc
+
+        try:
+            (root / "plenora_metadata.json").write_text(
+                json.dumps(meta, indent=2), encoding="utf-8"
+            )
+        except Exception as me:
+            logger.warning(f"[{task_id}] plenora_metadata.json write: {me}")
+
+        logger.info(
+            f"[{task_id}] IMDF bundle persistito in {root} "
+            f"(site={bundle.site_id})"
+        )
+
+        # R2 multi-host: upload zip + meta su object storage (S3).
+        # Cache locale resta per performance; S3 e' la fonte di verita'
+        # accessibile dagli altri nodi (backend/worker su altre VM).
+        # Failure non blocca il persist locale — best-effort: il bundle
+        # e' comunque servibile dal nodo corrente finche' la cache dura.
+        try:
+            from app.core.imdf import storage as _imdf_storage
+            _imdf_storage.save_bundle(task_id, root, meta=meta)
+        except Exception as _se:
+            logger.warning(
+                f"[{task_id}] imdf storage upload fallito (non-fatal, "
+                f"bundle disponibile solo sul nodo corrente): {_se}"
+            )
+
+        return {"path": str(root), "meta": meta}
+
+    finally:
+        # Cleanup SEMPRE garantito: se il happy path ha già svuotato
+        # tmp_dir via shutil.move, bundle.cleanup() è un no-op. Se è
+        # fallito a metà, rimuoviamo quel che resta. Previene gli
+        # orfani /tmp/imdf_XXXX/ storici.
+        try:
+            bundle.cleanup()
+        except Exception as ce:
+            logger.warning(f"[{task_id}] bundle.cleanup in finally: {ce}")

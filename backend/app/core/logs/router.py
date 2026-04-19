@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Query
 from app.config import settings
 from app.core.auth.auth import get_current_user, require_not_esecutore, CurrentUser, require_admin, group_filter
 from app.db.pg_connection import fetchone as _fetchone, fetchall as _fetchall, execute as _execute
+from app.shared.authz_helpers import assert_project_visible
 
 router = APIRouter(prefix="/logs", tags=["logs"])
 
@@ -31,7 +32,13 @@ def get_logs(
     module:     Optional[str] = Query(None, description="Filtro moduli (comma-separated: estrai,manipola,...)"),
     op:         Optional[str] = Query(None, description="Filtro operazioni"),
     project_id: Optional[str] = Query(None, description="Filtro per project_id"),
-    search:     Optional[str] = Query(None, description="Ricerca full-text nel messaggio"),
+    search:     Optional[str] = Query(
+        None,
+        max_length=100,
+        description="Ricerca substring nel messaggio (max 100 char). "
+                    "LIKE '%...%' non usa indici — se il volume cresce "
+                    "valutare indice trigram (pg_trgm) o full-text.",
+    ),
     after:      Optional[str] = Query(None, description="Timestamp minimo (ISO format)"),
     before:     Optional[str] = Query(None, description="Timestamp massimo (ISO format)"),
     current_user: CurrentUser = Depends(require_not_esecutore),
@@ -57,6 +64,15 @@ def get_logs(
         params.extend(o.strip().lower() for o in op.split(","))
 
     if project_id:
+        # N6 (2026-04-17): fail-closed ownership check prima di filtrare per
+        # project_id. Pre-fix il filtro `group_id = X OR group_id = ''` a
+        # riga ~82 bloccava il cross-tenant per log applicativi, ma i log
+        # di sistema con group_id='' erano leak-able da utenti cross-tenant
+        # che conoscevano un project_id di un altro gruppo. Ora rifiutiamo
+        # esplicitamente l'accesso a project altrui (superadmin bypassa
+        # via assert_project_visible che accetta anche progetti condivisi).
+        if current_user.role != "superadmin":
+            assert_project_visible(project_id, current_user)
         conditions.append("project_id = ?")
         params.append(project_id)
 
@@ -64,7 +80,7 @@ def get_logs(
         # Escape dei metacaratteri LIKE (% e _) e del backslash stesso.
         # Senza escape, un utente potrebbe usare `%` o `_` per costruire
         # pattern wildcard arbitrari (es. cercare `%password%` per discovery).
-        # SQLite supporta `ESCAPE '\\'` per l'escape esplicito.
+        # PostgreSQL supporta `ESCAPE '\'` per l'escape esplicito.
         escaped = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         conditions.append("msg LIKE ? ESCAPE '\\'")
         params.append(f"%{escaped}%")

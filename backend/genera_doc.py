@@ -89,7 +89,7 @@ def main():
     tree_view = generate_project_tree(root)
     
     # Inizializza il contenuto Markdown con stile per il PDF
-    md_content = f"# 📚 Documentazione Tecnica URBY-ETL\n\n"
+    md_content = f"# 📚 Documentazione Tecnica PLENORA-ETL\n\n"
     md_content += "## 🏗 Mappa del Progetto\n"
     md_content += f"```text\nbackend/\n{tree_view}```\n\n"
     md_content += '<div style="page-break-after: always;"></div>\n\n'

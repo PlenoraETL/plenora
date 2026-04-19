@@ -50,6 +50,9 @@ from app.core.features.models import (
     FeatureWriteRequest,
 )
 from app.core.features.features_service import FeaturesService
+from app.shared.path_policy import assert_path_within
+from app.core.artifacts import ArtifactResolver, LatestProjectArtifactRef
+from app.core.artifacts.types import MaterializedArtifact
 
 router = APIRouter(prefix="/features", tags=["features"])
 
@@ -69,11 +72,17 @@ def get_service() -> FeaturesService:
 # HELPER
 # =============================================================================
 
-def _mask_password(conn: ArcGISConnection) -> dict:
-    """Oscura la password nella risposta API."""
+def _mask_secrets(conn: ArcGISConnection) -> dict:
+    """Oscura `password` e `client_secret` nelle response API delle
+    connessioni ArcGIS: senza questa maschera un utente che legge la
+    connection vedrebbe in chiaro il secret OAuth, anche se il DB e'
+    cifrato at-rest.
+    """
     data = conn.model_dump()
     if data.get("password"):
         data["password"] = "***"
+    if data.get("client_secret"):
+        data["client_secret"] = "***"
     return data
 
 
@@ -113,10 +122,14 @@ async def create_connection(data: ArcGISCreate, current_user: CurrentUser = Depe
             group_id=current_user.group_id,
             created_by=current_user.user_id,
         )
-        if connection is not None:
-            connection.can_edit = compute_can_edit(connection, current_user)
-        return _mask_password(connection)
+        if connection is None:
+            raise HTTPException(status_code=500, detail="Errore creazione connessione")
+        connection.can_edit = compute_can_edit(connection, current_user)
+        return _mask_secrets(connection)
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"[GESTITO] Errore creazione connessione ArcGIS: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Errore interno del server")
 
 
@@ -142,7 +155,7 @@ async def list_connections(current_user: CurrentUser = Depends(require_not_esecu
         for c in result.connections:
             c.can_edit = compute_can_edit(c, current_user)
 
-        return {"connections": [_mask_password(c) for c in result.connections]}
+        return {"connections": [_mask_secrets(c) for c in result.connections]}
     except Exception as e:
         raise HTTPException(status_code=500, detail="Errore interno del server")
 
@@ -156,7 +169,7 @@ async def update_connection(connection_id: str, data: ArcGISUpdate, current_user
     if not connection:
         raise HTTPException(status_code=404, detail="Connessione non trovata")
     connection.can_edit = compute_can_edit(connection, current_user)
-    return _mask_password(connection)
+    return _mask_secrets(connection)
 
 
 @router.delete("/connections/{connection_id}")
@@ -318,24 +331,95 @@ class CreateServiceRequest(BaseModel):
     source_srid: Optional[int] = None  # SRID sorgente (dal nodo pipeline)
 
 
-def _resolve_input_path(input_path: str, project_id: str) -> str:
+def _resolve_input_path(
+    input_path: str,
+    project_id: str,
+    *,
+    expected_group_id: str,
+) -> MaterializedArtifact:
+    """Risolve il path del file di input per write/create-service ArcGIS.
+
+    Ritorna un `MaterializedArtifact` **context-managed**: il caller
+    DEVE usarlo in un blocco `with` per il cleanup del tempfile sul
+    branch project_id (il resolver materializza il blob DB come
+    `is_temporary=True`). Sul branch whitelist `is_temporary=False`
+    e `__exit__` e' no-op.
+
+    Dispatcher a 2 strategie:
+      - `input_path` valorizzato → valida contro whitelist
+        (RESULTS_DIR / TEMP_DIR / DATA_DIR / FILE_SOURCES_DIR) e
+        ritorna un MaterializedArtifact non temporaneo
+      - `project_id` valorizzato → risolve l'ultimo output via
+        `ArtifactResolver.materialize_latest` con tenant binding
+        fail-closed
+      - entrambi vuoti → `ValueError("Specificare input_path o project_id")`
+
+    `expected_group_id` keyword-only required: senza tenant binding
+    il check cross-tenant del resolver sarebbe disabilitato (rifiuta
+    None/blank).
+
+    Security: `input_path` arbitrario dal client viene rifiutato fuori
+    dalla whitelist, altrimenti un utente autenticato potrebbe leggere
+    `/etc/passwd` o `/proc/self/environ` passando il path come parametro.
+
+    Contratto eccezioni:
+      - `input_path UNC non consentito`         (UNC paths)
+      - `input_path non consentito: ...`        (fuori whitelist)
+      - `input_path non valido: ...`            (malformed)
+      - `Specificare input_path o project_id`   (entrambi vuoti)
+      - `FileNotFoundError`                     (project_id valido, no output)
     """
-    Risolve il path del file input: usa input_path se fornito,
-    altrimenti cerca il file output più recente nella directory risultati del progetto.
-    Stesso pattern di carica_task._find_latest_output().
-    """
+    if not expected_group_id:
+        raise ValueError(
+            "_resolve_input_path: expected_group_id obbligatorio "
+            "(defense-in-depth)"
+        )
+    from pathlib import Path as _Path
+    from app.config import settings
+
     if input_path:
-        return input_path
-    
+        # Whitelist di directory in cui e' lecito leggere file
+        _allowed_roots = []
+        for attr in ("RESULTS_DIR", "TEMP_DIR", "DATA_DIR", "FILE_SOURCES_DIR"):
+            try:
+                val = getattr(settings, attr, None)
+                if val:
+                    _allowed_roots.append(_Path(val).resolve())
+            except Exception:
+                pass
+
+        # Validazione delegata a `assert_path_within`. Catturiamo
+        # ValueError e re-raise con i messaggi specifici di questo
+        # endpoint per preservare il contratto observable.
+        try:
+            candidate = assert_path_within(input_path, _allowed_roots)
+        except ValueError as e:
+            msg = str(e)
+            if "UNC" in msg:
+                raise ValueError("input_path UNC non consentito") from e
+            if "fuori dai trusted roots" in msg:
+                raise ValueError(
+                    "input_path non consentito: deve essere dentro una "
+                    "directory di lavoro del backend (results/temp/data)"
+                ) from e
+            raise ValueError(f"input_path non valido: {e}") from e
+        return MaterializedArtifact(path=candidate, is_temporary=False)
+
     if not project_id:
         raise ValueError("Specificare input_path o project_id")
-    
-    from app.utils.result_store import get_result_as_tempfile
-    
-    tmp = get_result_as_tempfile(project_id)
-    if tmp:
-        return str(tmp)
-    
+
+    # Defense-in-depth: l'ACL a livello router (assert_project_visible)
+    # gia' garantisce la visibilita', ma passare expected_group_id al
+    # resolver mantiene l'invariante cross-tenant uniforme anche se in
+    # futuro questa funzione venisse richiamata da un path che salta
+    # il check HTTP.
+    materialized = ArtifactResolver().materialize_latest(
+        LatestProjectArtifactRef(project_id=project_id),
+        expected_group_id=expected_group_id,
+    )
+    if materialized is not None and materialized.path is not None:
+        return materialized
+
     raise FileNotFoundError(f"Nessun output trovato per progetto: {project_id}")
 
 
@@ -343,19 +427,35 @@ def _resolve_input_path(input_path: str, project_id: str) -> str:
 async def write_features(request: WriteRequest, current_user: CurrentUser = Depends(require_not_esecutore)):
     """Scrittura su Feature Service esistente (add/update/delete)."""
     _check_arcgis_access(request.connection_id, current_user)
+    # Se il caller risolve l'input via `project_id` invece che
+    # `input_path`, verifichiamo l'accesso al progetto prima di
+    # caricarne l'output: senza questo check, chi ha accesso alla
+    # connessione ArcGIS potrebbe scrivere su un Feature Service
+    # usando i dati di un progetto di un altro tenant conoscendone l'id.
+    if request.project_id:
+        from app.shared.authz_helpers import assert_project_visible
+        assert_project_visible(request.project_id, current_user)
     try:
-        resolved_path = _resolve_input_path(request.input_path, request.project_id)
-        
-        result = get_service().write_features(
-            connection_id=request.connection_id,
-            layer_url=request.layer_url,
-            operation=request.operation,
-            input_path=resolved_path,
-            geometry_column=request.geometry_column,
-            object_ids=request.object_ids,
-            where=request.where,
-            source_srid=request.source_srid,
-        )
+        # `with` garantisce cleanup del tempfile quando il resolver
+        # materializza l'ultimo output dal blob DB: senza questo,
+        # ogni chiamata con project_id lascerebbe un file orfano in
+        # TEMP_DIR perche' `_resolve_input_path` perdeva il riferimento
+        # al MaterializedArtifact.
+        with _resolve_input_path(
+            request.input_path,
+            request.project_id,
+            expected_group_id=current_user.group_id,
+        ) as materialized:
+            result = get_service().write_features(
+                connection_id=request.connection_id,
+                layer_url=request.layer_url,
+                operation=request.operation,
+                input_path=str(materialized.path),
+                geometry_column=request.geometry_column,
+                object_ids=request.object_ids,
+                where=request.where,
+                source_srid=request.source_srid,
+            )
         return result
         
     except ValueError as e:
@@ -372,7 +472,7 @@ async def write_features(request: WriteRequest, current_user: CurrentUser = Depe
 async def create_service(request: CreateServiceRequest, current_user: CurrentUser = Depends(require_not_esecutore)):
     """
     Crea un nuovo Feature Service su ArcGIS Online.
-    
+
     Flusso:
     1. Legge il file da input_path (o project_id)
     2. Crea il servizio con schema dal DataFrame
@@ -381,17 +481,28 @@ async def create_service(request: CreateServiceRequest, current_user: CurrentUse
     Restituisce URL del nuovo servizio e conteggio features caricate.
     """
     _check_arcgis_access(request.connection_id, current_user)
+    # Stesso check di write_features: se l'input arriva via project_id,
+    # validiamo l'accesso al progetto prima di leggerne l'output.
+    if request.project_id:
+        from app.shared.authz_helpers import assert_project_visible
+        assert_project_visible(request.project_id, current_user)
     try:
-        resolved_path = _resolve_input_path(request.input_path, request.project_id)
-
-        result = get_service().create_service(
-            connection_id=request.connection_id,
-            service_name=request.service_name,
-            layer_name=request.layer_name,
-            input_path=resolved_path,
-            geometry_column=request.geometry_column,
-            source_srid=request.source_srid,
-        )
+        # Stesso pattern di write_features: `with` garantisce cleanup
+        # del tempfile sul branch project_id (materialize_latest puo'
+        # ritornare is_temporary=True).
+        with _resolve_input_path(
+            request.input_path,
+            request.project_id,
+            expected_group_id=current_user.group_id,
+        ) as materialized:
+            result = get_service().create_service(
+                connection_id=request.connection_id,
+                service_name=request.service_name,
+                layer_name=request.layer_name,
+                input_path=str(materialized.path),
+                geometry_column=request.geometry_column,
+                source_srid=request.source_srid,
+            )
         return result
         
     except ValueError as e:

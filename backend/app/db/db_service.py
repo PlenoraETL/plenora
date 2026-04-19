@@ -1,5 +1,5 @@
 """
-Database Service — facade di compatibilità per URBY-ETL.
+Database Service — facade di compatibilità per PLENORA-ETL.
 
 Migrato da 3 SQLite separati a un singolo PostgreSQL.
 Questo modulo mantiene la stessa API pubblica delegando ai service
@@ -42,3 +42,9 @@ def init_all_dbs():
     # intermediate.db: anche questo va su PostgreSQL
     import app.core.intermediate.db as idb
     idb.init_db()
+    # C8-nit: runner migration — applica i file in migrations/ non ancora
+    # registrati in plenora.schema_migrations. I file esistenti usano
+    # IF NOT EXISTS (idempotenti) quindi il primo run post-C8 li registra
+    # semplicemente come applicate senza side-effect.
+    from app.db.migrations_runner import apply_pending_migrations
+    apply_pending_migrations()

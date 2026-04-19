@@ -1,5 +1,5 @@
 """
-Modelli condivisi del canvas URBY-ETL.
+Modelli condivisi del canvas PLENORA-ETL.
 
 Contiene i modelli Pydantic "core" usati trasversalmente da tutti i moduli:
 - Tipi colonna e info base (ColumnType, ColumnInfo)
@@ -113,7 +113,7 @@ class Node(BaseModel):
     type: Literal[
         "source", "result", "project_source", "file_source", "feature_source",
         "transform", "api_enrich", "staticValues", "carica", "carica_arcgis",
-        "multi_join", "comment", "datasource_node"
+        "multi_join", "comment", "datasource_node", "imdf_publisher"
     ]
     position: Position
 
@@ -180,10 +180,24 @@ class Node(BaseModel):
     enrich_type: Optional[str] = None
     api_type: Optional[str] = None
     connection_type: Optional[str] = None
-    executable: Optional[Any] = None  # B-BE-33: oggetto config {type, path, input_mode, ...}
     exec_params: Optional[Any] = None
     endpoint: Optional[Any] = None
     parameters: Optional[Any] = None
+    # rest_file (Processore File): config multipart in/binary out propagato
+    # dalla connection al nodo del canvas (cosi' il runner conosce file_fields,
+    # static_fields, output_extension senza dover rifetcharli al runtime).
+    request: Optional[Any] = None
+    response: Optional[Any] = None
+    # File aggiuntivi caricati inline sul nodo (per connector rest_file con
+    # file_fields source='extra_input'). Struttura:
+    #   {field_name: {file_source_id, original_filename, size} | file_source_id}
+    extra_files: Optional[Dict[str, Any]] = None
+    # output_kind: tag esplicito sul nodo api_enrich (canvas-side) per indicare
+    # che lo zip prodotto dall'upstream Processor File ha una struttura
+    # riconosciuta. Il nodo `result` downstream legge questo tag e si specializza
+    # (es. modalita' "Pubblicazione IMDF"). La connection resta generica.
+    # Valori: 'generic' (default), 'imdf', ... (estendibile in futuro)
+    output_kind: Optional[str] = None
     from_catalog: Optional[bool] = False
     model_id: Optional[str] = None
     model_name: Optional[str] = None
@@ -204,6 +218,19 @@ class Node(BaseModel):
     distinct: Optional[bool] = False
     limit: Optional[int] = None
     geomColumn: Optional[str] = None
+    # --- Nodo IMDF Publisher (type="imdf_publisher") — Pubblicazione su ArcGIS ---
+    # Prende in ingresso un api_enrich con output_kind='imdf', legge il bundle
+    # IMDF prodotto dal Processor File e chiama l'uploader (estrazione GDB +
+    # creazione FeatureService ArcGIS + apply renderers). I campi sono sul Node
+    # base perche' Pydantic non supporta variante di schema per type literal.
+    # La pubblicazione NON e' piu' automatica: l'utente la triggera dal nodo
+    # dopo aver verificato il risultato dell'arricchimento.
+    imdf_arcgis_connection_id: Optional[str] = None
+    imdf_arcgis_folder: Optional[str] = None
+    imdf_fs_name_template: Optional[str] = None
+    imdf_apply_renderers: Optional[bool] = False
+    # Modalita' pubblicazione: 'replace' (default) | 'append' | 'upsert'
+    imdf_publish_mode: Optional[Literal["replace", "append", "upsert"]] = "replace"
 
     # --- GROUP BY (per ESTRAI) ---
     group_by_enabled: Optional[bool] = False
@@ -276,14 +303,44 @@ class Edge(BaseModel):
 
     Rappresenta una relazione JOIN tra tabelle o il collegamento verso
     il nodo di output.
+
+    C11: id/source/target sono obbligatori e stringhe non-vuote.
+    sourceHandle/targetHandle sono metadata ReactFlow opzionali
+    tollerati (il frontend li invia a volte con l'edge grezzo).
+
+    Nota design (C11-nit): mantieniamo deliberatamente il default
+    Pydantic `extra="ignore"` invece di `extra="forbid"` raccomandato
+    dal finding. Motivo: il serializer frontend al
+    `frontend/src/utils/canvasSerializer.js:227` ritorna il raw edge
+    ReactFlow quando `data.join_type` manca (es. edge verso result /
+    carica). Quel raw edge porta con se' campi ReactFlow variabili
+    (`type`, `animated`, `label`, `style`, `markerStart`, ...) che
+    cambiano tra versioni di ReactFlow. Forbid spezzerebbe canvas
+    legittimi ad ogni upgrade library. Trade-off: accettiamo il rischio
+    minore di tollerare typo/field ignorati; la validazione strutturale
+    (id/source/target/join_type tipizzati) copre il 90% della superficie.
     """
-    id: str
-    source: str
-    target: str
-    join_type: Optional[Literal["left", "inner", "right", "outer", "output", "carica", "carica_arcgis"]] = "left"
+    id: str = Field(..., min_length=1)
+    source: str = Field(..., min_length=1)
+    target: str = Field(..., min_length=1)
+    # C11-nit: "cross" aggiunto. Il query_generator rifiuta CROSS JOIN
+    # impliciti (edge mancante) ma suggerisce all'utente di esplicitarlo
+    # via join_type="cross" — che senza questo valore nella Literal
+    # sarebbe impossibile da configurare (ValidationError a costruzione
+    # dell'Edge). Ora il contract runtime-message e' coerente col model.
+    join_type: Optional[Literal[
+        "left", "inner", "right", "outer", "cross",
+        "output", "carica", "carica_arcgis", "imdf_publisher",
+    ]] = "left"
     source_column: Optional[str] = ""
     target_column: Optional[str] = ""
-    
+
+    # C11: metadata ReactFlow tipicamente presenti negli edge del frontend.
+    # Dichiariamoli esplicitamente (invece di lasciarli come extra silent-dropped)
+    # cosi' passano la validazione typed senza perdite informative.
+    sourceHandle: Optional[str] = None
+    targetHandle: Optional[str] = None
+
     join_conditions: Optional[List[Dict[str, str]]] = None
     on_filters: Optional[List[Dict[str, str]]] = None
 

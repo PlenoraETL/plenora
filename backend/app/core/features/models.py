@@ -127,7 +127,7 @@ class FieldInfo(BaseModel):
     name: str
     alias: str = ""
     field_type: str = ""     # esriFieldTypeString, esriFieldTypeInteger, etc.
-    urby_type: str = ""      # Tipo interno URBY: str, int, real, geometry, etc.
+    urby_type: str = ""      # Tipo interno PLENORA: str, int, real, geometry, etc.
     length: Optional[int] = None
     nullable: bool = True
     editable: bool = True

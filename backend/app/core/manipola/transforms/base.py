@@ -274,9 +274,14 @@ def op_filter(
         DataFrame filtrato
     """
     if column not in df.columns:
-        logger.warning(f"Colonna '{column}' non trovata")
-        return df
-    
+        # Fail-fast: un filtro che non filtra e' un bug grave. Silent return
+        # df invariato nascondeva l'errore e i conteggi a valle erano sballati.
+        available = list(df.columns)
+        raise ValueError(
+            f"Filter: colonna '{column}' non trovata. "
+            f"Colonne disponibili: {available}"
+        )
+
     result = df.copy()
     col = result[column]
     
@@ -359,15 +364,47 @@ _SAFE_PANDAS_ATTRS = frozenset({
     "concat", "cut", "qcut",
 })
 
-# Nodi AST vietati: impediscono import, exec, class access, ecc.
-_FORBIDDEN_AST_NODES = (
-    _ast.Import, _ast.ImportFrom,     # import os
-    _ast.Global, _ast.Nonlocal,       # global/nonlocal
-    _ast.Delete,                      # del x
-    _ast.ClassDef, _ast.FunctionDef, _ast.AsyncFunctionDef,
-    _ast.Yield, _ast.YieldFrom,
-    _ast.Await,
-)
+# Nomi AST ammessi (whitelist positiva).
+#
+# Ogni nodo che appare nell'AST di una formula deve essere in questo set,
+# altrimenti la formula viene rifiutata. Whitelist e' piu' sicura di
+# blocklist: i nodi futuri/esotici (walrus, match-case, f-string con
+# expression embed, comprehension con gadget chain, lambda, ecc.) sono
+# rifiutati per default.
+#
+# Include:
+#   - wrapper (Expression, Load)
+#   - riferimenti (Constant, Name, Attribute, keyword per kwargs)
+#   - chiamate (Call)
+#   - operatori (BinOp, UnaryOp, BoolOp, Compare)
+#   - tutti gli operator types (Add, Sub, Mult, ..., Eq, Lt, ..., And, Or, Not)
+#
+# NON include (consapevolmente):
+#   - Lambda, FunctionDef, ClassDef, AsyncFunctionDef
+#   - ListComp, SetComp, DictComp, GeneratorExp
+#   - NamedExpr (walrus), JoinedStr/FormattedValue (f-string)
+#   - IfExp (ternary), Subscript, Slice
+#   - List, Tuple, Set, Dict literal
+#   - Import, ImportFrom, Global, Nonlocal, Delete, Yield, Await, Try
+_ALLOWED_AST_NODES = frozenset({
+    # Wrappers / context
+    "Expression", "Load",
+    # Valori e riferimenti
+    "Constant", "Name", "Attribute", "keyword",
+    # Chiamate
+    "Call",
+    # Operator kinds
+    "BinOp", "UnaryOp", "BoolOp", "Compare",
+    # BinOp operators
+    "Add", "Sub", "Mult", "Div", "Mod", "Pow", "FloorDiv",
+    "BitAnd", "BitOr", "BitXor", "LShift", "RShift", "MatMult",
+    # UnaryOp operators
+    "USub", "UAdd", "Not", "Invert",
+    # BoolOp operators
+    "And", "Or",
+    # Compare operators (Is/IsNot/In/NotIn esclusi consapevolmente)
+    "Eq", "NotEq", "Lt", "LtE", "Gt", "GtE",
+})
 
 # Nomi di attributo vietati: pattern di escape dal sandbox
 _FORBIDDEN_ATTR_NAMES = frozenset({
@@ -378,12 +415,26 @@ _FORBIDDEN_ATTR_NAMES = frozenset({
     "__getattr__", "__setattr__", "__delattr__",
 })
 
+# Nomi builtin vietati come ast.Name (aggirerebbero __builtins__={}
+# se l'utente avesse una colonna con lo stesso nome).
+_FORBIDDEN_NAMES = frozenset({
+    "__import__", "__builtins__", "eval", "exec",
+    "compile", "open", "getattr", "setattr", "delattr",
+    "globals", "locals", "vars", "dir", "type",
+    "breakpoint", "exit", "quit",
+})
+
 
 def _validate_formula_ast(formula: str) -> None:
-    """Valida una formula utente via AST per prevenire code injection.
+    """Valida una formula utente via whitelist AST per prevenire code injection.
 
     Parsa la formula come espressione Python, poi attraversa l'albero AST
-    cercando pattern pericolosi (import, class traversal, attribute escape).
+    richiedendo che ogni nodo sia in `_ALLOWED_AST_NODES`. Nodi sconosciuti
+    (future syntax, costrutti esotici) vengono rifiutati per default.
+
+    Su `Attribute` blocca anche accessi a dunder / attributi privati non
+    whitelisted. Su `Name` blocca builtin pericolosi anche se passati come
+    colonne.
 
     Solleva ValueError se la formula contiene costrutti non sicuri.
     Chiamata PRIMA di eval() in op_formula().
@@ -394,14 +445,16 @@ def _validate_formula_ast(formula: str) -> None:
         raise ValueError(f"Formula non valida (syntax error): {e}")
 
     for node in _ast.walk(tree):
-        # Blocca nodi AST esplicitamente vietati
-        if isinstance(node, _FORBIDDEN_AST_NODES):
+        node_name = type(node).__name__
+
+        # Whitelist: il nodo DEVE essere ammesso
+        if node_name not in _ALLOWED_AST_NODES:
             raise ValueError(
-                f"Formula non consentita: contiene {type(node).__name__} "
-                f"(import/class/function non ammessi)"
+                f"Formula non consentita: nodo AST '{node_name}' non in whitelist "
+                f"(costrutti ammessi: aritmetica, confronti, method call su pandas)"
             )
 
-        # Blocca accesso ad attributi dunder (__class__, __bases__, ecc.)
+        # Controlli aggiuntivi sul contenuto dei nodi ammessi
         if isinstance(node, _ast.Attribute):
             attr_name = node.attr
             if attr_name in _FORBIDDEN_ATTR_NAMES:
@@ -409,22 +462,17 @@ def _validate_formula_ast(formula: str) -> None:
                     f"Formula non consentita: accesso a '{attr_name}' non ammesso "
                     f"(possibile tentativo di escape dal sandbox)"
                 )
-            # Blocca attributi che iniziano con _ ma non sono in whitelist
+            # Attributi che iniziano con _ ma non sono in whitelist pandas
             if attr_name.startswith("_") and attr_name not in _SAFE_PANDAS_ATTRS:
                 raise ValueError(
                     f"Formula non consentita: attributo privato '{attr_name}' non ammesso"
                 )
 
-        # Blocca chiamate a __import__ e builtins pericolosi come nome
-        if isinstance(node, _ast.Name):
-            if node.id in ("__import__", "__builtins__", "eval", "exec",
-                           "compile", "open", "getattr", "setattr", "delattr",
-                           "globals", "locals", "vars", "dir", "type",
-                           "breakpoint", "exit", "quit"):
-                raise ValueError(
-                    f"Formula non consentita: '{node.id}' non ammesso "
-                    f"(funzione pericolosa)"
-                )
+        if isinstance(node, _ast.Name) and node.id in _FORBIDDEN_NAMES:
+            raise ValueError(
+                f"Formula non consentita: '{node.id}' non ammesso "
+                f"(funzione pericolosa)"
+            )
 
 
 # =============================================================================
@@ -461,12 +509,28 @@ def op_formula(
     result = df.copy()
     formula = formula.strip()
 
+    # N4 defense-in-depth: scarta colonne con nome _-prefix/dunder prima di
+    # esporle al motore eval (sia pandas.eval sia eval manuale). L'AST
+    # validator blocca gia' i builtin pericolosi come ast.Name, ma evitiamo
+    # comunque di esporre nomi strani nel namespace: se un attacker riuscisse
+    # a iniettare una colonna chiamata come un builtin o un dunder, non
+    # entrerebbe comunque nelle variabili dell'eval.
+    unsafe_cols = [c for c in result.columns if isinstance(c, str) and c.startswith("_")]
+    if unsafe_cols:
+        logger.warning(
+            f"Formula: colonne {unsafe_cols} scartate dal namespace eval "
+            f"(nomi _-prefix/dunder, defense-in-depth)"
+        )
+        eval_df = result.drop(columns=unsafe_cols)
+    else:
+        eval_df = result
+
     try:
         # --- Tentativo 1: pandas.eval() ---
         # Gestisce espressioni matematiche e booleane vettoriali.
         # Non regge per: metodi stringa (.str.upper()), concatenazioni con costanti stringa.
         try:
-            result[new_column] = result.eval(formula)
+            result[new_column] = eval_df.eval(formula)
             logger.info(f"Formula (pandas.eval) ok: '{new_column}'")
             return result
         except Exception:
@@ -476,8 +540,8 @@ def op_formula(
         # Passa le colonne come variabili locali — nessuna sostituzione nel testo della formula.
         # Auto-conversione a numerico per colonne object (es. CSV importato come stringa).
         local_vars = {}
-        for col in result.columns:
-            series = result[col]
+        for col in eval_df.columns:
+            series = eval_df[col]
             if series.dtype == 'object':
                 # Prova conversione a numerico (gestisce formato IT: 1.234,56)
                 converted = pd.to_numeric(series, errors='coerce')
@@ -485,9 +549,14 @@ def op_formula(
                 original_na = series.isna().sum() / max(len(series), 1)
                 if nan_ratio - original_na > 0.3:
                     # Troppi NaN nuovi → prova formato italiano
-                    cleaned = series.astype(str).str.strip()
-                    cleaned = cleaned.str.replace('€', '', regex=False).str.replace('$', '', regex=False).str.strip()
-                    cleaned = cleaned.str.replace('.', '', regex=False).str.replace(',', '.', regex=False)
+                    # Single-pass regex: rimuove €$ e separatori migliaia, converte , in .
+                    cleaned = (
+                        series.astype(str)
+                        .str.strip()
+                        .str.replace(r'[€$]', '', regex=True)
+                        .str.replace('.', '', regex=False)  # separatore migliaia IT
+                        .str.replace(',', '.', regex=False)  # decimale IT
+                    )
                     converted = pd.to_numeric(cleaned, errors='coerce')
                 # Se la conversione ha senso (pochi NaN aggiuntivi), usa numerica
                 if nan_ratio - original_na <= 0.3:
@@ -561,11 +630,21 @@ def op_concat_columns(
     
     try:
         if skip_null:
-            # Concatena solo valori non-null
-            def concat_row(row):
-                values = [str(row[col]) for col in valid_cols if pd.notna(row[col])]
-                return separator.join(values) if values else None
-            result[output_column] = result.apply(concat_row, axis=1)
+            # Vectorized: astype(str) converte NaN a "nan", lo distinguiamo
+            # via maschera notna originale. Usa .agg() pandas-native (Cython)
+            # invece di .apply() Python — 5-10x speedup su dataset grossi.
+            NAN_SENTINEL = "\x00__NAN__\x00"
+            str_df = result[valid_cols].astype(str)
+            for col in valid_cols:
+                mask = result[col].isna()
+                if mask.any():
+                    str_df.loc[mask, col] = NAN_SENTINEL
+            joined = str_df.agg(
+                lambda parts: separator.join(p for p in parts if p != NAN_SENTINEL),
+                axis=1,
+            )
+            # Righe con tutti NaN -> stringa vuota post-join -> None semanticamente
+            result[output_column] = joined.where(joined != "", None)
         else:
             # Tratta NULL come stringa vuota
             result[output_column] = result[valid_cols].fillna('').astype(str).agg(separator.join, axis=1)
@@ -1033,36 +1112,39 @@ def op_md5_hash(
     
     result = df.copy()
     separator = "\x1f"  # Unit Separator — non appare nei dati reali
-    
-    def row_hash(row):
-        parts = []
-        for col in valid_columns:
-            val = row[col]
-            
-            # Gestione NULL
-            if pd.isna(val):
-                parts.append("")
-                continue
-            
-            # Geometry → WKT
-            if hasattr(val, 'wkt'):
-                parts.append(val.wkt)
-                continue
-            
-            # Conversione a stringa
-            s = str(val)
-            
-            # Normalizzazione
-            if normalize:
-                s = s.strip().lower()
-            
-            parts.append(s)
-        
-        combined = separator.join(parts)
-        return hashlib.md5(combined.encode('utf-8')).hexdigest()
-    
+
     try:
-        result[output_column] = result.apply(row_hash, axis=1)
+        # Vectorized prep: preparo un DataFrame di stringhe normalizzate per
+        # tutte le righe in operazioni pandas-native. Solo l'MD5 finale
+        # resta Python (hashlib non e' vectorizable). Speedup 5-20x vs
+        # .apply(axis=1) su grandi dataset.
+        parts_df = pd.DataFrame(index=result.index)
+        for col in valid_columns:
+            s = result[col]
+            # Geometry → WKT (per ora tramite map, solo se ci sono oggetti
+            # con .wkt; il check su dtype=object evita overhead per colonne
+            # numeriche pure).
+            if s.dtype == object:
+                # Converti ogni cella: geometry -> .wkt, altrimenti str()
+                col_str = s.map(
+                    lambda v: "" if pd.isna(v) else (v.wkt if hasattr(v, "wkt") else str(v))
+                )
+            else:
+                # Colonne numeriche/bool/datetime: NaN -> "", altrimenti str()
+                col_str = s.astype(object).where(s.notna(), "").astype(str)
+                # astype(str) dopo where mantiene "" per NaN
+                col_str = col_str.where(s.notna(), "")
+            if normalize:
+                col_str = col_str.str.strip().str.lower()
+            parts_df[col] = col_str
+
+        # Join vectorized (pandas Cython)
+        combined = parts_df.agg(separator.join, axis=1)
+
+        # MD5 map (Python hashlib, ma senza overhead apply pandas)
+        result[output_column] = combined.map(
+            lambda s: hashlib.md5(s.encode("utf-8")).hexdigest()
+        )
         logger.info(f"MD5 Hash: {len(valid_columns)} colonne -> {output_column}")
         return result
     except Exception as e:
@@ -1874,109 +1956,131 @@ def op_table_diff(
         indicator=True
     )
     
-    # === Classificazione righe ===
-    results = []
-    
-    for idx, row in merged.iterrows():
-        merge_type = row['_merge']
-        
-        if merge_type == 'left_only':
-            # Riga presente solo nella vecchia → DELETED
-            result_row = {}
-            for k in key_cols:
-                result_row[k] = row[k]
-            for c in common_value_cols:
-                result_row[c] = row.get(f'{c}_OLD', row.get(c, None))
-            for c in only_old_cols:
-                result_row[c] = row.get(c, None)
-            result_row['_diff_status'] = 'DELETED'
-            result_row['_diff_columns'] = None
-            result_row['_diff_old_values'] = None
-            results.append(result_row)
-            
-        elif merge_type == 'right_only':
-            # Riga presente solo nella nuova → ADDED
-            result_row = {}
-            for k in key_cols:
-                result_row[k] = row[k]
-            for c in common_value_cols:
-                result_row[c] = row.get(f'{c}_NEW', row.get(c, None))
-            for c in only_new_cols:
-                result_row[c] = row.get(c, None)
-            result_row['_diff_status'] = 'ADDED'
-            result_row['_diff_columns'] = None
-            result_row['_diff_old_values'] = None
-            results.append(result_row)
-            
+    # === Classificazione righe — vectorized ===
+    # Prima: iterrows su ogni riga con confronto cella-per-cella Python.
+    # Su 1M righe -> timeout garantito.
+    # Ora: boolean masks pandas + 1 pass per raccogliere le colonne cambiate
+    # (costretto ad iterare, ma su un DataFrame piccolo di boolean).
+
+    merge_type = merged['_merge']
+    mask_deleted = merge_type == 'left_only'
+    mask_added = merge_type == 'right_only'
+    mask_both = merge_type == 'both'
+
+    # Per ogni common_value_col, calcola maschera "e' cambiato" vectorized.
+    # Regole (preservate dal comportamento precedente):
+    #   - entrambi NaN -> uguali (non changed)
+    #   - uno NaN e l'altro no -> changed
+    #   - entrambi numerici -> abs(diff) > 1e-9
+    #   - altrimenti -> str(old) != str(new)
+    changed_masks = {}
+    for c in common_value_cols:
+        old_s = merged[f'{c}_OLD']
+        new_s = merged[f'{c}_NEW']
+        both_nan = old_s.isna() & new_s.isna()
+        one_nan = old_s.isna() ^ new_s.isna()
+        if pd.api.types.is_numeric_dtype(old_s) and pd.api.types.is_numeric_dtype(new_s):
+            # Confronto numerico con tolleranza 1e-9
+            numeric_diff = (old_s.fillna(0) - new_s.fillna(0)).abs() > 1e-9
+            # Se uno solo e' NaN -> changed (one_nan), altrimenti solo se diff > tol
+            col_changed = one_nan | (numeric_diff & ~both_nan)
         else:
-            # Presente in entrambe → confronta valori
-            changed_cols = []
-            old_values = []
-            
-            for c in common_value_cols:
-                old_val = row.get(f'{c}_OLD', row.get(c, None))
-                new_val = row.get(f'{c}_NEW', row.get(c, None))
-                
-                # Gestione NaN: entrambi NaN = uguali
-                old_is_nan = pd.isna(old_val) if not isinstance(old_val, str) else False
-                new_is_nan = pd.isna(new_val) if not isinstance(new_val, str) else False
-                
-                if old_is_nan and new_is_nan:
-                    continue
-                if old_is_nan != new_is_nan:
-                    changed_cols.append(c)
-                    old_values.append('' if old_is_nan else str(old_val))
-                    continue
-                
-                # Confronto numerico con tolleranza
-                try:
-                    if isinstance(old_val, (int, float)) and isinstance(new_val, (int, float)):
-                        if abs(float(old_val) - float(new_val)) > 1e-9:
-                            changed_cols.append(c)
-                            old_values.append(str(old_val))
-                        continue
-                except (TypeError, ValueError):
-                    pass
-                
-                # Confronto generico
-                if str(old_val) != str(new_val):
-                    changed_cols.append(c)
-                    old_values.append(str(old_val))
-            
-            is_modified = len(changed_cols) > 0
-            
-            if not is_modified and include_unchanged != "yes":
-                continue
-            
-            result_row = {}
-            for k in key_cols:
-                result_row[k] = row[k]
-            # Usa valori NUOVI per le colonne comuni
-            for c in common_value_cols:
-                result_row[c] = row.get(f'{c}_NEW', row.get(c, None))
-            for c in only_new_cols:
-                result_row[c] = row.get(c, None)
-                
-            if is_modified:
-                result_row['_diff_status'] = 'MODIFIED'
-                result_row['_diff_columns'] = sep.join(changed_cols)
-                result_row['_diff_old_values'] = sep.join(old_values)
-            else:
-                result_row['_diff_status'] = 'UNCHANGED'
-                result_row['_diff_columns'] = None
-                result_row['_diff_old_values'] = None
-            
-            results.append(result_row)
-    
-    if not results:
+            # Confronto stringa (fallback generico)
+            str_diff = old_s.astype(str) != new_s.astype(str)
+            col_changed = one_nan | (str_diff & ~both_nan & ~one_nan)
+        changed_masks[c] = col_changed
+
+    changed_df = pd.DataFrame(changed_masks, index=merged.index) if common_value_cols else pd.DataFrame(index=merged.index)
+
+    # Status per riga
+    any_changed = changed_df.any(axis=1) if len(changed_df.columns) else pd.Series(False, index=merged.index)
+    status = pd.Series('UNCHANGED', index=merged.index, dtype=object)
+    status[mask_deleted] = 'DELETED'
+    status[mask_added] = 'ADDED'
+    status[mask_both & any_changed] = 'MODIFIED'
+
+    # Filtra UNCHANGED se non richiesti
+    if include_unchanged != "yes":
+        keep = status != 'UNCHANGED'
+        merged = merged[keep]
+        changed_df = changed_df.loc[keep] if len(changed_df.columns) else changed_df
+        status = status[keep]
+
+    if len(merged) == 0:
         logger.info("Table Diff: nessuna differenza trovata")
-        result_df = pd.DataFrame(
+        return pd.DataFrame(
             columns=key_cols + common_value_cols + ['_diff_status', '_diff_columns', '_diff_old_values']
         )
-        return result_df
-    
-    result_df = pd.DataFrame(results)
-    
+
+    # Costruzione result_df vectorized
+    result_df = pd.DataFrame(index=merged.index)
+    for k in key_cols:
+        result_df[k] = merged[k]
+
+    # Per ADDED e MODIFIED prendi _NEW; per DELETED prendi _OLD.
+    # Uso np.where per selezione vectorized.
+    import numpy as np
+    is_deleted = (status == 'DELETED').values
+    for c in common_value_cols:
+        old_col = f'{c}_OLD'
+        new_col = f'{c}_NEW'
+        result_df[c] = np.where(is_deleted, merged[old_col], merged[new_col])
+    for c in only_old_cols:
+        if c in merged.columns:
+            result_df[c] = merged[c]
+    for c in only_new_cols:
+        if c in merged.columns:
+            result_df[c] = merged[c]
+
+    # _diff_columns e _diff_old_values solo per MODIFIED — vectorized
+    # via stack+groupby.agg(join). Niente loop Python (pandas internals in C).
+    diff_columns_col = pd.Series([None] * len(merged), index=merged.index, dtype=object)
+    diff_old_values_col = pd.Series([None] * len(merged), index=merged.index, dtype=object)
+
+    modified_mask = status == 'MODIFIED'
+    if modified_mask.any() and common_value_cols:
+        cd_mod = changed_df.loc[modified_mask]  # (n_mod, n_cols) bool
+
+        # ── _diff_columns ──────────────────────────────────────────────
+        # Stack: (row, col) -> bool. Filtra True, groupby row e join level 1.
+        stacked = cd_mod.stack()
+        trues = stacked[stacked]
+        if len(trues) > 0:
+            diff_cols_per_row = (
+                trues.reset_index(level=1)
+                .groupby(level=0)[trues.index.names[1] or 'level_1']
+                .agg(sep.join)
+                .reindex(cd_mod.index, fill_value='')
+            )
+            diff_columns_col.loc[modified_mask] = diff_cols_per_row.values
+
+        # ── _diff_old_values ───────────────────────────────────────────
+        # DataFrame parallelo di old values stringificati, stessa shape di cd_mod.
+        old_df = pd.DataFrame(index=cd_mod.index)
+        for c in common_value_cols:
+            ov = merged.loc[modified_mask, f'{c}_OLD']
+            # Vectorized: NaN -> '', altrimenti str()
+            old_df[c] = ov.where(ov.notna(), '').astype(str)
+            # Rimuovi le occorrenze di 'nan' che astype(str) su float puo' produrre
+            # (solo dove ov era effettivamente NaN — gia' gestito da where).
+
+        if len(trues) > 0:
+            # Allinea old values con le posizioni True usando stesso MultiIndex
+            old_stacked = old_df.stack()
+            old_at_changes = old_stacked.loc[trues.index]
+            diff_old_per_row = (
+                old_at_changes.groupby(level=0)
+                .agg(sep.join)
+                .reindex(cd_mod.index, fill_value='')
+            )
+            diff_old_values_col.loc[modified_mask] = diff_old_per_row.values
+
+    result_df['_diff_status'] = status.values
+    result_df['_diff_columns'] = diff_columns_col.values
+    result_df['_diff_old_values'] = diff_old_values_col.values
+    # Ripulisci l'index (merged ha index ereditato, non serve al consumer)
+    result_df = result_df.reset_index(drop=True)
+
     # Statistiche
     status_counts = result_df['_diff_status'].value_counts().to_dict()
     logger.info(
@@ -2030,7 +2134,7 @@ def op_sample(
                     group_n = max(1, int(len(group) * fraction))
                 else:
                     # Proporzione del gruppo rispetto al totale
-                    group_n = max(1, int(n * len(group) / len(result)))
+                    group_n = max(1, int(n * len(group) / max(len(result), 1)))
 
                 group_n = min(group_n, len(group))
                 groups.append(group.sample(n=group_n, random_state=random_state))

@@ -65,17 +65,32 @@ CREATE TABLE IF NOT EXISTS node_meta (
 CREATE INDEX IF NOT EXISTS idx_node_meta_run ON node_meta(run_id);
 
 -- ============================================================
--- TABELLE DINAMICHE — generate a runtime dal writer task
--- Naming convention: run_{run_id}_{node_id}
--- Ogni tabella ha _row_hash + colonne reali del DataFrame
---
--- Esempio:
---   CREATE TABLE run_abc123_node_estrai (
---     _row_hash  TEXT,    -- MD5 valori ordinati per nome colonna
---     id         INTEGER,
---     paese      TEXT,
---     codice     TEXT
---   );
---
--- Cancellazione run: DROP TABLE run_{run_id}_*
+-- NODE_ROWS — dati intermedi dei nodi (unificato JSONB)
 -- ============================================================
+-- In passato ogni nodo di ogni run aveva una tabella fisica dedicata
+-- (naming: run_{uuid}_{node_id}) che causava bloat del pg_catalog,
+-- lock contention su CREATE/DROP e orphan tables. Ora tutto finisce in
+-- una singola tabella JSONB con FK ON DELETE CASCADE.
+--
+-- Vantaggi:
+--   - 1 tabella invece di N × righe_di_run in pg_class
+--   - retention atomica: DELETE FROM runs → node_rows svuotata
+--   - query cross-run (diff tra due run dello stesso nodo) via indice hash
+--   - schema uniforme indipendente dal canvas
+
+CREATE TABLE IF NOT EXISTS node_rows (
+    id        BIGSERIAL PRIMARY KEY,
+    run_id    TEXT NOT NULL REFERENCES runs(run_id) ON DELETE CASCADE,
+    node_id   TEXT NOT NULL,
+    row_idx   INTEGER NOT NULL,       -- ordine originale nel DataFrame
+    row_hash  TEXT NOT NULL,          -- MD5 riga (per diff cross-run)
+    row_data  JSONB NOT NULL          -- valori della riga
+);
+
+-- Lookup per-nodo di tutte le righe di una run
+CREATE INDEX IF NOT EXISTS idx_node_rows_run_node
+    ON node_rows(run_id, node_id);
+
+-- Confronto L2 cross-run: il predicato NOT EXISTS joina su (run_id, node_id, row_hash)
+CREATE INDEX IF NOT EXISTS idx_node_rows_hash
+    ON node_rows(run_id, node_id, row_hash);

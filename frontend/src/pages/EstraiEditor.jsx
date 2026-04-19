@@ -1,789 +1,746 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+/**
+ * EstraiEditor.jsx — Editor visuale per il modulo ESTRAI
+ * Logica invariata — solo classi CSS aggiornate al design system Plenora
+ */
+import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import ReactFlow, { 
-  Background, 
-  Controls, 
-  MiniMap,
-  useNodesState,
-  useEdgesState
-} from 'reactflow';
+import { isValidProjectId } from '../utils/validateRouteParam';
+import ReactFlow, { Background, Controls, MiniMap } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { 
-  getProject, 
-  getCatalog, 
-  updateCanvas, 
-  listConnections, 
-  getConnectionTables
-} from '../api/client';
-import TableNode from '../components/TableNode';
-import JoinModal from '../components/JoinModal';
-import QueryPreview from '../components/QueryPreview';
-import ResultNode from '../components/ResultNode';
-import PreviewModal from '../components/PreviewModal';
-import ExecutionModal from '../components/ExecutionModal';
+import TableNode from '../components/nodes/TableNode';
+import FeatureLayerNode from '../components/nodes/FeatureLayerNode';
+import FeatureServicePanel from '../components/panels/FeatureServicePanel';
+import QueryPreview from '../components/panels/QueryPreview';
+import ResultNode from '../components/nodes/ResultNode';
+import CaricanNode from '../components/nodes/CaricanNode';
+import CaricanArcGISNode from '../components/nodes/CaricanArcGISNode';
+import '../components/nodes/CaricanArcGISNode.css';
+
+// Modali lazy-loaded — caricati solo quando l'utente li apre
+const JoinModal = lazy(() => import('../components/modals/JoinModal'));
+const PreviewModal = lazy(() => import('../components/modals/PreviewModal'));
+const ExecutionModal = lazy(() => import('../components/modals/ExecutionModal'));
+const CaricaricaModal = lazy(() => import('../components/modals/CaricaricaModal'));
+import StaticValuesNode from '../components/nodes/StaticValuesNode';
+import AnnotationNode from '../components/nodes/AnnotationNode';
+import DataSourceNode from '../components/nodes/DataSourceNode';
+import '../components/nodes/DataSourceNode.css';
 import { calculateOutputColumnsRecursive } from '../utils/columnUtils';
-import { 
-  usePreview, 
-  useExecution, 
-  useCanvasKeyboard,
-  useCanvasValidation,
-  useEdgeHandlers
-} from '../hooks';
+import { createEdgeFromData, deserializeNodes } from '../utils/nodeFactories';
+import { getLayerSchema } from '../api/features';
+import { usePreview, useExecution, useCanvasValidation, useEdgeHandlers, useCanvasCore, useCaricarica } from '../hooks';
+import { useEditorData } from '../hooks/useEditorData';
+import useCanvasStore from '../store/useCanvasStore';
+import { useToast } from '../hooks/useToast';
 import '../styles/EstraiEditor.css';
+import '../components/nodes/StaticValuesNode.css';
+import '../components/nodes/AnnotationNode.css';
+import '../components/nodes/FeatureLayerNode.css';
+import '../components/panels/FeatureServicePanel.css';
+import { useAuth } from '../context/AuthContext';
+import { CanvasErrorBoundary, ModalErrorBoundary } from '../components/common/ErrorBoundary';
+import { LoadingOverlay } from '../components/common/LoadingOverlay';
+import { useHexCanvas } from '../utils/hexCanvas';
 
 const nodeTypes = {
-  tableNode: TableNode,
-  resultNode: ResultNode
+  tableNode: TableNode, resultNode: ResultNode, staticValues: StaticValuesNode,
+  carica: CaricanNode, carica_arcgis: CaricanArcGISNode, caricaArcgis: CaricanArcGISNode,
+  featureLayerNode: FeatureLayerNode, comment: AnnotationNode,
+  datasourceNode: DataSourceNode
 };
 
 function EstraiEditor() {
   const { projectId } = useParams();
   const navigate = useNavigate();
-  
+  const { user, logout } = useAuth();
   const reactFlowWrapper = useRef(null);
+  const hexCanvasRef = useRef(null);
   const [reactFlowInstance, setReactFlowInstance] = useState(null);
+  const canvasLoadedForRef = useRef(null);
+  const toast = useToast();
 
-  // ===== STATE =====
-  const [loading, setLoading] = useState(true);
-  const [project, setProject] = useState(null);
-  const [catalog, setCatalog] = useState({});
-  const [searchQuery, setSearchQuery] = useState('');
-  const [projectConnection, setProjectConnection] = useState(null);
-  
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  useHexCanvas(hexCanvasRef);
 
-  // Ref per evitare stale closure
-  const nodesRef = useRef(nodes);
-  const edgesRef = useRef(edges);
-  
-  useEffect(() => {
-    nodesRef.current = nodes;
-    edgesRef.current = edges;
-  }, [nodes, edges]);
-
-  // ===== SALVATAGGIO SILENZIOSO =====
-  const handleSaveQuiet = useCallback(async () => {
-    const currentNodes = nodesRef.current;
-    const currentEdges = edgesRef.current;
-    
-    const nodesToSave = currentNodes.map(node => {
-      if (node.type === 'resultNode') {
-        const outputColumns = calculateOutputColumnsRecursive(currentNodes, currentEdges, node.id);
-        return {
-          id: node.id,
-          type: 'result',
-          position: node.position,
-          fileName: node.data.fileName,
-          format: node.data.format,
-          distinct: node.data.distinct || false,
-          limit: node.data.limit || null,
-          geomColumn: node.data.geomColumn || null,
-          columns: outputColumns,
-          group_by_enabled: node.data.group_by_enabled || false,
-          group_by_columns: node.data.group_by_columns || [],
-          aggregations: node.data.aggregations || []
-        };
-      } else {
-        return {
-          id: node.id,
-          type: node.data.type || 'source',
-          table_name: node.data.table_name,
-          alias: node.alias,
-          position: node.position,
-          columns: node.data.columns || [],
-          filters: node.data.filters || [],
-          calculated_columns: node.data.calculated_columns || []
-        };
-      }
-    });
-    
-    const edgesToSave = currentEdges.map(edge => ({
-      id: edge.id,
-      source: edge.source,
-      target: edge.target,
-      join_type: edge.data?.join_type || 'left',
-      source_column: edge.data?.source_column || '',
-      target_column: edge.data?.target_column || '',
-      is_spatial: edge.data?.is_spatial || false,
-      spatial_predicate: edge.data?.spatial_predicate || null,
-      source_geom_column: edge.data?.source_geom_column || null,
-      target_geom_column: edge.data?.target_geom_column || null,
-      spatial_distance: edge.data?.spatial_distance || null
-    }));
-    
-    await updateCanvas(projectId, { nodes: nodesToSave, edges: edgesToSave });
-  }, [projectId]);
-
-  // ===== CUSTOM HOOKS =====
-  
-  // Preview
-  const preview = usePreview(projectId, handleSaveQuiet);
-
-  // Execution
-  const execution = useExecution(projectId, {
-    onBeforeExecute: handleSaveQuiet
-  });
-
-  // Validazione canvas
-  const validation = useCanvasValidation(nodes, edges, {
-    validateOnChange: true,
-    debounceMs: 300
-  });
-
-  // Gestione edges e modal join
-  const edgeHandlers = useEdgeHandlers(nodes, setEdges, {
-    resultNodeType: 'resultNode'
-  });
-
-  // Keyboard shortcuts
-  useCanvasKeyboard({
-    nodes,
-    edges,
-    onDeleteNode: handleDeleteNode,
-    setEdges
-  });
-
-  // ===== EFFECTS =====
-
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  // Applica stile nodi disconnessi
-  useEffect(() => {
-    if (validation.disconnectedNodeIds.length > 0) {
-      setNodes((nds) =>
-        nds.map((node) => ({
-          ...node,
-          style: validation.getNodeStyle(node.id)
-        }))
-      );
-    }
-  }, [validation.disconnectedNodeIds, setNodes, validation]);
-
-  // Aggiorna colonne del nodo risultato in real-time
-  useEffect(() => {
-    if (nodes.length === 0) return;
-    
-    const resultNode = nodes.find(n => n.type === 'resultNode');
-    if (!resultNode) return;
-
-    const outputColumns = calculateOutputColumnsRecursive(nodes, edges, resultNode.id);
-    const currentColumns = JSON.stringify(resultNode.data.columns || []);
-    const newColumns = JSON.stringify(outputColumns);
-    
-    if (currentColumns !== newColumns) {
-      setNodes((nds) =>
-        nds.map((node) => {
-          if (node.type === 'resultNode') {
-            return { ...node, data: { ...node.data, columns: outputColumns } };
-          }
-          return node;
-        })
-      );
-    }
-  }, [nodes, edges, setNodes]);
+  // ===== CANVAS CORE =====
+  const {
+    nodes, edges, setNodes, setEdges, onNodesChange, onEdgesChange,
+    nodesRef, edgesRef, updateNodeData, deleteNode,
+    handleSaveQuiet, dataNodes, getViewportCenter,
+    isReadOnly, readOnlyProps
+  } = useCanvasCore(projectId, { mode: 'estrai' });
 
   // ===== DATA LOADING =====
+  const {
+    project, connections, loading, error: loadError,
+    catalog, views, projectConnection, sourceType,
+    reload: reloadData,
+  } = useEditorData(projectId, { withCatalog: true });
 
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      
-      const projectData = await getProject(projectId);
-      setProject(projectData);
-      
-      // Carica connessione
-      let connection = null;
-      if (projectData.metadata.default_connection_id) {
-        try {
-          const connectionsData = await listConnections();
-          connection = connectionsData.connections.find(
-            c => c.id === projectData.metadata.default_connection_id
-          );
-          setProjectConnection(connection || null);
-        } catch (error) {
-          console.error('Errore caricamento connessione:', error);
-        }
-      }
-      
-      // Carica catalogo
-      if (connection) {
-        try {
-          const catalogData = await getConnectionTables(connection.id);
-          setCatalog(catalogData.tables || {});
-        } catch (error) {
-          console.error('Errore caricamento catalogo:', error);
-          setCatalog({});
-        }
-      } else {
-        const catalogData = await getCatalog();
-        setCatalog(catalogData.tables || {});
-      }
-      
-      // Carica nodi dal canvas
-      const loadedNodes = (projectData.canvas.nodes || []).map(node => {
-        if (node.type === 'result') {
-          return createResultNodeFromData(node);
-        } else {
-          return createTableNodeFromData(node, connection);
-        }
-      });
-      
-      // Carica edges
-      const loadedEdges = (projectData.canvas.edges || []).map(edge => 
-        createEdgeFromData(edge, loadedNodes)
-      );
+  // ===== STATE =====
+  const TABLES_PAGE_SIZE = 15;
 
-      setNodes(loadedNodes);
-      setEdges(loadedEdges);
-      
-    } catch (error) {
-      console.error('Errore caricamento:', error);
-      alert('Errore caricamento progetto');
-    } finally {
-      setLoading(false);
-    }
+  const [saving, setSaving] = useState(false);
+  const [searchQuery, setSearchQuery]             = useState('');
+  const [viewSearchQuery, setViewSearchQuery]     = useState('');
+  const [viewsCollapsed, setViewsCollapsed]       = useState(false);
+  const [tablesCollapsed, setTablesCollapsed]     = useState(false);
+  const [visibleTableCount, setVisibleTableCount] = useState(TABLES_PAGE_SIZE);
+  const [visibleViewCount,  setVisibleViewCount]  = useState(TABLES_PAGE_SIZE);
+  const [theme, setTheme] = useState(() => {
+    const saved = localStorage.getItem('plenora-theme');
+    const initial = saved || document.documentElement.getAttribute('data-theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', initial);
+    return initial;
+  });
+
+  const toggleTheme = (next) => {
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('plenora-theme', next);
+    setTheme(next);
   };
 
-  // ===== NODE FACTORY FUNCTIONS =====
+  // Reset visible count when search changes
+  useEffect(() => { setVisibleTableCount(TABLES_PAGE_SIZE); }, [searchQuery]);
+  useEffect(() => { setVisibleViewCount(TABLES_PAGE_SIZE);  }, [viewSearchQuery]);
 
-  const createResultNodeFromData = (node) => ({
-    id: node.id,
-    type: 'resultNode',
-    position: node.position,
-    data: {
-      fileName: node.fileName || 'output',
-      format: node.format || 'csv',
-      distinct: node.distinct || false,
-      limit: node.limit || null,
-      geomColumn: node.geomColumn || null,
-      columns: node.columns || [],
-      group_by_enabled: node.group_by_enabled || false,
-      group_by_columns: node.group_by_columns || [],
-      aggregations: node.aggregations || [],
-      onUpdateFileName: handleUpdateResultFileName,
-      onUpdateFormat: handleUpdateResultFormat,
-      onToggleDistinct: handleToggleDistinct,
-      onUpdateLimit: handleUpdateLimit,
-      onUpdateGeomColumn: handleUpdateGeomColumn,
-      onUpdateGroupBy: handleUpdateGroupBy,
-      onPreview: () => preview.handlePreview(),
-      onExecute: () => execution.handleExecute(),
-      onDelete: handleDeleteNode
-    }
+  // ===== HOOKS =====
+  const preview    = usePreview(projectId, handleSaveQuiet);
+  const execution  = useExecution(projectId, { onBeforeExecute: handleSaveQuiet });
+  const caricarica = useCaricarica(projectId, {
+    onBeforeExecute: handleSaveQuiet,
+    getCanvas: () => ({ nodes: nodesRef.current, edges: edgesRef.current })
   });
+  const validation = useCanvasValidation(dataNodes, edges, { validateOnChange: true, debounceMs: 300 });
+  const edgeHandlers = useEdgeHandlers(nodes, setEdges, { resultNodeType: 'resultNode' });
 
-  const createTableNodeFromData = (node, connection) => ({
-    id: node.id,
-    type: 'tableNode',
-    position: node.position,
-    data: { 
-      label: node.alias || node.table_name,
-      table_name: node.table_name,
-      alias: node.alias,
-      columns: node.columns || [],
-      filters: node.filters || [],
-      calculated_columns: node.calculated_columns || [],
-      db_type: connection?.db_type || 'postgres',
-      onUpdateAlias: handleUpdateNodeAlias,
-      onToggleColumn: handleToggleColumn,
-      onUpdateColumnAlias: handleUpdateColumnAlias,
-      onUpdateFilters: handleUpdateFilters,
-      onAddCalculatedColumn: handleAddCalculatedColumn,
-      onDeleteCalculatedColumn: handleDeleteCalculatedColumn,
-      onDelete: handleDeleteNode
-    }
-  });
+  // ===== EFFECTS =====
+  useEffect(() => {
+    if (!project?.canvas?.nodes || loading) return;
+    const canvasKey = `${projectId}::${projectConnection?.id ?? 'none'}`;
+    if (canvasLoadedForRef.current === canvasKey) return;
+    canvasLoadedForRef.current = canvasKey;
+    const loadedNodes = deserializeNodes(project.canvas.nodes, { connection: projectConnection });
+    const loadedEdges = (project.canvas.edges || []).map(e => createEdgeFromData(e, loadedNodes));
+    setNodes(loadedNodes);
+    setEdges(loadedEdges);
+    // setNodes/setEdges marcano dirty=true se inseriscono nuovi ID (lo fanno
+    // sempre al load). Resettiamo il flag così handleSaveQuiet non farà PUT
+    // inutili finché l'utente non modifica davvero qualcosa nel canvas.
+    useCanvasStore.getState().markClean();
+  }, [project, projectConnection, loading]); // eslint-disable-line
 
-  const createEdgeFromData = (edge, loadedNodes) => {
-    const targetNode = loadedNodes.find(n => n.id === edge.target);
-    const isSpatial = edge.is_spatial || false;
-    
-    let label, strokeColor;
-    if (targetNode?.type === 'resultNode') {
-      label = 'output';
-      strokeColor = '#4CAF50';
-    } else if (isSpatial) {
-      label = `🌐 ${edge.spatial_predicate?.replace('ST_', '') || 'spatial'}`;
-      strokeColor = '#E91E63';
-    } else {
-      label = `${edge.join_type || 'left'} join`;
-      strokeColor = '#2196F3';
+  useEffect(() => {
+    if (validation.disconnectedNodeIds.length === 0) return;
+    setNodes(nds => nds.map(node => ({
+      ...node, style: node.type === 'comment' ? node.style : validation.getNodeStyle(node.id)
+    })));
+  }, [validation.disconnectedNodeIds, setNodes, validation]);
+
+  useEffect(() => {
+    if (dataNodes.length === 0) return;
+    const resultNode = dataNodes.find(n => n.type === 'resultNode');
+    if (!resultNode) return;
+    const outputColumns = calculateOutputColumnsRecursive(dataNodes, edges, resultNode.id);
+    if (JSON.stringify(resultNode.data.columns || []) === JSON.stringify(outputColumns)) return;
+    setNodes(nds => nds.map(node => {
+      if (node.type === 'resultNode') return { ...node, data: { ...node.data, columns: outputColumns } };
+      if (node.type === 'carica' || node.type === 'carica_arcgis' || node.type === 'caricaArcgis') return { ...node, data: { ...node.data, availableColumns: outputColumns } };
+      return node;
+    }));
+  }, [dataNodes, edges, setNodes]);
+
+  // ===== FEATURE LAYER HANDLERS =====
+  const handleUpdateFeatureWhere  = useCallback((nodeId, v)      => updateNodeData(nodeId, { where: v }), [updateNodeData]);
+  const handleFeatureSchemaLoaded = useCallback((nodeId, schema) => {
+    setNodes(nds => nds.map(node => {
+      if (node.id !== nodeId) return node;
+      const columns = schema.columns
+        ? schema.columns.map(c => ({ name: c.name, type: c.type || 'str', alias: null, visible: true }))
+        : (schema.fields || []).map(f => ({ name: f.name, type: f.urby_type || f.field_type || f.type || 'str', alias: null, visible: true }));
+      return { ...node, data: { ...node.data, columns, geometry_type: schema.geometry_type || node.data.geometry_type,
+        geometry_type_urby: schema.geometry_type_urby || node.data.geometry_type_urby,
+        feature_count: schema.feature_count ?? node.data.feature_count, relationships: schema.relationships || [] } };
+    }));
+  }, [setNodes]);
+
+  const handleAddRelatedLayer = useCallback(async (originNodeId, relation) => {
+    const originNode = nodesRef.current.find(n => n.id === originNodeId);
+    if (!originNode) return;
+    if (nodesRef.current.some(n => n.type === 'featureLayerNode' && n.data.layer_url === relation.related_url)) {
+      toast.warning('Questo layer è già presente nel canvas'); return;
     }
-    
-    return {
-      id: edge.id,
-      source: edge.source,
-      target: edge.target,
-      label,
-      animated: true,
-      style: { stroke: strokeColor, strokeWidth: 2 },
-      data: { 
-        join_type: edge.join_type || 'left',
-        source_column: edge.source_column || '',
-        target_column: edge.target_column || '',
-        is_spatial: edge.is_spatial || false,
-        spatial_predicate: edge.spatial_predicate || null,
-        source_geom_column: edge.source_geom_column || null,
-        target_geom_column: edge.target_geom_column || null,
-        spatial_distance: edge.spatial_distance || null
-      }
+    let schema;
+    try { schema = await getLayerSchema(originNode.data.connection_id, relation.related_url); }
+    catch (err) { toast.error(`Errore caricamento schema: ${err.message}`); return; }
+    const newNodeId = `fl_${Date.now()}`;
+    const columns   = (schema.fields || []).map(f => ({ name: f.name, type: f.field_type || f.type || 'str', alias: null, visible: true }));
+    const newNode   = {
+      id: newNodeId, type: 'featureLayerNode',
+      position: { x: originNode.position.x, y: originNode.position.y + 350 },
+      data: { type: 'feature_source', layer_name: schema.name || relation.name,
+        layer_url: relation.related_url, connection_id: originNode.data.connection_id,
+        connection_name: originNode.data.connection_name, service_name: originNode.data.service_name,
+        geometry_type: schema.geometry_type_urby || schema.geometry_type || '',
+        feature_count: schema.feature_count, where: '', columns, relationships: schema.relationships || [] }
     };
-  };
+    const isOrigin = relation.role === 'origin';
+    const joinType = relation.cardinality === '1:1' ? 'inner' : 'left';
+    const newEdge  = {
+      id: `edge_rel_${Date.now()}`,
+      source: isOrigin ? originNodeId : newNodeId, target: isOrigin ? newNodeId : originNodeId,
+      label: `🔗 ${joinType} join (${relation.cardinality})`, animated: true,
+      style: { stroke: '#4B8BFF', strokeWidth: 2 },
+      data: { join_type: joinType,
+        source_column: isOrigin ? relation.key_field : (relation.key_field_in_relationship_table || relation.key_field),
+        target_column: isOrigin ? (relation.key_field_in_relationship_table || relation.key_field) : relation.key_field,
+        join_conditions: null, on_filters: null, is_spatial: false,
+        spatial_predicate: null, source_geom_column: null, target_geom_column: null, spatial_distance: null }
+    };
+    setNodes(nds => nds.concat(newNode));
+    setEdges(eds => eds.concat(newEdge));
+  }, [setNodes, setEdges, handleUpdateFeatureWhere, handleFeatureSchemaLoaded]); // eslint-disable-line
 
-  // ===== NODE HANDLERS =====
+  // Registra azioni editor nello store
+  useEffect(() => {
+    useCanvasStore.getState().setEditorActions({
+      onPreview:          () => preview.handlePreview(),
+      onExecute:          (nodeId, opts) => execution.handleExecute(opts),
+      onCaricanExecute:   (nodeId, cfg) => caricarica.handleExecute(nodeId, cfg),
+      onAddRelatedLayer:  handleAddRelatedLayer,
+    });
+  }, [preview.handlePreview, execution.handleExecute, caricarica.handleExecute, handleAddRelatedLayer]); // eslint-disable-line
 
-  const handleUpdateNodeAlias = useCallback((nodeId, newAlias) => {
-    setNodes((nds) =>
-      nds.map((node) => {
-        if (node.id === nodeId) {
-          return {
-            ...node,
-            data: { ...node.data, alias: newAlias, label: newAlias || node.data.table_name }
-          };
-        }
-        return node;
-      })
-    );
-  }, [setNodes]);
+  useEffect(() => { useCanvasStore.getState().setConnections(connections); }, [connections]);
 
-  const handleToggleColumn = useCallback((nodeId, columnIndex) => {
-    setNodes((nds) =>
-      nds.map((node) => {
-        if (node.id === nodeId) {
-          const updatedColumns = [...node.data.columns];
-          updatedColumns[columnIndex] = {
-            ...updatedColumns[columnIndex],
-            visible: !updatedColumns[columnIndex].visible
-          };
-          return { ...node, data: { ...node.data, columns: updatedColumns } };
-        }
-        return node;
-      })
-    );
-  }, [setNodes]);
-
-  const handleUpdateColumnAlias = useCallback((nodeId, columnIndex, newAlias) => {
-    setNodes((nds) =>
-      nds.map((node) => {
-        if (node.id === nodeId) {
-          const updatedColumns = [...node.data.columns];
-          updatedColumns[columnIndex] = { ...updatedColumns[columnIndex], alias: newAlias };
-          return { ...node, data: { ...node.data, columns: updatedColumns } };
-        }
-        return node;
-      })
-    );
-  }, [setNodes]);
-
-  const handleUpdateFilters = useCallback((nodeId, newFilters) => {
-    setNodes((nds) =>
-      nds.map((node) => {
-        if (node.id === nodeId) {
-          return { ...node, data: { ...node.data, filters: newFilters } };
-        }
-        return node;
-      })
-    );
-  }, [setNodes]);
-
-  const handleAddCalculatedColumn = useCallback((nodeId, columnDef) => {
-    setNodes((nds) =>
-      nds.map((node) => {
-        if (node.id === nodeId) {
-          const currentCalculated = node.data.calculated_columns || [];
-          return {
-            ...node,
-            data: { ...node.data, calculated_columns: [...currentCalculated, columnDef] }
-          };
-        }
-        return node;
-      })
-    );
-  }, [setNodes]);
-
-  const handleDeleteCalculatedColumn = useCallback((nodeId, columnIndex) => {
-    setNodes((nds) =>
-      nds.map((node) => {
-        if (node.id === nodeId) {
-          const currentCalculated = node.data.calculated_columns || [];
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              calculated_columns: currentCalculated.filter((_, idx) => idx !== columnIndex)
-            }
-          };
-        }
-        return node;
-      })
-    );
-  }, [setNodes]);
-
-  function handleDeleteNode(nodeId) {
-    setNodes((nds) => nds.filter((node) => node.id !== nodeId));
-    setEdges((eds) => eds.filter((edge) => edge.source !== nodeId && edge.target !== nodeId));
-  }
-
-  // ===== RESULT NODE HANDLERS =====
-
-  const handleUpdateResultFileName = useCallback((nodeId, newFileName) => {
-    setNodes((nds) =>
-      nds.map((node) => node.id === nodeId 
-        ? { ...node, data: { ...node.data, fileName: newFileName } } 
-        : node
-      )
-    );
-  }, [setNodes]);
-
-  const handleUpdateResultFormat = useCallback((nodeId, newFormat) => {
-    setNodes((nds) =>
-      nds.map((node) => node.id === nodeId 
-        ? { ...node, data: { ...node.data, format: newFormat } } 
-        : node
-      )
-    );
-  }, [setNodes]);
-
-  const handleToggleDistinct = useCallback((nodeId, newDistinct) => {
-    setNodes((nds) =>
-      nds.map((node) => node.id === nodeId 
-        ? { ...node, data: { ...node.data, distinct: newDistinct } } 
-        : node
-      )
-    );
-  }, [setNodes]);
-
-  const handleUpdateLimit = useCallback((nodeId, newLimit) => {
-    setNodes((nds) =>
-      nds.map((node) => node.id === nodeId 
-        ? { ...node, data: { ...node.data, limit: newLimit } } 
-        : node
-      )
-    );
-  }, [setNodes]);
-
-  const handleUpdateGeomColumn = useCallback((nodeId, newGeomColumn) => {
-    setNodes((nds) =>
-      nds.map((node) => node.id === nodeId 
-        ? { ...node, data: { ...node.data, geomColumn: newGeomColumn } } 
-        : node
-      )
-    );
-  }, [setNodes]);
-
-  const handleUpdateGroupBy = useCallback((nodeId, groupByConfig) => {
-    setNodes((nds) =>
-      nds.map((node) => {
-        if (node.id === nodeId) {
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              group_by_enabled: groupByConfig.group_by_enabled,
-              group_by_columns: groupByConfig.group_by_columns,
-              aggregations: groupByConfig.aggregations
-            }
-          };
-        }
-        return node;
-      })
-    );
-  }, [setNodes]);
-
+  // ===== ADD NODE HANDLERS =====
   const handleAddResultNode = useCallback(() => {
-    if (nodes.some(n => n.type === 'resultNode')) {
-      alert('Puoi avere solo un nodo risultato per progetto');
-      return;
-    }
+    if (nodes.some(n => n.type === 'resultNode')) { toast.warning('Puoi avere solo un nodo risultato per progetto'); return; }
+    setNodes(nds => nds.concat({
+      id: `result_${Date.now()}`, type: 'resultNode', position: getViewportCenter(reactFlowInstance),
+      data: { fileName: 'output', format: 'csv', distinct: false, limit: null,
+        group_by_enabled: false, group_by_columns: [], aggregations: [],
+        order_by_enabled: false, order_by_columns: [],
+        having_enabled: false, having_conditions: [] }
+    }));
+  }, [nodes, setNodes, getViewportCenter, reactFlowInstance]);
 
+  const handleAddCaricanNode = useCallback(() => {
+    if (!nodes.some(n => n.type === 'resultNode')) { toast.warning('Aggiungi prima un nodo Output'); return; }
+    if (nodes.some(n => n.type === 'carica'))      { toast.warning('Puoi avere solo un nodo CARICA DB per progetto'); return; }
+    const resultNode = nodes.find(n => n.type === 'resultNode');
     const newNode = {
-      id: `result_${Date.now()}`,
-      type: 'resultNode',
-      position: { x: 400, y: 300 },
-      data: {
-        fileName: 'output',
-        format: 'csv',
-        distinct: false,
-        limit: null,
-        group_by_enabled: false,
-        group_by_columns: [],
-        aggregations: [],
-        onUpdateFileName: handleUpdateResultFileName,
-        onUpdateFormat: handleUpdateResultFormat,
-        onToggleDistinct: handleToggleDistinct,
-        onUpdateLimit: handleUpdateLimit,
-        onUpdateGroupBy: handleUpdateGroupBy,
-        onPreview: () => preview.handlePreview(),
-        onExecute: () => execution.handleExecute(),
-        onDelete: handleDeleteNode
-      }
+      id: `carica_${Date.now()}`, type: 'carica',
+      position: { x: resultNode.position.x + 400, y: resultNode.position.y },
+      data: { connection_id: '', schema_name: '', table_name: '', write_mode: 'create',
+        column_mappings: [], match_columns: [], batch_size: 1000,
+        transaction_mode: 'all_or_nothing', create_spatial_index: true, conflict_policy: 'abort',
+        availableColumns: resultNode.data.columns || [] }
     };
+    setNodes(nds => nds.concat(newNode));
+    setEdges(eds => eds.concat({ id: `edge_result_carica_${Date.now()}`, source: resultNode.id, target: newNode.id,
+      label: 'Carica DB', animated: true, style: { stroke: '#7c3aed', strokeWidth: 2 }, data: { join_type: 'carica' } }));
+  }, [nodes, setNodes, setEdges]);
 
-    setNodes((nds) => nds.concat(newNode));
-  }, [nodes, setNodes, preview, execution]);
+  const handleAddCaricanArcGISNode = useCallback(() => {
+    if (!nodes.some(n => n.type === 'resultNode')) { toast.warning('Aggiungi prima un nodo Output'); return; }
+    if (nodes.some(n => n.type === 'carica_arcgis' || n.type === 'caricaArcgis')) { toast.warning('Puoi avere solo un nodo CARICA ArcGIS per progetto'); return; }
+    const resultNode = nodes.find(n => n.type === 'resultNode');
+    const newNode = {
+      id: `carica_arcgis_${Date.now()}`, type: 'carica_arcgis',
+      position: { x: resultNode.position.x + 400, y: resultNode.position.y + 200 },
+      data: { arcgis_connection_id: '', arcgis_service_url: '', arcgis_layer_url: '',
+        arcgis_operation: 'add', arcgis_new_service_name: '', arcgis_new_layer_name: 'Layer 0',
+        column_mappings: [], availableColumns: resultNode.data.columns || [] }
+    };
+    setNodes(nds => nds.concat(newNode));
+    setEdges(eds => eds.concat({ id: `edge_result_carica_arcgis_${Date.now()}`, source: resultNode.id, target: newNode.id,
+      label: 'Carica ArcGIS', animated: true, style: { stroke: '#2DD4BF', strokeWidth: 2 }, data: { join_type: 'carica_arcgis' } }));
+  }, [nodes, setNodes, setEdges]);
+
+  const handleAddDataSourceNode = useCallback((initialMode = 'source') => {
+    const pos = getViewportCenter(reactFlowInstance);
+    setNodes(nds => nds.concat({
+      id: `ds_${Date.now()}`, type: 'datasourceNode', position: { x: pos.x, y: pos.y },
+      data: { mode: initialMode, datasource_id: '', datasource_name: '',
+        file_mode: 'fixed', file_path: '', folder_path: '',
+        dynamic_rule: 'latest', pattern: '', format: '', columns: [],
+        parse_options: {}, dest_folder: '', dest_filename: '', dest_format: 'csv' }
+    }));
+  }, [setNodes, getViewportCenter, reactFlowInstance]);
+
+  const handleAddStaticValuesNode = useCallback(() => {
+    const pos = getViewportCenter(reactFlowInstance);
+    setNodes(nds => nds.concat({ id: `static_${Date.now()}`, type: 'staticValues', position: pos,
+      data: { label: 'Valori Statici', fields: [] } }));
+  }, [setNodes, getViewportCenter, reactFlowInstance]);
+
+  const handleAddCommentNode = useCallback(() => {
+    const pos = getViewportCenter(reactFlowInstance);
+    setNodes(nds => nds.concat({ id: `comment_${Date.now()}`, type: 'comment', position: pos, zIndex: -1,
+      style: { width: 250, height: 150 },
+      data: { level: '', label: '', title: '', color: '#fbbf24' } }));
+  }, [setNodes, getViewportCenter, reactFlowInstance]);
 
   // ===== SAVE =====
-
   const handleSave = async () => {
+    if (saving) return;
     if (!validation.isValid) {
-      alert(
-        'Impossibile salvare. Errori rilevati:\n\n' + 
-        validation.errors.map((e, i) => `${i + 1}. ${e}`).join('\n')
-      );
+      toast.error('Impossibile salvare: ' + validation.errors.join(' · '));
       return;
     }
-    
-    try {
-      await handleSaveQuiet();
-      alert('Progetto salvato con successo!');
-    } catch (error) {
-      console.error('Errore salvataggio:', error);
-      alert('Errore salvataggio progetto');
-    }
+    setSaving(true);
+    try { await handleSaveQuiet(); toast.success('Progetto salvato!'); }
+    catch (err) { console.error('Errore salvataggio:', err); toast.error('Errore salvataggio progetto'); }
+    finally { setSaving(false); }
   };
 
   // ===== DRAG & DROP =====
+  const onDrop = useCallback((event) => {
+    event.preventDefault();
+    if (!reactFlowInstance) return;
+    const position = reactFlowInstance.screenToFlowPosition({ x: event.clientX, y: event.clientY });
 
-  const onDrop = useCallback(
-    (event) => {
-      event.preventDefault();
-      const tableName = event.dataTransfer.getData('tableName');
-      
-      if (!tableName || !reactFlowInstance) return;
+    const featureLayerRaw = event.dataTransfer.getData('featureLayerData');
+    if (featureLayerRaw) {
+      try {
+        const ld = JSON.parse(featureLayerRaw);
+        setNodes(nds => nds.concat({ id: `fl_${Date.now()}`, type: 'featureLayerNode', position,
+          data: { type: 'feature_source', layer_name: ld.layerName, layer_url: ld.layerUrl,
+            connection_id: ld.connectionId, connection_name: ld.connectionName, service_name: ld.serviceName,
+            geometry_type: ld.geometryType, feature_count: ld.featureCount, where: '', columns: [] } }));
+      } catch (err) { console.error('Errore parsing feature layer data:', err); }
+      return;
+    }
 
-      const reactFlowBounds = reactFlowWrapper.current.getBoundingClientRect();
-      const position = reactFlowInstance.project({
-        x: event.clientX - reactFlowBounds.left,
-        y: event.clientY - reactFlowBounds.top,
-      });
+    const datasourceRaw = event.dataTransfer.getData('datasourceData');
+    if (datasourceRaw) {
+      try {
+        const ds = JSON.parse(datasourceRaw);
+        setNodes(nds => nds.concat({
+          id: `ds_${Date.now()}`, type: 'datasourceNode', position,
+          data: { mode: 'source', datasource_id: ds.id, datasource_name: ds.name,
+            file_mode: 'fixed', file_path: '', folder_path: '', dynamic_rule: 'latest',
+            pattern: '', format: '', columns: [], parse_options: {}, dest_folder: '', dest_filename: '', dest_format: 'csv' }
+        }));
+      } catch { /* noop */ }
+      return;
+    }
 
-      const tableColumns = catalog[tableName] || [];
-      
-      const newNode = {
-        id: `node_${Date.now()}`,
-        type: 'tableNode',
-        position,
-        data: {
-          label: tableName,
-          table_name: tableName,
-          alias: null,
-          type: 'source',
-          columns: tableColumns.map(col => ({
-            name: typeof col === 'object' ? col.name : col,
-            type: typeof col === 'object' ? col.type || 'str' : 'str',
-            alias: null,
-            visible: true
-          })),
-          filters: [],
-          calculated_columns: [],
-          db_type: projectConnection?.db_type || 'postgres',
-          onUpdateAlias: handleUpdateNodeAlias,
-          onToggleColumn: handleToggleColumn,
-          onUpdateColumnAlias: handleUpdateColumnAlias,
-          onUpdateFilters: handleUpdateFilters,
-          onAddCalculatedColumn: handleAddCalculatedColumn,
-          onDeleteCalculatedColumn: handleDeleteCalculatedColumn,
-          onDelete: handleDeleteNode
-        }
-      };
-
-      setNodes((nds) => nds.concat(newNode));
-    },
-    [reactFlowInstance, catalog, setNodes, projectConnection]
-  );
+    const tableName = event.dataTransfer.getData('tableName');
+    if (!tableName) return;
+    const isView = event.dataTransfer.getData('isView') === 'true';
+    const tableColumns = (isView ? views[tableName] : catalog[tableName]) || [];
+    setNodes(nds => nds.concat({ id: `node_${Date.now()}`, type: 'tableNode', position,
+      data: { label: tableName, table_name: tableName, alias: null, type: 'source',
+        columns: tableColumns.map(col => ({ name: typeof col === 'object' ? col.name : col,
+          type: typeof col === 'object' ? col.type || 'str' : 'str', alias: null, visible: true })),
+        filters: [], calculated_columns: [], db_type: projectConnection?.type || 'postgres' } }));
+  }, [reactFlowInstance, catalog, views, setNodes, projectConnection]);
 
   const onDragOver = useCallback((event) => {
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
   }, []);
 
-  // ===== RENDER HELPERS =====
+  // ===== DERIVED STATE =====
+  const handleBack              = () => navigate('/');
+  const filteredTables          = Object.keys(catalog).filter(t => t.toLowerCase().includes(searchQuery.toLowerCase()));
+  const sourceNodes             = nodes.filter(n => n.type === 'tableNode' || n.type === 'source');
+  const tablesInCanvas          = new Set(sourceNodes.map(n => n.data.table_name).filter(Boolean));
+  const availableTables         = filteredTables.filter(t => !tablesInCanvas.has(t));
+  const viewNames               = Object.keys(views);
+  const filteredViews           = viewNames.filter(v => v.toLowerCase().includes(viewSearchQuery.toLowerCase()));
+  const viewsInCanvas           = new Set(sourceNodes.map(n => n.data.table_name).filter(Boolean));
+  const availableViews          = filteredViews.filter(v => !viewsInCanvas.has(v));
+  const tableCount              = Object.keys(catalog).length;
+  const hasResultNode           = nodes.some(n => n.type === 'resultNode');
+  const hasCaricanNode          = nodes.some(n => n.type === 'carica');
+  const hasCaricanArcGISNode    = nodes.some(n => n.type === 'carica_arcgis' || n.type === 'caricaArcgis');
+  const featureNodes            = nodes.filter(n => n.type === 'featureLayerNode');
+  const featureLayersInCanvas   = new Set(featureNodes.map(n => n.data.layer_url).filter(Boolean));
 
-  const handleBack = () => navigate('/');
+  // ===== SECURITY GUARD =====
+  useEffect(() => {
+    if (!isValidProjectId(projectId)) {
+      console.error('[Security] projectId non valido, redirect a home:', projectId);
+      navigate('/', { replace: true });
+    }
+  }, [projectId, navigate]);
 
-  const filteredTables = Object.keys(catalog).filter(tableName => 
-    tableName.toLowerCase().includes(searchQuery.toLowerCase())
+  if (!isValidProjectId(projectId)) return null;
+  if (loading) return <LoadingOverlay message="Caricamento progetto..." />;
+  if (loadError) return (
+    <div className="estrai-error">
+      <p className="estrai-error__message">Errore caricamento: {loadError}</p>
+      <button type="button" className="estrai-error__btn" onClick={reloadData}>Riprova</button>
+      <button type="button" className="estrai-error__btn" onClick={handleBack}>Torna alla lista</button>
+    </div>
   );
-
-  const tablesInCanvas = new Set(nodes.map(node => node.data.table_name));
-  const availableTables = filteredTables.filter(tableName => !tablesInCanvas.has(tableName));
-
-  // ===== LOADING / ERROR =====
-
-  if (loading) {
-    return <div className="estrai-loading">Caricamento progetto...</div>;
-  }
-
-  if (!project) {
-    return (
-      <div className="estrai-error">
-        <p className="estrai-error__message">Progetto non trovato</p>
-        <button className="estrai-error__btn" onClick={handleBack}>Torna alla lista</button>
-      </div>
-    );
-  }
-
-  const tableCount = Object.keys(catalog).length;
-  const hasResultNode = nodes.some(n => n.type === 'resultNode');
-
-  // ===== RENDER =====
+  if (!project) return (
+    <div className="estrai-error">
+      <p className="estrai-error__message">Progetto non trovato</p>
+      <button type="button" className="estrai-error__btn" onClick={handleBack}>Torna alla lista</button>
+    </div>
+  );
 
   return (
     <div className="estrai-editor">
-      {/* TOOLBAR */}
+
+      {/* ── Topbar ── */}
       <div className="estrai-toolbar">
+
+        {/* Logo */}
+        <div className="estrai-toolbar__logo">
+          <svg width="90" height="28" viewBox="0 0 350 90" xmlns="http://www.w3.org/2000/svg">
+            <polygon points="16,58 52,40 88,58 52,76" fill="rgba(245,166,35,0.10)"  stroke="#F5A623" strokeWidth="1.4" strokeLinejoin="round"/>
+            <polygon points="16,44 52,26 88,44 52,62" fill="rgba(155,109,255,0.10)" stroke="#9B6DFF" strokeWidth="1.4" strokeLinejoin="round"/>
+            <polygon points="16,30 52,12 88,30 52,48" fill="rgba(52,193,122,0.12)"  stroke="#34C17A" strokeWidth="2"   strokeLinejoin="round"/>
+            <line x1="16" y1="30" x2="16" y2="58" stroke="rgba(255,255,255,0.08)" strokeWidth="1"/>
+            <text x="108" y="46" fontFamily="'Syne',sans-serif" fontSize="34" fontWeight="800" letterSpacing="-1.5" className="estrai-toolbar__logo-svg-text">Plen</text>
+            <text x="222" y="46" fontFamily="'Syne',sans-serif" fontSize="34" fontWeight="800" letterSpacing="-1.5" fill="#4B8BFF">ora</text>
+          </svg>
+        </div>
+
+        <div className="estrai-toolbar__sep" />
+
+        {/* Left */}
         <div className="estrai-toolbar__left">
-          <button className="estrai-toolbar__btn estrai-toolbar__btn--back" onClick={handleBack}>
+          <button type="button" className="estrai-toolbar__btn estrai-toolbar__btn--back" onClick={handleBack}>
             ← Indietro
           </button>
-          <button 
-            className="estrai-toolbar__btn estrai-toolbar__btn--connections"
-            onClick={() => navigate('/connections')}
-          >
+          <button type="button" className="estrai-toolbar__btn estrai-toolbar__btn--connections" onClick={() => navigate('/connections')}>
             🔌 Connessioni
           </button>
         </div>
-        
+
+        <div className="estrai-toolbar__sep" />
+
+        {/* Center */}
         <div className="estrai-toolbar__center">
           <h2 className="estrai-toolbar__title">{project.metadata.name}</h2>
           {projectConnection && (
             <div className="estrai-toolbar__connection-badge">
-              <span>🔌</span>
-              <span className="estrai-toolbar__connection-name">{projectConnection.name}</span>
-              <span className="estrai-toolbar__connection-type">{projectConnection.type.toUpperCase()}</span>
+              <div className="estrai-toolbar__conn-dot" />
+              <div>
+                <div className="estrai-toolbar__connection-name">{projectConnection.name}</div>
+                <div className="estrai-toolbar__connection-type">
+                  {sourceType === 'featureService' ? 'ArcGIS' : (projectConnection.type || 'DB').toUpperCase()}
+                </div>
+              </div>
             </div>
           )}
         </div>
-        
+
+        {/* Right */}
         <div className="estrai-toolbar__right">
-          <span className="estrai-toolbar__stats">Nodi: {nodes.length} | Edges: {edges.length}</span>
-          <button 
-            className="estrai-toolbar__btn estrai-toolbar__btn--output"
-            onClick={handleAddResultNode}
-            disabled={hasResultNode}
-          >
-            📁 Output
-          </button>
-          <button className="estrai-toolbar__btn estrai-toolbar__btn--save" onClick={handleSave}>
-            💾 Salva
-          </button>
+          <span className="estrai-toolbar__stats">
+            {nodes.length} nodi · {edges.length} edge
+          </span>
+
+          <div className="estrai-toolbar__sep" />
+
+          {!isReadOnly && (
+            <>
+              <button type="button" className="estrai-toolbar__btn estrai-toolbar__btn--annotation"
+                onClick={handleAddCommentNode} title="Aggiungi annotazione">
+                💬 Nota
+              </button>
+              <button type="button" className="estrai-toolbar__btn estrai-toolbar__btn--static"
+                onClick={handleAddStaticValuesNode}>
+                ✦ Valori Statici
+              </button>
+              <button type="button" className="estrai-toolbar__btn estrai-toolbar__btn--output"
+                onClick={handleAddResultNode} disabled={hasResultNode}>
+                📁 Output
+              </button>
+              <button type="button" className="estrai-toolbar__btn estrai-toolbar__btn--carica"
+                onClick={handleAddCaricanNode} disabled={!hasResultNode || hasCaricanNode}
+                title="Aggiungi nodo Carica DB">
+                ⬆ Carica DB
+              </button>
+              <button type="button" className="estrai-toolbar__btn estrai-toolbar__btn--carica-arcgis"
+                onClick={handleAddCaricanArcGISNode} disabled={!hasResultNode || hasCaricanArcGISNode}
+                title="Aggiungi nodo Carica ArcGIS"
+                style={{ borderColor: 'rgba(45,212,191,0.4)', color: '#2DD4BF' }}>
+                🌐 Carica ArcGIS
+              </button>
+              <button type="button" className="estrai-toolbar__btn estrai-toolbar__btn--datasource"
+                onClick={() => handleAddDataSourceNode('source')}>
+                📂 Data Source
+              </button>
+
+              <div className="estrai-toolbar__sep" />
+            </>
+          )}
+
+          {/* Theme toggle */}
+          <div className="estrai-toolbar__theme">
+            <span
+              className={`estrai-toolbar__theme-opt${theme === 'dark' ? ' estrai-toolbar__theme-opt--active' : ''}`}
+              onClick={() => theme !== 'dark' && toggleTheme('dark')}
+            >🌙 Scuro</span>
+            <span
+              className={`estrai-toolbar__theme-opt${theme === 'light' ? ' estrai-toolbar__theme-opt--active' : ''}`}
+              onClick={() => theme !== 'light' && toggleTheme('light')}
+            >☀️ Chiaro</span>
+          </div>
+
+          {!isReadOnly && (
+            <>
+              <div className="estrai-toolbar__sep" />
+
+              <button type="button" className="estrai-toolbar__btn estrai-toolbar__btn--save"
+                onClick={handleSave} disabled={saving}>
+                {saving ? 'Salvataggio…' : '💾 Salva'}
+              </button>
+            </>
+          )}
         </div>
       </div>
 
-      {/* MAIN */}
+      {/* ── Main ── */}
       <div className="estrai-main">
-        {/* Sidebar */}
+
+        {/* ── Sidebar (nascosta per viewer: niente drag&drop di tabelle) ── */}
+        {!isReadOnly && (
         <div className="estrai-sidebar">
-          <div className="estrai-sidebar__content">
-            <h3 className="estrai-sidebar__title">Tabelle Database</h3>
-            <p className="estrai-sidebar__subtitle">Trascina una tabella nel canvas →</p>
-            
-            <input
-              type="text"
-              className="estrai-sidebar__search"
-              placeholder="🔍 Cerca tabella..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-            
-            <div className="estrai-sidebar__count">
-              {availableTables.length} di {tableCount} tabelle
-              {tablesInCanvas.size > 0 && (
-                <span className="estrai-sidebar__count-detail"> ({tablesInCanvas.size} nel canvas)</span>
-              )}
-            </div>
-            
-            <div className="estrai-sidebar__table-list">
-              {availableTables.length === 0 ? (
-                <div className="estrai-sidebar__empty">
-                  {filteredTables.length === 0 ? 'Nessuna tabella trovata' : 'Tutte le tabelle sono nel canvas'}
-                </div>
-              ) : (
-                availableTables.map(tableName => (
-                  <div 
-                    key={tableName}
-                    className="estrai-sidebar__table-item"
-                    draggable
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData('tableName', tableName);
-                      e.dataTransfer.effectAllowed = 'move';
-                    }}
-                  >
-                    <span className="estrai-sidebar__table-name">📊 {tableName}</span>
-                    <span className="estrai-sidebar__table-cols">{catalog[tableName]?.length || 0} col</span>
-                  </div>
-                ))
-              )}
+
+          {/* Search */}
+          <div className="estrai-sidebar__search-wrap">
+            <div className="estrai-sidebar__search">
+              <span className="estrai-sidebar__search-icon">⌕</span>
+              <input
+                placeholder="Cerca tabelle e viste…"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+              />
             </div>
           </div>
-        </div>
 
-        {/* Canvas */}
-        <div className="estrai-canvas" ref={reactFlowWrapper}>
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={edgeHandlers.onConnect}
-            onEdgeClick={edgeHandlers.onEdgeClick}
-            onInit={setReactFlowInstance}
-            onDrop={onDrop}
-            onDragOver={onDragOver}
-            nodeTypes={nodeTypes}
-            fitView={false}
-          >
-            <Background color="#ddd" gap={16} />
-            <Controls />
-            <MiniMap style={{ height: 120, background: '#f5f5f5' }} zoomable pannable />
-          </ReactFlow>
+          <div className="estrai-sidebar__body">
+            {sourceType === 'database' && (
+              <>
+                {/* Tables section */}
+                <div
+                  className="estrai-sidebar__section-header"
+                  role="button" tabIndex={0}
+                  onClick={() => setTablesCollapsed(!tablesCollapsed)}
+                  onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && setTablesCollapsed(c => !c)}
+                >
+                  <span className="estrai-sidebar__section-toggle">
+                    {tablesCollapsed ? '▶' : '▼'}
+                  </span>
+                  <span className="estrai-sidebar__title">🗄 Tabelle</span>
+                  <span className="estrai-sidebar__count-badge">{tableCount}</span>
+                </div>
 
-          <QueryPreview 
-            nodes={nodes} 
-            edges={edges}
-            validationErrors={validation.errors}
-          />
+                {!tablesCollapsed && (
+                  <div className="estrai-sidebar__items">
+                    {availableTables.length === 0
+                      ? <div className="estrai-sidebar__empty">
+                          {filteredTables.length === 0 ? 'Nessuna tabella trovata' : 'Tutte nel canvas'}
+                        </div>
+                      : <>
+                          {availableTables.slice(0, visibleTableCount).map(t => (
+                            <div
+                              key={t}
+                              className="estrai-sidebar__table-item"
+                              draggable
+                              onDragStart={e => {
+                                e.dataTransfer.setData('tableName', t);
+                                e.dataTransfer.effectAllowed = 'move';
+                              }}
+                            >
+                              <span className="estrai-sidebar__table-name">📊 {t}</span>
+                              <span className="estrai-sidebar__table-cols">{catalog[t]?.length || 0} col</span>
+                            </div>
+                          ))}
+                          {availableTables.length > visibleTableCount && (
+                            <button
+                              type="button"
+                              className="estrai-sidebar__load-more"
+                              onClick={() => setVisibleTableCount(c => c + TABLES_PAGE_SIZE)}
+                            >
+                              ▼ Mostra altri {Math.min(TABLES_PAGE_SIZE, availableTables.length - visibleTableCount)} di {availableTables.length - visibleTableCount} rimasti
+                            </button>
+                          )}
+                        </>
+                    }
+                  </div>
+                )}
+
+                {/* Views section */}
+                {viewNames.length > 0 && (
+                  <>
+                    <div
+                      className="estrai-sidebar__section-header estrai-sidebar__section-header--views"
+                      role="button" tabIndex={0}
+                      onClick={() => setViewsCollapsed(!viewsCollapsed)}
+                      onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && setViewsCollapsed(c => !c)}
+                    >
+                      <span className="estrai-sidebar__section-toggle">
+                        {viewsCollapsed ? '▶' : '▼'}
+                      </span>
+                      <span className="estrai-sidebar__title">👁 Viste</span>
+                      <span className="estrai-sidebar__count-badge">{viewNames.length}</span>
+                    </div>
+
+                    {!viewsCollapsed && (
+                      <>
+                        <div className="estrai-sidebar__search-wrap" style={{ paddingTop: 0 }}>
+                          <div className="estrai-sidebar__search">
+                            <span className="estrai-sidebar__search-icon">⌕</span>
+                            <input
+                              placeholder="Cerca viste…"
+                              value={viewSearchQuery}
+                              onChange={e => setViewSearchQuery(e.target.value)}
+                            />
+                          </div>
+                        </div>
+                        <div className="estrai-sidebar__items">
+                          {availableViews.length === 0
+                            ? <div className="estrai-sidebar__empty">Nessuna vista trovata</div>
+                            : <>
+                                {availableViews.slice(0, visibleViewCount).map(v => (
+                                  <div
+                                    key={`view_${v}`}
+                                    className="estrai-sidebar__table-item estrai-sidebar__table-item--view"
+                                    draggable
+                                    onDragStart={e => {
+                                      e.dataTransfer.setData('tableName', v);
+                                      e.dataTransfer.setData('isView', 'true');
+                                      e.dataTransfer.effectAllowed = 'move';
+                                    }}
+                                  >
+                                    <span className="estrai-sidebar__table-name">👁 {v}</span>
+                                    <span className="estrai-sidebar__table-cols">{views[v]?.length || 0} col</span>
+                                  </div>
+                                ))}
+                                {availableViews.length > visibleViewCount && (
+                                  <button
+                                    type="button"
+                                    className="estrai-sidebar__load-more"
+                                    onClick={() => setVisibleViewCount(c => c + TABLES_PAGE_SIZE)}
+                                  >
+                                    ▼ Mostra altri {Math.min(TABLES_PAGE_SIZE, availableViews.length - visibleViewCount)} di {availableViews.length - visibleViewCount} rimaste
+                                  </button>
+                                )}
+                              </>
+                          }
+                        </div>
+                      </>
+                    )}
+                  </>
+                )}
+              </>
+            )}
+
+            {sourceType === 'featureService' && (
+              <FeatureServicePanel
+                layersInCanvas={featureLayersInCanvas}
+                lockedConnection={projectConnection}
+              />
+            )}
+          </div>
+
+          {/* User footer */}
+          <div className="estrai-sidebar__user">
+            <div>
+              <div className="estrai-sidebar__user-name">{user?.username}</div>
+              <div className="estrai-sidebar__user-email">{user?.email}</div>
+            </div>
+            <button
+              type="button"
+              className="estrai-sidebar__logout"
+              onClick={() => { logout(); navigate('/login'); }}
+              title="Logout"
+            >
+              ⏻
+            </button>
+          </div>
         </div>
+        )}
+
+        {/* ── Canvas ── */}
+        <CanvasErrorBoundary>
+          <div className={`estrai-canvas${isReadOnly ? ' canvas-readonly' : ''}`} ref={reactFlowWrapper}>
+            <canvas ref={hexCanvasRef} className="estrai-canvas__hex" />
+            <ReactFlow
+              nodes={nodes} edges={edges}
+              onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
+              onConnect={edgeHandlers.onConnect} onEdgeClick={edgeHandlers.onEdgeClick}
+              onInit={setReactFlowInstance} onDrop={onDrop} onDragOver={onDragOver}
+              nodeTypes={nodeTypes} fitView={false}
+              {...readOnlyProps}
+            >
+              <Background color="transparent" gap={16} />
+              <Controls />
+              <MiniMap zoomable pannable />
+            </ReactFlow>
+            <QueryPreview nodes={dataNodes} edges={edges} validationErrors={validation.errors} />
+          </div>
+        </CanvasErrorBoundary>
       </div>
 
-      {/* JOIN MODAL */}
-      {edgeHandlers.showJoinModal && (
-        <JoinModal
-          edge={edgeHandlers.editingEdge || edgeHandlers.pendingEdge}
-          sourceNode={edgeHandlers.sourceNode}
-          targetNode={edgeHandlers.targetNode}
-          onSave={edgeHandlers.handleSaveJoin}
-          onCancel={edgeHandlers.handleCancelJoin}
-          onDelete={edgeHandlers.handleDeleteEdge}
-          isEditing={edgeHandlers.isEditing}
+      {/* ── Modals (lazy-loaded) ── */}
+      <ModalErrorBoundary>
+      <Suspense fallback={null}>
+        {edgeHandlers.showJoinModal && (
+          <JoinModal
+            edge={edgeHandlers.editingEdge || edgeHandlers.pendingEdge}
+            sourceNode={edgeHandlers.sourceNode} targetNode={edgeHandlers.targetNode}
+            onSave={edgeHandlers.handleSaveJoin} onCancel={edgeHandlers.handleCancelJoin}
+            onDelete={edgeHandlers.handleDeleteEdge} isEditing={edgeHandlers.isEditing}
+          />
+        )}
+        <ExecutionModal
+          isOpen={execution.showModal} onClose={execution.closeModal}
+          isExecuting={execution.isExecuting} result={execution.result}
+          onDownload={execution.downloadTaskResult}
+          title="▶ Esecuzione Query" projectType="estrai"
+          caricaTasks={execution.caricaTasks} caricaPolling={execution.caricaPolling}
         />
-      )}
-
-      {/* EXECUTION MODAL */}
-      <ExecutionModal
-        isOpen={execution.showModal}
-        onClose={execution.closeModal}
-        isExecuting={execution.isExecuting}
-        result={execution.result}
-        downloadUrl={execution.downloadUrl}
-        title="🚀 Esecuzione Query"
-        projectType="estrai"
+        <CaricaricaModal
+          isOpen={caricarica.showModal} onClose={() => caricarica.closeModal()}
+          isExecuting={caricarica.isExecuting} result={caricarica.result}
+          progress={caricarica.progress} progressMessage={caricarica.progressMessage}
+          taskStatus={caricarica.taskStatus} caricaricaInfo={caricarica.caricaricaInfo}
+          onCancel={caricarica.cancelTask}
+        />
+        <PreviewModal
+        isOpen={preview.showModal} onClose={preview.closeModal}
+        onRefresh={limit => preview.handlePreview(limit)}
+        data={(() => {
+          // Arricchisce le colonne della preview con source_table dal resultNode,
+          // così PreviewModal può raggruppare per vera sorgente invece di indovinare dal prefisso.
+          if (!preview.data?.columns) return preview.data;
+          const resultNode = nodes.find(n => n.type === 'resultNode');
+          const canvasCols = resultNode?.data?.columns || [];
+          // Mappa name → source_table dal canvas (calculateOutputColumnsRecursive)
+          const sourceMap = {};
+          canvasCols.forEach(col => {
+            if (col.source_table) sourceMap[col.name] = col.source_table;
+          });
+          const enrichedColumns = preview.data.columns.map(col => ({
+            ...col,
+            source: sourceMap[col.name] || col.source || null,
+          }));
+          // Ordina per sorgente mantenendo l'ordine di prima apparizione (segue sequenza canvas)
+          const sourceOrder = [];
+          enrichedColumns.forEach(col => {
+            const s = col.source || '__none__';
+            if (!sourceOrder.includes(s)) sourceOrder.push(s);
+          });
+          enrichedColumns.sort((a, b) =>
+            sourceOrder.indexOf(a.source || '__none__') - sourceOrder.indexOf(b.source || '__none__')
+          );
+          return { ...preview.data, columns: enrichedColumns };
+        })()}
+        loading={preview.loading} error={preview.error}
+        title="Anteprima Query SQL" projectType="estrai"
       />
-
-      {/* PREVIEW MODAL */}
-      <PreviewModal
-        isOpen={preview.showModal}
-        onClose={preview.closeModal}
-        onRefresh={(limit) => preview.handlePreview(limit)}
-        data={preview.data}
-        loading={preview.loading}
-        error={preview.error}
-        title="Anteprima Query SQL"
-        projectType="estrai"
-      />
+      </Suspense>
+      </ModalErrorBoundary>
     </div>
   );
 }

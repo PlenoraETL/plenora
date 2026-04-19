@@ -1,5 +1,5 @@
 """
-Servizio CRUD per progetti URBY-ETL.
+Servizio CRUD per progetti PLENORA-ETL.
 
 Architettura
 ============
@@ -41,7 +41,7 @@ logger = get_logger(__name__)
 
 class ProjectService:
     """
-    Servizio CRUD per progetti URBY-ETL.
+    Servizio CRUD per progetti PLENORA-ETL.
 
     Usa SQLite come storage tramite db_service.
     group_id viene passato esplicitamente — in futuro verrà dal JWT.
@@ -117,43 +117,84 @@ class ProjectService:
         return self._row_to_metadata(row)
 
     def get_project_canvas(self, project_id: str) -> Optional[CanvasState]:
-        """Carica canvas del progetto. None se non esiste.
+        """Carica canvas del progetto.
 
-        Su canvas corrotto in DB, ritorna un CanvasState vuoto loggando warning,
-        invece di sollevare 500. L'utente vede un canvas vuoto e può rimediare
-        ricaricandolo dalla UI.
+        Ritorna:
+          - `None` se il progetto non esiste.
+          - `CanvasState()` vuoto se il canvas e' `None`/`{}` in DB
+            (caso legittimo: progetto appena creato, mai salvato).
+
+        Solleva `CanvasCorruptedError` se il canvas e' presente ma
+        non interpretabile (JSON malformato, tipo inatteso, schema
+        Pydantic non valido). Pre-fix questi casi ritornavano un
+        canvas vuoto silenziosamente → l'utente sovrascriveva i dati
+        originali senza accorgersene. Ora la corruzione e' fail-loud:
+        il router traduce in 500 con messaggio esplicito e l'utente
+        puo' chiedere il restore da backup.
         """
+        from app.shared.exceptions import CanvasCorruptedError
+
         row = db.get_project(project_id)
         if not row:
             return None
-        canvas_data = row.get("canvas", {})
+
+        canvas_data = row.get("canvas")
+
+        # Canvas mancante / vuoto → progetto nuovo, non corruzione.
+        if canvas_data is None or canvas_data == {} or canvas_data == "":
+            return CanvasState()
+
+        # JSON string: tentativo di parse. Fallimento = corruzione.
         if isinstance(canvas_data, str):
             import json
             try:
                 canvas_data = json.loads(canvas_data)
             except json.JSONDecodeError as e:
-                logger.warning(
-                    f"Canvas corrotto per progetto {project_id}: {e}. "
-                    f"Restituisco canvas vuoto.",
-                    op="get_project_canvas"
+                logger.error(
+                    f"Canvas JSON malformato per progetto {project_id}: {e}",
+                    op="get_project_canvas",
                 )
-                canvas_data = {}
+                raise CanvasCorruptedError(
+                    project_id=project_id,
+                    reason=f"JSON malformato ({e.msg} at line {e.lineno})",
+                    original_error=e,
+                )
+            # Dopo decode: se e' il literal null/vuoto, canvas legittimo.
+            if canvas_data is None or canvas_data == {}:
+                return CanvasState()
+
+        # Tipo inatteso dopo parse: non e' un dict ne' un valore vuoto
+        # riconosciuto → strutturalmente corrotto.
         if not isinstance(canvas_data, dict):
-            logger.warning(
-                f"Canvas con tipo inatteso per {project_id}: {type(canvas_data).__name__}. "
-                f"Restituisco canvas vuoto.",
-                op="get_project_canvas"
+            got_type = type(canvas_data).__name__
+            logger.error(
+                f"Canvas con tipo inatteso per {project_id}: {got_type}",
+                op="get_project_canvas",
             )
-            canvas_data = {}
+            raise CanvasCorruptedError(
+                project_id=project_id,
+                reason=f"tipo inatteso '{got_type}', atteso dict",
+            )
+
+        # Schema Pydantic: eccezioni tipiche sono ValidationError (pydantic
+        # v2) che eredita da ValueError. Gestiamo anche TypeError per
+        # compat con altri modelli.
         try:
             return CanvasState(**canvas_data)
         except (TypeError, ValueError) as e:
-            logger.warning(
-                f"Canvas con schema non valido per {project_id}: {e}. "
-                f"Restituisco canvas vuoto.",
-                op="get_project_canvas"
+            logger.error(
+                f"Canvas con schema non valido per {project_id}: {e}",
+                op="get_project_canvas",
             )
-            return CanvasState()
+            # Tronchiamo il reason: ValidationError e' verboso.
+            reason_str = str(e)
+            if len(reason_str) > 300:
+                reason_str = reason_str[:297] + "..."
+            raise CanvasCorruptedError(
+                project_id=project_id,
+                reason=f"schema non valido ({reason_str})",
+                original_error=e,
+            )
 
     def get_project(self, project_id: str, group_id: str = None) -> Optional[dict]:
         """Carica progetto completo (metadata + canvas).
@@ -174,12 +215,63 @@ class ProjectService:
         }
 
     def update_canvas(self, project_id: str, canvas: CanvasState) -> bool:
-        """Salva canvas e aggiorna updated_at. False se il progetto non esiste."""
+        """Salva canvas e aggiorna updated_at. False se il progetto non esiste.
+
+        Raises:
+            ProjectLineageCycleError: se i `project_source` nel canvas +
+                le dipendenze transitive degli altri progetti formano un
+                ciclo (C3 fix 5). Il router traduce in HTTP 400.
+        """
         row = db.get_project(project_id)
         if not row:
             return False
+
+        self._assert_no_lineage_cycle(project_id, canvas)
+
         db.update_project(project_id, canvas=canvas.model_dump())
         return True
+
+    def _assert_no_lineage_cycle(self, project_id: str, canvas: CanvasState) -> None:
+        """Verifica che salvare `canvas` per `project_id` non introduca
+        un ciclo nel DAG delle dipendenze cross-project (C3 fix 5).
+
+        Costruisce una `get_sources_fn` che per il progetto corrente usa
+        il CANVAS NUOVO (non ancora salvato) e per tutti gli altri legge
+        il canvas dal DB. Cosi' il check anticipa la validazione al save
+        invece di scoprire il ciclo solo al prossimo run.
+        """
+        from app.services.project_lineage import detect_project_lineage_cycle
+
+        new_sources = [
+            n.source_project_id
+            for n in canvas.nodes
+            if n.type == "project_source" and n.source_project_id
+        ]
+
+        def get_sources(pid: str):
+            if pid == project_id:
+                return new_sources
+            row = db.get_project(pid)
+            if not row:
+                return []
+            canvas_dict = row.get("canvas") or {}
+            if isinstance(canvas_dict, str):
+                import json
+                try:
+                    canvas_dict = json.loads(canvas_dict)
+                except Exception:
+                    return []
+            nodes = canvas_dict.get("nodes") or []
+            return [
+                n.get("source_project_id")
+                for n in nodes
+                if n.get("type") == "project_source" and n.get("source_project_id")
+            ]
+
+        chain = detect_project_lineage_cycle(project_id, get_sources)
+        if chain is not None:
+            from app.services.project_lineage import ProjectLineageCycleError
+            raise ProjectLineageCycleError(chain)
 
     def _find_dependent_projects(self, project_id: str, group_id: str = None) -> List[dict]:
         """Trova progetti manipola/arricchisci che usano `project_id` come sorgente
@@ -195,20 +287,27 @@ class ProjectService:
                 return []
             group_id = row.get("group_id")
 
-        candidates = []
-        for ptype in ("manipola", "arricchisci"):
-            candidates.extend(db.list_projects(group_id=group_id, project_type=ptype))
+        # Fix N+1: fetch tutti i candidates con canvas in una sola query
+        # invece di list + N get_project
+        rows = db.fetchall(
+            "SELECT id, name, project_type, canvas FROM projects "
+            "WHERE group_id = %s AND project_type IN ('manipola', 'arricchisci')",
+            (group_id,)
+        )
 
         dependents = []
-        for cand in candidates:
+        for cand in rows:
             cand_id = cand.get("id")
             if not cand_id or cand_id == project_id:
                 continue
-            full = db.get_project(cand_id)
-            if not full:
-                continue
-            canvas = full.get("canvas") or {}
-            nodes = canvas.get("nodes") or []
+            canvas = cand.get("canvas") or {}
+            if isinstance(canvas, str):
+                import json as _json
+                try:
+                    canvas = _json.loads(canvas)
+                except Exception:
+                    continue
+            nodes = canvas.get("nodes") or [] if isinstance(canvas, dict) else []
             for n in nodes:
                 if not isinstance(n, dict):
                     continue
@@ -343,21 +442,34 @@ class ProjectService:
         return canvas.get("columns_metadata", []) if isinstance(canvas, dict) else []
 
     def update_project_columns_metadata(self, project_id: str, columns_metadata: list) -> bool:
-        """Salva i metadati delle colonne nel canvas del progetto (DB)."""
-        try:
-            row = db.get_project(project_id)
-            if not row:
-                return False
-            canvas = row.get("canvas", {})
-            if isinstance(canvas, str):
-                import json
-                canvas = json.loads(canvas)
-            canvas["columns_metadata"] = columns_metadata
-            db.update_project(project_id, canvas=canvas)
-            return True
-        except Exception as e:
-            logger.error(f"[CRASH] Errore salvataggio columns_metadata: {e}", exc_info=True)
-            return False
+        """Salva i metadati delle colonne nel canvas del progetto (DB).
+
+        Operazione atomica: usa `update_project_canvas_key_atomic` (SELECT
+        FOR UPDATE + merge + UPDATE in transazione) per evitare lost
+        update quando executor ESTRAI e altri writer (es. utente che
+        modifica canvas da UI, altri worker Celery paralleli) concorrono
+        sullo stesso progetto.
+
+        Ritorna True se il progetto esiste ed e' stato aggiornato, False
+        se il progetto non esiste.
+
+        **NON** cattura eccezioni DB/transient: queste propagano al caller.
+        Motivazione: il helper `app.shared.columns_metadata
+        .save_columns_metadata_with_retry` fa retry selettivo sulle
+        eccezioni transient (OperationalError, DeadlockDetected, ecc.) e,
+        dopo i retry, solleva `ColumnsMetadataSaveError` esplicito per far
+        fallire il task Celery invece di ritornare SUCCESS con metadata
+        stale. Un wrapper try/except qui dentro avrebbe trasformato un
+        transient in un `return False` silenzioso, disabilitando il retry
+        e re-introducendo il silent-fallback contro cui il fix nasce.
+
+        Tutti i call-site (estrai/manipola/arricchisci/enrichment_task)
+        passano dall'helper condiviso — niente try/except locali.
+        """
+        import app.db.config_db_service as _cfg_db
+        return _cfg_db.update_project_canvas_key_atomic(
+            project_id, "columns_metadata", columns_metadata
+        )
 
     # =========================================================================
     # RISULTATI (file output pipeline)

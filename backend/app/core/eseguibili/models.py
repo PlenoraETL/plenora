@@ -64,6 +64,11 @@ class EseguibileDetails(BaseModel):
     created_at: str
     updated_at: str
     can_edit: Optional[bool] = None  # calcolato per l'utente corrente
+    # Flusso file-based (rest_file come ultimo nodo api_enrich):
+    # il wizard di esecuzione deve disabilitare il selettore di output_format
+    # perche' l'estensione e' determinata dal connettore, non dall'utente.
+    output_is_file_based: bool = False
+    inferred_output_extension: Optional[str] = None  # senza punto, es. "zip"
 
 
 class ColumnMappingEntry(BaseModel):

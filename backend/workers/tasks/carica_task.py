@@ -42,8 +42,13 @@ logger = get_logger("workers.carica_task")
     bind=True,
     base=BaseTaskWithRetry,
     name="carica.execute",
-    max_retries=3,
-    default_retry_delay=30,
+    # C4: fail-fast su write verso DB cliente, NO retry automatico.
+    # Motivazione: in modalita' append + per_batch (senza unique
+    # constraints) un retry dopo fallimento parziale duplica le
+    # righe gia' scritte. Meglio task fallito visibile che duplica
+    # silenziosa — l'operatore verifica il batch writeen e rilancia
+    # manualmente. Allineato a pipeline_task.max_retries=0 per coerenza.
+    max_retries=0,
     soft_time_limit=settings.CELERY_TASK_TIMEOUT,
     time_limit=settings.CELERY_TASK_HARD_LIMIT,
 )
@@ -55,8 +60,24 @@ def execute_carica_task(
     output_format: str = "geojson",
     force_recalculate: bool = False,
     triggered_by: str = "manual",
+    run_id: Optional[str] = None,
+    user_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Task asincrono per eseguire il caricamento su database.
+
+    Retry policy: `max_retries=0` (fail-fast). Un retry automatico
+    su un write in append+per_batch senza unique constraints
+    duplicherebbe righe. Preferiamo task fallito + rilancio manuale
+    dall'operatore dopo verifica, invece di retry silenzioso non
+    idempotent. Gli errori transient di rete non sono retryati —
+    sollevano eccezione visibile che viene persistita nei log.
+
+    Idempotency (C4 round 2): se `run_id` viene passato dall'esterno
+    (scheduler, retry-handler UI) e in intermediate.runs esiste gia'
+    un record con status='completed' per quel run_id, il task SKIPPA
+    l'esecuzione e ritorna un risultato cached. Copre il caso di
+    retry manuale accidentale o replay da backup. Se run_id non
+    viene passato → genera fresh (behavior legacy, no idempotency).
 
     Args:
         project_id: ID del progetto
@@ -65,15 +86,46 @@ def execute_carica_task(
         output_format: Formato output del nodo Result upstream
         force_recalculate: Se True, riesegue la pipeline upstream
         triggered_by: "manual" o "cron"
+        run_id: Chiave di idempotency opzionale. Se None, generato
+            fresh. Se passato e gia' completato → task skippato.
 
     Returns:
         Dict con risultato dell'esecuzione (WriteResult.to_dict())
+        o status='skipped_idempotent' se il run_id era gia' completo.
     """
     task_id = self.request.id
-    run_id = str(_uuid.uuid4())
+    # C4 round 2: idempotency guard. Se run_id e' passato e gia'
+    # completato, ritorna subito senza ri-eseguire (no duplicate writes).
+    if run_id is not None:
+        from app.core.carica.idempotency import is_already_completed
+        if is_already_completed(run_id):
+            logger.info(
+                f"[IDEMPOTENCY] Task CARICA {task_id}: run_id {run_id} "
+                f"gia' completato con successo, skip."
+            )
+            return {
+                "status": "skipped_idempotent",
+                "success": True,
+                "message": f"Run {run_id} gia' completato",
+                "run_id": run_id,
+                "rows_written": 0,
+            }
+    else:
+        run_id = str(_uuid.uuid4())
+
     _run_start = _time.time()
 
-    logger.info(f"Task CARICA {task_id} avviato per progetto {project_id}")
+    logger.info(f"Task CARICA {task_id} avviato per progetto {project_id} (run_id={run_id})")
+
+    # N9: re-check permessi user al pickup (helper condiviso)
+    from app.shared.async_user_recheck import recheck_user_authorized
+    _revoked = recheck_user_authorized(
+        user_id=user_id, project_id=project_id,
+        task_id=task_id, run_id=run_id, task_name="CARICA",
+    )
+    if _revoked is not None:
+        _revoked.update({"run_id": run_id, "task_id": task_id, "rows_written": 0})
+        return _revoked
 
     # --- Leggi metadata progetto ---
     _group_id = ""
@@ -91,6 +143,7 @@ def execute_carica_task(
         group_id=_group_id,
         module="carica",
         triggered_by=triggered_by,
+        user_id=user_id,
     )
     set_run_context(run_id=run_id, project_id=project_id)
 
@@ -148,7 +201,7 @@ def execute_carica_task(
         elif dest_type == 'arcgis' or node_type == 'carica_arcgis':
             result = _execute_arcgis_write(self, df, carica_node_data, project_id, task_id)
         else:
-            result = _execute_db_write(self, df, carica_node_data, project_id, task_id, triggered_by)
+            result = _execute_db_write(self, df, carica_node_data, project_id, task_id, triggered_by, run_id)
 
         # --- Step tracking + close run ---
         is_success = result.get("success", False)
@@ -279,7 +332,11 @@ def _execute_datasource_write(task, df, carica_node_data, project_id, task_id):
 
         # Componi path: dest_folder + dest_filename + .ext
         ext = f'.{dest_format}' if not dest_filename.endswith(f'.{dest_format}') else ''
-        path = f'{dest_folder}/{dest_filename}{ext}'.lstrip('/')
+        # Sanitizza per prevenire path traversal
+        from pathlib import PurePosixPath
+        safe_folder = PurePosixPath(dest_folder).as_posix().replace('..', '').strip('/')
+        safe_filename = PurePosixPath(dest_filename).name  # solo il nome, no directory
+        path = f'{safe_folder}/{safe_filename}{ext}'.lstrip('/')
 
         ds_service.write_file(datasource_id, path, content)
 
@@ -308,8 +365,16 @@ def _execute_datasource_write(task, df, carica_node_data, project_id, task_id):
         }
 
 
-def _execute_db_write(task, df, carica_node_data, project_id, task_id, triggered_by):
-    """Esegue il caricamento su database (percorso originale)."""
+def _execute_db_write(task, df, carica_node_data, project_id, task_id, triggered_by, run_id=None):
+    """Esegue il caricamento su database (percorso originale).
+
+    Args:
+        run_id: propagato all'executor come self-defense layer (N15). Il task
+            fa gia' il check idempotency a inizio prima di arrivare qui, quindi
+            nel happy path il guard executor e' un no-op (ri-verifica lo stesso
+            run_id). Lo passiamo per coerenza: tutti i callsite dell'executor
+            opt-in al guard quando hanno un run_id.
+    """
     from app.core.carica.executor import CaricaExecutor
     from app.services.connection_service import ConnectionService
 
@@ -326,6 +391,7 @@ def _execute_db_write(task, df, carica_node_data, project_id, task_id, triggered
         project_id=project_id,
         progress_callback=progress_callback,
         triggered_by=triggered_by,
+        run_id=run_id,  # N15: defense-in-depth (task-level guard gia' corto-circuita prima, ma questo protegge sync caller futuri)
     )
 
     result_dict = result.to_dict()
@@ -486,28 +552,60 @@ def _load_upstream_data(
     """Carica il DataFrame dal nodo Result upstream.
 
     Strategia:
-    1. Cerca nel DB SQLite (get_result_as_tempfile)
+    1. Cerca nel DB SQLite (via SourceLoader, fail-closed sul group_id)
     2. Se force_recalculate o non trova → riesegui la pipeline
-    3. Dopo ricalcolo rilegge dal DB
+    3. Dopo ricalcolo rilegge l'artefatto specifico della run
     """
     import pandas as pd
 
     try:
-        from app.utils.result_store import get_result_as_tempfile
         from app.utils.dataframe import load_dataframe_from_file
+        from app.core.artifacts import (
+            LatestProjectArtifactRef,
+            SourceLoader,
+            SourceLoadingError,
+            SourceRef,
+        )
 
-        # Cerca risultato nel DB
+        # Pre-cache check: se il blob e' gia' presente, salta execute_pipeline.
+        # Il group_id viene letto dal progetto per chiudere il check
+        # cross-tenant del resolver (defense-in-depth: il task CARICA
+        # opera su un project_id arrivato dal payload Celery, garantito
+        # dal layer HTTP a monte ma comunque verificato qui).
         if not force_recalculate:
-            tmp = get_result_as_tempfile(project_id)
-            if tmp:
-                logger.info(f"Caricamento output dal DB per {project_id}")
-                df = load_dataframe_from_file(tmp)
+            try:
+                import app.db.db_service as _db
+                _proj_row = _db.get_project(project_id)
+                _project_group_id = (
+                    _proj_row.get("group_id") if _proj_row else None
+                )
+            except Exception as _ge:
+                logger.warning(
+                    f"[GESTITO] _load_upstream_data: lookup group_id "
+                    f"per {project_id} fallito: {_ge}"
+                )
+                _project_group_id = None
+
+            if not _project_group_id:
+                logger.error(
+                    f"[SECURITY] _load_upstream_data: group_id non "
+                    f"determinabile per {project_id}, fail-closed sul "
+                    f"pre-cache (procedo con execute_pipeline)"
+                )
+            else:
                 try:
-                    import os as _os
-                    _os.unlink(str(tmp))
-                except Exception:
-                    pass
-                return df
+                    df = SourceLoader().load(
+                        SourceRef(project=LatestProjectArtifactRef(project_id=project_id)),
+                        expected_group_id=_project_group_id,
+                    )
+                except SourceLoadingError as _sle:
+                    logger.error(
+                        f"[SECURITY] CARICA pre-cache: {_sle}"
+                    )
+                    return None
+                if df is not None:
+                    logger.info(f"Caricamento output dal DB per {project_id}")
+                    return df
 
         # Nessun risultato in cache o force_recalculate → riesegui pipeline
 
@@ -550,66 +648,52 @@ def _load_upstream_data(
             )
             return None
 
-        # Se la pipeline ha avuto successo, leggi il blob dal DB
-        tmp = get_result_as_tempfile(project_id)
-        if tmp:
-            df = load_dataframe_from_file(tmp)
-            try:
-                import os as _os
-                _os.unlink(str(tmp))
-            except Exception:
-                pass
-            return df
-
-        # Fallback: DataFrame inline dal risultato (MANIPOLA/ARRICCHISCI)
-        if "dataframe" in result:
-            return result["dataframe"]
-
-        # Rileggi dal DB una seconda volta (race condition)
-        tmp = get_result_as_tempfile(project_id)
-        if tmp:
-            df = load_dataframe_from_file(tmp)
-            try:
-                import os as _os
-                _os.unlink(str(tmp))
-            except Exception:
-                pass
-            return df
-
-        # A questo punto la pipeline ha avuto successo ma non ha prodotto output
-        logger.error(
-            f"[GESTITO] Pipeline upstream completata ma nessun output trovato per {project_id}. "
-            f"Verificare che il nodo Result salvi correttamente il file."
+        # Risoluzione artefatto centralizzata via PipelineArtifact +
+        # ArtifactResolver: inline_df → result_id (verify project_id,
+        # hard fail su mismatch). Niente latest-by-project: due esecuzioni
+        # parallele sullo stesso project si scambierebbero l'output.
+        from app.core.artifacts import (
+            ArtifactResolver,
+            ArtifactResolutionError,
+            PipelineArtifact,
         )
-        return None
+
+        artifact = PipelineArtifact.from_executor_result(result, project_id=project_id)
+        if artifact.artifact_kind == "none":
+            logger.error(
+                f"[GESTITO] CARICA: execute_pipeline({project_id}) non ha "
+                f"restituito ne' dataframe inline ne' result_id. "
+                f"Impossibile determinare l'artefatto esatto — abort."
+            )
+            return None
+        try:
+            materialized = ArtifactResolver().materialize_run(
+                artifact.to_run_artifact_ref()
+            )
+        except ArtifactResolutionError as _re:
+            logger.error(f"[GESTITO] CARICA: {_re}")
+            return None
+        with materialized as m:
+            if m.df is not None:
+                return m.df
+            return load_dataframe_from_file(m.path)
 
     except ImportError as e:
-        logger.error(f"[CRASH] Import error: {e}", exc_info=True)
-        # Fallback: prova a caricare direttamente
-        return _load_from_project_dir(project_id)
+        # Qualunque errore nel risolvere l'artefatto upstream e' fatale:
+        # meglio un task CARICA fallito e visibile che un caricamento
+        # silente di un dataset sbagliato sul DB di destinazione (i due
+        # `except` NON devono rifallback su latest-by-project del
+        # progetto, sarebbe lo stesso race che il path principale evita).
+        logger.error(f"[CRASH] Import error in _load_upstream_data: {e}", exc_info=True)
+        return None
 
     except Exception as e:
-        logger.error(f"[CRASH] Errore caricamento dati upstream: {e}", exc_info=True)
-        return _load_from_project_dir(project_id)
-
-
-def _load_from_project_dir(project_id: str) -> Optional["pd.DataFrame"]:
-    """Fallback: carica dal DB SQLite."""
-    try:
-        from app.utils.result_store import get_result_as_tempfile
-        from app.utils.dataframe import load_dataframe_from_file
-        tmp = get_result_as_tempfile(project_id)
-        if tmp:
-            df = load_dataframe_from_file(tmp)
-            try:
-                import os as _os
-                _os.unlink(str(tmp))
-            except Exception:
-                pass
-            return df
-    except Exception as e:
-        logger.error(f"[CRASH] Errore fallback caricamento dal DB: {e}", exc_info=True)
-    return None
+        logger.error(
+            f"[CRASH] Errore caricamento dati upstream per {project_id}: {e} — "
+            f"abort (nessun fallback a latest-by-project)",
+            exc_info=True,
+        )
+        return None
 
 
 def _find_latest_output(directory: str) -> Optional[str]:

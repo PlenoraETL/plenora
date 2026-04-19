@@ -1,5 +1,5 @@
 """
-Processore di variabili template per URBY-ETL.
+Processore di variabili template per PLENORA-ETL.
 
 Architettura
 ============
@@ -40,7 +40,7 @@ Uso:
 
 import logging
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any
 
 logger = logging.getLogger(__name__)
@@ -84,7 +84,7 @@ def get_base_date(var_name: str, reference_date: datetime = None) -> datetime:
     Returns:
         Oggetto datetime corrispondente alla variabile.
     """
-    now = reference_date or datetime.now()
+    now = reference_date or datetime.now(timezone.utc)
 
     if var_name == "NOW":
         return now
@@ -120,6 +120,8 @@ def apply_offset(dt: datetime, offset_str: str) -> datetime:
 
     match = re.match(r"([+-])(\d+)([hdmsMHDMS])", offset_str)
     if not match:
+        import logging
+        logging.getLogger(__name__).warning(f"Offset template non valido: '{offset_str}' (formato atteso: ±N[hdms])")
         return dt
 
     segno, quantita, unita = match.groups()
@@ -182,7 +184,7 @@ def process_template_variables(text: str, reference_date: datetime = None) -> st
 
     Args:
         text: Testo contenente variabili template {{...}}.
-        reference_date: Data di riferimento (default: datetime.now()).
+        reference_date: Data di riferimento (default: datetime.now(timezone.utc)).
 
     Returns:
         Testo con tutte le variabili sostituite. In caso di errore

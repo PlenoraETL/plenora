@@ -1,0 +1,306 @@
+/**
+ * ModalWrapper.css - Stili base per modali
+ * 
+ * Utilizzato da tutte le modali dell'applicazione.
+ * Supporta varianti colore per ogni modulo (estrai, manipola, arricchisci)
+ */
+
+/* ===== OVERLAY ===== */
+.modal-wrapper__overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-modal, 1000);
+  padding: 20px;
+  animation: modalFadeIn 0.2s ease-out;
+}
+
+/* ===== CONTAINER ===== */
+.modal-wrapper {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+  animation: modalSlideIn 0.2s ease-out;
+  outline: none;
+}
+
+/* ===== SIZES ===== */
+.modal-wrapper--sm {
+  width: 400px;
+  max-width: 95vw;
+}
+
+.modal-wrapper--md {
+  width: 600px;
+  max-width: 95vw;
+}
+
+.modal-wrapper--lg {
+  width: 800px;
+  max-width: 95vw;
+}
+
+.modal-wrapper--xl {
+  width: 90vw;
+  max-width: none;
+}
+
+.modal-wrapper--full {
+  width: 95vw;
+  height: 90vh;
+}
+
+/* ===== HEADER ===== */
+.modal-wrapper__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.modal-wrapper__title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.modal-wrapper__icon {
+  font-size: 1.4rem;
+}
+
+.modal-wrapper__title {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.modal-wrapper__subtitle {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.modal-wrapper__close {
+  background: none;
+  border: none;
+  font-size: 1.8rem;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.modal-wrapper__close:hover {
+  background: var(--color-gray-150);
+  color: var(--color-text-primary);
+}
+
+/* ===== CONTENT ===== */
+.modal-wrapper__content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+/* ===== FOOTER ===== */
+.modal-wrapper__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+/* ===== LOADING ===== */
+.modal-wrapper__loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  gap: 16px;
+  color: var(--color-text-muted);
+}
+
+.modal-wrapper__spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+/* ===== VARIANT COLORS ===== */
+
+/* Estrai - Blue */
+.modal-wrapper--estrai .modal-wrapper__header {
+  background: var(--gradient-header-estrai);
+}
+
+.modal-wrapper--estrai .modal-wrapper__title {
+  color: var(--color-primary-600);
+}
+
+.modal-wrapper--estrai .modal-wrapper__spinner {
+  border-top-color: var(--color-primary);
+}
+
+/* Manipola - Purple */
+.modal-wrapper--manipola .modal-wrapper__header {
+  background: var(--gradient-header-manipola);
+}
+
+.modal-wrapper--manipola .modal-wrapper__title {
+  color: var(--color-type-bool);
+}
+
+.modal-wrapper--manipola .modal-wrapper__spinner {
+  border-top-color: var(--color-manipola);
+}
+
+/* Arricchisci - Orange */
+.modal-wrapper--arricchisci .modal-wrapper__header {
+  background: var(--gradient-header-arricchisci);
+}
+
+.modal-wrapper--arricchisci .modal-wrapper__title {
+  color: var(--color-type-date);
+}
+
+.modal-wrapper--arricchisci .modal-wrapper__spinner {
+  border-top-color: var(--color-arricchisci);
+}
+
+/* ===== FOOTER HELPER ===== */
+.modal-footer {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+}
+
+.modal-footer--left {
+  justify-content: flex-start;
+}
+
+.modal-footer--center {
+  justify-content: center;
+}
+
+.modal-footer--right {
+  justify-content: flex-end;
+}
+
+.modal-footer--between {
+  justify-content: space-between;
+}
+
+/* ===== BUTTONS ===== */
+.modal-btn {
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+}
+
+.modal-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.modal-btn--primary {
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+  border: none;
+}
+
+.modal-btn--primary:hover:not(:disabled) {
+  background: var(--color-primary-600);
+}
+
+.modal-btn--secondary {
+  background: var(--btn-secondary-bg);
+  color: var(--btn-secondary-text);
+  border: 1px solid var(--btn-secondary-border);
+}
+
+.modal-btn--secondary:hover:not(:disabled) {
+  background: var(--color-border);
+}
+
+.modal-btn--danger {
+  background: var(--btn-danger-bg);
+  color: var(--btn-danger-text);
+  border: none;
+}
+
+.modal-btn--danger:hover:not(:disabled) {
+  background: var(--color-danger-dark);
+}
+
+.modal-btn__spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 768px) {
+  .modal-wrapper__overlay {
+    padding: 10px;
+  }
+  
+  .modal-wrapper--sm,
+  .modal-wrapper--md,
+  .modal-wrapper--lg,
+  .modal-wrapper--xl {
+    width: 100%;
+    max-width: 100%;
+  }
+  
+  .modal-wrapper__header {
+    padding: 12px 16px;
+  }
+  
+  .modal-wrapper__content {
+    padding: 16px;
+  }
+  
+  .modal-wrapper__footer {
+    padding: 12px 16px;
+    flex-wrap: wrap;
+  }
+  
+  .modal-btn {
+    flex: 1;
+    justify-content: center;
+  }
+}

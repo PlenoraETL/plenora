@@ -1,0 +1,256 @@
+"""Contract test — app/shared/cloud_backends.py (astrazione cloud-agnostic).
+
+1. Factory `get_secrets_backend()` / `get_object_storage()` dispatch via
+   CLOUD_PROVIDER env (default 'aws', solleva su provider non supportati)
+2. AwsSsmSecretsBackend.get_secrets chiama boto3 SSM con gli args corretti
+   e produce la shape contract (strip prefix, / -> _)
+3. AwsS3ObjectStorage.{list,upload,download} wrap boto3 S3 correttamente
+4. Shape ObjectMeta stabile (key, last_modified, size)
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+
+pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
+
+
+@pytest.fixture(scope="module")
+def cb():
+    from app.shared import cloud_backends
+    return cloud_backends
+
+
+def _requires_boto3():
+    pytest.importorskip("boto3", reason="boto3 non installato su dev")
+
+
+# =============================================================================
+# 1. Factory — CLOUD_PROVIDER dispatch
+# =============================================================================
+
+
+def test_factory_default_provider_is_aws(cb, monkeypatch):
+    monkeypatch.delenv("CLOUD_PROVIDER", raising=False)
+    backend = cb.get_secrets_backend()
+    assert isinstance(backend, cb.AwsSsmSecretsBackend)
+
+
+def test_factory_aws_explicit(cb, monkeypatch):
+    monkeypatch.setenv("CLOUD_PROVIDER", "aws")
+    monkeypatch.setenv("AWS_REGION", "us-east-1")
+    backend = cb.get_secrets_backend()
+    assert isinstance(backend, cb.AwsSsmSecretsBackend)
+    assert backend.region == "us-east-1"
+
+
+def test_factory_case_insensitive(cb, monkeypatch):
+    monkeypatch.setenv("CLOUD_PROVIDER", "AWS")
+    assert isinstance(cb.get_secrets_backend(), cb.AwsSsmSecretsBackend)
+
+
+def test_factory_unknown_provider_raises(cb, monkeypatch):
+    monkeypatch.setenv("CLOUD_PROVIDER", "oracle")
+    with pytest.raises(ValueError, match="non supportato"):
+        cb.get_secrets_backend()
+    with pytest.raises(ValueError, match="non supportato"):
+        cb.get_object_storage()
+
+
+def test_object_storage_factory_requires_bucket(cb, monkeypatch):
+    monkeypatch.setenv("CLOUD_PROVIDER", "aws")
+    monkeypatch.delenv("BACKUP_BUCKET", raising=False)
+    monkeypatch.delenv("BACKUP_S3_BUCKET", raising=False)
+    with pytest.raises(ValueError, match="BACKUP_BUCKET"):
+        cb.get_object_storage()
+
+
+def test_object_storage_factory_accepts_legacy_env_name(cb, monkeypatch):
+    """BACKUP_S3_BUCKET e' il nome legacy, BACKUP_BUCKET e' quello nuovo
+    cross-provider. Factory accetta entrambi."""
+    monkeypatch.setenv("CLOUD_PROVIDER", "aws")
+    monkeypatch.delenv("BACKUP_BUCKET", raising=False)
+    monkeypatch.setenv("BACKUP_S3_BUCKET", "legacy-bucket")
+    storage = cb.get_object_storage()
+    assert storage.bucket == "legacy-bucket"
+
+
+def test_object_storage_factory_prefers_new_env_name(cb, monkeypatch):
+    """BACKUP_BUCKET (nuovo) ha priorita' su BACKUP_S3_BUCKET (legacy)."""
+    monkeypatch.setenv("CLOUD_PROVIDER", "aws")
+    monkeypatch.setenv("BACKUP_BUCKET", "new-name")
+    monkeypatch.setenv("BACKUP_S3_BUCKET", "legacy")
+    storage = cb.get_object_storage()
+    assert storage.bucket == "new-name"
+
+
+# =============================================================================
+# 2. AwsSsmSecretsBackend.get_secrets — contract
+# =============================================================================
+
+
+def _make_fake_ssm_client(params):
+    client = MagicMock()
+    paginator = MagicMock()
+    paginator.paginate.return_value = [{"Parameters": params}]
+    client.get_paginator.return_value = paginator
+    return client
+
+
+def test_ssm_strips_prefix(cb):
+    _requires_boto3()
+    backend = cb.AwsSsmSecretsBackend(region="eu-south-1")
+    fake_client = _make_fake_ssm_client([
+        {"Name": "/plenora/prod/DATABASE_URL", "Value": "postgresql://..."},
+        {"Name": "/plenora/prod/REDIS_URL", "Value": "redis://..."},
+    ])
+    with patch("boto3.client", return_value=fake_client):
+        secrets = backend.get_secrets("/plenora/prod/")
+    assert secrets == {
+        "DATABASE_URL": "postgresql://...",
+        "REDIS_URL": "redis://...",
+    }
+
+
+def test_ssm_subpath_to_underscore(cb):
+    _requires_boto3()
+    backend = cb.AwsSsmSecretsBackend(region="eu-south-1")
+    fake = _make_fake_ssm_client([
+        {"Name": "/plenora/prod/db/url", "Value": "postgres://..."},
+    ])
+    with patch("boto3.client", return_value=fake):
+        secrets = backend.get_secrets("/plenora/prod/")
+    assert secrets == {"db_url": "postgres://..."}
+
+
+def test_ssm_empty_returns_empty_dict(cb):
+    _requires_boto3()
+    backend = cb.AwsSsmSecretsBackend(region="eu-south-1")
+    with patch("boto3.client", return_value=_make_fake_ssm_client([])):
+        assert backend.get_secrets("/plenora/prod/") == {}
+
+
+def test_ssm_uses_with_decryption_and_recursive(cb):
+    """Sanity: il backend chiama SSM con WithDecryption=True e Recursive=True.
+    Senza questi, i SecureString tornano cifrati o le sub-dir sono perse."""
+    _requires_boto3()
+    backend = cb.AwsSsmSecretsBackend(region="eu-south-1")
+    fake = _make_fake_ssm_client([])
+    with patch("boto3.client", return_value=fake):
+        backend.get_secrets("/plenora/prod/")
+
+    fake.get_paginator.return_value.paginate.assert_called_once()
+    kwargs = fake.get_paginator.return_value.paginate.call_args.kwargs
+    assert kwargs["Path"] == "/plenora/prod/"
+    assert kwargs["Recursive"] is True
+    assert kwargs["WithDecryption"] is True
+
+
+# =============================================================================
+# 3. AwsS3ObjectStorage — wrap contract
+# =============================================================================
+
+
+def test_s3_list_objects_shape(cb):
+    _requires_boto3()
+    storage = cb.AwsS3ObjectStorage(bucket="b", region="eu-south-1")
+    fake_client = MagicMock()
+    paginator = MagicMock()
+    fixed_ts = datetime(2026, 4, 17, 12, 0, 0, tzinfo=timezone.utc)
+    paginator.paginate.return_value = [{
+        "Contents": [
+            {"Key": "urby_20260417.dump", "LastModified": fixed_ts, "Size": 12345},
+            {"Key": "other.txt", "LastModified": fixed_ts, "Size": 99},
+        ]
+    }]
+    fake_client.get_paginator.return_value = paginator
+
+    with patch("boto3.client", return_value=fake_client):
+        result = storage.list_objects("urby_")
+
+    assert len(result) == 2
+    # Shape ObjectMeta
+    assert result[0]["key"] == "urby_20260417.dump"
+    assert result[0]["last_modified"] == fixed_ts
+    assert result[0]["size"] == 12345
+
+
+def test_s3_upload_uses_sse(cb, tmp_path):
+    """Contract: upload con ServerSideEncryption=AES256 + StorageClass=STANDARD."""
+    _requires_boto3()
+    storage = cb.AwsS3ObjectStorage(bucket="my-bucket", region="eu-south-1")
+    fake_client = MagicMock()
+
+    local = tmp_path / "dump"
+    local.write_bytes(b"payload")
+
+    with patch("boto3.client", return_value=fake_client):
+        storage.upload(local, "key.dump")
+
+    fake_client.upload_file.assert_called_once()
+    call = fake_client.upload_file.call_args
+    args = call.args
+    kwargs = call.kwargs
+    assert args[0] == str(local)
+    assert args[1] == "my-bucket"
+    assert args[2] == "key.dump"
+    assert kwargs["ExtraArgs"]["ServerSideEncryption"] == "AES256"
+    assert kwargs["ExtraArgs"]["StorageClass"] == "STANDARD"
+
+
+def test_s3_upload_bytes_uses_upload_fileobj_for_multipart(cb):
+    """Contract: AwsS3ObjectStorage.upload_bytes deve usare upload_fileobj
+    (auto-multipart via TransferConfig), non put_object (5GB cap).
+
+    Garantisce che file grossi non vadano in errore artificiale.
+    Il contract multi-cloud richiede l'auto-chunking nativo del provider.
+    """
+    _requires_boto3()
+    storage = cb.AwsS3ObjectStorage(bucket="my-bucket", region="eu-south-1")
+    fake_client = MagicMock()
+
+    with patch("boto3.client", return_value=fake_client):
+        storage.upload_bytes(b"x" * 100, "key.bin")
+
+    # put_object NON deve essere chiamato (quello ha il cap 5GB)
+    fake_client.put_object.assert_not_called()
+    # upload_fileobj SI (auto-multipart)
+    fake_client.upload_fileobj.assert_called_once()
+
+    # Verifica che TransferConfig sia passato con multipart_threshold
+    call = fake_client.upload_fileobj.call_args
+    assert "Config" in call.kwargs
+    # ExtraArgs preserva encryption + storage class
+    extra_args = call.kwargs.get("ExtraArgs", {})
+    assert extra_args.get("ServerSideEncryption") == "AES256"
+    assert extra_args.get("StorageClass") == "STANDARD"
+
+
+def test_s3_download_delegates_correctly(cb, tmp_path):
+    _requires_boto3()
+    storage = cb.AwsS3ObjectStorage(bucket="my-bucket", region="eu-south-1")
+    fake_client = MagicMock()
+    dest = tmp_path / "out"
+
+    with patch("boto3.client", return_value=fake_client):
+        storage.download("key.dump", dest)
+
+    fake_client.download_file.assert_called_once_with("my-bucket", "key.dump", str(dest))
+
+
+# =============================================================================
+# 4. Protocol conformance (duck-typing sanity)
+# =============================================================================
+
+
+def test_aws_backends_satisfy_protocols(cb):
+    """Le impl AWS devono soddisfare i Protocol via runtime isinstance."""
+    ssm = cb.AwsSsmSecretsBackend(region="eu-south-1")
+    assert isinstance(ssm, cb.SecretsBackend)
+
+    s3 = cb.AwsS3ObjectStorage(bucket="b", region="eu-south-1")
+    assert isinstance(s3, cb.ObjectStorage)

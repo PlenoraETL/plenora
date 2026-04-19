@@ -1,9 +1,9 @@
 """
-Servizio di cleanup degli orfani cross-DB di URBY-ETL.
+Servizio di cleanup degli orfani cross-DB di PLENORA-ETL.
 
 Contesto
 ========
-URBY-ETL ha 3 SQLite separati:
+PLENORA-ETL ha 3 SQLite separati:
   - config.db       (progetti, utenti, ecc.)
   - results.db      (output finali pipeline)
   - intermediate.db (run intermedie + tabelle dinamiche)
@@ -18,7 +18,7 @@ orfani in results.db e intermediate.db.
 Questo servizio:
   - Trova orfani (project_id che non esistono più in config.projects)
   - Cancella orfani (sia results blob che intermediate runs+tabelle dinamiche)
-  - Supporta dry-run per audit prima del fix
+  - Supporta dry-run per audit prima della cancellazione
 
 API
 ===
@@ -60,7 +60,12 @@ def find_orphan_result_project_ids() -> List[str]:
     )
     orphans = []
     for row in distinct_in_results:
-        pid = row["project_id"] if isinstance(row, dict) else row[0]
+        if isinstance(row, dict):
+            pid = row.get("project_id")
+        elif row and len(row) > 0:
+            pid = row[0]
+        else:
+            continue
         if pid and pid not in existing:
             orphans.append(pid)
     return orphans
@@ -69,7 +74,7 @@ def find_orphan_result_project_ids() -> List[str]:
 def find_orphan_run_canvas_ids() -> List[str]:
     """Lista canvas_id presenti in `intermediate.runs` ma non in `config.projects`.
 
-    `canvas_id` corrisponde a `project_id` per convenzione URBY-ETL
+    `canvas_id` corrisponde a `project_id` per convenzione PLENORA-ETL
     (vedi commento in `intermediate_schema.sql`).
     """
     from app.core.intermediate import db as idb

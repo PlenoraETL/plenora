@@ -215,65 +215,76 @@ class ConflictChecker:
         table: str,
         match_columns: List[str],
     ) -> tuple:
-        """Check conflitti su più colonne match.
+        """Check conflitti su più colonne match — versione batch.
 
-        Usa query con AND per ogni combinazione di valori.
-        Più lento ma compatibile con tutti i database.
+        Strategia: invece di N query (una per combinazione), carica tutte le
+        combinazioni esistenti nella tabella destinazione con una SINGOLA SELECT
+        DISTINCT e fa il match in memoria. Drastico miglioramento performance
+        su dataset con molte combinazioni uniche (era N+1).
         """
         full_table = self._qualified_name(schema, table)
 
-        # Estrai combinazioni uniche
+        # Estrai combinazioni uniche nel DataFrame sorgente
         unique_combos = df[match_columns].drop_duplicates()
+        if unique_combos.empty:
+            return 0, []
+
+        # UNA sola query: carica tutte le combinazioni distinct della destinazione
+        quoted_cols = ", ".join(self._quote_col(c) for c in match_columns)
+        query = f"SELECT DISTINCT {quoted_cols} FROM {full_table}"
+
+        try:
+            with self.engine.connect() as conn:
+                result = conn.execute(text(query))
+                existing_rows = result.fetchall()
+        except Exception as e:
+            logger.error(f"[CRASH] Errore query multi-column destinazione: {e}", exc_info=True)
+            return 0, []
+
+        # Converte in set di tuple per lookup O(1).
+        # Sentinel per NaN (None non è hashable in tuple con NaN reali)
+        _NAN_SENTINEL = "__NAN__"
+
+        def _normalize(v):
+            if pd.isna(v):
+                return _NAN_SENTINEL
+            return _serialize_value(v)
+
+        existing_set = set()
+        for row in existing_rows:
+            values = tuple(_normalize(v) for v in row)
+            existing_set.add(values)
+
+        # Match in memoria: O(n) invece di N query DB
         conflict_count = 0
         details = []
 
-        for idx, combo_row in unique_combos.iterrows():
-            # Costruisci WHERE clause
-            where_parts = []
-            params = {}
-            for col in match_columns:
-                val = combo_row[col]
-                if pd.isna(val):
-                    where_parts.append(f"{self._quote_col(col)} IS NULL")
-                else:
-                    param_name = f"m_{col}"
-                    where_parts.append(f"{self._quote_col(col)} = :{param_name}")
-                    params[param_name] = _serialize_value(val)
+        for _, combo_row in unique_combos.iterrows():
+            combo_key = tuple(_normalize(combo_row[col]) for col in match_columns)
+            if combo_key in existing_set:
+                conflict_count += 1
+                if len(details) < self.MAX_DETAILS:
+                    match_vals = {
+                        col: _serialize_value(combo_row[col])
+                        for col in match_columns
+                    }
+                    # Trova righe nel DataFrame con questa combo
+                    mask = pd.Series(True, index=df.index)
+                    for col in match_columns:
+                        if pd.isna(combo_row[col]):
+                            mask &= df[col].isna()
+                        else:
+                            mask &= (df[col] == combo_row[col])
+                    matching_indices = df[mask].index.tolist()
+                    for row_idx in matching_indices[:5]:
+                        if len(details) >= self.MAX_DETAILS:
+                            break
+                        details.append(ConflictDetail(
+                            row_index=int(row_idx),
+                            match_values=match_vals,
+                            conflict_type="pk_duplicate",
+                        ))
 
-            where_sql = " AND ".join(where_parts)
-            query = f"SELECT COUNT(*) FROM {full_table} WHERE {where_sql}"
-
-            try:
-                with self.engine.connect() as conn:
-                    result = conn.execute(text(query), params)
-                    count = result.scalar()
-
-                    if count and count > 0:
-                        conflict_count += 1
-                        if len(details) < self.MAX_DETAILS:
-                            match_vals = {
-                                col: _serialize_value(combo_row[col])
-                                for col in match_columns
-                            }
-                            # Trova le righe nel DataFrame con questa combo
-                            mask = pd.Series(True, index=df.index)
-                            for col in match_columns:
-                                if pd.isna(combo_row[col]):
-                                    mask &= df[col].isna()
-                                else:
-                                    mask &= (df[col] == combo_row[col])
-                            matching_indices = df[mask].index.tolist()
-                            for row_idx in matching_indices[:5]:
-                                details.append(ConflictDetail(
-                                    row_index=int(row_idx),
-                                    match_values=match_vals,
-                                    conflict_type="pk_duplicate",
-                                ))
-            except Exception as e:
-                logger.error(f"[CRASH] Errore query conflitto multi-colonna: {e}", exc_info=True)
-                continue
-
-            # Safety: evita di fare troppe query
             if conflict_count > 1000:
                 logger.warning("Superati 1000 conflitti, interrompo check")
                 break

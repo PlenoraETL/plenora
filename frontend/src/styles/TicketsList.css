@@ -1,0 +1,765 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   TicketsList.css — Ticket (TicketsList + TicketDetail + TicketCreateModal)
+   Token con prefisso --tk-
+───────────────────────────────────────────────────────────────────────── */
+
+.tk-page {
+  --tk-bg:        #07090F;
+  --tk-surface:   #0C0F18;
+  --tk-surface-2: #111525;
+  --tk-surface-3: #171C2E;
+  --tk-border:    rgba(255,255,255,0.06);
+  --tk-border-hi: rgba(255,255,255,0.11);
+  --tk-text:      #DDE4F2;
+  --tk-text-sub:  #7D8BA8;
+  --tk-text-dim:  #3F4D68;
+  --tk-shadow:    0 14px 44px rgba(0,0,0,0.55);
+
+  --tk-blue:      #4B8BFF;
+  --tk-blue-mid:  #2563EB;
+  --tk-blue-dim:  rgba(75,139,255,0.10);
+  --tk-ok:    #34D399;
+  --tk-warn:  #FBBF24;
+  --tk-err:   #F87171;
+  --tk-purple: #9B6DFF;
+  --tk-pink:   #EC4899;
+
+  --tk-font-d: 'Syne',    'Trebuchet MS', 'Arial Black', sans-serif;
+  --tk-font-b: 'Inter',   'Segoe UI',     'Helvetica Neue', sans-serif;
+  --tk-font-m: 'DM Mono', 'Consolas',     'Courier New', monospace;
+}
+
+[data-theme='light'] .tk-page {
+  --tk-bg:        #EFF2F9;
+  --tk-surface:   #FFFFFF;
+  --tk-surface-2: #E8EDF8;
+  --tk-surface-3: #D8E0F0;
+  --tk-border:    rgba(0,0,0,0.07);
+  --tk-border-hi: rgba(0,0,0,0.13);
+  --tk-text:      #0B1120;
+  --tk-text-sub:  #4A5678;
+  --tk-text-dim:  #96A3BE;
+  --tk-shadow:    0 8px 32px rgba(0,0,0,0.09);
+  --tk-blue:      #2563EB;
+  --tk-blue-mid:  #1D4ED8;
+  --tk-err:       #DC2626;
+  --tk-warn:      #D97706;
+  --tk-ok:        #059669;
+}
+
+.tk-page *, .tk-page *::before, .tk-page *::after {
+  box-sizing: border-box;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+/* ── Root ── */
+.tk-page {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  overflow: hidden;
+  background: var(--tk-bg);
+  color: var(--tk-text);
+  font-family: var(--tk-font-b);
+  font-size: 13px;
+}
+
+.tk-page__main {
+  flex: 1;
+  min-width: 0;
+  padding: 24px 32px;
+  overflow-y: auto;
+}
+
+.tk-page__main::-webkit-scrollbar { width: 6px; }
+.tk-page__main::-webkit-scrollbar-thumb { background: var(--tk-surface-3); border-radius: 9px; }
+
+/* ── Header ── */
+.tk-page__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+
+.tk-page__title {
+  margin: 0;
+  font-family: var(--tk-font-d);
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  color: var(--tk-text);
+}
+
+.tk-page__subtitle {
+  color: var(--tk-text-sub);
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+/* ── Buttons ── */
+.tk-page__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: 1px solid var(--tk-border-hi);
+  background: var(--tk-surface);
+  color: var(--tk-text-sub);
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: var(--tk-font-b);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.tk-page__btn:hover { background: var(--tk-surface-2); color: var(--tk-text); }
+
+.tk-page__btn--primary {
+  background: linear-gradient(135deg, var(--tk-blue), var(--tk-blue-mid));
+  color: #fff;
+  border-color: var(--tk-blue-mid);
+  font-weight: 600;
+}
+
+.tk-page__btn--primary:hover {
+  filter: brightness(1.08);
+  background: linear-gradient(135deg, var(--tk-blue), var(--tk-blue-mid));
+  color: #fff;
+}
+
+.tk-page__btn--danger {
+  background: rgba(248,113,113,0.10);
+  color: var(--tk-err);
+  border-color: rgba(248,113,113,0.32);
+}
+
+.tk-page__btn--danger:hover {
+  background: rgba(248,113,113,0.18);
+  color: var(--tk-err);
+}
+
+.tk-page__btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Filters ── */
+.tk-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 14px 18px;
+  background: var(--tk-surface);
+  border: 1px solid var(--tk-border);
+  border-radius: 10px;
+  margin-bottom: 16px;
+}
+
+.tk-filters__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+
+.tk-filters__row > span:first-child {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--tk-text-dim);
+  font-family: var(--tk-font-m);
+  font-weight: 500;
+}
+
+.tk-filters__row select {
+  padding: 6px 10px;
+  border: 1px solid var(--tk-border-hi);
+  border-radius: 6px;
+  background: var(--tk-surface-2);
+  color: var(--tk-text);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tk-filters__row select:hover { border-color: var(--tk-blue); }
+
+.tk-filters__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--tk-border-hi);
+  background: var(--tk-surface-2);
+  color: var(--tk-text-sub);
+  border-radius: 14px;
+  cursor: pointer;
+  font-size: 11px;
+  font-family: var(--tk-font-m);
+  user-select: none;
+}
+
+.tk-filters__chip:hover { background: var(--tk-surface-3); color: var(--tk-text); }
+
+.tk-filters__chip input[type='checkbox'] {
+  width: 12px;
+  height: 12px;
+  accent-color: var(--tk-blue);
+  margin: 0;
+}
+
+.tk-filters__chip:has(input:checked) {
+  border-color: var(--tk-blue);
+  background: var(--tk-blue-dim);
+  color: var(--tk-text);
+}
+
+/* ── Table ── */
+.tk-list__table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--tk-surface);
+  border: 1px solid var(--tk-border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.tk-list__table th,
+.tk-list__table td {
+  padding: 11px 16px;
+  text-align: left;
+  border-bottom: 1px solid var(--tk-border);
+  font-size: 13px;
+  color: var(--tk-text);
+}
+
+.tk-list__table th {
+  background: var(--tk-surface-2);
+  font-family: var(--tk-font-m);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--tk-text-dim);
+}
+
+.tk-list__table tbody tr:last-child td { border-bottom: none; }
+
+.tk-list__row { cursor: pointer; }
+.tk-list__row:hover { background: var(--tk-surface-2); }
+
+.tk-list__title { font-weight: 500; color: var(--tk-text); }
+.tk-list__cat   { color: var(--tk-text-sub); font-size: 12px; font-family: var(--tk-font-m); }
+.tk-list__date  { color: var(--tk-text-dim); font-size: 11.5px; white-space: nowrap; font-family: var(--tk-font-m); }
+
+.tk-list__empty {
+  padding: 48px 32px;
+  text-align: center;
+  color: var(--tk-text-sub);
+  background: var(--tk-surface);
+  border: 1px solid var(--tk-border);
+  border-radius: 12px;
+  font-size: 13px;
+}
+
+/* ── Badges severity ── */
+.tk__sev {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-family: var(--tk-font-m);
+  font-size: 10.5px;
+  font-weight: 600;
+  border: 1px solid;
+}
+
+.tk__sev--low       { color: var(--tk-ok);   background: rgba(52,211,153,0.10); border-color: rgba(52,211,153,0.28); }
+.tk__sev--medium    { color: var(--tk-blue); background: rgba(75,139,255,0.10); border-color: rgba(75,139,255,0.28); }
+.tk__sev--high      { color: var(--tk-warn); background: rgba(251,191,36,0.10); border-color: rgba(251,191,36,0.28); }
+.tk__sev--critical  { color: var(--tk-err);  background: rgba(248,113,113,0.12); border-color: rgba(248,113,113,0.32); }
+
+/* ── Badges status ── */
+.tk__status {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-family: var(--tk-font-m);
+  font-size: 10.5px;
+  font-weight: 600;
+  background: var(--tk-surface-3);
+  color: var(--tk-text-sub);
+  border: 1px solid var(--tk-border-hi);
+  text-transform: lowercase;
+}
+
+.tk__status--open         { color: var(--tk-blue);   background: rgba(75,139,255,0.10); border-color: rgba(75,139,255,0.28); }
+.tk__status--in_progress  { color: var(--tk-warn);   background: rgba(251,191,36,0.10); border-color: rgba(251,191,36,0.28); }
+.tk__status--waiting_user { color: var(--tk-pink);   background: rgba(236,72,153,0.10); border-color: rgba(236,72,153,0.28); }
+.tk__status--resolved     { color: var(--tk-ok);     background: rgba(52,211,153,0.10); border-color: rgba(52,211,153,0.28); }
+.tk__status--closed       { color: var(--tk-text-dim); background: var(--tk-surface-3); border-color: var(--tk-border-hi); }
+.tk__status--reopened     { color: var(--tk-err);    background: rgba(248,113,113,0.12); border-color: rgba(248,113,113,0.32); }
+
+/* ── Badges kind ── */
+.tk__kind {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-family: var(--tk-font-m);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid;
+}
+
+.tk__kind--td { color: var(--tk-purple); background: rgba(155,109,255,0.10); border-color: rgba(155,109,255,0.28); }
+.tk__kind--us { color: var(--tk-blue);   background: rgba(75,139,255,0.10);  border-color: rgba(75,139,255,0.28); }
+
+/* ── Detail ── */
+.tk-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.tk-detail__back {
+  background: transparent;
+  border: 1px solid var(--tk-border-hi);
+  color: var(--tk-text-sub);
+  cursor: pointer;
+  padding: 5px 12px;
+  font-size: 11.5px;
+  font-family: var(--tk-font-m);
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+
+.tk-detail__back:hover { background: var(--tk-surface-2); color: var(--tk-text); }
+
+.tk-detail__meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px 28px;
+  padding: 18px 22px;
+  background: var(--tk-surface);
+  border: 1px solid var(--tk-border);
+  border-radius: 12px;
+}
+
+.tk-detail__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.tk-detail__label {
+  font-family: var(--tk-font-m);
+  font-size: 9px;
+  color: var(--tk-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+}
+
+.tk-detail__field > span:not(.tk-detail__label):not(.tk__status):not(.tk__sev):not(.tk__kind) {
+  color: var(--tk-text);
+  font-size: 13px;
+}
+
+.tk-detail__field select {
+  padding: 6px 10px;
+  border: 1px solid var(--tk-border-hi);
+  border-radius: 6px;
+  background: var(--tk-surface-2);
+  color: var(--tk-text);
+  font-family: inherit;
+  font-size: 12.5px;
+  max-width: 220px;
+  cursor: pointer;
+}
+
+.tk-detail__field select:hover { border-color: var(--tk-blue); }
+.tk-detail__field select:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.tk-detail__btn {
+  padding: 5px 12px;
+  background: var(--tk-surface-2);
+  border: 1px solid var(--tk-border-hi);
+  color: var(--tk-text-sub);
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: var(--tk-font-b);
+  font-size: 11.5px;
+  margin-left: 8px;
+}
+
+.tk-detail__btn:hover { background: var(--tk-surface-3); color: var(--tk-text); }
+
+.tk-detail__btn--danger {
+  background: rgba(248,113,113,0.08);
+  color: var(--tk-err);
+  border-color: rgba(248,113,113,0.28);
+}
+
+.tk-detail__btn--danger:hover {
+  background: rgba(248,113,113,0.14);
+  color: var(--tk-err);
+}
+
+.tk-detail__description,
+.tk-detail__attachments,
+.tk-detail__comments {
+  padding: 18px 22px;
+  background: var(--tk-surface);
+  border: 1px solid var(--tk-border);
+  border-radius: 12px;
+}
+
+.tk-detail__description h3,
+.tk-detail__attachments h3,
+.tk-detail__comments h3 {
+  margin: 0 0 14px 0;
+  font-family: var(--tk-font-m);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--tk-text-dim);
+  display: flex;
+  align-items: center;
+}
+
+.tk-detail__descr-body {
+  white-space: pre-wrap;
+  font-family: var(--tk-font-b);
+  margin: 0;
+  color: var(--tk-text);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.tk-detail__att-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.tk-detail__att-list li {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--tk-border);
+  font-size: 13px;
+  color: var(--tk-text);
+}
+
+.tk-detail__att-list li:last-child { border-bottom: none; }
+
+.tk-detail__att-link {
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: var(--tk-blue);
+  font-family: var(--tk-font-b);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.tk-detail__att-link:hover { color: var(--tk-blue-mid); }
+
+.tk-detail__att-meta {
+  color: var(--tk-text-dim);
+  font-size: 11px;
+  font-family: var(--tk-font-m);
+  flex: 1;
+}
+
+.tk-detail__empty {
+  color: var(--tk-text-dim);
+  font-size: 12px;
+  font-style: italic;
+  padding: 8px 0;
+}
+
+.tk-detail__attachments input[type='file'] {
+  font-size: 11.5px;
+  font-family: var(--tk-font-m);
+  color: var(--tk-text-sub);
+}
+
+.tk-detail__attachments input[type='file']::file-selector-button {
+  padding: 4px 10px;
+  background: var(--tk-surface-2);
+  border: 1px solid var(--tk-border-hi);
+  color: var(--tk-text-sub);
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  margin-right: 8px;
+}
+
+.tk-detail__attachments input[type='file']::file-selector-button:hover {
+  background: var(--tk-surface-3);
+  color: var(--tk-text);
+}
+
+/* Comments */
+.tk-comment {
+  padding: 12px 14px;
+  background: var(--tk-surface-2);
+  border-left: 3px solid var(--tk-blue);
+  border-radius: 0 6px 6px 0;
+  margin-bottom: 10px;
+}
+
+.tk-comment__head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  margin-bottom: 8px;
+  color: var(--tk-text);
+}
+
+.tk-comment__head strong {
+  font-weight: 600;
+  color: var(--tk-text);
+}
+
+.tk-comment__head span {
+  color: var(--tk-text-dim);
+  font-family: var(--tk-font-m);
+  font-size: 11px;
+}
+
+.tk-comment__body {
+  white-space: pre-wrap;
+  font-family: var(--tk-font-b);
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--tk-text);
+}
+
+.tk-comment-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.tk-comment-form textarea {
+  padding: 10px 12px;
+  border: 1px solid var(--tk-border-hi);
+  border-radius: 8px;
+  font-family: var(--tk-font-b);
+  font-size: 13px;
+  resize: vertical;
+  background: var(--tk-surface-2);
+  color: var(--tk-text);
+  line-height: 1.5;
+}
+
+.tk-comment-form textarea:focus {
+  outline: none;
+  border-color: var(--tk-blue);
+  background: var(--tk-surface);
+}
+
+.tk-comment-form textarea::placeholder { color: var(--tk-text-dim); }
+
+.tk-comment-form button { align-self: flex-end; }
+
+/* ── Modal (ha i propri token perché può aprirsi fuori da .tk-page) ── */
+.tk-modal__overlay {
+  --tk-bg:        #07090F;
+  --tk-surface:   #0C0F18;
+  --tk-surface-2: #111525;
+  --tk-surface-3: #171C2E;
+  --tk-border:    rgba(255,255,255,0.06);
+  --tk-border-hi: rgba(255,255,255,0.11);
+  --tk-text:      #DDE4F2;
+  --tk-text-sub:  #7D8BA8;
+  --tk-text-dim:  #3F4D68;
+  --tk-shadow:    0 14px 44px rgba(0,0,0,0.55);
+  --tk-blue:      #4B8BFF;
+  --tk-blue-mid:  #2563EB;
+  --tk-blue-dim:  rgba(75,139,255,0.10);
+  --tk-font-d: 'Syne',    'Trebuchet MS', sans-serif;
+  --tk-font-b: 'Inter',   'Segoe UI', sans-serif;
+  --tk-font-m: 'DM Mono', 'Consolas', monospace;
+
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+[data-theme='light'] .tk-modal__overlay {
+  --tk-bg:        #EFF2F9;
+  --tk-surface:   #FFFFFF;
+  --tk-surface-2: #E8EDF8;
+  --tk-surface-3: #D8E0F0;
+  --tk-border:    rgba(0,0,0,0.07);
+  --tk-border-hi: rgba(0,0,0,0.13);
+  --tk-text:      #0B1120;
+  --tk-text-sub:  #4A5678;
+  --tk-text-dim:  #96A3BE;
+  --tk-blue:      #2563EB;
+  --tk-blue-mid:  #1D4ED8;
+}
+
+.tk-modal {
+  background: var(--tk-surface);
+  color: var(--tk-text);
+  border: 1px solid var(--tk-border-hi);
+  border-radius: 12px;
+  width: min(560px, 92vw);
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: var(--tk-shadow);
+  font-family: var(--tk-font-b);
+}
+
+.tk-modal__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--tk-border);
+}
+
+.tk-modal__header h2 {
+  margin: 0;
+  font-family: var(--tk-font-d);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  color: var(--tk-text);
+}
+
+.tk-modal__close {
+  background: transparent;
+  border: none;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--tk-text-dim);
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.tk-modal__close:hover { color: var(--tk-text); background: var(--tk-surface-2); }
+
+.tk-modal__form {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.tk-modal__form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-family: var(--tk-font-m);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--tk-text-dim);
+}
+
+.tk-modal__form input,
+.tk-modal__form select,
+.tk-modal__form textarea {
+  padding: 9px 12px;
+  border: 1px solid var(--tk-border-hi);
+  border-radius: 8px;
+  font-family: var(--tk-font-b);
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+  background: var(--tk-surface-2);
+  color: var(--tk-text);
+}
+
+.tk-modal__form input:focus,
+.tk-modal__form select:focus,
+.tk-modal__form textarea:focus {
+  outline: none;
+  border-color: var(--tk-blue);
+  background: var(--tk-surface);
+}
+
+.tk-modal__form input::placeholder,
+.tk-modal__form textarea::placeholder { color: var(--tk-text-dim); }
+
+.tk-modal__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.tk-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--tk-border);
+}
+
+.tk-modal .tk-page__btn {
+  padding: 8px 16px;
+  border: 1px solid var(--tk-border-hi);
+  background: var(--tk-surface-2);
+  color: var(--tk-text-sub);
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: var(--tk-font-b);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.tk-modal .tk-page__btn:hover { background: var(--tk-surface-3); color: var(--tk-text); }
+
+.tk-modal .tk-page__btn--primary {
+  background: linear-gradient(135deg, var(--tk-blue), var(--tk-blue-mid));
+  color: #fff;
+  border-color: var(--tk-blue-mid);
+  font-weight: 600;
+}
+
+.tk-modal .tk-page__btn--primary:hover {
+  filter: brightness(1.08);
+  background: linear-gradient(135deg, var(--tk-blue), var(--tk-blue-mid));
+  color: #fff;
+}
+
+.tk-modal .tk-page__btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Responsive ── */
+@media (max-width: 900px) {
+  .tk-page__main { padding: 16px 20px; }
+  .tk-detail__meta { grid-template-columns: 1fr 1fr; }
+  .tk-modal__row { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 600px) {
+  .tk-page__main { padding: 14px; }
+  .tk-detail__meta { grid-template-columns: 1fr; }
+  .tk-list__table th:nth-child(5),
+  .tk-list__table td:nth-child(5) { display: none; }
+}

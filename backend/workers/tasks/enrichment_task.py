@@ -31,7 +31,7 @@ import time
 import json
 import threading
 from typing import Dict, Any, Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 from celery import current_task
 from workers.celery_app import celery_app
 from app.config import settings
@@ -51,9 +51,19 @@ def execute_enrichment_task(
     output_format: str = "csv",
     force_recalculate: bool = False,
     cleanup_file_source_ids: Optional[List[str]] = None,
+    is_eseguibile: bool = False,
+    run_id: Optional[str] = None,
+    user_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Task asincrono per eseguire l'arricchimento dati.
+
+    Idempotency (C4 round 3): se `run_id` viene passato dall'esterno
+    (scheduler, retry-handler UI) e in intermediate.runs esiste gia'
+    un record con status='completed' per quel run_id, il task SKIPPA
+    l'esecuzione e ritorna un risultato cached. Stesso pattern del
+    carica_task. Se run_id non viene passato → genera fresh (behavior
+    legacy, no idempotency).
 
     Args:
         project_id: ID del progetto
@@ -63,58 +73,143 @@ def execute_enrichment_task(
         cleanup_file_source_ids: Lista di file_source_id da eliminare al termine
             del task (sia in caso di successo che di errore). Usato dagli eseguibili
             per rimuovere i file temporanei creati durante l'esecuzione on-demand.
+        is_eseguibile: True quando il task gira per un "eseguibile" pubblicato.
+            In questa modalita' il task NON scrive nulla su DB (runs, log_runs,
+            results, node_rows, columns_metadata): persiste l'output su disco in
+            ESEGUIBILI_OUTPUTS_DIR/{task_id}/ e il frontend lo scarica via
+            GET /api/eseguibili/{id}/download/{task_id}, che elimina il file
+            dopo l'invio. Un cleanup periodico (celery beat) rimuove eventuali
+            file orfani.
+        run_id: Chiave di idempotency opzionale. Se passato e gia'
+            completato in intermediate.runs → task skippato.
 
     Returns:
-        Dict con risultato dell'esecuzione
+        Dict con risultato dell'esecuzione, oppure status='skipped_idempotent'
+        se il run_id era gia' completo.
     """
     task_id = self.request.id
+
+    # C4 round 3: idempotency guard. Se run_id e' passato dall'esterno
+    # (scheduler con schedule_run_id, UI retry-handler) ed e' gia'
+    # completato in intermediate.runs, skip senza ri-eseguire.
+    if run_id is not None:
+        from app.shared.idempotency import is_already_completed
+        if is_already_completed(run_id):
+            logger.info(
+                f"[IDEMPOTENCY] Task ENRICHMENT {task_id}: run_id {run_id} "
+                f"gia' completato con successo, skip."
+            )
+            return {
+                "status": "skipped_idempotent",
+                "success": True,
+                "message": f"Run {run_id} gia' completato",
+                "run_id": run_id,
+                "task_id": task_id,
+            }
+
     start_time = time.time()
-    
-    logger.info(f"[Task {task_id}] Avvio enrichment per progetto {project_id}", project_id=project_id)
-    
+
+    # N9: re-check permessi user al pickup (helper condiviso).
+    # Per is_eseguibile, skip: gli eseguibili hanno flusso di auth
+    # separato (token eseguibile) e non passano per user_id interattivo.
+    if not is_eseguibile:
+        from app.shared.async_user_recheck import recheck_user_authorized
+        _revoked = recheck_user_authorized(
+            user_id=user_id, project_id=project_id,
+            task_id=task_id, run_id=run_id or "", task_name="ENRICHMENT",
+        )
+        if _revoked is not None:
+            _revoked.update({"task_id": task_id, "project_id": project_id})
+            return _revoked
+
+    # Per gli eseguibili non propaghiamo project_id ai logger: il PostgresLogHandler
+    # lo userebbe come colonna `logs.project_id` creando tracce persistenti che
+    # vogliamo evitare.
+    _log_pid = "" if is_eseguibile else project_id
+
+    logger.info(f"[Task {task_id}] Avvio enrichment per progetto {project_id}", project_id=_log_pid)
+
     # Aggiorna stato: STARTED
-    update_task_progress(self, 0, "Inizializzazione...")
-    
+    update_task_progress(self, 0, "Inizializzazione...", task_id=task_id)
+
     # Variabili per statistiche enrichment
     enrichment_stats = None
     error_report_file = None
-    
-    # Apre run in intermediate.db (non bloccante)
+
+    # Apre run in intermediate.db (non bloccante).
+    # Per gli eseguibili saltiamo `intermediate.create_run` perche' l'eseguibile
+    # non e' un progetto in `projects`, quindi un record runs con
+    # canvas_id="exec_..." sarebbe orfano. MA il `_group_id` deve comunque
+    # essere recuperato (dalla tabella `eseguibili`) per propagarlo al
+    # tenant binding di `api_connection_service` piu' sotto: senza,
+    # `_load_*` / `_execute_rest_file` falliscono fail-closed con
+    # "Contesto di sicurezza non determinabile (group_id mancante)".
     import uuid as _uuid
-    _run_id = str(_uuid.uuid4())
     _run_start = time.time()
     _group_id = ""
-    try:
-        from app.core.intermediate import db as _idb
-        from app.services.project_service import ProjectService as _PS
-        _meta = _PS().get_project_metadata(project_id)
-        _group_id = getattr(_meta, 'group_id', 'unknown') if _meta else 'unknown'
-        _idb.create_run(run_id=_run_id, canvas_id=project_id, group_id=_group_id)
-    except Exception as _rie:
-        logger.warning(f"[Task {task_id}] Intermediate: apertura run fallita (non bloccante): {_rie}")
+    if is_eseguibile:
         _run_id = None
+        try:
+            from app.core.eseguibili.db import get_eseguibile as _get_eseg
+            _eseg = _get_eseg(project_id)
+            _group_id = (_eseg.get("group_id") or "") if _eseg else ""
+        except Exception as _ge:
+            logger.warning(
+                f"[Task {task_id}] Eseguibile group_id lookup fallito "
+                f"(non bloccante): {_ge}"
+            )
+    else:
+        _run_id = str(_uuid.uuid4())
+        try:
+            from app.core.intermediate import db as _idb
+            from app.services.project_service import ProjectService as _PS
+            _meta = _PS().get_project_metadata(project_id)
+            _group_id = getattr(_meta, 'group_id', 'unknown') if _meta else 'unknown'
+            _idb.create_run(run_id=_run_id, canvas_id=project_id, group_id=_group_id, user_id=user_id)
+        except Exception as _rie:
+            logger.warning(f"[Task {task_id}] Intermediate: apertura run fallita (non bloccante): {_rie}")
+            _run_id = None
 
     # --- Apri run su log.db ---
-    open_run(
-        run_id=_run_id or task_id,
-        project_id=project_id,
-        group_id=_group_id,
-        module="arricchisci",
-        triggered_by="manual",
-    )
-    set_run_context(run_id=_run_id or task_id, project_id=project_id)
+    # Per eseguibili: niente log_runs/logs su DB.
+    if not is_eseguibile:
+        open_run(
+            run_id=_run_id or task_id,
+            project_id=project_id,
+            group_id=_group_id,
+            module="arricchisci",
+            triggered_by="manual",
+            user_id=user_id,
+        )
+        set_run_context(run_id=_run_id or task_id, project_id=project_id)
 
     try:
-        # Import qui per evitare circular imports
-        from app.core.arricchisci.api_connector import api_connection_service
-        
+        # Import qui per evitare circular imports.
+        # IMPORTANTE: istanziamo una NUOVA `ApiConnectionService` invece di
+        # usare il singleton modulo-level. Il singleton ha stato per-execution
+        # (`_current_group_id`, `_preview_limit`) che e' soggetto a race
+        # condition cross-tenant fra task paralleli sullo stesso worker
+        # process (Celery prefork riusa i fork). Un'istanza locale per task
+        # garantisce isolamento totale del tenant binding.
+        from app.core.arricchisci.api_connector import ApiConnectionService
+        api_connection_service = ApiConnectionService()
+        # Tenant binding: i metodi `_execute_rest_file`,
+        # `_load_source_project`, `_load_file_source` richiedono
+        # `_current_group_id` per i check cross-tenant fail-closed. Senza
+        # questa init falliscono con "Contesto di sicurezza non determinabile
+        # per file_source" su qualunque canvas con nodi rest_file o file_source.
+        api_connection_service._current_group_id = (
+            _group_id if _group_id and _group_id != 'unknown' else None
+        )
+        api_connection_service._preview_limit = None  # task celery non e' preview
+
         nodes = canvas.get("nodes", [])
         edges = canvas.get("edges", [])
-        
+
         if not nodes:
             raise ValueError("Nessun nodo nel canvas")
 
-        update_task_progress(self, 5, "Caricamento dati...")
+        update_task_progress(self, 5, "Caricamento dati...", task_id=task_id)
 
         # Carica API connections
         api_connections = {}
@@ -123,287 +218,446 @@ def execute_enrichment_task(
             if full_api:
                 api_connections[api["id"]] = full_api
         
-        update_task_progress(self, 10, "API caricate, inizio elaborazione...")
+        update_task_progress(self, 10, "API caricate, inizio elaborazione...", task_id=task_id)
         
         # Ordine esecuzione topologico
-        execution_order = get_execution_order(nodes, edges)
+        execution_order = api_connection_service._get_execution_order(nodes, edges)
         node_results = {}
         
-        # Esegui nodi in ordine
-        for idx, node_id in enumerate(execution_order):
+        # ─── Raggruppamento nodi per esecuzione parallela ───
+        # compute_parallel_groups raggruppa api_enrich consecutivi che non
+        # dipendono l'uno dall'output dell'altro (leggono solo colonne gia'
+        # presenti nel DataFrame al momento del gruppo) → possono girare
+        # concorrentemente. I nodi di tipo source/static/result restano
+        # "single" (eseguiti uno alla volta).
+        from app.core.arricchisci.parallel import compute_parallel_groups, should_execute_node
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        parallel_groups = compute_parallel_groups(
+            execution_order, nodes, edges,
+            api_connections=api_connections,
+        )
+        logger.info(
+            f"[Task {task_id}] Gruppi esecuzione: "
+            f"{[(t, len(ids)) for t, ids in parallel_groups]}"
+        )
+
+        class _EarlyTaskReturn(Exception):
+            """Usata dentro la closure per early termination con payload.
+
+            Il loop esterno cattura questa eccezione e propaga il payload
+            come return del task. E' l'equivalente async-safe del `return`
+            diretto che il vecchio loop faceva in linea.
+            """
+            def __init__(self, payload):
+                self.payload = payload
+
+        def _run_single_node(node_id: str, node_progress: int,
+                             input_override=None) -> None:
+            """Esegue un singolo nodo del canvas.
+
+            Chiamata sequenzialmente per gli step "single" o in parallelo
+            (via ThreadPoolExecutor) per gli step "parallel" con >1 nodi
+            api_enrich indipendenti. Modifica node_results[node_id] in-place;
+            side-effect su enrichment_stats / error_report_file via nonlocal.
+
+            Parametri:
+                input_override: se non None, il nodo api_enrich lo usa come
+                    input_df invece di leggere node_results[input_edge.source].
+                    Serve nel caso dei batch paralleli dove tutti i nodi del
+                    batch condividono lo stesso input (il predecessore comune
+                    del batch), anche se topologicamente nel canvas sono
+                    concatenati (pattern pass-through).
+
+            Early termination: solleva _EarlyTaskReturn(payload) per errori
+            bloccanti (API mancante, continue_on_error=False con errori,
+            threshold errori raggiunto). Il caller propaga al global handler.
+            """
+            nonlocal enrichment_stats, error_report_file
+
             node = next((n for n in nodes if n["id"] == node_id), None)
             if not node:
-                continue
-            
+                return
+
             node_type = node.get("type")
-            # Merge: campi flat del nodo (da Pydantic) + node['data'] (da frontend)
-            # I campi in node['data'] hanno precedenza perché sono quelli salvati dal frontend
+            # Merge: campi flat del nodo + node['data'] (priorita' ai campi flat? no,
+            # a data — vedi commento vecchio codice). Stesso comportamento del loop
+            # originale.
             node_flat = {k: v for k, v in node.items() if k not in ("id", "type", "position", "data", "config")}
             node_data = {**node_flat, **(node.get("data") or {})}
-            
-            # Calcola progress base per questo nodo
-            node_progress = 10 + int((idx / len(execution_order)) * 80)
-            
+
             if node_type == "project_source":
-                update_task_progress(self, node_progress, f"Caricamento sorgente dati...")
-                result = load_source_project(node_data, force_recalculate)
+                update_task_progress(self, node_progress, f"Caricamento sorgente dati...", task_id=task_id)
+                result = api_connection_service._load_source_project(
+                    node_data, force_recalculate
+                )
                 node_results[node_id] = result
-                
-            elif node_type == "file_source":
-                # Controlla se downstream è executable → skip DataFrame parsing
+                return
+
+            if node_type == "file_source":
+                # Se il downstream e' un file-processor (rest_file) il file
+                # non va letto come DataFrame: resta un marker passthrough
+                # e il file vero viene risolto dal processor via file_source_id.
                 downstream_edges = [e for e in edges if e["source"] == node_id]
-                is_for_executable = False
+                is_for_file_processor = False
                 for de in downstream_edges:
                     target_node = next((n for n in nodes if n["id"] == de["target"]), None)
                     if target_node and target_node.get("type") == "api_enrich":
-                        target_api_id = target_node.get("data", {}).get("api_id")
+                        # Pydantic Node serializza tutti i campi al root del nodo;
+                        # `data` resta vuoto. Cerco prima al root, fallback dentro data.
+                        target_api_id = target_node.get("api_id") or (target_node.get("data") or {}).get("api_id")
                         target_api_config = api_connections.get(target_api_id, {})
-                        if target_api_config.get("connection_type") == "executable":
-                            is_for_executable = True
+                        if target_api_config.get("connection_type") == "rest_file":
+                            is_for_file_processor = True
                             break
-                
-                if is_for_executable:
-                    update_task_progress(self, node_progress, f"File source (passthrough per executable)...")
+
+                if is_for_file_processor:
+                    update_task_progress(self, node_progress, f"File source (passthrough per file processor)...", task_id=task_id)
                     node_results[node_id] = {
                         "_passthrough_file_source": True,
                         "file_source_id": node_data.get("file_source_id")
                     }
                 else:
-                    update_task_progress(self, node_progress, f"Caricamento file...")
-                    result = load_file_source(node_data)
+                    update_task_progress(self, node_progress, f"Caricamento file...", task_id=task_id)
+                    result = api_connection_service._load_file_source(node_data)
                     node_results[node_id] = result
-            
-            elif node_type == "staticValues":
-                update_task_progress(self, node_progress, f"Processamento valori statici...")
-                result = load_static_values(node_data)
+                return
+
+            if node_type == "staticValues":
+                update_task_progress(self, node_progress, f"Processamento valori statici...", task_id=task_id)
+                result = api_connection_service._load_static_values(node_data)
                 node_results[node_id] = result
-                
-            elif node_type == "api_enrich":
-                api_id = node_data.get("api_id")
-                api_config = api_connections.get(api_id)
+                return
 
-                if not api_config:
-                    logger.error(
-                        f"[GESTITO] [Task {task_id}] API '{api_id}' non trovata nel canvas "                        f"del progetto {project_id}"
-                    )
-                    return {
-                        "success": False,
-                        "task_id": task_id,
-                        "project_id": project_id,
-                        "error": f"Connessione API '{api_id}' non trovata. "                                  "Verifica che la connessione esista e non sia stata eliminata.",
-                        "enrichment_stats": enrichment_stats,
-                        "error_report": error_report_file,
-                    }
-
-                # ── execute_if: skip condizionale ──
-                from app.core.arricchisci.parallel import should_execute_node
-                _input_edge_check = next((e for e in edges if e["target"] == node_id), None)
-                _input_df_check = node_results.get(_input_edge_check["source"]) if _input_edge_check else None
-                if not should_execute_node(node_data, _input_df_check):
-                    logger.info(f"[Task {task_id}] Nodo {node_id} skippato (execute_if)")
-                    update_task_progress(self, node_progress, f"Nodo {node_id} skippato (condizione)")
-                    node_results[node_id] = _input_df_check
-                    continue
-
-                # ── EXECUTABLE: esegue processore locale (file→file) ──
-                if api_config.get("connection_type") == "executable":
-                    api_name = api_config.get("name", api_id)
-                    update_task_progress(self, node_progress, f"Esecuzione {api_name}...")
-                    
-                    result = api_connection_service._execute_executable(
-                        node_data, api_config, nodes, edges, node_id, project_id
-                    )
-                    if isinstance(result, dict) and not result.get("success", True):
-                        raise ValueError(result.get("error", "Errore esecuzione executable"))
-                    
-                    node_results[node_id] = result
-                else:
-                    api_type = api_config.get("api_type", "enricher")
-                    api_name = api_config.get("name", api_id)
-                
-                    if api_type == "generator":
-                        update_task_progress(self, node_progress, f"Chiamata API {api_name}...")
-                        # Cerca eventuale input (es. da StaticValues)
-                        input_edge = next((e for e in edges if e["target"] == node_id), None)
-                        input_df = None
-                        if input_edge:
-                            input_df = node_results.get(input_edge["source"])
-                        result = api_connection_service._execute_api_generator(api_config, input_df)
-                        node_results[node_id] = result
-                    else:
-                        # Enricher - elabora con deduplicazione e gestione errori
-                        input_edge = next((e for e in edges if e["target"] == node_id), None)
-                        
-                        # Nodo senza parametri obbligatori mappabili → API autonoma
-                        node_parameters = node_data.get("parameters") or api_config.get("parameters") or []
-                        needs_input = any(
-                            p.get("required") and p.get("mode") != "fixed"
-                            for p in node_parameters
-                        )
-                        
-                        if not input_edge and needs_input:
-                            raise ValueError(f"Nodo {node_id} non ha input")
-                        
-                        input_df = node_results.get(input_edge["source"]) if input_edge else None
-                        if input_df is None and needs_input:
-                            raise ValueError(f"Dati input non trovati per {node_id}")
-                        
-                        param_mapping = node_data.get("param_mapping", {})
-                        
-                        # output_mapping: prendi da node_data se presente, altrimenti da api_config
-                        # Deduplicazione per colonna (evita duplicati da import OpenAPI)
-                        raw_output_mapping = node_data.get("output_mapping") or api_config.get("output_mapping", [])
-                        seen_cols = set()
-                        deduped = []
-                        for m in (raw_output_mapping or []):
-                            col = m.get("column") or m.get("path")
-                            if col and col not in seen_cols:
-                                seen_cols.add(col)
-                                deduped.append(m)
-                        batch_from_node = node_data.get("batch", {})
-                        api_config = {**api_config, "output_mapping": deduped, "batch": batch_from_node or api_config.get("batch", {})}
-                        
-                        # Opzioni da node_data (configurabili da UI)
-                        exec_options = EnrichmentOptions(
-                            enable_deduplication=node_data.get("enable_deduplication", True),
-                            continue_on_error=node_data.get("continue_on_error", True),
-                            stop_on_error_threshold=node_data.get("max_errors", 0) or 0,
-                            generate_error_report=node_data.get("generate_error_report", True),
-                            skip_null_params=node_data.get("skip_null_params", True),
-                            rate_limit=api_config.get("options", {}).get("rate_limit", settings.API_DEFAULT_RATE_LIMIT),
-                            request_timeout=api_config.get("options", {}).get("timeout", settings.API_TIMEOUT),
-                            max_retries=api_config.get("options", {}).get("retry_max", 3),
-                            parallel_workers=api_config.get("options", {}).get("parallel_workers", 1),
-                        )
-                        
-                        # Progress callback che mappa su range del task
-                        # IMPORTANTE: usa default argument (_base=node_progress) per catturare
-                        # il valore corrente di node_progress, non la reference alla variabile
-                        # del loop (che cambierebbe ad ogni iterazione in caso di parallelismo)
-                        progress_range = 20
-                        def progress_callback(percent: int, message: str, _base=node_progress, _range=progress_range):
-                            mapped_progress = _base + int((percent / 100) * _range)
-                            update_task_progress(self, mapped_progress, message)
-                        
-                        # Crea executor ed esegui
-                        if input_df is None:
-                            # API autonoma (nessun parametro richiesto) → chiamata singola come generator
-                            result = api_connection_service._execute_api_generator(api_config, None)
-                            enrichment_stats = None
-                        else:
-                            executor = EnrichmentExecutor(
-                                api_config=api_config,
-                                param_mapping=param_mapping,
-                                options=exec_options,
-                                progress_callback=progress_callback
-                            )
-                            result, enrichment_result = executor.execute(input_df)
-                            enrichment_stats = enrichment_result.stats.to_dict()
-
-                            # Se continue_on_error=False e ci sono errori → task fallito
-                            if not exec_options.continue_on_error and enrichment_result.stats.errors > 0:
-                                logger.error(
-                                    f"[GESTITO] [Task {task_id}] Enrichment fallito: "
-                                    f"{enrichment_result.stats.errors} errori con continue_on_error=False"
-                                )
-                                return {
-                                    "success": False,
-                                    "task_id": task_id,
-                                    "project_id": project_id,
-                                    "error": (
-                                        f"{enrichment_result.stats.errors} righe fallite. "
-                                        "Imposta continue_on_error=True per ignorare gli errori."
-                                    ),
-                                    "enrichment_stats": enrichment_stats,
-                                    "error_report": error_report_file,
-                                }
-
-                            # Se lo stop_on_error_threshold è stato raggiunto,
-                            # il task deve terminare con failure — il loop si è
-                            # interrotto prima di processare tutte le righe.
-                            threshold = exec_options.stop_on_error_threshold
-                            if threshold > 0 and enrichment_result.stats.errors >= threshold:
-                                logger.warning(
-                                    f"[Task {task_id}] Threshold errori raggiunto "
-                                    f"({enrichment_result.stats.errors} >= {threshold}), task fallito"
-                                )
-                                return {
-                                    "success": False,
-                                    "task_id": task_id,
-                                    "project_id": project_id,
-                                    "error": (
-                                        f"Superato il limite massimo di errori ({threshold}). "
-                                        f"{enrichment_result.stats.errors} righe fallite su "
-                                        f"{enrichment_result.stats.total_rows}."
-                                    ),
-                                    "enrichment_stats": enrichment_stats,
-                                    "error_report": error_report_file,
-                                }
-
-                            # ── AUTO-SCHEMA: se schema_fields era vuoto (auto-flatten),
-                            # salva i tipi rilevati nella config API per il frontend ──
-                            if not api_config.get("output_mapping") and executor.detected_column_types:
-                                detected = executor.detected_column_types
-                                new_schema = [
-                                    {"path": col, "name": col, "type": typ}
-                                    for col, typ in detected.items()
-                                ]
-                                # Aggiungi anche le colonne di input sorgente come str
-                                for col in (result.columns if hasattr(result, 'columns') else []):
-                                    if col not in detected:
-                                        new_schema.append({"path": col, "name": col, "type": "str"})
-                                try:
-                                    api_connection_service.update_api_connection(
-                                        api_id, {"schema_fields": new_schema}
-                                    )
-                                    logger.info(f"[Task {task_id}] Schema auto-rilevato: {list(detected.keys())}")
-                                except Exception as _e:
-                                    logger.warning(f"[Task {task_id}] Aggiornamento schema fallito: {_e}")
-                            if exec_options.generate_error_report and enrichment_result.errors:
-                                output_dir = settings.RESULTS_DIR / project_id
-                                output_dir.mkdir(parents=True, exist_ok=True)
-                                error_report_file = generate_error_report(
-                                    enrichment_result.errors,
-                                    str(output_dir / f"enrichment_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
-                                )
-                            logger.info(
-                                f"[Task {task_id}] {api_name}: "
-                                f"{enrichment_result.stats.success}/{enrichment_result.stats.total_rows} OK, "
-                                f"{enrichment_result.stats.cached} cache, "
-                                f"{enrichment_result.stats.errors} errori, "
-                                f"{enrichment_result.stats.api_calls_saved} chiamate risparmiate"
-                            )
-                node_results[node_id] = result
-
-                # Snapshot intermediate.db — fire-and-forget thread (non bloccante)
-                if _run_id:
-                    try:
-                        import pandas as _pd
-                        _df = result if isinstance(result, _pd.DataFrame) else None
-                        if _df is not None and not _df.empty:
-                            _rows = _df.to_dict(orient="records")
-                            _schema = _df.dtypes.astype(str).to_dict()
-                            _nid = node_id
-                            _rid = _run_id
-                            def _async_write(_r=_rid, _n=_nid, _ro=_rows, _sc=_schema):
-                                try:
-                                    from app.core.intermediate.writer import write_node as _wn
-                                    _wn(run_id=_r, node_id=_n, node_type="api_enrich",
-                                        rows=_ro, col_schema=_sc, exec_time=0.0, status="ok")
-                                except Exception as _e:
-                                    pass  # non bloccante — errori ignorati
-                            threading.Thread(target=_async_write, daemon=True).start()
-                    except Exception as _sne:
-                        logger.warning(f"[Task {task_id}] Intermediate write nodo {node_id} fallita: {_sne}")
-
-            elif node_type == "result":
+            if node_type == "result":
+                # Il nodo result non produce output: prende l'input dall'edge
+                # (il salvataggio del risultato finale avviene dopo il loop).
                 input_edge = next((e for e in edges if e["target"] == node_id), None)
                 if input_edge:
                     input_df = node_results.get(input_edge["source"])
                     if input_df is not None:
                         node_results[node_id] = input_df
-        
-        update_task_progress(self, 90, "Salvataggio risultati...")
+                return
+
+            if node_type == "imdf_publisher":
+                # Passthrough nel DAG. La pubblicazione vera su ArcGIS avviene
+                # nel blocco post-processing api_enrich (dove il bundle IMDF e'
+                # gia' estratto dallo zip). Qui propaghiamo solo il risultato
+                # del predecessore perche' non romperemo l'execution order e
+                # perche' cosi' un eventuale result downstream riceve l'input.
+                input_edge = next((e for e in edges if e["target"] == node_id), None)
+                if input_edge:
+                    node_results[node_id] = node_results.get(input_edge["source"])
+                return
+
+            if node_type != "api_enrich":
+                return  # tipo sconosciuto → skip silente (era il comportamento del vecchio loop)
+
+            # ───── api_enrich ─────
+            api_id = node_data.get("api_id")
+            api_config = api_connections.get(api_id)
+
+            if not api_config:
+                logger.error(
+                    f"[GESTITO] [Task {task_id}] API '{api_id}' non trovata nel canvas "
+                    f"del progetto {project_id}"
+                )
+                raise _EarlyTaskReturn({
+                    "success": False,
+                    "task_id": task_id,
+                    "project_id": project_id,
+                    "error": f"Connessione API '{api_id}' non trovata. "
+                             "Verifica che la connessione esista e non sia stata eliminata.",
+                    "enrichment_stats": enrichment_stats,
+                    "error_report": error_report_file,
+                })
+
+            # ── execute_if: skip condizionale ──
+            _input_edge_check = next((e for e in edges if e["target"] == node_id), None)
+            _input_df_check = node_results.get(_input_edge_check["source"]) if _input_edge_check else None
+            if not should_execute_node(node_data, _input_df_check):
+                logger.info(f"[Task {task_id}] Nodo {node_id} skippato (execute_if)")
+                update_task_progress(self, node_progress, f"Nodo {node_id} skippato (condizione)", task_id=task_id)
+                node_results[node_id] = _input_df_check
+                return
+
+            # ── REST FILE: invia file a servizio HTTP remoto, riceve binario ──
+            if api_config.get("connection_type") == "rest_file":
+                api_name = api_config.get("name", api_id)
+                update_task_progress(self, node_progress, f"Esecuzione {api_name} (REST file)...", task_id=task_id)
+
+                result = api_connection_service._execute_rest_file(
+                    node_data, api_config, nodes, edges, node_id, project_id,
+                    node_results=node_results,
+                )
+                if isinstance(result, dict) and not result.get("success", True):
+                    raise ValueError(result.get("error", "Errore esecuzione REST file processor"))
+
+                node_results[node_id] = result
+
+            else:
+                api_type = api_config.get("api_type", "enricher")
+                api_name = api_config.get("name", api_id)
+
+                if api_type == "generator":
+                    update_task_progress(self, node_progress, f"Chiamata API {api_name}...", task_id=task_id)
+                    input_edge = next((e for e in edges if e["target"] == node_id), None)
+                    input_df = None
+                    if input_edge:
+                        input_df = node_results.get(input_edge["source"])
+                    result = api_connection_service._execute_api_generator(api_config, input_df)
+                    node_results[node_id] = result
+                else:
+                    # Enricher
+                    input_edge = next((e for e in edges if e["target"] == node_id), None)
+
+                    node_parameters = node_data.get("parameters") or api_config.get("parameters") or []
+                    needs_input = any(
+                        p.get("required") and p.get("mode") != "fixed"
+                        for p in node_parameters
+                    )
+
+                    if not input_edge and needs_input and input_override is None:
+                        raise ValueError(f"Nodo {node_id} non ha input")
+
+                    # Se il chiamante ha fornito un input_override (esecuzione
+                    # in batch parallelo), lo usiamo come input del nodo
+                    # invece di leggere da node_results[input_edge.source].
+                    # Questo e' il meccanismo con cui i nodi di un batch
+                    # condividono lo stesso DataFrame di partenza anche quando
+                    # topologicamente nel canvas sono concatenati.
+                    if input_override is not None:
+                        input_df = input_override
+                    else:
+                        input_df = node_results.get(input_edge["source"]) if input_edge else None
+                    if input_df is None and needs_input:
+                        raise ValueError(f"Dati input non trovati per {node_id}")
+
+                    param_mapping = node_data.get("param_mapping", {})
+
+                    raw_output_mapping = node_data.get("output_mapping") or api_config.get("output_mapping", [])
+                    seen_cols = set()
+                    deduped = []
+                    for m in (raw_output_mapping or []):
+                        col = m.get("column") or m.get("path")
+                        if col and col not in seen_cols:
+                            seen_cols.add(col)
+                            deduped.append(m)
+                    batch_from_node = node_data.get("batch", {})
+                    # IMPORTANTE: non riassegnare api_config (variabile closure condivisa
+                    # tra thread). Usa una copia locale api_config_local.
+                    api_config_local = {
+                        **api_config,
+                        "output_mapping": deduped,
+                        "batch": batch_from_node or api_config.get("batch", {}),
+                    }
+
+                    exec_options = EnrichmentOptions(
+                        enable_deduplication=node_data.get("enable_deduplication", True),
+                        continue_on_error=node_data.get("continue_on_error", True),
+                        stop_on_error_threshold=node_data.get("max_errors", 0) or 0,
+                        generate_error_report=node_data.get("generate_error_report", True),
+                        skip_null_params=node_data.get("skip_null_params", True),
+                        rate_limit=api_config_local.get("options", {}).get("rate_limit", settings.API_DEFAULT_RATE_LIMIT),
+                        request_timeout=api_config_local.get("options", {}).get("timeout", settings.API_TIMEOUT),
+                        max_retries=api_config_local.get("options", {}).get("retry_max", 3),
+                        parallel_workers=api_config_local.get("options", {}).get("parallel_workers", 1),
+                    )
+
+                    # Progress callback: usa default argument per catturare node_progress
+                    # al momento della creazione (non riferimento mutabile).
+                    progress_range = 20
+                    def progress_callback(percent: int, message: str, _base=node_progress, _range=progress_range):
+                        mapped_progress = _base + int((percent / 100) * _range)
+                        update_task_progress(self, mapped_progress, message, task_id=task_id)
+
+                    if input_df is None:
+                        # API autonoma (nessun parametro richiesto) → chiamata singola come generator
+                        result = api_connection_service._execute_api_generator(api_config_local, None)
+                        enrichment_stats = None
+                    else:
+                        executor = EnrichmentExecutor(
+                            api_config=api_config_local,
+                            param_mapping=param_mapping,
+                            options=exec_options,
+                            progress_callback=progress_callback,
+                        )
+                        result, enrichment_result = executor.execute(input_df)
+                        enrichment_stats = enrichment_result.stats.to_dict()
+
+                        if not exec_options.continue_on_error and enrichment_result.stats.errors > 0:
+                            logger.error(
+                                f"[GESTITO] [Task {task_id}] Enrichment fallito: "
+                                f"{enrichment_result.stats.errors} errori con continue_on_error=False"
+                            )
+                            raise _EarlyTaskReturn({
+                                "success": False,
+                                "task_id": task_id,
+                                "project_id": project_id,
+                                "error": (
+                                    f"{enrichment_result.stats.errors} righe fallite. "
+                                    "Imposta continue_on_error=True per ignorare gli errori."
+                                ),
+                                "enrichment_stats": enrichment_stats,
+                                "error_report": error_report_file,
+                            })
+
+                        threshold = exec_options.stop_on_error_threshold
+                        if threshold > 0 and enrichment_result.stats.errors >= threshold:
+                            logger.warning(
+                                f"[Task {task_id}] Threshold errori raggiunto "
+                                f"({enrichment_result.stats.errors} >= {threshold}), task fallito"
+                            )
+                            raise _EarlyTaskReturn({
+                                "success": False,
+                                "task_id": task_id,
+                                "project_id": project_id,
+                                "error": (
+                                    f"Superato il limite massimo di errori ({threshold}). "
+                                    f"{enrichment_result.stats.errors} righe fallite su "
+                                    f"{enrichment_result.stats.total_rows}."
+                                ),
+                                "enrichment_stats": enrichment_stats,
+                                "error_report": error_report_file,
+                            })
+
+                        # ── AUTO-SCHEMA ──
+                        if not api_config_local.get("output_mapping") and executor.detected_column_types:
+                            detected = executor.detected_column_types
+                            new_schema = [
+                                {"path": col, "name": col, "type": typ}
+                                for col, typ in detected.items()
+                            ]
+                            for col in (result.columns if hasattr(result, 'columns') else []):
+                                if col not in detected:
+                                    new_schema.append({"path": col, "name": col, "type": "str"})
+                            try:
+                                api_connection_service.update_api_connection(
+                                    api_id, {"schema_fields": new_schema}
+                                )
+                                logger.info(f"[Task {task_id}] Schema auto-rilevato: {list(detected.keys())}")
+                            except Exception as _e:
+                                logger.warning(f"[Task {task_id}] Aggiornamento schema fallito: {_e}")
+                        if exec_options.generate_error_report and enrichment_result.errors:
+                            output_dir = settings.RESULTS_DIR / project_id
+                            output_dir.mkdir(parents=True, exist_ok=True)
+                            error_report_file = generate_error_report(
+                                enrichment_result.errors,
+                                str(output_dir / f"enrichment_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}")
+                            )
+                        logger.info(
+                            f"[Task {task_id}] {api_name}: "
+                            f"{enrichment_result.stats.success}/{enrichment_result.stats.total_rows} OK, "
+                            f"{enrichment_result.stats.cached} cache, "
+                            f"{enrichment_result.stats.errors} errori, "
+                            f"{enrichment_result.stats.api_calls_saved} chiamate risparmiate"
+                        )
+            node_results[node_id] = result
+
+            # Snapshot intermediate.db — fire-and-forget thread (non bloccante)
+            if _run_id:
+                try:
+                    import pandas as _pd
+                    _df = result if isinstance(result, _pd.DataFrame) else None
+                    if _df is not None and not _df.empty:
+                        _rows = _df.to_dict(orient="records")
+                        _schema = _df.dtypes.astype(str).to_dict()
+                        _nid = node_id
+                        _rid = _run_id
+                        def _async_write(_r=_rid, _n=_nid, _ro=_rows, _sc=_schema):
+                            try:
+                                from app.core.intermediate.writer import write_node as _wn
+                                _wn(run_id=_r, node_id=_n, node_type="api_enrich",
+                                    rows=_ro, col_schema=_sc, exec_time=0.0, status="ok")
+                            except Exception:
+                                pass  # non bloccante
+                        threading.Thread(target=_async_write, daemon=True).start()
+                except Exception as _sne:
+                    logger.warning(f"[Task {task_id}] Intermediate write nodo {node_id} fallita: {_sne}")
+
+        # ─── Esecuzione per gruppi: single (qualunque tipo) o parallel (N api_enrich) ───
+        for step_type, node_ids in parallel_groups:
+            # Progress base del gruppo = progress del primo nodo nel execution_order
+            idx_first = execution_order.index(node_ids[0])
+            base_progress = 10 + int((idx_first / len(execution_order)) * 80)
+
+            if len(node_ids) == 1:
+                # Single: niente overhead threading, lettura normale via input_edge
+                _run_single_node(node_ids[0], base_progress)
+                continue
+
+            # Parallel: N nodi api_enrich indipendenti.
+            #
+            # Modello "fan-out artificiale": anche se topologicamente nel
+            # canvas i nodi del batch possono essere concatenati (es.
+            # A→B→C pass-through), logicamente consumano colonne gia'
+            # prodotte *prima* del batch e aggiungono colonne disgiunte.
+            # Per eseguirli in parallelo devono tutti vedere lo stesso
+            # input_df: quello del predecessore del PRIMO nodo del batch.
+            first_node_id = node_ids[0]
+            first_input_edge = next(
+                (e for e in edges if e["target"] == first_node_id), None
+            )
+            common_input_df = None
+            if first_input_edge:
+                common_input_df = node_results.get(first_input_edge["source"])
+            if common_input_df is None:
+                # Fallback difensivo: se per qualche motivo non troviamo
+                # l'input comune, ripiega su esecuzione sequenziale (il
+                # vecchio comportamento, che usa input_edge per-nodo).
+                logger.warning(
+                    f"[Task {task_id}] Batch parallelo senza input comune, "
+                    f"fallback a esecuzione sequenziale per {len(node_ids)} nodi"
+                )
+                for nid in node_ids:
+                    _run_single_node(nid, base_progress)
+                continue
+
+            max_workers = min(len(node_ids), 10)
+            logger.info(
+                f"[Task {task_id}] Esecuzione parallela: {len(node_ids)} nodi "
+                f"(workers={max_workers}, input_rows={len(common_input_df)})"
+            )
+            update_task_progress(
+                self, base_progress,
+                f"Esecuzione parallela di {len(node_ids)} nodi...",
+                task_id=task_id,
+            )
+            with ThreadPoolExecutor(max_workers=max_workers) as pool:
+                futures = {
+                    pool.submit(
+                        _run_single_node, nid, base_progress, common_input_df
+                    ): nid
+                    for nid in node_ids
+                }
+                for future in as_completed(futures):
+                    # future.result() risolleva eventuali _EarlyTaskReturn o
+                    # altre eccezioni → propagate al global handler del task
+                    future.result()
+
+            # Merge: costruiamo un unico DataFrame che contiene common_input_df
+            # + tutte le colonne nuove prodotte dai nodi del batch. Poi
+            # sovrascriviamo node_results[nid] di OGNI nodo del batch con
+            # il merged, cosi' il nodo successivo nel DAG (che ha edge
+            # verso l'ultimo nodo del batch) legge un DataFrame completo.
+            try:
+                import pandas as _pd
+                merged = common_input_df.copy() if hasattr(common_input_df, "copy") else common_input_df
+                for nid in node_ids:
+                    nr = node_results.get(nid)
+                    if isinstance(nr, _pd.DataFrame):
+                        new_cols = [c for c in nr.columns if c not in merged.columns]
+                        for c in new_cols:
+                            merged[c] = nr[c].values
+                for nid in node_ids:
+                    node_results[nid] = merged
+            except Exception as _me:
+                logger.warning(
+                    f"[Task {task_id}] Merge batch parallelo fallito: {_me}. "
+                    f"Proseguo con node_results per-nodo (potrebbe mancare qualche colonna)"
+                )
+
+        update_task_progress(self, 90, "Salvataggio risultati...", task_id=task_id)
         
         # Trova output finale
         result_node = next((n for n in nodes if n.get("type") == "result"), None)
@@ -438,11 +692,10 @@ def execute_enrichment_task(
         # ── EXECUTABLE FILE RESULT ──
         if isinstance(final_result, dict) and final_result.get("is_file_result"):
             from pathlib import Path
-            from app.utils.result_store import save_result_blob
 
             src_path = Path(final_result["output_path"]).resolve()
             elapsed_time = time.time() - start_time
-            update_task_progress(self, 100, "Completato!")
+            update_task_progress(self, 100, "Completato!", task_id=task_id)
 
             # Rinomina il file con il nome dal nodo result (se specificato)
             src_ext = src_path.suffix  # es. .csv
@@ -473,9 +726,11 @@ def execute_enrichment_task(
                 elif ext in ('.xlsx', '.xls'):
                     import openpyxl
                     wb = openpyxl.load_workbook(str(src_path), read_only=True, data_only=True)
-                    ws = wb.active
-                    rows_count = max(0, ws.max_row - 1)
-                    wb.close()
+                    try:
+                        ws = wb.active
+                        rows_count = max(0, ws.max_row - 1)
+                    finally:
+                        wb.close()
 
                 elif ext == '.json':
                     import json as json_mod
@@ -494,51 +749,160 @@ def execute_enrichment_task(
                 src_path.unlink(missing_ok=True)
                 raise ValueError(f"Output non valido ({ext}): {val_err}") from val_err
 
-            # Salva nel DB e cancella il file temp (stesso pattern ESTRAI)
-            result_id = save_result_blob(
-                project_id=project_id,
-                path=src_path,
-                fmt=src_path.suffix.lstrip(".") or "bin",
-                rows_count=rows_count,
+            # NOTA: la pubblicazione automatica su ArcGIS (chiamata a
+            # upload_imdf_layers dal modulo `app.core.imdf`) qui era stata
+            # cablata in modo provvisorio leggendo i campi `imdf_*` dal nodo
+            # result. E' stata rimossa: la pubblicazione su ArcGIS sara'
+            # gestita da un nodo dedicato (publisher) in una fase futura.
+            # Il modulo `app.core.imdf` resta disponibile per quel reuse.
+
+            # ── ESTRAZIONE METADATI IMDF ─────────────────────────────────
+            # Se nel canvas c'e' almeno un nodo api_enrich con
+            # output_kind='imdf', il file zip prodotto e' un IMDF: estraiamo
+            # manifest.json + validation.json e li includiamo inline nel task
+            # result come `result['imdf']`. Il frontend li mostra nei modali
+            # del nodo Result senza dover rifetchare il file.
+            # Sono piccoli (manifest ~10KB, validation ~6KB), inline e' OK.
+            imdf_metadata: Optional[Dict[str, Any]] = None
+            has_imdf_upstream = any(
+                (n.get("output_kind") == "imdf" or (n.get("data") or {}).get("output_kind") == "imdf")
+                for n in nodes
+                if n.get("type") == "api_enrich"
             )
-            logger.info(f"[Task {task_id}] File result salvato nel DB: {result_id}")
-            
+            if has_imdf_upstream and ext == ".zip":
+                try:
+                    from app.core.imdf.loader import extract_imdf_zip
+                    from app.core.imdf.persist import persist_imdf_bundle_to_disk
+                    bundle = extract_imdf_zip(str(src_path))
+
+                    # ── Persisti il bundle su disco ────────────────────
+                    # NON serializziamo piu' geojson/manifest/validation/renderers
+                    # nel task result: restano tutti sul filesystem in
+                    # IMDF_BUNDLES_DIR/{task_id}/, il frontend li carica
+                    # on-demand via GET /api/imdf/bundles/{task_id}.
+                    #
+                    # `persist_imdf_bundle_to_disk` garantisce in try/finally
+                    # il cleanup di `bundle.tmp_dir` in OGNI caso (anche
+                    # su errore di move), prevenendo orfani `/tmp/imdf_XXXX/`.
+                    bundle_persisted_path = None
+                    try:
+                        _res = persist_imdf_bundle_to_disk(
+                            bundle, task_id=task_id, project_id=project_id,
+                        )
+                        bundle_persisted_path = _res["path"]
+                    except Exception as _persist_e:
+                        logger.warning(
+                            f"[Task {task_id}] Persistenza bundle fallita: {_persist_e}"
+                        )
+                        # cleanup già eseguito dal finally interno di persist
+
+                    # ── Task result SLIM ──────────────────────────────
+                    # Solo informazioni minime che servono al frontend
+                    # per sapere "esiste un bundle IMDF" + link per fetch
+                    # lazy. I dettagli vengono da GET /api/imdf/bundles/{id}.
+                    imdf_metadata = {
+                        "site_id":        bundle.site_id,
+                        "has_gdb":        bundle.gdb_path is not None,
+                        "has_ifc":        bundle.ifc_path is not None,
+                        "has_renderers":  bundle.renderers_path is not None,
+                        "bundle_task_id": task_id if bundle_persisted_path else None,
+                    }
+                    logger.info(
+                        f"[Task {task_id}] IMDF metadata estratti: "
+                        f"site={imdf_metadata['site_id']} "
+                        f"has_gdb={imdf_metadata['has_gdb']} "
+                        f"has_ifc={imdf_metadata['has_ifc']} "
+                        f"has_renderers={imdf_metadata['has_renderers']}"
+                    )
+                except Exception as _imdf_e:
+                    logger.warning(f"[Task {task_id}] Estrazione metadati IMDF fallita: {_imdf_e}")
+                    imdf_metadata = {"error": str(_imdf_e)}
+
+            # `result_id` viene generato solo nel ramo arricchisci standard
+            # (save su DB). Per gli eseguibili pubblicati il file vive su
+            # disco e si scarica via /api/eseguibili/.../download, quindi
+            # non c'e' result_id da propagare.
+            result_id: Optional[str] = None
+
+            if is_eseguibile:
+                # Upload su object storage (S3 via cloud_backends). Niente FS
+                # locale persistente: backend+worker multi-host safe. Il
+                # frontend scarica via GET /api/eseguibili/{id}/download/{task_id}
+                # che streamma da S3 e cancella l'oggetto dopo l'invio.
+                import shutil as _shutil
+                from app.core.eseguibili import storage as _eseg_storage
+                _output_filename = src_path.name
+                _eseg_storage.save(task_id, src_path)
+                # Cleanup directory temporanea dell'executable (plenora_exec_*)
+                try:
+                    tmp_parent = src_path.parent
+                    if tmp_parent.name.startswith("plenora_exec_") and tmp_parent.exists():
+                        _shutil.rmtree(tmp_parent, ignore_errors=True)
+                except Exception:
+                    pass
+                # src_path non punta piu' a un file locale; conserviamo il nome
+                # per il payload del task result (usato come metadata).
+                src_path = Path(_output_filename)
+                logger.info(f"[Task {task_id}] Output eseguibile su storage: eseguibili-outputs/{task_id}/{_output_filename}")
+            else:
+                # Flusso arricchisci standard: salva nel DB
+                from app.utils.result_store import save_result_blob
+                result_id = save_result_blob(
+                    project_id=project_id,
+                    path=src_path,
+                    fmt=src_path.suffix.lstrip(".") or "bin",
+                    rows_count=rows_count,
+                )
+                logger.info(f"[Task {task_id}] File result persistito: {result_id}")
+
             result = {
                 "success": True,
                 "task_id": task_id,
                 "project_id": project_id,
+                # `result_id` propagato per il download via
+                # `/api/tasks/{task_id}/download` che usa
+                # `task_info.result["result_id"]` (vedi
+                # orchestrator/router.py:580). Senza, 410 Gone.
+                "result_id": result_id,
                 "output_type": "file",
                 "output_file": src_path.name,
                 "output_filename": src_path.name,
-                
-                "rows_processed": 0,
+
+                "rows_processed": rows_count,
                 "columns": [],
                 "output_format": src_path.suffix.lstrip("."),
                 "elapsed_time": round(elapsed_time, 2),
-                "completed_at": datetime.now().isoformat(),
+                "completed_at": datetime.now(timezone.utc).isoformat(),
                 "execution_time_ms": final_result.get("execution_time_ms", 0),
                 "enrichment_stats": None,
                 "error_report": None,
-                "message": f"Processamento completato: {src_path.name}"
+                "message": f"Processamento completato: {src_path.name}",
             }
+            if imdf_metadata is not None:
+                result["imdf"] = imdf_metadata
+            if is_eseguibile:
+                # URL relativo; il frontend lo compone con il base host.
+                result["download_url"] = f"/api/eseguibili/{project_id}/download/{task_id}"
             
             logger.info(f"[Task {task_id}] Executable completato in {elapsed_time:.2f}s - {src_path.name}")
 
-            # ── CARICA anche nel branch executable ──
-            try:
-                carica_info = _trigger_carica_if_present(
-                    project_id=project_id,
-                    canvas=canvas,
-                    output_format=src_path.suffix.lstrip(".") or "bin",
-                )
-                if carica_info:
-                    result["carica"] = carica_info
-            except Exception as _ce:
-                logger.error(
-                    f"[GESTITO] [Task {task_id}] Errore avvio task CARICA dopo executable: {_ce}",
-                    project_id=project_id, exc_info=True
-                )
+            # ── CARICA anche nel branch file-result (saltato per eseguibili pubblicati) ──
+            if not is_eseguibile:
+                try:
+                    carica_info = _trigger_carica_if_present(
+                        project_id=project_id,
+                        canvas=canvas,
+                        output_format=src_path.suffix.lstrip(".") or "bin",
+                    )
+                    if carica_info:
+                        result["carica"] = carica_info
+                except Exception as _ce:
+                    logger.error(
+                        f"[GESTITO] [Task {task_id}] Errore avvio task CARICA dopo rest_file: {_ce}",
+                        project_id=project_id, exc_info=True
+                    )
 
+            _cleanup_temp_file_sources(cleanup_file_source_ids, task_id)
             return result
         
         # ── DATAFRAME RESULT (flusso standard) ──
@@ -546,58 +910,108 @@ def execute_enrichment_task(
         
         if final_df is None:
             raise ValueError("Nessun risultato finale")
-        # B-BE-59: df vuoto (0 righe) è un risultato valido — non crashare,
+        # N14: df vuoto (0 righe) è un risultato valido — non crashare,
         # salva un file con solo l'header.
         if hasattr(final_df, "empty") and final_df.empty:
             logger.info(f"[Task {task_id}] DataFrame vuoto (0 righe) — salvo output con solo header")
         
-        # Salva in temp, poi nel DB, poi cancella (stesso pattern ESTRAI)
-        from app.utils.dataframe import save_dataframe
-        from app.utils.result_store import get_temp_output_path, save_result_blob
-
-        tmp_path = get_temp_output_path(f"{output_filename}.{final_format}")
-        saved_path = save_dataframe(df=final_df, output_path=tmp_path, format=final_format)
-
+        # Salva DataFrame come bytes/object su destinazione finale.
+        # Niente DATA_DIR/temp staging (save_pipeline_result e la variante
+        # S3 per eseguibili gestiscono il dispatch internamente).
+        final_filename = f"{output_filename}.{final_format}"
         elapsed_time = time.time() - start_time
+        result_id: Optional[str] = None
 
-        result_id = save_result_blob(
-            project_id=project_id,
-            path=saved_path,
-            fmt=final_format,
-            rows_count=len(final_df),
-        )
-        logger.info(f"[Task {task_id}] Risultato salvato nel DB: {result_id}")
+        if is_eseguibile:
+            # Eseguibile con output DataFrame → S3 via storage module.
+            # save_bytes fa put_object diretto (zero disk) per formati
+            # in-memory-safe. Per fmt fs-only (gpkg/shp) il driver GDAL/OGR
+            # richiede un path: usiamo TemporaryDirectory che garantisce
+            # rmtree al __exit__ (no orphan su SIGKILL mid-run entro il
+            # cleanup OS-level del /tmp).
+            from app.core.eseguibili import storage as _eseg_storage
+            from app.utils.dataframe import save_dataframe, save_dataframe_to_bytes
+            fmt_lower = (final_format or "").lower()
+            if fmt_lower in ("gpkg", "shp"):
+                import tempfile as _tf
+                with _tf.TemporaryDirectory(
+                    prefix="urby_eseg_gpkg_shp_",
+                    ignore_cleanup_errors=True,
+                ) as tmp_dir:
+                    tmp_path = Path(tmp_dir) / final_filename
+                    saved_local = save_dataframe(
+                        df=final_df, output_path=tmp_path, format=final_format,
+                    )
+                    # Bytes → S3 put_object direct. La dir viene pulita
+                    # al __exit__ anche se save_bytes solleva.
+                    data_bytes = saved_local.read_bytes()
+                    _eseg_storage.save_bytes(
+                        task_id, saved_local.name, data_bytes,
+                    )
+            else:
+                data_bytes = save_dataframe_to_bytes(final_df, fmt_lower)
+                _eseg_storage.save_bytes(task_id, final_filename, data_bytes)
+            saved_path = Path(final_filename)  # per metadata payload
+            logger.info(f"[Task {task_id}] Output eseguibile (df) su storage: eseguibili-outputs/{task_id}/{final_filename}")
+        else:
+            # Arricchisci standard: single entry-point save_pipeline_result.
+            from app.utils.result_store import save_pipeline_result
+            saved = save_pipeline_result(
+                project_id=project_id,
+                df=final_df,
+                output_format=final_format,
+                filename_stem=output_filename,
+                rows_count=len(final_df),
+            )
+            result_id = saved["result_id"]
+            saved_path = Path(saved["output_filename"])
+            logger.info(f"[Task {task_id}] Risultato persistito: {result_id}")
 
-        # B-BE-39: salva columns_metadata nel progetto per uso come project_source
-        try:
+            # B-BE-39: salva columns_metadata nel progetto per uso come project_source.
+            # Helper condiviso (retry transient + raise non-transient): se fallisce
+            # in modo permanente, ColumnsMetadataSaveError propaga al try/except
+            # esterno di Celery che marca il task FAILED — pre-fix il warning
+            # silenzioso lasciava il task SUCCESS con metadata stale.
             from app.services.project_service import ProjectService as _ProjSvc
+            from app.shared.columns_metadata import save_columns_metadata_with_retry
             _col_meta = [{"name": col, "type": str(final_df[col].dtype)} for col in final_df.columns]
-            _ProjSvc().update_project_columns_metadata(project_id, _col_meta)
+            save_columns_metadata_with_retry(
+                project_service=_ProjSvc(),
+                project_id=project_id,
+                columns_metadata=_col_meta,
+                logger=logger,
+                op=f"enrichment_task[{task_id}]:save_columns_metadata",
+            )
             logger.info(f"[Task {task_id}] columns_metadata salvato: {len(_col_meta)} colonne")
-        except Exception as _cme:
-            logger.warning(f"[Task {task_id}] Impossibile salvare columns_metadata: {_cme}")
 
-        update_task_progress(self, 100, "Completato!")
-        
+        update_task_progress(self, 100, "Completato!", task_id=task_id)
+
         result = {
             "success": True,
             "task_id": task_id,
             "project_id": project_id,
+            # `result_id` propagato per il download via
+            # `/api/tasks/{task_id}/download` (orchestrator/router.py:580).
+            # None nel ramo eseguibile: il frontend in quel caso usa
+            # `download_url` → `/api/eseguibili/.../download/{task_id}`.
+            "result_id": result_id,
             "rows_processed": len(final_df),
             "columns": list(final_df.columns),
             "output_file": saved_path.name,
             "output_format": final_format,
             "elapsed_time": round(elapsed_time, 2),
-            "completed_at": datetime.now().isoformat(),
+            "completed_at": datetime.now(timezone.utc).isoformat(),
             # Statistiche enrichment
             "enrichment_stats": enrichment_stats,
             "error_report": error_report_file,
         }
-        
-        logger.info(f"[Task {task_id}] Completato in {elapsed_time:.2f}s - {len(final_df)} righe", project_id=project_id)
+        if is_eseguibile:
+            result["download_url"] = f"/api/eseguibili/{project_id}/download/{task_id}"
+
+        logger.info(f"[Task {task_id}] Completato in {elapsed_time:.2f}s - {len(final_df)} righe", project_id=_log_pid)
 
         # Snapshot result node su intermediate.db — fire-and-forget thread
-        if _run_id and result_node:
+        if _run_id and result_node and not is_eseguibile:
             try:
                 _rows_r = final_df.to_dict(orient="records")
                 _schema_r = final_df.dtypes.astype(str).to_dict()
@@ -614,7 +1028,7 @@ def execute_enrichment_task(
             except Exception as _sne:
                 logger.warning(f"[Task {task_id}] Intermediate write result node fallita: {_sne}")
 
-        if _run_id:
+        if _run_id and not is_eseguibile:
             _exec_time = time.time() - _run_start
             _rid_c = _run_id
             def _async_close(_r=_rid_c, _t=_exec_time):
@@ -627,20 +1041,21 @@ def execute_enrichment_task(
             threading.Thread(target=_async_close, daemon=True).start()
 
         # --- Step tracking + close run su log.db ---
-        _elapsed_ms = int((time.time() - _run_start) * 1000)
-        _rows_ok = result.get("rows_processed", 0) or 0
-        append_step({
-            "module":      "arricchisci",
-            "status":      "success",
-            "rows_out":    _rows_ok,
-            "duration_ms": _elapsed_ms,
-        })
-        close_run(
-            run_id=_run_id or task_id,
-            status="success",
-            rows_out=_rows_ok,
-            duration_ms=_elapsed_ms,
-        )
+        if not is_eseguibile:
+            _elapsed_ms = int((time.time() - _run_start) * 1000)
+            _rows_ok = result.get("rows_processed", 0) or 0
+            append_step({
+                "module":      "arricchisci",
+                "status":      "success",
+                "rows_out":    _rows_ok,
+                "duration_ms": _elapsed_ms,
+            })
+            close_run(
+                run_id=_run_id or task_id,
+                status="success",
+                rows_out=_rows_ok,
+                duration_ms=_elapsed_ms,
+            )
 
         # ── CARICA: lancia task carica se presenti nodi collegati all'output ──
         # Stessa logica di OrchestratorService._execute_carica_if_present ma qui
@@ -666,7 +1081,32 @@ def execute_enrichment_task(
         return result
 
     except Exception as e:
-        if _run_id:
+        # Catch dei _EarlyTaskReturn sollevati dalla closure _run_single_node
+        # (anche da thread worker paralleli). Questi portano un payload gia'
+        # pronto per il return del task: niente logging CRASH, niente close_run
+        # in failure mode, niente debug_payload — e' un fallimento "gestito".
+        # Nota: _EarlyTaskReturn e' definita come classe locale dentro il try,
+        # quindi qui la riconosciamo via name matching sul __class__.
+        if type(e).__name__ == "_EarlyTaskReturn" and hasattr(e, "payload"):
+            if _run_id and not is_eseguibile:
+                try:
+                    from app.core.intermediate.writer import close_run as _close_run
+                    _close_run(run_id=_run_id, input_hash="", output_hash="",
+                               total_exec_time=time.time() - _run_start, success=False)
+                except Exception:
+                    pass
+            if not is_eseguibile:
+                _elapsed_ms_er = int((time.time() - _run_start) * 1000)
+                close_run(
+                    run_id=_run_id or task_id,
+                    status="failure",
+                    duration_ms=_elapsed_ms_er,
+                    error_module="arricchisci",
+                    error_message=e.payload.get("error", "task early return"),
+                )
+            _cleanup_temp_file_sources(cleanup_file_source_ids, task_id)
+            return e.payload
+        if _run_id and not is_eseguibile:
             try:
                 from app.core.intermediate.writer import close_run as _close_run
                 _close_run(run_id=_run_id, input_hash="", output_hash="",
@@ -675,43 +1115,44 @@ def execute_enrichment_task(
                 pass
         error_message = str(e)
         _elapsed_ms_f = int((time.time() - _run_start) * 1000)
-        logger.error(f"[CRASH] [Task {task_id}] Errore: {error_message}", project_id=project_id)
+        logger.error(f"[CRASH] [Task {task_id}] Errore: {error_message}", project_id=_log_pid)
 
-        # --- debug_payload ---
-        try:
-            from app.utils.debug_payload_builder import DebugPayloadBuilder
-            import traceback as _tb
-            _debug_payload = DebugPayloadBuilder().build(
+        if not is_eseguibile:
+            # --- debug_payload ---
+            try:
+                from app.utils.debug_payload_builder import DebugPayloadBuilder
+                import traceback as _tb
+                _debug_payload = DebugPayloadBuilder().build(
+                    run_id=_run_id or task_id,
+                    project_id=project_id,
+                    steps=[],
+                    failure={
+                        "node_id":        None,
+                        "node_type":      "api_enrich",
+                        "node_label":     "ARRICCHISCI",
+                        "module":         "arricchisci",
+                        "error_type":     type(e).__name__,
+                        "error_message":  error_message,
+                        "traceback":      _tb.format_exc(),
+                        "occurred_at_ms": _elapsed_ms_f,
+                    },
+                )
+            except Exception:
+                _debug_payload = None
+
+            close_run(
                 run_id=_run_id or task_id,
-                project_id=project_id,
-                steps=[],
-                failure={
-                    "node_id":        None,
-                    "node_type":      "api_enrich",
-                    "node_label":     "ARRICCHISCI",
-                    "module":         "arricchisci",
-                    "error_type":     type(e).__name__,
-                    "error_message":  error_message,
-                    "traceback":      _tb.format_exc(),
-                    "occurred_at_ms": _elapsed_ms_f,
-                },
+                status="failure",
+                duration_ms=_elapsed_ms_f,
+                error_module="arricchisci",
+                error_message=error_message,
+                debug_payload=_debug_payload,
             )
-        except Exception:
-            _debug_payload = None
-
-        close_run(
-            run_id=_run_id or task_id,
-            status="failure",
-            duration_ms=_elapsed_ms_f,
-            error_module="arricchisci",
-            error_message=error_message,
-            debug_payload=_debug_payload,
-        )
         
         # NON usare state="FAILURE" direttamente - causa problemi con Celery/Redis
         # Invece, aggiorniamo con progress negativo ma stato PROGRESS e is_error=True
         try:
-            update_task_progress(self, 0, f"Errore: {error_message}", is_error=True)
+            update_task_progress(self, 0, f"Errore: {error_message}", is_error=True, task_id=task_id)
         except Exception:
             pass  # Ignora errori di update
 
@@ -724,7 +1165,7 @@ def execute_enrichment_task(
             "task_id": task_id,
             "project_id": project_id,
             "error": error_message,
-            "failed_at": datetime.now().isoformat(),
+            "failed_at": datetime.now(timezone.utc).isoformat(),
             # Statistiche parziali se disponibili
             "enrichment_stats": enrichment_stats,
             "error_report": error_report_file,
@@ -760,64 +1201,54 @@ def _cleanup_temp_file_sources(file_source_ids: Optional[List[str]], task_id: st
             logger.warning(f"[Task {task_id}] Cleanup: errore eliminando '{fsid}': {e}")
 
 
-def update_task_progress(task, progress: int, message: str, is_error: bool = False):
+def update_task_progress(
+    task,
+    progress: int,
+    message: str,
+    is_error: bool = False,
+    *,
+    task_id: Optional[str] = None,
+):
     """
     Aggiorna il progresso del task in Redis.
 
     Usa sempre lo stato 'PROGRESS' (mai 'FAILURE') per evitare che Celery
     interpreti il task come terminato. Il frontend determina lo stato
     reale dal flag is_error e dall'eventuale prefisso "Errore:" nel messaggio.
+
+    `task_id` keyword obbligatorio quando la chiamata avviene da un
+    thread spawned (es. ThreadPoolExecutor del loop parallelo). Celery
+    `Task.request.id` e' thread-local: nei thread worker spawned dal
+    main thread del task, `self.request.id` ricade su `None` e
+    `backend.store_result(task_id=None, ...)` solleva
+    "task_id must not be empty. Got None instead.". Passare `task_id`
+    esplicito (catturato all'inizio del task da `self.request.id`)
+    bypassa il fallback thread-local.
     """
     task.update_state(
+        task_id=task_id,
         state="PROGRESS",
         meta={
             "progress": max(0, progress),
             "message": message,
             "is_error": is_error,
-            "updated_at": datetime.now().isoformat()
-        }
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        },
     )
 
 
-# ── Funzioni delegate ai moduli app.* ────────────────────────────────────────
-# Il worker Celery importa normalmente da app.* — non serve duplicare.
-# Usando le versioni canoniche si garantisce che fix e miglioramenti
-# si propaghino automaticamente senza aggiornare il worker separatamente.
-
-def get_execution_order(nodes: list, edges: list) -> list:
-    """Delega a api_connector._get_execution_order (algoritmo di Kahn)."""
-    from app.core.arricchisci.api_connector import api_connection_service
-    return api_connection_service._get_execution_order(nodes, edges)
-
-
-def find_latest_output_file(output_dir):
-    """Delega a app.utils.dataframe.find_latest_output (cerca file più recente)."""
-    from app.utils.dataframe import find_latest_output
-    return find_latest_output(str(output_dir))
-
-
-def load_dataframe_from_file(file_path):
-    """Delega a app.utils.dataframe.load_dataframe_from_file."""
-    from app.utils.dataframe import load_dataframe_from_file as _load
-    return _load(str(file_path))
-
-
-def load_source_project(node_data: Dict, force_recalculate: bool = False):
-    """Delega a api_connector._load_source_project."""
-    from app.core.arricchisci.api_connector import api_connection_service
-    return api_connection_service._load_source_project(node_data, force_recalculate)
-
-
-def load_file_source(node_data: Dict):
-    """Delega a api_connector._load_file_source."""
-    from app.core.arricchisci.api_connector import api_connection_service
-    return api_connection_service._load_file_source(node_data)
-
-
-def load_static_values(node_data: Dict):
-    """Delega a api_connector._load_static_values."""
-    from app.core.arricchisci.api_connector import api_connection_service
-    return api_connection_service._load_static_values(node_data)
+# Helper modulo-level rimossi: usavano il singleton globale
+# `api_connection_service` con stato per-execution non isolato fra task
+# paralleli. Ora il task celery (`execute_enrichment_task`) crea una
+# propria istanza locale di `ApiConnectionService` e chiama direttamente
+# `_get_execution_order` / `_load_source_project` / `_load_file_source` /
+# `_load_static_values` su di essa. Questo garantisce isolamento del
+# tenant binding (`_current_group_id`) fra task concorrenti sullo stesso
+# worker process Celery (prefork riusa i fork).
+#
+# `find_latest_output_file` e `load_dataframe_from_file` erano gia'
+# semplici alias di `app.utils.dataframe`: i call site usano direttamente
+# l'import canonico.
 
 
 def _trigger_carica_if_present(project_id: str, canvas: Dict, output_format: str = "csv") -> Optional[Dict[str, Any]]:

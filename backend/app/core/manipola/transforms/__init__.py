@@ -6,7 +6,7 @@ base.py e spatial.py tramite importlib dinamico. Questo __init__.py
 serve per import espliciti nei test e negli strumenti di sviluppo.
 
 Alias disponibili:
-    op_concat → op_union  (unione verticale di DataFrame, nome storico)
+    op_concat → op_union  (entrambi sono unione verticale di DataFrame)
 """
 
 # ── Trasformazioni base ──────────────────────────────────────────────────────
@@ -47,7 +47,7 @@ from .base import (
     op_string_extract,
 )
 
-# Alias storico: op_concat è sinonimo di op_union (unione verticale di DataFrame)
+# Alias: op_concat e' sinonimo di op_union (unione verticale di DataFrame)
 from .base import op_union as op_concat  # noqa: F401
 
 # ── Trasformazioni spaziali ──────────────────────────────────────────────────

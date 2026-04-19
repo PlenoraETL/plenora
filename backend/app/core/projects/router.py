@@ -19,11 +19,11 @@ Endpoints:
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
-from typing import Any, Optional
+from typing import Any, List, Optional
 
 from app.utils.logger import get_logger
-from app.shared.models import CanvasState
-from app.shared.exceptions import ProjectHasDependenciesError
+from app.shared.models import CanvasState, Node, Edge
+from app.shared.exceptions import ProjectHasDependenciesError, CanvasCorruptedError
 from app.core.auth.auth import (
     get_current_user,
     require_not_esecutore,
@@ -135,6 +135,21 @@ def list_projects(current_user: CurrentUser = Depends(require_not_esecutore)):
                 else:
                     project_dict['source_project_ids'] = []
                     project_dict['file_source_ids'] = []
+            except CanvasCorruptedError as e:
+                # Lista di progetti: NON rompiamo la pagina se un
+                # singolo progetto ha canvas corrotto. Listiamo il
+                # progetto con source_ids=[] ma marchiamo il campo
+                # `canvas_corrupted=True` cosi' il frontend puo'
+                # evidenziarlo (badge rosso) e l'admin sa quali
+                # progetti richiedono ripristino.
+                logger.error(
+                    f"Canvas corrotto in list_projects per {project.id}: "
+                    f"{e.reason}",
+                    op="list_projects",
+                )
+                project_dict['source_project_ids'] = []
+                project_dict['file_source_ids'] = []
+                project_dict['canvas_corrupted'] = True
             except Exception:
                 project_dict['source_project_ids'] = []
                 project_dict['file_source_ids'] = []
@@ -146,7 +161,14 @@ def list_projects(current_user: CurrentUser = Depends(require_not_esecutore)):
 
 @router.get("/{project_id}")
 def get_project(project_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
-    """Ottieni progetto specifico (metadata + canvas + columns_metadata)"""
+    """Ottieni progetto specifico (metadata + canvas + columns_metadata).
+
+    Se il canvas in DB e' corrotto, `get_project_canvas` solleva
+    `CanvasCorruptedError` → handler globale (main.py) restituisce 500
+    con detail esplicito + error_code=canvas_corrupted. Pre-fix il
+    fallback silenzioso a canvas vuoto portava l'utente a sovrascrivere
+    i dati corrotti originali senza accorgersene.
+    """
     metadata = _project_service.get_project_metadata(project_id)
     assert_group_access(metadata, current_user, f"Progetto '{project_id}'")
 
@@ -184,8 +206,17 @@ def delete_project(project_id: str, current_user: CurrentUser = Depends(require_
 
 
 class CanvasWithPlugins(BaseModel):
-    nodes: Any = []
-    edges: Any = []
+    """Body del PUT /projects/{id}/canvas.
+
+    C11: pre-fix `nodes: Any, edges: Any` accettava qualsiasi struttura
+    (anche stringa, int, None) e la validazione strutturale veniva
+    delegata a CanvasState più avanti — che a sua volta poteva produrre
+    errori oscuri a runtime. Ora tipizziamo con `List[Node]/List[Edge]`:
+    Pydantic rifiuta 422 al binding se il payload non matcha, con
+    messaggi diagnostici per ogni campo errato.
+    """
+    nodes: List[Node] = []
+    edges: List[Edge] = []
     plugins: Optional[dict] = None   # ignorato — rimasto per compatibilità frontend
 
 
@@ -205,8 +236,84 @@ def update_project_canvas(
 
     canvas = CanvasState(nodes=body.nodes, edges=body.edges)
 
-    if not _project_service.update_canvas(project_id, canvas):
-        raise HTTPException(404, f"Progetto '{project_id}' non trovato")
+    # C11: reject canvas con nodi orfani. Un nodo di tipo non-source
+    # (es. transform, api_enrich, result, carica, multi_join) senza
+    # alcun edge incoming provoca a runtime:
+    # - JOIN: CROSS JOIN silente (ora refused da query_generator) →
+    #   errore in esecuzione;
+    # - RESULT: nessuna fonte dati → output vuoto o errore;
+    # - TRANSFORM: input schema None → crash executor.
+    # Molto meglio rifiutare al save con messaggio claro.
+    # Esenti: nodi che sono sorgenti per definizione (source,
+    # feature_source, project_source, file_source, staticValues,
+    # datasource_node) + comment (non influenza il flusso dati).
+    _SOURCE_LIKE = {
+        "source", "feature_source", "project_source", "file_source",
+        "staticValues", "datasource_node", "comment",
+    }
+    target_ids = {e.target for e in canvas.edges}
+    orphans = [
+        n.id for n in canvas.nodes
+        if n.type not in _SOURCE_LIKE and n.id not in target_ids
+    ]
+    if orphans:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Canvas contiene nodi orfani (nessun edge incoming): "
+                f"{', '.join(orphans)}. Aggiungi almeno una relazione "
+                f"verso ciascuno di questi nodi, oppure rimuovili dal "
+                f"canvas prima di salvare."
+            ),
+        )
+
+    # C9: backend single source of truth per result_node.columns.
+    # Pre-fix, il frontend poteva inviare columns stale/vuote (vedi
+    # canvasSerializer.js:270 che ricade su `saved` quando l'upstream
+    # diretto non ha data.columns — tipico per api_enrich). Post-fix,
+    # il backend ricomputa autorevolmente via SchemaInferenceService
+    # (che gia' gestisce tutti i node type + BFS via edges) e inietta
+    # nel canvas in-memory PRIMA di persistere. Cosi' il canvas
+    # salvato ha result.columns corrette, il reload UI legge il
+    # canvas e il ResultNode mostra le colonne giuste.
+    try:
+        from app.shared.canvas_columns import (
+            compute_result_columns,
+            find_result_node,
+        )
+        result_node = find_result_node(canvas)
+        if result_node is not None:
+            computed = compute_result_columns(
+                canvas=canvas,
+                result_id=result_node.id,
+                project_id=project_id,
+                project_service=_project_service,
+            )
+            if computed:
+                # Mutate in-place: il canvas verra' persistito subito
+                # dopo con update_canvas(). Column(BaseModel) accetta
+                # **dict via pydantic.
+                from app.shared.models import Column
+                result_node.columns = [Column(**c) for c in computed]
+    except Exception as _ccerr:
+        # Non bloccare il save se il compute fallisce (canvas malformato,
+        # node type sconosciuto, ecc.). Cade nel comportamento
+        # pre-fix (frontend columns preserved). Loggato per visibility.
+        logger.warning(
+            f"C9 compute_result_columns fallito (non bloccante): {_ccerr}",
+            exc_info=True,
+        )
+
+    try:
+        if not _project_service.update_canvas(project_id, canvas):
+            raise HTTPException(404, f"Progetto '{project_id}' non trovato")
+    except HTTPException:
+        raise
+    except Exception as e:
+        from app.services.project_lineage import ProjectLineageCycleError
+        if isinstance(e, ProjectLineageCycleError):
+            raise HTTPException(400, str(e))
+        raise
 
     # Estrai e salva columns_metadata dal nodo Result
     columns_metadata = []

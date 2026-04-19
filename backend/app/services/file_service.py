@@ -3,12 +3,15 @@ Servizio CRUD per File Source (sorgenti dati da file caricati).
 
 Architettura
 ============
-Questo servizio gestisce il ciclo di vita dei file caricati dall'utente
-come sorgenti dati per i progetti MANIPOLA. Supporta upload, preview,
-listing, aggiornamento ed eliminazione.
+Gestisce il ciclo di vita dei file sources caricati dall'utente.
+Tutto lo storage (blob binario + metadata JSON) vive nel DB
+(`plenora.file_sources` table), niente persistenza su filesystem.
+Il filesystem viene usato solo per file **temporanei** durante il
+processing (fiona/GDAL lavorano con path fisici) e vengono eliminati
+al termine dell'operazione.
 
 Dependency Injection per testabilità:
-- FileSystemProtocol: operazioni filesystem (mock per test senza I/O reale)
+- FileSystemProtocol: operazioni temp file (mock per test senza I/O reale)
 - DataLoaderProtocol: caricamento dati (mock per test senza GeoPandas)
 - LoggerProtocol: logging (NullLogger per test silenziosi)
 - TimeProvider: datetime/uuid (mock per test deterministici e riproducibili)
@@ -16,27 +19,25 @@ Dependency Injection per testabilità:
 Formati supportati:
 - Tabulari: CSV, XLSX (Excel), JSON
 - Geospaziali: GeoJSON, GeoPackage (.gpkg), Shapefile (.shp/.zip), FileGDB
-
-Struttura filesystem:
-    data/file_sources/
-    └── <file_id>/
-        ├── metadata.json       # Metadati (nome, formato, layers, colonne)
-        ├── original.<ext>      # File originale caricato
-        └── processed/          # File processati per layer
+- Raw binari: DXF, altri formati non parsabili (salvati solo come blob)
 
 Operazioni principali:
-- upload(): salva file, rileva formato, estrae layers e schema colonne
-- preview(): restituisce le prime N righe come JSON per anteprima UI
-- get_layers(): lista layers/sheet per file multi-layer (GPKG, XLSX, SHP)
-- update(): aggiorna metadati (nome, layer selezionato)
-- delete(): rimuove file e metadati dal filesystem
+- create_from_upload(): parsing + infer colonne/layers, blob DB
+- create_raw_from_upload(): salva blob DB senza parsing (fallback per
+  formati non supportati dal parser)
+- load_dataframe(): estrae blob da DB, scrive in temp, legge via parser
+- get_preview(): prime N righe per anteprima UI
+- get_layers_info(): layers/sheets di file multi-layer
+- update_file_source(): aggiorna metadati
+- delete_file_source(): rimuove record DB
 """
 
 import json
+import os
 import re
 import warnings
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, Tuple, BinaryIO, Dict, Any, Protocol, Callable
 from dataclasses import dataclass, field
 import pandas as pd
@@ -81,7 +82,6 @@ if not _USE_APP_MODELS:
         id: str
         name: str
         description: str
-        file_path: str
         original_filename: str
         format: str
         layer: Optional[str]
@@ -92,14 +92,13 @@ if not _USE_APP_MODELS:
         crs: Optional[str]
         created_at: datetime
         updated_at: datetime
-        
+
         def model_dump_json(self, indent: int = 2) -> str:
             """Serializza a JSON"""
             return json.dumps({
                 "id": self.id,
                 "name": self.name,
                 "description": self.description,
-                "file_path": self.file_path,
                 "original_filename": self.original_filename,
                 "format": self.format,
                 "layer": self.layer,
@@ -188,13 +187,16 @@ class NullLogger:
 
 
 class DefaultTimeProvider:
-    """Time provider di default"""
+    """Time provider di default — UTC aware (no naive datetime)."""
     def now(self) -> datetime:
-        return datetime.now()
+        return datetime.now(timezone.utc)
     
     def generate_uuid(self) -> str:
+        # N1: full 32-hex UUID (pre-fix solo i primi 8 char = ~10^9
+        # combinazioni → brute-force fattibile se il nome + timestamp
+        # sono noti). 32-hex = 2^128 = infeasible.
         import uuid
-        return str(uuid.uuid4())[:8]
+        return uuid.uuid4().hex
 
 
 class DefaultFileSystem:
@@ -238,9 +240,14 @@ class DefaultFileSystem:
         path.unlink()
     
     def extract_zip(self, zip_path: Path, dest_dir: Path) -> None:
-        import zipfile
-        with zipfile.ZipFile(zip_path, 'r') as zf:
-            zf.extractall(dest_dir)
+        """Estrae un archivio ZIP con guard zip slip + zip bomb.
+
+        Delega a `app.utils.zip_safe.safe_extract_zip_path` per evitare
+        duplicazione: stesso codepath di tutti gli altri estrattori del
+        progetto (file_service blob, dataframe utils, imdf storage/loader).
+        """
+        from app.utils.zip_safe import safe_extract_zip_path
+        safe_extract_zip_path(zip_path, dest_dir)
     
     def rglob(self, path: Path, pattern: str) -> List[Path]:
         return list(path.rglob(pattern))
@@ -326,7 +333,8 @@ class DefaultDataLoader:
             return []
     
     def save_csv(self, df: pd.DataFrame, path: Path) -> None:
-        df.to_csv(path, index=False)
+        # UTF-8 esplicito: contratto leggibile, no ambiguita' su locale server.
+        df.to_csv(path, index=False, encoding="utf-8")
     
     def save_excel(self, df: pd.DataFrame, path: Path, sheet: str) -> None:
         df.to_excel(path, index=False, sheet_name=sheet)
@@ -443,14 +451,31 @@ class TypeInferrer:
 
 
 class FileIdGenerator:
-    """Genera ID per file source - PURE (con time provider iniettato)"""
-    
+    """Genera ID per file source - PURE (con time provider iniettato).
+
+    N1 follow-up: format opaco `file_{uuid_hex}` — niente nome file
+    ne' timestamp nell'ID.
+
+    Pre-N1: `file_{safe_name}_{timestamp}_{uuid[:8]}`. Rivelava il
+    nome file e l'orario di upload a chiunque vedesse l'ID in log o
+    URL trafilati. Anche con fail-closed sul service, l'hygiene era
+    scadente (metadata disclosure via ID).
+
+    Post-N1-B: solo uuid hex. 2^128 entropia, zero info leak.
+    NB: gli ID esistenti nel DB restano validi (lookup by string);
+    solo i NUOVI file generati useranno il formato opaco.
+    """
+
     @staticmethod
     def generate(name: str, timestamp: str, uuid_part: str) -> str:
-        """Genera ID univoco"""
-        safe_name = "".join(c for c in name if c.isalnum() or c in (' ', '_')).strip()
-        safe_name = safe_name.replace(' ', '_')[:30]
-        return f"file_{safe_name}_{timestamp}_{uuid_part}"
+        """Genera ID univoco opaco.
+
+        I parametri `name` e `timestamp` sono accettati per
+        backward-compat con il contract del caller ma NON sono piu'
+        incorporati nell'ID (erano vettori di metadata disclosure).
+        """
+        # Intenzionalmente ignorati: name, timestamp
+        return f"file_{uuid_part}"
     
     @staticmethod
     def sanitize_name(name: str, max_length: int = 30) -> str:
@@ -532,19 +557,29 @@ class ColumnInfoBuilder:
 # data loader, logger, time) è iniettabile con un mock nei test.
 
 
-def _rmtree_safe(path) -> None:
-    """shutil.rmtree con fallback Windows per file/cartelle locked (es. .gdb usato da fiona)."""
-    import stat
-    def _on_error(func, fpath, exc_info):
+def _rmtree_safe(path, _retries: int = 3) -> None:
+    """Rimuove file o directory con retry per handle locked (es. fiona)."""
+    import stat, time, gc, shutil, os
+    p = Path(path)
+    for attempt in range(_retries):
         try:
-            os.chmod(fpath, stat.S_IWRITE)
-            func(fpath)
+            if p.is_file():
+                p.unlink()
+                return
+            elif p.is_dir():
+                def _on_error(func, fpath, exc_info):
+                    try:
+                        os.chmod(fpath, stat.S_IWRITE)
+                        func(fpath)
+                    except Exception:
+                        pass
+                shutil.rmtree(p, onerror=_on_error)
+                if not p.exists():
+                    return
         except Exception:
-            pass  # non critico
-    try:
-        shutil.rmtree(path, onerror=_on_error)
-    except Exception:
-        pass  # non critico
+            pass
+        gc.collect()
+        time.sleep(0.3)
 
 class FileSourceService:
     """
@@ -575,38 +610,18 @@ class FileSourceService:
         data_loader: DataLoaderProtocol = None,
         logger: LoggerProtocol = None,
         time_provider: TimeProviderProtocol = None,
-        files_dir: Path = None
     ):
         self._fs = filesystem or DefaultFileSystem()
         self._loader = data_loader or DefaultDataLoader()
         self._logger = logger or NullLogger()
         self._time = time_provider or DefaultTimeProvider()
-        self._files_dir = files_dir or Path("/tmp/files")
-        
+
         # Pure function helpers
         self._format_detector = FormatDetector
         self._type_inferrer = TypeInferrer
         self._id_generator = FileIdGenerator
         self._column_builder = ColumnInfoBuilder
-    
-    @property
-    def FILES_DIR(self) -> Path:
-        """Backward compatibility"""
-        return self._files_dir
-    
-    # ==================== HELPER PERCORSI ====================
-    
-    def _get_file_dir(self, file_id: str) -> Path:
-        return self._files_dir / file_id
-    
-    def _get_metadata_path(self, file_id: str) -> Path:
-        return self._get_file_dir(file_id) / "metadata.json"
-    
-    def _get_data_dir(self, file_id: str) -> Path:
-        path = self._get_file_dir(file_id) / "data"
-        self._fs.mkdir(path, parents=True, exist_ok=True)
-        return path
-    
+
     # ==================== GENERAZIONE ID ====================
     
     def _generate_file_id(self, name: str) -> str:
@@ -638,68 +653,97 @@ class FileSourceService:
             self._logger.error(f"[CRASH] Errore listing sheets: {e}", exc_info=True)
             return []
     
-    # ==================== CARICAMENTO DATI ====================
-    # Carica DataFrame da file con gestione automatica formato e layer.
-    
-    def load_dataframe(
-        self,
-        file_id: str,
-        layer: str = None,
-        sheet: str = None
-    ) -> Tuple[pd.DataFrame, Optional[Any]]:
-        """Carica dati da file source come DataFrame — legge blob dal DB."""
-        import tempfile, os
-        import app.db.db_service as db
+    # ==================== N1 CROSS-TENANT FAIL-CLOSED CHECK ====================
+
+    # Sentinel per bypass esplicito superadmin. L'uso di questo valore
+    # scrive un log INFO (audit trail); pass-through di un group_id
+    # valido e' lo scenario normale.
+    SUPERADMIN_BYPASS: str = "*"
+
+    def _assert_visible(self, file_id: str, expected_group_id: str) -> None:
+        """Fail-closed: verifica che `expected_group_id` abbia visibilita'
+        sul file_id (owned o shared), altrimenti solleva PermissionError.
+
+        Visibilita' calcolata via `app.shared.sharing.is_resource_visible`
+        — stesso predicato usato da `assert_resource_visible` del layer
+        auth (coerente col router).
+
+        N1 (defense-in-depth): pre-fix, `load_dataframe` e metodi sensibili
+        affidavano 100% della validazione al router. Un endpoint che
+        dimentica `assert_resource_visible(...)` diventa immediatamente
+        un cross-tenant data leak. Con questo helper, anche il service
+        rifiuta la request se il caller non ha visibilita' dichiarata,
+        rendendo la leak richiedere due bug (router + service) invece
+        che uno.
+
+        Args:
+            file_id: identifier del file source.
+            expected_group_id: group_id del caller. Passare
+                `FileSourceService.SUPERADMIN_BYPASS` ("*") per saltare
+                il check (caso superadmin), che verra' loggato.
+
+        Raises:
+            ValueError: file_id non trovato (passthrough alla semantica
+                esistente che distingue 404 da 403).
+            PermissionError: expected_group_id vuoto/None, o nessun
+                match ownership/share.
+        """
+        if not expected_group_id:
+            raise PermissionError(
+                f"[N1 FAIL-CLOSED] expected_group_id mancante per load del "
+                f"file_source {file_id}. Il service richiede il group_id "
+                f"del caller per la verifica cross-tenant."
+            )
 
         file_source = self.get_file_source(file_id)
         if not file_source:
             raise ValueError(f"File source '{file_id}' non trovato")
 
-        # Leggi blob dal DB
-        row = db.get_file_source(file_id, include_data=True)
-        if not row or not row.get('data'):
-            raise ValueError(f"Nessun dato nel DB per file source '{file_id}'")
+        if expected_group_id == self.SUPERADMIN_BYPASS:
+            self._logger.info(
+                f"[N1] superadmin bypass visibility su file_source {file_id}"
+            )
+            return
 
-        raw_data: bytes = row['data']
-        fmt = file_source.format
-        suffix = Path(file_source.file_path).suffix or f".{fmt}"
+        # Ownership diretta: path hot, niente DB extra
+        if file_source.group_id == expected_group_id:
+            return
 
-        # Scrivi in temp e carica
-        from app.config import settings
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir=settings.TEMP_DIR)
-        tmp.write(raw_data)
-        tmp.close()
-        tmp_path = Path(tmp.name)
-
-        use_layer = layer or file_source.layer
-        use_sheet = sheet or file_source.sheet
-
+        # Shared via *_shares?
         try:
-            return self._load_by_format(tmp_path, fmt, use_layer, use_sheet)
-        finally:
-            try:
-                os.unlink(str(tmp_path))
-            except Exception:
-                pass
-    
-    def _find_data_file(self, data_files: List[Path], format_type: str) -> Optional[Path]:
-        """Trova il file dati corretto"""
-        if format_type == 'gdb':
-            for f in data_files:
-                if self._fs.is_dir(f) and f.name.endswith('.gdb'):
-                    return f
-        elif format_type == 'shp':
-            for f in data_files:
-                if f.suffix.lower() == '.shp':
-                    return f
-        elif format_type == 'gpkg':
-            for f in data_files:
-                if f.suffix.lower() == '.gpkg':
-                    return f
-        else:
-            return data_files[0] if data_files else None
-        return None
-    
+            from app.shared.sharing import is_resource_visible, is_shareable
+            if is_shareable("file_sources") and is_resource_visible(
+                "file_sources",
+                file_id,
+                expected_group_id,
+                is_superadmin=False,
+                resource_owner_group_id=file_source.group_id,
+            ):
+                return
+        except Exception as e:
+            # In caso di fallimento del check shared (es. tabella share
+            # non esistente o DB glitch), FAIL-CLOSED: nega accesso.
+            self._logger.warning(
+                f"[N1] check sharing fallito per {file_id}, nego accesso: {e}"
+            )
+
+        self._logger.error(
+            f"[N1 SECURITY] Cross-tenant access blocked: group "
+            f"'{expected_group_id}' tenta load su file_source {file_id} "
+            f"(owner: '{file_source.group_id}')"
+        )
+        raise PermissionError(
+            f"File source '{file_id}' non accessibile al gruppo "
+            f"'{expected_group_id}'"
+        )
+
+    # ==================== CARICAMENTO DATI ====================
+    # Carica DataFrame da file con gestione automatica formato e layer.
+    # La definizione canonica di `load_dataframe` e' piu' in basso
+    # (~riga 1200): estrae blob dal DB in temp file, carica via parser,
+    # cleanup garantito con cleanup robusto (SHP/GDB necessitano rmtree
+    # della temp dir parent, non solo unlink del file).
+
     def _load_by_format(
         self, 
         file_path: Path, 
@@ -735,27 +779,126 @@ class FileSourceService:
     
     # ==================== DB STORAGE HELPERS ====================
 
-    def _get_blob_from_db(self, file_id: str) -> Optional[bytes]:
-        """Recupera blob file dal DB SQLite."""
+    def _dispatch_blob_storage(
+        self, file_id: str, raw_data: bytes, filename: str,
+    ) -> Dict[str, Any]:
+        """Dispatch FS-B1-large del blob su DB BYTEA vs S3 in base alla size.
+
+        Soglia: `FILE_SOURCE_S3_THRESHOLD_BYTES` (default 50 MB, allineato
+        a RESULT_S3_THRESHOLD_BYTES del pattern FS-4). Sotto la soglia il
+        blob resta in DB (transazionale, piccolo). Sopra va su S3, la row
+        DB tiene solo metadata + `storage_key`.
+
+        Ritorna kwargs per `db.save_file_source`: `data`, `storage_key`,
+        `size_bytes`. Se upload S3 fallisce, solleva — caller deve gestire.
+        """
+        from app.config import settings
+
+        threshold_default = 50 * 1024 * 1024  # 50 MB
+        threshold = int(
+            os.getenv("FILE_SOURCE_S3_THRESHOLD_BYTES", threshold_default)
+        )
+
+        size = len(raw_data)
+        if size < threshold:
+            return {"data": raw_data, "storage_key": None, "size_bytes": size}
+
+        # S3 path: upload in `file-sources/{file_id}/{filename}` — mirror di
+        # `eseguibili-outputs/` e `imdf-bundles/` nel naming bucket.
+        storage_key = f"file-sources/{file_id}/{filename}"
+        try:
+            from app.shared.cloud_backends import get_object_storage
+            storage = get_object_storage()
+            storage.upload_bytes(raw_data, storage_key)
+        except Exception as e:
+            self._logger.error(
+                f"[FS-B1-large] S3 upload fallito per {file_id} "
+                f"({size // (1024 * 1024)} MB): {e}"
+            )
+            raise
+        self._logger.info(
+            f"[FS-B1-large] File source {file_id} su S3 "
+            f"({size // (1024 * 1024)} MB >= threshold "
+            f"{threshold // (1024 * 1024)} MB): {storage_key}"
+        )
+        return {"data": None, "storage_key": storage_key, "size_bytes": size}
+
+    def get_blob_bytes(
+        self, file_id: str, expected_group_id: str = None,
+    ) -> Optional[bytes]:
+        """API pubblica per ottenere il blob in-memory di un file_source.
+
+        Wrapper documentato di `_get_blob_from_db` per i caller esterni
+        (ticket attachments download, eseguibili workflow, ecc.) che
+        non devono dipendere da private API.
+        """
+        return self._get_blob_from_db(file_id, expected_group_id)
+
+    def _get_blob_from_db(
+        self, file_id: str, expected_group_id: str = None,
+    ) -> Optional[bytes]:
+        """Recupera blob file dal DB (BYTEA) o da S3 se `storage_key` set.
+
+        Dispatch automatico FS-B1-large: la row DB contiene o `data` (BYTEA)
+        o `storage_key` (TEXT puntato a S3). Questo helper risolve
+        trasparente al caller ritornando bytes in-memory in entrambi i casi.
+
+        N1: `expected_group_id` obbligatorio per il fail-closed check.
+        Chi chiama senza passarlo riceve PermissionError.
+        """
+        self._assert_visible(file_id, expected_group_id or "")
         try:
             import app.db.db_service as db
             row = db.get_file_source(file_id, include_data=True)
-            return row["data"] if row else None
+            if not row:
+                return None
+            if row.get("data") is not None:
+                return row["data"]
+            storage_key = row.get("storage_key")
+            if storage_key:
+                from app.shared.cloud_backends import get_object_storage
+                storage = get_object_storage()
+                # download_bytes o download-in-memory: il Protocol espone
+                # `download(key, path)`, quindi passiamo per temp file.
+                import tempfile
+                from app.config import settings
+                tmp = tempfile.NamedTemporaryFile(
+                    delete=False, dir=settings.TEMP_DIR,
+                )
+                tmp.close()
+                tmp_path = Path(tmp.name)
+                try:
+                    storage.download(storage_key, tmp_path)
+                    return tmp_path.read_bytes()
+                finally:
+                    try:
+                        tmp_path.unlink()
+                    except Exception:
+                        pass
+            return None
         except Exception as e:
             self._logger.error(f"[GESTITO] Errore lettura blob {file_id}: {e}")
             return None
 
-    def _temp_file_for(self, file_id: str) -> Optional[Path]:
+    def _temp_file_for(
+        self, file_id: str, expected_group_id: str = None,
+    ) -> Optional[Path]:
         """
         Estrae il blob dal DB in un file temporaneo.
         Per SHP: estrae lo ZIP in una temp dir e ritorna il path del .shp.
         Il chiamante deve eliminare il file (o la dir intera per SHP) dopo l'uso.
+
+        N1: `expected_group_id` obbligatorio per il fail-closed check.
         """
+        self._assert_visible(file_id, expected_group_id or "")
         import tempfile
         try:
             import app.db.db_service as db
             row_meta = db.get_file_source(file_id, include_data=False)
-            blob = self._get_blob_from_db(file_id)
+            # Nota: passiamo il bypass qui perche' _assert_visible sopra ha
+            # gia' validato il caller. Se saltassimo `expected_group_id` si
+            # riattiverebbe il fail-closed.
+            blob = self._get_blob_from_db(file_id, expected_group_id)
         except Exception:
             return None
         if not blob or not row_meta:
@@ -764,14 +907,19 @@ class FileSourceService:
         fmt = row_meta.get("format", "")
         original_filename = row_meta.get("original_filename", f"{file_id}.bin")
 
-        # Per SHP e GDB: il blob è uno ZIP — estrai tutto in temp dir
+        # Per SHP e GDB: il blob è uno ZIP — estrai tutto in temp dir.
+        # NB: chi riceve il path ritornato (load_dataframe / get_layers_info)
+        # cleanup la tmp_dir parent dopo l'uso. Qui cleanuppiamo SOLO i due
+        # path errore (estrazione fallita o nessun .shp/.gdb trovato),
+        # altrimenti la tmp_dir resta per il caller.
         if fmt in ("shp", "gdb"):
             import zipfile, io
             from app.config import settings
+            from app.utils.zip_safe import safe_extractall
             tmp_dir = Path(tempfile.mkdtemp(dir=settings.TEMP_DIR))
             try:
                 with zipfile.ZipFile(io.BytesIO(blob), 'r') as z:
-                    z.extractall(tmp_dir)
+                    safe_extractall(z, tmp_dir)
                 if fmt == "shp":
                     shp_files = list(tmp_dir.rglob("*.shp")) + list(tmp_dir.rglob("*.SHP"))
                     if shp_files:
@@ -782,6 +930,11 @@ class FileSourceService:
                         return gdb_dirs[0]
             except Exception as e:
                 self._logger.error(f"[GESTITO] Errore estrazione {fmt.upper()} zip {file_id}: {e}")
+            # Cleanup tmp_dir su entrambi i path errore (exception
+            # nell'estrazione, oppure zip valido ma senza .shp/.gdb
+            # dentro): senza, ogni file SHP malformato accumula una
+            # tmp dir nei worker.
+            _rmtree_safe(tmp_dir)
             return None
 
         suffix = Path(original_filename).suffix or ".bin"
@@ -897,12 +1050,15 @@ class FileSourceService:
         try:
             if format_type == 'zip':
                 from app.config import settings
+                from app.utils.zip_safe import safe_extractall, ZipSlipError
                 zip_tmp_dir = Path(tempfile.mkdtemp(dir=settings.TEMP_DIR))
                 try:
                     with _zipfile.ZipFile(tmp_path, 'r') as z:
-                        z.extractall(zip_tmp_dir)
+                        safe_extractall(z, zip_tmp_dir)
                 except _zipfile.BadZipFile as e:
                     raise ValueError(f"File ZIP non valido o corrotto: {e}") from e
+                except ZipSlipError as e:
+                    raise ValueError(f"File ZIP rifiutato (path traversal): {e}") from e
                 extracted_files = [f for f in zip_tmp_dir.rglob("*") if f.is_file() or (f.is_dir() and f.suffix.lower() == ".gdb")]
                 for ext in ['.shp', '.gpkg', '.gdb', '.geojson', '.csv', '.xlsx']:
                     match = next((f for f in extracted_files if f.suffix.lower() == ext), None)
@@ -959,7 +1115,6 @@ class FileSourceService:
                 id=file_id,
                 name=name,
                 description=description,
-                file_path=filename,
                 original_filename=filename,
                 format=format_type,
                 layer=layer,
@@ -974,24 +1129,108 @@ class FileSourceService:
             )
 
             metadata = file_source.model_dump(mode='json') if _USE_APP_MODELS else {}
+            blob_kwargs = self._dispatch_blob_storage(file_id, raw_data, filename)
             db.save_file_source(
                 file_id=file_id,
                 group_id=group_id or settings.DEFAULT_GROUP,
                 name=name,
                 original_filename=filename,
                 fmt=format_type,
-                data=raw_data,
                 metadata=metadata,
+                **blob_kwargs,
             )
 
             self._logger.info(f"FileSource creato: {file_id} ({len(raw_data)} bytes)")
             return file_source
 
         finally:
+            # Pulisci zip_tmp_dir per prima (contiene tmp_path per ZIP)
+            if zip_tmp_dir:
+                try:
+                    _rmtree_safe(zip_tmp_dir)
+                except Exception:
+                    pass
             try:
                 _rmtree_safe(tmp.name)
             except Exception:
-                pass  # non critico
+                pass
+
+    def create_raw_from_upload(
+        self,
+        file_content: BinaryIO,
+        filename: str,
+        name: str,
+        description: str = "",
+        group_id: str = None,
+    ) -> FileSource:
+        """Crea file source "raw" (senza parsing) da upload.
+
+        Usato come fallback per formati che il parser non sa gestire (es.
+        DXF, ZIP con contenuto non standard). Il blob viene salvato nel
+        DB identico al caso happy; solo le colonne/layer restano vuoti.
+        Downstream (es. eseguibili workflow) legge il blob dal DB quando
+        serve materializzare il file.
+
+        Defense-in-depth: anche se i router upload validano gia' il MIME
+        prima di chiamare il service, qui ri-validiamo "block-only" sui
+        magic bytes per proteggere caller futuri (task Celery, batch
+        import, ecc.) che bypassino il router. Il check e' O(16 bytes)
+        + un eventuale `filetype.guess()` — overhead trascurabile.
+        """
+        import app.db.db_service as db
+        from app.config import settings
+        from app.utils.mime_validator import (
+            MimeMismatchError, validate_no_executable,
+        )
+
+        file_id = self._generate_file_id(name)
+        file_content.seek(0)
+        raw_data = file_content.read()
+
+        try:
+            validate_no_executable(content=raw_data, filename=filename or name)
+        except MimeMismatchError as e:
+            self._logger.warning(
+                f"create_raw_from_upload bloccato (MIME): "
+                f"name={name!r} filename={filename!r}: {e}"
+            )
+            raise ValueError(str(e)) from e
+
+        file_ext = Path(filename).suffix.lstrip(".").lower() or "bin"
+        now = self._time.now()
+
+        file_source = FileSource(
+            id=file_id,
+            name=name,
+            description=description,
+            original_filename=filename,
+            format=file_ext,
+            layer=None,
+            sheet=None,
+            columns=[],
+            row_count=0,
+            file_size=len(raw_data),
+            crs=None,
+            group_id=group_id or settings.DEFAULT_GROUP,
+            created_at=now,
+            updated_at=now,
+        )
+        metadata = file_source.model_dump(mode="json") if _USE_APP_MODELS else {}
+        blob_kwargs = self._dispatch_blob_storage(file_id, raw_data, filename)
+        db.save_file_source(
+            file_id=file_id,
+            group_id=group_id or settings.DEFAULT_GROUP,
+            name=name,
+            original_filename=filename,
+            fmt=file_ext,
+            metadata=metadata,
+            **blob_kwargs,
+        )
+        self._logger.info(
+            f"FileSource raw creato: {file_id} format={file_ext} "
+            f"({len(raw_data)} bytes)"
+        )
+        return file_source
 
     def _filter_columns(self, df: pd.DataFrame, selected_columns: List[str]) -> pd.DataFrame:
         valid_cols = [c for c in selected_columns if c in df.columns]
@@ -1018,16 +1257,31 @@ class FileSourceService:
         Tutti i FileSource condividono lo stesso blob binario.
 
         Returns: lista di FileSource creati (uno per layer)
+
+        Defense-in-depth: stesso ragionamento di create_raw_from_upload,
+        ri-validiamo block-only sui magic bytes per caller diretti.
         """
         import tempfile, os, zipfile as _zipfile
         import app.db.db_service as db
         from app.config import settings
+        from app.utils.mime_validator import (
+            MimeMismatchError, validate_no_executable,
+        )
 
         if not layers_config:
             raise ValueError("layers_config non puo essere vuota")
 
         file_content.seek(0)
         raw_data = file_content.read()
+
+        try:
+            validate_no_executable(content=raw_data, filename=filename or name)
+        except MimeMismatchError as e:
+            self._logger.warning(
+                f"create_multi_layer_from_upload bloccato (MIME): "
+                f"name={name!r} filename={filename!r}: {e}"
+            )
+            raise ValueError(str(e)) from e
 
         suffix = Path(filename).suffix or ".bin"
         from app.config import settings
@@ -1042,12 +1296,15 @@ class FileSourceService:
         try:
             if format_type == 'zip':
                 from app.config import settings
+                from app.utils.zip_safe import safe_extractall, ZipSlipError
                 zip_tmp_dir = Path(tempfile.mkdtemp(dir=settings.TEMP_DIR))
                 try:
                     with _zipfile.ZipFile(tmp_path, 'r') as z:
-                        z.extractall(zip_tmp_dir)
+                        safe_extractall(z, zip_tmp_dir)
                 except _zipfile.BadZipFile as e:
                     raise ValueError(f"File ZIP non valido o corrotto: {e}") from e
+                except ZipSlipError as e:
+                    raise ValueError(f"File ZIP rifiutato (path traversal): {e}") from e
                 extracted_files = [f for f in zip_tmp_dir.rglob("*") if f.is_file() or (f.is_dir() and f.suffix.lower() == ".gdb")]
                 for ext in ['.gpkg', '.gdb']:
                     match = next((f for f in extracted_files if f.suffix.lower() == ext), None)
@@ -1106,7 +1363,6 @@ class FileSourceService:
                     id=file_id,
                     name=file_source_name,
                     description=description,
-                    file_path=filename,
                     original_filename=filename,
                     format=format_type,
                     layer=None if is_sheet_based else layer,
@@ -1121,14 +1377,15 @@ class FileSourceService:
                 )
 
                 metadata = file_source.model_dump(mode='json') if _USE_APP_MODELS else {}
+                blob_kwargs = self._dispatch_blob_storage(file_id, raw_data, filename)
                 db.save_file_source(
                     file_id=file_id,
                     group_id=group_id or settings.DEFAULT_GROUP,
                     name=file_source_name,
                     original_filename=filename,
                     fmt=format_type,
-                    data=raw_data,
                     metadata=metadata,
+                    **blob_kwargs,
                 )
 
                 self._logger.info(f"FileSource multi-layer creato: {file_id} layer='{layer}'")
@@ -1148,34 +1405,45 @@ class FileSourceService:
                 except Exception:
                     pass
 
-    def _handle_zip(self, zip_path: Path, data_dir: Path) -> Tuple[str, Path]:
-        """Backward compat."""
-        import zipfile
-        with zipfile.ZipFile(zip_path, 'r') as z:
-            z.extractall(data_dir)
-        extracted = [f for f in data_dir.iterdir() if f.is_file() and f != zip_path]
-        if not extracted:
-            raise ValueError("ZIP vuoto")
-        target = extracted[0]
-        return self._detect_format(target.name), target
+    def load_dataframe(
+        self, file_id: str, layer: str = None, sheet: str = None,
+        expected_group_id: str = None,
+    ) -> Tuple[pd.DataFrame, Optional[Any]]:
+        """Carica dati da file source — estrae blob in temp file.
 
-    def load_dataframe(self, file_id: str, layer: str = None, sheet: str = None) -> Tuple[pd.DataFrame, Optional[Any]]:
-        """Carica dati da file source — estrae blob in temp file."""
+        N1: `expected_group_id` obbligatorio per fail-closed cross-tenant
+        check. Superadmin puo' passare `FileSourceService.SUPERADMIN_BYPASS`.
+        """
+        self._assert_visible(file_id, expected_group_id or "")
         file_source = self.get_file_source(file_id)
         if not file_source:
             raise ValueError(f"File source '{file_id}' non trovato")
-        tmp_path = self._temp_file_for(file_id)
+        tmp_path = self._temp_file_for(file_id, expected_group_id)
         if not tmp_path:
             raise ValueError(f"Nessun dato trovato per '{file_id}'")
         try:
             use_layer = layer or file_source.layer
             use_sheet = sheet or file_source.sheet
-            return self._load_by_format(tmp_path, file_source.format, use_layer, use_sheet)
+            df, gdf = self._load_by_format(tmp_path, file_source.format, use_layer, use_sheet)
+            return df, gdf
         finally:
+            import gc
             try:
-                _rmtree_safe(tmp_path)
-            except Exception:
-                pass  # non critico
+                del df, gdf
+            except NameError:
+                pass
+            gc.collect()
+            # Per SHP/GDB tmp_path è dentro una tmp_dir — cancella la dir parent
+            if file_source.format in ('shp', 'gdb'):
+                try:
+                    _rmtree_safe(tmp_path.parent)
+                except Exception:
+                    pass
+            else:
+                try:
+                    _rmtree_safe(tmp_path)
+                except Exception:
+                    pass
 
     def update_file_source(self, file_id: str, data: Any) -> Optional[FileSource]:
         """Aggiorna file source nel DB."""
@@ -1188,7 +1456,13 @@ class FileSourceService:
             setattr(file_source, field_name, value)
         if 'layer' in update_data or 'sheet' in update_data:
             try:
-                df, gdf = self.load_dataframe(file_id)
+                # N1: update interno — il file e' appena stato recuperato
+                # e il caller (router) ha gia' validato l'ownership.
+                # Passiamo il group_id reale del file come "expected" per
+                # il fail-closed del helper.
+                df, gdf = self.load_dataframe(
+                    file_id, expected_group_id=file_source.group_id,
+                )
                 raw_cols = self._column_builder.from_dataframe(df, gdf)
                 file_source.columns = [
                     {"name": c.name, "type": c.type} if not isinstance(c, dict) else c
@@ -1211,20 +1485,28 @@ class FileSourceService:
                 name=file_source.name,
                 original_filename=file_source.original_filename,
                 fmt=file_source.format,
-                data=self._get_blob_from_db(file_id) or b"",
+                data=self._get_blob_from_db(
+                    file_id, expected_group_id=file_source.group_id,
+                ) or b"",
                 metadata=metadata,
             )
         return file_source
 
-    def get_layers_info(self, file_id: str) -> Dict[str, Any]:
-        """Ottieni info su layers/sheets — estrae blob in temp."""
+    def get_layers_info(
+        self, file_id: str, expected_group_id: str = None,
+    ) -> Dict[str, Any]:
+        """Ottieni info su layers/sheets — estrae blob in temp.
+
+        N1: `expected_group_id` obbligatorio per fail-closed check.
+        """
+        self._assert_visible(file_id, expected_group_id or "")
         file_source = self.get_file_source(file_id)
         if not file_source:
             raise ValueError(f"File source '{file_id}' non trovato")
         layers = []
         sheets = []
         if file_source.format in ['gdb', 'gpkg', 'xlsx']:
-            tmp_path = self._temp_file_for(file_id)
+            tmp_path = self._temp_file_for(file_id, expected_group_id)
             if tmp_path:
                 try:
                     if file_source.format in ['gdb', 'gpkg']:
@@ -1232,11 +1514,16 @@ class FileSourceService:
                     elif file_source.format == 'xlsx':
                         sheets = self.list_sheets(tmp_path)
                 finally:
-                    try:
-                        import os
-                        os.unlink(tmp_path)
-                    except Exception:
-                        pass
+                    if file_source.format in ('gdb',):
+                        try:
+                            _rmtree_safe(tmp_path.parent)
+                        except Exception:
+                            pass
+                    else:
+                        try:
+                            _rmtree_safe(tmp_path)
+                        except Exception:
+                            pass
         if _USE_APP_MODELS:
             try:
                 from app.models import FileSourceLayersResponse
@@ -1245,12 +1532,18 @@ class FileSourceService:
                 pass
         return {"file_id": file_id, "format": file_source.format, "layers": layers, "sheets": sheets}
 
-    def get_preview(self, file_id: str, limit: int = 100) -> Dict[str, Any]:
-        """Restituisce anteprima dati (prime N righe)."""
+    def get_preview(
+        self, file_id: str, limit: int = 100, expected_group_id: str = None,
+    ) -> Dict[str, Any]:
+        """Restituisce anteprima dati (prime N righe).
+
+        N1: `expected_group_id` obbligatorio per fail-closed check.
+        """
+        self._assert_visible(file_id, expected_group_id or "")
         file_source = self.get_file_source(file_id)
         if not file_source:
             raise ValueError(f"File source '{file_id}' non trovato")
-        df, gdf = self.load_dataframe(file_id)
+        df, gdf = self.load_dataframe(file_id, expected_group_id=expected_group_id)
         total_count = len(df)
         preview_df = df.head(limit)
         rows = preview_df.to_dict(orient='records')
@@ -1274,19 +1567,40 @@ class FileSourceService:
     def preview_file_temp(self, file_content: BinaryIO, filename: str, layer: str = None, sheet: str = None) -> dict:
         """
         Preview temporanea di un file prima dell'upload definitivo.
-        
+
         - layer: carica un layer specifico (GPKG/GDB)
         - sheet: carica un foglio specifico (XLSX)
         - Se nessuno specificato su file multi-layer/sheet, restituisce la lista disponibile.
+
+        Defense-in-depth: ri-valida block-only sui magic bytes (il router
+        gia' lo fa, ma chiamate dirette al service da altre code paths
+        non possono assumere quella protezione).
         """
         import tempfile
         import os
-        
+        from app.utils.mime_validator import (
+            MimeMismatchError, validate_no_executable,
+        )
+
+        # Letti i bytes per il MIME check, poi rewind per il caller.
+        # NB: per file molto grandi questo accumula in RAM una volta in
+        # piu'; e' OK per preview che e' bounded a pochi MB tipici.
+        file_content.seek(0)
+        _peek = file_content.read()
+        file_content.seek(0)
+        try:
+            validate_no_executable(content=_peek, filename=filename)
+        except MimeMismatchError as e:
+            self._logger.warning(
+                f"preview_file_temp bloccato (MIME): filename={filename!r}: {e}"
+            )
+            raise ValueError(str(e)) from e
+
         format_type = self._detect_format(filename)
-        
+
         if format_type == 'unknown':
             raise ValueError(f"Formato file non supportato: {filename}")
-        
+
         suffix = Path(filename).suffix
         
         from app.config import settings
@@ -1296,16 +1610,17 @@ class FileSourceService:
             tmp_path = Path(tmp.name)
         
         tmp_dir = None
-        
+        original_tmp = tmp_path
+
         try:
             columns = []
             row_count = 0
-            
+
             if format_type == 'zip':
                 from app.config import settings
                 tmp_dir = Path(tempfile.mkdtemp(dir=settings.TEMP_DIR))
                 self._fs.extract_zip(tmp_path, tmp_dir)
-                
+
                 for item in self._fs.iterdir(tmp_dir):
                     if self._fs.is_dir(item) and item.suffix.lower() == '.gdb':
                         format_type = 'gdb'
@@ -1362,15 +1677,26 @@ class FileSourceService:
             }
         
         finally:
+            import gc
             try:
-                if tmp_path.exists():
-                    _rmtree_safe(tmp_path)
-            except Exception:
-                pass  # non critico
-            
+                del df, gdf
+            except NameError:
+                pass
+            gc.collect()
             if tmp_dir and tmp_dir.exists():
-                import shutil
                 _rmtree_safe(tmp_dir)
+            try:
+                if original_tmp.exists():
+                    _rmtree_safe(original_tmp)
+            except Exception:
+                pass
+            # Se non era ZIP, tmp_path == original_tmp, già gestito sopra
+            if tmp_path != original_tmp:
+                try:
+                    if tmp_path.exists():
+                        _rmtree_safe(tmp_path)
+                except Exception:
+                    pass
 
 
 # ==================== FACTORY ====================
@@ -1380,30 +1706,23 @@ class FileSourceService:
 def create_file_service(
     filesystem: FileSystemProtocol = None,
     data_loader: DataLoaderProtocol = None,
-    files_dir: Path = None
 ) -> FileSourceService:
     """Factory function per creare service con dipendenze iniettate."""
     return FileSourceService(
         filesystem=filesystem,
         data_loader=data_loader,
-        files_dir=files_dir
     )
 
 
 # ==================== SINGLETON PRODUZIONE ====================
 # Istanza globale per uso da router FastAPI (evita ri-creazione ad ogni richiesta).
-# Singleton per uso in produzione — mantiene compatibilità con codice esistente.
 # Per test, usare create_file_service() con mock iniettati.
 def _create_production_service() -> FileSourceService:
     """Crea service con configurazione di produzione"""
     try:
-        from app.config import settings
         from app.utils.logger import get_logger
         logger = get_logger(__name__)
-        return FileSourceService(
-            files_dir=settings.FILES_DIR,
-            logger=logger
-        )
+        return FileSourceService(logger=logger)
     except ImportError:
         # Fallback per test standalone
         return FileSourceService()

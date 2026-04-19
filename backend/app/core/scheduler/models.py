@@ -75,11 +75,20 @@ class ScheduleFrequency(BaseModel):
 
     Supporta preset comuni e cron expression custom.
     Il timezone di default è Europe/Rome per il contesto ICSC.
+
+    Catchup (C3 fix 3): opt-in per schedule. Se `catchup_missed_runs`
+    e' True, il beat scheduler recupera al massimo un run mancante per
+    tick (distribuito nel tempo su tick successivi in caso di backlog),
+    entro la finestra `catchup_grace_hours`. Default off per
+    retrocompat: gli schedule esistenti mantengono la semantica cron
+    standard "missed is lost".
     """
     cron_expression: str                # Es. "0 3 * * *"
     timezone: str = "Europe/Rome"
     description: str = ""               # Es. "Ogni notte alle 03:00"
     enabled: bool = True
+    catchup_missed_runs: bool = False
+    catchup_grace_hours: int = Field(default=24, gt=0)
 
 
 class ScheduleExecution(BaseModel):
@@ -410,6 +419,17 @@ class ScheduleToggle(BaseModel):
     enabled: bool
 
 
+class ScheduleCatchupUpdate(BaseModel):
+    """Richiesta per modificare il catchup config di uno schedule (C3 fix 3).
+
+    Dedicato per pulizia API: evita di passare tutto il ScheduleConfig
+    via update generico quando si vuole solo attivare/disattivare il
+    catchup o aggiustare la grace window.
+    """
+    enabled: bool
+    grace_hours: int = Field(default=24, gt=0)
+
+
 # =============================================================================
 # LOG ESECUZIONI
 # =============================================================================
@@ -487,6 +507,6 @@ class BeatHealthcheck(BaseModel):
     Verificato tramite heartbeat in Redis scritto da RedBeat.
     Se last_beat è più vecchio di 2 minuti → Beat è down.
     """
-    status: Literal["ok", "down", "unknown"] = "unknown"
+    status: Literal["ok", "warning", "down", "unknown"] = "unknown"
     last_beat: Optional[datetime] = None
     message: str = ""

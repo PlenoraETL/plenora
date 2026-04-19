@@ -53,9 +53,6 @@ def get_runs(
     Lista run paginate, ordinate dalla più recente.
     Superadmin vede tutto, gli altri solo il proprio gruppo.
     """
-    if not LOG_DB_PATH.exists():
-        return {"runs": [], "total": 0, "limit": limit, "offset": offset, "has_more": False}
-
     conditions = []
     params = []
 

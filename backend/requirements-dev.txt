@@ -1,0 +1,8 @@
+# Dev / test dependencies — non installate in produzione.
+# Uso: `pip install -r requirements-dev.txt` dopo requirements.txt.
+
+# Redis in-memory per integration test (fakeredis e' drop-in di
+# redis-py, supporta SET NX EX / EXPIRE / TTL / DELETE senza Docker).
+# Usato in tests2/scheduler/integration/test_leader_election_e2e.py
+# per simulare scenari di concorrenza, SIGKILL, Redis down.
+fakeredis>=2.20

@@ -19,8 +19,92 @@ import threading
 from typing import Any, Dict, Optional
 
 import requests
+from requests.adapters import HTTPAdapter
 
 logger = logging.getLogger(__name__)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# HTTP Session pool condivisa (riuso connessioni TCP)
+# ──────────────────────────────────────────────────────────────────────
+
+_shared_session: Optional[requests.Session] = None
+_shared_session_lock = threading.Lock()
+
+
+def get_shared_session() -> requests.Session:
+    """Ritorna una Session requests condivisa con connection pooling.
+
+    Riutilizza connessioni TCP invece di aprirne una nuova per ogni chiamata:
+    riduce latenza (no handshake TLS ripetuto) e carico sul server.
+
+    Thread-safe: requests.Session è thread-safe per l'uso (lettura/write
+    concorrente su endpoint diversi). Per singola request con Session
+    condivisa non servono lock.
+    """
+    global _shared_session
+    if _shared_session is None:
+        with _shared_session_lock:
+            if _shared_session is None:
+                sess = requests.Session()
+                adapter = HTTPAdapter(
+                    pool_connections=20,
+                    pool_maxsize=50,
+                    max_retries=0,  # retry gestito a livello applicativo
+                    pool_block=False,
+                )
+                sess.mount("http://", adapter)
+                sess.mount("https://", adapter)
+                _shared_session = sess
+    return _shared_session
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Anti-SSRF: validazione URL esterni
+# ──────────────────────────────────────────────────────────────────────
+
+def validate_external_url(url: str) -> None:
+    """Anti-SSRF: valida che l'URL sia http(s) verso un host pubblico.
+
+    Solleva ValueError se URL malformato o l'host risolve a un
+    IP privato/loopback/link-local/riservato.
+
+    Override per test funzionali: se la env var
+    `URBY_ALLOW_LOOPBACK_OUTBOUND=1` e' settata, gli IP loopback
+    (`127.0.0.0/8`, `::1`) sono permessi. Gli IP privati di altre
+    reti (10.x, 172.16.x, 192.168.x), link-local e reserved restano
+    bloccati. Pensata per i test funzionali che lanciano un fake
+    HTTP server su `127.0.0.1`. NON usare in produzione: settarla
+    nella shell di un worker prod abilita SSRF verso servizi
+    bind-loopback (Redis, Postgres, ecc.).
+    """
+    from urllib.parse import urlparse
+    import ipaddress
+    import os
+    import socket
+
+    parsed = urlparse(url or "")
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError("URL non valido: solo schemi http/https sono permessi")
+    host = parsed.hostname
+    if not host:
+        raise ValueError("URL non valido: hostname mancante")
+
+    allow_loopback = os.environ.get("URBY_ALLOW_LOOPBACK_OUTBOUND", "").strip() == "1"
+
+    try:
+        _, _, addr_list = socket.gethostbyname_ex(host)
+    except socket.gaierror:
+        raise ValueError(f"Host non risolvibile: {host}")
+    for addr in addr_list:
+        try:
+            ip = ipaddress.ip_address(addr)
+        except ValueError:
+            continue
+        if allow_loopback and ip.is_loopback:
+            continue  # opt-in di test
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+            raise ValueError(f"URL bloccato: l'host risolve a un IP privato/interno ({addr})")
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -28,6 +112,96 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────────────────────────────────────────────────
 _ARCGIS_TOKEN_CACHE: Dict[str, Dict[str, Any]] = {}
 _ARCGIS_TOKEN_LOCK = threading.Lock()
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Cache thread-safe per token OAuth2 (lifecycle basato su expires_at)
+# ──────────────────────────────────────────────────────────────────────
+#
+# Sostituisce il pattern "rinnova ogni N righe" che era sbagliato:
+# il counter non ha nulla a che vedere con il tempo di vita reale del token.
+#
+# Pattern: double-checked locking con refresh se expires_at - now < 60s.
+# Thread-safe per uso da thread pool (sync).
+# Per uso async, threading.Lock funziona comunque perche e non-bloccante
+# nel fast path (token valido); si blocca solo durante il refresh.
+
+_OAUTH2_TOKEN_CACHE: Dict[str, Dict[str, Any]] = {}
+_OAUTH2_TOKEN_LOCK = threading.Lock()
+_OAUTH2_REFRESH_THRESHOLD_SEC = 60  # rinnova se manca meno di 60s
+
+
+def _oauth2_cache_key(auth: Dict) -> str:
+    """Chiave cache univoca per un set di credenziali OAuth2."""
+    auth_type = auth.get("type", "")
+    token_url = auth.get("token_url", "")
+    if auth_type == "oauth2_password":
+        identifier = auth.get("username", "")
+    else:  # client_credentials
+        identifier = auth.get("client_id", "")
+    return f"{auth_type}|{token_url}|{identifier}"
+
+
+def get_cached_oauth2_token(auth: Dict) -> Optional[str]:
+    """Ritorna un token OAuth2 valido, rinnovandolo solo se sta per scadere.
+
+    Sostituisce il pattern legacy "rinnova ogni N righe". Il refresh avviene
+    automaticamente quando `expires_at - now < 60s`, leggendo `expires_in`
+    dalla risposta del token endpoint (fallback a 3600s se non presente).
+
+    Thread-safe: il refresh e protetto da lock globale con double-check.
+    Se due chiamanti trovano il token scaduto, solo uno fara la richiesta.
+    """
+    auth_type = auth.get("type", "")
+    if auth_type not in ("oauth2_password", "oauth2_client_credentials"):
+        return None
+
+    cache_key = _oauth2_cache_key(auth)
+    now = time.time()
+
+    # Fast path: cache hit con token ancora valido
+    cached = _OAUTH2_TOKEN_CACHE.get(cache_key)
+    if cached and (cached["expires_at"] - now) > _OAUTH2_REFRESH_THRESHOLD_SEC:
+        return cached["token"]
+
+    # Slow path: serve refresh, acquisisci lock
+    with _OAUTH2_TOKEN_LOCK:
+        # Double-check: altro thread potrebbe aver rinnovato mentre aspettavamo
+        cached = _OAUTH2_TOKEN_CACHE.get(cache_key)
+        now = time.time()
+        if cached and (cached["expires_at"] - now) > _OAUTH2_REFRESH_THRESHOLD_SEC:
+            return cached["token"]
+
+        # Fetch nuovo token
+        if auth_type == "oauth2_password":
+            result = _fetch_oauth2_password_token(auth)
+        else:
+            result = _fetch_oauth2_client_credentials_token(auth)
+
+        if not result or not result.get("access_token"):
+            return None
+
+        token = result["access_token"]
+        expires_in = int(result.get("expires_in", 3600))  # default 1h
+        _OAUTH2_TOKEN_CACHE[cache_key] = {
+            "token": token,
+            "expires_at": time.time() + expires_in,
+        }
+        logger.info(
+            f"OAuth2 token rinnovato ({auth_type}, valido per {expires_in}s)"
+        )
+        return token
+
+
+def invalidate_oauth2_token(auth: Dict) -> None:
+    """Forza invalidazione cache per un set di credenziali.
+
+    Utile quando l'API ritorna 401 — il token potrebbe essere stato revocato
+    lato server prima della scadenza.
+    """
+    cache_key = _oauth2_cache_key(auth)
+    with _OAUTH2_TOKEN_LOCK:
+        _OAUTH2_TOKEN_CACHE.pop(cache_key, None)
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -274,12 +448,13 @@ def extract_json_value(data: Any, path: str) -> Any:
     return current
 
 
-def get_oauth2_token(auth: Dict) -> Optional[str]:
-    """
-    Ottiene token OAuth2 con resource owner password grant.
+def _fetch_oauth2_password_token(auth: Dict) -> Optional[Dict]:
+    """Fetch diretto di un token password grant. Ritorna dict completo con expires_in.
 
     Args:
         auth: dict con chiavi token_url, username, password
+    Returns:
+        dict con chiavi access_token, expires_in, token_type — oppure None
     """
     token_url = auth.get("token_url", "")
     username = auth.get("username", "")
@@ -290,7 +465,7 @@ def get_oauth2_token(auth: Dict) -> Optional[str]:
         return None
 
     try:
-        response = requests.post(
+        response = get_shared_session().post(
             token_url,
             data={
                 "grant_type": "password",
@@ -301,10 +476,10 @@ def get_oauth2_token(auth: Dict) -> Optional[str]:
             timeout=30,
         )
         if response.status_code == 200:
-            token = response.json().get("access_token")
+            data = response.json()
             masked = f"{username[:3]}{'*' * max(0, len(username) - 3)}"
             logger.info(f"OAuth2 password token ottenuto per user={masked}")
-            return token
+            return data
         logger.warning(
             f"OAuth2 password token fallito: HTTP {response.status_code} — {response.text[:200]}"
         )
@@ -314,13 +489,8 @@ def get_oauth2_token(auth: Dict) -> Optional[str]:
         return None
 
 
-def get_oauth2_client_credentials_token(auth: Dict) -> Optional[str]:
-    """
-    Ottiene token OAuth2 con client_credentials flow.
-
-    Args:
-        auth: dict con chiavi token_url, client_id, client_secret, scope (opzionale)
-    """
+def _fetch_oauth2_client_credentials_token(auth: Dict) -> Optional[Dict]:
+    """Fetch diretto di un token client_credentials grant. Ritorna dict completo."""
     token_url = auth.get("token_url", "")
     client_id = auth.get("client_id", "")
     client_secret = auth.get("client_secret", "")
@@ -338,7 +508,7 @@ def get_oauth2_client_credentials_token(auth: Dict) -> Optional[str]:
         if scope:
             data["scope"] = scope
 
-        response = requests.post(
+        response = get_shared_session().post(
             token_url,
             data=data,
             headers={"Content-Type": "application/x-www-form-urlencoded"},
@@ -349,13 +519,40 @@ def get_oauth2_client_credentials_token(auth: Dict) -> Optional[str]:
         if response.status_code == 200:
             masked = f"{client_id[:4]}{'*' * max(0, len(client_id) - 4)}"
             logger.info(f"OAuth2 CC token ottenuto per client={masked}")
-            return response.json().get("access_token")
+            return response.json()
 
         logger.warning(f"OAuth2 CC token fallito: HTTP {response.status_code}")
         return None
     except Exception as e:
         logger.error(f"[CRASH] Errore OAuth2 client_credentials: {e}", exc_info=True)
         return None
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Wrapper legacy: API pubbliche che ritornano solo la stringa del token.
+# Usano get_cached_oauth2_token per beneficiare automaticamente del
+# lifecycle tracking e del refresh on-demand. Backward compatible.
+# ──────────────────────────────────────────────────────────────────────
+
+def get_oauth2_token(auth: Dict) -> Optional[str]:
+    """Ottiene token OAuth2 password grant (via cache con expires_at).
+
+    Wrapper backward-compatible: usa internamente get_cached_oauth2_token
+    per riutilizzare il token se ancora valido.
+    """
+    auth_with_type = dict(auth)
+    auth_with_type.setdefault("type", "oauth2_password")
+    return get_cached_oauth2_token(auth_with_type)
+
+
+def get_oauth2_client_credentials_token(auth: Dict) -> Optional[str]:
+    """Ottiene token OAuth2 client_credentials grant (via cache).
+
+    Wrapper backward-compatible: usa internamente get_cached_oauth2_token.
+    """
+    auth_with_type = dict(auth)
+    auth_with_type.setdefault("type", "oauth2_client_credentials")
+    return get_cached_oauth2_token(auth_with_type)
 
 
 def get_arcgis_token(auth: Dict) -> Optional[str]:
@@ -495,7 +692,7 @@ def prepare_headers(auth: Dict, custom_headers: Dict = None) -> Dict:
     """
     headers: Dict = {
         "Accept": "application/json",
-        "User-Agent": "URBY-ETL/1.0",
+        "User-Agent": "PLENORA-ETL/1.0",
     }
 
     if custom_headers:

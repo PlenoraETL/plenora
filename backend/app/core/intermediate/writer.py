@@ -8,7 +8,6 @@ Responsabilità:
 """
 
 import hashlib
-import json
 from typing import Dict, List, Any, Optional
 
 from app.utils.logger import get_logger
@@ -90,6 +89,29 @@ def compute_aggregate_hash(rows: List[Dict], col_schema: dict) -> str:
 # ROW HASH MD5 per _row_hash
 # ============================================================
 
+def _format_float_stable(v: float) -> str:
+    """Formatta un float in modo stabile per hashing (N10).
+
+    Strategia: 6 decimali fissi, strip zeri trailing + punto.
+    Esempi:
+        1.23           -> "1.23"
+        1.2300000001   -> "1.23"        (coerente con 1.23 — dedup ok)
+        1.0            -> "1"           (coerente con int 1)
+        0.0            -> "0"
+        1.234567891    -> "1.234568"    (tronca a 6 decimali)
+        -1.23          -> "-1.23"
+
+    NaN/Inf gestiti esplicitamente (f"{nan:.6f}" darebbe "nan", ma
+    meglio output espliciti per leggibilita' nei log).
+    """
+    import math
+    if math.isnan(v):
+        return "nan"
+    if math.isinf(v):
+        return "+inf" if v > 0 else "-inf"
+    return f"{v:.6f}".rstrip("0").rstrip(".")
+
+
 def _normalize_value(v) -> str:
     """Normalizza un valore per l'hashing — deterministico su tutti i tipi."""
     if v is None:
@@ -98,7 +120,9 @@ def _normalize_value(v) -> str:
         return v.isoformat()
     import decimal
     if isinstance(v, decimal.Decimal):
-        return str(float(v))
+        # N10: Decimal -> float -> formato stabile. Prima era str(float(v))
+        # che e' sensibile a floating-point noise.
+        return _format_float_stable(float(v))
     if isinstance(v, (bytes, bytearray)):
         return f"bytes:{len(v)}"
     # Geometrie Shapely -> WKT (deve venire PRIMA dei check numerici per evitare
@@ -116,7 +140,10 @@ def _normalize_value(v) -> str:
     if isinstance(v, int):
         return str(v)
     if isinstance(v, float):
-        return str(v)
+        # N10 (2026-04-17): format stabile via helper condiviso. Prima
+        # era str(v) crudo che rompeva la dedup su floating-point noise
+        # (1.23 vs 1.2300000001 producevano hash diversi).
+        return _format_float_stable(v)
     return str(v)
 
 
@@ -152,30 +179,16 @@ def write_node(run_id: str, node_id: str, node_type: str,
     """
     try:
         if status == "ok" and rows:
-            # Crea tabella dinamica con schema reale
-            db.create_node_table(run_id, node_id, col_schema)
-
-            # Calcola _row_hash per ogni riga
+            # Calcola _row_hash per ogni riga. Non serve piu' sanitizzare
+            # list/dict/geometry qui: db.insert_node_rows usa _to_jsonable
+            # che gestisce tutti i tipi per la serializzazione in JSONB.
             col_names_sorted = sorted(col_schema.keys())
-            rows_with_hash = []
-            for row in rows:
-                row_hash = compute_row_hash(row, col_names_sorted)
-                # B-BE-58: serializza list/dict a JSON string per compatibilità SQLite
-                # B-BE-63: serializza geometrie Shapely in WKT (SQLite non supporta Polygon etc.)
-                def _to_sqlite(v):
-                    if isinstance(v, (list, dict)):
-                        return json.dumps(v, ensure_ascii=False)
-                    try:
-                        from shapely.geometry.base import BaseGeometry
-                        if isinstance(v, BaseGeometry):
-                            return v.wkt
-                    except ImportError:
-                        pass
-                    return v
-                sanitized = {k: _to_sqlite(v) for k, v in row.items()}
-                rows_with_hash.append({"_row_hash": row_hash, **sanitized})
+            rows_with_hash = [
+                {"_row_hash": compute_row_hash(row, col_names_sorted), **row}
+                for row in rows
+            ]
 
-            # Bulk insert
+            # Bulk insert nella tabella unificata plenora.node_rows
             db.insert_node_rows(run_id, node_id, rows_with_hash, col_schema)
 
             # Hash aggregato per questo nodo
@@ -259,6 +272,24 @@ def close_run(run_id: str, input_hash: str, output_hash: str,
             f"nodes={len(node_metas)} rows_in={rows_in} rows_out={rows_out}",
             op="intermediate_write"
         )
+
+        # N8 (2026-04-17): applica retention FIFO subito dopo chiusura run.
+        # Pre-fix: apply_runs_retention era definita ma mai chiamata da
+        # alcun callsite -> intermediate.runs + node_meta + node_rows
+        # crescevano indefinitamente causando disk fill nel tempo.
+        # Ora retention FIFO (N run piu' recenti non pinnate, N da
+        # projects.retention_n o default 5) viene applicata a ogni
+        # chiusura run. Best-effort: un errore qui non rollbacka l'update.
+        try:
+            run = db.get_run(run_id)
+            if run and run.get("canvas_id"):
+                db.apply_runs_retention(run["canvas_id"], run.get("group_id", ""))
+        except Exception as _re:
+            logger.warning(
+                f"[N8] Retention intermediate fallita (non bloccante) "
+                f"per run {run_id}: {_re}",
+                op="intermediate_write",
+            )
 
     except Exception as e:
         logger.error(f"[GESTITO] Errore chiusura run {run_id}: {e}", op="intermediate_write")

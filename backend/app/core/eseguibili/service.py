@@ -368,6 +368,7 @@ def execute(
         # Cleanup automatico al termine del task: rimuove il FileSource temporaneo
         # creato sopra (sia in caso di successo sia in caso di errore).
         cleanup_file_source_ids=[temp_file_source_id],
+        is_eseguibile=True,
     )
 
     logger.info(

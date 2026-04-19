@@ -13,11 +13,13 @@ import { listProjects, createProject, deleteProject, listConnections, listApiCon
 import { listFeatureConnections } from '../api/features';
 import { getFiles } from '../api/files';
 import { listSchedules } from '../api/schedules';
+import { listDataSources } from '../api/datasources';
 import http from '../api/http';
 import { useHexCanvas } from '../utils/hexCanvas';
 import PublishEseguibileModal from '../components/eseguibili/PublishEseguibileModal';
 import EseguibileExecuteWizard from '../components/eseguibili/EseguibileExecuteWizard';
 import AppSidebar from '../components/AppSidebar';
+import ModalWrapper, { ModalButton } from '../components/common/ModalWrapper';
 import { can, role } from '../utils/permissions';
 import '../styles/ProjectList.css';
 
@@ -35,6 +37,7 @@ function ProjectList() {
   const [apiConnections,    setApiConnections]    = useState([]);
   const [files,             setFiles]             = useState([]);
   const [schedules,         setSchedules]         = useState([]);
+  const [dataSources,       setDataSources]       = useState([]);
   const [loading,           setLoading]           = useState(true);
   const [creating,          setCreating]          = useState(false);
   const [showModal,         setShowModal]         = useState(false);
@@ -140,7 +143,7 @@ function ProjectList() {
           setNl2Preview(data.result);
           if (!load) {
             // Ricarica lista progetti
-            loadProjects();
+            loadData();
           }
           done = true;
         } else if (data.status === 'failure') {
@@ -191,7 +194,7 @@ function ProjectList() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [projectsData, connectionsData, apiConnData, filesData, schedulesData, arcgisData, eseguibiliData] =
+      const [projectsData, connectionsData, apiConnData, filesData, schedulesData, arcgisData, eseguibiliData, dataSourcesData] =
         await Promise.all([
           listProjects(),
           listConnections(),
@@ -200,6 +203,7 @@ function ProjectList() {
           listSchedules().catch(() => ({ schedules: [], total: 0 })),
           listFeatureConnections().catch(() => ({ connections: [] })),
           listEseguibili().catch(() => []),
+          listDataSources().catch(() => []),
         ]);
 
       const projectsList = projectsData.projects || [];
@@ -210,6 +214,7 @@ function ProjectList() {
       setFiles(filesData.files || []);
       setSchedules(schedulesData.schedules || []);
       setEseguibili(Array.isArray(eseguibiliData) ? eseguibiliData : (eseguibiliData?.items || []));
+      setDataSources(dataSourcesData?.datasources || []);
 
       const sourcesMap = {};
       const fileSourcesMap = {};
@@ -358,6 +363,7 @@ function ProjectList() {
           projects: projects.length,
           connections: connections.length + arcgisConnections.length,
           apiConnections: apiConnections.length,
+          datasources: dataSources.length,
           files: files.length,
           schedules: activeSchedules.length,
         }}
@@ -442,19 +448,28 @@ function ProjectList() {
 
           {/* Modal NL2Pipeline — log progressivi + preview risultato */}
           {nl2Modal && (
-            <div className="pl__nl2-overlay" onClick={() => !nl2Loading && setNl2Modal(false)}>
-              <div className="pl__nl2-modal" onClick={e => e.stopPropagation()}>
-                <div className="pl__nl2-modal-header">
-                  <span className="pl__nl2-modal-icon">✦</span>
-                  <span className="pl__nl2-modal-title">
-                    {nl2Loading ? 'Generazione in corso...' : nl2Preview ? 'Pipeline generata' : 'NL2Pipeline'}
-                  </span>
-                  {!nl2Loading && (
-                    <button className="pl__nl2-modal-close" onClick={() => { setNl2Modal(false); setNl2Preview(null); setNl2Logs([]); }}>✕</button>
+            <ModalWrapper
+              isOpen={true}
+              onClose={() => { setNl2Modal(false); setNl2Preview(null); setNl2Logs([]); }}
+              title={nl2Loading ? 'Generazione in corso...' : nl2Preview ? 'Pipeline generata' : 'NL2Pipeline'}
+              icon="✦"
+              size="md"
+              closeOnOverlay={!nl2Loading}
+              closeOnEsc={!nl2Loading}
+              showCloseButton={!nl2Loading}
+              footer={
+                <>
+                  <ModalButton variant="secondary" onClick={() => { setNl2Modal(false); setNl2Preview(null); setNl2Logs([]); }}>
+                    {nl2Loading ? 'Annulla' : 'Chiudi'}
+                  </ModalButton>
+                  {!nl2Loading && (!nl2Preview || Object.keys(nl2Preview?.project_ids || {}).length === 0) && (
+                    <ModalButton variant="primary" onClick={() => { setNl2Preview(null); setNl2Logs([]); handleNl2Generate(true); }}>
+                      ＋ Crea progetti su Plenora
+                    </ModalButton>
                   )}
-                </div>
-
-                <div className="pl__nl2-modal-body">
+                </>
+              }
+            >
                   {/* Log progressivi */}
                   <div ref={nl2LogsRef} style={{
                     background: 'var(--pl-surface-2)', borderRadius: 8, padding: '10px 14px',
@@ -502,7 +517,7 @@ function ProjectList() {
                             <button
                               onClick={() => {
                                 setNl2Modal(false);
-                                loadProjects();
+                                loadData();
                                 if (type === 'estrai') navigate(`/project/${pid}`);
                                 else if (type === 'manipola') navigate(`/editor/manipola/${pid}`);
                                 else navigate(`/arricchisci/${pid}`);
@@ -522,20 +537,7 @@ function ProjectList() {
                       ))}
                     </div>
                   )}
-                </div>
-
-                <div className="pl__nl2-modal-footer">
-                  <button className="pl__btn pl__btn--ghost" onClick={() => { setNl2Modal(false); setNl2Preview(null); setNl2Logs([]); }}>
-                    {nl2Loading ? 'Annulla' : 'Chiudi'}
-                  </button>
-                  {!nl2Loading && (!nl2Preview || Object.keys(nl2Preview?.project_ids || {}).length === 0) && (
-                    <button className="pl__btn pl__btn--primary" onClick={() => { setNl2Preview(null); setNl2Logs([]); handleNl2Generate(true); }}>
-                      ＋ Crea progetti su Plenora
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
+            </ModalWrapper>
           )}
 
           {/* Stats */}
@@ -717,13 +719,23 @@ function ProjectList() {
 
       {/* ── MODAL ──────────────────────────────────────────── */}
       {showModal && (
-        <div className="pl__modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="pl__modal" onClick={e => e.stopPropagation()}>
-            <h3 className="pl__modal-title">
-              {newProjectType === 'estrai' ? '↓' : newProjectType === 'manipola' ? '⚙' : '◈'}
-              &nbsp;Nuovo progetto {newProjectType === 'estrai' ? 'Estrai' : newProjectType === 'manipola' ? 'Manipola' : 'Arricchisci'}
-            </h3>
-
+        <ModalWrapper
+          isOpen={true}
+          onClose={() => setShowModal(false)}
+          title={`Nuovo progetto ${newProjectType === 'estrai' ? 'Estrai' : newProjectType === 'manipola' ? 'Manipola' : 'Arricchisci'}`}
+          icon={newProjectType === 'estrai' ? '↓' : newProjectType === 'manipola' ? '⚙' : '◈'}
+          size="md"
+          closeOnOverlay={!creating}
+          closeOnEsc={!creating}
+          footer={
+            <>
+              <ModalButton variant="secondary" onClick={() => setShowModal(false)} disabled={creating}>Annulla</ModalButton>
+              <ModalButton variant="primary" onClick={handleCreateProject} loading={creating}>
+                Crea Progetto
+              </ModalButton>
+            </>
+          }
+        >
             {/* Tipo selector */}
             <div className="pl__modal-field">
               <label className="pl__modal-label">Tipo</label>
@@ -806,22 +818,7 @@ function ProjectList() {
                 💡 I progetti Arricchisci chiamano API esterne per arricchire i dati estratti.
               </div>
             )}
-
-            <div className="pl__modal-actions">
-              <button type="button" className="pl__modal-btn pl__modal-btn--cancel" onClick={() => setShowModal(false)}>
-                Annulla
-              </button>
-              <button
-                type="button"
-                className={`pl__modal-btn pl__modal-btn--submit pl__modal-btn--${newProjectType}`}
-                onClick={handleCreateProject}
-                disabled={creating}
-              >
-                {creating ? 'Creazione...' : 'Crea Progetto'}
-              </button>
-            </div>
-          </div>
-        </div>
+        </ModalWrapper>
       )}
 
       {/* ── PUBLISH ESEGUIBILE MODAL ────────────────────────── */}
@@ -846,13 +843,17 @@ function ProjectList() {
 
       {/* ── SELETTORE PROGETTO SORGENTE PER NUOVO ESEGUIBILE ── */}
       {showEsegSelector && (
-        <div className="pl__modal-overlay" onClick={(e) => e.target === e.currentTarget && setShowEsegSelector(false)}>
-          <div className="pl__modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 560 }}>
-            <h3 className="pl__modal-title">📢 Pubblica come Eseguibile</h3>
-            <p style={{ fontSize: 13, color: 'var(--pl-text-sub)', marginTop: -4, marginBottom: 14 }}>
-              Seleziona un progetto Arricchisci da pubblicare come catena on-demand.
-            </p>
-
+        <ModalWrapper
+          isOpen={true}
+          onClose={() => setShowEsegSelector(false)}
+          title="Pubblica come Eseguibile"
+          icon="📢"
+          subtitle="Seleziona un progetto Arricchisci da pubblicare come catena on-demand"
+          size="md"
+          footer={
+            <ModalButton variant="secondary" onClick={() => setShowEsegSelector(false)}>Annulla</ModalButton>
+          }
+        >
             <div className="pl__modal-field">
               <input
                 type="text"
@@ -911,13 +912,7 @@ function ProjectList() {
               )}
             </div>
 
-            <div className="pl__modal-actions" style={{ marginTop: 16 }}>
-              <button type="button" className="pl__modal-btn pl__modal-btn--cancel" onClick={() => setShowEsegSelector(false)}>
-                Annulla
-              </button>
-            </div>
-          </div>
-        </div>
+        </ModalWrapper>
       )}
 
     </div>

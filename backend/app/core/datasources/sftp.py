@@ -1,5 +1,5 @@
 """
-URBY-ETL — Data Source Backend: SFTP
+PLENORA-ETL — Data Source Backend: SFTP
 Connessione SSH/SFTP con autenticazione tramite password o chiave SSH privata.
 Dipendenza: paramiko (pip install paramiko)
 

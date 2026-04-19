@@ -3,18 +3,14 @@ Servizio gestione connessioni API esterne per arricchimento dati.
 
 Architettura
 ============
-Questo modulo gestisce il ciclo di vita completo delle connessioni API utilizzate
-dal modulo ARRICCHISCI: creazione, configurazione, test, esecuzione e salvataggio
-risultati. Ogni connessione API è salvata come directory su filesystem con un
-config.json che contiene endpoint, autenticazione, mapping parametri e output.
+Gestisce il ciclo di vita delle API connections usate dal modulo
+ARRICCHISCI: creazione, configurazione, test, esecuzione, salvataggio
+risultati. Ogni connection vive come row in `plenora.api_connections`
+(colonna `config jsonb`); i campi sensibili (password, client_secret,
+token, ...) sono cifrati at-rest via `app.shared.crypto`.
 
 Componenti:
 - ApiConnectionService: classe principale con operazioni CRUD + esecuzione
-
-Struttura filesystem:
-    data/api_connections/
-    └── api_<uuid>/
-        └── config.json    # Configurazione completa (endpoint, auth, mapping)
 
 Sezioni principali:
 - CRUD: list, get, create, update, delete connessioni API
@@ -39,11 +35,12 @@ Integrazione con altri moduli:
 - utils/response_parser.py: parsing strutturato risposte JSON
 """
 
+import io
 import os
 import re
 import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 import requests
@@ -143,8 +140,6 @@ class ApiConnectionService:
     def __init__(self):
         self.data_dir = settings.DATA_DIR
         self.results_dir = settings.RESULTS_DIR
-        # api_connections_dir mantenuto per backward compat con executable runner
-        self.api_connections_dir = settings.API_CONNECTIONS_DIR
 
     # =========================================================================
     # CRUD CONNESSIONI API — storage SQLite tramite db_service
@@ -202,6 +197,41 @@ class ApiConnectionService:
         connections.sort(key=lambda x: x.get('created_at', ''), reverse=True)
         return connections
 
+    def list_api_connections_decrypted(self, group_id: str = None) -> Dict[str, Dict]:
+        """Lista API connections con credenziali decifrate (per uso interno).
+
+        Fix N+1: era un loop di get_api_connection(id, include_token=True).
+        Ora fa UNA sola query e decifra inline. Ritorna dict id -> config.
+        """
+        import app.db.config_db_service as _cfg_db
+        if group_id is None:
+            rows = _cfg_db.fetchall("SELECT * FROM api_connections")
+        else:
+            rows = _cfg_db.fetchall(
+                "SELECT * FROM api_connections WHERE group_id = %s",
+                (group_id,)
+            )
+        result = {}
+        for row in rows:
+            api_id = row.get("id")
+            if not api_id:
+                continue
+            config = row.get("config") or {}
+            if isinstance(config, str):
+                try:
+                    config = json.loads(config)
+                except json.JSONDecodeError:
+                    continue
+            if not isinstance(config, dict):
+                continue
+            config["id"] = api_id
+            config["group_id"] = row.get("group_id", "")
+            config["created_by"] = row.get("created_by")
+            # Decifra credenziali at-rest
+            config = _decrypt_auth_in_config(config)
+            result[api_id] = config
+        return result
+
     def get_api_connection(self, api_id: str, include_token: bool = False) -> Optional[Dict]:
         """Ottiene una API connection specifica dal DB.
 
@@ -249,18 +279,20 @@ class ApiConnectionService:
             "schema_fields": data.get("schema_fields", []),
             "response_preset": data.get("response_preset", ""),
             "options": data.get("options", {}),
-            "created_at": datetime.now().isoformat(),
-            "updated_at": datetime.now().isoformat()
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat()
         }
-        if data.get("executable"):
-            config["executable"] = data["executable"]
         if data.get("response_config") is not None:
             config["response_config"] = data["response_config"]
-        # B-BE-32: salva paginazione al create (mancava, presente solo in update)
         if data.get("pagination"):
             config["pagination"] = data["pagination"]
         if data.get("batch"):
             config["batch"] = data["batch"]
+        # rest_file (Processore File): config multipart in/binary out
+        if data.get("request") is not None:
+            config["request"] = data["request"]
+        if data.get("response") is not None:
+            config["response"] = data["response"]
         # Cifra i campi auth sensibili at-rest prima di salvare in SQLite
         _encrypt_auth_in_config(config)
         db_svc.save_api_connection(
@@ -292,9 +324,11 @@ class ApiConnectionService:
         _decrypt_auth_in_config(config)
 
         updatable_fields = ['name', 'description', 'api_type', 'category', 'connection_type',
-                            'parameters', 'executable', 'static_parameters', 'output_mapping',
+                            'parameters', 'static_parameters', 'output_mapping',
                             'schema_fields', 'custom_headers', 'response_preset', 'response_config',
-                            'pagination', 'options', 'batch']
+                            'pagination', 'options', 'batch',
+                            # rest_file (Processore File): config multipart in/binary out
+                            'request', 'response']
         for field in updatable_fields:
             if field in data:
                 config[field] = data[field]
@@ -303,17 +337,18 @@ class ApiConnectionService:
         if "method" in data:
             config.setdefault("endpoint", {})["method"] = data["method"]
         if "auth" in data:
-            # B-BE-22: merge auth invece di sovrascrivere — i campi omessi dal client
-            # (es. password mascherata non modificata) mantengono il valore esistente nel DB.
-            # I campi mascherati con "***" inviati dal client vanno IGNORATI per non
-            # sovrascrivere il valore reale con la maschera.
+            # Merge auth invece di sovrascrivere: i campi omessi dal
+            # client (es. password mascherata non modificata) mantengono
+            # il valore esistente nel DB. I campi inviati come "***"
+            # dal client sono mascherati e vanno IGNORATI, altrimenti
+            # sovrascriviamo il valore reale con la maschera.
             existing_auth = config.get("auth", {})
             incoming_auth = {
                 k: v for k, v in (data["auth"] or {}).items()
                 if v != "***"
             }
             config["auth"] = {**existing_auth, **incoming_auth}
-        config["updated_at"] = datetime.now().isoformat()
+        config["updated_at"] = datetime.now(timezone.utc).isoformat()
 
         # Re-cifra auth prima del save
         _encrypt_auth_in_config(config)
@@ -337,6 +372,103 @@ class ApiConnectionService:
     # permettere la configurazione dell'output mapping nel frontend.
     # =========================================================================
     
+    @staticmethod
+    def _build_test_call_params(config: Dict, test_params: Optional[Dict]) -> Dict:
+        """Costruisce i parametri per `test_api_connection`.
+
+        Merge di:
+        - `test_params` (forniti dall'utente, hanno priorita')
+        - `config['parameters']` con `default_value` (fixed params come
+          `f=json`, `outFields=*`, ecc.) — riempiono solo i mancanti.
+
+        Poi processa i template `{{NOW}}`, `{{NOW-2h}}` ecc. su valori
+        string via `process_static_fields`.
+        """
+        raw_params = dict(test_params or {})
+        for p in (config.get("parameters") or []):
+            if not isinstance(p, dict):
+                continue
+            pname = p.get("name")
+            if not pname or pname in raw_params:
+                continue
+            dval = p.get("default_value")
+            if dval not in (None, ""):
+                raw_params[pname] = dval
+
+        params: Dict = {}
+        for k, v in raw_params.items():
+            if isinstance(v, str) and '{{' in v:
+                fields = [{'name': k, 'value': v}]
+                processed = process_static_fields(fields)
+                params[k] = processed.get(k, v)
+            else:
+                params[k] = v
+        return params
+
+    @staticmethod
+    def _inject_auth_query_params(auth: Dict, params: Dict) -> Optional[Dict]:
+        """Inietta nei query params le credenziali in-query dell'auth.
+
+        Modifica `params` in place. Ritorna `None` su success, oppure
+        un error dict `{success: False, error: ...}` se l'auth richiede
+        un token che non riesce a recuperare (es. ArcGIS token failure).
+
+        Tipi gestiti:
+        - `api_key` con `location='query'`: aggiunge `key_name=key_value`
+        - `arcgis_token`: chiama `get_arcgis_token(auth)` e aggiunge
+          `token=<tok>`. Su failure ritorna error dict.
+        """
+        if auth.get('type') == 'api_key' and auth.get('location') == 'query':
+            params[auth.get('key_name', 'apiKey')] = auth.get('key_value', '')
+
+        if auth.get('type') == 'arcgis_token':
+            from app.shared.api_utils import get_arcgis_token
+            arcgis_tok = get_arcgis_token(auth)
+            if arcgis_tok:
+                params['token'] = arcgis_tok
+            else:
+                return {
+                    "success": False,
+                    "error": (
+                        "ArcGIS token: impossibile ottenere il token. "
+                        "Verifica token_url, username e password."
+                    ),
+                }
+
+        return None
+
+    @staticmethod
+    def _parse_test_response_json(response) -> tuple:
+        """Parsa il body JSON di una `test_api_connection` response.
+
+        Alcuni server (ArcGIS REST con `f=json/pjson`) ritornano JSON
+        valido con `Content-Type=text/plain`. Tentiamo prima
+        `response.json()` standard; se fallisce, fallback al parsing
+        manuale del testo grezzo (preserva il caso text/plain).
+
+        Ritorna `(json_data, parse_error)`:
+        - `(dict_or_list, None)` su success
+        - `(None, "Risposta non è JSON valido ...")` su failure
+        """
+        content_type = response.headers.get('Content-Type', '')
+        try:
+            return response.json(), None
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+        try:
+            body_text = (response.text or "").strip()
+            if body_text and body_text[0] in "{[":
+                return json.loads(body_text), None
+            return None, (
+                f"Risposta non è JSON valido (Content-Type: {content_type}). "
+                "Verifica l'URL e i parametri."
+            )
+        except (json.JSONDecodeError, ValueError) as e:
+            return None, (
+                f"Risposta non è JSON valido (Content-Type: {content_type}): {e}"
+            )
+
     def test_api_connection(self, api_id: str = None, config: Dict = None, test_params: Dict = None) -> Dict:
         """
         Testa una connessione API con parametri di prova.
@@ -366,109 +498,55 @@ class ApiConnectionService:
             return {"success": False, "error": "URL non configurato"}
         
         headers = self._prepare_headers(auth, custom_headers)
-        
-        # Merge: parametri di test (forniti dall'utente) + default_value dei
-        # parametri configurati (fixed params come f=json, outFields, ecc.).
-        # I test_params hanno priorità, i default_value riempiono i mancanti.
-        raw_params = dict(test_params or {})
-        for p in (config.get("parameters") or []):
-            if not isinstance(p, dict):
-                continue
-            pname = p.get("name")
-            if not pname or pname in raw_params:
-                continue
-            dval = p.get("default_value")
-            if dval not in (None, ""):
-                raw_params[pname] = dval
 
-        # Processa i template nei parametri ({{NOW}}, {{NOW-2h}}, ecc.)
-        params = {}
-        for k, v in raw_params.items():
-            if isinstance(v, str) and '{{' in v:
-                # Usa process_static_fields per processare i template
-                fields = [{'name': k, 'value': v}]
-                processed = process_static_fields(fields)
-                params[k] = processed.get(k, v)
-            else:
-                params[k] = v
+        params = self._build_test_call_params(config, test_params)
+        url, params = self._substitute_url_path_params(url, params)
 
-        # Sostituisci path params nell'URL ({ip}, {coordinates}, {name}, ecc.)
-        # NOTA: percent-encode i valori (safe: virgola e slash) per evitare che
-        # urlparse di Python interpreti ';' come separatore di path-params (RFC legacy)
-        import re
-        from urllib.parse import quote as _quote
-        path_param_names = re.findall(r'\{(\w+)\}', url)
-        for pname in path_param_names:
-            if pname in params:
-                encoded = _quote(str(params.pop(pname)), safe='-._~:@!$&\'()*+,=;/')
-                url = url.replace(f'{{{pname}}}', encoded)
-        
-        # API Key in query param
-        if auth.get('type') == 'api_key' and auth.get('location') == 'query':
-            params[auth.get('key_name', 'apiKey')] = auth.get('key_value', '')
+        auth_err = self._inject_auth_query_params(auth, params)
+        if auth_err is not None:
+            return auth_err
 
-        # ArcGIS Token in query param (auto-richiede e cacha il token)
-        if auth.get('type') == 'arcgis_token':
-            from app.shared.api_utils import get_arcgis_token
-            arcgis_tok = get_arcgis_token(auth)
-            if arcgis_tok:
-                params['token'] = arcgis_tok
-            else:
-                return {"success": False, "error": "ArcGIS token: impossibile ottenere il token. Verifica token_url, username e password."}
+        # Anti-SSRF: valida URL prima di eseguire la richiesta. Il
+        # messaggio di `validate_external_url` include gia' il prefisso
+        # "URL bloccato:" / "URL non valido:", quindi NON wrappare
+        # ulteriormente o si ottiene il prefisso doppio.
+        from app.shared.api_utils import validate_external_url
+        try:
+            validate_external_url(url)
+        except ValueError as ssrf_err:
+            return {"success": False, "error": str(ssrf_err)}
 
         try:
+            from app.shared.api_utils import get_shared_session
             if method == 'GET':
-                response = requests.get(url, params=params, headers=headers, timeout=30)
+                response = get_shared_session().get(url, params=params, headers=headers, timeout=30)
             else:
-                response = requests.post(url, json=params, headers=headers, timeout=30)
-            
-            # Parse JSON response and extract available fields
+                response = get_shared_session().post(url, json=params, headers=headers, timeout=30)
+
             result = {
                 "success": response.status_code == 200,
                 "status_code": response.status_code,
                 "response_preview": response.text[:500] if response.text else "",
-                "headers": dict(response.headers)
+                "headers": dict(response.headers),
             }
             if response.status_code != 200:
-                result["error"] = f"HTTP {response.status_code}: {response.text[:200] if response.text else 'Nessuna risposta'}"
-            
-            # Se success, prova a parsare JSON ed estrarre i campi.
-            # NOTA: alcuni server (es. ArcGIS REST con f=json/pjson) ritornano
-            # JSON valido con Content-Type=text/plain. Quindi tentiamo prima il
-            # parsing del body e usiamo il Content-Type solo come hint.
-            if response.status_code == 200:
-                content_type = response.headers.get('Content-Type', '')
-                json_data = None
-                parse_error: Optional[str] = None
-                try:
-                    json_data = response.json()
-                except (json.JSONDecodeError, ValueError):
-                    # Fallback: prova a parsare manualmente il testo
-                    try:
-                        body_text = (response.text or "").strip()
-                        if body_text and body_text[0] in "{[":
-                            json_data = json.loads(body_text)
-                        else:
-                            parse_error = (
-                                f"Risposta non è JSON valido (Content-Type: {content_type}). "
-                                "Verifica l'URL e i parametri."
-                            )
-                    except (json.JSONDecodeError, ValueError) as e:
-                        parse_error = (
-                            f"Risposta non è JSON valido (Content-Type: {content_type}): {e}"
-                        )
+                result["error"] = (
+                    f"HTTP {response.status_code}: "
+                    f"{response.text[:200] if response.text else 'Nessuna risposta'}"
+                )
+                return result
 
-                if json_data is not None:
-                    available_fields = self._extract_available_fields(json_data)
-                    result["available_fields"] = available_fields
-                    result["response_data"] = json_data  # Per debug
-                    result["raw_response"] = json_data  # Per ResponseConfigBuilder
-                else:
-                    result["success"] = False
-                    result["error"] = parse_error or "Risposta vuota o non parseabile"
-            
+            json_data, parse_error = self._parse_test_response_json(response)
+            if json_data is not None:
+                result["available_fields"] = self._extract_available_fields(json_data)
+                result["response_data"] = json_data  # Per debug
+                result["raw_response"] = json_data  # Per ResponseConfigBuilder
+            else:
+                result["success"] = False
+                result["error"] = parse_error or "Risposta vuota o non parseabile"
+
             return result
-            
+
         except requests.exceptions.Timeout:
             return {"success": False, "error": "Timeout: l'API non ha risposto entro 30 secondi"}
         except requests.exceptions.ConnectionError as e:
@@ -502,8 +580,9 @@ class ApiConnectionService:
                     # GeoJSON FeatureCollection check
                     if isinstance(first_item, dict) and first_item.get('type') == 'Feature':
                         return self._extract_geojson_fields(data)
-                    # B-BE-28: path senza prefisso [0] — _extract_rows_from_response
-                    # itera già su ogni item, quindi i path devono essere relativi all'item
+                    # Path senza prefisso [0]: `_extract_rows_from_response`
+                    # itera gia' su ogni item, quindi i path devono
+                    # essere relativi all'item.
                     fields.extend(self._extract_available_fields(first_item, "", max_depth - 1))
                 else:
                     fields.extend(self._extract_available_fields(first_item, f"{prefix}[0]", max_depth - 1))
@@ -638,7 +717,225 @@ class ApiConnectionService:
     # Supporta nodi: project_source, file_source, staticValues, api_enrich, result
     # =========================================================================
     
-    def execute_enrichment(self, project_id: str, canvas: Dict, format: str = 'csv', 
+    def _find_final_result(
+        self,
+        node_results: Dict[str, Any],
+        result_node: Optional[Dict],
+        execution_order: List[str],
+    ) -> Any:
+        """Risolve il risultato finale della pipeline.
+
+        Priorita':
+          1. Output del nodo `result` se presente e ha prodotto qualcosa
+          2. Fallback: ultimo nodo in execution_order con un risultato
+             non-None e non-marker passthrough file_source
+
+        Ritorna `None` se nessun nodo ha prodotto output.
+        """
+        if result_node is not None:
+            candidate = node_results.get(result_node['id'])
+            if candidate is not None:
+                return candidate
+
+        for node_id in reversed(execution_order):
+            r = node_results.get(node_id)
+            if r is None:
+                continue
+            if isinstance(r, dict) and r.get('_passthrough_file_source'):
+                continue
+            return r
+        return None
+
+    def _build_file_result_response(
+        self, final_result: Dict, project_id: str
+    ) -> Dict:
+        """Costruisce la response dict per un risultato file-based
+        (tipicamente `_execute_rest_file` con `is_file_result=True`).
+
+        Persiste il blob + pulisce la dir temporanea `plenora_exec_*` se
+        presente (best-effort).
+
+        Il dict ritornato espone `result_id` (riferimento canonico al
+        blob nel DB results) e `output_filename` per display, ma NON
+        `output_path`/`output_file`: dopo `save_result_blob` il file
+        temp non esiste piu' (vedi `app/utils/result_store.py:80`),
+        quindi qualunque path emesso sarebbe stale. I consumer
+        downstream usano `result_id` via `PipelineArtifact.artifact_kind
+        == "blob"` e l'ArtifactResolver per materializzare dal DB.
+        """
+        src_path = Path(final_result['output_path'])
+        src_name = src_path.name
+        # Leggi la size PRIMA del save: save_result_blob cancella il
+        # file temp nel finally su success, quindi src_path.stat()
+        # dopo la chiamata solleverebbe FileNotFoundError.
+        size_bytes = src_path.stat().st_size
+
+        result_id = save_result_blob(
+            project_id, src_path, src_path.suffix.lstrip('.') or 'bin', 0
+        )
+
+        response = {
+            "success": True,
+            "result_id": result_id,
+            "output_type": "file",
+            "output_filename": src_name,
+            "output_size_bytes": size_bytes,
+            "rows": 0,
+            "rows_count": 0,
+            "rows_processed": 0,
+            "columns": [],
+            "columns_count": 0,
+            "execution_time_ms": final_result.get('execution_time_ms', 0),
+            "metadata": final_result.get('metadata', {}),
+            "message": f"Processamento completato: {src_name} ({size_bytes // 1024} KB)",
+        }
+
+        # Cleanup dir tmp dell'executable (solo se il nome combacia con
+        # il pattern `plenora_exec_*`: niente rimozioni di cartelle altrui).
+        try:
+            import shutil
+            tmp_dir = src_path.parent
+            if tmp_dir.name.startswith("plenora_exec_"):
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+        except Exception:
+            pass
+
+        return response
+
+    def _save_and_build_dataframe_response(
+        self,
+        final_df: pd.DataFrame,
+        output_name: str,
+        output_format: str,
+        project_id: str,
+    ) -> Dict:
+        """Salva il DataFrame finale nel formato richiesto, persiste il
+        blob, costruisce la response dict standard.
+
+        Il dict ritornato espone `result_id` (riferimento canonico al
+        blob nel DB results) e `output_filename` per display, ma NON
+        `output_path`/`output_file`: dopo `save_result_blob` il file
+        temp non esiste piu' (vedi `app/utils/result_store.py:80`),
+        quindi qualunque path emesso sarebbe stale. I consumer
+        downstream usano `result_id` via `PipelineArtifact.artifact_kind
+        == "blob"` e l'ArtifactResolver per materializzare dal DB.
+        """
+        from app.utils.result_store import save_pipeline_result
+
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        filename_stem = f"{output_name}_{timestamp}"
+
+        saved = save_pipeline_result(
+            project_id=project_id,
+            df=final_df,
+            output_format=output_format,
+            filename_stem=filename_stem,
+            rows_count=len(final_df),
+        )
+
+        return {
+            "success": True,
+            "result_id": saved["result_id"],
+            "output_filename": saved["output_filename"],
+            "rows": len(final_df),
+            "rows_count": len(final_df),
+            "rows_processed": len(final_df),
+            "columns": list(final_df.columns),
+            "columns_metadata": [
+                {"name": c, "type": str(final_df[c].dtype)} for c in final_df.columns
+            ],
+            "columns_count": len(final_df.columns),
+            "message": f"Arricchimento completato: {len(final_df)} righe processate",
+        }
+
+    def _write_intermediate_snapshot(
+        self, run_id: str, node_id: str, node_type: str, df: Any
+    ) -> None:
+        """Scrive uno snapshot del DataFrame nell'intermediate.db.
+
+        Best-effort: errori loggati come warning ma non propagati
+        (lo snapshot e' per inspection, non bloccante per la pipeline).
+        No-op se `df` non e' un DataFrame non vuoto.
+        """
+        if not isinstance(df, pd.DataFrame) or df.empty:
+            return
+        try:
+            from app.core.intermediate.writer import write_node
+            write_node(
+                run_id=run_id,
+                node_id=node_id,
+                node_type=node_type,
+                rows=df.to_dict(orient="records"),
+                col_schema=df.dtypes.astype(str).to_dict(),
+                exec_time=0.0,
+                status="ok",
+            )
+        except Exception as e:
+            logger.warning(
+                f"Intermediate write {node_id} fallita (non bloccante): {e}"
+            )
+
+    def _is_file_source_for_file_processor(
+        self,
+        node_id: str,
+        edges: List[Dict],
+        node_map: Dict[str, Dict],
+        api_connections: Dict[str, Dict],
+    ) -> bool:
+        """True se il file_source e' input diretto di un nodo api_enrich
+        di tipo file-processor (`rest_file`).
+
+        Quando e' True il caller salta `_load_file_source` e tiene il
+        file_source come marker passthrough: i file-processor leggono
+        il file direttamente dal file_source_id, non dal DataFrame.
+        """
+        for de in edges:
+            if de.get('source') != node_id:
+                continue
+            target_node = node_map.get(de.get('target'))
+            if not target_node or target_node.get('type') != 'api_enrich':
+                continue
+            target_api_id = _nd(target_node, 'api_id')
+            target_api_config = api_connections.get(target_api_id, {})
+            if target_api_config.get('connection_type') == 'rest_file':
+                return True
+        return False
+
+    def _run_single_enricher(self, node_data: Dict, api_conns: Dict, in_df) -> Any:
+        """Esegue un singolo nodo enricher.
+
+        Dispatch su `api_type`: generator (1 call produce df intero)
+        vs enricher (1 call per riga). Usato sia direttamente che
+        come callback da `execute_parallel_enrichers`. Solleva
+        `ValueError` se l'api_id non e' nelle connections decifrate.
+        """
+        api_id = _nd(node_data, 'api_id')
+        api_config = api_conns.get(api_id)
+        if not api_config:
+            raise ValueError(f"API '{api_id}' non trovata")
+        if api_config.get('api_type', 'enricher') == 'generator':
+            return self._execute_api_generator(api_config, in_df)
+        param_mapping = _nd(node_data, 'param_mapping', {})
+        return self._execute_api_enricher(in_df, api_config, param_mapping)
+
+    def _init_execution_context(self, project_id: str, preview_limit: Optional[int]) -> None:
+        """Inizializza il contesto di esecuzione per `execute_enrichment`.
+
+        - `self._preview_limit`: usato da `_load_file_source` per
+          troncare i DataFrame in modalita' preview.
+        - `self._current_group_id`: tenant binding del progetto
+          corrente, usato dai check cross-tenant in `_load_source_project`
+          / `_load_file_source`. Fail-soft: se il lookup DB esplode
+          setta None e lascia fallire i check a valle.
+        """
+        self._preview_limit = preview_limit
+        try:
+            _proj_row = db_svc.get_project(project_id)
+            self._current_group_id = _proj_row.get("group_id") if _proj_row else None
+        except Exception:
+            self._current_group_id = None
+
+    def execute_enrichment(self, project_id: str, canvas: Dict, format: str = 'csv',
                           force_recalculate: bool = False, preview_limit: int = None,
                           run_id: str = None) -> Dict:
         """
@@ -657,17 +954,7 @@ class ApiConnectionService:
         - api_enrich: arricchisce (enricher) o genera (generator) dati via API
         - result: nodo terminale, definisce formato e nome output
         """
-        import time
-        self._preview_limit = preview_limit  # usato da _load_file_source
-
-        # SECURITY: memorizza group_id del progetto corrente per i check
-        # cross-tenant in _load_source_project.
-        try:
-            import app.db.db_service as _db
-            _proj_row = _db.get_project(project_id)
-            self._current_group_id = _proj_row.get("group_id") if _proj_row else None
-        except Exception:
-            self._current_group_id = None
+        self._init_execution_context(project_id, preview_limit)
 
         try:
             nodes = canvas.get('nodes', [])
@@ -676,12 +963,8 @@ class ApiConnectionService:
             if not nodes:
                 return {"success": False, "error": "Nessun nodo nel canvas"}
             
-            # Carica tutte le API connections
-            api_connections = {}
-            for api in self.list_api_connections():
-                full_api = self.get_api_connection(api['id'], include_token=True)
-                if full_api:
-                    api_connections[api['id']] = full_api
+            # Carica tutte le API connections con credenziali decifrate (1 query)
+            api_connections = self.list_api_connections_decrypted()
             
             # Ordine di esecuzione topologico
             execution_order = self._get_execution_order(nodes, edges)
@@ -691,24 +974,15 @@ class ApiConnectionService:
             from app.core.arricchisci.parallel import (
                 compute_parallel_groups, execute_parallel_enrichers, should_execute_node,
             )
-            groups = compute_parallel_groups(execution_order, nodes, edges)
+            groups = compute_parallel_groups(
+                execution_order, nodes, edges,
+                api_connections=api_connections,
+            )
             logger.info(f"Gruppi di esecuzione: {[(t, len(ids)) for t, ids in groups]}")
 
             node_map = {n['id']: n for n in nodes}
             node_results = {}
             processed = set()
-
-            def _run_single_enricher(node_data, api_conns, in_df):
-                """Esegue un singolo nodo enricher. Usato sia in sequenziale che come callback parallelo."""
-                api_id = _nd(node_data, 'api_id')
-                api_config = api_conns.get(api_id)
-                if not api_config:
-                    raise ValueError(f"API '{api_id}' non trovata")
-                api_type = api_config.get('api_type', 'enricher')
-                if api_type == 'generator':
-                    return self._execute_api_generator(api_config, in_df)
-                param_mapping = _nd(node_data, 'param_mapping', {})
-                return self._execute_api_enricher(in_df, api_config, param_mapping)
 
             for step_type, step_node_ids in groups:
                 if step_type == "single":
@@ -719,87 +993,24 @@ class ApiConnectionService:
                         continue
                     node_type = node.get('type')
                     node_data = node
-                    logger.info(f"Esecuzione nodo: {node_id} ({node_type})")
+                    logger.debug(f"Esecuzione nodo: {node_id} ({node_type})")
 
                     if node_type == 'project_source':
                         node_results[node_id] = self._load_source_project(node_data, force_recalculate)
 
                     elif node_type == 'file_source':
-                        downstream_edges = [e for e in edges if e['source'] == node_id]
-                        is_for_executable = False
-                        for de in downstream_edges:
-                            target_node = node_map.get(de['target'])
-                            if target_node and target_node.get('type') == 'api_enrich':
-                                target_api_id = _nd(target_node, 'api_id')
-                                target_api_config = api_connections.get(target_api_id, {})
-                                if target_api_config.get('connection_type') == 'executable':
-                                    is_for_executable = True
-                                    break
-                        if is_for_executable:
-                            node_results[node_id] = {"_passthrough_file_source": True, "file_source_id": _nd(node, 'file_source_id')}
+                        if self._is_file_source_for_file_processor(
+                            node_id, edges, node_map, api_connections
+                        ):
+                            node_results[node_id] = {
+                                "_passthrough_file_source": True,
+                                "file_source_id": _nd(node, 'file_source_id'),
+                            }
                         else:
                             node_results[node_id] = self._load_file_source(node_data)
 
                     elif node_type == 'staticValues':
                         node_results[node_id] = self._load_static_values(node_data)
-
-                    elif node_type == 'api_enrich':
-                        api_id = _nd(node, 'api_id')
-                        api_config = api_connections.get(api_id)
-                        if not api_config:
-                            return {"success": False, "error": f"API '{api_id}' non trovata"}
-
-                        input_edge = next((e for e in edges if e['target'] == node_id), None)
-                        input_df = node_results.get(input_edge['source']) if input_edge else None
-
-                        # ── execute_if check (per-riga) ──
-                        from app.core.arricchisci.parallel import get_execute_mask
-                        exec_mask = get_execute_mask(node_data, input_df)
-                        all_skip = not exec_mask.any() if isinstance(exec_mask, pd.Series) else not exec_mask
-
-                        if all_skip:
-                            logger.info(f"Nodo {node_id} skippato per tutte le righe (execute_if)")
-                            node_results[node_id] = input_df
-                        elif api_config.get('connection_type') == 'executable':
-                            result = self._execute_executable(node_data, api_config, nodes, edges, node_id, project_id)
-                            if isinstance(result, dict) and not result.get('success', True):
-                                return result
-                            node_results[node_id] = result
-                        else:
-                            all_exec = exec_mask.all() if isinstance(exec_mask, pd.Series) else exec_mask
-                            try:
-                                if all_exec:
-                                    node_results[node_id] = _run_single_enricher(node_data, api_connections, input_df)
-                                else:
-                                    # Per-row split: esegui solo righe matching
-                                    df_exec = input_df[exec_mask]
-                                    df_skip = input_df[~exec_mask]
-                                    result_exec = _run_single_enricher(node_data, api_connections, df_exec)
-                                    if isinstance(result_exec, pd.DataFrame):
-                                        new_cols = [c for c in result_exec.columns if c not in df_skip.columns]
-                                        for c in new_cols:
-                                            df_skip = df_skip.copy()
-                                            df_skip[c] = None
-                                        node_results[node_id] = pd.concat([result_exec, df_skip]).sort_index()
-                                    else:
-                                        node_results[node_id] = input_df
-                                    logger.info(f"Nodo {node_id}: {exec_mask.sum()}/{len(exec_mask)} righe eseguite (execute_if per-riga)")
-                            except ValueError as e:
-                                return {"success": False, "error": str(e)}
-
-                        # Snapshot intermediate
-                        if run_id:
-                            try:
-                                import pandas as _pd
-                                from app.core.intermediate.writer import write_node as _write_node
-                                _df = node_results.get(node_id)
-                                if isinstance(_df, _pd.DataFrame) and not _df.empty:
-                                    _write_node(run_id=run_id, node_id=node_id, node_type="api_enrich",
-                                                rows=_df.to_dict(orient="records"),
-                                                col_schema=_df.dtypes.astype(str).to_dict(),
-                                                exec_time=0.0, status="ok")
-                            except Exception as _iex:
-                                logger.warning(f"Intermediate write {node_id} fallita: {_iex}")
 
                     elif node_type == 'result':
                         input_edge = next((e for e in edges if e['target'] == node_id), None)
@@ -825,16 +1036,21 @@ class ApiConnectionService:
                     if input_df is None:
                         return {"success": False, "error": f"Input non trovato per gruppo parallelo {step_node_ids}"}
 
-                    # Filtra nodi executable dal gruppo (non parallelizzabili)
+                    # Filtra nodi file-processor (rest_file) dal gruppo:
+                    # non sono parallelizzabili col meccanismo degli enricher.
                     parallel_ids = []
                     for nid in step_node_ids:
                         nd = node_map.get(nid)
                         api_id = _nd(nd, 'api_id')
                         api_cfg = api_connections.get(api_id, {})
-                        if api_cfg.get('connection_type') == 'executable':
-                            # Esegui executable in sequenza prima del gruppo parallelo
+                        ctype = api_cfg.get('connection_type')
+                        if ctype == 'rest_file':
+                            # Esegui in sequenza prima del gruppo parallelo
                             if should_execute_node(nd, input_df):
-                                result = self._execute_executable(nd, api_cfg, nodes, edges, nid, project_id)
+                                result = self._execute_rest_file(
+                                    nd, api_cfg, nodes, edges, nid, project_id,
+                                    node_results=node_results,
+                                )
                                 if isinstance(result, dict) and not result.get('success', True):
                                     return result
                                 node_results[nid] = result
@@ -850,100 +1066,59 @@ class ApiConnectionService:
                             input_df=input_df,
                             node_map=node_map,
                             api_connections=api_connections,
-                            execute_single_fn=_run_single_enricher,
+                            execute_single_fn=self._run_single_enricher,
                         )
                         node_results.update(group_results)
 
-                        # Se errore non bloccante, logga e continua
+                        # Se il gruppo ha prodotto un errore, la pipeline
+                        # fallisce: inghiottire il group_error portava a
+                        # task "success" con output passthrough del nodo
+                        # upstream (es. solo la colonna seed di staticValues),
+                        # mascherando errori upstream come HTTP 422 sul
+                        # generator API. Non esiste un caso legittimo in cui
+                        # un'eccezione dentro run_one debba essere ignorata:
+                        # le skip via execute_if ritornano (None, None),
+                        # non (None, errore).
                         if group_error:
-                            logger.warning(f"Errore in gruppo parallelo (non bloccante): {group_error}")
+                            logger.error(
+                                f"[GESTITO] Errore api_enrich in gruppo "
+                                f"{parallel_ids}: {group_error}",
+                                op="execute", project_id=project_id,
+                            )
+                            return {
+                                "success": False,
+                                "user_error": True,
+                                "error": f"Errore chiamata API upstream: {group_error}",
+                                "error_node_id": parallel_ids[0] if parallel_ids else None,
+                                "error_node_type": "api_enrich",
+                            }
 
-                    # Snapshot intermediate per ogni nodo del gruppo
                     if run_id:
-                        try:
-                            import pandas as _pd
-                            from app.core.intermediate.writer import write_node as _write_node
-                            for nid in step_node_ids:
-                                _df = node_results.get(nid)
-                                if isinstance(_df, _pd.DataFrame) and not _df.empty:
-                                    _write_node(run_id=run_id, node_id=nid, node_type="api_enrich",
-                                                rows=_df.to_dict(orient="records"),
-                                                col_schema=_df.dtypes.astype(str).to_dict(),
-                                                exec_time=0.0, status="ok")
-                        except Exception as _iex:
-                            logger.warning(f"Intermediate write gruppo fallita: {_iex}")
+                        for nid in step_node_ids:
+                            self._write_intermediate_snapshot(
+                                run_id, nid, "api_enrich", node_results.get(nid)
+                            )
             
-            # Trova output finale
             result_node = next((n for n in nodes if n.get('type') == 'result'), None)
             output_format = _nd(result_node, 'format', format) or format if result_node else format
             output_name = _nd(result_node, 'fileName', _nd(result_node, 'name', 'output')) if result_node else 'output'
-            
-            # Trova ultimo risultato (DataFrame o ExecutableResult)
-            final_result = None
-            if result_node:
-                final_result = node_results.get(result_node['id'])
-            
-            if final_result is None:
-                # Cerca ultimo nodo con risultato (ignora marker passthrough)
-                for node_id in reversed(execution_order):
-                    r = node_results.get(node_id)
-                    if r is not None and not (isinstance(r, dict) and r.get('_passthrough_file_source')):
-                        final_result = r
-                        break
-            
+
+            final_result = self._find_final_result(
+                node_results, result_node, execution_order
+            )
             if final_result is None:
                 return {"success": False, "error": "Nessun risultato generato"}
-            
-            # ── EXECUTABLE RESULT: il risultato è un file, non un DataFrame ──
+
             if isinstance(final_result, dict) and final_result.get('is_file_result'):
-                src_path = Path(final_result['output_path'])
-                save_result_blob(project_id, src_path, src_path.suffix.lstrip('.') or 'bin', 0)
-                
-                return {
-                    "success": True,
-                    "output_file": str(src_path),
-                    "output_path": str(src_path),
-                    "output_type": "file",
-                    "output_filename": src_path.name,
-                    "output_size_bytes": src_path.stat().st_size,
-                    "rows": 0,
-                    "rows_count": 0,
-                    "rows_processed": 0,
-                    "columns": [],
-                    "columns_count": 0,
-                    "execution_time_ms": final_result.get('execution_time_ms', 0),
-                    "metadata": final_result.get('metadata', {}),
-                    "message": f"Processamento completato: {src_path.name} ({src_path.stat().st_size // 1024} KB)"
-                }
-            
-            # ── DATAFRAME RESULT: flusso standard ──
-            final_df = final_result
-            if not isinstance(final_df, pd.DataFrame):
+                return self._build_file_result_response(final_result, project_id)
+
+            if not isinstance(final_result, pd.DataFrame):
                 return {"success": False, "error": "Nessun DataFrame generato"}
-            
-            # Salva output su blob DB
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_filename = f"{output_name}_{timestamp}.{output_format}"
-            output_path = get_temp_output_path(output_filename)
-            
-            saved_path = save_dataframe(final_df, output_path, output_format)
-            save_result_blob(project_id, saved_path, output_format, len(final_df))
-            
-            return {
-                "success": True,
-                "output_file": str(saved_path),
-                "output_path": str(saved_path),
-                "rows": len(final_df),
-                "rows_count": len(final_df),
-                "rows_processed": len(final_df),
-                "columns": list(final_df.columns),
-                "columns_metadata": [
-                    {"name": c, "type": str(final_df[c].dtype)} for c in final_df.columns
-                ],
-                "columns_count": len(final_df.columns),
-                "message": f"Arricchimento completato: {len(final_df)} righe processate"
-            }
-            
+
+            return self._save_and_build_dataframe_response(
+                final_result, output_name, output_format, project_id
+            )
+
         except Exception as e:
             logger.error(f"[GESTITO] Errore esecuzione enrichment {project_id}: {e}", exc_info=True)
             return {"success": False, "error": str(e)}
@@ -993,405 +1168,902 @@ class ApiConnectionService:
         """Ottiene token OAuth2 con password flow. Delegato a shared/api_utils."""
         return _shared_get_oauth2_token(auth)
     
-    def _load_source_project(self, node_data: Dict, force_recalculate: bool = False) -> pd.DataFrame:
-        """Carica dati dal progetto sorgente.
+    # =========================================================================
+    # SOURCE LOADING
+    # =========================================================================
+    # Wrapper sopra `app.core.artifacts.SourceLoader`. I wrapper di
+    # api_connector aggiungono solo cio' che e' specifico al modulo:
+    #   - `_load_source_project`: recompute upstream + fallback filesystem
+    #   - `_load_file_source`: preview_limit
+    #   - tutti: `filter_visible_columns` sul DataFrame ritornato
 
-        SECURITY: verifica cross-tenant isolation — il progetto sorgente
-        deve appartenere allo stesso gruppo del progetto corrente.
+    def _assert_source_project_in_tenant(
+        self, source_project_id: str, executing_group_id: str
+    ) -> None:
+        """Verifica fail-closed che `source_project_id` appartenga al
+        gruppo `executing_group_id`. Solleva `ValueError("Accesso negato:
+        ...")` su mismatch o progetto inesistente.
+
+        Questo pre-check e' necessario PRIMA del recompute upstream:
+        con `force_recalculate=True` (user-controlled via
+        `EnrichAsyncRequest`) il Tentativo 1 con check cross-tenant via
+        `SourceLoader` viene saltato, e senza questo pre-check
+        l'esecuzione del pipeline di un altro tenant verrebbe triggerata
+        prima del block.
         """
-        source_project_id = node_data.get('source_project_id')
+        from app.db import config_db_service as _cfg_db
+        src_proj = _cfg_db.get_project(source_project_id)
+        if not src_proj or src_proj.get("group_id") != executing_group_id:
+            logger.error(
+                f"[SECURITY] Cross-tenant recompute blocked: "
+                f"source_project_id={source_project_id} non appartiene a "
+                f"group={executing_group_id}",
+                op="load_source_project",
+            )
+            raise ValueError(
+                f"Accesso negato: il progetto sorgente "
+                f"'{source_project_id}' non appartiene al tuo gruppo."
+            )
 
+    def _recompute_upstream_project(
+        self, source_project_id: str, force_recalculate: bool
+    ) -> None:
+        """Istanzia un OrchestratorService standalone e ri-esegue la
+        pipeline di `source_project_id`. Solleva `ValueError` su
+        `ImportError` o `success=False`.
+
+        Pattern standalone (no `from main import orchestrator`) perche'
+        `main.py` non e' nel path del worker Celery. Il caller fa
+        un'altro `loader.load` post-recompute per leggere il risultato
+        appena salvato.
+        """
+        logger.info(f"Riesecuzione progetto upstream: {source_project_id}")
+        try:
+            from app.core.orchestrator.service import OrchestratorService
+            from app.services.project_service import ProjectService
+            from app.services.connection_service import ConnectionService
+            from app.core.estrai.query_generator import QueryGenerator
+            from app.db.query_executor import QueryExecutor
+            from app.core.features.features_service import FeaturesService
+            from app.utils.dataframe import save_dataframe as _save_df
+
+            _proj_svc = ProjectService()
+            _conn_svc = ConnectionService()
+            _generator = QueryGenerator()
+            _executor = QueryExecutor(
+                results_dir=settings.DATA_DIR / "temp",
+                save_function=_save_df,
+            )
+            _features = FeaturesService(save_function=_save_df)
+            _orchestrator = OrchestratorService(
+                project_service=_proj_svc,
+                executor=_executor,
+                generator=_generator,
+                connection_service=_conn_svc,
+                features_service=_features,
+            )
+            upstream_result = _orchestrator.execute_pipeline(
+                source_project_id, force_recalculate=force_recalculate
+            )
+        except ImportError as _ie:
+            raise ValueError(
+                f"Impossibile importare orchestrator per ricalcolo: {_ie}"
+            )
+
+        if not upstream_result.get('success'):
+            raise ValueError(
+                f"Errore progetto sorgente: {upstream_result.get('message')}"
+            )
+
+    def _filesystem_fallback_load_project(
+        self, source_project_id: str, output_dir
+    ) -> pd.DataFrame:
+        """Carica l'ultimo output di `source_project_id` dal filesystem.
+
+        Tentativo 3 (last resort) di `_load_source_project`: usato quando
+        ne' il blob DB ne' il recompute upstream hanno prodotto un df.
+        Tipico di progetti pre-R#1 che avevano output solo su disco,
+        mai migrato al DB blob. Oggi `save_result_blob` cancella sempre
+        il file temp dopo il save, quindi il percorso "file su disco
+        ma blob DB assente" non dovrebbe piu' accadere per progetti
+        nuovi. Il fallback resta come compat residuo — se non scatta
+        mai per un periodo di osservazione puo' essere rimosso.
+
+        Emette `logger.warning` con tag `[COMPAT-RESIDUE]` quando lo
+        scatta: grep-ami i log di prod per verificare se e' ancora vivo.
+        """
+        from app.utils.dataframe import load_dataframe_from_file
+
+        if output_dir is None:
+            raise ValueError(f"Nessun output per progetto '{source_project_id}'")
+        output_file = find_latest_output_file(output_dir)
+        if not output_file:
+            raise ValueError(f"Nessun output per progetto '{source_project_id}'")
+
+        logger.warning(
+            f"[COMPAT-RESIDUE] api_connector._filesystem_fallback_load_project "
+            f"scattato per project_id={source_project_id} file={output_file} — "
+            f"questo fallback e' pensato per progetti pre-R#1 non migrati al "
+            f"DB blob. Se scatta regolarmente in prod, indagare."
+        )
+        return load_dataframe_from_file(output_file)
+
+    def _load_source_project(self, node_data: Dict, force_recalculate: bool = False) -> pd.DataFrame:
+        """Carica dati dal progetto sorgente via SourceLoader.
+
+        Cross-tenant fail-closed delegato al loader (che a sua volta
+        delega ad ArtifactResolver). Recompute upstream + fallback
+        filesystem restano qui perche' sono specifici di api_connector
+        (manipola usa orchestrator_callback).
+        """
+        from app.core.artifacts import (
+            SourceLoader,
+            SourceLoadingError,
+            SourceRef,
+        )
+        from app.utils.dataframe import load_dataframe_from_file
+
+        source_project_id = node_data.get('source_project_id')
         if not source_project_id:
             raise ValueError("source_project_id non specificato")
 
-        # Cross-tenant isolation check
-        if hasattr(self, '_current_group_id') and self._current_group_id:
-            import app.db.db_service as _db
-            _src_row = _db.get_project(source_project_id)
-            if _src_row and _src_row.get("group_id") != self._current_group_id:
-                raise ValueError(
-                    f"Accesso negato: progetto sorgente '{source_project_id}' "
-                    f"appartiene a un gruppo diverso"
-                )
-        
-        output_dir = self.results_dir / source_project_id
-        
-        # Ricalcola se necessario
-        if force_recalculate or not output_dir.exists():
-            logger.info(f"Riesecuzione progetto upstream: {source_project_id}")
-            # NON usare 'from main import orchestrator': main.py non è nel path del worker Celery.
-            # Istanzia l'orchestrator direttamente con le dipendenze minime necessarie.
-            try:
-                from app.core.orchestrator.service import OrchestratorService
-                from app.services.project_service import ProjectService
-                from app.services.connection_service import ConnectionService
-                from app.core.estrai.query_generator import QueryGenerator
-                from app.db.query_executor import QueryExecutor
-                from app.core.features.features_service import FeaturesService
-                from app.utils.dataframe import save_dataframe as _save_df
-                _proj_svc = ProjectService()
-                _conn_svc = ConnectionService()
-                _generator = QueryGenerator()
-                _executor = QueryExecutor(
-                    results_dir=settings.DATA_DIR / "temp",
-                    save_function=_save_df
-                )
-                _features = FeaturesService(save_function=_save_df)
-                _orchestrator = OrchestratorService(
-                    project_service=_proj_svc,
-                    executor=_executor,
-                    generator=_generator,
-                    connection_service=_conn_svc,
-                    features_service=_features
-                )
-                upstream_result = _orchestrator.execute_pipeline(
-                    source_project_id, force_recalculate=force_recalculate
-                )
-            except ImportError as _ie:
-                raise ValueError(f"Impossibile importare orchestrator per ricalcolo: {_ie}")
-            if not upstream_result.get('success'):
-                raise ValueError(f"Errore progetto sorgente: {upstream_result.get('message')}")
-        
-        # B-BE-43: carica output dal blob DB (nuovo pattern), fallback su filesystem (legacy)
-        df = None
-        try:
-            from app.utils.result_store import get_result_as_tempfile
-            from app.utils.dataframe import load_dataframe_from_file
-            import os
-            tmp = get_result_as_tempfile(source_project_id)
-            if tmp:
-                df = load_dataframe_from_file(tmp)
-                try:
-                    if os.path.exists(str(tmp)):
-                        os.unlink(str(tmp))
-                except Exception:
-                    pass
-        except Exception as _e:
-            logger.warning(f"Blob DB non disponibile per {source_project_id}: {_e}")
+        executing_group_id = getattr(self, '_current_group_id', None)
+        if not executing_group_id:
+            raise ValueError(
+                "Contesto di sicurezza non determinabile (group_id mancante)"
+            )
 
+        ref = SourceRef.from_node_data('project_source', node_data)
+        loader = SourceLoader()
+
+        df = None
+        # Tentativo 1: latest output dal blob DB (skip se force_recalculate)
+        if not force_recalculate:
+            try:
+                df = loader.load(ref, expected_group_id=executing_group_id)
+            except SourceLoadingError as e:
+                # I caller di api_connector si aspettano ValueError;
+                # propaghiamo il messaggio originale del loader cosi'
+                # che la distinzione fra cross-tenant, progetto
+                # inesistente ed errore DB resti leggibile lato caller.
+                raise ValueError(
+                    f"Accesso negato: progetto sorgente "
+                    f"'{source_project_id}': {e}"
+                ) from e
+
+        # Path su disco usato sia per il check "directory esistente"
+        # sia per il fallback filesystem. Calcolato solo se serve.
+        output_dir = (
+            self.results_dir / source_project_id
+            if self.results_dir is not None
+            else None
+        )
+
+        # Tentativo 2: recompute upstream (orchestrator standalone)
+        if df is None and (
+            force_recalculate or output_dir is None or not output_dir.exists()
+        ):
+            self._assert_source_project_in_tenant(
+                source_project_id, executing_group_id
+            )
+            self._recompute_upstream_project(source_project_id, force_recalculate)
+
+            # Re-tenta load via SourceLoader dopo recompute.
+            try:
+                df = loader.load(ref, expected_group_id=executing_group_id)
+            except SourceLoadingError as e:
+                raise ValueError(
+                    f"Accesso negato: progetto sorgente "
+                    f"'{source_project_id}': {e}"
+                ) from e
+
+        # Tentativo 3: fallback filesystem (retention DB scaduta ecc.)
         if df is None:
-            # Fallback filesystem
-            output_file = find_latest_output_file(output_dir)
-            if not output_file:
-                raise ValueError(f"Nessun output per progetto '{source_project_id}'")
-            df = load_dataframe_from_file(output_file)
-        
-        # Filtra colonne visibili
+            df = self._filesystem_fallback_load_project(
+                source_project_id, output_dir
+            )
+
+        # Post-processing: filtro colonne visibili
         node_columns = node_data.get('columns', [])
         df = filter_visible_columns(df, node_columns)
-        
+
         logger.info(f"Caricato progetto {source_project_id}: {len(df)} righe")
         return df
-    
+
     def _load_file_source(self, node_data: Dict) -> pd.DataFrame:
-        """Carica dati da file source."""
+        """Carica dati da file source via SourceLoader.
+
+        Visibility check + preserve GeoDataFrame (per non perdere il
+        CRS lungo le trasformazioni downstream) sono garantiti dal
+        loader unico.
+        """
+        from app.core.artifacts import (
+            SourceLoader,
+            SourceLoadingError,
+            SourceRef,
+        )
+
         file_source_id = node_data.get('file_source_id')
-        
         if not file_source_id:
             raise ValueError("file_source_id non specificato")
-        
-        from app.services.file_service import file_source_service
-        df, _ = file_source_service.load_dataframe(file_source_id)
-        
-        # Tronca per preview
+
+        executing_group_id = getattr(self, '_current_group_id', None)
+        if not executing_group_id:
+            raise ValueError(
+                "Contesto di sicurezza non determinabile (group_id mancante)"
+            )
+
+        ref = SourceRef.from_node_data('file_source', node_data)
+        try:
+            df = SourceLoader().load(ref, expected_group_id=executing_group_id)
+        except SourceLoadingError as e:
+            # I caller di api_connector si aspettano ValueError; il
+            # messaggio originale del loader viene propagato come-is.
+            raise ValueError(str(e)) from e
+
+        # Tronca per preview (opzionale)
         _plimit = getattr(self, '_preview_limit', None)
         if _plimit and isinstance(_plimit, int) and _plimit > 0:
             df = df.head(_plimit)
-        
-        # Filtra colonne visibili
+
+        # Post-processing: filtro colonne visibili
         node_columns = node_data.get('columns', [])
         df = filter_visible_columns(df, node_columns)
-        
+
         return df
-    
+
     def _load_static_values(self, node_data: Dict) -> pd.DataFrame:
+        """Carica dati da nodo StaticValues via SourceLoader.
+
+        Le variabili template ({{NOW}}, {{TODAY}}, ecc.) vengono
+        processate dentro il loader.
         """
-        Carica dati da nodo StaticValues.
-        Genera un DataFrame con 1 riga contenente i campi definiti.
-        Le variabili template ({{NOW}}, {{TODAY}}, ecc.) vengono processate.
-        """
+        from app.core.artifacts import SourceLoader, SourceRef
+
         fields = _nd(node_data, 'fields') or []
-        
         if not fields:
-            logger.warning("Nodo StaticValues senza campi - restituisco DataFrame con 1 riga vuota")
-            return pd.DataFrame([{}])
-        
-        # Processa le variabili template nei valori
-        processed_values = process_static_fields(fields)
-        
-        # Crea DataFrame con una singola riga
-        df = pd.DataFrame([processed_values])
-        
-        return df
+            logger.warning(
+                "Nodo StaticValues senza campi - restituisco DataFrame con 1 riga vuota"
+            )
+
+        ref = SourceRef.from_node_data('staticValues', node_data)
+        # Static branch non tocca DB ne' file: il group_id e' richiesto
+        # solo dalla guardia del loader. Passiamo il group_id corrente
+        # se disponibile, oppure un placeholder costante (lo static
+        # non ha tenant binding semantico, e' processing puro di
+        # template variables).
+        executing_group_id = getattr(self, '_current_group_id', None) or "_static_"
+        return SourceLoader().load(ref, expected_group_id=executing_group_id)
     
     # =========================================================================
     # EXECUTABLE: esecuzione processori locali (script Python, exe, shell, node)
     # =========================================================================
     
-    def _execute_executable(self, node_data: Dict, api_config: Dict, 
-                            nodes: List[Dict], edges: List[Dict], 
-                            node_id: str, project_id: str) -> Dict:
+    @staticmethod
+    def _validate_outbound_url(url: str) -> Optional[str]:
+        """Valida un URL per uscite outbound (SSRF guard).
+
+        Blocca:
+          - schema non http/https
+          - hostname mancante
+          - IP privati / loopback / link-local / metadata EC2 (169.254.*)
+          - IP multicast / reserved
+
+        Ritorna None se OK, altrimenti una stringa con il motivo.
+        La risoluzione DNS e' fatta al momento della validazione: un attacker
+        puo' teoricamente fare DNS rebinding (TOCTOU tra resolve e connect),
+        ma per il nostro threat model (admin compromesso) questo e' sufficiente.
         """
-        Esegue un processore locale (script Python, eseguibile, shell, node.js).
-        
-        A differenza di enricher/generator che lavorano su DataFrame riga per riga,
-        executable lavora file→file: riceve un file in input e produce un file in output.
-        
-        Flusso:
-        1. Risolve il path del file input dal nodo sorgente collegato
-        2. Prepara la directory output
-        3. Esegue il processore secondo la configurazione (subprocess)
-        4. Ritorna un dict con is_file_result=True e output_path
-        
-        Supporta:
-        - Script Python (.py) con input_mode: stdin, file, args, json_arg
-        - Eseguibili nativi (.exe)
-        - Script Shell (.sh)
-        - Script Node.js (.js)
-        - Moduli Python built-in (importati dinamicamente)
-        """
-        import subprocess
-        import time
-        import importlib
-        
-        exec_config = api_config.get('executable', {})
-        exec_type = exec_config.get('type', 'python')  # python, executable, shell, node
-        exec_path = exec_config.get('path', '')
-        working_dir = exec_config.get('working_dir', '') or None
-        
-        # Se working_dir non è specificato, usa il parent del parent dello script
-        # (per risolvere import relativi al package, es. dxf_imdf_sync/process.py → mdf_project/)
-        if not working_dir and exec_path:
-            script_parent = Path(exec_path).resolve().parent.parent
-            if script_parent.exists():
-                working_dir = str(script_parent)
-        input_mode = exec_config.get('input_mode', 'file')
-        output_mode = exec_config.get('output_mode', 'file')
-        timeout = exec_config.get('timeout', 600)
-        env_vars = exec_config.get('env_vars', {})
-        
-        # Builtin module support (per DXF→IMDF e simili)
-        builtin_module = exec_config.get('module')
-        builtin_function = exec_config.get('function', 'process')
-        
-        # Risolvi file input dal nodo sorgente collegato
-        input_path = self._resolve_file_source_path(nodes, edges, node_id)
-        
-        if not input_path and not builtin_module:
-            return {"success": False, "error": "Nessun file di input collegato"}
-        
-        # Usa directory temp per output subprocess
-        import tempfile, os
-        tmp_exec_dir = Path(tempfile.mkdtemp(prefix="urby_exec_"))
-        
-        # Parametri extra dal nodo (es. site_id)
-        exec_params = node_data.get('exec_params', {}) or {}
-        
-        # B-BE-37: merge default_value dai parameters del connettore
-        # (parametri definiti nello step 4 del wizard con nome+valore_default)
-        connector_params = api_config.get('parameters', []) or []
-        for p in connector_params:
-            name = p.get('name', '')
-            default_val = p.get('default_value', '')
-            if name and default_val and name not in exec_params:
-                exec_params[name] = default_val
-        
-        start_time = time.time()
-        
+        import ipaddress as _ip
+        import socket as _sock
+        from urllib.parse import urlparse as _urlparse
+
+        if not url or not isinstance(url, str):
+            return "URL vuoto"
+
         try:
-            # ── BUILTIN MODULE: import Python diretto ──
-            if builtin_module:
-                logger.info(f"Esecuzione modulo built-in: {builtin_module}.{builtin_function}")
-                
-                mod = importlib.import_module(builtin_module)
-                func = getattr(mod, builtin_function)
-                
-                # Filtra kwargs: passa solo quelli che la funzione accetta
-                import inspect
-                sig = inspect.signature(func)
-                valid_params = set(sig.parameters.keys())
-                
-                kwargs = {}
-                if 'input_path' in valid_params and input_path:
-                    kwargs['input_path'] = str(input_path)
-                if 'output_dir' in valid_params:
-                    kwargs['output_dir'] = str(tmp_exec_dir)
-                if 'output_zip' in valid_params:
-                    kwargs['output_zip'] = str(tmp_exec_dir)
-                
-                # Aggiungi exec_params filtrati
-                for k, v in exec_params.items():
-                    if k in valid_params and v:
-                        kwargs[k] = v
-                
-                output_path = func(**kwargs)
-                
-                elapsed_ms = (time.time() - start_time) * 1000
-                
-                return {
-                    "is_file_result": True,
-                    "success": True,
-                    "output_path": str(output_path),
-                    "execution_time_ms": round(elapsed_ms, 1),
-                    "metadata": {
-                        "module": builtin_module,
-                        "function": builtin_function,
-                        "params": exec_params
-                    }
-                }
-            
-            # ── SUBPROCESS: esegue script/eseguibile esterno ──
-            if not exec_path:
-                return {"success": False, "error": "Percorso eseguibile non configurato"}
-            
-            # Costruisci comando
-            cmd = []
-            
-            if exec_type == 'python':
-                cmd.append('python')
-                
-                # Detect se lo script è dentro un package Python (ha __init__.py)
-                script_path = Path(exec_path)
-                package_dir = script_path.parent
-                init_file = package_dir / '__init__.py'
-                
-                if init_file.exists():
-                    # È un package → usa -m notation
-                    # Es: mdf_project/dxf_imdf_sync/process.py → -m dxf_imdf_sync.process
-                    package_name = package_dir.name
-                    module_name = script_path.stem
-                    cmd.extend(['-m', f'{package_name}.{module_name}'])
-                    
-                    # Working dir = parent del package
-                    if not working_dir:
-                        working_dir = str(package_dir.parent)
-                    
-                    logger.info(f"Rilevato package Python: -m {package_name}.{module_name} (cwd={working_dir})")
-                else:
-                    cmd.append(exec_path)
-            else:
-                cmd_map = {'shell': 'bash', 'node': 'node', 'r': 'Rscript', 'rscript': 'Rscript', 'executable': ''}
-                cmd_prefix = cmd_map.get(exec_type, '')
-                if cmd_prefix:
-                    cmd.append(cmd_prefix)
-                cmd.append(exec_path)
-            
-            # Gestisci input mode
-            stdin_data = None
-            if input_mode == 'file' and input_path:
-                # Passa come argomento posizionale (la maggior parte degli script lo accetta così)
-                cmd.append(str(input_path))
-            elif input_mode == 'json_arg' and input_path:
-                import json as json_mod
-                cmd.append(json_mod.dumps({"input_path": str(input_path), **exec_params}))
-            elif input_mode == 'args':
-                if input_path:
-                    cmd.append(str(input_path))
-                for k, v in exec_params.items():
-                    if v:
-                        cmd.extend([f'--{k}', str(v)])
-            elif input_mode == 'stdin' and input_path:
-                stdin_data = Path(input_path).read_bytes()
-            
-            # Output file path
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            # B-BE-35: estensione output da config, default .csv per python, .zip per altri
-            out_ext = exec_config.get('output_extension', '')
-            if not out_ext:
-                out_ext = '.csv' if exec_type in ('python', 'r', 'rscript') else '.zip'
-            out_filename = f"exec_output_{timestamp}{out_ext}"
-            out_path = (tmp_exec_dir / out_filename).resolve()
-            
-            if output_mode == 'file':
-                cmd.extend(['-o', str(out_path)])
-            
-            # Env — sempre per Python (PYTHONPATH), opzionale per altri
-            import os
-            env = {**os.environ, **(env_vars or {})}
-            if working_dir:
-                existing_pp = env.get('PYTHONPATH', '')
-                env['PYTHONPATH'] = f"{working_dir}{os.pathsep}{existing_pp}" if existing_pp else working_dir
-            
-            logger.info(f"Esecuzione subprocess: {' '.join(cmd)}")
-            
-            proc = subprocess.run(
-                cmd,
-                capture_output=True,
-                timeout=timeout,
-                cwd=working_dir,
-                input=stdin_data,
-                env=env
-            )
-            
-            elapsed_ms = (time.time() - start_time) * 1000
-            
-            if proc.returncode != 0:
-                # Se il file output esiste, lo script ha funzionato
-                # (l'errore potrebbe essere nel riepilogo CLI, encoding, etc.)
-                if output_mode == 'file' and out_path.exists() and out_path.stat().st_size > 0:
-                    logger.warning(
-                        f"Executable exit code {proc.returncode} ma output generato: {out_path.name} "
-                        f"({out_path.stat().st_size // 1024} KB)"
-                    )
-                else:
-                    stderr = proc.stderr.decode('utf-8', errors='replace')[:2000]
-                    return {
-                        "success": False,
-                        "error": f"Eseguibile terminato con codice {proc.returncode}: {stderr}"
-                    }
-            
-            # Determina output path
-            actual_output = None
-            if output_mode == 'file' and out_path.exists():
-                actual_output = str(out_path)
-            elif output_mode in ('stdout', 'json_stdout'):
-                # Scrivi stdout su file
-                stdout_data = proc.stdout
-                out_file = tmp_exec_dir / f"{out_filename}.json"
-                out_file.write_bytes(stdout_data)
-                actual_output = str(out_file)
-            
-            # Cerca anche file generati nella tmp_exec_dir (pattern recente)
-            if not actual_output:
-                import glob
-                recent_files = sorted(
-                    tmp_exec_dir.glob('*'),
-                    key=lambda f: f.stat().st_mtime,
-                    reverse=True
+            parsed = _urlparse(url.strip())
+        except Exception as e:
+            return f"URL non parsabile: {e}"
+
+        scheme = (parsed.scheme or "").lower()
+        if scheme not in ("http", "https"):
+            return f"schema '{scheme}' non consentito (solo http/https)"
+        if not parsed.hostname:
+            return "hostname mancante"
+
+        host = parsed.hostname
+        # Prova a parsare direttamente come IP (short-circuit)
+        candidates: List[str] = []
+        try:
+            _ip.ip_address(host)
+            candidates.append(host)
+        except ValueError:
+            # E' un hostname → risolvi tutti i record A/AAAA
+            try:
+                infos = _sock.getaddrinfo(host, None)
+                candidates = list({info[4][0] for info in infos})
+            except _sock.gaierror as ge:
+                return f"hostname '{host}' non risolvibile: {ge}"
+
+        if not candidates:
+            return f"nessun IP risolto per '{host}'"
+
+        for ip_str in candidates:
+            try:
+                ip_obj = _ip.ip_address(ip_str)
+            except ValueError:
+                continue
+            if ip_obj.is_loopback:
+                return f"IP loopback bloccato: {ip_str}"
+            if ip_obj.is_private:
+                return f"IP privato bloccato: {ip_str}"
+            if ip_obj.is_link_local:
+                return f"IP link-local bloccato: {ip_str} (es. AWS IMDS 169.254.*)"
+            if ip_obj.is_multicast:
+                return f"IP multicast bloccato: {ip_str}"
+            if ip_obj.is_reserved:
+                return f"IP reserved bloccato: {ip_str}"
+            if ip_obj.is_unspecified:
+                return f"IP unspecified bloccato: {ip_str}"
+        return None
+
+    @staticmethod
+    def _parse_http_error_body(response) -> str:
+        """Estrae il messaggio d'errore dal body di una risposta HTTP.
+
+        Prova prima JSON (preferendo `detail` → `error` → `message` →
+        l'intero dict se nessuno di questi e' presente). Se il body non
+        e' JSON, fallback a `text[:500]`.
+        """
+        try:
+            err_body = response.json()
+            if isinstance(err_body, dict):
+                return (
+                    err_body.get('detail')
+                    or err_body.get('error')
+                    or err_body.get('message')
+                    or err_body
                 )
-                for f in recent_files:
-                    if f.is_file() and f.stat().st_mtime >= start_time:
-                        actual_output = str(f)
+            return err_body
+        except Exception:
+            return response.text[:500] if response.text else ''
+
+    @staticmethod
+    def _download_binary_response(
+        response, output_path: Path, start_time: float, timeout: int
+    ) -> tuple:
+        """Streaming download del body su file con watchdog wall-clock.
+
+        Il parametro `timeout` di `requests.post` copre solo connect/
+        first-byte, NON il download del body. Per un server che inizia
+        a rispondere ma poi rallenta drammaticamente, il task rischia
+        di durare molto oltre il timeout apparente. Il watchdog
+        interrompe il download se il totale supera `timeout` secondi
+        dall'avvio della chiamata (`start_time`).
+
+        Ritorna `(total_bytes, download_timed_out)`. Chiude sempre
+        la response in un `finally` interno (`response.close` best-effort).
+        """
+        import time as _time
+
+        total_bytes = 0
+        body_deadline = start_time + timeout
+        download_timed_out = False
+        try:
+            with open(output_path, 'wb') as out_fh:
+                for chunk in response.iter_content(chunk_size=65536):
+                    if _time.time() > body_deadline:
+                        download_timed_out = True
                         break
-            
-            if not actual_output:
-                return {"success": False, "error": "Nessun file di output generato"}
-            
+                    if chunk:
+                        out_fh.write(chunk)
+                        total_bytes += len(chunk)
+        finally:
+            try:
+                response.close()
+            except Exception:
+                pass
+
+        return total_bytes, download_timed_out
+
+    def _build_rest_file_multipart(
+        self,
+        *,
+        file_fields: List[Dict],
+        static_fields: List[Dict],
+        input_path: Optional[str],
+        extra_files_cfg: Dict,
+        opened_handles: List,
+    ) -> tuple:
+        """Costruisce i dict `files` e `data` per `requests.post(multipart)`.
+
+        Ritorna `(files, data, error_or_None)`.
+
+        Regole:
+        - `file_fields` con `source='node_input'` leggono `input_path`
+          (risolto dall'edge in ingresso al nodo); se required e assente
+          → error, altrimenti skip silenzioso.
+        - `file_fields` con `source='extra_input'` leggono da
+          `extra_files_cfg[name]` (dict con `file_source_id` o id nudo)
+          via `_resolve_file_source_id_path`. Stessa logica required/skip.
+        - `static_fields` con `content_type` sono inviati come file
+          in-memory (per JSON inline tipo styles/mapping); altrimenti
+          come form-data semplice.
+
+        `opened_handles` e' appended in-place: il caller e' responsabile
+        del close nel finally, indipendentemente da success/error.
+        """
+        files: Dict = {}
+        data: Dict = {}
+
+        for ff in file_fields:
+            name = ff.get('name')
+            source = ff.get('source', 'node_input')
+            required = bool(ff.get('required', False))
+            if not name:
+                continue
+
+            if source == 'node_input':
+                if not input_path:
+                    if required:
+                        return files, data, {
+                            "success": False,
+                            "error": f"Campo file '{name}' richiesto ma nessun file di input collegato al nodo",
+                        }
+                    continue
+                # FS-5: input_path puo' essere str (path su disco) OPPURE
+                # tuple(bytes, filename) dal materialize in-memory.
+                if isinstance(input_path, tuple):
+                    data_bytes, filename = input_path
+                    fh = io.BytesIO(data_bytes)
+                    # Nessun opened_handle: BytesIO viene GC'd al return,
+                    # non serve close esplicito (diversamente da file handle).
+                    files[name] = (filename, fh, 'application/octet-stream')
+                else:
+                    ip = Path(input_path)
+                    if not ip.exists():
+                        if required:
+                            return files, data, {
+                                "success": False,
+                                "error": f"File di input {ip} non trovato",
+                            }
+                        continue
+                    fh = open(ip, 'rb')
+                    opened_handles.append(fh)
+                    files[name] = (ip.name, fh, 'application/octet-stream')
+
+            elif source == 'extra_input':
+                entry = extra_files_cfg.get(name)
+                fs_id = entry.get('file_source_id') if isinstance(entry, dict) else entry
+                if not fs_id:
+                    if required:
+                        return files, data, {
+                            "success": False,
+                            "error": f"Campo file extra '{name}' richiesto ma non configurato sul nodo",
+                        }
+                    continue
+                extra_path = self._resolve_file_source_id_path(fs_id)
+                if not extra_path:
+                    if required:
+                        return files, data, {
+                            "success": False,
+                            "error": f"Campo file extra '{name}': file_source '{fs_id}' non trovato",
+                        }
+                    logger.warning(
+                        f"rest_file extra_input '{name}': file_source {fs_id} "
+                        f"non risolvibile, saltato"
+                    )
+                    continue
+                ep = Path(extra_path)
+                fh = open(ep, 'rb')
+                opened_handles.append(fh)
+                files[name] = (ep.name, fh, 'application/octet-stream')
+
+            else:
+                logger.warning(
+                    f"rest_file: source '{source}' non gestita per campo '{name}', saltato"
+                )
+
+        for sf in static_fields:
+            name = sf.get('name')
+            value = sf.get('value', '')
+            ct = sf.get('content_type') or None
+            if not name:
+                continue
+            if ct:
+                payload = (
+                    value
+                    if isinstance(value, (bytes, bytearray))
+                    else str(value).encode('utf-8')
+                )
+                files[name] = (name, payload, ct)
+            else:
+                data[name] = '' if value is None else str(value)
+
+        return files, data, None
+
+    def _parse_rest_file_config(
+        self, api_config: Dict
+    ) -> tuple:
+        """Valida e normalizza la config di un rest_file.
+
+        Ritorna `(parsed_dict, None)` se OK, `(None, error_dict)` se
+        invalida. `error_dict` ha il formato `{success: False, error: ...}`
+        atteso dai caller di `_execute_rest_file`.
+
+        Controlli:
+        - `endpoint.url` obbligatorio
+        - `endpoint.method` deve essere POST (unico supportato per rest_file)
+        - `_validate_outbound_url(url)` per SSRF guard
+        - `response.format` deve essere `binary_file` (unico supportato)
+        """
+        endpoint = api_config.get('endpoint', {}) or {}
+        url = endpoint.get('url')
+        method = (endpoint.get('method') or 'POST').upper()
+        if not url:
+            return None, {"success": False, "error": "Endpoint URL mancante nella configurazione"}
+        if method != 'POST':
+            return None, {
+                "success": False,
+                "error": f"Metodo {method} non supportato per rest_file (usare POST)",
+            }
+
+        ssrf_error = self._validate_outbound_url(url)
+        if ssrf_error:
+            logger.warning(f"rest_file SSRF block: {url} → {ssrf_error}")
+            return None, {
+                "success": False,
+                "error": f"URL non consentito: {ssrf_error}",
+            }
+
+        response_cfg = api_config.get('response', {}) or {}
+        response_format = response_cfg.get('format', 'binary_file')
+        if response_format != 'binary_file':
+            return None, {
+                "success": False,
+                "error": f"response.format '{response_format}' non supportato (usare 'binary_file')",
+            }
+        output_ext = response_cfg.get('output_extension') or '.bin'
+        if not output_ext.startswith('.'):
+            output_ext = '.' + output_ext
+
+        request_cfg = api_config.get('request', {}) or {}
+        # IMPORTANTE: NON fare fallback su `options.timeout` qui. Quel
+        # campo è il timeout "richieste API generiche" (default 30s nel
+        # form frontend) e per rest_file è fuorviante: un'operazione
+        # file-to-file può durare minuti (es. imdf.plenora.it/api/process
+        # che genera IMDF da un DXF). Il canonico è `request.timeout`;
+        # se assente, default 600s (10 min).
+        timeout = int(request_cfg.get('timeout') or 600)
+
+        return {
+            'url': url,
+            'method': method,
+            'file_fields': request_cfg.get('file_fields') or [],
+            'static_fields': request_cfg.get('static_fields') or [],
+            'timeout': timeout,
+            'output_ext': output_ext,
+        }, None
+
+    def _execute_rest_file(self, node_data: Dict, api_config: Dict,
+                           nodes: List[Dict], edges: List[Dict],
+                           node_id: str, project_id: str,
+                           node_results: Optional[Dict] = None) -> Dict:
+        """
+        Esegue un connector REST di tipo "Processore File" (connection_type='rest_file').
+
+        Pattern: invia un file (o piu') in multipart/form-data a un servizio HTTP
+        remoto e riceve un file binario come risposta. A differenza di
+        enricher/generator che lavorano su DataFrame riga per riga, questo pattern
+        lavora file->file via HTTP.
+
+        Config attesa in ``api_config``:
+            endpoint: { url, method }                        # POST
+            auth: {...}                                      # usa _prepare_headers
+            request:
+              body_type: "multipart"                         # fisso per ora
+              file_fields: [ { name, source, required } ]    # source='node_input'
+              static_fields: [ { name, value, content_type } ]
+              timeout: 600                                   # override opzionale
+            response:
+              format: "binary_file"                          # fisso per ora
+              output_extension: ".zip"                       # estensione file output
+
+        Il campo file con ``source='node_input'`` riceve il file dal file_source
+        collegato in input al nodo del canvas (``_resolve_file_source_path``).
+
+        I campi ``static_fields`` con ``content_type`` sono inviati come file
+        in-memory (utile per JSON inline tipo ``styles`` e ``mapping``). Senza
+        content_type sono inviati come form-data semplice.
+
+        Ritorna un dict con ``is_file_result=True``, ``output_path``,
+        ``metadata`` cosi' il caller del canvas arricchisci lo tratta come
+        un generico risultato file.
+        """
+        import time
+        import tempfile
+        import requests
+
+        start_time = time.time()
+
+        parsed, err = self._parse_rest_file_config(api_config)
+        if err is not None:
+            return err
+        url = parsed['url']
+        method = parsed['method']
+        file_fields = parsed['file_fields']
+        static_fields = parsed['static_fields']
+        timeout = parsed['timeout']
+        output_ext = parsed['output_ext']
+
+        try:
+            headers = self._prepare_headers(api_config.get('auth', {}) or {}, {})
+        except Exception as e:
+            return {"success": False, "error": f"Preparazione auth fallita: {e}"}
+
+        # Formato di materializzazione per input da upstream DataFrame.
+        # Default xlsx; override via node_data.materialize_format o
+        # api_config.request.materialize_format.
+        _req_cfg = api_config.get('request', {}) or {}
+        materialize_format = (
+            node_data.get('materialize_format')
+            or _req_cfg.get('materialize_format')
+            or 'xlsx'
+        )
+        try:
+            input_path, _owns_materialized_input = self._resolve_input_path_for_file_processor(
+                nodes, edges, node_id,
+                node_results=node_results,
+                materialize_format=materialize_format,
+            )
+        except Exception as e:
+            return {"success": False, "error": f"Risoluzione input fallita: {e}"}
+
+        # `extra_files` e' il dict {field_name: file_source_id} salvato sul
+        # nodo api_enrich quando l'utente carica inline file aggiuntivi
+        # (es. Excel di arricchimento per il servizio IMDF). Separato dal
+        # file principale che arriva via edge.
+        extra_files_cfg = node_data.get('extra_files') or {}
+        opened_handles: List = []
+
+        # Pre-dichiarazione per il finally: se l'eccezione capita prima
+        # del mkdtemp queste variabili devono comunque esistere.
+        tmp_exec_dir: Optional[Path] = None
+        _cleanup_tmp = True
+
+        try:
+            files, data, build_err = self._build_rest_file_multipart(
+                file_fields=file_fields,
+                static_fields=static_fields,
+                input_path=input_path,
+                extra_files_cfg=extra_files_cfg,
+                opened_handles=opened_handles,
+            )
+            if build_err is not None:
+                return build_err
+
+            # ── 5. Directory temp output ──────────────────────────────────
+            # tmp_exec_dir viene cleanup dal `finally` se _cleanup_tmp
+            # resta True. Sul ramo success lo settiamo a False perche'
+            # restituiamo un output_path al suo interno e il chiamante
+            # e' responsabile del cleanup downstream.
+            tmp_exec_dir = Path(tempfile.mkdtemp(prefix="plenora_exec_"))
+            _cleanup_tmp = True
+            output_filename = f"output{output_ext}"
+            output_path = tmp_exec_dir / output_filename
+
+            logger.info(
+                f"REST File Processor: POST {url} "
+                f"files={list(files.keys())} data={list(data.keys())} timeout={timeout}s"
+            )
+
+            # ── 6. Chiamata HTTP ──────────────────────────────────────────
+            response = requests.post(
+                url,
+                headers=headers,
+                files=files,
+                data=data,
+                timeout=timeout,
+                stream=True,
+            )
+
+            if response.status_code >= 400:
+                return {
+                    "success": False,
+                    "error": f"HTTP {response.status_code}: {self._parse_http_error_body(response)}",
+                }
+
+            total_bytes, download_timed_out = self._download_binary_response(
+                response, output_path, start_time, timeout
+            )
+
+            if download_timed_out:
+                return {
+                    "success": False,
+                    "error": (
+                        f"Timeout download response dopo {timeout}s "
+                        f"(ricevuti {total_bytes // 1024} KB parziali) da {url}"
+                    ),
+                }
+
+            if total_bytes == 0:
+                return {
+                    "success": False,
+                    "error": "Risposta vuota dal servizio remoto",
+                }
+
+            elapsed_ms = (time.time() - start_time) * 1000
+            logger.info(f"REST File Processor: output {output_path} ({total_bytes // 1024} KB, {elapsed_ms:.0f}ms)")
+
+            _cleanup_tmp = False  # ramo success: caller gestisce tmp_exec_dir
             return {
                 "is_file_result": True,
                 "success": True,
-                "output_path": actual_output,
+                "output_path": str(output_path),
                 "execution_time_ms": round(elapsed_ms, 1),
                 "metadata": {
-                    "executable": exec_path,
-                    "type": exec_type,
-                    "params": exec_params
-                }
+                    "method": method,
+                    "url": url,
+                    "status_code": response.status_code,
+                    "content_length": total_bytes,
+                },
             }
-            
-        except subprocess.TimeoutExpired:
-            return {"success": False, "error": f"Timeout: esecuzione superato {timeout}s"}
-        except ImportError as e:
-            return {"success": False, "error": f"Modulo non trovato: {e}"}
+
+        except requests.Timeout:
+            return {"success": False, "error": f"Timeout dopo {timeout}s chiamando {url}"}
+        except requests.RequestException as e:
+            return {"success": False, "error": f"Errore HTTP: {e}"}
         except Exception as e:
-            logger.error(f"[GESTITO] Errore esecuzione executable: {e}", exc_info=True)
+            logger.error(f"[CRASH] rest_file: {e}", exc_info=True)
             return {"success": False, "error": str(e)}
-    
-    def _resolve_file_source_path(self, nodes: List[Dict], edges: List[Dict], 
+        finally:
+            for fh in opened_handles:
+                try:
+                    fh.close()
+                except Exception:
+                    pass
+            # Cleanup tmp_exec_dir su tutti i rami errore: senza questo
+            # ogni exception lascerebbe una dir `plenora_exec_*` su disco,
+            # con leak progressivo nei worker Celery long-running.
+            try:
+                if _cleanup_tmp and tmp_exec_dir is not None and tmp_exec_dir.exists():
+                    import shutil as _shutil_cleanup
+                    _shutil_cleanup.rmtree(tmp_exec_dir, ignore_errors=True)
+            except Exception:
+                pass
+            # Cleanup del file temporaneo creato per materializzare un
+            # DataFrame upstream (branch api_enrich → rest_file). Solo se
+            # e' stato creato qui; non tocchiamo path provenienti da
+            # file_source o da un altro file-processor a monte.
+            # FS-5: per il branch in-memory (input_path e' tuple bytes+filename)
+            # _owns_materialized_input e' sempre False. Guardia contro
+            # un unlink su tuple (che fallirebbe) in caso di future evoluzioni.
+            try:
+                if _owns_materialized_input and input_path and not isinstance(input_path, tuple):
+                    Path(input_path).unlink(missing_ok=True)
+            except Exception:
+                pass
+
+    def _assert_file_source_group_access(self, file_source_id: str) -> None:
+        """Defense-in-depth: verifica che `file_source_id` sia visibile al
+        gruppo del progetto corrente (stored in `self._current_group_id`
+        da `execute_enrichment`). Fail-closed se il contesto non e' noto.
+
+        Raises:
+            ValueError con 403-like message se cross-tenant.
+        """
+        current_group_id = getattr(self, "_current_group_id", None)
+        if not current_group_id:
+            # Se non conosciamo il gruppo corrente meglio rifiutare che
+            # rischiare un leak (schedule/task context mancante e' gia' un
+            # segnale sospetto di per se').
+            raise ValueError(
+                "Contesto di sicurezza non determinabile per file_source"
+            )
+        try:
+            from app.shared.sharing import is_resource_visible
+            if not is_resource_visible(
+                "file_sources", file_source_id, current_group_id,
+                is_superadmin=False,
+            ):
+                logger.error(
+                    f"[SECURITY] Cross-tenant access blocked: file_source "
+                    f"{file_source_id} non visibile al gruppo {current_group_id}",
+                )
+                raise ValueError(
+                    f"Accesso negato: il file sorgente '{file_source_id}' "
+                    f"non appartiene al tuo gruppo"
+                )
+        except ValueError:
+            raise
+        except Exception as _sec_err:
+            logger.warning(
+                f"Cross-tenant check file_source fallito: {_sec_err}"
+            )
+            raise ValueError(
+                f"Errore verifica accesso file_source '{file_source_id}'"
+            )
+
+    def _resolve_file_source_id_path(self, file_source_id: str) -> Optional[str]:
+        """Materializza il blob di un file_source su filesystem come cache.
+
+        DB e' sempre source of truth. Questa funzione estrae il blob dal
+        DB in una cache locale (`{FILES_DIR}/{file_source_id}/{filename}`)
+        perche' fiona/GDAL lavorano con path fisici. Il file in cache
+        puo' essere eliminato in qualsiasi momento — viene ricreato al
+        prossimo accesso.
+
+        Flusso:
+          1. Check cache: se il file esiste in cache con il nome atteso
+             (da DB metadata), usalo
+          2. Altrimenti estrai il blob dal DB, scrivi in modo atomico
+             (.tmp + os.replace) per evitare race tra worker concorrenti
+
+        SECURITY: cross-tenant group check prima di qualsiasi lookup.
+        Senza questo, un canvas con `file_source_id` di un altro tenant
+        verrebbe materializzato su disco / estratto dal blob.
+
+        Restituisce None se il file_source non esiste o e' vuoto.
+        """
+        if not file_source_id:
+            return None
+
+        self._assert_file_source_group_access(file_source_id)
+
+        import os as _os
+        from app.config import settings
+
+        try:
+            import app.db.db_service as db_svc
+            row_meta = db_svc.get_file_source(file_source_id, include_data=False)
+            if not row_meta:
+                return None
+            expected_name = (
+                row_meta.get("original_filename")
+                or (row_meta.get("metadata") or {}).get("original_filename")
+                or "input.bin"
+            )
+
+            source_dir = settings.get_file_source_dir(file_source_id)
+
+            # Cache hit: se il file gia' materializzato esiste con il
+            # nome atteso, riuso (evita I/O ripetuto tra task che usano
+            # lo stesso file_source nello stesso nodo).
+            target = source_dir / expected_name
+            if target.is_file():
+                return str(target.resolve())
+
+            # Cache miss: estrai blob da DB e scrivi atomico
+            row_full = db_svc.get_file_source(file_source_id, include_data=True)
+            if not row_full or not row_full.get("data"):
+                return None
+            raw = row_full["data"]
+            source_dir.mkdir(parents=True, exist_ok=True)
+            out_path = source_dir / expected_name
+            tmp_path = source_dir / f".{expected_name}.{_os.getpid()}.tmp"
+            try:
+                tmp_path.write_bytes(raw if isinstance(raw, bytes) else bytes(raw))
+                _os.replace(str(tmp_path), str(out_path))
+            finally:
+                if tmp_path.exists():
+                    try:
+                        tmp_path.unlink()
+                    except Exception:
+                        pass
+            logger.debug(
+                f"file_source {file_source_id}: blob materializzato in cache → {out_path}"
+            )
+            return str(out_path.resolve())
+        except Exception as e:
+            logger.warning(f"errore materializzazione file_source {file_source_id}: {e}")
+            return None
+
+    def _resolve_file_source_path(self, nodes: List[Dict], edges: List[Dict],
                                    target_node_id: str) -> Optional[str]:
         """
         Risolve il path originale del file dal nodo file_source collegato.
-        
+
         Cerca il nodo sorgente collegato via edge al target_node_id.
         Se è un file_source, trova il file originale nel file system.
         Se è un project_source, trova l'ultimo output del progetto.
@@ -1400,60 +2072,415 @@ class ApiConnectionService:
         input_edge = next((e for e in edges if e['target'] == target_node_id), None)
         if not input_edge:
             return None
-        
+
         source_node = next((n for n in nodes if n['id'] == input_edge['source']), None)
         if not source_node:
             return None
-        
+
         if source_node.get('type') == 'file_source':
             file_source_id = _nd(source_node, 'file_source_id')
-            if not file_source_id:
-                return None
-            
-            from app.config import settings
-            
-            # Prima prova su disco (directory file_source)
-            source_dir = settings.get_file_source_dir(file_source_id)
-            if source_dir.exists():
-                for f in source_dir.iterdir():
-                    if f.is_file() and f.name != 'metadata.json':
-                        return str(f.resolve())
-            
-            # B-BE-34: fallback — estrai blob dal DB e scrivi file temporaneo
-            try:
-                import app.db.db_service as db_svc
-                import tempfile, os
-                row = db_svc.get_file_source(file_source_id, include_data=True)
-                if row and row.get('data'):
-                    raw = row['data']
-                    original_filename = row.get('original_filename', 'input.csv')
-                    suffix = Path(original_filename).suffix or '.csv'
-                    # Scrivi in directory del file_source (persistente per run successivi)
-                    source_dir.mkdir(parents=True, exist_ok=True)
-                    out_path = source_dir / original_filename
-                    out_path.write_bytes(raw if isinstance(raw, bytes) else raw)
-                    logger.info(f"B-BE-34: blob estratto dal DB → {out_path}")
-                    return str(out_path.resolve())
-            except Exception as e:
-                logger.warning(f"B-BE-34: errore estrazione blob file_source {file_source_id}: {e}")
-            
-            return None
+            return self._resolve_file_source_id_path(file_source_id)
         
         elif source_node.get('type') == 'project_source':
             source_project_id = _nd(source_node, 'source_project_id')
             if not source_project_id:
                 return None
-            
-            # Leggi dal blob DB
+
+            # Tenant binding fail-closed via SourceLoader: tutto il
+            # source loading di api_connector passa per il loader unico,
+            # niente accesso diretto ad ArtifactResolver. Senza
+            # _current_group_id rifiutiamo esplicitamente: meglio
+            # errore visibile che leak silente.
+            executing_group_id = getattr(self, '_current_group_id', None)
+            if not executing_group_id:
+                logger.error(
+                    f"[SECURITY] _resolve_file_source_path: group_id "
+                    f"corrente sconosciuto, rifiuto risoluzione "
+                    f"project_source {source_project_id} (fail-closed)"
+                )
+                raise ValueError(
+                    "Contesto di sicurezza non determinabile (group_id mancante)"
+                )
+
+            from app.core.artifacts import (
+                LatestProjectArtifactRef,
+                SourceLoader,
+                SourceLoadingError,
+            )
             try:
-                from app.utils.result_store import get_result_as_tempfile
-                tmp = get_result_as_tempfile(source_project_id)
-                return str(tmp) if tmp else None
-            except Exception:
-                return None
-        
+                return SourceLoader().resolve_project_path(
+                    LatestProjectArtifactRef(project_id=source_project_id),
+                    expected_group_id=executing_group_id,
+                )
+            except SourceLoadingError as e:
+                # Cross-tenant block o progetto inesistente: hard fail
+                # con messaggio che preserva il dettaglio originale del
+                # loader, coerente con _load_source_project.
+                logger.error(
+                    f"[SECURITY] _resolve_file_source_path cross-tenant: "
+                    f"{source_project_id} per group={executing_group_id}: {e}"
+                )
+                raise ValueError(
+                    f"Accesso negato: progetto sorgente "
+                    f"'{source_project_id}': {e}"
+                ) from e
+
         return None
-    
+
+    def _resolve_input_path_for_file_processor(
+        self,
+        nodes: List[Dict],
+        edges: List[Dict],
+        target_node_id: str,
+        node_results: Optional[Dict] = None,
+        materialize_format: str = "xlsx",
+    ) -> tuple:
+        """Risolve il path di input per un nodo file-processor (rest_file)
+        accettando come predecessore anche un api_enrich o un altro file-processor.
+
+        Estende `_resolve_file_source_path` con due branch aggiuntivi quando
+        `node_results` è disponibile:
+
+        1. Upstream è un altro file-processor (`is_file_result=True`): riusa
+           direttamente il suo `output_path`, così rest_file→rest_file
+           funziona senza duplicare file su disco.
+        2. Upstream è un api_enrich che ha prodotto un pandas.DataFrame:
+           serializza il DataFrame in un file temporaneo (formato scelto dal
+           nodo, default xlsx) e ritorna quel path. Il caller è responsabile
+           del cleanup.
+
+        Ritorna `(input_ref, owns_disk_file)` dove `input_ref` e' una delle seguenti:
+          - `str` (path): file su disco pre-esistente (file_source / upstream
+            file-processor output). NON owned: il caller non deve cancellarlo.
+          - `tuple(bytes, filename)`: DataFrame upstream serializzato
+            in-memory (no disk touch). No cleanup necessario (GC naturale).
+          - `None`: nessun input risolvibile (il caller gestisce required/skip).
+
+        `owns_disk_file`: True solo in casi legacy dove un tempfile e'
+        stato creato e va cancellato. Dopo FS-5 (in-memory refactor del
+        materialize), il branch DataFrame ritorna sempre bytes/False —
+        owns=True resta solo per path backward-compat non usati oggi.
+
+        Se non c'è un upstream utilizzabile via node_results, fa fallback al
+        comportamento classico di `_resolve_file_source_path` (file_source
+        / project_source), con `owns_disk_file=False`.
+        """
+        if node_results is not None:
+            input_edge = next((e for e in edges if e.get('target') == target_node_id), None)
+            if input_edge is not None:
+                source_id = input_edge.get('source')
+                source_node = next((n for n in nodes if n.get('id') == source_id), None)
+                upstream_type = source_node.get('type') if source_node else None
+                upstream_result = node_results.get(source_id)
+
+                # Branch 1: upstream e' un altro file-processor (rest_file)
+                # il cui risultato e' gia' un file su disco.
+                if isinstance(upstream_result, dict) and upstream_result.get('is_file_result'):
+                    out_path = upstream_result.get('output_path')
+                    if out_path and Path(out_path).exists():
+                        logger.info(
+                            f"file-processor input: riuso output file del nodo upstream "
+                            f"{source_id} ({out_path})"
+                        )
+                        return str(out_path), False
+
+                # Branch 2: upstream ha prodotto un DataFrame (api_enrich o simili).
+                # FS-5: serializzazione in-memory → bytes. Nessun tempfile.
+                # Il caller (`_build_rest_file_multipart`) wrappa i bytes in
+                # io.BytesIO per requests multipart — requests accetta ogni
+                # file-like object che implementa read().
+                if isinstance(upstream_result, pd.DataFrame) and upstream_type != 'file_source':
+                    from app.utils.dataframe import save_dataframe_to_bytes
+                    fmt = (materialize_format or 'xlsx').lower()
+                    supported = {'xlsx', 'csv', 'json', 'parquet'}
+                    if fmt not in supported:
+                        logger.warning(
+                            f"file-processor input: materialize_format {fmt!r} non supportato "
+                            f"in-memory (supportati: {supported}), uso xlsx"
+                        )
+                        fmt = 'xlsx'
+                    try:
+                        data_bytes = save_dataframe_to_bytes(upstream_result, fmt)
+                    except Exception as e:
+                        logger.error(
+                            f"file-processor input: materializzazione DataFrame upstream "
+                            f"fallita per nodo {target_node_id} (fmt={fmt}): {e}"
+                        )
+                        raise
+                    filename = f"input.{fmt}"
+                    logger.info(
+                        f"file-processor input: DataFrame upstream {source_id} "
+                        f"materializzato in-memory (fmt={fmt}, {len(upstream_result)} righe, "
+                        f"{len(data_bytes)} bytes)"
+                    )
+                    return (data_bytes, filename), False
+
+        # Fallback: comportamento classico (file_source / project_source)
+        return self._resolve_file_source_path(nodes, edges, target_node_id), False
+
+    def _paginate_generator_results(
+        self, *, call_fn, pagination: Dict, base_params: Dict
+    ) -> List[Dict]:
+        """Esegue la paginazione del generator dispatchando su `pagination['type']`.
+
+        - `''` (vuoto): singola chiamata, ritorna tutto.
+        - `'offset'`: incrementa `offset_param` di `page_size` ogni
+          pagina, ferma su empty / `len < page_size` / `>= max_rows`.
+        - `'cursor'`: estrae `cursor_path` dal body e lo passa come
+          `cursor_param` alla pagina successiva.
+        - `'link'`: segue URL `next` dal body (`link_path`) o
+          dall'header `Link` RFC 5988. Dopo la prima pagina svuota
+          `base_params` (l'URL e' gia' completo).
+        - tipo sconosciuto: warn + singola chiamata fallback.
+
+        `MAX_PAGES = max_rows // page_size + 1` come safety cap globale.
+        """
+        pagination_type = pagination.get('type', '')
+
+        if not pagination_type:
+            rows, _, _ = call_fn(base_params)
+            logger.info(f"Generator completato: {len(rows)} righe (no paginazione)")
+            return rows or []
+
+        page_size = int(pagination.get('page_size', 100))
+        max_rows = int(pagination.get('max_rows', 10000))
+        all_rows: List[Dict] = []
+        page_num = 0
+        MAX_PAGES = max(1, max_rows // max(1, page_size)) + 1
+
+        if pagination_type == 'offset':
+            offset_param = pagination.get('offset_param', 'offset')
+            limit_param = pagination.get('limit_param', 'limit')
+            start = int(pagination.get('start_page', 0))
+
+            for page_num in range(MAX_PAGES):
+                call_params = {
+                    **base_params,
+                    offset_param: start + page_num * page_size,
+                    limit_param: page_size,
+                }
+                rows, _, _ = call_fn(call_params)
+                if not rows:
+                    break
+                all_rows.extend(rows)
+                logger.info(
+                    f"Generator offset pag {page_num+1}: +{len(rows)} righe "
+                    f"(tot {len(all_rows)})"
+                )
+                if len(all_rows) >= max_rows:
+                    all_rows = all_rows[:max_rows]
+                    break
+                if len(rows) < page_size:
+                    break  # ultima pagina parziale
+
+        elif pagination_type == 'cursor':
+            cursor_param = pagination.get('cursor_param', 'cursor')
+            cursor_path = pagination.get('cursor_path', 'next_cursor')
+            cursor_value = None
+
+            for page_num in range(MAX_PAGES):
+                call_params = {**base_params}
+                if cursor_value:
+                    call_params[cursor_param] = cursor_value
+                rows, data, _ = call_fn(call_params)
+                if not rows:
+                    break
+                all_rows.extend(rows)
+                logger.info(
+                    f"Generator cursor pag {page_num+1}: +{len(rows)} righe "
+                    f"(tot {len(all_rows)})"
+                )
+                cursor_value = self._extract_json_value(data, cursor_path)
+                if not cursor_value:
+                    break
+                if len(all_rows) >= max_rows:
+                    all_rows = all_rows[:max_rows]
+                    break
+
+        elif pagination_type == 'link':
+            link_path = pagination.get('link_path', 'next')
+            next_url = None
+            link_base_params = base_params  # mutiamo la copy locale
+
+            for page_num in range(MAX_PAGES):
+                rows, data, resp = call_fn(link_base_params, call_url=next_url)
+                if not rows:
+                    break
+                all_rows.extend(rows)
+                logger.info(
+                    f"Generator link pag {page_num+1}: +{len(rows)} righe "
+                    f"(tot {len(all_rows)})"
+                )
+                next_url = self._extract_json_value(data, link_path)
+                if not next_url:
+                    link_header = resp.headers.get('Link', '')
+                    match = re.search(r'<([^>]+)>;\s*rel=["\']next["\']', link_header)
+                    next_url = match.group(1) if match else None
+                if not next_url:
+                    break
+                if len(all_rows) >= max_rows:
+                    all_rows = all_rows[:max_rows]
+                    break
+                # Dopo prima pagina, non rimandare base_params (URL gia' completo)
+                link_base_params = {}
+
+        else:
+            logger.warning(
+                f"Tipo paginazione sconosciuto: '{pagination_type}', "
+                f"eseguo singola chiamata"
+            )
+            rows, _, _ = call_fn(base_params)
+            all_rows = rows or []
+
+        logger.info(
+            f"Generator completato: {len(all_rows)} righe totali in "
+            f"{page_num+1} pagine"
+        )
+        return all_rows
+
+    @staticmethod
+    def _substitute_url_path_params(
+        url: str, params: Dict, *, safe: str = "-._~:@!$&'()*+,=;/"
+    ) -> tuple:
+        """Sostituisce placeholder `{name}` nel URL con i valori da `params`.
+
+        Ritorna `(updated_url, query_params)` dove `query_params` contiene
+        solo le chiavi che NON erano placeholder nel URL (vanno in
+        querystring). I valori sostituiti nel path sono URL-encoded.
+
+        `safe` controlla quali caratteri NON vengono percent-encodati:
+        - default `"-._~:@!$&'()*+,=;/"`: permissivo, preserva slash/virgola
+          (usato da `_execute_api_enricher` e `test_api_connection` —
+          alcuni endpoint si aspettano `lat,lon` non encoded nel path).
+        - `""`: stretto, encoda tutto (usato da `_execute_api_generator`).
+
+        Usato da `_execute_api_generator`, `_execute_api_enricher` e
+        `test_api_connection`.
+        """
+        target_url = url
+        query_params: Dict = {}
+        for pname, pvalue in params.items():
+            placeholder = f'{{{pname}}}'
+            if placeholder in target_url:
+                encoded = requests.utils.quote(str(pvalue), safe=safe)
+                target_url = target_url.replace(placeholder, encoded)
+            else:
+                query_params[pname] = pvalue
+        return target_url, query_params
+
+    def _call_generator_endpoint(
+        self,
+        *,
+        url: str,
+        method: str,
+        headers: Dict,
+        call_params: Dict,
+        call_url: Optional[str],
+        response_preset: str,
+        response_config: Dict,
+        output_mapping: List[Dict],
+    ) -> tuple:
+        """Esegue una singola chiamata del generator e parsa la response.
+
+        Path param substitution → SSRF guard → GET/POST → status check
+        → dispatch parser (preset > response_config no-wildcard >
+        output_mapping). Ritorna `(rows, raw_data, response)`.
+
+        Solleva `ValueError` su HTTP error.
+        """
+        from app.shared.api_utils import (
+            get_shared_session,
+            validate_external_url,
+        )
+
+        target_url = call_url or url
+        # Generator: encoding stretto (safe='') — i path param vengono
+        # encoded interamente, niente eccezioni per slash/virgola.
+        target_url, query_params = self._substitute_url_path_params(
+            target_url, call_params, safe=''
+        )
+
+        validate_external_url(target_url)
+
+        logger.info(f"Generator API call: {method} {target_url}")
+        session = get_shared_session()
+        if method == 'GET':
+            resp = session.get(
+                target_url, params=query_params, headers=headers, timeout=60
+            )
+        else:
+            resp = session.post(
+                target_url, json=call_params, headers=headers, timeout=60
+            )
+
+        if resp.status_code != 200:
+            err = resp.text[:500] if resp.text else 'nessuna risposta'
+            raise ValueError(f"API error: HTTP {resp.status_code} — {err}")
+
+        data = resp.json()
+
+        if response_preset:
+            preset_cfg = get_preset_config(response_preset)
+            if preset_cfg:
+                return ResponseParser(preset_cfg).parse(data), data, resp
+
+        # `response_config` viene usato solo se ha mappings configurati
+        # e senza wildcard `[*]` — i path con wildcard sono gestiti da
+        # `_extract_rows_from_response` (specializzato per gli array
+        # generati dal wizard).
+        rc_mappings = response_config.get('mappings', []) if response_config else []
+        has_wildcard = any('[*]' in m.get('path', '') for m in rc_mappings)
+        if response_config and rc_mappings and not has_wildcard:
+            return ResponseParser(response_config).parse(data), data, resp
+
+        return self._extract_rows_from_response(data, output_mapping), data, resp
+
+    def _build_generator_base_params(
+        self, api_config: Dict, input_df: Optional[pd.DataFrame]
+    ) -> Dict:
+        """Costruisce i parametri base per `_execute_api_generator`.
+
+        Strategie:
+        - Se `input_df` non e' vuoto: prima riga → dict di parametri
+          stringificati (ignora None/blank).
+        - Altrimenti: `static_parameters` con template processing
+          (`{{NOW}}`, `{{TODAY}}`, ecc.) per i valori string.
+
+        Aggiunge `api_key` come query param se l'auth e' di tipo
+        `api_key` con `location='query'`.
+        """
+        auth = api_config.get('auth', {}) or {}
+        if input_df is not None and not input_df.empty:
+            row = input_df.iloc[0].to_dict()
+            base_params = {
+                k: str(v).strip()
+                for k, v in row.items()
+                if v is not None and str(v).strip()
+            }
+            logger.info(
+                f"Generator usando parametri da input: "
+                f"{sanitize_for_log(base_params, auth)}"
+            )
+        else:
+            base_params = {}
+            static_params = api_config.get('static_parameters', {}) or {}
+            for k, v in static_params.items():
+                if isinstance(v, str):
+                    fields = [{'name': k, 'value': v}]
+                    processed = process_static_fields(fields)
+                    base_params[k] = processed.get(k, v)
+                else:
+                    base_params[k] = v
+            logger.info(
+                f"Generator usando static_parameters (processed): "
+                f"{sanitize_for_log(base_params, auth)}"
+            )
+
+        if auth.get('type') == 'api_key' and auth.get('location') == 'query':
+            base_params[auth.get('key_name', 'apiKey')] = auth.get('key_value', '')
+
+        return base_params
+
     def _execute_api_generator(self, api_config: Dict, input_df: pd.DataFrame = None) -> pd.DataFrame:
         """
         Esegue API di tipo 'generator' — genera un DataFrame dalla risposta.
@@ -1484,7 +2511,6 @@ class ApiConnectionService:
         method = endpoint.get('method', 'GET').upper()
         auth = api_config.get('auth', {})
         custom_headers = api_config.get('custom_headers', {})
-        static_params = api_config.get('static_parameters', {})
         output_mapping = api_config.get('output_mapping', [])
         response_config = api_config.get('response_config', {})
         response_preset = api_config.get('response_preset', '')
@@ -1494,147 +2520,25 @@ class ApiConnectionService:
             raise ValueError("URL API non configurato")
 
         headers = self._prepare_headers(auth, custom_headers)
+        base_params = self._build_generator_base_params(api_config, input_df)
 
-        # Costruisci parametri base
-        if input_df is not None and not input_df.empty:
-            row = input_df.iloc[0].to_dict()
-            base_params = {k: str(v).strip() for k, v in row.items()
-                          if v is not None and str(v).strip()}
-            logger.info(f"Generator usando parametri da input: {sanitize_for_log(base_params, auth)}")
-        else:
-            base_params = {}
-            for k, v in static_params.items():
-                if isinstance(v, str):
-                    fields = [{'name': k, 'value': v}]
-                    processed = process_static_fields(fields)
-                    base_params[k] = processed.get(k, v)
-                else:
-                    base_params[k] = v
-            logger.info(f"Generator usando static_parameters (processed): {sanitize_for_log(base_params, auth)}")
-
-        if auth.get('type') == 'api_key' and auth.get('location') == 'query':
-            base_params[auth.get('key_name', 'apiKey')] = auth.get('key_value', '')
-
-        # Helper: esegui una singola chiamata e parsa le righe
         def _call_and_parse(call_params, call_url=None):
-            target_url = call_url or url
-            # Sostituisci path params nell'URL ({name}, {id}, ecc.)
-            query_params = {}
-            for pname, pvalue in list(call_params.items()):
-                placeholder = f'{{{pname}}}'
-                if placeholder in target_url:
-                    encoded = requests.utils.quote(str(pvalue), safe='')
-                    target_url = target_url.replace(placeholder, encoded)
-                else:
-                    query_params[pname] = pvalue
-            logger.info(f"Generator API call: {method} {target_url}")
-            if method == 'GET':
-                resp = requests.get(target_url, params=query_params, headers=headers, timeout=60)
-            else:
-                resp = requests.post(target_url, json=call_params, headers=headers, timeout=60)
-            if resp.status_code != 200:
-                err = resp.text[:500] if resp.text else 'nessuna risposta'
-                raise ValueError(f"API error: HTTP {resp.status_code} — {err}")
-            data = resp.json()
+            return self._call_generator_endpoint(
+                url=url,
+                method=method,
+                headers=headers,
+                call_params=call_params,
+                call_url=call_url,
+                response_preset=response_preset,
+                response_config=response_config,
+                output_mapping=output_mapping,
+            )
 
-            if response_preset:
-                cfg = get_preset_config(response_preset)
-                if cfg:
-                    return ResponseParser(cfg).parse(data), data, resp
-            # B-BE-30: usa response_config solo se ha mappings configurati
-            # e senza wildcard [*] (quelli vengono gestiti da _extract_rows_from_response)
-            rc_mappings = response_config.get('mappings', []) if response_config else []
-            has_wildcard = any('[*]' in m.get('path', '') for m in rc_mappings)
-            if response_config and rc_mappings and not has_wildcard:
-                return ResponseParser(response_config).parse(data), data, resp
-            return self._extract_rows_from_response(data, output_mapping), data, resp
-
-        # ── NESSUNA PAGINAZIONE ──
-        pagination_type = pagination.get('type', '')
-        if not pagination_type:
-            rows, _, _ = _call_and_parse(base_params)
-            logger.info(f"Generator completato: {len(rows)} righe (no paginazione)")
-            return pd.DataFrame(rows) if rows else pd.DataFrame()
-
-        # ── PAGINAZIONE ──
-        page_size  = int(pagination.get('page_size', 100))
-        max_rows   = int(pagination.get('max_rows', 10000))
-        all_rows   = []
-        page_num   = 0
-        MAX_PAGES  = max(1, max_rows // max(1, page_size)) + 1  # safety cap
-
-        if pagination_type == 'offset':
-            offset_param = pagination.get('offset_param', 'offset')
-            limit_param  = pagination.get('limit_param', 'limit')
-            start        = int(pagination.get('start_page', 0))
-
-            for page_num in range(MAX_PAGES):
-                call_params = {**base_params,
-                               offset_param: start + page_num * page_size,
-                               limit_param:  page_size}
-                rows, _, _ = _call_and_parse(call_params)
-                if not rows:
-                    break
-                all_rows.extend(rows)
-                logger.info(f"Generator offset pag {page_num+1}: +{len(rows)} righe (tot {len(all_rows)})")
-                if len(all_rows) >= max_rows:
-                    all_rows = all_rows[:max_rows]
-                    break
-                if len(rows) < page_size:
-                    break  # ultima pagina parziale
-
-        elif pagination_type == 'cursor':
-            cursor_param = pagination.get('cursor_param', 'cursor')
-            cursor_path  = pagination.get('cursor_path', 'next_cursor')
-            cursor_value = None
-
-            for page_num in range(MAX_PAGES):
-                call_params = {**base_params}
-                if cursor_value:
-                    call_params[cursor_param] = cursor_value
-                rows, data, _ = _call_and_parse(call_params)
-                if not rows:
-                    break
-                all_rows.extend(rows)
-                logger.info(f"Generator cursor pag {page_num+1}: +{len(rows)} righe (tot {len(all_rows)})")
-                # Estrai cursore per prossima chiamata
-                cursor_value = self._extract_json_value(data, cursor_path)
-                if not cursor_value:
-                    break
-                if len(all_rows) >= max_rows:
-                    all_rows = all_rows[:max_rows]
-                    break
-
-        elif pagination_type == 'link':
-            link_path  = pagination.get('link_path', 'next')
-            next_url   = None
-
-            for page_num in range(MAX_PAGES):
-                rows, data, resp = _call_and_parse(base_params, call_url=next_url)
-                if not rows:
-                    break
-                all_rows.extend(rows)
-                logger.info(f"Generator link pag {page_num+1}: +{len(rows)} righe (tot {len(all_rows)})")
-                # Cerca next URL nel body JSON
-                next_url = self._extract_json_value(data, link_path)
-                # Fallback: header Link RFC 5988
-                if not next_url:
-                    link_header = resp.headers.get('Link', '')
-                    match = re.search(r'<([^>]+)>;\s*rel=["\']next["\']', link_header)
-                    next_url = match.group(1) if match else None
-                if not next_url:
-                    break
-                if len(all_rows) >= max_rows:
-                    all_rows = all_rows[:max_rows]
-                    break
-                # Dopo prima pagina, non rimandare base_params (URL è già completo)
-                base_params = {}
-        else:
-            logger.warning(f"Tipo paginazione sconosciuto: '{pagination_type}', eseguo singola chiamata")
-            rows, _, _ = _call_and_parse(base_params)
-            all_rows = rows
-
-        logger.info(f"Generator completato: {len(all_rows)} righe totali in {page_num+1} pagine")
+        all_rows = self._paginate_generator_results(
+            call_fn=_call_and_parse,
+            pagination=pagination,
+            base_params=base_params,
+        )
         return pd.DataFrame(all_rows) if all_rows else pd.DataFrame()
     
     def _extract_rows_from_response(self, data: Any, output_mapping: List[Dict]) -> List[Dict]:
@@ -1646,15 +2550,14 @@ class ApiConnectionService:
         """
         rows = []
 
-        # B-BE-31: rileva path con wildcard [*] (es. data[*].id)
-        # → estrai il root array e itera con path relativo all'item
+        # Path con wildcard `[*]` (es. `data[*].id`): estrai il root
+        # array e itera con path relativo all'item.
         wildcard_paths = [m.get('path', '') for m in output_mapping if '[*]' in m.get('path', '')]
         if wildcard_paths:
             # Trova il prefisso comune prima di [*] (es. "data")
             first_path = wildcard_paths[0]
             array_root = first_path.split('[*]')[0].rstrip('.')  # es. "data"
             # Naviga all'array root
-            import re as _re
             array_data = self._extract_json_value(data, array_root) if array_root else data
             if not isinstance(array_data, list):
                 array_data = [array_data] if array_data is not None else []
@@ -1719,6 +2622,73 @@ class ApiConnectionService:
         
         return rows
     
+    def _enrich_one_row(
+        self,
+        *,
+        row,
+        api_config: Dict,
+        headers: Dict,
+        param_mapping: Dict,
+        output_mapping: List[Dict],
+        method: str,
+        url: str,
+        idx,
+    ) -> Optional[Dict]:
+        """Esegue l'enrichment per una singola riga del DataFrame.
+
+        Costruisce parametri (static + mappati da colonne + api_key in
+        query), sostituisce path params nell'URL, fa la chiamata HTTP,
+        estrae i valori per le colonne output.
+
+        Ritorna `dict[col_name → value]` su success (200), `None` su
+        errore HTTP (lascia il caller incrementare l'error counter senza
+        propagare l'eccezione). Le eccezioni network/parse risalgono al
+        caller (che le cattura nel try/except del loop).
+        """
+        from app.shared.api_utils import (
+            get_shared_session,
+            validate_external_url,
+        )
+
+        auth = api_config.get('auth', {}) or {}
+        params = dict(api_config.get('static_parameters', {}) or {})
+
+        for api_param, df_column in param_mapping.items():
+            if df_column and df_column in row:
+                value = row[df_column]
+                params[api_param] = str(value) if pd.notna(value) else None
+
+        if auth.get('type') == 'api_key' and auth.get('location') == 'query':
+            params[auth.get('key_name', 'apiKey')] = auth.get('key_value', '')
+
+        call_url, call_params = self._substitute_url_path_params(url, params)
+
+        validate_external_url(call_url)
+        session = get_shared_session()
+        if method == 'GET':
+            response = session.get(
+                call_url, params=call_params, headers=headers, timeout=30
+            )
+        else:
+            response = session.post(
+                call_url, json=call_params, headers=headers, timeout=30
+            )
+
+        if response.status_code != 200:
+            logger.warning(
+                f"Riga {idx}: HTTP {response.status_code} - "
+                f"{response.text[:200]}"
+            )
+            return None
+
+        data = response.json()
+        extracted: Dict[str, Any] = {}
+        for mapping in output_mapping:
+            path = mapping.get('path', '')
+            col_name = mapping.get('column', path)
+            extracted[col_name] = self._extract_json_value(data, path)
+        return extracted
+
     def _execute_api_enricher(self, df: pd.DataFrame, api_config: Dict, param_mapping: Dict) -> pd.DataFrame:
         """
         Esegue API di tipo 'enricher' — arricchisce ogni riga del DataFrame.
@@ -1751,77 +2721,50 @@ class ApiConnectionService:
             if col_name not in result_df.columns:
                 result_df[col_name] = None
         
-        # B-BE-24: token OAuth2 rinnovato ogni N righe invece che una volta sola
-        # (evita 401 su dataset grandi quando il token scade durante l'esecuzione)
-        TOKEN_RENEW_EVERY = 500  # righe
-        _token_counter = [0]
+        # Token OAuth2 gestito via cache con expires_at (vedi api_utils.get_cached_oauth2_token).
+        # Il refresh avviene automaticamente solo quando il token sta per scadere — non serve
+        # piu il vecchio pattern "rinnova ogni N righe" basato su un counter arbitrario.
+        _is_oauth2 = auth.get('type') in ('oauth2_password', 'oauth2_client_credentials')
 
         def _get_fresh_headers():
             return self._prepare_headers(auth, custom_headers)
 
         headers = _get_fresh_headers()
-        
+
         rate_limit = api_config.get('options', {}).get('rate_limit', 5)
         delay = 1.0 / rate_limit if rate_limit > 0 else 0
-        
+
         success_count = 0
         error_count = 0
-        
+
         for idx, row in df.iterrows():
             try:
-                # Rinnova il token OAuth2 ogni TOKEN_RENEW_EVERY righe
-                _token_counter[0] += 1
-                if _token_counter[0] % TOKEN_RENEW_EVERY == 0 and auth.get('type') in ('oauth2_password', 'oauth2_client_credentials'):
+                if _is_oauth2:
                     headers = _get_fresh_headers()
-                    logger.info(f"Token OAuth2 rinnovato alla riga {_token_counter[0]}")
-                
-                # Costruisci parametri - PRIMA i fissi, poi i mappati
-                params = dict(api_config.get('static_parameters', {}))  # Parametri fissi
-                
-                # Aggiungi parametri mappati dalle colonne
-                for api_param, df_column in param_mapping.items():
-                    if df_column and df_column in row:
-                        value = row[df_column]
-                        params[api_param] = str(value) if pd.notna(value) else None
-                
-                # API Key in query
-                if auth.get('type') == 'api_key' and auth.get('location') == 'query':
-                    params[auth.get('key_name', 'apiKey')] = auth.get('key_value', '')
-                
-                
-                # Chiamata API — sostituisci path params nell'URL se presenti
-                import re as _re
-                from urllib.parse import quote as _quote
-                call_url = url
-                call_params = dict(params)
-                for pname in _re.findall(r'\{(\w+)\}', call_url):
-                    if pname in call_params:
-                        encoded = _quote(str(call_params.pop(pname)), safe='-._~:@!$&\'()*+,=;/')
-                        call_url = call_url.replace(f'{{{pname}}}', encoded)
 
-                if method == 'GET':
-                    response = requests.get(call_url, params=call_params, headers=headers, timeout=30)
-                else:
-                    response = requests.post(call_url, json=call_params, headers=headers, timeout=30)
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    for mapping in output_mapping:
-                        path = mapping.get('path', '')
-                        col_name = mapping.get('column', path)
-                        extracted = self._extract_json_value(data, path)
-                        result_df.at[idx, col_name] = extracted
+                extracted_values = self._enrich_one_row(
+                    row=row,
+                    api_config=api_config,
+                    headers=headers,
+                    param_mapping=param_mapping,
+                    output_mapping=output_mapping,
+                    method=method,
+                    url=url,
+                    idx=idx,
+                )
+                if extracted_values is not None:
+                    for col_name, value in extracted_values.items():
+                        result_df.at[idx, col_name] = value
                     success_count += 1
                 else:
-                    logger.warning(f"Riga {idx}: HTTP {response.status_code} - {response.text[:200]}")
                     error_count += 1
-                
+
                 if delay > 0:
                     time.sleep(delay)
-                    
-            except Exception as e:
+
+            except Exception:
                 error_count += 1
-            
+
             if (idx + 1) % 100 == 0:
                 logger.info(f"Progresso: {idx + 1}/{len(df)} (OK: {success_count}, ERR: {error_count})")
         

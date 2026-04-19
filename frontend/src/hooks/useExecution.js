@@ -1,143 +1,167 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
-import { executeProjectQuery, getDownloadUrl } from '../api/client';
-
-const API_BASE = 'http://localhost:8000';
-
 /**
- * Hook per gestire la logica di esecuzione dei progetti
- * Supporta sia esecuzione sincrona (Estrai/Manipola) che asincrona (Arricchisci con Celery)
- * 
- * @param {string} projectId - ID del progetto
- * @param {Object} options - Opzioni di configurazione
- * @param {Function} options.onBeforeExecute - Callback da eseguire prima dell'esecuzione
- * @param {Function} options.validateCanvas - Funzione di validazione canvas (opzionale)
- * @param {number} options.pollInterval - Intervallo polling in ms (default: 1000)
- * @returns {Object} Stati e handler per l'esecuzione
+ * useExecution.js — Hook per esecuzione asincrona pipeline
+ *
+ * Gestisce l'intero ciclo di vita di una esecuzione:
+ * avvio task Celery → polling stato → completamento/errore → download output.
+ *
+ * Ritorna: { executing, taskId, progress, result, error, execute, cancel }
+ *
+ * Usato da: EstraiEditor, ManipolaEditor, ArricchisciEditor (via ResultNode)
  */
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { executeProjectQuery, getTaskStatus, cancelTask as cancelTaskApi, downloadTaskOutput, downloadProjectOutput } from '../api';
+import { useTaskPolling } from './useTaskPolling';
+import useCanvasStore from '../store/useCanvasStore';
+
 export function useExecution(projectId, options = {}) {
-  const { 
-    onBeforeExecute = null, 
-    validateCanvas = null,
-    pollInterval = 1000 
+  const {
+    onBeforeExecute = null,
+    executeFunction = null,
+    pollInterval = 1000
   } = options;
-  
-  // Stati base
-  const [showModal, setShowModal] = useState(false);
-  const [result, setResult] = useState(null);
-  const [isExecuting, setIsExecuting] = useState(false);
-  
-  // Stati per task asincroni
-  const [taskId, setTaskId] = useState(null);
-  const [progress, setProgress] = useState(0);
+
+  // Stati base pipeline
+  const [showModal, setShowModal]           = useState(false);
+  const [result, setResult]                 = useState(null);
+  const [isExecuting, setIsExecuting]       = useState(false);
+  const [taskId, setTaskId]                 = useState(null);
+  const [progress, setProgress]             = useState(0);
   const [progressMessage, setProgressMessage] = useState('');
-  const [taskStatus, setTaskStatus] = useState(null); // pending, progress, success, failure, revoked
-  
-  // Ref per gestire il polling
-  const pollingRef = useRef(null);
+  const [taskStatus, setTaskStatus]         = useState(null);
+
+  // Stati CARICA tasks
+  const [caricaTasks, setCaricaTasks]       = useState([]);
+  const [caricaPolling, setCaricaPolling]   = useState(false);
+
+  const caricaRefs    = useRef({});
   const isCancelledRef = useRef(false);
 
-  /**
-   * URL per il download del file generato
-   */
-  const downloadUrl = getDownloadUrl(projectId);
+  // Polling base dal hook condiviso
+  const { mountedRef, stopPolling, startPolling } = useTaskPolling({ interval: pollInterval });
 
-  /**
-   * Ferma il polling
-   */
-  const stopPolling = useCallback(() => {
-    if (pollingRef.current) {
-      clearInterval(pollingRef.current);
-      pollingRef.current = null;
-    }
+  // Cleanup carica refs su unmount
+  useEffect(() => () => {
+    Object.values(caricaRefs.current).forEach(id => clearInterval(id));
+    caricaRefs.current = {};
   }, []);
 
-  /**
-   * Cleanup al unmount
-   */
-  useEffect(() => {
-    return () => {
-      stopPolling();
-    };
-  }, [stopPolling]);
+  const stopAllCaricaPolling = useCallback(() => {
+    Object.values(caricaRefs.current).forEach(id => clearInterval(id));
+    caricaRefs.current = {};
+    setCaricaPolling(false);
+  }, []);
 
-  /**
-   * Polling dello stato del task
-   */
-  const pollTaskStatus = useCallback(async (taskIdToPoll) => {
-    try {
-      const response = await fetch(`${API_BASE}/api/tasks/${taskIdToPoll}`);
-      const data = await response.json();
-      
-      // Se è stato cancellato dall'utente, ignora
-      if (isCancelledRef.current) {
-        stopPolling();
-        return;
+  // ── Polling singolo task CARICA ──────────────────────────────────────
+  const startCaricaPolling = useCallback((caricaTask) => {
+    const { task_id } = caricaTask;
+
+    const poll = async () => {
+      try {
+        const data = await getTaskStatus(task_id);
+        if (!mountedRef.current) return;
+        if (!data) return;
+
+        const isDone = ['success', 'failure', 'revoked'].includes(data.status);
+
+        // data.status = stato Celery (success/failure/revoked)
+        // data.result.status = stato business logic (validation_error, write_error, ecc.)
+        const businessStatus = data.result?.status;
+        const isBusinessError = businessStatus && businessStatus !== 'success' && businessStatus !== 'completed' && businessStatus !== 'partial_success';
+        const effectiveStatus = data.status === 'failure' ? 'failure'
+          : data.status === 'revoked' ? 'revoked'
+          : isBusinessError ? 'failure'
+          : data.status;
+        const effectiveError = data.status === 'failure'
+          ? (data.error || 'Errore')
+          : isBusinessError
+          ? (data.result?.error_message || data.result?.message || businessStatus)
+          : null;
+
+        setCaricaTasks(prev => prev.map(t =>
+          t.task_id === task_id
+            ? {
+                ...t,
+                status: effectiveStatus,
+                message: data.result?.message || data.error || data.message || '',
+                rows_written: data.result?.rows_written || 0,
+                error: null,
+                error_message: effectiveError,
+              }
+            : t
+        ));
+
+        if (isDone) {
+          clearInterval(caricaRefs.current[task_id]);
+          delete caricaRefs.current[task_id];
+          if (Object.keys(caricaRefs.current).length === 0) {
+            setCaricaPolling(false);
+          }
+        }
+      } catch (e) {
+        // 404 = task non ancora registrato, aspetta il prossimo poll
+        if (e.message && e.message.includes('non trovato')) return;
+        console.error('[useExecution] Errore polling CARICA:', e);
       }
-      
+    };
+
+    poll();
+    caricaRefs.current[task_id] = setInterval(poll, pollInterval);
+  }, [pollInterval, mountedRef]);
+
+  // ── Avvia polling CARICA da result pipeline ──────────────────────────
+  const startCaricaTasksPolling = useCallback((pipelineResult) => {
+    const tasks = pipelineResult?.carica?.tasks;
+    if (!tasks || tasks.length === 0) return;
+
+    const initialTasks = tasks.map(t => ({
+      task_id: t.task_id,
+      node_id: t.node_id,
+      status: 'pending',
+      message: 'In coda...',
+      rows_written: 0,
+      error: null,
+    }));
+
+    setCaricaTasks(initialTasks);
+    setCaricaPolling(true);
+    initialTasks.forEach(t => startCaricaPolling(t));
+  }, [startCaricaPolling]);
+
+  // ── Polling pipeline task (usa useTaskPolling) ──────────────────────
+  const startMainPolling = useCallback((taskIdToWatch) => {
+    isCancelledRef.current = false;
+    startPolling(taskIdToWatch, (data) => {
+      if (isCancelledRef.current) return true;
+
       setTaskStatus(data.status);
       setProgress(data.progress || 0);
       setProgressMessage(data.message || '');
-      
-      // Task completato con successo
+
       if (data.status === 'success') {
-        stopPolling();
         setIsExecuting(false);
-        setResult({
-          success: true,
-          ...data.result,
-          task_id: taskIdToPoll
-        });
-      }
-      // Task fallito
-      else if (data.status === 'failure') {
-        stopPolling();
+        const r = { success: true, ...data.result, task_id: taskIdToWatch };
+        setResult(r);
+        // Salva l'ultimo task result completo nel canvas store, cosi' i nodi
+        // (es. ResultNode in modalita' IMDF) possono leggerlo via selector
+        // reattivo per popolare modali/badge post-esecuzione.
+        try { useCanvasStore.getState().setLastTaskResult(r); } catch (_) {}
+        startCaricaTasksPolling(data.result);
+        return true;
+      } else if (data.status === 'failure') {
         setIsExecuting(false);
-        setResult({
-          success: false,
-          message: data.error || 'Errore durante l\'esecuzione'
-        });
-      }
-      // Task annullato
-      else if (data.status === 'revoked') {
-        stopPolling();
+        setResult({ success: false, message: data.error || 'Errore durante l\'esecuzione' });
+        return true;
+      } else if (data.status === 'revoked') {
         setIsExecuting(false);
-        setResult({
-          success: false,
-          message: 'Task annullato dall\'utente'
-        });
+        setResult({ success: false, message: 'Task annullato dall\'utente' });
+        return true;
       }
-      
-    } catch (error) {
-      console.error('[useExecution] Errore polling:', error);
-      // Non fermare il polling per errori transitori di rete
-    }
-  }, [stopPolling]);
+      return false;
+    });
+  }, [startPolling, startCaricaTasksPolling]);
 
-  /**
-   * Avvia il polling per un task
-   */
-  const startPolling = useCallback((taskIdToWatch) => {
-    stopPolling(); // Ferma eventuale polling precedente
-    isCancelledRef.current = false;
-    
-    // Prima chiamata immediata
-    pollTaskStatus(taskIdToWatch);
-    
-    // Poi polling a intervalli
-    pollingRef.current = setInterval(() => {
-      pollTaskStatus(taskIdToWatch);
-    }, pollInterval);
-  }, [pollTaskStatus, pollInterval, stopPolling]);
-
-  /**
-   * Esegue il progetto
-   * @param {Object} executeOptions - Opzioni per l'esecuzione
-   * @param {boolean} executeOptions.force_recalculate - Forza ricalcolo completo
-   * @param {string} executeOptions.format - Formato output (opzionale)
-   * @param {string} executeOptions.connection_id - ID connessione (per progetti SQL)
-   */
+  // ── handleExecute ────────────────────────────────────────────────────
   const handleExecute = useCallback(async (executeOptions = {}) => {
-    // Reset stati
     setShowModal(true);
     setIsExecuting(true);
     setResult(null);
@@ -145,142 +169,89 @@ export function useExecution(projectId, options = {}) {
     setProgress(0);
     setProgressMessage('Avvio...');
     setTaskStatus('pending');
+    setCaricaTasks([]);
+    setCaricaPolling(false);
+    stopAllCaricaPolling();
     isCancelledRef.current = false;
-    
+
     try {
-      // Validazione canvas (opzionale)
-      if (validateCanvas) {
-        const validationResult = validateCanvas();
-        if (validationResult && !validationResult.valid) {
-          throw new Error(
-            validationResult.errors?.join('\n') || 'Canvas non valido'
-          );
-        }
-      }
-      
-      // Esegui callback pre-esecuzione (es. salvataggio canvas)
-      if (onBeforeExecute) {
-        await onBeforeExecute();
-      }
-      
-      // Esegui progetto
-      const response = await executeProjectQuery(projectId, executeOptions);
-      
-      // Controlla se è una risposta asincrona (Arricchisci con Celery)
+      if (onBeforeExecute) await onBeforeExecute();
+
+      const executeFn = executeFunction || executeProjectQuery;
+      const response = await executeFn(projectId, executeOptions);
+      if (!mountedRef.current) return;
+
       if (response.async && response.task_id) {
-        // Salva task_id e avvia polling
         setTaskId(response.task_id);
-        setProgressMessage('Task avviato...');
-        startPolling(response.task_id);
+        setProgressMessage(response.message || 'Task avviato...');
+        startMainPolling(response.task_id);
       } else {
-        // Risposta sincrona (Estrai/Manipola)
         setIsExecuting(false);
         setProgress(100);
+        setTaskStatus('success');
         setResult(response);
+        startCaricaTasksPolling(response);
       }
-      
     } catch (error) {
       console.error('[useExecution] Errore:', error);
       setIsExecuting(false);
       setProgress(0);
       setTaskStatus('failure');
-      setResult({
-        success: false,
-        message: error.response?.data?.detail || error.message || 'Errore durante l\'esecuzione'
-      });
+      setResult({ success: false, message: error.response?.data?.detail || error.message || 'Errore' });
     }
-  }, [projectId, onBeforeExecute, validateCanvas, startPolling]);
+  }, [projectId, onBeforeExecute, executeFunction, startMainPolling, startCaricaTasksPolling, stopAllCaricaPolling, mountedRef]);
 
-  /**
-   * Annulla il task in esecuzione
-   */
   const cancelTask = useCallback(async () => {
     if (!taskId) return;
-    
     try {
       isCancelledRef.current = true;
       stopPolling();
-      
-      await fetch(`${API_BASE}/api/tasks/${taskId}`, {
-        method: 'DELETE'
-      });
-      
+      await cancelTaskApi(taskId);
+      if (!mountedRef.current) return;
       setIsExecuting(false);
       setTaskStatus('revoked');
       setProgressMessage('Annullato');
-      setResult({
-        success: false,
-        message: 'Task annullato dall\'utente'
-      });
-      
+      setResult({ success: false, message: 'Task annullato dall\'utente' });
     } catch (error) {
       console.error('[useExecution] Errore annullamento:', error);
     }
-  }, [taskId, stopPolling]);
+  }, [taskId, stopPolling, mountedRef]);
 
-  /**
-   * Chiude il modal
-   * @param {boolean} resetResult - Se true, resetta anche il risultato
-   */
   const closeModal = useCallback((resetResult = false) => {
     setShowModal(false);
     if (resetResult) {
-      setResult(null);
-      setProgress(0);
-      setProgressMessage('');
-      setTaskId(null);
-      setTaskStatus(null);
+      setResult(null); setProgress(0); setProgressMessage('');
+      setTaskId(null); setTaskStatus(null);
+      setCaricaTasks([]); setCaricaPolling(false);
     }
   }, []);
 
-  /**
-   * Resetta completamente lo stato
-   */
   const reset = useCallback(() => {
-    stopPolling();
-    setShowModal(false);
-    setResult(null);
-    setIsExecuting(false);
-    setTaskId(null);
-    setProgress(0);
-    setProgressMessage('');
-    setTaskStatus(null);
+    stopPolling(); stopAllCaricaPolling();
+    setShowModal(false); setResult(null); setIsExecuting(false);
+    setTaskId(null); setProgress(0); setProgressMessage('');
+    setTaskStatus(null); setCaricaTasks([]); setCaricaPolling(false);
     isCancelledRef.current = false;
-  }, [stopPolling]);
+  }, [stopPolling, stopAllCaricaPolling]);
 
-  /**
-   * Download risultato del task
-   */
   const downloadTaskResult = useCallback(async () => {
-    if (!taskId) return downloadUrl;
-    
-    // Se c'è un task_id, usa l'endpoint specifico
-    return `${API_BASE}/api/tasks/${taskId}/download`;
-  }, [taskId, downloadUrl]);
+    // Estrae il filename reale dal result (output_file o output_path)
+    const outputPath = result?.output_file || result?.output_path || null;
+    const filename   = outputPath ? outputPath.split(/[/\\]/).pop() : null;
+
+    if (taskId) {
+      await downloadTaskOutput(taskId, filename);
+    } else {
+      await downloadProjectOutput(projectId, filename);
+    }
+  }, [taskId, projectId, result]);
 
   return {
-    // Stati base
-    showModal,
-    result,
-    isExecuting,
-    downloadUrl,
-    
-    // Stati task asincrono
-    taskId,
-    progress,
-    progressMessage,
-    taskStatus,
-    
-    // Handler
-    handleExecute,
-    closeModal,
-    reset,
-    cancelTask,
-    downloadTaskResult,
-    
-    // Setter per casi speciali
-    setShowModal,
-    setResult
+    showModal, result, isExecuting,
+    taskId, progress, progressMessage, taskStatus,
+    caricaTasks, caricaPolling,
+    handleExecute, closeModal, reset, cancelTask, downloadTaskResult,
+    setShowModal, setResult,
   };
 }
 

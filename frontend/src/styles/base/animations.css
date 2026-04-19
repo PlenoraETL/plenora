@@ -1,0 +1,97 @@
+/**
+ * animations.css — Fonte unica di tutte le animazioni CSS
+ *
+ * Importato da App.css. Rimuovere @keyframes duplicati dagli altri file.
+ *
+ * Keyframes consolidati (erano sparsi in 25+ file):
+ *   @spin         — 11 file diversi
+ *   @fadeIn       — 6 file
+ *   @slideUp      — 6 file
+ *   @modalFadeIn  — 2 file (ModalWrapper)
+ *   @modalSlideIn — 2 file (ModalWrapper)
+ *   @shimmer / @skeletonShimmer / @dotPulse / @pulse-live — 1 file ciascuno (lasciarli)
+ */
+
+/* ── Rotazione (spinner) ─────────────────────────────────── */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* ── Entrata in opacità ──────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Entrata dal basso ───────────────────────────────────── */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Entrata modale overlay ──────────────────────────────── */
+@keyframes modalFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Entrata modale pannello ─────────────────────────────── */
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ── Entrata modale preview (variante con scale 0.98) ────── */
+@keyframes previewModalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ── Shimmer (skeleton loading bar) ─────────────────────── */
+@keyframes shimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* ── Skeleton shimmer (background-position) ─────────────── */
+@keyframes skeletonShimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── Pulsazione puntini loader ───────────────────────────── */
+@keyframes dotPulse {
+  0%, 80%, 100% {
+    transform: scale(0.6);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* ── Pulsazione live indicator ───────────────────────────── */
+@keyframes pulse-live {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.6; }
+}

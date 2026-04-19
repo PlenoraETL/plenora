@@ -1,5 +1,14 @@
+/**
+ * useCanvasValidation.js — Validazione canvas in tempo reale
+ *
+ * Osserva nodes/edges e valida continuamente il canvas:
+ * grafo connesso, nodo risultato presente, nodi disconnessi, cicli.
+ * Debounced per non ricalcolare a ogni micro-cambiamento.
+ *
+ * Ritorna: { isValid, errors, disconnectedNodeIds, validate }
+ */
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { validateCanvas } from '../utils/canvasValidation';
+import { validateEstraiCanvas } from '../utils/validateEstraiCanvas';
 
 /**
  * useCanvasValidation - Hook per validazione canvas in tempo reale
@@ -30,6 +39,7 @@ export function useCanvasValidation(nodes, edges, options = {}) {
   const [validationResult, setValidationResult] = useState({
     valid: true,
     errors: [],
+    issues: [],
     disconnectedNodeIds: []
   });
 
@@ -47,8 +57,15 @@ export function useCanvasValidation(nodes, edges, options = {}) {
     const currentNodes = nodesRef.current;
     const currentEdges = edgesRef.current;
     
-    const result = validateCanvas(currentNodes, currentEdges);
-    setValidationResult(result);
+    const result = validateEstraiCanvas(currentNodes, currentEdges);
+    // Adatta formato: mappiamo issues → errors per retrocompatibilità
+    const adapted = {
+      valid: result.isValid,
+      issues: result.issues,
+      errors: result.issues.filter(i => i.severity === 'error').map(i => i.message),
+      disconnectedNodeIds: result.issues.filter(i => i.nodeId).map(i => i.nodeId)
+    };
+    setValidationResult(adapted);
     
     if (onValidationChange) {
       onValidationChange(result);
@@ -88,12 +105,14 @@ export function useCanvasValidation(nodes, edges, options = {}) {
       const joinType = e.data?.join_type || 'left';
       const srcCol = e.data?.source_column || '';
       const tgtCol = e.data?.target_column || '';
+      const joinConds = e.data?.join_conditions ? JSON.stringify(e.data.join_conditions) : '';
+      const onFilters = e.data?.on_filters ? JSON.stringify(e.data.on_filters) : '';
       const isSpatial = e.data?.is_spatial ? 'S' : 'N';
       const spatialPred = e.data?.spatial_predicate || '';
       const srcGeom = e.data?.source_geom_column || '';
       const tgtGeom = e.data?.target_geom_column || '';
       
-      return `${e.source}-${e.target}:${joinType}:${srcCol}:${tgtCol}:${isSpatial}:${spatialPred}:${srcGeom}:${tgtGeom}`;
+      return `${e.source}-${e.target}:${joinType}:${srcCol}:${tgtCol}:${joinConds}:${onFilters}:${isSpatial}:${spatialPred}:${srcGeom}:${tgtGeom}`;
     }).sort().join(',');
   }, [edges]);
 
@@ -124,6 +143,7 @@ export function useCanvasValidation(nodes, edges, options = {}) {
   const result = useMemo(() => ({
     isValid: validationResult.valid,
     errors: validationResult.errors,
+    issues: validationResult.issues || [],
     disconnectedNodeIds: validationResult.disconnectedNodeIds,
     validate,
     clearErrors,

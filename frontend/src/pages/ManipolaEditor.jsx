@@ -1,609 +1,376 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
-import ReactFlow, { 
-  Background, 
-  Controls, 
-  addEdge,
-  useReactFlow,
-  ReactFlowProvider,
-  useNodesState,
-  useEdgesState,
-  MarkerType
-} from 'reactflow';
+/**
+ * ManipolaEditor.jsx — Editor visuale per il modulo MANIPOLA
+ *
+ * Permette di costruire pipeline di trasformazione dati collegando:
+ *  - Nodi sorgente (progetti Estrai, file)
+ *  - Nodi Transform (33+ operazioni: join, filter, pivot, reproject, dissolve...)
+ *  - Nodo Multi-Join (N sorgenti)
+ *  - Nodo Output
+ *  - Nodo Carica DB
+ *
+ * Hooks usati: useEditorData, useCanvasCore, useNodeHandlers,
+ *              useEdgeHandlers, useColumnPropagation, useExecution,
+ *              usePreview, useCaricarica, useToast
+ *
+ * Route: /editor/manipola/:id
+ */
+import React, { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react';
+import ReactFlow, { Background, Controls, addEdge, useReactFlow, ReactFlowProvider, MarkerType } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { useParams, useNavigate } from 'react-router-dom';
-import { 
-  listProjects, 
-  getProject, 
-  updateCanvas,
-  getDownloadUrl
-} from '../api/client';
+import { isValidProjectId } from '../utils/validateRouteParam';
+import { getDownloadUrl, createTask } from '../api';
 import { getFiles } from '../api/files';
-
-import ProjectSourceNode from '../components/ProjectSourceNode';
-import FileSourceNode from '../components/FileSourceNode';
+import ProjectSourceNode from '../components/nodes/ProjectSourceNode';
+import FileSourceNode from '../components/nodes/FileSourceNode';
 import TransformNode from '../components/transforms/TransformNode';
-import ResultNode from '../components/ResultNode';
-import PreviewModal from '../components/PreviewModal';
-import ExecutionModal from '../components/ExecutionModal';
-import EditorSidebar from '../components/EditorSidebar';
-import { useSchemaInference, usePreview, useExecution, useCanvasKeyboard } from '../hooks';
+import MultiJoinNode from '../components/transforms/MultiJoinNode';
+import ResultNode from '../components/nodes/ResultNode';
+import CaricanNode from '../components/nodes/CaricanNode';
+import CaricanArcGISNode from '../components/nodes/CaricanArcGISNode';
+import '../components/nodes/CaricanArcGISNode.css';
+import EditorSidebar from '../components/panels/EditorSidebar';
+
+// Modali lazy-loaded
+const PreviewModal = lazy(() => import('../components/modals/PreviewModal'));
+const ExecutionModal = lazy(() => import('../components/modals/ExecutionModal'));
+import StaticValuesNode from '../components/nodes/StaticValuesNode';
+import AnnotationNode from '../components/nodes/AnnotationNode';
+import DataSourceNode from '../components/nodes/DataSourceNode';
+import { useSchemaInference, usePreview, useExecution, useCanvasCore } from '../hooks';
+import { useEditorData } from '../hooks/useEditorData';
+import useCanvasStore from '../store/useCanvasStore';
+import { useToast } from '../hooks/useToast';
+import useColumnPropagation from '../hooks/useColumnPropagation';
+import { deserializeNodes, createEdgeFromData } from '../utils/nodeFactories';
 import '../styles/ManipolaEditor.css';
+import '../components/nodes/StaticValuesNode.css';
+import '../components/nodes/AnnotationNode.css';
+import '../components/nodes/DataSourceNode.css';
+import { useAuth } from '../context/AuthContext';
+import { CanvasErrorBoundary, ModalErrorBoundary } from '../components/common/ErrorBoundary';
+import { LoadingOverlay } from '../components/common/LoadingOverlay';
+import { useHexCanvas } from '../utils/hexCanvas';
+
+// Costante stabile — evita array literal nelle deps di useEditorData
+const MANIPOLA_SOURCE_TYPES = ['estrai', 'manipola', 'arricchisci'];
 
 const nodeTypes = {
-  project_source: ProjectSourceNode,
-  file_source: FileSourceNode,
-  transform: TransformNode,
-  result: ResultNode,
+  project_source: ProjectSourceNode, file_source: FileSourceNode,
+  transform: TransformNode, multi_join: MultiJoinNode,
+  result: ResultNode, staticValues: StaticValuesNode,
+  carica: CaricanNode, carica_arcgis: CaricanArcGISNode, caricaArcgis: CaricanArcGISNode, comment: AnnotationNode,
+  datasource_node: DataSourceNode
 };
 
 const defaultEdgeOptions = {
-  type: 'smoothstep',
-  animated: false,
-  style: { 
-    stroke: '#9C27B0',
-    strokeWidth: 2
-  },
-  markerEnd: {
-    type: MarkerType.ArrowClosed,
-    width: 20,
-    height: 20,
-    color: '#9C27B0',
-  },
+  type: 'smoothstep', animated: false,
+  style: { stroke: '#9C27B0', strokeWidth: 2 },
+  markerEnd: { type: MarkerType.ArrowClosed, width: 20, height: 20, color: '#9C27B0' }
 };
 
 const ManipolaEditorContent = () => {
   const { id: projectId } = useParams();
+
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
   const { screenToFlowPosition } = useReactFlow();
-  
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  const [availableSources, setAvailableSources] = useState([]);
-  const [availableFiles, setAvailableFiles] = useState([]);
-  const [project, setProject] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const toast = useToast();
+
+  // ===== THEME =====
+  const [theme, setThemeState] = useState(() => {
+    const saved = localStorage.getItem('plenora-theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', saved);
+    return saved;
+  });
+  const hexCanvasRef = useRef(null);
+  useHexCanvas(hexCanvasRef);
+
+  const setTheme = (t) => {
+    document.documentElement.setAttribute('data-theme', t);
+    localStorage.setItem('plenora-theme', t);
+    setThemeState(t);
+  };
+
+  // ===== CANVAS CORE =====
+  // Sostituisce: useNodesState, useEdgesState, useNodeHandlers, nodesRef, edgesRef,
+  //             handleSaveQuiet, useCanvasKeyboard, getViewportCenter
+  const {
+    nodes, edges, setNodes, setEdges, onNodesChange, onEdgesChange,
+    nodesRef, edgesRef, updateNodeData, deleteNode,
+    handleSaveQuiet, getViewportCenter,
+    isReadOnly, readOnlyProps
+  } = useCanvasCore(projectId, { mode: 'manipola' });
+
+  // ===== COLUMN PROPAGATION (specifico Manipola) =====
+  const { propagateColumns } = useColumnPropagation(setNodes);
+
+  // ===== DATA LOADING (centralizzato) =====
+  const {
+    project, connections, loading, error: loadError,
+    availableSources, availableFiles,
+    reload: reloadData,
+  } = useEditorData(projectId, {
+    withSources: true,
+    sourceTypes: MANIPOLA_SOURCE_TYPES,
+  });
+
+  // ===== STATE SPECIFICO MANIPOLA =====
   const [saving, setSaving] = useState(false);
-  
-  // ===== SCHEMA INFERENCE =====
-  const { 
-    schemas, 
-    loading: schemasLoading, 
-    refreshSchemas
-  } = useSchemaInference(projectId);
-  
-  const nodesRef = useRef(nodes);
-  const edgesRef = useRef(edges);
-  
-  useEffect(() => {
-    nodesRef.current = nodes;
-    edgesRef.current = edges;
-  }, [nodes, edges]);
 
-  // ===== SALVATAGGIO SILENZIOSO =====
-  const handleSaveQuiet = useCallback(async () => {
-    try {
-      const currentNodes = nodesRef.current;
-      const currentEdges = edgesRef.current;
-      
-      const canvasToSave = {
-        nodes: currentNodes.map(node => ({
-          id: node.id,
-          type: node.type,
-          position: node.position,
-          data: {
-            source_project_id: node.data?.source_project_id,
-            file_source_id: node.data?.file_source_id,
-            columns: node.data?.columns,
-            transform_op: node.data?.transform_op,
-            config: node.data?.config,
-            fileName: node.data?.fileName,
-            format: node.data?.format,
-            geomColumn: node.data?.geomColumn,
-            group_by_enabled: node.data?.group_by_enabled,
-            group_by_columns: node.data?.group_by_columns,
-            aggregations: node.data?.aggregations
-          }
-        })),
-        edges: currentEdges
-      };
-      
-      await updateCanvas(projectId, canvasToSave);
-      
-    } catch (error) {
-      console.error('[ManipolaEditor] Errore salvataggio canvas silenzioso:', error);
-    }
-  }, [projectId]);
+  // ===== SCHEMA INFERENCE (specifico Manipola) =====
+  const { schemas, loading: schemasLoading, refreshSchemas } = useSchemaInference(projectId);
 
-  // ===== CUSTOM HOOKS =====
-  
-  // Hook Preview
-  const preview = usePreview(projectId, handleSaveQuiet);
-
-  // Hook Execution
+  // ===== HOOKS COMUNI =====
+  const preview   = usePreview(projectId, handleSaveQuiet);
   const execution = useExecution(projectId, {
     onBeforeExecute: async () => {
       const currentNodes = nodesRef.current;
-      
-      if (currentNodes.length === 0) {
-        throw new Error('Canvas vuoto. Aggiungi nodi prima di eseguire.');
-      }
-      
-      const resultNode = currentNodes.find(n => n.type === 'result');
-      if (!resultNode) {
-        throw new Error('Aggiungi un nodo Output prima di eseguire.');
-      }
-      
-      const sourceNodes = currentNodes.filter(n => n.type === 'project_source' || n.type === 'file_source');
-      if (sourceNodes.length === 0) {
-        throw new Error('Aggiungi almeno una sorgente dati (progetto o file).');
-      }
-      
+      if (currentNodes.length === 0) throw new Error('Canvas vuoto. Aggiungi nodi prima di eseguire.');
+      if (!currentNodes.find(n => n.type === 'result')) throw new Error('Aggiungi un nodo Output prima di eseguire.');
+      if (!currentNodes.find(n => n.type === 'project_source' || n.type === 'file_source' || n.type === 'staticValues' || (n.type === 'datasource_node' && n.data?.mode === 'source')))
+        throw new Error('Aggiungi almeno una sorgente dati (progetto, file, valori statici o DataSource).');
       await handleSaveCanvas();
     }
   });
 
-  // Hook Keyboard (Delete/Backspace)
-  useCanvasKeyboard({
-    nodes,
-    edges,
-    onDeleteNode: handleDeleteNode,
-    setEdges
+  // CARICA asincrono via Celery
+  const executeCaricanTask = useCallback(async (projId, options) => {
+    const res = await createTask({
+      task_type: 'carica', project_id: projId,
+      canvas: { nodes: nodesRef.current, edges: edgesRef.current },
+      carica_node_data: options.carica_node_data
+    });
+    const result = res;
+    if (result.task_id) return { async: true, task_id: result.task_id, message: result.message };
+    throw new Error(result.detail || result.error || 'Errore creazione task CARICA');
+  }, []);
+
+  const caricaExecution = useExecution(projectId, {
+    onBeforeExecute: handleSaveQuiet,
+    executeFunction: executeCaricanTask,
+    pollInterval: 1500
   });
 
   // ===== EFFECTS =====
 
+  // ===== EFFECT: carica nodi nel canvas quando il progetto e pronto =====
+  useEffect(() => {
+    if (!project?.canvas?.nodes || loading) return;
+
+    const loadedNodes = deserializeNodes(project.canvas.nodes, {
+      flags: { isManipulate: true },
+    });
+
+    const rawEdges = (project.canvas.edges || []).map(edge => {
+      if (edge.targetHandle) return edge;
+      const match = edge.id?.match(/(input-\d+)$/);
+      return match ? { ...edge, targetHandle: match[1] } : edge;
+    });
+
+    setNodes(loadedNodes);
+    setEdges(rawEdges);
+    // Reset dirty: setNodes/setEdges hanno marcato dirty perché inseriscono
+    // nuovi ID, ma è un load programmatico, non una modifica utente.
+    useCanvasStore.getState().markClean();
+    setTimeout(() => { propagateColumns(loadedNodes, rawEdges); }, 300);
+    setTimeout(() => { refreshSchemas(); }, 100);
+  }, [project, loading]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Propaga schemi ai nodi transform
   useEffect(() => {
     if (!schemas || Object.keys(schemas).length === 0) return;
-    
-    setNodes((nds) =>
-      nds.map((node) => {
-        const nodeSchema = schemas[node.id];
-        if (nodeSchema && nodeSchema.length > 0) {
-          const columns = nodeSchema.map(col => ({
-            name: col.name,
-            type: col.type,
-            visible: true,
-            source_node: col.source_node,
-            is_calculated: col.is_calculated
-          }));
-          
-          const currentCols = JSON.stringify(node.data?.columns || []);
-          const newCols = JSON.stringify(columns);
-          
-          if (currentCols !== newCols) {
-            return {
-              ...node,
-              data: {
-                ...node.data,
-                columns: columns
-              }
-            };
-          }
-        }
-        return node;
-      })
-    );
+    setNodes(nds => nds.map(node => {
+      const nodeSchema = schemas[node.id];
+      if (!nodeSchema || nodeSchema.length === 0) return node;
+      const columns = nodeSchema.map(col => ({ name: col.name, type: col.type, visible: true, source_node: col.source_node, is_calculated: col.is_calculated }));
+      if (JSON.stringify(node.data?.columns || []) === JSON.stringify(columns)) return node;
+      return { ...node, data: { ...node.data, columns } };
+    }));
   }, [schemas, setNodes]);
 
-  // ===== FIX: Aggiorna availableColumns nel ResultNode - SOLO dal nodo collegato =====
+  // Aggiorna availableColumns in ResultNode e CaricanNode
   useEffect(() => {
-    const resultNode = nodes.find(n => n.type === 'result');
-    if (!resultNode) return;
-    
-    // Trova l'edge che entra nel ResultNode
-    const incomingEdge = edges.find(e => e.target === resultNode.id);
-    
-    if (!incomingEdge) {
-      // Nessun nodo collegato, svuota le colonne disponibili
-      const currentColumns = resultNode.data?.availableColumns || [];
-      if (currentColumns.length > 0) {
-        setNodes((nds) =>
-          nds.map((node) => {
-            if (node.type === 'result') {
-              return {
-                ...node,
-                data: {
-                  ...node.data,
-                  availableColumns: []
-                }
-              };
-            }
-            return node;
-          })
-        );
-      }
-      return;
-    }
-    
-    // Trova il nodo sorgente (quello collegato al ResultNode)
-    const sourceNodeId = incomingEdge.source;
-    
-    // Prendi le colonne SOLO dal nodo collegato
-    const availableColumns = [];
-    
-    // Prima prova dallo schema inference (più affidabile)
-    const nodeSchema = schemas[sourceNodeId] || [];
-    if (nodeSchema.length > 0) {
-      for (const col of nodeSchema) {
-        availableColumns.push({
-          name: col.name,
-          type: col.type || 'str',
-          source: sourceNodeId
-        });
-      }
-    } else {
-      // Fallback: prendi dai dati locali del nodo
-      const sourceNode = nodes.find(n => n.id === sourceNodeId);
-      if (sourceNode && sourceNode.data?.columns) {
-        for (const col of sourceNode.data.columns) {
-          availableColumns.push({
-            name: col.name || col,
-            type: col.type || 'str',
-            source: sourceNodeId
-          });
-        }
-      }
-    }
-    
-    const currentColumns = resultNode.data?.availableColumns || [];
-    const columnsChanged = JSON.stringify(availableColumns) !== JSON.stringify(currentColumns);
-    
-    if (columnsChanged) {
-      setNodes((nds) =>
-        nds.map((node) => {
-          if (node.type === 'result') {
-            return {
-              ...node,
-              data: {
-                ...node.data,
-                availableColumns: availableColumns
-              }
-            };
-          }
-          return node;
-        })
-      );
-    }
-  }, [nodes, edges, schemas, setNodes]);
+    // NOTA: 'nodes' rimosso dalle dipendenze intenzionalmente per evitare loop React.
+    // nodes e edges vengono letti dentro la callback di setNodes (snapshot aggiornato)
+    // e da edgesRef (ref stabile). schemas è la sola vera dipendenza esterna.
+    setNodes(nds => {
+      const currentEdges = edgesRef.current;
+      const resultNode = nds.find(n => n.type === 'result');
+      if (!resultNode) return nds;
+      const incomingEdge = currentEdges.find(e => e.target === resultNode.id);
 
-  useEffect(() => {
-    loadProjectAndSources();
-  }, [projectId]);
-
-  // ===== DATA LOADING =====
-
-  const loadProjectAndSources = async () => {
-    try {
-      setLoading(true);
-      
-      const projectData = await getProject(projectId);
-      setProject(projectData);
-      
-      // Carica canvas se presente
-      if (projectData.canvas && projectData.canvas.nodes) {
-        const loadedNodes = projectData.canvas.nodes.map(node => {
-          if (node.type === 'project_source') {
-            return {
-              ...node,
-              data: {
-                ...node.data,
-                source_project_id: node.data?.source_project_id || '',
-                columns: node.data?.columns || [],
-                onChange: (val) => handleUpdateProjectSource(node.id, val),
-                onUpdateColumns: handleUpdateProjectSourceColumns,
-                onDelete: handleDeleteNode
-              }
-            };
-          } else if (node.type === 'file_source') {
-            return {
-              ...node,
-              data: {
-                ...node.data,
-                file_source_id: node.data?.file_source_id || '',
-                columns: node.data?.columns || [],
-                onUpdateColumns: handleUpdateFileSourceColumns,
-                onDelete: handleDeleteNode
-              }
-            };
-          } else if (node.type === 'transform') {
-            return {
-              ...node,
-              data: {
-                ...node.data,
-                transform_op: node.data?.transform_op || 'join',
-                config: node.data?.config || {},
-                columns: node.data?.columns || [],
-                onChange: (newData) => handleUpdateTransform(node.id, newData),
-                onUpdateColumns: handleUpdateProjectSourceColumns,
-                onDelete: handleDeleteNode
-              }
-            };
-          } else if (node.type === 'result') {
-            return {
-              ...node,
-              data: {
-                ...node.data,
-                isManipulate: true,
-                fileName: node.data?.fileName || 'output',
-                format: node.data?.format || 'csv',
-                geomColumn: node.data?.geomColumn || '',
-                group_by_enabled: node.data?.group_by_enabled || false,
-                group_by_columns: node.data?.group_by_columns || [],
-                aggregations: node.data?.aggregations || [],
-                onUpdateFileName: handleUpdateResultFileName,
-                onUpdateFormat: handleUpdateResultFormat,
-                onUpdateGeomColumn: handleUpdateGeomColumn,
-                onUpdateGroupBy: handleUpdateGroupBy,
-                onPreview: () => preview.handlePreview(),
-                onExecute: (nodeId, options) => execution.handleExecute(options),
-                onDelete: handleDeleteNode
-              }
-            };
-          }
+      if (!incomingEdge) {
+        if ((resultNode.data?.availableColumns || []).length === 0) return nds;
+        return nds.map(node => {
+          if (node.type === 'result' || node.type === 'carica' || node.type === 'carica_arcgis' || node.type === 'caricaArcgis') return { ...node, data: { ...node.data, availableColumns: [] } };
           return node;
         });
-        
-        setNodes(loadedNodes);
-        setEdges(projectData.canvas.edges || []);
       }
-      
-      // Carica progetti SQL disponibili
-      const projectsData = await listProjects();
-      const sqlProjects = (projectsData.projects || []).filter(
-        p => (p.project_type || 'estrai') === 'estrai'
-      );
-      setAvailableSources(sqlProjects);
-      
-      // Carica file esterni disponibili
-      try {
-        const filesData = await getFiles();
-        setAvailableFiles(filesData.files || []);
-      } catch (err) {
-        console.warn("[ManipolaEditor] Errore caricamento file esterni:", err);
-        setAvailableFiles([]);
+
+      const sourceNodeId     = incomingEdge.source;
+      const availableColumns = [];
+      const nodeSchema       = schemas[sourceNodeId] || [];
+      if (nodeSchema.length > 0) {
+        nodeSchema.forEach(col => availableColumns.push({ name: col.name, type: col.type || 'str', source: sourceNodeId }));
+      } else {
+        const sourceNode = nds.find(n => n.id === sourceNodeId);
+        (sourceNode?.data?.columns || []).forEach(col => availableColumns.push({ name: col.name || col, type: col.type || 'str', source: sourceNodeId }));
       }
-      
-      // Refresh schemi dopo caricamento
-      setTimeout(() => {
-        refreshSchemas();
-      }, 100);
-      
-    } catch (err) {
-      console.error("[ManipolaEditor] Errore caricamento:", err);
-      alert('Errore caricamento progetto');
-    } finally {
-      setLoading(false);
-    }
-  };
+
+      if (JSON.stringify(availableColumns) === JSON.stringify(resultNode.data?.availableColumns || [])) return nds;
+      return nds.map(node => {
+        if (node.type === 'result' || node.type === 'carica' || node.type === 'carica_arcgis' || node.type === 'caricaArcgis') return { ...node, data: { ...node.data, availableColumns } };
+        return node;
+      });
+    });
+  }, [edges, schemas, setNodes, edgesRef]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ===== NODE HANDLERS =====
 
   const handleUpdateProjectSource = useCallback((nodeId, projectSourceId) => {
-    setNodes((nds) =>
-      nds.map((node) => {
-        if (node.id === nodeId) {
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              source_project_id: projectSourceId
-            }
-          };
-        }
-        return node;
-      })
-    );
-    
-    setTimeout(() => {
-      handleSaveQuiet().then(() => refreshSchemas());
-    }, 100);
-  }, [setNodes, refreshSchemas, handleSaveQuiet]);
+    updateNodeData(nodeId, { source_project_id: projectSourceId });
+    setTimeout(() => { handleSaveQuiet().then(() => refreshSchemas()); }, 100);
+  }, [updateNodeData, refreshSchemas, handleSaveQuiet]);
 
   const handleUpdateProjectSourceColumns = useCallback((nodeId, columns) => {
-    setNodes((nds) =>
-      nds.map((node) => {
-        if (node.id === nodeId) {
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              columns: columns
-            }
-          };
-        }
-        return node;
-      })
-    );
-  }, [setNodes]);
+    updateNodeData(nodeId, { columns });
+    setTimeout(() => { propagateColumns(nodesRef.current, edgesRef.current); }, 50);
+  }, [updateNodeData, propagateColumns]);
 
   const handleUpdateFileSourceColumns = useCallback((nodeId, columns) => {
-    setNodes((nds) =>
-      nds.map((node) => {
-        if (node.id === nodeId) {
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              columns: columns
-            }
-          };
-        }
-        return node;
-      })
-    );
-    
+    updateNodeData(nodeId, { columns });
     setTimeout(() => {
+      const updatedNodes = nodesRef.current.map(n =>
+        n.id === nodeId ? { ...n, data: { ...n.data, columns } } : n
+      );
+      propagateColumns(updatedNodes, edgesRef.current);
       handleSaveQuiet().then(() => refreshSchemas());
     }, 100);
-  }, [setNodes, refreshSchemas, handleSaveQuiet]);
+  }, [updateNodeData, propagateColumns, refreshSchemas, handleSaveQuiet]);
 
   const handleUpdateTransform = useCallback((nodeId, newData) => {
-    setNodes((nds) =>
-      nds.map((node) => {
-        if (node.id === nodeId) {
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              ...newData
-            }
-          };
-        }
-        return node;
-      })
-    );
-    
+    updateNodeData(nodeId, newData);
+    // Costruiamo i nodi aggiornati inline invece di aspettare nodesRef.current
+    // (che viene aggiornato dall'useEffect solo al prossimo render)
     setTimeout(() => {
+      const updatedNodes = nodesRef.current.map(n =>
+        n.id === nodeId ? { ...n, data: { ...n.data, ...newData } } : n
+      );
+      propagateColumns(updatedNodes, edgesRef.current);
       handleSaveQuiet().then(() => refreshSchemas());
-    }, 300);
-  }, [setNodes, refreshSchemas, handleSaveQuiet]);
+    }, 50);
+  }, [updateNodeData, propagateColumns, refreshSchemas, handleSaveQuiet]);
 
-  // ===== RESULT NODE HANDLERS =====
+  // handleUpdateProjectSource/Columns/FileSource/Transform rimangono perché
+  // fanno side-effect (refreshSchemas, propagateColumns) registrati in setEditorActions
 
-  const handleUpdateResultFileName = useCallback((nodeId, newFileName) => {
-    setNodes((nds) =>
-      nds.map((node) => {
-        if (node.id === nodeId) {
-          return { ...node, data: { ...node.data, fileName: newFileName } };
-        }
-        return node;
-      })
-    );
-  }, [setNodes]);
+  // Registra azioni editor nello store — DEVE stare dopo tutti gli hook e useCallback
+  useEffect(() => {
+    useCanvasStore.getState().setEditorActions({
+      onPreview:                    () => preview.handlePreview(),
+      onExecute:                    (nodeId, opts) => execution.handleExecute(opts),
+      onCaricanExecute:             (nodeId, cfg) => caricaExecution.handleExecute({ carica_node_data: cfg }),
+      onUpdateProjectSource:        handleUpdateProjectSource,
+      onUpdateProjectSourceColumns: handleUpdateProjectSourceColumns,
+      onUpdateFileSourceColumns:    handleUpdateFileSourceColumns,
+      onUpdateTransform:            handleUpdateTransform,
+    });
+  }, [preview, execution, caricaExecution,
+      handleUpdateProjectSource, handleUpdateProjectSourceColumns,
+      handleUpdateFileSourceColumns, handleUpdateTransform]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleUpdateResultFormat = useCallback((nodeId, newFormat) => {
-    setNodes((nds) =>
-      nds.map((node) => {
-        if (node.id === nodeId) {
-          return { ...node, data: { ...node.data, format: newFormat } };
-        }
-        return node;
-      })
-    );
-  }, [setNodes]);
-
-  const handleUpdateGeomColumn = useCallback((nodeId, geomColumn) => {
-    setNodes((nds) =>
-      nds.map((node) => {
-        if (node.id === nodeId) {
-          return { ...node, data: { ...node.data, geomColumn } };
-        }
-        return node;
-      })
-    );
-  }, [setNodes]);
-
-  const handleUpdateGroupBy = useCallback((nodeId, groupByConfig) => {
-    setNodes((nds) =>
-      nds.map((node) => {
-        if (node.id === nodeId) {
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              group_by_enabled: groupByConfig.group_by_enabled,
-              group_by_columns: groupByConfig.group_by_columns,
-              aggregations: groupByConfig.aggregations
-            }
-          };
-        }
-        return node;
-      })
-    );
-  }, [setNodes]);
-
-  function handleDeleteNode(nodeId) {
-    setNodes((nds) => nds.filter((node) => node.id !== nodeId));
-    setEdges((eds) => eds.filter((edge) => 
-      edge.source !== nodeId && edge.target !== nodeId
-    ));
-  }
-
-  const handleAddTransformNode = useCallback(() => {
-    const newNodeId = `transform_${Date.now()}`;
-    const newNode = {
-      id: newNodeId,
-      type: 'transform',
-      position: { 
-        x: Math.random() * 300 + 200, 
-        y: Math.random() * 200 + 100 
-      },
-      data: {
-        transform_op: 'join',
-        config: {},
-        columns: [],
-        onChange: (newData) => handleUpdateTransform(newNodeId, newData),
-        onUpdateColumns: handleUpdateProjectSourceColumns,
-        onDelete: handleDeleteNode
-      }
-    };
-
-    setNodes((nds) => nds.concat(newNode));
-  }, [setNodes, handleUpdateTransform, handleUpdateProjectSourceColumns]);
-
-  const handleAddResultNode = useCallback(() => {
-    const currentNodes = nodesRef.current;
-    if (currentNodes.some(n => n.type === 'result')) {
-      alert('Puoi avere solo un nodo risultato per progetto');
-      return;
-    }
-
-    const newNode = {
-      id: `result_${Date.now()}`,
-      type: 'result',
-      position: { x: 500, y: 200 },
-      data: {
-        isManipulate: true,
-        fileName: 'output',
-        format: 'csv',
-        availableColumns: [],
-        group_by_enabled: false,
-        group_by_columns: [],
-        aggregations: [],
-        onUpdateFileName: handleUpdateResultFileName,
-        onUpdateFormat: handleUpdateResultFormat,
-        onUpdateGeomColumn: handleUpdateGeomColumn,
-        onUpdateGroupBy: handleUpdateGroupBy,
-        onPreview: () => preview.handlePreview(),
-        onExecute: (nodeId, options) => execution.handleExecute(options),
-        onDelete: handleDeleteNode
-      }
-    };
-
-    setNodes((nds) => nds.concat(newNode));
-  }, [setNodes, handleUpdateResultFileName, handleUpdateResultFormat, handleUpdateGeomColumn, handleUpdateGroupBy, preview, execution]);
+  // Sincronizza connections nello store
+  useEffect(() => {
+    useCanvasStore.getState().setConnections(connections);
+  }, [connections]);
 
   // ===== SAVE =====
 
   const handleSaveCanvas = useCallback(async () => {
-    try {
-      setSaving(true);
-      await handleSaveQuiet();
-    } catch (error) {
-      console.error('[ManipolaEditor] Errore salvataggio canvas:', error);
-      alert('Errore durante il salvataggio');
-    } finally {
-      setSaving(false);
-    }
+    try { setSaving(true); await handleSaveQuiet(); }
+    catch (err) { console.error('[ManipolaEditor] Errore salvataggio:', err); toast.error('Errore durante il salvataggio'); }
+    finally { setSaving(false); }
   }, [handleSaveQuiet]);
 
   // ===== EDGE HANDLERS =====
 
   const onConnect = useCallback((params) => {
-    setEdges((eds) => addEdge({ ...params, ...defaultEdgeOptions }, eds));
-    
-    setTimeout(() => {
-      handleSaveQuiet().then(() => refreshSchemas());
-    }, 100);
-  }, [setEdges, refreshSchemas, handleSaveQuiet]);
+    setEdges(eds => {
+      const newEdges = addEdge({ ...params, ...defaultEdgeOptions }, eds);
+      setTimeout(() => { propagateColumns(nodesRef.current, newEdges); handleSaveQuiet().then(() => refreshSchemas()); }, 50);
+      return newEdges;
+    });
+  }, [setEdges, propagateColumns, refreshSchemas, handleSaveQuiet]);
 
   const onEdgeContextMenu = useCallback((event, edge) => {
     event.preventDefault();
-    if (window.confirm('Eliminare questo collegamento?')) {
-      setEdges((eds) => eds.filter((e) => e.id !== edge.id));
-    }
-  }, [setEdges]);
+    setEdges(eds => eds.filter(e => e.id !== edge.id));
+    setTimeout(() => { propagateColumns(nodesRef.current, edgesRef.current); handleSaveQuiet(); }, 50);
+  }, [setEdges, propagateColumns, handleSaveQuiet]);
+
+  // ===== ADD NODE HANDLERS =====
+
+  const getPos = () => getViewportCenter({ screenToFlowPosition });
+
+  const handleAddTransformNode = useCallback(() => {
+    setNodes(nds => nds.concat({ id: `transform_${Date.now()}`, type: 'transform', position: getPos(),
+      data: { transform_op: 'join', config: {}, columns: [] } }));
+  }, [setNodes]);
+
+  const handleAddMultiJoinNode = useCallback(() => {
+    setNodes(nds => nds.concat({ id: `multi_join_${Date.now()}`, type: 'multi_join', position: getPos(),
+      data: { config: { join_keys: [], join_type: 'inner' }, columns: [], inputColumns: [] } }));
+  }, [setNodes]);
+
+  const handleAddStaticValuesNode = useCallback(() => {
+    setNodes(nds => nds.concat({ id: `static_${Date.now()}`, type: 'staticValues', position: getPos(),
+      data: { label: 'Valori Statici', fields: [] } }));
+  }, [setNodes]);
+
+  const handleAddCommentNode = useCallback(() => {
+    setNodes(nds => nds.concat({ id: `comment_${Date.now()}`, type: 'comment', position: getPos(), zIndex: -1,
+      style: { width: 250, height: 150 },
+      data: { level: '', label: '', title: '', color: '#fbbf24' } }));
+  }, [setNodes]);
+
+  const handleAddResultNode = useCallback(() => {
+    if (nodesRef.current.some(n => n.type === 'result')) { toast.warning('Puoi avere solo un nodo risultato per progetto'); return; }
+    setNodes(nds => nds.concat({ id: `result_${Date.now()}`, type: 'result', position: getPos(),
+      data: { isManipulate: true, fileName: 'output', format: 'csv', availableColumns: [],
+        group_by_enabled: false, group_by_columns: [], aggregations: [],
+        order_by_enabled: false, order_by_columns: [],
+        having_enabled: false, having_conditions: [] } }));
+  }, [setNodes]);
+
+  const handleAddDataSourceNode = useCallback((mode = 'source') => {
+    const newNodeId = `datasource_${Date.now()}`;
+    setNodes(nds => nds.concat({
+      id: newNodeId, type: 'datasource_node', position: getPos(),
+      data: { mode, datasource_id: '', datasource_name: '', file_mode: 'fixed',
+        file_path: '', folder_path: '', dynamic_rule: 'latest', pattern: '',
+        dest_folder: '', dest_filename: '', dest_format: 'csv', columns: [] }
+    }));
+  }, [setNodes]);
+
+  const handleAddCaricanNode = useCallback(() => {
+    const currentNodes = nodesRef.current;
+    if (!currentNodes.some(n => n.type === 'result')) { toast.warning('Aggiungi prima un nodo Output'); return; }
+    if (currentNodes.some(n => n.type === 'carica'))  { toast.warning('Puoi avere solo un nodo CARICA per progetto'); return; }
+    const resultNode = currentNodes.find(n => n.type === 'result');
+    const newNode = { id: `carica_${Date.now()}`, type: 'carica',
+      position: { x: resultNode.position.x + 400, y: resultNode.position.y },
+      data: { dest_type: 'db', connection_id: '', schema_name: '', table_name: '', write_mode: 'create',
+        column_mappings: [], match_columns: [], batch_size: 1000, transaction_mode: 'all_or_nothing',
+        create_spatial_index: true, conflict_policy: 'abort',
+        arcgis_connection_id: '', arcgis_service_url: '', arcgis_layer_url: '', arcgis_operation: 'add',
+        arcgis_new_service_name: '', arcgis_new_layer_name: 'Layer 0',
+        availableColumns: resultNode.data?.availableColumns || [] } };
+    setNodes(nds => nds.concat(newNode));
+    setEdges(eds => eds.concat({ id: `edge_result_carica_${Date.now()}`, source: resultNode.id, target: newNode.id,
+      type: 'smoothstep', animated: true, style: { stroke: '#7c3aed', strokeWidth: 2 },
+      markerEnd: { type: MarkerType.ArrowClosed, width: 20, height: 20, color: '#7c3aed' }, data: {} }));
+  }, [setNodes, setEdges]);
 
   // ===== DRAG & DROP =====
 
@@ -613,219 +380,147 @@ const ManipolaEditorContent = () => {
     event.dataTransfer.effectAllowed = 'move';
   };
 
-  const onDragOver = useCallback((event) => {
+  const onDragOver = useCallback((event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; }, []);
+
+  const onDrop = useCallback((event) => {
     event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-  }, []);
+    const type        = event.dataTransfer.getData('application/reactflow');
+    const itemDataStr = event.dataTransfer.getData('itemData');
+    if (!type || !itemDataStr) return;
+    const itemData = JSON.parse(itemDataStr);
+    const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
 
-  const onDrop = useCallback(
-    (event) => {
-      event.preventDefault();
+    let newNode;
+    if (type === 'project_source') {
+      const newNodeId = `source_${Date.now()}`;
+      newNode = { id: newNodeId, type: 'project_source', position,
+        data: { source_project_id: itemData.id, columns: [],
+          onChange: (val) => handleUpdateProjectSource(newNodeId, val),
+          onUpdateColumns: handleUpdateProjectSourceColumns } };
+    } else if (type === 'file_source') {
+      const newNodeId = `file_${Date.now()}`;
+      newNode = { id: newNodeId, type: 'file_source', position,
+        data: { file_source_id: itemData.id, columns: [],
+          onUpdateColumns: handleUpdateFileSourceColumns } };
+    }
 
-      const type = event.dataTransfer.getData('application/reactflow');
-      const itemDataStr = event.dataTransfer.getData('itemData');
-
-      if (!type || !itemDataStr) return;
-
-      const itemData = JSON.parse(itemDataStr);
-      const position = screenToFlowPosition({ 
-        x: event.clientX, 
-        y: event.clientY 
-      });
-
-      let newNode;
-
-      if (type === 'project_source') {
-        const newNodeId = `source_${Date.now()}`;
-        newNode = {
-          id: newNodeId,
-          type: 'project_source',
-          position,
-          data: { 
-            source_project_id: itemData.id,
-            columns: [],
-            onChange: (val) => handleUpdateProjectSource(newNodeId, val),
-            onUpdateColumns: handleUpdateProjectSourceColumns,
-            onDelete: handleDeleteNode
-          }
-        };
-      } else if (type === 'file_source') {
-        const newNodeId = `file_${Date.now()}`;
-        newNode = {
-          id: newNodeId,
-          type: 'file_source',
-          position,
-          data: { 
-            file_source_id: itemData.id,
-            columns: [],
-            onUpdateColumns: handleUpdateFileSourceColumns,
-            onDelete: handleDeleteNode
-          }
-        };
-      }
-
-      if (newNode) {
-        setNodes((nds) => nds.concat(newNode));
-        
-        setTimeout(() => {
-          handleSaveQuiet().then(() => refreshSchemas());
-        }, 100);
-      }
-    },
-    [screenToFlowPosition, setNodes, handleUpdateProjectSource, handleUpdateProjectSourceColumns, handleUpdateFileSourceColumns, refreshSchemas, handleSaveQuiet]
-  );
+    if (newNode) {
+      setNodes(nds => nds.concat(newNode));
+      setTimeout(() => { handleSaveQuiet().then(() => refreshSchemas()); }, 100);
+    }
+  }, [screenToFlowPosition, setNodes, handleUpdateProjectSource, handleUpdateProjectSourceColumns, handleUpdateFileSourceColumns, refreshSchemas, handleSaveQuiet]);
 
   // ===== RENDER =====
 
-  const handleBack = () => {
-    navigate('/');
-  };
+  const handleBack = () => navigate('/');
+  const hasResultNode  = nodes.some(n => n.type === 'result');
+  const hasCaricanNode = nodes.some(n => n.type === 'carica');
 
-  if (loading) {
-    return <div className="manipola-loading">Caricamento progetto...</div>;
-  }
+  // ── Security guard: projectId da URL ──────────────────────────────────────
+  // useEffect gestisce il redirect (non viola Rules of Hooks essendo dopo tutti
+  // gli altri hook). Il render guard impedisce di mostrare contenuto con ID non valido.
+  useEffect(() => {
+    if (!isValidProjectId(projectId)) {
+      console.error('[Security] projectId non valido, redirect a home:', projectId);
+      navigate('/', { replace: true });
+    }
+  }, [projectId, navigate]);
 
-  if (!project) {
-    return (
-      <div className="manipola-error">
-        <p>Progetto non trovato</p>
-        <button onClick={handleBack}>Torna alla lista</button>
-      </div>
-    );
-  }
+  if (!isValidProjectId(projectId)) return null;
+  if (loading) return <LoadingOverlay message="Caricamento progetto..." />;
+  if (loadError) return (
+    <div className="manipola-error">
+      <p>Errore caricamento: {loadError}</p>
+      <button type="button" onClick={reloadData}>Riprova</button>
+      <button type="button" onClick={handleBack}>Torna alla lista</button>
+    </div>
+  );
+  if (!project) return <div className="manipola-error"><p>Progetto non trovato</p><button type="button" onClick={handleBack}>Torna alla lista</button></div>;
 
   return (
     <div className="manipola-editor">
-      {/* ===== TOOLBAR ===== */}
       <div className="manipola-toolbar">
         <div className="manipola-toolbar__left">
-          <button 
-            className="manipola-toolbar__btn manipola-toolbar__btn--back"
-            onClick={handleBack}
-          >
-            ← Indietro
-          </button>
+          <div className="manipola-toolbar__logo">
+            <svg width="90" height="28" viewBox="0 0 350 90" xmlns="http://www.w3.org/2000/svg">
+              <polygon points="16,58 52,40 88,58 52,76" fill="rgba(245,166,35,0.10)"  stroke="#F5A623" strokeWidth="1.4" strokeLinejoin="round"/>
+              <polygon points="16,44 52,26 88,44 52,62" fill="rgba(155,109,255,0.10)" stroke="#9B6DFF" strokeWidth="1.4" strokeLinejoin="round"/>
+              <polygon points="16,30 52,12 88,30 52,48" fill="rgba(52,193,122,0.12)"  stroke="#34C17A" strokeWidth="2"   strokeLinejoin="round"/>
+              <line x1="16" y1="30" x2="16" y2="58" stroke="rgba(255,255,255,0.08)" strokeWidth="1"/>
+              <text x="108" y="46" fontFamily="'Syne',sans-serif" fontSize="34" fontWeight="800" letterSpacing="-1.5" className="manipola-toolbar__logo-text">Plen</text>
+              <text x="222" y="46" fontFamily="'Syne',sans-serif" fontSize="34" fontWeight="800" letterSpacing="-1.5" fill="#4B8BFF">ora</text>
+            </svg>
+          </div>
+          <div className="manipola-toolbar__sep" />
+          <button type="button" className="manipola-toolbar__btn manipola-toolbar__btn--back" onClick={handleBack}>← Indietro</button>
         </div>
-        
         <div className="manipola-toolbar__center">
           <h2 className="manipola-toolbar__title">{project.metadata?.name}</h2>
           <span className="manipola-toolbar__badge">MANIPOLA</span>
-          {schemasLoading && (
-            <span className="manipola-toolbar__badge" style={{background: '#FF9800'}}>
-              ⏳ Aggiornamento schemi...
-            </span>
-          )}
+          {schemasLoading && <span className="manipola-toolbar__badge" style={{background: '#FF9800'}}>⏳ Aggiornamento schemi...</span>}
         </div>
-        
         <div className="manipola-toolbar__right">
-          <button 
-            className="manipola-toolbar__btn manipola-toolbar__btn--transform"
-            onClick={handleAddTransformNode}
-          >
-            + Transform
-          </button>
-          <button 
-            className="manipola-toolbar__btn manipola-toolbar__btn--output"
-            onClick={handleAddResultNode}
-          >
-            📁 Output
-          </button>
-          <button 
-            className="manipola-toolbar__btn manipola-toolbar__btn--save"
-            onClick={handleSaveCanvas}
-            disabled={saving}
-          >
-            {saving ? 'Salvataggio...' : '💾 Salva'}
-          </button>
+          {!isReadOnly && (
+            <>
+              <button type="button" className="manipola-toolbar__btn manipola-toolbar__btn--static" onClick={handleAddStaticValuesNode} title="Aggiungi valori statici con variabili template">📝 Valori Statici</button>
+              <button type="button" className="manipola-toolbar__btn manipola-toolbar__btn--annotation" onClick={handleAddCommentNode} title="Aggiungi annotazione al canvas">💬 Nota</button>
+              <button type="button" className="manipola-toolbar__btn manipola-toolbar__btn--transform" onClick={handleAddTransformNode}>+ Transform</button>
+              <button type="button" className="manipola-toolbar__btn manipola-toolbar__btn--join" onClick={handleAddMultiJoinNode} title="Unisci più sorgenti dati">🔗 Multi-Join</button>
+              <button type="button" className="manipola-toolbar__btn manipola-toolbar__btn--output" onClick={handleAddResultNode}>📁 Output</button>
+              <button type="button" className="manipola-toolbar__btn manipola-toolbar__btn--datasource" onClick={() => handleAddDataSourceNode('source')} title="Aggiungi sorgente DataSource (SharePoint/FTP/Local)">🗄️ Data Source</button>
+            </>
+          )}
+          <div className="manipola-theme-toggle">
+            <div className={`manipola-theme-opt${theme==='dark'?' manipola-theme-opt--on':''}`} onClick={() => setTheme('dark')}>🌙 Scuro</div>
+            <div className={`manipola-theme-opt${theme==='light'?' manipola-theme-opt--on':''}`} onClick={() => setTheme('light')}>☀️ Chiaro</div>
+          </div>
+          {!isReadOnly && (
+            <>
+              <button type="button" className="manipola-toolbar__btn manipola-toolbar__btn--carica" onClick={handleAddCaricanNode} disabled={!hasResultNode || hasCaricanNode} title="Aggiungi nodo per caricare su database">💾 Carica DB</button>
+              <button type="button" className="manipola-toolbar__btn manipola-toolbar__btn--save" onClick={handleSaveCanvas} disabled={saving}>{saving ? 'Salvataggio...' : '💾 Salva'}</button>
+            </>
+          )}
         </div>
       </div>
 
-      {/* ===== MAIN CONTENT ===== */}
       <div className="manipola-main">
-        {/* Sidebar - Usa componente condiviso */}
-        <EditorSidebar
-          variant="manipola"
-          projects={availableSources}
-          files={availableFiles}
-          onDragStart={onDragStart}
-          projectsConfig={{
-            title: "📊 Sorgenti Progetto",
-            subtitle: "Trascina un progetto SQL nel canvas",
-            emptyMessage: "Nessun progetto SQL disponibile.",
-            emptyHint: "Crea prima un progetto di tipo Estrai.",
-            filterTypes: ['estrai', 'manipola']
-          }}
-          filesConfig={{
-            title: "📁 File Esterni",
-            subtitle: "Trascina un file nel canvas",
-            emptyMessage: "Nessun file disponibile.",
-            uploadLink: "/files",
-            uploadLinkText: "Carica file esterni"
-          }}
-          quickActions={[
-            {
-              label: "Aggiungi Transform",
-              icon: "+",
-              onClick: handleAddTransformNode,
-              variant: "transform"
-            },
-            {
-              label: "Aggiungi Output",
-              icon: "📁",
-              onClick: handleAddResultNode,
-              variant: "output"
-            }
-          ]}
-        />
-
-        {/* Canvas Area */}
-        <div 
-          className="manipola-canvas"
-          onDrop={onDrop} 
-          onDragOver={onDragOver}
-        >
+        {!isReadOnly && (
+          <EditorSidebar
+            variant="manipola" projects={availableSources} files={availableFiles} onDragStart={onDragStart}
+            projectsConfig={{ title: '📊 Sorgenti Progetto', subtitle: 'Trascina un progetto SQL nel canvas',
+              emptyMessage: 'Nessun progetto SQL disponibile.', emptyHint: 'Crea prima un progetto di tipo Estrai.',
+              filterTypes: ['estrai', 'manipola', 'arricchisci'], showSearch: true }}
+            filesConfig={{ title: '📁 File Esterni', subtitle: 'Trascina un file nel canvas',
+              emptyMessage: 'Nessun file disponibile.', uploadLink: '/files', uploadLinkText: 'Carica file esterni' }}
+          />
+        )}
+        <CanvasErrorBoundary>
+        <div className={`manipola-canvas${isReadOnly ? ' canvas-readonly' : ''}`} onDrop={onDrop} onDragOver={onDragOver}>
+          <canvas ref={hexCanvasRef} className="manipola-hex-canvas" />
           <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onEdgeContextMenu={onEdgeContextMenu}
-            nodeTypes={nodeTypes}
-            defaultEdgeOptions={defaultEdgeOptions}
-            fitView
-            fitViewOptions={{ padding: 0.2 }}
-            minZoom={0.5}
-            maxZoom={2}
+            nodes={nodes} edges={edges}
+            onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
+            onConnect={onConnect} onEdgeContextMenu={onEdgeContextMenu}
+            nodeTypes={nodeTypes} defaultEdgeOptions={defaultEdgeOptions}
+            fitView fitViewOptions={{ padding: 0.2 }} minZoom={0.5} maxZoom={2}
+            {...readOnlyProps}
           >
             <Background color="#aaa" gap={20} />
             <Controls />
           </ReactFlow>
         </div>
+        </CanvasErrorBoundary>
       </div>
 
-      {/* ===== EXECUTION MODAL ===== */}
-      <ExecutionModal
-        isOpen={execution.showModal}
-        onClose={() => execution.closeModal()}
-        isExecuting={execution.isExecuting}
-        result={execution.result}
-        downloadUrl={execution.downloadUrl}
-        title="🔄 Esecuzione Pipeline Manipola"
-        projectType="manipola"
-      />
-
-      {/* ===== PREVIEW MODAL ===== */}
-      <PreviewModal
-        isOpen={preview.showModal}
-        onClose={preview.closeModal}
-        onRefresh={(limit) => preview.handlePreview(limit)}
-        data={preview.data}
-        loading={preview.loading}
-        error={preview.error}
-        title="Anteprima Pipeline Manipola"
-        projectType="manipola"
-      />
+      <ModalErrorBoundary>
+      <Suspense fallback={null}>
+        <ExecutionModal isOpen={execution.showModal} onClose={() => execution.closeModal()} isExecuting={execution.isExecuting} result={execution.result} onDownload={execution.downloadTaskResult} title="🔄 Esecuzione Pipeline Manipola" projectType="manipola" caricaTasks={execution.caricaTasks} caricaPolling={execution.caricaPolling} />
+        <ExecutionModal isOpen={caricaExecution.showModal} onClose={() => caricaExecution.closeModal()} isExecuting={caricaExecution.isExecuting} result={caricaExecution.result} title="📤 Caricamento Dati" projectType="arricchisci" progress={caricaExecution.progress} progressMessage={caricaExecution.progressMessage} taskStatus={caricaExecution.taskStatus} onCancel={caricaExecution.cancelTask} />
+        <PreviewModal isOpen={preview.showModal} onClose={preview.closeModal} onRefresh={limit => preview.handlePreview(limit)}
+          data={preview.data} loading={preview.loading} error={preview.error}
+          title="Anteprima Pipeline Manipola" projectType="manipola" disableGrouping />
+      </Suspense>
+      </ModalErrorBoundary>
     </div>
   );
 };

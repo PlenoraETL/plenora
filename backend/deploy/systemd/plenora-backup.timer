@@ -1,0 +1,13 @@
+[Unit]
+Description=PLENORA-ETL daily Postgres schema backup (02:00)
+
+[Timer]
+OnCalendar=*-*-* 02:00:00
+# Se il server era spento, recupera il run al boot successivo
+Persistent=true
+# Evita cold-start se molti timer sullo stesso minuto (best practice)
+RandomizedDelaySec=300
+Unit=plenora-backup.service
+
+[Install]
+WantedBy=timers.target

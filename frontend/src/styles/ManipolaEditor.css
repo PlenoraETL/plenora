@@ -1,557 +1,371 @@
-/* ==========================================
-   ManipolaEditor.css - Stili per l'editor Pipeline Pandas
-   ========================================== */
+/* ═══════════════════════════════════════════════════════════════
+   ManipolaEditor.css — Plenora design system
+   Prefix: .manipola-
+   ═══════════════════════════════════════════════════════════════ */
 
-/* ===================
-   EDITOR CONTAINER
-   =================== */
+/* ── Editor container ─────────────────────────────────────────── */
 .manipola-editor {
   width: 100%;
   height: 100vh;
   display: flex;
   flex-direction: column;
+  background: var(--plen-bg, #07090F);
+  color: var(--plen-text, #DDE4F2);
+  font-family: 'Inter', sans-serif;
 }
 
-/* ===================
-   TOOLBAR
-   =================== */
+/* ── Toolbar ──────────────────────────────────────────────────── */
 .manipola-toolbar {
-  height: 60px;
-  background: white;
-  border-bottom: 1px solid #e0e0e0;
-  padding: 0 20px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.manipola-toolbar__left {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
-
-.manipola-toolbar__center {
-  display: flex;
-  alignItems: center;
-  gap: 12px;
-}
-
-.manipola-toolbar__title {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: #333;
-}
-
-.manipola-toolbar__badge {
-  background: linear-gradient(135deg, #9C27B0 0%, #673AB7 100%);
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 11px;
-  color: white;
-  font-weight: 600;
-}
-
-.manipola-toolbar__right {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
-
-/* Toolbar Buttons */
-.manipola-toolbar__btn {
-  padding: 8px 16px;
-  border: none;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
+  height: 52px;
   display: flex;
   align-items: center;
   gap: 6px;
+  padding: 0 14px;
+  flex-shrink: 0;
+  background: var(--plen-surface, #0C0F18);
+  border-bottom: 1px solid var(--plen-border-hi, rgba(255,255,255,0.11));
+  position: relative;
+  z-index: 10;
 }
 
-.manipola-toolbar__btn--back {
-  background: #e0e0e0;
-  color: #333;
+/* accent bar — manipola purple */
+.manipola-toolbar::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: var(--plen-manipola, #9B6DFF);
+  border-radius: 0 2px 2px 0;
 }
 
-.manipola-toolbar__btn--back:hover {
-  background: #d0d0d0;
+[data-theme='light'] .manipola-toolbar {
+  background: #FFFFFF;
+  border-bottom-color: rgba(0,0,0,0.11);
 }
 
-.manipola-toolbar__btn--transform {
-  background: #2196F3;
-  color: white;
+.manipola-toolbar__left,
+.manipola-toolbar__right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
-.manipola-toolbar__btn--transform:hover {
-  background: #1976D2;
+.manipola-toolbar__center {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 0 6px;
 }
 
-.manipola-toolbar__btn--output {
-  background: #4CAF50;
-  color: white;
+.manipola-toolbar__title {
+  font-family: 'Syne', sans-serif;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--plen-text, #DDE4F2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 240px;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+[data-theme='light'] .manipola-toolbar__title { color: #0F1729; }
+
+.manipola-toolbar__badge {
+  font-family: 'DM Mono', monospace;
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 3px 8px;
+  border-radius: 5px;
+  background: rgba(155,109,255,0.12);
+  border: 1px solid rgba(155,109,255,0.28);
+  color: var(--plen-manipola, #9B6DFF);
+  flex-shrink: 0;
 }
 
-.manipola-toolbar__btn--output:hover {
-  background: #43A047;
+/* ── Toolbar buttons base ─────────────────────────────────────── */
+.manipola-toolbar__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.12s;
+  white-space: nowrap;
+  flex-shrink: 0;
+  line-height: 1;
 }
-
-.manipola-toolbar__btn--save {
-  background: #9C27B0;
-  color: white;
-}
-
-.manipola-toolbar__btn--save:hover {
-  background: #7B1FA2;
-}
-
-.manipola-toolbar__btn--save:disabled {
-  background: #ccc;
+.manipola-toolbar__btn:disabled {
+  opacity: 0.38;
   cursor: not-allowed;
 }
 
-/* ===================
-   MAIN CONTENT
-   =================== */
+/* back */
+.manipola-toolbar__btn--back {
+  background: transparent;
+  border-color: var(--plen-border-hi, rgba(255,255,255,0.11));
+  color: var(--plen-text-sub, #7D8BA8);
+}
+.manipola-toolbar__btn--back:hover:not(:disabled) {
+  border-color: var(--plen-text-dim, #3F4D68);
+  color: var(--plen-text, #DDE4F2);
+}
+
+/* transform */
+.manipola-toolbar__btn--transform {
+  background: rgba(155,109,255,0.10);
+  border-color: rgba(155,109,255,0.28);
+  color: var(--plen-manipola, #9B6DFF);
+}
+.manipola-toolbar__btn--transform:hover:not(:disabled) {
+  background: rgba(155,109,255,0.18);
+}
+
+/* join */
+.manipola-toolbar__btn--join {
+  background: rgba(75,139,255,0.10);
+  border-color: rgba(75,139,255,0.25);
+  color: var(--plen-blue, #4B8BFF);
+}
+.manipola-toolbar__btn--join:hover:not(:disabled) {
+  background: rgba(75,139,255,0.18);
+}
+
+/* output */
+.manipola-toolbar__btn--output {
+  background: rgba(52,193,122,0.10);
+  border-color: rgba(52,193,122,0.25);
+  color: var(--plen-estrai, #34C17A);
+}
+.manipola-toolbar__btn--output:hover:not(:disabled) {
+  background: rgba(52,193,122,0.18);
+}
+
+/* static values */
+.manipola-toolbar__btn--static {
+  background: rgba(155,109,255,0.08);
+  border-color: rgba(155,109,255,0.2);
+  color: var(--plen-manipola, #9B6DFF);
+}
+.manipola-toolbar__btn--static:hover:not(:disabled) {
+  background: rgba(155,109,255,0.15);
+}
+
+/* annotation */
+.manipola-toolbar__btn--annotation {
+  background: rgba(251,191,36,0.08);
+  border-color: rgba(251,191,36,0.2);
+  color: var(--plen-warn, #FBBF24);
+}
+.manipola-toolbar__btn--annotation:hover:not(:disabled) {
+  background: rgba(251,191,36,0.14);
+}
+
+/* datasource */
+.manipola-toolbar__btn--datasource {
+  background: rgba(45,212,191,0.08);
+  border-color: rgba(45,212,191,0.2);
+  color: #2DD4BF;
+}
+.manipola-toolbar__btn--datasource:hover:not(:disabled) {
+  background: rgba(45,212,191,0.14);
+}
+
+/* carica DB */
+.manipola-toolbar__btn--carica {
+  background: rgba(155,109,255,0.10);
+  border-color: rgba(155,109,255,0.28);
+  color: var(--plen-manipola, #9B6DFF);
+}
+.manipola-toolbar__btn--carica:hover:not(:disabled) {
+  background: rgba(155,109,255,0.18);
+}
+
+/* save */
+.manipola-toolbar__btn--save {
+  background: var(--plen-manipola, #9B6DFF);
+  border-color: var(--plen-manipola, #9B6DFF);
+  color: white;
+}
+.manipola-toolbar__btn--save:hover:not(:disabled) {
+  opacity: 0.88;
+}
+
+/* ── Main layout ──────────────────────────────────────────────── */
 .manipola-main {
   flex: 1;
   display: flex;
   overflow: hidden;
+  min-height: 0;
 }
 
-/* ===================
-   SIDEBAR
-   =================== */
-.manipola-sidebar {
-  width: 300px;
-  background: white;
-  border-right: 1px solid #e0e0e0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.manipola-sidebar__header {
-  padding: 15px;
-  border-bottom: 1px solid #eee;
-  background: #f9f9f9;
-}
-
-.manipola-sidebar__title {
-  font-size: 16px;
-  font-weight: bold;
-  margin: 0 0 8px 0;
-  color: #333;
-}
-
-.manipola-sidebar__subtitle {
-  font-size: 11px;
-  color: #888;
-  margin: 0;
-}
-
-/* Source List */
-.manipola-sidebar__sources {
-  flex: 1;
-  padding: 10px;
-  overflow-y: auto;
-}
-
-.manipola-sidebar__empty {
-  padding: 20px;
-  text-align: center;
-  color: #999;
-  font-size: 12px;
-}
-
-/* Source Item */
-.manipola-sidebar__source-item {
-  padding: 10px 12px;
-  margin: 6px 0;
-  background: white;
-  border: 1px solid #e0e0e0;
-  border-radius: 6px;
-  cursor: grab;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-}
-
-.manipola-sidebar__source-item:hover {
-  background: #e3f2fd;
-  border-color: #2196F3;
-  transform: translateX(4px);
-}
-
-.manipola-sidebar__source-item:active {
-  cursor: grabbing;
-}
-
-.manipola-sidebar__source-icon {
-  font-size: 16px;
-}
-
-.manipola-sidebar__source-name {
-  flex: 1;
-}
-
-.manipola-sidebar__source-badge {
-  font-size: 10px;
-  color: #999;
-  background: #f5f5f5;
-  padding: 2px 6px;
-  border-radius: 3px;
-}
-
-.manipola-sidebar__source-badge--file {
-  background: #EDE7F6;
-  color: #7B1FA2;
-}
-
-/* Header Files */
-.manipola-sidebar__header--files {
-  border-top: 1px solid #e0e0e0;
-  margin-top: 10px;
-}
-
-/* Source Item File */
-.manipola-sidebar__source-item--file {
-  border-color: #E1BEE7;
-}
-
-.manipola-sidebar__source-item--file:hover {
-  background: #F3E5F5;
-  border-color: #9C27B0;
-}
-
-/* Actions Section */
-.manipola-sidebar__actions {
-  padding: 15px;
-  border-top: 1px solid #eee;
-  background: #f9f9f9;
-}
-
-.manipola-sidebar__actions-title {
-  font-size: 14px;
-  font-weight: bold;
-  margin: 0 0 10px 0;
-  color: #333;
-}
-
-.manipola-sidebar__action-btn {
-  width: 100%;
-  padding: 10px;
-  margin-bottom: 8px;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
-  transition: all 0.2s;
-}
-
-.manipola-sidebar__action-btn--transform {
-  background: #2196F3;
-  color: white;
-}
-
-.manipola-sidebar__action-btn--transform:hover {
-  background: #1976D2;
-}
-
-.manipola-sidebar__action-btn--output {
-  background: #4CAF50;
-  color: white;
-}
-
-.manipola-sidebar__action-btn--output:hover {
-  background: #43A047;
-}
-
-/* ===================
-   CANVAS AREA
-   =================== */
+/* ── Canvas area ──────────────────────────────────────────────── */
 .manipola-canvas {
   flex: 1;
   position: relative;
-}
-
-/* ===================
-   LOADING & ERROR STATES
-   =================== */
-.manipola-loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
   height: 100%;
-  font-size: 16px;
-  color: #666;
+  background: var(--plen-bg, #07090F);
+}
+[data-theme='light'] .manipola-canvas { background: #EFF2F9; }
+
+/* ReactFlow overrides */
+.manipola-canvas .react-flow__background { opacity: 0.4; }
+
+.react-flow__controls {
+  background: var(--plen-surface-2, #111525) !important;
+  border: 1px solid var(--plen-border-hi, rgba(255,255,255,0.11)) !important;
+  border-radius: 7px !important;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4) !important;
+}
+[data-theme='light'] .react-flow__controls {
+  background: #FFFFFF !important;
+  border-color: rgba(0,0,0,0.11) !important;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1) !important;
 }
 
+.react-flow__controls-button {
+  background: transparent !important;
+  border: none !important;
+  border-bottom: 1px solid var(--plen-border, rgba(255,255,255,0.06)) !important;
+  color: var(--plen-text-sub, #7D8BA8) !important;
+  width: 28px !important;
+  height: 28px !important;
+  transition: all 0.12s;
+}
+.react-flow__controls-button:hover {
+  background: rgba(155,109,255,0.1) !important;
+  color: var(--plen-manipola, #9B6DFF) !important;
+}
+.react-flow__controls-button:last-child { border-bottom: none !important; }
+.react-flow__controls-button svg { fill: currentColor !important; }
+[data-theme='light'] .react-flow__controls-button {
+  color: #4A5568 !important;
+  border-bottom-color: rgba(0,0,0,0.07) !important;
+}
+
+/* Edges — viola Manipola */
+.manipola-canvas .react-flow__edge-path {
+  stroke: var(--plen-manipola, #9B6DFF);
+  stroke-opacity: 0.6;
+}
+.manipola-canvas .react-flow__edge.selected .react-flow__edge-path {
+  stroke-opacity: 1;
+}
+.manipola-canvas .react-flow__arrowhead path {
+  fill: var(--plen-manipola, #9B6DFF);
+}
+
+/* ── Error state ──────────────────────────────────────────────── */
 .manipola-error {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: #f44336;
-  padding: 20px;
-  text-align: center;
-}
-
-/* ===================
-   EXECUTION MODAL
-   =================== */
-.manipola-execution-modal {
-  max-width: 700px;
-  min-width: 500px;
-}
-
-.manipola-execution-modal__title {
-  margin: 0 0 20px 0;
-  font-size: 20px;
-  font-weight: 600;
-}
-
-/* Loading State */
-.manipola-execution-modal__loading {
-  text-align: center;
-  padding: 40px 20px;
-}
-
-.manipola-execution-modal__spinner {
-  font-size: 48px;
-  margin-bottom: 20px;
-  animation: spin 2s linear infinite;
-}
-
-.manipola-execution-modal__loading-text {
-  font-size: 16px;
-  color: #666;
-}
-
-/* Success State */
-.manipola-execution-modal__success {
-  padding: 20px;
-  background: #f3e5f5;
-  border: 1px solid #9C27B0;
-  border-radius: 8px;
-  margin-bottom: 20px;
-}
-
-.manipola-execution-modal__success-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: #6A1B9A;
-  margin-bottom: 8px;
-}
-
-.manipola-execution-modal__success-message {
-  font-size: 14px;
-  color: #7B1FA2;
-}
-
-/* Error State */
-.manipola-execution-modal__error {
-  padding: 20px;
-  background: #ffebee;
-  border: 1px solid #f44336;
-  border-radius: 8px;
-}
-
-.manipola-execution-modal__error-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: #c62828;
-  margin-bottom: 8px;
-}
-
-.manipola-execution-modal__error-message {
-  font-size: 14px;
-  color: #c62828;
-  white-space: pre-wrap;
-}
-
-/* Stats Grid */
-.manipola-execution-modal__stats {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 15px;
-  margin-bottom: 15px;
-}
-
-.manipola-execution-modal__stat {
-  padding: 15px;
-  background: #f5f5f5;
-  border-radius: 6px;
-}
-
-.manipola-execution-modal__stat-label {
-  font-size: 12px;
-  color: #666;
-  margin-bottom: 4px;
-}
-
-.manipola-execution-modal__stat-value {
-  font-size: 24px;
-  font-weight: 600;
-  color: #333;
-}
-
-/* Output File */
-.manipola-execution-modal__output {
-  padding: 15px;
-  background: #f3e5f5;
-  border: 1px solid #9C27B0;
-  border-radius: 6px;
-  margin-bottom: 20px;
-}
-
-.manipola-execution-modal__output-label {
-  font-size: 12px;
-  color: #7B1FA2;
-  margin-bottom: 8px;
-}
-
-.manipola-execution-modal__output-path {
-  font-size: 14px;
-  font-weight: 500;
-  color: #6A1B9A;
-  font-family: monospace;
-  word-break: break-all;
-}
-
-/* Columns List */
-.manipola-execution-modal__columns {
-  margin-bottom: 20px;
-}
-
-.manipola-execution-modal__columns-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: #666;
-  margin-bottom: 8px;
-}
-
-.manipola-execution-modal__columns-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  max-height: 150px;
-  overflow-y: auto;
-  padding: 8px;
-  background: #f9f9f9;
-  border-radius: 4px;
-}
-
-.manipola-execution-modal__column-tag {
-  padding: 4px 8px;
-  background: #e0e0e0;
-  border-radius: 4px;
-  font-size: 11px;
-  font-family: monospace;
-}
-
-/* Modal Actions */
-.manipola-execution-modal__actions {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 20px;
-}
-
-.manipola-execution-modal__btn {
-  padding: 10px 20px;
-  background: linear-gradient(135deg, #9C27B0 0%, #673AB7 100%);
-  color: white;
-  border: none;
-  border-radius: 6px;
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.manipola-execution-modal__btn:hover {
-  opacity: 0.9;
-}
-
-/* Download Button */
-.manipola-execution-modal__download-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 24px;
-  background: linear-gradient(135deg, #4CAF50 0%, #43A047 100%);
-  color: white;
-  border-radius: 8px;
-  text-decoration: none;
-  font-weight: 600;
-  font-size: 14px;
-  transition: all 0.2s;
-  margin: 15px 0;
-}
-
-.manipola-execution-modal__download-btn:hover {
-  background: linear-gradient(135deg, #43A047 0%, #388E3C 100%);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4);
-  color: white;
-}
-
-/* ===================
-   ANIMATIONS
-   =================== */
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-/* ===================
-   MODAL OVERLAY (generico)
-   =================== */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.modal {
-  background: white;
-  border-radius: 8px;
+  gap: 14px;
+  color: var(--plen-err, #F87171);
   padding: 24px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  text-align: center;
 }
+.manipola-error p { font-size: 13.5px; }
+.manipola-error button {
+  padding: 7px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--plen-border-hi, rgba(255,255,255,0.11));
+  background: transparent;
+  color: var(--plen-text-sub, #7D8BA8);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.manipola-error button:hover { border-color: var(--plen-manipola, #9B6DFF); color: var(--plen-manipola, #9B6DFF); }
 
-/* ===================
-   RESPONSIVE
-   =================== */
+/* ── Responsive ───────────────────────────────────────────────── */
 @media (max-width: 1024px) {
-  .manipola-sidebar {
-    width: 250px;
-  }
+  .manipola-toolbar__btn { padding: 5px 8px; font-size: 11px; }
+}
+@media (max-width: 768px) {
+  .manipola-toolbar__center { display: none; }
 }
 
-@media (max-width: 768px) {
-  .manipola-sidebar {
-    width: 200px;
-  }
-  
-  .manipola-toolbar {
-    padding: 0 10px;
-  }
-  
-  .manipola-toolbar__title {
-    font-size: 14px;
-  }
+/* ── Hex background canvas ────────────────────────────────────── */
+.manipola-hex-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── Theme toggle pill ────────────────────────────────────────── */
+.manipola-theme-toggle {
+  display: flex;
+  background: var(--plen-surface-2, #111525);
+  border: 1px solid var(--plen-border-hi, rgba(255,255,255,0.11));
+  border-radius: 20px;
+  padding: 3px;
+  gap: 2px;
+  flex-shrink: 0;
+}
+[data-theme='light'] .manipola-theme-toggle {
+  background: #E8EDF8;
+}
+
+.manipola-theme-opt {
+  padding: 4px 11px;
+  border-radius: 16px;
+  font-size: 11px;
+  font-family: 'DM Mono', monospace;
+  color: var(--plen-text-dim, #3F4D68);
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.manipola-theme-opt--on {
+  background: var(--plen-surface, #0C0F18);
+  color: var(--plen-text, #DDE4F2);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+}
+[data-theme='light'] .manipola-theme-opt--on {
+  background: #FFFFFF;
+  color: #0F1729;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+}
+
+/* ── Logo ─────────────────────────────────────────────────────── */
+.manipola-toolbar__logo {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.manipola-toolbar__logo-text {
+  fill: var(--plen-text, #DDE4F2);
+}
+[data-theme='light'] .manipola-toolbar__logo-text {
+  fill: #0F1729;
+}
+
+.manipola-toolbar__sep {
+  width: 1px;
+  height: 22px;
+  background: var(--plen-border-hi, rgba(255,255,255,0.11));
+  flex-shrink: 0;
+  margin: 0 2px;
+}
+[data-theme='light'] .manipola-toolbar__sep {
+  background: rgba(0,0,0,0.11);
 }

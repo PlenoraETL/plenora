@@ -5,7 +5,7 @@ Task Celery per esecuzione pipeline (ESTRAI / MANIPOLA / ARRICCHISCI).
 import time as _time
 import traceback as _traceback
 import uuid as _uuid
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from workers.celery_app import celery_app, BaseTaskWithRetry
 from app.utils.logger import get_logger, open_run, close_run, set_run_context, get_steps
@@ -22,10 +22,16 @@ def _update_progress(task, percent: int, message: str):
 
 
 def _build_orchestrator():
-    """Istanzia OrchestratorService con tutte le dipendenze."""
+    """Istanzia OrchestratorService con tutte le dipendenze.
+
+    IMPORTANTE: passa anche `features_service` — senza, i progetti ESTRAI
+    con nodi ArcGIS Feature Service non riescono a risolvere il layer al
+    task-time (mentre in modalita' sincrona via app/main.py funzionano).
+    """
     from app.services.project_service import ProjectService
     from app.services.connection_service import ConnectionService
     from app.core.estrai.query_generator import QueryGenerator
+    from app.core.features.features_service import FeaturesService
     from app.db.query_executor import create_executor
     from app.core.orchestrator.service import OrchestratorService
     from app.utils.dataframe import save_dataframe
@@ -35,12 +41,14 @@ def _build_orchestrator():
     connection_service = ConnectionService()
     generator = QueryGenerator()
     executor = create_executor(save_function=save_dataframe)
+    features_service = FeaturesService(save_function=save_dataframe)
 
     return OrchestratorService(
         project_service=project_service,
         executor=executor,
         generator=generator,
         connection_service=connection_service,
+        features_service=features_service,
     )
 
 
@@ -66,11 +74,66 @@ def execute_pipeline_task(
     project_id: str,
     force_recalculate: bool = False,
     triggered_by: str = "manual",
+    run_id: Optional[str] = None,
+    user_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Task asincrono per eseguire la pipeline completa di un progetto."""
+    """Task asincrono per eseguire la pipeline completa di un progetto.
+
+    Idempotency (C4 round 4): se `run_id` viene passato dall'esterno
+    (retry-handler UI, scheduler, replay da backup) ed esiste gia' in
+    intermediate.runs con status='completed', il task SKIPPA
+    l'esecuzione e ritorna un result cached. Copre lo scenario
+    "admin rilancia pipeline intera": con run_id fresh, la pipeline
+    sarebbe ri-eseguita da zero aggirando l'idempotency dei singoli
+    sotto-task (carica/enrichment). Con un run_id stabile, il
+    re-invio dell'intera pipeline diventa no-op.
+
+    Il run_id passato viene propagato all'orchestrator via
+    `execute_pipeline(run_id=...)`, quindi l'intera run usa una
+    chiave stabile anziche' UUID volatile.
+
+    Args:
+        project_id: ID del progetto da eseguire.
+        force_recalculate: Se True, ignora cache e ricalcola.
+        triggered_by: "manual" / "cron" / "retry".
+        run_id: Chiave di idempotency opzionale. Se None → generato
+            fresh (behavior legacy, no idempotency).
+    """
     task_id = self.request.id
-    run_id = str(_uuid.uuid4())
+
+    # C4 round 4: idempotency guard. Se run_id e' passato ed e' gia'
+    # completato, ritorna subito senza ri-eseguire la pipeline.
+    if run_id is not None:
+        from app.shared.idempotency import is_already_completed
+        if is_already_completed(run_id):
+            logger.info(
+                f"[IDEMPOTENCY] Task PIPELINE {task_id}: run_id {run_id} "
+                f"gia' completato con successo, skip."
+            )
+            return {
+                "status": "skipped_idempotent",
+                "success": True,
+                "message": f"Run {run_id} gia' completato",
+                "run_id": run_id,
+                "task_id": task_id,
+            }
+
+    if run_id is None:
+        run_id = str(_uuid.uuid4())
     _run_start = _time.time()
+
+    # --- N9 (2026-04-17): re-check permessi user al pickup del worker ---
+    # Helper centralizzato in app.shared.async_user_recheck — single source
+    # of truth condivisa fra tutti i worker Celery (pipeline, preview,
+    # carica, enrichment). user_id=None -> skip legittimo (cron/scheduled).
+    from app.shared.async_user_recheck import recheck_user_authorized
+    _revoked = recheck_user_authorized(
+        user_id=user_id, project_id=project_id,
+        task_id=task_id, run_id=run_id, task_name="PIPELINE",
+    )
+    if _revoked is not None:
+        _revoked.update({"run_id": run_id, "task_id": task_id})
+        return _revoked
 
     # Raccolta step in itinere — popolata dagli executor tramite append_step()
     # Non usiamo una lista locale: get_steps() legge dal RunContext thread-local
@@ -86,13 +149,14 @@ def execute_pipeline_task(
     group_id = project_info.get("group_id", "")
     module   = project_info.get("project_type", "")
 
-    # --- Apri run su log.db ---
+    # --- Apri run su log.db (N9: user_id persistito per audit) ---
     open_run(
         run_id=run_id,
         project_id=project_id,
         group_id=group_id,
         module=module,
         triggered_by=triggered_by,
+        user_id=user_id,
     )
 
     # --- Imposta contesto thread-local (run_id + steps collector) ---
@@ -101,7 +165,7 @@ def execute_pipeline_task(
     # --- Apri run su intermediate.db (non bloccante) ---
     try:
         from app.core.intermediate import db as idb
-        idb.create_run(run_id=run_id, canvas_id=project_id, group_id=group_id)
+        idb.create_run(run_id=run_id, canvas_id=project_id, group_id=group_id, user_id=user_id)
     except Exception as _ie:
         logger.warning(f"Intermediate: apertura run fallita (non bloccante): {_ie}")
 
@@ -119,8 +183,8 @@ def execute_pipeline_task(
 
         elapsed_ms = int((_time.time() - _run_start) * 1000)
 
-        if not result.get("success"):
-            message = result.get("message", "Errore sconosciuto")
+        if not result.success:
+            message = result.message or "Errore sconosciuto"
 
             # Errori di connessione DB: fail immediato
             _CONNECTION_ERRORS = (
@@ -205,7 +269,7 @@ def execute_pipeline_task(
             return {"success": False, "message": message}
 
         # --- Successo ---
-        rows_out = result.get("rows_count", 0) or 0
+        rows_out = result.rows_count or 0
         _update_progress(self, 100, "Pipeline completata")
         logger.info(
             f"Task PIPELINE {task_id} completato per {project_id}",
@@ -231,7 +295,7 @@ def execute_pipeline_task(
             logger.warning(f"Intermediate: chiusura run fallita: {_ce}")
 
         from pathlib import Path as _Path
-        output_path = result.get("output_path")
+        output_path = result.output_path
         output_file = _Path(output_path).name if output_path else None
         extra = {"output_file": output_file} if output_file else {}
         return {
@@ -292,7 +356,8 @@ def execute_pipeline_task(
         except Exception:
             pass
 
-        # FIX BUG-7: chiudi connessione SQLite del thread Celery
+        # Chiudi connessione SQLite del thread Celery: senza questo,
+        # ogni task lascia aperto un handle che si accumula nel pool.
         try:
             from app.core.intermediate.db import close_connection
             close_connection()
@@ -314,11 +379,22 @@ def preview_pipeline_task(
     self,
     project_id: str,
     limit: int = settings.MAX_PREVIEW_ROWS,
+    user_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Task asincrono per preview pipeline."""
     task_id = self.request.id
     logger.info(f"Task PREVIEW {task_id} avviato per progetto {project_id}")
     _update_progress(self, 0, "Inizializzazione preview...")
+
+    # N9: re-check permessi al pickup (helper condiviso)
+    from app.shared.async_user_recheck import recheck_user_authorized
+    _revoked = recheck_user_authorized(
+        user_id=user_id, project_id=project_id,
+        task_id=task_id, task_name="PREVIEW",
+    )
+    if _revoked is not None:
+        _revoked.update({"task_id": task_id, "project_id": project_id})
+        return _revoked
 
     try:
         _update_progress(self, 10, "Esecuzione preview...")

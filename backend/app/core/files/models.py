@@ -16,9 +16,14 @@ class FileSource(BaseModel):
     id: str
     name: str
     description: str = ""
-    file_path: str
     original_filename: str
-    format: Literal["csv", "xlsx", "json", "geojson", "gpkg", "shp", "gdb", "zip"]
+    # Formati supportati dal parser: csv, xlsx, json, geojson, gpkg, shp, gdb, zip.
+    # Formati raw (blob senza parsing, vedi create_raw_from_upload): dxf,
+    # unknown, bin, e qualsiasi altra estensione binaria. Per questo usiamo
+    # `str` libero invece di `Literal` — la classe di formati evolve (es.
+    # upload DXF per eseguibili workflow) e ristringere qui crasha la
+    # validazione sul raw fallback.
+    format: str
     group_id: str = ""
     layer: Optional[str] = None
     sheet: Optional[str] = None

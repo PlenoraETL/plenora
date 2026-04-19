@@ -11,7 +11,7 @@ Componenti:
 - DatabaseInspector: classe principale che orchestra l'ispezione
 - DefaultConnectionFactory: factory che crea connessioni reali con i driver nativi
 - SQLQueries: raccolta delle query SQL specifiche per ogni database
-- TypeMapper: funzioni pure per mappare tipi nativi → tipi interni URBY
+- TypeMapper: funzioni pure per mappare tipi nativi → tipi interni PLENORA
 - ResultProcessor: funzioni pure per trasformare righe SQL → strutture dati
 
 Flusso di ispezione:
@@ -22,7 +22,7 @@ Flusso di ispezione:
 5. TypeMapper converte i tipi nativi nel formato interno
 6. ResultProcessor organizza i risultati in Dict[tabella → colonne]
 
-Formato tipi interni URBY:
+Formato tipi interni PLENORA:
 - Scalari: "int", "real", "str", "bool", "date"
 - Geometrie semplici: "geometry"
 - Geometrie tipizzate: "geometry:point", "geometry:line", "geometry:polygon"
@@ -54,7 +54,7 @@ class ColumnInfo(TypedDict):
 
     Campi:
     - name: nome della colonna nel database
-    - type: tipo interno URBY (formato "tipo_base:sottotipo:srid")
+    - type: tipo interno PLENORA (formato "tipo_base:sottotipo:srid")
             Es: "int", "str", "geometry:point:4326"
     """
     name: str
@@ -440,12 +440,12 @@ class SQLQueries:
 
 # =============================================================================
 # MAPPER DEI TIPI (FUNZIONI PURE)
-# Converte i tipi nativi di ogni DBMS nel formato interno URBY
+# Converte i tipi nativi di ogni DBMS nel formato interno PLENORA
 # =============================================================================
 
 class TypeMapper:
     """
-    Mapper per convertire tipi nativi database → tipi interni URBY.
+    Mapper per convertire tipi nativi database → tipi interni PLENORA.
 
     Tutti i metodi sono classmethod puri (nessun side effect), quindi
     facilmente testabili in isolamento. Ogni database ha la sua mappa
@@ -455,7 +455,7 @@ class TypeMapper:
     Formato geometrie: "geometry[:sottotipo[:srid]]"
     """
 
-    # --- Mappe statiche tipo nativo → tipo URBY ---
+    # --- Mappe statiche tipo nativo → tipo PLENORA ---
 
     POSTGRES_TYPE_MAP = {
         # Interi
@@ -858,10 +858,12 @@ class DatabaseInspector:
             connection = self._factory.create_connection(conn)
             try:
                 cursor = connection.cursor()
-                cursor.execute(query)
-                rows = cursor.fetchall()
-                cursor.close()
-                return processor(rows, **processor_kwargs)
+                try:
+                    cursor.execute(query)
+                    rows = cursor.fetchall()
+                    return processor(rows, **processor_kwargs)
+                finally:
+                    cursor.close()
             finally:
                 connection.close()
         except ImportError:
@@ -894,30 +896,29 @@ class DatabaseInspector:
             connection = self._factory.create_connection(conn)
             try:
                 cursor = connection.cursor()
+                try:
+                    # Rileva se è MariaDB dalla stringa VERSION()
+                    cursor.execute("SELECT VERSION()")
+                    version = cursor.fetchone()[0].lower()
+                    is_mariadb = 'mariadb' in version
 
-                # Rileva se è MariaDB dalla stringa VERSION()
-                cursor.execute("SELECT VERSION()")
-                version = cursor.fetchone()[0].lower()
-                is_mariadb = 'mariadb' in version
-
-                has_srid = False
-                if is_mariadb:
-                    # MariaDB: usa query senza ST_GEOMETRY_COLUMNS
-                    cursor.execute(SQLQueries.MYSQL_COLUMNS_SIMPLE)
-                    rows = cursor.fetchall()
-                else:
-                    # MySQL: prova con SRID, fallback su semplice
-                    try:
-                        cursor.execute(SQLQueries.MYSQL_COLUMNS_WITH_SRID)
-                        rows = cursor.fetchall()
-                        has_srid = True
-                    except Exception as e:
-                        logger.info("MySQL SRID query non supportata, fallback a query semplice: %s", e)
+                    has_srid = False
+                    if is_mariadb:
                         cursor.execute(SQLQueries.MYSQL_COLUMNS_SIMPLE)
                         rows = cursor.fetchall()
+                    else:
+                        try:
+                            cursor.execute(SQLQueries.MYSQL_COLUMNS_WITH_SRID)
+                            rows = cursor.fetchall()
+                            has_srid = True
+                        except Exception as e:
+                            logger.info("MySQL SRID query non supportata, fallback a query semplice: %s", e)
+                            cursor.execute(SQLQueries.MYSQL_COLUMNS_SIMPLE)
+                            rows = cursor.fetchall()
 
-                cursor.close()
-                return self._processor.process_mysql_rows(rows, has_srid)
+                    return self._processor.process_mysql_rows(rows, has_srid)
+                finally:
+                    cursor.close()
             finally:
                 connection.close()
         except ImportError:
@@ -940,19 +941,18 @@ class DatabaseInspector:
             connection = self._factory.create_connection(conn)
             try:
                 cursor = connection.cursor()
+                try:
+                    cursor.execute(SQLQueries.SQLITE_TABLES)
+                    table_names = [row[0] for row in cursor.fetchall()]
 
-                # Primo passaggio: elenco tabelle (escluse tabelle di sistema sqlite_*)
-                cursor.execute(SQLQueries.SQLITE_TABLES)
-                table_names = [row[0] for row in cursor.fetchall()]
+                    tables: Dict[str, List[ColumnInfo]] = {}
+                    for table_name in table_names:
+                        cursor.execute(SQLQueries.sqlite_table_info(table_name))
+                        tables[table_name] = self._processor.process_sqlite_table(cursor.fetchall())
 
-                # Secondo passaggio: colonne per ogni tabella
-                tables: Dict[str, List[ColumnInfo]] = {}
-                for table_name in table_names:
-                    cursor.execute(SQLQueries.sqlite_table_info(table_name))
-                    tables[table_name] = self._processor.process_sqlite_table(cursor.fetchall())
-
-                cursor.close()
-                return tables
+                    return tables
+                finally:
+                    cursor.close()
             finally:
                 connection.close()
         except Exception as e:
@@ -983,28 +983,28 @@ class DatabaseInspector:
             connection = self._factory.create_connection(conn)
             try:
                 cursor = connection.cursor()
+                try:
+                    cursor.execute("SELECT VERSION()")
+                    version = cursor.fetchone()[0].lower()
+                    is_mariadb = 'mariadb' in version
 
-                # Rileva se è MariaDB dalla stringa VERSION()
-                cursor.execute("SELECT VERSION()")
-                version = cursor.fetchone()[0].lower()
-                is_mariadb = 'mariadb' in version
-
-                has_srid = False
-                if is_mariadb:
-                    cursor.execute(SQLQueries.MYSQL_VIEW_COLUMNS_SIMPLE)
-                    rows = cursor.fetchall()
-                else:
-                    try:
-                        cursor.execute(SQLQueries.MYSQL_VIEW_COLUMNS_WITH_SRID)
-                        rows = cursor.fetchall()
-                        has_srid = True
-                    except Exception as e:
-                        logger.info("MySQL view SRID query non supportata, fallback a query semplice: %s", e)
+                    has_srid = False
+                    if is_mariadb:
                         cursor.execute(SQLQueries.MYSQL_VIEW_COLUMNS_SIMPLE)
                         rows = cursor.fetchall()
+                    else:
+                        try:
+                            cursor.execute(SQLQueries.MYSQL_VIEW_COLUMNS_WITH_SRID)
+                            rows = cursor.fetchall()
+                            has_srid = True
+                        except Exception as e:
+                            logger.info("MySQL view SRID query non supportata, fallback a query semplice: %s", e)
+                            cursor.execute(SQLQueries.MYSQL_VIEW_COLUMNS_SIMPLE)
+                            rows = cursor.fetchall()
 
-                cursor.close()
-                return self._processor.process_mysql_rows(rows, has_srid)
+                    return self._processor.process_mysql_rows(rows, has_srid)
+                finally:
+                    cursor.close()
             finally:
                 connection.close()
         except ImportError:
@@ -1026,19 +1026,18 @@ class DatabaseInspector:
             connection = self._factory.create_connection(conn)
             try:
                 cursor = connection.cursor()
+                try:
+                    cursor.execute(SQLQueries.SQLITE_VIEWS)
+                    view_names = [row[0] for row in cursor.fetchall()]
 
-                # Elenco viste
-                cursor.execute(SQLQueries.SQLITE_VIEWS)
-                view_names = [row[0] for row in cursor.fetchall()]
+                    views: Dict[str, List[ColumnInfo]] = {}
+                    for view_name in view_names:
+                        cursor.execute(SQLQueries.sqlite_table_info(view_name))
+                        views[view_name] = self._processor.process_sqlite_table(cursor.fetchall())
 
-                # Colonne per ogni vista
-                views: Dict[str, List[ColumnInfo]] = {}
-                for view_name in view_names:
-                    cursor.execute(SQLQueries.sqlite_table_info(view_name))
-                    views[view_name] = self._processor.process_sqlite_table(cursor.fetchall())
-
-                cursor.close()
-                return views
+                    return views
+                finally:
+                    cursor.close()
             finally:
                 connection.close()
         except Exception as e:

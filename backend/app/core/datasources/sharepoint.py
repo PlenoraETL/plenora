@@ -1,5 +1,5 @@
 """
-URBY-ETL — Data Source Backend: SharePoint Online
+PLENORA-ETL — Data Source Backend: SharePoint Online
 Usa la libreria Office365-REST-Python-Client (stessa usata in sharepoint_uploader.py)
 che gestisce correttamente l'autenticazione e i certificati SSL su Windows/Anaconda.
 
@@ -14,8 +14,11 @@ Configurazione extra attesa in config.extra:
 """
 
 import io
+import logging
 from datetime import datetime
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 from app.core.datasources.interface import (
     BackendConfig,

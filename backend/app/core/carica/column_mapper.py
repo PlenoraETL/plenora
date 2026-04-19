@@ -38,7 +38,7 @@ GEOMETRY_COLUMN_NAMES = {
     "geo", "spatial", "location", "coordinates",
 }
 
-# Tipi canvas URBY che indicano una geometria
+# Tipi canvas PLENORA che indicano una geometria
 GEOMETRY_URBY_TYPES = {
     "geometry", "geometry:point", "geometry:line", "geometry:polygon",
     "geometry:multipoint", "geometry:multiline", "geometry:multipolygon",
@@ -74,7 +74,7 @@ class ColumnMapper:
             df: DataFrame sorgente (output del nodo Result)
             existing_columns: colonne già presenti nella tabella destinazione
                               [{"name": "col", "type": "INTEGER"}, ...]
-            canvas_types: tipi dal canvas URBY {"col_name": "geometry:point:4326"}
+            canvas_types: tipi dal canvas PLENORA {"col_name": "geometry:point:4326"}
             srid: SRID di default per le geometrie
 
         Returns:
@@ -228,7 +228,7 @@ class ColumnMapper:
         """Determina se una colonna contiene dati geometrici.
 
         Controlla in ordine:
-        1. Tipo canvas URBY (geometry:*)
+        1. Tipo canvas PLENORA (geometry:*)
         2. Nome colonna noto (geom, geometry, shape, ...)
         3. Tipo dati Pandas (GeoSeries)
         4. Contenuto valori (WKT/WKB pattern)
@@ -291,41 +291,23 @@ class ColumnMapper:
     # ========================================================================
 
     def _infer_type_from_canvas(self, canvas_type: str) -> str:
-        """Converte tipo canvas URBY in tipo interno per il mapping."""
-        if not canvas_type:
-            return ""
-        base_type = canvas_type.split(":")[0].lower()
-        if base_type in ("int", "real", "str", "bool", "date"):
-            return base_type
-        if base_type == "geometry":
-            return "geometry"
-        return ""
+        """Converte tipo canvas PLENORA in tipo interno per il mapping.
+
+        Delega a `app.shared.column_types.normalize_canvas_type` — fonte
+        unica del vocabolario canonico (refactor C).
+        """
+        from app.shared.column_types import normalize_canvas_type
+        return normalize_canvas_type(canvas_type)
 
     def _infer_type_from_pandas(self, series: pd.Series) -> str:
-        """Converte dtype Pandas in tipo interno URBY."""
-        dtype_str = str(series.dtype).lower()
+        """Converte dtype Pandas in tipo interno PLENORA (include euristica N11).
 
-        if "int" in dtype_str:
-            return "int"
-        elif "float" in dtype_str:
-            return "real"
-        elif "bool" in dtype_str:
-            return "bool"
-        elif "datetime" in dtype_str:
-            return "date"
-        elif dtype_str == "object":
-            # Prova a capire dal contenuto
-            sample = series.dropna().head(20)
-            if len(sample) == 0:
-                return "str"
-            # Se tutti i valori sono numerici
-            try:
-                pd.to_numeric(sample)
-                return "real"
-            except (ValueError, TypeError):
-                pass
-            return "str"
-        return "str"
+        Delega a `app.shared.column_types.pandas_series_to_canvas_type` —
+        fonte unica della dispatch pandas->canonical (refactor C). Vedi il
+        modulo per policy N11 e trade-off sui float-all-integer.
+        """
+        from app.shared.column_types import pandas_series_to_canvas_type
+        return pandas_series_to_canvas_type(series)
 
     # ========================================================================
     # MATCHING E SANITIZZAZIONE

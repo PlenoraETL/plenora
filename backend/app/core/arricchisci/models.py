@@ -33,7 +33,7 @@ per evitare inconsistenze quando le stats vengono aggiornate incrementalmente.
 from enum import Enum
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field, asdict
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 # =============================================================================
@@ -128,7 +128,7 @@ class RowError:
     input_params: Dict = field(default_factory=dict)
     http_status: Optional[int] = None
     retry_count: int = 0
-    timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     
     def to_dict(self) -> Dict:
         result = asdict(self)

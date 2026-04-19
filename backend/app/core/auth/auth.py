@@ -1,5 +1,5 @@
 """
-URBY-ETL — Autenticazione JWT
+PLENORA-ETL — Autenticazione JWT
 
 Modello RBAC:
   superadmin → tutto, senza filtro gruppo
@@ -131,7 +131,7 @@ else:
         # RuntimeError invece di SystemExit: catturabile dai test, gestibile
         # dal framework FastAPI/uvicorn invece di kill brutale del processo.
         raise RuntimeError(
-            "[URBY-ETL] JWT_SECRET_KEY non configurata in ambiente "
+            "[PLENORA-ETL] JWT_SECRET_KEY non configurata in ambiente "
             f"'{_env}'. Imposta la variabile d'ambiente JWT_SECRET_KEY "
             "prima di avviare l'app.\n"
             "  Per generare una chiave robusta:\n"
@@ -145,7 +145,7 @@ else:
         SECRET_KEY = secrets.token_hex(32)
         import warnings
         warnings.warn(
-            "[URBY-ETL] JWT_SECRET_KEY non configurata: generato secret random per questa sessione. "
+            "[PLENORA-ETL] JWT_SECRET_KEY non configurata: generato secret random per questa sessione. "
             "I token emessi non saranno validi dopo il riavvio dell'app. "
             "Imposta JWT_SECRET_KEY in backend/.env per avere persistenza.",
             stacklevel=2,
@@ -217,11 +217,24 @@ def hash_password(password: str) -> str:
 def verify_password(password: str, hashed: str) -> bool:
     return bcrypt.checkpw(password.encode(), hashed.encode())
 
+# C10: hash bcrypt reale di una password dummy, generato una volta
+# all'import. Usato nel login quando l'username non esiste, cosi'
+# `verify_password` fa comunque il lavoro bcrypt (~200-400ms) e il
+# tempo di risposta non rivela se un utente esiste o no (timing
+# attack / user enumeration). Un hash fittizio tipo "$2b$12$xxx..."
+# farebbe eccezione in bcrypt.checkpw → timing diverso → leak.
+_DUMMY_PASSWORD_HASH = bcrypt.hashpw(
+    b"c10_dummy_password_for_timing_parity", bcrypt.gensalt()
+).decode()
+
 # ============================================================
 # JWT UTILS
 # ============================================================
 
 def create_access_token(user_id: str, username: str, group_id: str, role: str) -> str:
+    # jti: identificatore univoco del token, usato come chiave della
+    # blacklist Redis per supportare revoca via /auth/logout. uuid4.hex
+    # e' 32 char esadecimali → 128 bit di entropia, collision-free.
     expire = datetime.now(timezone.utc) + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
     payload = {
         "sub":      user_id,
@@ -230,6 +243,7 @@ def create_access_token(user_id: str, username: str, group_id: str, role: str) -
         "role":     role,
         "exp":      expire,
         "iat":      datetime.now(timezone.utc),
+        "jti":      uuid.uuid4().hex,
     }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
@@ -262,6 +276,18 @@ def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token invalido o scaduto",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    # Blacklist check: se il jti e' stato revocato via /auth/logout,
+    # rifiuta anche se la signature+exp sarebbero valide. Precede la
+    # query DB (piu' economico di un SELECT users).
+    # Backward compat: token pre-rollout jti non hanno la claim → None
+    # → `is_jti_blacklisted(None)` False → passa, come prima.
+    from app.shared.token_blacklist import is_jti_blacklisted
+    if is_jti_blacklisted(payload.get("jti")):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token revocato",
             headers={"WWW-Authenticate": "Bearer"},
         )
     user = db.get_user(payload["sub"])
@@ -589,11 +615,19 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @router.post("/login", response_model=TokenResponse)
 def login(data: LoginRequest, request: Request):
     """Login con username/password → JWT token."""
-    client_ip = request.client.host if request.client else "unknown"
+    from app.shared.request_utils import get_client_ip
+    client_ip = get_client_ip(request)
     _check_rate_limit(client_ip)
 
     user = db.get_user_by_username(data.username)
-    if not user or not verify_password(data.password, user["password_hash"]):
+    # C10: timing parity — verify_password SEMPRE, con dummy_hash se user
+    # non esiste. Evita short-circuit che permetterebbe a un attaccante
+    # di enumerare gli username misurando il tempo di risposta (bcrypt
+    # richiede ~200-400ms; la differenza con la risposta 401 immediata
+    # rendeva banale l'enumeration).
+    password_hash = user["password_hash"] if user else _DUMMY_PASSWORD_HASH
+    password_ok = verify_password(data.password, password_hash)
+    if not user or not password_ok:
         _record_failed_login(client_ip)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                             detail="Username o password errati")
@@ -611,6 +645,60 @@ def login(data: LoginRequest, request: Request):
         group_id=user["group_id"], role=user["role"],
         expires_in=ACCESS_TOKEN_EXPIRE_HOURS * 3600,
     )
+
+# --- Logout (revoca token via blacklist Redis) ---
+
+@router.post("/logout")
+def logout(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer_scheme),
+):
+    """Revoca il token corrente aggiungendo il suo jti alla blacklist.
+
+    - TTL della blacklist = `exp - now` → auto-cleanup a scadenza.
+    - Idempotente: chiamarlo 2 volte va bene (seconda volta la SETEX
+      riscrive la stessa chiave con stesso valore).
+    - Token pre-rollout (senza claim jti) → no blacklist possibile, il
+      client comunque considera il suo logout "avvenuto" lato UI, ma
+      il token resta valido fino alla sua exp naturale. Ritorniamo
+      `blacklisted=False` per trasparenza.
+    - Redis down → 503 (fail-loud): il client deve sapere se la revoca
+      e' effettiva per non cambiare security posture inconsapevolmente.
+    """
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token mancante",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    payload = decode_token(credentials.credentials)
+    if payload is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token invalido o scaduto",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    jti = payload.get("jti")
+    exp = payload.get("exp")
+    if not jti or not exp:
+        logger.info("Logout su token legacy senza jti, no blacklist", op="logout_legacy")
+        return {"ok": True, "blacklisted": False}
+
+    now_ts = int(datetime.now(timezone.utc).timestamp())
+    ttl = int(exp) - now_ts
+    if ttl <= 0:
+        # Token gia' scaduto: nessuna revoca serve (decode_token l'avrebbe
+        # gia' rifiutato, ma tecnicamente potrebbe accadere in race).
+        return {"ok": True, "blacklisted": False}
+
+    from app.shared.token_blacklist import blacklist_jti
+    if not blacklist_jti(jti, ttl):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Servizio di revoca token non disponibile, riprova",
+        )
+    logger.info(f"Logout: jti blacklistato, ttl={ttl}s", op="logout")
+    return {"ok": True, "blacklisted": True, "ttl": ttl}
+
 
 # --- Profilo personale ---
 
@@ -639,8 +727,8 @@ def change_password(
     if not verify_password(data.old_password, user["password_hash"]):
         raise HTTPException(status_code=400, detail="Password attuale errata")
 
-    if len(data.new_password) < 6:
-        raise HTTPException(status_code=400, detail="La nuova password deve essere lunga almeno 6 caratteri")
+    if len(data.new_password) < 12:
+        raise HTTPException(status_code=400, detail="La nuova password deve essere lunga almeno 12 caratteri")
 
     db.update_user_password(current_user.user_id, hash_password(data.new_password))
     logger.info(f"Password cambiata: {current_user.username}", op="change_password")
@@ -657,17 +745,9 @@ def list_users(current_user: CurrentUser = Depends(require_admin)):
     admin      → solo utenti del proprio gruppo
     """
     if current_user.role == "superadmin":
-        # Recupera utenti da tutti i gruppi
-        seen = set()
-        users = []
-        groups = db.list_groups()
-        # Aggiungi sempre il gruppo corrente per sicurezza
-        group_ids = {g["id"] for g in groups} | {current_user.group_id}
-        for gid in group_ids:
-            for u in db.list_users(gid):
-                if u["id"] not in seen:
-                    seen.add(u["id"])
-                    users.append(u)
+        # Superadmin: tutti gli utenti con una singola query (no N+1 per gruppo)
+        import app.db.config_db_service as _cfg_db
+        users = _cfg_db.fetchall("SELECT * FROM users ORDER BY username")
     else:
         users = db.list_users(current_user.group_id)
     return [UserResponse(**{k: u[k] for k in UserResponse.model_fields if k in u}) for u in users]
@@ -693,6 +773,9 @@ def create_user(data: UserCreate, current_user: CurrentUser = Depends(require_ad
                 status_code=403,
                 detail="Solo un superadmin può creare utenti admin o superadmin",
             )
+
+    if len(data.password) < 12:
+        raise HTTPException(status_code=400, detail="La password deve essere lunga almeno 12 caratteri")
 
     existing = db.get_user_by_username(data.username)
     if existing:
@@ -727,6 +810,23 @@ def update_user(user_id: str, data: dict,
         raise HTTPException(status_code=404, detail="Utente non trovato")
     if current_user.role != "superadmin" and target.get("group_id") != current_user.group_id:
         raise HTTPException(status_code=403, detail="Accesso negato")
+
+    # Fail-fast sui campi sensibili non gestiti qui: meglio errore esplicito
+    # del drop silenzioso. Storicamente il frontend mandava `password` nel
+    # payload di PUT e il backend lo scartava senza segnalare: l'utente
+    # credeva di aver cambiato password mentre restava la vecchia.
+    if "password" in data:
+        raise HTTPException(
+            status_code=400,
+            detail="Per cambiare password usa POST /users/{id}/reset-password",
+        )
+    # group_id non e' aggiornabile qui: spostare un utente tra gruppi
+    # e' operazione separata (nessun endpoint implementato oggi).
+    if "group_id" in data and current_user.role != "superadmin":
+        raise HTTPException(
+            status_code=403,
+            detail="Solo superadmin puo' modificare group_id",
+        )
 
     allowed = ["email", "is_active"]
     if current_user.role == "superadmin":
@@ -782,10 +882,22 @@ def reset_password(user_id: str, data: ResetPasswordRequest,
     admin      → solo utenti del proprio gruppo
     """
     target = db.get_user(user_id)
-    if not target:
-        raise HTTPException(status_code=404, detail="Utente non trovato")
-    if current_user.role != "superadmin" and target.get("group_id") != current_user.group_id:
+    # C10: response uniforme 403 per admin non-superadmin, sia che
+    # l'utente non esista sia che esista ma fuori dal gruppo. Evita
+    # user enumeration (admin malevolo non puo' distinguere i due
+    # casi per mappare gli utenti di altri gruppi). Superadmin
+    # mantiene 404 perche' ha visibilita' totale e la distinzione
+    # e' informazione gia' accessibile per loro.
+    if not target or (
+        current_user.role != "superadmin"
+        and target.get("group_id") != current_user.group_id
+    ):
+        if current_user.role == "superadmin":
+            raise HTTPException(status_code=404, detail="Utente non trovato")
         raise HTTPException(status_code=403, detail="Accesso negato")
+
+    if len(data.new_password) < 12:
+        raise HTTPException(status_code=400, detail="La password deve essere lunga almeno 12 caratteri")
 
     db.update_user_password(user_id, hash_password(data.new_password))
     return {"ok": True}
@@ -801,9 +913,14 @@ def delete_user(user_id: str, current_user: CurrentUser = Depends(require_admin)
         raise HTTPException(status_code=400, detail="Non puoi eliminare te stesso")
 
     target = db.get_user(user_id)
-    if not target:
-        raise HTTPException(status_code=404, detail="Utente non trovato")
-    if current_user.role != "superadmin" and target.get("group_id") != current_user.group_id:
+    # C10: stesso pattern di reset-password — 403 uniforme per admin
+    # non-superadmin, evita enumeration.
+    if not target or (
+        current_user.role != "superadmin"
+        and target.get("group_id") != current_user.group_id
+    ):
+        if current_user.role == "superadmin":
+            raise HTTPException(status_code=404, detail="Utente non trovato")
         raise HTTPException(status_code=403, detail="Accesso negato")
 
     if not db.delete_user(user_id):

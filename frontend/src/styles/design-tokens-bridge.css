@@ -1,0 +1,55 @@
+/* ═══════════════════════════════════════════════════════════════
+   design-tokens-bridge.css — Alias dai token legacy a quelli moderni
+   ═══════════════════════════════════════════════════════════════
+   Il progetto ha due design system paralleli:
+     - moderno (`--plen-*` in variables.css, dark/light aware)
+     - legacy  (`--color-*` in base/variables.css, solo light hardcoded)
+
+   Questo file e' l'ultimo import dopo entrambi e ridefinisce i token
+   legacy come alias dei moderni. Effetto: i componenti che continuano
+   a usare `var(--color-border)`, `var(--color-text-primary)`, ecc.
+   ereditano automaticamente la palette dark/light corretta senza
+   che i loro JSX/CSS debbano essere toccati.
+
+   Scope conservativo: solo i token che influenzano background/text/
+   border/button. Gli altri (gray-scale, semantic ok/warn/err, module
+   e node colors, type colors) restano invariati per evitare
+   regressioni a cascata in grafici/badge/editor.
+
+   In futuro si puo' migrare tutto a `--plen-*` e rimuovere sia il
+   legacy che questo bridge. Nel frattempo, nessuno deve aggiungere
+   NUOVI `--color-*` hardcoded.
+   ═══════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Background layers ─────────────────────────────────────── */
+  --color-bg-primary:    var(--plen-surface);
+  --color-bg-secondary:  var(--plen-surface-2);
+  --color-bg-tertiary:   var(--plen-surface-3);
+  --color-bg-hover:      var(--plen-surface-2);
+
+  /* ── Borders ────────────────────────────────────────────────── */
+  --color-border:        var(--plen-border);
+  --color-border-light:  var(--plen-border-hi);
+
+  /* ── Text ───────────────────────────────────────────────────── */
+  --color-text-primary:   var(--plen-text);
+  --color-text-secondary: var(--plen-text-sub);
+  --color-text-tertiary:  var(--plen-text-dim);
+  --color-text-muted:     var(--plen-text-sub);
+  --color-text-disabled:  var(--plen-text-dim);
+
+  /* ── Button SECONDARY (il piu' comune nei modal) ─────────── */
+  --btn-secondary-bg:      var(--plen-surface);
+  --btn-secondary-text:    var(--plen-text);
+  --btn-secondary-border:  var(--plen-border);
+
+  /* ── Primary blue: allinea ai moderni Plenora ──────────────── */
+  --color-primary:       var(--plen-blue);
+  --color-primary-dark:  var(--plen-blue-mid);
+  --color-primary-600:   var(--plen-blue-mid);
+  --color-primary-700:   var(--plen-blue-mid);
+
+  /* ── Sidebar bg ─────────────────────────────────────────────── */
+  --sidebar-bg:          var(--plen-surface);
+}

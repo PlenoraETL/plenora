@@ -1,6 +1,16 @@
 """
-URBY-ETL — Data Source Backend: Cartella Locale / Rete
+PLENORA-ETL — Data Source Backend: Cartella Locale / Rete
 Supporta path locali (C:\\dati\\) e UNC (\\\\server\\share\\).
+
+**Nota multi-host**: un path puramente locale (es. `C:\\data\\`, `/srv/data/`)
+e' accessibile SOLO dal nodo su cui gira il worker/backend che lo processa.
+In setup multi-VM o container orchestrati, il worker potrebbe girare su un
+nodo che non ha quel filesystem -> errore "cartella non trovata". Per
+multi-host usare UNC (`\\\\server\\share`), NFS/EFS mount, o sharepoint via
+il relativo datasource backend.
+
+`test_connection` ritorna un advisory su questo (campo
+details.multi_host_advisory) — informativo, non fail.
 """
 
 import os
@@ -15,6 +25,47 @@ from app.core.datasources.interface import (
     DataSourcePermissionError,
     FileInfo,
 )
+
+
+def _classify_path_for_multi_host(path: str) -> str:
+    """Classifica un path come accessibile multi-host o locale.
+
+    Ritorna una di: 'network' | 'local' | 'unknown'.
+
+    Heuristic (non perfetta):
+      - UNC (`\\\\server\\share`) su Windows -> network
+      - Linux: prefix in /mnt/, /media/, /net/, /nfs/ -> network
+      - Windows drive letter (`C:\\...`) -> local
+      - Unix absolute path standard (/home, /srv, /var, /opt) -> local
+      - Altro -> unknown
+
+    Senza controllare il mount table reale (richiederebbe root). Serve
+    per advisory, non per decisioni critiche.
+    """
+    if not path:
+        return "unknown"
+
+    p = path.strip()
+
+    # UNC path (Windows) — \\server\share\...
+    if p.startswith(("\\\\", "//")) and len(p) > 2:
+        return "network"
+
+    # Linux network mount prefix conventions
+    linux_network_prefixes = ("/mnt/", "/media/", "/net/", "/nfs/", "/efs/")
+    if any(p.startswith(prefix) for prefix in linux_network_prefixes):
+        return "network"
+
+    # Windows drive letter (C:\, D:\, ...)
+    if len(p) >= 2 and p[1] == ":":
+        return "local"
+
+    # Linux tipico local: /home/, /srv/, /var/, /opt/, /tmp/, /root/
+    linux_local_prefixes = ("/home/", "/srv/", "/var/", "/opt/", "/tmp/", "/root/", "/etc/")
+    if any(p.startswith(prefix) for prefix in linux_local_prefixes):
+        return "local"
+
+    return "unknown"
 
 
 class LocalDataSource(DataSourceInterface):
@@ -51,10 +102,34 @@ class LocalDataSource(DataSourceInterface):
                 file_count = sum(1 for e in entries if os.path.isfile(os.path.join(root, e)))
             except PermissionError:
                 file_count = None
+
+            # Multi-host advisory: avvisa se il path sembra local-only.
+            # Non blocca — solo informativo. Utile in setup con Celery
+            # worker distribuiti: su un nodo diverso questo path NON sara'
+            # raggiungibile e task che usano questo datasource falliranno.
+            path_class = _classify_path_for_multi_host(root)
+            advisory = None
+            if path_class == "local":
+                advisory = (
+                    "Path locale: accessibile solo al nodo corrente. "
+                    "In setup multi-host usare UNC (\\\\server\\share), "
+                    "NFS/EFS mount, o un datasource SFTP/SharePoint."
+                )
+            elif path_class == "unknown":
+                advisory = (
+                    "Impossibile classificare il path: verifica che sia "
+                    "accessibile anche dai worker Celery se distribuiti."
+                )
+
             return {
                 "ok": True,
                 "message": "Cartella accessibile",
-                "details": {"path": root, "files_in_root": file_count},
+                "details": {
+                    "path": root,
+                    "files_in_root": file_count,
+                    "path_class": path_class,
+                    "multi_host_advisory": advisory,
+                },
             }
         except DataSourceConnectionError as e:
             return {"ok": False, "message": str(e), "details": {}}
@@ -213,16 +288,67 @@ class LocalDataSource(DataSourceInterface):
     # ── Helpers privati ─────────────────────────────────────────────────────
 
     def _abs(self, relative: str) -> str:
-        """Path assoluto = root + relativo."""
+        """Path assoluto = root + relativo, validato contro path traversal.
+
+        Regole specifiche di local datasource:
+          - rifiuta path assoluti (Unix, Windows drive letter, UNC)
+          - verifica che il risultato sia contenuto dentro root_path
+
+        Il check di containment (resolve + relative_to) e' delegato a
+        `app.shared.path_policy.assert_path_within` (R#4 cleanup).
+        I check su path assoluti / drive letter restano inline perche'
+        sono regole specifiche di questa datasource (le altre whitelist
+        accettano path assoluti dentro RESULTS_DIR/TEMP_DIR/etc).
+
+        Raises DataSourcePermissionError se l'input e' malformato o tenta
+        di uscire dalla root configurata.
+        """
+        from pathlib import Path as _Path
+        from app.shared.path_policy import assert_path_within
+
         root = self.config.root_path.rstrip("/\\")
-        rel = relative.lstrip("/\\")
-        return os.path.join(root, rel) if rel else root
+        root_abs = _Path(root).resolve()
+
+        if not relative:
+            return str(root_abs)
+
+        # Blocca path assoluti Unix, Windows e UNC (il helper centralizzato
+        # rifiuta solo UNC: gli altri check restano qui perche' specifici
+        # di local datasource).
+        if relative.startswith(('/', '\\')):
+            raise DataSourcePermissionError(
+                f"Path assoluto non consentito: {relative!r}"
+            )
+        if len(relative) >= 2 and relative[1] == ':':
+            raise DataSourcePermissionError(
+                f"Drive letter non consentita: {relative!r}"
+            )
+
+        # Containment check: compone candidato e delega a
+        # assert_path_within per resolve + relative_to. Traduciamo
+        # ValueError in DataSourcePermissionError per uniformare il
+        # tipo di eccezione che esce da questa datasource.
+        try:
+            resolved = assert_path_within(root_abs / relative, [root_abs])
+        except ValueError as e:
+            raise DataSourcePermissionError(
+                f"Path traversal rifiutato: {relative!r} esce da {root_abs}"
+            ) from e
+        return str(resolved)
 
     def _rel(self, absolute: str) -> str:
         """Path relativo alla root, separatori normalizzati a '/'."""
         rel = os.path.relpath(absolute, self.config.root_path)
         return rel.replace(os.sep, "/")
 
+    _MAX_READ_SIZE = 500 * 1024 * 1024  # 500 MB
+
     def _raw_read(self, full_path: str) -> bytes:
+        size = os.path.getsize(full_path)
+        if size > self._MAX_READ_SIZE:
+            raise ValueError(
+                f"File troppo grande ({size // (1024*1024)}MB). "
+                f"Limite: {self._MAX_READ_SIZE // (1024*1024)}MB"
+            )
         with open(full_path, "rb") as f:
             return f.read()

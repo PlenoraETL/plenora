@@ -1,0 +1,32 @@
+/**
+ * modals.css — Stili base condivisi per overlay e modali
+ *
+ * Questi stili erano duplicati in App.css, EstraiEditor.css,
+ * ManipolaEditor.css, ArricchisciEditor.css e ProjectList.css.
+ *
+ * Ogni modal specifica usa classi proprie (.execution-modal, .join-modal ecc.)
+ * per override puntuali. Questi sono solo i fondamentali condivisi.
+ */
+
+/* ── Overlay sfondo ──────────────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-modal-backdrop, 1000);
+}
+
+/* ── Contenitore base ────────────────────────────────────────────────── */
+.modal {
+  background: var(--color-bg-primary);
+  border-radius: 8px;
+  padding: 24px;
+  min-width: 400px;
+  max-width: 600px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+/* ── Footer azioni ───────────────────────────────────────────────────── */

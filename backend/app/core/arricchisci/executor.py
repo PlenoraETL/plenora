@@ -22,15 +22,9 @@ Chiamato da: core/orchestrator/service.py quando il progetto è di tipo ARRICCHI
 
 import time as _time
 from typing import Dict, Any
-from app.config import settings
 
 from app.models import CanvasState
 from app.config import settings
-try:
-    from app.utils.result_store import save_result_blob as _save_result_blob
-    _USE_RESULT_STORE = True
-except ImportError:
-    _USE_RESULT_STORE = False
 from app.utils.logger import get_logger, append_step
 
 logger = get_logger(__name__)
@@ -68,59 +62,48 @@ class EnrichExecutor:
         )
 
         if result.get("success"):
-            # Gestione output file (da executable)
+            # `api_connector.execute_enrichment` ha gia' chiamato
+            # `save_result_blob` internamente e ritorna `result_id`
+            # come riferimento canonico al blob nel DB results.
+            # Propaghiamo `result_id` verso l'alto cosi' il
+            # `PipelineArtifact.artifact_kind` risolve come `"blob"`
+            # invece di tentare di leggere `output_path` stale (gia'
+            # unlink-ato dal save_result_blob inner).
             if result.get("output_type") == "file":
                 res = {
                     "success": True,
-                    "output_path": result.get("output_path"),
+                    "result_id": result.get("result_id"),
                     "output_type": "file",
                     "output_filename": result.get("output_filename", ""),
                     "output_size_bytes": result.get("output_size_bytes", 0),
                     "rows_count": 0,
                     "columns": [],
                     "execution_time_ms": result.get("execution_time_ms", 0),
-                    "message": result.get("message", "Processamento completato")
+                    "message": result.get("message", "Processamento completato"),
                 }
             else:
-                output_path = result.get("output_path")
-                if not output_path:
-                    output_file = result.get("output_file", "")
-                    if "/" in output_file or "\\" in output_file:
-                        output_path = output_file
-                    else:
-                        output_path = str(self.results_base_dir / project_id / output_file)
-
-                if _USE_RESULT_STORE and output_path:
-                    from pathlib import Path as _Path
-                    _p = _Path(output_path)
-                    if _p.exists():
-                        _fmt = _p.suffix.lstrip('.') or 'csv'
-                        _group_id = None
-                        try:
-                            _meta = self.project_service.get_project_metadata(project_id)
-                            if _meta:
-                                _group_id = getattr(_meta, 'group_id', None)
-                        except Exception:
-                            pass
-                        _save_result_blob(project_id, _p, _fmt, result.get("rows_processed", 0), group_id=_group_id)
-
                 res = {
                     "success": True,
-                    "output_path": output_path,
+                    "result_id": result.get("result_id"),
+                    "output_filename": result.get("output_filename", ""),
                     "rows_count": result.get("rows_processed", 0),
                     "columns": result.get("columns", []),
-                    "message": f"Arricchimento completato: {result.get('rows_processed', 0)} righe processate"
+                    "message": f"Arricchimento completato: {result.get('rows_processed', 0)} righe processate",
                 }
 
                 # Allinea columns_metadata del progetto allo schema reale del DataFrame finale.
                 # Fix desincronizzazione UI/DB del nodo result — il file xlsx era già corretto
                 # ma columns_metadata restava stale e rompeva il riuso come project_source.
-                try:
-                    cm = result.get("columns_metadata") or []
-                    if cm:
-                        self.project_service.update_project_columns_metadata(project_id, cm)
-                except Exception as _cme:
-                    logger.warning(f"Impossibile salvare columns_metadata: {_cme}")
+                # Helper condiviso: retry transient + raise non-transient (vedi shared/columns_metadata.py).
+                cm = result.get("columns_metadata") or []
+                if cm:
+                    from app.shared.columns_metadata import save_columns_metadata_with_retry
+                    save_columns_metadata_with_retry(
+                        project_service=self.project_service,
+                        project_id=project_id,
+                        columns_metadata=cm,
+                        logger=logger,
+                    )
         else:
             res = {
                 "success": False,
@@ -159,12 +142,8 @@ class EnrichExecutor:
             if not nodes:
                 return {"success": False, "message": "Nessun nodo nel canvas"}
 
-            # Carica tutte le API connections
-            api_connections = {}
-            for api in api_connection_service.list_api_connections():
-                full_api = api_connection_service.get_api_connection(api["id"], include_token=True)
-                if full_api:
-                    api_connections[api["id"]] = full_api
+            # Carica tutte le API connections con credenziali decifrate (1 query)
+            api_connections = api_connection_service.list_api_connections_decrypted()
 
             # Ordine topologico
             execution_order = api_connection_service._get_execution_order(nodes, edges)

@@ -54,13 +54,12 @@ def extract_expected_columns(canvas: Dict[str, Any]) -> List[Dict[str, Any]]:
     nodes = canvas.get("nodes", []) or []
     edges = canvas.get("edges", []) or []
 
-    # Carica tutte le config API una volta (cache locale)
+    # Carica tutte le config API una volta (1 query, gia masked)
     api_configs: Dict[str, Dict[str, Any]] = {}
     try:
-        for api in api_connection_service.list_api_connections():
-            full = api_connection_service.get_api_connection(api["id"], include_token=False)
-            if full:
-                api_configs[api["id"]] = full
+        for cfg in api_connection_service.list_api_connections():
+            if cfg.get("id"):
+                api_configs[cfg["id"]] = cfg
     except Exception as e:
         logger.warning(f"Scanner: impossibile caricare API configs: {e}")
 

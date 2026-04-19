@@ -501,33 +501,43 @@ class EstraiExecutor:
     # =========================================================================
 
     def _salva_tipi_colonne_da_canvas(self, project_id: str, canvas: CanvasState, res: Dict):
+        """Salva i tipi colonne definiti nel canvas nei metadati del progetto.
+
+        Usa ricerca case-insensitive per gestire differenze di naming tra
+        canvas e output (es. Oracle restituisce nomi UPPERCASE).
+
+        La logica retry+backoff+raise vive in
+        `app.shared.columns_metadata.save_columns_metadata_with_retry`:
+        unica fonte di verita' condivisa con manipola/arricchisci/
+        enrichment_task. Vedi quel modulo per la classificazione delle
+        eccezioni transient vs non-transient.
+
+        Pre-fix: qualsiasi eccezione era catchata con warning silenzioso
+        → downstream riceveva tipi fallback `str`, numeri/date diventavano
+        testo nel CARICA target, nessun segnale all'utente.
         """
-        Salva i tipi colonne definiti nel canvas nei metadati del progetto.
+        from app.shared.columns_metadata import save_columns_metadata_with_retry
 
-        Usa una ricerca case-insensitive per gestire le differenze di naming
-        tra canvas e output (es. Oracle restituisce nomi UPPERCASE).
-        """
-        try:
-            canvas_type_map = self._build_canvas_type_map(canvas)
-            canvas_type_map_lower = {k.lower(): v for k, v in canvas_type_map.items()}
+        canvas_type_map = self._build_canvas_type_map(canvas)
+        canvas_type_map_lower = {k.lower(): v for k, v in canvas_type_map.items()}
 
-            # Usa le colonne già disponibili nel risultato — non serve rileggere il file
-            col_names = res.get("columns", [])
+        col_names = res.get("columns", [])
+        columns_metadata = []
+        for col in col_names:
+            col_type = (
+                canvas_type_map.get(col)
+                or canvas_type_map_lower.get(col.lower())
+                or 'str'
+            )
+            columns_metadata.append({"name": col, "type": col_type})
 
-            columns_metadata = []
-            for col in col_names:
-                col_type = (
-                    canvas_type_map.get(col)
-                    or canvas_type_map_lower.get(col.lower())
-                    or 'str'
-                )
-                columns_metadata.append({"name": col, "type": col_type})
-
-            self.project_service.update_project_columns_metadata(project_id, columns_metadata)
-            res['columns_metadata'] = columns_metadata
-
-        except Exception as e:
-            logger.warning(f"Errore salvataggio tipi colonne: {e}")
+        save_columns_metadata_with_retry(
+            project_service=self.project_service,
+            project_id=project_id,
+            columns_metadata=columns_metadata,
+            logger=logger,
+        )
+        res['columns_metadata'] = columns_metadata
 
     # =========================================================================
     # SQL HELPERS (per percorso database)
@@ -705,7 +715,7 @@ class EstraiExecutor:
 
     def _normalize_geometry_type(self, geom_type: str) -> str:
         """
-        Normalizza il tipo geometria ArcGIS/URBY al formato interno.
+        Normalizza il tipo geometria ArcGIS/PLENORA al formato interno.
         
         Input possibili:
         - "geometry:polygon", "geometry:point" → già normalizzato

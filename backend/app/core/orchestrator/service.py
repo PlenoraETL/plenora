@@ -42,6 +42,7 @@ from app.utils.logger import get_logger
 from app.core.estrai.executor import EstraiExecutor
 from app.core.manipola.executor import ManipolaExecutor
 from app.core.arricchisci.executor import EnrichExecutor
+from app.core.artifacts import PipelineArtifact
 
 logger = get_logger(__name__)
 
@@ -91,9 +92,14 @@ class OrchestratorService:
     # Metodi chiamati da main.py per eseguire o visualizzare in anteprima.
     # =========================================================================
 
-    def execute_pipeline(self, project_id: str, force_recalculate: bool = False, skip_carica: bool = False, run_id: str = None) -> Dict[str, Any]:
+    def execute_pipeline(self, project_id: str, force_recalculate: bool = False, skip_carica: bool = False, run_id: str = None) -> PipelineArtifact:
         """Punto di ingresso principale: decide se estrarre, manipolare o arricchire.
-        
+
+        Ritorna un `PipelineArtifact` (subclass di dict, dict-like
+        compat con i consumer legacy che leggono `result["success"]`
+        ecc.). I consumer nuovi possono usare le proprieta' tipizzate
+        `result.success`, `result.artifact_kind`, `result.to_run_artifact_ref()`.
+
         Args:
             project_id: ID del progetto da eseguire
             force_recalculate: Se True, forza il ricalcolo anche se ci sono risultati cached
@@ -102,56 +108,72 @@ class OrchestratorService:
             run_id: ID run intermediate.db (opzionale, passato da pipeline_task)
         """
         logger.info(f"Esecuzione pipeline progetto: {project_id}", op="execute", project_id=project_id)
-        
+
         metadata = self.project_service.get_project_metadata(project_id)
         canvas = self.project_service.get_project_canvas(project_id)
-        
-        if not metadata or not canvas:
-            return {"success": False, "message": f"Progetto {project_id} non trovato"}
 
-        
+        if not metadata or not canvas:
+            return PipelineArtifact.failure(
+                project_id=project_id,
+                message=f"Progetto {project_id} non trovato",
+            )
+
+
         # Esegui la pipeline in base al tipo
         result = None
         if metadata.project_type == "estrai":
             result = self.estrai_executor.execute(project_id, canvas, run_id=run_id)
-        
+
         elif metadata.project_type == "manipola":
             result = self.manipola_executor.execute(project_id, canvas, force_recalculate, run_id=run_id)
-        
+
         elif metadata.project_type == "arricchisci":
             result = self.enrich_executor.execute(project_id, canvas, force_recalculate, run_id=run_id)
-        
+
         else:
-            return {"success": False, "message": f"Tipo progetto '{metadata.project_type}' non supportato"}
-        
+            return PipelineArtifact.failure(
+                project_id=project_id,
+                message=f"Tipo progetto '{metadata.project_type}' non supportato",
+            )
+
+        # Wrap il dict raw degli executor in PipelineArtifact (preserva
+        # tutti i campi originali, aggiunge le proprieta' tipizzate).
+        artifact = PipelineArtifact.from_executor_result(result, project_id=project_id)
+
         # Se la pipeline ha avuto successo, controlla se c'è un nodo CARICA
-        # (skip se chiamato dal task CARICA stesso per evitare loop)
-        if result and result.get("success") and not skip_carica:
+        # (skip se chiamato dal task CARICA stesso per evitare loop).
+        # PipelineArtifact e' dict-like quindi `artifact["carica"] = ...`
+        # funziona come prima del refactor.
+        if artifact.success and not skip_carica:
             carica_info = self._execute_carica_if_present(project_id, canvas)
             if carica_info:
-                result["carica"] = carica_info
-        
-        return result
+                artifact["carica"] = carica_info
+
+        return artifact
 
     def execute_preview(self, project_id: str, limit: int = 100) -> Dict[str, Any]:
-        """Esegue una preview dei dati senza salvare file."""
+        """Esegue una preview dei dati senza salvare file.
+
+        NB: la preview non produce artifact, quindi resta un dict raw —
+        `PipelineArtifact` modella l'output di una run, non di un preview.
+        """
         logger.info(f"Preview progetto: {project_id} (limit={limit})", op="preview", project_id=project_id)
-        
+
         metadata = self.project_service.get_project_metadata(project_id)
         canvas = self.project_service.get_project_canvas(project_id)
-        
+
         if not metadata or not canvas:
             return {"success": False, "message": f"Progetto {project_id} non trovato"}
-        
+
         if metadata.project_type == "estrai":
             return self.estrai_executor.preview(project_id, canvas, limit)
-        
+
         elif metadata.project_type == "manipola":
             return self.manipola_executor.preview(project_id, canvas, limit)
-        
+
         elif metadata.project_type == "arricchisci":
             return self.enrich_executor.preview(project_id, canvas, limit)
-        
+
         else:
             return {"success": False, "message": f"Preview non supportata per tipo '{metadata.project_type}'"}
 
@@ -192,6 +214,11 @@ class OrchestratorService:
                     nested_data = {}
                 safe_nested = {k: v for k, v in nested_data.items() if k not in _NODE_RESERVED_FIELDS}
                 carica_node_data = {**node_dict, **safe_nested}
+                # N11: arricchisci canvas_types da projects.columns_metadata
+                # per evitare che CARICA perda il tipo semantico quando MANIPOLA
+                # promuove silenziosamente int->float per NaN.
+                from app.shared.canvas_types_enricher import enrich_canvas_types_from_metadata
+                enrich_canvas_types_from_metadata(carica_node_data, project_id)
                 logger.info(
                     f"Nodo {carica_node.id} — connection_id: '{carica_node_data.get('connection_id', 'MANCANTE')}', "
                     f"dest_type: '{carica_node_data.get('dest_type', 'MANCANTE')}', "

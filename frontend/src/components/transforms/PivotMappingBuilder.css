@@ -1,0 +1,118 @@
+/* =============================================================================
+   PivotMappingBuilder — stile coerente con AggregationListInput
+   ============================================================================= */
+
+.pivot-mapping-builder {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Header colonne */
+.pivot-mapping-builder__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 2px;
+  font-size: 11px;
+  color: #8b95a5;
+  font-weight: 500;
+}
+
+.pivot-mapping-builder__header-col {
+  flex: 1;
+}
+
+.pivot-mapping-builder__header-arrow {
+  width: 24px;
+  text-align: center;
+}
+
+.pivot-mapping-builder__header-action {
+  width: 28px;
+}
+
+/* Riga mapping */
+.pivot-mapping-builder__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pivot-mapping-builder__input {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid #d1d9e6;
+  border-radius: 6px;
+  font-size: 12px;
+  background: var(--color-bg-primary);
+  transition: border-color 0.2s;
+}
+
+.pivot-mapping-builder__input:focus {
+  outline: none;
+  border-color: var(--color-indigo);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
+
+.pivot-mapping-builder__input::placeholder {
+  color: #b0b8c8;
+  font-style: italic;
+}
+
+/* Freccia → */
+.pivot-mapping-builder__arrow {
+  width: 24px;
+  text-align: center;
+  color: #8b95a5;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+/* Bottone rimuovi */
+.pivot-mapping-builder__remove {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: #b0b8c8;
+  font-size: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+
+.pivot-mapping-builder__remove:hover {
+  background: var(--color-danger-bg);
+  border-color: #fca5a5;
+  color: var(--color-danger);
+}
+
+/* Bottone aggiungi */
+.pivot-mapping-builder__add {
+  padding: 6px 10px;
+  background: none;
+  border: 1px dashed #d1d9e6;
+  border-radius: 6px;
+  color: var(--color-indigo);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.pivot-mapping-builder__add:hover {
+  background: #f0f0ff;
+  border-color: var(--color-indigo);
+}
+
+/* Hint quando vuoto */
+.pivot-mapping-builder__hint {
+  font-size: 11px;
+  color: #8b95a5;
+  font-style: italic;
+  padding: 2px 0;
+}

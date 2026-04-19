@@ -1,5 +1,5 @@
 """
-URBY-ETL — Data Source Factory
+PLENORA-ETL — Data Source Factory
 Crea istanze dei backend a partire da una configurazione dizionario.
 Unico punto di accoppiamento tra DataSourceService e i backend concreti.
 """

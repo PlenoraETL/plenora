@@ -1,5 +1,5 @@
 """
-URBY-ETL — Data Source Interface
+PLENORA-ETL — Data Source Interface
 Classe base astratta comune a tutti i backend di storage.
 
 Il Data Source è un componente "stupido": solo trasporto bytes raw.

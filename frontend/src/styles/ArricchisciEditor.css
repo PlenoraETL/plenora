@@ -1,685 +1,402 @@
-/* ==========================================
-   ArricchisciEditor.css - Stili per l'editor Arricchimento API
-   Tema: Arancione (#FF6B35)
-   ========================================== */
+/* ═══════════════════════════════════════════════════════════════
+   ArricchisciEditor.css — Plenora design system
+   Accent: #F5A623 (arancio arricchisci)
+   ═══════════════════════════════════════════════════════════════ */
 
-/* ===================
-   EDITOR CONTAINER
-   =================== */
+/* ── Editor shell ─────────────────────────────────────────────── */
 .arricchisci-editor {
   width: 100%;
   height: 100vh;
   display: flex;
   flex-direction: column;
+  background: var(--plen-bg, #07090F);
+  overflow: hidden;
 }
 
-/* ===================
+/* ══════════════════════════════════════════════════════════════
    TOOLBAR
-   =================== */
+══════════════════════════════════════════════════════════════ */
 .arricchisci-toolbar {
-  height: 60px;
-  background: linear-gradient(135deg, #FF6B35 0%, #F7931E 100%);
-  border-bottom: 1px solid #E65100;
-  padding: 0 20px;
+  height: 52px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  color: white;
+  gap: 6px;
+  padding: 0 14px;
+  background: var(--plen-surface, #0C0F18);
+  border-bottom: 1px solid var(--plen-border-hi, rgba(255,255,255,0.11));
+  flex-shrink: 0;
+  z-index: 20;
+  position: relative;
 }
 
+/* Accent bar sinistra — arancio */
+.arricchisci-toolbar::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: #F5A623;
+  border-radius: 0 2px 2px 0;
+}
+
+[data-theme='light'] .arricchisci-toolbar {
+  background: #FFFFFF;
+  border-bottom-color: rgba(0,0,0,0.10);
+}
+
+/* ── Left ─────────────────────────────────────────────────────── */
 .arricchisci-toolbar__left {
   display: flex;
-  gap: 10px;
   align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
+/* ── Center ───────────────────────────────────────────────────── */
 .arricchisci-toolbar__center {
+  flex: 1;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 9px;
+  min-width: 0;
+  padding: 0 6px;
 }
 
 .arricchisci-toolbar__title {
   margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: white;
+  font-family: 'Syne', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--plen-text, #DDE4F2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 280px;
 }
+[data-theme='light'] .arricchisci-toolbar__title { color: #0F1729; }
 
 .arricchisci-toolbar__badge {
-  background: rgba(255, 255, 255, 0.2);
-  padding: 4px 10px;
-  border-radius: 4px;
-  font-size: 11px;
-  color: white;
-  font-weight: 600;
+  font-family: 'DM Mono', monospace;
+  font-size: 9.5px;
+  font-weight: 700;
   text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding: 3px 9px;
+  border-radius: 5px;
+  background: rgba(245,166,35,0.12);
+  border: 1px solid rgba(245,166,35,0.28);
+  color: #F5A623;
+  flex-shrink: 0;
 }
 
+/* ── Right ────────────────────────────────────────────────────── */
 .arricchisci-toolbar__right {
   display: flex;
-  gap: 10px;
   align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
 }
 
-/* Toolbar Buttons */
+/* ── Toolbar buttons base ─────────────────────────────────────── */
 .arricchisci-toolbar__btn {
-  padding: 8px 16px;
-  border: none;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: 7px;
+  font-size: 11.5px;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
   cursor: pointer;
-  transition: all 0.2s;
+  border: 1px solid transparent;
+  transition: all 0.12s;
+  white-space: nowrap;
+  flex-shrink: 0;
+  line-height: 1.3;
+}
+.arricchisci-toolbar__btn:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* back */
+.arricchisci-toolbar__btn--back {
+  background: transparent;
+  border-color: var(--plen-border-hi, rgba(255,255,255,0.11));
+  color: var(--plen-text-sub, #7D8BA8);
+}
+.arricchisci-toolbar__btn--back:hover:not(:disabled) {
+  border-color: var(--plen-text-dim, #3F4D68);
+  color: var(--plen-text, #DDE4F2);
+}
+[data-theme='light'] .arricchisci-toolbar__btn--back { color: #4A5568; border-color: rgba(0,0,0,0.12); }
+
+/* api — dropdown trigger */
+.arricchisci-toolbar__btn--api {
+  background: rgba(245,166,35,0.12);
+  border-color: rgba(245,166,35,0.30);
+  color: #F5A623;
+}
+.arricchisci-toolbar__btn--api:hover:not(:disabled) {
+  background: rgba(245,166,35,0.20);
+}
+
+/* static values */
+.arricchisci-toolbar__btn--static {
+  background: rgba(155,109,255,0.10);
+  border-color: rgba(155,109,255,0.25);
+  color: #9B6DFF;
+}
+.arricchisci-toolbar__btn--static:hover:not(:disabled) {
+  background: rgba(155,109,255,0.18);
+}
+
+/* output */
+.arricchisci-toolbar__btn--output {
+  background: rgba(52,193,122,0.08);
+  border-color: rgba(52,193,122,0.22);
+  color: #34C17A;
+}
+.arricchisci-toolbar__btn--output:hover:not(:disabled) {
+  background: rgba(52,193,122,0.16);
+}
+
+/* carica db */
+.arricchisci-toolbar__btn--carica {
+  background: rgba(75,139,255,0.10);
+  border-color: rgba(75,139,255,0.25);
+  color: #4B8BFF;
+}
+.arricchisci-toolbar__btn--carica:hover:not(:disabled) {
+  background: rgba(75,139,255,0.18);
+}
+
+/* save */
+.arricchisci-toolbar__btn--save {
+  background: #F5A623;
+  border-color: #F5A623;
+  color: #fff;
+}
+.arricchisci-toolbar__btn--save:hover:not(:disabled) {
+  background: #D97706;
+  border-color: #D97706;
+}
+
+/* ── Dropdown enrichment ──────────────────────────────────────── */
+.arricchisci-toolbar__dropdown {
+  position: relative;
+}
+
+.arricchisci-toolbar__dropdown-content {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 195px;
+  background: var(--plen-surface, #0C0F18);
+  border: 1px solid var(--plen-border-hi, rgba(255,255,255,0.11));
+  border-radius: 9px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  z-index: 100;
+  overflow: hidden;
+}
+[data-theme='light'] .arricchisci-toolbar__dropdown-content {
+  background: #FFFFFF;
+  border-color: rgba(0,0,0,0.10);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.13);
+}
+
+.arricchisci-toolbar__dropdown-content button {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 9px;
+  width: 100%;
+  padding: 9px 14px;
+  text-align: left;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--plen-border, rgba(255,255,255,0.06));
+  font-size: 12px;
+  font-family: 'Inter', sans-serif;
+  color: var(--plen-text-sub, #7D8BA8);
+  cursor: pointer;
+  transition: all 0.1s;
+}
+.arricchisci-toolbar__dropdown-content button:last-child {
+  border-bottom: none;
+}
+.arricchisci-toolbar__dropdown-content button:hover {
+  background: rgba(245,166,35,0.06);
+  color: var(--plen-text, #DDE4F2);
+  padding-left: 18px;
+}
+[data-theme='light'] .arricchisci-toolbar__dropdown-content button {
+  color: #4A5568;
+  border-bottom-color: rgba(0,0,0,0.05);
+}
+[data-theme='light'] .arricchisci-toolbar__dropdown-content button:hover {
+  background: rgba(245,166,35,0.05);
+  color: #0F1729;
 }
 
-.arricchisci-toolbar__btn--back {
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
-}
-
-.arricchisci-toolbar__btn--back:hover {
-  background: rgba(255, 255, 255, 0.3);
-}
-
-.arricchisci-toolbar__btn--save {
-  background: white;
-  color: #FF6B35;
-}
-
-.arricchisci-toolbar__btn--save:hover {
-  background: #FFF3E0;
-}
-
-.arricchisci-toolbar__btn--save:disabled {
-  background: rgba(255, 255, 255, 0.5);
-  color: #999;
-  cursor: not-allowed;
-}
-
-.arricchisci-toolbar__btn--execute {
-  background: white;
-  color: #FF6B35;
-  font-weight: 600;
-}
-
-.arricchisci-toolbar__btn--execute:hover {
-  background: #FFF3E0;
-  transform: translateY(-1px);
-}
-
-/* ===================
+/* ══════════════════════════════════════════════════════════════
    MAIN CONTENT
-   =================== */
+══════════════════════════════════════════════════════════════ */
 .arricchisci-main {
   flex: 1;
   display: flex;
   overflow: hidden;
+  min-height: 0;
 }
 
-/* ===================
-   SIDEBAR
-   =================== */
-.arricchisci-sidebar {
-  width: 280px;
-  background: white;
-  border-right: 1px solid #e0e0e0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.arricchisci-sidebar__section {
-  padding: 15px;
-  border-bottom: 1px solid #eee;
-}
-
-.arricchisci-sidebar__section:last-child {
-  border-bottom: none;
-}
-
-.arricchisci-sidebar__section-title {
-  font-size: 11px;
-  color: #666;
-  margin-bottom: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-/* Source List */
-.arricchisci-sidebar__sources {
-  flex: 1;
-  padding: 10px 15px;
-  overflow-y: auto;
-}
-
-.arricchisci-sidebar__empty {
-  padding: 15px;
-  background: #FFF3E0;
-  border-radius: 6px;
-  font-size: 11px;
-  color: #E65100;
-  text-align: center;
-}
-
-/* Source Item - Estrai */
-.arricchisci-sidebar__source-item {
-  padding: 10px 12px;
-  margin-bottom: 8px;
-  border-radius: 6px;
-  cursor: grab;
-  transition: all 0.2s;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.arricchisci-sidebar__source-item:active {
-  cursor: grabbing;
-}
-
-.arricchisci-sidebar__source-item--estrai {
-  background: linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%);
-  border: 1px solid #A5D6A7;
-  color: #2E7D32;
-}
-
-.arricchisci-sidebar__source-item--estrai:hover {
-  transform: translateX(4px);
-  box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
-}
-
-.arricchisci-sidebar__source-item--manipola {
-  background: linear-gradient(135deg, #F3E5F5 0%, #E1BEE7 100%);
-  border: 1px solid #CE93D8;
-  color: #7B1FA2;
-}
-
-.arricchisci-sidebar__source-item--manipola:hover {
-  transform: translateX(4px);
-  box-shadow: 0 2px 8px rgba(156, 39, 176, 0.3);
-}
-
-/* File Source Item */
-.arricchisci-sidebar__source-item--file {
-  background: linear-gradient(135deg, #E8EAF6 0%, #C5CAE9 100%);
-  border: 1px solid #9FA8DA;
-  color: #3F51B5;
-}
-
-.arricchisci-sidebar__source-item--file:hover {
-  transform: translateX(4px);
-  box-shadow: 0 2px 8px rgba(63, 81, 181, 0.3);
-}
-
-.arricchisci-sidebar__source-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.arricchisci-sidebar__source-type {
-  font-size: 10px;
-  opacity: 0.7;
-  margin-top: 4px;
-}
-
-/* API Enrich Item */
-.arricchisci-sidebar__api-item {
-  padding: 12px;
-  background: linear-gradient(135deg, #FFF3E0 0%, #FFE0B2 100%);
-  border: 1px solid #FFCC80;
-  border-radius: 6px;
-  cursor: grab;
-  transition: all 0.2s;
-  font-size: 12px;
-  font-weight: 500;
-  color: #E65100;
-}
-
-.arricchisci-sidebar__api-item:hover {
-  transform: translateX(4px);
-  box-shadow: 0 2px 8px rgba(255, 107, 53, 0.3);
-}
-
-.arricchisci-sidebar__api-item:active {
-  cursor: grabbing;
-}
-
-.arricchisci-sidebar__api-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.arricchisci-sidebar__api-desc {
-  font-size: 10px;
-  opacity: 0.7;
-  margin-top: 4px;
-}
-
-/* Output Item */
-.arricchisci-sidebar__output-item {
-  padding: 12px;
-  background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
-  border: 1px solid #90CAF9;
-  border-radius: 6px;
-  cursor: grab;
-  transition: all 0.2s;
-  font-size: 12px;
-  font-weight: 500;
-  color: #1565C0;
-}
-
-.arricchisci-sidebar__output-item:hover {
-  transform: translateX(4px);
-  box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3);
-}
-
-.arricchisci-sidebar__output-item:active {
-  cursor: grabbing;
-}
-
-/* Help Box */
-.arricchisci-sidebar__help {
-  padding: 12px;
-  background: #E3F2FD;
-  border-radius: 6px;
-  font-size: 11px;
-  color: #1565C0;
-}
-
-.arricchisci-sidebar__help-title {
-  font-weight: 600;
-  margin-bottom: 8px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.arricchisci-sidebar__help-list {
-  margin: 0;
-  padding-left: 16px;
-}
-
-.arricchisci-sidebar__help-list li {
-  margin-bottom: 4px;
-}
-
-/* ===================
-   CANVAS AREA
-   =================== */
+/* ══════════════════════════════════════════════════════════════
+   CANVAS
+══════════════════════════════════════════════════════════════ */
 .arricchisci-canvas {
   flex: 1;
   position: relative;
-  background: #fafafa;
+  height: 100%;
+  overflow: hidden;
+  background: var(--plen-bg, #07090F);
 }
 
-/* ===================
-   LOADING & ERROR STATES
-   =================== */
-.arricchisci-loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100vh;
-  font-size: 16px;
-  color: #666;
-  background: linear-gradient(135deg, #FFF3E0 0%, #FFE0B2 100%);
+/* ── Minimap ──────────────────────────────────────────────────── */
+.arricchisci-minimap.react-flow__minimap {
+  background: rgba(12,15,24,0.88) !important;
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--plen-border-hi, rgba(255,255,255,0.11)) !important;
+  border-radius: 7px !important;
+}
+[data-theme='light'] .arricchisci-minimap.react-flow__minimap {
+  background: rgba(255,255,255,0.92) !important;
 }
 
+/* ══════════════════════════════════════════════════════════════
+   ERROR STATE
+══════════════════════════════════════════════════════════════ */
 .arricchisci-error {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   height: 100vh;
-  color: #f44336;
-  padding: 20px;
+  gap: 14px;
+  background: var(--plen-bg, #07090F);
+  color: var(--plen-err, #F87171);
+  padding: 24px;
   text-align: center;
 }
 
-/* ===================
-   EXECUTION MODAL
-   =================== */
-.arricchisci-execution-modal {
-  max-width: 500px;
-  min-width: 400px;
-}
-
-.arricchisci-execution-modal__title {
-  margin: 0 0 20px 0;
-  font-size: 20px;
-  font-weight: 600;
-  color: #333;
-}
-
-/* Format Selector */
-.arricchisci-execution-modal__format-grid {
+/* ── Logo ─────────────────────────────────────────────────────── */
+.arricchisci-toolbar__logo {
   display: flex;
-  gap: 10px;
-  margin-bottom: 20px;
-}
-
-.arricchisci-execution-modal__format-option {
-  flex: 1;
-  padding: 12px;
-  border: 2px solid #ddd;
-  border-radius: 6px;
-  text-align: center;
-  cursor: pointer;
-  transition: all 0.2s;
-  background: white;
-}
-
-.arricchisci-execution-modal__format-option:hover {
-  border-color: #FF6B35;
-}
-
-.arricchisci-execution-modal__format-option--selected {
-  border-color: #FF6B35;
-  background: #FFF3E0;
-}
-
-.arricchisci-execution-modal__format-label {
-  font-weight: 600;
-  text-transform: uppercase;
-  font-size: 12px;
-}
-
-/* Loading State */
-.arricchisci-execution-modal__loading {
-  text-align: center;
-  padding: 40px 20px;
-}
-
-.arricchisci-execution-modal__spinner {
-  font-size: 48px;
-  margin-bottom: 20px;
-  animation: spin 2s linear infinite;
-}
-
-.arricchisci-execution-modal__loading-text {
-  font-size: 16px;
-  color: #666;
-}
-
-/* Success State */
-.arricchisci-execution-modal__success {
-  padding: 20px;
-  background: #E8F5E9;
-  border-radius: 8px;
-  text-align: center;
-}
-
-.arricchisci-execution-modal__success-icon {
-  font-size: 48px;
-  margin-bottom: 15px;
-}
-
-.arricchisci-execution-modal__success-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: #2E7D32;
-  margin-bottom: 10px;
-}
-
-.arricchisci-execution-modal__success-message {
-  font-size: 14px;
-  color: #666;
-  margin-bottom: 15px;
-}
-
-.arricchisci-execution-modal__download-btn {
-  display: inline-block;
-  padding: 10px 20px;
-  background: #4CAF50;
-  color: white;
-  border-radius: 6px;
-  text-decoration: none;
-  font-weight: 600;
-  transition: all 0.2s;
-}
-
-.arricchisci-execution-modal__download-btn:hover {
-  background: #43A047;
-}
-
-/* Error State */
-.arricchisci-execution-modal__error {
-  padding: 20px;
-  background: #FFEBEE;
-  border-radius: 8px;
-  text-align: center;
-}
-
-.arricchisci-execution-modal__error-icon {
-  font-size: 48px;
-  margin-bottom: 15px;
-}
-
-.arricchisci-execution-modal__error-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: #C62828;
-  margin-bottom: 10px;
-}
-
-.arricchisci-execution-modal__error-message {
-  font-size: 14px;
-  color: #C62828;
-}
-
-/* Output Path */
-.arricchisci-execution-modal__output {
-  padding: 15px;
-  background: #FFF3E0;
-  border: 1px solid #FF6B35;
-  border-radius: 6px;
-  margin: 15px 0;
-}
-
-.arricchisci-execution-modal__output-label {
-  font-size: 12px;
-  color: #E65100;
-  margin-bottom: 8px;
-  font-weight: 600;
-}
-
-.arricchisci-execution-modal__output-path {
-  font-size: 14px;
-  font-weight: 500;
-  color: #BF360C;
-  font-family: monospace;
-  word-break: break-all;
-}
-
-/* Download Button */
-.arricchisci-execution-modal__download-btn {
-  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 24px;
-  background: linear-gradient(135deg, #4CAF50 0%, #43A047 100%);
-  color: white;
-  border-radius: 8px;
-  text-decoration: none;
-  font-weight: 600;
-  font-size: 14px;
-  transition: all 0.2s;
-  margin: 15px 0;
+  flex-shrink: 0;
 }
+.arricchisci-toolbar__logo-text { fill: var(--plen-text, #DDE4F2); }
+[data-theme='light'] .arricchisci-toolbar__logo-text { fill: #0F1729; }
 
-.arricchisci-execution-modal__download-btn:hover {
-  background: linear-gradient(135deg, #43A047 0%, #388E3C 100%);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4);
-  color: white;
+/* ── Sep ──────────────────────────────────────────────────────── */
+.arricchisci-toolbar__sep {
+  width: 1px;
+  height: 22px;
+  background: var(--plen-border-hi, rgba(255,255,255,0.11));
+  flex-shrink: 0;
+  margin: 0 4px;
 }
+[data-theme='light'] .arricchisci-toolbar__sep { background: rgba(0,0,0,0.10); }
 
-/* Columns List */
-.arricchisci-execution-modal__columns {
-  margin: 15px 0;
-}
-
-.arricchisci-execution-modal__columns-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: #666;
-  margin-bottom: 8px;
-}
-
-.arricchisci-execution-modal__columns-list {
+/* ── Theme toggle ─────────────────────────────────────────────── */
+.arricchisci-theme-toggle {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  max-height: 120px;
-  overflow-y: auto;
-  padding: 8px;
-  background: #f9f9f9;
-  border-radius: 4px;
+  background: var(--plen-surface-2, #111525);
+  border: 1px solid var(--plen-border-hi, rgba(255,255,255,0.11));
+  border-radius: 20px;
+  padding: 3px;
+  flex-shrink: 0;
 }
+[data-theme='light'] .arricchisci-theme-toggle { background: #E8EDF8; border-color: rgba(0,0,0,0.10); }
 
-.arricchisci-execution-modal__column-tag {
-  padding: 4px 8px;
-  background: #FFE0B2;
-  border: 1px solid #FFCC80;
-  border-radius: 4px;
+.arricchisci-theme-opt {
+  padding: 4px 11px;
+  border-radius: 16px;
+  font-family: 'DM Mono', monospace;
   font-size: 11px;
-  font-family: monospace;
-  color: #E65100;
-}
-
-/* Stats Grid */
-.arricchisci-execution-modal__stats {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 15px;
-  margin: 20px 0;
-}
-
-.arricchisci-execution-modal__stat {
-  padding: 15px;
-  background: #f5f5f5;
-  border-radius: 6px;
-  text-align: center;
-}
-
-.arricchisci-execution-modal__stat-label {
-  font-size: 12px;
-  color: #666;
-  margin-bottom: 4px;
-}
-
-.arricchisci-execution-modal__stat-value {
-  font-size: 24px;
-  font-weight: 600;
-  color: #333;
-}
-
-/* Modal Actions */
-.arricchisci-execution-modal__actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-top: 20px;
-}
-
-.arricchisci-execution-modal__btn {
-  padding: 10px 20px;
-  border: none;
-  border-radius: 6px;
-  font-size: 14px;
+  color: var(--plen-text-dim, #3F4D68);
   cursor: pointer;
-  transition: all 0.2s;
+  user-select: none;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.arricchisci-theme-opt--on {
+  background: var(--plen-surface, #0C0F18);
+  color: var(--plen-text, #DDE4F2);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+}
+[data-theme='light'] .arricchisci-theme-opt--on { background: #FFFFFF; color: #0F1729; }
+
+/* ── Hex canvas ───────────────────────────────────────────────── */
+.arricchisci-hex-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
 }
 
-.arricchisci-execution-modal__btn--cancel {
-  background: #f5f5f5;
-  color: #333;
+/* ── Canvas background & ReactFlow overrides ──────────────────── */
+.arricchisci-canvas {
+  background: var(--plen-bg, #07090F);
+}
+[data-theme='light'] .arricchisci-canvas { background: #EFF2F9; }
+
+/* Rende il pattern dot semitrasparente → esagoni visibili sotto */
+.arricchisci-canvas .react-flow__background { opacity: 0.35; }
+
+/* Il renderer ReactFlow deve essere trasparente */
+.arricchisci-canvas .react-flow__renderer { background: transparent !important; }
+.arricchisci-canvas .react-flow__pane    { background: transparent !important; }
+
+/* Controls */
+.arricchisci-canvas .react-flow__controls {
+  background: var(--plen-surface-2, #111525) !important;
+  border: 1px solid var(--plen-border-hi, rgba(255,255,255,0.11)) !important;
+  border-radius: 7px !important;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4) !important;
+}
+[data-theme='light'] .arricchisci-canvas .react-flow__controls {
+  background: #FFFFFF !important;
+  border-color: rgba(0,0,0,0.11) !important;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1) !important;
+}
+.arricchisci-canvas .react-flow__controls-button {
+  background: transparent !important;
+  border: none !important;
+  border-bottom: 1px solid var(--plen-border, rgba(255,255,255,0.06)) !important;
+  color: var(--plen-text-sub, #7D8BA8) !important;
+  width: 28px !important;
+  height: 28px !important;
+  transition: all 0.12s;
+}
+.arricchisci-canvas .react-flow__controls-button:hover {
+  background: rgba(245,166,35,0.1) !important;
+  color: #F5A623 !important;
+}
+.arricchisci-canvas .react-flow__controls-button:last-child { border-bottom: none !important; }
+.arricchisci-canvas .react-flow__controls-button svg { fill: currentColor !important; }
+[data-theme='light'] .arricchisci-canvas .react-flow__controls-button {
+  color: #4A5568 !important;
+  border-bottom-color: rgba(0,0,0,0.07) !important;
 }
 
-.arricchisci-execution-modal__btn--cancel:hover {
-  background: #e0e0e0;
+/* Edges — arancio arricchisci */
+.arricchisci-canvas .react-flow__edge-path {
+  stroke: #F5A623;
+  stroke-opacity: 0.6;
 }
+.arricchisci-canvas .react-flow__edge.selected .react-flow__edge-path { stroke-opacity: 1; }
+.arricchisci-canvas .react-flow__arrowhead path { fill: #F5A623; }
 
-.arricchisci-execution-modal__btn--execute {
-  background: linear-gradient(135deg, #FF6B35 0%, #F7931E 100%);
-  color: white;
-  font-weight: 600;
-}
-
-.arricchisci-execution-modal__btn--execute:hover {
-  opacity: 0.9;
-  transform: translateY(-1px);
-}
-
-.arricchisci-execution-modal__btn--execute:disabled {
-  background: #ccc;
-  cursor: not-allowed;
-  transform: none;
-}
-
-.arricchisci-execution-modal__btn--close {
-  background: #f5f5f5;
-  color: #333;
-}
-
-/* ===================
-   ANIMATIONS
-   =================== */
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-/* ===================
-   MODAL OVERLAY
-   =================== */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.modal {
-  background: white;
-  border-radius: 12px;
-  padding: 25px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-}
-
-/* ===================
-   RESPONSIVE
-   =================== */
-@media (max-width: 1024px) {
-  .arricchisci-sidebar {
-    width: 240px;
-  }
-}
-
-@media (max-width: 768px) {
-  .arricchisci-sidebar {
-    width: 200px;
-  }
-  
-  .arricchisci-toolbar {
-    padding: 0 10px;
-  }
-  
-  .arricchisci-toolbar__title {
-    font-size: 14px;
-  }
-}

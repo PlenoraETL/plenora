@@ -1,5 +1,5 @@
 """
-Entry point dell'applicazione FastAPI URBY-ETL.
+Entry point dell'applicazione FastAPI PLENORA-ETL.
 
 Architettura (post-rework)
 ==========================
@@ -28,6 +28,7 @@ Porte: backend su 8000, frontend React su 5173
 """
 
 import os
+from typing import Tuple
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -39,13 +40,14 @@ from app.utils.dataframe import save_dataframe
 # Interrompe l'avvio con messaggio chiaro se la configurazione è incompleta.
 settings.validate_startup()
 
-# Inizializza database SQLite (crea tabelle se non esistono)
+# Inizializza database PostgreSQL (pool + tabelle)
 from app.db.db_service import init_all_dbs
 init_all_dbs()
 
 # Auth JWT
 from app.core.auth.auth import router as auth_router, groups_router, get_current_user
 from app.core.auth.auth_middleware import JWTMiddleware
+from app.core.auth.request_id_middleware import RequestIdMiddleware
 from app.db.cleanup_middleware import DBConnectionCleanupMiddleware
 
 # Fix SSL certificate issue caused by PostgreSQL
@@ -62,8 +64,19 @@ logger = get_logger(__name__)
 import os as _os
 _is_prod = _os.getenv("ENVIRONMENT", _os.getenv("ENV", "development")).lower() in ("production", "prod")
 
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app):
+    yield
+    # Shutdown: chiudi il pool PostgreSQL
+    from app.db.pg_connection import close_pool
+    close_pool()
+    logger.info("PG connection pool chiuso")
+
 app = FastAPI(
-    title="URBY-ETL API",
+    title="PLENORA-ETL API",
+    lifespan=lifespan,
     docs_url=None if _is_prod else "/docs",
     redoc_url=None if _is_prod else "/redoc",
     openapi_url=None if _is_prod else "/openapi.json",
@@ -74,10 +87,18 @@ app.add_middleware(
     allow_origins=settings.CORS_ORIGINS_LIST,
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allow_headers=["Authorization", "Content-Type", "Accept", "X-Requested-With"],
-    # Permette al frontend di leggere il filename suggerito dal backend nei download.
-    # Senza questo header, downloadBlob.js non riesce a usare il Content-Disposition.
-    expose_headers=["Content-Disposition"],
+    # X-Request-ID (C8): accettato in preflight cosi' il frontend puo'
+    # mandare il proprio correlation ID (es. da un distributed trace)
+    # e noi lo riusiamo nel ContextVar invece di generarne uno nuovo.
+    allow_headers=[
+        "Authorization", "Content-Type", "Accept", "X-Requested-With",
+        "X-Request-ID",
+    ],
+    # Headers che il browser e' autorizzato a leggere dal JS client.
+    # - Content-Disposition: usato da downloadBlob.js per filename
+    # - X-Request-ID (C8): consente al frontend di correlare log
+    #   client-side con log server-side sullo stesso request_id.
+    expose_headers=["Content-Disposition", "X-Request-ID"],
 )
 app.add_middleware(JWTMiddleware)
 # DB cleanup deve essere il middleware più ESTERNO (FastAPI esegue in LIFO),
@@ -85,6 +106,12 @@ app.add_middleware(JWTMiddleware)
 # processing è terminato. Previene leak di file descriptor nei thread riusati
 # dal pool uvicorn.
 app.add_middleware(DBConnectionCleanupMiddleware)
+# C8: RequestIdMiddleware e' il piu' esterno assoluto. Setta ContextVar
+# request_id PRIMA che qualunque altro middleware logghi (JWT errors,
+# DBConn errors) cosi' ogni riga di log di quella richiesta e'
+# correlata. Legge X-Request-ID se il client lo manda, altrimenti
+# genera uuid4. Echo della stessa ID nella response.
+app.add_middleware(RequestIdMiddleware)
 
 
 # Global exception handler — garantisce header CORS anche su eccezioni non gestite.
@@ -111,6 +138,40 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
+# Handler dedicato per canvas corrotto: il messaggio al client deve
+# essere esplicito (non "errore interno") cosi' l'utente capisce che
+# serve un ripristino da backup, non un retry. Precede il catch-all
+# sopra perche' FastAPI matcha il piu' specifico.
+from app.shared.exceptions import CanvasCorruptedError
+
+
+@app.exception_handler(CanvasCorruptedError)
+async def canvas_corrupted_handler(request: Request, exc: CanvasCorruptedError):
+    origin = request.headers.get("origin", "")
+    headers = {}
+    if origin in _CORS_ORIGINS:
+        headers["Access-Control-Allow-Origin"] = origin
+        headers["Access-Control-Allow-Credentials"] = "false"
+    logger.error(
+        f"Canvas corrotto servito su {request.method} {request.url.path} "
+        f"per progetto {exc.project_id}: {exc.reason}",
+        exc_info=exc.original_error,
+    )
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": (
+                f"Canvas del progetto '{exc.project_id}' corrotto "
+                f"({exc.reason}). Contattare l'amministratore per il "
+                f"ripristino da backup."
+            ),
+            "error_code": "canvas_corrupted",
+            "project_id": exc.project_id,
+        },
+        headers=headers,
+    )
+
+
 # ==================== INIZIALIZZA SERVIZI SHARED ====================
 
 from app.services.project_service import ProjectService
@@ -121,7 +182,6 @@ from app.db.query_executor import QueryExecutor
 from app.core.orchestrator.service import OrchestratorService
 from app.core.arricchisci.api_connector import api_connection_service
 from app.core.features.features_service import FeaturesService
-from app.core.arricchisci.router import executables_router
 
 project_service = ProjectService()
 connection_service = ConnectionService()
@@ -160,7 +220,11 @@ from app.core.datasources.router import router as datasources_router, init_datas
 from app.core.intermediate.router import router as intermediate_router
 from app.core.datasources.service import datasource_service
 from app.core.eseguibili.router import router as eseguibili_router
+from app.core.imdf.router import router as imdf_router
 from app.core.auth.shares_router import router as shares_router
+from app.core.admin_backups.router import router as admin_backups_router
+from app.core.admin_system_status.router import router as admin_system_status_router
+from app.core.tickets.router import router as tickets_router
 
 # Inizializza moduli che necessitano di servizi
 init_connections(connection_service, database_inspector)
@@ -219,18 +283,159 @@ app.include_router(runs_router, prefix="/api")
 
 # Datasources
 app.include_router(datasources_router, prefix="/api")
-app.include_router(executables_router, prefix="/api")
 app.include_router(intermediate_router, prefix="/api")
 
 # Eseguibili (catene on-demand)
 app.include_router(eseguibili_router, prefix="/api")
 
+# IMDF (publish async su ArcGIS)
+app.include_router(imdf_router, prefix="/api")
+
+# Admin Backups (superadmin only)
+app.include_router(admin_backups_router, prefix="/api")
+
+# Admin System Status dashboard (superadmin only)
+app.include_router(admin_system_status_router, prefix="/api")
+
+# Tickets (tech_debt + user_support, RBAC nel router)
+app.include_router(tickets_router, prefix="/api")
+
 # ==================== HEALTH CHECK ====================
 
 @app.get("/")
 def root():
-    """Health check"""
-    return {"status": "ok", "service": "URBY-ETL API"}
+    """Banner root (non e' health check vero — vedi /health)"""
+    return {"status": "ok", "service": "PLENORA-ETL API"}
+
+
+def _check_postgres() -> Tuple[bool, str]:
+    """SELECT 1 sul pool PG. Return (ok, detail)."""
+    try:
+        from app.db.pg_connection import fetchone
+        row = fetchone("SELECT 1 AS v")
+        if row and int(row.get("v", 0)) == 1:
+            return True, "ok"
+        return False, f"SELECT 1 ha restituito: {row!r}"
+    except Exception as e:
+        return False, f"{type(e).__name__}: {e}"
+
+
+def _check_redis() -> Tuple[bool, str]:
+    """PING su Redis broker Celery."""
+    try:
+        import redis
+        r = redis.from_url(settings.CELERY_BROKER_URL, socket_connect_timeout=2)
+        if r.ping():
+            return True, "ok"
+        return False, "PING non ha risposto True"
+    except Exception as e:
+        return False, f"{type(e).__name__}: {e}"
+
+
+def _check_migrations_aligned() -> Tuple[bool, str]:
+    """C8-nit: /ready rigoroso include check "migrations allineate".
+    Confronta files in migrations/ con righe in schema_migrations.
+    503 se ci sono pending (deploy a meta' / file committato ma non
+    ancora applicato dal runner)."""
+    try:
+        from app.db.migrations_runner import list_pending_migrations
+        pending = list_pending_migrations()
+        if pending:
+            return False, f"{len(pending)} pending: {', '.join(pending[:3])}"
+        return True, "aligned"
+    except Exception as e:
+        # Non falliamo /ready per un problema di introspection stessa —
+        # un check PG/Redis a monte ha gia' validato la raggiungibilita'.
+        return True, f"check skipped: {type(e).__name__}"
+
+
+def _check_pool_headroom() -> Tuple[bool, str]:
+    """Verifica che il pool PG non sia saturo: almeno 1 slot libero."""
+    try:
+        from app.db.pg_connection import _get_pool, _POOL_MAX
+        pool = _get_pool()
+        # psycopg2.pool._used e' lista conn in uso, _pool e' lista free.
+        # Accesso interno — best-effort diagnostic.
+        in_use = len(getattr(pool, "_used", {}) or {})
+        free = len(getattr(pool, "_pool", []) or [])
+        used_total = in_use
+        if used_total >= _POOL_MAX:
+            return False, f"pool saturo: {used_total}/{_POOL_MAX} in uso, {free} free"
+        return True, f"{used_total}/{_POOL_MAX} in uso, {free} free"
+    except Exception as e:
+        # Se non riusciamo a ispezionare, non falliamo /ready —
+        # un SELECT 1 e' gia' successo sopra.
+        return True, f"introspection skipped: {type(e).__name__}"
+
+
+@app.get("/health")
+def health():
+    """C8: liveness + dependency check (PG SELECT 1 + Redis PING).
+
+    Ritorna 200 se entrambe le dipendenze critiche rispondono, 503
+    altrimenti. Pensato per load balancer / K8s readinessProbe.
+    """
+    checks = {}
+    status_code = 200
+
+    pg_ok, pg_detail = _check_postgres()
+    checks["postgres"] = {"ok": pg_ok, "detail": pg_detail}
+    if not pg_ok:
+        status_code = 503
+
+    redis_ok, redis_detail = _check_redis()
+    checks["redis"] = {"ok": redis_ok, "detail": redis_detail}
+    if not redis_ok:
+        status_code = 503
+
+    return JSONResponse(
+        content={
+            "status": "ok" if status_code == 200 else "unhealthy",
+            "checks": checks,
+        },
+        status_code=status_code,
+    )
+
+
+@app.get("/ready")
+def ready():
+    """C8: readiness check rigoroso. Include:
+    - /health checks (PG + Redis)
+    - headroom sul pool PG (non saturo)
+
+    Pensato per K8s readinessProbe conservativo (rimuove pod dal pool
+    di load balancing se qualcosa e' degradato anche non-fatal).
+    """
+    checks = {}
+    status_code = 200
+
+    pg_ok, pg_detail = _check_postgres()
+    checks["postgres"] = {"ok": pg_ok, "detail": pg_detail}
+    if not pg_ok:
+        status_code = 503
+
+    redis_ok, redis_detail = _check_redis()
+    checks["redis"] = {"ok": redis_ok, "detail": redis_detail}
+    if not redis_ok:
+        status_code = 503
+
+    pool_ok, pool_detail = _check_pool_headroom()
+    checks["pool_headroom"] = {"ok": pool_ok, "detail": pool_detail}
+    if not pool_ok:
+        status_code = 503
+
+    mig_ok, mig_detail = _check_migrations_aligned()
+    checks["migrations"] = {"ok": mig_ok, "detail": mig_detail}
+    if not mig_ok:
+        status_code = 503
+
+    return JSONResponse(
+        content={
+            "status": "ready" if status_code == 200 else "not_ready",
+            "checks": checks,
+        },
+        status_code=status_code,
+    )
 
 
 # ==================== STARTUP ====================

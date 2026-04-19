@@ -31,7 +31,7 @@ Le property calcolate (success_rate, duration_seconds) sono definite come
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 # ============================================================================
@@ -66,6 +66,10 @@ class WriteStatus(str, Enum):
     CONNECTION_ERROR: impossibile connettersi al database destinazione
     WRITE_ERROR: errore durante la scrittura (query fallita, timeout, ecc.)
     PERMISSION_ERROR: permessi insufficienti (CREATE TABLE, INSERT, ecc.)
+    SKIPPED_IDEMPOTENT: run_id gia' completato in precedenza — no-op sicuro
+        (N15 guard). I caller che trattano il risultato come "failure/retry"
+        devono includerlo tra i success state, altrimenti innescano
+        retry loop.
     """
     SUCCESS = "success"
     PARTIAL = "partial"
@@ -74,6 +78,7 @@ class WriteStatus(str, Enum):
     CONNECTION_ERROR = "connection_error"
     WRITE_ERROR = "write_error"
     PERMISSION_ERROR = "permission_error"
+    SKIPPED_IDEMPOTENT = "skipped_idempotent"
 
 
 class TransactionMode(str, Enum):
@@ -451,7 +456,7 @@ class AuditRecord:
     ) -> "AuditRecord":
         """Crea AuditRecord dal risultato di un'operazione."""
         return AuditRecord(
-            timestamp=result.started_at or datetime.now().isoformat(),
+            timestamp=result.started_at or datetime.now(timezone.utc).isoformat(),
             project_id=project_id,
             connection_id=config.connection_id,
             schema_name=config.schema_name,

@@ -1,3 +1,11 @@
+/**
+ * useEdgeHandlers.js — Hook per gestione edges e apertura JoinModal
+ *
+ * Gestisce onConnect (creazione edge), onEdgesChange, e l'apertura
+ * automatica di JoinModal quando si crea un edge tra due nodi.
+ *
+ * Ritorna: { edges, setEdges, onConnect, onEdgesChange, joinModalProps }
+ */
 import { useState, useCallback, useMemo } from 'react';
 import { addEdge } from 'reactflow';
 
@@ -31,11 +39,28 @@ export function useEdgeHandlers(nodes, setEdges, options = {}) {
   const getEdgeStyle = useCallback((joinConfig) => {
     const isSpatial = joinConfig?.is_spatial;
     const isOutput = joinConfig?.join_type === 'output';
+    const isCarica = joinConfig?.join_type === 'carica';
     
     if (isOutput) {
       return {
         label: 'output',
         style: { stroke: '#4CAF50', strokeWidth: 2 },
+        animated: true
+      };
+    }
+    
+    if (joinConfig?.join_type === 'carica_arcgis') {
+      return {
+        label: 'Carica ArcGIS',
+        style: { stroke: '#2DD4BF', strokeWidth: 2 },
+        animated: true
+      };
+    }
+
+    if (isCarica) {
+      return {
+        label: 'Carica DB',
+        style: { stroke: '#7c3aed', strokeWidth: 2 },
         animated: true
       };
     }
@@ -80,6 +105,27 @@ export function useEdgeHandlers(nodes, setEdges, options = {}) {
       return;
     }
     
+    // Se target è nodo CARICA (DB o ArcGIS) o datasourceNode in modalità carica, crea edge direttamente (no modal)
+    if (targetNode && (targetNode.type === 'carica' || targetNode.type === 'caricaArcgis' ||
+        (targetNode.type === 'datasourceNode' && targetNode.data?.mode === 'carica'))) {
+      const joinType = targetNode.type === 'caricaArcgis' ? 'carica_arcgis' : 'carica';
+      const edgeStyle = getEdgeStyle({ join_type: joinType });
+      const newEdge = {
+        id: `edge_carica_${Date.now()}`,
+        source: params.source,
+        target: params.target,
+        ...edgeStyle,
+        data: { join_type: joinType }
+      };
+
+      setEdges((eds) => addEdge(newEdge, eds));
+
+      if (onEdgeCreated) {
+        onEdgeCreated(newEdge);
+      }
+      return;
+    }
+    
     // Altrimenti apri modal per configurare join
     setPendingEdge({
       source: params.source,
@@ -95,9 +141,24 @@ export function useEdgeHandlers(nodes, setEdges, options = {}) {
     // Non aprire modal per edge output
     if (edge.data?.join_type === 'output') return;
     
+    // Non aprire modal per edge carica
+    if (edge.data?.join_type === 'carica' || edge.data?.join_type === 'carica_arcgis') return;
+
+    // Verifica anche il tipo del nodo target (fallback)
+    const targetNode = nodes.find(n => n.id === edge.target);
+    if (targetNode && (
+      targetNode.type === 'carica' ||
+      targetNode.type === 'caricaArcgis' ||
+      targetNode.type === 'resultNode' ||
+      targetNode.type === 'result' ||
+      (targetNode.type === 'datasourceNode' && targetNode.data?.mode === 'carica')
+    )) {
+      return;
+    }
+    
     setEditingEdge(edge);
     setShowJoinModal(true);
-  }, []);
+  }, [nodes]);
 
   /**
    * Handler context menu su edge (per delete)
@@ -105,11 +166,9 @@ export function useEdgeHandlers(nodes, setEdges, options = {}) {
   const onEdgeContextMenu = useCallback((event, edge) => {
     event.preventDefault();
     
-    // Non permettere delete di edge output tramite context menu
-    if (edge.data?.join_type === 'output') {
-      if (window.confirm('Eliminare questo collegamento al nodo output?')) {
-        setEdges((eds) => eds.filter((e) => e.id !== edge.id));
-      }
+    // Edge output e carica: eliminazione diretta (context menu è già intenzionale)
+    if (edge.data?.join_type === 'output' || edge.data?.join_type === 'carica' || edge.data?.join_type === 'carica_arcgis') {
+      setEdges((eds) => eds.filter((e) => e.id !== edge.id));
       return;
     }
     

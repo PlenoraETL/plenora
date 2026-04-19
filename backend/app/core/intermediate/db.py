@@ -1,12 +1,17 @@
 """
-Intermediate DB — accesso a PostgreSQL (ex SQLite intermediate.db).
+Intermediate DB — accesso a PostgreSQL.
 
-Gestisce runs, node_meta e tabelle dinamiche run_{run_id}_{node_id}.
-Migrato da SQLite a PostgreSQL: usa pg_connection pool.
+Gestisce runs, node_meta e node_rows (tabella unificata JSONB per i dati
+intermedi dei nodi pipeline). Usa pg_connection pool.
+
+Nota design: in passato ogni nodo di ogni run aveva una tabella Postgres
+fisica dedicata (run_{uuid}_{node_id}) — anti-pattern che causava bloat
+del pg_catalog, lock contention e orphan tables. Ora tutti i dati finiscono
+in plenora.node_rows con FK ON DELETE CASCADE a runs, che garantisce
+retention atomica.
 """
 
 import json
-import re
 from typing import Dict, List, Optional
 
 from app.utils.logger import get_logger
@@ -42,14 +47,21 @@ def init_db():
 # ============================================================
 
 def create_run(run_id: str, canvas_id: str, group_id: str,
-               total_nodes: int = 0) -> Dict:
+               total_nodes: int = 0,
+               user_id: Optional[str] = None) -> Dict:
+    """Crea una nuova run in intermediate.runs.
+
+    N9: user_id persistito per audit (chi ha lanciato la run). None per
+    task cron/scheduled o per sub-chain interne (es. sub-task carica
+    lanciato dall'orchestrator durante una pipeline gia' validata).
+    """
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc).isoformat()
     execute(
         """INSERT INTO runs
-           (run_id, canvas_id, group_id, timestamp, status, total_nodes)
-           VALUES (?,?,?,?,?,?)""",
-        (run_id, canvas_id, group_id, now, "running", total_nodes)
+           (run_id, canvas_id, group_id, timestamp, status, total_nodes, user_id)
+           VALUES (?,?,?,?,?,?,?)""",
+        (run_id, canvas_id, group_id, now, "running", total_nodes, user_id)
     )
     return get_run(run_id)
 
@@ -101,12 +113,24 @@ def update_run(run_id: str, **fields) -> None:
     )
 
 
-def pin_run(run_id: str, group_id: str, pinned: bool = True) -> bool:
-    """Pinna o spinna una run. Verifica group_id per sicurezza."""
-    cur = execute(
-        "UPDATE runs SET pinned = ? WHERE run_id = ? AND group_id = ?",
-        (pinned, run_id, group_id)
-    )
+def pin_run(run_id: str, group_id: Optional[str], pinned: bool = True) -> bool:
+    """Pinna o spinna una run. Verifica group_id per sicurezza.
+
+    Se `group_id` e' None, il filtro di gruppo viene omesso: usato dal
+    router per superadmin, che ha gia' validato l'accesso via
+    `_check_run_access`. Senza questa branch il superadmin riceverebbe
+    un falso 404 su run di altri gruppi perche' l'UPDATE non matcha mai.
+    """
+    if group_id is None:
+        cur = execute(
+            "UPDATE runs SET pinned = ? WHERE run_id = ?",
+            (pinned, run_id)
+        )
+    else:
+        cur = execute(
+            "UPDATE runs SET pinned = ? WHERE run_id = ? AND group_id = ?",
+            (pinned, run_id, group_id)
+        )
     return cur.rowcount > 0
 
 
@@ -151,181 +175,149 @@ def list_node_meta(run_id: str) -> List[Dict]:
 
 
 # ============================================================
-# TABELLE DINAMICHE
+# NODE ROWS — tabella unificata JSONB (ex tabelle dinamiche)
+# ============================================================
+#
+# Design precedente (rimosso): una tabella Postgres fisica per ogni nodo di
+# ogni run, naming convention run_{uuid}_{node_id}. Causava:
+#   - bloat del pg_catalog (una riga in pg_class / pg_attribute per ogni col)
+#   - AccessExclusiveLock su pg_class ad ogni CREATE/DROP → contesa
+#   - orphan tables se drop_run_tables falliva
+#   - impossibile query cross-run (schemi potenzialmente diversi)
+#
+# Design corrente: una singola tabella plenora.node_rows con row_data jsonb.
+# La FK run_id → plenora.runs(run_id) ON DELETE CASCADE garantisce retention
+# atomica gratuita: basta DELETE FROM runs WHERE run_id = ? per pulire tutto.
 # ============================================================
 
-def _safe_table_name(run_id: str, node_id: str) -> str:
+
+def _to_jsonable(v):
+    """Normalizza un valore per la serializzazione JSONB.
+
+    JSONB non accetta nativamente: datetime, date, Decimal, bytes, geometrie
+    Shapely, pandas Timestamp, numpy scalar. Questa funzione li converte in
+    tipi primitivi JSON-compatibili (str, int, float, bool, None, list, dict).
     """
-    Genera nome tabella sicuro per SQL.
-    Sostituisce caratteri non alfanumerici con underscore.
-    """
-    safe_run = re.sub(r"[^a-zA-Z0-9]", "_", run_id)
-    safe_node = re.sub(r"[^a-zA-Z0-9]", "_", node_id)
-    return f"run_{safe_run}_{safe_node}"
-
-
-def _pandas_dtype_to_sql(dtype_str: str) -> str:
-    """Converte dtype pandas in tipo SQLite."""
-    dtype_str = str(dtype_str).lower()
-    if "int" in dtype_str:
-        return "INTEGER"
-    if "float" in dtype_str:
-        return "REAL"
-    if "bool" in dtype_str:
-        return "INTEGER"
-    if "datetime" in dtype_str:
-        return "TEXT"
-    return "TEXT"
-
-
-def create_node_table(run_id: str, node_id: str, col_schema: dict) -> str:
-    """
-    Crea tabella dinamica run_{run_id}_{node_id} con le colonne reali del DataFrame.
-    col_schema: {"col_name": "dtype_str", ...} — da df.dtypes.astype(str).to_dict()
-    Ritorna il nome tabella creato.
-    """
-    table_name = _safe_table_name(run_id, node_id)
-
-    col_defs = ["_row_hash TEXT"]
-    for col_name, dtype_str in col_schema.items():
-        safe_col = re.sub(r"[^a-zA-Z0-9_]", "_", col_name)
-        sql_type = _pandas_dtype_to_sql(dtype_str)
-        col_defs.append(f'"{safe_col}" {sql_type}')
-
-    ddl = f"CREATE TABLE IF NOT EXISTS {table_name} ({', '.join(col_defs)})"
-    execute(ddl)
-    return table_name
+    if v is None:
+        return None
+    # datetime / date / pandas Timestamp
+    if hasattr(v, "isoformat"):
+        return v.isoformat()
+    # decimal.Decimal
+    import decimal
+    if isinstance(v, decimal.Decimal):
+        return float(v)
+    # Geometrie Shapely -> WKT (deve venire prima dei check numerici perche'
+    # "Point"/"Polygon" hanno __name__ che contengono "int")
+    try:
+        from shapely.geometry.base import BaseGeometry
+        if isinstance(v, BaseGeometry):
+            return v.wkt
+    except ImportError:
+        pass
+    # numpy / pandas scalar
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, int):
+        return int(v)
+    if isinstance(v, float):
+        # NaN/Inf non sono validi in JSON strict — convertiamo a None
+        if v != v or v in (float("inf"), float("-inf")):
+            return None
+        return float(v)
+    # bytes/bytearray → base64 o hex-repr; per intermediate usiamo un
+    # placeholder lungo quanto servono sapere bytes_len
+    if isinstance(v, (bytes, bytearray)):
+        return f"bytes:{len(v)}"
+    # list/dict: ricorsione
+    if isinstance(v, list):
+        return [_to_jsonable(x) for x in v]
+    if isinstance(v, dict):
+        return {str(k): _to_jsonable(val) for k, val in v.items()}
+    return str(v)
 
 
 def insert_node_rows(run_id: str, node_id: str,
                      rows: List[Dict], col_schema: dict) -> None:
-    """
-    Bulk insert di tutte le righe nella tabella dinamica.
-    rows: lista di dict con _row_hash già calcolato.
+    """Bulk insert delle righe di un nodo in plenora.node_rows.
+
+    Args:
+        run_id: uuid della run
+        node_id: id del nodo nel canvas
+        rows: lista di dict dove ogni dict contiene '_row_hash' + i valori
+              della riga (gia' calcolati dal writer). Il row_hash viene
+              estratto e messo in una colonna dedicata; il resto finisce in
+              row_data (jsonb).
+        col_schema: {"col_name": "dtype_str", ...} — ignorato dal nuovo
+              design ma mantenuto nella signature per compat col writer.
     """
     if not rows:
         return
 
-    # FIX BUG-6: safety net — crea la tabella se non esiste già
-    # (evita OperationalError: no such table in caso di race condition)
-    create_node_table(run_id, node_id, col_schema)
+    # Costruisci i record nel formato target:
+    # (run_id, node_id, row_idx, row_hash, row_data_json)
+    records = []
+    for idx, row in enumerate(rows):
+        row_hash = row.get("_row_hash", "")
+        # row_data = tutti i valori della riga ECCETTO _row_hash
+        row_data = {k: _to_jsonable(v) for k, v in row.items() if k != "_row_hash"}
+        records.append((
+            run_id, node_id, idx, row_hash,
+            json.dumps(row_data, ensure_ascii=False),
+        ))
 
-    table_name = _safe_table_name(run_id, node_id)
-    cols = ["_row_hash"] + [
-        re.sub(r"[^a-zA-Z0-9_]", "_", c) for c in col_schema.keys()
-    ]
-    placeholders = ", ".join("?" for _ in cols)
-    col_list = ", ".join(f'"{c}"' for c in cols)
-    sql = f"INSERT INTO {table_name} ({col_list}) VALUES ({placeholders})"
-
-    def _to_sqlite(v):
-        """Converte tipi non supportati da SQLite in tipi nativi.
-
-        SQLite accetta nativamente bytes/bytearray come BLOB, non serve
-        scartarli. Prima il codice ritornava None silenziosamente perdendo
-        la colonna intera (silent data loss su DataFrame con BLOB).
-        """
-        if v is None:
-            return None
-        # pandas Timestamp / datetime / date
-        if hasattr(v, "isoformat"):
-            return v.isoformat()
-        # decimal.Decimal
-        import decimal
-        if isinstance(v, decimal.Decimal):
-            return float(v)
-        # numpy / pandas scalar
-        t = type(v).__name__
-        if "int" in t:
-            return int(v)
-        if "float" in t:
-            return float(v)
-        if "bool" in t:
-            return int(v)
-        # bytes/bytearray → SQLite li gestisce come BLOB (nativo).
-        # bytearray va convertito a bytes per il driver sqlite3.
-        if isinstance(v, bytearray):
-            return bytes(v)
-        if isinstance(v, bytes):
-            return v
-        return v
-
-    data = []
-    for row in rows:
-        safe_row = {re.sub(r"[^a-zA-Z0-9_]", "_", k): _to_sqlite(v) for k, v in row.items()}
-        data.append(tuple(safe_row.get(c) for c in cols))
-
-    # Usa pg_connection.executemany (pool-based)
-    executemany(sql, data)
-
-
-def drop_run_tables(run_id: str) -> int:
-    """
-    Elimina tutte le tabelle dinamiche di una run.
-    Ritorna il numero di tabelle eliminate.
-
-    Difesa in profondità: anche se i nomi vengono da sqlite_master (e quindi
-    sono stati creati da `create_node_table` con `_safe_table_name`),
-    rivalidiamo OGNI nome contro un pattern strict prima di interpolarlo nel
-    DDL. Questo blocca eventuali tabelle create out-of-band con nomi malevoli
-    o future regressioni del sanitizer.
-    """
-    safe_run = re.sub(r"[^a-zA-Z0-9]", "_", run_id)
-    prefix = f"run_{safe_run}_"
-
-    # Pattern strict per nomi tabella validi (lettere/numeri/underscore, max 200 char)
-    valid_name = re.compile(r"^[a-zA-Z0-9_]{1,200}$")
-
-    # PostgreSQL: query information_schema invece di sqlite_master
-    tables = fetchall(
-        "SELECT table_name FROM information_schema.tables "
-        "WHERE table_schema = 'plenora' AND table_name LIKE ?",
-        (f"{prefix}%",)
+    sql = (
+        "INSERT INTO node_rows (run_id, node_id, row_idx, row_hash, row_data) "
+        "VALUES (?, ?, ?, ?, ?::jsonb)"
     )
-
-    count = 0
-    for t in tables:
-        table_name = t["table_name"]
-        if not valid_name.match(table_name) or not table_name.startswith(prefix):
-            logger.warning(
-                f"drop_run_tables: nome tabella sospetto skippato: {table_name!r}"
-            )
-            continue
-        execute(f"DROP TABLE IF EXISTS {table_name}")
-        count += 1
-    return count
+    executemany(sql, records)
 
 
 def get_node_table_rows(run_id: str, node_id: str,
-                        group_id: str, limit: int = None) -> List[Dict]:
+                        group_id: Optional[str], limit: int = None) -> List[Dict]:
+    """Legge le righe di un nodo da plenora.node_rows.
+
+    Verifica ownership via runs.group_id. Ritorna una lista di dict nel
+    formato del DataFrame originale (cioe' row_data espanso + _row_hash).
+
+    Se `group_id` e' None il filtro di gruppo viene omesso: usato dal
+    router per superadmin, che ha gia' validato l'accesso via
+    `_check_run_access` prima di chiamare questa funzione. Senza questa
+    branch il superadmin riceverebbe sempre lista vuota per run di altri
+    gruppi perche' il WHERE group_id = ? non matcha.
     """
-    Legge righe dalla tabella dinamica di un nodo.
-    Verifica group_id tramite runs per sicurezza.
-    """
-    # Verifica ownership
-    run = fetchone(
-        "SELECT run_id FROM runs WHERE run_id = ? AND group_id = ?",
-        (run_id, group_id)
-    )
+    # Verifica ownership — skippata se group_id None (caller superadmin)
+    if group_id is None:
+        run = fetchone("SELECT run_id FROM runs WHERE run_id = ?", (run_id,))
+    else:
+        run = fetchone(
+            "SELECT run_id FROM runs WHERE run_id = ? AND group_id = ?",
+            (run_id, group_id)
+        )
     if not run:
         return []
 
-    table_name = _safe_table_name(run_id, node_id)
-
-    # Verifica che la tabella esista (PostgreSQL information_schema)
-    exists = fetchone(
-        "SELECT table_name FROM information_schema.tables "
-        "WHERE table_schema = 'plenora' AND table_name = ?",
-        (table_name,)
+    sql = (
+        "SELECT row_hash, row_data FROM node_rows "
+        "WHERE run_id = ? AND node_id = ? ORDER BY row_idx"
     )
-    if not exists:
-        return []
-
-    sql = f"SELECT * FROM {table_name}"
+    params: tuple = (run_id, node_id)
     if limit:
-        sql += f" LIMIT {int(limit)}"
+        sql += " LIMIT ?"
+        params = params + (int(limit),)
 
-    return fetchall(sql)
+    raw_rows = fetchall(sql, params)
+
+    # Ricostruisci il formato originale: _row_hash + colonne row_data
+    # (row_data arriva già come dict da psycopg2 per JSONB)
+    result = []
+    for r in raw_rows:
+        row_data = r.get("row_data") or {}
+        if isinstance(row_data, str):
+            # Safety: se arriva come stringa JSON invece che dict
+            row_data = json.loads(row_data)
+        result.append({"_row_hash": r.get("row_hash", ""), **row_data})
+    return result
 
 
 # ============================================================
@@ -384,9 +376,13 @@ def apply_runs_retention(canvas_id: str, group_id: str) -> None:
 
 
 def _delete_run(run_id: str) -> None:
-    """Elimina una run: tabelle dinamiche + node_meta + riga in runs."""
-    drop_run_tables(run_id)
-    execute("DELETE FROM node_meta WHERE run_id = ?", (run_id,))
+    """Elimina una run e tutti i dati correlati.
+
+    Grazie alla FK ON DELETE CASCADE su node_meta.run_id e node_rows.run_id,
+    basta una singola DELETE sulla tabella runs per pulire tutto atomicamente.
+    Prima il codice droppava tabelle dinamiche, poi DELETE node_meta,
+    poi DELETE runs — tre statement non atomici che potevano lasciare orphan.
+    """
     execute("DELETE FROM runs WHERE run_id = ?", (run_id,))
 
 

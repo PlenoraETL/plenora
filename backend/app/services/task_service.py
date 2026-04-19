@@ -27,7 +27,7 @@ Backend: Redis (sia come broker Celery che come result backend).
 
 import json
 from typing import Dict, Any, Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from dataclasses import dataclass, asdict
 from celery.result import AsyncResult
@@ -85,6 +85,15 @@ class TaskService:
     # Risolve la race condition: frontend fa polling subito dopo la creazione
     # ma il worker non ha ancora scritto project_id nel result backend.
     _task_project_cache: Dict[str, str] = {}
+    _CACHE_MAX_SIZE = 500
+
+    def _prune_cache(self):
+        """Rimuove le entry più vecchie se la cache supera il limite."""
+        if len(self._task_project_cache) > self._CACHE_MAX_SIZE:
+            excess = len(self._task_project_cache) - self._CACHE_MAX_SIZE // 2
+            keys = list(self._task_project_cache.keys())[:excess]
+            for k in keys:
+                self._task_project_cache.pop(k, None)
 
     def __init__(self):
         self.app = celery_app
@@ -100,6 +109,8 @@ class TaskService:
         output_format: str = "csv",
         force_recalculate: bool = False,
         cleanup_file_source_ids: Optional[List[str]] = None,
+        is_eseguibile: bool = False,
+        user_id: Optional[str] = None,
     ) -> TaskInfo:
         """
         Crea e avvia un task di enrichment.
@@ -112,6 +123,11 @@ class TaskService:
             cleanup_file_source_ids: Opzionale — lista di file source temporanei
                 da eliminare al termine del task (usato dagli eseguibili per
                 rimuovere i file caricati dall'utente dopo l'esecuzione).
+            is_eseguibile: True se il task gira per un "eseguibile" pubblicato
+                (record della tabella `eseguibili`). In questo caso il task
+                salta qualsiasi scrittura su DB (runs/log_runs/results/node_rows/
+                columns_metadata) e persiste l'output su disco in
+                ESEGUIBILI_OUTPUTS_DIR/{task_id}/.
 
         Returns:
             TaskInfo con task_id
@@ -125,12 +141,15 @@ class TaskService:
             output_format=output_format,
             force_recalculate=force_recalculate,
             cleanup_file_source_ids=cleanup_file_source_ids,
+            is_eseguibile=is_eseguibile,
+            user_id=user_id,
         )
 
         logger.info(f"Creato task enrichment: {result.id} per progetto {project_id}")
 
         # Cache per risolvere project_id durante PENDING (prima che il worker scriva metadata)
         self._task_project_cache[result.id] = project_id
+        self._prune_cache()
 
         return TaskInfo(
             task_id=result.id,
@@ -139,7 +158,7 @@ class TaskService:
             status=TaskStatus.PENDING,
             progress=0,
             message="Task in coda...",
-            created_at=datetime.now().isoformat()
+            created_at=datetime.now(timezone.utc).isoformat()
         )
     
     def create_carica_task(
@@ -149,7 +168,8 @@ class TaskService:
         carica_node_data: Dict,
         output_format: str = "geojson",
         force_recalculate: bool = False,
-        triggered_by: str = "manual"
+        triggered_by: str = "manual",
+        user_id: Optional[str] = None,
     ) -> TaskInfo:
         """
         Crea e avvia un task di caricamento su database.
@@ -174,11 +194,13 @@ class TaskService:
             carica_node_data=carica_node_data,
             output_format=output_format,
             force_recalculate=force_recalculate,
-            triggered_by=triggered_by
+            triggered_by=triggered_by,
+            user_id=user_id,
         )
         
         logger.info(f"Creato task carica: {result.id} per progetto {project_id}")
         self._task_project_cache[result.id] = project_id
+        self._prune_cache()
 
         return TaskInfo(
             task_id=result.id,
@@ -187,7 +209,7 @@ class TaskService:
             status=TaskStatus.PENDING,
             progress=0,
             message="Task CARICA in coda...",
-            created_at=datetime.now().isoformat()
+            created_at=datetime.now(timezone.utc).isoformat()
         )
     
     # =========================================================================
@@ -199,16 +221,24 @@ class TaskService:
         project_id: str,
         force_recalculate: bool = False,
         triggered_by: str = "manual",
+        user_id: Optional[str] = None,
     ) -> TaskInfo:
-        """Crea e avvia un task di esecuzione pipeline (ESTRAI/MANIPOLA/ARRICCHISCI)."""
+        """Crea e avvia un task di esecuzione pipeline (ESTRAI/MANIPOLA/ARRICCHISCI).
+
+        N9: `user_id` viene propagato alla task Celery per re-check
+        permessi al pickup del worker. Se None (tipico delle cron
+        schedulate), il task skippa il re-check.
+        """
         from workers.tasks.pipeline_task import execute_pipeline_task
         result = execute_pipeline_task.delay(
             project_id=project_id,
             force_recalculate=force_recalculate,
             triggered_by=triggered_by,
+            user_id=user_id,
         )
         logger.info(f"Creato task execute: {result.id} per progetto {project_id}")
         self._task_project_cache[result.id] = project_id
+        self._prune_cache()
         return TaskInfo(
             task_id=result.id,
             task_type=TaskType.EXECUTE,
@@ -216,22 +246,25 @@ class TaskService:
             status=TaskStatus.PENDING,
             progress=0,
             message="Pipeline in coda...",
-            created_at=datetime.now().isoformat(),
+            created_at=datetime.now(timezone.utc).isoformat(),
         )
 
     def create_preview_task(
         self,
         project_id: str,
         limit: int = 100,
+        user_id: Optional[str] = None,
     ) -> TaskInfo:
         """Crea e avvia un task di preview pipeline."""
         from workers.tasks.pipeline_task import preview_pipeline_task
         result = preview_pipeline_task.delay(
             project_id=project_id,
             limit=limit,
+            user_id=user_id,
         )
         logger.info(f"Creato task preview: {result.id} per progetto {project_id}")
         self._task_project_cache[result.id] = project_id
+        self._prune_cache()
         return TaskInfo(
             task_id=result.id,
             task_type=TaskType.PREVIEW,
@@ -239,7 +272,7 @@ class TaskService:
             status=TaskStatus.PENDING,
             progress=0,
             message="Preview in coda...",
-            created_at=datetime.now().isoformat(),
+            created_at=datetime.now(timezone.utc).isoformat(),
         )
 
     def get_task_status(self, task_id: str) -> TaskInfo:
@@ -281,9 +314,16 @@ class TaskService:
 
             # Se completato con successo, meta contiene il risultato
             if status == TaskStatus.SUCCESS:
-                progress = 100
-                message = "Completato"
-                task_result = meta
+                # Fix: task che ritornano dict con success=False sono in realtà fallite
+                if meta.get("success") is False:
+                    status = TaskStatus.FAILURE
+                    progress = 100
+                    message = meta.get("message", meta.get("error", "Errore"))
+                    task_result = meta
+                else:
+                    progress = 100
+                    message = "Completato"
+                    task_result = meta
             else:
                 task_result = None
 

@@ -1,0 +1,78 @@
+/**
+ * buttons.css — Sistema bottoni globale token-based
+ * Modifica i token in variables.css per cambiare stile globalmente.
+ * Override per modulo: definisci --btn-primary-bg nello scope dell'editor.
+ *
+ * Struttura:
+ *   .btn-base        → reset + layout comune (NON usare direttamente)
+ *   .btn-primary     → azione principale del modulo
+ *   .btn-secondary   → azione neutrale / annulla
+ *   .btn-danger      → elimina / operazione distruttiva
+ *   .btn-success     → conferma / esegui / salva
+ *   .btn-cancel      → annulla ghost (solo testo)
+ */
+
+/* ============================================================
+   BASE — reset condiviso
+   ============================================================ */
+.btn-base,
+.btn-primary,
+.btn-secondary,
+.btn-danger,
+.btn-success,
+
+.btn-base:disabled,
+.btn-primary:disabled,
+.btn-secondary:disabled,
+.btn-danger:disabled,
+.btn-success:disabled,
+
+/* ============================================================
+   PRIMARY — azione principale del modulo corrente
+   Override: .estrai-editor { --btn-primary-bg: var(--color-primary) }
+   ============================================================ */
+
+/* ============================================================
+   SECONDARY — azione neutrale
+   ============================================================ */
+
+/* ============================================================
+   DANGER — elimina / operazione distruttiva
+   ============================================================ */
+
+/* ============================================================
+   SUCCESS — conferma / esegui
+   ============================================================ */
+
+/* ============================================================
+   CANCEL — ghost, solo testo
+   ============================================================ */
+
+/* ============================================================
+   OVERRIDE PER MODULO
+   Basta cambiare questi per un re-theme completo
+   ============================================================ */
+.estrai-editor,
+.estrai-toolbar,
+.modal-wrapper--estrai {
+  --btn-primary-bg:    var(--color-primary);
+  --btn-primary-hover: var(--color-primary-dark);
+}
+
+.manipola-editor,
+.manipola-toolbar,
+.modal-wrapper--manipola {
+  --btn-primary-bg:    var(--color-manipola);
+  --btn-primary-hover: var(--color-manipola-dark);
+}
+
+.arricchisci-editor,
+.arricchisci-toolbar,
+.modal-wrapper--arricchisci {
+  --btn-primary-bg:    var(--color-arricchisci);
+  --btn-primary-hover: var(--color-arricchisci-dark);
+}
+
+/* ============================================================
+   SIZE VARIANTS
+   ============================================================ */

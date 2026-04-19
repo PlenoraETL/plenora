@@ -1,7 +1,14 @@
+/**
+ * useSchemaInference.js — Hook per inferire lo schema colonne dai nodi
+ *
+ * Interroga il backend per ottenere lo schema (colonne + tipi) di ogni
+ * nodo sorgente nel canvas. Usato per popolare i select di colonne
+ * nelle configurazioni delle trasformazioni.
+ *
+ * useInputColumns(nodeId, edges, schemas): filtra lo schema per un nodo specifico.
+ */
 import { useState, useCallback, useEffect, useRef } from 'react';
-
-// API_BASE_URL - adatta in base alla tua configurazione
-const API_BASE_URL = 'http://localhost:8000';
+import { getProjectSchemas, getNodeSchema, validateProjectConnection, validateAllProjectSources } from '../api';
 
 /**
  * Hook per gestire l'inferenza degli schemi delle colonne attraverso il grafo dei nodi.
@@ -37,13 +44,7 @@ export function useSchemaInference(projectId) {
     setError(null);
     
     try {
-      const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}/schemas`);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      
-      const data = await response.json();
+      const data = await getProjectSchemas(projectId);
       setSchemas(data.schemas || {});
       lastProjectIdRef.current = projectId;
       
@@ -72,15 +73,7 @@ export function useSchemaInference(projectId) {
     if (!projectId || !nodeId) return [];
     
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/api/projects/${projectId}/schemas/${nodeId}`
-      );
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      
-      const data = await response.json();
+      const data = await getNodeSchema(projectId, nodeId);
       
       // Aggiorna cache locale
       setSchemas(prev => ({
@@ -103,24 +96,11 @@ export function useSchemaInference(projectId) {
     if (!projectId) return { valid: false, error: 'No project ID' };
     
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/api/projects/${projectId}/validate-connection`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+      return await validateProjectConnection(projectId, {
             source_node_id: sourceNodeId,
             target_node_id: targetNodeId,
             config
-          })
-        }
-      );
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      
-      return await response.json();
+          });
       
     } catch (err) {
       console.error('[useSchemaInference] Errore validazione connessione:', err);
@@ -135,15 +115,7 @@ export function useSchemaInference(projectId) {
     if (!projectId) return { valid: true, errors: [] };
     
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/api/projects/${projectId}/validate-all`
-      );
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      
-      return await response.json();
+      return await validateAllProjectSources(projectId);
       
     } catch (err) {
       console.error('[useSchemaInference] Errore validazione connessioni:', err);

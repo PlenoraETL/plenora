@@ -1,0 +1,295 @@
+"""
+test_imdf_validate_publish_folder_contract.py
+
+Contract test per il supporto del parametro `folder` in validate_publish.
+Verifica che:
+  1. Il Pydantic model ImdfValidateRequest accetta folder come Optional.
+  2. Chiamare validate_publish senza folder preserva il comportamento
+     baseline (no FOLDER_MISMATCH nel report).
+  3. Chiamare validate_publish con folder che coincide con la ownerFolder
+     dell'FS esistente NON emette FOLDER_MISMATCH.
+  4. Chiamare validate_publish con folder diverso dalla ownerFolder
+     dell'FS esistente emette warning FOLDER_MISMATCH.
+"""
+import pytest
+
+pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
+
+
+# ── 1. Pydantic model ───────────────────────────────────────────────────
+def test_imdf_validate_request_accepts_optional_folder():
+    from app.core.imdf.router import ImdfValidateRequest
+
+    # Senza folder → default None
+    r = ImdfValidateRequest(
+        bundle_task_id="task-1",
+        connection_id="conn-1",
+        fs_name="MyFS",
+    )
+    assert getattr(r, "folder", None) is None
+
+    # Con folder
+    r = ImdfValidateRequest(
+        bundle_task_id="task-1",
+        connection_id="conn-1",
+        fs_name="MyFS",
+        folder="MyFolder",
+    )
+    assert r.folder == "MyFolder"
+
+
+# ── 2. Fixtures per mockare validate_publish ────────────────────────────
+class _FakeGDF:
+    """Mock minimo di un GeoDataFrame per far passare il per-layer loop in
+    mode=replace (non serve columns, solo __len__)."""
+    def __init__(self, n: int):
+        self._n = n
+        self.columns = []
+
+    def __len__(self):
+        return self._n
+
+
+class _FakeConnInfo:
+    username = "tester"
+    server_url = "https://example.com"
+
+
+@pytest.fixture
+def fake_bundle(tmp_path, monkeypatch):
+    """Crea una cartella bundle finta con .gdb e patcha IMDF_BUNDLES_DIR
+    sostituendo l'intero oggetto settings in app.config (IMDF_BUNDLES_DIR
+    nell'oggetto reale è una @property read-only)."""
+    bundle_dir = tmp_path / "task-abc"
+    bundle_dir.mkdir()
+    (bundle_dir / "fake.gdb").mkdir()
+
+    from types import SimpleNamespace
+    import app.config as config_mod
+    fake_settings = SimpleNamespace(
+        IMDF_BUNDLES_DIR=tmp_path,
+        IMDF_BUNDLE_TTL_HOURS=24,
+    )
+    monkeypatch.setattr(config_mod, "settings", fake_settings)
+    return bundle_dir
+
+
+@pytest.fixture
+def stub_externals(monkeypatch):
+    """Monkeypatcha tutte le dipendenze esterne di validate_publish:
+    loader, FeaturesService, create_client, _find_existing_service,
+    _is_service_name_available."""
+    import app.core.imdf.loader as loader_mod
+    import app.core.features.features_service as fs_mod
+    import app.core.features.arcgis_client as client_mod
+    import app.core.imdf.arcgis_uploader as uploader_mod
+
+    # Layer finti (solo Locale per avere un layer presente)
+    monkeypatch.setattr(
+        loader_mod, "load_imdf_layers",
+        lambda gdb: {"Locale": _FakeGDF(3)},
+    )
+
+    class _FakeFS:
+        def get_connection(self, cid):
+            return {"id": cid}
+
+        def _to_connection_info(self, pyd):
+            return _FakeConnInfo()
+
+    monkeypatch.setattr(fs_mod, "FeaturesService", _FakeFS)
+
+    class _FakeArcgisClient:
+        def list_layers(self, conn, url):
+            return []
+
+        def get_layer_schema(self, conn, url):
+            return {"fields": []}
+
+    monkeypatch.setattr(client_mod, "create_client", lambda: _FakeArcgisClient())
+
+    # Default: nessun service esistente (override nei test che servono)
+    monkeypatch.setattr(
+        uploader_mod, "_find_existing_service",
+        lambda *args, **kwargs: (None, None, None),
+    )
+    monkeypatch.setattr(
+        uploader_mod, "_is_service_name_available",
+        lambda client, conn, fs_name: (True, None),
+    )
+
+    return {"uploader": uploader_mod}
+
+
+# ── 3. Baseline: senza folder ───────────────────────────────────────────
+def test_validate_publish_without_folder_has_no_folder_mismatch(fake_bundle, stub_externals):
+    """Comportamento baseline: senza folder nel request, mai warning
+    FOLDER_MISMATCH nel report (retrocompat)."""
+    from app.core.imdf.validator import validate_publish
+
+    report = validate_publish(
+        bundle_task_id="task-abc",
+        connection_id="conn-1",
+        fs_name="MyFS",
+        mode="replace",
+    )
+
+    codes = [i.get("code") for i in report.get("top_issues", [])]
+    assert "FOLDER_MISMATCH" not in codes
+
+
+# ── 4. Folder passato, FS non esiste → nessun warning (è solo per esistenti)
+def test_validate_publish_folder_no_existing_fs_no_mismatch(fake_bundle, stub_externals):
+    from app.core.imdf.validator import validate_publish
+
+    report = validate_publish(
+        bundle_task_id="task-abc",
+        connection_id="conn-1",
+        fs_name="MyFS",
+        mode="replace",
+        folder="MyFolder",
+    )
+    codes = [i.get("code") for i in report.get("top_issues", [])]
+    assert "FOLDER_MISMATCH" not in codes
+
+
+# ── 5. Folder matches ownerFolder esistente → no warning ────────────────
+def test_validate_publish_folder_matches_existing_no_warning(fake_bundle, stub_externals, monkeypatch):
+    import app.core.imdf.arcgis_uploader as uploader_mod
+
+    # FS esistente con ownerFolder == "MyFolder"
+    monkeypatch.setattr(
+        uploader_mod, "_find_existing_service",
+        lambda *args, **kwargs: ("https://example.com/services/MyFS/FeatureServer", "item-1", "MyFolder"),
+    )
+
+    from app.core.imdf.validator import validate_publish
+    report = validate_publish(
+        bundle_task_id="task-abc",
+        connection_id="conn-1",
+        fs_name="MyFS",
+        mode="append",
+        folder="MyFolder",
+    )
+    codes = [i.get("code") for i in report.get("top_issues", [])]
+    assert "FOLDER_MISMATCH" not in codes
+    assert report["fs_exists"] is True
+
+
+# ── 6. Folder mismatches → warning FOLDER_MISMATCH ──────────────────────
+def test_validate_publish_folder_mismatch_emits_warning(fake_bundle, stub_externals, monkeypatch):
+    import app.core.imdf.arcgis_uploader as uploader_mod
+
+    # FS esistente nella folder "OtherFolder", utente chiede "MyFolder"
+    monkeypatch.setattr(
+        uploader_mod, "_find_existing_service",
+        lambda *args, **kwargs: ("https://example.com/services/MyFS/FeatureServer", "item-1", "OtherFolder"),
+    )
+
+    from app.core.imdf.validator import validate_publish
+    report = validate_publish(
+        bundle_task_id="task-abc",
+        connection_id="conn-1",
+        fs_name="MyFS",
+        mode="append",
+        folder="MyFolder",
+    )
+
+    codes = [i.get("code") for i in report.get("top_issues", [])]
+    assert "FOLDER_MISMATCH" in codes, (
+        f"Atteso FOLDER_MISMATCH in top_issues, trovato: {codes}"
+    )
+    # Severità warning, non error: il publish funzionerà comunque
+    folder_issues = [i for i in report["top_issues"] if i.get("code") == "FOLDER_MISMATCH"]
+    assert folder_issues[0].get("severity") == "warning"
+
+
+# ── 7. FOLDER_MISMATCH falso positivo: id esistente vs title richiesto ─
+def test_validate_publish_folder_id_resolves_to_title_no_warning(fake_bundle, stub_externals, monkeypatch):
+    """L'API ArcGIS restituisce ownerFolder come folder ID (hash), mentre
+    l'utente sceglie una folder per TITLE. Il validator deve risolvere
+    l'ID → title via _list_user_folders prima di confrontare. Se la folder
+    con ID='hash-abc' ha title='MyFolder' e l'utente ha scelto 'MyFolder',
+    NON deve esserci warning."""
+    import app.core.imdf.arcgis_uploader as uploader_mod
+
+    monkeypatch.setattr(
+        uploader_mod, "_find_existing_service",
+        lambda *args, **kwargs: ("https://example.com/services/MyFS/FeatureServer", "item-1", "hash-abc"),
+    )
+    # _list_user_folders ritorna la lista con id/title
+    monkeypatch.setattr(
+        uploader_mod, "_list_user_folders",
+        lambda client, conn: [{"id": "hash-abc", "title": "MyFolder"}],
+        raising=False,
+    )
+
+    from app.core.imdf.validator import validate_publish
+    report = validate_publish(
+        bundle_task_id="task-abc",
+        connection_id="conn-1",
+        fs_name="MyFS",
+        mode="append",
+        folder="MyFolder",
+    )
+    codes = [i.get("code") for i in report.get("top_issues", [])]
+    assert "FOLDER_MISMATCH" not in codes, (
+        f"Con id→title resolution non deve esserci mismatch. top_issues: {report.get('top_issues')}"
+    )
+
+
+def test_validate_publish_folder_id_mismatch_uses_title_in_message(fake_bundle, stub_externals, monkeypatch):
+    """Quando il mismatch è reale, il messaggio di warning deve mostrare
+    il title risolto, non l'ID hash."""
+    import app.core.imdf.arcgis_uploader as uploader_mod
+
+    monkeypatch.setattr(
+        uploader_mod, "_find_existing_service",
+        lambda *args, **kwargs: ("https://example.com/services/MyFS/FeatureServer", "item-1", "hash-abc"),
+    )
+    monkeypatch.setattr(
+        uploader_mod, "_list_user_folders",
+        lambda client, conn: [
+            {"id": "hash-abc", "title": "RealOwnerFolder"},
+            {"id": "hash-xyz", "title": "UserSelected"},
+        ],
+        raising=False,
+    )
+
+    from app.core.imdf.validator import validate_publish
+    report = validate_publish(
+        bundle_task_id="task-abc",
+        connection_id="conn-1",
+        fs_name="MyFS",
+        mode="replace",
+        folder="UserSelected",
+    )
+    mm = [i for i in report["top_issues"] if i.get("code") == "FOLDER_MISMATCH"]
+    assert len(mm) == 1, f"Atteso 1 FOLDER_MISMATCH, trovato: {report['top_issues']}"
+    msg = mm[0]["message"]
+    assert "RealOwnerFolder" in msg, f"Messaggio deve contenere il title risolto, non l'id. msg={msg}"
+    assert "hash-abc" not in msg, f"Messaggio NON deve contenere l'id raw. msg={msg}"
+
+
+# ── 9. Folder mismatch NON deve rompere replace ok ──────────────────────
+def test_validate_publish_folder_mismatch_replace_still_ok(fake_bundle, stub_externals, monkeypatch):
+    """Anche con folder diverso, replace resta 'ok' (è un warning, non error)."""
+    import app.core.imdf.arcgis_uploader as uploader_mod
+
+    monkeypatch.setattr(
+        uploader_mod, "_find_existing_service",
+        lambda *args, **kwargs: ("https://example.com/services/MyFS/FeatureServer", "item-1", "OtherFolder"),
+    )
+
+    from app.core.imdf.validator import validate_publish
+    report = validate_publish(
+        bundle_task_id="task-abc",
+        connection_id="conn-1",
+        fs_name="MyFS",
+        mode="replace",
+        folder="MyFolder",
+    )
+
+    assert report["summary"]["errors"] == 0
+    assert report["ok"] is True
+    assert report["summary"]["warnings"] >= 1

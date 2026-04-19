@@ -1,5 +1,5 @@
 """
-Utility centralizzate per operazioni geospaziali in URBY-ETL.
+Utility centralizzate per operazioni geospaziali in PLENORA-ETL.
 
 Architettura
 ============
@@ -492,6 +492,27 @@ def get_utm_crs_for_geometry(gdf: gpd.GeoDataFrame) -> str:
         centroide = gdf.geometry.unary_union.centroid
         lon, lat = centroide.x, centroide.y
 
+        # Guard multi-zona: bbox che copre molto longitudine segnala che
+        # la singola zona UTM scelta sul centroide e' inaccurata ai bordi.
+        # Soglie: 3 gradi = zona nominale ±1 zona adiacente (circa 0.04%
+        # distorsione scala); 6 gradi = fuori zona garantito.
+        bounds = gdf.total_bounds  # (minx, miny, maxx, maxy)
+        lon_range = bounds[2] - bounds[0]
+        if lon_range > 6:
+            logger.warning(
+                "UTM zone guard CRITICAL: bbox copre %.2f gradi di longitudine "
+                "(>6). La zona UTM scelta distorce le geometrie ai bordi. "
+                "Considera CRS custom (es. Lambert conformico) per operazioni "
+                "metriche accurate.",
+                lon_range,
+            )
+        elif lon_range > 3:
+            logger.warning(
+                "UTM zone guard: bbox copre %.2f gradi di longitudine (>3). "
+                "Accuratezza metrica marginale per geometrie ai bordi della zona.",
+                lon_range,
+            )
+
         # Formula: zona UTM = floor((lon + 180) / 6) + 1
         zona_utm = int((lon + 180) / 6) + 1
 
@@ -509,7 +530,7 @@ def extract_srid_from_column_type(col_type: str) -> Optional[int]:
     """
     Estrae il codice SRID dal formato tipo colonna "geometry:subtype:srid".
 
-    Il formato tipo usato internamente da URBY-ETL codifica il subtype e
+    Il formato tipo usato internamente da PLENORA-ETL codifica il subtype e
     l'SRID separati da ':'. L'SRID è il terzo componente, se presente.
 
     Esempi:

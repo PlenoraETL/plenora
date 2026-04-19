@@ -1,0 +1,247 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   AdminSystemStatusPage.css — Dashboard stato sistema (solo superadmin)
+   Token con prefisso --sys-. Stile coerente con AdminBackupsPage/FileManager.
+───────────────────────────────────────────────────────────────────────── */
+
+.sys {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  overflow: hidden;
+  background: #07090F;
+  color: #DDE4F2;
+  font-family: 'Inter', 'Segoe UI', sans-serif;
+  font-size: 13px;
+}
+[data-theme='light'] .sys {
+  background: #EFF2F9;
+  color: #0B1120;
+}
+
+.sys *, .sys *::before, .sys *::after {
+  box-sizing: border-box;
+}
+
+.sys__main {
+  flex: 1;
+  min-width: 0;
+  padding: 24px 32px;
+  overflow-y: auto;
+}
+
+/* ── Header ───────────────────────────────────────────────────────────── */
+.sys__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+.sys__title {
+  margin: 0 0 4px 0;
+  font-family: 'Syne', 'Trebuchet MS', sans-serif;
+  font-size: 26px;
+  font-weight: 700;
+  color: #DDE4F2;
+  letter-spacing: -0.5px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+[data-theme='light'] .sys__title { color: #0B1120; }
+
+.sys__subtitle {
+  font-size: 13px;
+  color: #7D8BA8;
+}
+
+.sys__header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.sys__btn {
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity .15s ease, transform .1s ease;
+}
+.sys__btn:disabled { opacity: .5; cursor: not-allowed; }
+.sys__btn:not(:disabled):hover { transform: translateY(-1px); }
+.sys__btn--primary {
+  background: linear-gradient(135deg, #4B8BFF, #2563EB);
+  color: white;
+  border-color: #2563EB;
+}
+
+/* ── Badge stato ──────────────────────────────────────────────────────── */
+.sys__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.6;
+  border: 1px solid;
+}
+.sys__badge--ok      { color: #34D399; border-color: #34D399; background: rgba(52,211,153,0.08); }
+.sys__badge--warn    { color: #FBBF24; border-color: #FBBF24; background: rgba(251,191,36,0.08); }
+.sys__badge--error   { color: #F87171; border-color: #F87171; background: rgba(248,113,113,0.08); }
+.sys__badge--unknown { color: #7D8BA8; border-color: #7D8BA8; background: rgba(125,139,168,0.08); }
+
+/* ── Grid card (full width del container) ─────────────────────────────── */
+.sys__cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.sys__card {
+  padding: 14px 18px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: #0C0F18;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 160px;
+}
+[data-theme='light'] .sys__card {
+  background: #FFFFFF;
+  border-color: rgba(0,0,0,0.07);
+}
+.sys__card--ok      { border-left: 3px solid #34D399; }
+.sys__card--warn    { border-left: 3px solid #FBBF24; }
+.sys__card--error   { border-left: 3px solid #F87171; }
+.sys__card--unknown { border-left: 3px solid #7D8BA8; }
+
+.sys__card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.sys__card-title {
+  margin: 0;
+  font-family: 'Syne', 'Trebuchet MS', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sys__card-message {
+  font-weight: 500;
+  font-size: 13px;
+  color: #DDE4F2;
+}
+[data-theme='light'] .sys__card-message { color: #0B1120; }
+
+.sys__card-body {
+  font-size: 12px;
+  color: #7D8BA8;
+  line-height: 1.7;
+  flex: 1;
+}
+.sys__card-body b,
+.sys__card-body strong {
+  color: #DDE4F2;
+  font-weight: 500;
+}
+[data-theme='light'] .sys__card-body b,
+[data-theme='light'] .sys__card-body strong { color: #0B1120; }
+
+.sys__card-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #4B8BFF;
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+  font-weight: 500;
+}
+.sys__card-link:hover { text-decoration: underline; }
+
+/* ── Progress bar ─────────────────────────────────────────────────────── */
+.sys__progress {
+  height: 6px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 6px;
+}
+[data-theme='light'] .sys__progress { background: rgba(0,0,0,0.07); }
+.sys__progress-fill {
+  height: 100%;
+  transition: width 0.3s ease;
+  border-radius: 3px;
+}
+.sys__progress-fill--ok    { background: #34D399; }
+.sys__progress-fill--warn  { background: #FBBF24; }
+.sys__progress-fill--error { background: #F87171; }
+
+/* ── Worker / table list dentro card ───────────────────────────────────── */
+.sys__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.sys__list-item {
+  padding: 6px 8px;
+  margin-bottom: 4px;
+  border-radius: 4px;
+  border-left: 2px solid #4B8BFF;
+  background: rgba(75,139,255,0.05);
+  font-size: 12px;
+}
+[data-theme='light'] .sys__list-item {
+  background: rgba(75,139,255,0.05);
+}
+.sys__list-item b { color: #DDE4F2; }
+[data-theme='light'] .sys__list-item b { color: #0B1120; }
+
+.sys__kv {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+  font-size: 12px;
+}
+.sys__kv-key { color: #7D8BA8; }
+.sys__kv-val { color: #DDE4F2; font-family: 'DM Mono', 'Consolas', monospace; font-size: 11px; }
+[data-theme='light'] .sys__kv-val { color: #0B1120; }
+
+.sys__hint {
+  margin-top: 6px;
+  font-style: italic;
+  font-size: 11px;
+  color: #7D8BA8;
+}
+
+/* ── Footer / errore ──────────────────────────────────────────────────── */
+.sys__error-box {
+  background: rgba(248,113,113,0.08);
+  border: 1px solid rgba(248,113,113,0.3);
+  color: #F87171;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+.sys__footer {
+  margin-top: 32px;
+  font-size: 12px;
+  color: #7D8BA8;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  padding-top: 12px;
+}
+[data-theme='light'] .sys__footer {
+  border-top-color: rgba(0,0,0,0.08);
+}

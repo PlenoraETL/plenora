@@ -1,0 +1,18 @@
+# Terraform working dir (provider binaries, modules, lock file local copy)
+.terraform/
+.terraform.lock.hcl.bak
+
+# State files (vivono su S3 remote backend — questi sono backup locali accidentali)
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+
+# Valori reali (il .example va committato, i valori no)
+terraform.tfvars
+*.tfvars
+!*.tfvars.example
+
+# Plan output files
+*.tfplan
+plan.out

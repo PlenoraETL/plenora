@@ -52,22 +52,34 @@ def _sanitize_upload_filename(raw: Optional[str]) -> str:
 
 
 def _assert_path_within(child: Path, parent: Path, label: str = "Percorso") -> Path:
-    """Verifica che `child` (resolved) sia dentro `parent` (resolved).
+    """Garantisce che `child` (resolved) sia dentro `parent`, traducendo
+    eventuali violazioni in HTTPException con codice e messaggio
+    HTTP-friendly.
 
-    Difesa in profondità: anche se `_sanitize_upload_filename` ha già escluso
-    path traversal nel nome, una eventuale presenza di symlink in `parent`
-    potrebbe far uscire il `child` resolved fuori dalla sandbox.
+    Contratto:
+      - path malformato (UNC, resolve fallito) → HTTPException 400
+      - path resolved fuori dalla sandbox       → HTTPException 403
+      - successo                                 → ritorna il Path resolved
+
+    `label` viene incluso nel messaggio response (es. "Percorso file
+    non valido", "Upload fuori dalla directory consentita") per dare
+    al client un errore comprensibile senza esporre dettagli del
+    filesystem interno.
+
+    Difesa in profondità: anche se il filename in upload e' stato gia'
+    sanitizzato a monte, un symlink dentro `parent` potrebbe far uscire
+    il `child` resolved fuori dalla sandbox — qui lo intercettiamo.
     """
     try:
-        child_resolved = child.resolve(strict=False)
-        parent_resolved = parent.resolve(strict=False)
-    except Exception:
+        return _core_assert(child, [parent])
+    except ValueError as e:
+        msg = str(e)
+        if "fuori dai trusted roots" in msg:
+            raise HTTPException(
+                status_code=403,
+                detail=f"{label} fuori dalla directory consentita",
+            )
         raise HTTPException(status_code=400, detail=f"{label} non valido")
-    try:
-        child_resolved.relative_to(parent_resolved)
-    except ValueError:
-        raise HTTPException(status_code=403, detail=f"{label} fuori dalla directory consentita")
-    return child_resolved
 
 from app.services.file_service import file_source_service
 from app.config import settings
@@ -84,6 +96,7 @@ from app.core.auth.auth import (
     group_filter,
 )
 from app.shared.sharing import visible_resource_ids
+from app.shared.path_policy import assert_path_within as _core_assert
 from .models import (
     FileSource,
     FileSourceList,
@@ -118,11 +131,28 @@ def preview_file_temp(
     current_user: CurrentUser = Depends(require_not_esecutore),
 ):
     """Preview temporanea di un file per ottenere le colonne disponibili.
-    
+
     - layer: layer specifico per GPKG/GDB
     - sheet: foglio specifico per XLSX
     Se nessuno e' specificato su file multi-layer/sheet, restituisce la lista disponibile.
     """
+    # Block-only MIME validation: blocca eseguibili anche in preview
+    # (no persist ma evita di passare un binario al parser, riducendo
+    # superficie RCE da parser bug). Allowlist stretta romperebbe i
+    # passthrough_extensions documentati sotto.
+    from app.utils.mime_validator import (
+        MimeMismatchError, validate_no_executable,
+    )
+    file.file.seek(0)
+    _content_for_mime = file.file.read()
+    file.file.seek(0)
+    try:
+        validate_no_executable(
+            content=_content_for_mime, filename=file.filename or "upload",
+        )
+    except MimeMismatchError as _mime_err:
+        raise HTTPException(status_code=400, detail=str(_mime_err))
+
     try:
         result = file_source_service.preview_file_temp(
             file_content=file.file,
@@ -166,6 +196,8 @@ def upload_file(
     current_user: CurrentUser = Depends(require_user_or_above),
 ):
     """Upload un nuovo file e crea un File Source. Viewer non può creare."""
+    import json, uuid
+    from datetime import datetime
     try:
         # Sanitizza filename con helper centralizzato (path traversal, NUL,
         # nomi riservati ".."/"."/"" )
@@ -187,13 +219,31 @@ def upload_file(
                        f"Limite massimo: {max_mb}MB."
             )
 
-        valid_extensions = ['.csv', '.xlsx', '.xls', '.json', '.geojson', '.gpkg', '.shp', '.gdb', '.zip']
+        # MIME validation content-based: rifiuta eseguibili rinominati,
+        # polyglot, content-extension mismatch. Sostituisce la heuristic
+        # pure-Python con `filetype` (zero dep sistema, ~200 MIME noti
+        # coprono tutti i formati Plenora).
+        from app.utils.mime_validator import MimeMismatchError, validate_upload
 
-        if not any(filename.lower().endswith(ext) for ext in valid_extensions):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Formato file non supportato. Formati validi: {', '.join(valid_extensions)}"
+        _ALLOWED_UPLOAD_EXTENSIONS = {
+            "csv", "xlsx", "xls", "json", "geojson",
+            "gpkg", "shp", "gdb", "zip", "dxf",
+        }
+        file.file.seek(0)
+        content_for_mime = file.file.read()
+        file.file.seek(0)
+        try:
+            validate_upload(
+                content=content_for_mime,
+                filename=filename,
+                allowed_extensions=_ALLOWED_UPLOAD_EXTENSIONS,
             )
+        except MimeMismatchError as e:
+            logger.warning(
+                f"Upload rifiutato (MIME): filename={filename!r} "
+                f"user={current_user.username}: {e}"
+            )
+            raise HTTPException(status_code=400, detail=str(e))
         
         # File binari/archivio: salva senza parsing (usati da executable)
         binary_extensions = ['.zip', '.gz', '.tar', '.7z', '.rar', '.dxf']
@@ -204,7 +254,6 @@ def upload_file(
                 
                 columns_list_bin = None
                 if selected_columns:
-                    import json
                     try:
                         columns_list_bin = json.loads(selected_columns)
                     except json.JSONDecodeError:
@@ -233,58 +282,26 @@ def upload_file(
                 # ValueError esplicito (es. ZIP corrotto) → errore 400, non salvare come raw
                 raise
             except Exception as _bin_exc:
-                # Parsing fallito per formato non supportato — salva come raw (es. ZIP con DXF)
-                logger.warning(f"create_from_upload fallito per ZIP: {type(_bin_exc).__name__}: {_bin_exc}")
-                pass
-            
-            import uuid
-            from datetime import datetime
-            from app.config import settings
-            
-            file.file.seek(0)
-            file_id = str(uuid.uuid4())[:8]
-            dest_dir = settings.get_file_source_dir(file_id)
-
-            # filename è già stato sanitizzato all'inizio della funzione.
-            # Difesa in profondità: verifichiamo che il percorso finale risolto
-            # sia dentro dest_dir (protezione anti-symlink).
-            safe_filename = _sanitize_upload_filename(filename)
-            dest_path = dest_dir / safe_filename
-            _assert_path_within(dest_path, dest_dir, label="Percorso file")
-
-            content = file.file.read()
-            dest_path.write_bytes(content)
-            
-            file_ext = safe_filename.rsplit('.', 1)[-1].lower()
-
-            # Salva metadata
-            import json
-            metadata = {
-                "id": file_id,
-                "name": name,
-                "description": description,
-                "file_path": str(dest_path),
-                "original_filename": safe_filename,
-                "format": file_ext,
-                "layer": None,
-                "sheet": None,
-                "columns": [],
-                "row_count": 0,
-                "file_size": len(content),
-                "crs": None,
-                "created_at": datetime.now().isoformat(),
-                "updated_at": datetime.now().isoformat()
-            }
-            
-            metadata_path = dest_dir / "metadata.json"
-            with open(metadata_path, 'w', encoding='utf-8') as f:
-                json.dump(metadata, f, indent=2, ensure_ascii=False)
-            
-            return FileSource(**metadata)
+                # Parsing fallito per formato non supportato (es. ZIP con
+                # DXF interno, .dxf diretto). Fallback: salva blob raw nel
+                # DB senza inferire colonne/layer. Il downstream (es.
+                # eseguibili workflow) legge il blob come bytes.
+                logger.warning(
+                    f"create_from_upload fallito, fallback raw DB: "
+                    f"{type(_bin_exc).__name__}: {_bin_exc}"
+                )
+                safe_filename = _sanitize_upload_filename(filename)
+                file.file.seek(0)
+                return file_source_service.create_raw_from_upload(
+                    file_content=file.file,
+                    filename=safe_filename,
+                    name=name,
+                    description=description,
+                    group_id=current_user.group_id,
+                )
         
         columns_list = None
         if selected_columns:
-            import json
             try:
                 columns_list = json.loads(selected_columns)
             except json.JSONDecodeError:
@@ -346,12 +363,25 @@ def upload_multi_layer(
         filename = Path(file.filename).name if file.filename else ""
         if not filename:
             raise HTTPException(status_code=400, detail="Nome file non valido")
-        valid_extensions = ['.gpkg', '.gdb', '.zip', '.xlsx', '.xls']
-        if not any(filename.lower().endswith(ext) for ext in valid_extensions):
-            raise HTTPException(
-                status_code=400,
-                detail=f"upload-multi-layer supporta solo: {', '.join(valid_extensions)}"
+
+        # MIME validation content-based (stessa difesa di /upload).
+        from app.utils.mime_validator import MimeMismatchError, validate_upload
+        _ALLOWED_MULTI_LAYER_EXTENSIONS = {"gpkg", "gdb", "zip", "xlsx", "xls"}
+        file.file.seek(0)
+        content_for_mime = file.file.read()
+        file.file.seek(0)
+        try:
+            validate_upload(
+                content=content_for_mime,
+                filename=filename,
+                allowed_extensions=_ALLOWED_MULTI_LAYER_EXTENSIONS,
             )
+        except MimeMismatchError as e:
+            logger.warning(
+                f"Upload multi-layer rifiutato (MIME): filename={filename!r} "
+                f"user={current_user.username}: {e}"
+            )
+            raise HTTPException(status_code=400, detail=str(e))
 
         try:
             layers_cfg = _json.loads(layers_config)
@@ -392,11 +422,27 @@ def upload_multi_layer(
 @router.get("", response_model=FileSourceList)
 def list_files(current_user: CurrentUser = Depends(require_not_esecutore)):
     """Lista file visibili: owned dal proprio gruppo + condivisi via allowed_groups.
-    Ogni record include `can_edit` calcolato per l'utente corrente."""
+    Ogni record include `can_edit` calcolato per l'utente corrente.
+
+    I file_source temporanei creati dagli eseguibili (prefisso `__exec_temp_`)
+    sono esclusi: esistono solo per ~20 secondi durante un'esecuzione e non
+    devono mai apparire in UI — sono un dettaglio implementativo del runner
+    dell'eseguibile, non contenuto utente.
+    """
     is_super = current_user.role == "superadmin"
 
     # Carica TUTTI i file (senza filter) — il superadmin vede tutto.
     all_files = file_source_service.list_file_sources(group_id=None)
+
+    # Filtro file_source temporanei degli eseguibili (sempre, anche per superadmin).
+    def _is_temp(f):
+        name = getattr(f, "name", "") or ""
+        return name.startswith("__exec_temp_")
+
+    if hasattr(all_files, 'files'):
+        all_files.files = [f for f in all_files.files if not _is_temp(f)]
+    elif isinstance(all_files, list):
+        all_files = [f for f in all_files if not _is_temp(f)]
 
     if not is_super:
         visible_ids = visible_resource_ids(
@@ -435,15 +481,28 @@ def delete_file(file_id: str, current_user: CurrentUser = Depends(require_file_o
     return {"status": "deleted", "file_id": file_id}
 
 
+def _svc_group(current_user: CurrentUser) -> str:
+    """N1: calcola il group_id da passare al service per fail-closed.
+    Superadmin usa il bypass sentinel del FileSourceService."""
+    from app.services.file_service import FileSourceService
+    if current_user.role == "superadmin":
+        return FileSourceService.SUPERADMIN_BYPASS
+    return current_user.group_id
+
+
 @router.get("/{file_id}/layers", response_model=FileSourceLayersResponse)
 def get_file_layers(file_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
     """Ottieni lista layer/sheet disponibili in un file. Read-only su risorsa visibile."""
     file_source = file_source_service.get_file_source(file_id)
     assert_resource_visible(file_source, "file_sources", current_user, "File")
     try:
-        return file_source_service.get_layers_info(file_id)
+        return file_source_service.get_layers_info(
+            file_id, expected_group_id=_svc_group(current_user),
+        )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
     except Exception as e:
         logger.error(f"[CRASH] Errore listing layers: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Errore interno del server")
@@ -455,9 +514,13 @@ def preview_file(file_id: str, limit: int = Query(100, ge=1, le=1000), current_u
     file_source = file_source_service.get_file_source(file_id)
     assert_resource_visible(file_source, "file_sources", current_user, "File")
     try:
-        return file_source_service.get_preview(file_id, limit)
+        return file_source_service.get_preview(
+            file_id, limit, expected_group_id=_svc_group(current_user),
+        )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
     except Exception as e:
         logger.error(f"[CRASH] Errore preview file: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Errore interno del server")

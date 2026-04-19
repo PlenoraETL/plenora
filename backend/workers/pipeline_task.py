@@ -120,8 +120,8 @@ def execute_pipeline_task(
 
         elapsed_ms = int((_time.time() - _run_start) * 1000)
 
-        if not result.get("success"):
-            message = result.get("message", "Errore sconosciuto")
+        if not result.success:
+            message = result.message or "Errore sconosciuto"
 
             # Errori di connessione DB: fail immediato
             _CONNECTION_ERRORS = (
@@ -200,7 +200,7 @@ def execute_pipeline_task(
             return {"success": False, "message": message}
 
         # --- Successo ---
-        rows_out = result.get("rows_count", 0) or 0
+        rows_out = result.rows_count or 0
         _update_progress(self, 100, "Pipeline completata")
         logger.info(
             f"Task PIPELINE {task_id} completato per {project_id}",
@@ -226,7 +226,7 @@ def execute_pipeline_task(
             logger.warning(f"Intermediate: chiusura run fallita: {_ce}")
 
         from pathlib import Path as _Path
-        output_path = result.get("output_path")
+        output_path = result.output_path
         output_file = _Path(output_path).name if output_path else None
         extra = {"output_file": output_file} if output_file else {}
         return {
@@ -287,7 +287,8 @@ def execute_pipeline_task(
         except Exception:
             pass
 
-        # FIX BUG-7: chiudi connessione SQLite del thread Celery
+        # Chiudi connessione SQLite del thread Celery: senza questo,
+        # ogni task lascia aperto un handle che si accumula nel pool.
         try:
             from app.core.intermediate.db import close_connection
             close_connection()

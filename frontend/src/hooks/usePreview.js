@@ -1,87 +1,107 @@
-import { useState, useCallback } from 'react';
-import { previewProject } from '../api/client';
+/**
+ * usePreview.js — Hook per preview asincrona dei dati
+ *
+ * Avvia una preview (esecuzione parziale con LIMIT) e fa polling
+ * finché il task non è completato. Il risultato viene mostrato in PreviewModal.
+ *
+ * Ritorna: { previewing, previewData, previewError, startPreview, clearPreview }
+ */
+import { useState, useCallback, useRef } from 'react';
+import { previewProject } from '../api';
+import { useTaskPolling } from './useTaskPolling';
+
+const POLL_INTERVAL = 1000;
 
 /**
- * Hook per gestire la logica di preview dei progetti
- * Elimina duplicazione di stati e handler tra EstraiEditor, ManipolaEditor, ArricchisciEditor
- * 
- * @param {string} projectId - ID del progetto
- * @param {Function} onBeforePreview - Callback opzionale da eseguire prima della preview (es. salvataggio canvas)
- * @returns {Object} Stati e handler per la preview
- * 
- * Uso:
- * ```jsx
- * const { 
- *   showModal, data, loading, error,
- *   handlePreview, closeModal 
- * } = usePreview(projectId, handleSaveCanvasQuiet);
- * ```
+ * Hook per gestire la preview dei progetti.
+ * La preview gira su Celery — polling fino al completamento.
  */
 export function usePreview(projectId, onBeforePreview = null) {
   const [showModal, setShowModal] = useState(false);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [progress, setProgress] = useState(0);
+  const [progressMessage, setProgressMessage] = useState('');
 
-  /**
-   * Esegue la preview del progetto
-   * @param {number} limit - Numero massimo di righe (default 100)
-   */
+  const cancelledRef = useRef(false);
+  const { mountedRef, stopPolling, startPolling } = useTaskPolling({ interval: POLL_INTERVAL });
+
   const handlePreview = useCallback(async (limit = 100) => {
     setShowModal(true);
     setLoading(true);
     setError(null);
     setData(null);
-    
+    setProgress(0);
+    setProgressMessage('Avvio...');
+    cancelledRef.current = false;
+
     try {
-      // Esegui callback pre-preview (es. salvataggio canvas)
-      if (onBeforePreview) {
-        await onBeforePreview();
-      }
-      
-      // Chiama API preview
-      const result = await previewProject(projectId, limit);
-      
-      if (result.success) {
-        setData(result);
+      if (onBeforePreview) await onBeforePreview();
+
+      const response = await previewProject(projectId, limit);
+      if (!mountedRef.current) return;
+
+      if (response.async && response.task_id) {
+        setProgressMessage(response.message || 'Preview in coda...');
+        // Il callback ritorna true quando il task è completato → stopPolling automatico
+        startPolling(response.task_id, (task) => {
+          if (cancelledRef.current) return true;
+
+          setProgress(task.progress || 0);
+          setProgressMessage(task.message || '');
+
+          if (task.status === 'success') {
+            setLoading(false);
+            const result = task.result || {};
+            if (result.success === false) {
+              setError(result.message || 'Errore preview');
+            } else {
+              setData(result);
+            }
+            return true;
+          } else if (task.status === 'failure') {
+            setLoading(false);
+            setError(task.error || 'Errore durante la preview');
+            return true;
+          }
+          return false;
+        });
       } else {
-        setError(result.message || 'Errore generazione preview');
+        // fallback sincrono (non dovrebbe accadere)
+        setLoading(false);
+        setProgress(100);
+        if (response.success) {
+          setData(response);
+        } else {
+          setError(response.message || 'Errore preview');
+        }
       }
     } catch (err) {
       console.error('[usePreview] Errore:', err);
-      setError(err.message || 'Errore durante la preview');
-    } finally {
       setLoading(false);
+      setError(err.message || 'Errore durante la preview');
     }
-  }, [projectId, onBeforePreview]);
+  }, [projectId, onBeforePreview, startPolling, mountedRef]);
 
-  /**
-   * Chiude il modal e resetta lo stato
-   */
   const closeModal = useCallback(() => {
     setShowModal(false);
   }, []);
 
-  /**
-   * Resetta completamente lo stato
-   */
   const reset = useCallback(() => {
+    stopPolling();
     setShowModal(false);
     setData(null);
     setLoading(false);
     setError(null);
-  }, []);
+    setProgress(0);
+    setProgressMessage('');
+  }, [stopPolling]);
 
   return {
-    // Stati
-    showModal,
-    data,
-    loading,
-    error,
-    // Handler
-    handlePreview,
-    closeModal,
-    reset
+    showModal, data, loading, error,
+    progress, progressMessage,
+    handlePreview, closeModal, reset,
   };
 }
 

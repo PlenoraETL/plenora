@@ -1,5 +1,5 @@
 """
-Policy Engine per lo Scheduler URBY-ETL.
+Policy Engine per lo Scheduler PLENORA-ETL.
 
 Architettura
 ============

@@ -22,8 +22,9 @@ CREATE TABLE IF NOT EXISTS results (
     size_bytes  INTEGER,
     rows_count  INTEGER,
     created_at  TEXT NOT NULL,
-    created_by  TEXT,
-    UNIQUE (project_id, filename)
+    created_by  TEXT
+    -- Volutamente senza UNIQUE(project_id, filename): la retention policy
+    -- conserva piu' risultati per progetto con stesso filename.
 );
 
 CREATE INDEX IF NOT EXISTS idx_results_project   ON results(project_id);

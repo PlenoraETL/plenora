@@ -15,10 +15,32 @@ Funzionalità:
 - Scrittura: addFeatures, updateFeatures, deleteFeatures
 - Conversione Esri JSON ↔ GeoDataFrame
 
-Gestione token:
-- Il token viene generato al primo utilizzo e riutilizzato
-- Se scaduto (errore 498/499), viene rigenerato automaticamente
-- Supporta token URL custom o auto-rilevato dal tipo di server
+Gestione token (C12)
+====================
+- Il token viene generato al primo utilizzo e cachato con margine 60s
+  rispetto alla scadenza reportata da ArcGIS.
+- Passaggio come `Authorization: Bearer {token}` header — NON piu'
+  come `?token=` query param (pre-C12 era in params/data). Rationale
+  sicurezza per un client backend server-to-server:
+    * log reverse-proxy / upstream ArcGIS non catturano piu' il token
+      nell'URL;
+    * observability HTTP (tracing lato server) non lo espone;
+    * eventuali log applicativi che catturano request URL/params fuori
+      da questo modulo non leakano il segreto.
+  (Browser history / Referer non sono vettori per questo client
+  server-to-server, ma il fix li copre comunque per igiene.)
+- Retry automatico (via `_request_with_token`):
+    * HTTP 401 o body `error.code` in {498, 499} → invalida cache,
+      refresh + retry una volta;
+    * HTTP 429 → exponential backoff con jitter (rispetta Retry-After
+      se presente), max 3 tentativi;
+  Pre-C12 la docstring prometteva retry automatica ma non era
+  implementata — il batch writer autenticava una volta e se il token
+  scadeva a meta' batch falliva tutto.
+- Supporta token URL custom o auto-rilevato dal tipo di server.
+- Compatibilita' server: Bearer e' supportato da ArcGIS Online e
+  ArcGIS Enterprise >= 10.6 (2018). Versioni precedenti non sono piu'
+  supportate da Esri.
 
 Paginazione:
 - La query rispetta il maxRecordCount del server
@@ -89,25 +111,27 @@ class HttpClientProtocol(Protocol):
 
 class DefaultHttpClient:
     """
-    Client HTTP di default basato su requests.
-    
+    Client HTTP di default basato su requests con Session pool condivisa.
+
     Sostituibile con mock nei test per evitare chiamate HTTP reali.
     """
-    
+
     def get(self, url: str, params: dict = None, timeout: int = 30, headers: dict = None) -> requests.Response:
-        return requests.get(url, params=params, timeout=timeout, headers=headers)
-    
+        from app.shared.api_utils import get_shared_session
+        return get_shared_session().get(url, params=params, timeout=timeout, headers=headers)
+
     def post(self, url: str, data: dict = None, timeout: int = 30, headers: dict = None) -> requests.Response:
-        return requests.post(url, data=data, timeout=timeout, headers=headers)
+        from app.shared.api_utils import get_shared_session
+        return get_shared_session().post(url, data=data, timeout=timeout, headers=headers)
 
 
 # =============================================================================
-# MAPPING TIPI ESRI → URBY
+# MAPPING TIPI ESRI → PLENORA
 # =============================================================================
 
 class EsriTypeMapper:
     """
-    Mappa i tipi di campo Esri nei tipi interni URBY.
+    Mappa i tipi di campo Esri nei tipi interni PLENORA.
     
     Analogo a TypeMapper in database_inspector.py.
     
@@ -125,7 +149,7 @@ class EsriTypeMapper:
     - esriFieldTypeBlob → str
     """
     
-    ESRI_TO_URBY = {
+    ESRI_TO_PLENORA = {
         "esriFieldTypeOID": "int",
         "esriFieldTypeInteger": "int",
         "esriFieldTypeSmallInteger": "int",
@@ -140,7 +164,7 @@ class EsriTypeMapper:
         "esriFieldTypeXML": "str",
     }
     
-    ESRI_GEOM_TO_URBY = {
+    ESRI_GEOM_TO_PLENORA = {
         "esriGeometryPoint": "geometry:point",
         "esriGeometryMultipoint": "geometry:point",
         "esriGeometryPolyline": "geometry:line",
@@ -150,13 +174,13 @@ class EsriTypeMapper:
     
     @classmethod
     def map_field_type(cls, esri_type: str) -> str:
-        """Converte un tipo di campo Esri in tipo URBY."""
-        return cls.ESRI_TO_URBY.get(esri_type, "str")
+        """Converte un tipo di campo Esri in tipo PLENORA."""
+        return cls.ESRI_TO_PLENORA.get(esri_type, "str")
     
     @classmethod
     def map_geometry_type(cls, esri_geom_type: str) -> str:
-        """Converte un tipo di geometria Esri in tipo URBY con sottotipo."""
-        return cls.ESRI_GEOM_TO_URBY.get(esri_geom_type, "geometry")
+        """Converte un tipo di geometria Esri in tipo PLENORA con sottotipo."""
+        return cls.ESRI_GEOM_TO_PLENORA.get(esri_geom_type, "geometry")
 
 
 # =============================================================================
@@ -404,7 +428,161 @@ class ArcGISClient:
     def __init__(self, http_client: HttpClientProtocol = None):
         self._http = http_client or DefaultHttpClient()
         self._token_cache: Dict[str, dict] = {}  # url → {token, expires}
-    
+
+    # =========================================================================
+    # C12: HELPER CENTRALIZZATO TOKEN-AWARE
+    # =========================================================================
+
+    def _request_with_token(
+        self,
+        method: str,
+        url: str,
+        conn: "ArcGISConnectionInfo",
+        params: Optional[dict] = None,
+        data: Optional[dict] = None,
+        timeout: int = DEFAULT_TIMEOUT,
+        max_retries_429: int = 3,
+        extra_headers: Optional[dict] = None,
+    ) -> "requests.Response":
+        """Esegue una request autenticata verso ArcGIS con:
+
+        1. Token in `Authorization: Bearer <token>` header (non in
+           params/data). Evita leak in log reverse-proxy, observability
+           tracing, e log applicativi che catturano URL o request body.
+        2. Su HTTP 401 o response body `error.code` in {498, 499}
+           (token expired/invalid), invalida la cache token per questa
+           connection e ritenta UNA volta con un token fresh.
+        3. Su HTTP 429 (rate limit), rispetta `Retry-After` header se
+           presente altrimenti exponential backoff con jitter, fino a
+           `max_retries_429` tentativi. Oltre quel limite, lascia
+           ritornare la 429 al caller.
+
+        Compatibilita' ArcGIS: Authorization Bearer e' supportato da
+        ArcGIS Online e ArcGIS Enterprise >= 10.6 (rilascio 2018).
+        Versioni piu' vecchie non sono piu' supportate da Esri.
+
+        Args:
+            method: "GET" o "POST" (case-insensitive).
+            url: URL completo dell'endpoint.
+            conn: ArcGISConnectionInfo per refresh token su 498/499.
+            params: query string parameters (token rimosso).
+            data: form-encoded body (token rimosso).
+            timeout: HTTP timeout in secondi.
+            max_retries_429: max ritentativi su 429. Default 3.
+
+        Returns:
+            Oggetto requests.Response. Il caller chiama `.json()`.
+
+        NB: questo helper DOES NOT raise su 498/499 ritornati dal body
+        — il caller deve fare `if "error" in data` come prima. Il
+        refresh si attiva automaticamente prima di cedere la response
+        finale al caller, cosi' il caller vede solo l'esito del retry.
+        """
+        import random
+
+        # Difesa in profondita': rimuovi token da params/data se qualche
+        # caller ha ancora passato la vecchia forma. L'header e' l'unica
+        # fonte autoritativa.
+        if params and "token" in params:
+            params = {k: v for k, v in params.items() if k != "token"}
+        if data and "token" in data:
+            data = {k: v for k, v in data.items() if k != "token"}
+
+        cache_key = f"{conn.server_url}:{conn.username or conn.client_id}"
+        attempt = 0
+        retry_on_401_done = False
+        backoff_429_count = 0
+
+        while True:
+            token = self.authenticate(conn)
+            # Merge header: extra_headers del caller (es. Referer per
+            # compat ArcGIS) + Authorization Bearer
+            headers = dict(extra_headers) if extra_headers else {}
+            if token:
+                headers["Authorization"] = f"Bearer {token}"
+            if not headers:
+                headers = None  # evita dict vuoto → comportamento di requests
+
+            method_upper = method.upper()
+            if method_upper == "GET":
+                response = self._http.get(
+                    url, params=params, timeout=timeout, headers=headers
+                )
+            elif method_upper == "POST":
+                response = self._http.post(
+                    url, data=data, timeout=timeout, headers=headers
+                )
+            else:
+                raise ValueError(
+                    f"Metodo HTTP non supportato: {method_upper}"
+                )
+
+            attempt += 1
+
+            # Caso 1: HTTP 429 rate limit
+            if response.status_code == 429:
+                if backoff_429_count >= max_retries_429:
+                    logger.warning(
+                        f"[ARCGIS] 429 dopo {backoff_429_count} retry, "
+                        f"abbandono. URL: {url}"
+                    )
+                    return response
+                retry_after = response.headers.get("Retry-After")
+                if retry_after:
+                    try:
+                        wait_s = float(retry_after)
+                    except (TypeError, ValueError):
+                        wait_s = 2.0 ** backoff_429_count
+                else:
+                    # Exponential backoff: 2^n secondi con jitter +-25%
+                    wait_s = (2.0 ** backoff_429_count) * (
+                        1.0 + (random.random() - 0.5) * 0.5
+                    )
+                # Cap a 30s per non bloccare troppo a lungo
+                wait_s = min(wait_s, 30.0)
+                logger.warning(
+                    f"[ARCGIS] 429 rate limited, backoff {wait_s:.1f}s "
+                    f"(retry {backoff_429_count + 1}/{max_retries_429})"
+                )
+                time.sleep(wait_s)
+                backoff_429_count += 1
+                continue
+
+            # Caso 2: HTTP 401 → token rifiutato lato HTTP layer
+            # (alcuni endpoint ArcGIS rispondono 401 invece che 200+error)
+            if response.status_code == 401 and not retry_on_401_done:
+                logger.info(
+                    f"[ARCGIS] 401 sul token corrente, invalido cache e "
+                    f"ritento con token fresh. URL: {url}"
+                )
+                self._token_cache.pop(cache_key, None)
+                retry_on_401_done = True
+                continue
+
+            # Caso 3: response 200 con body `error.code` in {498, 499}
+            # (il pattern Esri standard per token scaduti/invalidi)
+            if response.status_code == 200 and not retry_on_401_done:
+                try:
+                    body = response.json()
+                except Exception:
+                    body = None
+                if isinstance(body, dict):
+                    err = body.get("error")
+                    if isinstance(err, dict):
+                        code = err.get("code")
+                        if code in (498, 499):
+                            logger.info(
+                                f"[ARCGIS] error.code={code} (token "
+                                f"scaduto/invalido), refresh + retry. "
+                                f"URL: {url}"
+                            )
+                            self._token_cache.pop(cache_key, None)
+                            retry_on_401_done = True
+                            continue
+
+            # Response finale — successo o errore non gestito dal retry
+            return response
+
     # =========================================================================
     # AUTENTICAZIONE
     # =========================================================================
@@ -424,10 +602,16 @@ class ArcGISClient:
         if conn.auth_type == "public":
             return None
         
+        # Cleanup token scaduti
+        now = time.time()
+        expired = [k for k, v in self._token_cache.items() if v["expires"] <= now]
+        for k in expired:
+            del self._token_cache[k]
+
         # Controlla cache
         cache_key = f"{conn.server_url}:{conn.username or conn.client_id}"
         cached = self._token_cache.get(cache_key)
-        if cached and cached["expires"] > time.time():
+        if cached and cached["expires"] > now:
             return cached["token"]
         
         # OAuth2 client_credentials
@@ -516,7 +700,7 @@ class ArcGISClient:
                 response = self._http.post(token_url, data=token_data, timeout=self.DEFAULT_TIMEOUT)
                 result = response.json()
                 
-                logger.info(f"Token request a {token_url} - client={_mask_secret(str(strategy.get('client', '')))} - status: {response.status_code}")
+                logger.debug(f"Token request a {token_url} - client={_mask_secret(str(strategy.get('client', '')))} - status: {response.status_code}")
                 
                 if "token" in result:
                     token = result["token"]
@@ -528,7 +712,7 @@ class ArcGISClient:
                         "expires": expires_sec - 60
                     }
                     
-                    logger.info(f"Token ottenuto per {conn.server_url} (client={_mask_secret(str(strategy.get('client', '')))})")
+                    logger.debug(f"Token ottenuto per {conn.server_url} (client={_mask_secret(str(strategy.get('client', '')))})")
                     return token
                 else:
                     error_obj = result.get("error", {})
@@ -720,10 +904,10 @@ class ArcGISClient:
                 "f": "json",
                 "num": 100,
             }
-            if token:
-                params["token"] = token
-            
-            response = self._http.get(content_url, params=params, timeout=self.DEFAULT_TIMEOUT)
+            # C12: token va nell'header Authorization via _request_with_token
+            response = self._request_with_token(
+                "GET", content_url, conn, params=params, timeout=self.DEFAULT_TIMEOUT,
+            )
             data = response.json()
             
             if "error" in data:
@@ -796,11 +980,11 @@ class ArcGISClient:
         content_url = f"{base_url}/content/users/{username}"
 
         params = {"f": "json"}
-        if token:
-            params["token"] = token
 
         try:
-            response = self._http.get(content_url, params=params, timeout=self.DEFAULT_TIMEOUT)
+            response = self._request_with_token(
+                "GET", content_url, conn, params=params, timeout=self.DEFAULT_TIMEOUT,
+            )
             data = response.json()
             if "error" in data:
                 logger.warning(f"Errore lista folders: {data['error']}")
@@ -819,15 +1003,14 @@ class ArcGISClient:
 
     def _list_folders_server(self, conn: ArcGISConnectionInfo) -> List[dict]:
         """Lista cartelle su ArcGIS Server/Enterprise via catalogo REST."""
-        token = self.authenticate(conn)
         catalog_url = f"{conn.server_url.rstrip('/')}/rest/services"
 
         params = {"f": "json"}
-        if token:
-            params["token"] = token
 
         try:
-            response = self._http.get(catalog_url, params=params, timeout=self.DEFAULT_TIMEOUT)
+            response = self._request_with_token(
+                "GET", catalog_url, conn, params=params, timeout=self.DEFAULT_TIMEOUT,
+            )
             data = response.json()
 
             folders = [{"id": "", "title": "(root)"}]
@@ -890,16 +1073,12 @@ class ArcGISClient:
                     "sortField": "modified",
                     "sortOrder": "desc",
                 }
-                if token:
-                    params["token"] = token
-                
-                response = self._http.get(
-                    f"{base_url}/search", 
-                    params=params, 
-                    timeout=self.DEFAULT_TIMEOUT
+                response = self._request_with_token(
+                    "GET", f"{base_url}/search", conn,
+                    params=params, timeout=self.DEFAULT_TIMEOUT,
                 )
                 data = response.json()
-                
+
                 if "error" in data:
                     error_msg = data["error"].get("message", "Errore ricerca")
                     raise ConnectionError(f"Errore ricerca ArcGIS Online: {error_msg}")
@@ -954,19 +1133,18 @@ class ArcGISClient:
         Naviga il catalogo REST e restituisce solo i FeatureServer.
         Scansiona ricorsivamente i folder.
         """
-        token = self.authenticate(conn)
         base = self._get_rest_services_url(conn)
-        
+
         catalog_url = f"{base}/{folder}" if folder else base
-        
+
         params = {"f": "json"}
-        if token:
-            params["token"] = token
-        
+
         try:
-            response = self._http.get(catalog_url, params=params, timeout=self.DEFAULT_TIMEOUT)
+            response = self._request_with_token(
+                "GET", catalog_url, conn, params=params, timeout=self.DEFAULT_TIMEOUT,
+            )
             data = response.json()
-            
+
             if "error" in data:
                 raise ConnectionError(f"Errore catalogo: {data['error'].get('message', '')}")
             
@@ -1051,15 +1229,15 @@ class ArcGISClient:
         logger.info(f"list_layers: URL candidati: {urls_to_try}")
         
         params = {"f": "json"}
-        if token:
-            params["token"] = token
-        
+
         last_error = ""
-        
+
         for url in urls_to_try:
             try:
                 logger.info(f"list_layers: provo {url}")
-                response = self._http.get(url, params=params, timeout=self.DEFAULT_TIMEOUT)
+                response = self._request_with_token(
+                    "GET", url, conn, params=params, timeout=self.DEFAULT_TIMEOUT,
+                )
                 data = response.json()
                 
                 if "error" in data:
@@ -1140,7 +1318,7 @@ class ArcGISClient:
         Recupera lo schema completo di un layer (campi, tipi, capabilities).
         
         Equivalente a DatabaseInspector.get_tables_and_columns() ma per un
-        singolo layer. Restituisce campi con tipo URBY mappato.
+        singolo layer. Restituisce campi con tipo PLENORA mappato.
         
         Args:
             conn: configurazione connessione
@@ -1150,20 +1328,18 @@ class ArcGISClient:
             Dict con schema completo: {layer_id, name, geometry_type,
             spatial_reference, fields, feature_count, capabilities}
         """
-        token = self.authenticate(conn)
-        
         params = {"f": "json"}
-        if token:
-            params["token"] = token
-        
+
         try:
-            response = self._http.get(layer_url, params=params, timeout=self.DEFAULT_TIMEOUT)
+            response = self._request_with_token(
+                "GET", layer_url, conn, params=params, timeout=self.DEFAULT_TIMEOUT,
+            )
             data = response.json()
-            
+
             if "error" in data:
                 raise ConnectionError(f"Errore layer: {data['error'].get('message', '')}")
             
-            # Mappa i campi in formato URBY
+            # Mappa i campi in formato PLENORA
             fields = []
             for f in data.get("fields", []):
                 esri_type = f.get("type", "")
@@ -1177,10 +1353,12 @@ class ArcGISClient:
                     "editable": f.get("editable", True),
                 })
             
-            # Feature count (richiede query separata se non disponibile)
+            # Feature count (richiede query separata se non disponibile).
+            # C12: token non piu' passato (gestito internamente dal helper);
+            # lasciamo None per retrocompatibilita' della signature.
             feature_count = data.get("count", None)
             if feature_count is None:
-                feature_count = self._get_feature_count(conn, layer_url, token)
+                feature_count = self._get_feature_count(conn, layer_url, None)
             
             geometry_type = data.get("geometryType", "")
             
@@ -1189,7 +1367,7 @@ class ArcGISClient:
                                      data.get("sourceSpatialReference", {}))
             wkid = spatial_ref.get("latestWkid") or spatial_ref.get("wkid")
             
-            # Tipo geometria URBY con SRID (es. "geometry:polygon:3857")
+            # Tipo geometria PLENORA con SRID (es. "geometry:polygon:3857")
             urby_geom = EsriTypeMapper.map_geometry_type(geometry_type)
             if wkid and urby_geom != "geometry":
                 urby_geom = f"{urby_geom}:{wkid}"
@@ -1224,7 +1402,7 @@ class ArcGISClient:
                 })
             
             # Colonne in formato canvas-ready (come DatabaseInspector)
-            # Mappa field_type Esri → tipo URBY per ogni campo
+            # Mappa field_type Esri → tipo PLENORA per ogni campo
             columns = []
             for f in fields:
                 columns.append({
@@ -1260,7 +1438,7 @@ class ArcGISClient:
         self,
         conn: ArcGISConnectionInfo,
         layer_url: str,
-        token: str = None
+        token: str = None  # C12: non piu' usato ma mantenuto per compat caller
     ) -> Optional[int]:
         """Query count delle features di un layer."""
         params = {
@@ -1268,12 +1446,10 @@ class ArcGISClient:
             "returnCountOnly": "true",
             "f": "json",
         }
-        if token:
-            params["token"] = token
-        
         try:
-            response = self._http.get(
-                f"{layer_url}/query", params=params, timeout=self.DEFAULT_TIMEOUT
+            response = self._request_with_token(
+                "GET", f"{layer_url}/query", conn,
+                params=params, timeout=self.DEFAULT_TIMEOUT,
             )
             data = response.json()
             return data.get("count")
@@ -1348,26 +1524,24 @@ class ArcGISClient:
                 "f": "json",
             }
             
-            if token:
-                params["token"] = token
-            
             if geometry_filter:
                 params["geometry"] = json.dumps(geometry_filter.get("geometry", {}))
                 params["geometryType"] = geometry_filter.get("geometryType", "esriGeometryEnvelope")
                 params["spatialRel"] = geometry_filter.get("spatialRel", "esriSpatialRelIntersects")
                 params["inSR"] = geometry_filter.get("inSR", "")
-            
+
             if order_by:
                 params["orderByFields"] = order_by
             elif oid_field:
                 params["orderByFields"] = f"{oid_field} ASC"
-            
+
             if out_sr:
                 params["outSR"] = out_sr
-            
+
             try:
-                response = self._http.get(
-                    f"{layer_url}/query", params=params, timeout=self.DEFAULT_TIMEOUT
+                response = self._request_with_token(
+                    "GET", f"{layer_url}/query", conn,
+                    params=params, timeout=self.DEFAULT_TIMEOUT,
                 )
                 data = response.json()
                 
@@ -1495,24 +1669,22 @@ class ArcGISClient:
         Returns:
             {success, deleted_count, errors}
         """
-        token = self.authenticate(conn)
         referer_headers = {"Referer": conn.server_url}
-        
+
         data = {"f": "json"}
-        if token:
-            data["token"] = token
-        
+
         if object_ids:
             data["objectIds"] = ",".join(str(oid) for oid in object_ids)
         elif where:
             data["where"] = where
         else:
             raise ValueError("Specificare object_ids o where per l'eliminazione")
-        
+
         try:
-            response = self._http.post(
-                f"{layer_url}/deleteFeatures", data=data, timeout=self.DEFAULT_TIMEOUT,
-                headers=referer_headers,
+            response = self._request_with_token(
+                "POST", f"{layer_url}/deleteFeatures", conn,
+                data=data, timeout=self.DEFAULT_TIMEOUT,
+                extra_headers=referer_headers,
             )
             result = response.json()
             
@@ -1560,9 +1732,11 @@ class ArcGISClient:
         Returns:
             {success, count, errors}
         """
-        token = self.authenticate(conn)
+        # C12: auth avviene dentro _request_with_token per-batch.
+        # Rimosso il `token = self.authenticate(conn)` pre-loop: non
+        # serviva piu' (il helper gestisce token + refresh mid-batch).
         referer_headers = {"Referer": conn.server_url}
-        
+
         total_success = 0
         all_errors = []
         
@@ -1575,16 +1749,19 @@ class ArcGISClient:
                 "features": json.dumps(batch),
                 "f": "json",
             }
-            if token:
-                data["token"] = token
-            
+
             try:
                 batch_num = i // _batch_size + 1
-                logger.info(f"Batch {batch_num}: invio {len(batch)} features a {layer_url}/{operation}")
-                
-                response = self._http.post(
-                    f"{layer_url}/{operation}", data=data, timeout=60,
-                    headers=referer_headers,
+                logger.debug(f"Batch {batch_num}: invio {len(batch)} features a {layer_url}/{operation}")
+
+                # C12: ogni batch via _request_with_token → refresh token
+                # mid-batch automatico su 498/499, backoff su 429.
+                # Pre-fix il token era autenticato UNA volta fuori loop,
+                # scadenza a meta' batch = tutto il resto falliva.
+                response = self._request_with_token(
+                    "POST", f"{layer_url}/{operation}", conn,
+                    data=data, timeout=60,
+                    extra_headers=referer_headers,
                 )
                 try:
                     result = response.json()
@@ -1606,7 +1783,7 @@ class ArcGISClient:
                 successes = sum(1 for r in results if r.get("success"))
                 errors = [r for r in results if not r.get("success")]
                 
-                logger.info(f"Batch {batch_num}: {successes} ok, {len(errors)} errori")
+                logger.debug(f"Batch {batch_num}: {successes} ok, {len(errors)} errori")
                 if errors:
                     logger.error(f"[GESTITO] Batch {batch_num} errori (primi 2): {errors[:2]}")
                 
@@ -1714,7 +1891,7 @@ class ArcGISClient:
             
             features.append(feature)
         
-        logger.info(f"Convertite {len(features)} features (has_geometry={has_geometry}, srid={srid})")
+        logger.debug(f"Convertite {len(features)} features (has_geometry={has_geometry}, srid={srid})")
         return features
     
     @staticmethod
@@ -1788,7 +1965,7 @@ class ArcGISClient:
             "MultiLineString": "esriGeometryPolyline",
             "Polygon": "esriGeometryPolygon",
             "MultiPolygon": "esriGeometryPolygon",
-            # Formati URBY
+            # Formati PLENORA
             "geometry:point": "esriGeometryPoint",
             "geometry:line": "esriGeometryPolyline",
             "geometry:polygon": "esriGeometryPolygon",
@@ -1940,30 +2117,28 @@ class ArcGISClient:
             "outputType": "featureService",
             "f": "json",
         }
-        if token:
-            create_data["token"] = token
-        
+
         # Header Referer necessario per token client=referer
         referer_headers = {"Referer": conn.server_url}
-        
+
         try:
             if folder_id:
                 create_url = f"{base_url}/content/users/{username}/{folder_id}/createService"
             else:
                 create_url = f"{base_url}/content/users/{username}/createService"
-            logger.info(f"createService URL: {create_url}")
-            logger.info(f"createService params: {json.dumps(create_params, indent=2)}")
-            logger.info(f"Token presente: {bool(token)}, lunghezza: {len(token) if token else 0}")
-            logger.info(f"Referer: {conn.server_url}")
-            
-            response = self._http.post(
-                create_url,
+            logger.debug(f"createService URL: {create_url}")
+            logger.debug(f"createService params: {json.dumps(create_params, indent=2)}")
+            logger.debug(f"Token presente: {bool(token)}, lunghezza: {len(token) if token else 0}")
+            logger.debug(f"Referer: {conn.server_url}")
+
+            response = self._request_with_token(
+                "POST", create_url, conn,
                 data=create_data,
                 timeout=60,
-                headers=referer_headers,
+                extra_headers=referer_headers,
             )
             result = response.json()
-            logger.info(f"createService risposta completa: {json.dumps(result, indent=2, default=str)}")
+            logger.debug(f"createService risposta completa: {json.dumps(result, indent=2, default=str)}")
             
             if not result.get("success"):
                 error = result.get("error", {})
@@ -1983,14 +2158,29 @@ class ArcGISClient:
         
         # ---- Step 2: Aggiungi la definizione del layer ----
         
-        # Determina tipo geometria dal DataFrame
+        # Determina tipo geometria dal DataFrame.
+        # Usiamo il tipo MAGGIORITARIO (value_counts) invece della prima
+        # feature: se il df ha una feature stray di tipo diverso (es. 1
+        # Point in mezzo a migliaia di Polygon per errore di caricamento),
+        # usare la prima potrebbe creare il servizio col tipo sbagliato →
+        # tutte le altre fallirebbero in addFeatures.
         geom_type = "esriGeometryPolygon"  # default
         try:
             import geopandas as gpd
-            if isinstance(df, gpd.GeoDataFrame) and df.geometry is not None:
-                first_geom = df.geometry.dropna().iloc[0] if len(df) > 0 else None
-                if first_geom:
-                    geom_type = self._esri_geometry_type(first_geom.geom_type)
+            if isinstance(df, gpd.GeoDataFrame) and df.geometry is not None and len(df) > 0:
+                geom_types = df.geometry.dropna().geom_type
+                if len(geom_types) > 0:
+                    majority_type = geom_types.value_counts().idxmax()
+                    geom_type = self._esri_geometry_type(majority_type)
+                    # Warning se c'e' mix di tipi (ArcGIS non li supporta)
+                    unique_types = set(geom_types)
+                    if len(unique_types) > 1:
+                        logger.warning(
+                            f"create_service: DataFrame contiene {len(unique_types)} "
+                            f"tipi di geometria diversi ({unique_types}), usato il "
+                            f"maggioritario '{majority_type}'. Le feature di tipo "
+                            f"diverso potrebbero fallire in addFeatures."
+                        )
                 if df.crs:
                     srid = df.crs.to_epsg() or srid
         except (ImportError, IndexError):
@@ -2033,7 +2223,7 @@ class ArcGISClient:
                         "ymax": float(bounds[3]),
                         "spatialReference": {"wkid": srid},
                     }
-                    logger.info(f"Extent calcolato dai dati: {extent}")
+                    logger.debug(f"Extent calcolato dai dati: {extent}")
             elif geometry_column in df.columns:
                 from shapely import wkt as _wkt
                 geom_series = df[geometry_column].dropna()
@@ -2048,7 +2238,7 @@ class ArcGISClient:
                         "xmax": float(b[2]), "ymax": float(b[3]),
                         "spatialReference": {"wkid": srid},
                     }
-                    logger.info(f"Extent calcolato da WKT: {extent}")
+                    logger.debug(f"Extent calcolato da WKT: {extent}")
         except Exception as _e:
             logger.warning(f"Impossibile calcolare extent, uso default: {_e}")
 
@@ -2074,31 +2264,29 @@ class ArcGISClient:
         admin_url = service_url.replace("/rest/services/", "/rest/admin/services/")
         
         field_names = [f["name"] for f in fields]
-        logger.info(f"addToDefinition: {len(fields)} campi: {field_names}")
-        logger.info(f"addToDefinition URL: {admin_url}/addToDefinition")
+        logger.debug(f"addToDefinition: {len(fields)} campi: {field_names}")
+        logger.debug(f"addToDefinition URL: {admin_url}/addToDefinition")
         
         add_def_data = {
             "addToDefinition": json.dumps(layer_def),
             "f": "json",
         }
-        if token:
-            add_def_data["token"] = token
-        
+
         try:
-            response = self._http.post(
-                f"{admin_url}/addToDefinition",
+            response = self._request_with_token(
+                "POST", f"{admin_url}/addToDefinition", conn,
                 data=add_def_data,
                 timeout=60,
-                headers=referer_headers,
+                extra_headers=referer_headers,
             )
             result = response.json()
-            logger.info(f"addToDefinition risposta: {json.dumps(result, indent=2, default=str)[:500]}")
-            
+            logger.debug(f"addToDefinition risposta: {json.dumps(result, indent=2, default=str)[:500]}")
+
             if not result.get("success"):
                 logger.error(f"[GESTITO] Errore addToDefinition: {result}")
                 # Non blocchiamo — il servizio è creato
             else:
-                logger.info(f"Layer definizione aggiunta: {layer_name}")
+                logger.debug(f"Layer definizione aggiunta: {layer_name}")
                 
         except requests.RequestException as e:
             logger.error(f"[GESTITO] Errore addToDefinition: {e}")
@@ -2113,13 +2301,13 @@ class ArcGISClient:
             sample = features[0]
             sample_geom = sample.get("geometry", {})
             sample_attrs = list(sample.get("attributes", {}).keys())[:5]
-            logger.info(f"Sample feature — geometry keys: {list(sample_geom.keys()) if sample_geom else 'NONE'}")
-            logger.info(f"Sample feature — geometry snippet: {json.dumps(sample_geom, default=str)[:300]}")
-            logger.info(f"Sample feature — attribute keys (primi 5): {sample_attrs}")
+            logger.debug(f"Sample feature — geometry keys: {list(sample_geom.keys()) if sample_geom else 'NONE'}")
+            logger.debug(f"Sample feature — geometry snippet: {json.dumps(sample_geom, default=str)[:300]}")
+            logger.debug(f"Sample feature — attribute keys (primi 5): {sample_attrs}")
         
         write_result = self.add_features(conn, layer_url, features)
         
-        logger.info(f"addFeatures result: added={write_result.get('added_count', 0)}, "
+        logger.debug(f"addFeatures result: added={write_result.get('added_count', 0)}, "
                      f"errors={len(write_result.get('errors', []))}")
         if write_result.get("errors"):
             logger.error(f"[GESTITO] addFeatures errori (primi 3): {write_result['errors'][:3]}")
@@ -2136,17 +2324,15 @@ class ArcGISClient:
                 "updateDefinition": json.dumps(update_def),
                 "f": "json",
             }
-            if token:
-                update_data["token"] = token
-            response = self._http.post(
-                f"{admin_url}/updateDefinition",
+            response = self._request_with_token(
+                "POST", f"{admin_url}/updateDefinition", conn,
                 data=update_data,
                 timeout=60,
-                headers=referer_headers,
+                extra_headers=referer_headers,
             )
             upd_result = response.json()
             if upd_result.get("success"):
-                logger.info(f"Extent aggiornato sul servizio")
+                logger.debug(f"Extent aggiornato sul servizio")
             else:
                 logger.warning(f"updateDefinition extent non riuscito: {upd_result}")
         except Exception as _e:
@@ -2212,6 +2398,75 @@ class ArcGISClient:
                 "message": f"Errore: {str(e)}",
             }
 
+
+    # =========================================================================
+    # STILI / RENDERER
+    # =========================================================================
+
+    def update_renderer(
+        self,
+        conn: ArcGISConnectionInfo,
+        layer_url: str,
+        drawing_info: dict,
+    ) -> dict:
+        """
+        Aggiorna il renderer (stile) di un layer tramite updateDefinition.
+
+        Args:
+            conn: configurazione connessione
+            layer_url: URL del layer (es. .../FeatureServer/0)
+            drawing_info: dict con la definizione drawingInfo Esri
+
+        Returns:
+            {success, message}
+        """
+        token = self.authenticate(conn)
+        referer_headers = {"Referer": conn.server_url}
+
+        # Ricava admin URL dal layer URL
+        admin_url = layer_url.replace("/rest/services/", "/rest/admin/services/")
+
+        # Estrai layer ID dall'URL (ultimo segmento numerico)
+        parts = layer_url.rstrip("/").split("/")
+        layer_id = int(parts[-1]) if parts[-1].isdigit() else 0
+
+        update_def = {
+            "layers": [{
+                "id": layer_id,
+                "drawingInfo": drawing_info,
+            }]
+        }
+
+        # L'admin URL è il service, non il layer
+        service_admin_url = "/".join(admin_url.split("/")[:-1]) if parts[-1].isdigit() else admin_url
+
+        data = {
+            "updateDefinition": json.dumps(update_def),
+            "f": "json",
+        }
+
+        try:
+            response = self._request_with_token(
+                "POST", f"{service_admin_url}/updateDefinition", conn,
+                data=data,
+                timeout=60,
+                extra_headers=referer_headers,
+            )
+            result = response.json()
+
+            if result.get("success"):
+                logger.info(f"Renderer aggiornato per layer {layer_id}")
+                return {"success": True, "message": "Renderer aggiornato"}
+            else:
+                error = result.get("error", {})
+                msg = error.get("message", str(result))
+                logger.error(f"[GESTITO] updateDefinition renderer fallito: {msg}")
+                return {"success": False, "message": msg}
+
+        except requests.RequestException as e:
+            return {"success": False, "message": str(e)}
+
+    # =========================================================================
 
 # =============================================================================
 # FACTORY FUNCTION

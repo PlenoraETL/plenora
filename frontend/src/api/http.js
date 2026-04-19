@@ -64,13 +64,29 @@ http.interceptors.response.use(
       });
     }
 
-    // Sessione scaduta → delega al contesto React tramite authBus
-    if (error.response?.status === 401) {
+    // Sessione scaduta → delega al contesto React tramite authBus.
+    // Eccezione: la call a /auth/logout (revoca server-side) NON deve
+    // triggerare onUnauthorized — altrimenti un token scaduto passato
+    // al logout innescherebbe un ciclo logout→401→logout. Il logout
+    // lato client procede comunque a ripulire sessionStorage: il
+    // risultato della blacklist e' best-effort, non bloccante.
+    const requestUrl = error.config?.url || '';
+    const isLogoutCall = /\/auth\/logout(\?|$)/.test(requestUrl);
+    if (error.response?.status === 401 && !isLogoutCall) {
       sessionStorage.removeItem('urby_token');
       sessionStorage.removeItem('urby_user');
       authBus.onUnauthorized?.();
     }
 
+    // Preserva l'AxiosError originale con .response/.status/.config/.code:
+    // molti consumer branchano su err.response?.status (es. 409 dipendenze
+    // in ProjectList, 400 validation in form). Sovrascriviamo solo il
+    // .message per avere il testo user-friendly senza perdere lo shape
+    // originale.
+    if (error && typeof error === 'object') {
+      try { error.message = message; } catch { /* message non scrivibile, amen */ }
+      return Promise.reject(error);
+    }
     return Promise.reject(new Error(message));
   }
 );

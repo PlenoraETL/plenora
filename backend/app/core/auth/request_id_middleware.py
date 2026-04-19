@@ -1,0 +1,62 @@
+"""
+PLENORA-ETL — Middleware correlation X-Request-ID (C8).
+
+Propaga un identificatore di richiesta lungo tutta la catena logging:
+- HTTP IN:  legge `X-Request-ID` dal header se presente, altrimenti
+            genera un uuid4 e lo mette nella ContextVar `request_id`.
+- HTTP OUT: l'header `X-Request-ID` viene echoed nella response, cosi'
+            il client vede lo stesso ID per correlare lato browser.
+- LOG:      `get_request_id()` lo espone al logger (console + PG).
+- CELERY:   propagazione via `before_task_publish` / `task_prerun`
+            signals (vedi workers/celery_app.py).
+
+Ordine middleware: questo DEVE essere piu' esterno di JWTMiddleware
+cosi' anche i log del JWT middleware (token invalido, ecc.) hanno il
+request_id corretto.
+"""
+
+from __future__ import annotations
+
+import uuid
+
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import Response
+
+from app.utils.logger import set_request_id, get_logger
+
+
+logger = get_logger(__name__)
+
+_HEADER = "X-Request-ID"
+
+
+class RequestIdMiddleware(BaseHTTPMiddleware):
+    """Genera/propaga un request_id per ogni richiesta HTTP."""
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        # Legge il request_id dal client se presente, altrimenti genera.
+        # Trust-but-verify: accettiamo qualsiasi stringa fornita dal
+        # client (consente correlation con sistemi upstream) ma la
+        # tronchiamo a 64 char per evitare log bombing.
+        incoming = request.headers.get(_HEADER, "").strip()
+        req_id = incoming[:64] if incoming else str(uuid.uuid4())
+
+        set_request_id(req_id)
+        request.state.request_id = req_id
+
+        try:
+            response = await call_next(request)
+        except Exception:
+            # Anche su eccezione vogliamo reset ContextVar (evita leak
+            # all'ambiente successivo via recycling worker). Starlette
+            # comunque rigenera il contesto per la prossima request,
+            # ma esplicitare e' difensivo.
+            set_request_id("")
+            raise
+
+        response.headers[_HEADER] = req_id
+        # Non resetto la ContextVar qui: la prossima request fara'
+        # set_request_id() sovrascrivendo. Il reset esplicito sopra
+        # copre solo il caso eccezione propagata.
+        return response

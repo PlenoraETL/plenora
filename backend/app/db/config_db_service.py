@@ -87,22 +87,33 @@ def get_group_summary(group_id: str) -> dict:
     """
     Ritorna il conteggio di tutte le entità appartenenti al gruppo.
     Usato dal frontend per il modale di conferma prima del cascade delete.
+
+    Fix: prima erano 7 query separate. Ora 1 sola query con subquery scalari
+    — PostgreSQL/MySQL le eseguono in parallelo internamente.
     """
-    projects      = fetchall("SELECT id FROM projects WHERE group_id = ?", (group_id,))
-    users         = fetchall("SELECT id FROM users WHERE group_id = ?", (group_id,))
-    connections   = fetchall("SELECT id FROM connections WHERE group_id = ?", (group_id,))
-    file_sources  = fetchall("SELECT id FROM file_sources WHERE group_id = ?", (group_id,))
-    datasources   = fetchall("SELECT id FROM datasources WHERE group_id = ?", (group_id,))
-    api_conns     = fetchall("SELECT id FROM api_connections WHERE group_id = ?", (group_id,))
-    schedules     = fetchall("SELECT id FROM schedules WHERE group_id = ?", (group_id,))
+    row = fetchone(
+        "SELECT "
+        "(SELECT COUNT(*) FROM projects WHERE group_id = ?) AS projects, "
+        "(SELECT COUNT(*) FROM users WHERE group_id = ?) AS users, "
+        "(SELECT COUNT(*) FROM connections WHERE group_id = ?) AS connections, "
+        "(SELECT COUNT(*) FROM file_sources WHERE group_id = ?) AS file_sources, "
+        "(SELECT COUNT(*) FROM datasources WHERE group_id = ?) AS datasources, "
+        "(SELECT COUNT(*) FROM api_connections WHERE group_id = ?) AS api_connections, "
+        "(SELECT COUNT(*) FROM schedules WHERE group_id = ?) AS schedules",
+        tuple([group_id] * 7)
+    )
+    if not row:
+        return {k: 0 for k in ("projects", "users", "connections",
+                               "file_sources", "datasources",
+                               "api_connections", "schedules")}
     return {
-        "projects":        len(projects),
-        "users":           len(users),
-        "connections":     len(connections),
-        "file_sources":    len(file_sources),
-        "datasources":     len(datasources),
-        "api_connections": len(api_conns),
-        "schedules":       len(schedules),
+        "projects":        row.get("projects", 0),
+        "users":           row.get("users", 0),
+        "connections":     row.get("connections", 0),
+        "file_sources":    row.get("file_sources", 0),
+        "datasources":     row.get("datasources", 0),
+        "api_connections": row.get("api_connections", 0),
+        "schedules":       row.get("schedules", 0),
     }
 
 
@@ -130,64 +141,21 @@ def delete_group_cascade(group_id: str) -> dict:
         "log_runs": 0, "log_entries": 0,
     }
 
-    # 1. Schedules
-    try:
-        rows = fetchall("SELECT id FROM schedules WHERE group_id = ?", (group_id,))
-        for r in rows:
-            execute("DELETE FROM schedules WHERE id = ?", (r["id"],))
-            report["schedules"] += 1
-    except Exception as e:
-        _log.warning(f"Cascade delete schedules fallito: {e}")
-
-    # 2. API connections
-    try:
-        rows = fetchall("SELECT id FROM api_connections WHERE group_id = ?", (group_id,))
-        for r in rows:
-            execute("DELETE FROM api_connections WHERE id = ?", (r["id"],))
-            report["api_connections"] += 1
-    except Exception as e:
-        _log.warning(f"Cascade delete api_connections fallito: {e}")
-
-    # 3. Datasources
-    try:
-        rows = fetchall("SELECT id FROM datasources WHERE group_id = ?", (group_id,))
-        for r in rows:
-            execute("DELETE FROM datasources WHERE id = ?", (r["id"],))
-            report["datasources"] += 1
-    except Exception as e:
-        _log.warning(f"Cascade delete datasources fallito: {e}")
-
-    # 4. File sources
-    try:
-        rows = fetchall("SELECT id FROM file_sources WHERE group_id = ?", (group_id,))
-        for r in rows:
-            execute("DELETE FROM file_sources WHERE id = ?", (r["id"],))
-            report["file_sources"] += 1
-    except Exception as e:
-        _log.warning(f"Cascade delete file_sources fallito: {e}")
-
-    # 5. Connections
-    try:
-        rows = fetchall("SELECT id FROM connections WHERE group_id = ?", (group_id,))
-        for r in rows:
-            execute("DELETE FROM connections WHERE id = ?", (r["id"],))
-            report["connections"] += 1
-    except Exception as e:
-        _log.warning(f"Cascade delete connections fallito: {e}")
+    # 1-5: Batch DELETE per tabelle con group_id
+    for table in ["schedules", "api_connections", "datasources", "file_sources", "connections"]:
+        try:
+            cur = execute(f"DELETE FROM {table} WHERE group_id = ?", (group_id,))
+            report[table] = cur.rowcount
+        except Exception as e:
+            _log.warning(f"Cascade delete {table} fallito: {e}")
 
     # 6. Projects → results.db + intermediate.db per ognuno
     try:
         projects = fetchall("SELECT id FROM projects WHERE group_id = ?", (group_id,))
-        for p in projects:
-            pid = p["id"]
+        project_ids = [p["id"] for p in projects]
 
-            # Comparison keys (config.db)
-            try:
-                execute("DELETE FROM comparison_keys WHERE canvas_id = ?", (pid,))
-            except Exception as e:
-                _log.warning(f"Cascade delete comparison_keys progetto {pid}: {e}")
-
-            # Results (results.db)
+        # Results + intermediate runs: loop perche toccano DB logici diversi
+        for pid in project_ids:
             try:
                 import app.db.results_db_service as res_db
                 deleted = res_db.delete_results_for_project(pid)
@@ -195,7 +163,6 @@ def delete_group_cascade(group_id: str) -> dict:
             except Exception as e:
                 _log.warning(f"Cascade delete results progetto {pid}: {e}")
 
-            # Intermediate runs + tabelle dinamiche (intermediate.db)
             try:
                 from app.core.intermediate.db import delete_all_runs_for_canvas
                 deleted = delete_all_runs_for_canvas(pid)
@@ -203,18 +170,30 @@ def delete_group_cascade(group_id: str) -> dict:
             except Exception as e:
                 _log.warning(f"Cascade delete intermediate progetto {pid}: {e}")
 
-            # Progetto (config.db)
-            execute("DELETE FROM projects WHERE id = ?", (pid,))
-            report["projects"] += 1
+        # Comparison keys: batch delete via subquery (O(1) query invece di O(n))
+        if project_ids:
+            try:
+                execute(
+                    "DELETE FROM comparison_keys WHERE canvas_id IN "
+                    "(SELECT id FROM projects WHERE group_id = ?)",
+                    (group_id,)
+                )
+            except Exception as e:
+                _log.warning(f"Cascade batch delete comparison_keys fallito: {e}")
+
+            # Progetti: batch delete
+            try:
+                cur = execute("DELETE FROM projects WHERE group_id = ?", (group_id,))
+                report["projects"] = cur.rowcount if hasattr(cur, 'rowcount') else len(project_ids)
+            except Exception as e:
+                _log.warning(f"Cascade batch delete projects fallito: {e}")
     except Exception as e:
         _log.warning(f"Cascade delete projects fallito: {e}")
 
     # 7. Users
     try:
-        rows = fetchall("SELECT id FROM users WHERE group_id = ?", (group_id,))
-        for r in rows:
-            execute("DELETE FROM users WHERE id = ?", (r["id"],))
-            report["users"] += 1
+        cur = execute("DELETE FROM users WHERE group_id = ?", (group_id,))
+        report["users"] = cur.rowcount
     except Exception as e:
         _log.warning(f"Cascade delete users fallito: {e}")
 
@@ -378,6 +357,70 @@ def update_project(project_id: str, **fields) -> Optional[Dict]:
     return get_project(project_id)
 
 
+def update_project_canvas_key_atomic(project_id: str, key: str, value) -> bool:
+    """Aggiorna una singola chiave del canvas JSON in maniera atomica.
+
+    Pattern: BEGIN; SELECT ... FOR UPDATE; merge; UPDATE; COMMIT.
+    Il SELECT FOR UPDATE blocca il row dal momento del check fino al
+    COMMIT, serializzando scritture concorrenti sullo stesso progetto
+    (cross-process: worker Celery + uvicorn handler + altri worker).
+
+    Senza questo, due write concorrenti facevano lost-update:
+      - A: canvas = get(); canvas["columns_metadata"] = X; update()
+      - B: canvas = get(); canvas["nodes"] = Y;            update()
+    Se B lo pone dopo A ma legge prima, X va perso. Ora il 2°
+    SELECT FOR UPDATE aspetta il 1° COMMIT → vede il canvas gia'
+    aggiornato e fa merge sopra.
+
+    Nota: `canvas` in DB e' TEXT (JSON serializzato), non jsonb → non
+    possiamo usare `jsonb_set` nativo. Il lock pessimistico e' la
+    strategia piu' semplice che funziona sulla colonna attuale senza
+    migration di schema.
+
+    Ritorna True se aggiornato, False se progetto inesistente.
+    Solleva sulle altre eccezioni (rollback automatico via transaction).
+    """
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
+    with transaction() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT canvas FROM projects WHERE id = %s FOR UPDATE",
+                (project_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return False
+            canvas_raw = row["canvas"] if isinstance(row, dict) else row[0]
+            if isinstance(canvas_raw, str):
+                try:
+                    canvas_obj = json.loads(canvas_raw) if canvas_raw else {}
+                except json.JSONDecodeError:
+                    # Canvas corrotto: non vogliamo sovrascriverlo silent
+                    # (come documentato in project_service.get_project_canvas).
+                    # Solleva → rollback automatico del lock.
+                    raise ValueError(
+                        f"Canvas corrotto per progetto {project_id}: JSON non parsabile. "
+                        f"Rifiuto di sovrascrivere — ripristinare da backup."
+                    )
+            elif canvas_raw is None:
+                canvas_obj = {}
+            elif isinstance(canvas_raw, dict):
+                canvas_obj = canvas_raw
+            else:
+                raise ValueError(
+                    f"Canvas di tipo inatteso per progetto {project_id}: "
+                    f"{type(canvas_raw).__name__}"
+                )
+
+            canvas_obj[key] = value
+            cur.execute(
+                "UPDATE projects SET canvas = %s, updated_at = %s WHERE id = %s",
+                (json.dumps(canvas_obj), now, project_id),
+            )
+    return True
+
+
 def delete_project(project_id: str, group_id: str = None) -> bool:
     if group_id:
         cur = execute("DELETE FROM projects WHERE id = ? AND group_id = ?", (project_id, group_id))
@@ -516,17 +559,37 @@ def list_file_sources(group_id: Optional[str] = None) -> List[Dict]:
 
 
 def save_file_source(file_id: str, group_id: str, name: str, original_filename: str,
-                     fmt: str, data: bytes, metadata: dict = None,
-                     created_by: str = None) -> Dict:
+                     fmt: str, data: Optional[bytes] = None,
+                     metadata: dict = None, created_by: str = None,
+                     storage_key: Optional[str] = None,
+                     size_bytes: Optional[int] = None) -> Dict:
+    """Salva/aggiorna file_source.
+
+    Dispatch FS-B1-large:
+      - `data` + `size_bytes=len(data)` + `storage_key=None` → blob in DB (BYTEA)
+      - `data=None` + `storage_key="file-sources/..."` + `size_bytes=N` → blob
+        su S3, la row tiene solo metadata + puntatore.
+
+    Almeno uno tra `data` e `storage_key` deve essere non-None (check
+    app-level, il DB non lo enforce perche' la migration rilassa NOT NULL
+    su data).
+    """
     from datetime import datetime, timezone
+    if data is None and not storage_key:
+        raise ValueError(
+            "save_file_source: serve almeno 'data' o 'storage_key' "
+            "(non entrambi None)"
+        )
     now = datetime.now(timezone.utc).isoformat()
+    effective_size = size_bytes if size_bytes is not None else (len(data) if data else 0)
     execute(
-        "INSERT INTO file_sources (id, group_id, name, original_filename, format, data, size_bytes, metadata, created_at, updated_at, created_by) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT (id) DO UPDATE SET "
+        "INSERT INTO file_sources (id, group_id, name, original_filename, format, data, storage_key, size_bytes, metadata, created_at, updated_at, created_by) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT (id) DO UPDATE SET "
         "name=EXCLUDED.name, original_filename=EXCLUDED.original_filename, format=EXCLUDED.format, "
-        "data=EXCLUDED.data, size_bytes=EXCLUDED.size_bytes, metadata=EXCLUDED.metadata, updated_at=EXCLUDED.updated_at",
-        (file_id, group_id, name, original_filename, fmt, data, len(data),
-         json.dumps(metadata or {}), now, now, created_by)
+        "data=EXCLUDED.data, storage_key=EXCLUDED.storage_key, size_bytes=EXCLUDED.size_bytes, "
+        "metadata=EXCLUDED.metadata, updated_at=EXCLUDED.updated_at",
+        (file_id, group_id, name, original_filename, fmt, data, storage_key,
+         effective_size, json.dumps(metadata or {}), now, now, created_by)
     )
     return get_file_source(file_id)
 
@@ -541,6 +604,30 @@ def update_file_source_metadata(file_id: str, metadata: dict) -> None:
 
 
 def delete_file_source(file_id: str) -> bool:
+    """Elimina file_source dal DB + cleanup S3 se blob era S3-backed (FS-B1-large).
+
+    Ordine: S3 prima (best-effort, log su warn se fallisce), poi DB.
+    Se S3 fallisce ma DB no, l'orfano resta sul bucket — meglio la row
+    DB via che un fantom. Cleanup manuale o lifecycle rule possono
+    raccogliere gli orfani.
+    """
+    # Leggi storage_key prima del delete (ci serve per cleanup S3)
+    row = fetchone(
+        "SELECT storage_key FROM file_sources WHERE id = ?", (file_id,)
+    )
+    storage_key = row.get("storage_key") if row else None
+
+    if storage_key:
+        try:
+            from app.shared.cloud_backends import get_object_storage
+            storage = get_object_storage()
+            storage.delete(storage_key)
+        except Exception as e:
+            logger.warning(
+                f"delete_file_source: cleanup S3 fallito per "
+                f"{file_id} key={storage_key}: {e}"
+            )
+
     cur = execute("DELETE FROM file_sources WHERE id = ?", (file_id,))
     return cur.rowcount > 0
 

@@ -1,5 +1,5 @@
 """
-URBY-ETL — Helper allowed_groups (cross-group sharing)
+PLENORA-ETL — Helper allowed_groups (cross-group sharing)
 
 Centralizza la logica per le risorse "shareable":
     connections, datasources, eseguibili, api_connections, arcgis_connections.
@@ -146,21 +146,27 @@ def visible_resource_ids(
     share_table, fk = _validate_table(resource_table)
     conn = _conn()
     try:
-        if is_superadmin:
-            cur = conn.execute(f"SELECT id FROM {resource_table}")
-            return {row[0] for row in cur.fetchall()}
+        with conn.cursor() as cur:
+            if is_superadmin:
+                cur.execute(f"SELECT id FROM {resource_table}")
+                return {row["id"] for row in cur.fetchall()}
 
-        # Owned + shared
-        cur = conn.execute(
-            f"""
-            SELECT id FROM {resource_table} WHERE group_id = %s
-            UNION
-            SELECT {fk} FROM {share_table}
-            WHERE group_id = %s OR group_id = %s
-            """,
-            (user_group_id, user_group_id, MAGIC_ALL),
-        )
-        return {row[0] for row in cur.fetchall()}
+            cur.execute(
+                f"""
+                SELECT id FROM {resource_table} WHERE group_id = %s
+                UNION
+                SELECT {fk} FROM {share_table}
+                WHERE group_id = %s OR group_id = %s
+                """,
+                (user_group_id, user_group_id, MAGIC_ALL),
+            )
+            return {row["id"] for row in cur.fetchall()}
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
     finally:
         _pg_put_conn(conn)
 
@@ -184,31 +190,32 @@ def is_resource_visible(
     share_table, fk = _validate_table(resource_table)
     conn = _conn()
     try:
-        # Owner check (se non già fornito)
-        if resource_owner_group_id is None:
-            cur = conn.execute(
-                f"SELECT group_id FROM {resource_table} WHERE id = %s",
-                (resource_id,),
+        with conn.cursor() as cur:
+            # Owner check (se non già fornito)
+            if resource_owner_group_id is None:
+                cur.execute(
+                    f"SELECT group_id FROM {resource_table} WHERE id = %s",
+                    (resource_id,),
+                )
+                row = cur.fetchone()
+                if not row:
+                    return False
+                resource_owner_group_id = row["group_id"]
+
+            if resource_owner_group_id == user_group_id:
+                return True
+
+            # Share check
+            cur.execute(
+                f"""
+                SELECT 1 FROM {share_table}
+                WHERE {fk} = %s
+                  AND (group_id = %s OR group_id = %s)
+                LIMIT 1
+                """,
+                (resource_id, user_group_id, MAGIC_ALL),
             )
-            row = cur.fetchone()
-            if not row:
-                return False
-            resource_owner_group_id = row[0]
-
-        if resource_owner_group_id == user_group_id:
-            return True
-
-        # Share check
-        cur = conn.execute(
-            f"""
-            SELECT 1 FROM {share_table}
-            WHERE {fk} = %s
-              AND (group_id = %s OR group_id = %s)
-            LIMIT 1
-            """,
-            (resource_id, user_group_id, MAGIC_ALL),
-        )
-        return cur.fetchone() is not None
+            return cur.fetchone() is not None
     finally:
         _pg_put_conn(conn)
 
@@ -225,11 +232,12 @@ def list_resource_shares(resource_table: str, resource_id: str) -> list[str]:
     share_table, fk = _validate_table(resource_table)
     conn = _conn()
     try:
-        cur = conn.execute(
-            f"SELECT group_id FROM {share_table} WHERE {fk} = %s ORDER BY group_id",
-            (resource_id,),
-        )
-        return [row[0] for row in cur.fetchall()]
+        with conn.cursor() as cur:
+            cur.execute(
+                f"SELECT group_id FROM {share_table} WHERE {fk} = %s ORDER BY group_id",
+                (resource_id,),
+            )
+            return [row["group_id"] for row in cur.fetchall()]
     finally:
         _pg_put_conn(conn)
 
@@ -244,12 +252,14 @@ def add_resource_share(
     share_table, fk = _validate_table(resource_table)
     conn = _conn()
     try:
-        cur = conn.execute(
-            f"INSERT INTO {share_table} ({fk}, group_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
-            (resource_id, group_id),
-        )
+        with conn.cursor() as cur:
+            cur.execute(
+                f"INSERT INTO {share_table} ({fk}, group_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                (resource_id, group_id),
+            )
+            affected = cur.rowcount
         conn.commit()
-        return cur.rowcount > 0
+        return affected > 0
     finally:
         _pg_put_conn(conn)
 
@@ -263,12 +273,14 @@ def remove_resource_share(
     share_table, fk = _validate_table(resource_table)
     conn = _conn()
     try:
-        cur = conn.execute(
-            f"DELETE FROM {share_table} WHERE {fk} = %s AND group_id = %s",
-            (resource_id, group_id),
-        )
+        with conn.cursor() as cur:
+            cur.execute(
+                f"DELETE FROM {share_table} WHERE {fk} = %s AND group_id = %s",
+                (resource_id, group_id),
+            )
+            affected = cur.rowcount
         conn.commit()
-        return cur.rowcount > 0
+        return affected > 0
     finally:
         _pg_put_conn(conn)
 

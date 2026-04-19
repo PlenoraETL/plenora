@@ -11,7 +11,7 @@ plaintext legacy e vengono cifrati automaticamente al primo update.
 """
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from app.config import settings
@@ -37,7 +37,7 @@ class ConnectionService:
     DEFAULT_GROUP = settings.DEFAULT_GROUP
 
     def _generate_connection_id(self, name: str) -> str:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         short_uuid = str(uuid.uuid4())[:8]
         safe_name = "".join(c for c in name if c.isalnum() or c in (" ", "_")).strip()
         safe_name = safe_name.replace(" ", "_")[:30]
@@ -96,16 +96,19 @@ class ConnectionService:
 
     def list_connections(self, group_id: str = None) -> ConnectionList:
         # group_id=None → no filter (usato da superadmin e dalla path allowed_groups)
+        # Fix N+1: fetch tutte le righe complete in una query, no loop di get_connection_config
+        import app.db.config_db_service as _cfg_db
         if group_id is None:
-            import app.db.config_db_service as _cfg_db
             rows = _cfg_db.fetchall(
-                "SELECT id, group_id, name, db_type, host, port, database, db_schema, username, created_at FROM connections ORDER BY name"
+                "SELECT * FROM connections ORDER BY name"
             )
         else:
-            rows = db.list_connections(group_id)
+            rows = _cfg_db.fetchall(
+                "SELECT * FROM connections WHERE group_id = %s ORDER BY name",
+                (group_id,)
+            )
         connections = []
-        for row in rows:
-            full_row = db.get_connection_config(row["id"])
+        for full_row in rows:
             conn = self._row_to_connection(full_row, mask_password=True)
             if conn:
                 connections.append(conn)
@@ -173,22 +176,25 @@ class ConnectionService:
             else:
                 return ConnectionTestResult(success=False, message=f"Tipo '{connection.type}' non supportato")
         except Exception as e:
-            return ConnectionTestResult(success=False, message=f"Errore: {str(e)}")
+            logger.error(f"[GESTITO] Errore test connessione: {e}", exc_info=True)
+            return ConnectionTestResult(success=False, message="Errore durante il test della connessione")
 
     def _test_postgres(self, conn):
         try:
             import psycopg2
             c = psycopg2.connect(host=conn.host, port=conn.port, database=conn.database,
                                   user=conn.username, password=conn.password, connect_timeout=5)
-            cur = c.cursor()
-            cur.execute("SELECT version();")
-            version = cur.fetchone()[0]
-            cur.close(); c.close()
-            return ConnectionTestResult(success=True, message="Connessione PostgreSQL riuscita", details={"version": version})
+            try:
+                with c.cursor() as cur:
+                    cur.execute("SELECT version();")
+                    version = cur.fetchone()[0]
+                return ConnectionTestResult(success=True, message="Connessione PostgreSQL riuscita", details={"version": version})
+            finally:
+                c.close()
         except ImportError:
             return ConnectionTestResult(success=False, message="psycopg2 non installato: pip install psycopg2-binary")
         except Exception as e:
-            return ConnectionTestResult(success=False, message=f"Errore PostgreSQL: {str(e)}")
+            return ConnectionTestResult(success=False, message="Errore connessione PostgreSQL")
 
     def _test_mssql(self, conn):
         """
@@ -257,15 +263,18 @@ class ConnectionService:
             for driver_name, cs in attempts:
                 try:
                     c = pyodbc.connect(cs, timeout=5)
-                    cur = c.cursor()
-                    cur.execute("SELECT @@VERSION;")
-                    version = cur.fetchone()[0]
-                    cur.close(); c.close()
-                    return ConnectionTestResult(
-                        success=True,
-                        message=f"MS SQL riuscita ({driver_name})",
-                        details={"version": version[:100]},
-                    )
+                    try:
+                        cur = c.cursor()
+                        cur.execute("SELECT @@VERSION;")
+                        version = cur.fetchone()[0]
+                        cur.close()
+                        return ConnectionTestResult(
+                            success=True,
+                            message=f"MS SQL riuscita ({driver_name})",
+                            details={"version": version[:100]},
+                        )
+                    finally:
+                        c.close()
                 except Exception as e:
                     # Filtra IM002 (driver non installato): non aiuta capire il problema
                     err_msg = str(e)
@@ -287,15 +296,18 @@ class ConnectionService:
                         timeout=5,
                         login_timeout=5,
                     )
-                    cur = c.cursor()
-                    cur.execute("SELECT @@VERSION")
-                    version = cur.fetchone()[0]
-                    cur.close(); c.close()
-                    return ConnectionTestResult(
-                        success=True,
-                        message="MS SQL riuscita (pymssql / FreeTDS)",
-                        details={"version": version[:100]},
-                    )
+                    try:
+                        cur = c.cursor()
+                        cur.execute("SELECT @@VERSION")
+                        version = cur.fetchone()[0]
+                        cur.close()
+                        return ConnectionTestResult(
+                            success=True,
+                            message="MS SQL riuscita (pymssql / FreeTDS)",
+                            details={"version": version[:100]},
+                        )
+                    finally:
+                        c.close()
                 except Exception as e:
                     errors.append(f"[pymssql] {e}")
             except ImportError:
@@ -318,39 +330,48 @@ class ConnectionService:
             import pymysql
             c = pymysql.connect(host=conn.host, port=conn.port, database=conn.database,
                                  user=conn.username, password=conn.password, connect_timeout=5)
-            cur = c.cursor()
-            cur.execute("SELECT VERSION();")
-            version = cur.fetchone()[0]
-            cur.close(); c.close()
-            return ConnectionTestResult(success=True, message="MySQL/MariaDB riuscita", details={"version": version})
+            try:
+                cur = c.cursor()
+                cur.execute("SELECT VERSION();")
+                version = cur.fetchone()[0]
+                cur.close()
+                return ConnectionTestResult(success=True, message="MySQL/MariaDB riuscita", details={"version": version})
+            finally:
+                c.close()
         except ImportError:
             return ConnectionTestResult(success=False, message="pymysql non installato: pip install pymysql")
         except Exception as e:
-            return ConnectionTestResult(success=False, message=f"Errore MySQL: {str(e)}")
+            return ConnectionTestResult(success=False, message="Errore connessione MySQL")
 
     def _test_oracle(self, conn):
         try:
             import oracledb
             c = oracledb.connect(user=conn.username, password=conn.password,
                                   dsn=f"{conn.host}:{conn.port}/{conn.database}")
-            cur = c.cursor()
-            cur.execute("SELECT banner FROM v$version WHERE banner LIKE 'Oracle%' AND ROWNUM = 1")
-            version = cur.fetchone()[0]
-            cur.close(); c.close()
-            return ConnectionTestResult(success=True, message="Oracle riuscita", details={"version": version})
+            try:
+                cur = c.cursor()
+                cur.execute("SELECT banner FROM v$version WHERE banner LIKE 'Oracle%' AND ROWNUM = 1")
+                version = cur.fetchone()[0]
+                cur.close()
+                return ConnectionTestResult(success=True, message="Oracle riuscita", details={"version": version})
+            finally:
+                c.close()
         except ImportError:
             return ConnectionTestResult(success=False, message="oracledb non installato: pip install oracledb")
         except Exception as e:
-            return ConnectionTestResult(success=False, message=f"Errore Oracle: {str(e)}")
+            return ConnectionTestResult(success=False, message="Errore connessione Oracle")
 
     def _test_sqlite(self, conn):
         try:
             import sqlite3
             c = sqlite3.connect(conn.database, timeout=5)
-            cur = c.cursor()
-            cur.execute("SELECT sqlite_version();")
-            version = cur.fetchone()[0]
-            cur.close(); c.close()
-            return ConnectionTestResult(success=True, message="SQLite riuscita", details={"version": version})
+            try:
+                cur = c.cursor()
+                cur.execute("SELECT sqlite_version();")
+                version = cur.fetchone()[0]
+                cur.close()
+                return ConnectionTestResult(success=True, message="SQLite riuscita", details={"version": version})
+            finally:
+                c.close()
         except Exception as e:
-            return ConnectionTestResult(success=False, message=f"Errore SQLite: {str(e)}")
+            return ConnectionTestResult(success=False, message="Errore connessione SQLite")

@@ -1,0 +1,85 @@
+/* ────────────────────────────────────────────────────────────────────────
+ * canvas-readonly.css
+ *
+ * Stili per la modalità sola lettura del canvas (viewer role).
+ * La classe `.canvas-readonly` viene applicata al wrapper del canvas
+ * negli editor (Estrai/Manipola/Arricchisci) quando l'utente è viewer.
+ *
+ * Tutte le mutazioni dati sono già bloccate a livello di store
+ * (useCanvasStore.isReadOnly), ma queste regole CSS rendono visivamente
+ * chiaro che l'editing è disabilitato:
+ *  - nasconde le X di cancellazione e i pulsanti "remove" inline
+ *  - disabilita input, textarea, select, checkbox dentro i nodi
+ *  - mostra un banner "Sola lettura" in alto
+ *
+ * I pulsanti normali restano cliccabili, così Esegui/Preview funzionano.
+ * ──────────────────────────────────────────────────────────────────────── */
+
+/* Garantisce che il banner ::before si posizioni rispetto al wrapper */
+.canvas-readonly {
+  position: relative;
+}
+
+/* Banner sola lettura */
+.canvas-readonly::before {
+  content: "👁  Modalità sola lettura — non puoi modificare il canvas";
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #FFD27A;
+  background: rgba(35, 26, 8, 0.92);
+  border: 1px solid rgba(245, 166, 35, 0.45);
+  border-radius: 999px;
+  pointer-events: none;
+  letter-spacing: 0.3px;
+}
+
+/* Nasconde tutti i pulsanti di cancellazione/rimozione dentro i nodi.
+ * Copre i pattern usati nei nodi:
+ *   *__delete-btn   (Transform, MultiJoin, ApiEnrich, Result, Table, Carican,
+ *                    CaricanArcGIS, FeatureLayer, FileSource, ProjectSource, Dsn)
+ *   *__delete       (table-node__calculated-delete)
+ *   *__remove       (carica-arcgis-node__mapping-remove, carica-node__mapping-remove)
+ *   *-remove        (result-node__groupby-tag-remove, result-node__agg-remove)
+ *   *--del          (ann-group__btn--del — AnnotationNode)
+ *   *__node-del     (svn__node-del — StaticValuesNode)
+ */
+.canvas-readonly [class*="__delete-btn"],
+.canvas-readonly [class*="__delete"],
+.canvas-readonly [class*="__remove"],
+.canvas-readonly [class*="-remove"],
+.canvas-readonly [class*="--del"],
+.canvas-readonly [class*="__node-del"],
+.canvas-readonly .dsn__delete-btn {
+  display: none !important;
+}
+
+/* Disabilita gli input editabili nei nodi (mantiene visibili i valori) */
+.canvas-readonly .react-flow__node input,
+.canvas-readonly .react-flow__node textarea,
+.canvas-readonly .react-flow__node select {
+  pointer-events: none !important;
+  opacity: 0.75;
+  cursor: not-allowed;
+}
+
+/* Checkbox di toggle colonne: visibili ma non cliccabili */
+.canvas-readonly .react-flow__node input[type="checkbox"] {
+  pointer-events: none !important;
+  cursor: not-allowed;
+}
+
+/* Pulsanti "+ Aggiungi" / "Modifica" tipici dentro i nodi: visibili ma disabilitati */
+.canvas-readonly .react-flow__node button[class*="add"],
+.canvas-readonly .react-flow__node button[class*="edit"],
+.canvas-readonly .react-flow__node button[class*="modify"],
+.canvas-readonly .react-flow__node button[class*="calculated"] {
+  pointer-events: none !important;
+  opacity: 0.45;
+  cursor: not-allowed;
+}

@@ -112,8 +112,9 @@ def update_connection(
     existing = _connection_service.get_connection(connection_id)
     assert_can_modify(existing, current_user, "Connessione")
     conn = _connection_service.update_connection(connection_id, data)
-    if conn:
-        conn.can_edit = compute_can_edit(conn, current_user)
+    if not conn:
+        raise HTTPException(status_code=404, detail=f"Connessione '{connection_id}' non trovata")
+    conn.can_edit = compute_can_edit(conn, current_user)
     return conn
 
 

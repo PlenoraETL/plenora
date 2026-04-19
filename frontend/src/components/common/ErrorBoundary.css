@@ -1,0 +1,114 @@
+/* ErrorBoundary.css — Stili per i componenti ErrorBoundary */
+
+/* ─── Shared ─────────────────────────────────────────────────── */
+.error-boundary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 32px 24px;
+  text-align: center;
+  font-family: var(--font-family, Arial, sans-serif);
+}
+
+.error-boundary__icon {
+  font-size: 2.5rem;
+  line-height: 1;
+}
+
+.error-boundary__title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--color-text-primary, #1f2937);
+}
+
+.error-boundary__message {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--color-text-secondary, #6b7280);
+  max-width: 480px;
+  line-height: 1.5;
+}
+
+.error-boundary__actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.error-boundary__btn {
+  padding: 8px 18px;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: opacity 0.15s;
+}
+
+.error-boundary__btn:hover {
+  opacity: 0.85;
+}
+
+.error-boundary__btn--primary {
+  background: var(--color-primary, #2196F3);
+  color: #ffffff;
+}
+
+.error-boundary__btn--secondary {
+  background: var(--color-bg-secondary, #f3f4f6);
+  color: var(--color-text-primary, #1f2937);
+  border: 1px solid var(--color-border, #e5e7eb);
+}
+
+/* ─── Canvas variant ─────────────────────────────────────────── */
+.error-boundary--canvas {
+  height: 100%;
+  min-height: 300px;
+  background: var(--color-bg-secondary, #f9fafb);
+  border: 2px dashed var(--color-border, #e5e7eb);
+  border-radius: 12px;
+}
+
+/* ─── Modal variant ─────────────────────────────────────────── */
+.error-boundary--modal {
+  padding: 24px 16px;
+  background: var(--color-bg-secondary, #f9fafb);
+  border-radius: 8px;
+  border: 1px solid var(--color-border, #e5e7eb);
+}
+
+/* ─── App variant ────────────────────────────────────────────── */
+.error-boundary--app {
+  min-height: 100vh;
+  background: #f9fafb;
+}
+
+.error-boundary__card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 40px 48px;
+  max-width: 520px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+}
+
+.error-boundary__detail {
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 0.8rem;
+  color: #6b7280;
+  max-width: 100%;
+  overflow-x: auto;
+  text-align: left;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

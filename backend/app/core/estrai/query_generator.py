@@ -863,7 +863,10 @@ class QueryGenerator:
             # SECURITY: alias viene dal canvas (utente). Senza validazione,
             # un utente potrebbe iniettare SQL via alias (es. "t1 WHERE 1=2--").
             self._safe_identifier(first_node.alias, "Alias tabella FROM")
-            from_clause += f" AS {first_node.alias}"
+            # Oracle (ORA-03048) vieta ` AS ` per alias di tabella; gli altri
+            # DBMS supportati (postgres/mysql/mssql/sqlite) accettano anche
+            # la forma space-separated standard, quindi la usiamo ovunque.
+            from_clause += f" {first_node.alias}"
 
         # Traccia nodi già nel FROM per scegliere l'edge corretto
         processed_ids = {first_node.id}
@@ -891,8 +894,11 @@ class QueryGenerator:
         - Join spaziali: ON ST_Intersects(source.geom, target.geom)
           con supporto per buffer distance via sql_translator
 
-        Se non trova un edge per questo nodo, genera CROSS JOIN.
-        
+        C11: se non trova un edge per questo nodo, solleva ValueError
+        (pre-C11 generava un CROSS JOIN silente, con rischio di prodotti
+        cartesiani accidentali catastrofici). CROSS JOIN esplicito resta
+        supportato via edge.join_type='cross'.
+
         IMPORTANTE: I nomi tabella vengono qualificati con lo schema se presente.
         Gestisce correttamente edge invertiti (quando il nodo corrente è edge.source
         anziché edge.target).
@@ -933,10 +939,22 @@ class QueryGenerator:
         qualified_table_name = self._qualify_table_name(raw_name) if node.type != 'datasource_node' else raw_name
 
         if not edge:
-            # Nessun edge trovato → CROSS JOIN
-            if node.alias:
-                return f"CROSS JOIN {qualified_table_name} AS {node.alias}"
-            return f"CROSS JOIN {qualified_table_name}"
+            # C11: pre-fix qui emettevamo un CROSS JOIN silente, con rischio
+            # di query cartesiane accidentali (3 tabelle da 1M righe senza
+            # relazione → 10^18 righe richieste al DB). Ora rifiutiamo
+            # esplicitamente: se il cliente vuole davvero un CROSS JOIN,
+            # deve configurarlo in modo esplicito aggiungendo un edge
+            # tra i due nodi con `join_type='cross'`. L'assenza totale di
+            # edge e' sempre un bug del canvas (nodo orfano).
+            raise ValueError(
+                f"Nodo tabella '{self._get_node_table_name(node)}' "
+                f"(id={node.id}) non ha alcun edge di relazione con le "
+                f"altre tabelle del FROM. Un CROSS JOIN accidentale "
+                f"puo' generare un prodotto cartesiano di dimensioni "
+                f"esplosive (query OOM). Aggiungi un edge al nodo, "
+                f"oppure se il CROSS JOIN e' intenzionale, aggiungi un "
+                f"edge con join_type='cross' esplicito."
+            )
 
         # Determina tipo JOIN
         join_type = (edge.join_type or 'LEFT').upper()
@@ -946,6 +964,17 @@ class QueryGenerator:
         # Normalizza FULL e OUTER → FULL OUTER (sintassi SQL standard)
         if join_type in ('FULL', 'OUTER'):
             join_type = 'FULL OUTER'
+
+        # C11-nit: CROSS JOIN esplicito e' gestito subito — SQL standard
+        # rifiuta `CROSS JOIN t ON ...` (il CROSS non ha condizione di
+        # join), quindi ritorniamo la clausola senza ON prima di
+        # calcolare on_clause (che per CROSS sarebbe vuoto/errato).
+        if join_type == 'CROSS':
+            join_str = f"CROSS JOIN {qualified_table_name}"
+            if node.alias:
+                self._safe_identifier(node.alias, "Alias tabella CROSS JOIN")
+                join_str += f" {node.alias}"
+            return join_str
 
         table_alias = node.alias or self._get_node_table_name(node)
 
@@ -981,7 +1010,7 @@ class QueryGenerator:
         if node.alias:
             # SECURITY: alias validato come identifier (anti SQL injection)
             self._safe_identifier(node.alias, "Alias tabella JOIN")
-            join_str += f" AS {node.alias}"
+            join_str += f" {node.alias}"
         join_str += f" ON {on_clause}"
 
         return join_str
@@ -1156,10 +1185,10 @@ class QueryGenerator:
 
                 # Costruisci condizione con escaping SQL strict.
                 # NOTA: idealmente i filtri ON dovrebbero usare parametri
-                # preparati come i filtri WHERE (_crea_condizione). Ma i JOIN ON
-                # sono assemblati come stringa pura (pre-refactor). Il replace
-                # ("'","''") è il metodo standard SQL per escaping di apici
-                # singoli e previene injection base.
+                # preparati come i filtri WHERE (_crea_condizione). Ma i
+                # JOIN ON oggi sono assemblati come stringa pura: il
+                # replace ("'","''") e' il metodo standard SQL per
+                # escaping degli apici singoli e previene injection base.
                 if operator in ('IS NULL', 'IS NOT NULL'):
                     parts.append(f"{col_expr} {operator}")
                 elif operator == 'IN':
@@ -1481,6 +1510,8 @@ class QueryGenerator:
             value = [v.strip() for v in value.split(',') if v.strip()]
 
         if isinstance(value, list):
+            if not value:
+                return "1=0"
             placeholders = []
             for v in value:
                 param_name = self._prossimo_nome_param()

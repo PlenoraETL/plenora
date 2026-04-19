@@ -110,12 +110,11 @@ def list_runs(
         gid = group_filter(current_user)
         # superadmin: gid è None → nessun filtro gruppo
         if gid is None:
-            conn = idb.get_connection()
-            rows = conn.execute(
+            from app.db.pg_connection import fetchall as _pg_fetchall
+            runs = _pg_fetchall(
                 "SELECT * FROM runs WHERE canvas_id = ? ORDER BY timestamp DESC LIMIT ?",
                 (canvas_id, limit)
-            ).fetchall()
-            runs = [dict(r) for r in rows]
+            )
         else:
             runs = idb.list_runs(canvas_id, gid, limit=limit)
         return [_run_to_summary(r) for r in runs]
@@ -136,11 +135,21 @@ def get_node_data(
     Ritorna max `limit` righe (default 100).
     """
     try:
-        _check_run_access(run_id, current_user)
+        run = _check_run_access(run_id, current_user)
+        # superadmin puo' leggere run di qualsiasi gruppo (access check
+        # passa). Per evitare che `get_node_table_rows` applichi comunque
+        # `group_id=current_user.group_id` come filtro (rendendo il
+        # fetch vuoto per run di altri gruppi):
+        #   - superadmin → None (nessun filtro, vede tutto)
+        #   - altri       → group della RUN (post-check), non dell'utente
+        if current_user.role == "superadmin":
+            effective_group = None
+        else:
+            effective_group = (run or {}).get("group_id") or current_user.group_id
         rows = idb.get_node_table_rows(
             run_id=run_id,
             node_id=node_id,
-            group_id=current_user.group_id,
+            group_id=effective_group,
             limit=limit,
         )
         node = idb.get_node_meta(run_id, node_id)
@@ -220,47 +229,95 @@ def compare_runs_l2(
 ):
     """
     Confronto L2 tra due run sullo stesso nodo.
-    Ritorna righe aggiunte in B (non presenti in A) e rimosse da A (non presenti in B),
-    confrontando tramite _row_hash.
+    Ritorna righe aggiunte in B (non presenti in A) e rimosse da A (non
+    presenti in B), confrontando tramite row_hash.
+
+    Dopo il refactor a tabella unificata plenora.node_rows, tutto il diff
+    e' una singola query con NOT EXISTS che sfrutta l'indice
+    (run_id, node_id, row_hash).
     """
     try:
         _check_run_access(run_id_a, current_user)
         _check_run_access(run_id_b, current_user)
 
-        # Legge gli hash dalle due tabelle dinamiche
-        from app.core.intermediate.db import _safe_table_name
-        conn = idb.get_connection()
+        from app.db.pg_connection import fetchall, fetchone
 
-        table_a = _safe_table_name(run_id_a, node_id)
-        table_b = _safe_table_name(run_id_b, node_id)
+        # Verifica che il nodo esista in entrambe le run via node_meta
+        # (piu' robusto che controllare la presenza di righe in node_rows:
+        # un nodo potrebbe essere stato eseguito con 0 righe di output).
+        meta_a = idb.get_node_meta(run_id_a, node_id)
+        meta_b = idb.get_node_meta(run_id_b, node_id)
+        if not meta_a:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Dati nodo '{node_id}' non trovati per run {run_id_a}"
+            )
+        if not meta_b:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Dati nodo '{node_id}' non trovati per run {run_id_b}"
+            )
 
-        # Verifica che entrambe le tabelle esistano
-        for tbl in [table_a, table_b]:
-            exists = conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name=?", (tbl,)
-            ).fetchone()
-            if not exists:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Dati nodo '{node_id}' non trovati per run {run_id_a if tbl == table_a else run_id_b}"
-                )
-
-        # Righe rimosse: in A ma non in B
-        removed = conn.execute(
-            f"SELECT * FROM {table_a} WHERE _row_hash NOT IN (SELECT _row_hash FROM {table_b}) LIMIT 500"
-        ).fetchall()
+        # Righe rimosse: in A ma non in B (confronto su row_hash).
+        # L'indice idx_node_rows_hash su (run_id, node_id, row_hash) rende
+        # il NOT EXISTS O(n log m) anche per dataset grandi.
+        removed_raw = fetchall(
+            """
+            SELECT a.row_hash, a.row_data
+            FROM node_rows a
+            WHERE a.run_id = ? AND a.node_id = ?
+              AND NOT EXISTS (
+                SELECT 1 FROM node_rows b
+                WHERE b.run_id = ? AND b.node_id = ?
+                  AND b.row_hash = a.row_hash
+              )
+            ORDER BY a.row_idx
+            LIMIT 500
+            """,
+            (run_id_a, node_id, run_id_b, node_id),
+        )
 
         # Righe aggiunte: in B ma non in A
-        added = conn.execute(
-            f"SELECT * FROM {table_b} WHERE _row_hash NOT IN (SELECT _row_hash FROM {table_a}) LIMIT 500"
-        ).fetchall()
-
-        removed_list = [dict(r) for r in removed]
-        added_list = [dict(r) for r in added]
+        added_raw = fetchall(
+            """
+            SELECT b.row_hash, b.row_data
+            FROM node_rows b
+            WHERE b.run_id = ? AND b.node_id = ?
+              AND NOT EXISTS (
+                SELECT 1 FROM node_rows a
+                WHERE a.run_id = ? AND a.node_id = ?
+                  AND a.row_hash = b.row_hash
+              )
+            ORDER BY b.row_idx
+            LIMIT 500
+            """,
+            (run_id_b, node_id, run_id_a, node_id),
+        )
 
         # Conta totali senza limite
-        count_a = conn.execute(f"SELECT COUNT(*) FROM {table_a}").fetchone()[0]
-        count_b = conn.execute(f"SELECT COUNT(*) FROM {table_b}").fetchone()[0]
+        row_a = fetchone(
+            "SELECT COUNT(*) AS cnt FROM node_rows WHERE run_id = ? AND node_id = ?",
+            (run_id_a, node_id),
+        )
+        row_b = fetchone(
+            "SELECT COUNT(*) AS cnt FROM node_rows WHERE run_id = ? AND node_id = ?",
+            (run_id_b, node_id),
+        )
+        count_a = row_a["cnt"] if row_a else 0
+        count_b = row_b["cnt"] if row_b else 0
+
+        # Shape del response identico a prima: gli elementi sono dict con
+        # le colonne "piatte" della riga. Espandiamo row_data (jsonb) e
+        # aggiungiamo _row_hash per retrocompatibilita' col frontend.
+        def _expand(r):
+            data = r.get("row_data") or {}
+            if isinstance(data, str):
+                import json as _json
+                data = _json.loads(data)
+            return {"_row_hash": r.get("row_hash", ""), **data}
+
+        removed_list = [_expand(r) for r in removed_raw]
+        added_list = [_expand(r) for r in added_raw]
 
         return {
             "run_id_a": run_id_a,
@@ -289,7 +346,16 @@ def pin_run(
 ):
     """Pinna o spinna una run — le run pinnate sono escluse dalla retention FIFO."""
     try:
-        ok = idb.pin_run(run_id, current_user.group_id, pinned=body.pinned)
+        # Stessa logica di `get_node_data`. Il superadmin puo' pinnare
+        # run di qualsiasi gruppo (access check passa); senza questa
+        # branch, `idb.pin_run` filtrerebbe per `current_user.group_id`
+        # e fallirebbe con un falso 404 quando la run appartiene a un
+        # altro gruppo. Quindi:
+        #   - superadmin  → usa il group_id della run stessa (post-check)
+        #   - altri       → group della run validato da _check_run_access
+        run = _check_run_access(run_id, current_user)
+        effective_group = (run or {}).get("group_id") or current_user.group_id
+        ok = idb.pin_run(run_id, effective_group, pinned=body.pinned)
         if not ok:
             raise HTTPException(status_code=404, detail=f"Run {run_id} non trovata")
         return {"run_id": run_id, "pinned": body.pinned}

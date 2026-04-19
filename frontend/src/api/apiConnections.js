@@ -14,7 +14,7 @@ import http from './http';
  *
  * @param {Object} filters
  * @param {string} filters.category        - Filtra per categoria (geocoding, routing, ml_model, ...)
- * @param {string} filters.connection_type - Filtra per tipo (manual, template, openapi, executable, datasource)
+ * @param {string} filters.connection_type - Filtra per tipo (manual, template, openapi, rest_file, datasource)
  * @returns {Promise<Object>} { connections: [...] }
  */
 export const listApiConnections = async (filters = {}) => {

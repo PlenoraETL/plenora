@@ -1,0 +1,469 @@
+/**
+ * FeatureLayerNode.css
+ * Stili per il nodo layer ArcGIS Feature Service (modulo ESTRAI)
+ * Convenzione: BEM — tema arancione/esri, coerente con TableNode
+ */
+
+/* ============================================================
+   VARIABILI CSS
+   ============================================================ */
+.fl-node {
+  --color-primary: var(--color-feature-layer);
+  --color-primary-light: #fdf2e9;
+  --color-primary-dark: #D35400;
+}
+
+/* ============================================================
+   CONTAINER PRINCIPALE
+   ============================================================ */
+.fl-node {
+  background: white;
+  border: 1px solid var(--color-primary);
+  border-radius: 6px;
+  min-width: 200px;
+  max-width: var(--sidebar-width);
+  box-shadow: 0 2px 8px rgba(230, 126, 34, 0.15);
+  font-size: 12px;
+}
+
+/* ============================================================
+   HANDLES
+   ============================================================ */
+.fl-node__handle {
+  background: var(--color-primary) !important;
+  width: 10px !important;
+  height: 10px !important;
+  border: 2px solid white !important;
+}
+
+/* ============================================================
+   HEADER
+   ============================================================ */
+.fl-node__header {
+  background: var(--gradient-header-geo);
+  color: var(--color-text-primary);
+}
+
+.fl-node__header-content {
+  flex: 1;
+}
+
+.fl-node__title {
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.fl-node__title-icon {
+  margin-right: 4px;
+}
+
+.fl-node__subtitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.fl-node__service-name {
+  font-size: 10px;
+  opacity: 0.85;
+}
+
+.fl-node__geom-badge {
+  font-size: 9px;
+  background: rgba(255, 255, 255, 0.25);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-weight: 500;
+}
+
+.fl-node__count-badge {
+  font-size: 9px;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.fl-node__delete-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 6px;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.fl-node__delete-btn:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+/* ============================================================
+   CONNECTION BADGE
+   ============================================================ */
+.fl-node__connection-badge {
+  padding: 4px 10px;
+  background: var(--color-primary-light);
+  border-bottom: 1px solid var(--color-border);
+  font-size: 10px;
+  color: var(--color-primary-dark);
+  font-weight: 500;
+}
+
+/* ============================================================
+   BODY
+   ============================================================ */
+.fl-node__body {
+  padding: 6px;
+}
+
+.fl-node__loading {
+  padding: 12px;
+  text-align: center;
+  color: var(--color-text-tertiary);
+  font-style: italic;
+}
+
+/* ============================================================
+   TOOLBAR
+   ============================================================ */
+.fl-node__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.fl-node__search {
+  flex: 1;
+  position: relative;
+}
+
+.fl-node__search-input {
+  width: 100%;
+  padding: 4px 22px 4px 6px;
+  font-size: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+  background: white;
+  box-sizing: border-box;
+}
+
+.fl-node__search-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(230, 126, 34, 0.1);
+}
+
+.fl-node__search-clear {
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0 3px;
+}
+
+.fl-node__toggle-all {
+  flex-shrink: 0;
+}
+
+.fl-node__toggle-all-label {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+}
+
+.fl-node__toggle-all-text {
+  font-size: 9px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.fl-node__search-info {
+  font-size: 9px;
+  color: var(--color-text-tertiary);
+  text-align: center;
+  padding: 2px 0 4px;
+}
+
+.fl-node__empty {
+  padding: 12px;
+  color: var(--color-text-tertiary);
+  text-align: center;
+  font-style: italic;
+}
+
+/* ============================================================
+   CAMPO SINGOLO
+   ============================================================ */
+.fl-node__field {
+  padding: 4px 6px;
+  margin: 2px 0;
+  background: var(--color-bg-secondary);
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--color-border);
+  font-size: 11px;
+  transition: opacity 0.2s;
+}
+
+.fl-node__field--hidden {
+  background: white;
+  border-color: var(--color-danger-border);
+  opacity: 0.5;
+}
+
+.fl-node__field-checkbox {
+  margin-right: 6px;
+  cursor: pointer;
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+.fl-node__field-icon {
+  font-size: 12px;
+  margin-right: 5px;
+  flex-shrink: 0;
+  cursor: help;
+}
+
+.fl-node__field-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fl-node__field-name--hidden {
+  text-decoration: line-through;
+}
+
+/* ============================================================
+   ESPANDI / COLLASSA
+   ============================================================ */
+.fl-node__expand-btn {
+  width: 100%;
+  margin-top: 6px;
+  padding: 6px;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  transition: background 0.2s;
+}
+
+.fl-node__expand-btn:hover {
+  background: var(--color-gray-200);
+}
+
+/* ============================================================
+   SEZIONE WHERE
+   ============================================================ */
+.fl-node__where-section {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border);
+}
+
+.fl-node__where-toggle {
+  width: 100%;
+  padding: 8px;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: all 0.2s;
+}
+
+.fl-node__where-toggle:hover {
+  background: var(--color-gray-200);
+}
+
+.fl-node__where-toggle--active {
+  background: var(--color-primary-light);
+  border-color: var(--color-primary);
+  color: var(--color-primary-dark);
+  font-weight: 500;
+}
+
+.fl-node__where-badge {
+  background: var(--color-primary);
+  color: white;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: bold;
+}
+
+/* WHERE Editor */
+.fl-node__where-editor {
+  padding: 4px;
+}
+
+.fl-node__where-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  margin-bottom: 4px;
+  display: block;
+}
+
+.fl-node__where-textarea {
+  width: 100%;
+  padding: 6px;
+  font-size: 11px;
+  font-family: monospace;
+  border: 1px solid var(--color-primary);
+  border-radius: 3px;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.fl-node__where-textarea:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(230, 126, 34, 0.2);
+}
+
+.fl-node__where-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.fl-node__where-btn {
+  padding: 4px 10px;
+  border-radius: 3px;
+  font-size: 10px;
+  cursor: pointer;
+  border: none;
+}
+
+.fl-node__where-btn--cancel {
+  background: var(--color-bg-secondary);
+  color: var(--color-text-muted);
+}
+
+.fl-node__where-btn--save {
+  background: var(--color-primary);
+  color: white;
+  font-weight: 500;
+}
+
+.fl-node__where-btn--save:hover {
+  background: var(--color-primary-dark);
+}
+
+/* ============================================================
+   SEZIONE RELAZIONI (Related Tables)
+   ============================================================ */
+.fl-node__relations-section {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border);
+}
+
+.fl-node__relations-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-bottom: 6px;
+  padding: 0 2px;
+}
+
+.fl-node__relations-badge {
+  background: #3498db;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: bold;
+}
+
+.fl-node__relations-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fl-node__relation-item {
+  display: flex;
+  align-items: center;
+  padding: 5px 6px;
+  background: linear-gradient(135deg, #ebf5fb 0%, #eaf2f8 100%);
+  border: 1px solid #aed6f1;
+  border-radius: 3px;
+  gap: 6px;
+}
+
+.fl-node__relation-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.fl-node__relation-name {
+  display: block;
+  font-size: 10px;
+  font-weight: 500;
+  color: #2471a3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fl-node__relation-detail {
+  display: block;
+  font-size: 9px;
+  color: #7fb3d8;
+  margin-top: 1px;
+}
+
+.fl-node__relation-add-btn {
+  background: #3498db;
+  color: white;
+  border: none;
+  border-radius: 3px;
+  padding: 3px 8px;
+  font-size: 10px;
+  font-weight: 500;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+
+.fl-node__relation-add-btn:hover {
+  background: #2980b9;
+}
+
+.fl-node__relation-add-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}

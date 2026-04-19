@@ -1,0 +1,305 @@
+/* EseguibiliList.css — Lista catene on-demand */
+
+.esl {
+  padding: 32px;
+  min-height: 100vh;
+  background: var(--bg-primary, #0f1419);
+  color: var(--text-primary, #e6e6e6);
+}
+
+.esl__header {
+  margin-bottom: 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.esl__btn--new {
+  white-space: nowrap;
+  padding: 12px 20px;
+  font-size: 14px;
+}
+
+.esl__back {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.1);
+  color: var(--text-secondary, #999);
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+.esl__back:hover { background: rgba(255,255,255,0.05); color: var(--text-primary, #e6e6e6); }
+
+.esl__title {
+  font-size: 28px;
+  margin: 0 0 6px 0;
+  font-weight: 600;
+}
+
+.esl__subtitle {
+  color: var(--text-secondary, #999);
+  margin: 0;
+  font-size: 14px;
+}
+
+.esl__loading,
+.esl__empty {
+  text-align: center;
+  padding: 64px 32px;
+  color: var(--text-secondary, #999);
+}
+
+.esl__empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.esl__empty h3 {
+  margin: 12px 0;
+  color: var(--text-primary, #e6e6e6);
+}
+
+.esl__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 20px;
+}
+
+.esl__card {
+  background: var(--bg-secondary, #1a1f28);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  transition: border-color 0.2s, transform 0.2s;
+}
+
+.esl__card:hover {
+  border-color: rgba(124, 58, 237, 0.4);
+  transform: translateY(-2px);
+}
+
+.esl__card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.esl__card-title {
+  font-size: 17px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text-primary, #e6e6e6);
+}
+
+.esl__card-format {
+  background: rgba(124, 58, 237, 0.15);
+  color: #a78bfa;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.esl__card-desc {
+  color: var(--text-secondary, #999);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0 0 16px 0;
+  flex-grow: 1;
+}
+
+.esl__card-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-secondary, #888);
+  margin-bottom: 16px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255,255,255,0.05);
+}
+
+.esl__card-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.esl__btn {
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.esl__btn--ghost {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.1);
+  color: var(--text-secondary, #999);
+}
+.esl__btn--ghost:hover { background: rgba(239,68,68,0.1); border-color: rgba(239,68,68,0.4); color: #f87171; }
+
+.esl__btn--primary {
+  background: linear-gradient(135deg, #7c3aed, #6d28d9);
+  color: white;
+}
+.esl__btn--primary:hover { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }
+
+/* ── Selettore progetto sorgente ─────────────────────────────── */
+.esl__overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-modal-priority, 9999);
+  padding: 20px;
+}
+
+.esl__selector {
+  background: var(--bg-secondary, #1a1f28);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 640px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  color: var(--text-primary, #e6e6e6);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+
+.esl__selector-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.esl__selector-header h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.esl__selector-close {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary, #999);
+  font-size: 28px;
+  cursor: pointer;
+  padding: 0 8px;
+  line-height: 1;
+}
+.esl__selector-close:hover { color: var(--text-primary, #e6e6e6); }
+
+.esl__selector-body {
+  padding: 20px 24px;
+  overflow-y: auto;
+  flex-grow: 1;
+}
+
+.esl__selector-search {
+  width: 100%;
+  padding: 10px 14px;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  color: var(--text-primary, #e6e6e6);
+  font-size: 14px;
+  margin-bottom: 16px;
+  box-sizing: border-box;
+}
+.esl__selector-search:focus {
+  outline: none;
+  border-color: rgba(124,58,237,0.5);
+}
+
+.esl__selector-loading,
+.esl__selector-empty {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--text-secondary, #999);
+  font-size: 14px;
+}
+
+.esl__selector-empty p {
+  margin: 8px 0;
+}
+
+.esl__selector-hint {
+  font-size: 12px;
+  color: var(--text-secondary, #666);
+}
+
+.esl__selector-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.esl__selector-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.esl__selector-item:hover {
+  background: rgba(124,58,237,0.08);
+  border-color: rgba(124,58,237,0.4);
+  transform: translateX(2px);
+}
+
+.esl__selector-item-icon {
+  font-size: 20px;
+  color: #a78bfa;
+  width: 32px;
+  text-align: center;
+}
+
+.esl__selector-item-info {
+  flex-grow: 1;
+  min-width: 0;
+}
+
+.esl__selector-item-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary, #e6e6e6);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.esl__selector-item-desc {
+  font-size: 12px;
+  color: var(--text-secondary, #888);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.esl__selector-item-arrow {
+  color: var(--text-secondary, #666);
+  font-size: 18px;
+}

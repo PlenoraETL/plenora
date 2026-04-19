@@ -1,0 +1,394 @@
+/**
+ * FeatureServicePanel.css
+ * Stili per il pannello browse ArcGIS Feature Service nella sidebar ESTRAI
+ * Convenzione: BEM — si innesta dentro .estrai-sidebar
+ */
+
+/* ============================================================
+   CONTAINER
+   ============================================================ */
+.fs-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* ============================================================
+   HEADER CON BREADCRUMB
+   ============================================================ */
+.fs-panel__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  min-height: 28px;
+}
+
+.fs-panel__back-btn {
+  background: var(--color-gray-150);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 14px;
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+
+.fs-panel__back-btn:hover {
+  background: var(--color-border);
+}
+
+.fs-panel__breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  overflow: hidden;
+  flex-wrap: wrap;
+}
+
+.fs-panel__breadcrumb-item {
+  font-weight: 600;
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fs-panel__breadcrumb-link {
+  color: var(--color-feature-layer);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.fs-panel__breadcrumb-link:hover {
+  text-decoration: underline;
+}
+
+.fs-panel__breadcrumb-sep {
+  color: var(--color-text-tertiary);
+  flex-shrink: 0;
+}
+
+/* ============================================================
+   TOOLBAR (search + add)
+   ============================================================ */
+.fs-panel__toolbar {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.fs-panel__search {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  font-size: 13px;
+  box-sizing: border-box;
+}
+
+.fs-panel__search:focus {
+  outline: none;
+  border-color: var(--color-feature-layer);
+}
+
+.fs-panel__add-btn {
+  width: 36px;
+  height: 36px;
+  background: var(--color-feature-layer);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 18px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+
+.fs-panel__add-btn:hover {
+  background: #D35400;
+}
+
+/* ============================================================
+   ERROR
+   ============================================================ */
+.fs-panel__error {
+  padding: 8px 12px;
+  background: var(--color-type-date-bg);
+  border: 1px solid var(--color-feature-layer);
+  border-radius: 4px;
+  font-size: 12px;
+  color: #D35400;
+  margin-bottom: 10px;
+}
+
+/* ============================================================
+   LIST CONTAINER
+   ============================================================ */
+.fs-panel__list {
+  flex: 1;
+  overflow-y: auto;
+  max-height: calc(100vh - 280px);
+}
+
+.fs-panel__loading {
+  padding: 20px;
+  text-align: center;
+  color: var(--color-text-tertiary);
+  font-style: italic;
+  font-size: 13px;
+}
+
+.fs-panel__empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--color-text-tertiary);
+}
+
+.fs-panel__empty p {
+  margin: 0 0 12px 0;
+  font-size: 13px;
+}
+
+.fs-panel__empty-btn {
+  padding: 8px 16px;
+  background: var(--color-feature-layer);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.fs-panel__hint {
+  padding: 6px 8px;
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+  text-align: center;
+  margin-bottom: 4px;
+}
+
+/* ============================================================
+   LIST ITEM (generico per connections, services, layers)
+   ============================================================ */
+.fs-panel__item {
+  padding: 10px 12px;
+  margin: 4px 0;
+  background: var(--color-bg-secondary);
+  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.fs-panel__item:hover {
+  background: #fdf2e9;
+  border-color: var(--color-feature-layer);
+}
+
+.fs-panel__item--layer {
+  cursor: grab;
+}
+
+.fs-panel__item--layer:active {
+  cursor: grabbing;
+}
+
+.fs-panel__item--used {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.fs-panel__item--used:hover {
+  background: var(--color-bg-secondary);
+  border-color: var(--color-border);
+}
+
+.fs-panel__item-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.fs-panel__item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.fs-panel__item-name {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fs-panel__item-detail {
+  display: block;
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+  margin-top: 2px;
+}
+
+.fs-panel__item-arrow {
+  color: var(--color-gray-300);
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.fs-panel__item-badge {
+  background: var(--color-success);
+  color: white;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.fs-panel__item-drag-hint {
+  color: var(--color-gray-300);
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+/* ============================================================
+   MODAL NUOVA CONNESSIONE
+   ============================================================ */
+.fs-panel__modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-modal, 1000);
+}
+
+.fs-panel__modal {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  width: 100%;
+  max-width: 450px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.fs-panel__modal-title {
+  margin: 0 0 20px 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+/* Form */
+.fs-panel__form-group {
+  margin-bottom: 16px;
+}
+
+.fs-panel__form-group label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.fs-panel__form-group input,
+.fs-panel__form-group select {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  font-size: 13px;
+  box-sizing: border-box;
+}
+
+.fs-panel__form-group input:focus,
+.fs-panel__form-group select:focus {
+  outline: none;
+  border-color: var(--color-feature-layer);
+  box-shadow: 0 0 0 3px rgba(230, 126, 34, 0.1);
+}
+
+.fs-panel__form-error {
+  padding: 8px 12px;
+  background: var(--color-danger-light);
+  border: 1px solid var(--color-danger);
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--color-danger-dark);
+  margin-bottom: 12px;
+}
+
+.fs-panel__form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.fs-panel__form-actions button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.fs-panel__form-actions button:first-child {
+  background: var(--color-bg-secondary);
+  color: var(--color-text-muted);
+}
+
+.fs-panel__form-submit {
+  background: var(--color-feature-layer) !important;
+  color: white !important;
+  font-weight: 600;
+}
+
+.fs-panel__form-submit:hover {
+  background: #D35400 !important;
+}
+
+.fs-panel__form-submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed !important;
+}
+
+/* ============================================================
+   SOURCE TYPE TOGGLE (va nella sidebar EstraiEditor)
+   ============================================================ */
+
+
+/* ============================================================
+   CLASSI MANCANTI — Fase 13 Bucket 2
+   ============================================================ */
+
+/* Item connessione ArcGIS (cliccabile per navigare) */
+.fs-panel__item--connection {
+  border-left: 3px solid var(--color-feature-layer);
+}
+
+.fs-panel__item--connection:hover {
+  background: #fdf2e9;
+  border-color: var(--color-feature-layer-dark);
+}
+
+/* Item servizio FeatureServer */
+.fs-panel__item--service {
+  border-left: 3px solid var(--color-primary);
+}
+
+.fs-panel__item--service:hover {
+  background: var(--color-primary-50);
+  border-color: var(--color-primary-dark);
+}

@@ -80,7 +80,12 @@ CREATE TABLE IF NOT EXISTS file_sources (
     name              TEXT NOT NULL,
     original_filename TEXT NOT NULL,
     format            TEXT NOT NULL,
-    data              BLOB NOT NULL,
+    -- Dispatch threshold (FS-B1-large): file < FILE_SOURCE_S3_THRESHOLD_BYTES
+    -- vivono qui (BLOB); file >= threshold hanno data=NULL e storage_key
+    -- puntato a S3 via cloud_backends. Il reader file_service risolve
+    -- trasparente al caller.
+    data              BLOB,
+    storage_key       TEXT,
     size_bytes        INTEGER,
     metadata          TEXT,
     created_at        TEXT NOT NULL,
@@ -156,6 +161,19 @@ CREATE TABLE IF NOT EXISTS schedules (
 CREATE INDEX IF NOT EXISTS idx_schedules_group      ON schedules(group_id);
 CREATE INDEX IF NOT EXISTS idx_schedules_enabled    ON schedules(is_enabled);
 CREATE INDEX IF NOT EXISTS idx_schedules_created_by ON schedules(created_by);
+
+-- Audit log catchup run emessi dal beat (C3 fix 3). Vedi
+-- migrations/2026-04-16_add_schedule_catchup_history.sql per contesto
+-- e per il cap anti-runaway consultato al momento dell'emit.
+CREATE TABLE IF NOT EXISTS schedule_catchup_history (
+    id              BIGSERIAL PRIMARY KEY,
+    schedule_id     TEXT NOT NULL,
+    emitted_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    scheduled_for   TIMESTAMPTZ NOT NULL,
+    leader_id       TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_schedule_catchup_schedule_emitted
+    ON schedule_catchup_history(schedule_id, emitted_at DESC);
 
 CREATE TABLE IF NOT EXISTS beat_heartbeat (
     id TEXT PRIMARY KEY,

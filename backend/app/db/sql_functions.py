@@ -1,5 +1,5 @@
 """
-Catalogo funzioni SQL astratte e traduttore multi-database per URBY-ETL.
+Catalogo funzioni SQL astratte e traduttore multi-database per PLENORA-ETL.
 
 Architettura
 ============
@@ -51,6 +51,132 @@ Uso:
 from typing import Dict, List, Optional, Any
 from enum import Enum
 from dataclasses import dataclass
+
+
+def _sql_escape(value: str) -> str:
+    """Escape apici singoli per string literal SQL (limitato).
+
+    NB (N2): questo raddoppio e' sicuro SOLO quando il valore finisce
+    tra apici singoli in SQL (es. `'{_sql_escape(v)}'`). NON protegge
+    da injection in numeri, identificatori o espressioni. Per quei
+    contesti usa `_safe_number` o `_safe_identifier`.
+    """
+    if value is None:
+        return ""
+    return str(value).replace("'", "''")
+
+
+# =============================================================================
+# N2 — VALIDATORI INPUT CONTRO SQL INJECTION
+# =============================================================================
+# I traduttori in questo modulo costruiscono SQL via f-string. Per i valori
+# che non finiscono tra apici (numeri, nomi colonna, espressioni) _sql_escape
+# non basta: serve un cast/whitelist esplicito che rifiuti input malformati
+# prima di interpolare.
+#
+# Helpers:
+# - _safe_number(v, kind): float/int cast, ValueError su non-numerico
+# - _safe_identifier(v): whitelist regex per singoli identificatori
+#   (es. "geom" → OK, "geom); DROP TABLE x;--" → ValueError)
+# - _safe_qualified_identifier(v): come sopra ma ammette "table.column"
+
+
+import re as _re_n2
+
+
+# Singolo identificatore SQL: lettera/underscore iniziale, poi alfanumerico
+# o underscore. Ammette anche doppio apice inglobante per identifier
+# delimitati ("My Column" con spazi) — questa variante e' piu' restrittiva
+# e accetta solo il caso "pulito". Case-insensitive.
+_IDENTIFIER_RE = _re_n2.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,62}$")
+
+# Identificatore qualificato: "schema.table" o "table.column"; max 2 parti
+_QUALIFIED_RE = _re_n2.compile(
+    r"^[A-Za-z_][A-Za-z0-9_]{0,62}(\.[A-Za-z_][A-Za-z0-9_]{0,62})?$"
+)
+
+
+def _safe_number(value, kind: str = "float"):
+    """Converte value a numero (int o float) e rifiuta ValueError
+    se non e' un numero valido. Usalo prima di interpolare un valore
+    numerico in un f-string SQL.
+
+    Args:
+        value: valore da validare (potrebbe essere str, int, float).
+        kind: "float" o "int". Se "int", cast stretto via int().
+
+    Returns:
+        int o float validato.
+
+    Raises:
+        ValueError se value non e' numerico (es. "1; DROP TABLE x;").
+    """
+    if value is None:
+        raise ValueError("_safe_number: valore None")
+    try:
+        if kind == "int":
+            # Consenti "10" ma non "10.5" come int. Per tolleranza: prima
+            # float() per validare, poi controlla che sia intero esatto.
+            f = float(value)
+            if f != int(f):
+                raise ValueError(
+                    f"_safe_number: valore '{value}' non e' intero"
+                )
+            return int(f)
+        return float(value)
+    except (TypeError, ValueError) as e:
+        raise ValueError(
+            f"_safe_number: valore '{value}' non numerico (kind={kind}): {e}"
+        )
+
+
+def _safe_identifier(value) -> str:
+    """Valida un singolo identificatore SQL (nome colonna o alias).
+
+    Pattern whitelist: lettera/underscore iniziale, alfanumerico o
+    underscore dopo, max 63 char (limite Postgres default).
+
+    Raises:
+        ValueError se contiene caratteri fuori dal pattern (spazi,
+        parentesi, punti, semicoloni, commenti, operatori).
+    """
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"_safe_identifier: valore non stringa/vuoto: {value!r}")
+    if not _IDENTIFIER_RE.match(value):
+        raise ValueError(
+            f"_safe_identifier: '{value}' contiene caratteri non validi "
+            f"(ammessi solo [A-Za-z0-9_], inizio con lettera o _)"
+        )
+    return value
+
+
+def _safe_qualified_identifier(value) -> str:
+    """Valida "table.column" o singolo "column"."""
+    if not isinstance(value, str) or not value:
+        raise ValueError(
+            f"_safe_qualified_identifier: valore non valido: {value!r}"
+        )
+    if not _QUALIFIED_RE.match(value):
+        raise ValueError(
+            f"_safe_qualified_identifier: '{value}' non e' un identifier "
+            f"semplice (ammessi 'column' o 'table.column')"
+        )
+    return value
+
+
+# Operatori di confronto ammessi per CASE_WHEN / IIF. Finivano raw in
+# f-string → injection via operator="= '1' OR 1=1 --".
+_COMPARE_OPERATORS = frozenset({"=", "!=", "<>", "<", ">", "<=", ">="})
+
+
+def _safe_compare_operator(value) -> str:
+    """Whitelist operatori di confronto per predicati CASE/IIF."""
+    if value not in _COMPARE_OPERATORS:
+        raise ValueError(
+            f"_safe_compare_operator: operatore '{value}' non ammesso. "
+            f"Validi: {sorted(_COMPARE_OPERATORS)}"
+        )
+    return value
 
 
 # =============================================================================
@@ -621,29 +747,52 @@ class SqlFunctionTranslator:
         """
         Qualifica un nome colonna con l'alias della tabella.
 
-        NON qualifica se:
-            - La colonna è già un'espressione SQL (contiene parentesi)
-            - La colonna è già qualificata (contiene un punto, es. "tabella.colonna")
+        Ammessi:
+            - Nome colonna semplice: "geom", "my_col"
+            - Nome gia' qualificato: "t.geom", "schema.table"
+            - Espressione composta: contiene parentesi e/o funzioni SQL
+              (usato dai traduttori che nestano chiamate, es.
+              ST_Transform(ST_Buffer(...))). Sul path espressione NON
+              applichiamo whitelist — la fiducia ricade sui traduttori
+              sottostanti.
 
-        Args:
-            column: Nome colonna o espressione SQL.
-            table_alias: Alias tabella da anteporre.
+        N2: per il path "nome semplice" e "gia' qualificato" applichiamo
+        un whitelist regex (`_safe_qualified_identifier`) che rifiuta
+        payload come `geom); DROP TABLE x;--`. Il path espressione resta
+        trust-based ma l'unica fonte di espressioni in input sono gli
+        altri `_translate_*` di questo modulo (che ora validano i loro
+        input tramite gli helper), quindi la catena e' safe end-to-end.
 
-        Returns:
-            Colonna qualificata (es. "t.geom") o espressione originale.
+        Raises:
+            ValueError: se la colonna non e' ne' un'espressione ne' un
+            identifier valido secondo il whitelist.
         """
         if not isinstance(column, str):
             return str(column)
 
-        # Se contiene parentesi, è un'espressione SQL complessa
+        # Path "espressione SQL": contiene parentesi → fiducia al
+        # traduttore che ha prodotto l'espressione. Questi input NON
+        # arrivano direttamente dall'utente in condizioni normali: sono
+        # frammenti SQL emessi da altre _translate_*.
+        # N2 defense-in-depth: rifiuta comunque marker strutturali di
+        # injection. Non compaiono mai negli output legittimi dei
+        # _translate_*, quindi niente falsi positivi.
         if "(" in column or ")" in column:
+            for marker in (";", "--", "/*", "*/", "\x00"):
+                if marker in column:
+                    raise ValueError(
+                        f"_qualify_column: espressione contiene marker "
+                        f"di injection '{marker}': {column!r}"
+                    )
             return column
 
-        # Se è già qualificata (contiene un punto), non modificare
+        # Path "identifier": validiamo whitelist prima di usarlo.
+        # Accetta "col" o "table.col" (2 parti).
+        _safe_qualified_identifier(column)
+
+        # Se e' gia' qualificato (contiene un punto), non aggiungere alias
         if "." in column:
-            parti = column.split(".")
-            if len(parti) == 2 and parti[0] and parti[1]:
-                return column
+            return column
 
         # Qualifica con l'alias della tabella
         if table_alias:
@@ -670,7 +819,8 @@ class SqlFunctionTranslator:
     def _translate_buffer(self, params: Dict, table_alias: str = None) -> str:
         """Buffer — area di distanza attorno alla geometria."""
         col = self._qualify_column(params["column"], table_alias)
-        distanza = params["distance"]
+        # N2: cast float per rifiutare payload tipo "1); DROP TABLE x;--"
+        distanza = _safe_number(params["distance"], "float")
 
         traduzioni = {
             DbType.POSTGRES: f"ST_Buffer({col}, {distanza})",
@@ -684,7 +834,8 @@ class SqlFunctionTranslator:
     def _translate_transform(self, params: Dict, table_alias: str = None) -> str:
         """Riproiezione — trasforma la geometria in un altro CRS."""
         col = self._qualify_column(params["column"], table_alias)
-        srid = params["srid"]
+        # N2: SRID e' sempre un intero (EPSG code), cast strict int
+        srid = _safe_number(params["srid"], "int")
 
         traduzioni = {
             DbType.POSTGRES: f"ST_Transform({col}, {srid})",
@@ -737,7 +888,8 @@ class SqlFunctionTranslator:
     def _translate_simplify(self, params: Dict, table_alias: str = None) -> str:
         """Semplificazione — riduce i vertici della geometria."""
         col = self._qualify_column(params["column"], table_alias)
-        tolleranza = params["tolerance"]
+        # N2: float strict — tolerance e' una distanza
+        tolleranza = _safe_number(params["tolerance"], "float")
 
         traduzioni = {
             DbType.POSTGRES: f"ST_Simplify({col}, {tolleranza})",
@@ -846,7 +998,7 @@ class SqlFunctionTranslator:
         # Normalizza a lista: il frontend può mandare una stringa singola o CSV
         if isinstance(valori, str):
             valori = [v.strip() for v in valori.split(',') if v.strip()]
-        separatore = params.get("separator", "")
+        separatore = _sql_escape(params.get("separator", ""))
         valori_qualificati = [self._qualify_column(v, table_alias) for v in valori]
 
         if self.db_type in (DbType.POSTGRES, DbType.MSSQL, DbType.MYSQL):
@@ -875,8 +1027,13 @@ class SqlFunctionTranslator:
             - Oracle/SQLite: SUBSTR(col, start[, length])
         """
         col = self._qualify_column(params["column"], table_alias)
-        inizio = params.get("start", 1)
+        # N2: cast strict — start e length sono sempre int in SQL SUBSTRING
+        inizio = _safe_number(params.get("start", 1), "int")
         lunghezza = params.get("length")
+        if lunghezza is not None and lunghezza != "":
+            lunghezza = _safe_number(lunghezza, "int")
+        else:
+            lunghezza = None
 
         if self.db_type == DbType.POSTGRES:
             if lunghezza:
@@ -966,7 +1123,8 @@ class SqlFunctionTranslator:
         if col2:
             secondo_operando = self._qualify_column(col2, table_alias)
         elif valore is not None:
-            secondo_operando = str(valore)
+            # N2: cast strict su value (finiva f-string raw → injection)
+            secondo_operando = str(_safe_number(valore, "float"))
         else:
             raise ValueError("Specificare column2 o value per l'operazione matematica")
 
@@ -988,22 +1146,29 @@ class SqlFunctionTranslator:
     # =========================================================================
 
     def _translate_mod(self, params: Dict, table_alias: str = None) -> str:
-        """Resto divisione — MSSQL/SQLite usano %, altri MOD()."""
+        """Resto divisione — MSSQL/SQLite usano %, altri MOD(). Protezione div per zero."""
         col = self._qualify_column(params["column"], table_alias)
-        divisore = params["divisor"]
+        # N2: cast strict su divisor (finiva f-string raw in NULLIF → injection)
+        divisore = _safe_number(params["divisor"], "float")
+        if divisore == 0:
+            raise ValueError("MOD: divisore non puo essere zero")
+        # NULLIF non piu' necessaria come protezione runtime (divisore
+        # e' gia' numerico validato), ma lasciata per safety a livello SQL.
+        safe_div = f"NULLIF({divisore}, 0)"
         traduzioni = {
-            DbType.POSTGRES: f"MOD({col}, {divisore})",
-            DbType.MSSQL: f"({col} % {divisore})",
-            DbType.MYSQL: f"MOD({col}, {divisore})",
-            DbType.ORACLE: f"MOD({col}, {divisore})",
-            DbType.SQLITE: f"({col} % {divisore})",
+            DbType.POSTGRES: f"MOD({col}, {safe_div})",
+            DbType.MSSQL: f"({col} % {safe_div})",
+            DbType.MYSQL: f"MOD({col}, {safe_div})",
+            DbType.ORACLE: f"MOD({col}, {safe_div})",
+            DbType.SQLITE: f"({col} % {safe_div})",
         }
         return self._ottieni_traduzione(traduzioni, "MOD")
 
     def _translate_power(self, params: Dict, table_alias: str = None) -> str:
         """Potenza — POWER() su tutti i database."""
         col = self._qualify_column(params["column"], table_alias)
-        esponente = params["exponent"]
+        # N2: cast float su exponent (accetta fratti es. 2.5)
+        esponente = _safe_number(params["exponent"], "float")
         return f"POWER({col}, {esponente})"
 
     def _translate_sqrt(self, params: Dict, table_alias: str = None) -> str:
@@ -1056,14 +1221,15 @@ class SqlFunctionTranslator:
     def _translate_replace(self, params: Dict, table_alias: str = None) -> str:
         """Sostituzione testo — REPLACE() identico su tutti i database."""
         col = self._qualify_column(params["column"], table_alias)
-        cerca = params["search"]
-        sostituisci = params.get("replace", "")
+        cerca = _sql_escape(params["search"])
+        sostituisci = _sql_escape(params.get("replace", ""))
         return f"REPLACE({col}, '{cerca}', '{sostituisci}')"
 
     def _translate_left(self, params: Dict, table_alias: str = None) -> str:
         """Primi N caratteri — Oracle/SQLite usano SUBSTR."""
         col = self._qualify_column(params["column"], table_alias)
-        lunghezza = params["length"]
+        # N2: cast int — length e' sempre intero
+        lunghezza = _safe_number(params["length"], "int")
         traduzioni = {
             DbType.POSTGRES: f"LEFT({col}, {lunghezza})",
             DbType.MSSQL: f"LEFT({col}, {lunghezza})",
@@ -1076,7 +1242,8 @@ class SqlFunctionTranslator:
     def _translate_right(self, params: Dict, table_alias: str = None) -> str:
         """Ultimi N caratteri — Oracle/SQLite usano SUBSTR con indice negativo."""
         col = self._qualify_column(params["column"], table_alias)
-        lunghezza = params["length"]
+        # N2: cast int — length e' sempre intero
+        lunghezza = _safe_number(params["length"], "int")
         traduzioni = {
             DbType.POSTGRES: f"RIGHT({col}, {lunghezza})",
             DbType.MSSQL: f"RIGHT({col}, {lunghezza})",
@@ -1089,7 +1256,7 @@ class SqlFunctionTranslator:
     def _translate_position(self, params: Dict, table_alias: str = None) -> str:
         """Trova posizione — sintassi diversa per ogni database."""
         col = self._qualify_column(params["column"], table_alias)
-        cerca = params["search"]
+        cerca = _sql_escape(params["search"])
         traduzioni = {
             DbType.POSTGRES: f"POSITION('{cerca}' IN {col})",
             DbType.MSSQL: f"CHARINDEX('{cerca}', {col})",
@@ -1151,8 +1318,15 @@ class SqlFunctionTranslator:
     def _translate_date_add(self, params: Dict, table_alias: str = None) -> str:
         """Aggiunta intervallo a data — sintassi molto diversa per ogni DB."""
         col = self._qualify_column(params["column"], table_alias)
-        intervallo = params["interval"]
-        unita = params.get("unit", "day")
+        # Validazione: intervallo deve essere numerico, unita deve essere in whitelist
+        _VALID_UNITS = {"year", "month", "day", "hour", "minute", "second", "week"}
+        try:
+            intervallo = int(params["interval"])
+        except (ValueError, TypeError):
+            raise ValueError(f"DATE_ADD: interval deve essere numerico, ricevuto: {params.get('interval')}")
+        unita = str(params.get("unit", "day")).lower()
+        if unita not in _VALID_UNITS:
+            raise ValueError(f"DATE_ADD: unit '{unita}' non valida. Valide: {_VALID_UNITS}")
         traduzioni = {
             DbType.POSTGRES: f"{col} + INTERVAL '{intervallo} {unita}'",
             DbType.MSSQL: f"DATEADD({unita}, {intervallo}, {col})",
@@ -1165,7 +1339,10 @@ class SqlFunctionTranslator:
     def _translate_date_trunc(self, params: Dict, table_alias: str = None) -> str:
         """Tronca data a unita — sintassi molto diversa per ogni DB."""
         col = self._qualify_column(params["column"], table_alias)
-        unita = params["unit"].lower()
+        unita = str(params["unit"]).lower()
+        _VALID_TRUNC_UNITS = {"year", "month", "week", "day", "hour", "minute", "second"}
+        if unita not in _VALID_TRUNC_UNITS:
+            raise ValueError(f"DATE_TRUNC: unit '{unita}' non valida. Valide: {_VALID_TRUNC_UNITS}")
         # Mappa unita per Oracle TRUNC
         oracle_fmt = {"year": "YYYY", "month": "MM", "week": "IW", "day": "DD"}.get(unita, "MM")
         # Mappa unita per SQLite strftime
@@ -1193,6 +1370,10 @@ class SqlFunctionTranslator:
         """Formatta data come stringa — ogni DB ha il suo sistema di formattazione."""
         col = self._qualify_column(params["column"], table_alias)
         fmt = params["format"]
+        # Validazione: solo caratteri alfanumerici e separatori comuni per evitare injection
+        import re as _re
+        if not _re.match(r"^[A-Za-z0-9\-_/:\s\.]+$", fmt):
+            raise ValueError(f"DATE_FORMAT: format '{fmt}' contiene caratteri non permessi")
         # Converte formato generico DD/MM/YYYY nei formati specifici per DB
         pg_fmt = fmt.replace("DD", "DD").replace("MM", "MM").replace("YYYY", "YYYY").replace("YY", "YY").replace("HH", "HH24").replace("mm", "MI").replace("ss", "SS")
         mysql_fmt = fmt.replace("YYYY", "%Y").replace("YY", "%y").replace("MM", "%m").replace("DD", "%d").replace("HH", "%H").replace("mm", "%i").replace("ss", "%s")
@@ -1210,12 +1391,19 @@ class SqlFunctionTranslator:
     def _translate_extract(self, params: Dict, table_alias: str = None) -> str:
         """Estrazione parte da data — generalizzazione di YEAR/MONTH/DAY."""
         col = self._qualify_column(params["column"], table_alias)
-        parte = params["part"]
+        # N2: whitelist su `part` — finiva raw in EXTRACT({part} FROM ...)
+        ammesse = {"year", "month", "day", "hour", "minute", "second"}
+        raw = params.get("part")
+        if not isinstance(raw, str) or raw.lower() not in ammesse:
+            raise ValueError(
+                f"EXTRACT: part '{raw}' non valida. Ammesse: {sorted(ammesse)}"
+            )
+        parte = raw.lower()
         sqlite_format_map = {
             "year": "%Y", "month": "%m", "day": "%d",
             "hour": "%H", "minute": "%M", "second": "%S"
         }
-        sqlite_fmt = sqlite_format_map.get(parte.lower(), "%Y")
+        sqlite_fmt = sqlite_format_map[parte]
         traduzioni = {
             DbType.POSTGRES: f"EXTRACT({parte} FROM {col})",
             DbType.MSSQL: f"DATEPART({parte}, {col})",
@@ -1240,25 +1428,27 @@ class SqlFunctionTranslator:
     def _translate_nullif(self, params: Dict, table_alias: str = None) -> str:
         """NULL se uguale — NULLIF() identico su tutti i database."""
         col = self._qualify_column(params["column"], table_alias)
-        valore = params["value"]
+        valore = _sql_escape(params["value"])
         return f"NULLIF({col}, '{valore}')"
 
     def _translate_case_when(self, params: Dict, table_alias: str = None) -> str:
         """Espressione condizionale CASE WHEN — identica su tutti i database."""
         col = self._qualify_column(params["column"], table_alias)
-        operatore = params.get("operator", "=")
-        confronto = params["compare_value"]
-        valore_vero = params["then_value"]
-        valore_falso = params.get("else_value", "NULL")
+        # N2: whitelist su operator (finiva raw in f-string)
+        operatore = _safe_compare_operator(params.get("operator", "="))
+        confronto = _sql_escape(params["compare_value"])
+        valore_vero = _sql_escape(params["then_value"])
+        valore_falso = _sql_escape(params.get("else_value", "NULL"))
         return f"CASE WHEN {col} {operatore} '{confronto}' THEN '{valore_vero}' ELSE '{valore_falso}' END"
 
     def _translate_iif(self, params: Dict, table_alias: str = None) -> str:
         """If inline — MSSQL/SQLite hanno IIF, altri usano CASE WHEN."""
         col = self._qualify_column(params["column"], table_alias)
-        operatore = params.get("operator", "=")
-        confronto = params["compare_value"]
-        valore_vero = params["true_value"]
-        valore_falso = params["false_value"]
+        # N2: whitelist su operator (finiva raw in f-string)
+        operatore = _safe_compare_operator(params.get("operator", "="))
+        confronto = _sql_escape(params["compare_value"])
+        valore_vero = _sql_escape(params["true_value"])
+        valore_falso = _sql_escape(params["false_value"])
         condizione = f"{col} {operatore} '{confronto}'"
         traduzioni = {
             DbType.POSTGRES: f"CASE WHEN {condizione} THEN '{valore_vero}' ELSE '{valore_falso}' END",

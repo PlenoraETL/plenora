@@ -1,5 +1,5 @@
 """
-Gestione concorrenza per lo Scheduler URBY-ETL — su SQLite, no Redis.
+Gestione concorrenza per lo Scheduler PLENORA-ETL — su SQLite, no Redis.
 
 Lock e coda memorizzati nella tabella `scheduler_locks` in urbyetorbit.db.
 
@@ -16,14 +16,25 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# TTL del lock scheduler. Se il worker Celery muore HARD (SIGKILL/OOM) durante
-# l'esecuzione di una pipeline, il finally di ExecutionManager.execute() non
-# viene eseguito e il lock resta acquisito fino allo scadere del TTL.
+# TTL del lock scheduler (C3 fix 4).
 #
-# Prima era 4 ore: troppo lungo, lasciava deadlock di 4h dopo crash.
-# Ora: hard limit Celery (1h) + 50% margine = ~1.5h. Copre il caso peggiore
-# di pipeline lente con buffer per cleanup, e limita il blast radius del crash.
-LOCK_TTL_SECONDS = int(settings.CELERY_SCHEDULE_HARD_LIMIT * 1.5)
+# Strategia heartbeat: il lock ha TTL breve (10 min default), ma
+# ExecutionManager.execute() avvia un thread daemon che refresha il
+# TTL ogni HEARTBEAT_INTERVAL secondi finche' la pipeline e' attiva.
+# Se il worker muore HARD (SIGKILL/OOM) il thread daemon muore con lui
+# -> niente piu' refresh -> lock scade entro LOCK_TTL_SECONDS (10 min)
+# invece di restare appeso fino al hard limit Celery (65 min).
+#
+# Il valore e' configurabile via `settings.SCHEDULE_LOCK_TTL_SECONDS`
+# per deployment con pipeline eccezionalmente lunghe o heartbeat
+# meno frequente.
+LOCK_TTL_SECONDS = settings.SCHEDULE_LOCK_TTL_SECONDS
+
+# Intervallo del thread di heartbeat dentro ExecutionManager.execute().
+# Deve essere << LOCK_TTL_SECONDS / 2 per lasciare almeno un refresh
+# di margine se il primo fallisce per transient. Default: 180s (3 min)
+# = 3 refresh nel TTL 10 min, margine 3x.
+LOCK_HEARTBEAT_INTERVAL_SECONDS = settings.SCHEDULE_LOCK_HEARTBEAT_INTERVAL_SECONDS
 
 
 class ConcurrencyManager:
@@ -32,15 +43,21 @@ class ConcurrencyManager:
     """
 
     def __init__(self):
-        self._ensure_table()
+        # IMPORTANTE: inizializzo _available=True PRIMA di _ensure_table()
+        # e non DOPO. Se _ensure_table() fallisce e setta _available=False,
+        # un eventuale `self._available = True` posizionato dopo lo
+        # sovrascriverebbe, mascherando la degraded mode.
         self._available = True
+        self._ensure_table()
 
     @property
     def available(self) -> bool:
         return self._available
 
     def _ensure_table(self):
-        """Crea la tabella se non esiste."""
+        """Crea la tabella se non esiste. Se fallisce, setta available=False
+        cosi' il manager segnala degraded mode ai caller (che dovrebbero
+        fallback a esecuzione senza lock)."""
         try:
             db.execute("""
                 CREATE TABLE IF NOT EXISTS scheduler_locks (
@@ -64,6 +81,8 @@ class ConcurrencyManager:
         if row["expires_at"]:
             try:
                 exp = datetime.fromisoformat(row["expires_at"])
+                if exp.tzinfo is None:
+                    exp = exp.replace(tzinfo=timezone.utc)
                 if datetime.now(timezone.utc) > exp:
                     db.execute("DELETE FROM scheduler_locks WHERE key = ?", (key,))
                     return None
@@ -199,6 +218,47 @@ class ConcurrencyManager:
             )
             return "skipped"
         return "queued"
+
+    def refresh_lock(self, schedule_id: str, ttl_seconds: int = None) -> bool:
+        """Estende il TTL del lock (C3 fix 4, heartbeat da ExecutionManager).
+
+        Usato dal thread daemon di heartbeat durante l'esecuzione di una
+        pipeline lunga: il TTL base e' corto (10 min) per permettere
+        recovery veloce su SIGKILL, e il worker rinfresca periodicamente
+        finche' sta lavorando.
+
+        Race safety: se il lock e' stato rilasciato tra due chiamate,
+        ritorna False (il caller sa che non deve piu' rinfrescare).
+
+        Args:
+            schedule_id: lo schedule il cui lock va rinfrescato.
+            ttl_seconds: override opzionale del TTL (default LOCK_TTL_SECONDS).
+
+        Returns:
+            True se il lock era vivo ed e' stato rinfrescato;
+            False se il lock non esiste piu' (race o gia' rilasciato).
+        """
+        lock_key = f"scheduler:lock:{schedule_id}"
+        # _get fa anche auto-cleanup se scaduto: se ritorna None, il
+        # lock e' morto e non dobbiamo ri-crearlo da zero.
+        if self._get(lock_key) is None:
+            return False
+
+        ttl = ttl_seconds if ttl_seconds is not None else LOCK_TTL_SECONDS
+        new_expires = (
+            datetime.now(timezone.utc) + timedelta(seconds=ttl)
+        ).isoformat()
+
+        try:
+            cur = db.execute(
+                "UPDATE scheduler_locks SET expires_at = %s WHERE key = %s",
+                (new_expires, lock_key),
+            )
+            rowcount = getattr(cur, "rowcount", 0) or 0
+            return rowcount > 0
+        except Exception as e:
+            logger.warning(f"refresh_lock {schedule_id}: {e}")
+            return False
 
     def release(self, schedule_id: str) -> bool:
         lock_key  = f"scheduler:lock:{schedule_id}"

@@ -1,0 +1,14 @@
+[Unit]
+Description=PLENORA-ETL Celery Worker
+After=network.target redis.service
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/plenora-etl/backend
+ExecStart=/home/ubuntu/plenora-etl/backend/venv/bin/celery -A workers.celery_app worker --loglevel=info --concurrency=4
+Restart=always
+RestartSec=5
+EnvironmentFile=/home/ubuntu/plenora-etl/backend/.env
+
+[Install]
+WantedBy=multi-user.target

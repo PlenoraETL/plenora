@@ -18,7 +18,8 @@ Architettura
 
 Sorgente della chiave (in ordine di priorità)
 ---------------------------------------------
-1. ``URBY_ENCRYPTION_KEY``    — nome canonico nuovo (consigliato per nuovi deploy)
+1. ``PLENORA_ENCRYPTION_KEY`` — nome canonico nuovo (consigliato per nuovi deploy)
+   ``URBY_ENCRYPTION_KEY``    — alias retro-compat, ancora supportato
 2. ``CONN_ENCRYPT_KEY``       — nome legacy già usato da connection_service.py
 3. ``SECRET_KEY`` / ``JWT_SECRET_KEY`` — fallback condiviso con JWT auth
 
@@ -90,8 +91,9 @@ _MIN_KEY_LENGTH = 16
 def _get_raw_key() -> str:
     """Recupera la raw key dall'env var, con fallback dev e fail-fast in prod.
 
-    Cerca in ordine: URBY_ENCRYPTION_KEY → CONN_ENCRYPT_KEY → SECRET_KEY →
-    JWT_SECRET_KEY. Se nessuna è valorizzata e ci troviamo in produzione,
+    Cerca in ordine: PLENORA_ENCRYPTION_KEY → URBY_ENCRYPTION_KEY (legacy) →
+    CONN_ENCRYPT_KEY → SECRET_KEY → JWT_SECRET_KEY.
+    Se nessuna è valorizzata e ci troviamo in produzione,
     solleva ``RuntimeError`` (preferito a SystemExit per essere catturabile
     nei test e gestibile dal framework FastAPI in fase di startup).
 
@@ -104,8 +106,12 @@ def _get_raw_key() -> str:
       - In dev, se URBY_DISABLE_DEFAULT_KEY=1 è impostata, fail-fast invece
         di usare la dev key (opt-in per chi vuole replicare prod localmente)
     """
+    # Nome canonico nuovo: PLENORA_ENCRYPTION_KEY. URBY_ENCRYPTION_KEY e'
+    # mantenuto come alias retro-compat finche' il .env sul server viene
+    # aggiornato (rimozione safe dopo il rollout del nuovo nome).
     found = None
     for env_name in (
+        "PLENORA_ENCRYPTION_KEY",
         "URBY_ENCRYPTION_KEY",
         "CONN_ENCRYPT_KEY",
         "SECRET_KEY",
@@ -124,7 +130,7 @@ def _get_raw_key() -> str:
         # Detection del default-key che qualcuno ha copiato in prod
         if val == _DEV_DEFAULT_KEY:
             msg = (
-                f"[URBY-ETL] {env_name} contiene il valore di default di sviluppo. "
+                f"[PLENORA-ETL] {env_name} contiene il valore di default di sviluppo. "
                 f"Questo è un grave rischio di sicurezza: cambia la chiave."
             )
             if is_prod:
@@ -133,7 +139,7 @@ def _get_raw_key() -> str:
         # Chiavi troppo corte sono inaccettabili in qualsiasi ambiente
         if len(val) < _MIN_KEY_LENGTH:
             raise RuntimeError(
-                f"[URBY-ETL] {env_name} troppo corta ({len(val)} char, minimo "
+                f"[PLENORA-ETL] {env_name} troppo corta ({len(val)} char, minimo "
                 f"{_MIN_KEY_LENGTH}). Usa una chiave casuale di almeno "
                 f"{_MIN_KEY_LENGTH} caratteri."
             )
@@ -142,20 +148,23 @@ def _get_raw_key() -> str:
     # Nessuna chiave trovata
     if is_prod:
         raise RuntimeError(
-            "[URBY-ETL] Nessuna chiave di cifratura configurata. "
-            "Imposta URBY_ENCRYPTION_KEY (o CONN_ENCRYPT_KEY/SECRET_KEY) "
+            "[PLENORA-ETL] Nessuna chiave di cifratura configurata. "
+            "Imposta PLENORA_ENCRYPTION_KEY (o CONN_ENCRYPT_KEY/SECRET_KEY) "
             "nelle variabili d'ambiente prima di avviare in produzione."
         )
 
-    # Opt-in per developer che vogliono replicare il fail-fast di prod
-    if os.getenv("URBY_DISABLE_DEFAULT_KEY") == "1":
+    # Opt-in per developer che vogliono replicare il fail-fast di prod.
+    # Sia PLENORA_DISABLE_DEFAULT_KEY sia URBY_DISABLE_DEFAULT_KEY triggherano
+    # (retro-compat: il vecchio nome e' ancora accettato).
+    if os.getenv("PLENORA_DISABLE_DEFAULT_KEY") == "1" or \
+       os.getenv("URBY_DISABLE_DEFAULT_KEY") == "1":
         raise RuntimeError(
-            "[URBY-ETL] Nessuna chiave di cifratura e URBY_DISABLE_DEFAULT_KEY=1. "
-            "Imposta URBY_ENCRYPTION_KEY o rimuovi URBY_DISABLE_DEFAULT_KEY."
+            "[PLENORA-ETL] Nessuna chiave di cifratura e PLENORA_DISABLE_DEFAULT_KEY=1. "
+            "Imposta PLENORA_ENCRYPTION_KEY o rimuovi PLENORA_DISABLE_DEFAULT_KEY."
         )
 
     logger.warning(
-        "[URBY-ETL] Nessuna chiave di cifratura trovata nelle env var: "
+        "[PLENORA-ETL] Nessuna chiave di cifratura trovata nelle env var: "
         "uso la chiave di sviluppo di default. NON usare in produzione."
     )
     return _DEV_DEFAULT_KEY
@@ -193,9 +202,9 @@ def encrypt(value: Optional[str]) -> Optional[str]:
     - ``None`` o stringa vuota → restituiti tal quali (nulla da cifrare).
     - Valore già cifrato (con prefisso ``enc:``) → restituito tal quale
       (idempotente, sicuro da chiamare in cascata).
-    - Errori di cifratura → log warning + restituzione del valore originale
-      (preferiamo non bloccare il save di una connessione per un bug crypto;
-      l'utente vede comunque il warning nei log).
+    - Errori di cifratura → **fail-fast** con ``RuntimeError``: si rifiuta
+      esplicitamente di salvare plaintext su dato critico (password, token,
+      client_secret). Preferiamo il crash visibile al silent-compromise.
     """
     if value is None or value == "":
         return value
@@ -204,9 +213,11 @@ def encrypt(value: Optional[str]) -> Optional[str]:
     try:
         token = _get_fernet().encrypt(value.encode("utf-8")).decode("utf-8")
         return f"{ENC_PREFIX}{token}"
-    except Exception as e:  # pragma: no cover — fallback difensivo
-        logger.warning(f"crypto.encrypt fallita: {e}")
-        return value
+    except Exception as e:
+        logger.error(f"crypto.encrypt fallita: {e}")
+        raise RuntimeError(
+            "crypto.encrypt broken — refusing to save plaintext"
+        ) from e
 
 
 def decrypt(value: Optional[str]) -> Optional[str]:
@@ -228,14 +239,14 @@ def decrypt(value: Optional[str]) -> Optional[str]:
     try:
         return _get_fernet().decrypt(token.encode("utf-8")).decode("utf-8")
     except InvalidToken:
-        logger.warning(
+        logger.error(
             "crypto.decrypt: token Fernet non valido (chiave sbagliata o "
-            "valore corrotto). Restituisco il valore cifrato non decodificato."
+            "valore corrotto). Restituisco None."
         )
-        return value
+        return None
     except Exception as e:  # pragma: no cover
-        logger.warning(f"crypto.decrypt fallita: {e}")
-        return value
+        logger.error(f"crypto.decrypt fallita: {e}")
+        return None
 
 
 def encrypt_dict_fields(d: dict, fields: list[str]) -> dict:

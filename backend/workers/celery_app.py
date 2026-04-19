@@ -3,13 +3,22 @@ Configurazione applicazione Celery — broker e backend su Redis.
 
 Broker:  redis://localhost:6379/0
 Backend: redis://localhost:6379/1
-Beat:    UrbyBeatScheduler              (legge schedule da config.db)
+Beat:    PlenoraBeatScheduler              (legge schedule da config.db)
 
-Avvio worker:
+Avvio worker (TEST ONLY):
     celery -A workers.celery_app worker --loglevel=info --pool=solo
 
+Avvio worker (PRODUZIONE):
+    celery -A workers.celery_app worker --loglevel=info --concurrency=4
+
+NB (C7): `--pool=solo` e' solo per test locali o debug (single-threaded,
+no concurrency). In produzione il systemd unit `plenora-celery.service`
+usa il pool default `prefork` con `--concurrency=N` (piu' child worker
+processi paralleli). Ogni child ha il proprio pool psycopg2 — vedi
+`app/db/pg_connection.py` per il sizing PG aggregato.
+
 Avvio Beat:
-    celery -A workers.celery_app beat -S workers.beat_scheduler.UrbyBeatScheduler --loglevel=info
+    celery -A workers.celery_app beat -S workers.beat_scheduler.PlenoraBeatScheduler --loglevel=info
 """
 
 from celery import Celery
@@ -28,6 +37,7 @@ celery_app = Celery(
         "workers.tasks.carica_task",
         "workers.tasks.schedule_task",
         "workers.tasks.pipeline_task",
+        "workers.tasks.imdf_publish_task",
     ]
 )
 
@@ -71,8 +81,12 @@ celery_app.conf.update(
 class BaseTaskWithRetry(celery_app.Task):
     """Task base con retry automatico su errori transitori."""
     # Retry SOLO su errori di rete/infrastruttura transitori, non su errori applicativi
-    # (SQL errato, connessione chiusa dall'utente, credenziali errate, ecc.)
-    autoretry_for = ()  # Nessun retry automatico — gestiamo esplicitamente in pipeline_task
+    autoretry_for = (
+        ConnectionError,
+        ConnectionResetError,
+        TimeoutError,
+        OSError,
+    )
     retry_kwargs = {"max_retries": settings.CELERY_MAX_RETRIES}
     retry_backoff = True
     retry_backoff_max = 600
@@ -80,6 +94,70 @@ class BaseTaskWithRetry(celery_app.Task):
 
 
 celery_app.Task = BaseTaskWithRetry
+
+
+# ============================================================
+# C8: request_id propagation via Celery signals
+# ============================================================
+# Il request_id impostato nel ContextVar dal RequestIdMiddleware HTTP
+# deve seguire il task attraverso il broker Redis fino al worker child
+# che lo esegue. Senza questi signal handler, il task parte con
+# request_id vuoto nel worker (la ContextVar del parent non viene
+# serializzata).
+#
+# - before_task_publish: sender-side, legge request_id dal ContextVar
+#   corrente (del chiamante, es. request HTTP) e lo mette nei task
+#   headers.
+# - task_prerun: worker-side, legge il request_id dai task headers e lo
+#   setta nel ContextVar del worker prima che il task body esegua.
+# - task_postrun: worker-side, reset difensivo della ContextVar (evita
+#   che un task legga request_id di uno precedente se il worker non
+#   rigenera il contesto).
+
+from celery.signals import before_task_publish, task_prerun, task_postrun
+
+
+@before_task_publish.connect
+def _propagate_request_id_on_publish(sender=None, headers=None, **kwargs):
+    """Copia il request_id dal ContextVar locale nei headers del task."""
+    try:
+        from app.utils.logger import get_request_id
+        req_id = get_request_id()
+        if req_id and headers is not None:
+            # Celery usa headers dict "raw" — convenzione: chiave custom.
+            headers["X-Request-ID"] = req_id
+    except Exception:
+        # Non bloccare mai la pubblicazione del task per un errore nel
+        # propagate — il task stesso funziona comunque, solo perde il
+        # correlation ID.
+        pass
+
+
+@task_prerun.connect
+def _set_request_id_from_task(task_id=None, task=None, **kwargs):
+    """Restaura il request_id nel worker dal task headers."""
+    try:
+        from app.utils.logger import set_request_id
+        headers = getattr(task.request, "headers", None) or {}
+        req_id = headers.get("X-Request-ID") or ""
+        # Fallback: se non c'e' un request_id propagato (task schedulato
+        # da beat, o invocazione legacy), usa il task_id come correlation
+        # cosi' c'e' sempre un id per correlare le righe di log di un
+        # singolo task.
+        set_request_id(req_id or (task_id or ""))
+    except Exception:
+        pass
+
+
+@task_postrun.connect
+def _clear_request_id_after_task(**kwargs):
+    """Reset ContextVar dopo il task per evitare leak tra task
+    consecutivi nello stesso worker child."""
+    try:
+        from app.utils.logger import set_request_id
+        set_request_id("")
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":
@@ -90,7 +168,9 @@ if __name__ == "__main__":
     print(f"Backend: {BACKEND_URL}")
     print(f"Timeout: {settings.CELERY_TASK_TIMEOUT}s")
     print("=" * 50)
-    print("\nAvvio worker:")
+    print("\nAvvio worker (TEST ONLY, single-thread):")
     print("  celery -A workers.celery_app worker --loglevel=info --pool=solo")
+    print("\nAvvio worker (PRODUZIONE, prefork):")
+    print("  celery -A workers.celery_app worker --loglevel=info --concurrency=4")
     print("\nAvvio Beat:")
-    print("  celery -A workers.celery_app beat -S workers.beat_scheduler.UrbyBeatScheduler --loglevel=info")
+    print("  celery -A workers.celery_app beat -S workers.beat_scheduler.PlenoraBeatScheduler --loglevel=info")

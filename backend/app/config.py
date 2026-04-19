@@ -1,18 +1,40 @@
 """
-Configurazione URBY-ETL — solo DEFAULTS + variabili d'ambiente, niente config.json.
+Configurazione PLENORA-ETL — solo DEFAULTS + variabili d'ambiente, niente config.json.
 
 Priorità:
     1. Variabile d'ambiente (es. export CELERY_BROKER_URL=...)
-    2. File backend/.env (caricato all'import di questo modulo)
+    2. File backend/.env (caricato all'import di questo modulo — SOLO in development)
     3. DEFAULTS della classe
 
+In production/staging il file backend/.env viene ignorato: i secret devono
+arrivare da variabili d'ambiente iniettate da systemd o da un secret manager.
+Se il file è presente in prod/staging viene loggato un warning.
 """
 
 import logging
 import os
-import sqlite3
 from pathlib import Path
 from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
+
+# Env names che disabilitano il caricamento di backend/.env dal disco.
+# In questi ambienti i secret devono arrivare da env var di sistema o
+# da un secret manager, mai da un file sul filesystem che potrebbe
+# essere sopravvissuto a un rollback, finire in un backup, o essere
+# stato copiato per errore dal deploy.
+_DOTENV_DISABLED_ENVS = ("production", "prod", "staging", "stage")
+
+
+def _should_load_dotenv() -> bool:
+    """True se l'ambiente corrente consente la lettura di backend/.env dal disco.
+
+    L'ambiente è letto da `ENVIRONMENT` (fallback `ENV`, default `development`).
+    Ambienti in `_DOTENV_DISABLED_ENVS` restituiscono False.
+    """
+    env_name = os.getenv("ENVIRONMENT", os.getenv("ENV", "development")).lower()
+    return env_name not in _DOTENV_DISABLED_ENVS
+
 
 # Carica backend/.env il prima possibile, prima di qualunque os.getenv del
 # resto dell'app. Tutti i moduli che leggono variabili d'ambiente (incluso
@@ -23,13 +45,17 @@ try:
     from dotenv import load_dotenv
     _env_path = Path(__file__).resolve().parent.parent / ".env"
     if _env_path.exists():
-        load_dotenv(_env_path)
+        if _should_load_dotenv():
+            load_dotenv(_env_path)
+        else:
+            logger.warning(
+                "backend/.env presente ma ENVIRONMENT indica prod/staging: "
+                "file ignorato. I secret devono arrivare da env var di sistema."
+            )
 except ImportError:
     # python-dotenv non installato — l'app continua a funzionare con le sole
     # variabili d'ambiente esportate dal sistema.
     pass
-
-logger = logging.getLogger(__name__)
 
 # =============================================================================
 # CLASSE SETTINGS
@@ -37,7 +63,7 @@ logger = logging.getLogger(__name__)
 
 class Settings:
     """
-    Configurazione singleton per URBY-ETL.
+    Configurazione singleton per PLENORA-ETL.
 
     Accesso:
         from app.config import settings
@@ -74,6 +100,18 @@ class Settings:
         "CELERY_PREVIEW_HARD_LIMIT":    360,
         "CELERY_SCHEDULE_TIMEOUT":      3500,
         "CELERY_SCHEDULE_HARD_LIMIT":   3600,
+        # C3 fix 4: TTL corto + heartbeat periodico dal worker durante
+        # l'esecuzione. Se il worker muore SIGKILL il lock scade in
+        # SCHEDULE_LOCK_TTL_SECONDS invece di restare appeso fino al
+        # hard limit Celery. HEARTBEAT_INTERVAL << TTL/2 per margine.
+        "SCHEDULE_LOCK_TTL_SECONDS":                600,
+        "SCHEDULE_LOCK_HEARTBEAT_INTERVAL_SECONDS": 180,
+        # C3 follow-up: leader election fail-closed di default.
+        # Se Redis e' unavailable il beat va in standby invece di
+        # diventare leader by default (evita doppio enqueue in caso
+        # di flap Redis con due beat attivi). Override a True per
+        # deployment single-instance dove nessun altro beat gira mai.
+        "SCHEDULE_BEAT_LEADER_FAIL_OPEN":           False,
         "CELERY_MAX_RETRIES":           3,
         "TASK_PROGRESS_POLL_INTERVAL":  1,
         "CELERY_RESULT_EXPIRES":        86400,
@@ -109,6 +147,32 @@ class Settings:
         "ENRICHMENT_BATCH_SIZE": 100,
         "ENRICHMENT_MAX_WORKERS": 5,
         "ENRICHMENT_CACHE_TTL": 3600,
+
+        # ==================== CARICA ====================
+        # Soglia righe oltre la quale TRUNCATE_INSERT + ALL_OR_NOTHING usa
+        # stage+swap invece di DELETE+INSERT atomico. Sotto soglia: atomic
+        # (zero overhead, no privilegi DDL). Sopra soglia: stage+swap
+        # (safe su dataset enormi, richiede CREATE TABLE; se il grant
+        # manca il writer fa fallback automatico ad atomic con WARNING).
+        "CARICA_STAGE_SWAP_THRESHOLD": 500_000,
+
+        # ==================== ESTRAI ====================
+        # C11: hard cap righe ritornate da una query ESTRAI. Se un
+        # chunk_fetchmany porta il totale oltre questo limite, la
+        # query fallisce loud con suggerimento (aggiungi WHERE, usa
+        # LIMIT, oppure alza il cap). Protezione anti-OOM: fino a
+        # C11 il chunking era cosmetico (fetchmany ma poi accumulo
+        # in memoria + DataFrame intero). Default 5M: ragionevole per
+        # ETL tipico PLENORA-ETL (centinaia-migliaia di righe), lascia
+        # margine per operazioni admin occasionali da 1-5M.
+        "ESTRAI_MAX_ROWS": 5_000_000,
+
+        # C11: cap righe serializzate in intermediate.runs snapshot.
+        # Sopra questa soglia il writer scrive solo metadata (no
+        # df.to_dict rows) per evitare double-materialization della
+        # query output nell'intermediate DB. Default 100k: l'intermediate
+        # serve per debug UI, non per re-esecuzione integrale.
+        "INTERMEDIATE_SNAPSHOT_MAX_ROWS": 100_000,
     }
 
     def __init__(self):
@@ -135,9 +199,15 @@ class Settings:
         if isinstance(default_value, bool):
             return env_value.lower() in ("true", "1", "yes")
         elif isinstance(default_value, int):
-            return int(env_value)
+            try:
+                return int(env_value)
+            except ValueError:
+                return default_value
         elif isinstance(default_value, float):
-            return float(env_value)
+            try:
+                return float(env_value)
+            except ValueError:
+                return default_value
         return env_value
 
     def set(self, key: str, value: Any, auto_save: bool = True):
@@ -182,8 +252,60 @@ class Settings:
         return self._directory("results", create=False)
 
     @property
-    def API_CONNECTIONS_DIR(self) -> Path:
-        return self._directory("api_connections", create=False)
+    def ESEGUIBILI_OUTPUTS_DIR(self) -> Path:
+        return self._directory("eseguibili_outputs", create=False)
+
+    @property
+    def IMDF_BUNDLES_DIR(self) -> Path:
+        """Cartella dove vengono persistiti i bundle IMDF estratti dopo
+        l'arricchimento (GDB + renderers + geojson). I bundle rimangono
+        disponibili per la pubblicazione ArcGIS on-demand (nodo imdf_publisher)
+        finche' non vengono puliti dal beat scheduler (TTL da IMDF_BUNDLE_TTL_HOURS)."""
+        return self._directory("imdf_bundles", create=False)
+
+    @property
+    def IMDF_BUNDLE_TTL_HOURS(self) -> int:
+        """Ore di retention per i bundle IMDF su disco. Default 48h:
+        copre un weekend lungo e lascia tempo per pubblicare manualmente
+        senza che il bundle venga rimosso sotto i piedi dell'utente."""
+        try:
+            return int(self.get("IMDF_BUNDLE_TTL_HOURS", 48))
+        except (TypeError, ValueError):
+            return 48
+
+    # ==================== LOGGING ====================
+    # Livello minimo dei log che finiscono nella console (stdout/journald).
+    @property
+    def LOG_LEVEL_CONSOLE(self) -> str:
+        return (self.get("LOG_LEVEL_CONSOLE", "INFO") or "INFO").upper()
+
+    # Livello minimo dei log persistiti nel DB (tabella plenora.logs).
+    # Default WARNING: in prod le righe INFO sono rumore e gonfiano la tabella
+    # senza fornire valore diagnostico proporzionale al costo.
+    @property
+    def LOG_LEVEL_DB(self) -> str:
+        return (self.get("LOG_LEVEL_DB", "WARNING") or "WARNING").upper()
+
+    # Giorni di retention per plenora.logs. Record piu' vecchi vengono eliminati
+    # dal beat scheduler (PlenoraBeatScheduler._cleanup_old_logs).
+    @property
+    def LOG_RETENTION_DAYS(self) -> int:
+        try:
+            return int(self.get("LOG_RETENTION_DAYS", 30))
+        except (TypeError, ValueError):
+            return 30
+
+    # Giorni di retention per plenora.schedule_logs (storia esecuzioni
+    # scheduler). Default 90gg — finestra utile per debug/audit di catene
+    # ricorrenti, oltre la quale il dettaglio dei singoli step non serve.
+    # Eliminati da PlenoraBeatScheduler._cleanup_old_schedule_logs.
+    # Mettere 0 per disabilitare la retention.
+    @property
+    def SCHEDULE_LOGS_RETENTION_DAYS(self) -> int:
+        try:
+            return int(self.get("SCHEDULE_LOGS_RETENTION_DAYS", 90))
+        except (TypeError, ValueError):
+            return 90
 
     @property
     def UPLOADS_DIR(self) -> Path:
@@ -191,6 +313,15 @@ class Settings:
 
     @property
     def FILES_DIR(self) -> Path:
+        """Cache dir per file_source blob materializzati.
+
+        I file_source sono salvati nel DB (source of truth). Questa dir
+        e' solo una cache filesystem popolata on-demand da
+        `api_connector._resolve_file_source_id_path` quando un workflow
+        deve dare a fiona/GDAL un path concreto. I file qui possono
+        essere eliminati in qualsiasi momento — vengono ri-estratti dal
+        DB al prossimo accesso.
+        """
         return self._directory("files", create=False)
 
     @property
@@ -204,10 +335,6 @@ class Settings:
     @property
     def TASKS_DIR(self) -> Path:
         return self._directory("tasks", create=False)
-
-    @property
-    def SCHEDULER_LOGS_DIR(self) -> Path:
-        return self._directory("scheduler_logs", create=False)
 
     @property
     def SCHEDULES_DIR(self) -> Path:
@@ -224,9 +351,6 @@ class Settings:
 
     def get_connection_file(self, connection_id: str) -> Path:
         return self.CONNECTIONS_DIR / f"{connection_id}.json"
-
-    def get_api_connection_dir(self, api_id: str) -> Path:
-        return self._directory(api_id, base=self.API_CONNECTIONS_DIR)
 
     def get_file_source_dir(self, file_id: str) -> Path:
         return self._directory(file_id, base=self.FILES_DIR)
@@ -311,23 +435,6 @@ class Settings:
         except Exception as e:
             logger.debug("Pulizia cartelle temp fallita (non critico): %s", e)
 
-        # Rimozione cartelle legacy data/files e data/results
-        # I file e i risultati sono nel DB SQLite come blob — queste cartelle
-        # sono residui dell'architettura precedente e non vengono più scritte.
-        # WAL checkpoint per tutti i DB SQLite — riduce i file .wal residui
-        try:
-            for db_name in ["config.db", "results.db", "intermediate.db"]:
-                db_path = self.DATA_DIR / db_name
-                if db_path.exists():
-                    try:
-                        _conn = sqlite3.connect(str(db_path))
-                        _conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-                        _conn.close()
-                    except Exception as e:
-                        logger.debug("WAL checkpoint fallito per %s: %s", db_name, e)
-        except Exception as e:
-            logger.debug("WAL checkpoint sweep fallito: %s", e)
-
         try:
             import shutil as _shutil
             for legacy_dir in ["files", "results", "File", "Results"]:
@@ -341,10 +448,10 @@ class Settings:
         self._ensure_redis(errors, warnings)
 
         for w in warnings:
-            print(f"⚠️  URBY-ETL: {w}")
+            print(f"⚠️  PLENORA-ETL: {w}")
 
         if errors:
-            print("\n❌ URBY-ETL — Configurazione non valida, avvio interrotto:\n")
+            print("\n❌ PLENORA-ETL — Configurazione non valida, avvio interrotto:\n")
             for i, e in enumerate(errors, 1):
                 print(f"  {i}. {e}")
             raise SystemExit(1)
@@ -353,7 +460,7 @@ class Settings:
 
     def print_config(self):
         print("=" * 60)
-        print("⚙️  CONFIGURAZIONE URBY-ETL")
+        print("⚙️  CONFIGURAZIONE PLENORA-ETL")
         print("=" * 60)
         print("\n📂 DIRECTORY")
         print(f"  DATA_DIR:            {self.DATA_DIR}")

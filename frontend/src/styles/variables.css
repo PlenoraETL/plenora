@@ -1,0 +1,86 @@
+/* ═══════════════════════════════════════════════════════════════
+   variables.css — Plenora Design System Tokens
+   Importa questo file PRIMA di qualsiasi altro CSS.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Dark theme (default) ─────────────────────────────────────── */
+:root,
+[data-theme='dark'] {
+
+  /* Background layers */
+  --plen-bg:        #07090F;
+  --plen-surface:   #0C0F18;
+  --plen-surface-2: #111525;
+  --plen-surface-3: #171C2E;
+
+  /* Borders */
+  --plen-border:    rgba(255, 255, 255, 0.06);
+  --plen-border-hi: rgba(255, 255, 255, 0.11);
+
+  /* Text */
+  --plen-text:     #DDE4F2;
+  --plen-text-sub: #7D8BA8;
+  --plen-text-dim: #3F4D68;
+
+  /* Module accents */
+  --plen-estrai:      #34C17A;
+  --plen-manipola:    #9B6DFF;
+  --plen-arricchisci: #F5A623;
+  --plen-blue:        #4B8BFF;
+  --plen-blue-mid:    #2563EB;
+
+  /* Semantic */
+  --plen-ok:   #34D399;
+  --plen-warn: #FBBF24;
+  --plen-err:  #F87171;
+
+  /* Layout */
+  --plen-topbar:  52px;
+  --plen-sidebar: 260px;
+
+  /* Typography */
+  --plen-font-display: 'Syne', sans-serif;
+  --plen-font-body:    'Inter', sans-serif;
+  --plen-font-mono:    'DM Mono', monospace;
+}
+
+/* ── Light theme ──────────────────────────────────────────────── */
+[data-theme='light'] {
+
+  /* Background layers */
+  --plen-bg:        #EFF2F9;
+  --plen-surface:   #FFFFFF;
+  --plen-surface-2: #E8EDF8;
+  --plen-surface-3: #DDE4F2;
+
+  /* Borders */
+  --plen-border:    rgba(0, 0, 0, 0.07);
+  --plen-border-hi: rgba(0, 0, 0, 0.11);
+
+  /* Text */
+  --plen-text:     #0F1729;
+  --plen-text-sub: #4A5568;
+  --plen-text-dim: #8898AA;
+
+  /* Module accents — invariati */
+  --plen-estrai:      #2AAD69;
+  --plen-manipola:    #7C3AED;
+  --plen-arricchisci: #D97706;
+  --plen-blue:        #2563EB;
+  --plen-blue-mid:    #1D4ED8;
+
+  /* Semantic */
+  --plen-ok:   #059669;
+  --plen-warn: #D97706;
+  --plen-err:  #DC2626;
+}
+
+/* ── Anti-FOUC: applica bg immediatamente ─────────────────────── */
+/* (il tema viene impostato via JS in index.html prima del render) */
+html { background-color: var(--plen-bg, #07090F); }
+body {
+  background-color: var(--plen-bg, #07090F);
+  color: var(--plen-text, #DDE4F2);
+  font-family: var(--plen-font-body);
+  margin: 0;
+}

@@ -1,0 +1,349 @@
+/* ═══════════════════════════════════════════════════════════════
+   CaricanArcGISNode.css — Plenora design system
+   Prefix: .carica-arcgis-node
+   Accent: teal
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Tokens ────────────────────────────────────────────────────── */
+.carica-arcgis-node {
+  --cn-accent:      #2DD4BF;
+  --cn-accent-dim:  rgba(45,212,191,0.10);
+  --cn-accent-bdr:  rgba(45,212,191,0.22);
+  --cn-accent-hi:   rgba(45,212,191,0.38);
+}
+
+/* ── Container ─────────────────────────────────────────────────── */
+.carica-arcgis-node {
+  background: var(--plen-surface, #0C0F18);
+  border: 1px solid var(--cn-accent-bdr);
+  border-radius: 9px;
+  min-width: 300px;
+  max-width: 370px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.35);
+  font-family: 'Inter', sans-serif;
+  font-size: 12.5px;
+  color: var(--plen-text, #DDE4F2);
+  overflow: hidden;
+}
+[data-theme='light'] .carica-arcgis-node {
+  background: #FFFFFF;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+}
+
+/* Accent bar top */
+.carica-arcgis-node::before {
+  content: '';
+  display: block;
+  height: 3px;
+  background: var(--cn-accent);
+  flex-shrink: 0;
+}
+
+.carica-arcgis-node--invalid {
+  border-color: rgba(251,191,36,0.35);
+}
+.carica-arcgis-node--invalid::before { background: #FBBF24; }
+
+/* ── Handle ─────────────────────────────────────────────────────── */
+.carica-arcgis-node__handle {
+  width: 10px;
+  height: 10px;
+  background: var(--cn-accent);
+  border: 2px solid var(--plen-surface, #0C0F18);
+  border-radius: 50%;
+}
+.carica-arcgis-node__handle--input { left: -5px; }
+
+/* ── Header ─────────────────────────────────────────────────────── */
+.carica-arcgis-node__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  background: var(--cn-accent-dim);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.12s;
+}
+.carica-arcgis-node__header:hover { background: var(--cn-accent-bdr); }
+
+.carica-arcgis-node__header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.carica-arcgis-node__icon { font-size: 15px; flex-shrink: 0; }
+
+.carica-arcgis-node__title {
+  font-family: 'Syne', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cn-accent);
+}
+
+.carica-arcgis-node__header-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.carica-arcgis-node__expand-icon {
+  font-size: 9px;
+  color: var(--cn-accent);
+  opacity: 0.7;
+}
+
+.carica-arcgis-node__delete-btn {
+  background: none;
+  border: none;
+  color: var(--plen-text-dim, #7A849A);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+  opacity: 0.6;
+  transition: opacity 0.12s, color 0.12s;
+}
+.carica-arcgis-node__delete-btn:hover {
+  opacity: 1;
+  color: #f87171;
+}
+
+/* ── Body ──────────────────────────────────────────────────────── */
+.carica-arcgis-node__body {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ── Section ───────────────────────────────────────────────────── */
+.carica-arcgis-node__section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.carica-arcgis-node__label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--cn-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.carica-arcgis-node__select,
+.carica-arcgis-node__input {
+  background: var(--plen-input-bg, #141825);
+  border: 1px solid var(--cn-accent-bdr);
+  border-radius: 5px;
+  color: var(--plen-text, #DDE4F2);
+  padding: 6px 8px;
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.12s;
+}
+.carica-arcgis-node__select:focus,
+.carica-arcgis-node__input:focus {
+  border-color: var(--cn-accent);
+}
+[data-theme='light'] .carica-arcgis-node__select,
+[data-theme='light'] .carica-arcgis-node__input {
+  background: #F5F7FA;
+  color: #1E293B;
+}
+
+.carica-arcgis-node__hint {
+  font-size: 10.5px;
+  color: var(--plen-text-dim, #7A849A);
+  line-height: 1.3;
+}
+
+.carica-arcgis-node__warning {
+  font-size: 11px;
+  color: #FBBF24;
+  padding: 4px 6px;
+  background: rgba(251,191,36,0.08);
+  border-radius: 4px;
+}
+
+/* ── Section header (collapsible) ──────────────────────────────── */
+.carica-arcgis-node__section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--cn-accent);
+  padding: 4px 0;
+}
+.carica-arcgis-node__toggle {
+  font-size: 9px;
+  opacity: 0.7;
+}
+
+/* ── Schema info ───────────────────────────────────────────────── */
+.carica-arcgis-node__schema-info {
+  display: flex;
+  gap: 10px;
+  font-size: 10.5px;
+  color: var(--plen-text-dim, #7A849A);
+  padding: 4px 6px;
+  background: var(--cn-accent-dim);
+  border-radius: 4px;
+}
+
+/* ── Mapping ───────────────────────────────────────────────────── */
+.carica-arcgis-node__mapping {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.carica-arcgis-node__mapping-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.carica-arcgis-node__mapping-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.carica-arcgis-node__mapping-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.carica-arcgis-node__mapping-select {
+  flex: 1;
+  background: var(--plen-input-bg, #141825);
+  border: 1px solid var(--cn-accent-bdr);
+  border-radius: 4px;
+  color: var(--plen-text, #DDE4F2);
+  padding: 4px 6px;
+  font-size: 11px;
+  outline: none;
+}
+[data-theme='light'] .carica-arcgis-node__mapping-select {
+  background: #F5F7FA;
+  color: #1E293B;
+}
+
+.carica-arcgis-node__mapping-input {
+  flex: 1;
+  background: var(--plen-input-bg, #141825);
+  border: 1px solid var(--cn-accent-bdr);
+  border-radius: 4px;
+  color: var(--plen-text, #DDE4F2);
+  padding: 4px 6px;
+  font-size: 11px;
+  outline: none;
+}
+[data-theme='light'] .carica-arcgis-node__mapping-input {
+  background: #F5F7FA;
+  color: #1E293B;
+}
+
+.carica-arcgis-node__mapping-arrow {
+  color: var(--cn-accent);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.carica-arcgis-node__mapping-remove {
+  background: none;
+  border: none;
+  color: #f87171;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 2px;
+  opacity: 0.6;
+}
+.carica-arcgis-node__mapping-remove:hover { opacity: 1; }
+
+/* ── Buttons ───────────────────────────────────────────────────── */
+.carica-arcgis-node__btn {
+  padding: 5px 10px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: background 0.12s, opacity 0.12s;
+}
+.carica-arcgis-node__btn--secondary {
+  background: var(--cn-accent-dim);
+  color: var(--cn-accent);
+  border: 1px solid var(--cn-accent-bdr);
+}
+.carica-arcgis-node__btn--secondary:hover {
+  background: var(--cn-accent-bdr);
+}
+
+/* ── Preview ───────────────────────────────────────────────────── */
+.carica-arcgis-node__preview {
+  background: var(--cn-accent-dim);
+  border-radius: 5px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.carica-arcgis-node__preview-item {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+}
+.carica-arcgis-node__preview-label {
+  color: var(--plen-text-dim, #7A849A);
+}
+.carica-arcgis-node__preview-value {
+  color: var(--plen-text, #DDE4F2);
+  font-weight: 500;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Result ────────────────────────────────────────────────────── */
+.carica-arcgis-node__result {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 5px;
+  font-size: 11px;
+  align-items: center;
+}
+.carica-arcgis-node__result--success {
+  background: rgba(34,197,94,0.1);
+  color: #22c55e;
+}
+.carica-arcgis-node__result--error {
+  background: rgba(248,113,113,0.1);
+  color: #f87171;
+}
+.carica-arcgis-node__result-count {
+  font-weight: 600;
+}
+.carica-arcgis-node__result-url {
+  font-size: 10px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* ── Auto info ─────────────────────────────────────────────────── */
+.carica-arcgis-node__auto-info {
+  font-size: 10px;
+  color: var(--plen-text-dim, #7A849A);
+  text-align: center;
+  padding-top: 4px;
+  border-top: 1px solid var(--cn-accent-dim);
+}

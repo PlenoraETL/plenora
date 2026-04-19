@@ -407,7 +407,7 @@ class SQLFunctionTranslator:
         # Applica rimappatura nomi colonne se fornita
         if column_map:
             for old_name, new_name in column_map.items():
-                result = re.sub(rf'\b{old_name}\b', new_name, result)
+                result = re.sub(rf'\b{re.escape(old_name)}\b', new_name, result)
 
         return result
 

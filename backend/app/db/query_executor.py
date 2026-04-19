@@ -1,5 +1,5 @@
 """
-Esecutore di query SQL unificato per URBY-ETL.
+Esecutore di query SQL unificato per PLENORA-ETL.
 
 Gestisce l'esecuzione di query su tutti i database supportati tramite
 SQLAlchemy come layer di astrazione unificato.
@@ -79,8 +79,17 @@ class QueryResult:
     """
     Risultato di un'esecuzione query.
 
-    Contiene sia il risultato di successo (righe, colonne, timing)
-    che quello di errore (messaggio).
+    Contiene sia il risultato di successo (righe, colonne, timing,
+    `result_id` del result persistito) che quello di errore (messaggio).
+
+    `result_id` e' il riferimento canonico al result persistito via
+    `save_result_blob`. Lo storage fisico (DB BYTEA o S3) e' trasparente:
+    il reader risolve dalla row `results.storage_key` — se presente
+    scarica da S3, altrimenti legge BYTEA. I consumer downstream
+    (`/api/tasks/{id}/download`, `PipelineArtifact.artifact_kind`) lo
+    usano per accedere al result invece di tentare `output_path` che e'
+    stale (il file temp viene cancellato da `save_result_blob` nel
+    finally success).
     """
     success: bool
     message: str
@@ -89,6 +98,7 @@ class QueryResult:
     output_path: str = ""
     project_id: str = ""
     timings: Dict[str, float] = field(default_factory=dict)
+    result_id: Optional[str] = None
 
 
 # =============================================================================
@@ -146,6 +156,8 @@ class DefaultEngineFactory:
 
     SUPPORTED_TYPES = ("postgres", "postgresql", "mysql", "mssql", "oracle", "sqlite")
 
+    _MAX_ENGINES = 50
+
     def __init__(self):
         self._engine_cache: Dict[str, Engine] = {}
 
@@ -178,6 +190,14 @@ class DefaultEngineFactory:
         # Restituisci engine cached se disponibile
         if cache_key in self._engine_cache:
             return self._engine_cache[cache_key]
+
+        # Evict oldest engine se cache piena
+        if len(self._engine_cache) >= self._MAX_ENGINES:
+            oldest_key = next(iter(self._engine_cache))
+            try:
+                self._engine_cache.pop(oldest_key).dispose()
+            except Exception:
+                pass
 
         # Oracle: configurazione specifica del driver
         if conn.type == "oracle":
@@ -228,6 +248,23 @@ class DefaultEngineFactory:
         Tenta prima con ODBC Driver 18 (più recente), e se fallisce
         per mancanza del driver, ritenta con ODBC Driver 17.
 
+        Bulk performance: abilita `fast_executemany=True` per pyodbc.
+        Questo trasforma l'executemany standard (1 INSERT per riga, ~100
+        round-trip per 1000 righe) in una chiamata `SQLBulkOperations`
+        ODBC con array binding nativo. Speedup tipico **10-50x** su
+        INSERT batch sopra le ~500 righe.
+
+        Edge case noti di `fast_executemany`:
+          - DECIMAL con precisione molto alta (>15) puo' perdere
+            precisione: pyodbc usa `SQL_NUMERIC` che ha bound a 15
+            cifre significative. CARICA usa `Numeric(precision, scale)`
+            entro questa soglia, quindi safe.
+          - DATETIME2(7) con precisione 100ns: pyodbc tronca a microseconds
+            (6 cifre). Tipi standard `DATETIME`/`DATETIMEOFFSET` ok.
+
+        Disable rapido: env `MSSQL_FAST_EXECUTEMANY=off` per fallback
+        all'executemany standard senza redeploy.
+
         Args:
             conn_str: Connection string con Driver 18.
             connect_args: Argomenti di connessione.
@@ -235,8 +272,16 @@ class DefaultEngineFactory:
         Returns:
             Engine SQLAlchemy funzionante.
         """
+        import os as _os
+        fast_em = (_os.getenv("MSSQL_FAST_EXECUTEMANY") or "on").lower()
+        engine_kwargs = {}
+        if fast_em not in ("off", "false", "0", "no", "disabled"):
+            engine_kwargs["fast_executemany"] = True
+
         try:
-            engine = create_engine(conn_str, connect_args=connect_args)
+            engine = create_engine(
+                conn_str, connect_args=connect_args, **engine_kwargs,
+            )
             # Verifica che il driver funzioni con una query di test
             with engine.connect() as test_conn:
                 test_conn.execute(text("SELECT 1"))
@@ -244,7 +289,9 @@ class DefaultEngineFactory:
         except Exception as e:
             if "ODBC Driver 18" in str(e):
                 conn_str_17 = conn_str.replace("ODBC+Driver+18", "ODBC+Driver+17")
-                return create_engine(conn_str_17, connect_args=connect_args)
+                return create_engine(
+                    conn_str_17, connect_args=connect_args, **engine_kwargs,
+                )
             raise
 
     def _costruisci_connection_string(self, conn: DatabaseConnection) -> str:
@@ -328,9 +375,15 @@ class ResultBuilder:
         columns: List[str],
         output_path: str,
         project_id: str,
-        timings: Dict[str, float]
+        timings: Dict[str, float],
+        result_id: Optional[str] = None,
     ) -> QueryResult:
-        """Costruisce un risultato di successo con tutti i dettagli."""
+        """Costruisce un risultato di successo con tutti i dettagli.
+
+        `result_id` e' il riferimento canonico al blob persistito da
+        `save_result_blob`. I caller downstream (task result dict,
+        `PipelineArtifact.artifact_kind`) lo usano per il download.
+        """
         return QueryResult(
             success=True,
             message=f"Query eseguita. File: {Path(output_path).name}",
@@ -338,7 +391,8 @@ class ResultBuilder:
             columns=columns,
             output_path=output_path,
             project_id=project_id,
-            timings=timings
+            timings=timings,
+            result_id=result_id,
         )
 
     @staticmethod
@@ -354,8 +408,8 @@ class ResultBuilder:
         """
         Converte un QueryResult in dizionario per la risposta API.
 
-        I campi di dettaglio (righe, colonne, path, timing) vengono
-        inclusi solo in caso di successo.
+        I campi di dettaglio (righe, colonne, path, timing, result_id)
+        vengono inclusi solo in caso di successo.
         """
         d = {
             "success": result.success,
@@ -368,6 +422,7 @@ class ResultBuilder:
                 "output_path": result.output_path,
                 "project_id": result.project_id,
                 "timings": result.timings,
+                "result_id": result.result_id,
             })
         return d
 
@@ -446,7 +501,7 @@ class QueryExecutor:
         """
         final_path = output_path.with_suffix(f".{format}")
         if format == "csv":
-            df.to_csv(final_path, index=False)
+            df.to_csv(final_path, index=False, encoding="utf-8")
         elif format == "json":
             df.to_json(final_path, orient="records", indent=2)
         elif format == "xlsx":
@@ -454,7 +509,7 @@ class QueryExecutor:
         else:
             # Fallback: salva come CSV
             final_path = output_path.with_suffix(".csv")
-            df.to_csv(final_path, index=False)
+            df.to_csv(final_path, index=False, encoding="utf-8")
         return final_path
 
     @property
@@ -539,7 +594,14 @@ class QueryExecutor:
             if connection.type == "oracle":
                 columns = [c.lower() for c in columns]
 
-            # Materializza righe in blocchi per ridurre il picco di memoria
+            # Materializza righe in blocchi.
+            # C11: hard cap (ESTRAI_MAX_ROWS) per evitare OOM. Pre-fix il
+            # chunking era cosmetico (fetchmany ma accumulo totale in
+            # memoria), quindi una query mal filtrata da 100M righe
+            # crashava il worker. Ora se il cumulativo supera il cap la
+            # query fallisce loud con suggerimento operativo.
+            from app.config import settings as _s
+            _max_rows = int(getattr(_s, "ESTRAI_MAX_ROWS", 5_000_000) or 0)
             CHUNK_SIZE = 10_000
             rows = []
             while True:
@@ -547,8 +609,129 @@ class QueryExecutor:
                 if not chunk:
                     break
                 rows.extend(tuple(row) for row in chunk)
+                if _max_rows > 0 and len(rows) > _max_rows:
+                    raise ValueError(
+                        f"Query ha ritornato piu' di {_max_rows:,} righe "
+                        f"(letti {len(rows):,}+ in streaming). "
+                        f"Aggiungi un filtro WHERE o un LIMIT alla query, "
+                        f"oppure alza ESTRAI_MAX_ROWS se la dimensione e' "
+                        f"attesa. Cap in vigore per prevenire OOM del worker."
+                    )
 
             return rows, columns
+
+    # =========================================================================
+    # C11: STREAMING CSV / PARQUET (zero full-materialization)
+    # =========================================================================
+
+    def _execute_streaming_to_file(
+        self,
+        connection: DatabaseConnection,
+        sql: str,
+        params: Optional[Dict[str, Any]],
+        output_path: "Path",
+        output_format: str,
+    ) -> Tuple[int, List[str]]:
+        """Esegue la query e scrive l'output su file in streaming
+        senza materializzare l'intero result set in memoria.
+
+        Supporta CSV e Parquet. Per CSV scrive riga-per-riga via
+        csv.writer. Per Parquet usa pyarrow.parquet.ParquetWriter
+        con scrittura per RecordBatch (chunk da 10k).
+
+        Return: (righe_totali, nomi_colonne).
+
+        C11: prima del fix il chunking era cosmetico (fetchmany ma
+        accumulo in list + DataFrame intero). Ora il peak memory e'
+        proporzionale al chunk (10k righe), non al result set.
+        """
+        import csv as _csv
+        from pathlib import Path as _Path
+        output_path = _Path(output_path)
+
+        engine = self._engine_factory.create_engine(connection)
+        from app.config import settings as _s
+        _max_rows = int(getattr(_s, "ESTRAI_MAX_ROWS", 5_000_000) or 0)
+        CHUNK_SIZE = 10_000
+        total_rows = 0
+
+        with engine.connect() as conn:
+            # Stesso setup timeout di execute_raw (duplicato qui per
+            # mantenere boundary chiari; factor-out sarebbe refactor fuori
+            # scope C11).
+            try:
+                timeout_s = _s.DB_QUERY_TIMEOUT
+                timeout_ms = int(timeout_s) * 1000
+                if connection.type in ("postgres", "postgresql"):
+                    conn.execute(text("SET statement_timeout = :t"), {"t": timeout_ms})
+                elif connection.type == "mysql":
+                    conn.execute(text("SET SESSION max_execution_time = :t"), {"t": timeout_ms})
+                elif connection.type == "oracle":
+                    raw = conn.connection.dbapi_connection
+                    if hasattr(raw, "callTimeout"):
+                        raw.callTimeout = timeout_ms
+            except Exception:
+                pass
+
+            if connection.type == "oracle":
+                try:
+                    conn.execute(text("ALTER SESSION SET OPEN_CURSORS = 32767"))
+                except Exception:
+                    pass
+
+            result = conn.execute(text(sql), params or {})
+            columns = [desc[0] for desc in result.cursor.description]
+            if connection.type == "oracle":
+                columns = [c.lower() for c in columns]
+
+            if output_format == "csv":
+                with open(output_path, "w", newline="", encoding="utf-8") as fp:
+                    writer = _csv.writer(fp)
+                    writer.writerow(columns)
+                    while True:
+                        chunk = result.fetchmany(CHUNK_SIZE)
+                        if not chunk:
+                            break
+                        writer.writerows(chunk)
+                        total_rows += len(chunk)
+                        if _max_rows > 0 and total_rows > _max_rows:
+                            raise ValueError(
+                                f"Query ha ritornato piu' di {_max_rows:,} "
+                                f"righe (streaming). Aggiungi WHERE/LIMIT "
+                                f"o alza ESTRAI_MAX_ROWS."
+                            )
+
+            elif output_format == "parquet":
+                import pyarrow as _pa
+                import pyarrow.parquet as _pq
+                pq_writer = None
+                try:
+                    while True:
+                        chunk = result.fetchmany(CHUNK_SIZE)
+                        if not chunk:
+                            break
+                        df_chunk = pd.DataFrame(chunk, columns=columns)
+                        table = _pa.Table.from_pandas(df_chunk, preserve_index=False)
+                        if pq_writer is None:
+                            pq_writer = _pq.ParquetWriter(output_path, table.schema)
+                        pq_writer.write_table(table)
+                        total_rows += len(chunk)
+                        if _max_rows > 0 and total_rows > _max_rows:
+                            raise ValueError(
+                                f"Query ha ritornato piu' di {_max_rows:,} "
+                                f"righe (streaming). Aggiungi WHERE/LIMIT "
+                                f"o alza ESTRAI_MAX_ROWS."
+                            )
+                finally:
+                    if pq_writer is not None:
+                        pq_writer.close()
+            else:
+                raise ValueError(
+                    f"_execute_streaming_to_file: formato non supportato "
+                    f"per streaming: {output_format}. Use csv o parquet."
+                )
+
+        return total_rows, columns
 
     # =========================================================================
     # ESECUZIONE COMPLETA (con salvataggio file)
@@ -591,62 +774,151 @@ class QueryExecutor:
         timings = {}
         inizio_totale = time.time()
 
+        # C11: path streaming per CSV/Parquet (zero full-materialization).
+        # Attivato solo se non c'e' geometria (export geospaziale richiede
+        # trasformazioni WKT/WKB sulla colonna geom che non si prestano al
+        # chunk-write minimal). Per gli altri formati (xlsx, geojson, gpkg,
+        # shp, json): path legacy in-memory coperto dal cap
+        # ESTRAI_MAX_ROWS.
+        _streamable = output_format in ("csv", "parquet") and not geom_column
+
         try:
-            # Preparazione temp dir per output (il risultato finale va nel DB)
             self._logger.info(f"Esecuzione query per progetto {project_id}")
 
-            # Fase 1: Esecuzione query
-            t_query = time.time()
-            rows, columns = self.execute_raw(connection, sql, params)
-            timings["query_total"] = time.time() - t_query
-            self._logger.info(f"Query totale: {timings['query_total']:.2f}s")
+            if _streamable:
+                # STREAMING PATH (CSV / Parquet senza geometria)
+                t_query = time.time()
+                output_path = get_temp_output_path(output_filename)
+                output_path = output_path.with_suffix(f".{output_format}")
+                row_count, columns = self._execute_streaming_to_file(
+                    connection=connection,
+                    sql=sql,
+                    params=params,
+                    output_path=output_path,
+                    output_format=output_format,
+                )
+                saved_path = output_path
+                # df resta None: in streaming non costruiamo DataFrame
+                # (risparmia un'intera pass di memoria pari al result set).
+                df = None
+                timings["query_total"] = time.time() - t_query
+                timings["dataframe"] = 0.0
+                timings["save"] = 0.0  # fuso dentro query_total
+                self._logger.info(
+                    f"Streaming {output_format} completato: "
+                    f"{row_count} righe in {timings['query_total']:.2f}s "
+                    f"(peak memory ~= 1 chunk, non il result set intero)"
+                )
+            else:
+                # LEGACY PATH (fetch → DataFrame → save, capped da ESTRAI_MAX_ROWS)
+                t_query = time.time()
+                rows, columns = self.execute_raw(connection, sql, params)
+                timings["query_total"] = time.time() - t_query
+                self._logger.info(f"Query totale: {timings['query_total']:.2f}s")
 
-            # Fase 2: Conversione in DataFrame
-            t_df = time.time()
-            df = self._df_builder.from_rows(rows, columns)
-            timings["dataframe"] = time.time() - t_df
-            self._logger.info(f"Creazione DataFrame ({len(rows)} righe): {timings['dataframe']:.2f}s")
+                t_df = time.time()
+                df = self._df_builder.from_rows(rows, columns)
+                timings["dataframe"] = time.time() - t_df
+                self._logger.info(
+                    f"Creazione DataFrame ({len(rows)} righe): "
+                    f"{timings['dataframe']:.2f}s"
+                )
 
-            # Fase 3: Salvataggio temp + DB (sempre blob DB)
+                row_count = len(rows)
+
+            # Salva risultato.
+            # - Streaming path: il file esiste gia' su disco, usiamo
+            #   save_result_blob (path-based) che lo legge e lo cancella.
+            # - Legacy path: delegamo a save_pipeline_result (single
+            #   entry-point che fa in-memory per formati serializzabili
+            #   e fallback FS trasparente per gpkg/shp).
             t_save = time.time()
-            output_path = get_temp_output_path(output_filename)
-            saved_path = self._save(
-                df=df,
-                output_path=output_path,
-                format=output_format,
-                geom_column=geom_column
-            )
-            save_result_blob(project_id, saved_path, output_format, len(rows), group_id=group_id)
+            if _streamable:
+                result_id = save_result_blob(
+                    project_id, saved_path, output_format, row_count,
+                    group_id=group_id,
+                )
+            else:
+                from app.utils.result_store import save_pipeline_result
+                saved = save_pipeline_result(
+                    project_id=project_id,
+                    df=df,
+                    output_format=output_format,
+                    filename_stem=output_filename,
+                    rows_count=row_count,
+                    group_id=group_id,
+                    geom_column=geom_column,
+                )
+                result_id = saved["result_id"]
+                saved_path = Path(saved["output_filename"])
             timings["save"] = time.time() - t_save
             self._logger.info(f"Salvataggio file ({output_format}): {timings['save']:.2f}s")
 
             timings["total"] = time.time() - inizio_totale
             self._logger.info(f"TOTALE: {timings['total']:.2f}s")
 
-            # Snapshot intermediate.db (non bloccante)
+            # Snapshot intermediate.db (non bloccante).
+            # C11: cap sulle righe serializzate. Pre-fix, df.to_dict(
+            # orient="records") materializzava l'intero result set UNA
+            # SECONDA VOLTA (dopo query/DataFrame build) → double
+            # memory footprint. Sopra INTERMEDIATE_SNAPSHOT_MAX_ROWS
+            # scriviamo solo schema + count con status "ok_sampled"
+            # (l'intermediate serve al debug UI, non al re-run integrale).
             if run_id and node_id:
                 try:
                     from app.core.intermediate.writer import write_node
-                    col_schema = df.dtypes.astype(str).to_dict()
-                    write_node(
-                        run_id=run_id,
-                        node_id=node_id,
-                        node_type="estrai",
-                        rows=df.to_dict(orient="records"),
-                        col_schema=col_schema,
-                        exec_time=timings.get("total", 0),
-                        status="ok",
-                    )
+                    from app.config import settings as _s
+                    _isnap_cap = int(getattr(_s, "INTERMEDIATE_SNAPSHOT_MAX_ROWS", 100_000) or 0)
+                    # In streaming df=None → snapshot solo metadata (sempre
+                    # ok_streamed, no re-materialization dal file).
+                    if df is None:
+                        write_node(
+                            run_id=run_id,
+                            node_id=node_id,
+                            node_type="estrai",
+                            rows=[],
+                            col_schema={c: "unknown" for c in columns},
+                            exec_time=timings.get("total", 0),
+                            status="ok_streamed",
+                        )
+                    else:
+                        col_schema = df.dtypes.astype(str).to_dict()
+                        if _isnap_cap > 0 and len(df) > _isnap_cap:
+                            self._logger.info(
+                                f"Intermediate snapshot: {len(df)} righe > cap "
+                                f"{_isnap_cap}, salvo solo schema + count "
+                                f"(status=ok_sampled)"
+                            )
+                            write_node(
+                                run_id=run_id,
+                                node_id=node_id,
+                                node_type="estrai",
+                                rows=[],  # niente payload — sopra cap
+                                col_schema=col_schema,
+                                exec_time=timings.get("total", 0),
+                                status="ok_sampled",
+                            )
+                        else:
+                            write_node(
+                                run_id=run_id,
+                                node_id=node_id,
+                                node_type="estrai",
+                                rows=df.to_dict(orient="records"),
+                                col_schema=col_schema,
+                                exec_time=timings.get("total", 0),
+                                status="ok",
+                            )
                     self._logger.info(f"Intermediate snapshot: run={run_id} node={node_id}")
                 except Exception as _iex:
                     self._logger.warning(f"Intermediate write fallita (non bloccante): {_iex}")
 
             result = self._result_builder.success(
-                rows_count=len(rows),
+                rows_count=row_count,
                 columns=columns,
                 output_path=str(saved_path),
                 project_id=project_id,
-                timings=timings
+                timings=timings,
+                result_id=result_id,
             )
             return self._result_builder.to_dict(result)
 

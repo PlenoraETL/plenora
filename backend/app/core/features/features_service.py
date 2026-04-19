@@ -34,14 +34,14 @@ import json
 import uuid
 import time
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any, Tuple, Protocol
 
 import pandas as pd
 
 from app.config import settings
 from app.utils.logger import get_logger
-from app.utils.result_store import get_temp_output_path, save_result_blob
+from app.utils.result_store import save_pipeline_result
 from app.core.features.models import (
     ArcGISConnection,
     ArcGISCreate,
@@ -120,7 +120,7 @@ class FeaturesService:
     
     def _generate_connection_id(self, name: str) -> str:
         """Genera ID univoco per connessione (stesso pattern di ConnectionService)."""
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         short_uuid = str(uuid.uuid4())[:8]
         safe_name = "".join(c for c in name if c.isalnum() or c in (' ', '_')).strip()
         safe_name = safe_name.replace(' ', '_')[:30]
@@ -271,7 +271,7 @@ class FeaturesService:
             layer_url: URL del layer (es. .../FeatureServer/0)
             
         Returns:
-            Schema con campi in formato URBY
+            Schema con campi in formato PLENORA
         """
         connection = self.get_connection(connection_id)
         if not connection:
@@ -392,27 +392,29 @@ class FeaturesService:
             df = pd.DataFrame(rows, columns=columns)
             timings["dataframe"] = time.time() - t_df
             
-            # Fase 3: Salvataggio su blob DB
+            # Fase 3: Salvataggio su blob DB (single entry, dispatch interno)
             t_save = time.time()
-            output_path = get_temp_output_path(output_filename)
-            saved_path = self._save(
+            filename_stem = Path(output_filename).stem or "result"
+            saved = save_pipeline_result(
+                project_id=project_id,
                 df=df,
-                output_path=output_path,
-                format=output_format,
+                output_format=output_format,
+                filename_stem=filename_stem,
+                rows_count=len(rows),
                 geom_column=geom_column if return_geometry else None,
                 crs=layer_crs,
             )
-            save_result_blob(project_id, saved_path, output_format, len(rows))
+            saved_path_display = saved["output_filename"]
             timings["save"] = time.time() - t_save
-            
+
             timings["total"] = time.time() - inizio
-            
+
             return {
                 "success": True,
                 "message": f"Query completata: {len(rows)} features estratte",
                 "rows_count": len(rows),
                 "columns": columns,
-                "output_path": str(saved_path),
+                "output_path": saved_path_display,
                 "project_id": project_id,
                 "timings": timings,
             }
@@ -517,14 +519,14 @@ class FeaturesService:
         """
         final_path = output_path.with_suffix(f".{format}")
         if format == "csv":
-            df.to_csv(final_path, index=False)
+            df.to_csv(final_path, index=False, encoding="utf-8")
         elif format == "json":
             df.to_json(final_path, orient="records", indent=2)
         elif format == "xlsx":
             df.to_excel(final_path, index=False)
         else:
             final_path = output_path.with_suffix(".csv")
-            df.to_csv(final_path, index=False)
+            df.to_csv(final_path, index=False, encoding="utf-8")
         return final_path
     
     # =========================================================================

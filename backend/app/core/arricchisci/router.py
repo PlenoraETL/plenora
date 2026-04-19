@@ -17,7 +17,6 @@ import json
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Depends
 from app.core.auth.auth import (
-    get_current_user,
     require_not_esecutore,
     require_admin,
     assert_group_access,
@@ -25,21 +24,68 @@ from app.core.auth.auth import (
     assert_can_modify,
     compute_can_edit,
     CurrentUser,
-    group_filter,
 )
 from pydantic import BaseModel
 from typing import Dict, Any, List, Optional
 
 from app.config import settings
-from app.utils.logger import get_logger, open_run, close_run, set_run_context
+from app.utils.logger import get_logger
 from app.utils.router_utils import require_service
+from app.shared.path_policy import assert_path_within
+from app.core.artifacts import (
+    LatestProjectArtifactRef,
+    SourceLoader,
+    SourceLoadingError,
+    SourceRef,
+)
+
+
+def _load_request_data(request, current_user):
+    """Carica i dati sorgente per validate/estimate enrichment.
+
+    Dispatcher 2-vie:
+      - `file_source_id` valorizzato → carica quel file
+      - altrimenti, `project_id` valorizzato → carica l'ultimo output del progetto
+      - altrimenti → ritorna `None`
+
+    Invariante "no fallback silenzioso": se entrambi sono valorizzati,
+    `file_source_id` vince e `project_id` viene ignorato. Un caller che
+    chiede un file_source specifico vuole quel file, non un mix con
+    l'output del progetto. La regola e' enforced dal `if/elif/else`
+    esplicito ed e' coperta dai contract test in
+    `tests2/arricchisci/unit/test_arricchisci_router_security_contract.py`.
+
+    `expected_group_id` propagato a `SourceLoader` come
+    `current_user.group_id`, e `is_superadmin` come
+    `current_user.role == "superadmin"`. Il loader fa il check di
+    visibility (owned/shared/superadmin) — questo permette ai
+    superadmin e ai progetti shared via `allowed_groups` di superare
+    il check, allineando il behavior del loader a quello di
+    `assert_project_visible` / `assert_file_source_access` gia' usati
+    dai router come pre-check di accesso.
+
+    Eccezioni `SourceLoadingError` propagate al caller (validate /
+    estimate le traducono in HTTPException 400).
+    """
+    if request.file_source_id:
+        ref = SourceRef(file_source_id=request.file_source_id)
+    elif request.project_id:
+        ref = SourceRef(
+            project=LatestProjectArtifactRef(project_id=request.project_id)
+        )
+    else:
+        return None
+    return SourceLoader().load(
+        ref,
+        expected_group_id=current_user.group_id,
+        is_superadmin=current_user.role == "superadmin",
+    )
 
 logger = get_logger(__name__)
 
 # Sub-router separati per prefix diversi
 enrichment_router = APIRouter(prefix="/enrichment", tags=["enrichment"])
 api_connections_router = APIRouter(tags=["api-connections"])
-executables_router = APIRouter(prefix="/executables", tags=["executables"])
 templates_router = APIRouter(prefix="/templates", tags=["templates"])
 
 # Servizi inizializzati da main.py
@@ -99,44 +145,14 @@ class FetchSchemaRequest(BaseModel):
     url: str
 
 def _validate_external_url(url: str) -> None:
-    """Anti-SSRF: valida che l'URL sia http(s) verso un host pubblico.
-
-    Solleva HTTPException 400 se URL malformato, 403 se l'host risolve a un
-    IP privato/loopback/link-local/riservato. Da usare prima di QUALSIASI
-    fetch verso URL fornite dall'utente (proxy, test, webhook, ecc.).
-
-    Bloccato:
-      - schemi != http/https (file://, ftp://, gopher://, ...)
-      - IP privati (10.x, 172.16-31.x, 192.168.x)
-      - loopback (127.x)
-      - link-local (169.254.x — incluso EC2/Azure metadata)
-      - reserved/multicast
-    """
-    from urllib.parse import urlparse
-    import ipaddress
-    import socket
-
-    parsed = urlparse(url or "")
-    if parsed.scheme not in ("http", "https"):
-        raise HTTPException(400, "URL non valido: solo schemi http/https sono permessi")
-    host = parsed.hostname
-    if not host:
-        raise HTTPException(400, "URL non valido: hostname mancante")
-
+    """Anti-SSRF: wrapper che converte ValueError in HTTPException."""
+    from app.shared.api_utils import validate_external_url
     try:
-        _, _, addr_list = socket.gethostbyname_ex(host)
-    except socket.gaierror:
-        raise HTTPException(400, f"Host non risolvibile: {host}")
-    for addr in addr_list:
-        try:
-            ip = ipaddress.ip_address(addr)
-        except ValueError:
-            continue
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
-            raise HTTPException(
-                403,
-                f"URL bloccato: l'host risolve a un IP privato/interno ({addr})",
-            )
+        validate_external_url(url)
+    except ValueError as e:
+        msg = str(e)
+        status = 403 if "IP privato" in msg or "bloccato" in msg else 400
+        raise HTTPException(status, msg)
 
 
 @api_connections_router.post("/api-connections/fetch-openapi-schema")
@@ -162,7 +178,8 @@ async def fetch_openapi_schema(body: FetchSchemaRequest, user: CurrentUser = Dep
     except httpx.HTTPStatusError as e:
         raise HTTPException(status_code=e.response.status_code, detail=f"HTTP {e.response.status_code}")
     except Exception as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        logger.error(f"[GESTITO] Errore fetch OpenAPI schema: {e}", exc_info=True)
+        raise HTTPException(status_code=502, detail="Errore nel recupero dello schema OpenAPI")
 
 
 # =============================================================================
@@ -215,11 +232,23 @@ async def validate_enrichment(
     """Valida input prima di eseguire l'enrichment."""
     try:
         from app.core.arricchisci.api_connector import api_connection_service
+        from app.shared.authz_helpers import (
+            assert_project_visible, assert_file_source_access,
+        )
 
         api_conn = api_connection_service.get_api_connection(request.api_id)
         # Visibility check (read-only): owned + condivise via allowed_groups.
         # Senza, un utente del tenant A potrebbe sondare api_id del tenant B.
         assert_resource_visible(api_conn, "api_connections", current_user, f"API {request.api_id}")
+
+        # Authz sulle risorse che verranno caricate da `_load_data`:
+        # senza questi check un utente con accesso a una API connection
+        # (possibilmente condivisa) potrebbe leakare canvas/file_source di
+        # altri tenant passando project_id / file_source_id arbitrari.
+        if request.project_id:
+            assert_project_visible(request.project_id, current_user)
+        if request.file_source_id:
+            assert_file_source_access(request.file_source_id, current_user)
 
         # Verifica che tutti i parametri required dell'API abbiano un mapping non vuoto.
         # Quando l'utente lascia "-- colonna --" nel dropdown, il frontend omette
@@ -246,8 +275,11 @@ async def validate_enrichment(
                 ]
             )
 
-        df = _load_data(request.project_id, request.file_source_id)
-        
+        try:
+            df = _load_request_data(request, current_user)
+        except SourceLoadingError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
         if df is None or df.empty:
             static_cols = set(request.static_columns or [])
             all_static = all(col in static_cols for col in request.param_mapping.values())
@@ -345,7 +377,20 @@ async def estimate_enrichment(
         # Visibility check (read-only stima): owned + condivise.
         assert_resource_visible(api_config, "api_connections", current_user, f"API {request.api_id}")
 
-        df = _load_data(request.project_id, request.file_source_id)
+        # Authz sulle risorse che verranno caricate da _load_request_data
+        from app.shared.authz_helpers import (
+            assert_project_visible, assert_file_source_access,
+        )
+        if request.project_id:
+            assert_project_visible(request.project_id, current_user)
+        if request.file_source_id:
+            assert_file_source_access(request.file_source_id, current_user)
+
+        try:
+            df = _load_request_data(request, current_user)
+        except SourceLoadingError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
         if df is None or df.empty:
             return EstimateResponse(
                 total_rows=0, unique_combinations=0, estimated_api_calls=0,
@@ -431,7 +476,18 @@ def get_api_connection(api_id: str, current_user: CurrentUser = Depends(require_
 
 @api_connections_router.post("/api-connections")
 def create_api_connection(data: dict, current_user: CurrentUser = Depends(require_admin)):
-    """Crea una nuova API connection. Solo admin/superadmin."""
+    """Crea una nuova API connection. Solo admin/superadmin.
+
+    `connection_type='executable'` non è più supportato (rimosso per
+    ridurre la superficie RCE). Le richieste che lo specificano vengono
+    rifiutate con 400.
+    """
+    if data.get("connection_type") == "executable":
+        raise HTTPException(
+            400,
+            "connection_type 'executable' non è più supportato. "
+            "Usa 'rest_file' per processori file→file esposti via HTTP."
+        )
     try:
         data["group_id"] = current_user.group_id
         data["created_by"] = current_user.user_id
@@ -446,7 +502,18 @@ def create_api_connection(data: dict, current_user: CurrentUser = Depends(requir
 
 @api_connections_router.put("/api-connections/{api_id}")
 def update_api_connection(api_id: str, data: dict, current_user: CurrentUser = Depends(require_admin)):
-    """Aggiorna una API connection esistente. Solo admin/superadmin."""
+    """Aggiorna una API connection esistente. Solo admin/superadmin.
+
+    `connection_type='executable'` non è più supportato (rimosso per
+    ridurre la superficie RCE). Le richieste che tentano di
+    impostarlo vengono rifiutate con 400.
+    """
+    if data.get("connection_type") == "executable":
+        raise HTTPException(
+            400,
+            "connection_type 'executable' non è più supportato. "
+            "Usa 'rest_file' per processori file→file esposti via HTTP."
+        )
     try:
         # Ownership check: 404 se non esiste, 403 se appartiene ad altro gruppo.
         # Senza questo check, qualunque utente autenticato potrebbe modificare
@@ -490,7 +557,25 @@ def delete_api_connection(api_id: str, current_user: CurrentUser = Depends(requi
                 proj_type = proj_dict.get('project_type')
                 if proj_type != 'arricchisci':
                     continue
-                canvas = _project_service.get_project_canvas(proj_id)
+                try:
+                    canvas = _project_service.get_project_canvas(proj_id)
+                except Exception as _canvas_err:
+                    # Canvas corrotto di un progetto != della api
+                    # connection che stiamo cancellando → non blocchiamo
+                    # la delete, ma logghiamo per triage.
+                    from app.shared.exceptions import CanvasCorruptedError
+                    if isinstance(_canvas_err, CanvasCorruptedError):
+                        logger.warning(
+                            f"delete_api_connection: canvas corrotto "
+                            f"per progetto {proj_id} skippato "
+                            f"({_canvas_err.reason})"
+                        )
+                    else:
+                        logger.warning(
+                            f"delete_api_connection: errore lettura canvas "
+                            f"{proj_id}: {_canvas_err}"
+                        )
+                    continue
                 if not canvas:
                     continue
                 nodes_raw = canvas.nodes if hasattr(canvas, 'nodes') else canvas.get('nodes', [])
@@ -613,190 +698,6 @@ def get_templates(current_user: CurrentUser = Depends(require_not_esecutore)):
 
 
 # =============================================================================
-# ENDPOINT: EXECUTABLES
-# =============================================================================
-
-# Cap massimo per il timeout di test (secondi). Evita chiamate che bloccano un worker a lungo.
-_TEST_EXEC_TIMEOUT_MAX = 60
-
-# Variabili d'ambiente che NON devono essere passate al child process: alterano il
-# loader/runtime e possono essere usate per code injection (LD_PRELOAD), bypass di
-# sandbox (PATH override), ecc. Vengono filtrate sia dal merge utente sia ereditate.
-_BLOCKED_ENV_VARS = {
-    "LD_PRELOAD", "LD_LIBRARY_PATH", "LD_AUDIT", "DYLD_INSERT_LIBRARIES",
-    "DYLD_LIBRARY_PATH", "PYTHONPATH", "PYTHONSTARTUP", "PYTHONHOME",
-    "PATH",  # forziamo l'uso del PATH del processo padre senza override utente
-}
-
-
-def _validate_sandboxed_path(raw_path: str, label: str) -> Path:
-    """Risolve `raw_path` e verifica che sia dentro DATA_DIR. Solleva HTTPException 400 altrimenti."""
-    if not raw_path:
-        raise HTTPException(400, f"{label} non specificato")
-    try:
-        resolved = Path(raw_path).expanduser().resolve(strict=False)
-    except Exception:
-        raise HTTPException(400, f"{label} non valido")
-    data_root = settings.DATA_DIR.resolve()
-    try:
-        resolved.relative_to(data_root)
-    except ValueError:
-        raise HTTPException(
-            403,
-            f"{label} fuori dalla sandbox: deve essere all'interno di {data_root}"
-        )
-    return resolved
-
-
-@executables_router.post("/test")
-def test_executable(
-    data: dict,
-    current_user: CurrentUser = Depends(require_admin),
-):
-    """
-    Testa un eseguibile locale con input di prova.
-    Usato dallo step Test del wizard ExecutableConfigModal.
-
-    SECURITY:
-      - Solo admin/superadmin (RCE potential)
-      - exec_path e working_dir devono risolvere dentro settings.DATA_DIR
-      - env vars utente filtrate per bloccare LD_PRELOAD/PATH/PYTHONPATH ecc.
-      - timeout massimo 60s
-    """
-    import subprocess
-    import time
-
-    exec_config = data.get("executable", {})
-    exec_type = exec_config.get("type", "python")
-    exec_path_raw = exec_config.get("path", "")
-    working_dir_raw = exec_config.get("working_dir") or None
-    input_mode = exec_config.get("input_mode", "json_arg")
-    output_mode = exec_config.get("output_mode", "json_stdout")
-    timeout = min(int(exec_config.get("timeout", 30) or 30), _TEST_EXEC_TIMEOUT_MAX)
-    env_vars = exec_config.get("env_vars", {}) or {}
-    test_input = data.get("test_input", "{}")
-
-    # Builtin module test (import-only, no subprocess).
-    # SECURITY: solo moduli registrati in BUILTIN_REGISTRY sono ammessi.
-    # Senza whitelist, un admin potrebbe usare importlib.import_module su
-    # qualsiasi modulo Python (os, subprocess, ecc.) — l'IMPORT stesso esegue
-    # il code del modulo (side effects), oltre a permettere di scoprire
-    # dipendenze installate sul server.
-    builtin_module = exec_config.get("module")
-    if builtin_module:
-        from app.core.arricchisci.executable_runner import BUILTIN_REGISTRY
-        # Whitelist: solo i moduli dichiarati nel registry sono importabili
-        allowed_modules = {cfg.get("module") for cfg in BUILTIN_REGISTRY.values() if cfg.get("module")}
-        if builtin_module not in allowed_modules:
-            return {
-                "success": False,
-                "error": (
-                    f"Modulo '{builtin_module}' non in whitelist. "
-                    f"Moduli ammessi: {sorted(allowed_modules)}"
-                )
-            }
-        try:
-            import importlib
-            mod = importlib.import_module(builtin_module)
-            func_name = exec_config.get("function", "process")
-            if not hasattr(mod, func_name):
-                return {"success": False, "error": f"Funzione '{func_name}' non trovata in {builtin_module}"}
-            return {
-                "success": True,
-                "output": f"Modulo {builtin_module}.{func_name} trovato e importabile",
-                "elapsed": "0.0s"
-            }
-        except ImportError as e:
-            return {"success": False, "error": f"Modulo non trovato: {e}"}
-
-    # Sandbox: exec_path DEVE essere dentro DATA_DIR (no /bin/bash, /etc/..., ecc.)
-    exec_path_resolved = _validate_sandboxed_path(exec_path_raw, "Percorso eseguibile")
-    if not exec_path_resolved.exists():
-        return {"success": False, "error": f"Eseguibile non trovato: {exec_path_resolved}"}
-    if not exec_path_resolved.is_file():
-        return {"success": False, "error": f"Il percorso non è un file: {exec_path_resolved}"}
-
-    # Working dir opzionale: se passato, deve anch'esso essere nella sandbox
-    if working_dir_raw:
-        working_dir_resolved = _validate_sandboxed_path(working_dir_raw, "Working directory")
-        if not working_dir_resolved.is_dir():
-            return {"success": False, "error": f"Working directory non valida: {working_dir_resolved}"}
-        working_dir = str(working_dir_resolved)
-    else:
-        working_dir = None
-
-    # Costruisci comando con il path validato (no più stringa raw)
-    cmd_map = {'python': 'python', 'shell': 'bash', 'node': 'node', 'executable': ''}
-    cmd_prefix = cmd_map.get(exec_type, '')
-
-    cmd = []
-    if cmd_prefix:
-        cmd.append(cmd_prefix)
-    cmd.append(str(exec_path_resolved))
-
-    stdin_data = None
-    if input_mode == 'json_arg':
-        cmd.append(test_input)
-    elif input_mode == 'stdin':
-        stdin_data = test_input.encode('utf-8')
-    elif input_mode == 'args':
-        try:
-            import json as json_mod
-            params = json_mod.loads(test_input)
-            for k, v in params.items():
-                cmd.extend([f'--{k}', str(v)])
-        except Exception:
-            pass
-
-    # Env: parti dall'env del processo padre PRIVATO delle variabili pericolose,
-    # poi aggiungi quelle utente FILTRATE (anche qui niente LD_PRELOAD ecc.)
-    import os
-    safe_env = {k: v for k, v in os.environ.items() if k not in _BLOCKED_ENV_VARS}
-    user_env_filtered = {k: str(v) for k, v in env_vars.items() if k not in _BLOCKED_ENV_VARS}
-    env = {**safe_env, **user_env_filtered}
-
-    logger.info(
-        f"test_executable da user={current_user.user_id} "
-        f"path={exec_path_resolved} type={exec_type}",
-        op="test_executable"
-    )
-
-    try:
-        start = time.time()
-        proc = subprocess.run(
-            cmd,
-            capture_output=True,
-            timeout=timeout,
-            cwd=working_dir,
-            input=stdin_data,
-            env=env
-        )
-        elapsed = time.time() - start
-
-        stdout = proc.stdout.decode('utf-8', errors='replace')[:5000]
-        stderr = proc.stderr.decode('utf-8', errors='replace')[:2000]
-
-        if proc.returncode != 0:
-            return {
-                "success": False,
-                "error": f"Exit code {proc.returncode}: {stderr}",
-                "elapsed": f"{elapsed:.1f}s"
-            }
-
-        return {
-            "success": True,
-            "output": stdout,
-            "elapsed": f"{elapsed:.1f}s"
-        }
-    except subprocess.TimeoutExpired:
-        return {"success": False, "error": f"Timeout superato ({timeout}s)"}
-    except FileNotFoundError:
-        return {"success": False, "error": f"Eseguibile non trovato: {exec_path_resolved}"}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-
-# =============================================================================
 # ENDPOINT: ESECUZIONE ARRICCHIMENTO (sincrono/asincrono)
 # =============================================================================
 
@@ -866,7 +767,8 @@ def execute_enrichment_async(
             project_id=project_id,
             canvas=canvas.model_dump(),
             output_format=output_format,
-            force_recalculate=request.force_recalculate
+            force_recalculate=request.force_recalculate,
+            user_id=current_user.user_id,  # N9
         )
         
         return {
@@ -886,56 +788,6 @@ def execute_enrichment_async(
 # =============================================================================
 # HELPER
 # =============================================================================
-
-def _load_data(project_id: str, file_source_id: str = None):
-    """Carica dati da progetto o file source.
-    
-    Se file_source_id è specificato, usa SOLO quello — non fa fallback silenzioso
-    al progetto se il file source fallisce, per evitare di restituire dati inconsistenti.
-    """
-    import pandas as pd
-    
-    if file_source_id:
-        try:
-            from app.services.file_service import file_source_service
-            df, _ = file_source_service.load_dataframe(file_source_id)
-            return df
-        except Exception as e:
-            logger.error(f"[GESTITO] Errore caricamento file source {file_source_id}: {e}")
-            # NON fare fallback al progetto: l'utente ha specificato esplicitamente
-            # un file source — restituire dati diversi sarebbe un bug silenzioso.
-            raise HTTPException(
-                status_code=400,
-                detail=f"Impossibile caricare il file source '{file_source_id}': {e}"
-            )
-    
-    if project_id:
-        return _load_project_output(project_id)
-    
-    return None
-
-
-def _load_project_output(project_id: str):
-    """Carica l'ultimo output di un progetto dal DB SQLite (stesso pattern ESTRAI/CARICA)."""
-    from app.utils.result_store import get_result_as_tempfile
-    from app.utils.dataframe import load_dataframe_from_file
-    import os
-
-    tmp = get_result_as_tempfile(project_id)
-    if not tmp:
-        return None
-
-    try:
-        return load_dataframe_from_file(tmp)
-    except Exception as e:
-        logger.error(f"[CRASH] Errore caricamento output {project_id}: {e}", exc_info=True)
-        return None
-    finally:
-        try:
-            if tmp and os.path.exists(tmp):
-                os.unlink(str(tmp))
-        except Exception:
-            pass
 
 
 def _format_time(seconds: float) -> str:

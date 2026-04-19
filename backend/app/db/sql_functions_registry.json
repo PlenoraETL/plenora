@@ -1,7 +1,7 @@
 {
   "_meta": {
     "version": "1.0.0",
-    "description": "Registry funzioni SQL multi-database per URBY-ETL",
+    "description": "Registry funzioni SQL multi-database per PLENORA-ETL",
     "supported_databases": [
       "postgres",
       "mssql",

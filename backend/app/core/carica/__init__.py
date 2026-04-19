@@ -1,7 +1,7 @@
 """
 Modulo CARICA — Caricamento dati su database relazionali.
 
-Fa parte della pipeline URBY-ETL: ESTRAI → MANIPOLA → ARRICCHISCI → [CARICA]
+Fa parte della pipeline PLENORA-ETL: ESTRAI → MANIPOLA → ARRICCHISCI → [CARICA]
 
 Il modulo CARICA è un nodo canvas collegabile solo al nodo Output (Result).
 Riceve il DataFrame prodotto dalla pipeline e lo scrive su una tabella

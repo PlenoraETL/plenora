@@ -1,3 +1,12 @@
+/**
+ * useCanvasKeyboard.js — Shortcuts tastiera per il canvas
+ *
+ * useCanvasKeyboard:    Delete/Backspace per eliminare nodi/edges selezionati
+ * useCanvasSaveShortcut: Ctrl+S / Cmd+S per salvataggio canvas
+ * useCanvasShortcuts:   Combina entrambi
+ *
+ * Tutti gli hook accettano { enabled, onDelete, onSave }.
+ */
 import { useEffect, useCallback } from 'react';
 
 /**

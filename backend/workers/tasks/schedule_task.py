@@ -18,8 +18,11 @@ Flusso:
 Registrazione:
     Aggiunto a celery_app.conf.include come "workers.tasks.schedule_task"
 
-Avvio worker:
+Avvio worker (test only — single thread, no concurrency):
     celery -A workers.celery_app worker --loglevel=info --pool=solo
+
+Avvio worker (produzione — prefork, vedi plenora-celery.service):
+    celery -A workers.celery_app worker --loglevel=info --concurrency=4
 
 Avvio Beat (con RedBeat per schedule dinamici):
     celery -A workers.celery_app beat -S redbeat.RedBeatScheduler --loglevel=info
@@ -45,37 +48,59 @@ def schedule_pipeline_task(
     self,
     schedule_id: str,
     triggered_by: str = "cron",
-    retry_attempt: int = 0
+    retry_attempt: int = 0,
+    scheduled_for: str = None,
 ):
     """
     Task Celery per eseguire una pipeline schedulata.
-    
+
     Chiamato da:
     - Celery Beat (cron) → triggered_by="cron"
     - API "Esegui Ora" → triggered_by="manual"
     - PolicyEngine (retry) → triggered_by originale, retry_attempt > 0
-    
+    - Beat catchup (C3 fix 3) → triggered_by="catchup" + scheduled_for
+
     Args:
         schedule_id: ID dello schedule da eseguire
-        triggered_by: Chi ha triggerato ("cron" o "manual")
+        triggered_by: Chi ha triggerato ("cron", "manual", "catchup")
         retry_attempt: Numero tentativo corrente (0 = primo)
-    
+        scheduled_for: ISO8601 del "tick logico" recuperato. Valorizzato
+            solo per triggered_by='catchup'. Rappresenta il momento cron
+            previsto per cui stiamo recuperando il run (es. "2026-04-16
+            06:00" quando il sistema era down alle 06:00 e il catchup
+            scatta alle 10:00). Passato a ExecutionManager per lineage.
+            None per run normali (cron/manual/retry).
+
     Returns:
         Dict con risultato esecuzione
     """
+    # N15b: se il caller non ha valorizzato scheduled_for (cron normali,
+    # manual "Esegui Ora"), lo computiamo qui al task entry. Questo
+    # garantisce che la chiave idempotency di CARICA sia sempre stabile
+    # attraverso retry dello stesso tick — il retry propaga scheduled_for
+    # via _handle_failure (cfr. execution_manager N15).
+    # Invocazioni distinte (tick cron diversi, click Esegui Ora multipli)
+    # producono ISO diversi (microsecondi) -> run_id distinti -> ognuna
+    # eseguita separatamente come intended.
+    if scheduled_for is None:
+        from datetime import datetime, timezone
+        scheduled_for = datetime.now(timezone.utc).isoformat()
+
     logger.info(
         f"Task schedule avviato: {schedule_id} "
-        f"(triggered_by={triggered_by}, attempt={retry_attempt})"
+        f"(triggered_by={triggered_by}, attempt={retry_attempt}, "
+        f"scheduled_for={scheduled_for})"
     )
-    
+
     try:
         from app.core.scheduler.execution_manager import ExecutionManager
-        
+
         manager = ExecutionManager()
         result = manager.execute(
             schedule_id=schedule_id,
             triggered_by=triggered_by,
-            retry_attempt=retry_attempt
+            retry_attempt=retry_attempt,
+            scheduled_for=scheduled_for,
         )
         
         logger.info(f"Task schedule completato: {schedule_id} → {result.get('status')}")
@@ -122,7 +147,8 @@ def beat_heartbeat():
         import app.db.db_service as db
         now = datetime.now(timezone.utc).isoformat()
         db.execute(
-            "INSERT OR REPLACE INTO beat_heartbeat (id, ts) VALUES ('beat', ?)",
+            "INSERT INTO beat_heartbeat (id, ts) VALUES ('beat', %s) "
+            "ON CONFLICT (id) DO UPDATE SET ts = EXCLUDED.ts",
             (now,)
         )
     except Exception:

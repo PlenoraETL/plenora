@@ -232,31 +232,28 @@ async def auto_mapping(request: AutoMappingRequest, current_user: CurrentUser = 
     """
     try:
         import pandas as pd
+        from app.shared.column_types import (
+            canvas_type_to_pandas_dtype,
+            metadata_to_dict,
+        )
 
         # Ricostruisci un DataFrame vuoto con le colonne sorgente
-        # (per il mapping servono solo i nomi e i tipi)
-        columns_data = {}
-        for col_info in request.source_columns:
-            col_name = col_info.get("name", "")
-            col_type = col_info.get("type", "str")
-            if col_type in ("int", "integer"):
-                columns_data[col_name] = pd.Series(dtype="int64")
-            elif col_type in ("real", "float", "double"):
-                columns_data[col_name] = pd.Series(dtype="float64")
-            elif col_type in ("bool", "boolean"):
-                columns_data[col_name] = pd.Series(dtype="bool")
-            elif col_type.startswith("geometry"):
-                columns_data[col_name] = pd.Series(dtype="object")
-            else:
-                columns_data[col_name] = pd.Series(dtype="object")
+        # (per il mapping servono solo i nomi e i tipi). La dispatch
+        # canvas-type -> pandas dtype vive in app.shared.column_types
+        # (fonte unica: alias, geometry, fallback object).
+        columns_data = {
+            col_info.get("name", ""): pd.Series(
+                dtype=canvas_type_to_pandas_dtype(col_info.get("type", "str"))
+            )
+            for col_info in request.source_columns
+        }
 
         df = pd.DataFrame(columns_data)
 
-        # Canvas types per rilevare geometrie
-        canvas_types = {
-            col_info.get("name", ""): col_info.get("type", "")
-            for col_info in request.source_columns
-        }
+        # Canvas types (dict form del tipo semantico) per rilevare geometrie.
+        # `source_columns` arriva gia' come list[{"name","type"}] (columns_metadata
+        # shape) — l'adapter fa la sola conversione di forma.
+        canvas_types = metadata_to_dict(request.source_columns)
 
         # Recupera colonne esistenti se la tabella è specificata
         existing_columns = []
@@ -343,12 +340,21 @@ async def check_conflicts(request: ConflictCheckRequest, current_user: CurrentUs
             # Query diretta al DB sorgente — non richiede esecuzione previa della pipeline
             src_conn = _get_connection(request.source_connection_id)
             src_engine = _create_engine(src_conn)
+            import re
+            _ident_re = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
             src_schema = request.source_schema or "public"
+            src_table = request.source_table
             src_cols = request.source_match_columns or request.match_columns
-            quoted_cols = ", ".join('"' + c + '"' for c in src_cols)
-            qualified = '"' + src_schema + '"."' + request.source_table + '"' ''
-            src_query = f"SELECT DISTINCT {quoted_cols} FROM {qualified}"
-            logger.info(f"[C07-SRC] Query sorgente diretta: {src_query}")
+            # Validazione identificatori per prevenire SQL injection
+            for ident in [src_schema, src_table] + list(src_cols):
+                if not _ident_re.match(ident):
+                    raise HTTPException(400, f"Nome identificatore non valido: {ident}")
+            from sqlalchemy.sql import quoted_name
+            q_schema = quoted_name(src_schema, quote=True)
+            q_table = quoted_name(src_table, quote=True)
+            quoted_cols = ", ".join(quoted_name(c, quote=True) for c in src_cols)
+            src_query = f"SELECT DISTINCT {quoted_cols} FROM {q_schema}.{q_table}"
+            logger.info("[C07-SRC] Query sorgente diretta eseguita")
             with src_engine.connect() as src_conn_obj:
                 result_proxy = src_conn_obj.execute(text(src_query))
                 rows = result_proxy.fetchall()
@@ -360,17 +366,32 @@ async def check_conflicts(request: ConflictCheckRequest, current_user: CurrentUs
                 df = df.rename(columns=rename_map)
             logger.info(f"[C07-SRC] DataFrame sorgente: {len(df)} righe distinte")
         elif request.project_id:
-            # Carica il DataFrame dal result store del progetto
-            from app.utils.result_store import get_result_as_tempfile
-            from app.utils.dataframe import load_dataframe_from_file
-            tmp = get_result_as_tempfile(request.project_id)
-            if tmp:
-                df = load_dataframe_from_file(tmp)
-                try:
-                    import os as _os
-                    _os.unlink(str(tmp))
-                except Exception:
-                    pass
+            # Authz: verifica che l'utente abbia accesso al progetto prima
+            # di leggerne il result blob. Senza questo check, chiunque con
+            # accesso a una connection di destinazione potrebbe leggere
+            # l'output di un progetto di un altro gruppo conoscendone l'id.
+            from app.shared.authz_helpers import assert_project_visible
+            assert_project_visible(request.project_id, current_user)
+
+            # Defense-in-depth core-level: il SourceLoader propaga
+            # expected_group_id al resolver, che applica il check
+            # cross-tenant fail-closed anche se l'ACL HTTP a monte
+            # venisse bypassata da chiamate interne future.
+            from app.core.artifacts import (
+                LatestProjectArtifactRef,
+                SourceLoader,
+                SourceLoadingError,
+                SourceRef,
+            )
+            try:
+                df = SourceLoader().load(
+                    SourceRef(project=LatestProjectArtifactRef(project_id=request.project_id)),
+                    expected_group_id=current_user.group_id,
+                )
+            except SourceLoadingError as e:
+                raise HTTPException(status_code=403, detail=str(e))
+
+            if df is not None:
                 # Usa df_match_columns (alias) per leggere il DataFrame
                 logger.info(f"[C07] match_columns={request.match_columns} df_match_columns={request.df_match_columns}")
                 df_cols = request.df_match_columns or request.match_columns
@@ -456,19 +477,19 @@ def _create_engine(connection: Dict[str, Any]):
         username = connection.get("username", "")
         password = connection.get("password", "")
 
+        from urllib.parse import quote_plus as _qp
         if db_type == "postgres":
-            url = f"postgresql://{username}:{password}@{host}:{port}/{database}"
+            url = f"postgresql://{_qp(username)}:{_qp(password)}@{host}:{port}/{database}"
         elif db_type in ("mysql", "mariadb"):
-            url = f"mysql+pymysql://{username}:{password}@{host}:{port}/{database}"
+            url = f"mysql+pymysql://{_qp(username)}:{_qp(password)}@{host}:{port}/{database}"
         elif db_type == "mssql":
-            # Encrypt=Optional per supportare server senza TLS valido
             url = (
-                f"mssql+pyodbc://{username}:{password}@{host}:{port}/{database}"
+                f"mssql+pyodbc://{_qp(username)}:{_qp(password)}@{host}:{port}/{database}"
                 f"?driver=ODBC+Driver+18+for+SQL+Server"
                 f"&TrustServerCertificate=yes&Encrypt=Optional"
             )
         elif db_type == "oracle":
-            url = f"oracle+oracledb://{username}:{password}@{host}:{port}/{database}"
+            url = f"oracle+oracledb://{_qp(username)}:{_qp(password)}@{host}:{port}/{database}"
         else:
             raise ValueError(f"Database type '{db_type}' non supportato")
 

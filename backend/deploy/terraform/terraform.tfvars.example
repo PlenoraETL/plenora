@@ -1,0 +1,9 @@
+# Valori reali per URBY-ETL production.
+# Copia in `terraform.tfvars` e modifica se serve deviare dai default.
+# IMPORTANTE: `terraform.tfvars` e' in .gitignore — i valori prod non finiscono su Git.
+
+aws_region                    = "eu-south-1"
+backup_bucket_name            = "plenora-backup-112011134642-eu-south-1-an"
+db_backup_retention_days      = 365
+db_backup_ia_transition_days  = 30
+ephemeral_retention_days      = 7

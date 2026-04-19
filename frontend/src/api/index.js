@@ -116,10 +116,9 @@ export {
   translateFunction,
 } from './transforms';
 
-// ── Template API ed eseguibili ────────────────────────────────────────────────
+// ── Template API ────────────────────────────────────────────────
 export {
   getTemplates,
-  testExecutable,
 } from './templates';
 
 // ── Schema inference e validazione connessioni ────────────────────────────────
@@ -131,7 +130,7 @@ export {
 } from './projects';
 
 // ── Task creation ─────────────────────────────────────────────────────────────
-export { createTask, downloadTaskOutput } from './tasks';
+export { createTask, downloadTaskOutput, cleanupTaskCompletely } from './tasks';
 
 // ── Eseguibili (catene on-demand) ─────────────────────────────────────────────
 export {
@@ -142,3 +141,12 @@ export {
   analyzeUpload as analyzeEseguibileUpload,
   executeEseguibile,
 } from './eseguibili';
+
+// ── Shares (cross-group sharing / allowed_groups) ─────────────────────────────
+export {
+  getShares,
+  setShares,
+  addShare,
+  removeShare,
+  VALID_RESOURCE_TYPES as SHARES_VALID_RESOURCE_TYPES,
+} from './shares';

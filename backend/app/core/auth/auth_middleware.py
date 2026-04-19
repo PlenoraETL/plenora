@@ -1,5 +1,5 @@
 """
-URBY-ETL — Middleware JWT
+PLENORA-ETL — Middleware JWT
 
 Intercetta ogni richiesta HTTP, legge il token Bearer se presente,
 e imposta il group_id nel contesto del thread per il logger.
@@ -27,7 +27,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from app.core.auth.auth import decode_token
-from app.utils.logger import set_log_group, get_logger
+from app.utils.logger import set_log_group, set_user_id, get_logger
 
 logger = get_logger(__name__)
 
@@ -42,7 +42,11 @@ PUBLIC_PATHS = {
 
 
 def _clear_request_state(request: Request) -> None:
-    """Imposta tutti i campi request.state a stringa vuota (utente anonimo)."""
+    """Imposta tutti i campi request.state a stringa vuota (utente anonimo).
+
+    NB: il reset dei ContextVar (set_log_group, set_user_id) va fatto
+    esplicitamente dal caller — questo helper tocca solo request.state.
+    """
     request.state.group_id = ""
     request.state.user_id = ""
     request.state.username = ""
@@ -58,10 +62,12 @@ class JWTMiddleware(BaseHTTPMiddleware):
             payload = decode_token(token)
             if payload:
                 group_id = payload.get("group_id", "")
+                user_id = payload.get("sub", "")
                 set_log_group(group_id)
+                set_user_id(user_id)  # C8: correlation user_id nei log
                 # Inietta nel request.state per uso negli endpoint
                 request.state.group_id = group_id
-                request.state.user_id = payload.get("sub", "")
+                request.state.user_id = user_id
                 request.state.username = payload.get("username", "")
                 request.state.role = payload.get("role", "user")
             else:
@@ -74,9 +80,11 @@ class JWTMiddleware(BaseHTTPMiddleware):
                     details={"path": str(request.url.path)},
                 )
                 set_log_group("")
+                set_user_id("")  # C8-nit: evita leak user_id da richieste precedenti
                 _clear_request_state(request)
         else:
             set_log_group("")
+            set_user_id("")  # C8-nit: evita leak user_id da richieste precedenti
             _clear_request_state(request)
 
         response = await call_next(request)

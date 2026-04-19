@@ -37,6 +37,7 @@ import pandas as pd
 
 from app.core.carica.models import (
     AuditRecord,
+    ColumnMapping,
     WriteConfig,
     WriteResult,
     WriteStatus,
@@ -50,6 +51,47 @@ def _short_err(e: Exception, max_len: int = 120) -> str:
     msg = str(e).strip()
     first_line = msg.split("\n")[0].strip()
     return first_line[:max_len] if len(first_line) > max_len else first_line
+
+
+def _resolve_aliases_in_mappings(
+    mappings: List[ColumnMapping],
+    available_cols: Optional[List[Dict[str, Any]]],
+    project_id: str = "",
+) -> None:
+    """N13: corregge `dest_column` quando il DataFrame usa alias.
+
+    Contesto: `availableColumns` del nodo CARICA e' la lista delle colonne
+    del Result node upstream, ciascuna con {name, alias, type}. Se una
+    colonna ha un alias, il DataFrame ha l'alias come nome (es. `SELECT
+    id AS id2`) e sia l'auto-mapping che eventualmente un utente che
+    configura esplicitamente il mapping possono mettere `dest_column = alias`.
+    Ma la tabella destinazione ha il NOME ORIGINALE, non l'alias — quindi
+    la scrittura fallirebbe con "colonna inesistente".
+
+    Applica una tabella `alias -> name` e riscrive in-place `dest_column`
+    dove matcha un alias. Idempotente (dest_column gia' corretto resta
+    invariato). No-op se `available_cols` e' vuoto/None o nessuna entry
+    ha sia `name` che `alias`.
+
+    Applicato sia al path auto-map che al path mapping esplicito (stesso
+    scenario, stesso errore potenziale).
+    """
+    if not available_cols:
+        return
+    alias_to_original: Dict[str, str] = {}
+    for c in available_cols:
+        if isinstance(c, dict) and c.get('alias') and c.get('name'):
+            alias_to_original[c['alias']] = c['name']
+    if not alias_to_original:
+        return
+    for cm in mappings:
+        if cm.dest_column in alias_to_original:
+            original = alias_to_original[cm.dest_column]
+            logger.info(
+                f"N13: dest_column '{cm.dest_column}' -> '{original}' (alias risolto)",
+                op="carica", project_id=project_id,
+            )
+            cm.dest_column = original
 
 
 
@@ -105,6 +147,7 @@ class CaricaExecutor:
         project_id: str = "",
         progress_callback: Optional[Callable] = None,
         triggered_by: str = "manual",
+        run_id: Optional[str] = None,
     ) -> WriteResult:
         """Esegue il caricamento su database.
 
@@ -114,10 +157,42 @@ class CaricaExecutor:
             project_id: ID del progetto (per audit)
             progress_callback: callback per aggiornare il progresso
             triggered_by: "manual" o "cron"
+            run_id: ID logico della run (opzionale). Se passato e la run
+                risulta gia' completata, l'executor corto-circuita con
+                WriteStatus.SKIPPED_IDEMPOTENT senza toccare il DB.
+                Self-defense layer (N15): il task async ha gia' il check
+                all'ingresso (evita open_run/df load), questo guard
+                protegge i sync caller (scheduler, CLI futuri).
+                Fail-open: eccezioni nel check NON bloccano il flusso.
 
         Returns:
             WriteResult con esito dell'operazione.
         """
+        # N15: idempotency guard (self-defense per sync caller).
+        if run_id:
+            try:
+                from app.shared.idempotency import is_already_completed
+                if is_already_completed(run_id):
+                    logger.info(
+                        f"[IDEMPOTENCY] CARICA run_id {run_id} gia' completato, skip.",
+                        op="execute", project_id=project_id,
+                    )
+                    return WriteResult(
+                        status=WriteStatus.SKIPPED_IDEMPOTENT,
+                        total_rows=len(df),
+                        rows_written=0,
+                        error_message=f"Run {run_id} gia' completato",
+                    )
+            except Exception as _idem_err:
+                # Fail-open: se il check idempotency esplode, NON blocchiamo.
+                # Meglio un possibile duplicato che bloccare la run su un
+                # errore di lettura intermediate.db.
+                logger.warning(
+                    f"[IDEMPOTENCY] check fallito per run_id={run_id}: {_idem_err}. "
+                    f"Proseguo senza guard (fail-open).",
+                    op="execute", project_id=project_id,
+                )
+
         logger.info(f"Avvio CARICA: {project_id}", op="execute", project_id=project_id)
 
         # 1. Parse configurazione dal nodo canvas
@@ -163,21 +238,16 @@ class CaricaExecutor:
                 canvas_types=canvas_types,
                 srid=config.geometry_srid,
             )
-            # B-BE-59: correggi dest_column se il DataFrame usa alias.
-            # availableColumns porta {name: "id", alias: "id2"} -> alias→originale.
-            available_cols = node_data.get('availableColumns', [])
-            if available_cols:
-                alias_to_original = {}
-                for c in available_cols:
-                    if isinstance(c, dict) and c.get('alias') and c.get('name'):
-                        alias_to_original[c['alias']] = c['name']
-                if alias_to_original:
-                    for cm in config.column_mappings:
-                        if cm.dest_column in alias_to_original:
-                            logger.info(
-                                f"B-BE-59: dest_column '{cm.dest_column}' -> '{alias_to_original[cm.dest_column]}' (alias corretto)"
-                            )
-                            cm.dest_column = alias_to_original[cm.dest_column]
+
+        # N13: resolve alias -> original name in dest_column.
+        # Applicato a ENTRAMBI i path (auto-map e mapping esplicito dal canvas):
+        # in entrambi i casi la tabella destinazione ha il nome originale,
+        # mai l'alias. Fix idempotente se dest_column e' gia' corretto.
+        _resolve_aliases_in_mappings(
+            config.column_mappings,
+            node_data.get('availableColumns', []),
+            project_id=project_id,
+        )
 
         # 5. Crea writer e valida
         writer = DatabaseWriter(
@@ -342,20 +412,19 @@ class CaricaExecutor:
         username = conn.get("username", "")
         password = conn.get("password", "")
 
+        from urllib.parse import quote_plus as _qp
         if db_type == "postgres":
-            # gssencmode=disable evita Kerberos/GSSAPI su Windows
-            url = f"postgresql://{username}:{password}@{host}:{port}/{database}?gssencmode=disable"
+            url = f"postgresql://{_qp(username)}:{_qp(password)}@{host}:{port}/{database}?gssencmode=disable"
         elif db_type == "mysql" or db_type == "mariadb":
-            url = f"mysql+pymysql://{username}:{password}@{host}:{port}/{database}"
+            url = f"mysql+pymysql://{_qp(username)}:{_qp(password)}@{host}:{port}/{database}"
         elif db_type == "mssql":
-            # Encrypt=Optional per supportare server senza TLS valido (sviluppo, on-prem legacy)
             url = (
-                f"mssql+pyodbc://{username}:{password}@{host}:{port}/{database}"
+                f"mssql+pyodbc://{_qp(username)}:{_qp(password)}@{host}:{port}/{database}"
                 f"?driver=ODBC+Driver+18+for+SQL+Server"
                 f"&TrustServerCertificate=yes&Encrypt=Optional"
             )
         elif db_type == "oracle":
-            url = f"oracle+oracledb://{username}:{password}@{host}:{port}/{database}"
+            url = f"oracle+oracledb://{_qp(username)}:{_qp(password)}@{host}:{port}/{database}"
         else:
             raise ValueError(f"Database type '{db_type}' non supportato")
 

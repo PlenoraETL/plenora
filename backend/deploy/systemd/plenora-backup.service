@@ -1,0 +1,30 @@
+[Unit]
+Description=PLENORA-ETL daily Postgres schema backup to S3
+Documentation=file:/home/ubuntu/plenora-etl/backend/scripts/backup_db.py
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/plenora-etl/backend
+
+# AWS region per SSM (fetch secrets) e S3 (upload).
+Environment=AWS_REGION=eu-south-1
+# Bucket object storage. Nome cross-provider BACKUP_BUCKET; lasciamo
+# anche BACKUP_S3_BUCKET per retro-compat (factory cloud_backends
+# accetta entrambi).
+Environment=BACKUP_BUCKET=plenora-backup-112011134642-eu-south-1-an
+
+# C1: secrets da AWS SSM, NON da backend/.env.
+# Il wrapper `load_secrets_from_ssm.py` popola os.environ (DATABASE_URL,
+# ecc.) leggendo da /plenora/prod/* e poi execv il target script.
+# Richiede IAM role con ssm:GetParametersByPath + kms:Decrypt
+# (vedi backend/deploy/iam/).
+ExecStart=/home/ubuntu/plenora-etl/backend/venv/bin/python3 /home/ubuntu/plenora-etl/backend/scripts/load_secrets.py /home/ubuntu/plenora-etl/backend/scripts/backup_db.py
+
+# Safety net: 2 ore massimo (oggi il dump e' 12 MB, secondi. Margine per crescita)
+TimeoutStartSec=7200
+StandardOutput=journal
+StandardError=journal

@@ -1,28 +1,42 @@
 /**
- * Custom Hooks per DataFlow Manager
- * 
- * Questi hooks centralizzano logica comune tra i vari Editor
- * eliminando duplicazione di codice.
+ * hooks/index.js — Export centralizzato di tutti i custom hooks
+ *
+ * Importa SEMPRE da qui, non direttamente dai singoli file.
+ *
+ * Hook disponibili:
+ *   usePreview            → gestione anteprima dati (polling Celery)
+ *   useExecution          → gestione esecuzione pipeline (polling Celery)
+ *   useCaricarica         → gestione scrittura su DB/ArcGIS
+ *   useCanvasCore         → stato nodi/edges condiviso (wrapper Zustand)
+ *   useCanvasValidation   → validazione canvas in tempo reale
+ *   useCanvasKeyboard     → shortcut tastiera (Delete, Ctrl+S, ...)
+ *   useEdgeHandlers       → gestione connessioni tra nodi e modal join
+ *   useNodeHandlers       → operazioni CRUD sui nodi (update, delete, get)
+ *   useColumnPropagation  → calcolo colonne lungo il grafo
+ *   useSchemaInference    → inferenza schema colonne via backend
+ *   useEnrichmentValidation → validazione/stima prima di arricchire
+ *   useMultiModal         → gestione multiple modali con un unico stato
+ *   useConfirmModal       → dialog di conferma promise-based
+ *   useToast              → notifiche toast non bloccanti
  */
 
-// Preview hook - gestisce stati e logica anteprima dati
-export { usePreview } from './usePreview';
-
-// Execution hook - gestisce stati e logica esecuzione progetti
-export { useExecution } from './useExecution';
-
-// Canvas keyboard hooks - gestisce shortcut tastiera
-export { 
-  useCanvasKeyboard, 
-  useCanvasSaveShortcut, 
-  useCanvasShortcuts 
-} from './useCanvasKeyboard';
-
-// Canvas validation hook - validazione in tempo reale
-export { useCanvasValidation } from './useCanvasValidation';
-
-// Edge handlers hook - gestione edges e modal join
-export { useEdgeHandlers } from './useEdgeHandlers';
-
-// Re-export dello schema inference hook esistente
-export { useSchemaInference, useInputColumns } from './useSchemaInference';
+export { usePreview }                               from './usePreview';
+export { useExecution }                             from './useExecution';
+export { useCaricarica }                            from './useCaricarica';
+export { useCanvasCore }                            from './useCanvasCore';
+export { useCanvasValidation }                      from './useCanvasValidation';
+export {
+  useCanvasKeyboard,
+  useCanvasSaveShortcut,
+  useCanvasShortcuts,
+}                                                   from './useCanvasKeyboard';
+export { useEdgeHandlers }                          from './useEdgeHandlers';
+export { useNodeHandlers }                          from './useNodeHandlers';
+export { default as useColumnPropagation }          from './useColumnPropagation';
+export { useSchemaInference, useInputColumns }      from './useSchemaInference';
+export { useEnrichmentValidation }                  from './useEnrichmentValidation';
+export { useMultiModal }                            from './useMultiModal';
+export { useConfirmModal }                          from './useConfirmModal';
+export { useToast }                                 from './useToast';
+export { useEditorData }                            from './useEditorData';
+export { useTaskPolling }                           from './useTaskPolling';
