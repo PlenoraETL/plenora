@@ -507,4 +507,59 @@ Dopo checkpoint utente, gli interventi di Fase B ricadranno prevedibilmente in q
 
 ---
 
-**Fine Fase A — attendo checkpoint utente per passare a Fase B.**
+## Sezione 5 — Verdetti approvati post-checkpoint utente (2026-04-19)
+
+Dopo il secondo triage (shortlist S1–S28 + investigate D1–D19), l'utente ha approvato un subset esplicito per Fase B. Questa sezione e' la fonte di verita' per `verdetto_approvato`: tutto il resto del report resta valido come analisi grezza ma NON e' nel perimetro Fase B finche' l'utente non estende l'approvazione.
+
+### 5.1 APPROVATI per Fase B (5 item)
+
+Execute obbligato, commit atomici piccoli, zero allargamento perimetro.
+
+| Codice triage | Riferimento report | Path:linea | Intervento |
+|---------------|--------------------|------------|------------|
+| S1 | 2.1 | `backend/app/shared/crypto.py:213-218` | Rimuovere silent fallback encrypt→plaintext: sostituire `except Exception → logger.warning + return value` con `raise RuntimeError("crypto.encrypt broken — refusing to save plaintext")`. Fail-fast su dato critico (charter base 8). |
+| S2 | 2.4 | `backend/app/core/carica/database_writer.py:195-240` | Quattro introspection (`table_exists`, `get_existing_columns`, `get_schemas`, `get_tables`): rimuovere `except → return False/[]`. Far propagare l'eccezione o restituire `Optional[T]` che differenzi "non trovato" da "non verificato". Il chiamante deve decidere. |
+| S3 | 2.9 | `backend/app/core/features/features_service.py:1066-1070` | Silent geopandas→CSV fallback: aggiungere log dell'errore geopandas e validare che il path abbia estensione plausibile per CSV prima del fallback. Se non plausibile, `raise ValueError`. |
+| S4 | 1.1 | `backend/app/core/features/features_service.py` + `backend/app/core/features/features_service_db.py` | Merge di `features_service_db.py` dentro `FeaturesService` (classe). Rimuovere file `_db.py`. Aggiornare docstring di `FeaturesService` per riflettere storage PG. Nessun chiamante esterno importa `_db` direttamente (verificato in 1.1). |
+| S5 | Sez. 4 + bug out-of-scope | `backend/app/core/auth/auth.py:989-991` | Silent swallow su `delete_group_cascade`: rimuovere `except: pass` e far propagare. Se ci sono motivazioni (delete idempotente), documentarle esplicitamente con commento + log. |
+
+### 5.2 CONDIZIONALI (7 item) — eseguire nel medesimo batch SOLO se l'intervento resta locale, meccanico, senza allargare perimetro
+
+Criteri "locale / meccanico":
+- modifica confinata al file-linee indicate nel report
+- nessun cambio di firma pubblica che impatti altri moduli
+- nessuna riarchitettura o estrazione di helper nuovi
+- test esistenti continuano a passare senza modifiche oltre allineamento log
+
+Se uno qualsiasi di questi item richiede piu' di quello, **segnalarlo prima di eseguire** e rimandarlo a batch dedicato.
+
+| Codice triage | Riferimento report | Path:linea | Intervento |
+|---------------|--------------------|------------|------------|
+| S9 | 2.5 | `backend/app/core/carica/bulk_writers.py:208-212` | Sostituire `try cur.close(); except Exception: pass` con chiamata diretta (psycopg2 close e' idempotente) oppure `logger.debug` se si vuole mantenere il try. |
+| S10 | 2.6 | `backend/app/db/query_executor.py:198-200, 225-227, 240-242, 576-578, 583-585, 672-674, 677-680` | Aggiungere `logger.debug(...)` uniforme in tutti e 7 i cleanup pool/session. Nessun cambio di comportamento, solo tracing. |
+| S11 | 2.7 | `backend/app/core/logs/router.py:21-24` | JSON parse silent: aggiungere `logger.debug("log details non parseable come json, lascio stringa")` + commento che spiega la policy display. |
+| S12 | 2.11 | `backend/app/db/pg_connection.py:242-245` | Silent putconn: `logger.warning` se putconn fallisce (indicatore di pool exhaustion o conn gia' chiusa). |
+| S13 | Sez. 4 (`execution_manager.py:576-585`) | `backend/app/core/scheduler/execution_manager.py:576-585` | Oracle tuning silent (`ALTER SESSION` fails): aggiungere `logger.debug` con nome parametro. Cleanup path, non critico. |
+| S15 | Sez. 4 (`admin_backups/service.py:134-135`) | `backend/app/core/admin_backups/service.py:134-135` | Silent AttributeError: sostituire con `logger.warning` + contesto minimo. |
+| S16 | Sez. 4 (`files/router.py:153-154, 241-246`) | `backend/app/core/files/router.py:153-154, 241-246` | Uniformare log level tra i due punti indicati (attualmente warning vs error senza motivo). Scegliere il livello corretto per la semantica e allineare. |
+
+### 5.3 NON APPROVATI al momento (tutti gli altri item)
+
+Restano nel report come analisi grezza; richiedono decisione utente separata prima di toccare codice.
+
+- **S6, S7, S8**: non approvati (motivazione utente non dichiarata; probabilmente perimetro troppo esteso o evidenza insufficiente).
+- **S14**: non approvato (stessa ragione).
+- **S17–S28**: non approvati in blocco. Include `file_service.py` 21 `except: pass` (2.8), `api_connector.py` 25 except (volume alto), `intermediate/writer.py` 5 except, altri cluster da triage riga-per-riga.
+- **Tutta la fascia D1–D19 (investigate-only)**: non approvata. Include `ENABLE_ASYNC_ENRICHMENT` + `_execute_parallel*` unify (1.3 / 2.3 / 3.2), `_read_csv_safe` duplicate (1.2), IMDF loader/persist/storage (1.5), alias crypto retro-compat (1.6), `SECRET_KEY`/`JWT_SECRET_KEY` fallback crypto (sez. 3), policy preview vs execute cross-modulo (sez. 4), e ogni altro item flaggato come `investigate` o `unify` complesso.
+
+### 5.4 Vincoli operativi dichiarati per l'esecuzione Fase B
+
+- Commit atomici piccoli, prefisso `[consolidation]`.
+- Zero explore agents, zero subagents, zero parallelizzazione durante execute.
+- Ogni deviazione dal subset 5.1+5.2 richiede esplicito go utente prima di essere toccata.
+- Se un item condizionale (5.2) si rivela non-locale o non-meccanico, va rimandato — non va esteso di propria iniziativa.
+- Worktree attualmente sporco (1230 entries pre-esistenti dalla migrazione `backend/`): commit solo dei file effettivamente modificati dall'intervento; nessun `git add -A`.
+
+---
+
+**Fine Fase A + Checkpoint utente — attendo go esplicito per eseguire Fase B sul subset 5.1 (+ 5.2 condizionale).**
