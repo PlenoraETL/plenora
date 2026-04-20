@@ -1,7 +1,7 @@
 # CONSOLIDATION — Report Fase 0
 
-**Status**: checkpoint_completed — in attesa di go esplicito per Fase B
-**Last updated**: 2026-04-19
+**Status**: fase_d_completed — done salvo test suite + smoke E2E pre-chiusura
+**Last updated**: 2026-04-20
 
 ## Fase A — Inventario
 - [x] inventory_report.md committato (`backend/docs/architecture/inventory_report.md`)
@@ -37,33 +37,62 @@ Fonte di verita': `backend/docs/architecture/inventory_report.md` Sezione 5.
 - **S6, S7, S8, S14, S17–S28**: richiedono decisione utente separata, perimetro troppo esteso o evidenza insufficiente.
 - **D1–D19** (fascia investigate-only): include `ENABLE_ASYNC_ENRICHMENT`+`_execute_parallel*` unify, IMDF loader/persist/storage, alias crypto retro-compat, `SECRET_KEY`/`JWT_SECRET_KEY` fallback, policy preview vs execute cross-modulo. Nessuno in Fase B corrente.
 
-## Fase B — Consolidation execute
-- **Status**: bloccata — attendo go esplicito su subset 5.1 (+5.2 se mechanical) dal checkpoint
-- **Nota S13 (2026-04-20)**: chiuso come **inventory error**. Il riferimento originale `app/core/scheduler/execution_manager.py:576-585` non contiene `ALTER SESSION`; i siti reali pertinenti sono già coperti da **S10** in `app/db/query_executor.py`. Possibile candidato separato fuori scope: `backend/app/core/carica/database_writer.py:2198-2204`.
-- Vincoli operativi hard (dichiarati dall'utente):
-  - Niente explore agents, niente subagents, niente parallelizzazione
-  - Commit atomici piccoli, prefisso `[consolidation]`
-  - Niente `git add -A`: worktree ha 1230 entries pre-esistenti dalla migrazione `backend/`; commit solo dei file toccati
-  - Ogni item condizionale (5.2) che si riveli non-locale o non-meccanico va segnalato e rimandato, non esteso
+## Fase B — Consolidation execute (2026-04-19 / 2026-04-20)
+
+**Status**: eseguita sul subset approvato. Vincoli operativi hard (niente explore/subagents/parallelizzazione, commit atomici, no `git add -A`) rispettati.
+
+Commit list (in ordine cronologico):
+- `0845650` S2: introspection fail-fast in DatabaseWriter (4 metodi: `table_exists`, `get_existing_columns`, `get_schemas`, `get_tables`)
+- `d25d00a` S5: log `[CRASH]` + HTTPException 500 su `delete_group_cascade` errors
+- `af642c0` S3: fail-fast su `_load_dataframe`, no silent GeoJSON→CSV fallback (solo `.tsv/.txt` fallback autorizzato)
+- `b9206ee` S4: merge `features_service_db.py` dentro `FeaturesService` (file `_db` rimosso)
+- `a7beca5` S4: refresh docstring top-level `features_service.py`
+- `b8bde62` S9: log debug su `cursor.close()` failure in bulk COPY
+- `7d330c6` S11: log debug su JSON parse fallito in `logs/_row_to_dict`
+- `f5c340f` S12: log warning su `putconn()` fallito in `pg_connection`
+- `198289a` S15: log warning su `duration_sec` calc fallito in `admin_backups`
+- `3c6ff2a` S16: uniforma log level (`warning`) su MIME rejection in `files/router` (preview + upload)
+- `45e04ef` S13: close as inventory error — il path indicato non conteneva `ALTER SESSION`; coperto da S10 (aperto)
+
+S1 (crypto encrypt fail-fast): applicato in `eab1c65` (reconcile snapshot pre-consolidation); verificato in Fase C che la `raise RuntimeError("crypto.encrypt broken — refusing to save plaintext")` e' live.
+
+Totale: **10 item S-serie applicati** + 1 chiuso come inventory error. Subset 5.1 (5 item) + 5.2 parziale (5 item su 7 approvati: S9/S11/S12/S15/S16) eseguito; S10 (7 siti cleanup in `query_executor.py`) **rimandato** come da scope 5.2 ("locale/meccanico") — e' locale ma volume elevato, meglio fuori Fase 0 per non estendere il batch.
 
 ## Fase C — Invariants
-- [ ] invariants.md pubblicato (da redigere dopo Fase B)
+- [x] `backend/docs/architecture/invariants.md` pubblicato (2026-04-20)
+- Struttura: 6 sezioni (core path canonici, fallback autorizzati, feature flag vivi, policy di uniformita', regole review, cosa NON e' invariant)
+- Principio guida: riflette il codice post-consolidation reale, non un brief astratto; ogni riga e' stata verificata nel sorgente
+- Debito noto lasciato esplicito:
+  - S10 (query_executor 7 siti silent cleanup) — da risolvere fuori Fase 0
+  - `ENABLE_ASYNC_ENRICHMENT` + dual path `_execute_parallel*` — violazione charter base 7 aperta, rimozione obbligata prima di chiudere Fase 1
+  - Alias retro-compat crypto (URBY_*, CONN_ENCRYPT_KEY, SECRET_KEY/JWT_SECRET_KEY) — decisione D-fascia post-deploy verification
+  - Triage residui `file_service.py`, `api_connector.py`, `intermediate/writer.py`, stale docstrings
 
 ## Fase D — Brief Fase 1
-- [ ] 4 brief aggiornati
+- [x] 4 brief aggiornati in `orchestrate/phase_1_stabilization/`:
+  - `brief_fe.md` — aggiunto punto 3 in "Lettura obbligatoria" + regola 7 in "Regole disciplina" (framework invariants applicato per simmetria al codice FE)
+  - `brief_acn.md` — aggiunto punto 3 in "Lettura obbligatoria" con focus su §1.1/§2/§3 crypto + regola 7 (nuovi flag/fallback `@audit_action`/MFA/SSM devono essere registrati in §2/§3)
+  - `brief_perf.md` — aggiunto punto 3 in "Lettura obbligatoria" con focus sul path canonico `DestinationWriter` e flag `CARICA_BULK_INSERT` + regola 7 (benchmark verde non basta se invariant violato)
+  - `brief_tests.md` — aggiunto punto 3 in "Lettura obbligatoria" come fonte dei contract + regola 7 (test blindano invariants o annotano gap, no mock di fallback non autorizzati)
+- Wiring uniforme: ogni brief cita `backend/docs/architecture/invariants.md` come lettura obbligatoria e richiama le 7 regole di review in §5 per nuovi branch/fallback/flag
 
 ## Test
-- Backend: non eseguito (Fase A read-only)
-- Frontend: non eseguito (Fase A read-only)
-- Smoke E2E manuale: non eseguito
+- Backend: non eseguito in Fase C (sessione documentale). Esecuzione da considerare prima della chiusura complessiva di Fase 0
+- Frontend: non eseguito (nessun file frontend toccato in Fase B)
+- Smoke E2E manuale: non eseguito — da programmare pre-chiusura Fase 0
 
-## Bug trovati fuori scope (NON fissati in Fase A, S5 ora in scope Fase B)
-- Docstrings stale post-migrazione PG:
-  - `backend/app/services/connection_service.py:1-11` — parla di "SQLite tramite app.db.db_service"
-  - `backend/app/core/features/features_service.py:1-13` — descrive filesystem JSON storage
-  - `backend/app/core/features/features_service_db.py:1-7` — descrive "patch" verso SQLite (rilevante per S4)
-- `backend/app/core/features/features_service.py:1076-1078` — claim "per evitare dipendenza circolare" non verificato (non in Fase B corrente)
-- `backend/app/core/auth/auth.py:989-991` — silent swallow su `delete_group_cascade` → **promosso a S5, incluso in Fase B**
+## Bug trovati fuori scope
+
+### Chiusi in Fase B
+- `backend/app/core/auth/auth.py:989-991` — silent swallow su `delete_group_cascade` → chiuso da **S5** (`d25d00a`)
+- `backend/app/core/features/features_service_db.py` — file rimosso, logica integrata in `FeaturesService` (**S4** `b9206ee`); docstring top-level rigenerata (`a7beca5`)
+- `backend/app/core/features/features_service.py:1-13` stale docstring storage JSON → aggiornata da `a7beca5`
+
+### Ancora aperti (fuori Fase 0)
+- Docstring stale `backend/app/services/connection_service.py:1-11` (parla di "SQLite tramite app.db.db_service") — cleanup documentale da fare fuori Fase 0
+- `backend/app/core/features/features_service.py:1249-1253` claim "per evitare dipendenza circolare" non verificato — candidato per unify con `app/utils/dataframe._read_csv_safe` in fase successiva
+- `backend/app/db/query_executor.py` 7 siti silent cleanup (S10 rimandato) — intervento meccanico ma volume elevato, dedicarci un batch separato
+- `ENABLE_ASYNC_ENRICHMENT` + dual path `_execute_parallel` / `_execute_parallel_async` — violazione charter base 7, richiede decisione prod (vedi §3 di `invariants.md`)
 - Eventuali bug del nodo `result` colonne (cross-modulo estrai/manipola/arricchisci) — gia' tracciato in memoria `project_arricchisci_result_columns_bug.md`, fuori scope consolidamento
 
 ## Deps nuove richieste
