@@ -4,6 +4,16 @@
 **Scope**: read-only audit pre-Fase 1, riferimento vincolante = code charter (regole base 1/4/5/6/7/8/9, review 1/2/3, arch 1/2/3/4/5).
 **Modalità**: single-session. Nessuna modifica applicata in questa fase.
 
+## Stato (2026-04-20)
+
+Report storico. Lasciato nella forma stratificata originale per tracciabilita' del percorso Fase A → checkpoint → Fase B → re-pass:
+
+- **Sezioni 1–4**: analisi pre-checkpoint grezza (8 famiglie duplicati, ~152 fallback, 6 flag veri, 24 moduli policy). I campi **"Verdetto proposto"** sono proposte analitiche, **non** decisioni finali.
+- **Sintesi esecutiva**: gli **8 casi dubbi** listati erano pre-checkpoint; **tutti risolti** al checkpoint 2026-04-19 + re-pass 2026-04-20. Vedi Sezione 5 per i verdetti finali.
+- **Sezione 5**: verdetti approvati post-checkpoint (5.1 approvati, 5.2 condizionali, 5.3 non approvati, 5.4 vincoli operativi, **5.5 re-pass finale 2026-04-20** — classificazione residui definitiva).
+- **Fase B**: eseguita sul subset approvato + re-pass. 14 S-serie + 2 D-serie applicati su `main`. Commit list e closeout completo in `CONSOLIDATION_REPORT.md` sezione "Closeout Phase 0".
+- **Invariants vivi**: `backend/docs/architecture/invariants.md` (fonte di verita' per review futura; il presente report e' snapshot storico dell'inventory, non vincola comportamento).
+
 ## Nota metodologica sull'eta' git
 
 La storia git compressa del repo mostra pochi commit (`78dcd6c Initial commit: Plenora Backend` del 2026-04-10, poi `df35930` stessa data per il security audit, poi la sequenza `01d74cf`/`9cf3e14`/`4196e2b` della migrazione PG). Dopo lo spostamento dei sorgenti sotto `backend/` il blame per `backend/app/...` e' compresso su pochi giorni (principalmente 2026-04-10..2026-04-19). Di conseguenza la colonna "eta" in questo report e' grossolana: tutti gli item sono nati nell'ultimo mese di lavoro intensivo. Dove rilevante ho usato `git log -S` per collocare l'introduzione di un flag o di un fallback, altrimenti annoto "≈fresh (≤10gg)".
@@ -470,14 +480,24 @@ Tutti gli item sono stati verificati in `backend/` (codice + `.env.example` + te
 
 ### Casi dubbi da sottoporre a checkpoint utente
 
+> **Stato 2026-04-20**: tutti e 8 i casi dubbi sono stati risolti. Resolution inline sotto; classificazione finale in **Sezione 5.5**.
+
 1. **ENABLE_ASYNC_ENRICHMENT + `_execute_parallel` vs `_execute_parallel_async`** (1.3 + 2.3 + 3.2) — decidere: mai attivato in prod → remove flag+async. Gia' attivato e stabile → remove sync+mark flag kill-switch. Serve lettura `.env` del server prod.
+   → **Risolto (D1)**: parity sync/async sanata (rate limiter + error granularity). Flag promosso a kill-switch autorizzato documentato in `invariants.md §2/§3`.
 2. **crypto.py encrypt fallback a plaintext** (2.1) — decidere: `raise RuntimeError` (fail-fast) o mantenere best-effort con alert severity alta. Utente: la tua tolleranza al rischio "password plaintext in DB" vs "app crash".
+   → **Risolto (S1)**: `raise RuntimeError("crypto.encrypt broken — refusing to save plaintext")` applicato. Fail-fast su dato critico.
 3. **database_writer.py introspection return vuoto** (2.4) — decidere: `raise` o `Optional[T]` per differenziare "non trovato" da "non verificato".
+   → **Risolto (S2)**: introspection fail-fast applicato alle 4 funzioni (`table_exists`, `get_existing_columns`, `get_schemas`, `get_tables`).
 4. **Alias retro-compat `URBY_ENCRYPTION_KEY` / `CONN_ENCRYPT_KEY`** (1.6 + 3.5) — serve verifica del `.env` di prod (lab.plenora.it, project_deployment) per capire quale nome e' effettivamente settato prima di rimuovere.
+   → **Riclassificato a product/env (D4)**: rimozione coordinata con deploy prod `lab.plenora.it`. Non refactor, decisione governance.
 5. **IMDF `loader`/`persist`/`storage`** (1.5) — non analizzato in dettaglio in Fase A; decidere se audit di Fase B deve tracciarne i confini prima di toccare nulla o se si accetta "keep come-e'".
+   → **Riclassificato a product/env (D3)**: boundaries loader/persist/storage = decisione architetturale, richiede allineamento con cliente.
 6. **file_service.py 21 `except: pass`** (2.8) — triage riga-per-riga e' lavoro significativo. Utente: accetta che Fase B dedichi tempo esteso qui o preferisce mark-legacy bulk?
+   → **Riclassificato a Phase 1 batch dedicato (S17)**: scope ristretto, audit riga-per-riga fuori Phase 0.
 7. **`SECRET_KEY` / `JWT_SECRET_KEY` come crypto fallback** (sez. 3) — intenzionale o side-effect? `auth.py:126-145` e' pulito (no default) ma crypto.py li accetta.
+   → **Riclassificato a product/env (D5)**: chiarimento intenzionalita' chain prima di toccare.
 8. **Policy preview vs execute (estrai/manipola/arricchisci)** (sez. 4) — chiarire: preview e' "best-effort perche' non-bloccante per UI" o "fail-fast perche' deve segnalare bug"?
+   → **Riclassificato a product/env (D6)**: decisione product cross-modulo, non refactor meccanico.
 
 ### Pattern piu' preoccupanti
 
@@ -545,6 +565,8 @@ Se uno qualsiasi di questi item richiede piu' di quello, **segnalarlo prima di e
 
 ### 5.3 NON APPROVATI al momento (tutti gli altri item)
 
+> **Stato 2026-04-20**: questa classificazione e' pre-re-pass. La **rivalutazione finale** e' in **Sezione 5.5** (alcuni item promossi a "riaprire subito" e chiusi in Fase B, altri riclassificati a product/env o declassati a rumore).
+
 Restano nel report come analisi grezza; richiedono decisione utente separata prima di toccare codice.
 
 - **S6, S7, S8**: non approvati (motivazione utente non dichiarata; probabilmente perimetro troppo esteso o evidenza insufficiente).
@@ -600,4 +622,4 @@ Questo re-pass non riapre l'inventory da zero: rivaluta solo i residui alla luce
 
 ---
 
-**Fine Fase A + Checkpoint utente — attendo go esplicito per eseguire Fase B sul subset 5.1 (+ 5.2 condizionale).**
+**Fine Fase A** — Fase B eseguita sul subset approvato (5.1 + 5.2) + re-pass 2026-04-20 (S10, S19, S20, D1, D2). Verdetti finali in Sezione 5.5. Per lo stato finale Phase 0 (commit list, closeout, residui classificati) vedi `CONSOLIDATION_REPORT.md` → sezione "Closeout Phase 0". Invariants vivi: `backend/docs/architecture/invariants.md`.

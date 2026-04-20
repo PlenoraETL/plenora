@@ -2,9 +2,9 @@
 
 **Riferimento vincolante**: code charter del progetto (regole base 1/4/5/6/7/8/9, review 1–7, arch 1/2/3/4/5). Questo documento e' il ponte tra il charter astratto e il codice concreto post-Fase 0.
 
-**Stato**: pubblicato al termine di Fase 0 consolidation (Phase B closed: S1, S2, S3, S4, S5, S9, S11, S12, S15, S16 applicati; S13 chiuso come inventory error; S10 e la fascia D1–D19 intenzionalmente lasciati aperti per decisioni dedicate).
+**Stato**: pubblicato al termine di Fase 0 consolidation e aggiornato dopo il re-pass finale. Phase B + ultimo pass closed: S1, S2, S3, S4, S5, S9, S10, S11, S12, S15, S16, S19, S20 applicati; D1 (`ENABLE_ASYNC_ENRICHMENT`) parity sync/async sanata + kill-switch mantenuto; D2 (`_read_csv_*`) unificato su `app.utils.dataframe._read_csv_safe`; S13 chiuso come inventory error. Residui veri classificati in §6 (Phase 1 / product-env / governance).
 
-**Aggiornato**: 2026-04-20
+**Aggiornato**: 2026-04-20 (post re-pass)
 
 **Ambito**: le invarianti qui elencate valgono per il codice `backend/app/` e vincolano ogni nuovo commit da Fase 1 in poi. Le scelte di prodotto o di performance restano fuori scope.
 
@@ -59,7 +59,7 @@ Principio generale: **fail-fast su dato critico (charter base 8)**, **best-effor
 | Modulo | Policy dominante | Note post-Fase 0 |
 |--------|------------------|------------------|
 | `app/shared/crypto.py` | Fail-fast su encrypt, best-effort loggato su decrypt | S1 chiuso: encrypt solleva `RuntimeError` se Fernet e' rotto, niente plaintext silenzioso. Decrypt ritorna `None` su `InvalidToken` con `logger.error` (fallback autorizzato, §2) |
-| `app/db/` | Fail-fast su query, best-effort loggato su cleanup pool | S12 chiuso (`pg_connection.put_connection` ora logga warning). S10 aperto: 7 siti di cleanup in `query_executor.py` restano silent, intervento rimandato a decisione dedicata |
+| `app/db/` | Fail-fast su query, best-effort loggato su cleanup pool | S12 chiuso (`pg_connection.put_connection` ora logga warning). S10 chiuso: i 7 siti di cleanup in `query_executor.py` loggano `logger.debug` uniforme (dispose engine, timeout setup, Oracle `ALTER SESSION`, disconnect) |
 | `app/core/auth/` | Fail-fast | S5 chiuso: `delete_group_cascade` logga `[CRASH]` e poi solleva `HTTPException 500` |
 | `app/core/carica/` | Fail-fast su introspection e scrittura; best-effort loggato su cleanup cursor | S2 chiuso: `table_exists/get_existing_columns/get_schemas/get_tables` sollevano (niente return vuoto ambiguo). S9 chiuso: `cursor.close()` in COPY logga `debug` |
 | `app/core/features/` | Fail-fast su formato file non supportato | S3 chiuso: `_load_dataframe` non cade piu' silenziosamente in CSV; solo `.tsv/.txt` sono fallback legittimo. S4 chiuso: `features_service_db.py` merged in `FeaturesService` |
@@ -94,9 +94,8 @@ Questo e' l'elenco chiuso dei fallback attivi nel codice `backend/app/` che sodd
 
 **Fallback note di debito (non invarianti, da risolvere fuori Fase 0)**:
 
-- `app/db/query_executor.py` 7 siti di cleanup silent (dispose engine, timeout setup, Oracle `ALTER SESSION`, disconnect). Approvati per Fase 0 come "noti" ma **non autorizzati** come invariant — S10 rimandato per decisione dedicata. Finche' non si decide, non estendere il pattern.
-- `app/core/arricchisci/enrichment_service.py:403-410` fallback async→sync su eccezione (feature flag `ENABLE_ASYNC_ENRICHMENT`). Post-D1 (2026-04-20) i due path sono parity-verified su rate limiting e error granularity (test `tests2/arricchisci/unit/test_enrichment_executor_sync_vs_async_parity.py`). Il fallback resta come safety-net: se async solleva per ragioni inattese, sync offre lo stesso contratto osservabile. Promosso a fallback autorizzato nella nuova riga di §2.
-- `app/services/file_service.py` 21 `except: pass` sparsi (triage rimandato). Mix legittimo (type detection) + sospetto; richiede audit riga-per-riga fuori Fase 0.
+- `app/services/file_service.py` 21 `except: pass` sparsi (triage rimandato — S17 Phase 1). Mix legittimo (type detection) + sospetto; richiede audit riga-per-riga.
+- `app/core/arricchisci/api_connector.py` 25 `except` in retry loop (triage rimandato — S18 Phase 1). Pattern ripetitivo: verificare se va unificato in helper comune o se ogni ramo ha ragione specifica.
 
 ---
 
@@ -207,14 +206,14 @@ Le seguenti decisioni **non** sono vincolate da questo documento e restano scope
 - **Priorita' specifiche di refactor** (es. "prima i writer, poi i reader"): scelta per brief di fase, non invariant.
 - **Target di performance, SLO, SLA**: scope Fase 1 PERF; non sono invariant architetturali.
 - **Contratti API pubblici verso ICSC/RFI/ANIA**: governati fuori da questo doc (contratti commerciali + versioning API).
-- **Decisioni aperte della fascia D1–D19** (`_read_csv_*` unify, IMDF loader/persist/storage, alias crypto, SECRET_KEY/JWT_SECRET_KEY, policy preview vs execute). Restano scope decisionale post-Fase 0. Il codice attuale e' documentato qui come "stato" — non come "obiettivo permanente". D1 (ENABLE_ASYNC_ENRICHMENT) chiuso il 2026-04-20: flag mantenuto come kill-switch, parity sync/async sanata.
-- **Triage residui**:
-  - `app/services/file_service.py` 21 `except: pass` sparsi — audit rimandato
-  - `app/db/query_executor.py` 7 siti cleanup silent (S10) — log debug rimandato
-  - `app/core/arricchisci/api_connector.py` 25 except retry loop — triage rimandato
-  - `app/core/intermediate/writer.py` 5 except — triage rimandato
-  - Stale docstring post-migrazione PG (`connection_service.py`, ecc.) — cleanup rimandato
-- **Strategia di rimozione alias retro-compat** (`URBY_*` → `PLENORA_*`): richiede coordinamento con deploy prod (`lab.plenora.it`) prima di rimuovere dal codice.
+- **Decisioni aperte fascia D (residue dopo il re-pass)**: IMDF loader/persist/storage boundaries (D3), alias crypto retro-compat `URBY_*`/`CONN_ENCRYPT_KEY` (D4), `SECRET_KEY`/`JWT_SECRET_KEY` come crypto fallback (D5), policy preview vs execute cross-modulo estrai/manipola/arricchisci (D6). Restano scope decisionale product/env post-Fase 0. D1 (`ENABLE_ASYNC_ENRICHMENT`) e D2 (`_read_csv_*`) chiusi in Fase 0 e rimossi da questa lista.
+- **Triage residui rimandati a batch dedicato Phase 1**:
+  - `app/services/file_service.py` 21 `except: pass` sparsi (S17) — audit riga-per-riga
+  - `app/core/arricchisci/api_connector.py` 25 except retry loop (S18) — triage pattern ripetitivo
+  - `app/core/carica/database_writer.py` anomalie residue (S23) — batch separato
+  - `app/core/eseguibili/router.py` (S25) — batch separato
+  - cluster IMDF (S27) — coordinato con D3
+- **Strategia di rimozione alias retro-compat** (`URBY_*` → `PLENORA_*`): richiede coordinamento con deploy prod (`lab.plenora.it`) prima di rimuovere dal codice. Scope product/env, non invariant.
 
 Queste aree restano aperte: se toccate in Fase 1+, il PR deve dichiarare la scelta con la stessa disciplina delle 7 regole in §5, anche se il punto non e' ancora in tabella §2/§3.
 

@@ -1,7 +1,7 @@
 # CONSOLIDATION — Report Fase 0
 
-**Status**: fase_d_completed — done salvo test suite + smoke E2E pre-chiusura
-**Last updated**: 2026-04-20
+**Status**: **done** — codice, documentazione e gate chiusi. BE `pytest tests2/` verde (1945+8), FE `npm run test -- --run` verde (134), smoke E2E manuale eseguito senza regressioni. Caveat locali ambientali registrati come handoff non-blocker a Phase 1 (storage policy) in `orchestrate/phase_0_consolidation/integration_notes.md`.
+**Last updated**: 2026-04-20 (closeout finale — gate verdi + smoke chiuso con handoff Phase 1)
 
 ## Fase A — Inventario
 - [x] inventory_report.md committato (`backend/docs/architecture/inventory_report.md`)
@@ -42,6 +42,8 @@ Fonte di verita': `backend/docs/architecture/inventory_report.md` Sezione 5.
 **Status**: eseguita sul subset approvato. Vincoli operativi hard (niente explore/subagents/parallelizzazione, commit atomici, no `git add -A`) rispettati.
 
 Commit list (in ordine cronologico):
+
+**Batch iniziale (subset approvato 5.1 + 5.2)**:
 - `0845650` S2: introspection fail-fast in DatabaseWriter (4 metodi: `table_exists`, `get_existing_columns`, `get_schemas`, `get_tables`)
 - `d25d00a` S5: log `[CRASH]` + HTTPException 500 su `delete_group_cascade` errors
 - `af642c0` S3: fail-fast su `_load_dataframe`, no silent GeoJSON→CSV fallback (solo `.tsv/.txt` fallback autorizzato)
@@ -52,21 +54,30 @@ Commit list (in ordine cronologico):
 - `f5c340f` S12: log warning su `putconn()` fallito in `pg_connection`
 - `198289a` S15: log warning su `duration_sec` calc fallito in `admin_backups`
 - `3c6ff2a` S16: uniforma log level (`warning`) su MIME rejection in `files/router` (preview + upload)
-- `45e04ef` S13: close as inventory error — il path indicato non conteneva `ALTER SESSION`; coperto da S10 (aperto)
+- `45e04ef` S13: close as inventory error — il path indicato non conteneva `ALTER SESSION`; coperto da S10
 
-S1 (crypto encrypt fail-fast): applicato in `eab1c65` (reconcile snapshot pre-consolidation); verificato in Fase C che la `raise RuntimeError("crypto.encrypt broken — refusing to save plaintext")` e' live.
+**Re-pass 2026-04-20** (dopo pubblicazione invariants):
+- `8df515a` S10: `logger.debug` uniforme sui 7 siti cleanup pool/session in `query_executor.py`
+- `692f532` pubblicazione `backend/docs/architecture/invariants.md` + rimozione artefatti backend stale
+- `cc5b89f` D1: harden `_execute_parallel_async` (rate limiter + error granularity)
+- `fc18e35` D1: parity tests sync vs async enrichment
+- `a365a82` S20: log debug/warning sui 5 silent in `datasources/sharepoint`
+- `b5c2ce6` S19: log debug sui 2 silent cleanup in `intermediate/writer`
+- `c97be5a` D2: unify `_read_csv_*` su `app.utils.dataframe._read_csv_safe`
 
-Totale: **10 item S-serie applicati** + 1 chiuso come inventory error. Subset 5.1 (5 item) + 5.2 parziale (5 item su 7 approvati: S9/S11/S12/S15/S16) eseguito; S10 (7 siti cleanup in `query_executor.py`) **rimandato** come da scope 5.2 ("locale/meccanico") — e' locale ma volume elevato, meglio fuori Fase 0 per non estendere il batch.
+S1 (crypto encrypt fail-fast): applicato in `eab1c65` (reconcile snapshot pre-consolidation); verificato in Fase C che `raise RuntimeError("crypto.encrypt broken — refusing to save plaintext")` e' live.
+
+Totale: **14 item S-serie applicati** (S1–S5, S9–S13, S15–S16, S19–S20) + **2 D-serie** (D1, D2) + 1 chiuso come inventory error (S13). Subset 5.1 (5 item) + 5.2 completo (7 item) + re-pass 2026-04-20 (S10 + S19 + S20 + D1 + D2). Classificazione finale dei residui in sezione "Closeout Phase 0" sotto.
 
 ## Fase C — Invariants
 - [x] `backend/docs/architecture/invariants.md` pubblicato (2026-04-20)
 - Struttura: 6 sezioni (core path canonici, fallback autorizzati, feature flag vivi, policy di uniformita', regole review, cosa NON e' invariant)
 - Principio guida: riflette il codice post-consolidation reale, non un brief astratto; ogni riga e' stata verificata nel sorgente
-- Debito noto lasciato esplicito:
-  - S10 (query_executor 7 siti silent cleanup) — da risolvere fuori Fase 0
-  - `ENABLE_ASYNC_ENRICHMENT` + dual path `_execute_parallel*` — violazione charter base 7 aperta, rimozione obbligata prima di chiudere Fase 1
-  - Alias retro-compat crypto (URBY_*, CONN_ENCRYPT_KEY, SECRET_KEY/JWT_SECRET_KEY) — decisione D-fascia post-deploy verification
-  - Triage residui `file_service.py`, `api_connector.py`, `intermediate/writer.py`, stale docstrings
+- Debito noto lasciato esplicito (aggiornato post re-pass):
+  - `ENABLE_ASYNC_ENRICHMENT` + dual path `_execute_parallel*` — D1 chiuso: parity sync/async sanata (rate limiter + error granularity), flag promosso a kill-switch autorizzato in §2/§3 di `invariants.md`. Non piu' "violazione", ora safety valve documentato.
+  - Alias retro-compat crypto (`URBY_*`, `CONN_ENCRYPT_KEY`, `SECRET_KEY`/`JWT_SECRET_KEY`) — decisione product/env post-deploy verification (D4/D5)
+  - Triage residui `file_service.py` (S17), `api_connector.py` (S18) — batch Phase 1 dedicato
+  - S10 (`query_executor.py` 7 siti) e S19 (`intermediate/writer.py`) chiusi nell'ultimo pass; rimossi dal debito noto
 
 ## Fase D — Brief Fase 1
 - [x] 4 brief aggiornati in `orchestrate/phase_1_stabilization/`:
@@ -77,72 +88,67 @@ Totale: **10 item S-serie applicati** + 1 chiuso come inventory error. Subset 5.
 - Wiring uniforme: ogni brief cita `backend/docs/architecture/invariants.md` come lettura obbligatoria e richiama le 7 regole di review in §5 per nuovi branch/fallback/flag
 
 ## Test
-- Backend: non eseguito in Fase C (sessione documentale). Esecuzione da considerare prima della chiusura complessiva di Fase 0
-- Frontend: non eseguito (nessun file frontend toccato in Fase B)
-- Smoke E2E manuale: non eseguito — da programmare pre-chiusura Fase 0
-
-## Bug trovati fuori scope
-
-### Chiusi in Fase B
-- `backend/app/core/auth/auth.py:989-991` — silent swallow su `delete_group_cascade` → chiuso da **S5** (`d25d00a`)
-- `backend/app/core/features/features_service_db.py` — file rimosso, logica integrata in `FeaturesService` (**S4** `b9206ee`); docstring top-level rigenerata (`a7beca5`)
-- `backend/app/core/features/features_service.py:1-13` stale docstring storage JSON → aggiornata da `a7beca5`
-
-### Ancora aperti (fuori Fase 0)
-- Docstring stale `backend/app/services/connection_service.py:1-11` (parla di "SQLite tramite app.db.db_service") — cleanup documentale da fare fuori Fase 0
-- `backend/app/core/features/features_service.py:1249-1253` claim "per evitare dipendenza circolare" non verificato — candidato per unify con `app/utils/dataframe._read_csv_safe` in fase successiva
-- `backend/app/db/query_executor.py` 7 siti silent cleanup (S10 rimandato) — intervento meccanico ma volume elevato, dedicarci un batch separato
-- `ENABLE_ASYNC_ENRICHMENT` + dual path `_execute_parallel` / `_execute_parallel_async` — violazione charter base 7, richiede decisione prod (vedi §3 di `invariants.md`)
-- Eventuali bug del nodo `result` colonne (cross-modulo estrai/manipola/arricchisci) — gia' tracciato in memoria `project_arricchisci_result_columns_bug.md`, fuori scope consolidamento
+- Backend: `pytest tests2/` verde (1945 passed + 8 skipped, 2026-04-20)
+- Frontend: `npm run test -- --run` verde (134 passed, 2026-04-20)
+- Smoke E2E manuale: residuo gate pre-chiusura formale — da programmare
 
 ## Deps nuove richieste
-- Nessuna
+
+Nessuna.
 
 ## Proposte Fase 1
-- (da definire a fine Fase 0)
 
-## Addendum re-pass (2026-04-20)
+Brief in `orchestrate/phase_1_stabilization/` (`brief_fe.md`, `brief_acn.md`, `brief_perf.md`, `brief_tests.md`) gia' allineati a `invariants.md`. Residui micro-consolidamento listati in Closeout sotto.
 
-Questo addendum aggiorna il report senza riscrivere la traccia storica del primo checkpoint.
+## Closeout Phase 0
 
-- `S10` e' chiuso su `main` con `8df515a`
-- `S13` resta chiuso come inventory error
-- `692f532` pubblica `backend/docs/architecture/invariants.md` e rimuove artefatti backend stale
+Dopo il re-pass 2026-04-20 il lavoro codice Phase 0 e' concluso. Classificazione finale dei residui in 4 bucket:
 
-### Stato reale dopo il re-pass
+### Phase 0 closed items (tutti applicati su `main`)
 
-- `Phase 0` non e' ancora chiusa
-- resta un ultimo pass di sostanza
-- dopo quel pass il residuo e' dominato da decisioni di prodotto/env, policy cross-modulo o rumore
+- **S-serie**: S1 (crypto encrypt fail-fast), S2 (DatabaseWriter introspection), S3 (features `_load_dataframe`), S4 (features_service merge), S5 (`delete_group_cascade` log+raise), S9 (bulk cursor close debug), S10 (query_executor 7 siti cleanup debug), S11 (logs JSON parse debug), S12 (pg_connection putconn warning), S13 (chiuso inventory error), S15 (admin_backups duration warning), S16 (files MIME warning uniforme), S19 (intermediate/writer cleanup debug), S20 (datasources/sharepoint silent)
+- **D-serie**: D1 (`ENABLE_ASYNC_ENRICHMENT` parity sync/async + kill-switch mantenuto), D2 (`_read_csv_*` unificato)
+- **Deliverable documentali**: `backend/docs/architecture/inventory_report.md`, `backend/docs/architecture/invariants.md`, aggiornamento dei 4 brief Fase 1 (`brief_fe.md`, `brief_acn.md`, `brief_perf.md`, `brief_tests.md`)
 
-### Shortlist ultimo pass Phase 0
+### Residui riclassificati a Phase 1 (batch dedicato, scope ristretto)
 
-- `connection_service.py:1-11` docstring stale
-- `D2` unify `_read_csv_safe` / `_read_csv_with_encoding_fallback`
-- `S19` `app/core/intermediate/writer.py`
-- `S20` `app/core/datasources/sharepoint.py`
-- `D1` `ENABLE_ASYNC_ENRICHMENT` come checkpoint separato (serve verifica env prod prima della scelta)
+- **S17** `app/services/file_service.py` — 21 `except: pass` sparsi, audit riga-per-riga
+- **S18** `app/core/arricchisci/api_connector.py` — 25 except retry loop, triage pattern ripetitivo
+- **S23** `app/core/carica/database_writer.py` — anomalie residue
+- **S25** `app/core/eseguibili/router.py`
+- **S26** preview swallow cross-modulo estrai/manipola/arricchisci (tocca D6)
+- **S27** cluster IMDF (coordinato con D3)
+- **S28** shared layer mixed
 
-### Riaprire dopo / batch dedicato
+Questi finiscono in `invariants.md §6` come "triage residui rimandati a batch dedicato Phase 1" e vanno trattati con la disciplina delle 7 regole di review in §5.
 
-- `S17` `file_service.py`
-- `S18` `api_connector.py`
-- `S23` `database_writer.py`
-- `S25` `eseguibili/router.py`
-- `S27` cluster IMDF
+### Residui product / env (non invariant, scope governance)
 
-### Tenere per fase successiva
+- **D3** IMDF loader/persist/storage boundaries — decisione architetturale, richiede allineamento con cliente
+- **D4** alias crypto retro-compat (`URBY_*`, `CONN_ENCRYPT_KEY`) — rimozione coordinata con deploy prod `lab.plenora.it`
+- **D5** `SECRET_KEY`/`JWT_SECRET_KEY` come crypto fallback — chiarimento intenzionalita' chain prima di toccare
+- **D6** policy preview vs execute cross-modulo — decisione product, non refactor meccanico
 
-- `S26` preview swallow estrai/manipola/arricchisci
-- `S28` shared layer mixed
-- `D3` IMDF loader/persist/storage boundaries
-- `D4` alias crypto retro-compat
-- `D5` `SECRET_KEY`/`JWT_SECRET_KEY` come crypto fallback
-- `D6` policy preview vs execute cross-modulo
+### Rumore declassato / inventory overcount (non riapribile senza nuova evidenza)
 
-### Declassati a rumore / inventory overcount
+- `connection_service.py:1-11` docstring stale (non invariant, non vincolante)
+- `S6`, `S7`, `S8`, `S14` (triage chat: non attivabili)
+- `S21` `config_db_service.py`, `S22` `features/routes.py`, `S24` `admin_system_status/service.py` (overcount inventory)
 
-- `S21` `config_db_service.py`
-- `S22` `features/routes.py`
-- `S24` `admin_system_status/service.py`
-- `S6`, `S7`, `S8`, `S14`
+### Gate eseguiti (2026-04-20)
+
+Il codice e la documentazione Phase 0 sono allineati. Gate check:
+
+1. ✅ Test suite backend `pytest tests2/` verde (1945 passed + 8 skipped, 2026-04-20)
+2. ✅ Test suite frontend `npm run test -- --run` verde (134 passed, 2026-04-20)
+3. ✅ Smoke E2E manuale (login → project → Estrai → Manipola → preview → Carica): eseguito, nessuna regressione vs pre-Fase 0. Caveat locali ambientali (storage policy implicitamente accoppiato a object storage) annotati come handoff **non-blocker** a Phase 1 — vedi `orchestrate/phase_0_consolidation/integration_notes.md` §Handoff a Phase 1. Fix finali durante gate run: **test/harness only**, nessun codice prodotto toccato.
+
+Phase 0 passa da `done-ready` a **`done`**. Lancio di Fase 1 autorizzato via `done_check.md`.
+
+### File meta aggiornati (2026-04-20)
+
+Aggiornati al post-Phase 0 in anticipo rispetto allo smoke E2E residuo, per coerenza documentale (cfr. `done_check.md` §11–13):
+
+- `VALUTAZIONE_URBY_ETL.md` — sezione `Chiusi Fase 0 Consolidamento (2026-04-20)` con 14 S-serie + 2 D-serie applicati, residui riclassificati, gate BE/FE verde
+- `orchestrate/STREAMS.md` — ownership matrix Phase 0 CHIUSA 2026-04-20
+- `orchestrate/README.md` — `### Fase 0 — Consolidamento` + riga tempi realistici
