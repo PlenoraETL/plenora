@@ -3,6 +3,7 @@ Router API per la consultazione dei log — lettura da PostgreSQL.
 """
 
 import json
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
@@ -11,17 +12,24 @@ from app.core.auth.auth import get_current_user, require_not_esecutore, CurrentU
 from app.db.pg_connection import fetchone as _fetchone, fetchall as _fetchall, execute as _execute
 from app.shared.authz_helpers import assert_project_visible
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/logs", tags=["logs"])
 
 
 def _row_to_dict(row: dict) -> dict:
     d = dict(row) if row else {}
-    # Deserializza details JSON
+    # Deserializza details JSON. Se il campo non e' JSON valido lasciamolo
+    # come stringa: log di sistema legacy possono avere `details` testuali.
     if d.get("details"):
         try:
             d["details"] = json.loads(d["details"])
-        except Exception:
-            pass
+        except (ValueError, TypeError) as e:
+            logger.debug(
+                "details non-JSON su log row, lascio come stringa: %s: %s",
+                type(e).__name__,
+                e,
+            )
     # Rimuovi campi vuoti
     return {k: v for k, v in d.items() if v not in (None, "", [])}
 
