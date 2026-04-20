@@ -46,6 +46,16 @@ import pandas as pd
 # Non bloccante — i file vengono letti correttamente nonostante il warning
 warnings.filterwarnings("ignore", message=".*GeoPackage user_version.*may only be partially supported.*")
 
+# Logger module-level per helper senza accesso a self._logger (es. _rmtree_safe,
+# DefaultDataLoader): gli altri percorsi del service usano self._logger iniettato
+# via LoggerProtocol. Fallback stdlib per esecuzione standalone di test.
+try:
+    from app.utils.logger import get_logger as _get_logger
+    _logger = _get_logger(__name__)
+except ImportError:
+    import logging as _logging
+    _logger = _logging.getLogger(__name__)
+
 # ==================== IMPORT CONDIZIONALI ====================
 # Usa modelli da app.models in produzione, fallback a dataclass per test standalone
 # Usa modelli da app.models in produzione, fallback a dataclass per test standalone
@@ -322,14 +332,19 @@ class DefaultDataLoader:
         try:
             import fiona
             return fiona.listlayers(str(path))
-        except Exception:
+        except Exception as e:
+            # Probe fiona: in formati non multi-layer ritorna [] (contratto).
+            # Debug log preserva visibilita' su fallimenti reali (file corrotto,
+            # permessi) che oggi si perdevano.
+            _logger.debug(f"list_layers probe fiona fallita per {path}: {e}")
             return []
-    
+
     def list_sheets(self, path: Path) -> List[str]:
         try:
             xlsx = pd.ExcelFile(path)
             return xlsx.sheet_names
-        except Exception:
+        except Exception as e:
+            _logger.debug(f"list_sheets probe pandas fallita per {path}: {e}")
             return []
     
     def save_csv(self, df: pd.DataFrame, path: Path) -> None:
@@ -545,7 +560,9 @@ class ColumnInfoBuilder:
                     else:
                         geom_columns[col] = geom_type
             except Exception as _e:
-                pass  # Rilevamento geometria fallito (non critico)
+                # Rilevamento geometria fallito (non critico): il fallback e'
+                # TypeInferrer.infer_column_type() sulla colonna a valle.
+                _logger.debug(f"geometry detect fallita per colonna '{col}': {_e}")
         
         return geom_columns
 
@@ -561,6 +578,7 @@ def _rmtree_safe(path, _retries: int = 3) -> None:
     """Rimuove file o directory con retry per handle locked (es. fiona)."""
     import stat, time, gc, shutil, os
     p = Path(path)
+    last_exc: Optional[BaseException] = None
     for attempt in range(_retries):
         try:
             if p.is_file():
@@ -571,15 +589,23 @@ def _rmtree_safe(path, _retries: int = 3) -> None:
                     try:
                         os.chmod(fpath, stat.S_IWRITE)
                         func(fpath)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        # Callback onerror di shutil.rmtree: non deve raisare
+                        # (contratto API). Debug log per visibilita' su permessi.
+                        _logger.debug(
+                            f"_rmtree_safe onerror chmod fallito per {fpath}: {e}"
+                        )
                 shutil.rmtree(p, onerror=_on_error)
                 if not p.exists():
                     return
-        except Exception:
-            pass
+        except Exception as e:
+            last_exc = e
         gc.collect()
         time.sleep(0.3)
+    if last_exc is not None and p.exists():
+        _logger.debug(
+            f"_rmtree_safe: cleanup fallito per {p} dopo {_retries} tentativi: {last_exc}"
+        )
 
 class FileSourceService:
     """
@@ -873,8 +899,10 @@ class FileSourceService:
                 finally:
                     try:
                         tmp_path.unlink()
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        self._logger.debug(
+                            f"cleanup tmp S3 blob fallito per {tmp_path}: {e}"
+                        )
             return None
         except Exception as e:
             self._logger.error(f"[GESTITO] Errore lettura blob {file_id}: {e}")
@@ -899,7 +927,13 @@ class FileSourceService:
             # gia' validato il caller. Se saltassimo `expected_group_id` si
             # riattiverebbe il fail-closed.
             blob = self._get_blob_from_db(file_id, expected_group_id)
-        except Exception:
+        except Exception as e:
+            # Errore DB lato metadata (get_file_source) o import db_service.
+            # _get_blob_from_db gia' logga [GESTITO] internamente e non raisa,
+            # quindi qui intercettiamo solo failure reali del lookup metadata.
+            self._logger.warning(
+                f"[GESTITO] _temp_file_for {file_id}: fetch metadata/blob fallito: {e}"
+            )
             return None
         if not blob or not row_meta:
             return None
@@ -1148,12 +1182,14 @@ class FileSourceService:
             if zip_tmp_dir:
                 try:
                     _rmtree_safe(zip_tmp_dir)
-                except Exception:
-                    pass
+                except Exception as e:
+                    self._logger.debug(
+                        f"cleanup zip_tmp_dir fallito ({zip_tmp_dir}): {e}"
+                    )
             try:
                 _rmtree_safe(tmp.name)
-            except Exception:
-                pass
+            except Exception as e:
+                self._logger.debug(f"cleanup tmp upload fallito ({tmp.name}): {e}")
 
     def create_raw_from_upload(
         self,
@@ -1396,14 +1432,18 @@ class FileSourceService:
         finally:
             try:
                 os.unlink(tmp.name)
-            except Exception:
-                pass
+            except Exception as e:
+                self._logger.debug(
+                    f"cleanup tmp multi-layer fallito ({tmp.name}): {e}"
+                )
             if zip_tmp_dir:
                 import shutil
                 try:
                     _rmtree_safe(zip_tmp_dir)
-                except Exception:
-                    pass
+                except Exception as e:
+                    self._logger.debug(
+                        f"cleanup zip_tmp_dir multi-layer fallito ({zip_tmp_dir}): {e}"
+                    )
 
     def load_dataframe(
         self, file_id: str, layer: str = None, sheet: str = None,
@@ -1437,13 +1477,17 @@ class FileSourceService:
             if file_source.format in ('shp', 'gdb'):
                 try:
                     _rmtree_safe(tmp_path.parent)
-                except Exception:
-                    pass
+                except Exception as e:
+                    self._logger.debug(
+                        f"cleanup load_dataframe tmp_dir fallito ({tmp_path.parent}): {e}"
+                    )
             else:
                 try:
                     _rmtree_safe(tmp_path)
-                except Exception:
-                    pass
+                except Exception as e:
+                    self._logger.debug(
+                        f"cleanup load_dataframe tmp fallito ({tmp_path}): {e}"
+                    )
 
     def update_file_source(self, file_id: str, data: Any) -> Optional[FileSource]:
         """Aggiorna file source nel DB."""
@@ -1517,13 +1561,17 @@ class FileSourceService:
                     if file_source.format in ('gdb',):
                         try:
                             _rmtree_safe(tmp_path.parent)
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            self._logger.debug(
+                                f"cleanup get_layers_info tmp_dir fallito ({tmp_path.parent}): {e}"
+                            )
                     else:
                         try:
                             _rmtree_safe(tmp_path)
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            self._logger.debug(
+                                f"cleanup get_layers_info tmp fallito ({tmp_path}): {e}"
+                            )
         if _USE_APP_MODELS:
             try:
                 from app.models import FileSourceLayersResponse
@@ -1688,15 +1736,19 @@ class FileSourceService:
             try:
                 if original_tmp.exists():
                     _rmtree_safe(original_tmp)
-            except Exception:
-                pass
+            except Exception as e:
+                self._logger.debug(
+                    f"cleanup preview original_tmp fallito ({original_tmp}): {e}"
+                )
             # Se non era ZIP, tmp_path == original_tmp, già gestito sopra
             if tmp_path != original_tmp:
                 try:
                     if tmp_path.exists():
                         _rmtree_safe(tmp_path)
-                except Exception:
-                    pass
+                except Exception as e:
+                    self._logger.debug(
+                        f"cleanup preview tmp_path fallito ({tmp_path}): {e}"
+                    )
 
 
 # ==================== FACTORY ====================
