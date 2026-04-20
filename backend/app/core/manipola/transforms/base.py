@@ -533,8 +533,11 @@ def op_formula(
             result[new_column] = eval_df.eval(formula)
             logger.info(f"Formula (pandas.eval) ok: '{new_column}'")
             return result
-        except Exception:
-            pass  # Prova il fallback
+        except Exception as _pd_eval_err:
+            logger.debug(
+                f"pandas.eval fallita per '{new_column}', fallback a "
+                f"eval() con namespace colonne: {_pd_eval_err}"
+            )
 
         # --- Tentativo 2: eval() con namespace colonne ---
         # Passa le colonne come variabili locali — nessuna sostituzione nel testo della formula.
@@ -1423,7 +1426,10 @@ def op_geo_from_coords(
                     return None
                 try:
                     return wkt.loads(str(val))
-                except Exception:
+                except Exception as _wkt_err:
+                    # Parse WKT fallito per riga singola — debug (row-loop:
+                    # warning causerebbe flood su dataset con WKT malformati).
+                    logger.debug(f"safe_wkt_parse fallita: {_wkt_err}")
                     return None
             
             result[output_column] = result[wkt_column].apply(safe_wkt_parse)

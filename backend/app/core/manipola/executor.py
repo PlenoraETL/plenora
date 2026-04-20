@@ -1066,5 +1066,9 @@ class ManipolaExecutor:
             prefixes = ('POINT', 'LINESTRING', 'POLYGON', 'MULTIPOINT',
                         'MULTILINESTRING', 'MULTIPOLYGON', 'GEOMETRYCOLLECTION')
             return 'geometry' if any(val_str.startswith(p) for p in prefixes) else 'str'
-        except Exception:
+        except Exception as _geo_probe_err:
+            logger.debug(
+                f"Rilevamento geometria da contenuto fallito per "
+                f"colonna '{col_name}', fallback a 'str': {_geo_probe_err}"
+            )
             return 'str'

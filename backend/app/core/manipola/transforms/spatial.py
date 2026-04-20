@@ -92,8 +92,11 @@ def _ensure_active_geometry(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
         # Se la geometria attiva esiste nelle colonne, tutto ok
         if gdf.geometry.name in gdf.columns:
             return gdf
-    except Exception:
-        pass
+    except Exception as _active_geom_err:
+        logger.debug(
+            f"Probe geometria attiva fallito, provo discovery colonne: "
+            f"{_active_geom_err}"
+        )
 
     # Trova colonne di tipo geometry
     geom_cols = []
@@ -101,7 +104,10 @@ def _ensure_active_geometry(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
         try:
             if hasattr(gdf[col], 'geom_type') or gdf[col].dtype.name == 'geometry':
                 geom_cols.append(col)
-        except Exception:
+        except Exception as _col_probe_err:
+            logger.debug(
+                f"Probe colonna geometry '{col}' fallito: {_col_probe_err}"
+            )
             continue
     
     if geom_cols:
