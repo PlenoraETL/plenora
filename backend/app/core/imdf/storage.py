@@ -140,8 +140,8 @@ def save_bundle(task_id: str, local_dir: Path, meta: Optional[Dict[str, Any]] = 
         finally:
             try:
                 tmp_meta_path.unlink()
-            except OSError:
-                pass
+            except OSError as _ue:
+                logger.debug(f"[{task_id}] tmp_meta unlink skipped: {type(_ue).__name__}: {_ue}")
 
     return {"zip_key": _zip_key(task_id), "meta_key": mk}
 
