@@ -28,6 +28,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
+
 # I 5 layer dello standard IMDF prodotti dal servizio imdf.plenora.it.
 # L'ordine e' significativo: Localita > OperaPrincipale > Livello > Locale > Details
 # corrisponde alla gerarchia spaziale (sito → edifici → piani → locali → dettagli).
@@ -269,8 +273,12 @@ def load_imdf_layers(
 
             try:
                 gdf = gdf.set_geometry(gdf.geometry.apply(_drop_z))
-            except Exception:
-                pass
+            except Exception as _ze:
+                # Geometria malformata o shapely senza has_z: lascia GDF
+                # invariato (2D o mix). Non-fatal per il caller.
+                logger.debug(
+                    f"drop_z skipped for layer '{layer_name}': {type(_ze).__name__}: {_ze}"
+                )
 
         # Filtra colonne di sistema ESRI: non vanno mai inviate al create_service
         sys_cols = [c for c in gdf.columns if c in ESRI_SYSTEM_FIELDS]
