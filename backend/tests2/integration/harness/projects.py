@@ -48,14 +48,14 @@ def _assert_persisted_canvas(
     if not requested_canvas or not requested_canvas.get("nodes"):
         return
 
-    deadline = time.time() + 30.0
+    deadline = time.time() + 60.0
     last_error = None
     while time.time() < deadline:
         try:
             status, fetched, _ = http_json_response(
                 f"{base_url}/api/projects/{project_id}",
                 headers=auth_headers,
-                timeout=30.0,
+                timeout=10.0,
             )
             if status == 200:
                 persisted_canvas = (

@@ -872,7 +872,7 @@ class DatabaseWriter(DestinationWriter):
         start_time = time.time()
 
         try:
-            with self.engine.connect() as conn:
+            with self.engine.begin() as conn:
                 if self.db_type == "oracle":
                     self._oracle_setup(conn)
 
@@ -902,8 +902,6 @@ class DatabaseWriter(DestinationWriter):
                         total_rows=result.total_rows,
                         elapsed_seconds=elapsed,
                     ))
-
-                conn.commit()
         except Exception as e:
             # Shadow pieno a meta'/vuoto: target intatto, cleanup shadow
             logger.error(
@@ -1098,7 +1096,7 @@ class DatabaseWriter(DestinationWriter):
         start_time = time.time()
 
         try:
-            with self.engine.connect() as conn:
+            with self.engine.begin() as conn:
                 if self.db_type == "oracle":
                     self._oracle_setup(conn)
 
@@ -1123,8 +1121,6 @@ class DatabaseWriter(DestinationWriter):
                         total_rows=result.total_rows,
                         elapsed_seconds=time.time() - start_time,
                     ))
-
-                conn.commit()
         except Exception as e:
             logger.error(
                 f"[REPLACE ATOMIC] INSERT shadow fallito, target intatto, "

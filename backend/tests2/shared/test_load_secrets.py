@@ -169,8 +169,8 @@ def test_main_calls_execv_with_target(ssm_mod, monkeypatch, tmp_path):
 
     assert len(execv_calls) == 1
     path, argv = execv_calls[0]
-    assert path == "/usr/bin/python3"
-    assert argv[0] == "/usr/bin/python3"
+    assert path == sys.executable
+    assert argv[0] == sys.executable
     assert argv[1] == str(target)
     assert argv[2:] == ["--flag", "value"]
 

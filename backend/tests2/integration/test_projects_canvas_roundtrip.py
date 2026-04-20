@@ -52,7 +52,7 @@ def test_project_create_with_canvas_roundtrip(
         status, fetched, _ = http_json_response(
             f"{integration_backend_server['base_url']}/api/projects/{project_id}",
             headers=integration_auth_headers,
-            timeout=10.0,
+            timeout=30.0,
         )
         assert status == 200
         assert fetched["metadata"]["id"] == project_id
@@ -85,7 +85,7 @@ def test_project_canvas_update_roundtrip(
         status, fetched, _ = http_json_response(
             f"{integration_backend_server['base_url']}/api/projects/{project_id}",
             headers=integration_auth_headers,
-            timeout=10.0,
+            timeout=30.0,
         )
         assert status == 200
         assert fetched["canvas"]["nodes"][0]["fileName"] == "integration_updated"

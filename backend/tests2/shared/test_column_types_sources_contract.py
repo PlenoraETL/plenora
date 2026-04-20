@@ -102,59 +102,61 @@ def test_columns_metadata_handles_canvas_as_json_string(monkeypatch):
 
 def test_update_columns_metadata_writes_to_canvas(monkeypatch):
     """update_project_columns_metadata salva dentro canvas["columns_metadata"],
-    NON in colonna DB separata. E' un'invariante del contract da preservare."""
+    NON in colonna DB separata. E' un'invariante del contract da preservare.
+
+    Post-refactor la scrittura passa da `update_project_canvas_key_atomic`
+    (SELECT FOR UPDATE + merge + UPDATE) invece che da `update_project`
+    su payload intero. L'invariante osservabile e' la stessa: la chiave
+    "columns_metadata" dentro il canvas JSON."""
     from app.services.project_service import ProjectService
-    from app.services import project_service as ps_mod
+    import app.db.config_db_service as _cfg_db
 
-    captured_updates = []
-    fake_row = {"id": "p1", "canvas": {"nodes": [], "edges": []}}
+    captured_calls = []
 
-    def fake_update(pid, **kwargs):
-        captured_updates.append(kwargs)
+    def fake_atomic(project_id, key, value):
+        captured_calls.append({"project_id": project_id, "key": key, "value": value})
         return True
 
-    monkeypatch.setattr(ps_mod.db, "get_project", lambda pid: fake_row)
-    monkeypatch.setattr(ps_mod.db, "update_project", fake_update)
+    monkeypatch.setattr(_cfg_db, "update_project_canvas_key_atomic", fake_atomic)
 
     new_meta = [{"name": "id", "type": "int"}]
     ok = ProjectService().update_project_columns_metadata("p1", new_meta)
     assert ok is True
 
-    # Invariante: il payload DB include 'canvas' con columns_metadata dentro
-    assert len(captured_updates) == 1
-    assert "canvas" in captured_updates[0]
-    assert captured_updates[0]["canvas"]["columns_metadata"] == new_meta
+    # Invariante: l'atomic helper viene invocato con key="columns_metadata"
+    # sul progetto target. Niente scritture su altre colonne DB.
+    assert len(captured_calls) == 1
+    assert captured_calls[0]["project_id"] == "p1"
+    assert captured_calls[0]["key"] == "columns_metadata"
+    assert captured_calls[0]["value"] == new_meta
 
 
 def test_update_columns_metadata_preserves_other_canvas_fields(monkeypatch):
-    """Invariante critica: update non deve droppare nodes/edges esistenti."""
-    from app.services.project_service import ProjectService
-    from app.services import project_service as ps_mod
+    """Invariante critica: update non deve droppare nodes/edges esistenti.
 
-    captured = []
-    fake_canvas_before = {
-        "nodes": [{"id": "n1", "type": "source"}],
-        "edges": [{"id": "e1"}],
-        "columns_metadata": [{"name": "old_col", "type": "str"}],
-    }
+    Post-refactor la preservazione e' intrinseca al contract di
+    `update_project_canvas_key_atomic`, che fa SELECT FOR UPDATE + merge
+    sul singolo key del canvas JSON (testato end-to-end in
+    tests2/integration/test_project_columns_metadata_atomic_integration.py).
+    Qui verifichiamo solo che il service non invii mai chiavi diverse da
+    "columns_metadata" — scenari dove una regressione ri-serializza il
+    canvas intero e droppa nodi/edge."""
+    from app.services.project_service import ProjectService
+    import app.db.config_db_service as _cfg_db
+
+    captured_calls = []
     monkeypatch.setattr(
-        ps_mod.db, "get_project",
-        lambda pid: {"id": "p1", "canvas": fake_canvas_before}
-    )
-    monkeypatch.setattr(
-        ps_mod.db, "update_project",
-        lambda pid, **kw: captured.append(kw) or True
+        _cfg_db,
+        "update_project_canvas_key_atomic",
+        lambda pid, key, value: captured_calls.append({"pid": pid, "key": key, "value": value}) or True,
     )
 
     new_meta = [{"name": "new_col", "type": "int"}]
     ProjectService().update_project_columns_metadata("p1", new_meta)
 
-    saved_canvas = captured[0]["canvas"]
-    # nodes/edges preservati
-    assert saved_canvas["nodes"] == fake_canvas_before["nodes"]
-    assert saved_canvas["edges"] == fake_canvas_before["edges"]
-    # columns_metadata sovrascritto
-    assert saved_canvas["columns_metadata"] == new_meta
+    assert len(captured_calls) == 1
+    assert captured_calls[0]["key"] == "columns_metadata"
+    assert captured_calls[0]["value"] == new_meta
 
 
 # =============================================================================

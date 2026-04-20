@@ -26,10 +26,10 @@ def _load_backup_module():
 
 
 def test_build_dump_filename_format():
-    """Pattern atteso: urby_YYYYMMDD_HHMMSSZ.dump"""
+    """Pattern atteso: plenora_YYYYMMDD_HHMMSSZ.dump"""
     mod = _load_backup_module()
     name = mod.build_dump_filename()
-    assert re.match(r"^urby_\d{8}_\d{6}Z\.dump$", name), f"formato inatteso: {name}"
+    assert re.match(r"^plenora_\d{8}_\d{6}Z\.dump$", name), f"formato inatteso: {name}"
 
 
 def test_build_dump_filename_is_unique_across_seconds():

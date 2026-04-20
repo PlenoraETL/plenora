@@ -33,6 +33,7 @@ from tests2.integration.harness.oracle import (
     ORACLE_USER,
     ORACLE_PASSWORD,
     oracle_conn,
+    oracle_read_retry,
 )
 
 from app.core.carica.database_writer import DatabaseWriter
@@ -84,18 +85,19 @@ def _drop_if_exists(table_name: str) -> None:
 
 
 def _count(table_name: str) -> int:
-    with oracle_conn() as conn:
+    def _op(conn):
         cur = conn.cursor()
         try:
             cur.execute(f"SELECT COUNT(*) FROM {table_name}")
             return int(cur.fetchone()[0])
         finally:
             cur.close()
+    return oracle_read_retry(_op)
 
 
 def _get_constraints(table_name: str) -> list[dict]:
     """Ritorna PK/UK/CHECK della tabella."""
-    with oracle_conn() as conn:
+    def _op(conn):
         cur = conn.cursor()
         try:
             cur.execute(f"""
@@ -116,11 +118,12 @@ def _get_constraints(table_name: str) -> list[dict]:
             ]
         finally:
             cur.close()
+    return oracle_read_retry(_op)
 
 
 def _get_indexes(table_name: str) -> list[dict]:
     """Ritorna indici user (non-PK) sulla tabella."""
-    with oracle_conn() as conn:
+    def _op(conn):
         cur = conn.cursor()
         try:
             cur.execute(f"""
@@ -134,6 +137,7 @@ def _get_indexes(table_name: str) -> list[dict]:
             return [{"name": r[0], "uniqueness": r[1]} for r in rows]
         finally:
             cur.close()
+    return oracle_read_retry(_op)
 
 
 def _make_writer(
