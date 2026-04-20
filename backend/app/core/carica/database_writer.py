@@ -856,8 +856,12 @@ class DatabaseWriter(DestinationWriter):
                 with self.engine.connect() as conn2:
                     conn2.execute(text(drop_stg_sql))
                     conn2.commit()
-            except Exception:
-                pass
+            except Exception as cleanup_err:
+                logger.debug(
+                    "[STAGE+SWAP] cleanup shadow post-CREATE fallito, ignoro: %s: %s",
+                    type(cleanup_err).__name__,
+                    cleanup_err,
+                )
             result.status = WriteStatus.WRITE_ERROR
             result.error_message = f"CREATE shadow fallito: {e}"
             result.error_details = repr(e)
@@ -1062,8 +1066,12 @@ class DatabaseWriter(DestinationWriter):
                     self.ddl.generate_drop_if_exists(schema, backup_table)
                 ))
                 conn.commit()
-        except Exception:
-            pass
+        except Exception as cleanup_err:
+            logger.debug(
+                "[REPLACE ATOMIC] cleanup difensivo orfani stg/bak fallito, ignoro: %s: %s",
+                type(cleanup_err).__name__,
+                cleanup_err,
+            )
 
         # Check se target esiste (decide se swap vs single rename)
         target_exists = self._table_exists_for(schema, src_table)
@@ -1132,8 +1140,12 @@ class DatabaseWriter(DestinationWriter):
                         self.ddl.generate_drop_if_exists(schema, stg_table)
                     ))
                     conn.commit()
-            except Exception:
-                pass
+            except Exception as cleanup_err:
+                logger.debug(
+                    "[REPLACE ATOMIC] cleanup shadow post-INSERT fail fallito, ignoro: %s: %s",
+                    type(cleanup_err).__name__,
+                    cleanup_err,
+                )
             result.rows_written = 0
             result.status = WriteStatus.WRITE_ERROR
             result.error_message = f"INSERT shadow fallito: {e}"
@@ -1454,8 +1466,12 @@ class DatabaseWriter(DestinationWriter):
                     self.ddl.generate_drop_if_exists(schema, interim)
                 ))
                 conn.commit()
-        except Exception:
-            pass
+        except Exception as cleanup_err:
+            logger.debug(
+                "[ORACLE REDEF] cleanup difensivo interim orfana fallito, ignoro: %s: %s",
+                type(cleanup_err).__name__,
+                cleanup_err,
+            )
 
         # -------- PHASE 1: eligibility check --------
         options_flag = None
@@ -1530,8 +1546,12 @@ END;"""))
                         self.ddl.generate_drop_if_exists(schema, interim)
                     ))
                     conn.commit()
-            except Exception:
-                pass
+            except Exception as cleanup_err:
+                logger.debug(
+                    "[ORACLE REDEF] cleanup interim post-START_REDEF fail fallito, ignoro: %s: %s",
+                    type(cleanup_err).__name__,
+                    cleanup_err,
+                )
             return self._truncate_insert_atomic(df, columns, result)
 
         # Da qui in poi, qualunque errore richiede ABORT_REDEF
@@ -1648,8 +1668,12 @@ END;"""))
                         self.ddl.generate_drop_if_exists(schema, interim)
                     ))
                     conn.commit()
-            except Exception:
-                pass
+            except Exception as cleanup_err:
+                logger.debug(
+                    "[ORACLE REDEF] drop interim post-ABORT fallito, ignoro: %s: %s",
+                    type(cleanup_err).__name__,
+                    cleanup_err,
+                )
 
             result.rows_written = 0
             result.status = WriteStatus.WRITE_ERROR
@@ -1885,13 +1909,21 @@ END;"""))
                 except Exception as e:
                     try:
                         conn.rollback()
-                    except Exception:
-                        pass
+                    except Exception as rb_err:
+                        logger.debug(
+                            "[BATCH] conn.rollback() post errore batch fallito, ignoro: %s: %s",
+                            type(rb_err).__name__,
+                            rb_err,
+                        )
                     # Chiudi e riapri la connessione dopo errore
                     try:
                         conn.close()
-                    except Exception:
-                        pass
+                    except Exception as cl_err:
+                        logger.debug(
+                            "[BATCH] conn.close() pre-riapertura fallito, ignoro: %s: %s",
+                            type(cl_err).__name__,
+                            cl_err,
+                        )
                     conn = self.engine.connect()
                     if self.db_type == "oracle":
                         self._oracle_setup(conn)
@@ -1913,8 +1945,12 @@ END;"""))
         finally:
             try:
                 conn.close()
-            except Exception:
-                pass
+            except Exception as cl_err:
+                logger.debug(
+                    "[BATCH] conn.close() in finally fallito, ignoro: %s: %s",
+                    type(cl_err).__name__,
+                    cl_err,
+                )
 
         # Stato finale
         if result.rows_failed == 0:
@@ -2195,6 +2231,10 @@ END;"""))
             conn.execute(text(
                 "ALTER SESSION SET SDO_GEOM_METADATA_TABLE = 'USER_SDO_GEOM_METADATA'"
             ))
-        except Exception:
+        except Exception as e:
             # Non critico, procedi comunque
-            pass
+            logger.debug(
+                "[ORACLE] ALTER SESSION SDO_GEOM_METADATA_TABLE fallito, ignoro: %s: %s",
+                type(e).__name__,
+                e,
+            )
