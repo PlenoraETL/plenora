@@ -760,8 +760,12 @@ def execute_enrichment_async(
                     )
                     if canvas_format:
                         output_format = canvas_format
-            except Exception:
-                pass  # fallback a csv
+            except Exception as _fmt_err:
+                logger.debug(
+                    f"Lettura output_format dal result_node fallita, "
+                    f"fallback a '{output_format}': {_fmt_err}",
+                    op="execute",
+                )
 
         task_info = task_service.create_enrichment_task(
             project_id=project_id,

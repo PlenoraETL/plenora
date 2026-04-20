@@ -767,8 +767,11 @@ class EnrichmentExecutor:
                         if self.progress_callback and processed_counter[0] % 100 == 0:
                             try:
                                 self.progress_callback(processed_counter[0], total_rows)
-                            except Exception:
-                                pass
+                            except Exception as _cb_err:
+                                logger.debug(
+                                    f"[ASYNC] progress_callback fallita: {_cb_err}",
+                                    op="execute",
+                                )
 
                     return None
 
@@ -1384,8 +1387,10 @@ class EnrichmentExecutor:
             try:
                 if pd.isna(val) if not isinstance(val, (list, dict)) else False:
                     return None
-            except Exception:
-                pass
+            except Exception as _isna_err:
+                logger.debug(
+                    f"pd.isna probe fallito per tipo {type(val).__name__}: {_isna_err}"
+                )
             # Converti numpy → Python nativo per str()
             try:
                 import numpy as _np
@@ -1395,8 +1400,11 @@ class EnrichmentExecutor:
                     val = float(val)
                 elif isinstance(val, _np.bool_):
                     val = bool(val)
-            except Exception:
-                pass
+            except Exception as _np_err:
+                logger.debug(
+                    f"numpy→native conversion probe fallita per tipo "
+                    f"{type(val).__name__}: {_np_err}"
+                )
             # Formattazione: int/float/bool senza decoration, str raw
             out_parts.append(str(val))
             last_end = m.end()
