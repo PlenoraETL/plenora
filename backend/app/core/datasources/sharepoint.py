@@ -201,8 +201,8 @@ class SharePointDataSource(DataSourceInterface):
                 try:
                     content = self._download_file(f)
                     hash_val = self._compute_hash(content)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Hash computation fallita per {name!r}: {type(e).__name__}: {e}")
 
             results.append(FileInfo(
                 name=name,
@@ -363,7 +363,8 @@ class SharePointDataSource(DataSourceInterface):
             self._ctx.load(f)
             self._ctx.execute_query()
             return f.properties.get("Exists", True)
-        except Exception:
+        except Exception as e:
+            logger.debug(f"file_exists probe fallito per {path!r}: {type(e).__name__}: {e}")
             return False
 
     # ── Helpers privati ─────────────────────────────────────────────────────
@@ -436,7 +437,8 @@ class SharePointDataSource(DataSourceInterface):
             self._ctx.load(folder)
             self._ctx.execute_query()
             return folder
-        except Exception:
+        except Exception as e:
+            logger.debug(f"_get_folder fallito per {relative_path!r}: {type(e).__name__}: {e}")
             return None
 
     def _get_or_create_folder(self, relative_path: str):
@@ -475,10 +477,18 @@ class SharePointDataSource(DataSourceInterface):
                     current_folder = current_folder.folders.add(part)
                     self._ctx.execute_query()
             except Exception as e:
+                logger.debug(
+                    f"Listing subfolders fallito per {part!r}, retry via folders.add: "
+                    f"{type(e).__name__}: {e}"
+                )
                 try:
                     current_folder = current_folder.folders.add(part)
                     self._ctx.execute_query()
                 except Exception as e2:
+                    logger.warning(
+                        f"Creazione cartella {part!r} fallita dopo retry "
+                        f"(path {relative_path!r}): {type(e2).__name__}: {e2}"
+                    )
                     return None
 
         return current_folder
