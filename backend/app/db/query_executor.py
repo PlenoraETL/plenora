@@ -36,6 +36,7 @@ Uso:
     righe, colonne = executor.execute_raw(connessione, sql, params)
 """
 
+import logging
 import time
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple, Protocol
@@ -45,6 +46,8 @@ from urllib.parse import quote_plus
 import pandas as pd
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
+
+logger = logging.getLogger(__name__)
 
 # Result store — salva blob nel DB e usa temp files
 try:
@@ -196,8 +199,13 @@ class DefaultEngineFactory:
             oldest_key = next(iter(self._engine_cache))
             try:
                 self._engine_cache.pop(oldest_key).dispose()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "dispose() su engine evicted (key=%s) fallito, ignoro: %s: %s",
+                    oldest_key,
+                    type(e).__name__,
+                    e,
+                )
 
         # Oracle: configurazione specifica del driver
         if conn.type == "oracle":
@@ -223,8 +231,12 @@ class DefaultEngineFactory:
         for engine in self._engine_cache.values():
             try:
                 engine.dispose()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "dispose() su engine in shutdown fallito, ignoro: %s: %s",
+                    type(e).__name__,
+                    e,
+                )
         self._engine_cache.clear()
 
     def _configura_oracle(self):
@@ -574,15 +586,26 @@ class QueryExecutor:
                     if hasattr(raw, "callTimeout"):
                         raw.callTimeout = timeout_ms
 
-            except Exception:
-                pass  # Non bloccante — il timeout di default di Celery fa da fallback
+            except Exception as e:
+                # Non bloccante — il timeout di default di Celery fa da fallback.
+                logger.debug(
+                    "set timeout di sessione fallito (db=%s), uso fallback Celery: %s: %s",
+                    connection.type,
+                    type(e).__name__,
+                    e,
+                )
 
             # Oracle: aumenta limite cursori aperti per funzioni SDO_UTIL/SDO_GEOM
             if connection.type == "oracle":
                 try:
                     conn.execute(text("ALTER SESSION SET OPEN_CURSORS = 32767"))
-                except Exception:
-                    pass  # Prosegui con il default se non ha i permessi
+                except Exception as e:
+                    # Prosegui con il default se non ha i permessi.
+                    logger.debug(
+                        "ALTER SESSION OPEN_CURSORS fallito (probabili permessi), uso default: %s: %s",
+                        type(e).__name__,
+                        e,
+                    )
 
             # Esecuzione query con parametri preparati (sicurezza SQL injection)
             result = conn.execute(text(sql), params or {})
@@ -670,14 +693,25 @@ class QueryExecutor:
                     raw = conn.connection.dbapi_connection
                     if hasattr(raw, "callTimeout"):
                         raw.callTimeout = timeout_ms
-            except Exception:
-                pass
+            except Exception as e:
+                # Non bloccante — il timeout di default di Celery fa da fallback.
+                logger.debug(
+                    "set timeout di sessione fallito (db=%s), uso fallback Celery: %s: %s",
+                    connection.type,
+                    type(e).__name__,
+                    e,
+                )
 
             if connection.type == "oracle":
                 try:
                     conn.execute(text("ALTER SESSION SET OPEN_CURSORS = 32767"))
-                except Exception:
-                    pass
+                except Exception as e:
+                    # Prosegui con il default se non ha i permessi.
+                    logger.debug(
+                        "ALTER SESSION OPEN_CURSORS fallito (probabili permessi), uso default: %s: %s",
+                        type(e).__name__,
+                        e,
+                    )
 
             result = conn.execute(text(sql), params or {})
             columns = [desc[0] for desc in result.cursor.description]
