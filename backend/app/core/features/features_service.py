@@ -41,6 +41,7 @@ import pandas as pd
 from app.config import settings
 from app.utils.logger import get_logger
 from app.utils.result_store import save_pipeline_result
+from app.utils.dataframe import _read_csv_safe
 from app.core.features.models import (
     ArcGISConnection,
     ArcGISCreate,
@@ -1200,7 +1201,7 @@ class FeaturesService:
             pass
         
         if suffix == ".csv":
-            df = _read_csv_with_encoding_fallback(path)
+            df = _read_csv_safe(path)
             # Cerca colonna geometria WKT
             geom_col = None
             if "geometry" in df.columns:
@@ -1238,28 +1239,12 @@ class FeaturesService:
                     logger.info(
                         f"Fallback a CSV per {path.name}: suffix {suffix!r} plausibile"
                     )
-                    return _read_csv_with_encoding_fallback(path)
+                    return _read_csv_safe(path)
                 raise ValueError(
                     f"Formato file non supportato: {path.name} (suffix={suffix!r}). "
                     f"Formati supportati: .csv, .tsv, .txt, .geojson, .gpkg, .shp, "
                     f".json, .xlsx, .xls. Lettura GeoJSON fallita: {exc}"
                 ) from exc
-
-
-def _read_csv_with_encoding_fallback(path):
-    """Carica un CSV con detection di encoding (utf-8 → cp1252 → latin-1).
-
-    Stesso pattern di app/utils/dataframe.py:_read_csv_safe. Duplicato qui
-    per evitare dipendenza circolare.
-    """
-    for enc in ("utf-8", "utf-8-sig", "cp1252", "latin-1"):
-        try:
-            return pd.read_csv(path, encoding=enc)
-        except UnicodeDecodeError:
-            continue
-    # latin-1 non fallisce mai, ma per sicurezza:
-    return pd.read_csv(path, encoding="latin-1", errors="replace")
-    
 
 
 # =============================================================================
