@@ -39,6 +39,7 @@ Fonte di verita': `backend/docs/architecture/inventory_report.md` Sezione 5.
 
 ## Fase B — Consolidation execute
 - **Status**: bloccata — attendo go esplicito su subset 5.1 (+5.2 se mechanical) dal checkpoint
+- **Nota S13 (2026-04-20)**: chiuso come **inventory error**. Il riferimento originale `app/core/scheduler/execution_manager.py:576-585` non contiene `ALTER SESSION`; i siti reali pertinenti sono già coperti da **S10** in `app/db/query_executor.py`. Possibile candidato separato fuori scope: `backend/app/core/carica/database_writer.py:2198-2204`.
 - Vincoli operativi hard (dichiarati dall'utente):
   - Niente explore agents, niente subagents, niente parallelizzazione
   - Commit atomici piccoli, prefisso `[consolidation]`

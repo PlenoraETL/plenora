@@ -421,7 +421,7 @@ Tutti gli item sono stati verificati in `backend/` (codice + `.env.example` + te
 | `app/core/features/` | Mista | `features_service.py:422-423, 904-905, 1069` silent/naked except; `features_service.py:1056-1058` warning+pass | Diverso da pattern router; query silenziose | `unify` (logging obbligatorio) |
 | `app/core/imdf/` | Mista | `router.py:82-83` warning non-fatal; `:327-329` HTTPException; `:358-410` multi silent; `:477-478` S3 fallback warning | Diverse semantiche di fallback | `align`: policy unica fallback vs error |
 | `app/core/eseguibili/` | Fail-fast | `router.py` HTTPException-based | `router.py` 19 except, 6 `pass` da triare | `align` probabile |
-| `app/core/scheduler/` | Fail-fast | `router.py:112-139` pattern uniforme; `execution_manager.py` 15 except | `execution_manager.py:576-585` silent oracle tuning (cleanup) | `keep + align piccoli` |
+| `app/core/scheduler/` | Fail-fast | `router.py:112-139` pattern uniforme; `execution_manager.py` 15 except | Nessuna occorrenza `ALTER SESSION` nel modulo; riferimento S13 risultato errato in triage successivo | `keep` |
 | `app/core/orchestrator/` | Fail-fast | `service.py:245-246` HTTPException; `router.py` 19 except | Maggior parte delegata a worker | `keep` |
 | `app/core/tickets/` | Fail-fast | `router.py:66-293` HTTPException + validazione | `router.py:456-457` warning+swallow | `align` |
 | `app/core/admin_backups/` | Fail-fast | `service.py` sampled HTTPException | `service.py:134-135` silent AttributeError | `align` (minor) |
@@ -539,7 +539,7 @@ Se uno qualsiasi di questi item richiede piu' di quello, **segnalarlo prima di e
 | S10 | 2.6 | `backend/app/db/query_executor.py:198-200, 225-227, 240-242, 576-578, 583-585, 672-674, 677-680` | Aggiungere `logger.debug(...)` uniforme in tutti e 7 i cleanup pool/session. Nessun cambio di comportamento, solo tracing. |
 | S11 | 2.7 | `backend/app/core/logs/router.py:21-24` | JSON parse silent: aggiungere `logger.debug("log details non parseable come json, lascio stringa")` + commento che spiega la policy display. |
 | S12 | 2.11 | `backend/app/db/pg_connection.py:242-245` | Silent putconn: `logger.warning` se putconn fallisce (indicatore di pool exhaustion o conn gia' chiusa). |
-| S13 | Sez. 4 (`execution_manager.py:576-585`) | `backend/app/core/scheduler/execution_manager.py:576-585` | Oracle tuning silent (`ALTER SESSION` fails): aggiungere `logger.debug` con nome parametro. Cleanup path, non critico. |
+| S13 | Sez. 4 (`execution_manager.py:576-585`) | `backend/app/core/scheduler/execution_manager.py:576-585` | **Dropped — inventory error.** Il path indicato non contiene `ALTER SESSION`; i due siti Oracle `ALTER SESSION SET OPEN_CURSORS = 32767` realmente pertinenti sono già coperti da **S10** (`backend/app/db/query_executor.py:582-585` e `:677-680`). Il sito `backend/app/core/carica/database_writer.py:2198-2204` è un candidato separato fuori scope, non sostituisce S13. |
 | S15 | Sez. 4 (`admin_backups/service.py:134-135`) | `backend/app/core/admin_backups/service.py:134-135` | Silent AttributeError: sostituire con `logger.warning` + contesto minimo. |
 | S16 | Sez. 4 (`files/router.py:153-154, 241-246`) | `backend/app/core/files/router.py:153-154, 241-246` | Uniformare log level tra i due punti indicati (attualmente warning vs error senza motivo). Scegliere il livello corretto per la semantica e allineare. |
 
