@@ -90,11 +90,12 @@ Questo e' l'elenco chiuso dei fallback attivi nel codice `backend/app/` che sodd
 | `app/core/logs/router.py:_row_to_dict()` → lascia `details` come stringa se non e' JSON | Log legacy hanno `details` testuale | Solo display log | `logger.debug` (S11) | Rimuovere quando tutti i log verranno scritti con `details` JSON normalizzato (target: data-cleanup) |
 | `app/core/carica/bulk_writers.py:cursor.close() in finally` | psycopg2 cursor close non deve mascherare l'errore originale se fallisce | Solo ramo finally di COPY Postgres | `logger.debug` con type+msg (S9) | Rimozione non prevista |
 | `app/core/admin_backups/service.py` → warning su `duration_sec` | `started_at/finished_at` potrebbero essere stringhe o `None` in rows legacy | Solo rendering job summary | `logger.warning` con contesto started/finished (S15) | Rimuovere quando schema log job avra' tipi consolidati |
+| `app/core/arricchisci/enrichment_service.py:408-410` → `_execute_parallel` su eccezione async | Safety-net: se il path async (attivo in prod) solleva per ragione inattesa, il path sync offre lo stesso contratto osservabile (parity D1) | Solo ramo `except` del routing async; non maschera errori API normali (quelli tornano come `RowError`) | `logger.error` con `exc_info=True` e prefisso `[ASYNC]` | Rimozione non prevista finche' il flag resta kill-switch |
 
 **Fallback note di debito (non invarianti, da risolvere fuori Fase 0)**:
 
 - `app/db/query_executor.py` 7 siti di cleanup silent (dispose engine, timeout setup, Oracle `ALTER SESSION`, disconnect). Approvati per Fase 0 come "noti" ma **non autorizzati** come invariant — S10 rimandato per decisione dedicata. Finche' non si decide, non estendere il pattern.
-- `app/core/arricchisci/enrichment_service.py:403-410` fallback async→sync su eccezione (feature flag `ENABLE_ASYNC_ENRICHMENT`). E' esplicitamente una violazione di charter base 7 (due architetture vive) e deve essere risolto con rimozione del flag o del path legacy. Non promosso qui come fallback autorizzato.
+- `app/core/arricchisci/enrichment_service.py:403-410` fallback async→sync su eccezione (feature flag `ENABLE_ASYNC_ENRICHMENT`). Post-D1 (2026-04-20) i due path sono parity-verified su rate limiting e error granularity (test `tests2/arricchisci/unit/test_enrichment_executor_sync_vs_async_parity.py`). Il fallback resta come safety-net: se async solleva per ragioni inattese, sync offre lo stesso contratto osservabile. Promosso a fallback autorizzato nella nuova riga di §2.
 - `app/services/file_service.py` 21 `except: pass` sparsi (triage rimandato). Mix legittimo (type detection) + sospetto; richiede audit riga-per-riga fuori Fase 0.
 
 ---
@@ -111,7 +112,7 @@ Ogni flag attivo nel codice deve stare qui con owner, data di introduzione e rim
 | `URBY_ALLOW_LOOPBACK_OUTBOUND` | `app/shared/api_utils.py` | 2026-04-10 | Test-only: consente loopback in outbound validation | Attivo solo in test harness | Mai (test infra) |
 | `PLENORA_DISABLE_DEFAULT_KEY` | `app/shared/crypto.py` | 2026-04-10 | Dev opt-in per replicare fail-fast di prod | Attivo | Mai (dev ergonomy) |
 | `URBY_DISABLE_DEFAULT_KEY` | `app/shared/crypto.py` | 2026-04-10 | Alias retro-compat del flag sopra | In uscita | Dopo verifica `.env` dei deploy che non lo usano piu' (decisione D-fascia) |
-| `ENABLE_ASYNC_ENRICHMENT` | `app/core/arricchisci/enrichment_service.py` | 2026-04-10 (security audit) | Routing tra `_execute_parallel` (sync) e `_execute_parallel_async` (async) | **Viola charter base 7** (due architetture parallele); default `false` | Rimozione obbligatoria prima di chiudere Fase 1; scelta binaria `remove flag+async` o `remove flag+sync` dopo verifica prod |
+| `ENABLE_ASYNC_ENRICHMENT` | `app/core/arricchisci/enrichment_service.py` | 2026-04-10 (security audit) | Routing tra `_execute_parallel` (sync) e `_execute_parallel_async` (async) | Kill-switch operazionale post-D1. Verifica prod 2026-04-20: `true` in `/home/ubuntu/plenora-etl/backend/.env`. Parity rate-limiter + error granularity sanata (D1); divergenze residue accettate e documentate (early stop, progress) | Rimozione non prevista (safety valve analogo a `CARICA_BULK_INSERT`) |
 
 ### Env var crypto-key (coda di §1.5)
 
@@ -206,7 +207,7 @@ Le seguenti decisioni **non** sono vincolate da questo documento e restano scope
 - **Priorita' specifiche di refactor** (es. "prima i writer, poi i reader"): scelta per brief di fase, non invariant.
 - **Target di performance, SLO, SLA**: scope Fase 1 PERF; non sono invariant architetturali.
 - **Contratti API pubblici verso ICSC/RFI/ANIA**: governati fuori da questo doc (contratti commerciali + versioning API).
-- **Decisioni aperte della fascia D1–D19** (ENABLE_ASYNC_ENRICHMENT unify, `_read_csv_*` unify, IMDF loader/persist/storage, alias crypto, SECRET_KEY/JWT_SECRET_KEY, policy preview vs execute). Restano scope decisionale post-Fase 0. Il codice attuale e' documentato qui come "stato" — non come "obiettivo permanente".
+- **Decisioni aperte della fascia D1–D19** (`_read_csv_*` unify, IMDF loader/persist/storage, alias crypto, SECRET_KEY/JWT_SECRET_KEY, policy preview vs execute). Restano scope decisionale post-Fase 0. Il codice attuale e' documentato qui come "stato" — non come "obiettivo permanente". D1 (ENABLE_ASYNC_ENRICHMENT) chiuso il 2026-04-20: flag mantenuto come kill-switch, parity sync/async sanata.
 - **Triage residui**:
   - `app/services/file_service.py` 21 `except: pass` sparsi — audit rimandato
   - `app/db/query_executor.py` 7 siti cleanup silent (S10) — log debug rimandato

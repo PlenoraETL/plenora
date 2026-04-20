@@ -676,11 +676,15 @@ class EnrichmentExecutor:
         processed_counter = [0]
         counter_lock = asyncio.Lock()
 
-        async def _process_group(cache_key: str, row_indices: List) -> Optional[RowError]:
+        async def _process_group(cache_key: str, row_indices: List) -> Optional[List[RowError]]:
             """Processa un singolo gruppo di righe con parametri identici.
 
             La chiamata API sync viene eseguita in un thread via asyncio.to_thread,
             cosi non blocca l'event loop.
+
+            Ritorno: None su successo/skip, oppure List[RowError] con UN entry
+            per ogni riga del gruppo (parity con il path sync _execute_parallel,
+            che replica il RowError su tutti gli idx).
             """
             async with semaphore:
                 first_idx = row_indices[0]
@@ -710,13 +714,31 @@ class EnrichmentExecutor:
 
                     # Se non cached: chiamata API (sync via to_thread)
                     if api_result is None:
+                        # Rate limiting: parity con _execute_parallel sync.
+                        # RateLimiter.acquire() puo' bloccare via time.sleep:
+                        # esecuzione via to_thread evita di bloccare l'event loop.
+                        await asyncio.to_thread(self._rate_limiter.acquire)
+
                         api_result, err_obj = await asyncio.to_thread(
                             self._call_api_with_retry, params, int(first_idx)
                         )
 
                         if err_obj is not None:
                             stats.errors += len(row_indices)
-                            return err_obj
+                            # Parity con sync: replica il RowError per ogni
+                            # riga del gruppo preservando http_status/retry_count.
+                            return [
+                                RowError(
+                                    row_index=int(idx),
+                                    status=err_obj.status,
+                                    error_message=err_obj.error_message,
+                                    error_type=err_obj.error_type,
+                                    http_status=err_obj.http_status,
+                                    retry_count=err_obj.retry_count,
+                                    input_params=err_obj.input_params or params,
+                                )
+                                for idx in row_indices
+                            ]
 
                         if self.options.enable_deduplication and api_result:
                             with self._cache_lock:
@@ -753,18 +775,17 @@ class EnrichmentExecutor:
                 except Exception as e:
                     logger.error(f"[ASYNC] Errore gruppo {cache_key}: {e}", exc_info=True)
                     stats.errors += len(row_indices)
-                    # Fix: la dataclass RowError ha status obbligatorio e il
-                    # campo params si chiama input_params. Prima passava
-                    # params={} (kwarg inesistente) → TypeError → l'eccezione
-                    # secondaria mascherava quella primaria e tutti i gruppi
-                    # venivano trattati come "skipped" silenziosi.
-                    return RowError(
-                        row_index=int(first_idx),
-                        status=RowStatus.ERROR,
-                        error_message=str(e),
-                        error_type="async_exception",
-                        input_params=params,
-                    )
+                    # Parity con sync: un RowError per riga del gruppo.
+                    return [
+                        RowError(
+                            row_index=int(idx),
+                            status=RowStatus.ERROR,
+                            error_message=str(e),
+                            error_type="async_exception",
+                            input_params=params,
+                        )
+                        for idx in row_indices
+                    ]
 
         # Lancia tutti i task in parallelo, gestiti dal semaforo
         tasks = [
@@ -777,8 +798,8 @@ class EnrichmentExecutor:
             chunk = tasks[chunk_start:chunk_start + CHUNK]
             results = await asyncio.gather(*chunk, return_exceptions=True)
             for r in results:
-                if isinstance(r, RowError):
-                    errors.append(r)
+                if isinstance(r, list):
+                    errors.extend(r)
                 elif isinstance(r, Exception):
                     logger.error(f"[ASYNC] Exception in task: {r}")
 
