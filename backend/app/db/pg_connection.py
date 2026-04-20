@@ -241,8 +241,12 @@ def put_connection(conn):
     """Rimette una connessione nel pool."""
     try:
         _get_pool().putconn(conn)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(
+            "putconn() fallito, connessione non restituita al pool: %s: %s",
+            type(e).__name__,
+            e,
+        )
 
 
 def close_pool():
