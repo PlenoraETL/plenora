@@ -151,6 +151,10 @@ def preview_file_temp(
             content=_content_for_mime, filename=file.filename or "upload",
         )
     except MimeMismatchError as _mime_err:
+        logger.warning(
+            f"Preview rifiutata (MIME): filename={file.filename!r} "
+            f"user={current_user.username}: {_mime_err}"
+        )
         raise HTTPException(status_code=400, detail=str(_mime_err))
 
     try:
