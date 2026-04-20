@@ -1,6 +1,7 @@
 """
 Servizio CRUD per connessioni database.
-Storage: SQLite tramite app.db.db_service.
+Storage: PostgreSQL tramite app.db.db_service (facade) e
+app.db.config_db_service (query dirette catalogo PLENORA).
 
 Le password vengono cifrate con Fernet prima di essere salvate nel DB.
 La logica di cifratura è centralizzata in app.shared.crypto — qui si fa
