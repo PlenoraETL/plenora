@@ -319,7 +319,18 @@ class CaricaExecutor:
 
         # Verifica tabella
         writer = DatabaseWriter(config=config, engine=engine, db_type=db_type)
-        table_exists = writer.table_exists()
+        try:
+            table_exists = writer.table_exists()
+        except Exception as e:
+            return {
+                "is_valid": False,
+                "errors": [
+                    f"Verifica esistenza tabella "
+                    f"{config.schema_name}.{config.table_name} "
+                    f"fallita: {str(e)}"
+                ],
+                "warnings": [],
+            }
 
         # Validazione mapping
         if config.column_mappings:

@@ -94,7 +94,14 @@ class DatabaseWriter(DestinationWriter):
             return False, f"Connessione al database fallita: {str(e)}"
 
         # 2. Verifica tabella per modalità che la richiedono
-        exists = self.table_exists()
+        try:
+            exists = self.table_exists()
+        except Exception as e:
+            return False, (
+                f"Verifica esistenza tabella "
+                f"{self.config.schema_name}.{self.config.table_name} "
+                f"fallita: {str(e)}"
+            )
 
         if self.config.write_mode == WriteMode.CREATE:
             if exists and self.config.if_table_exists == "error":
@@ -133,7 +140,14 @@ class DatabaseWriter(DestinationWriter):
             WriteMode.APPEND, WriteMode.UPDATE,
             WriteMode.UPSERT, WriteMode.TRUNCATE_INSERT
         ) and self.config.column_mappings and exists:
-            existing_col_names = {c["name"] for c in self.get_existing_columns()}
+            try:
+                existing_col_names = {c["name"] for c in self.get_existing_columns()}
+            except Exception as e:
+                return False, (
+                    f"Lettura colonne tabella "
+                    f"{self.config.schema_name}.{self.config.table_name} "
+                    f"fallita: {str(e)}"
+                )
             if existing_col_names:
                 invalid = [
                     cm.dest_column
@@ -180,7 +194,12 @@ class DatabaseWriter(DestinationWriter):
     # ========================================================================
 
     def table_exists(self) -> bool:
-        """Verifica se la tabella destinazione esiste."""
+        """Verifica se la tabella destinazione esiste.
+
+        Solleva l'eccezione sottostante se la query non e' eseguibile
+        (connessione, permessi, DDL). Il chiamante deve distinguere
+        "tabella non trovata" (False) da "verifica fallita" (raise).
+        """
         query, params = self.ddl.query_table_exists(
             self.config.schema_name, self.config.table_name
         )
@@ -199,10 +218,15 @@ class DatabaseWriter(DestinationWriter):
                     return bool(count)
         except Exception as e:
             logger.error(f"[CRASH] Errore verifica esistenza tabella: {e}", exc_info=True)
-            return False
+            raise
 
     def get_existing_columns(self) -> List[Dict[str, str]]:
-        """Recupera le colonne della tabella destinazione."""
+        """Recupera le colonne della tabella destinazione.
+
+        Solleva l'eccezione sottostante se la query non e' eseguibile;
+        una lista vuota significa esclusivamente "tabella senza colonne
+        o inesistente", mai "introspection fallita".
+        """
         query, params = self.ddl.query_table_columns(
             self.config.schema_name, self.config.table_name
         )
@@ -215,10 +239,15 @@ class DatabaseWriter(DestinationWriter):
                 ]
         except Exception as e:
             logger.error(f"[CRASH] Errore recupero colonne: {e}", exc_info=True)
-            return []
+            raise
 
     def get_schemas(self) -> List[str]:
-        """Recupera la lista degli schema disponibili."""
+        """Recupera la lista degli schema disponibili.
+
+        Solleva l'eccezione sottostante se la query non e' eseguibile;
+        una lista vuota significa esclusivamente "nessuno schema
+        visibile", mai "introspection fallita".
+        """
         query = self.ddl.query_list_schemas()
         try:
             with self.engine.connect() as conn:
@@ -226,10 +255,15 @@ class DatabaseWriter(DestinationWriter):
                 return [str(row[0]) for row in result]
         except Exception as e:
             logger.error(f"[CRASH] Errore recupero schema: {e}", exc_info=True)
-            return []
+            raise
 
     def get_tables(self, schema_name: str) -> List[str]:
-        """Recupera la lista delle tabelle in uno schema."""
+        """Recupera la lista delle tabelle in uno schema.
+
+        Solleva l'eccezione sottostante se la query non e' eseguibile;
+        una lista vuota significa esclusivamente "schema vuoto", mai
+        "introspection fallita".
+        """
         query, params = self.ddl.query_list_tables(schema_name)
         try:
             with self.engine.connect() as conn:
@@ -237,7 +271,7 @@ class DatabaseWriter(DestinationWriter):
                 return [str(row[0]) for row in result]
         except Exception as e:
             logger.error(f"[CRASH] Errore recupero tabelle: {e}", exc_info=True)
-            return []
+            raise
 
     # ========================================================================
     # GESTIONE TABELLA
