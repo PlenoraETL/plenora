@@ -208,8 +208,12 @@ def bulk_copy_postgres(
     finally:
         try:
             cur.close()
-        except Exception:
-            pass
+        except Exception as close_err:
+            logger.debug(
+                "COPY cursor.close() failed: %s: %s",
+                type(close_err).__name__,
+                close_err,
+            )
 
     return n_rows
 
