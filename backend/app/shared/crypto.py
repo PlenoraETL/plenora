@@ -21,7 +21,13 @@ Sorgente della chiave (in ordine di priorità)
 1. ``PLENORA_ENCRYPTION_KEY`` — nome canonico nuovo (consigliato per nuovi deploy)
    ``URBY_ENCRYPTION_KEY``    — alias retro-compat, ancora supportato
 2. ``CONN_ENCRYPT_KEY``       — nome legacy già usato da connection_service.py
-3. ``SECRET_KEY`` / ``JWT_SECRET_KEY`` — fallback condiviso con JWT auth
+
+La chain NON fallbacka su ``SECRET_KEY`` / ``JWT_SECRET_KEY``: quei nomi
+appartengono al dominio auth JWT (vedi ``app/core/auth/auth.py``) e vengono
+tenuti distinti di proposito. Condividere il secret tra JWT e crypto-at-rest
+renderebbe la rotazione della chiave JWT (documentata in
+``docs/ops/jwt-incident-response.md``) un'operazione silently distruttiva
+per tutti i record cifrati. Un secret, un consumatore, un nome canonico.
 
 Comportamento se la chiave manca
 --------------------------------
@@ -92,7 +98,9 @@ def _get_raw_key() -> str:
     """Recupera la raw key dall'env var, con fallback dev e fail-fast in prod.
 
     Cerca in ordine: PLENORA_ENCRYPTION_KEY → URBY_ENCRYPTION_KEY (legacy) →
-    CONN_ENCRYPT_KEY → SECRET_KEY → JWT_SECRET_KEY.
+    CONN_ENCRYPT_KEY. Nessun fallback su SECRET_KEY / JWT_SECRET_KEY:
+    quei nomi appartengono al dominio auth JWT, tenerli separati rompe
+    l'accoppiamento rotazione-JWT ↔ decifratura-at-rest.
     Se nessuna è valorizzata e ci troviamo in produzione,
     solleva ``RuntimeError`` (preferito a SystemExit per essere catturabile
     nei test e gestibile dal framework FastAPI in fase di startup).
@@ -114,8 +122,6 @@ def _get_raw_key() -> str:
         "PLENORA_ENCRYPTION_KEY",
         "URBY_ENCRYPTION_KEY",
         "CONN_ENCRYPT_KEY",
-        "SECRET_KEY",
-        "JWT_SECRET_KEY",
     ):
         val = os.getenv(env_name)
         if val:
@@ -149,8 +155,8 @@ def _get_raw_key() -> str:
     if is_prod:
         raise RuntimeError(
             "[PLENORA-ETL] Nessuna chiave di cifratura configurata. "
-            "Imposta PLENORA_ENCRYPTION_KEY (o CONN_ENCRYPT_KEY/SECRET_KEY) "
-            "nelle variabili d'ambiente prima di avviare in produzione."
+            "Imposta PLENORA_ENCRYPTION_KEY nelle variabili d'ambiente "
+            "prima di avviare in produzione."
         )
 
     # Opt-in per developer che vogliono replicare il fail-fast di prod.
