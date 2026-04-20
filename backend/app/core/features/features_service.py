@@ -4,12 +4,11 @@ Servizio CRUD per connessioni ArcGIS Feature Service.
 Architettura
 ============
 Servizio parallelo a ConnectionService per gestire le connessioni ad
-ArcGIS Server/Enterprise/Online. Ogni connessione è salvata come file JSON
-su filesystem, seguendo lo stesso pattern di ConnectionService.
-
-Struttura filesystem:
-    data/arcgis_connections/
-    └── <nome>_<timestamp>_<uuid>.json    # Configurazione connessione
+ArcGIS Server/Enterprise/Online. Le connessioni sono persistite nella
+tabella PostgreSQL `arcgis_connections` tramite `app.db.db_service`,
+seguendo lo stesso pattern di ConnectionService post-migrazione PG.
+I campi sensibili (`password`, `client_secret`) sono cifrati a riposo
+via `app.shared.crypto` (Fernet, prefisso "enc:", idempotente).
 
 Operazioni CRUD:
 - list_connections(): lista connessioni ArcGIS
