@@ -1,6 +1,6 @@
 import pytest
 
-from app.core.features.features_service_db import _row_to_connection, create_connection_db
+from app.core.features.features_service import _row_to_connection, create_connection_db
 from app.shared.crypto import decrypt, is_encrypted
 from tests2.helpers.builders import build_arcgis_create
 
@@ -11,7 +11,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.features, pytest.mark.security, pyte
 def test_create_connection_db_encrypts_password_and_client_secret_before_insert(monkeypatch):
     captured = {}
 
-    import app.core.features.features_service_db as fs_db
+    import app.core.features.features_service as fs_db
 
     def _execute(sql, params):
         captured["sql"] = sql

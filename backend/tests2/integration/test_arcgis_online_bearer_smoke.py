@@ -43,7 +43,7 @@ def _fetch_conn_or_skip():
     if not os.getenv("DATABASE_URL"):
         pytest.skip("DATABASE_URL non configurato localmente")
     try:
-        from app.core.features.features_service_db import get_connection_db
+        from app.core.features.features_service import get_connection_db
         conn = get_connection_db(_CONN_ID)
     except Exception as e:
         pytest.skip(f"Impossibile caricare connection da DB: {e}")
