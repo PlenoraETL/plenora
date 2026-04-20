@@ -1062,12 +1062,28 @@ class FeaturesService:
         elif suffix in (".xlsx", ".xls"):
             return pd.read_excel(path)
         else:
-            # Prova come GeoJSON
+            # Estensione non riconosciuta: prova come GeoJSON via geopandas.
+            # Fallback a CSV solo se l'estensione e' plausibilmente CSV-like
+            # (.tsv, .txt). Altrimenti fail-fast: un .gpkg corrotto o un
+            # binario mislabel-ato non deve essere letto silenziosamente come CSV.
             try:
                 import geopandas as gpd
                 return gpd.read_file(path)
-            except Exception:
-                return _read_csv_with_encoding_fallback(path)
+            except Exception as exc:
+                logger.warning(
+                    f"Lettura come GeoJSON fallita per {path.name} "
+                    f"(suffix={suffix!r}): {type(exc).__name__}: {exc}"
+                )
+                if suffix in (".tsv", ".txt"):
+                    logger.info(
+                        f"Fallback a CSV per {path.name}: suffix {suffix!r} plausibile"
+                    )
+                    return _read_csv_with_encoding_fallback(path)
+                raise ValueError(
+                    f"Formato file non supportato: {path.name} (suffix={suffix!r}). "
+                    f"Formati supportati: .csv, .tsv, .txt, .geojson, .gpkg, .shp, "
+                    f".json, .xlsx, .xls. Lettura GeoJSON fallita: {exc}"
+                ) from exc
 
 
 def _read_csv_with_encoding_fallback(path):
