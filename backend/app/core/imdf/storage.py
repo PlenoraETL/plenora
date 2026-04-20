@@ -206,8 +206,8 @@ def ensure_local_bundle(task_id: str) -> Path:
     finally:
         try:
             tmp_zip.unlink()
-        except OSError:
-            pass
+        except OSError as _ue:
+            logger.debug(f"[{task_id}] tmp_zip unlink (hydrate) skipped: {type(_ue).__name__}: {_ue}")
 
 
 def get_meta_only(task_id: str) -> Optional[Dict[str, Any]]:
