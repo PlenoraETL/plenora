@@ -217,7 +217,12 @@ def _load_upload_meta(file_id: str) -> Optional[dict]:
     try:
         import json as _json
         return _json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
+    except Exception as _meta_err:
+        logger.warning(
+            f"_load_upload_meta: metadata file_id={file_id} presente ma non "
+            f"decodificabile ({type(_meta_err).__name__}: {_meta_err}); "
+            f"ritorno None → analyze/execute vedranno 'upload non trovato'"
+        )
         return None
 
 
@@ -227,8 +232,11 @@ def _delete_upload_meta(file_id: str) -> None:
     try:
         if path.exists():
             path.unlink()
-    except Exception:
-        pass
+    except Exception as _unlink_err:
+        logger.debug(
+            f"_delete_upload_meta best-effort fallito per file_id={file_id}: "
+            f"{_unlink_err}"
+        )
 
 
 # ─ Task ownership metadata ──────────────────────────────────────────────
@@ -259,7 +267,12 @@ def _load_task_owner(task_id: str) -> Optional[dict]:
     try:
         import json as _json
         return _json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
+    except Exception as _owner_err:
+        logger.warning(
+            f"_load_task_owner: ownership file task_id={task_id} presente ma "
+            f"non decodificabile ({type(_owner_err).__name__}: {_owner_err}); "
+            f"ritorno None → download endpoint fail-closed per non-superadmin"
+        )
         return None
 
 
@@ -268,8 +281,11 @@ def _delete_task_owner(task_id: str) -> None:
         path = _task_owner_path(task_id)
         if path.exists():
             path.unlink()
-    except Exception:
-        pass
+    except Exception as _unlink_err:
+        logger.debug(
+            f"_delete_task_owner best-effort fallito per task_id={task_id}: "
+            f"{_unlink_err}"
+        )
 
 
 @router.post("/{eseguibile_id}/analyze-upload", response_model=AnalyzeUploadResponse)
@@ -316,8 +332,11 @@ async def analyze_upload(
             tmp_file.close()
             try:
                 os.unlink(tmp_file.name)
-            except Exception:
-                pass
+            except Exception as _unlink_err:
+                logger.debug(
+                    f"analyze_upload: cleanup tmp post-MIME-reject best-effort "
+                    f"fallito per {tmp_file.name}: {_unlink_err}"
+                )
             raise HTTPException(status_code=400, detail=str(e))
         tmp_file.write(content)
     finally:
@@ -335,8 +354,11 @@ async def analyze_upload(
             # Cleanup file temp se analisi fallisce
             try:
                 os.unlink(tmp_path)
-            except Exception:
-                pass
+            except Exception as _unlink_err:
+                logger.debug(
+                    f"analyze_upload: cleanup tmp post-ValueError best-effort "
+                    f"fallito per {tmp_path}: {_unlink_err}"
+                )
             raise HTTPException(status_code=400, detail=str(e))
 
         # Salva metadata su disco (multi-worker safe: visibile a tutti i worker uvicorn)
@@ -425,8 +447,11 @@ def execute_eseguibile(
         try:
             if os.path.exists(upload["path"]):
                 os.unlink(upload["path"])
-        except Exception:
-            pass
+        except Exception as _unlink_err:
+            logger.debug(
+                f"execute_eseguibile: cleanup tmp upload best-effort fallito "
+                f"per {upload.get('path')}: {_unlink_err}"
+            )
         _delete_upload_meta(payload.file_id)
 
     return result
@@ -511,8 +536,11 @@ def download_eseguibile_output(
             logger.warning(f"Cleanup storage post-download fallito per {safe_task_id}: {e}")
         try:
             _delete_task_owner(safe_task_id)
-        except Exception:
-            pass
+        except Exception as _owner_err:
+            logger.debug(
+                f"_cleanup_after_send: _delete_task_owner best-effort fallito "
+                f"per task_id={safe_task_id}: {_owner_err}"
+            )
 
     background_tasks.add_task(_cleanup_after_send)
 
