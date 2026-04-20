@@ -232,8 +232,12 @@ def write_node(run_id: str, node_id: str, node_type: str,
                 status="error",
                 error_msg=str(e),
             )
-        except Exception:
-            pass
+        except Exception as _cleanup_err:
+            logger.debug(
+                f"upsert_node_meta fallback fallito per run {run_id} node {node_id}: "
+                f"{type(_cleanup_err).__name__}: {_cleanup_err}",
+                op="intermediate_write",
+            )
         return hashlib.sha256(b"error").hexdigest()
 
 
@@ -295,5 +299,9 @@ def close_run(run_id: str, input_hash: str, output_hash: str,
         logger.error(f"[GESTITO] Errore chiusura run {run_id}: {e}", op="intermediate_write")
         try:
             db.update_run(run_id, status="failed")
-        except Exception:
-            pass
+        except Exception as _cleanup_err:
+            logger.debug(
+                f"update_run(status=failed) fallback fallito per run {run_id}: "
+                f"{type(_cleanup_err).__name__}: {_cleanup_err}",
+                op="intermediate_write",
+            )
