@@ -103,7 +103,7 @@ def _get_raw_key() -> str:
         chiave configurata" → fail-fast in production
       - Se la chiave è più corta di `_MIN_KEY_LENGTH` caratteri, fail-fast
         anche in dev (probabile errore di configurazione)
-      - In dev, se URBY_DISABLE_DEFAULT_KEY=1 è impostata, fail-fast invece
+      - In dev, se PLENORA_DISABLE_DEFAULT_KEY=1 è impostata, fail-fast invece
         di usare la dev key (opt-in per chi vuole replicare prod localmente)
     """
     # Nome canonico nuovo: PLENORA_ENCRYPTION_KEY. URBY_ENCRYPTION_KEY e'
@@ -154,10 +154,7 @@ def _get_raw_key() -> str:
         )
 
     # Opt-in per developer che vogliono replicare il fail-fast di prod.
-    # Sia PLENORA_DISABLE_DEFAULT_KEY sia URBY_DISABLE_DEFAULT_KEY triggherano
-    # (retro-compat: il vecchio nome e' ancora accettato).
-    if os.getenv("PLENORA_DISABLE_DEFAULT_KEY") == "1" or \
-       os.getenv("URBY_DISABLE_DEFAULT_KEY") == "1":
+    if os.getenv("PLENORA_DISABLE_DEFAULT_KEY") == "1":
         raise RuntimeError(
             "[PLENORA-ETL] Nessuna chiave di cifratura e PLENORA_DISABLE_DEFAULT_KEY=1. "
             "Imposta PLENORA_ENCRYPTION_KEY o rimuovi PLENORA_DISABLE_DEFAULT_KEY."

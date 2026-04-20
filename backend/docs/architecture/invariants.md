@@ -110,7 +110,6 @@ Ogni flag attivo nel codice deve stare qui con owner, data di introduzione e rim
 | `MSSQL_FAST_EXECUTEMANY` | `app/db/query_executor.py` | 2026-04-10 | Opt-out driver tuning (default `on`, `off` per precisione DATETIME2) | Attivo, default `on` | Mai (dialect-specific) |
 | `URBY_ALLOW_LOOPBACK_OUTBOUND` | `app/shared/api_utils.py` | 2026-04-10 | Test-only: consente loopback in outbound validation | Attivo solo in test harness | Mai (test infra) |
 | `PLENORA_DISABLE_DEFAULT_KEY` | `app/shared/crypto.py` | 2026-04-10 | Dev opt-in per replicare fail-fast di prod | Attivo | Mai (dev ergonomy) |
-| `URBY_DISABLE_DEFAULT_KEY` | `app/shared/crypto.py` | 2026-04-10 | Alias retro-compat del flag sopra | In uscita | Dopo verifica `.env` dei deploy che non lo usano piu' (decisione D-fascia) |
 | `ENABLE_ASYNC_ENRICHMENT` | `app/core/arricchisci/enrichment_service.py` | 2026-04-10 (security audit) | Routing tra `_execute_parallel` (sync) e `_execute_parallel_async` (async) | Kill-switch operazionale post-D1. Verifica prod 2026-04-20: `true` in `/home/ubuntu/plenora-etl/backend/.env`. Parity rate-limiter + error granularity sanata (D1); divergenze residue accettate e documentate (early stop, progress) | Rimozione non prevista (safety valve analogo a `CARICA_BULK_INSERT`) |
 
 ### Env var crypto-key (coda di §1.5)

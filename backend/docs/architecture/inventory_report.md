@@ -353,13 +353,13 @@ Tutti gli item sono stati verificati in `backend/` (codice + `.env.example` + te
 - **Stato**: default `on`, opt-out via `off`. Workaround per casi edge MSSQL (precisione DATETIME2).
 - **Verdetto proposto**: `keep + documenta in invariants` (operational, dialect-specific).
 
-### 3.5 `PLENORA_DISABLE_DEFAULT_KEY` + alias `URBY_DISABLE_DEFAULT_KEY`
+### 3.5 `PLENORA_DISABLE_DEFAULT_KEY`
 
-- **Read**: `backend/app/shared/crypto.py:159-160` (entrambi).
-- **Documentato**: docstring `crypto.py:156-164`, `.env.example:34-35`.
-- **Stato**: dev opt-in per replicare fail-fast di prod. Alias `URBY_*` retro-compat.
+- **Read**: `backend/app/shared/crypto.py`.
+- **Documentato**: docstring `crypto.py` (sezione `SECURITY hardening`), `.env.example`.
+- **Stato**: dev opt-in per replicare fail-fast di prod.
 - **Seconda arch**: no (spegne solo dev-default key).
-- **Verdetto proposto**: `keep + unify nome (remove URBY_DISABLE_DEFAULT_KEY dopo verifica .env)`. Aggiunge coda a 1.6.
+- **Verdetto proposto**: `keep`. Alias retro-compat `URBY_DISABLE_DEFAULT_KEY` rimosso (D4 parziale, 2026-04-20).
 
 ### 3.6 `URBY_ALLOW_LOOPBACK_OUTBOUND`
 
@@ -398,11 +398,11 @@ Tutti gli item sono stati verificati in `backend/` (codice + `.env.example` + te
 ### Riepilogo Sezione 3
 
 - **Flag veri**: 6 (`ENVIRONMENT`, `ENABLE_ASYNC_ENRICHMENT`, `CARICA_BULK_INSERT`, `MSSQL_FAST_EXECUTEMANY`, `PLENORA_DISABLE_DEFAULT_KEY`, `URBY_ALLOW_LOOPBACK_OUTBOUND`).
-- **Aliases retro-compat**: 3 (`URBY_ENCRYPTION_KEY`, `URBY_DISABLE_DEFAULT_KEY`, `CONN_ENCRYPT_KEY`).
+- **Aliases retro-compat**: 2 (`URBY_ENCRYPTION_KEY`, `CONN_ENCRYPT_KEY`). `URBY_DISABLE_DEFAULT_KEY` rimosso in D4 parziale (2026-04-20).
 - **Selectors/config-not-flag**: 3 (`CLOUD_PROVIDER`, `FILE_SOURCE_S3_THRESHOLD_BYTES`, `TEMP_ORPHAN_CLEANUP_HOURS`, `ENRICHMENT_POOL_SIZE`).
 - **Verdetti**:
   - `keep + documenta`: 5 (ENVIRONMENT, CARICA_BULK_INSERT, MSSQL_FAST_EXECUTEMANY, URBY_ALLOW_LOOPBACK_OUTBOUND, CLOUD_PROVIDER)
-  - `investigate → remove/unify`: 1 (ENABLE_ASYNC_ENRICHMENT) **+ 3 aliases crypto** (URBY_ENCRYPTION_KEY, URBY_DISABLE_DEFAULT_KEY, CONN_ENCRYPT_KEY)
+  - `investigate → remove/unify`: 1 (ENABLE_ASYNC_ENRICHMENT) **+ 2 aliases crypto residui** (URBY_ENCRYPTION_KEY, CONN_ENCRYPT_KEY — bloccati su verifica `.env` prod)
   - `config-not-flag`: 3
 
 ---
