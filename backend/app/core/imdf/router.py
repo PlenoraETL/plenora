@@ -407,8 +407,10 @@ def get_bundle_metadata(
                     "path": str(f.relative_to(bundle_dir)).replace("\\", "/"),
                     "size": f.stat().st_size,
                 })
-            except Exception:
-                pass
+            except Exception as _fe:
+                # File sparito tra rglob e stat (cleanup concorrente) o
+                # permessi: skippa il singolo entry, non-fatal per la response.
+                logger.debug(f"files_list skip {f.name}: {type(_fe).__name__}: {_fe}")
 
     return {
         "site_id":       site_id,
