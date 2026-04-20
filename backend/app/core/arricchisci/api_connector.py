@@ -221,6 +221,10 @@ class ApiConnectionService:
                 try:
                     config = json.loads(config)
                 except json.JSONDecodeError:
+                    logger.warning(
+                        f"api_connection {api_id}: config JSON corrotto, "
+                        f"row skippata da list_api_connections_decrypted"
+                    )
                     continue
             if not isinstance(config, dict):
                 continue
@@ -797,8 +801,10 @@ class ApiConnectionService:
             tmp_dir = src_path.parent
             if tmp_dir.name.startswith("plenora_exec_"):
                 shutil.rmtree(tmp_dir, ignore_errors=True)
-        except Exception:
-            pass
+        except Exception as _cleanup_err:
+            logger.debug(
+                f"cleanup plenora_exec_ dir best-effort fallito: {_cleanup_err}"
+            )
 
         return response
 
@@ -932,7 +938,12 @@ class ApiConnectionService:
         try:
             _proj_row = db_svc.get_project(project_id)
             self._current_group_id = _proj_row.get("group_id") if _proj_row else None
-        except Exception:
+        except Exception as _ctx_err:
+            logger.warning(
+                f"_init_execution_context: get_project({project_id}) fallito "
+                f"({type(_ctx_err).__name__}: {_ctx_err}); group_id=None "
+                f"→ check cross-tenant downstream falliranno fail-closed"
+            )
             self._current_group_id = None
 
     def execute_enrichment(self, project_id: str, canvas: Dict, format: str = 'csv',
@@ -1493,6 +1504,9 @@ class ApiConnectionService:
             try:
                 ip_obj = _ip.ip_address(ip_str)
             except ValueError:
+                logger.debug(
+                    f"_validate_outbound_url: IP non parsabile skippato: {ip_str}"
+                )
                 continue
             if ip_obj.is_loopback:
                 return f"IP loopback bloccato: {ip_str}"
@@ -1562,8 +1576,11 @@ class ApiConnectionService:
         finally:
             try:
                 response.close()
-            except Exception:
-                pass
+            except Exception as _close_err:
+                logger.debug(
+                    f"_download_binary_response: response.close() best-effort "
+                    f"fallito: {_close_err}"
+                )
 
         return total_bytes, download_timed_out
 
@@ -1921,8 +1938,10 @@ class ApiConnectionService:
             for fh in opened_handles:
                 try:
                     fh.close()
-                except Exception:
-                    pass
+                except Exception as _fh_err:
+                    logger.debug(
+                        f"rest_file: fh.close() best-effort fallito: {_fh_err}"
+                    )
             # Cleanup tmp_exec_dir su tutti i rami errore: senza questo
             # ogni exception lascerebbe una dir `plenora_exec_*` su disco,
             # con leak progressivo nei worker Celery long-running.
@@ -1930,8 +1949,10 @@ class ApiConnectionService:
                 if _cleanup_tmp and tmp_exec_dir is not None and tmp_exec_dir.exists():
                     import shutil as _shutil_cleanup
                     _shutil_cleanup.rmtree(tmp_exec_dir, ignore_errors=True)
-            except Exception:
-                pass
+            except Exception as _rm_err:
+                logger.debug(
+                    f"rest_file: cleanup tmp_exec_dir best-effort fallito: {_rm_err}"
+                )
             # Cleanup del file temporaneo creato per materializzare un
             # DataFrame upstream (branch api_enrich → rest_file). Solo se
             # e' stato creato qui; non tocchiamo path provenienti da
@@ -1942,8 +1963,11 @@ class ApiConnectionService:
             try:
                 if _owns_materialized_input and input_path and not isinstance(input_path, tuple):
                     Path(input_path).unlink(missing_ok=True)
-            except Exception:
-                pass
+            except Exception as _unlink_err:
+                logger.debug(
+                    f"rest_file: unlink materialized input best-effort "
+                    f"fallito: {_unlink_err}"
+                )
 
     def _assert_file_source_group_access(self, file_source_id: str) -> None:
         """Defense-in-depth: verifica che `file_source_id` sia visibile al
@@ -2049,8 +2073,11 @@ class ApiConnectionService:
                 if tmp_path.exists():
                     try:
                         tmp_path.unlink()
-                    except Exception:
-                        pass
+                    except Exception as _tmp_err:
+                        logger.debug(
+                            f"_resolve_file_source_id_path: unlink tmp_path "
+                            f"best-effort fallito: {_tmp_err}"
+                        )
             logger.debug(
                 f"file_source {file_source_id}: blob materializzato in cache → {out_path}"
             )
@@ -2762,7 +2789,15 @@ class ApiConnectionService:
                 if delay > 0:
                     time.sleep(delay)
 
-            except Exception:
+            except Exception as _row_err:
+                # skip-on-row-error per design (vedi docstring
+                # `_enrich_one_row`): il loop continua sul batch.
+                # Log a `debug` per evitare flood su dataset grandi;
+                # il riassunto finale `info` mostra il counter aggregato.
+                logger.debug(
+                    f"Riga {idx}: eccezione skippata "
+                    f"({type(_row_err).__name__}: {_row_err})"
+                )
                 error_count += 1
 
             if (idx + 1) % 100 == 0:
