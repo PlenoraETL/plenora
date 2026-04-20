@@ -131,8 +131,14 @@ def get_last_run_status() -> Dict[str, Any]:
     if started and finished:
         try:
             out["duration_sec"] = (finished - started).total_seconds()
-        except (TypeError, AttributeError):
-            pass
+        except (TypeError, AttributeError) as e:
+            logger.warning(
+                "Impossibile calcolare duration_sec (started=%r, finished=%r): %s: %s",
+                started,
+                finished,
+                type(e).__name__,
+                e,
+            )
 
     log_tail = row.get("log_tail")
     if log_tail:
