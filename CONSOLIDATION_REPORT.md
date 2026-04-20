@@ -100,3 +100,49 @@ Totale: **10 item S-serie applicati** + 1 chiuso come inventory error. Subset 5.
 
 ## Proposte Fase 1
 - (da definire a fine Fase 0)
+
+## Addendum re-pass (2026-04-20)
+
+Questo addendum aggiorna il report senza riscrivere la traccia storica del primo checkpoint.
+
+- `S10` e' chiuso su `main` con `8df515a`
+- `S13` resta chiuso come inventory error
+- `692f532` pubblica `backend/docs/architecture/invariants.md` e rimuove artefatti backend stale
+
+### Stato reale dopo il re-pass
+
+- `Phase 0` non e' ancora chiusa
+- resta un ultimo pass di sostanza
+- dopo quel pass il residuo e' dominato da decisioni di prodotto/env, policy cross-modulo o rumore
+
+### Shortlist ultimo pass Phase 0
+
+- `connection_service.py:1-11` docstring stale
+- `D2` unify `_read_csv_safe` / `_read_csv_with_encoding_fallback`
+- `S19` `app/core/intermediate/writer.py`
+- `S20` `app/core/datasources/sharepoint.py`
+- `D1` `ENABLE_ASYNC_ENRICHMENT` come checkpoint separato (serve verifica env prod prima della scelta)
+
+### Riaprire dopo / batch dedicato
+
+- `S17` `file_service.py`
+- `S18` `api_connector.py`
+- `S23` `database_writer.py`
+- `S25` `eseguibili/router.py`
+- `S27` cluster IMDF
+
+### Tenere per fase successiva
+
+- `S26` preview swallow estrai/manipola/arricchisci
+- `S28` shared layer mixed
+- `D3` IMDF loader/persist/storage boundaries
+- `D4` alias crypto retro-compat
+- `D5` `SECRET_KEY`/`JWT_SECRET_KEY` come crypto fallback
+- `D6` policy preview vs execute cross-modulo
+
+### Declassati a rumore / inventory overcount
+
+- `S21` `config_db_service.py`
+- `S22` `features/routes.py`
+- `S24` `admin_system_status/service.py`
+- `S6`, `S7`, `S8`, `S14`

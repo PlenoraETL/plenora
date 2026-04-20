@@ -560,6 +560,44 @@ Restano nel report come analisi grezza; richiedono decisione utente separata pri
 - Se un item condizionale (5.2) si rivela non-locale o non-meccanico, va rimandato — non va esteso di propria iniziativa.
 - Worktree attualmente sporco (1230 entries pre-esistenti dalla migrazione `backend/`): commit solo dei file effettivamente modificati dall'intervento; nessun `git add -A`.
 
+### 5.5 Re-pass inventory (2026-04-20) - rivalutazione residui esclusi
+
+Questo re-pass non riapre l'inventory da zero: rivaluta solo i residui alla luce dei fix gia' applicati (`S1/S2/S3/S4/S5/S9/S10/S11/S12/S15/S16`), di `invariants.md` e del triage `S13 -> inventory error`.
+
+#### Riaprire subito
+
+| Item | Categoria | Perimetro | Motivo |
+|------|-----------|-----------|--------|
+| `connection_service.py:1-11` docstring stale | doc/cleanup | locale | Invariant §4.5: docstring stale = bug documentale |
+| `D2` `_read_csv_safe` / `_read_csv_with_encoding_fallback` | complexity / cleanup | locale | Il claim "evitare dipendenza circolare" e' risultato infondato; unify banale |
+| `S19` `app/core/intermediate/writer.py` | error-policy / bug | locale | 3 `except Exception: pass` azionabili nel write path |
+| `S20` `app/core/datasources/sharepoint.py` | bug | locale | 5 siti silent reali in auth/network path; `None`/`False` ambiguo rispetto a "non trovato" |
+| `D1` `ENABLE_ASYNC_ENRICHMENT` | complexity / error-policy | medio | Invariant §3 lo rende blocker di Fase 1, ma richiede checkpoint separato con verifica env prod |
+
+#### Riaprire dopo / batch dedicato
+
+- `S17` `file_service.py` - residuo reale ma misto tra type detection legit e swallow nudi
+- `S18` `api_connector.py` - 7 silent reali in retry loop (non 25)
+- `S23` `database_writer.py` - 13 siti silent residui, perimetro medio
+- `S25` `eseguibili/router.py` - 8 silent reali, non critico ma non rumore
+- `S27` cluster IMDF - misto tra cleanup legit e generic swallow
+
+#### Tenere per fase successiva
+
+- `S26` preview swallow estrai/manipola/arricchisci
+- `S28` shared layer mixed
+- `D3` IMDF loader/persist/storage boundaries
+- `D4` alias crypto retro-compat
+- `D5` `SECRET_KEY`/`JWT_SECRET_KEY` come crypto fallback
+- `D6` policy preview vs execute cross-modulo
+
+#### Declassati a rumore / inventory overcount
+
+- `S21` `config_db_service.py` - 0 silent reali
+- `S22` `features/routes.py` - 1 solo silent marginale
+- `S24` `admin_system_status/service.py` - 0 silent reali
+- `S6`, `S7`, `S8`, `S14` - non ricostruibili con evidenza sufficiente nel re-pass
+
 ---
 
 **Fine Fase A + Checkpoint utente — attendo go esplicito per eseguire Fase B sul subset 5.1 (+ 5.2 condizionale).**
