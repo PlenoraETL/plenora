@@ -407,3 +407,74 @@ def validate_storage_config() -> None:
     # Hard cap DB: attivo in db (primario) e in hybrid (guard ramo DB).
     if policy in ("db", "hybrid"):
         _check_positive_int("RESULT_DB_HARD_CAP_BYTES")
+
+    # O-ARC Batch 2 — coerenza config archive log (ADR-0014 §A1-§A5).
+    # Attivo solo se LOG_ARCHIVE_ENABLED=true: con ENABLED=false (default)
+    # il boot passa silenzioso anche se altre LOG_ARCHIVE_* sono settate
+    # nel .env (pattern preparazione pre-flip, §A4). Zero refactor dei
+    # check A1 sopra: il blocco riusa policy/provider/bucket gia'
+    # normalizzati + gli helper _fail / _check_positive_int.
+    archive_enabled_raw = (os.getenv("LOG_ARCHIVE_ENABLED") or "false").strip().lower()
+    if archive_enabled_raw in ("true", "1", "yes"):
+        # 1. STORAGE_POLICY deve essere object_storage o hybrid.
+        if policy == "db":
+            _fail(
+                "LOG_ARCHIVE_ENABLED=true incompatibile con STORAGE_POLICY=db: "
+                "archive non ha target object storage. Imposta "
+                "STORAGE_POLICY=object_storage o hybrid, o disabilita "
+                "LOG_ARCHIVE_ENABLED."
+            )
+        # 2. CLOUD_PROVIDER reale richiesto.
+        if provider == "none":
+            _fail(
+                "LOG_ARCHIVE_ENABLED=true richiede un object storage "
+                "provider, ma CLOUD_PROVIDER=none."
+            )
+        # 3. LOG_ARCHIVE_BUCKET required (intenzionalmente fuori da
+        #    Settings.DEFAULTS, required-if-enabled per design A3).
+        log_archive_bucket = os.getenv("LOG_ARCHIVE_BUCKET")
+        if not log_archive_bucket:
+            _fail(
+                "LOG_ARCHIVE_ENABLED=true richiede LOG_ARCHIVE_BUCKET "
+                "configurato (bucket dedicato archive, distinto da "
+                "BACKUP_BUCKET)."
+            )
+        # 4. Bucket archive distinto da BACKUP_BUCKET/BACKUP_S3_BUCKET:
+        #    IAM boundary (O-ARC §5.4, ADR-0014 §A3). A questo punto
+        #    `bucket` e' guaranteed truthy: regola 1 ha escluso policy=db,
+        #    e il ramo A1 else-branch (riga 395) fallisce gia' se bucket
+        #    e' unset con policy != db.
+        if log_archive_bucket == bucket:
+            _fail(
+                f"LOG_ARCHIVE_BUCKET={log_archive_bucket!r} coincide con "
+                "BACKUP_BUCKET/BACKUP_S3_BUCKET: IAM boundary richiesto "
+                "distinto per archive log vs backup DB (O-ARC §5.4)."
+            )
+        # 5. Formato key prefix (se settata): vuoto o endswith "/".
+        #    Coerente con log_archive._build_object_key:206-209.
+        log_archive_prefix = os.getenv("LOG_ARCHIVE_KEY_PREFIX")
+        if log_archive_prefix and not log_archive_prefix.endswith("/"):
+            _fail(
+                f"LOG_ARCHIVE_KEY_PREFIX={log_archive_prefix!r} non valido: "
+                "deve essere vuoto oppure terminare con '/'."
+            )
+        # 6. Batch rows > 0 (riusa helper esistente).
+        _check_positive_int("LOG_ARCHIVE_BATCH_ROWS")
+        # 7. AUDIT_RETENTION_DAYS >= 0 (inline parse: _check_positive_int
+        #    rigetta 0, ma qui 0 = retention disabilitata e' legittimo,
+        #    simmetrico a SCHEDULE_LOGS_RETENTION_DAYS).
+        audit_retention_raw = os.getenv("AUDIT_RETENTION_DAYS")
+        if audit_retention_raw is not None:
+            try:
+                audit_retention_value = int(audit_retention_raw)
+            except (TypeError, ValueError):
+                _fail(
+                    f"AUDIT_RETENTION_DAYS={audit_retention_raw!r} non e' "
+                    "un intero valido."
+                )
+            else:
+                if audit_retention_value < 0:
+                    _fail(
+                        f"AUDIT_RETENTION_DAYS={audit_retention_value} deve "
+                        "essere >= 0 (0 = retention disabilitata)."
+                    )
