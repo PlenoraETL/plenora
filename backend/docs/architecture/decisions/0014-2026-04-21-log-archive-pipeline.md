@@ -118,3 +118,61 @@ Questo ADR ratifica formalmente O-ARC **limitato al Batch 1**: writer isolato, t
 - Related: ADR-0008 (backup observability DB-side — pattern log applicativo esito job, applicabile in Batch 3)
 - Related: ADR-0012 (preview/execute policy — fail-fast principle applicato qui al naive datetime)
 - Invariants: `backend/docs/architecture/invariants.md §1.4` (logging append-only), §6 (carry-over O-ARC — update in Batch 4)
+
+## Addendum Batch 2 (2026-04-21)
+
+Questo addendum ratifica le decisioni di contratto env emerse dal triage implementativo `orchestrate/phase_2_hardening/o_arc_batch2_triage.md` prima dell'implementazione di Batch 2 (env var + fail-fast boot validation). **Supersede** la citazione env in §Consequences/Neutral dove diverge. Il corpo principale dell'ADR (Context, Decision, Rationale, Alternatives, Consequences) resta invariato: l'addendum integra solo i dettagli di naming/default/fail-fast aperti al momento della ratifica iniziale.
+
+### A1. Nome canonico batch size
+
+**`LOG_ARCHIVE_BATCH_ROWS`** e' il nome canonico della env che configura la dimensione del batch del writer. Supersede `LOG_ARCHIVE_BATCH_SIZE` citato in §Consequences/Neutral.
+
+Motivazione:
+- `backend/app/services/log_archive.py:178` (merged in Batch 1) documenta gia' `LOG_ARCHIVE_BATCH_ROWS` come nome atteso.
+- "ROWS" e' non-ambiguo rispetto a "bytes": il parametro e' un conteggio di righe DB per batch, non una size in byte del payload.
+- Rinominare il commento in `log_archive.py` per allinearlo a `BATCH_SIZE` sarebbe scope-creep sul modulo Batch 1 frozen.
+
+### A2. Default `LOG_ARCHIVE_KEY_PREFIX`
+
+Default: **`"logs-archive/"`** (literal, senza auto-derivazione di `<env>`).
+
+Motivazione:
+- O-ARC §2.4 suggeriva `logs-archive/<env>/`, ma `backend/app/config.py` non ha oggi un canale canonico per derivare `<env>` logico (prod/staging/dev) a livello di property; introdurlo accoppierebbe config e deployment topology.
+- Ops override esplicito in `.env` per-environment (`LOG_ARCHIVE_KEY_PREFIX=logs-archive/prod/`) e' piu' onesto e auditable.
+- Il writer (`log_archive._build_object_key` righe 206-209) valida gia' il formato (vuoto oppure endswith `"/"`); il default rispetta l'invariante.
+
+### A3. Fail-fast bucket-distinct
+
+Regola aggiunta a `validate_storage_config()` nel commit Batch 2b:
+
+**`LOG_ARCHIVE_BUCKET` deve essere distinto da `BACKUP_BUCKET` e da `BACKUP_S3_BUCKET` (legacy)**. Overlap → `StorageConfigError` a boot.
+
+Motivazione (O-ARC §5.4):
+- Archive log e backup DB hanno IAM boundary diversi: il service account beat deve avere `PutObject` su archive e **niente** delete su backup (protezione contro auto-sabotaggio in caso di bug del job).
+- La separazione di bucket e' l'unico enforcement tecnico al boot contro un cut-paste di `.env` che allinei i due bucket.
+- Nessun probe di reachability (coerente con lo stile `validate_storage_config` esistente: sola coerenza config, mai I/O di rete).
+
+### A4. Comportamento con `LOG_ARCHIVE_ENABLED=false`
+
+Quando `LOG_ARCHIVE_ENABLED=false` (default), `validate_storage_config()` **salta silenziosamente** tutti i check `LOG_ARCHIVE_*`, anche se altre env `LOG_ARCHIVE_*` sono gia' settate nel `.env`.
+
+Scelta esplicita:
+- Silent pass (nessun warning) abilita il pattern "preparazione operativa": un admin scrive le env finali in `.env` con `ENABLED=false` prima del flip, senza rumore a ogni boot.
+- **Asimmetria consapevole** rispetto al warning A1 cut-paste `STORAGE_POLICY=db` + bucket (`cloud_backends.py:381-386`): li' la combinazione suggerisce errore di cut-paste, qui e' un'attesa legittima pre-flip.
+- Un eventuale avviso "stai per attivare archive, verifica config" sara' scope di un commit separato, non di questo addendum.
+
+### A5. Env matrix finale ratificata
+
+| Env var | Tipo | Default | Enforcement (boot, solo se `ENABLED=true`) |
+|---|---|---|---|
+| `LOG_ARCHIVE_ENABLED` | bool | `False` | — (trigger del ramo; `false` → silent pass) |
+| `LOG_ARCHIVE_BUCKET` | str | unset | required, distinto da `BACKUP_BUCKET`/`BACKUP_S3_BUCKET` |
+| `LOG_ARCHIVE_KEY_PREFIX` | str | `"logs-archive/"` | se settata: vuota oppure endswith `"/"` |
+| `LOG_ARCHIVE_BATCH_ROWS` | int | `10000` | intero > 0 (via helper `_check_positive_int`) |
+| `AUDIT_RETENTION_DAYS` | int | `365` | intero >= 0 (`0` = retention disabilitata, simmetrico a `SCHEDULE_LOGS_RETENTION_DAYS`) |
+
+### Additional references
+
+- Triage Batch 2: `orchestrate/phase_2_hardening/o_arc_batch2_triage.md`
+- Baseline codice: `backend/app/services/log_archive.py:178` (nome canonico `LOG_ARCHIVE_BATCH_ROWS`)
+- Pattern warning A1 cut-paste: `backend/app/shared/cloud_backends.py:381-386` (non-applicabile ad archive per §A4)
