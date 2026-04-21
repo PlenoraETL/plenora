@@ -518,7 +518,14 @@ class DatabaseWriter(DestinationWriter):
                                     prepared_df[col_name].astype(str)
                                     .str.len().max() or 0
                                 )
-                            except Exception:
+                            except Exception as max_len_err:
+                                logger.debug(
+                                    "[MAX_LEN] calcolo lunghezza colonna '%s' "
+                                    "fallito, assumo 0: %s: %s",
+                                    col_name,
+                                    type(max_len_err).__name__,
+                                    max_len_err,
+                                )
                                 max_len = 0
                             if max_len > 0:
                                 max_lengths[col_name] = max_len
@@ -561,7 +568,14 @@ class DatabaseWriter(DestinationWriter):
                     if is_string_like:
                         try:
                             max_len = int(prepared_df[col_name].astype(str).str.len().max() or 0)
-                        except Exception:
+                        except Exception as max_len_err:
+                            logger.debug(
+                                "[MAX_LEN] calcolo lunghezza colonna '%s' "
+                                "fallito, assumo 0: %s: %s",
+                                col_name,
+                                type(max_len_err).__name__,
+                                max_len_err,
+                            )
                             max_len = 0
                         if max_len > 0:
                             max_lengths[col_name] = max_len
@@ -877,7 +891,7 @@ class DatabaseWriter(DestinationWriter):
                     conn2.execute(text(drop_stg_sql))
                     conn2.commit()
             except Exception as cleanup_err:
-                logger.debug(
+                logger.warning(
                     "[STAGE+SWAP] cleanup shadow post-CREATE fallito, ignoro: %s: %s",
                     type(cleanup_err).__name__,
                     cleanup_err,
@@ -1087,7 +1101,7 @@ class DatabaseWriter(DestinationWriter):
                 ))
                 conn.commit()
         except Exception as cleanup_err:
-            logger.debug(
+            logger.warning(
                 "[REPLACE ATOMIC] cleanup difensivo orfani stg/bak fallito, ignoro: %s: %s",
                 type(cleanup_err).__name__,
                 cleanup_err,
@@ -1161,7 +1175,7 @@ class DatabaseWriter(DestinationWriter):
                     ))
                     conn.commit()
             except Exception as cleanup_err:
-                logger.debug(
+                logger.warning(
                     "[REPLACE ATOMIC] cleanup shadow post-INSERT fail fallito, ignoro: %s: %s",
                     type(cleanup_err).__name__,
                     cleanup_err,
@@ -1494,7 +1508,7 @@ class DatabaseWriter(DestinationWriter):
                 ))
                 conn.commit()
         except Exception as cleanup_err:
-            logger.debug(
+            logger.warning(
                 "[ORACLE REDEF] cleanup difensivo interim orfana fallito, ignoro: %s: %s",
                 type(cleanup_err).__name__,
                 cleanup_err,
@@ -1574,7 +1588,7 @@ END;"""))
                     ))
                     conn.commit()
             except Exception as cleanup_err:
-                logger.debug(
+                logger.warning(
                     "[ORACLE REDEF] cleanup interim post-START_REDEF fail fallito, ignoro: %s: %s",
                     type(cleanup_err).__name__,
                     cleanup_err,
@@ -1696,7 +1710,7 @@ END;"""))
                     ))
                     conn.commit()
             except Exception as cleanup_err:
-                logger.debug(
+                logger.warning(
                     "[ORACLE REDEF] drop interim post-ABORT fallito, ignoro: %s: %s",
                     type(cleanup_err).__name__,
                     cleanup_err,
@@ -2162,7 +2176,15 @@ END;"""))
                         lambda g: g.wkt if g is not None and not pd.isna(g) else None
                     )
         except ImportError:
-            pass
+            # geopandas e' dependency opzionale: se manca, le eventuali
+            # GeoSeries nel DataFrame non vengono pre-convertite a WKT,
+            # ma _geometry_to_wkt a valle gestisce comunque il caso.
+            # Pre-fix: `pass` silenzioso — impossibile sapere in prod se
+            # la conversione GeoSeries e' stata saltata.
+            logger.debug(
+                "[_prepare_dataframe] geopandas non disponibile, "
+                "skip pre-conversione GeoSeries → WKT"
+            )
 
         return prepared
 
@@ -2226,15 +2248,27 @@ END;"""))
                     from shapely.geometry import shape
                     return shape(_json.loads(value)).wkt
                 except Exception as e:
-                    import logging
-                    logging.getLogger(__name__).warning(f"GeoJSON→WKT fallito: {e}")
-                    pass
+                    # Usa il logger di modulo (prima: getLogger(__name__)
+                    # ad hoc — inconsistente col resto del file).
+                    # Il `pass` morto dopo il warning e' stato rimosso:
+                    # era dead statement, cade naturalmente al ramo WKB.
+                    logger.warning(f"GeoJSON→WKT fallito, provo WKB: {e}")
             # Potrebbe essere WKB hex
             try:
                 from shapely import wkb
                 geom = wkb.loads(bytes.fromhex(value))
                 return geom.wkt
-            except Exception:
+            except Exception as wkb_err:
+                # Fallback esaurito: ritorna il valore raw (contratto
+                # pubblico invariato — il DB sollevera' su geometria
+                # malformata, ma almeno la causa originale e' tracciata
+                # nel log. Pre-fix: nessun log.
+                logger.debug(
+                    "[_geometry_to_wkt] parse WKB fallito dopo GeoJSON, "
+                    "restituisco valore raw: %s: %s",
+                    type(wkb_err).__name__,
+                    wkb_err,
+                )
                 return value
 
         # Shapely geometry
