@@ -6,11 +6,9 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getLogs, getLogsStats, clearLogs } from '../api/logs';
+import { getLogs, getLogsStats } from '../api/logs';
 import { useAuth } from '../context/AuthContext';
-import { useConfirmModal } from '../hooks/useConfirmModal';
 import { useToast } from '../hooks/useToast';
-import ConfirmDialog from '../components/common/ConfirmDialog';
 import RunsTab from '../components/logviewer/RunsTab';
 
 import { useHexCanvas } from '../utils/hexCanvas';
@@ -67,13 +65,11 @@ function truncateProjectId(id) {
 function LogViewer() {
   const navigate     = useNavigate();
   const toast        = useToast();
-  const confirmModal = useConfirmModal();
   const { user, logout } = useAuth();
   const canvasRef    = useRef(null);
   useHexCanvas(canvasRef);
 
   // Capability resolution dal policy file unico (vedi utils/permissions.js)
-  const canClearLogs       = can.clearLogs(user);
   const canSeeTechnicalLog = can.seeTechnicalLogs(user);
 
   const [logs,         setLogs]         = useState([]);
@@ -156,11 +152,6 @@ function LogViewer() {
   }, [autoRefresh, loadLogs, loadStats]);
 
   const handleSearch = e => { e.preventDefault(); setSearchText(searchInput); };
-  const handleClear  = async () => {
-    const ok = await confirmModal.confirm({ title: 'Svuota log', message: 'Svuotare tutti i log? Questa azione è irreversibile.', confirmText: 'Svuota', variant: 'danger' });
-    if (!ok) return;
-    await clearLogs(); loadLogs(0); loadStats(); setRefreshTick(t => t + 1);
-  };
   const handleExportCSV = () => {
     if (!logs.length) return;
     const headers = ['Timestamp', 'Livello', 'Modulo', 'Operazione', 'Messaggio', 'Progetto', 'Dettagli'];
@@ -176,7 +167,6 @@ function LogViewer() {
 
   return (
     <>
-    <ConfirmDialog {...confirmModal} />
     <div className="lv">
       {/* SIDEBAR */}
       <AppSidebar />
@@ -197,11 +187,6 @@ function LogViewer() {
                 effettivamente sul tab "Log Tecnici" (cioè solo per admin) */}
             {canSeeTechnicalLog && mainTab === 'logs' && (
               <button type="button" className="lv__btn lv__btn--ghost" onClick={handleExportCSV}>↓ Export CSV</button>
-            )}
-            {/* Svuota: solo admin/superadmin, e solo sul tab tecnico per
-                evitare equivoci (svuota log tecnici + run del proprio gruppo) */}
-            {canClearLogs && mainTab === 'logs' && (
-              <button type="button" className="lv__btn lv__btn--danger" onClick={handleClear}>🗑 Svuota</button>
             )}
             <ThemeToggle />
           </div>

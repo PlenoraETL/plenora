@@ -8,8 +8,8 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 from app.config import settings
-from app.core.auth.auth import get_current_user, require_not_esecutore, CurrentUser, require_admin, group_filter
-from app.db.pg_connection import fetchone as _fetchone, fetchall as _fetchall, execute as _execute
+from app.core.auth.auth import get_current_user, require_not_esecutore, CurrentUser, group_filter
+from app.db.pg_connection import fetchone as _fetchone, fetchall as _fetchall
 from app.shared.authz_helpers import assert_project_visible
 
 logger = logging.getLogger(__name__)
@@ -168,19 +168,3 @@ def get_log_stats(
         "by_operation": by_op,
         "recent_errors": recent_errors,
     }
-
-
-@router.post("/clear")
-def clear_logs(current_user: CurrentUser = Depends(require_admin)):
-    """
-    Svuota i log e le run.
-    superadmin → svuota tutti i log e tutte le run
-    admin      → svuota solo i log e le run del proprio gruppo
-    """
-    if current_user.role == "superadmin":
-        _execute("DELETE FROM logs")
-        _execute("DELETE FROM log_runs")
-    else:
-        _execute("DELETE FROM logs WHERE group_id = ? OR group_id = ''", (current_user.group_id,))
-        _execute("DELETE FROM log_runs WHERE group_id = ?", (current_user.group_id,))
-    return {"status": "ok", "message": "Log e run svuotati"}

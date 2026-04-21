@@ -96,7 +96,6 @@ export const can = {
   createEsecutore:   isAdminOrAbove,  // sia superadmin che admin di gruppo
 
   // ── Log viewer ─────────────────────────────────────────────────────
-  clearLogs:         isAdminOrAbove,
   seeTechnicalLogs:  isAdminOrAbove,  // tab "Log Tecnici" del LogViewer
 
   // ── Eseguibili (kiosk-friendly) ────────────────────────────────────

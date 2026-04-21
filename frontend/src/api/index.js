@@ -106,7 +106,6 @@ export {
 export {
   getLogs,
   getLogsStats,
-  clearLogs,
 } from './logs';
 
 // ── Trasformazioni e funzioni SQL ─────────────────────────────────────────────

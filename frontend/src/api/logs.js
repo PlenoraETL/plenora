@@ -4,7 +4,6 @@
  * Espone gli endpoint del backend per:
  *   - Recupero log con filtri (livello, data, testo, progetto)
  *   - Statistiche aggregate sui log
- *   - Pulizia log (admin)
  *
  * Usato da: pages/LogViewer.jsx
  */
@@ -34,14 +33,5 @@ export const getLogs = async (params = {}) => {
  */
 export const getLogsStats = async () => {
   const response = await http.get('/logs/stats');
-  return response.data;
-};
-
-/**
- * Elimina tutti i log dal database (operazione irreversibile, solo admin).
- * @returns {Promise<{deleted: number}>}
- */
-export const clearLogs = async () => {
-  const response = await http.post('/logs/clear');
   return response.data;
 };
