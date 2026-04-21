@@ -1,7 +1,7 @@
 # STREAM TESTS — Report Fase 1 Stabilization
 
 **Status**: in_progress
-**Last updated**: 2026-04-21 (Batch 3 Scheduler — policy_engine 21 + concurrency_manager TTL 6, stream 87)
+**Last updated**: 2026-04-21 (Batch 3 Scheduler — policy_engine 21 + concurrency_manager TTL 6 + execution_manager orphan/release 3, stream 90)
 
 ## Scope
 
@@ -68,7 +68,11 @@ Invariants blindati: §2 riga `enrichment_service:408-410` async safety-net + §
   - `tests2/datasources/test_local_edge_contract.py` — 7 test edge case su `local.py` (gap reali vs `shared/test_datasource_local_multi_host.py` + `security/unit/test_local_datasource_contract.py`): `_abs` rifiuta drive letter Windows (branch separata da `/etc/passwd`), `_abs("")` → root_abs (early-return), `_abs` deep nested join 3+ livelli, **symlink escape** via resolve() (skip su Windows no dev-mode), `_rel` normalizza backslash→forward slash (portability), `file_exists` False su directory (os.path.isfile, non exists), `write_file` crea parent dir mancanti (os.makedirs exist_ok)
   - `tests2/datasources/test_ftp_error_contract.py` — 8 test error mapping (nessun test preesistente su FTPDataSource): missing host → fail-fast NO network call (counter istanziazioni), ftplib.all_errors generico → ConnectionError chained con `__cause__`, auth failure (error_perm su login) → ConnectionError, root cwd fail → ConnectionError con messaggio specifico, operation senza connect → `_check` gate ConnectionError "Non connesso", read_file 550 → FileNotFound, read_file non-550 error_perm (530) → PermissionError, file_exists fail-closed → False silent
   - `tests2/datasources/test_sftp_security_contract.py` — 8 test sicurezza + error mapping (nessun test preesistente su SFTPDataSource, fake paramiko module): **host_key_policy=reject → RejectPolicy + load_system_host_keys entrambi** (contract MITM-safe), auto_add → AutoAddPolicy senza system keys (complementare), policy non-canonica ("Reject"/"strict"/"rejetc") → fallback auto_add (documenta check esatto `== "reject"`), credenziali assenti → fail-fast ConnectionError "Credenziali SFTP mancanti" NO ssh.connect, password+private_key → preferenza `pkey` esclusiva (no password kwarg), AuthenticationException → "Autenticazione SFTP fallita" chained, SSHException → "Errore SSH" chained, operation senza connect → `_check` gate
-- Scheduler: **27** (2 file, batch 3 in corso)
+- Scheduler: **30** (3 file, batch 3)
+  - `tests2/scheduler/unit/test_execution_manager_orphan_and_release_contract.py` — 3 test su `execution_manager.py` (gap reale vs 5 file esistenti / 23 test che coprono group isolation + heartbeat + lock_lost + scheduled_for). Contract blindati:
+    - **Orphan cleanup su progetto cancellato** (brief: orphan cleanup post-task-kill) — `execute` con `project_meta=None` → `mark_as_orphan` chiamato + log `PIPELINE_FAILED` ERROR + return `status="orphan"` + NO lock acquisito (check before try_acquire)
+    - **Release lock retry dopo transient DB failure** (brief: fail-closed DB/lock backend) — finally: primo release solleva → retry (sleep+release) → second riesce. Release chiamata esattamente 2 volte, stesso schedule_id
+    - **Release lock entrambi tentativi falliti** (brief: cleanup che lascia stato sporco) — finally con outer try/except: 2 release sollevano, `execute()` ritorna dict invece di propagare (contract critico per Celery task return)
   - `tests2/scheduler/unit/test_concurrency_manager_ttl_contract.py` — 6 test su `concurrency_manager.py` TTL/expiration (gap reale vs 17 test esistenti che mockano i 5 helper privati e non blindano la semantica TTL nativa). Contract blindati:
     - `_get` auto-cleanup su lock scaduto → DELETE + None (core lock-expire brief punto 3)
     - `_get` expires_at malformato (non-ISO) → `except pass` → lock preservato (fail-closed su corruzione dati)
@@ -92,7 +96,7 @@ Invariants blindati: §2 riga `enrichment_service:408-410` async safety-net + §
 - Crypto: **13** (2 file, batch 1 ✅)
   - `tests2/crypto/test_crypto_fernet_contract.py` — 5 test: roundtrip, tamper detection (MAC fail → None + log error), wrong key → None, allowlist plaintext (non-string / assenti / fuori lista), nonce uniqueness (IV random)
   - `tests2/crypto/test_crypto_key_sourcing_contract.py` — 8 test: chain priority PLENORA > URBY > CONN (3 test), **D5 regression** (no fallback su SECRET_KEY/JWT_SECRET_KEY, chiuso 2026-04-20), prod fail-fast no-key, prod fail-fast dev-default-leak, min-length < 16 char in any env, PLENORA_DISABLE_DEFAULT_KEY opt-in dev
-- **TOTALE**: **87 / ~38** (target 30+ superato ampiamente; Batch 2 chiuso; Batch 3 in corso)
+- **TOTALE**: **90 / ~38** (target 30+ superato ampiamente; Batch 2 chiuso; Batch 3 ha colmato i 3 gap forti prioritari)
 
 ## Bug / anomalie source trovati durante studio (NON fissati)
 
@@ -114,6 +118,7 @@ Nessuna al momento. Verifica al primo test che lo richieda:
   - Datasources: **47/47 pass** (`pytest tests2/datasources/ -q`)
   - Scheduler policy_engine: **21/21 pass** (`pytest tests2/scheduler/unit/test_policy_engine_contract.py -q` in 0.64s)
   - Scheduler concurrency_manager TTL: **6/6 pass** (`pytest tests2/scheduler/unit/test_concurrency_manager_ttl_contract.py -q` in 0.52s) + zero regressioni sui 17 test esistenti (`test_concurrency_manager_contract.py` tutti verdi in combinazione)
+  - Scheduler execution_manager orphan/release: **3/3 pass** (`pytest tests2/scheduler/unit/test_execution_manager_orphan_and_release_contract.py -q` in 0.70s)
 - Coverage: — (a fine stream)
 
 ## Collisioni cross-stream
