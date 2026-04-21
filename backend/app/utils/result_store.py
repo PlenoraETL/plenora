@@ -75,25 +75,72 @@ class ResultSaveError(Exception):
       - DB rifiuta l'insert (vincolo FK, connection, ecc.)
       - S3 upload fallisce (permessi, rete, bucket)
       - Retention non recuperabile post-save
+      - Payload oltre `RESULT_DB_HARD_CAP_BYTES` in policy=db
     Il caller (tipicamente un task Celery) DEVE far fallire il task,
     altrimenti l'utente scaricherebbe un risultato stantio credendo
     che sia il nuovo.
     """
 
 
+# ---------------------------------------------------------------------------
+# Storage policy dispatch helpers (A1)
+# ---------------------------------------------------------------------------
+
+
+def _storage_policy() -> str:
+    """Policy normalizzata: db | object_storage | hybrid.
+    Validata al boot da cloud_backends.validate_storage_config."""
+    from app.config import settings
+    return (settings.get("STORAGE_POLICY", "hybrid") or "hybrid").strip().lower()
+
+
+def _result_s3_threshold() -> int:
+    from app.config import settings
+    return int(settings.get("RESULT_S3_THRESHOLD_BYTES", 50 * 1024 * 1024))
+
+
+def _result_db_hard_cap() -> int:
+    from app.config import settings
+    return int(settings.get("RESULT_DB_HARD_CAP_BYTES", 500 * 1024 * 1024))
+
+
+def _should_use_object_storage(size: int, policy: str) -> bool:
+    """Dispatch policy-aware: `db` -> mai, `object_storage` -> sempre,
+    `hybrid` -> sopra RESULT_S3_THRESHOLD_BYTES."""
+    if policy == "db":
+        return False
+    if policy == "object_storage":
+        return True
+    return size >= _result_s3_threshold()
+
+
+def _enforce_db_hard_cap(size: int, ctx: str) -> None:
+    """Fail-fast se `size` supera il hard cap DB. Applicato in policy=db
+    (sempre) e come guard del ramo DB di `hybrid` (protegge da configurazioni
+    in cui la soglia di dispatch e' piu' alta del cap pratico del BYTEA PG).
+    """
+    cap = _result_db_hard_cap()
+    if size > cap:
+        raise ResultSaveError(
+            f"[{ctx}] Payload {size} byte supera RESULT_DB_HARD_CAP_BYTES={cap}. "
+            "Alza il cap, cambia STORAGE_POLICY a object_storage/hybrid, "
+            "o riduci la dimensione del result."
+        )
+
+
 def save_result_blob(project_id: str, path: Path, fmt: str,
                      rows_count: int = None, group_id: str = None) -> str:
     """
-    Salva il risultato (file su disco) come DB blob o S3 object.
+    Salva il risultato (file su disco) come DB blob o object storage.
 
-    FS-4b: dispatch threshold identico a save_result_blob_from_bytes:
-      - file_size < RESULT_S3_THRESHOLD_BYTES (default 50MB) -> DB BYTEA
-      - file_size >= threshold -> S3 via storage.upload(path, key).
-        Vantaggio path-based: boto3 upload_file streamma dal disk
-        (zero RAM per file grossi, auto-multipart sopra 8MB).
+    Dispatch policy-aware (A1, STORAGE_POLICY):
+      - `db`             -> sempre DB BYTEA, fail se size > RESULT_DB_HARD_CAP_BYTES
+      - `object_storage` -> sempre object storage (streaming dal disk)
+      - `hybrid`         -> threshold-based su RESULT_S3_THRESHOLD_BYTES;
+                            il ramo DB e' protetto dallo stesso hard cap
 
-    Applica la retention policy dopo il salvataggio.
-    Elimina il file temp solo dopo che il blob/S3 e' stato scritto.
+    Applica la retention policy dopo il salvataggio. Elimina il file temp
+    solo dopo che il blob/object e' stato scritto.
 
     Args:
         group_id: gruppo dell'utente proprietario del progetto.
@@ -102,9 +149,9 @@ def save_result_blob(project_id: str, path: Path, fmt: str,
     Returns: result_id generato (sempre non vuoto se il metodo ritorna)
 
     Raises:
-        ResultSaveError: se il salvataggio nel DB fallisce. Il file temp viene
-            lasciato sul disco (non cancellato) per consentire un retry manuale
-            o il recovery da parte del caller.
+        ResultSaveError: se il salvataggio fallisce (DB, object storage,
+            payload oltre hard cap). Il file temp viene lasciato sul
+            disco per consentire retry manuale.
     """
     _saved = False
     try:
@@ -124,15 +171,12 @@ def save_result_blob(project_id: str, path: Path, fmt: str,
         except OSError as _ose:
             raise ResultSaveError(f"Impossibile leggere dimensione file {path}: {_ose}")
 
-        # Threshold: sotto -> DB blob (transazionale, veloce).
-        # Sopra -> S3 via storage.upload(path) che streamma dal disk
-        # (zero RAM spike, auto-multipart sopra 8MB via boto3 S3Transfer).
-        s3_threshold = int(
-            settings.get("RESULT_S3_THRESHOLD_BYTES", 50 * 1024 * 1024)
-        )
+        policy = _storage_policy()
+        use_object_storage = _should_use_object_storage(file_size, policy)
 
-        if file_size < s3_threshold:
-            # DB blob path: size < threshold, load in memoria e save transazionale.
+        if not use_object_storage:
+            # DB blob path — hard cap guard (db sempre; hybrid ramo DB).
+            _enforce_db_hard_cap(file_size, ctx=f"save_result_blob/{policy}")
             blob = path.read_bytes()
             db.save_result(
                 result_id=result_id,
@@ -144,8 +188,8 @@ def save_result_blob(project_id: str, path: Path, fmt: str,
                 rows_count=rows_count,
             )
         else:
-            # S3 path: upload streaming dal disk (no RAM load del file).
-            # Ordine: S3 prima (no row DB orfana se upload fallisce).
+            # Object storage path: upload streaming dal disk (no RAM load).
+            # Ordine: upload prima (no row DB orfana se upload fallisce).
             storage_key = f"results/{project_id}/{result_id}.bin"
             try:
                 from app.shared.cloud_backends import get_object_storage
@@ -153,7 +197,8 @@ def save_result_blob(project_id: str, path: Path, fmt: str,
                 storage.upload(path, storage_key)
             except Exception as _se:
                 raise ResultSaveError(
-                    f"Upload S3 fallito per result {result_id} ({path.name}): {_se}"
+                    f"Upload object storage fallito per result {result_id} "
+                    f"({path.name}): {_se}"
                 ) from _se
 
             db.save_result(
@@ -168,9 +213,8 @@ def save_result_blob(project_id: str, path: Path, fmt: str,
                 size_bytes=file_size,
             )
             logger.info(
-                f"[FS-4] Result {result_id} su S3 (file-based, "
-                f"{file_size // (1024*1024)} MB >= threshold "
-                f"{s3_threshold // (1024*1024)} MB): {storage_key}"
+                f"[FS-4] Result {result_id} su object storage (file-based, "
+                f"policy={policy}, {file_size // (1024*1024)} MB): {storage_key}"
             )
 
         _saved = True
@@ -239,15 +283,6 @@ def save_result_blob_from_bytes(
 
         size = len(data)
 
-        # Threshold: sotto -> DB blob (piccolo, transazionale).
-        # Sopra -> object storage (S3/Azure/GCS via cloud_backends).
-        # Nessun hard cap: upload_bytes usa auto-chunking (S3 multipart,
-        # Azure block, GCS resumable). Il limite reale e' la RAM del
-        # processo (se `data` entra in memoria, puo' essere uploadato).
-        s3_threshold = int(
-            settings.get("RESULT_S3_THRESHOLD_BYTES", 50 * 1024 * 1024)
-        )
-
         # Risolvi group_id
         resolved_group_id = group_id
         if not resolved_group_id:
@@ -256,8 +291,12 @@ def save_result_blob_from_bytes(
 
         result_id = str(uuid.uuid4())
 
-        if size < s3_threshold:
-            # DB blob path — piccolo, in-transaction.
+        policy = _storage_policy()
+        use_object_storage = _should_use_object_storage(size, policy)
+
+        if not use_object_storage:
+            # DB blob path — hard cap guard (db sempre; hybrid ramo DB).
+            _enforce_db_hard_cap(size, ctx=f"save_result_blob_from_bytes/{policy}")
             db.save_result(
                 result_id=result_id,
                 project_id=project_id,
@@ -268,8 +307,8 @@ def save_result_blob_from_bytes(
                 rows_count=rows_count,
             )
         else:
-            # S3 path — upload prima, poi salva row con storage_key (ordine
-            # importante: se upload fallisce, non abbiamo row orfana).
+            # Object storage path — upload prima, poi row con storage_key
+            # (ordine importante: no row DB orfana su upload failure).
             storage_key = f"results/{project_id}/{result_id}.bin"
             try:
                 from app.shared.cloud_backends import get_object_storage
@@ -277,7 +316,7 @@ def save_result_blob_from_bytes(
                 storage.upload_bytes(data, storage_key)
             except Exception as _se:
                 raise ResultSaveError(
-                    f"Upload S3 fallito per result {result_id}: {_se}"
+                    f"Upload object storage fallito per result {result_id}: {_se}"
                 ) from _se
 
             db.save_result(
@@ -292,8 +331,8 @@ def save_result_blob_from_bytes(
                 size_bytes=size,
             )
             logger.info(
-                f"[FS-4] Result {result_id} su S3 ({size // (1024*1024)} MB "
-                f">= threshold {s3_threshold // (1024*1024)} MB): {storage_key}"
+                f"[FS-4] Result {result_id} su object storage "
+                f"(policy={policy}, {size // (1024*1024)} MB): {storage_key}"
             )
 
         # Retention post-save (stesso pattern del path-based).
