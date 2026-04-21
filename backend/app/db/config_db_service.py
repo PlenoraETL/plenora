@@ -124,7 +124,7 @@ def delete_group_cascade(group_id: str) -> dict:
                     connections, comparison_keys, projects, users, group
       results.db  → results per ogni progetto del gruppo
       intermediate.db → runs + tabelle dinamiche per ogni progetto del gruppo
-      log.db      → runs + logs per group_id
+      log.db      → log_runs per group_id
 
     Ritorna un dict con i conteggi di ciò che è stato eliminato.
     Non solleva eccezioni — ogni step è non bloccante e logga i warning.
@@ -138,7 +138,7 @@ def delete_group_cascade(group_id: str) -> dict:
         "schedules": 0, "api_connections": 0, "datasources": 0,
         "file_sources": 0, "connections": 0, "projects": 0,
         "users": 0, "results": 0, "intermediate_runs": 0,
-        "log_runs": 0, "log_entries": 0,
+        "log_runs": 0,
     }
 
     # 1-5: Batch DELETE per tabelle con group_id
@@ -197,14 +197,12 @@ def delete_group_cascade(group_id: str) -> dict:
     except Exception as e:
         _log.warning(f"Cascade delete users fallito: {e}")
 
-    # 8. logs + log_runs (ora su PostgreSQL, stessa connessione)
+    # 8. log_runs (ora su PostgreSQL, stessa connessione)
     try:
-        cur = execute("DELETE FROM logs WHERE group_id = ?", (group_id,))
-        report["log_entries"] = cur.rowcount
         cur = execute("DELETE FROM log_runs WHERE group_id = ?", (group_id,))
         report["log_runs"] = cur.rowcount
     except Exception as e:
-        _log.warning(f"Cascade delete logs fallito: {e}")
+        _log.warning(f"Cascade delete log_runs fallito: {e}")
 
     # 9. Elimina il gruppo
     try:
