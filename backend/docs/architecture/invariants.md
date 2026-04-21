@@ -2,9 +2,9 @@
 
 **Riferimento vincolante**: code charter del progetto (regole base 1/4/5/6/7/8/9, review 1–7, arch 1/2/3/4/5). Questo documento e' il ponte tra il charter astratto e il codice concreto post-Fase 0.
 
-**Stato**: pubblicato al termine di Fase 0 consolidation e aggiornato al termine di Fase 1 stabilization. Phase B + re-pass chiusi: S1-S5, S9-S13, S15-S16, S19-S20 applicati; D1 (`ENABLE_ASYNC_ENRICHMENT`) parity sync/async sanata + kill-switch mantenuto; D2 (`_read_csv_*`) unificato. Phase 1 chiusi: S17, S18, S23, S25, S26, S27 (commit atomici), S28 (triage conformita' 2026-04-20); D5 (SECRET_KEY/JWT_SECRET_KEY fallback) rimosso; Architecture A1 storage policy validate + dispatch simmetrici (commit `2a80970`+`1176c32`+`c5578db`). Residui veri classificati in §6.
+**Stato**: pubblicato al termine di Fase 0 consolidation e aggiornato al termine di Fase 1 stabilization. Phase B + re-pass chiusi: S1-S5, S9-S13, S15-S16, S19-S20 applicati; D1 (`ENABLE_ASYNC_ENRICHMENT`) parity sync/async sanata + kill-switch mantenuto; D2 (`_read_csv_*`) unificato. Phase 1 chiusi: S17, S18, S23, S25, S26, S27 (commit atomici), S28 (triage conformita' 2026-04-20); D5 (SECRET_KEY/JWT_SECRET_KEY fallback) rimosso; Architecture A1 storage policy validate + dispatch simmetrici (commit `2a80970`+`1176c32`+`c5578db`). Post Phase 1 micro-0bis: D6 (policy preview vs execute) ratificato come ADR-0012 — codice gia' allineato via S26, §1.6 tre righe canoniche e §2 registrazione fallback autorizzato `_init_security_context(strict=False)`. Residui veri classificati in §6.
 
-**Aggiornato**: 2026-04-21 (post Phase 1 stabilization)
+**Aggiornato**: 2026-04-21 (post Phase 1 stabilization + micro-0bis D6 ratifica)
 
 **Ambito**: le invarianti qui elencate valgono per il codice `backend/app/` e vincolano ogni nuovo commit da Fase 1 in poi. Le scelte di prodotto o di performance restano fuori scope.
 
@@ -67,7 +67,9 @@ Principio generale: **fail-fast su dato critico (charter base 8)**, **best-effor
 | `app/core/files/` | Fail-fast con HTTPException; log uniforme su MIME rejection | S16 chiuso: livello `warning` uniforme nei due punti di rejection MIME (preview + upload) |
 | `app/core/admin_backups/` | Fail-fast con HTTPException; warning su calcoli non bloccanti | S15 chiuso: calcolo `duration_sec` logga `warning` con contesto |
 | `app/core/connections/`, `projects/`, `tickets/`, `scheduler/`, `orchestrator/`, `artifacts/`, `eseguibili/` | Fail-fast via HTTPException | Pattern uniforme, nessuna anomalia in Fase 0 |
-| `app/core/estrai/`, `manipola/`, `arricchisci/` | Misto preview-vs-execute | Convenzione (non ancora invariant): execute = fail-fast; preview = best-effort loggato. Unificazione rimandata (D-fascia) |
+| `app/core/estrai/`, `manipola/`, `arricchisci/` — `execute()` | Fail-fast | Policy canonizzata da ADR-0012 (ratifica D6): errore che compromette correttezza/persistenza/tenancy propaga come `HTTPException` con `logger.error [CRASH]`. Nessun return soft `{success: false}` su path che persiste |
+| `app/core/estrai/`, `manipola/`, `arricchisci/` — `preview()` | Best-effort loggato (`warning+`) | Policy canonizzata da ADR-0012: catch top-level + return uniforme `{success: False, message: str}` per UI; mai silent (`debug` come unico canale vietato). Pattern applicato tatticamente da S26 (`db9ef03` arricchisci, `6db33c7` manipola) prima della ratifica formale |
+| `app/core/estrai/`, `manipola/`, `arricchisci/` — `preview()` fail-fast | Fail-fast | Eccezioni alla best-effort di preview, da ADR-0012 §3: (a) auth/tenant binding non risolvibile, (b) canvas malformato (result node assente, edge dangling, connection_id non esistente), (c) validazione contrattuale di input. Queste salgono come eccezione al router anche in preview |
 | `workers/` | Fail-fast su raise Celery, best-effort su cleanup intermediate | Invariato in Fase 0 |
 | `app/utils/` | Fail-fast | Pattern uniforme; `logger.py` e' l'unica eccezione motivata (no-recursion) |
 
@@ -101,6 +103,7 @@ Questo e' l'elenco chiuso dei fallback attivi nel codice `backend/app/` che sodd
 | `app/core/carica/bulk_writers.py:cursor.close() in finally` | psycopg2 cursor close non deve mascherare l'errore originale se fallisce | Solo ramo finally di COPY Postgres | `logger.debug` con type+msg (S9) | Rimozione non prevista |
 | `app/core/admin_backups/service.py` → warning su `duration_sec` | `started_at/finished_at` potrebbero essere stringhe o `None` in rows legacy | Solo rendering job summary | `logger.warning` con contesto started/finished (S15) | Rimuovere quando schema log job avra' tipi consolidati |
 | `app/core/arricchisci/enrichment_service.py:408-410` → `_execute_parallel` su eccezione async | Safety-net: se il path async (attivo in prod) solleva per ragione inattesa, il path sync offre lo stesso contratto osservabile (parity D1) | Solo ramo `except` del routing async; non maschera errori API normali (quelli tornano come `RowError`) | `logger.error` con `exc_info=True` e prefisso `[ASYNC]` | Rimozione non prevista finche' il flag resta kill-switch |
+| `app/core/manipola/executor.py:146` `_init_security_context(strict=False)` in `preview()` | Preview non persiste: un `group_id` non risolvibile non compromette l'integrita' tenant. I source loader sono fail-closed e restituiscono "Nessun dato sorgente disponibile" con messaggio leggibile invece di bloccare la UI con 500 | Solo `preview()` di manipola (`executor.py:305`); `execute()` chiama `strict=True` e fail-fast con `ValueError` se `group_id` e' `None` | `logger.error` prefisso `[GESTITO]` sul catch interno al lookup progetto (`executor.py:163-164`); `strict=False` di per se' non logga perche' e' un mode-switch di contratto, non un catch | Rimozione non prevista finche' preview resta non-persistente. Ratificato da ADR-0012 §3; registrazione post-S26 richiesta da D6 §4.1 |
 
 **Fallback note di debito (non invarianti, da risolvere fuori Fase 0)**:
 
@@ -221,8 +224,8 @@ Le seguenti decisioni **non** sono vincolate da questo documento e restano scope
 - **Decisioni aperte fascia D (residue dopo Phase 1)**:
   - **D3** IMDF loader/persist/storage boundaries — design doc `orchestrate/phase_1_stabilization/d3_imdf_boundaries.md` consolidato, **nessun refactor codice applicato in Phase 1**. Carry-over **bucket phase_2** (refactor boundaries dedicato).
   - **D4** alias crypto retro-compat — parziale: `URBY_DISABLE_DEFAULT_KEY` rimosso in Phase 1 (`3924bfb`). `URBY_ENCRYPTION_KEY` + `CONN_ENCRYPT_KEY` → **bucket operation**: bloccato su verifica `.env` produzione via SSH su `lab.plenora.it` prima della rimozione codice.
-  - **D6** policy preview vs execute — design doc `orchestrate/phase_1_stabilization/d6_preview_execute_policy.md` proposto; la parte tattica "no silent swallow" e' gia' applicata via S26 (`db9ef03` + `6db33c7`). **Bucket micro_0bis**: ratifica formale come ADR in `backend/docs/architecture/decisions/`.
-  - D1 (`ENABLE_ASYNC_ENRICHMENT`) e D2 (`_read_csv_*`) chiusi in Fase 0; D5 chiuso in Phase 1 (`9fc330a` + `81ac385`); D4 parziale (`3924bfb`).
+  - **D6** policy preview vs execute — **chiuso** post Phase 1 (micro-0bis): ratifica formale come `ADR-0012` in `backend/docs/architecture/decisions/0012-2026-04-21-preview-execute-policy.md`. Codice gia' allineato via S26 (`db9ef03` + `6db33c7`); design doc originale `orchestrate/phase_1_stabilization/d6_preview_execute_policy.md`. Le tre righe canoniche sono in §1.6 e il fallback autorizzato `_init_security_context(strict=False)` e' in §2.
+  - D1 (`ENABLE_ASYNC_ENRICHMENT`) e D2 (`_read_csv_*`) chiusi in Fase 0; D5 chiuso in Phase 1 (`9fc330a` + `81ac385`); D4 parziale (`3924bfb`); D6 chiuso post Phase 1 micro-0bis (`ADR-0012`).
 - **Triage residui Phase 1 — CHIUSI**:
   - S17 `app/services/file_service.py` silent → debug/warning logs (`91b7109`)
   - S18 `app/core/arricchisci/api_connector.py` retry loop (`60dadc7`)
