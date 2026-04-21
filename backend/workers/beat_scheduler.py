@@ -890,12 +890,17 @@ class PlenoraBeatScheduler(Scheduler):
         from app.config import settings
         if not getattr(settings, "LOG_ARCHIVE_ENABLED", False):
             return
+        # Phase 2 archive path: 0 significa disabled (coerente con triage
+        # Batch 3 e con AUDIT_RETENTION_DAYS>=0 ratificato in Batch 2).
+        # Non uso `... or 30` come il legacy _cleanup_old_logs: qui 0 deve
+        # passare nel gate `days <= 0` e fare skip. Asimmetria volontaria
+        # col cleanup baseline.
         try:
-            days = int(getattr(settings, "LOG_RETENTION_DAYS", 30) or 30)
+            days = int(getattr(settings, "LOG_RETENTION_DAYS", 30))
         except (TypeError, ValueError):
             days = 30
         if days <= 0:
-            return  # retention disabilitata
+            return  # retention disabilitata (0 o negativo)
 
         try:
             from datetime import timedelta
@@ -1032,12 +1037,16 @@ class PlenoraBeatScheduler(Scheduler):
         from app.config import settings
         if not getattr(settings, "LOG_ARCHIVE_ENABLED", False):
             return
+        # Phase 2 archive path: 0 significa disabled (gia' ratificato per
+        # AUDIT_RETENTION_DAYS in Batch 2). Niente `... or 365` per evitare
+        # che lo 0 legato all'opt-out venga mascherato in 365. Il gate
+        # `days <= 0` intercetta 0 e valori negativi.
         try:
-            days = int(getattr(settings, "AUDIT_RETENTION_DAYS", 365) or 365)
+            days = int(getattr(settings, "AUDIT_RETENTION_DAYS", 365))
         except (TypeError, ValueError):
             days = 365
         if days <= 0:
-            return  # retention disabilitata
+            return  # retention disabilitata (0 o negativo)
 
         try:
             from datetime import timedelta
