@@ -242,6 +242,7 @@ class PlenoraBeatScheduler(Scheduler):
     _last_stuck_check: float = 0.0
     _last_eseguibili_cleanup: float = 0.0
     _last_logs_retention: float = 0.0
+    _last_logs_archive: float = 0.0
     _last_schedule_logs_retention: float = 0.0
     _last_imdf_bundles_cleanup: float = 0.0
     _last_temp_orphan_cleanup: float = 0.0
@@ -266,6 +267,7 @@ class PlenoraBeatScheduler(Scheduler):
         self._check_stuck_tasks()
         self._cleanup_eseguibili_outputs()
         self._cleanup_imdf_bundles()
+        self._archive_old_logs()
         self._cleanup_old_logs()
         self._cleanup_old_schedule_logs()
         self._cleanup_orphan_temp_files()
@@ -855,6 +857,92 @@ class PlenoraBeatScheduler(Scheduler):
         except Exception as e:
             logger.warning(f"Errore retention schedule_logs: {e}")
 
+    def _archive_old_logs(self):
+        """Ogni 24h archivia+purga plenora.logs via LogArchiveWriter
+        (O-ARC Batch 3, ADR-0014).
+
+        Gate sequenziali:
+        1. 24h temporal gate (_last_logs_archive).
+        2. LOG_ARCHIVE_ENABLED=False -> early return (no-op).
+        3. LOG_RETENTION_DAYS <= 0 -> retention disabilitata, early return
+           (simmetrico al baseline _cleanup_old_logs).
+
+        Su successo:
+          - _last_logs_archive aggiornato (il 24h gate scatta al prossimo tick).
+          - logger.info con archived_rows + numero oggetti creati.
+
+        Su failure (eccezione dal writer o dalle closures):
+          - logger.warning(exc_info=True).
+          - _last_logs_archive NON aggiornato: il run riparte al prossimo
+            tick. La finestra 24h si "chiude" solo con un run pulito.
+          - L'eccezione non propaga: il resto del tick continua.
+
+        Il bypass PG `plenora.retention_cleanup` resta scoped alla DELETE
+        callable (stesso cursor di SET LOCAL), mai esposto globalmente.
+        """
+        import time as _t
+        now = _t.time()
+        if now - self._last_logs_archive < 86400:  # 24h
+            return
+
+        from app.config import settings
+        if not getattr(settings, "LOG_ARCHIVE_ENABLED", False):
+            return
+        try:
+            days = int(getattr(settings, "LOG_RETENTION_DAYS", 30) or 30)
+        except (TypeError, ValueError):
+            days = 30
+        if days <= 0:
+            return  # retention disabilitata
+
+        try:
+            from datetime import timedelta
+            from app.shared.cloud_backends import get_log_archive_storage
+            from app.services.log_archive import LogArchiveWriter
+            from app.db.pg_connection import fetchall, transaction
+
+            cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+            storage = get_log_archive_storage()
+            writer = LogArchiveWriter(
+                storage=storage,
+                key_prefix=settings.LOG_ARCHIVE_KEY_PREFIX,
+                batch_size=settings.LOG_ARCHIVE_BATCH_ROWS,
+            )
+
+            def select_rows(cutoff_ts, batch_size):
+                # Schema-agnostic: search_path del pool risolve `logs` a
+                # plenora.logs (stesso pattern di _cleanup_old_logs).
+                # ORDER BY stabile (ts, id) richiesto dal writer per non
+                # saltare righe fra iterazioni successive.
+                return fetchall(
+                    "SELECT * FROM logs WHERE ts < %s "
+                    "ORDER BY ts ASC, id ASC LIMIT %s",
+                    (cutoff_ts, batch_size),
+                )
+
+            def retention_bypass_execute(sql, params):
+                # Una nuova tx per batch: SET LOCAL + DELETE sullo stesso
+                # cursor (pattern _cleanup_old_logs), altrimenti il trigger
+                # plenora.block_log_modifications scatta sulla DELETE.
+                with transaction() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "SET LOCAL plenora.retention_cleanup = 'true'"
+                        )
+                        cur.execute(sql, params)
+
+            result = writer.archive_and_purge(
+                "logs", cutoff, select_rows, retention_bypass_execute,
+            )
+            self._last_logs_archive = now
+            logger.info(
+                f"Archive logs: {result['archived_rows']} righe "
+                f"in {len(result['object_keys'])} oggetti "
+                f"(cutoff={cutoff.isoformat()}, days={days})"
+            )
+        except Exception as e:
+            logger.warning(f"Errore archive logs: {e}", exc_info=True)
+
     def _cleanup_old_logs(self):
         """Ogni 24h rimuove righe da plenora.logs piu' vecchie di LOG_RETENTION_DAYS.
 
@@ -869,6 +957,11 @@ class PlenoraBeatScheduler(Scheduler):
 
         try:
             from app.config import settings
+            # O-ARC Batch 3: con archive attivo il purge canonico passa
+            # dal writer (_archive_old_logs nel tick, prima di questo
+            # metodo). Skip per non duplicare la DELETE.
+            if getattr(settings, "LOG_ARCHIVE_ENABLED", False):
+                return
             days = int(getattr(settings, "LOG_RETENTION_DAYS", 30) or 30)
             if days <= 0:
                 return  # retention disabilitata
