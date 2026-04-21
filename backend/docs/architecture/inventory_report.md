@@ -600,20 +600,29 @@ Questo re-pass non riapre l'inventory da zero: rivaluta solo i residui alla luce
 
 #### Riaprire dopo / batch dedicato
 
-- `S17` `file_service.py` - residuo reale ma misto tra type detection legit e swallow nudi
-- `S18` `api_connector.py` - 7 silent reali in retry loop (non 25)
-- `S23` `database_writer.py` - 13 siti silent residui, perimetro medio
-- `S25` `eseguibili/router.py` - 8 silent reali, non critico ma non rumore
-- `S27` cluster IMDF - misto tra cleanup legit e generic swallow
+_Phase 1 close-out 2026-04-21: tutti gli item di questa sezione sono stati chiusi con commit atomici `[consolidation-phase-1]` (dettaglio in `PHASE_1_CLOSEOUT.md` §5)._
+
+- ~~`S17` `file_service.py`~~ — **chiuso 2026-04-21** (`91b7109`)
+- ~~`S18` `api_connector.py`~~ — **chiuso 2026-04-21** (`60dadc7`)
+- ~~`S23` `database_writer.py`~~ — **chiuso 2026-04-21** (`e006b56`)
+- ~~`S25` `eseguibili/router.py`~~ — **chiuso 2026-04-21** (`ef3ba63`)
+- ~~`S27` cluster IMDF~~ — **chiuso 2026-04-21** (5 commit: `92f0c31`, `9e1246b`, `be20d19`, `afe3aba`, `834bf91`)
 
 #### Tenere per fase successiva
 
-- `S26` preview swallow estrai/manipola/arricchisci
-- `S28` shared layer mixed
-- `D3` IMDF loader/persist/storage boundaries
-- `D4` alias crypto retro-compat `URBY_ENCRYPTION_KEY` / `CONN_ENCRYPT_KEY` (migration-required: rename `.env` prod + verifica SSH)
-- ~~`D5` `SECRET_KEY`/`JWT_SECRET_KEY` come crypto fallback~~ — **chiuso 2026-04-20** (fallback rimossi dalla chain crypto)
-- `D6` policy preview vs execute cross-modulo
+_Aggiornato 2026-04-21 post Phase 1 close-out._
+
+- ~~`S26` preview swallow estrai/manipola/arricchisci~~ — **chiuso 2026-04-21** tatticamente (`db9ef03` arricchisci + `6db33c7` manipola). Policy formale D6 resta in carry-over.
+- ~~`S28` shared layer mixed~~ — **chiuso 2026-04-20 come triage**, perimetro gia' conforme a `invariants.md` §4.1/§4.3/§2 (no code change; dettaglio in `orchestrate/phase_1_stabilization/kickoff.md`)
+- `D3` IMDF loader/persist/storage boundaries — **carry-over bucket phase_2** (design doc consolidato, refactor non applicato)
+- `D4` alias crypto retro-compat — **carry-over bucket operation**: `URBY_DISABLE_DEFAULT_KEY` rimosso (`3924bfb`); `URBY_ENCRYPTION_KEY` + `CONN_ENCRYPT_KEY` bloccati su verifica `.env` `lab.plenora.it` via SSH
+- ~~`D5` `SECRET_KEY`/`JWT_SECRET_KEY` come crypto fallback~~ — **chiuso 2026-04-20** (`9fc330a` + doc `81ac385`)
+- `D6` policy preview vs execute cross-modulo — **carry-over bucket micro_0bis** (ratifica ADR formale; codice gia' allineato via S26)
+
+#### Carry-over architetturale Phase 2 (nuovi 2026-04-21)
+
+- **A1 follow-up** — provider MinIO P1 implementation + contract test matrice policy/provider + bulk review chiamanti file storage per allineamento al dispatch §1.7 `invariants.md`.
+- **Log lifecycle complessivo** — append-only enforcement architetturale, retention policy formale, purge controllato. `SET LOCAL plenora.retention_cleanup` (`a32c9f3`) risolve solo il retention job autorizzato, non il lifecycle complessivo. Nessun bypass manuale implicito della policy.
 
 #### Declassati a rumore / inventory overcount
 
