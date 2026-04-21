@@ -71,6 +71,7 @@ Non cancellare mai un ADR: il registro e' append-only. Un errore in un ADR si re
 - [ADR-0007](0007-2026-04-21-protocol-runtime-checkable-vs-abc.md) — `Protocol` + `typing.runtime_checkable` per storage, Python-idiomatic vs `ABC`
 - [ADR-0008](0008-2026-04-21-backup-observability-db-side.md) — Observability backup DB-side (`plenora.backup_runs`/`verify_runs`) vs systemctl/journalctl
 - [ADR-0011](0011-2026-04-21-file-sources-dispatch-s3-threshold.md) — `FileSourcesDispatch` threshold S3 50MB, pattern FS-4 simmetrico
+- [ADR-0012](0012-2026-04-21-preview-execute-policy.md) — Policy preview vs execute per `estrai / manipola / arricchisci` (ratifica D6, post S26)
 
 ## Workflow
 
