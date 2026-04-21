@@ -159,6 +159,9 @@ else:
 class LoginRequest(BaseModel):
     username: str
     password: str
+    # MFA opt-in: None per utenti senza MFA (comportamento invariato).
+    # Per utenti con MFA attiva: richiesto, altrimenti 403 mfa_required.
+    mfa_code: Optional[str] = None
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -202,6 +205,22 @@ class GroupCreate(BaseModel):
     group_id: str
     name: str
     description: str = ""
+
+class MFAEnrollResponse(BaseModel):
+    secret: str
+    provisioning_uri: str
+    qr_code_png_base64: str
+
+class MFAVerifyRequest(BaseModel):
+    code: str
+
+class MFADisableRequest(BaseModel):
+    code: str
+
+class MFAStatusResponse(BaseModel):
+    enabled: bool
+    enrolled_at: Optional[str] = None
+    last_verified_at: Optional[str] = None
 
 class GroupResponse(BaseModel):
     group_id: str
@@ -636,6 +655,25 @@ def login(data: LoginRequest, request: Request):
     if not user.get("is_active"):
         raise HTTPException(status_code=403, detail="Account disabilitato")
 
+    # MFA opt-in: se l'utente ha MFA attiva, il codice TOTP e' richiesto.
+    # Se MFA non e' attiva, il comportamento e' invariato (nessun impatto).
+    # Trade-off noto (vedi mfa.py): 403 mfa_required dopo password OK
+    # differisce da 401 password errata, quindi rivela "utente con MFA
+    # attiva". Mitigazione: rate limit su client_ip (gia' attivo).
+    from app.core.auth import mfa as _mfa
+    if _mfa.is_enabled(user["id"]):
+        if not data.mfa_code:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="mfa_required",
+            )
+        if not _mfa.verify_code(user["id"], data.mfa_code):
+            _record_failed_login(client_ip)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="mfa_invalid",
+            )
+
     _clear_failed_logins(client_ip)
     token = create_access_token(
         user_id=user["id"], username=user["username"],
@@ -737,6 +775,63 @@ def change_password(
     db.update_user_password(current_user.user_id, hash_password(data.new_password))
     logger.info(f"Password cambiata: {current_user.username}", op="change_password")
     return {"ok": True}
+
+
+# --- MFA TOTP (opt-in) ---
+
+@router.get("/mfa/status", response_model=MFAStatusResponse)
+def get_mfa_status(current_user: CurrentUser = Depends(get_current_user)):
+    """Stato MFA dell'utente corrente. Qualsiasi autenticato."""
+    from app.core.auth import mfa as _mfa
+    return MFAStatusResponse(**_mfa.status(current_user.user_id))
+
+
+@router.post("/mfa/enroll", response_model=MFAEnrollResponse)
+@audit_action(action="mfa.enroll")
+def mfa_enroll(current_user: CurrentUser = Depends(get_current_user)):
+    """
+    Genera un nuovo secret TOTP (enrollment pendente).
+
+    Sovrascrive qualsiasi riga esistente: se l'utente aveva MFA attiva,
+    perde l'attivazione finche' non chiama /mfa/verify col nuovo codice.
+    Use-case: ri-enrollment dopo perdita device.
+    """
+    from app.core.auth import mfa as _mfa
+    data = _mfa.generate_enrollment(current_user.user_id, current_user.username)
+    return MFAEnrollResponse(**data)
+
+
+@router.post("/mfa/verify")
+@audit_action(action="mfa.verify")
+def mfa_verify(
+    data: MFAVerifyRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Conferma l'enrollment attivando MFA (enabled=TRUE). Richiede un
+    codice TOTP valido dal secret ricevuto in /mfa/enroll.
+    """
+    from app.core.auth import mfa as _mfa
+    if not _mfa.verify_enrollment(current_user.user_id, data.code):
+        raise HTTPException(status_code=400, detail="Codice MFA non valido")
+    return {"ok": True, "enabled": True}
+
+
+@router.post("/mfa/disable")
+@audit_action(action="mfa.disable")
+def mfa_disable(
+    data: MFADisableRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Disabilita MFA. Richiede codice TOTP valido (proof-of-possession):
+    non basta essere autenticati per disattivare, bisogna anche avere
+    l'authenticator. Questo limita il danno da JWT rubati.
+    """
+    from app.core.auth import mfa as _mfa
+    if not _mfa.disable(current_user.user_id, data.code):
+        raise HTTPException(status_code=400, detail="Codice MFA non valido")
+    return {"ok": True, "enabled": False}
 
 
 # --- Gestione utenti (admin only) ---
