@@ -532,13 +532,7 @@ def cleanup_task_completely(task_id: str, current_user: CurrentUser = Depends(ge
     except Exception as e:
         logger.warning(f"cleanup: errore rimozione output_file: {e}")
 
-    # 5. Logs scoped al run_id (per convenzione coincide con task_id)
-    #    + log_runs: cleanup esplicito per non lasciare orfani.
-    try:
-        from app.db.pg_connection import execute as _pg_exec
-        _pg_exec("DELETE FROM logs WHERE run_id = ?", (task_id,))
-    except Exception as e:
-        logger.warning(f"cleanup: errore delete logs WHERE run_id: {e}")
+    # 5. log_runs: cleanup esplicito per non lasciare orfani.
     try:
         from app.db.pg_connection import execute as _pg_exec
         _pg_exec("DELETE FROM log_runs WHERE run_id = ?", (task_id,))
