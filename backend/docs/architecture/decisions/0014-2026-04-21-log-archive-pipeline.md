@@ -176,3 +176,84 @@ Scelta esplicita:
 - Triage Batch 2: `orchestrate/phase_2_hardening/o_arc_batch2_triage.md`
 - Baseline codice: `backend/app/services/log_archive.py:178` (nome canonico `LOG_ARCHIVE_BATCH_ROWS`)
 - Pattern warning A1 cut-paste: `backend/app/shared/cloud_backends.py:381-386` (non-applicabile ad archive per §A4)
+
+## Addendum Batch 4 (2026-04-21)
+
+Questo addendum ratifica la **deviazione esplicita** dal path canonico di scrittura log emersa in fase implementativa del Batch 4 (observability circolare, O-ARC §6.3). Supersede la citazione in §Consequences/Negative ("L'hook di logging chiusura circolare entra in Batch 3") — in Batch 3 e' entrato solo lo stub su console; la chiusura circolare vera su `plenora.logs` arriva in Batch 4 con la deviazione qui ratificata. Il corpo principale dell'ADR (Context, Decision, Rationale, Alternatives, Consequences) e l'addendum Batch 2 restano invariati.
+
+### B1. Deviazione ratificata: INSERT diretta `pg_execute` per observability beat
+
+La riga di observability circolare a fine run success degli hook `_archive_old_logs()` / `_archive_old_audit_actions()` viene scritta su `plenora.logs` via **`pg_execute("INSERT INTO logs ...")` diretto**, **non** via `StructuredLogger.info(op="log_archive", details=...)` come preliminarmente indicato nel triage Batch 4.
+
+**Perche' la deviazione e' necessaria**:
+- `PostgresLogHandler.__init__` (`backend/app/utils/logger.py:290-301`) imposta il livello handler a `settings.LOG_LEVEL_DB`, **default `WARNING`** (`backend/app/config.py:323-324`, nessun `.env` template lo override a `INFO`).
+- Python logging filtra ogni `LogRecord` con `record.levelno < handler.level` prima di `emit()`: `logger.info(...)` non raggiunge `emit()` → nessuna INSERT su `plenora.logs`.
+- Verificato empiricamente: `backend/workers/beat_scheduler.py` ha 13+ chiamate `logger.info(...)` esistenti (es. righe 203, 359, 445, 514) che vanno solo su console, mai su DB. E' il comportamento atteso del logger.
+- Alzare `LOG_LEVEL_DB` a `INFO` globalmente farebbe finire su `plenora.logs` ogni INFO dell'app — out of scope Batch 4 e rumore inaccettabile.
+
+**Alternative considerate e rigettate**:
+- `logger.warning("Archived N rows", op="log_archive", ...)` — **Rejected**. Semanticamente sbagliato: un success path non e' un warning. Inquina il signal-to-noise del livello WARNING, gia' usato in Batch 3 per `logger.warning(exc_info=True)` nel ramo except. Un reviewer che grep-pa `level=WARNING op=log_archive` non sa se e' success o failure.
+- Bypass handler via `_get_db_handler().emit(custom_record)` — **Rejected**. Espone `logging.Logger.makeRecord` (API privata di Python logging), fragile a refactor interni, richiede costruzione manuale di `LogRecord` con tutti i campi. Complessita' senza beneficio rispetto a INSERT diretta.
+- Aggiungere un flag `force_db=True` a `StructuredLogger` che bypassa il filtro livello — **Rejected**. Tocca `app/utils/logger.py`, out of scope Batch 4 ("frozen" in §1.2 triage), e introdurrebbe un escape hatch riusabile — incentivo a proliferare il bypass.
+- Rinunciare alla observability circolare DB-side e tenere solo console (`logger.info` esistente) — **Rejected**. O-ARC §6.3 prescrive esplicitamente "Log applicativo su `plenora.logs` (stesso DB) ad ogni run del job"; e' la chiusura del cerchio append-only (il job logga il proprio completamento sulla stessa tabella che ha appena archiviato+purgato).
+
+**Perche' la deviazione e' accettabile**:
+- **Append-only invariant preservato**: la operazione e' solo INSERT. Nessun UPDATE, nessun DELETE. Il trigger `plenora.block_log_modifications` (migration `2026-04-21_log_immutable_triggers.sql`) blocca UPDATE/DELETE ma lascia passare INSERT — invariante di §Decision 7 ADR-0014 intatto.
+- **No bypass `SET LOCAL plenora.retention_cleanup`**: l'INSERT observability non richiede il flag di bypass (il flag e' solo per DELETE). Il bypass resta scoped alle due closure `retention_bypass_execute` dei Batch 3 hook (invariante §Decision 4 intatto).
+- **Precedente diretto nel repo**: `backend/app/shared/audit_action.py:213-216` scrive direttamente su `plenora.audit_actions` via `pg_execute`, non via `StructuredLogger`. Stesso pattern applicato a `plenora.logs` per observability di un job specifico.
+- **Scope chirurgico**: la deviazione e' limitata a **2 call site** in `beat_scheduler.py` (uno per hook), con shape INSERT identica a quella del `PostgresLogHandler.emit` canonico. Nessun pattern riusabile introdotto, nessun helper esportato.
+
+### B2. Shape INSERT canonica (11 colonne)
+
+L'INSERT observability usa **esattamente** la stessa lista colonne e lo stesso ordine di `PostgresLogHandler.emit` (`backend/app/utils/logger.py:340-344`):
+
+```
+INSERT INTO logs (ts, level, module, op, msg, project_id, group_id, run_id, node_id, details, error)
+VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+```
+
+Valori passati dagli hook:
+
+| Colonna | Valore | Note |
+|---|---|---|
+| `ts` | `datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]` | Stesso format del logger (riga 307). |
+| `level` | `"INFO"` | Semantica success, non WARNING. |
+| `module` | `"workers"` | Coerente con `MODULE_MAP` (`utils/logger.py:266`, `"workers": "workers"`). |
+| `op` | `"log_archive"` | Op canonico del cluster O-ARC, grep-pabile. |
+| `msg` | `f"Archive {table}: {N} righe in {K} oggetti (cutoff=..., days=...)"` | Human-readable, stessa forma del `logger.info` console esistente. |
+| `project_id`, `group_id`, `run_id`, `node_id` | `""` (stringa vuota) | Il beat job non ha contesto progetto/run; pattern coerente con logger (riga 312-315, `getattr(..., "") or ...`). |
+| `details` | `json.dumps({"table", "cutoff", "archived_rows", "object_keys", "batch_runs"}, default=str)` | JSON string con metriche archive. `default=str` gestisce datetime. |
+| `error` | `""` | Success path, nessun traceback. |
+
+**Contract test B4-T1 (commit 4a)** verifica esplicitamente la shape: 11 placeholder `%s`, 11 valori tuple, ordine esatto, serializzazione `details` JSON parsable con le 5 chiavi attese.
+
+### B3. Success-only, no INSERT circolare su failure
+
+La INSERT observability viene emessa **solo** nel ramo success degli hook, **dopo** `self._last_*_archive = now` e **dopo** il `logger.info(...)` console esistente. Non viene emessa:
+- Nei 3 early-return gate (24h / `ENABLED=false` / retention `<= 0`): il silence e' voluto.
+- Nel ramo `except`: il `logger.warning(exc_info=True)` di Batch 3 resta l'unico segnale. Ragioni:
+  - `pg_execute` potrebbe fallire in cascata (se il DB e' il problema che ha fatto fallire il writer, lo sara' anche per la INSERT observability).
+  - Una INSERT observability sul failure dovrebbe catturare partial state (quante righe archiviate prima del crash, quali object creati), e il writer non ritorna quella info sul failure path — richiederebbe modifica del writer, out of scope Batch 4.
+  - La failure observability resta affidata a `logger.warning` console + stack trace in `journalctl` / console ops. La query-ability DB-side del failure non e' richiesta da O-ARC §6.3 ne' da ISO 27001 A.12.4.1.
+
+### B4. Non-loop runtime garantito
+
+La riga observability ha `ts = now()`. Il tick successivo ha `cutoff = now() - LOG_RETENTION_DAYS` (default 30gg). La riga diventa archive-eligible **30 giorni dopo** la sua creazione — nessun loop same-tick, nessun amplificatore. In steady state, ogni giorno la INSERT di oggi finira' archiviata insieme al batch del giorno +30gg.
+
+Mitigazione extra non necessaria: nessun filtro `WHERE op != 'log_archive'` nella SELECT del writer, nessuna exclusion list. Il comportamento "la riga di chiusura cerchio viene anch'essa archiviata" **e'** la chiusura del cerchio append-only — conforme al design O-ARC.
+
+### B5. Invariants update obbligatorio in commit 4d
+
+Il commit `[invariants] post O-ARC: §1.4 + §3 + §6` (4d del piano Batch 4) **deve** documentare esplicitamente questa deviazione come eccezione autorizzata al path canonico §1.4 "scrittura log via `StructuredLogger`". Formulazione proposta per §1.4:
+
+> Path canonico scrittura log applicativo: `StructuredLogger` (`app/utils/logger.py`) con handler `PostgresLogHandler`. **Eccezioni autorizzate** (scrittura diretta `pg_execute` su `plenora.logs` con shape colonne canonica): (a) `beat_scheduler._archive_old_logs` / `_archive_old_audit_actions` observability circolare a fine run success, ratificata in ADR-0014 §B. Motivazione tecnica: `LOG_LEVEL_DB=WARNING` di default filtra INFO del logger canonico; la deviazione preserva append-only (solo INSERT) e usa la stessa lista colonne del handler.
+
+Senza questo update §1.4, la deviazione sarebbe ratificata solo in ADR — la separazione "ADR decide, invariants enforca in review" richiede entrambe le voci.
+
+### Additional references (Batch 4)
+
+- Triage Batch 4: `orchestrate/phase_2_hardening/o_arc_batch4_triage.md` §3.1 (opzione B scelta al checkpoint), §3.2 (shape `details`)
+- Code-read determinante: `backend/app/utils/logger.py:290-301` (`PostgresLogHandler.__init__` livello WARNING), `:340-344` (shape INSERT canonica), `backend/app/config.py:323-324` (`LOG_LEVEL_DB` default `"WARNING"`)
+- Precedente INSERT diretta autorizzata: `backend/app/shared/audit_action.py:213-216`
+- Baseline hook Batch 3: `backend/workers/beat_scheduler.py:862` (`_archive_old_logs`), `:1002` (`_archive_old_audit_actions`)
+- Invariants post Batch 4: `backend/docs/architecture/invariants.md §1.4` (update commit 4d con eccezione esplicita)
