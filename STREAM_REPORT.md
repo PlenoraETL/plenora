@@ -1,7 +1,7 @@
 # STREAM TESTS — Report Fase 1 Stabilization
 
 **Status**: in_progress
-**Last updated**: 2026-04-21 (Batch 2 Datasources — service crypto + factory done, 17/~25)
+**Last updated**: 2026-04-21 (Batch 2 Datasources — service crud+crypto + factory done, 24/~25)
 
 ## Scope
 
@@ -61,15 +61,16 @@ Invariants blindati: §2 riga `enrichment_service:408-410` async safety-net + §
 
 ## Test scritti (tot)
 
-- Datasources: **17** (2 file, batch 2 in corso)
+- Datasources: **24** (3 file, batch 2 in corso)
   - `tests2/datasources/test_factory_dispatch_contract.py` — 11 test: dispatch parametrico (4 tipi) → classe corretta, fail-fast su tipo sconosciuto/missing/empty, contract BackendConfig structured-vs-extra, filtro `None` con False/empty-string preservati, `supported_types()` ritorna i 4 canonici, meta-contract dispatch ↔ supported_types
   - `tests2/datasources/test_service_crypto_contract.py` — 6 test (gap coverage vs legacy `security/unit/test_datasource_crypto_contract.py`): update re-cifra con nuovo valore, update skip su `"***"` masked (CVE-class regression guard), update strips `group_id`/`created_by` dal blob salvato, `_to_model(redact=True)` maschera 4 sensitive in `_SENSITIVE_FIELDS`, `_to_model(redact=False)` preserva plaintext per uso interno, update su ds inesistente → `None` senza side-effect DB
+  - `tests2/datasources/test_service_crud_contract.py` — 7 test CRUD + tenant: list WHERE group_id con binding `%s` (cross-tenant fail-closed), list senza WHERE quando group_id=None (path superadmin), **N+1 guard** (1 fetchall + 0 get_datasource per-row con counter su 5 row), delete non-existent → False senza DB delete (idempotenza), create id pattern canonico `ds_<name>_<date>_<time>_<uuid8>`, get_scan_state JSON corrotto → rename `.broken.<ts>` + empty, get_scan_state file assente → empty no write
 - Scheduler: 0 (batch 3)
 - Enrichment: 0 (batch 4)
 - Crypto: **13** (2 file, batch 1 ✅)
   - `tests2/crypto/test_crypto_fernet_contract.py` — 5 test: roundtrip, tamper detection (MAC fail → None + log error), wrong key → None, allowlist plaintext (non-string / assenti / fuori lista), nonce uniqueness (IV random)
   - `tests2/crypto/test_crypto_key_sourcing_contract.py` — 8 test: chain priority PLENORA > URBY > CONN (3 test), **D5 regression** (no fallback su SECRET_KEY/JWT_SECRET_KEY, chiuso 2026-04-20), prod fail-fast no-key, prod fail-fast dev-default-leak, min-length < 16 char in any env, PLENORA_DISABLE_DEFAULT_KEY opt-in dev
-- **TOTALE**: **30 / ~38**
+- **TOTALE**: **37 / ~38**
 
 ## Bug / anomalie source trovati durante studio (NON fissati)
 

@@ -1,0 +1,378 @@
+"""Contract test per CRUD + tenant isolation di `DataSourceService`.
+
+Invariants blindati (da ``backend/docs/architecture/invariants.md``):
+
+- §4.1 layer business + tenant isolation: ``list_datasources(group_id=X)``
+  DEVE restringere alla query con ``WHERE group_id = %s``. Un bug che
+  omettesse il filtro esporrebbe cross-tenant i datasource di altri
+  gruppi — viola fail-closed.
+- §1.1 "un solo entry point": ``list_datasources`` è il punto canonico
+  di enumeration. Ogni bypass che rileggesse la lista con chiamate
+  parallele violerebbe il contract di policy.
+- Perf invariant N+1: ``list_datasources`` DEVE usare 1 sola ``fetchall``
+  con parse in memoria (vedi ``service.py:52-62``). Un ritorno al pattern
+  ``get_datasource`` per-row porterebbe a N+1 round-trip a DB.
+- Policy recovery ``get_scan_state`` (service.py:254-285): JSON corrotto
+  → rinomina in ``.broken.<ts>`` + log ERROR + ritorna ``ScanState`` vuoto.
+  Il rename È il punto chiave: senza, ogni call successiva ritrova lo
+  stesso errore e lo scan è rotto fino al manual cleanup.
+
+Regressioni protette:
+
+- Cross-tenant leak: rimuovere il filtro ``WHERE group_id`` o cambiarlo
+  in un OR loose esporrebbe dati di tenant altrui.
+- N+1 regressione: un refactor che iterasse ``get_datasource(id)`` per
+  ogni row (apparentemente più "pulito") rompe la garanzia di singola
+  query.
+- Delete idempotente: ``delete_datasource`` su id inesistente deve
+  ritornare ``False`` SENZA chiamare ``db.delete_datasource`` — evita
+  DELETE SQL spurie su id non esistenti (log spam / row count metrics).
+- Scan state "silent corrupt": prima del fix il file corrotto restava
+  su disco e ogni call ri-loggava il warning. Il test blinda il rename.
+"""
+
+from __future__ import annotations
+
+import json
+from datetime import datetime, timezone
+
+import pytest
+
+
+pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.shared]
+
+
+# ─── Fixtures ──────────────────────────────────────────────────────────────
+
+@pytest.fixture(autouse=True)
+def _ensure_database_url_for_module_import(monkeypatch):
+    """``app.db.pg_connection`` at-import-time richiede ``DATABASE_URL``.
+
+    Placeholder sintetico: nessuna query reale viene eseguita (tutte le
+    funzioni DB sono monkeypatchate nei singoli test).
+    """
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql://fake:fake@localhost:5432/fake",
+    )
+    yield
+
+
+def _make_row(ds_id: str, group_id: str, name: str = "test ds",
+              ds_type: str = "local") -> dict:
+    """Costruisce una row DB finta come la ritornerebbe ``fetchall``.
+
+    ``config`` è una string JSON (formato DB). Senza campi sensibili:
+    così ``_decrypt_dict_fields`` non esegue logica Fernet (allowlist
+    skippa campi assenti — già blindato nei test crypto).
+    """
+    config = {
+        "id": ds_id,
+        "name": name,
+        "type": ds_type,
+        "root_path": "/tmp",
+        "created_at": "2026-01-01T00:00:00+00:00",
+        "updated_at": "2026-01-01T00:00:00+00:00",
+    }
+    return {
+        "id": ds_id,
+        "group_id": group_id,
+        "name": name,
+        "ds_type": ds_type,
+        "config": json.dumps(config),
+        "created_by": "user-x",
+    }
+
+
+# ─── 1) Cross-tenant fail-closed ──────────────────────────────────────────
+
+def test_list_datasources_filters_by_group_id_uses_where_clause(monkeypatch):
+    """Blinda §4.1 tenant isolation: con ``group_id`` non-None la query SQL
+    include ``WHERE group_id = %s`` e i params passano l'id del tenant.
+
+    Regressione: la rimozione del filtro (o il passaggio a ``WHERE TRUE``)
+    esporrebbe a un tenant i datasource di ogni altro gruppo — silent,
+    nessun errore, solo lista gonfia.
+    """
+    from app.core.datasources.service import DataSourceService
+    import app.db.config_db_service as cfg_db
+
+    captured = []
+
+    def fake_fetchall(query, params=None):
+        captured.append((query, params))
+        return []
+
+    monkeypatch.setattr(cfg_db, "fetchall", fake_fetchall)
+
+    service = DataSourceService()
+    service.list_datasources(group_id="tenant-a")
+
+    assert len(captured) == 1, (
+        f"Attesa 1 chiamata a fetchall, ottenute {len(captured)}"
+    )
+    query, params = captured[0]
+    assert "WHERE group_id" in query, (
+        f"La query DEVE includere WHERE group_id per tenant isolation. "
+        f"Ottenuto: {query!r}"
+    )
+    assert params == ("tenant-a",), (
+        f"Il params DEVE essere ('tenant-a',) per binding SQL sicuro, "
+        f"ottenuto {params!r}"
+    )
+
+
+def test_list_datasources_no_where_clause_when_group_id_is_none(monkeypatch):
+    """Blinda il path superadmin: ``group_id=None`` → query SENZA WHERE.
+
+    Semantica: ``None`` significa "chi chiama ha già autorizzato l'accesso
+    full-tenant" (superadmin o route con ``allowed_groups`` pre-filtrato).
+    Il service non deve inserire autonomamente filtri: rimane responsabilità
+    del caller (router/auth layer) proteggere la chiamata.
+    """
+    from app.core.datasources.service import DataSourceService
+    import app.db.config_db_service as cfg_db
+
+    captured = []
+
+    def fake_fetchall(query, params=None):
+        captured.append((query, params))
+        return []
+
+    monkeypatch.setattr(cfg_db, "fetchall", fake_fetchall)
+
+    service = DataSourceService()
+    service.list_datasources(group_id=None)
+
+    assert len(captured) == 1
+    query, params = captured[0]
+    assert "WHERE group_id" not in query, (
+        f"Senza group_id NON deve esserci filtro WHERE group_id, "
+        f"query: {query!r}"
+    )
+    # L'implementazione chiama fetchall senza tuple di params in questo path.
+    assert params is None, (
+        f"Senza group_id i params DEVONO essere None, ottenuto {params!r}"
+    )
+
+
+# ─── 2) N+1 guard ─────────────────────────────────────────────────────────
+
+def test_list_datasources_uses_single_fetchall_no_per_row_requery(monkeypatch):
+    """Blinda il fix N+1 (service.py:52-68): ``list_datasources`` DEVE usare
+    1 sola ``fetchall`` e parse in memoria — MAI ``get_datasource(id)`` per-row.
+
+    Regressione: il pattern N+1 era presente prima del refactor
+    2026-04-17/18. Un merge futuro che riportasse ``for row: db.get_datasource(row.id)``
+    (magari per uniformare il decrypt path) distruggerebbe la garanzia
+    di latenza O(1) query per M datasource.
+
+    Strategia: counter su ``fetchall`` (==1) e su ``db.get_datasource`` (==0).
+    Il counter 0 su get_datasource è il segnale discriminante: se sale,
+    c'è un path di re-fetch che non deve esserci.
+    """
+    from app.core.datasources.service import DataSourceService
+    import app.db.config_db_service as cfg_db
+    import app.db.db_service as db
+
+    rows = [_make_row(f"ds-{i}", "tenant-a", f"ds{i}") for i in range(5)]
+
+    fetchall_count = [0]
+    get_datasource_count = [0]
+
+    def fake_fetchall(query, params=None):
+        fetchall_count[0] += 1
+        return rows
+
+    def fake_get_datasource(ds_id):
+        get_datasource_count[0] += 1
+        return rows[0]  # non dovrebbe mai essere chiamato
+
+    monkeypatch.setattr(cfg_db, "fetchall", fake_fetchall)
+    monkeypatch.setattr(db, "get_datasource", fake_get_datasource)
+
+    service = DataSourceService()
+    result = service.list_datasources(group_id="tenant-a")
+
+    assert len(result.datasources) == 5
+    assert fetchall_count[0] == 1, (
+        f"list_datasources DEVE fare 1 sola fetchall. Ottenuto "
+        f"{fetchall_count[0]} — probabile regressione N+1."
+    )
+    assert get_datasource_count[0] == 0, (
+        f"list_datasources NON DEVE chiamare get_datasource per row. "
+        f"Ottenuto {get_datasource_count[0]} chiamate — pattern N+1."
+    )
+
+
+# ─── 3) Delete non-existent ───────────────────────────────────────────────
+
+def test_delete_datasource_returns_false_for_nonexistent_no_db_delete(monkeypatch):
+    """Blinda idempotenza delete: id inesistente → ``False`` SENZA side-effect.
+
+    Il check ``if not db.get_datasource(ds_id): return False`` È il punto
+    di idempotenza. Rimuoverlo farebbe partire DELETE SQL spurie che
+    toccherebbero 0 row ma:
+    - gonfierebbero le metriche ``rowcount = 0`` nei log
+    - confonderebbero eventuali trigger audit (delete event per id ignoto)
+    - nasconderebbero bug upstream (l'UI che chiama delete su id stale)
+
+    Il contract fail-closed: se non esiste, ritorna False e nessuna
+    operazione DB viene eseguita.
+    """
+    from app.core.datasources.service import DataSourceService
+    import app.db.db_service as db
+
+    delete_called_with = []
+    monkeypatch.setattr(db, "get_datasource", lambda ds_id: None)
+    monkeypatch.setattr(
+        db,
+        "delete_datasource",
+        lambda ds_id: delete_called_with.append(ds_id),
+    )
+
+    service = DataSourceService()
+    result = service.delete_datasource("ds-not-exist")
+
+    assert result is False, (
+        f"delete su id inesistente DEVE ritornare False, ottenuto {result!r}"
+    )
+    assert delete_called_with == [], (
+        f"db.delete_datasource NON DEVE essere chiamato se get_datasource è None. "
+        f"Chiamate osservate: {delete_called_with}"
+    )
+
+
+# ─── 4) Create: ID pattern canonico ───────────────────────────────────────
+
+def test_create_datasource_generates_id_with_canonical_pattern(monkeypatch):
+    """Blinda il contract pubblico di ``_generate_id``: ID segue il pattern
+    ``ds_<name_safe>_<YYYYMMDD>_<HHMMSS>_<uuid[:8]>``.
+
+    Questo ID finisce nelle URL REST (``/api/datasources/{ds_id}``), nelle
+    metriche, nei log strutturati. Un refactor che ne cambiasse la forma
+    (es. UUID puro) romperebbe:
+    - le URL bookmark-ate dai client
+    - i grep negli stack di log che cercano il prefisso ``ds_``
+    - i parser che estraggono il timestamp per analisi storica
+
+    Regressione: fix-forward deve aggiornare anche il router e il frontend.
+    Il test blinda il formato lato service.
+    """
+    from app.core.datasources.service import DataSourceService
+    from app.core.datasources.models import DataSourceCreate
+    import app.db.db_service as db
+
+    saved = []
+    monkeypatch.setattr(db, "save_datasource", lambda **kw: saved.append(kw))
+
+    service = DataSourceService()
+    data = DataSourceCreate(name="My Test DS", type="local", root_path="/tmp")
+    result = service.create_datasource(
+        data, group_id="tenant-x", created_by="user-1",
+    )
+
+    # ds_<name>_<date>_<time>_<uuid8>: il nome può contenere '_' per via della
+    # normalizzazione (space → underscore), quindi ragiono sui token dalla coda.
+    assert result.id.startswith("ds_"), (
+        f"ID deve iniziare con 'ds_', ottenuto {result.id!r}"
+    )
+    parts = result.id.split("_")
+    assert len(parts) >= 5, (
+        f"ID deve avere almeno 5 token (ds, name>=1, date, time, uuid): {result.id!r}"
+    )
+    uuid_token = parts[-1]
+    time_token = parts[-2]
+    date_token = parts[-3]
+    assert len(uuid_token) == 8, (
+        f"Ultimo token deve essere uuid[:8] (8 char), ottenuto {uuid_token!r}"
+    )
+    assert time_token.isdigit() and len(time_token) == 6, (
+        f"Penultimo token deve essere HHMMSS (6 cifre), ottenuto {time_token!r}"
+    )
+    assert date_token.isdigit() and len(date_token) == 8, (
+        f"Terzultimo token deve essere YYYYMMDD (8 cifre), ottenuto {date_token!r}"
+    )
+
+    # Side-effect: save_datasource è stato chiamato con l'id generato
+    assert len(saved) == 1
+    assert saved[0]["ds_id"] == result.id
+    assert saved[0]["group_id"] == "tenant-x"
+    assert saved[0]["created_by"] == "user-1"
+
+
+# ─── 5) get_scan_state: JSON corrotto → rename + empty ───────────────────
+
+def test_get_scan_state_renames_corrupted_file_and_returns_empty(tmp_path):
+    """Blinda policy recovery (service.py:254-285): JSON corrotto →
+    rinomina in ``<name>.broken.<ts>`` + log ERROR + ``ScanState`` vuoto.
+
+    Il rename È il punto chiave. Prima del fix, il comportamento era
+    "warning + silent return empty": il file corrotto restava su disco,
+    ogni call successiva re-incontrava lo stesso errore, lo scan era
+    "rotto" fino al manual cleanup admin.
+
+    Con il rename, la successiva get_scan_state vede "no file" → riparte
+    pulita. Il file `.broken.<ts>` resta sul disco per investigazione.
+
+    Regressione: un merge futuro che togliesse il ``path.rename`` (magari
+    perché "sembra aggressivo") riporterebbe il silent-corrupt di prima.
+    """
+    from app.core.datasources.service import DataSourceService
+    from app.core.datasources.models import ScanState
+
+    service = DataSourceService()
+    # Override scan_dir per isolamento completo dal filesystem reale
+    service._scan_dir = tmp_path
+
+    ds_id = "ds-corrupt-test"
+    scan_path = tmp_path / f"{ds_id}.json"
+    scan_path.write_text("{this is not valid json", encoding="utf-8")
+    assert scan_path.exists(), "setup: file corrotto deve esistere"
+
+    state = service.get_scan_state(ds_id)
+
+    assert isinstance(state, ScanState)
+    assert state.last_check is None, (
+        "ScanState ritornato DEVE essere empty (no fallback su contenuto corrotto)"
+    )
+    assert state.processed == []
+
+    # Il file originale NON deve più esistere (è stato rinominato)
+    assert not scan_path.exists(), (
+        "File corrotto DEVE essere rinominato — non deve più esistere con nome originale"
+    )
+    # Deve esistere esattamente un file .broken.<ts>
+    broken_files = list(tmp_path.glob(f"{ds_id}.json.broken.*"))
+    assert len(broken_files) == 1, (
+        f"Atteso esattamente 1 file .broken.<ts>, trovati: "
+        f"{[f.name for f in broken_files]}"
+    )
+    # Il contenuto del .broken deve essere preservato per investigazione admin
+    assert "{this is not valid json" in broken_files[0].read_text(encoding="utf-8")
+
+
+def test_get_scan_state_returns_empty_when_file_absent(tmp_path):
+    """Edge case base: path inesistente → ``ScanState`` vuoto, no file create.
+
+    Complementare al test precedente: senza questo, un refactor che per errore
+    creasse un file placeholder (``path.touch()``) sembrerebbe benigno ma
+    introdurrebbe I/O spurio (disk write su ogni read di scheduler). Blindato.
+    """
+    from app.core.datasources.service import DataSourceService
+    from app.core.datasources.models import ScanState
+
+    service = DataSourceService()
+    service._scan_dir = tmp_path
+
+    state = service.get_scan_state("ds-never-existed")
+
+    assert isinstance(state, ScanState)
+    assert state.last_check is None
+    assert state.processed == []
+    assert state.snapshot == []
+    # Nessun file deve essere stato creato come side-effect
+    assert list(tmp_path.iterdir()) == [], (
+        f"Nessun file deve essere creato per scan_state inesistente. "
+        f"Trovati: {[p.name for p in tmp_path.iterdir()]}"
+    )
