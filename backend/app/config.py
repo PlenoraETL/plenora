@@ -147,6 +147,30 @@ class Settings:
         # Sopra cap: ResultSaveError al save (caller deve failare).
         "RESULT_DB_HARD_CAP_BYTES": 500 * 1024 * 1024,
 
+        # ==================== LOG ARCHIVE (O-ARC Batch 2, ADR-0014) ====================
+        # Master switch archive+purge per plenora.logs e plenora.audit_actions.
+        # Con enabled=false (default) validate_storage_config salta tutti i check
+        # LOG_ARCHIVE_*; il retention esistente (_cleanup_old_logs) continua a
+        # girare come oggi. L'hook archive nel beat arriva in Batch 3
+        # (ADR-0014 §A4: silent pass anche con altre LOG_ARCHIVE_* settate).
+        "LOG_ARCHIVE_ENABLED": False,
+        # Prefisso deterministico delle object key archive. Default senza
+        # auto-derivazione <env>: ops override esplicito in .env per separare
+        # prod/staging/dev (ADR-0014 §A2). Formato: "" oppure endswith "/".
+        "LOG_ARCHIVE_KEY_PREFIX": "logs-archive/",
+        # Righe per batch iterazione SELECT->upload->DELETE del writer. Cap
+        # pratico RAM per batch. Nome canonico (ADR-0014 §A1): supersede
+        # LOG_ARCHIVE_BATCH_SIZE citato nell'ADR originale Consequences/Neutral.
+        "LOG_ARCHIVE_BATCH_ROWS": 10_000,
+        # Giorni di retention per plenora.audit_actions. 0 = retention
+        # disabilitata (simmetrico a SCHEDULE_LOGS_RETENTION_DAYS). Default
+        # 365gg: baseline ISO 27001 A.12.4.1 per event log. Consumato dal
+        # beat in Batch 3 come cutoff archive+purge.
+        "AUDIT_RETENTION_DAYS": 365,
+        # NB: LOG_ARCHIVE_BUCKET e' intenzionalmente fuori da DEFAULTS —
+        # e' required-if-enabled con validazione fail-fast a boot
+        # (ADR-0014 §A3: distinto da BACKUP_BUCKET/BACKUP_S3_BUCKET).
+
         # ==================== PROGETTI ====================
         "SUPPORTED_PROJECT_TYPES": ["estrai", "manipola", "arricchisci", "salva"],
         "DEFAULT_GROUP": "default",
@@ -319,6 +343,53 @@ class Settings:
             return int(self.get("SCHEDULE_LOGS_RETENTION_DAYS", 90))
         except (TypeError, ValueError):
             return 90
+
+    # ==================== LOG ARCHIVE (O-ARC Batch 2, ADR-0014) ====================
+    # Master switch pipeline archive+purge (beat hook in Batch 3). False =
+    # validate_storage_config salta i check LOG_ARCHIVE_*; il retention
+    # esistente gira come oggi. Silent pass anche con altre LOG_ARCHIVE_*
+    # settate nel .env (pattern preparazione pre-flip, ADR-0014 §A4).
+    @property
+    def LOG_ARCHIVE_ENABLED(self) -> bool:
+        return bool(self.get("LOG_ARCHIVE_ENABLED", False))
+
+    # Bucket object storage dedicato per archive log. Separato da
+    # BACKUP_BUCKET: IAM boundary distinto (ADR-0014 §A3). Unset di
+    # default; required-if-enabled con validazione fail-fast a boot in
+    # app/shared/cloud_backends.validate_storage_config.
+    @property
+    def LOG_ARCHIVE_BUCKET(self) -> Optional[str]:
+        return self.get("LOG_ARCHIVE_BUCKET")
+
+    # Prefisso deterministico delle object key archive. Ops override in
+    # .env per separare prod/staging/dev (ADR-0014 §A2). Formato: vuoto
+    # oppure terminante con "/" (invariante consumato da
+    # app/services/log_archive._build_object_key).
+    @property
+    def LOG_ARCHIVE_KEY_PREFIX(self) -> str:
+        return self.get("LOG_ARCHIVE_KEY_PREFIX", "logs-archive/") or "logs-archive/"
+
+    # Righe per batch iterazione SELECT->upload->DELETE del writer
+    # LogArchiveWriter. Cap pratico RAM per batch. Nome canonico
+    # (ADR-0014 §A1): supersede LOG_ARCHIVE_BATCH_SIZE citato nell'ADR
+    # originale. Consumato dal beat in Batch 3 per istanziare il writer.
+    @property
+    def LOG_ARCHIVE_BATCH_ROWS(self) -> int:
+        try:
+            return int(self.get("LOG_ARCHIVE_BATCH_ROWS", 10_000))
+        except (TypeError, ValueError):
+            return 10_000
+
+    # Giorni di retention per plenora.audit_actions. 0 = retention
+    # disabilitata (simmetrico a SCHEDULE_LOGS_RETENTION_DAYS). Default
+    # 365gg: baseline ISO 27001 A.12.4.1 per event log. Consumato dal
+    # beat in Batch 3 come cutoff archive+purge.
+    @property
+    def AUDIT_RETENTION_DAYS(self) -> int:
+        try:
+            return int(self.get("AUDIT_RETENTION_DAYS", 365))
+        except (TypeError, ValueError):
+            return 365
 
     @property
     def UPLOADS_DIR(self) -> Path:
