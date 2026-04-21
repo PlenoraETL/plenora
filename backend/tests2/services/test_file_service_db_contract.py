@@ -290,6 +290,8 @@ def test_dispatch_below_threshold_keeps_data_in_db(monkeypatch):
     from app.services.file_service import FileSourceService
 
     store = _install_fake_db(monkeypatch)
+    # Post-A1: il dispatch threshold-based e' contratto di STORAGE_POLICY=hybrid.
+    monkeypatch.setenv("STORAGE_POLICY", "hybrid")
     # Threshold 10 MB — test payload 1KB ci va sotto.
     monkeypatch.setenv("FILE_SOURCE_S3_THRESHOLD_BYTES", str(10 * 1024 * 1024))
 
@@ -315,6 +317,8 @@ def test_dispatch_above_threshold_uploads_s3_and_nulls_data(monkeypatch):
     from app.services.file_service import FileSourceService
 
     store = _install_fake_db(monkeypatch)
+    # Post-A1: il dispatch threshold-based e' contratto di STORAGE_POLICY=hybrid.
+    monkeypatch.setenv("STORAGE_POLICY", "hybrid")
     # Threshold 100 byte — test payload 1KB supera.
     monkeypatch.setenv("FILE_SOURCE_S3_THRESHOLD_BYTES", "100")
 
@@ -354,6 +358,8 @@ def test_upload_failure_does_not_create_db_row(monkeypatch):
     from app.services.file_service import FileSourceService
 
     store = _install_fake_db(monkeypatch)
+    # Post-A1: il dispatch threshold-based e' contratto di STORAGE_POLICY=hybrid.
+    monkeypatch.setenv("STORAGE_POLICY", "hybrid")
     monkeypatch.setenv("FILE_SOURCE_S3_THRESHOLD_BYTES", "100")
 
     class FakeStorage:
