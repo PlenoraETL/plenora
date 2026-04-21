@@ -13,17 +13,12 @@ import React, { useState, memo, useMemo, useEffect } from 'react';
 import { Handle, Position, useReactFlow, useStore } from 'reactflow';
 import ValidationModal from '../modals/ValidationModal';
 import RunHistoryModal from '../modals/RunHistoryModal';
-import ImdfPreviewModal from '../modals/ImdfPreviewModal';
-import ImdfManifestModal from '../modals/ImdfManifestModal';
-import ImdfValidationModal from '../modals/ImdfValidationModal';
 import { validateManipolaCanvas } from '../../utils/validateManipolaCanvas';
 import { validateEstraiCanvas } from '../../utils/validateEstraiCanvas';
 import { validateArricchisciCanvas } from '../../utils/validateArricchisciCanvas';
 import { getColumnTypeIcon, getColumnTypeLabel, getColumnSRID, isGeometryType } from '../../utils/columnUtils';
 import useCanvasStore from '../../store/useCanvasStore';
-import BundleSlotCard from '../imdf/BundleSlotCard';
-import ImdfBundlesManagerModal from '../modals/ImdfBundlesManagerModal';
-import { useImdfBundles } from './result/useImdfBundles';
+import ResultNodeImdfView from './result/ResultNodeImdfView';
 import './ResultNode.css';
 
 /**
@@ -147,28 +142,9 @@ const ResultNode = memo(({ data, id }) => {
   const havingEnabled = data.having_enabled || false;
   const havingConditions = data.having_conditions || [];
 
-  // ── IMDF mode: stato dei modal di anteprima ──────────────────────
-  // openImdfModal: 'preview' | 'manifest' | 'validation' | null
-  const [openImdfModal, setOpenImdfModal] = useState(null);
-
-  // Bundle IMDF: fetching + hydration + selezione incapsulati in
-  // useImdfBundles (Batch 2 step 1 split). Questo componente resta
-  // responsabile solo della view (JSX + openImdfModal).
-  const {
-    bundles,
-    loadingBundles,
-    selectedBundleId,
-    setSelectedBundleId,
-    bundlesManagerOpen,
-    setBundlesManagerOpen,
-    bundleSwitcherOpen,
-    setBundleSwitcherOpen,
-    bundleTaskId,
-    selectedBundle,
-    isBundleFallback,
-    imdfData,
-    handleDeleteBundle,
-  } = useImdfBundles({ isImdfMode });
+  // In modalita' IMDF, view + downloader + modali IMDF vivono in
+  // ResultNodeImdfView (Batch 2 step 2 split). Qui non serve ne' owning del
+  // hook useImdfBundles ne' dello stato openImdfModal / bundlesManagerOpen.
 
   // Verifica se il formato selezionato è geospaziale
   const isGeoFormat = ['geojson', 'gpkg', 'shp'].includes(format);
@@ -529,85 +505,12 @@ const ResultNode = memo(({ data, id }) => {
             (cronologia/esecuzione/preview/colonne) con 3 bottoni che aprono
             modal di anteprima sul contenuto del file IMDF prodotto. */}
         {isImdfMode ? (
-          <div className="result-node__section result-node__section--imdf"
-               style={{ background: 'rgba(124,58,237,0.08)', borderLeft: '3px solid #7C3AED', padding: '14px 14px', borderRadius: 6 }}>
-            <div className="result-node__label" style={{ fontWeight: 700, color: '#7C3AED', marginBottom: 10 }}>
-              📦 Bundle IMDF
-              {!imdfData && (
-                <span style={{ marginLeft: 8, fontSize: 11, opacity: 0.6, fontWeight: 400 }}>
-                  (esegui per generare i dati)
-                </span>
-              )}
-            </div>
-
-            {/* Card bundle attivo con switcher e link manager */}
-            <BundleSlotCard
-              loading={loadingBundles}
-              bundle={selectedBundle}
-              bundleTaskId={bundleTaskId}
-              isFallback={isBundleFallback}
-              bundles={bundles}
-              switcherOpen={bundleSwitcherOpen}
-              onToggleSwitcher={(e) => { e?.stopPropagation?.(); setBundleSwitcherOpen(v => !v); }}
-              onSelectBundle={(tid) => {
-                setSelectedBundleId(tid);
-                setBundleSwitcherOpen(false);
-              }}
-              onOpenManager={(e) => {
-                e?.stopPropagation?.();
-                setBundlesManagerOpen(true);
-                setBundleSwitcherOpen(false);
-              }}
-            />
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <button
-                type="button"
-                disabled={!imdfData}
-                onClick={(e) => { e.stopPropagation(); setOpenImdfModal('preview'); }}
-                onMouseDown={(e) => e.stopPropagation()}
-                className="result-node__filename-input"
-                style={{ width: '100%', cursor: imdfData ? 'pointer' : 'not-allowed', textAlign: 'left', padding: '10px 14px', fontSize: 14, opacity: imdfData ? 1 : 0.5 }}
-              >
-                🗺️ Visualizza IMDF
-              </button>
-              <button
-                type="button"
-                disabled={!imdfData?.manifest}
-                onClick={(e) => { e.stopPropagation(); setOpenImdfModal('manifest'); }}
-                onMouseDown={(e) => e.stopPropagation()}
-                className="result-node__filename-input"
-                style={{ width: '100%', cursor: imdfData?.manifest ? 'pointer' : 'not-allowed', textAlign: 'left', padding: '10px 14px', fontSize: 14, opacity: imdfData?.manifest ? 1 : 0.5 }}
-              >
-                📋 Visualizza Manifest
-              </button>
-              <button
-                type="button"
-                disabled={!imdfData?.validation}
-                onClick={(e) => { e.stopPropagation(); setOpenImdfModal('validation'); }}
-                onMouseDown={(e) => e.stopPropagation()}
-                className="result-node__filename-input"
-                style={{ width: '100%', cursor: imdfData?.validation ? 'pointer' : 'not-allowed', textAlign: 'left', padding: '10px 14px', fontSize: 14, opacity: imdfData?.validation ? 1 : 0.5 }}
-              >
-                ⚠️ Visualizza Validation
-              </button>
-
-              {/* Bottone Esegui — anche in modalita' IMDF, perche' senza il
-                  Run dell'utente i modali sono vuoti. */}
-              {hasOnExecute && (
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); handleExecuteWithValidation(); }}
-                  onMouseDown={(e) => e.stopPropagation()}
-                  className={`result-node__execute-btn result-node__execute-btn--${nodeVariant}`}
-                  style={{ marginTop: 6, width: '100%' }}
-                >
-                  <span className="result-node__execute-icon">▶️</span>
-                  <span>{executeLabel}</span>
-                </button>
-              )}
-            </div>
-          </div>
+          <ResultNodeImdfView
+            hasOnExecute={hasOnExecute}
+            onExecute={handleExecuteWithValidation}
+            nodeVariant={nodeVariant}
+            executeLabel={executeLabel}
+          />
         ) : (
         <>
         {/* Nome file */}
@@ -1225,37 +1128,8 @@ const ResultNode = memo(({ data, id }) => {
           nodeLabel="Output"
         />
 
-        {/* Modali IMDF: leggono dati dall'ultimo task result */}
-        <ImdfPreviewModal
-          isOpen={openImdfModal === 'preview'}
-          onClose={() => setOpenImdfModal(null)}
-          imdfData={imdfData}
-        />
-        <ImdfManifestModal
-          isOpen={openImdfModal === 'manifest'}
-          onClose={() => setOpenImdfModal(null)}
-          manifest={imdfData?.manifest}
-          siteId={imdfData?.site_id}
-          publish={imdfData?.publish}
-        />
-        <ImdfValidationModal
-          isOpen={openImdfModal === 'validation'}
-          onClose={() => setOpenImdfModal(null)}
-          validation={imdfData?.validation}
-        />
-
-        {/* Modal gestione cronologia bundle */}
-        <ImdfBundlesManagerModal
-          isOpen={bundlesManagerOpen}
-          onClose={() => setBundlesManagerOpen(false)}
-          bundles={bundles}
-          selectedTaskId={bundleTaskId}
-          onSelect={(tid) => {
-            setSelectedBundleId(tid);
-            setBundlesManagerOpen(false);
-          }}
-          onDelete={handleDeleteBundle}
-        />
+        {/* Modali IMDF (Preview/Manifest/Validation/BundlesManager) vivono
+            in ResultNodeImdfView, si montano solo quando isImdfMode=true. */}
       </div>
     </div>
   );
