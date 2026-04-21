@@ -22,10 +22,13 @@ trascurabile (client AWS SDK ha la sua pool), semplicita' > micro-ott.
 
 from __future__ import annotations
 
+import logging
 import os
 from datetime import datetime
 from pathlib import Path
 from typing import List, Protocol, TypedDict, runtime_checkable
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -286,3 +289,121 @@ def get_object_storage() -> ObjectStorage:
         )
     # Estendere qui per Azure / GCP (vedi get_secrets_backend).
     raise ValueError(f"CLOUD_PROVIDER non supportato: {provider!r}")
+
+
+# ---------------------------------------------------------------------------
+# Storage policy — boot-time validation (A1)
+# ---------------------------------------------------------------------------
+
+
+VALID_STORAGE_POLICIES = ("db", "object_storage", "hybrid")
+# Provider effettivamente implementati in cloud_backends.
+IMPLEMENTED_PROVIDERS = ("aws", "none")
+# Provider noti all'enum (inclusi quelli roadmap P1/P2): dichiararli e'
+# accettato in validate_storage_config solo se policy=db (= bucket non
+# consultato), altrimenti fail-fast perche' la factory non li costruisce.
+KNOWN_PROVIDERS = ("aws", "minio", "azure", "gcp", "none")
+
+
+class StorageConfigError(ValueError):
+    """Config di storage incoerente rilevata al boot.
+
+    Sollevata da :func:`validate_storage_config` quando la combinazione
+    di STORAGE_POLICY, CLOUD_PROVIDER, BACKUP_BUCKET e soglie non e'
+    consistente. Fail-fast all'avvio e' preferito a lazy failure runtime
+    (di solito in un task Celery oltre soglia).
+    """
+
+
+def validate_storage_config() -> None:
+    """Fail-fast boot check per la policy di storage (A1).
+
+    Verifica la sola **coerenza di config**, mai la raggiungibilita'
+    del provider (nessun probe di rete). Chiamata da `app.main` subito
+    dopo `settings.validate_startup()`.
+
+    Controlli:
+      1. STORAGE_POLICY in {db, object_storage, hybrid}
+      2. CLOUD_PROVIDER in enum noto + implementato in factory
+      3. Se policy != db: BACKUP_BUCKET (o legacy BACKUP_S3_BUCKET) settato
+         e CLOUD_PROVIDER != none
+      4. Se policy == db con bucket+provider cloud: warning non-blocking
+         (probabile cut-paste)
+      5. Soglie `RESULT_S3_THRESHOLD_BYTES` / `FILE_SOURCE_S3_THRESHOLD_BYTES`
+         (solo in hybrid) sono intere > 0 se settate
+      6. `RESULT_DB_HARD_CAP_BYTES` (in db e hybrid) intero > 0 se settato
+
+    Raises:
+        StorageConfigError: config inconsistente — il processo deve terminare.
+    """
+    def _fail(msg: str) -> None:
+        logger.critical("[BOOT] %s", msg)
+        raise StorageConfigError(msg)
+
+    def _check_positive_int(name: str) -> None:
+        raw = os.getenv(name)
+        if raw is None:
+            return
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            _fail(f"{name}={raw!r} non e' un intero valido.")
+            return  # unreachable: _fail solleva
+        if value <= 0:
+            _fail(f"{name}={value} deve essere > 0.")
+
+    policy = (os.getenv("STORAGE_POLICY") or "hybrid").strip().lower()
+    if policy not in VALID_STORAGE_POLICIES:
+        _fail(
+            f"STORAGE_POLICY={policy!r} non valido. "
+            f"Valori ammessi: {', '.join(VALID_STORAGE_POLICIES)}."
+        )
+
+    provider = (os.getenv("CLOUD_PROVIDER") or "aws").strip().lower()
+    if provider not in KNOWN_PROVIDERS:
+        _fail(
+            f"CLOUD_PROVIDER={provider!r} sconosciuto. "
+            f"Valori ammessi: {', '.join(KNOWN_PROVIDERS)}."
+        )
+    if provider not in IMPLEMENTED_PROVIDERS:
+        _fail(
+            f"CLOUD_PROVIDER={provider!r} non ancora implementato in "
+            "cloud_backends. Provider disponibili oggi: "
+            f"{', '.join(IMPLEMENTED_PROVIDERS)}."
+        )
+
+    bucket = os.getenv("BACKUP_BUCKET") or os.getenv("BACKUP_S3_BUCKET")
+
+    if policy == "db":
+        # Warning non-blocking: bucket + provider cloud settati ma policy=db
+        # probabilmente e' cut-paste da altro env. Policy rispettata.
+        if bucket and provider != "none":
+            logger.warning(
+                f"[BOOT] STORAGE_POLICY=db ma CLOUD_PROVIDER={provider!r} e "
+                "bucket configurati: policy rispettata (object storage "
+                "ignorato), ma la combinazione suggerisce cut-paste — "
+                "verifica l'intento."
+            )
+    else:
+        # object_storage | hybrid: richiedono provider reale + bucket
+        if provider == "none":
+            _fail(
+                f"STORAGE_POLICY={policy} richiede un object storage provider, "
+                "ma CLOUD_PROVIDER=none. Imposta CLOUD_PROVIDER=aws o cambia "
+                "policy a db."
+            )
+        if not bucket:
+            _fail(
+                f"STORAGE_POLICY={policy} richiede un bucket object storage, "
+                "ma ne' BACKUP_BUCKET ne' BACKUP_S3_BUCKET (legacy) sono "
+                "configurati."
+            )
+
+    # Soglie dispatch: solo hybrid le consulta effettivamente.
+    if policy == "hybrid":
+        _check_positive_int("RESULT_S3_THRESHOLD_BYTES")
+        _check_positive_int("FILE_SOURCE_S3_THRESHOLD_BYTES")
+
+    # Hard cap DB: attivo in db (primario) e in hybrid (guard ramo DB).
+    if policy in ("db", "hybrid"):
+        _check_positive_int("RESULT_DB_HARD_CAP_BYTES")

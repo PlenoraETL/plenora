@@ -33,12 +33,18 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+from app.shared.cloud_backends import validate_storage_config
 from app.utils.logger import get_logger
 from app.utils.dataframe import save_dataframe
 
 # Verifica prerequisiti di sistema (DATA_DIR scrivibile, ecc.)
 # Interrompe l'avvio con messaggio chiaro se la configurazione è incompleta.
 settings.validate_startup()
+
+# A1: coerenza STORAGE_POLICY + provider + bucket + soglie. Fail-fast qui
+# evita che un task Celery scopra al primo upload oltre soglia che il bucket
+# non esiste o che il provider non e' implementato.
+validate_storage_config()
 
 # Inizializza database PostgreSQL (pool + tabelle)
 from app.db.db_service import init_all_dbs

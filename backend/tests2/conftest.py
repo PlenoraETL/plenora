@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 import sys
 
@@ -12,6 +13,12 @@ def _ensure_backend_on_path() -> None:
 
 
 _ensure_backend_on_path()
+
+# A1: i test non usano un bucket reale. Di default la test session vive in
+# STORAGE_POLICY=db (= on-prem single-node), cosi' `app.main` boota senza
+# richiedere BACKUP_BUCKET. I test che esercitano il dispatch S3 impostano
+# esplicitamente STORAGE_POLICY via monkeypatch.
+os.environ.setdefault("STORAGE_POLICY", "db")
 
 
 def _kill_stray_test_subprocesses() -> None:

@@ -134,6 +134,19 @@ class Settings:
         ],
         "MAX_FILE_SIZE": 100 * 1024 * 1024,  # 100 MB
 
+        # ==================== STORAGE POLICY (A1) ====================
+        # Policy unica top-level per persistenza di result pipeline e
+        # file_source utente. Vedi orchestrate/phase_1_stabilization/a1_storage_policy.md.
+        #   - "db"             -> sempre BYTEA in DB, nessun bucket richiesto
+        #   - "object_storage" -> sempre bucket, DB tiene solo metadata
+        #   - "hybrid"         -> dispatch per soglia (default retro-compat)
+        # Validazione coerenza all'avvio in app/shared/cloud_backends.validate_storage_config.
+        "STORAGE_POLICY": "hybrid",
+        # Hard cap per payload persistiti come BYTEA (mode "db" + ramo DB di "hybrid").
+        # Default 500 MB: limite pratico di un BYTEA PG senza toast tuning.
+        # Sopra cap: ResultSaveError al save (caller deve failare).
+        "RESULT_DB_HARD_CAP_BYTES": 500 * 1024 * 1024,
+
         # ==================== PROGETTI ====================
         "SUPPORTED_PROJECT_TYPES": ["estrai", "manipola", "arricchisci", "salva"],
         "DEFAULT_GROUP": "default",
