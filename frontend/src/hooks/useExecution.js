@@ -194,6 +194,11 @@ export function useExecution(projectId, options = {}) {
       }
     } catch (error) {
       console.error('[useExecution] Errore:', error);
+      // Guard: se il componente ha smontato mentre executeFn/onBeforeExecute
+      // era in flight e poi la promise rejecta, evita 4 setState post-unmount
+      // (React warning + leak di reference allo state). Simmetrico al check
+      // nel success path (riga sopra).
+      if (!mountedRef.current) return;
       setIsExecuting(false);
       setProgress(0);
       setTaskStatus('failure');
