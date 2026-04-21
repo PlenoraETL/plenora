@@ -1266,7 +1266,7 @@ class ApiConnectionService:
         except ImportError as _ie:
             raise ValueError(
                 f"Impossibile importare orchestrator per ricalcolo: {_ie}"
-            )
+            ) from _ie
 
         if not upstream_result.get('success'):
             raise ValueError(
@@ -2014,7 +2014,7 @@ class ApiConnectionService:
             )
             raise ValueError(
                 f"Errore verifica accesso file_source '{file_source_id}'"
-            )
+            ) from _sec_err
 
     def _resolve_file_source_id_path(self, file_source_id: str) -> Optional[str]:
         """Materializza il blob di un file_source su filesystem come cache.
