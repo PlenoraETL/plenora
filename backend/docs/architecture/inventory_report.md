@@ -622,7 +622,16 @@ _Aggiornato 2026-04-21 post Phase 1 close-out._
 #### Carry-over architetturale Phase 2 (nuovi 2026-04-21)
 
 - **A1 follow-up** — provider MinIO P1 implementation + contract test matrice policy/provider + bulk review chiamanti file storage per allineamento al dispatch §1.7 `invariants.md`.
-- **Log lifecycle complessivo** — append-only enforcement architetturale, retention policy formale, purge controllato. `SET LOCAL plenora.retention_cleanup` (`a32c9f3`) risolve solo il retention job autorizzato, non il lifecycle complessivo. Nessun bypass manuale implicito della policy.
+- ~~**Log lifecycle complessivo**~~ — **chiuso 2026-04-21** con cluster O-ARC Batch 1-4 (ADR-0014). Append-only enforcement architetturale, retention policy formale e purge controllato sono ora coperti dalla pipeline `log_archive` + hook `_archive_old_logs` / `_archive_old_audit_actions`. `SET LOCAL plenora.retention_cleanup` (`a32c9f3`) resta come tassello pre-O-ARC del retention job autorizzato. Dettaglio batch nella sotto-sezione successiva.
+
+#### Chiusura cluster O-ARC Batch 1-4 (2026-04-21)
+
+Cluster **merged su `main`**. Charter: ADR-0014 (`log archive pipeline`). Roll-up sintetico per batch (hash rappresentativi, non esaustivi):
+
+- **Batch 1 — pipeline skeleton + ADR charter**: da `39b2267` (ADR-0014 log archive pipeline) a `8e7549b` (upload/verify/delete loop), passando per writer skeleton, NDJSON serialization e object key naming.
+- **Batch 2 — env contract + config + storage validation fail-fast**: `1a57d4b` (ADR-0014 batch-2 env contract addendum), `861604d` (`LOG_ARCHIVE_*` + `AUDIT_RETENTION_DAYS` properties), `b739c11` (validate coherence at boot), `ef6ae2c` (test validate fail-fast).
+- **Batch 3 — factory + hooks integration + contract tests**: `ebb5ec2` (`get_log_archive_storage` factory), `7819406` (`_archive_old_logs` hook + `_cleanup_old_logs` gate), `afcb185` (`_archive_old_audit_actions` hook), `165ed7f` (contract tests archive hooks + `0 = disabled` fix).
+- **Batch 4 — closure**: `50058a1` (ADR-0014 batch-4 closure addendum), `ce58b65` (observability circolare `log_archive`), `73e85a1` (integration e2e archive purge), `0cf18ad` (invariants post O-ARC: §1.4 + §3 + §6).
 
 #### Declassati a rumore / inventory overcount
 
