@@ -47,6 +47,11 @@ def _clean_storage_env(monkeypatch):
         "RESULT_S3_THRESHOLD_BYTES",
         "FILE_SOURCE_S3_THRESHOLD_BYTES",
         "RESULT_DB_HARD_CAP_BYTES",
+        "LOG_ARCHIVE_ENABLED",
+        "LOG_ARCHIVE_BUCKET",
+        "LOG_ARCHIVE_KEY_PREFIX",
+        "LOG_ARCHIVE_BATCH_ROWS",
+        "AUDIT_RETENTION_DAYS",
     ):
         monkeypatch.delenv(name, raising=False)
     yield
@@ -209,4 +214,130 @@ def test_known_but_unimplemented_provider_fails(monkeypatch, provider):
     monkeypatch.setenv("STORAGE_POLICY", "db")
     monkeypatch.setenv("CLOUD_PROVIDER", provider)
     with pytest.raises(StorageConfigError, match="non ancora implementato"):
+        validate_storage_config()
+
+
+# =============================================================================
+# 6. LOG_ARCHIVE_* fail-fast (O-ARC Batch 2, ADR-0014 §A1-§A5)
+# =============================================================================
+
+
+def test_log_archive_disabled_skips_all_checks(monkeypatch):
+    """Con ENABLED=false il ramo non scatta: tutte le LOG_ARCHIVE_* /
+    AUDIT_RETENTION_DAYS invalide sono ignorate (pattern §A4 preparazione
+    pre-flip: env settate nel .env prima del flip non devono rompere boot)."""
+    monkeypatch.setenv("STORAGE_POLICY", "db")
+    monkeypatch.setenv("CLOUD_PROVIDER", "none")
+    monkeypatch.setenv("LOG_ARCHIVE_ENABLED", "false")
+    monkeypatch.setenv("LOG_ARCHIVE_KEY_PREFIX", "no-trailing-slash")
+    monkeypatch.setenv("LOG_ARCHIVE_BATCH_ROWS", "-1")
+    monkeypatch.setenv("AUDIT_RETENTION_DAYS", "not-an-int")
+    validate_storage_config()  # no raise
+
+
+def test_log_archive_enabled_rejects_policy_db(monkeypatch):
+    monkeypatch.setenv("STORAGE_POLICY", "db")
+    monkeypatch.setenv("CLOUD_PROVIDER", "none")
+    monkeypatch.setenv("LOG_ARCHIVE_ENABLED", "true")
+    with pytest.raises(StorageConfigError, match="STORAGE_POLICY=db"):
+        validate_storage_config()
+
+
+def test_log_archive_enabled_rejects_provider_none(monkeypatch):
+    """ENABLED=true con CLOUD_PROVIDER=none: boot fallisce. Il check A1
+    precedente copre gia' il caso policy=object_storage/hybrid+provider=none;
+    la regola LOG_ARCHIVE (regola 2) e' difensiva — il test documenta
+    l'invariante combinata senza pinnare il layer che raise."""
+    monkeypatch.setenv("STORAGE_POLICY", "object_storage")
+    monkeypatch.setenv("CLOUD_PROVIDER", "none")
+    monkeypatch.setenv("BACKUP_BUCKET", "b")
+    monkeypatch.setenv("LOG_ARCHIVE_ENABLED", "true")
+    monkeypatch.setenv("LOG_ARCHIVE_BUCKET", "archive-b")
+    with pytest.raises(StorageConfigError, match="CLOUD_PROVIDER=none"):
+        validate_storage_config()
+
+
+def test_log_archive_enabled_requires_bucket(monkeypatch):
+    """LOG_ARCHIVE_BUCKET unset con ENABLED=true -> fail (intenzionalmente
+    fuori da Settings.DEFAULTS, required-if-enabled per design §A3)."""
+    monkeypatch.setenv("STORAGE_POLICY", "object_storage")
+    monkeypatch.setenv("CLOUD_PROVIDER", "aws")
+    monkeypatch.setenv("BACKUP_BUCKET", "b")
+    monkeypatch.setenv("LOG_ARCHIVE_ENABLED", "true")
+    with pytest.raises(StorageConfigError, match="LOG_ARCHIVE_BUCKET"):
+        validate_storage_config()
+
+
+def test_log_archive_enabled_rejects_bucket_collides_with_backup(monkeypatch):
+    """Bucket archive == BACKUP_BUCKET: IAM boundary richiede distinzione
+    (O-ARC §5.4, ADR-0014 §A3)."""
+    monkeypatch.setenv("STORAGE_POLICY", "hybrid")
+    monkeypatch.setenv("CLOUD_PROVIDER", "aws")
+    monkeypatch.setenv("BACKUP_BUCKET", "shared-bucket")
+    monkeypatch.setenv("LOG_ARCHIVE_ENABLED", "true")
+    monkeypatch.setenv("LOG_ARCHIVE_BUCKET", "shared-bucket")
+    with pytest.raises(StorageConfigError, match="coincide con"):
+        validate_storage_config()
+
+
+def test_log_archive_enabled_rejects_invalid_key_prefix(monkeypatch):
+    """KEY_PREFIX settato ma senza '/' finale: fail (coerente con
+    log_archive._build_object_key)."""
+    monkeypatch.setenv("STORAGE_POLICY", "hybrid")
+    monkeypatch.setenv("CLOUD_PROVIDER", "aws")
+    monkeypatch.setenv("BACKUP_BUCKET", "b")
+    monkeypatch.setenv("LOG_ARCHIVE_ENABLED", "true")
+    monkeypatch.setenv("LOG_ARCHIVE_BUCKET", "archive-b")
+    monkeypatch.setenv("LOG_ARCHIVE_KEY_PREFIX", "logs-archive")
+    with pytest.raises(StorageConfigError, match="LOG_ARCHIVE_KEY_PREFIX"):
+        validate_storage_config()
+
+
+def test_log_archive_enabled_rejects_non_positive_batch_rows(monkeypatch):
+    """BATCH_ROWS=0 -> fail (riusa _check_positive_int)."""
+    monkeypatch.setenv("STORAGE_POLICY", "hybrid")
+    monkeypatch.setenv("CLOUD_PROVIDER", "aws")
+    monkeypatch.setenv("BACKUP_BUCKET", "b")
+    monkeypatch.setenv("LOG_ARCHIVE_ENABLED", "true")
+    monkeypatch.setenv("LOG_ARCHIVE_BUCKET", "archive-b")
+    monkeypatch.setenv("LOG_ARCHIVE_BATCH_ROWS", "0")
+    with pytest.raises(StorageConfigError, match="LOG_ARCHIVE_BATCH_ROWS"):
+        validate_storage_config()
+
+
+def test_log_archive_enabled_rejects_audit_retention_non_int(monkeypatch):
+    """AUDIT_RETENTION_DAYS non parseabile come int -> fail."""
+    monkeypatch.setenv("STORAGE_POLICY", "hybrid")
+    monkeypatch.setenv("CLOUD_PROVIDER", "aws")
+    monkeypatch.setenv("BACKUP_BUCKET", "b")
+    monkeypatch.setenv("LOG_ARCHIVE_ENABLED", "true")
+    monkeypatch.setenv("LOG_ARCHIVE_BUCKET", "archive-b")
+    monkeypatch.setenv("AUDIT_RETENTION_DAYS", "forever")
+    with pytest.raises(StorageConfigError, match="AUDIT_RETENTION_DAYS"):
+        validate_storage_config()
+
+
+def test_log_archive_enabled_rejects_audit_retention_negative(monkeypatch):
+    """AUDIT_RETENTION_DAYS < 0 -> fail; 0 resta ammesso = retention
+    disabilitata (simmetrico a SCHEDULE_LOGS_RETENTION_DAYS)."""
+    monkeypatch.setenv("STORAGE_POLICY", "hybrid")
+    monkeypatch.setenv("CLOUD_PROVIDER", "aws")
+    monkeypatch.setenv("BACKUP_BUCKET", "b")
+    monkeypatch.setenv("LOG_ARCHIVE_ENABLED", "true")
+    monkeypatch.setenv("LOG_ARCHIVE_BUCKET", "archive-b")
+    monkeypatch.setenv("AUDIT_RETENTION_DAYS", "-1")
+    with pytest.raises(StorageConfigError, match="AUDIT_RETENTION_DAYS"):
+        validate_storage_config()
+
+
+@pytest.mark.parametrize("truthy_value", ["true", "1", "yes", "TRUE", "Yes"])
+def test_log_archive_enabled_truthy_variants(monkeypatch, truthy_value):
+    """Parsing ENABLED: `.strip().lower()` accetta true/1/yes case-insensitive.
+    Forza un errore noto (bucket mancante) per verificare che il ramo
+    scatta per ciascuna variante."""
+    monkeypatch.setenv("STORAGE_POLICY", "object_storage")
+    monkeypatch.setenv("CLOUD_PROVIDER", "aws")
+    monkeypatch.setenv("BACKUP_BUCKET", "b")
+    monkeypatch.setenv("LOG_ARCHIVE_ENABLED", truthy_value)
+    with pytest.raises(StorageConfigError, match="LOG_ARCHIVE_BUCKET"):
         validate_storage_config()
