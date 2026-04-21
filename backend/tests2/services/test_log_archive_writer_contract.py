@@ -22,6 +22,8 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from app.services.log_archive import (
+    _MAX_BATCH_SEQ,
+    _build_object_key,
     _normalize_datetime,
     _serialize_rows,
     _table_ts_column,
@@ -217,3 +219,106 @@ def test_serialize_datetime_iso8601_utc_suffix_Z_and_rejects_naive():
     out_audit = _serialize_rows([_sample_audit_row(ts_rome)], "audit_actions")
     parsed_audit = json.loads(_decompress_lines(out_audit)[0])
     assert parsed_audit["timestamp"] == "2026-04-21T10:00:00Z"
+
+
+# ─── T5 ──────────────────────────────────────────────────────────────────
+
+def test_build_object_key_pattern_and_padding():
+    """Pattern deterministico O-ARC §5.2:
+    `<prefix><table>/<YYYY-MM>/<table>-<YYYY-MM-DD>-<NNN>.ndjson.gz`.
+
+    Blinda:
+    - segment `<table>` corretto per `logs` e `audit_actions`
+    - partition folder `YYYY-MM`
+    - filename `<table>-YYYY-MM-DD-<NNN>.ndjson.gz`
+    - seq zero-padded a 3 cifre (000, 001, 042, 999)
+    - determinismo (stessi input -> stessa key byte-per-byte)
+    - prefix preservato alla lettera
+    """
+    ts = datetime(2026, 4, 21, 10, 30, 0, tzinfo=timezone.utc)
+
+    # Pattern logs, seq piccolo padding.
+    key_logs = _build_object_key("logs-archive/prod/", "logs", ts, 0)
+    assert key_logs == "logs-archive/prod/logs/2026-04/logs-2026-04-21-000.ndjson.gz"
+
+    # Pattern audit_actions, seq con padding centrale.
+    key_audit = _build_object_key("logs-archive/prod/", "audit_actions", ts, 42)
+    assert (
+        key_audit
+        == "logs-archive/prod/audit_actions/2026-04/audit_actions-2026-04-21-042.ndjson.gz"
+    )
+
+    # Padding agli estremi del range [0, 999].
+    assert _build_object_key("p/", "logs", ts, 0).endswith("-000.ndjson.gz")
+    assert _build_object_key("p/", "logs", ts, 1).endswith("-001.ndjson.gz")
+    assert _build_object_key("p/", "logs", ts, 9).endswith("-009.ndjson.gz")
+    assert _build_object_key("p/", "logs", ts, 99).endswith("-099.ndjson.gz")
+    assert _build_object_key("p/", "logs", ts, 100).endswith("-100.ndjson.gz")
+    assert _build_object_key("p/", "logs", ts, _MAX_BATCH_SEQ).endswith("-999.ndjson.gz")
+
+    # Determinismo: stessi input -> stessa key.
+    assert _build_object_key("x/", "logs", ts, 7) == _build_object_key("x/", "logs", ts, 7)
+
+    # Segments in ordine corretto: <prefix>/<table>/<month>/<filename>.
+    parts = key_audit.split("/")
+    assert parts[0] == "logs-archive"
+    assert parts[1] == "prod"
+    assert parts[2] == "audit_actions"          # table segment
+    assert parts[3] == "2026-04"                # partition YYYY-MM
+    assert parts[4].startswith("audit_actions-2026-04-21-")  # filename prefix
+    assert parts[4].endswith(".ndjson.gz")
+
+    # Prefix vuoto e' ammesso (caso "no per-env prefix").
+    key_no_prefix = _build_object_key("", "logs", ts, 0)
+    assert key_no_prefix == "logs/2026-04/logs-2026-04-21-000.ndjson.gz"
+
+    # Non-UTC tz-aware -> partitioning calcolato in UTC (coerente con il
+    # payload: evita drift giorno tra `ts` della riga e folder YYYY-MM-DD).
+    ts_late_rome = datetime(2026, 5, 1, 1, 0, 0, tzinfo=timezone(timedelta(hours=2)))
+    # 2026-05-01 01:00+02:00 -> 2026-04-30 23:00 UTC: folder deve essere aprile.
+    key_rome = _build_object_key("p/", "logs", ts_late_rome, 0)
+    assert "2026-04" in key_rome
+    assert "logs-2026-04-30-000" in key_rome
+    assert "2026-05" not in key_rome
+
+
+# ─── T6 ──────────────────────────────────────────────────────────────────
+
+def test_build_object_key_rejects_invalid_inputs():
+    """Fail-fast sugli input invalidi: prefix mal formato, table ignota,
+    run_date naive o non-datetime, seq fuori range."""
+    ts = datetime(2026, 4, 21, 10, 0, 0, tzinfo=timezone.utc)
+
+    # (a) prefix non vuoto e senza `/` finale.
+    with pytest.raises(ValueError, match="prefix"):
+        _build_object_key("logs-archive/prod", "logs", ts, 0)
+
+    # (b) table sconosciuta -> `ValueError` via `_table_ts_column`.
+    with pytest.raises(ValueError, match="unknown log archive table"):
+        _build_object_key("p/", "events", ts, 0)
+
+    # (c) run_date naive.
+    ts_naive = datetime(2026, 4, 21, 10, 0, 0)
+    with pytest.raises(ValueError, match="naive"):
+        _build_object_key("p/", "logs", ts_naive, 0)
+
+    # (d) run_date non-datetime.
+    with pytest.raises(TypeError, match="datetime"):
+        _build_object_key("p/", "logs", "2026-04-21", 0)  # type: ignore[arg-type]
+
+    # (e) seq negativo.
+    with pytest.raises(ValueError, match="out of range"):
+        _build_object_key("p/", "logs", ts, -1)
+
+    # (f) seq oltre il cap del pattern NNN.
+    with pytest.raises(ValueError, match="out of range"):
+        _build_object_key("p/", "logs", ts, _MAX_BATCH_SEQ + 1)
+    assert _MAX_BATCH_SEQ == 999
+
+    # (g) seq non-int.
+    with pytest.raises(TypeError, match="int"):
+        _build_object_key("p/", "logs", ts, "0")  # type: ignore[arg-type]
+
+    # (h) bool NON e' un seq valido (anche se bool e' subclass di int).
+    with pytest.raises(TypeError, match="int"):
+        _build_object_key("p/", "logs", ts, True)  # type: ignore[arg-type]

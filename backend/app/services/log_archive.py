@@ -164,6 +164,76 @@ def _serialize_rows(rows: list[dict], table: str) -> bytes:
 
 
 # ---------------------------------------------------------------------------
+# Helpers (private) — object key naming (O-ARC §5.2)
+# ---------------------------------------------------------------------------
+# Pattern deterministico:
+#   <prefix><table>/<YYYY-MM>/<table>-<YYYY-MM-DD>-<NNN>.ndjson.gz
+#
+# - Il partitioning YYYY-MM / YYYY-MM-DD e' derivato dal `run_date`
+#   convertito in UTC (coerente con la normalizzazione `Z` del payload).
+# - `seq` e' zero-padded a 3 cifre (cap 999): ordinamento lessicografico
+#   delle key rispecchia l'ordine di emissione all'interno dello stesso
+#   giorno. Il cap 999 e' un invariante del pattern, non un limite di
+#   policy: superarlo significa che il sizing batch a monte e' mal tarato
+#   e va alzato via `LOG_ARCHIVE_BATCH_ROWS` (Batch 2) piuttosto che
+#   estendere il padding.
+
+_MAX_BATCH_SEQ: int = 999
+
+
+def _build_object_key(
+    prefix: str,
+    table: str,
+    run_date: datetime,
+    seq: int,
+) -> str:
+    """Compone la chiave object storage per un batch (O-ARC §5.2).
+
+    Pattern:
+        ``<prefix><table>/<YYYY-MM>/<table>-<YYYY-MM-DD>-<NNN>.ndjson.gz``
+
+    Invarianti:
+    - `prefix` deve essere stringa vuota o terminare con `"/"`: altrimenti
+      la concatenazione produce un path ambiguo.
+    - `table` validata tramite `_table_ts_column`.
+    - `run_date` tz-aware: naive -> `ValueError` (coerente con
+      `_normalize_datetime`). La componente UTC e' usata per derivare
+      YYYY-MM e YYYY-MM-DD.
+    - `seq` intero in `[0, _MAX_BATCH_SEQ]`: out-of-range -> `ValueError`.
+
+    La funzione e' pura: stessi input -> stesso output, byte per byte.
+    """
+    if prefix != "" and not prefix.endswith("/"):
+        raise ValueError(
+            f"log archive key prefix must be empty or end with '/': {prefix!r}"
+        )
+    _table_ts_column(table)  # validazione runtime di `table`
+    if not isinstance(run_date, datetime):
+        raise TypeError(
+            f"_build_object_key expected datetime for run_date, "
+            f"got {type(run_date).__name__}"
+        )
+    if run_date.tzinfo is None:
+        raise ValueError(
+            f"naive datetime is not allowed as run_date: {run_date!r}"
+        )
+    if not isinstance(seq, int) or isinstance(seq, bool):
+        raise TypeError(
+            f"_build_object_key expected int for seq, "
+            f"got {type(seq).__name__}"
+        )
+    if seq < 0 or seq > _MAX_BATCH_SEQ:
+        raise ValueError(
+            f"batch seq out of range [0, {_MAX_BATCH_SEQ}]: {seq}"
+        )
+
+    utc_date = run_date.astimezone(timezone.utc)
+    month = utc_date.strftime("%Y-%m")
+    day = utc_date.strftime("%Y-%m-%d")
+    return f"{prefix}{table}/{month}/{table}-{day}-{seq:03d}.ndjson.gz"
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
