@@ -1,7 +1,7 @@
 # STREAM TESTS — Report Fase 1 Stabilization
 
 **Status**: in_progress
-**Last updated**: 2026-04-21 (Batch 3 Scheduler — primo commit policy_engine, 21 test)
+**Last updated**: 2026-04-21 (Batch 3 Scheduler — policy_engine 21 + concurrency_manager TTL 6, stream 87)
 
 ## Scope
 
@@ -68,7 +68,14 @@ Invariants blindati: §2 riga `enrichment_service:408-410` async safety-net + §
   - `tests2/datasources/test_local_edge_contract.py` — 7 test edge case su `local.py` (gap reali vs `shared/test_datasource_local_multi_host.py` + `security/unit/test_local_datasource_contract.py`): `_abs` rifiuta drive letter Windows (branch separata da `/etc/passwd`), `_abs("")` → root_abs (early-return), `_abs` deep nested join 3+ livelli, **symlink escape** via resolve() (skip su Windows no dev-mode), `_rel` normalizza backslash→forward slash (portability), `file_exists` False su directory (os.path.isfile, non exists), `write_file` crea parent dir mancanti (os.makedirs exist_ok)
   - `tests2/datasources/test_ftp_error_contract.py` — 8 test error mapping (nessun test preesistente su FTPDataSource): missing host → fail-fast NO network call (counter istanziazioni), ftplib.all_errors generico → ConnectionError chained con `__cause__`, auth failure (error_perm su login) → ConnectionError, root cwd fail → ConnectionError con messaggio specifico, operation senza connect → `_check` gate ConnectionError "Non connesso", read_file 550 → FileNotFound, read_file non-550 error_perm (530) → PermissionError, file_exists fail-closed → False silent
   - `tests2/datasources/test_sftp_security_contract.py` — 8 test sicurezza + error mapping (nessun test preesistente su SFTPDataSource, fake paramiko module): **host_key_policy=reject → RejectPolicy + load_system_host_keys entrambi** (contract MITM-safe), auto_add → AutoAddPolicy senza system keys (complementare), policy non-canonica ("Reject"/"strict"/"rejetc") → fallback auto_add (documenta check esatto `== "reject"`), credenziali assenti → fail-fast ConnectionError "Credenziali SFTP mancanti" NO ssh.connect, password+private_key → preferenza `pkey` esclusiva (no password kwarg), AuthenticationException → "Autenticazione SFTP fallita" chained, SSHException → "Errore SSH" chained, operation senza connect → `_check` gate
-- Scheduler: **21** (1 file, batch 3 in corso)
+- Scheduler: **27** (2 file, batch 3 in corso)
+  - `tests2/scheduler/unit/test_concurrency_manager_ttl_contract.py` — 6 test su `concurrency_manager.py` TTL/expiration (gap reale vs 17 test esistenti che mockano i 5 helper privati e non blindano la semantica TTL nativa). Contract blindati:
+    - `_get` auto-cleanup su lock scaduto → DELETE + None (core lock-expire brief punto 3)
+    - `_get` expires_at malformato (non-ISO) → `except pass` → lock preservato (fail-closed su corruzione dati)
+    - `_get` expires_at NULL → ritorna value sempre (counter coda persistente)
+    - `try_acquire` post-scadenza → "acquired" + lock rinstallato con nuovo TTL (catena completa re-acquire dopo SIGKILL orfano)
+    - `is_running` su lock scaduto → False (contract pubblico, delega a `_get`)
+    - `refresh_lock` su lock scaduto → False + NO UPDATE emesso (guard race-safe contro overwrite TTL su lock fresco concorrente)
   - `tests2/scheduler/unit/test_policy_engine_contract.py` — 21 test su `policy_engine.py` (214 LOC prima ZERO coverage). Gap reale colmato. Contract blindati:
     - `should_retry` progression parametrizzato 3 casi (attempt 0/1/2 → backoff 60/300/900)
     - `should_retry` exhaustion boundary (attempt=max_retries → False/0; attempt>>max → False/0)
@@ -85,7 +92,7 @@ Invariants blindati: §2 riga `enrichment_service:408-410` async safety-net + §
 - Crypto: **13** (2 file, batch 1 ✅)
   - `tests2/crypto/test_crypto_fernet_contract.py` — 5 test: roundtrip, tamper detection (MAC fail → None + log error), wrong key → None, allowlist plaintext (non-string / assenti / fuori lista), nonce uniqueness (IV random)
   - `tests2/crypto/test_crypto_key_sourcing_contract.py` — 8 test: chain priority PLENORA > URBY > CONN (3 test), **D5 regression** (no fallback su SECRET_KEY/JWT_SECRET_KEY, chiuso 2026-04-20), prod fail-fast no-key, prod fail-fast dev-default-leak, min-length < 16 char in any env, PLENORA_DISABLE_DEFAULT_KEY opt-in dev
-- **TOTALE**: **81 / ~38** (target 30+ superato ampiamente; Batch 2 chiuso senza sharepoint per valore marginale)
+- **TOTALE**: **87 / ~38** (target 30+ superato ampiamente; Batch 2 chiuso; Batch 3 in corso)
 
 ## Bug / anomalie source trovati durante studio (NON fissati)
 
@@ -105,7 +112,8 @@ Nessuna al momento. Verifica al primo test che lo richieda:
 - Test nuovi tutti verdi: 
   - Crypto: **13/13 pass** (`pytest tests2/crypto/ -q`)
   - Datasources: **47/47 pass** (`pytest tests2/datasources/ -q`)
-  - Scheduler policy_engine: **21/21 pass** (`pytest tests2/scheduler/unit/test_policy_engine_contract.py -q` in 0.64s, con `DATABASE_URL` placeholder per bypassare import-time check come da pattern batch 2)
+  - Scheduler policy_engine: **21/21 pass** (`pytest tests2/scheduler/unit/test_policy_engine_contract.py -q` in 0.64s)
+  - Scheduler concurrency_manager TTL: **6/6 pass** (`pytest tests2/scheduler/unit/test_concurrency_manager_ttl_contract.py -q` in 0.52s) + zero regressioni sui 17 test esistenti (`test_concurrency_manager_contract.py` tutti verdi in combinazione)
 - Coverage: — (a fine stream)
 
 ## Collisioni cross-stream
