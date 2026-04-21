@@ -59,18 +59,18 @@ Non cancellare mai un ADR: il registro e' append-only. Un errore in un ADR si re
 
 ### Security / Crypto
 - [ADR-0001](0001-2026-04-17-eval-whitelist-over-asteval.md) — Validazione formula utente via whitelist AST anziche' libreria `asteval`
-- ADR-0002 — _(da scrivere)_ f-string SQL via `_safe_number` / `_safe_identifier` vs SQLAlchemy `bindparam`
-- ADR-0003 — _(da scrivere)_ Crypto at-rest via `cryptography.Fernet` (AES-GCM) per `encrypt_dict_fields`
-- ADR-0004 — _(da scrivere)_ JWT HS256 vs RS256, TTL 8h, no refresh token
-- ADR-0009 — _(da scrivere)_ JWT JTI blacklist Redis: policy fail-open READ + fail-loud WRITE
-- ADR-0010 — _(da scrivere)_ Trusted proxies anti-spoofing: allowlist-based vs trust-all
+- [ADR-0002](0002-2026-04-21-safe-number-identifier-vs-bindparam.md) — f-string SQL via `_safe_number` / `_safe_identifier` vs SQLAlchemy `bindparam`
+- [ADR-0003](0003-2026-04-21-fernet-crypto-at-rest.md) — Crypto at-rest via `cryptography.Fernet` per `encrypt_dict_fields`
+- [ADR-0004](0004-2026-04-21-jwt-hs256-ttl-8h-no-refresh.md) — JWT HS256 vs RS256, TTL 8h, no refresh token
+- [ADR-0009](0009-2026-04-21-jwt-blacklist-redis-fail-open-read-fail-loud-write.md) — JWT JTI blacklist Redis: policy fail-open READ + fail-loud WRITE
+- [ADR-0010](0010-2026-04-21-trusted-proxies-allowlist.md) — Trusted proxies anti-spoofing: allowlist-based vs trust-all
 
 ### Architecture patterns
-- ADR-0005 — _(da scrivere)_ Helper condiviso `async_user_recheck` (DRY su 4 task Celery)
-- ADR-0006 — _(da scrivere)_ CRS opt-in metric: default `"same"` retrocompat
-- ADR-0007 — _(da scrivere)_ `Protocol` + `typing.runtime_checkable` per storage, Python-idiomatic vs `ABC`
-- ADR-0008 — _(da scrivere)_ Observability backup DB-side (`plenora.backup_runs`/`verify_runs`) vs systemctl/journalctl
-- ADR-0011 — _(da scrivere)_ `FileSourcesDispatch` threshold S3 50MB, pattern FS-4 simmetrico
+- [ADR-0005](0005-2026-04-21-async-user-recheck-helper.md) — Helper condiviso `recheck_user_authorized` (DRY su 4 task Celery)
+- [ADR-0006](0006-2026-04-21-crs-opt-in-default-same.md) — CRS opt-in metric: default `"same"` retrocompat
+- [ADR-0007](0007-2026-04-21-protocol-runtime-checkable-vs-abc.md) — `Protocol` + `typing.runtime_checkable` per storage, Python-idiomatic vs `ABC`
+- [ADR-0008](0008-2026-04-21-backup-observability-db-side.md) — Observability backup DB-side (`plenora.backup_runs`/`verify_runs`) vs systemctl/journalctl
+- [ADR-0011](0011-2026-04-21-file-sources-dispatch-s3-threshold.md) — `FileSourcesDispatch` threshold S3 50MB, pattern FS-4 simmetrico
 
 ## Workflow
 
