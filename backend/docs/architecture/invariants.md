@@ -114,14 +114,15 @@ Ogni flag attivo nel codice deve stare qui con owner, data di introduzione e rim
 
 ### Env var crypto-key (coda di §1.5)
 
-La chain di 5 nomi per la chiave Fernet e' deliberata ma in uscita.
+La chain di 3 nomi per la chiave Fernet e' deliberata ma in uscita.
 
 | Env var | Tipo | Stato |
 |---------|------|-------|
 | `PLENORA_ENCRYPTION_KEY` | Canonico | Attivo, preferito in tutti i nuovi deploy |
-| `URBY_ENCRYPTION_KEY` | Alias retro-compat | In uscita, decisione D-fascia |
-| `CONN_ENCRYPT_KEY` | Alias legacy pre-migrazione | In uscita, decisione D-fascia |
-| `SECRET_KEY` / `JWT_SECRET_KEY` | Fallback condiviso con JWT | **Da chiarire**: side-effect della chain o intenzionale? Decisione D-fascia prima di qualsiasi rimozione |
+| `URBY_ENCRYPTION_KEY` | Alias retro-compat | In uscita, D4 migration-required (rename `.env` prod prima della rimozione codice) |
+| `CONN_ENCRYPT_KEY` | Alias legacy pre-migrazione | In uscita, D4 migration-required (verifica SSH `.env` prod prima della rimozione codice) |
+
+Il fallback su `SECRET_KEY` / `JWT_SECRET_KEY` (D5) e' stato **rimosso** il 2026-04-20: quei nomi appartengono al dominio auth JWT e condividerli con crypto-at-rest rendeva la rotazione `JWT_SECRET_KEY` un'operazione silently distruttiva sui record cifrati. Review futuri che vedessero tentativi di re-introdurre quel fallback devono essere respinti: un secret, un consumatore, un nome canonico.
 
 ### Config-not-flag (registrati per trasparenza, non soggetti a §3)
 
@@ -205,7 +206,7 @@ Le seguenti decisioni **non** sono vincolate da questo documento e restano scope
 - **Priorita' specifiche di refactor** (es. "prima i writer, poi i reader"): scelta per brief di fase, non invariant.
 - **Target di performance, SLO, SLA**: scope Fase 1 PERF; non sono invariant architetturali.
 - **Contratti API pubblici verso ICSC/RFI/ANIA**: governati fuori da questo doc (contratti commerciali + versioning API).
-- **Decisioni aperte fascia D (residue dopo il re-pass)**: IMDF loader/persist/storage boundaries (D3), alias crypto retro-compat `URBY_*`/`CONN_ENCRYPT_KEY` (D4), `SECRET_KEY`/`JWT_SECRET_KEY` come crypto fallback (D5), policy preview vs execute cross-modulo estrai/manipola/arricchisci (D6). Restano scope decisionale product/env post-Fase 0. D1 (`ENABLE_ASYNC_ENRICHMENT`) e D2 (`_read_csv_*`) chiusi in Fase 0 e rimossi da questa lista.
+- **Decisioni aperte fascia D (residue dopo il re-pass)**: IMDF loader/persist/storage boundaries (D3), alias crypto retro-compat `URBY_ENCRYPTION_KEY`/`CONN_ENCRYPT_KEY` (D4, bloccato su verifica `.env` prod + rename coordinato), policy preview vs execute cross-modulo estrai/manipola/arricchisci (D6). Restano scope decisionale product/env post-Fase 0. D1 (`ENABLE_ASYNC_ENRICHMENT`) e D2 (`_read_csv_*`) chiusi in Fase 0; D5 (`SECRET_KEY`/`JWT_SECRET_KEY` come crypto fallback) chiusa in Phase 1 consolidation il 2026-04-20 con rimozione del fallback dalla chain.
 - **Triage residui rimandati a batch dedicato Phase 1**:
   - `app/services/file_service.py` 21 `except: pass` sparsi (S17) — audit riga-per-riga
   - `app/core/arricchisci/api_connector.py` 25 except retry loop (S18) — triage pattern ripetitivo
