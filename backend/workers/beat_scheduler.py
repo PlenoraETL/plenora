@@ -947,6 +947,41 @@ class PlenoraBeatScheduler(Scheduler):
                 f"in {len(result['object_keys'])} oggetti "
                 f"(cutoff={cutoff.isoformat()}, days={days})"
             )
+            # B4: observability circolare su plenora.logs. INFO non passa
+            # dal PostgresLogHandler (LOG_LEVEL_DB=WARNING default), quindi
+            # INSERT diretta via pg_execute. Shape colonne identica al
+            # handler canonico (utils/logger.py:340-344). Ratificata in
+            # ADR-0014 §B. Best-effort: un fallimento observability non
+            # contamina lo stato "archive ok" (slot gia' aggiornato sopra).
+            try:
+                import json as _json
+                from app.db.pg_connection import execute as pg_execute
+                obs_ts = datetime.now(timezone.utc).strftime(
+                    "%Y-%m-%dT%H:%M:%S.%f"
+                )[:-3]
+                obs_details = _json.dumps({
+                    "table": "logs",
+                    "cutoff": cutoff.isoformat(),
+                    "archived_rows": result["archived_rows"],
+                    "object_keys": list(result["object_keys"]),
+                    "batch_runs": len(result["object_keys"]),
+                }, default=str)
+                pg_execute(
+                    "INSERT INTO logs (ts, level, module, op, msg, "
+                    "project_id, group_id, run_id, node_id, details, error) "
+                    "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                    (
+                        obs_ts, "INFO", "workers", "log_archive",
+                        f"Archive logs: {result['archived_rows']} righe in "
+                        f"{len(result['object_keys'])} oggetti",
+                        "", "", "", "", obs_details, "",
+                    ),
+                )
+            except Exception as obs_err:
+                logger.warning(
+                    f"Observability log_archive fallita (archive logs ok): "
+                    f"{obs_err}"
+                )
         except Exception as e:
             logger.warning(f"Errore archive logs: {e}", exc_info=True)
 
@@ -1093,6 +1128,39 @@ class PlenoraBeatScheduler(Scheduler):
                 f"in {len(result['object_keys'])} oggetti "
                 f"(cutoff={cutoff.isoformat()}, days={days})"
             )
+            # B4: observability circolare su plenora.logs (tabella logs,
+            # non audit_actions: la chiusura del cerchio log-del-log
+            # va sempre su plenora.logs). Shape identica al handler
+            # canonico (utils/logger.py:340-344). ADR-0014 §B.
+            try:
+                import json as _json
+                from app.db.pg_connection import execute as pg_execute
+                obs_ts = datetime.now(timezone.utc).strftime(
+                    "%Y-%m-%dT%H:%M:%S.%f"
+                )[:-3]
+                obs_details = _json.dumps({
+                    "table": "audit_actions",
+                    "cutoff": cutoff.isoformat(),
+                    "archived_rows": result["archived_rows"],
+                    "object_keys": list(result["object_keys"]),
+                    "batch_runs": len(result["object_keys"]),
+                }, default=str)
+                pg_execute(
+                    "INSERT INTO logs (ts, level, module, op, msg, "
+                    "project_id, group_id, run_id, node_id, details, error) "
+                    "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                    (
+                        obs_ts, "INFO", "workers", "log_archive",
+                        f"Archive audit_actions: {result['archived_rows']} "
+                        f"righe in {len(result['object_keys'])} oggetti",
+                        "", "", "", "", obs_details, "",
+                    ),
+                )
+            except Exception as obs_err:
+                logger.warning(
+                    f"Observability log_archive fallita "
+                    f"(archive audit_actions ok): {obs_err}"
+                )
         except Exception as e:
             logger.warning(f"Errore archive audit_actions: {e}", exc_info=True)
 

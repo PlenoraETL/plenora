@@ -610,3 +610,328 @@ def test_retention_bypass_execute_closure_sets_local_flag_on_same_cursor():
     delete_call = mock_cursor.execute.call_args_list[1]
     assert "DELETE FROM plenora.logs" in delete_call.args[0]
     assert delete_call.args[1] == ("cutoff_sentinel", 123)
+
+
+# ===========================================================================
+# Section 5 — B4 observability circolare (ADR-0014 §B)
+# ===========================================================================
+#
+# Verifica che al termine di un archive successo venga emessa una riga
+# INFO su plenora.logs via pg_execute diretta. LOG_LEVEL_DB=WARNING
+# default filtra logger.info() prima del PostgresLogHandler, quindi la
+# chiusura del cerchio osservabilita' richiede INSERT esplicita.
+# Shape 11-col identica al handler canonico (utils/logger.py:340-344).
+# Append-only preservato: INSERT passa dal trigger
+# plenora.block_log_modifications senza bypass (solo UPDATE/DELETE
+# bloccati). Best-effort: fallimento observability non regredisce
+# lo stato "archive ok" (slot gia' aggiornato prima della INSERT).
+
+
+def test_archive_old_logs_emits_observability_insert_on_success(monkeypatch):
+    """B4-T1 logs: shape INSERT esplicita.
+
+    Verifica:
+    - pg_execute chiamato 1 volta dopo archive success
+    - SQL = 11-col INSERT INTO logs, 11 placeholder
+    - valori: ts non-vuoto, level='INFO', module='workers',
+      op='log_archive', msg contiene 'Archive logs: 42 righe'
+    - project_id/group_id/run_id/node_id tutti ''
+    - details JSON parseable con 5 chiavi, table='logs',
+      archived_rows=42, batch_runs=1
+    - error=''
+    """
+    import json
+
+    scheduler = _make_scheduler()
+    now_ts = 1_000_000.0
+    monkeypatch.setattr(time, "time", lambda: now_ts)
+
+    mock_pg_execute = MagicMock()
+
+    with patch(
+        "app.config.settings",
+        new=_settings_ns(LOG_ARCHIVE_ENABLED=True, LOG_RETENTION_DAYS=30),
+    ), patch(
+        "app.shared.cloud_backends.get_log_archive_storage",
+        return_value=MagicMock(),
+    ), patch(
+        "app.services.log_archive.LogArchiveWriter",
+    ) as mock_writer_cls, patch(
+        "app.db.pg_connection.fetchall", new=MagicMock(),
+    ), patch(
+        "app.db.pg_connection.transaction", new=MagicMock(),
+    ), patch(
+        "app.db.pg_connection.execute", new=mock_pg_execute,
+    ):
+        mock_writer = mock_writer_cls.return_value
+        mock_writer.archive_and_purge.return_value = _writer_result(
+            datetime.now(timezone.utc),
+            archived_rows=42,
+            keys=["logs/2026-04/logs-2026-04-21-000.ndjson.gz"],
+        )
+
+        scheduler._archive_old_logs()
+
+    assert mock_pg_execute.call_count == 1, (
+        "observability INSERT non emessa dopo archive success"
+    )
+    sql_arg = mock_pg_execute.call_args.args[0]
+    params_arg = mock_pg_execute.call_args.args[1]
+
+    # Shape SQL: 11 colonne, 11 placeholder
+    assert "INSERT INTO logs" in sql_arg
+    assert "ts, level, module, op, msg" in sql_arg
+    assert "project_id, group_id, run_id, node_id" in sql_arg
+    assert "details, error" in sql_arg
+    assert sql_arg.count("%s") == 11, (
+        f"SQL deve avere 11 placeholder, trovati {sql_arg.count('%s')}"
+    )
+
+    # Tuple di 11 valori
+    assert isinstance(params_arg, tuple)
+    assert len(params_arg) == 11, (
+        f"params deve essere tuple(11), trovato len={len(params_arg)}"
+    )
+
+    (ts, level, module, op, msg, project_id, group_id,
+     run_id, node_id, details, error) = params_arg
+
+    assert ts and isinstance(ts, str), "ts deve essere str non-vuoto"
+    assert level == "INFO"
+    assert module == "workers"
+    assert op == "log_archive"
+    assert "Archive logs: 42 righe" in msg
+    assert "1 oggetti" in msg
+    assert project_id == ""
+    assert group_id == ""
+    assert run_id == ""
+    assert node_id == ""
+    assert error == ""
+
+    # details = JSON con 5 chiavi canoniche, table='logs'
+    details_obj = json.loads(details)
+    assert set(details_obj.keys()) == {
+        "table", "cutoff", "archived_rows", "object_keys", "batch_runs",
+    }
+    assert details_obj["table"] == "logs"
+    assert details_obj["archived_rows"] == 42
+    assert details_obj["batch_runs"] == 1
+    assert details_obj["object_keys"] == [
+        "logs/2026-04/logs-2026-04-21-000.ndjson.gz"
+    ]
+
+
+def test_archive_old_audit_actions_emits_observability_insert_on_success(
+    monkeypatch,
+):
+    """B4-T1 gemello audit_actions: shape INSERT esplicita.
+
+    Stessa struttura 11-col, ma details.table='audit_actions' e msg
+    inizia con 'Archive audit_actions:'. La riga finisce comunque
+    in plenora.logs (chiusura del cerchio log-del-log su un'unica
+    tabella osservabile).
+    """
+    import json
+
+    scheduler = _make_scheduler()
+    now_ts = 2_000_000.0
+    monkeypatch.setattr(time, "time", lambda: now_ts)
+
+    mock_pg_execute = MagicMock()
+
+    with patch(
+        "app.config.settings",
+        new=_settings_ns(LOG_ARCHIVE_ENABLED=True, AUDIT_RETENTION_DAYS=365),
+    ), patch(
+        "app.shared.cloud_backends.get_log_archive_storage",
+        return_value=MagicMock(),
+    ), patch(
+        "app.services.log_archive.LogArchiveWriter",
+    ) as mock_writer_cls, patch(
+        "app.db.pg_connection.fetchall", new=MagicMock(),
+    ), patch(
+        "app.db.pg_connection.transaction", new=MagicMock(),
+    ), patch(
+        "app.db.pg_connection.execute", new=mock_pg_execute,
+    ):
+        mock_writer = mock_writer_cls.return_value
+        mock_writer.archive_and_purge.return_value = _writer_result(
+            datetime.now(timezone.utc),
+            archived_rows=7,
+            keys=["audit/2026-04/audit-2026-04-21-000.ndjson.gz"],
+        )
+
+        scheduler._archive_old_audit_actions()
+
+    assert mock_pg_execute.call_count == 1
+    sql_arg = mock_pg_execute.call_args.args[0]
+    params_arg = mock_pg_execute.call_args.args[1]
+
+    # INSERT va SEMPRE su plenora.logs (non su audit_actions): la
+    # chiusura del cerchio osservabilita' e' unica per entrambe le
+    # pipeline archive.
+    assert "INSERT INTO logs" in sql_arg
+    assert sql_arg.count("%s") == 11
+    assert len(params_arg) == 11
+
+    (_ts, level, module, op, msg, project_id, _group_id,
+     _run_id, _node_id, details, error) = params_arg
+
+    assert level == "INFO"
+    assert module == "workers"
+    assert op == "log_archive"
+    assert "Archive audit_actions:" in msg
+    assert "7 righe" in msg
+    assert project_id == ""
+    assert error == ""
+
+    details_obj = json.loads(details)
+    assert details_obj["table"] == "audit_actions"
+    assert details_obj["archived_rows"] == 7
+    assert details_obj["batch_runs"] == 1
+
+
+def test_archive_old_logs_skips_observability_when_gate_early_returns():
+    """B4-T2: i gate early-return (ENABLED=False, retention=0) non
+    devono emettere observability.
+
+    Due scenari in un solo test: entrambi i hook con ENABLED=False
+    non invocano pg_execute. Completa la semantica di B3-T2/B3-T9
+    chiudendo il contratto anche sul path osservabilita'.
+    """
+    scheduler = _make_scheduler()
+    mock_pg_execute = MagicMock()
+
+    # Scenario A: _archive_old_logs con ENABLED=False
+    with patch(
+        "app.config.settings", new=_settings_ns(LOG_ARCHIVE_ENABLED=False),
+    ), patch(
+        "app.shared.cloud_backends.get_log_archive_storage",
+    ), patch(
+        "app.services.log_archive.LogArchiveWriter",
+    ), patch(
+        "app.db.pg_connection.execute", new=mock_pg_execute,
+    ):
+        scheduler._archive_old_logs()
+
+    assert mock_pg_execute.call_count == 0, (
+        "observability non deve essere emessa con ENABLED=False (logs)"
+    )
+
+    # Scenario B: _archive_old_audit_actions con AUDIT_RETENTION_DAYS=0
+    with patch(
+        "app.config.settings",
+        new=_settings_ns(
+            LOG_ARCHIVE_ENABLED=True, AUDIT_RETENTION_DAYS=0,
+        ),
+    ), patch(
+        "app.shared.cloud_backends.get_log_archive_storage",
+    ), patch(
+        "app.services.log_archive.LogArchiveWriter",
+    ), patch(
+        "app.db.pg_connection.execute", new=mock_pg_execute,
+    ):
+        scheduler._archive_old_audit_actions()
+
+    assert mock_pg_execute.call_count == 0, (
+        "observability non deve essere emessa con retention=0 (audit)"
+    )
+
+
+def test_archive_old_logs_skips_observability_when_archive_fails(monkeypatch):
+    """B4-T3: se writer.archive_and_purge solleva, observability non
+    viene emessa.
+
+    Rationale ADR-0014 §B3: observability = success-only. Un fallimento
+    archive non deve contaminare plenora.logs con una INSERT "finta"
+    di success. L'handler canonico (utils/logger.py) traccia gia'
+    l'error via logger.warning(exc_info=True) -> se WARNING passa
+    il level filter, finisce comunque in plenora.logs come riga error.
+    """
+    scheduler = _make_scheduler()
+    now_ts = 1_000_000.0
+    monkeypatch.setattr(time, "time", lambda: now_ts)
+
+    mock_pg_execute = MagicMock()
+
+    with patch(
+        "app.config.settings", new=_settings_ns(),
+    ), patch(
+        "app.shared.cloud_backends.get_log_archive_storage",
+        return_value=MagicMock(),
+    ), patch(
+        "app.services.log_archive.LogArchiveWriter",
+    ) as mock_writer_cls, patch(
+        "app.db.pg_connection.fetchall", new=MagicMock(),
+    ), patch(
+        "app.db.pg_connection.transaction", new=MagicMock(),
+    ), patch(
+        "app.db.pg_connection.execute", new=mock_pg_execute,
+    ):
+        mock_writer = mock_writer_cls.return_value
+        mock_writer.archive_and_purge.side_effect = RuntimeError("S3 down")
+
+        scheduler._archive_old_logs()  # must not raise
+
+    assert mock_pg_execute.call_count == 0, (
+        "observability success-only: nessuna INSERT su archive failure"
+    )
+    # Slot NON aggiornato -> retry al prossimo tick (gate-elapsed)
+    assert scheduler._last_logs_archive == 0.0
+
+
+def test_archive_old_logs_observability_failure_does_not_regress_archive_ok(
+    monkeypatch,
+):
+    """B4-T4: se pg_execute observability solleva, il hook NON propaga
+    e lo slot resta aggiornato.
+
+    Best-effort semantics (ADR-0014 §B3): un fallimento della INSERT
+    observability (es. DB transitorio, trigger edge case) non deve
+    far regredire lo stato "archive ok" gia' committato (oggetto su
+    S3, DELETE PG gia' fatta). Retry al prossimo tick archive-ok
+    e' inutile: l'archive e' gia' avvenuto.
+    """
+    scheduler = _make_scheduler()
+    now_ts = 1_000_000.0
+    monkeypatch.setattr(time, "time", lambda: now_ts)
+
+    mock_pg_execute = MagicMock(side_effect=RuntimeError("db transient"))
+
+    with patch(
+        "app.config.settings", new=_settings_ns(),
+    ), patch(
+        "app.shared.cloud_backends.get_log_archive_storage",
+        return_value=MagicMock(),
+    ), patch(
+        "app.services.log_archive.LogArchiveWriter",
+    ) as mock_writer_cls, patch(
+        "app.db.pg_connection.fetchall", new=MagicMock(),
+    ), patch(
+        "app.db.pg_connection.transaction", new=MagicMock(),
+    ), patch(
+        "app.db.pg_connection.execute", new=mock_pg_execute,
+    ), patch(
+        "workers.beat_scheduler.logger",
+    ) as mock_logger:
+        mock_writer = mock_writer_cls.return_value
+        mock_writer.archive_and_purge.return_value = _writer_result(
+            datetime.now(timezone.utc), archived_rows=5,
+        )
+
+        scheduler._archive_old_logs()  # must not raise
+
+    # Slot gia' aggiornato prima della INSERT observability: resta set
+    assert scheduler._last_logs_archive == now_ts, (
+        "slot archive deve restare aggiornato anche se observability fallisce"
+    )
+    # pg_execute tentato (ha sollevato, ma senza propagare)
+    assert mock_pg_execute.call_count == 1
+    # logger.warning chiamato col prefisso observability (non "Errore archive")
+    warning_calls = [
+        c for c in mock_logger.warning.call_args_list
+        if "Observability log_archive fallita" in c.args[0]
+    ]
+    assert len(warning_calls) == 1, (
+        "deve esserci esattamente 1 warning 'Observability log_archive fallita'"
+    )
