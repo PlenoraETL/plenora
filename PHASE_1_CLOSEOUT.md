@@ -14,7 +14,7 @@ Questo file e' la versione **git-tracked** del closeout di Phase 1. Il contenuto
 
 Phase 1 si chiude con:
 
-- **Track A (4 stream paralleli)** — tutti mergiati su `main`, STREAM_REPORT consolidato in `STREAM_REPORT.md`.
+- **Track A (4 stream paralleli)** — tutti mergiati su `main`. Artefatti di chiusura per stream: `STREAM_REPORT.md` (stream TESTS), ADR-0001..0011 in `backend/docs/architecture/decisions/` (stream ACN), commit history con prefissi `[stream-fe]` e `[stream-perf]` (stream FE e PERF). Non esiste un singolo STREAM_REPORT consolidato dei 4 stream: `STREAM_REPORT.md` e' storicamente il report del solo stream TESTS.
 - **Track B (consolidation-micro S17-S28)** — tutti chiusi: S17, S18, S23, S25, S26, S27 con commit atomici; S28 chiuso come triage di conformita' il 2026-04-20 (nessuna modifica codice).
 - **Track C (governance D3-D6)** — D5 chiuso con fix codice + doc; D4 parziale (`URBY_DISABLE_DEFAULT_KEY` rimosso; i due alias residui bloccati su verifica `.env` produzione); D3 e D6 restano design doc senza refactor codice (in attesa di policy formale).
 - **Architecture A1 (storage policy)** — 3 commit canonici applicati (validate + dispatch simmetrici FS-4/FS-5).
@@ -50,7 +50,7 @@ Nessun fake closure. Quello che non e' stato completato e' classificato esplicit
 | FE | `83d7765` | `[stream-fe] hooks: useEditorData cancellation fixes stale writes` |
 | PERF | `61a3446` | `[stream-perf] perf/spatial: batch 3 — voronoi STRtree (181x) + clean_topology incremental union (14x)` |
 
-Dettaglio chiusure per stream: `STREAM_REPORT.md`.
+Dettaglio chiusura stream TESTS: `STREAM_REPORT.md`. Chiusura stream ACN: `backend/docs/architecture/decisions/` (ADR-0001..0011) + `STREAM_REPORT.md` non copre ACN. Chiusura stream FE e PERF: commit history con prefissi `[stream-fe]` e `[stream-perf]` (nessun report doc dedicato).
 
 Punti non-tecnici da registrare:
 
@@ -181,7 +181,7 @@ Tematiche architetturali che richiedono design dedicato + execution dedicata:
 - **D3 — refactor IMDF boundaries** (loader / persist / storage). `site_id` risolto in 3+ posti, hydration duplicata. Design doc gia' scritto, execution in Phase 2.
 - **A1 follow-up** — provider MinIO P1 implementation + contract test per matrice policy/provider; bulk review di tutti i chiamanti file storage per allineamento al dispatch canonico.
 - **Log lifecycle complessivo** — append-only enforcement architetturale, retention policy formale, purge controllato. Vedi §9.
-- **Tematiche emerse dagli STREAM_REPORT** — raccolte in `orchestrate/phase_2_hardening/` durante apertura fase 2.
+- **Tematiche emerse dai 4 stream** (TESTS report + ADR ACN + commit history FE/PERF) — raccolte in `orchestrate/phase_2_hardening/` durante apertura fase 2.
 
 ### Bucket `micro_0bis`
 
@@ -196,7 +196,7 @@ Housekeeping documentale / ratifica formale, chiudibile in un pass doc-only succ
 
 **Phase 1 Stabilization: CHIUSA il 2026-04-21.**
 
-- Track A: 4/4 stream mergiati, STREAM_REPORT consolidato.
+- Track A: 4/4 stream mergiati. Artefatti di chiusura: `STREAM_REPORT.md` (TESTS), ADR-0001..0011 (ACN), commit history `[stream-fe]` / `[stream-perf]` (FE, PERF).
 - Track B: 7/7 item chiusi (S17-S27 via commit, S28 via triage).
 - Track C: 1/4 chiuso (D5), 1/4 parziale con carry-over esplicito (D4), 2/4 in carry-over classificato (D3 → phase_2, D6 → micro_0bis).
 - Architecture A1: design + impl canonica applicata, follow-up provider in phase_2.
@@ -212,7 +212,9 @@ La fase termina con margine sufficiente per aprire il pass **micro-0bis** (clean
 - Kickoff: `orchestrate/phase_1_stabilization/kickoff.md`
 - Done-check runbook: `orchestrate/phase_1_stabilization/done_check.md`
 - Mirror orchestrate (local): `orchestrate/phase_1_stabilization/closeout_report.md`
-- STREAM_REPORT consolidato: `STREAM_REPORT.md`
+- Report stream TESTS: `STREAM_REPORT.md` (non consolidato dei 4 stream: copre solo TESTS)
+- ADR stream ACN: `backend/docs/architecture/decisions/` (ADR-0001..0011)
+- Commit history stream FE e PERF: prefissi `[stream-fe]` e `[stream-perf]` (nessun report doc dedicato)
 - Invariants: `backend/docs/architecture/invariants.md`
 - Inventory: `backend/docs/architecture/inventory_report.md`
 - Design docs Track C: `orchestrate/phase_1_stabilization/d3_imdf_boundaries.md`, `d4_crypto_aliases.md`, `d5_secret_fallbacks.md`, `d6_preview_execute_policy.md`
