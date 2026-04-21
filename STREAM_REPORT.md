@@ -1,7 +1,7 @@
 # STREAM TESTS — Report Fase 1 Stabilization
 
 **Status**: in_progress
-**Last updated**: 2026-04-21 (Batch 2 Datasources — service + factory + local + ftp done, 39/~40)
+**Last updated**: 2026-04-21 (Batch 2 Datasources — service + factory + local + ftp + sftp done, 47/~45)
 
 ## Scope
 
@@ -61,18 +61,19 @@ Invariants blindati: §2 riga `enrichment_service:408-410` async safety-net + §
 
 ## Test scritti (tot)
 
-- Datasources: **39** (5 file, batch 2 in corso)
+- Datasources: **47** (6 file, batch 2 in corso)
   - `tests2/datasources/test_factory_dispatch_contract.py` — 11 test: dispatch parametrico (4 tipi) → classe corretta, fail-fast su tipo sconosciuto/missing/empty, contract BackendConfig structured-vs-extra, filtro `None` con False/empty-string preservati, `supported_types()` ritorna i 4 canonici, meta-contract dispatch ↔ supported_types
   - `tests2/datasources/test_service_crypto_contract.py` — 6 test (gap coverage vs legacy `security/unit/test_datasource_crypto_contract.py`): update re-cifra con nuovo valore, update skip su `"***"` masked (CVE-class regression guard), update strips `group_id`/`created_by` dal blob salvato, `_to_model(redact=True)` maschera 4 sensitive in `_SENSITIVE_FIELDS`, `_to_model(redact=False)` preserva plaintext per uso interno, update su ds inesistente → `None` senza side-effect DB
   - `tests2/datasources/test_service_crud_contract.py` — 7 test CRUD + tenant: list WHERE group_id con binding `%s` (cross-tenant fail-closed), list senza WHERE quando group_id=None (path superadmin), **N+1 guard** (1 fetchall + 0 get_datasource per-row con counter su 5 row), delete non-existent → False senza DB delete (idempotenza), create id pattern canonico `ds_<name>_<date>_<time>_<uuid8>`, get_scan_state JSON corrotto → rename `.broken.<ts>` + empty, get_scan_state file assente → empty no write
   - `tests2/datasources/test_local_edge_contract.py` — 7 test edge case su `local.py` (gap reali vs `shared/test_datasource_local_multi_host.py` + `security/unit/test_local_datasource_contract.py`): `_abs` rifiuta drive letter Windows (branch separata da `/etc/passwd`), `_abs("")` → root_abs (early-return), `_abs` deep nested join 3+ livelli, **symlink escape** via resolve() (skip su Windows no dev-mode), `_rel` normalizza backslash→forward slash (portability), `file_exists` False su directory (os.path.isfile, non exists), `write_file` crea parent dir mancanti (os.makedirs exist_ok)
   - `tests2/datasources/test_ftp_error_contract.py` — 8 test error mapping (nessun test preesistente su FTPDataSource): missing host → fail-fast NO network call (counter istanziazioni), ftplib.all_errors generico → ConnectionError chained con `__cause__`, auth failure (error_perm su login) → ConnectionError, root cwd fail → ConnectionError con messaggio specifico, operation senza connect → `_check` gate ConnectionError "Non connesso", read_file 550 → FileNotFound, read_file non-550 error_perm (530) → PermissionError, file_exists fail-closed → False silent
+  - `tests2/datasources/test_sftp_security_contract.py` — 8 test sicurezza + error mapping (nessun test preesistente su SFTPDataSource, fake paramiko module): **host_key_policy=reject → RejectPolicy + load_system_host_keys entrambi** (contract MITM-safe), auto_add → AutoAddPolicy senza system keys (complementare), policy non-canonica ("Reject"/"strict"/"rejetc") → fallback auto_add (documenta check esatto `== "reject"`), credenziali assenti → fail-fast ConnectionError "Credenziali SFTP mancanti" NO ssh.connect, password+private_key → preferenza `pkey` esclusiva (no password kwarg), AuthenticationException → "Autenticazione SFTP fallita" chained, SSHException → "Errore SSH" chained, operation senza connect → `_check` gate
 - Scheduler: 0 (batch 3)
 - Enrichment: 0 (batch 4)
 - Crypto: **13** (2 file, batch 1 ✅)
   - `tests2/crypto/test_crypto_fernet_contract.py` — 5 test: roundtrip, tamper detection (MAC fail → None + log error), wrong key → None, allowlist plaintext (non-string / assenti / fuori lista), nonce uniqueness (IV random)
   - `tests2/crypto/test_crypto_key_sourcing_contract.py` — 8 test: chain priority PLENORA > URBY > CONN (3 test), **D5 regression** (no fallback su SECRET_KEY/JWT_SECRET_KEY, chiuso 2026-04-20), prod fail-fast no-key, prod fail-fast dev-default-leak, min-length < 16 char in any env, PLENORA_DISABLE_DEFAULT_KEY opt-in dev
-- **TOTALE**: **52 / ~38** (target 30+ superato, procedo su sftp/sharepoint + batch 3/4)
+- **TOTALE**: **60 / ~38** (target 30+ superato ampiamente; valuto closeout batch 2 senza sharepoint)
 
 ## Bug / anomalie source trovati durante studio (NON fissati)
 
