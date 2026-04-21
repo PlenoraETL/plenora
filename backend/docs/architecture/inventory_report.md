@@ -622,7 +622,7 @@ _Aggiornato 2026-04-21 post Phase 1 close-out._
 #### Carry-over architetturale Phase 2 (nuovi 2026-04-21)
 
 - **A1 follow-up** — provider MinIO P1 implementation + contract test matrice policy/provider + bulk review chiamanti file storage per allineamento al dispatch §1.7 `invariants.md`.
-- ~~**Log lifecycle complessivo**~~ — **chiuso 2026-04-21** con cluster O-ARC Batch 1-4 (ADR-0014). Append-only enforcement architetturale, retention policy formale e purge controllato sono ora coperti dalla pipeline `log_archive` + hook `_archive_old_logs` / `_archive_old_audit_actions`. `SET LOCAL plenora.retention_cleanup` (`a32c9f3`) resta come tassello pre-O-ARC del retention job autorizzato. Dettaglio batch nella sotto-sezione successiva.
+- ~~**Log lifecycle complessivo**~~ — **chiuso 2026-04-21** con cluster O-ARC Batch 1-4 (ADR-0014) **+ cluster P-CLR 2026-04-22** (user path cleanup). Append-only enforcement architetturale, retention policy formale e purge controllato sono ora coperti dalla pipeline `log_archive` + hook `_archive_old_logs` / `_archive_old_audit_actions`. `SET LOCAL plenora.retention_cleanup` (`a32c9f3`) resta come tassello pre-O-ARC del retention job autorizzato. Il cluster P-CLR ha rimosso l'ultimo user path applicativo che toccava `DELETE plenora.logs` (endpoint `POST /logs/clear` + FE button + cascade cleanup ora scoped a `log_runs`), chiudendo il perimetro complementare all'enforcement O-ARC. Dettaglio batch nelle sotto-sezioni successive.
 
 #### Chiusura cluster O-ARC Batch 1-4 (2026-04-21)
 
@@ -632,6 +632,18 @@ Cluster **merged su `main`**. Charter: ADR-0014 (`log archive pipeline`). Roll-u
 - **Batch 2 — env contract + config + storage validation fail-fast**: `1a57d4b` (ADR-0014 batch-2 env contract addendum), `861604d` (`LOG_ARCHIVE_*` + `AUDIT_RETENTION_DAYS` properties), `b739c11` (validate coherence at boot), `ef6ae2c` (test validate fail-fast).
 - **Batch 3 — factory + hooks integration + contract tests**: `ebb5ec2` (`get_log_archive_storage` factory), `7819406` (`_archive_old_logs` hook + `_cleanup_old_logs` gate), `afcb185` (`_archive_old_audit_actions` hook), `165ed7f` (contract tests archive hooks + `0 = disabled` fix).
 - **Batch 4 — closure**: `50058a1` (ADR-0014 batch-4 closure addendum), `ce58b65` (observability circolare `log_archive`), `73e85a1` (integration e2e archive purge), `0cf18ad` (invariants post O-ARC: §1.4 + §3 + §6).
+
+#### Chiusura cluster P-CLR (2026-04-22)
+
+Cluster **merged su `main`**. Charter: piano `orchestrate/phase_2_hardening/p_clr_finalization.md` (Option D pura: rimozione `POST /logs/clear` + FE button, niente replacement endpoint, niente compat mode, niente banner). Chiude l'ultimo user path applicativo che toccava `DELETE plenora.logs`, complementare all'enforcement append-only O-ARC. Commit atomici (5):
+
+- **C1 endpoint + FE**: `698ff9d` (`[phase-2-ux] logs: remove POST /logs/clear endpoint + FE button`) — rimossi endpoint BE `backend/app/core/logs/router.py` + UI admin (`frontend/src/api/logs.js` client, `frontend/src/api/index.js` re-export, `frontend/src/utils/permissions.js` capability, `frontend/src/pages/LogViewer.jsx` button + handler + ConfirmDialog + imports orfani).
+- **C2 orchestrator**: `5361fce` (`[phase-2-arch] orchestrator: drop DELETE FROM logs in task cleanup`) — `backend/app/core/orchestrator/router.py` step 5 full-cleanup scoped a `log_runs`; test `backend/tests2/orchestrator/unit/test_tasks_router_contract.py` aggiornato in stesso commit.
+- **C3 config_db_service**: `ae29f99` (`[phase-2-arch] config_db_service: drop DELETE FROM logs in group cascade`) — `backend/app/db/config_db_service.py:delete_group_cascade` step 8 scoped a `log_runs`; docstring + report dict allineati (rimosso key `log_entries`).
+- **C4 regression**: `7fd8d7c` (`[phase-2-ux] logs: regression test clear endpoint returns 404`) — nuovo contract test `backend/tests2/security/unit/test_logs_clear_endpoint_removed.py` (3 assert: POST 404, GET 404, assenza `/logs/clear` dall'OpenAPI schema). Markers `unit + security + contract + regression`. Esito reale 404 (non 405), blinda anti-reintroduzione.
+- **Invariants**: `3e7c370` (`[invariants] post P-CLR: §Stato + §1.4 + §6`) — ratifica in `backend/docs/architecture/invariants.md` (header §Stato aggiornato a 2026-04-22, nuovo bullet §1.4 "User path DELETE su plenora.logs chiuso (P-CLR cluster, ratificato 2026-04-22)", §6 "Log lifecycle" esteso con closure P-CLR).
+
+**Esito architetturale**: nessun endpoint utente autorizza DELETE su `plenora.logs`. Il beat worker resta unico consumatore autorizzato del bypass `SET LOCAL plenora.retention_cleanup='true'` (integrato con la pipeline archive-before-purge O-ARC). I cleanup cascade applicativi (`config_db_service.delete_group_cascade`, `orchestrator` task full-cleanup) operano ora solo su `log_runs` (state table mutabile), mai su `logs` (append-only). Carry-over `P-VIEW` (rehydrate archive → ricostruzione riga DB) resta fuori Phase 2.
 
 #### Declassati a rumore / inventory overcount
 
