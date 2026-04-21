@@ -883,10 +883,18 @@ class PlenoraBeatScheduler(Scheduler):
                 (days,),
             )[0]["c"]
             if before:
-                execute(
-                    "DELETE FROM logs WHERE ts < now() - make_interval(days => %s)",
-                    (days,),
-                )
+                # SET LOCAL + DELETE devono stare nella stessa transazione:
+                # `execute()` apre/committa una tx per call, azzerando SET LOCAL.
+                # Il flag consente a policy/trigger PG di distinguere il
+                # cleanup schedulato dalle DELETE applicative.
+                from app.db.pg_connection import transaction
+                with transaction() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("SET LOCAL plenora.retention_cleanup = 'true'")
+                        cur.execute(
+                            "DELETE FROM logs WHERE ts < now() - make_interval(days => %s)",
+                            (days,),
+                        )
                 logger.info(f"Retention logs: rimosse {before} righe piu' vecchie di {days}gg")
         except Exception as e:
             logger.warning(f"Errore retention logs: {e}")

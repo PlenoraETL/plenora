@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import time
 
@@ -106,7 +106,18 @@ def test_cleanup_eseguibili_outputs_removes_only_expired(tmp_path, monkeypatch):
 
 
 def test_cleanup_old_logs_deletes_rows_older_than_retention():
+    """SET LOCAL + DELETE devono essere emessi sullo stesso cursor
+    (stessa tx), cosi' il flag `plenora.retention_cleanup` e' visibile
+    ai trigger/policy PG durante la DELETE."""
     scheduler = _make_scheduler()
+
+    mock_cursor = MagicMock()
+    mock_conn = MagicMock()
+    mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+    mock_conn.cursor.return_value.__exit__.return_value = False
+    mock_tx_cm = MagicMock()
+    mock_tx_cm.__enter__.return_value = mock_conn
+    mock_tx_cm.__exit__.return_value = False
 
     with patch(
         "app.config.settings",
@@ -115,15 +126,21 @@ def test_cleanup_old_logs_deletes_rows_older_than_retention():
         "app.db.pg_connection.fetchall",
         return_value=[{"c": 7}],
     ) as mock_fetchall, patch(
-        "app.db.pg_connection.execute"
-    ) as mock_execute:
+        "app.db.pg_connection.transaction",
+        return_value=mock_tx_cm,
+    ) as mock_transaction:
         scheduler._cleanup_old_logs()
 
     mock_fetchall.assert_called_once()
-    mock_execute.assert_called_once()
-    sql, params = mock_execute.call_args.args
-    assert "DELETE FROM logs" in sql
-    assert params == (30,)
+    mock_transaction.assert_called_once()
+    # Sullo stesso cursor: prima SET LOCAL, poi DELETE
+    assert mock_cursor.execute.call_count == 2
+    set_local_call = mock_cursor.execute.call_args_list[0]
+    assert "SET LOCAL plenora.retention_cleanup" in set_local_call.args[0]
+    assert "'true'" in set_local_call.args[0]
+    delete_call = mock_cursor.execute.call_args_list[1]
+    assert "DELETE FROM logs" in delete_call.args[0]
+    assert delete_call.args[1] == (30,)
 
 
 def test_cleanup_old_logs_skips_when_retention_disabled():
@@ -135,12 +152,12 @@ def test_cleanup_old_logs_skips_when_retention_disabled():
     ), patch(
         "app.db.pg_connection.fetchall"
     ) as mock_fetchall, patch(
-        "app.db.pg_connection.execute"
-    ) as mock_execute:
+        "app.db.pg_connection.transaction"
+    ) as mock_transaction:
         scheduler._cleanup_old_logs()
 
     mock_fetchall.assert_not_called()
-    mock_execute.assert_not_called()
+    mock_transaction.assert_not_called()
 
 
 # =============================================================================
