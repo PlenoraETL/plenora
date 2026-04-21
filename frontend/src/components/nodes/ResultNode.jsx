@@ -21,9 +21,9 @@ import { validateEstraiCanvas } from '../../utils/validateEstraiCanvas';
 import { validateArricchisciCanvas } from '../../utils/validateArricchisciCanvas';
 import { getColumnTypeIcon, getColumnTypeLabel, getColumnSRID, isGeometryType } from '../../utils/columnUtils';
 import useCanvasStore from '../../store/useCanvasStore';
-import { getImdfBundleMetadata, listImdfBundles, deleteImdfBundle } from '../../api/imdf';
 import BundleSlotCard from '../imdf/BundleSlotCard';
 import ImdfBundlesManagerModal from '../modals/ImdfBundlesManagerModal';
+import { useImdfBundles } from './result/useImdfBundles';
 import './ResultNode.css';
 
 /**
@@ -151,125 +151,24 @@ const ResultNode = memo(({ data, id }) => {
   // openImdfModal: 'preview' | 'manifest' | 'validation' | null
   const [openImdfModal, setOpenImdfModal] = useState(null);
 
-  // Dati IMDF dell'ultima esecuzione. Dopo lo slim del task result il
-  // payload inline contiene solo {site_id, bundle_task_id, has_gdb, ...} —
-  // manifest/validation/geojson/renderers stanno sul disco del server.
-  // Il ResultNode in IMDF mode fa self-hydration via /api/imdf/bundles/{id}
-  // quando rileva un bundle_task_id ma manifest non ancora caricato.
-  const lastTaskResult = useCanvasStore(s => s.lastTaskResult);
-  const setLastTaskResult = useCanvasStore(s => s.setLastTaskResult);
-  const imdfData = lastTaskResult?.imdf || null;
-
-
-  // ── Bundle browser UI state (solo IMDF mode) ────────────────────
-  const [bundles, setBundles]                     = useState([]);
-  const [loadingBundles, setLoadingBundles]       = useState(false);
-  const [selectedBundleId, setSelectedBundleId]   = useState(null); // override storico
-  const [bundlesManagerOpen, setBundlesManagerOpen] = useState(false);
-  const [bundleSwitcherOpen, setBundleSwitcherOpen] = useState(false);
-  const projectId = useCanvasStore(s => s.projectId);
-
-  // bundleTaskId effettivo: live (da lastTaskResult) oppure override esplicito utente
-  const liveBundleTaskId = imdfData?.bundle_task_id || null;
-  const bundleTaskId = selectedBundleId || liveBundleTaskId || null;
-  const selectedBundle = bundles.find(b => b.task_id === bundleTaskId) || null;
-  const isBundleFallback = !liveBundleTaskId && !!selectedBundleId;
-
-  // Carica lista bundle del progetto al mount (solo in IMDF mode).
-  // Se non c'e' un live task result, preseleziona automaticamente il
-  // bundle piu' recente cosi' che l'utente veda subito qualcosa al
-  // caricamento della pagina (stesso comportamento del vecchio Publisher).
-  useEffect(() => {
-    if (!isImdfMode) return;
-    let cancelled = false;
-    (async () => {
-      setLoadingBundles(true);
-      try {
-        const list = await listImdfBundles({ project_id: projectId });
-        if (cancelled) return;
-        const arr = Array.isArray(list) ? list : [];
-        setBundles(arr);
-        // Auto-select del piu' recente se non c'e' nulla di live ne'
-        // una scelta esplicita precedente. Uso getState() per leggere
-        // fuori closure ed evitare stale reads.
-        const state = useCanvasStore.getState();
-        const hasLive = !!state.lastTaskResult?.imdf?.bundle_task_id;
-        if (!hasLive && arr.length > 0) {
-          setSelectedBundleId(prev => prev || arr[0].task_id);
-        }
-      } catch (e) {
-        console.warn('listImdfBundles:', e);
-      } finally {
-        if (!cancelled) setLoadingBundles(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [isImdfMode, projectId]);
-
-  // Quando arriva un nuovo live task post-Esegui, resetta l'override e
-  // ri-fetcha la lista (così il nuovo bundle appare nel select).
-  useEffect(() => {
-    if (!isImdfMode || !liveBundleTaskId) return;
-    if (liveBundleTaskId === selectedBundleId) return;
-    setSelectedBundleId(null);
-    let cancelled = false;
-    (async () => {
-      try {
-        const list = await listImdfBundles({ project_id: projectId });
-        if (!cancelled) setBundles(Array.isArray(list) ? list : []);
-      } catch (e) {
-        console.warn('listImdfBundles refresh:', e);
-      }
-    })();
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isImdfMode, liveBundleTaskId, projectId]);
-
-  // Hydration: quando il bundleTaskId corrente non è gia' riflesso nello
-  // store con manifest presente, fetcha il contenuto completo. Copre sia il
-  // caso live (slim payload dal task) sia il caso historical (utente cambia
-  // bundle nella card). Niente cache per-id: il controllo sullo store è
-  // sufficiente a evitare re-fetch ridondanti, e cachare separatamente
-  // causava "torno al bundle X e vedo ancora Y" dopo un ciclo di switch.
-  useEffect(() => {
-    if (!isImdfMode) return;
-    const bid = bundleTaskId;
-    if (!bid) return;
-    // Se lo store ha già manifest per QUESTO id, non re-fetchare
-    if (imdfData?.bundle_task_id === bid && imdfData?.manifest) return;
-
-    let cancelled = false;
-    (async () => {
-      try {
-        const meta = await getImdfBundleMetadata(bid);
-        if (cancelled) return;
-        const prev = useCanvasStore.getState().lastTaskResult || {};
-        setLastTaskResult({
-          ...prev,
-          imdf: {
-            ...(prev.imdf || {}),
-            ...meta,
-            bundle_task_id: bid,
-          },
-        });
-      } catch (e) {
-        console.warn('ResultNode hydrate IMDF:', e);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [isImdfMode, bundleTaskId, imdfData?.bundle_task_id, imdfData?.manifest, setLastTaskResult]);
-
-  // Cancella un bundle dal server + aggiorna la lista locale
-  const handleDeleteBundle = async (tid) => {
-    try {
-      await deleteImdfBundle(tid);
-      setBundles(prev => prev.filter(b => b.task_id !== tid));
-      if (selectedBundleId === tid) setSelectedBundleId(null);
-    } catch (e) {
-      console.error('deleteImdfBundle:', e);
-      alert(`Errore cancellazione bundle: ${e?.response?.data?.detail || e.message}`);
-    }
-  };
+  // Bundle IMDF: fetching + hydration + selezione incapsulati in
+  // useImdfBundles (Batch 2 step 1 split). Questo componente resta
+  // responsabile solo della view (JSX + openImdfModal).
+  const {
+    bundles,
+    loadingBundles,
+    selectedBundleId,
+    setSelectedBundleId,
+    bundlesManagerOpen,
+    setBundlesManagerOpen,
+    bundleSwitcherOpen,
+    setBundleSwitcherOpen,
+    bundleTaskId,
+    selectedBundle,
+    isBundleFallback,
+    imdfData,
+    handleDeleteBundle,
+  } = useImdfBundles({ isImdfMode });
 
   // Verifica se il formato selezionato è geospaziale
   const isGeoFormat = ['geojson', 'gpkg', 'shp'].includes(format);
