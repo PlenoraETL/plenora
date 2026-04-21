@@ -239,11 +239,13 @@ def mfa_user(request):
     fixture. Cleanup e' esplicito via DELETE su users.
     """
     import uuid
+    from datetime import datetime, timezone
     from app.db import pg_connection
 
     group_id = f"grp_test_{uuid.uuid4().hex[:8]}"
     user_id = f"usr_test_{uuid.uuid4().hex[:8]}"
     username = f"mfa_user_{uuid.uuid4().hex[:6]}"
+    now = datetime.now(timezone.utc).isoformat()
 
     pg_connection.execute(
         "INSERT INTO plenora.groups (id, name) VALUES (?, ?)",
@@ -252,7 +254,7 @@ def mfa_user(request):
     pg_connection.execute(
         "INSERT INTO plenora.users (id, username, password_hash, group_id, role, "
         "is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        (user_id, username, "x", group_id, "user", 1, "now", "now"),
+        (user_id, username, "x", group_id, "user", True, now, now),
     )
 
     def _cleanup():
