@@ -291,6 +291,43 @@ def get_object_storage() -> ObjectStorage:
     raise ValueError(f"CLOUD_PROVIDER non supportato: {provider!r}")
 
 
+def get_log_archive_storage() -> ObjectStorage:
+    """Ritorna l'ObjectStorage dedicato all'archive log (O-ARC, ADR-0014 §A3).
+
+    Gemella di `get_object_storage` ma su bucket distinto: IAM boundary
+    separato per archive log vs backup DB e' un invariante di design,
+    non un'opzione. Per questo la factory e' dedicata e non parametrica
+    su `get_object_storage`.
+
+    La coerenza config (ENABLED + provider reale + `LOG_ARCHIVE_BUCKET`
+    distinto da `BACKUP_BUCKET` + prefix + batch_rows + audit retention)
+    e' gia' enforcata al boot da `validate_storage_config` piu' in basso
+    in questo file: questa factory presume la precondizione verificata.
+    Il `ValueError` difensivo su bucket unset e' un guard ridondante per
+    chiamate out-of-contract (es. `ENABLED=false` che tocca il hook).
+
+    Config via env:
+      CLOUD_PROVIDER=aws (default)
+        LOG_ARCHIVE_BUCKET  — required (nessun fallback legacy: per
+                              design il bucket archive e' nuovo)
+        AWS_REGION          — default eu-south-1
+    """
+    provider = _get_provider()
+    if provider == "aws":
+        bucket = os.getenv("LOG_ARCHIVE_BUCKET")
+        if not bucket:
+            raise ValueError(
+                "LOG_ARCHIVE_BUCKET non configurato (richiesto quando "
+                "LOG_ARCHIVE_ENABLED=True)."
+            )
+        return AwsS3ObjectStorage(
+            bucket=bucket,
+            region=os.getenv("AWS_REGION", "eu-south-1"),
+        )
+    # Estendere qui per Azure / GCP (stesso pattern di get_object_storage).
+    raise ValueError(f"CLOUD_PROVIDER non supportato: {provider!r}")
+
+
 # ---------------------------------------------------------------------------
 # Storage policy — boot-time validation (A1)
 # ---------------------------------------------------------------------------
