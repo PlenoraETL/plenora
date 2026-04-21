@@ -347,6 +347,77 @@ class LogArchiveWriter:
             Qualsiasi eccezione da `upload_bytes` o dalla callable DELETE
             propaga senza swallow.
         """
-        raise NotImplementedError(
-            "archive_and_purge() e' implementato nei commit 1b-1d di O-ARC Batch 1 (ADR-0014)"
+        # ---- fail-fast validation (prima di qualsiasi side-effect) ------
+        if not isinstance(cutoff_ts, datetime):
+            raise TypeError(
+                f"archive_and_purge expected datetime for cutoff_ts, "
+                f"got {type(cutoff_ts).__name__}"
+            )
+        if cutoff_ts.tzinfo is None:
+            raise ValueError(
+                f"naive datetime is not allowed as cutoff_ts: {cutoff_ts!r}"
+            )
+
+        ts_column = _table_ts_column(table)
+        effective_run_date = (
+            run_date if run_date is not None else datetime.now(tz=timezone.utc)
+        )
+        # Dry-run su `_build_object_key` con seq=0: valida in un colpo solo
+        # prefix, table e run_date PRIMA di invocare `select_rows`. Se
+        # `run_date` e' naive o `key_prefix` e' mal formato, l'errore esce
+        # qui, non a meta' iterazione.
+        _build_object_key(self._key_prefix, table, effective_run_date, 0)
+
+        # ---- loop SELECT -> serialize -> upload -> verify -> DELETE -----
+        archived_rows_total = 0
+        object_keys: list[str] = []
+        seq = 0
+
+        while True:
+            rows = select_rows(cutoff_ts, self._batch_size)
+            if not rows:
+                break
+
+            payload = _serialize_rows(rows, table)
+            key = _build_object_key(
+                self._key_prefix, table, effective_run_date, seq
+            )
+
+            self._storage.upload_bytes(payload, key)
+
+            # Unico meccanismo di verify: `list_objects(prefix=key)` deve
+            # ritornare almeno un `ObjectMeta` con `key` esattamente pari
+            # e `size > 0`. Nessun HEAD, nessun checksum: il Protocol
+            # non viene esteso in Batch 1 (ADR-0014 §Decision 7).
+            listed = self._storage.list_objects(prefix=key)
+            if not any(
+                obj["key"] == key and obj["size"] > 0 for obj in listed
+            ):
+                raise RuntimeError(
+                    f"log archive verify failed: key {key!r} not visible "
+                    f"via list_objects(prefix=key) with size > 0 after "
+                    f"upload_bytes. No DELETE will be executed on "
+                    f"{table!r}. Rows remain in DB; the next run will "
+                    f"retry with the same deterministic key."
+                )
+
+            # DELETE scoped: `<ts_col> < cutoff_ts AND id <= max(batch_ids)`.
+            # Il bound su `id` garantisce che non cancelliamo righe inserite
+            # nella stessa finestra temporale da tx concorrenti (append-only
+            # su id crescente -> id fuori dal batch = riga piu' recente).
+            max_id = max(row["id"] for row in rows)
+            sql = (
+                f"DELETE FROM plenora.{table} "
+                f"WHERE {ts_column} < %s AND id <= %s"
+            )
+            retention_bypass_execute(sql, (cutoff_ts, max_id))
+
+            archived_rows_total += len(rows)
+            object_keys.append(key)
+            seq += 1
+
+        return ArchiveResult(
+            archived_rows=archived_rows_total,
+            object_keys=object_keys,
+            cutoff_ts=cutoff_ts,
         )

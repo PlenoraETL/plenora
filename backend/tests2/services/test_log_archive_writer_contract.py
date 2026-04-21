@@ -23,6 +23,7 @@ import pytest
 
 from app.services.log_archive import (
     _MAX_BATCH_SEQ,
+    LogArchiveWriter,
     _build_object_key,
     _normalize_datetime,
     _serialize_rows,
@@ -322,3 +323,367 @@ def test_build_object_key_rejects_invalid_inputs():
     # (h) bool NON e' un seq valido (anche se bool e' subclass di int).
     with pytest.raises(TypeError, match="int"):
         _build_object_key("p/", "logs", ts, True)  # type: ignore[arg-type]
+
+
+# ─── Fake storage (scope: solo tests T7-T12) ─────────────────────────────
+# Mock in-memory di `ObjectStorage` sufficiente per il loop di
+# `archive_and_purge`. NON implementa l'intero Protocol (download,
+# get_object_stream, delete, upload su file): chiamarli farebbe fallire
+# il test — segnale che l'impl produzione ha chiamato metodi fuori
+# contratto.
+
+
+class _FakeObjectStorage:
+    def __init__(
+        self,
+        *,
+        verify_returns_empty: bool = False,
+        verify_returns_zero_size: bool = False,
+    ) -> None:
+        self.uploaded: list[tuple[bytes, str]] = []
+        self.list_calls: list[str] = []
+        self._verify_returns_empty = verify_returns_empty
+        self._verify_returns_zero_size = verify_returns_zero_size
+
+    def upload_bytes(self, data: bytes, key: str) -> None:
+        self.uploaded.append((data, key))
+
+    def list_objects(self, prefix: str) -> list[dict]:
+        self.list_calls.append(prefix)
+        if self._verify_returns_empty:
+            return []
+        size = 0 if self._verify_returns_zero_size else 1
+        return [
+            {
+                "key": k,
+                "last_modified": datetime(2026, 4, 21, tzinfo=timezone.utc),
+                "size": size if d else 0,
+            }
+            for d, k in self.uploaded
+            if k.startswith(prefix)
+        ]
+
+
+def _collector():
+    """Factory per callable DELETE che raccoglie (sql, params)."""
+    deletes: list[tuple[str, tuple]] = []
+
+    def _delete(sql: str, params: tuple) -> None:
+        deletes.append((sql, params))
+
+    return deletes, _delete
+
+
+# ─── T7 ──────────────────────────────────────────────────────────────────
+
+def test_archive_and_purge_noop_on_empty_select():
+    """Zero righe: nessun upload, nessuna DELETE, result coerente
+    (archived_rows=0, object_keys=[], cutoff_ts preservato)."""
+    storage = _FakeObjectStorage()
+    writer = LogArchiveWriter(storage, "p/", batch_size=100)
+
+    cutoff = datetime(2026, 4, 21, 12, 0, 0, tzinfo=timezone.utc)
+    run_date = datetime(2026, 4, 21, 10, 0, 0, tzinfo=timezone.utc)
+
+    select_calls: list = []
+
+    def select(cutoff_ts, batch_size):
+        select_calls.append((cutoff_ts, batch_size))
+        return []
+
+    deletes, delete = _collector()
+
+    result = writer.archive_and_purge(
+        "logs", cutoff, select, delete, run_date=run_date,
+    )
+
+    assert result["archived_rows"] == 0
+    assert result["object_keys"] == []
+    assert result["cutoff_ts"] == cutoff
+
+    assert storage.uploaded == []
+    assert storage.list_calls == []  # verify neppure chiamata
+    assert deletes == []
+    assert select_calls == [(cutoff, 100)]  # SELECT interrogata una sola volta
+
+
+# ─── T8 ──────────────────────────────────────────────────────────────────
+
+def test_archive_and_purge_single_batch_happy_path():
+    """Singolo batch: 1 upload, 1 verify, 1 DELETE, key deterministica,
+    result coerente. Ordine canonico: upload -> list_objects -> delete."""
+    storage = _FakeObjectStorage()
+    writer = LogArchiveWriter(storage, "logs-archive/prod/", batch_size=100)
+
+    ts = datetime(2026, 4, 21, 9, 0, 0, tzinfo=timezone.utc)
+    cutoff = datetime(2026, 4, 21, 12, 0, 0, tzinfo=timezone.utc)
+    run_date = datetime(2026, 4, 21, 10, 0, 0, tzinfo=timezone.utc)
+
+    call_count = {"n": 0}
+
+    def select(cutoff_ts, batch_size):
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            return [_sample_log_row(ts, id_=i) for i in (1, 2, 3)]
+        return []
+
+    deletes, delete = _collector()
+
+    result = writer.archive_and_purge(
+        "logs", cutoff, select, delete, run_date=run_date,
+    )
+
+    expected_key = "logs-archive/prod/logs/2026-04/logs-2026-04-21-000.ndjson.gz"
+    assert result["archived_rows"] == 3
+    assert result["object_keys"] == [expected_key]
+    assert result["cutoff_ts"] == cutoff
+
+    # Un solo upload, con la key attesa.
+    assert len(storage.uploaded) == 1
+    data, key = storage.uploaded[0]
+    assert key == expected_key
+    # Payload e' gzip NDJSON valido.
+    assert data[:2] == b"\x1f\x8b"
+    assert len(_decompress_lines(data)) == 3
+
+    # Verify chiamato esattamente una volta con prefix=key.
+    assert storage.list_calls == [expected_key]
+
+    # DELETE invocata una volta, scoped a cutoff + max_id = 3.
+    assert len(deletes) == 1
+    sql, params = deletes[0]
+    assert "DELETE FROM plenora.logs" in sql
+    assert "ts < %s" in sql
+    assert "id <= %s" in sql
+    assert params == (cutoff, 3)
+
+    # SELECT chiamata 2 volte: prima restituisce rows, seconda vuota.
+    assert call_count["n"] == 2
+
+
+# ─── T9 ──────────────────────────────────────────────────────────────────
+
+def test_archive_and_purge_multi_batch_deterministic_order():
+    """N batch in sequenza: seq incrementa, keys emesse in ordine,
+    DELETE per batch con max_id corretto. `archived_rows` cumulativo."""
+    storage = _FakeObjectStorage()
+    writer = LogArchiveWriter(storage, "p/", batch_size=2)
+
+    ts = datetime(2026, 4, 21, 9, 0, 0, tzinfo=timezone.utc)
+    cutoff = datetime(2026, 4, 21, 12, 0, 0, tzinfo=timezone.utc)
+    run_date = datetime(2026, 4, 21, 10, 0, 0, tzinfo=timezone.utc)
+
+    # 5 righe, batch_size=2 -> 3 batch [1,2], [3,4], [5], poi [].
+    pool = [_sample_log_row(ts, id_=i) for i in (1, 2, 3, 4, 5)]
+
+    def select(cutoff_ts, batch_size):
+        taken = pool[:batch_size]
+        del pool[:batch_size]
+        return taken
+
+    deletes, delete = _collector()
+
+    result = writer.archive_and_purge(
+        "logs", cutoff, select, delete, run_date=run_date,
+    )
+
+    assert result["archived_rows"] == 5
+    assert result["object_keys"] == [
+        "p/logs/2026-04/logs-2026-04-21-000.ndjson.gz",
+        "p/logs/2026-04/logs-2026-04-21-001.ndjson.gz",
+        "p/logs/2026-04/logs-2026-04-21-002.ndjson.gz",
+    ]
+
+    # 3 upload, in ordine.
+    assert [k for _, k in storage.uploaded] == result["object_keys"]
+
+    # 3 verify, ciascuna col prefix=key corrispondente, stessa sequenza.
+    assert storage.list_calls == result["object_keys"]
+
+    # 3 DELETE, ciascuna scoped al max_id del proprio batch.
+    assert len(deletes) == 3
+    assert deletes[0][1] == (cutoff, 2)
+    assert deletes[1][1] == (cutoff, 4)
+    assert deletes[2][1] == (cutoff, 5)
+
+
+# ─── T10 ─────────────────────────────────────────────────────────────────
+
+def test_archive_and_purge_verify_failure_blocks_delete():
+    """Se `list_objects(prefix=key)` non trova la key con `size > 0`:
+    `RuntimeError` esplicito, ZERO DELETE invocate, upload gia'
+    avvenuto rimane in storage (idempotent su retry).
+
+    Copre due casi di failure della verify:
+    (a) list_objects ritorna lista vuota;
+    (b) list_objects ritorna l'oggetto ma con `size == 0`.
+    """
+    ts = datetime(2026, 4, 21, 9, 0, 0, tzinfo=timezone.utc)
+    cutoff = datetime(2026, 4, 21, 12, 0, 0, tzinfo=timezone.utc)
+    run_date = datetime(2026, 4, 21, 10, 0, 0, tzinfo=timezone.utc)
+
+    # (a) list_objects vuoto.
+    storage_empty = _FakeObjectStorage(verify_returns_empty=True)
+    writer_a = LogArchiveWriter(storage_empty, "p/", batch_size=100)
+
+    def select_once(cutoff_ts, batch_size):
+        return [_sample_log_row(ts, id_=i) for i in (1, 2, 3)]
+
+    deletes_a, delete_a = _collector()
+
+    with pytest.raises(RuntimeError, match="list_objects"):
+        writer_a.archive_and_purge(
+            "logs", cutoff, select_once, delete_a, run_date=run_date,
+        )
+
+    # Upload e' gia' avvenuto (non rollback-abile da qui), ma DELETE no.
+    assert len(storage_empty.uploaded) == 1
+    assert deletes_a == []
+    # Errore cita anche la tabella, per audit/runbook.
+    # (gia' coperto dal match "list_objects", ma doppio check sul testo)
+
+    # (b) list_objects ritorna l'oggetto ma con `size == 0` (upload vuoto
+    # spurio o listing di un marker / placeholder).
+    storage_zero = _FakeObjectStorage(verify_returns_zero_size=True)
+    writer_b = LogArchiveWriter(storage_zero, "p/", batch_size=100)
+
+    deletes_b, delete_b = _collector()
+
+    with pytest.raises(RuntimeError, match="list_objects"):
+        writer_b.archive_and_purge(
+            "logs", cutoff, select_once, delete_b, run_date=run_date,
+        )
+
+    assert len(storage_zero.uploaded) == 1
+    assert deletes_b == []
+
+
+# ─── T11 ─────────────────────────────────────────────────────────────────
+
+def test_archive_and_purge_rejects_bad_inputs_before_any_side_effect():
+    """Fail-fast: naive cutoff_ts / naive run_date / table ignota -> errore
+    prima di toccare `select_rows`, `storage`, `retention_bypass_execute`."""
+    storage = _FakeObjectStorage()
+    writer = LogArchiveWriter(storage, "p/", batch_size=100)
+
+    ts_naive = datetime(2026, 4, 21, 10, 0, 0)
+    ts_aware = datetime(2026, 4, 21, 10, 0, 0, tzinfo=timezone.utc)
+
+    def select_must_not_be_called(*args, **kwargs):
+        raise AssertionError("select_rows must not be called on invalid input")
+
+    def delete_must_not_be_called(*args, **kwargs):
+        raise AssertionError("retention_bypass_execute must not be called on invalid input")
+
+    # (a) cutoff_ts naive -> ValueError
+    with pytest.raises(ValueError, match="naive"):
+        writer.archive_and_purge(
+            "logs",
+            ts_naive,
+            select_must_not_be_called,
+            delete_must_not_be_called,
+            run_date=ts_aware,
+        )
+
+    # (b) cutoff_ts non-datetime -> TypeError
+    with pytest.raises(TypeError, match="datetime"):
+        writer.archive_and_purge(
+            "logs",
+            "2026-04-21",  # type: ignore[arg-type]
+            select_must_not_be_called,
+            delete_must_not_be_called,
+            run_date=ts_aware,
+        )
+
+    # (c) table ignota -> ValueError
+    with pytest.raises(ValueError, match="unknown log archive table"):
+        writer.archive_and_purge(
+            "events",  # type: ignore[arg-type]
+            ts_aware,
+            select_must_not_be_called,
+            delete_must_not_be_called,
+            run_date=ts_aware,
+        )
+
+    # (d) run_date naive -> ValueError (via dry-run di `_build_object_key`)
+    with pytest.raises(ValueError, match="naive"):
+        writer.archive_and_purge(
+            "logs",
+            ts_aware,
+            select_must_not_be_called,
+            delete_must_not_be_called,
+            run_date=ts_naive,
+        )
+
+    # Nessun side-effect (storage/DELETE) e' avvenuto.
+    assert storage.uploaded == []
+    assert storage.list_calls == []
+
+
+# ─── T12 ─────────────────────────────────────────────────────────────────
+
+def test_archive_and_purge_delete_scoped_to_cutoff_and_batch_max_id():
+    """Il callable DELETE riceve SQL + params coerenti:
+    - per `logs`: `DELETE FROM plenora.logs WHERE ts < %s AND id <= %s`
+    - per `audit_actions`: `... WHERE timestamp < %s AND id <= %s`
+    - params = (cutoff_ts, max(id) del batch).
+
+    Garantisce che la colonna temporale sia quella giusta per la tabella
+    (nessun hardcode di `ts` per audit_actions) e che lo scoping su `id`
+    non si estenda oltre il batch corrente.
+    """
+    ts = datetime(2026, 4, 21, 9, 0, 0, tzinfo=timezone.utc)
+    cutoff = datetime(2026, 4, 21, 12, 0, 0, tzinfo=timezone.utc)
+    run_date = datetime(2026, 4, 21, 10, 0, 0, tzinfo=timezone.utc)
+
+    # --- logs (ts column) ---
+    storage_logs = _FakeObjectStorage()
+    writer_logs = LogArchiveWriter(storage_logs, "p/", batch_size=100)
+
+    n = {"i": 0}
+
+    def select_logs(cutoff_ts, batch_size):
+        n["i"] += 1
+        if n["i"] == 1:
+            return [_sample_log_row(ts, id_=i) for i in (10, 20, 30)]
+        return []
+
+    deletes_logs, delete_logs = _collector()
+
+    writer_logs.archive_and_purge(
+        "logs", cutoff, select_logs, delete_logs, run_date=run_date,
+    )
+
+    sql_logs, params_logs = deletes_logs[0]
+    assert "DELETE FROM plenora.logs" in sql_logs
+    assert "WHERE ts < %s" in sql_logs
+    assert "AND id <= %s" in sql_logs
+    assert "timestamp" not in sql_logs  # non la colonna di audit
+    assert params_logs == (cutoff, 30)
+
+    # --- audit_actions (timestamp column) ---
+    storage_audit = _FakeObjectStorage()
+    writer_audit = LogArchiveWriter(storage_audit, "p/", batch_size=100)
+
+    m = {"i": 0}
+
+    def select_audit(cutoff_ts, batch_size):
+        m["i"] += 1
+        if m["i"] == 1:
+            return [_sample_audit_row(ts, id_=i) for i in (5, 15)]
+        return []
+
+    deletes_audit, delete_audit = _collector()
+
+    writer_audit.archive_and_purge(
+        "audit_actions", cutoff, select_audit, delete_audit, run_date=run_date,
+    )
+
+    sql_audit, params_audit = deletes_audit[0]
+    assert "DELETE FROM plenora.audit_actions" in sql_audit
+    assert "WHERE timestamp < %s" in sql_audit
+    assert "AND id <= %s" in sql_audit
+    # Importante: la clausola WHERE NON deve referenziare la colonna `ts`
+    # (che non esiste in audit_actions). Cerchiamo la parola isolata.
+    assert " ts " not in sql_audit and " ts<" not in sql_audit
+    assert params_audit == (cutoff, 15)
