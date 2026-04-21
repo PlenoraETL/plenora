@@ -1,0 +1,308 @@
+"""Contract test trigger append-only su plenora.logs + plenora.audit_actions.
+
+Scope:
+  Fissa il contratto dei trigger BEFORE UPDATE/DELETE introdotti dalla
+  migration `2026-04-21_log_immutable_triggers.sql`:
+
+    1. UPDATE sempre vietato (immutability assoluta su log/audit).
+    2. DELETE vietato nel ramo normale.
+    3. DELETE ammesso SOLO con `SET LOCAL plenora.retention_cleanup = 'true'`
+       (bypass esplicito per job di retention autorizzati).
+    4. Il bypass NON permette UPDATE (immutabilita' su UPDATE e' totale).
+
+Divisione in due sezioni:
+
+  A) Static — leggono il file SQL della migration e asseriscono la
+     struttura: nomi trigger, tabelle coperte, presenza del bypass,
+     direzioni BEFORE/FOR EACH ROW. Girano senza PG.
+
+  B) Integration — applicano la migration dentro una transazione PG
+     isolata e verificano il comportamento effettivo dei trigger. Skip
+     con reason chiaro se `DATABASE_URL` non e' configurato.
+
+Le assertion integration si fanno dentro una tx con SAVEPOINT: ogni
+test rollbacka le righe inserite, zero residuo nel DB condiviso.
+"""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import pytest
+
+
+pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
+
+
+# ---------------------------------------------------------------------------
+# MIGRATION PATH
+# ---------------------------------------------------------------------------
+
+MIGRATION_FILENAME = "2026-04-21_log_immutable_triggers.sql"
+
+
+def _migration_path() -> Path:
+    # __file__ = backend/tests2/security/unit/test_log_immutable_contract.py
+    # parents[3] = backend
+    return Path(__file__).resolve().parents[3] / "migrations" / MIGRATION_FILENAME
+
+
+@pytest.fixture(scope="module")
+def migration_sql() -> str:
+    path = _migration_path()
+    assert path.exists(), f"Migration attesa a {path}"
+    return path.read_text(encoding="utf-8")
+
+
+# ===========================================================================
+# A) STATIC CONTRACT (no PG)
+# ===========================================================================
+
+
+def test_migration_defines_block_function(migration_sql: str) -> None:
+    """Deve esistere la funzione trigger `plenora.block_log_modifications`."""
+    assert "CREATE OR REPLACE FUNCTION plenora.block_log_modifications()" in migration_sql
+
+
+def test_function_rejects_update_always(migration_sql: str) -> None:
+    """Il ramo TG_OP='UPDATE' deve sempre `RAISE EXCEPTION`, nessun bypass."""
+    # Normalizza whitespace per asserzione robusta su newline-spacing.
+    content = " ".join(migration_sql.split())
+    assert "IF TG_OP = 'UPDATE' THEN RAISE EXCEPTION" in content, (
+        "REGRESSIONE: il ramo UPDATE deve sollevare EXCEPTION senza "
+        "condizioni. La migration ha perso l'immutability assoluta."
+    )
+
+
+def test_function_allows_delete_only_with_bypass(migration_sql: str) -> None:
+    """Il bypass `plenora.retention_cleanup` deve essere l'UNICA via
+    d'uscita per il ramo DELETE. Il pattern atteso:
+        retention_flag := current_setting('plenora.retention_cleanup', true);
+        IF retention_flag = 'true' THEN RETURN OLD;
+    """
+    assert "current_setting('plenora.retention_cleanup'" in migration_sql, (
+        "REGRESSIONE: rimosso il check del bypass GUC, il DELETE verrebbe "
+        "sempre bloccato anche per i retention job autorizzati."
+    )
+    assert "retention_flag = 'true'" in migration_sql, (
+        "REGRESSIONE: rimosso il confronto con 'true', il bypass non "
+        "si attiva piu'."
+    )
+
+
+def test_migration_covers_logs_table(migration_sql: str) -> None:
+    """Entrambi i trigger (UPDATE + DELETE) su `plenora.logs`."""
+    assert "CREATE TRIGGER trg_logs_block_update" in migration_sql
+    assert "CREATE TRIGGER trg_logs_block_delete" in migration_sql
+    # Collegati alla tabella giusta e in BEFORE + FOR EACH ROW.
+    content = " ".join(migration_sql.split())
+    assert "BEFORE UPDATE ON plenora.logs FOR EACH ROW" in content
+    assert "BEFORE DELETE ON plenora.logs FOR EACH ROW" in content
+
+
+def test_migration_covers_audit_actions_table(migration_sql: str) -> None:
+    """Entrambi i trigger (UPDATE + DELETE) su `plenora.audit_actions`."""
+    assert "CREATE TRIGGER trg_audit_actions_block_update" in migration_sql
+    assert "CREATE TRIGGER trg_audit_actions_block_delete" in migration_sql
+    content = " ".join(migration_sql.split())
+    assert "BEFORE UPDATE ON plenora.audit_actions FOR EACH ROW" in content
+    assert "BEFORE DELETE ON plenora.audit_actions FOR EACH ROW" in content
+
+
+def test_migration_is_idempotent(migration_sql: str) -> None:
+    """Re-run safe: `CREATE OR REPLACE FUNCTION` + `DROP TRIGGER IF EXISTS`
+    per tutti i trigger. Senza questo la migration non e' replayable.
+    """
+    assert migration_sql.count("DROP TRIGGER IF EXISTS") >= 4, (
+        "Ogni trigger deve essere preceduto da DROP IF EXISTS per "
+        "mantenere idempotenza della migration"
+    )
+    assert "CREATE OR REPLACE FUNCTION" in migration_sql
+
+
+def test_migration_covers_only_declared_tables(migration_sql: str) -> None:
+    """Perimetro stretto: SOLO plenora.logs e plenora.audit_actions.
+    Se in futuro qualcuno aggiunge trigger su altre tabelle qui, il test
+    forza review esplicita (scope creep bloccato al commit).
+    """
+    import re
+    # \b davanti a ON per evitare falsi match su "FUNCTION plenora.xxx"
+    # (la stringa "TION plenora." termina con un substring "ON plenora.").
+    tables = re.findall(r"\bON\s+plenora\.(\w+)", migration_sql)
+    unique_tables = set(tables)
+    assert unique_tables == {"logs", "audit_actions"}, (
+        f"Perimetro migration cambiato: tabelle trovate = {unique_tables}. "
+        f"Atteso: {{'logs', 'audit_actions'}}. Se lo scope si allarga, "
+        f"aggiorna il test e documenta in invariants.md."
+    )
+
+
+# ===========================================================================
+# B) INTEGRATION CONTRACT (richiede PG)
+# ===========================================================================
+
+_DATABASE_URL = os.getenv("DATABASE_URL")
+_SKIP_NO_PG = pytest.mark.skipif(
+    not _DATABASE_URL,
+    reason="Richiede DATABASE_URL configurato con PG + migration applicata",
+)
+
+
+@pytest.fixture
+def pg_tx():
+    """Apre una connessione PG e consegna un cursor dentro una tx che
+    viene SEMPRE rollback-ata in teardown. Zero residuo nel DB.
+
+    Assumption: la migration `2026-04-21_log_immutable_triggers.sql`
+    e' gia' stata applicata (via migrations_runner al boot del backend
+    in ambiente di test / staging).
+    """
+    import psycopg2
+
+    conn = psycopg2.connect(_DATABASE_URL)
+    conn.autocommit = False
+    cur = conn.cursor()
+    try:
+        yield cur
+    finally:
+        cur.close()
+        conn.rollback()
+        conn.close()
+
+
+@_SKIP_NO_PG
+def test_update_on_audit_actions_is_blocked(pg_tx) -> None:
+    """UPDATE su audit_actions → RAISE EXCEPTION, tx abortita.
+
+    Usa SAVEPOINT cosi' l'errore non aborta la tx globale del fixture
+    (che deve restare viva per il rollback finale).
+    """
+    import psycopg2
+
+    pg_tx.execute(
+        "INSERT INTO plenora.audit_actions (action, status) "
+        "VALUES (%s, %s) RETURNING id",
+        ("test.immutable_update", 200),
+    )
+    row_id = pg_tx.fetchone()[0]
+
+    pg_tx.execute("SAVEPOINT sp_update_attempt")
+    with pytest.raises(psycopg2.Error) as excinfo:
+        pg_tx.execute(
+            "UPDATE plenora.audit_actions SET status = %s WHERE id = %s",
+            (500, row_id),
+        )
+    # Ripristina lo stato della tx al savepoint per continuare ad
+    # avere il cursor usabile per la pulizia.
+    pg_tx.execute("ROLLBACK TO SAVEPOINT sp_update_attempt")
+
+    assert "append-only" in str(excinfo.value).lower(), (
+        f"Messaggio errore atteso 'append-only', trovato: {excinfo.value}"
+    )
+
+
+@_SKIP_NO_PG
+def test_delete_on_audit_actions_without_bypass_is_blocked(pg_tx) -> None:
+    """DELETE senza `SET LOCAL plenora.retention_cleanup` → blocked."""
+    import psycopg2
+
+    pg_tx.execute(
+        "INSERT INTO plenora.audit_actions (action, status) "
+        "VALUES (%s, %s) RETURNING id",
+        ("test.immutable_delete", 200),
+    )
+    row_id = pg_tx.fetchone()[0]
+
+    pg_tx.execute("SAVEPOINT sp_delete_attempt")
+    with pytest.raises(psycopg2.Error) as excinfo:
+        pg_tx.execute(
+            "DELETE FROM plenora.audit_actions WHERE id = %s",
+            (row_id,),
+        )
+    pg_tx.execute("ROLLBACK TO SAVEPOINT sp_delete_attempt")
+
+    assert "retention_cleanup" in str(excinfo.value), (
+        f"Messaggio errore dovrebbe citare il bypass 'retention_cleanup': "
+        f"{excinfo.value}"
+    )
+
+
+@_SKIP_NO_PG
+def test_delete_on_audit_actions_with_bypass_succeeds(pg_tx) -> None:
+    """DELETE con `SET LOCAL plenora.retention_cleanup = 'true'` → passa.
+
+    Simula il comportamento di un job di retention autorizzato.
+    """
+    pg_tx.execute(
+        "INSERT INTO plenora.audit_actions (action, status) "
+        "VALUES (%s, %s) RETURNING id",
+        ("test.retention_bypass", 200),
+    )
+    row_id = pg_tx.fetchone()[0]
+
+    # Il SET LOCAL dichiara il bypass, scopato alla transazione corrente.
+    pg_tx.execute("SET LOCAL plenora.retention_cleanup = 'true'")
+    pg_tx.execute("DELETE FROM plenora.audit_actions WHERE id = %s", (row_id,))
+
+    assert pg_tx.rowcount == 1, (
+        "REGRESSIONE: il bypass retention_cleanup non consente il DELETE. "
+        "Il retention job legittimo e' bloccato dal trigger."
+    )
+
+
+@_SKIP_NO_PG
+def test_update_with_retention_bypass_still_blocked(pg_tx) -> None:
+    """Il bypass riguarda SOLO DELETE. L'immutabilita' su UPDATE e'
+    totale: anche un retention job non puo' modificare una riga
+    storicizzata (deve inserire una nuova riga di rettifica).
+    """
+    import psycopg2
+
+    pg_tx.execute(
+        "INSERT INTO plenora.audit_actions (action, status) "
+        "VALUES (%s, %s) RETURNING id",
+        ("test.bypass_no_update", 200),
+    )
+    row_id = pg_tx.fetchone()[0]
+
+    pg_tx.execute("SET LOCAL plenora.retention_cleanup = 'true'")
+
+    pg_tx.execute("SAVEPOINT sp_update_even_with_bypass")
+    with pytest.raises(psycopg2.Error) as excinfo:
+        pg_tx.execute(
+            "UPDATE plenora.audit_actions SET status = %s WHERE id = %s",
+            (403, row_id),
+        )
+    pg_tx.execute("ROLLBACK TO SAVEPOINT sp_update_even_with_bypass")
+
+    assert "append-only" in str(excinfo.value).lower(), (
+        "REGRESSIONE: il bypass retention ha reso mutabile la tabella "
+        "su UPDATE. L'immutabilita' su UPDATE deve essere assoluta."
+    )
+
+
+@_SKIP_NO_PG
+def test_update_on_logs_is_blocked(pg_tx) -> None:
+    """Stesso contratto anche su plenora.logs: UPDATE sempre vietato."""
+    import psycopg2
+
+    # plenora.logs ha colonne level/message/category/user_id/etc, inserisco
+    # un set minimo valido. Se lo schema di logs dovesse cambiare e
+    # richiedere piu' colonne NOT NULL, questo test fallirebbe sulla INSERT
+    # segnalando il drift di schema (desiderabile).
+    pg_tx.execute(
+        "INSERT INTO plenora.logs (level, message) VALUES (%s, %s) RETURNING id",
+        ("INFO", "test.logs_immutable"),
+    )
+    row_id = pg_tx.fetchone()[0]
+
+    pg_tx.execute("SAVEPOINT sp_logs_update")
+    with pytest.raises(psycopg2.Error) as excinfo:
+        pg_tx.execute(
+            "UPDATE plenora.logs SET message = %s WHERE id = %s",
+            ("tampered", row_id),
+        )
+    pg_tx.execute("ROLLBACK TO SAVEPOINT sp_logs_update")
+
+    assert "append-only" in str(excinfo.value).lower()
