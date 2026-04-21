@@ -1784,7 +1784,7 @@ END;"""))
                             raise ValueError(
                                 f"La colonna '{mc}' non ha un indice UNIQUE sulla tabella "
                                 f"'{schema}.{table}' e la creazione automatica è fallita: {idx_err}"
-                            )
+                            ) from idx_err
         sql_template, param_names = self.ddl.generate_upsert(
             self.config.schema_name,
             self.config.table_name,
