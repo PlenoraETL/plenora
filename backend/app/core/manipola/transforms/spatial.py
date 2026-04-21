@@ -1287,21 +1287,24 @@ def op_geo_voronoi(
         # Estrai i poligoni individuali
         voronoi_polygons = list(voronoi_geom.geoms)
 
-        # Associa ogni poligono di Voronoi al punto originale più vicino
-        from shapely.geometry import Point
-        result_rows = []
-        for idx, row in gdf.iterrows():
-            pt = row.geometry
-            # Trova il poligono di Voronoi che contiene il punto
-            matched_poly = None
-            for poly in voronoi_polygons:
-                if poly.contains(pt) or poly.touches(pt):
-                    matched_poly = poly
-                    break
-            # Fallback: prendi il poligono più vicino
-            if matched_poly is None:
-                distances = [poly.distance(pt) for poly in voronoi_polygons]
-                matched_poly = voronoi_polygons[distances.index(min(distances))]
+        # Associa ogni punto alla cella Voronoi che lo contiene via STRtree
+        # (O(log n) per query vs O(n) lineare). Il legacy usava first-match
+        # per contains|touches nell'ordine della lista; qui usiamo
+        # `predicate="intersects"` (superset di contains+touches) e
+        # prendiamo l'indice minimo fra i candidati per preservare l'ordine.
+        from shapely.strtree import STRtree
+        tree = STRtree(voronoi_polygons)
+        pts = gdf.geometry.to_numpy()
+        result_rows: List = []
+        for pt in pts:
+            candidates = tree.query(pt, predicate="intersects")
+            if len(candidates) > 0:
+                matched_poly = voronoi_polygons[int(candidates.min())]
+            else:
+                # Fallback: poligono piu' vicino (caso degenere; con
+                # voronoi_diagram shapely questo non dovrebbe mai servire)
+                nearest_idx = tree.nearest(pt)
+                matched_poly = voronoi_polygons[int(nearest_idx)]
             result_rows.append(matched_poly)
 
         result = gdf.copy()
@@ -1572,20 +1575,44 @@ def op_geo_clean_topology(
             )
 
         # Step 3: rimuovi sovrapposizioni
+        # Legacy: per ogni i, ricostruisce `unary_union(geometries[:i])`
+        # da zero — O(n^2). Qui teniamo un accumulator incrementale:
+        # al passo i, `accumulated` e' gia' l'unione dei geometries[0..i-1]
+        # processati. Complessita' effettiva ~O(n) union pairwise.
+        # Nota FP: pair-union vs cascading-union possono differire a
+        # livello di coordinate; i test perf_correctness usano tolerance
+        # topologica (equals → equals_exact → area-relative 1e-6).
         if remove_overlaps and len(result) > 1:
             from shapely.ops import unary_union
             geom_col_name = result.geometry.name
             geometries = list(result.geometry)
-            # Itera in ordine: i poligoni precedenti hanno priorità
+
+            accumulated = None  # lazy: union di tutti i geometries[0..i-1] validi
             for i in range(1, len(geometries)):
-                if geometries[i] is None or geometries[i].is_empty:
+                g = geometries[i]
+                if g is None or g.is_empty:
                     continue
-                # Unione di tutti i poligoni precedenti
-                preceding = unary_union([g for g in geometries[:i] if g is not None and not g.is_empty])
-                diff = geometries[i].difference(preceding)
+                if accumulated is None:
+                    # Primo passo con geometries[i] valido: lazy-init da [0..i-1]
+                    preceding_list = [
+                        ga for ga in geometries[:i]
+                        if ga is not None and not ga.is_empty
+                    ]
+                    if preceding_list:
+                        accumulated = unary_union(preceding_list)
+                    else:
+                        # Nessun preceding non-empty: legacy avrebbe fatto
+                        # diff = g.difference(empty_collection) = g,
+                        # non-empty → fixed_count++ e geometries[i] = g.
+                        geometries[i] = g
+                        fixed_count += 1
+                        accumulated = g
+                        continue
+                diff = g.difference(accumulated)
                 if not diff.is_empty:
                     geometries[i] = diff
                     fixed_count += 1
+                    accumulated = accumulated.union(diff)
             result[geom_col_name] = geometries
 
         # Rimuovi geometrie vuote
