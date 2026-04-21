@@ -200,6 +200,16 @@ def disable(user_id: str, code: str) -> bool:
     return True
 
 
+def _iso(value) -> Optional[str]:
+    # psycopg2 puo' restituire colonne timestamp come datetime o come str a
+    # seconda del cursor/adapter; normalizziamo a ISO string (o None).
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    return value.isoformat()
+
+
 def status(user_id: str) -> dict:
     """Snapshot dello stato MFA per l'utente.
 
@@ -209,10 +219,8 @@ def status(user_id: str) -> dict:
     row = _row_for(user_id)
     if not row:
         return {"enabled": False, "enrolled_at": None, "last_verified_at": None}
-    enrolled_at = row.get("enrolled_at")
-    last_verified_at = row.get("last_verified_at")
     return {
         "enabled": bool(row.get("enabled")),
-        "enrolled_at": enrolled_at.isoformat() if enrolled_at else None,
-        "last_verified_at": last_verified_at.isoformat() if last_verified_at else None,
+        "enrolled_at": _iso(row.get("enrolled_at")),
+        "last_verified_at": _iso(row.get("last_verified_at")),
     }
