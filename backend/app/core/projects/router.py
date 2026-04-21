@@ -22,6 +22,7 @@ from pydantic import BaseModel
 from typing import Any, List, Optional
 
 from app.utils.logger import get_logger
+from app.shared.audit_action import audit_action
 from app.shared.models import CanvasState, Node, Edge
 from app.shared.exceptions import ProjectHasDependenciesError, CanvasCorruptedError
 from app.core.auth.auth import (
@@ -64,6 +65,7 @@ def init_projects(project_service):
 # ==================== CRUD PROGETTI ====================
 
 @router.post("")
+@audit_action(action="project.create")
 def create_project(data: ProjectCreateWithCanvas, current_user: CurrentUser = Depends(require_user_or_above)):
     """Crea nuovo progetto. Se canvas è presente lo salva direttamente. Viewer non può creare."""
     metadata = _project_service.create_project(
@@ -183,6 +185,7 @@ def get_project(project_id: str, current_user: CurrentUser = Depends(require_not
 
 
 @router.delete("/{project_id}")
+@audit_action(action="project.delete", target_param="project_id")
 def delete_project(project_id: str, current_user: CurrentUser = Depends(require_project_owner)):
     """Elimina un progetto. Solo owner o admin/superadmin.
 
@@ -221,6 +224,7 @@ class CanvasWithPlugins(BaseModel):
 
 
 @router.put("/{project_id}/canvas")
+@audit_action(action="project.update_canvas", target_param="project_id")
 def update_project_canvas(
     project_id: str,
     body: CanvasWithPlugins,
@@ -455,6 +459,7 @@ def validate_all_connections(project_id: str, current_user: CurrentUser = Depend
 # ==================== ADMIN: ORPHAN CLEANUP ====================
 
 @router.post("/admin/cleanup-orphans")
+@audit_action(action="admin.cleanup_orphans")
 def admin_cleanup_orphans(
     dry_run: bool = True,
     current_user: CurrentUser = Depends(require_superadmin),

@@ -39,6 +39,7 @@ from pydantic import BaseModel
 import app.config  # noqa: F401
 import app.db.db_service as db
 import app.db.config_db_service as cfg_db
+from app.shared.audit_action import audit_action
 from app.utils.logger import get_logger
 
 
@@ -613,6 +614,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 # --- Login ---
 
 @router.post("/login", response_model=TokenResponse)
+@audit_action(action="auth.login")
 def login(data: LoginRequest, request: Request):
     """Login con username/password → JWT token."""
     from app.shared.request_utils import get_client_ip
@@ -649,6 +651,7 @@ def login(data: LoginRequest, request: Request):
 # --- Logout (revoca token via blacklist Redis) ---
 
 @router.post("/logout")
+@audit_action(action="auth.logout")
 def logout(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer_scheme),
 ):
@@ -712,6 +715,7 @@ def get_me(current_user: CurrentUser = Depends(get_current_user)):
 
 
 @router.post("/change-password")
+@audit_action(action="auth.change_password")
 def change_password(
     data: ChangePasswordRequest,
     current_user: CurrentUser = Depends(get_current_user),
@@ -753,6 +757,7 @@ def list_users(current_user: CurrentUser = Depends(require_admin)):
     return [UserResponse(**{k: u[k] for k in UserResponse.model_fields if k in u}) for u in users]
 
 @router.post("/users", response_model=UserResponse, status_code=201)
+@audit_action(action="user.create")
 def create_user(data: UserCreate, current_user: CurrentUser = Depends(require_admin)):
     """
     Crea nuovo utente.
@@ -790,6 +795,7 @@ def create_user(data: UserCreate, current_user: CurrentUser = Depends(require_ad
     return UserResponse(**{k: user[k] for k in UserResponse.model_fields if k in user})
 
 @router.put("/users/{user_id}", response_model=UserResponse)
+@audit_action(action="user.update", target_param="user_id")
 def update_user(user_id: str, data: dict,
                 current_user: CurrentUser = Depends(require_admin)):
     """
@@ -874,6 +880,7 @@ def update_user(user_id: str, data: dict,
     return UserResponse(**{k: updated[k] for k in UserResponse.model_fields if k in updated})
 
 @router.post("/users/{user_id}/reset-password")
+@audit_action(action="user.reset_password", target_param="user_id")
 def reset_password(user_id: str, data: ResetPasswordRequest,
                    current_user: CurrentUser = Depends(require_admin)):
     """
@@ -903,6 +910,7 @@ def reset_password(user_id: str, data: ResetPasswordRequest,
     return {"ok": True}
 
 @router.delete("/users/{user_id}", status_code=204)
+@audit_action(action="user.delete", target_param="user_id")
 def delete_user(user_id: str, current_user: CurrentUser = Depends(require_admin)):
     """
     Elimina utente.
@@ -949,6 +957,7 @@ def list_groups(current_user: CurrentUser = Depends(require_admin)):
             for g in groups if g]
 
 @groups_router.post("", response_model=GroupResponse, status_code=201)
+@audit_action(action="group.create")
 def create_group(data: GroupCreate,
                  current_user: CurrentUser = Depends(require_superadmin)):
     """Crea nuovo gruppo (solo superadmin)."""
@@ -971,6 +980,7 @@ def get_group_summary(group_id: str,
 
 
 @groups_router.delete("/{group_id}", status_code=200)
+@audit_action(action="group.delete", target_param="group_id")
 def delete_group(group_id: str,
                  current_user: CurrentUser = Depends(require_superadmin)):
     """

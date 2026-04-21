@@ -84,6 +84,7 @@ def _assert_path_within(child: Path, parent: Path, label: str = "Percorso") -> P
 from app.services.file_service import file_source_service
 from app.config import settings
 from app.utils.logger import get_logger
+from app.shared.audit_action import audit_action
 from app.core.auth.auth import (
     get_current_user,
     require_not_esecutore,
@@ -189,6 +190,7 @@ def preview_file_temp(
 
 
 @router.post("/upload", response_model=FileSource)
+@audit_action(action="file.upload")
 def upload_file(
     file: UploadFile = File(...),
     name: str = Form(...),
@@ -339,6 +341,7 @@ def upload_file(
 
 
 @router.post("/upload-multi-layer", response_model=List[FileSource])
+@audit_action(action="file.upload_multi_layer")
 def upload_multi_layer(
     file: UploadFile = File(...),
     name: str = Form(...),
@@ -477,6 +480,7 @@ def get_file(file_id: str, current_user: CurrentUser = Depends(require_not_esecu
 
 
 @router.delete("/{file_id}")
+@audit_action(action="file.delete", target_param="file_id")
 def delete_file(file_id: str, current_user: CurrentUser = Depends(require_file_owner)):
     """Elimina un file source e tutti i suoi file. Solo owner o admin."""
     success = file_source_service.delete_file_source(file_id)

@@ -22,6 +22,7 @@ from fastapi.responses import Response
 from typing import Optional, List, Dict
 
 from app.utils.logger import get_logger
+from app.shared.audit_action import audit_action
 from app.core.auth.auth import (
     get_current_user,
     require_not_esecutore,
@@ -87,6 +88,7 @@ def _ds_error_to_http(e: DataSourceError) -> HTTPException:
 # =============================================================================
 
 @router.post("", response_model=DataSource, status_code=201)
+@audit_action(action="datasource.create")
 def create_datasource(data: DataSourceCreate, current_user: CurrentUser = Depends(require_admin)):
     """Crea un nuovo Data Source. Solo admin/superadmin."""
     try:
@@ -139,6 +141,7 @@ def get_datasource(ds_id: str, current_user: CurrentUser = Depends(require_not_e
 
 
 @router.put("/{ds_id}", response_model=DataSource)
+@audit_action(action="datasource.update", target_param="ds_id")
 def update_datasource(ds_id: str, data: DataSourceUpdate, current_user: CurrentUser = Depends(require_admin)):
     """Aggiorna un Data Source esistente. Solo admin/superadmin del gruppo, e
     solo se non creato da un superadmin (hierarchical ownership)."""
@@ -151,6 +154,7 @@ def update_datasource(ds_id: str, data: DataSourceUpdate, current_user: CurrentU
 
 
 @router.delete("/{ds_id}", status_code=204)
+@audit_action(action="datasource.delete", target_param="ds_id")
 def delete_datasource(ds_id: str, current_user: CurrentUser = Depends(require_admin)):
     """Elimina un Data Source e tutti i suoi dati. Solo admin/superadmin del gruppo,
     e solo se non creato da un superadmin (hierarchical ownership).
@@ -219,6 +223,7 @@ def _find_projects_using_datasource(ds_id: str) -> List[Dict[str, str]]:
 
 
 @router.post("/{ds_id}/test", response_model=DataSourceTestResult)
+@audit_action(action="datasource.test", target_param="ds_id")
 def test_connection(ds_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
     """Testa la connessione di un Data Source. Read-only su risorsa visibile."""
     existing = _svc().get_datasource(ds_id)
@@ -288,6 +293,7 @@ def download_file(
 
 
 @router.post("/{ds_id}/files/upload", status_code=201)
+@audit_action(action="datasource.file_upload", target_param="ds_id")
 def upload_file(
     ds_id: str,
     path: str = Query(..., description="Percorso destinazione relativo alla root"),

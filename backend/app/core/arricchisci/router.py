@@ -31,6 +31,7 @@ from typing import Dict, Any, List, Optional
 from app.config import settings
 from app.utils.logger import get_logger
 from app.utils.router_utils import require_service
+from app.shared.audit_action import audit_action
 from app.shared.path_policy import assert_path_within
 from app.core.artifacts import (
     LatestProjectArtifactRef,
@@ -475,6 +476,7 @@ def get_api_connection(api_id: str, current_user: CurrentUser = Depends(require_
 
 
 @api_connections_router.post("/api-connections")
+@audit_action(action="api_connection.create")
 def create_api_connection(data: dict, current_user: CurrentUser = Depends(require_admin)):
     """Crea una nuova API connection. Solo admin/superadmin.
 
@@ -501,6 +503,7 @@ def create_api_connection(data: dict, current_user: CurrentUser = Depends(requir
 
 
 @api_connections_router.put("/api-connections/{api_id}")
+@audit_action(action="api_connection.update", target_param="api_id")
 def update_api_connection(api_id: str, data: dict, current_user: CurrentUser = Depends(require_admin)):
     """Aggiorna una API connection esistente. Solo admin/superadmin.
 
@@ -537,6 +540,7 @@ def update_api_connection(api_id: str, data: dict, current_user: CurrentUser = D
 
 
 @api_connections_router.delete("/api-connections/{api_id}")
+@audit_action(action="api_connection.delete", target_param="api_id")
 def delete_api_connection(api_id: str, current_user: CurrentUser = Depends(require_admin)):
     """Elimina una API connection, con check se è in uso in qualche canvas. Solo admin/superadmin."""
     # Ownership check PRIMA di qualunque altra cosa: 404/403 se non sei
@@ -639,6 +643,7 @@ def test_api_config(
 
 
 @api_connections_router.post("/api-connections/{api_id}/test")
+@audit_action(action="api_connection.test", target_param="api_id")
 def test_api_connection(
     api_id: str,
     body: dict = None,
@@ -710,6 +715,7 @@ class EnrichAsyncRequest(BaseModel):
 
 
 @enrich_router.post("/{project_id}/enrich-async")
+@audit_action(action="enrich.execute_async", target_param="project_id")
 def execute_enrichment_async(
     project_id: str,
     request: EnrichAsyncRequest = None,

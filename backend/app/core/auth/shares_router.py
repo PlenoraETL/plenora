@@ -25,6 +25,7 @@ from app.core.auth.auth import (
     require_superadmin,
     CurrentUser,
 )
+from app.shared.audit_action import audit_action
 from app.shared.sharing import (
     _SHAREABLE,
     list_resource_shares,
@@ -117,6 +118,7 @@ def get_shares(
 
 
 @router.put("/{resource_type}/{resource_id}", response_model=SharesResponse)
+@audit_action(action="share.set", target_param="resource_id")
 def set_shares(
     resource_type: str,
     resource_id: str,
@@ -138,6 +140,7 @@ def set_shares(
 
 
 @router.post("/{resource_type}/{resource_id}/{group_id}", response_model=SharesResponse)
+@audit_action(action="share.add", target_param="resource_id")
 def add_share(
     resource_type: str,
     resource_id: str,
@@ -158,6 +161,7 @@ def add_share(
 
 
 @router.delete("/{resource_type}/{resource_id}/{group_id}", response_model=SharesResponse)
+@audit_action(action="share.remove", target_param="resource_id")
 def remove_share(
     resource_type: str,
     resource_id: str,
