@@ -31,10 +31,141 @@ Riferimenti
 
 from __future__ import annotations
 
-from datetime import datetime
+import gzip
+import json
+from datetime import datetime, timezone
 from typing import Callable, Literal, TypedDict
 
 from app.shared.cloud_backends import ObjectStorage
+
+
+# ---------------------------------------------------------------------------
+# Canonical NDJSON shapes (O-ARC §5.1)
+# ---------------------------------------------------------------------------
+# Ordine vincolante: garantisce output deterministico byte-level in
+# combinazione con gzip(mtime=0). Un'eventuale aggiunta di colonna al
+# DB (migration futura) richiede aggiornamento coordinato qui + ADR.
+
+_LOGS_FIELDS: tuple[str, ...] = (
+    "id", "ts", "level", "module", "op", "msg",
+    "project_id", "group_id", "run_id", "node_id",
+    "details", "error",
+)
+
+_AUDIT_FIELDS: tuple[str, ...] = (
+    "id", "timestamp", "user_id", "action", "target",
+    "status", "ip_address", "error_message", "metadata",
+)
+
+_FIELDS_BY_TABLE: dict[str, tuple[str, ...]] = {
+    "logs": _LOGS_FIELDS,
+    "audit_actions": _AUDIT_FIELDS,
+}
+
+_TS_COLUMN_BY_TABLE: dict[str, str] = {
+    "logs": "ts",
+    "audit_actions": "timestamp",
+}
+
+
+# ---------------------------------------------------------------------------
+# Helpers (private) — serializzazione NDJSON gzip
+# ---------------------------------------------------------------------------
+
+
+def _table_ts_column(table: str) -> str:
+    """Ritorna il nome della colonna temporale per `table`.
+
+    `logs -> "ts"`, `audit_actions -> "timestamp"` (O-ARC assunzione #4).
+    Solleva `ValueError` per tabelle sconosciute: il `Literal[...]` sulla
+    firma pubblica limita il typing-time, questo check chiude il runtime.
+    """
+    try:
+        return _TS_COLUMN_BY_TABLE[table]
+    except KeyError as exc:
+        raise ValueError(
+            f"unknown log archive table {table!r}; expected one of "
+            f"{sorted(_TS_COLUMN_BY_TABLE)}"
+        ) from exc
+
+
+def _normalize_datetime(value: datetime) -> str:
+    """Normalizza un datetime tz-aware in ISO 8601 UTC con suffisso `Z`.
+
+    - Input naive (`tzinfo is None`) -> `ValueError` (ADR-0014 §5).
+    - Input non-UTC -> convertito in UTC.
+    - Microsecondi preservati se presenti.
+    """
+    if not isinstance(value, datetime):
+        raise TypeError(
+            f"_normalize_datetime expected datetime, got {type(value).__name__}"
+        )
+    if value.tzinfo is None:
+        raise ValueError(
+            f"naive datetime is not allowed in log archive rows: {value!r}"
+        )
+    utc_value = value.astimezone(timezone.utc)
+    # isoformat() su un datetime UTC produce "...+00:00"; il contratto
+    # O-ARC §5.1 prescrive il suffisso `Z`.
+    return utc_value.isoformat().replace("+00:00", "Z")
+
+
+def _json_default(obj: object) -> str:
+    """Encoder di fallback per `json.dumps`.
+
+    Gestisce i `datetime` (incluso il rifiuto fail-fast dei naive) e
+    propaga `TypeError` per ogni altro tipo non JSON-serializable. Non
+    distingue tra la colonna ts/timestamp e campi datetime eventualmente
+    annidati in `details`/`metadata`: naive = bug upstream in ogni caso.
+    """
+    if isinstance(obj, datetime):
+        return _normalize_datetime(obj)
+    raise TypeError(
+        f"log archive row contains non-serializable value "
+        f"of type {type(obj).__name__}"
+    )
+
+
+def _serialize_rows(rows: list[dict], table: str) -> bytes:
+    """Serializza un batch di righe in NDJSON UTF-8 compresso gzip.
+
+    Shape (O-ARC §5.1): una riga NDJSON per riga DB, keyset canonico per
+    `table`, campi extra dell'input vengono droppati, campi canonici
+    assenti vengono emessi come `null`. JSON compatto senza spazi.
+
+    Invarianti:
+    - `gzip.compresslevel=6` (O-ARC §5.1 "livello default (6)").
+    - `gzip.mtime=0` (byte-level determinism per re-run idempotency,
+      O-ARC §4.4 "stessi byte").
+    - `separators=(",", ":")` (no whitespace).
+    - Trailing newline dopo l'ultima riga NDJSON.
+
+    Solleva `ValueError` se `table` non e' riconosciuta o se una riga
+    contiene datetime naive. Propaga `TypeError` per valori non
+    JSON-serializable (via `_json_default`).
+    """
+    _table_ts_column(table)  # validazione runtime di `table`
+    fields = _FIELDS_BY_TABLE[table]
+
+    lines: list[str] = []
+    for row in rows:
+        canonical = {field: row.get(field) for field in fields}
+        lines.append(
+            json.dumps(
+                canonical,
+                separators=(",", ":"),
+                ensure_ascii=False,
+                default=_json_default,
+            )
+        )
+
+    payload = ("\n".join(lines) + "\n").encode("utf-8") if lines else b""
+    return gzip.compress(payload, compresslevel=6, mtime=0)
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
 
 
 class ArchiveResult(TypedDict):
