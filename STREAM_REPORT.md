@@ -1,7 +1,7 @@
 # STREAM TESTS — Report Fase 1 Stabilization
 
 **Status**: in_progress
-**Last updated**: 2026-04-21 (kickoff)
+**Last updated**: 2026-04-21 (Batch 1 Crypto done)
 
 ## Scope
 
@@ -64,12 +64,15 @@ Invariants blindati: §2 riga `enrichment_service:408-410` async safety-net + §
 - Datasources: 0 (batch 2)
 - Scheduler: 0 (batch 3)
 - Enrichment: 0 (batch 4)
-- Crypto: 0 (batch 1 in progress)
-- **TOTALE**: 0
+- Crypto: **13** (2 file, batch 1 ✅)
+  - `tests2/crypto/test_crypto_fernet_contract.py` — 5 test: roundtrip, tamper detection (MAC fail → None + log error), wrong key → None, allowlist plaintext (non-string / assenti / fuori lista), nonce uniqueness (IV random)
+  - `tests2/crypto/test_crypto_key_sourcing_contract.py` — 8 test: chain priority PLENORA > URBY > CONN (3 test), **D5 regression** (no fallback su SECRET_KEY/JWT_SECRET_KEY, chiuso 2026-04-20), prod fail-fast no-key, prod fail-fast dev-default-leak, min-length < 16 char in any env, PLENORA_DISABLE_DEFAULT_KEY opt-in dev
+- **TOTALE**: **13 / ~38**
 
 ## Bug / anomalie source trovati durante studio (NON fissati)
 
-- `backend/tests2/pytest.ini:7` — `pythonpath = C:\Users\Marco\Desktop\int_efm\PLENORA-ETL\backend` punta a worktree inesistente (`PLENORA-ETL/` non presente). Il `conftest.py:8-15` corregge runtime via `_ensure_backend_on_path()`, quindi i test girano. È un bug documentale, severity: **trascurabile**. Non toccato (potrebbe essere intenzionale cross-worktree). Integration manager decide.
+- `backend/tests2/pytest.ini:7` — `pythonpath = C:\Users\Marco\Desktop\int_efm\PLENORA-ETL\backend` punta a worktree inesistente (`PLENORA-ETL/` non presente). Il `conftest.py:8-15` corregge runtime via `_ensure_backend_on_path()`, quindi i test girano. Bug documentale, severity: **trascurabile**. Non toccato (potrebbe essere intenzionale cross-worktree). Integration manager decide.
+- `backend/tests2/security/unit/test_datasource_crypto_contract.py` — **collection error** in esecuzione isolata perché importa indirettamente `app.db.pg_connection` che esige `DATABASE_URL` al top-level (`pg_connection.py:113`). Il test NON è mio perimetro (precedente), ma la dipendenza hard `DATABASE_URL` at import-time rende difficile girare test unit-crypto isolati su un environment senza PG. Severity: **bassa** (i test girano in CI con env var settate). Annoto per integration manager: eventuale lazy-init di `pg_connection` renderebbe testabile off-grid.
 
 ## Deps nuove richieste (via requirements-dev.txt)
 
@@ -80,8 +83,8 @@ Nessuna al momento. Verifica al primo test che lo richieda:
 
 ## Metriche
 
-- Test esistenti tutti verdi: **baseline verificata solo su `test_shared_crypto_contract.py`** (4/4 pass). Suite completa da rigirare a fine batch.
-- Test nuovi tutti verdi: —
+- Test esistenti tutti verdi: **baseline verificata su `test_shared_crypto_contract.py`** (4/4 pass), legacy crypto esistente non toccato.
+- Test nuovi tutti verdi: **13/13 pass** (`pytest tests2/crypto/ -q` → 13 passed in 0.57s).
 - Coverage: — (a fine stream)
 
 ## Collisioni cross-stream
