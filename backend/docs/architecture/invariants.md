@@ -2,9 +2,9 @@
 
 **Riferimento vincolante**: code charter del progetto (regole base 1/4/5/6/7/8/9, review 1–7, arch 1/2/3/4/5). Questo documento e' il ponte tra il charter astratto e il codice concreto post-Fase 0.
 
-**Stato**: pubblicato al termine di Fase 0 consolidation e aggiornato dopo il re-pass finale. Phase B + ultimo pass closed: S1, S2, S3, S4, S5, S9, S10, S11, S12, S15, S16, S19, S20 applicati; D1 (`ENABLE_ASYNC_ENRICHMENT`) parity sync/async sanata + kill-switch mantenuto; D2 (`_read_csv_*`) unificato su `app.utils.dataframe._read_csv_safe`; S13 chiuso come inventory error. Residui veri classificati in §6 (Phase 1 / product-env / governance).
+**Stato**: pubblicato al termine di Fase 0 consolidation e aggiornato al termine di Fase 1 stabilization. Phase B + re-pass chiusi: S1-S5, S9-S13, S15-S16, S19-S20 applicati; D1 (`ENABLE_ASYNC_ENRICHMENT`) parity sync/async sanata + kill-switch mantenuto; D2 (`_read_csv_*`) unificato. Phase 1 chiusi: S17, S18, S23, S25, S26, S27 (commit atomici), S28 (triage conformita' 2026-04-20); D5 (SECRET_KEY/JWT_SECRET_KEY fallback) rimosso; Architecture A1 storage policy validate + dispatch simmetrici (commit `2a80970`+`1176c32`+`c5578db`). Residui veri classificati in §6.
 
-**Aggiornato**: 2026-04-20 (post re-pass)
+**Aggiornato**: 2026-04-21 (post Phase 1 stabilization)
 
 **Ambito**: le invarianti qui elencate valgono per il codice `backend/app/` e vincolano ogni nuovo commit da Fase 1 in poi. Le scelte di prodotto o di performance restano fuori scope.
 
@@ -73,6 +73,16 @@ Principio generale: **fail-fast su dato critico (charter base 8)**, **best-effor
 
 **Vincolo**: una PR che cambia policy errore di un modulo deve dichiararlo e argomentare perche'. Sposare "silent" non e' mai ammesso.
 
+### 1.7 Storage dispatch (result / file)
+
+- **Principio**: ogni scrittura/lettura di artefatti di risultato e file sorgente passa per un dispatch policy-aware. La policy e' `STORAGE_POLICY` con valori `db | object_storage | hybrid`, caricata via `app/config/storage_config.py` e validata fail-fast all'avvio da `validate_storage_config()` (ADR A1, commit `2a80970`).
+- **Entry point canonici**:
+  - `app/core/*/result_store.py` — dispatch risultati per modulo (result_store policy-aware, commit `1176c32`)
+  - `app/services/file_service.py` — dispatch file sorgente (pattern FS-4 simmetrico, commit `c5578db`)
+- **Provider disponibili**: DB locale (Postgres) + AWS S3. MinIO come provider P1 designato (implementazione in Phase 2). Azure/GCP fuori scope (A1 §8).
+- **Vincolo**: nessun accesso diretto a bucket S3 / filesystem / DB bytea fuori da questi entry point. Se un modulo legge/scrive artefatti bypassando il dispatch, e' una violazione della policy e va corretta, non normalizzata via fallback locale.
+- **Config-not-flag**: STORAGE_POLICY non e' un toggle (niente `on`/`off`) ma un enum di deployment. E' registrato in §3 Config-not-flag per trasparenza.
+
 ---
 
 ## 2. Fallback autorizzati
@@ -119,16 +129,18 @@ La chain di 3 nomi per la chiave Fernet e' deliberata ma in uscita.
 | Env var | Tipo | Stato |
 |---------|------|-------|
 | `PLENORA_ENCRYPTION_KEY` | Canonico | Attivo, preferito in tutti i nuovi deploy |
-| `URBY_ENCRYPTION_KEY` | Alias retro-compat | In uscita, D4 migration-required (rename `.env` prod prima della rimozione codice) |
-| `CONN_ENCRYPT_KEY` | Alias legacy pre-migrazione | In uscita, D4 migration-required (verifica SSH `.env` prod prima della rimozione codice) |
+| `URBY_ENCRYPTION_KEY` | Alias retro-compat | In uscita, D4 parziale in Phase 1 — **bucket operation** post-Phase 1: richiede verifica `.env` su `lab.plenora.it` via SSH prima della rimozione codice |
+| `CONN_ENCRYPT_KEY` | Alias legacy pre-migrazione | In uscita, D4 parziale in Phase 1 — **bucket operation** post-Phase 1: richiede verifica SSH `.env` prod prima della rimozione codice |
+| `URBY_DISABLE_DEFAULT_KEY` | Alias ridondante | **Rimosso** 2026-04-21 (commit `3924bfb`) — la funzionalita' e' gia' in `PLENORA_DISABLE_DEFAULT_KEY` |
 
-Il fallback su `SECRET_KEY` / `JWT_SECRET_KEY` (D5) e' stato **rimosso** il 2026-04-20: quei nomi appartengono al dominio auth JWT e condividerli con crypto-at-rest rendeva la rotazione `JWT_SECRET_KEY` un'operazione silently distruttiva sui record cifrati. Review futuri che vedessero tentativi di re-introdurre quel fallback devono essere respinti: un secret, un consumatore, un nome canonico.
+Il fallback su `SECRET_KEY` / `JWT_SECRET_KEY` (D5) e' stato **rimosso** il 2026-04-20 (commit `9fc330a` + doc `81ac385`): quei nomi appartengono al dominio auth JWT e condividerli con crypto-at-rest rendeva la rotazione `JWT_SECRET_KEY` un'operazione silently distruttiva sui record cifrati. Review futuri che vedessero tentativi di re-introdurre quel fallback devono essere respinti: un secret, un consumatore, un nome canonico.
 
 ### Config-not-flag (registrati per trasparenza, non soggetti a §3)
 
 - `ENRICHMENT_POOL_SIZE` (tuning numerico enrichment async)
 - `FILE_SOURCE_S3_THRESHOLD_BYTES`, `TEMP_ORPHAN_CLEANUP_HOURS` (operational knobs)
 - `CLOUD_PROVIDER` (provider enum architetturale)
+- `STORAGE_POLICY` (enum `db | object_storage | hybrid`, ADR A1 — validato fail-fast all'avvio, vedi §1.7)
 - `LOGIN_MAX_ATTEMPTS`, `LOGIN_WINDOW_SECONDS`, `LOGIN_LOCKOUT_SECONDS`, `JWT_EXPIRE_HOURS`, `DB_SCHEMA_WARN_GB`, `DB_SCHEMA_ERROR_GB`, `JWT_BLACKLIST_STALE_THRESHOLD_SEC` (soglie numeriche)
 - `BACKUP_S3_BUCKET`, `BACKUP_S3_REGION`, `BACKUP_SCHEDULE_CRON`, `TICKET_ATTACHMENT_MAX_BYTES` (config deploy)
 
@@ -206,13 +218,21 @@ Le seguenti decisioni **non** sono vincolate da questo documento e restano scope
 - **Priorita' specifiche di refactor** (es. "prima i writer, poi i reader"): scelta per brief di fase, non invariant.
 - **Target di performance, SLO, SLA**: scope Fase 1 PERF; non sono invariant architetturali.
 - **Contratti API pubblici verso ICSC/RFI/ANIA**: governati fuori da questo doc (contratti commerciali + versioning API).
-- **Decisioni aperte fascia D (residue dopo il re-pass)**: IMDF loader/persist/storage boundaries (D3), alias crypto retro-compat `URBY_ENCRYPTION_KEY`/`CONN_ENCRYPT_KEY` (D4, bloccato su verifica `.env` prod + rename coordinato), policy preview vs execute cross-modulo estrai/manipola/arricchisci (D6). Restano scope decisionale product/env post-Fase 0. D1 (`ENABLE_ASYNC_ENRICHMENT`) e D2 (`_read_csv_*`) chiusi in Fase 0; D5 (`SECRET_KEY`/`JWT_SECRET_KEY` come crypto fallback) chiusa in Phase 1 consolidation il 2026-04-20 con rimozione del fallback dalla chain.
-- **Triage residui rimandati a batch dedicato Phase 1**:
-  - `app/services/file_service.py` 21 `except: pass` sparsi (S17) — audit riga-per-riga
-  - `app/core/arricchisci/api_connector.py` 25 except retry loop (S18) — triage pattern ripetitivo
-  - `app/core/carica/database_writer.py` anomalie residue (S23) — batch separato
-  - `app/core/eseguibili/router.py` (S25) — batch separato
-  - cluster IMDF (S27) — coordinato con D3
+- **Decisioni aperte fascia D (residue dopo Phase 1)**:
+  - **D3** IMDF loader/persist/storage boundaries — design doc `orchestrate/phase_1_stabilization/d3_imdf_boundaries.md` consolidato, **nessun refactor codice applicato in Phase 1**. Carry-over **bucket phase_2** (refactor boundaries dedicato).
+  - **D4** alias crypto retro-compat — parziale: `URBY_DISABLE_DEFAULT_KEY` rimosso in Phase 1 (`3924bfb`). `URBY_ENCRYPTION_KEY` + `CONN_ENCRYPT_KEY` → **bucket operation**: bloccato su verifica `.env` produzione via SSH su `lab.plenora.it` prima della rimozione codice.
+  - **D6** policy preview vs execute — design doc `orchestrate/phase_1_stabilization/d6_preview_execute_policy.md` proposto; la parte tattica "no silent swallow" e' gia' applicata via S26 (`db9ef03` + `6db33c7`). **Bucket micro_0bis**: ratifica formale come ADR in `backend/docs/architecture/decisions/`.
+  - D1 (`ENABLE_ASYNC_ENRICHMENT`) e D2 (`_read_csv_*`) chiusi in Fase 0; D5 chiuso in Phase 1 (`9fc330a` + `81ac385`); D4 parziale (`3924bfb`).
+- **Triage residui Phase 1 — CHIUSI**:
+  - S17 `app/services/file_service.py` silent → debug/warning logs (`91b7109`)
+  - S18 `app/core/arricchisci/api_connector.py` retry loop (`60dadc7`)
+  - S23 `app/core/carica/database_writer.py` cleanup silent → debug (`e006b56`)
+  - S25 `app/core/eseguibili/router.py` (`ef3ba63`)
+  - S26 preview swallow arricchisci+manipola (`db9ef03`, `6db33c7`)
+  - S27 cluster IMDF — 5 commit (`92f0c31`, `9e1246b`, `be20d19`, `afe3aba`, `834bf91`)
+  - S28 shared layer — triage conformita' 2026-04-20, no code change (dettaglio in `orchestrate/phase_1_stabilization/kickoff.md`)
+- **Carry-over architetturale Phase 2**: log lifecycle complessivo (append-only enforcement formale, retention policy, purge controllato). Il commit `a32c9f3` applica `SET LOCAL plenora.retention_cleanup` al beat job di retention — risolve **solo** la coesistenza con i trigger log-immutable per il job autorizzato, **non** il lifecycle complessivo. Nessun bypass manuale implicito della policy e' ammesso.
+- **Carry-over architetturale Phase 2**: A1 follow-up — provider MinIO P1 implementation + contract test per matrice policy/provider + bulk review dei chiamanti file storage per allineamento al dispatch canonico §1.7.
 - **Strategia di rimozione alias retro-compat** (`URBY_*` → `PLENORA_*`): richiede coordinamento con deploy prod (`lab.plenora.it`) prima di rimuovere dal codice. Scope product/env, non invariant.
 
 Queste aree restano aperte: se toccate in Fase 1+, il PR deve dichiarare la scelta con la stessa disciplina delle 7 regole in §5, anche se il punto non e' ancora in tabella §2/§3.
