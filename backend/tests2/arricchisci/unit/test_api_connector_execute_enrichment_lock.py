@@ -176,7 +176,12 @@ class TestExecuteEnrichmentBasics:
         assert result["success"] is False
         assert "Nessun nodo nel canvas" in result["error"]
 
-    def test_top_level_exception_returns_error_dict(self, env):
+    def test_top_level_exception_returns_safe_error_dict(self, env):
+        # CONTRATTO Fix-C [phase-2-err]: una Exception non-ValueError al
+        # top-level NON deve leakare il messaggio raw al caller (FE/UI).
+        # Il dettaglio tecnico resta nei log; il caller riceve un messaggio
+        # generico e `user_error=False` per distinguerlo da errori di
+        # input/business gia' user-safe (vedi test ValueError sotto).
         env.list_conns.side_effect = RuntimeError("db down")
 
         result = env.svc.execute_enrichment(
@@ -184,7 +189,24 @@ class TestExecuteEnrichmentBasics:
         )
 
         assert result["success"] is False
-        assert "db down" in result["error"]
+        assert result["user_error"] is False
+        assert "db down" not in result["error"]
+        assert result["error"] == "Errore interno durante l'arricchimento"
+
+    def test_top_level_value_error_propagates_message_as_user_error(self, env):
+        # CONTRATTO Fix-C [phase-2-err]: un ValueError sollevato dentro
+        # api_connector porta un messaggio gia' user-safe (es. "Accesso
+        # negato:", "URL bloccato:", validazione param). Va propagato
+        # invariato al caller con `user_error=True`.
+        env.list_conns.side_effect = ValueError("Accesso negato: gruppo X")
+
+        result = env.svc.execute_enrichment(
+            "proj-1", _canvas(nodes=[_project_source()])
+        )
+
+        assert result["success"] is False
+        assert result["user_error"] is True
+        assert "Accesso negato: gruppo X" in result["error"]
 
     def test_tenant_group_id_memorized_from_project(self, env):
         env.db_get_project.return_value = {"group_id": "grp-xyz"}

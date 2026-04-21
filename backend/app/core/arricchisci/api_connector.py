@@ -1130,10 +1130,17 @@ class ApiConnectionService:
                 final_result, output_name, output_format, project_id
             )
 
-        except Exception as e:
+        except ValueError as e:
+            # boundary: i ValueError sollevati dentro api_connector portano
+            # messaggi gia' user-safe (es. "Accesso negato:", "URL bloccato:",
+            # "Contesto di sicurezza ..."). Li propaghiamo come user_error.
             logger.error(f"[GESTITO] Errore esecuzione enrichment {project_id}: {e}", exc_info=True)
-            return {"success": False, "error": str(e)}
-    
+            return {"success": False, "user_error": True, "error": str(e)}
+        except Exception as e:
+            # boundary: messaggio safe al caller, dettaglio tecnico solo nei log
+            logger.error(f"[GESTITO] Errore esecuzione enrichment {project_id}: {e}", exc_info=True)
+            return {"success": False, "user_error": False, "error": "Errore interno durante l'arricchimento"}
+
     def _get_execution_order(self, nodes: List[Dict], edges: List[Dict]) -> List[str]:
         """
         Calcola ordine topologico per esecuzione (algoritmo di Kahn).
