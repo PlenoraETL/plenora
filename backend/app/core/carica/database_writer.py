@@ -185,9 +185,21 @@ class DatabaseWriter(DestinationWriter):
                     f"Permessi insufficienti per CREATE TABLE nello schema "
                     f"'{self.config.schema_name}': {str(e)}"
                 )
-            # Potrebbe essere un altro errore, logga ma non blocca
-            logger.warning(f"Check permessi CREATE: {e}")
-            return True, ""
+            # Errore non classificato come permission: fail-closed.
+            # Pre-fix: logger.warning + return True ("logga ma non blocca")
+            # lasciava passare errori transient/DDL sconosciuti come se i
+            # permessi fossero ok, poi CREATE TABLE vero falliva senza
+            # diagnostica utile. Ora la verifica segnala esplicitamente
+            # il fallimento al chiamante.
+            logger.error(
+                f"[CRASH] Verifica permessi CREATE fallita su schema "
+                f"'{self.config.schema_name}': {e}",
+                exc_info=True,
+            )
+            return False, (
+                f"Verifica permessi CREATE TABLE nello schema "
+                f"'{self.config.schema_name}' fallita: {str(e)}"
+            )
 
     # ========================================================================
     # SCHEMA INTROSPECTION
@@ -363,7 +375,15 @@ class DatabaseWriter(DestinationWriter):
             return False
 
     def truncate_table(self) -> bool:
-        """Svuota la tabella destinazione."""
+        """Svuota la tabella destinazione.
+
+        Solleva l'eccezione sottostante se TRUNCATE non e' eseguibile
+        (permessi, lock, DDL). Pre-fix: ritornava False silenziosamente,
+        e il caller in write() PER_BATCH (TRUNCATE_INSERT) procedeva
+        comunque con l'INSERT appendendo anziche' truncate-inserting —
+        correttezza dati compromessa. Ora il boundary in write() cattura
+        e segnala WRITE_ERROR.
+        """
         trunc_sql = self.ddl.generate_truncate(
             self.config.schema_name, self.config.table_name
         )
@@ -375,7 +395,7 @@ class DatabaseWriter(DestinationWriter):
             return True
         except Exception as e:
             logger.error(f"[CRASH] Errore truncate tabella: {e}", exc_info=True)
-            return False
+            raise
 
     # ========================================================================
     # CHECK CONFLITTI
@@ -1225,7 +1245,14 @@ class DatabaseWriter(DestinationWriter):
 
     def _table_exists_for(self, schema: str, table: str) -> bool:
         """table_exists per una coppia (schema, table) arbitraria
-        (a differenza di self.table_exists che usa self.config)."""
+        (a differenza di self.table_exists che usa self.config).
+
+        Solleva l'eccezione sottostante se la query non e' eseguibile.
+        Pre-fix: logger.warning + return False — ma il valore e' usato
+        da _replace_atomic per scegliere swap vs single-rename, quindi
+        un errore query silenziato produceva routing errato e fallimento
+        confuso downstream. Allineato al pattern di self.table_exists.
+        """
         try:
             query, params = self.ddl.query_table_exists(schema, table)
             with self.engine.connect() as conn:
@@ -1237,11 +1264,11 @@ class DatabaseWriter(DestinationWriter):
                 except (ValueError, TypeError):
                     return bool(res)
         except Exception as e:
-            logger.warning(
-                f"[TABLE_EXISTS_FOR] verifica {schema}.{table} fallita, "
-                f"assumo False: {e}"
+            logger.error(
+                f"[CRASH] Verifica esistenza tabella {schema}.{table} fallita: {e}",
+                exc_info=True,
             )
-            return False
+            raise
 
     def _generate_single_rename(
         self, schema: str, old_name: str, new_name: str
