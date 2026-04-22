@@ -259,10 +259,12 @@ def execute_imdf_publish_task(
 
     except Exception as e:
         logger.error(f"[Task {task_id}] Errore IMDF publish: {e}", exc_info=True)
+        # intent: boundary top-level task Celery / outcome: fail-closed sanitizzato
         return {
             "success": False,
             "task_id": task_id,
             "bundle_task_id": bundle_task_id,
-            "error": str(e),
+            "error": "imdf_publish_failed",
+            "message": "Errore pubblicazione IMDF (consulta log)",
             "elapsed_time": round(time.time() - started_at, 2),
         }

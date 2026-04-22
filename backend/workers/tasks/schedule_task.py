@@ -125,10 +125,15 @@ def schedule_pipeline_task(
         except Exception:
             pass  # Se anche il log fallisce, non possiamo fare nulla
         
+        # intent: boundary top-level task Celery / outcome: fail-closed sanitizzato
+        # Il dettaglio tecnico resta solo nel logger.error([CRASH]) + nel log_entry
+        # schedule_logs (canale admin diagnostics). Il return dict finisce in Redis
+        # via AsyncResult e viene esposto via get_task_status al FE: niente str(e).
         return {
             "success": False,
             "status": "failed",
-            "message": f"Errore fatale: {str(e)}"
+            "error": "schedule_task_fatal",
+            "message": "Errore fatale del task schedule (consulta log)",
         }
 
 

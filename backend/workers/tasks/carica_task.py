@@ -227,12 +227,15 @@ def execute_carica_task(
         return result
 
     except Exception as e:
-        error_msg = f"Errore task CARICA: {str(e)}"
+        # error_msg_internal: canale admin/diagnostics (log_runs DB via close_run,
+        # progress UI via _update_progress, log_service.create_log_entry).
+        # Contiene str(e) intenzionalmente per postmortem admin.
+        error_msg_internal = f"Errore task CARICA: {str(e)}"
         error_trace = traceback.format_exc()
         elapsed_ms = int((_time.time() - _run_start) * 1000)
-        logger.error(f"[CRASH] {error_msg}\n{error_trace}")
+        logger.error(f"[CRASH] {error_msg_internal}\n{error_trace}")
 
-        # --- debug_payload ---
+        # --- debug_payload --- (diagnostic canonico, str(e) intenzionale)
         try:
             from app.utils.debug_payload_builder import DebugPayloadBuilder
             debug_payload = DebugPayloadBuilder().build(
@@ -253,20 +256,25 @@ def execute_carica_task(
         except Exception:
             debug_payload = None
 
+        # Canali admin preservano str(e) per postmortem (log_runs DB / progress UI)
         close_run(
             run_id=run_id,
             status="failure",
             duration_ms=elapsed_ms,
             error_module="carica",
-            error_message=error_msg,
+            error_message=error_msg_internal,
             debug_payload=debug_payload,
         )
-        _update_progress(self, -1, error_msg)
+        _update_progress(self, -1, error_msg_internal)
+        # intent: boundary top-level task Celery / outcome: fail-closed sanitizzato
+        # Il return dict finisce in Redis via AsyncResult → FE: niente str(e).
+        # error_details=error_trace preservato come canale diagnostic separato.
         return {
             "status": "write_error",
             "success": False,
-            "message": error_msg,
-            "error_message": error_msg,
+            "error": "carica_task_fatal",
+            "message": "Errore task CARICA (consulta log)",
+            "error_message": "Errore task CARICA (consulta log)",
             "error_details": error_trace,
             "rows_written": 0,
             "total_rows": 0,
@@ -356,10 +364,13 @@ def _execute_datasource_write(task, df, carica_node_data, project_id, task_id):
 
     except Exception as e:
         logger.error(f'[CRASH] Errore scrittura DataSource: {e}', exc_info=True)
+        # intent: boundary branch DataSource write / outcome: fail-closed sanitizzato
         return {
             'status': 'connection_error',
             'success': False,
-            'error_message': str(e),
+            'error': 'carica_datasource_write_failed',
+            'message': 'Errore scrittura DataSource (consulta log)',
+            'error_message': 'Errore scrittura DataSource (consulta log)',
             'rows_written': 0,
             'total_rows': len(df),
         }
@@ -509,13 +520,15 @@ def _execute_arcgis_write(task, df, carica_node_data, project_id, task_id):
         }
 
     except Exception as e:
-        error_msg = f"Errore scrittura ArcGIS: {str(e)}"
-        logger.error(f"[GESTITO] {error_msg}", exc_info=True)
+        # Canale admin log: preserva str(e) per postmortem
+        logger.error(f"[GESTITO] Errore scrittura ArcGIS: {e}", exc_info=True)
+        # intent: boundary branch ArcGIS write / outcome: fail-closed sanitizzato
         return {
             "status": "write_error",
             "success": False,
-            "message": error_msg,
-            "error_message": error_msg,
+            "error": "carica_arcgis_write_failed",
+            "message": "Errore scrittura ArcGIS (consulta log)",
+            "error_message": "Errore scrittura ArcGIS (consulta log)",
             "rows_written": 0,
             "total_rows": len(df),
         }

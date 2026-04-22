@@ -882,7 +882,12 @@ class ExecutionManager:
 
         except Exception as e:
             logger.error(f"[GESTITO] Errore CARICA scheduler: {e}", op="carica", exc_info=True)
-            return {"success": False, "error": str(e)}
+            # intent: boundary CARICA scheduler / outcome: fail-closed sanitizzato
+            return {
+                "success": False,
+                "error": "carica_scheduler_failed",
+                "message": "Errore esecuzione CARICA scheduler (consulta log)",
+            }
     
     # =========================================================================
     # GESTIONE FALLIMENTI
