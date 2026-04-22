@@ -177,9 +177,15 @@ class ArtifactResolver:
     ) -> MaterializedArtifact:
         import app.db.db_service as db_service
 
+        # intent: boundary / outcome: fail-closed (broad→domain con chain preservata)
         try:
             row = db_service.get_result(result_id)
         except Exception as e:
+            logger.error(
+                "[GESTITO] resolver lookup result_id '%s' fallito: %s",
+                result_id, e,
+                exc_info=True,
+            )
             raise ArtifactResolutionError(
                 f"lookup result_id '{result_id}' fallito: {e}"
             ) from e
@@ -198,9 +204,15 @@ class ArtifactResolver:
                 f"project_id '{expected_project_id}'"
             )
 
+        # intent: boundary / outcome: fail-closed (broad→domain con chain preservata)
         try:
             blob = db_service.get_result_data(result_id)
         except Exception as e:
+            logger.error(
+                "[GESTITO] resolver lettura blob result_id '%s' fallita: %s",
+                result_id, e,
+                exc_info=True,
+            )
             raise ArtifactResolutionError(
                 f"lettura blob result_id '{result_id}' fallita: {e}"
             ) from e
