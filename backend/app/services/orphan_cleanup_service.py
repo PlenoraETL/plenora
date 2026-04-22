@@ -100,6 +100,7 @@ def cleanup_orphans(dry_run: bool = False) -> Dict[str, Any]:
         dict con il report:
         {
             "dry_run": bool,
+            "status": "clean" | "partial",  # "partial" se `errors` non vuoto
             "orphan_results": {
                 "project_ids": [...],
                 "rows_deleted": int      # 0 in dry_run
@@ -110,9 +111,17 @@ def cleanup_orphans(dry_run: bool = False) -> Dict[str, Any]:
             },
             "errors": [...]
         }
+
+    `status` distingue il caso "scan completato, zero orfani o tutti
+    cancellati" (clean) da "scan o cancellazione parziale" (partial).
+    Senza questa chiave il caller admin non poteva differenziare "tutto
+    ok" da "tutto fallito silenziosamente" (report con `rows_deleted=0`
+    e `errors=[...]` e' indistinguibile da "niente da fare" a livello
+    dict-shape).
     """
     report = {
         "dry_run": dry_run,
+        "status": "clean",  # aggiornato a "partial" al termine se errors non vuoto
         "orphan_results": {"project_ids": [], "rows_deleted": 0},
         "orphan_runs": {"canvas_ids": [], "runs_deleted": 0},
         "errors": [],
@@ -155,6 +164,11 @@ def cleanup_orphans(dry_run: bool = False) -> Dict[str, Any]:
         logger.error(f"orphan_cleanup: {err}", exc_info=True)
         report["errors"].append(err)
 
+    # Finalizza status: "partial" se almeno un errore (outer scan fail o
+    # per-pid delete fail). Distinzione utile al caller admin/automation.
+    if report["errors"]:
+        report["status"] = "partial"
+
     if dry_run:
         logger.info(
             f"orphan_cleanup DRY-RUN: "
@@ -162,8 +176,12 @@ def cleanup_orphans(dry_run: bool = False) -> Dict[str, Any]:
             f"{len(report['orphan_runs']['canvas_ids'])} orphan runs"
         )
     else:
-        logger.info(
-            f"orphan_cleanup: "
+        # Log level riflette lo status: partial merita visibilita' maggiore
+        # per alerting admin (un cleanup silenziosamente fallito non deve
+        # passare inosservato come "info").
+        _log = logger.warning if report["status"] == "partial" else logger.info
+        _log(
+            f"orphan_cleanup: status={report['status']} "
             f"results={report['orphan_results']['rows_deleted']} righe, "
             f"runs={report['orphan_runs']['runs_deleted']} run, "
             f"errors={len(report['errors'])}"
