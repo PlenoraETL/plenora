@@ -1839,9 +1839,17 @@ class ApiConnectionService:
         timeout = parsed['timeout']
         output_ext = parsed['output_ext']
 
+        # Fix-D narrow #20: clausola ristretta alle classi domain-safe
+        # sollevate da `_prepare_headers`:
+        #  - KeyError: campo auth mancante (es. api_key, client_secret)
+        #  - ValueError: formato auth invalido / auth_type non riconosciuto
+        #  - requests.RequestException: fallimento del fetch OAuth2 token
+        # Eccezioni fuori tupla (bug interno) fluiscono al safety-net
+        # outer di _execute_rest_file (catch #22c, ancora broad in
+        # questo commit).
         try:
             headers = self._prepare_headers(api_config.get('auth', {}) or {}, {})
-        except Exception as e:
+        except (KeyError, ValueError, requests.RequestException) as e:
             return {"success": False, "error": f"Preparazione auth fallita: {e}"}
 
         # Formato di materializzazione per input da upstream DataFrame.
@@ -1853,13 +1861,24 @@ class ApiConnectionService:
             or _req_cfg.get('materialize_format')
             or 'xlsx'
         )
+        # Fix-D narrow #21: clausola ristretta alle classi domain-safe
+        # prodotte dalla catena di risoluzione input:
+        #  - ValueError: messaggi domain gia' safe ("Accesso negato:",
+        #    "Contesto di sicurezza...", "Errore progetto sorgente...")
+        #  - SourceLoadingError: errore dal SourceLoader cross-tenant
+        #    (tecnicamente gia' wrappato in ValueError da
+        #    _resolve_file_source_path, incluso come belt-and-suspenders)
+        #  - FileSourceResolutionError: da Fix-A (lookup DB o scrittura
+        #    cache fallita), messaggio safe-by-construction
+        # Eccezioni fuori tupla fluiscono al safety-net outer (#22c).
+        from app.core.artifacts import SourceLoadingError
         try:
             input_path, _owns_materialized_input = self._resolve_input_path_for_file_processor(
                 nodes, edges, node_id,
                 node_results=node_results,
                 materialize_format=materialize_format,
             )
-        except Exception as e:
+        except (ValueError, SourceLoadingError, FileSourceResolutionError) as e:
             return {"success": False, "error": f"Risoluzione input fallita: {e}"}
 
         # `extra_files` e' il dict {field_name: file_source_id} salvato sul

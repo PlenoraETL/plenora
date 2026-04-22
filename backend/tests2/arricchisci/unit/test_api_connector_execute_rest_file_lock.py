@@ -22,6 +22,9 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
+
+from app.shared.exceptions import FileSourceResolutionError
 
 
 pytestmark = [
@@ -164,15 +167,98 @@ class TestExecuteRestFileConfigValidation:
         assert result["success"] is False
         assert "json_array" in result["error"]
 
-    def test_auth_preparation_failure_returns_error(self, rf_env):
-        rf_env.prepare_headers.side_effect = RuntimeError("oauth token expired")
+    def test_auth_preparation_keyerror_returns_error_with_prefix(self, rf_env):
+        """Fix-D narrow #20: `KeyError` da `_prepare_headers` (campo
+        auth mancante, es. api_key non configurato) rientra nella
+        tupla narrow `(KeyError, ValueError, requests.RequestException)`
+        ed e' restituita con il prefisso `"Preparazione auth fallita:"`
+        + il dettaglio di `str(e)`. I messaggi di KeyError qui sono
+        nomi di campo config -- safe da esporre.
+
+        Pre-fix (broad `except Exception`) accettava qualsiasi classe:
+        dopo Fix-D narrow, `KeyError` resta catturato esplicitamente.
+        """
+        rf_env.prepare_headers.side_effect = KeyError("api_key")
         cfg = _api_config()
         result = rf_env.svc._execute_rest_file(
             {}, cfg, [], [], "n1", "p1"
         )
         assert result["success"] is False
         assert "Preparazione auth fallita" in result["error"]
-        assert "oauth token expired" in result["error"]
+        assert "api_key" in result["error"]
+
+    def test_auth_preparation_request_exception_returns_error_with_prefix(
+        self, rf_env
+    ):
+        """Fix-D narrow #20: `requests.RequestException` (es. timeout /
+        connection error durante il fetch del token OAuth2) e' nella
+        tupla narrow. Lock separato perche' e' la classe meno ovvia
+        del trittico: non e' un errore di config ma di runtime HTTP
+        verso il provider OAuth.
+        """
+        rf_env.prepare_headers.side_effect = requests.ConnectionError(
+            "oauth server unreachable"
+        )
+        cfg = _api_config()
+        result = rf_env.svc._execute_rest_file(
+            {}, cfg, [], [], "n1", "p1"
+        )
+        assert result["success"] is False
+        assert "Preparazione auth fallita" in result["error"]
+        assert "oauth server unreachable" in result["error"]
+
+    def test_input_resolve_value_error_returns_error_with_prefix(self, rf_env):
+        """Fix-D narrow #21: `ValueError` dalla catena di risoluzione
+        input (`_resolve_file_source_path` -> ValueError domain con
+        messaggi "Accesso negato:", "Contesto di sicurezza...",
+        "Errore progetto sorgente...") viene catturato dalla clausola
+        narrow `(ValueError, SourceLoadingError, FileSourceResolutionError)`
+        e restituito con prefisso `"Risoluzione input fallita:"` +
+        messaggio domain. Questi messaggi sono safe by construction.
+        """
+        rf_env.resolve_path.side_effect = ValueError(
+            "Accesso negato: risorsa cross-tenant"
+        )
+        cfg = _api_config(
+            file_fields=[{"name": "file", "source": "node_input", "required": True}],
+        )
+        result = rf_env.svc._execute_rest_file(
+            {}, cfg, [], [], "n1", "p1"
+        )
+        assert result["success"] is False
+        assert "Risoluzione input fallita" in result["error"]
+        assert "Accesso negato" in result["error"]
+
+    def test_input_resolve_file_source_resolution_error_returns_error_with_prefix(
+        self, rf_env
+    ):
+        """Fix-D narrow #21: `FileSourceResolutionError` (Fix-A) dalla
+        catena di risoluzione input e' nella tupla narrow. Il messaggio
+        `__str__` della classe e' safe-by-construction (non include
+        `str(original_error)`), quindi il prefisso + il testo esposto
+        sono safe per l'utente. In particolare, `pool exhausted`
+        dall'`original_error` NON deve comparire nella response.
+        """
+        fsre = FileSourceResolutionError(
+            file_source_id="fs-uuid-1",
+            cause="lookup",
+            reason="errore lettura metadata file_source dal DB",
+            original_error=RuntimeError("pool exhausted"),
+        )
+        rf_env.resolve_path.side_effect = fsre
+        cfg = _api_config(
+            file_fields=[{"name": "file", "source": "node_input", "required": True}],
+        )
+        result = rf_env.svc._execute_rest_file(
+            {}, cfg, [], [], "n1", "p1"
+        )
+        assert result["success"] is False
+        assert "Risoluzione input fallita" in result["error"]
+        assert "fs-uuid-1" in result["error"]
+        assert "pool exhausted" not in result["error"], (
+            "FileSourceResolutionError.__str__ non deve esporre "
+            "str(original_error): e' il contratto safe-by-construction"
+        )
 
 
 # =============================================================================
