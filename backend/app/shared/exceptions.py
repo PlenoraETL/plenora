@@ -2,7 +2,7 @@
 Eccezioni custom condivise tra i moduli backend.
 """
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Literal, Optional
 
 
 class ColumnsMetadataSaveError(Exception):
@@ -202,4 +202,88 @@ class ExecutionContextError(Exception):
         super().__init__(
             f"Errore inizializzazione contesto esecuzione per "
             f"progetto '{project_id}': {reason}"
+        )
+
+
+class FileSourceResolutionError(Exception):
+    """Sollevata quando la materializzazione di un file_source su
+    filesystem fallisce per errore tecnico (lookup DB o scrittura cache),
+    distinto dal caso "file_source inesistente / blob vuoto" che resta
+    `return None` del caller.
+
+    Contesto (reperto: broad-catch in `_resolve_file_source_id_path`):
+      `ApiConnectionService._resolve_file_source_id_path` materializza
+      il blob di un file_source dal DB a una cache locale
+      (`{FILES_DIR}/{file_source_id}/{filename}`) perche' fiona/GDAL
+      lavorano con path fisici. L'operazione fa due query DB
+      (`get_file_source` con e senza `include_data`) e una scrittura FS
+      atomica (`.tmp` + `os.replace`).
+
+      Pre-fix, l'intero try era protetto da `except Exception ->
+      logger.warning + return None`. Questo conflato:
+        - errori DB (pool exhausted, connection drop) -> None
+        - errori FS (filesystem read-only, permission denied) -> None
+        - file_source inesistente (`row_meta is None`) -> None
+        - blob vuoto (`row_full["data"] is None`) -> None
+      I caller (`_resolve_file_source_path`, `_build_rest_file_multipart`
+      ramo extra_input) interpretavano `None` come "file non
+      disponibile" e producevano messaggi tipo "file_source 'X' non
+      trovato" o "non risolvibile, saltato". Un errore DB transient
+      appariva all'utente identico a un file_source mai configurato.
+      Sul ramo optional (`required=False`), il task proseguiva
+      silenziosamente saltando il file -- fail-open non ratificato.
+
+    Post-fix (questa eccezione):
+      - Errori DB classificati (`psycopg2.Error`) -> raise
+        `FileSourceResolutionError(cause="lookup", ...)` con chain
+        preservata via `from e`.
+      - Errori FS (`OSError`, include `PermissionError`) -> raise
+        `FileSourceResolutionError(cause="materialization", ...)`.
+      - `row_meta is None` / `row_full["data"] is None` -> return `None`
+        (ramo dati legittimo, invariato).
+      - Il boundary `_execute_rest_file` ramo input resolve (post
+        Fix-D) cattura `FileSourceResolutionError` e la traduce in
+        response `{success:False, error:"Risoluzione input fallita: ..."}`
+        con messaggio domain safe-to-show. Path non-rest_file (generator,
+        api_enrich) fluiscono al boundary `execute_enrichment` top-level
+        (Fix-C gia' mergiato) e producono safe message generico.
+
+    Fail-open NON ratificato:
+      Anche nel ramo `extra_input` con `required=False`, un errore DB
+      qui non viene piu' mascherato da `continue`: l'eccezione propaga
+      e fa fallire il task esplicitamente. Scelta consapevole
+      (errori tecnici fail-closed a prescindere dal flag required del
+      campo).
+
+    Attributi:
+        file_source_id: id del file_source su cui l'operazione ha
+            fallito. Safe da esporre (e' un UUID del DB).
+        cause: `"lookup"` se l'errore e' sul lato DB,
+            `"materialization"` se sul lato filesystem. Usato per la
+            diagnostica, non per decidere il comportamento del caller
+            (entrambi sono fail-closed).
+        reason: descrizione safe-to-show del problema (es. "errore
+            lettura file_source dal DB"). Non contiene str() dell'errore
+            originale: il dettaglio tecnico resta nell'attributo
+            `original_error` e nei log, non in questo messaggio.
+        original_error: eccezione sottostante (`psycopg2.Error` o
+            sottoclasse, `OSError`, ecc.). Usata per logging
+            strutturato + preservazione chain (`raise ... from e`).
+            Non va esposta al caller via response API.
+    """
+
+    def __init__(
+        self,
+        file_source_id: str,
+        cause: Literal["lookup", "materialization"],
+        reason: str,
+        original_error: Optional[Exception] = None,
+    ):
+        self.file_source_id = file_source_id
+        self.cause = cause
+        self.reason = reason
+        self.original_error = original_error
+        super().__init__(
+            f"Errore risoluzione file_source '{file_source_id}' "
+            f"({cause}): {reason}"
         )
