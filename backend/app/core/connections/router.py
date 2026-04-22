@@ -141,6 +141,7 @@ def delete_connection(
         (connection_id,)
     )
     if using_projects:
+        # Shape 409 cascade canonica (Batch Fix 6.1): dependencies con kind.
         raise HTTPException(
             status_code=409,
             detail={
@@ -149,8 +150,13 @@ def delete_connection(
                     f"Connessione usata in {len(using_projects)} progetto/i. "
                     f"Rimuoverla dai progetti prima di cancellarla."
                 ),
-                "projects": [
-                    {"id": p["id"], "name": p["name"], "project_type": p["project_type"]}
+                "dependencies": [
+                    {
+                        "kind": "project",
+                        "id": p["id"],
+                        "name": p["name"],
+                        "project_type": p["project_type"],
+                    }
                     for p in using_projects
                 ],
             },

@@ -15,6 +15,7 @@ import ResponseConfigBuilder from '../components/panels/ResponseConfigBuilder';
 import { useHexCanvas } from '../utils/hexCanvas';
 import AllowedGroupsSelector from '../components/shared/AllowedGroupsSelector';
 import AppSidebar from '../components/AppSidebar';
+import { handleCascade409, formatCascadeDependencies } from '../api/errors';
 import { can, role } from '../utils/permissions';
 import '../styles/ApiConnectionManager.css';
 import '../components/panels/ResponseConfigBuilder.css';
@@ -224,7 +225,17 @@ function ApiConnectionManager() {
   const handleDelete = async (apiId, apiName) => {
     if (!confirm(`Eliminare "${apiName}"?`)) return;
     try { await deleteApiConnection(apiId); loadApiConnections(); }
-    catch(e) { const d=e?.response?.data?.detail; if (e?.response?.status===409&&d?.message) { toast.error(`${d.message}${d.in_use_by?.map(p=>p.project_name).join(', ')}`); } else { toast.error('Errore eliminazione'); } }
+    catch (e) {
+      const cascade = handleCascade409(e);
+      if (cascade) {
+        toast.error(
+          `Impossibile eliminare "${apiName}": ${formatCascadeDependencies(cascade.dependencies)}. Rimuovili prima.`,
+          10000
+        );
+        return;
+      }
+      toast.error('Errore eliminazione');
+    }
   };
 
   const getCustomHeadersObject = () => { const h={}; customHeadersList.forEach(x=>{if(x.key?.trim())h[x.key.trim()]=x.value||'';}); return h; };

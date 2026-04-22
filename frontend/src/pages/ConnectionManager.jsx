@@ -19,6 +19,7 @@ import { useHexCanvas } from '../utils/hexCanvas';
 import AllowedGroupsSelector from '../components/shared/AllowedGroupsSelector';
 import AppSidebar from '../components/AppSidebar';
 import ModalWrapper, { ModalButton } from '../components/common/ModalWrapper';
+import { handleCascade409, formatCascadeDependencies } from '../api/errors';
 import { can, role } from '../utils/permissions';
 import '../styles/ConnectionManager.css';
 
@@ -149,7 +150,17 @@ function ConnectionManager() {
     try {
       conn._category === 'arcgis' ? await deleteFeatureConnection(conn.id) : await deleteConnection(conn.id);
       loadConnections();
-    } catch { toast.error('Errore eliminazione'); }
+    } catch (err) {
+      const cascade = handleCascade409(err);
+      if (cascade) {
+        toast.error(
+          `Impossibile eliminare "${conn.name}": ${formatCascadeDependencies(cascade.dependencies)}. Rimuovili prima.`,
+          10000
+        );
+        return;
+      }
+      toast.error('Errore eliminazione');
+    }
   };
 
   const handleTest = async (conn) => {

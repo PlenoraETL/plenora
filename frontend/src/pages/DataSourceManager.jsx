@@ -14,6 +14,7 @@ import {
 import { useHexCanvas } from '../utils/hexCanvas';
 import AllowedGroupsSelector from '../components/shared/AllowedGroupsSelector';
 import AppSidebar from '../components/AppSidebar';
+import { handleCascade409, formatCascadeDependencies } from '../api/errors';
 import { can, role } from '../utils/permissions';
 import '../styles/DataSourceManager.css';
 
@@ -123,8 +124,22 @@ export default function DataSourceManager() {
   };
 
   const handleDelete = async id => {
-    try { await deleteDataSource(id); setConfirmDelete(null); await load(); }
-    catch (e) { toast.error(`Errore: ${e.message}`); }
+    try {
+      await deleteDataSource(id);
+      setConfirmDelete(null);
+      await load();
+    } catch (e) {
+      const cascade = handleCascade409(e);
+      if (cascade) {
+        const dsName = confirmDelete?.name || id;
+        toast.error(
+          `Impossibile eliminare "${dsName}": ${formatCascadeDependencies(cascade.dependencies)}. Rimuovili prima.`,
+          10000
+        );
+        return;
+      }
+      toast.error(`Errore: ${e.message}`);
+    }
   };
 
   const openBrowser = async ds => { setBrowserDs(ds); setBrowserPath(''); setBrowserFiles([]); setBrowserError(null); await browseFiles(ds.id, ''); };

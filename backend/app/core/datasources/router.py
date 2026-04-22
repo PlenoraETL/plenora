@@ -169,6 +169,7 @@ def delete_datasource(ds_id: str, current_user: CurrentUser = Depends(require_ad
     # Check dipendenze: progetti il cui canvas usa questo datasource
     using_projects = _find_projects_using_datasource(ds_id)
     if using_projects:
+        # Shape 409 cascade canonica (Batch Fix 6.1): dependencies con kind.
         raise HTTPException(
             status_code=409,
             detail={
@@ -177,7 +178,15 @@ def delete_datasource(ds_id: str, current_user: CurrentUser = Depends(require_ad
                     f"Data Source usato in {len(using_projects)} progetto/i. "
                     f"Rimuoverlo dai canvas prima di cancellarlo."
                 ),
-                "projects": using_projects,
+                "dependencies": [
+                    {
+                        "kind": "project",
+                        "id": p["id"],
+                        "name": p["name"],
+                        "project_type": p.get("project_type", ""),
+                    }
+                    for p in using_projects
+                ],
             },
         )
 

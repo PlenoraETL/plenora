@@ -14,6 +14,7 @@ import { listFeatureConnections } from '../api/features';
 import { getFiles } from '../api/files';
 import { listSchedules } from '../api/schedules';
 import { listDataSources } from '../api/datasources';
+import { handleCascade409, formatCascadeDependencies } from '../api/errors';
 import http from '../api/http';
 import { useHexCanvas } from '../utils/hexCanvas';
 import PublishEseguibileModal from '../components/eseguibili/PublishEseguibileModal';
@@ -257,25 +258,15 @@ function ProjectList() {
       await deleteProject(id);
       loadData();
     } catch (err) {
-      // 409: il progetto ha dipendenze (eseguibili e/o progetti downstream)
-      if (err?.response?.status === 409) {
-        const detail = err.response.data?.detail || {};
-        if (detail.error === 'project_has_dependencies' || detail.error === 'project_has_eseguibili') {
-          const eseguibili = detail.eseguibili || [];
-          const dependents = detail.dependent_projects || [];
-          const parts = [];
-          if (eseguibili.length) {
-            parts.push(`${eseguibili.length} eseguibile/i (${eseguibili.map(e => e.name).join(', ')})`);
-          }
-          if (dependents.length) {
-            parts.push(`${dependents.length} progetto/i che lo usa/no come sorgente (${dependents.map(p => p.name).join(', ')})`);
-          }
-          toast.error(
-            `Impossibile eliminare "${name}": ${parts.join(' e ')}. Rimuovili prima.`,
-            10000
-          );
-          return;
-        }
+      // 409 cascade: il progetto ha dipendenze (eseguibili + progetti
+      // downstream). Parsing via hub unificato (api/errors.js).
+      const cascade = handleCascade409(err);
+      if (cascade) {
+        toast.error(
+          `Impossibile eliminare "${name}": ${formatCascadeDependencies(cascade.dependencies)}. Rimuovili prima.`,
+          10000
+        );
+        return;
       }
       toast.error('Errore eliminazione: ' + (err?.response?.data?.detail || err.message));
     }

@@ -196,13 +196,33 @@ def delete_project(project_id: str, current_user: CurrentUser = Depends(require_
     try:
         _project_service.delete_project(project_id)
     except ProjectHasDependenciesError as e:
+        # Shape 409 cascade canonica (Batch Fix 6.1):
+        # { error, message, dependencies:[{kind, id, name, project_type?}] }.
+        # kind="eseguibile" per pubblicazioni bloccanti, kind="project"
+        # per progetti downstream (manipola/arricchisci) che usano questo
+        # come sorgente. Il FE usa handleCascade409 per rendere il toast.
+        deps: List[dict] = []
+        for item in e.eseguibili:
+            deps.append({
+                "kind": "eseguibile",
+                "id": item.get("id"),
+                "name": item.get("name"),
+            })
+        for item in e.dependent_projects:
+            entry = {
+                "kind": "project",
+                "id": item.get("id"),
+                "name": item.get("name"),
+            }
+            if item.get("project_type") is not None:
+                entry["project_type"] = item.get("project_type")
+            deps.append(entry)
         raise HTTPException(
             status_code=409,
             detail={
                 "error": "project_has_dependencies",
                 "message": str(e),
-                "eseguibili": e.eseguibili,
-                "dependent_projects": e.dependent_projects,
+                "dependencies": deps,
             },
         )
     return {"status": "deleted", "project_id": project_id}

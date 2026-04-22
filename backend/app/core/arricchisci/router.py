@@ -598,12 +598,28 @@ def delete_api_connection(api_id: str, current_user: CurrentUser = Depends(requi
         logger.warning(f"Errore check canvas per delete {api_id}: {e}")
 
     if in_use_by:
+        # Shape 409 cascade canonica (Batch Fix 6.1): error + dependencies
+        # con kind. Pre-fix questa shape non aveva la chiave "error" e
+        # usava "in_use_by" con {project_id, project_name}: il FE non
+        # poteva scrivere un handler unificato. Ora allineata a projects/
+        # connections/datasources: kind="project", id, name.
         raise HTTPException(
             status_code=409,
             detail={
-                "message": f"La connessione è usata in {len(in_use_by)} progetto/i. Rimuoverla dal canvas prima di eliminarla.",
-                "in_use_by": in_use_by
-            }
+                "error": "api_connection_in_use",
+                "message": (
+                    f"La connessione è usata in {len(in_use_by)} progetto/i. "
+                    f"Rimuoverla dal canvas prima di eliminarla."
+                ),
+                "dependencies": [
+                    {
+                        "kind": "project",
+                        "id": p["project_id"],
+                        "name": p["project_name"],
+                    }
+                    for p in in_use_by
+                ],
+            },
         )
 
     if not _api_connection_service.delete_api_connection(api_id):
