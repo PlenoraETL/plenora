@@ -32,6 +32,7 @@ from app.config import settings
 from app.utils.logger import get_logger
 from app.utils.router_utils import require_service
 from app.shared.audit_action import audit_action
+from app.shared.exceptions import CanvasCorruptedError
 from app.shared.path_policy import assert_path_within
 from app.core.artifacts import (
     LatestProjectArtifactRef,
@@ -569,22 +570,25 @@ def delete_api_connection(api_id: str, current_user: CurrentUser = Depends(requi
                     continue
                 try:
                     canvas = _project_service.get_project_canvas(proj_id)
-                except Exception as _canvas_err:
-                    # Canvas corrotto di un progetto != della api
-                    # connection che stiamo cancellando → non blocchiamo
+                except CanvasCorruptedError as _canvas_err:
+                    # Batch Fix 6.4: narrow catch tipizzato (era isinstance
+                    # inside broad). Canvas corrotto di un progetto != della
+                    # api connection che stiamo cancellando → non blocchiamo
                     # la delete, ma logghiamo per triage.
-                    from app.shared.exceptions import CanvasCorruptedError
-                    if isinstance(_canvas_err, CanvasCorruptedError):
-                        logger.warning(
-                            f"delete_api_connection: canvas corrotto "
-                            f"per progetto {proj_id} skippato "
-                            f"({_canvas_err.reason})"
-                        )
-                    else:
-                        logger.warning(
-                            f"delete_api_connection: errore lettura canvas "
-                            f"{proj_id}: {_canvas_err}"
-                        )
+                    logger.warning(
+                        f"delete_api_connection: canvas corrotto "
+                        f"per progetto {proj_id} skippato "
+                        f"({_canvas_err.reason})"
+                    )
+                    continue
+                except Exception as _canvas_err:
+                    # Altre eccezioni di lettura canvas: comportamento
+                    # invariato (per-consumer fail-open), messaggio log
+                    # generico per triage.
+                    logger.warning(
+                        f"delete_api_connection: errore lettura canvas "
+                        f"{proj_id}: {_canvas_err}"
+                    )
                     continue
                 if not canvas:
                     continue

@@ -25,6 +25,7 @@ from app.utils.logger import get_logger
 from app.shared.audit_action import audit_action
 from app.shared.models import CanvasState, Node, Edge
 from app.shared.exceptions import ProjectHasDependenciesError, CanvasCorruptedError
+from app.services.project_lineage import ProjectLineageCycleError
 from app.core.auth.auth import (
     get_current_user,
     require_not_esecutore,
@@ -333,11 +334,11 @@ def update_project_canvas(
             raise HTTPException(404, f"Progetto '{project_id}' non trovato")
     except HTTPException:
         raise
-    except Exception as e:
-        from app.services.project_lineage import ProjectLineageCycleError
-        if isinstance(e, ProjectLineageCycleError):
-            raise HTTPException(400, str(e))
-        raise
+    except ProjectLineageCycleError as e:
+        # Batch Fix 6.4: narrow catch tipizzato (era isinstance inside broad).
+        # La chain `from e` preserva il traceback originale nel log backend
+        # senza leakarlo nel detail HTTP (FastAPI serializza solo HTTPException).
+        raise HTTPException(400, str(e)) from e
 
     # Estrai e salva columns_metadata dal nodo Result
     columns_metadata = []
