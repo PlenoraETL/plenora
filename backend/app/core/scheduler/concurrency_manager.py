@@ -10,6 +10,10 @@ Chiavi:
 
 from datetime import datetime, timedelta, timezone
 from typing import Literal
+
+import psycopg2
+import psycopg2.errors
+
 import app.db.db_service as db
 from app.config import settings
 from app.utils.logger import get_logger
@@ -91,20 +95,32 @@ class ConcurrencyManager:
         return row["value"]
 
     def _set_nx(self, key: str, value: str, ttl_seconds: int = None) -> bool:
-        """SET NX — imposta solo se non esiste. Returns True se acquisito."""
+        """SET NX — imposta solo se non esiste. Returns True se acquisito.
+
+        Il catch e' narrow a (UniqueViolation, IntegrityError) per preservare
+        la semantica control-flow "chiave gia' esistente" SOLO sui casi
+        legittimi di conflitto UNIQUE. Altri errori DB (pool exhausted,
+        connection down, bug logici) propagano al caller `try_acquire`, che
+        a sua volta propaga al boundary `ExecutionManager.execute` — cosi'
+        il vero problema emerge come status failure esplicito invece di
+        "queued" misleading (pre-fix: qualsiasi errore -> False silent ->
+        coda corrotta su DB down).
+        """
         # Prima pulisci eventuali lock scaduti
         self._get(key)  # side effect: cancella se scaduto
         expires_at = None
         if ttl_seconds:
             expires_at = (datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)).isoformat()
+        # intent: exception-as-control-flow tipizzata (UNIQUE -> False)
+        # outcome: fail-closed sugli errori non-UNIQUE (propagano)
         try:
             db.execute(
                 "INSERT INTO scheduler_locks (key, value, expires_at) VALUES (?,?,?)",
                 (key, value, expires_at)
             )
             return True
-        except Exception:
-            return False  # chiave già esistente
+        except (psycopg2.errors.UniqueViolation, psycopg2.IntegrityError):
+            return False  # semantica UNIQUE constraint — lock gia' preso
 
     def _incr(self, key: str) -> int:
         """Incrementa contatore atomicamente, crea se non esiste.
