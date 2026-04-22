@@ -23,6 +23,9 @@ Avvio Beat:
 
 from celery import Celery
 from app.config import settings
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 # Redis come broker e backend
 BROKER_URL  = settings.CELERY_BROKER_URL    # redis://localhost:6379/0
@@ -126,11 +129,18 @@ def _propagate_request_id_on_publish(sender=None, headers=None, **kwargs):
         if req_id and headers is not None:
             # Celery usa headers dict "raw" — convenzione: chiave custom.
             headers["X-Request-ID"] = req_id
-    except Exception:
+    except Exception as e:
         # Non bloccare mai la pubblicazione del task per un errore nel
         # propagate — il task stesso funziona comunque, solo perde il
-        # correlation ID.
-        pass
+        # correlation ID. Breadcrumb best-effort: se anche il log fallisce
+        # (hot path signal handler), non propagare.
+        try:
+            logger.warning(
+                f"[SIGNAL] before_task_publish: propagazione request_id "
+                f"fallita (task perde correlation id): {e}"
+            )
+        except Exception:
+            pass
 
 
 @task_prerun.connect
@@ -145,8 +155,16 @@ def _set_request_id_from_task(task_id=None, task=None, **kwargs):
         # cosi' c'e' sempre un id per correlare le righe di log di un
         # singolo task.
         set_request_id(req_id or (task_id or ""))
-    except Exception:
-        pass
+    except Exception as e:
+        # Breadcrumb best-effort: il worker continua (log del task perdera'
+        # correlation id, ma il task non deve crashare per questo).
+        try:
+            logger.warning(
+                f"[SIGNAL] task_prerun: set request_id fallito per "
+                f"task_id={task_id}: {e}"
+            )
+        except Exception:
+            pass
 
 
 @task_postrun.connect
@@ -156,8 +174,16 @@ def _clear_request_id_after_task(**kwargs):
     try:
         from app.utils.logger import set_request_id
         set_request_id("")
-    except Exception:
-        pass
+    except Exception as e:
+        # Breadcrumb best-effort: se il reset fallisce, il prossimo task
+        # nello stesso worker potrebbe ereditare il request_id precedente
+        # — diagnosi utile per correlation leak cross-task.
+        try:
+            logger.warning(
+                f"[SIGNAL] task_postrun: reset request_id fallito: {e}"
+            )
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":

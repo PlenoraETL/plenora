@@ -151,5 +151,12 @@ def beat_heartbeat():
             "ON CONFLICT (id) DO UPDATE SET ts = EXCLUDED.ts",
             (now,)
         )
-    except Exception:
-        pass
+    except Exception as e:
+        # Breadcrumb obbligatorio: la tabella beat_heartbeat e' letta
+        # dall'healthcheck — un silent swallow qui nasconde un DB down
+        # dietro un beat apparentemente sano. Non re-raise: il task e'
+        # `ignore_result=True` e non deve rompere il tick beat.
+        logger.warning(
+            f"[HEARTBEAT] INSERT beat_heartbeat fallito "
+            f"(healthcheck vedra' beat stale): {e}"
+        )
