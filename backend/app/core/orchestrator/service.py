@@ -242,11 +242,13 @@ class OrchestratorService:
                 "message": f"{len(tasks)} task CARICA avviati"
             }
 
+        # intent: optional feature — pipeline success indipendente da launch CARICA
+        # outcome: fail-open sanitizzato (stringa opaca al FE, dettaglio tecnico solo nel log)
         except Exception as e:
             logger.error(f"[CRASH] Errore avvio task CARICA: {e}", op="carica", project_id=project_id, exc_info=True)
             return {
-                "error": str(e),
-                "message": "Errore nell'avvio del caricamento"
+                "error": "carica_launch_failed",
+                "message": "Errore nell'avvio del caricamento (consulta log)"
             }
 
     def _find_carica_node(self, canvas: CanvasState) -> Optional[Any]:
