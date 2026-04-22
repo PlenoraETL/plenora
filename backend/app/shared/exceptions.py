@@ -200,6 +200,60 @@ class ProjectCleanupPartialError(Exception):
         )
 
 
+class IntermediateWriteError(Exception):
+    """Sollevata quando la scrittura intermediate di un nodo fallisce.
+
+    Contesto (reperto S2 Batch 8, audit `error_handling_batch8_storage_provider_audit.md`):
+      `intermediate/writer.write_node` e' chiamato dagli executor
+      (estrai/manipola/arricchisci) a fine nodo per persistere righe e
+      metadata nella intermediate.db (PG plenora schema). Pre-fix un
+      fallimento ritornava silenziosamente `sha256(b"error").hexdigest()`:
+      un hash sintatticamente valido (64 hex chars) ma semanticamente
+      fake. Indistinguibile da un hash reale a valle → `input_hash` e
+      `output_hash` del run potevano contenere marker "error" invisibile,
+      violando l'invariante di determinismo di dedup/replay.
+
+    Post-fix (questa eccezione):
+      - Il fake hash NON viene piu' ritornato.
+      - `write_node` solleva questa eccezione dopo aver tentato il fallback
+        `upsert_node_meta(status="error")` come resource guard.
+      - I caller attuali (query_executor, manipola/executor, arricchisci/
+        api_connector, enrichment_task) gia' wrappano `write_node` in
+        `try/except Exception: logger.warning + pass` perche' il contratto
+        di intermediate e' "best-effort non bloccante": l'eccezione viene
+        swallowed lato caller. Effetto macroscopico invariato, ma invariante
+        di determinismo preservato.
+      - Caller futuri che vogliono differenziare "intermediate non critico"
+        da "pipeline primaria fallita" possono fare `except
+        IntermediateWriteError` invece di `except Exception` broad.
+
+    Attributi:
+        run_id: id della run intermediate su cui il write ha fallito.
+        node_id: id del nodo che ha fallito la scrittura.
+        original_error: eccezione sottostante (tipicamente psycopg2.Error,
+            OSError, ecc.). Usata per logging strutturato + preservazione
+            chain traceback via `raise ... from original_error`. Non va
+            esposta via response API.
+    """
+
+    def __init__(
+        self,
+        run_id: str,
+        node_id: str,
+        original_error: Optional[Exception] = None,
+    ):
+        self.run_id = run_id
+        self.node_id = node_id
+        self.original_error = original_error
+        err_type = (
+            type(original_error).__name__ if original_error else "unknown"
+        )
+        super().__init__(
+            f"Intermediate write fallito per run={run_id} node={node_id} "
+            f"({err_type})"
+        )
+
+
 class ExecutionContextError(Exception):
     """Sollevata quando l'inizializzazione del contesto di esecuzione
     per `arricchisci/api_connector.execute_enrichment` fallisce su

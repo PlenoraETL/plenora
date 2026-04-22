@@ -215,13 +215,21 @@ def write_node(run_id: str, node_id: str, node_type: str,
         )
         return node_hash
 
+    # intent: resource guard — fallback upsert_node_meta(status="error") +
+    # re-raise tipizzato via IntermediateWriteError (chain preservata via
+    # `from e`). Pre-fix ritornava silenziosamente `sha256(b"error")`: hash
+    # sintatticamente valido ma semanticamente fake, che contaminava
+    # input_hash/output_hash del run e violava l'invariante di determinismo
+    # di dedup/replay. I caller attuali wrappano in try/except e swallowano
+    # come "best-effort non bloccante" → effetto macroscopico invariato.
+    # outcome: fail-closed tipizzato.
     except Exception as e:
         logger.error(
-            f"Errore scrittura nodo {node_id} run {run_id}: {e}",
+            f"[CRASH] Errore scrittura nodo {node_id} run {run_id}: {e}",
             op="intermediate_write",
-            exc_info=True
+            exc_info=True,
         )
-        # Scrive comunque node_meta con errore
+        # Scrive comunque node_meta con errore (resource guard best-effort)
         try:
             db.upsert_node_meta(
                 run_id=run_id,
@@ -238,7 +246,10 @@ def write_node(run_id: str, node_id: str, node_type: str,
                 f"{type(_cleanup_err).__name__}: {_cleanup_err}",
                 op="intermediate_write",
             )
-        return hashlib.sha256(b"error").hexdigest()
+        from app.shared.exceptions import IntermediateWriteError
+        raise IntermediateWriteError(
+            run_id=run_id, node_id=node_id, original_error=e,
+        ) from e
 
 
 def close_run(run_id: str, input_hash: str, output_hash: str,
