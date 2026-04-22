@@ -253,7 +253,8 @@ def execute_carica_task(
                     "occurred_at_ms": elapsed_ms,
                 },
             )
-        except Exception:
+        except Exception as e:
+            logger.debug(f"DebugPayloadBuilder fallito: {type(e).__name__}: {e}")
             debug_payload = None
 
         # Canali admin preservano str(e) per postmortem (log_runs DB / progress UI)

@@ -57,7 +57,8 @@ def _get_project_info(project_id: str) -> dict:
     try:
         import app.db.config_db_service as cfg_db
         return cfg_db.get_project(project_id) or {}
-    except Exception:
+    except Exception as e:
+        logger.debug(f"project info lookup fallito: {type(e).__name__}: {e}")
         return {}
 
 

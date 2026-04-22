@@ -1029,7 +1029,8 @@ class ExecutionManager:
                         "occurred_at_ms": total_duration,
                     },
                 )
-            except Exception:
+            except Exception as e:
+                logger.debug(f"DebugPayloadBuilder fallito (scheduler): {type(e).__name__}: {e}")
                 _debug_payload = None
 
             close_run(

@@ -1137,7 +1137,8 @@ def execute_enrichment_task(
                         "occurred_at_ms": _elapsed_ms_f,
                     },
                 )
-            except Exception:
+            except Exception as e:
+                logger.debug(f"DebugPayloadBuilder fallito (enrichment): {type(e).__name__}: {e}")
                 _debug_payload = None
 
             close_run(
@@ -1297,7 +1298,8 @@ def _trigger_carica_if_present(project_id: str, canvas: Dict, output_format: str
     try:
         metadata = ProjectService().get_project_metadata(project_id)
         group_id = getattr(metadata, 'group_id', None) if metadata else None
-    except Exception:
+    except Exception as e:
+        logger.debug(f"group_id metadata lookup fallito: {type(e).__name__}: {e}")
         group_id = None
 
     tasks = []
