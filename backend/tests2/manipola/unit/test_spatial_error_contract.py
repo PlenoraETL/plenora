@@ -1,11 +1,13 @@
-"""Contract test — fail-closed sui transform di spatial.py (D1 + D2).
+"""Contract test — fail-closed su tutti i 32 transform di spatial.py
+(D1 + D2 + D3).
 
-Verifica che un errore interno dei 28 transform (17 single-input di D1 +
-11 multi-input di D2) di `spatial.py` venga propagato al caller invece
-di essere silenziato. Pre-fix, ogni transform catturava qualunque
-Exception, loggava "[CRASH] Errore X" e ritornava l'input originale
-(fail-open illegittimo — cfr. audit Batch 4). Post-fix, il catch si
-limita a loggare e rilanciare bare.
+Verifica che un errore interno dei 32 transform di `spatial.py` (17
+single-input D1 + 11 multi-input D2 + 4 builder/extractor D3) venga
+propagato al caller invece di essere silenziato. Pre-fix, ogni transform
+catturava qualunque Exception, loggava "[CRASH] Errore X" e ritornava
+l'input originale (fail-open illegittimo — cfr. audit Batch 4). Post-fix,
+il catch si limita a loggare e rilanciare bare. D3 chiude anche lo smell
+S6 (fallback rischioso `to_geodataframe` nel ramo except).
 
 Il test copre:
 1. Contratto fail-closed locale sulle 3 transform single-input
@@ -16,6 +18,9 @@ Il test copre:
 4. Contratto fail-closed locale sulle 3 transform multi-input
    rappresentative di D2 (sjoin, overlay, count_points_in_polygons).
 5. Smoke regression sull'happy path multi-input (op_sjoin).
+6. Contratto fail-closed sui 4 builder/extractor D3 + verifica che il
+   ramo except non re-invoca `to_geodataframe` (chiusura smell S6).
+7. Smoke regression sull'happy path builder (op_geo_bounds_extractor).
 
 Il focus e' il contratto fail-closed. Il dettaglio del log (tag [CRASH],
 exc_info) non e' parte dell'asserzione principale.
@@ -31,11 +36,15 @@ import pytest
 from shapely.geometry import Point, Polygon
 
 from app.core.manipola.transforms.spatial import (
+    op_geo_bounds_extractor,
     op_geo_buffer,
     op_geo_count_points_in_polygons,
     op_geo_dissolve,
+    op_geo_line_builder,
     op_geo_overlay,
+    op_geo_polygon_builder,
     op_geo_reproject,
+    op_geo_vertex_count,
     op_sjoin,
 )
 from app.core.manipola.plugin_executor import PluginExecutor
@@ -176,3 +185,62 @@ def test_sjoin_happy_path_unchanged():
                       predicate="within")
     assert "zone" in result.columns
     assert result["zone"].iloc[0] == "A"
+
+
+# =============================================================================
+# 6. Contratto fail-closed sui 4 builder/extractor (D3) + chiusura S6
+# =============================================================================
+
+@pytest.mark.parametrize(
+    "transform, args, kwargs",
+    [
+        (op_geo_bounds_extractor, ("geometry",), {}),
+        (op_geo_vertex_count,     ("geometry",), {}),
+        (op_geo_line_builder,     ("geometry",), {"group_column": "grp"}),
+        (op_geo_polygon_builder,  ("geometry",), {"group_column": "grp"}),
+    ],
+    ids=["bounds_extractor", "vertex_count", "line_builder", "polygon_builder"],
+)
+def test_builder_extractor_reraises_and_closes_s6(transform, args, kwargs):
+    """I 4 builder/extractor devono fail-closed come D1/D2. In piu', il
+    ramo except NON deve re-invocare `to_geodataframe` (smell S6 pre-fix:
+    un fallback rischioso che poteva a sua volta sollevare, mascherando
+    l'errore originale).
+
+    Verifica combinata:
+    - pytest.raises con il messaggio originale (non quello del fallback)
+    - mock.call_count == 1 (to_geodataframe chiamata solo nel try, mai
+      nell'except — smell S6 chiuso)."""
+    df = pd.DataFrame({"geometry": [None], "id": [1], "grp": ["A"]})
+
+    with patch(
+        "app.core.manipola.transforms.spatial.to_geodataframe",
+        side_effect=RuntimeError("mock-builder-failure"),
+    ) as mock_tgdf:
+        with pytest.raises(RuntimeError, match="mock-builder-failure"):
+            transform(df, *args, **kwargs)
+
+    # Pre-fix D3: il ramo except tentava di nuovo to_geodataframe,
+    # call_count sarebbe stato 2. Post-fix: solo 1 (la chiamata nel try).
+    assert mock_tgdf.call_count == 1, (
+        f"smell S6 non chiuso: to_geodataframe invocata {mock_tgdf.call_count} "
+        f"volte (attese: 1). Il ramo except sta ancora tentando il fallback."
+    )
+
+
+# =============================================================================
+# 7. Smoke regression sull'happy path builder (D3)
+# =============================================================================
+
+def test_bounds_extractor_happy_path_unchanged():
+    """Il fix D3 tocca solo il ramo except: l'happy path deve restare
+    identico. bounds_extractor su un GDF valido produce le 4 colonne
+    min_x, min_y, max_x, max_y."""
+    gdf = gpd.GeoDataFrame(
+        {"id": [1]},
+        geometry=[Point(11.34, 44.49)],
+        crs="EPSG:4326",
+    )
+    result = op_geo_bounds_extractor(gdf, "geometry")
+    for col in ("min_x", "min_y", "max_x", "max_y"):
+        assert col in result.columns

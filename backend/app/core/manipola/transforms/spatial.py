@@ -1738,7 +1738,7 @@ def op_geo_bounds_extractor(
 
     except Exception as e:
         logger.error(f"[CRASH] Errore GeoBoundsExtractor: {e}", exc_info=True)
-        return to_geodataframe(df, geom_column) if not isinstance(df, gpd.GeoDataFrame) else df
+        raise
 
 
 # =============================================================================
@@ -1793,7 +1793,7 @@ def op_geo_vertex_count(
 
     except Exception as e:
         logger.error(f"[CRASH] Errore GeoVertexCount: {e}", exc_info=True)
-        return to_geodataframe(df, geom_column) if not isinstance(df, gpd.GeoDataFrame) else df
+        raise
 
 
 # =============================================================================
@@ -1855,7 +1855,7 @@ def op_geo_line_builder(
 
     except Exception as e:
         logger.error(f"[CRASH] Errore GeoLineBuilder: {e}", exc_info=True)
-        return to_geodataframe(df, geom_column) if not isinstance(df, gpd.GeoDataFrame) else df
+        raise
 
 
 # =============================================================================
@@ -1921,4 +1921,4 @@ def op_geo_polygon_builder(
 
     except Exception as e:
         logger.error(f"[CRASH] Errore GeoPolygonBuilder: {e}", exc_info=True)
-        return to_geodataframe(df, geom_column) if not isinstance(df, gpd.GeoDataFrame) else df
+        raise
