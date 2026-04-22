@@ -1308,9 +1308,21 @@ def op_mask_data(
             
             logger.info(f"Mask Data: {column} -> {out_col} (tipo: {mask_type})")
             
+        # intent: fail-closed all-or-nothing masking — privacy-safe.
+        # Se una colonna fallisce, l'intero transform fallisce prima di
+        # ritornare un `result` con colonne parzialmente mascherate (leak
+        # PII). Il caller executor manipola (batch 5 E1 chiuso) cattura
+        # RuntimeError e traduce in error dict del nodo. str(e) tecnico
+        # preservato nel logger.error [CRASH] server-side per postmortem.
         except Exception as e:
-            logger.error(f"[CRASH] Errore mascheramento colonna '{column}': {e}", exc_info=True)
-            continue
+            logger.error(
+                f"[CRASH] Errore mascheramento colonna '{column}': {e}",
+                exc_info=True,
+            )
+            raise RuntimeError(
+                f"Mask Data: mascheramento fallito per la colonna '{column}'. "
+                f"Operazione interrotta per prevenire leak PII parziale."
+            ) from e
     
     return result
 
