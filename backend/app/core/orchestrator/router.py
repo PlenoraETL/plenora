@@ -442,7 +442,21 @@ def cancel_task(task_id: str, current_user: CurrentUser = Depends(get_current_us
         raise HTTPException(status_code=500, detail="Errore interno del server")
 
 
-@tasks_router.delete("/{task_id}/full-cleanup", status_code=204)
+@tasks_router.delete(
+    "/{task_id}/full-cleanup",
+    status_code=204,
+    responses={
+        204: {"description": "Cleanup completato — tutti gli step ok"},
+        207: {
+            "description": (
+                "Cleanup parziale — almeno uno degli step ha fallito. "
+                "Body: {status: 'partial', failed_steps: [step_name, ...]} "
+                "dove step_name in {delete_result, unlink_output_file, "
+                "delete_log_runs, celery_forget}."
+            )
+        },
+    },
+)
 def cleanup_task_completely(task_id: str, current_user: CurrentUser = Depends(get_current_user)):
     """
     Cleanup completo di un task: elimina result file/blob, log entries e revoca
@@ -456,6 +470,16 @@ def cleanup_task_completely(task_id: str, current_user: CurrentUser = Depends(ge
         dell'utente corrente. Cross-tenant → 403.
       - Senza project_id non possiamo verificare ownership: 404.
       - Idempotente: ripetere su stesso task non è un errore.
+
+    STATUS CODE:
+      - 204: tutti e 4 gli step cleanup (delete_result, unlink_output_file,
+        delete_log_runs, celery_forget) sono andati a buon fine.
+      - 207: almeno uno step ha sollevato. Body JSON con `failed_steps`
+        list espone al caller quali step non sono stati completati.
+        Gli step sono best-effort individualmente (uno che fallisce non
+        blocca gli altri), ma il caller deve poter sapere che il cleanup
+        non e' integrale — altrimenti il claim GDPR "rimuovere ogni traccia"
+        resta silenziosamente violato.
     """
     from app.services.task_service import task_service
     import app.db.results_db_service as _results_db
@@ -511,6 +535,12 @@ def cleanup_task_completely(task_id: str, current_user: CurrentUser = Depends(ge
     # "cleanup task" distruggerebbe lo storico dell'intero progetto).
     # ──────────────────────────────────────────────────────────────
 
+    # Accumulatore step cleanup falliti. Ogni step e' best-effort (un fallimento
+    # non blocca i successivi) ma l'esito aggregato finisce nel body 207 cosi'
+    # che il caller sappia quali step non sono andati a buon fine.
+    failed_steps: List[str] = []
+
+    # intent: cascade step best-effort / outcome: fail-open con aggregazione
     # 3. Result row: solo il record di questo task, non tutti del progetto
     try:
         result_id = task_result_payload.get("result_id")
@@ -523,7 +553,8 @@ def cleanup_task_completely(task_id: str, current_user: CurrentUser = Depends(ge
             # per non rischiare di toccare record di altri task.
             logger.debug(f"cleanup: task {task_id} senza result_id nel payload, skip results")
     except Exception as e:
-        logger.warning(f"cleanup: errore delete_result: {e}")
+        logger.warning(f"cleanup: errore delete_result: {e}", exc_info=True)
+        failed_steps.append("delete_result")
 
     # 4. File output specifico del task (se persistito su disco)
     # Il task Celery salva il nome file in `output_file`. Proviamo a
@@ -542,16 +573,20 @@ def cleanup_task_completely(task_id: str, current_user: CurrentUser = Depends(ge
                     resolved.unlink()
                     logger.info(f"cleanup: file output rimosso: {resolved.name}")
             except ValueError:
+                # Path traversal guard: file fuori da RESULTS_DIR, skip sicuro
+                # (non contato in failed_steps: e' una safety skip, non un fallimento)
                 logger.warning(f"cleanup: output_file fuori da RESULTS_DIR, skip")
     except Exception as e:
-        logger.warning(f"cleanup: errore rimozione output_file: {e}")
+        logger.warning(f"cleanup: errore rimozione output_file: {e}", exc_info=True)
+        failed_steps.append("unlink_output_file")
 
     # 5. log_runs: cleanup esplicito per non lasciare orfani.
     try:
         from app.db.pg_connection import execute as _pg_exec
         _pg_exec("DELETE FROM log_runs WHERE run_id = ?", (task_id,))
     except Exception as e:
-        logger.warning(f"cleanup: errore delete log_runs: {e}")
+        logger.warning(f"cleanup: errore delete log_runs: {e}", exc_info=True)
+        failed_steps.append("delete_log_runs")
 
     # 6. Forget del result Celery (libera Redis)
     try:
@@ -559,7 +594,23 @@ def cleanup_task_completely(task_id: str, current_user: CurrentUser = Depends(ge
         ar = AsyncResult(task_id, app=task_service.app)
         ar.forget()
     except Exception as e:
-        logger.warning(f"cleanup: errore forget Celery: {e}")
+        logger.warning(f"cleanup: errore forget Celery: {e}", exc_info=True)
+        failed_steps.append("celery_forget")
+
+    # Esito aggregato: se qualche step ha fallito, 207 Multi-Status con body
+    # JSON che espone al caller quali step non sono stati completati. Altrimenti
+    # 204 No Content (path invariato). FE consumer (axios) tratta 207 come
+    # success (validateStatus default 200-299), quindi nessun breaking change
+    # UX — il body e' leggibile dai caller futuri che vogliono differenziare.
+    if failed_steps:
+        from fastapi.responses import JSONResponse
+        logger.warning(
+            f"cleanup: task {task_id} partial — failed_steps={failed_steps}"
+        )
+        return JSONResponse(
+            status_code=207,
+            content={"status": "partial", "failed_steps": failed_steps},
+        )
 
     return None  # 204 No Content
 
