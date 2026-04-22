@@ -228,7 +228,7 @@ def op_sjoin(
         
     except Exception as e:
         logger.error(f"[CRASH] Errore Spatial Join: {e}", exc_info=True)
-        return inputs[0] if inputs else gpd.GeoDataFrame()
+        raise
 
 
 # =============================================================================
@@ -431,7 +431,7 @@ def op_geo_clip(
         
     except Exception as e:
         logger.error(f"[CRASH] Errore Clip: {e}", exc_info=True)
-        return inputs[0] if inputs else gpd.GeoDataFrame()
+        raise
 
 
 # =============================================================================
@@ -533,7 +533,7 @@ def op_geo_intersection(
         
     except Exception as e:
         logger.error(f"[CRASH] Errore Intersection: {e}", exc_info=True)
-        return inputs[0] if inputs else gpd.GeoDataFrame()
+        raise
 
 
 # =============================================================================
@@ -576,7 +576,7 @@ def op_geo_union(
         
     except Exception as e:
         logger.error(f"[CRASH] Errore Union geometrica: {e}", exc_info=True)
-        return inputs[0] if inputs else gpd.GeoDataFrame()
+        raise
 
 
 # =============================================================================
@@ -619,7 +619,7 @@ def op_geo_difference(
         
     except Exception as e:
         logger.error(f"[CRASH] Errore Difference: {e}", exc_info=True)
-        return inputs[0] if inputs else gpd.GeoDataFrame()
+        raise
 
 
 # =============================================================================
@@ -846,7 +846,7 @@ def op_geo_distance(
 
     except Exception as e:
         logger.error(f"[CRASH] Errore Distance: {e}", exc_info=True)
-        return dfs[0] if dfs else gpd.GeoDataFrame()
+        raise
 
 
 # =============================================================================
@@ -931,7 +931,7 @@ def op_geo_nearest(
 
     except Exception as e:
         logger.error(f"[CRASH] Errore Nearest: {e}", exc_info=True)
-        return dfs[0] if dfs else gpd.GeoDataFrame()
+        raise
 
 
 # =============================================================================
@@ -1165,7 +1165,7 @@ def op_geo_within(
 
     except Exception as e:
         logger.error(f"[CRASH] Errore Within: {e}", exc_info=True)
-        return dfs[0] if dfs else gpd.GeoDataFrame()
+        raise
 
 
 # =============================================================================
@@ -1415,7 +1415,7 @@ def op_geo_symmetric_difference(
 
     except Exception as e:
         logger.error(f"[CRASH] Errore Symmetric Difference: {e}", exc_info=True)
-        return dfs[0] if dfs else gpd.GeoDataFrame()
+        raise
 
 
 # =============================================================================
@@ -1511,7 +1511,7 @@ def op_geo_count_points_in_polygons(
 
     except Exception as e:
         logger.error(f"[CRASH] Errore CountPointsInPolygons: {e}", exc_info=True)
-        return dfs[0] if dfs else gpd.GeoDataFrame()
+        raise
 
 
 # =============================================================================
@@ -1690,7 +1690,7 @@ def op_geo_overlay(
 
     except Exception as e:
         logger.error(f"[CRASH] Errore Overlay: {e}", exc_info=True)
-        return dfs[0] if dfs else gpd.GeoDataFrame()
+        raise
 
 
 # =============================================================================
