@@ -246,24 +246,44 @@ class ArtifactResolver:
         #   ancora dentro RESULTS_DIR)
         # Path arbitrari dal client vengono sempre rifiutati: l'unico
         # produttore di output_path e' il backend stesso.
+        # intent: resource guard (build path whitelist) / outcome: fail-closed
+        # esplicito se la lista finale e' vuota. Una lista parziale (≥1 root)
+        # e' ammessa — gli altri root sono tracciabili via warning log, cosi'
+        # che config/FS issue siano diagnosticabili post-hoc senza confonderle
+        # con path client malicious al livello `assert_path_within` a valle.
         trusted_roots = []
         try:
             results_root = (Path(settings.RESULTS_DIR).resolve() / project_id).resolve()
             trusted_roots.append(results_root)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(
+                f"trusted_roots build: RESULTS_DIR resolve fallito per project_id={project_id}: {e}",
+                exc_info=True,
+            )
         for attr in ("TEMP_DIR", "DATA_DIR"):
             try:
                 base = getattr(settings, attr, None)
                 if not base:
-                    continue
+                    continue  # setting non impostato: skip legittimo, non un fallimento
                 base = Path(base).resolve()
                 if attr == "DATA_DIR":
                     trusted_roots.append((base / "temp").resolve())
                 else:
                     trusted_roots.append(base)
-            except Exception:
-                continue
+            except Exception as e:
+                logger.warning(
+                    f"trusted_roots build: attr={attr} resolve fallito: {e}",
+                    exc_info=True,
+                )
+
+        # Gate fail-closed: lista vuota = config rotta o FS unmount, non un
+        # path client malicious. Raise esplicito con messaggio diagnostico
+        # che distingue questo caso dal "fuori dai root" a valle.
+        if not trusted_roots:
+            raise ArtifactResolutionError(
+                "trusted_roots build fallita: nessun root valido disponibile "
+                "(verifica config RESULTS_DIR/DATA_DIR/TEMP_DIR)"
+            )
 
         # Validazione delegata a `assert_path_within`. Convertiamo
         # `ValueError` in `ArtifactResolutionError` con messaggi
