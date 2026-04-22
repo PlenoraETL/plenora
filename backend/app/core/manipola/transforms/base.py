@@ -333,9 +333,16 @@ def op_filter(
         logger.info(f"Filter: {len(df)} -> {len(result)} righe")
         return result
         
+    # intent: fail-closed — input utente invalido (operatore/valore
+    # incompatibile con tipo colonna, runtime error pandas) solleva
+    # ValueError con messaggio safe. str(e) tecnico preservato solo
+    # nel logger.warning server-side per postmortem admin.
     except Exception as e:
         logger.warning(f"[GESTITO] Errore Filter '{operator}' su colonna '{column}': {e}")
-        return df
+        raise ValueError(
+            f"Filter: operatore '{operator}' non applicabile sulla colonna "
+            f"'{column}' con il valore fornito. Verificare tipo e sintassi."
+        ) from e
 
 
 # =============================================================================
@@ -586,9 +593,17 @@ def op_formula(
         logger.info(f"Formula (eval namespace) ok: '{new_column}'")
         return result
 
+    # intent: fail-closed — formula utente non valida (sintassi, AST
+    # bloccata per security, runtime error) solleva ValueError con
+    # messaggio safe. Dettaglio tecnico preservato nel logger.warning
+    # server-side. Security-win (audit §7.5): il blocco AST validator
+    # ora e' visibile all'utente invece di silent "non ha effetto".
     except Exception as e:
         logger.warning(f"[GESTITO] Formula '{formula}' non valida: {e}")
-        return df
+        raise ValueError(
+            f"Formula '{formula}' non valida o non consentita. "
+            f"Verificare sintassi e operatori ammessi."
+        ) from e
 
 
 # =============================================================================
