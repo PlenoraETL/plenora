@@ -101,7 +101,7 @@ def create_datasource(data: DataSourceCreate, current_user: CurrentUser = Depend
             ds.can_edit = compute_can_edit(ds, current_user)
         return ds
     except Exception as e:
-        logger.error(f"[GESTITO] Errore creazione Data Source: {e}")
+        logger.error(f"[CRASH] Errore creazione Data Source: {e}")
         raise HTTPException(500, "Errore interno del server")
 
 
@@ -301,7 +301,7 @@ def list_files(
     except DataSourceError as e:
         raise _ds_error_to_http(e)
     except Exception as e:
-        logger.error(f"[GESTITO] Errore list_files {ds_id}: {e}")
+        logger.error(f"[CRASH] Errore list_files {ds_id}: {e}")
         raise HTTPException(500, "Errore interno del server")
 
 
@@ -339,7 +339,7 @@ def download_file(
     except DataSourceError as e:
         raise _ds_error_to_http(e)
     except Exception as e:
-        logger.error(f"[GESTITO] Errore download {ds_id}/{path}: {e}")
+        logger.error(f"[CRASH] Errore download {ds_id}/{path}: {e}")
         raise HTTPException(500, "Errore interno del server")
 
 
@@ -380,7 +380,7 @@ def upload_file(
     except DataSourceError as e:
         raise _ds_error_to_http(e)
     except Exception as e:
-        logger.error(f"[GESTITO] Errore upload {ds_id}/{path}: {e}")
+        logger.error(f"[CRASH] Errore upload {ds_id}/{path}: {e}")
         raise HTTPException(500, "Errore interno del server")
 
 

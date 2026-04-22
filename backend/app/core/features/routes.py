@@ -130,7 +130,7 @@ async def create_connection(data: ArcGISCreate, current_user: CurrentUser = Depe
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"[GESTITO] Errore creazione connessione ArcGIS: {e}", exc_info=True)
+        logger.error(f"[CRASH] Errore creazione connessione ArcGIS: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Errore interno del server")
 
 
