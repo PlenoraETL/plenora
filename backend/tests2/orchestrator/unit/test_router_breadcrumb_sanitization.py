@@ -1,0 +1,144 @@
+"""[phase-2-err][batch9] C2 — breadcrumb + detail fisso in orchestrator/router.
+
+Audit Batch 9 §3.2 S4/S5/S8/S9 — fix F6.1-F6.5:
+  - F6.1: `_assert_task_group` broad→404 ora emette `logger.warning([GESTITO])`
+    con exc_info prima del raise (DB/Redis transient distinguibili in log).
+  - F6.2: `get_task_status` endpoint 404 con `detail="Task non trovato"` fisso
+    (rimuove interpolazione task_id che e' input utente).
+  - F6.3: `full-cleanup` tenant check su ProjectService lookup: breadcrumb
+    warning prima di `_meta = None` (bypass admin non piu' silent).
+  - F6.4: S3 eseguibili lookup `exc_info=True` aggiunto al warning.
+  - F6.5: S3 open_stream boundary `exc_info=True` aggiunto al [CRASH] error.
+
+Tutti i fix sono **additive**: zero cambio HTTP status code, zero cambio
+logica di flusso. Solo breadcrumb + sanitize detail string.
+"""
+
+from __future__ import annotations
+
+from types import SimpleNamespace
+from unittest.mock import patch
+
+import pytest
+
+
+pytestmark = [pytest.mark.unit, pytest.mark.orchestrator, pytest.mark.contract]
+
+
+# =============================================================================
+# F6.2 — get_task_status endpoint detail fisso (no task_id leak in response)
+# =============================================================================
+
+
+def test_get_task_status_detail_fixed_on_broad_exception(client):
+    """Quando task_service.get_task_status solleva non-HTTPException dentro
+    l'endpoint GET /api/tasks/{id}, il detail della 404 deve essere fisso
+    'Task non trovato' (NON interpolare task_id)."""
+    # task_id plausibile ma univoco, cosi' possiamo cercarlo nel body
+    canary_task_id = "canary-xyz-abc-123"
+
+    with patch(
+        "app.core.orchestrator.router._assert_task_group"
+    ), patch(
+        "app.services.task_service.task_service.get_task_status",
+        side_effect=RuntimeError("DB pool exhausted — internal details")
+    ):
+        response = client.get(f"/api/tasks/{canary_task_id}")
+
+    assert response.status_code == 404
+    # detail canonico senza interpolazione dell'input utente
+    assert response.json()["detail"] == "Task non trovato"
+    # il task_id NON deve comparire nel detail (no reflected input)
+    assert canary_task_id not in response.json()["detail"]
+
+
+# =============================================================================
+# F6.1 — _assert_task_group breadcrumb su lookup fail
+# =============================================================================
+
+
+def test_assert_task_group_logs_breadcrumb_on_lookup_fail(client):
+    """Quando task_service.get_task_status solleva dentro _assert_task_group,
+    deve emettere logger.warning('[GESTITO] _assert_task_group: ...')
+    con exc_info=True prima del raise HTTPException(404)."""
+    with patch(
+        "app.core.orchestrator.router.logger"
+    ) as mock_logger, patch(
+        "app.services.task_service.task_service.get_task_status",
+        side_effect=RuntimeError("redis connection reset")
+    ):
+        # Qualsiasi endpoint che passi attraverso _assert_task_group va bene.
+        # Usiamo DELETE /api/tasks/{id}/full-cleanup perche' _assert_task_group
+        # non e' invocato li', uso invece DELETE /api/tasks/{id} (cancel_task)
+        # che chiama _assert_task_group come primo step.
+        response = client.delete("/api/tasks/task-xyz")
+
+    # Il breadcrumb deve essere stato emesso prima del 404
+    gestito_calls = [
+        c for c in mock_logger.warning.call_args_list
+        if "[GESTITO]" in str(c) and "_assert_task_group" in str(c)
+    ]
+    assert gestito_calls, (
+        f"atteso logger.warning('[GESTITO] _assert_task_group: ...'), "
+        f"ricevuto: {mock_logger.warning.call_args_list}"
+    )
+    # exc_info=True preservato (traceback visibile per diagnosi transient)
+    assert any(
+        call.kwargs.get("exc_info") is True for call in gestito_calls
+    )
+    # L'endpoint risponde comunque 404 (comportamento UX invariato)
+    assert response.status_code == 404
+
+
+# =============================================================================
+# F6.3 — full-cleanup tenant check breadcrumb su ProjectService lookup
+# =============================================================================
+
+
+def test_full_cleanup_tenant_check_breadcrumb_on_project_lookup_fail(client, tmp_path):
+    """Quando ProjectService.get_project_metadata solleva nel tenant check
+    di full-cleanup, deve emettere logger.warning('[GESTITO] full-cleanup
+    tenant check: ...') con exc_info=True prima di impostare _meta=None.
+
+    User admin bypass resta attivo (l'endpoint conftest usa role='admin')
+    ma il motivo del bypass ora e' visibile in log."""
+    task_info = SimpleNamespace(
+        project_id="p1",
+        result={"project_id": "p1"},
+    )
+
+    with patch(
+        "app.core.orchestrator.router.logger"
+    ) as mock_logger, patch(
+        "app.services.task_service.task_service.get_task_status",
+        return_value=task_info
+    ), patch(
+        "app.services.project_service.ProjectService.get_project_metadata",
+        side_effect=RuntimeError("config DB lock wait timeout")
+    ), patch(
+        "app.core.orchestrator.router.settings",
+        new=SimpleNamespace(RESULTS_DIR=tmp_path)
+    ), patch(
+        "app.db.results_db_service.delete_result", return_value=True
+    ), patch(
+        "app.db.pg_connection.execute", return_value=SimpleNamespace(rowcount=0)
+    ), patch(
+        "celery.result.AsyncResult",
+        return_value=SimpleNamespace(forget=lambda: None)
+    ):
+        response = client.delete("/api/tasks/task-xyz/full-cleanup")
+
+    # Il breadcrumb tenant-check deve essere stato emesso
+    gestito_calls = [
+        c for c in mock_logger.warning.call_args_list
+        if "[GESTITO]" in str(c) and "full-cleanup tenant check" in str(c)
+    ]
+    assert gestito_calls, (
+        f"atteso warning '[GESTITO] full-cleanup tenant check: ...', "
+        f"ricevuto: {mock_logger.warning.call_args_list}"
+    )
+    assert any(
+        call.kwargs.get("exc_info") is True for call in gestito_calls
+    )
+    # 204 invariato: admin bypass continua (role=admin in fixture)
+    assert response.status_code == 204

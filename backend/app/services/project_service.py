@@ -257,9 +257,14 @@ class ProjectService:
             canvas_dict = row.get("canvas") or {}
             if isinstance(canvas_dict, str):
                 import json
+                # intent: optional feature — canvas corrotto non blocca cycle check
+                # narrow difensivo: solo errori di parse/shape attesi; altro propaga fail-loud
                 try:
                     canvas_dict = json.loads(canvas_dict)
-                except Exception:
+                except (json.JSONDecodeError, TypeError, AttributeError) as e:
+                    logger.warning(
+                        f"canvas JSON malformato in cycle check per pid={pid}: {e}"
+                    )
                     return []
             nodes = canvas_dict.get("nodes") or []
             return [
@@ -303,9 +308,14 @@ class ProjectService:
             canvas = cand.get("canvas") or {}
             if isinstance(canvas, str):
                 import json as _json
+                # intent: optional feature — canvas corrotto del candidato non blocca la
+                # scansione. Narrow difensivo come in _assert_no_lineage_cycle.get_sources.
                 try:
                     canvas = _json.loads(canvas)
-                except Exception:
+                except (_json.JSONDecodeError, TypeError, AttributeError) as e:
+                    logger.warning(
+                        f"canvas JSON malformato in _find_dependent_projects per candidato {cand_id}: {e}"
+                    )
                     continue
             nodes = canvas.get("nodes") or [] if isinstance(canvas, dict) else []
             for n in nodes:

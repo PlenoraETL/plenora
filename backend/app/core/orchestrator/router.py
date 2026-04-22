@@ -70,9 +70,15 @@ def _assert_task_group(task_id: str, current_user) -> None:
     operare sul task.
     """
     from app.services.task_service import task_service
+    # intent: boundary broad→404 / outcome: fail-closed user-facing + breadcrumb
+    # diagnostico server-side (DB/Redis transient distinguibile in log, non in UX)
     try:
         task_info = task_service.get_task_status(task_id)
-    except Exception:
+    except Exception as e:
+        logger.warning(
+            f"[GESTITO] _assert_task_group: lookup task_id={task_id} fallito: {e}",
+            exc_info=True,
+        )
         raise HTTPException(404, f"Task '{task_id}' non trovato")
 
     project_id = getattr(task_info, "project_id", None)
@@ -407,9 +413,11 @@ def get_task_status(task_id: str, current_user: CurrentUser = Depends(get_curren
 
     except HTTPException:
         raise
+    # intent: boundary broad→404 / outcome: fail-closed sanitizzato
+    # detail fisso: task_id e' input utente, niente interpolazione in response
     except Exception as e:
         logger.error(f"[CRASH] Errore lettura stato task {task_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=404, detail=f"Task {task_id} non trovato")
+        raise HTTPException(status_code=404, detail="Task non trovato")
 
 
 @tasks_router.delete("/{task_id}")
@@ -471,10 +479,16 @@ def cleanup_task_completely(task_id: str, current_user: CurrentUser = Depends(ge
             status_code=404,
             detail="Task non trovato o senza progetto associato — cleanup non eseguibile",
         )
+    # intent: boundary tenant-check / outcome: fail-open solo per progetto-gia-eliminato
+    # breadcrumb: DB transient vs progetto genuinamente mancante distinguibile in log
     try:
         from app.services.project_service import ProjectService
         _meta = ProjectService().get_project_metadata(project_id)
-    except Exception:
+    except Exception as e:
+        logger.warning(
+            f"[GESTITO] full-cleanup tenant check: project lookup project_id={project_id} fallito: {e}",
+            exc_info=True,
+        )
         _meta = None
     if _meta is None:
         # Progetto già eliminato: solo admin/superadmin possono fare cleanup residui
@@ -593,10 +607,12 @@ def download_task_result(
         safe_task_id = "".join(c for c in task_id if c.isalnum() or c in "-_")
         if safe_task_id == task_id:
             from app.core.eseguibili import storage as _eseg_storage
+            # intent: optional feature — fallback a DB blob se S3 lookup fallisce
+            # outcome: fail-open con breadcrumb (exc_info per diagnosticare S3 down)
             try:
                 _keys = _eseg_storage.find_keys(safe_task_id)
             except Exception as _e:
-                logger.warning(f"lookup eseguibili storage fallito: {_e}")
+                logger.warning(f"lookup eseguibili storage fallito: {_e}", exc_info=True)
                 _keys = []
 
             if _keys:
@@ -604,10 +620,11 @@ def download_task_result(
                 # (convention: un solo output per task eseguibile).
                 _key = _keys[0]
                 _filename = _key.rsplit("/", 1)[-1]
+                # intent: boundary broad→HTTP500 / outcome: fail-closed
                 try:
                     _stream = _eseg_storage.open_stream(_key)
                 except Exception as _e:
-                    logger.error(f"[CRASH] open_stream eseguibile {_key}: {_e}")
+                    logger.error(f"[CRASH] open_stream eseguibile {_key}: {_e}", exc_info=True)
                     raise HTTPException(status_code=500, detail="Errore apertura stream output")
 
                 def _cleanup_after_send(_tid=safe_task_id):
