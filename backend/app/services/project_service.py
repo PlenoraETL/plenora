@@ -363,9 +363,21 @@ class ProjectService:
                 dependent_projects=dependent_projects,
             )
 
-        # Marca come orphan tutti gli schedule collegati al progetto.
-        # Non li cancelliamo: lo storico (log esecuzioni) resta visibile e
-        # l'utente decide se rimuoverli manualmente dalla UI scheduler.
+        # Accumulatori cascade cleanup. `critical_failures` contiene step
+        # che, se falliti, invalidano il claim "progetto cancellato" (orfani
+        # cross-DB con dati utente). `derived_failures` contiene step il cui
+        # fallimento e' tollerato (metadata/config derivata, recuperabile).
+        # Se `critical_failures` e' non vuoto al termine, la row `config.projects`
+        # NON viene rimossa (fail-closed) e si solleva RuntimeError con lista
+        # step falliti: il caller deve ritentare o escalare.
+        critical_failures: list[str] = []
+        derived_failures: list[str] = []
+
+        # intent: cascade step derived — mark_as_orphan e' idempotente, un
+        # fallimento e' recuperabile via UI scheduler.
+        # outcome: fail-open con breadcrumb (exc_info per diagnosi).
+        # Non cancelliamo gli schedule: lo storico (log esecuzioni) resta
+        # visibile e l'utente decide se rimuoverli manualmente dalla UI.
         try:
             from app.core.scheduler.schedule_service import ScheduleService
             schedule_service = ScheduleService()
@@ -383,10 +395,14 @@ class ProjectService:
         except Exception as e:
             logger.warning(
                 f"Cleanup schedules fallito per {project_id}: {e}",
-                op="delete_project"
+                op="delete_project",
+                exc_info=True,
             )
+            derived_failures.append("schedules_orphan")
 
-        # Cleanup intermediate.db (run + tabelle dinamiche) prima di rimuovere il progetto
+        # intent: cascade step CRITICAL — intermediate.db runs + tabelle
+        # dinamiche contengono dati utente (volume potenzialmente grande).
+        # outcome: fail-closed via aggregazione (vedi gate sotto).
         try:
             from app.core.intermediate.db import delete_all_runs_for_canvas
             deleted_runs = delete_all_runs_for_canvas(project_id)
@@ -396,11 +412,16 @@ class ProjectService:
                     op="delete_project"
                 )
         except Exception as e:
-            logger.warning(
-                f"Cleanup intermediate fallito per {project_id}: {e}",
-                op="delete_project"
+            logger.error(
+                f"[CRASH] Cleanup intermediate fallito per {project_id}: {e}",
+                op="delete_project",
+                exc_info=True,
             )
-        # Cleanup result blobs da results.db
+            critical_failures.append("intermediate_runs")
+
+        # intent: cascade step CRITICAL — results.db blob contengono output
+        # utente esportati (GDPR-sensitive).
+        # outcome: fail-closed via aggregazione.
         try:
             from app.db.results_db_service import delete_results_for_project
             deleted_results = delete_results_for_project(project_id)
@@ -410,11 +431,16 @@ class ProjectService:
                     op="delete_project"
                 )
         except Exception as e:
-            logger.warning(
-                f"Cleanup results fallito per {project_id}: {e}",
-                op="delete_project"
+            logger.error(
+                f"[CRASH] Cleanup results fallito per {project_id}: {e}",
+                op="delete_project",
+                exc_info=True,
             )
+            critical_failures.append("results_blobs")
 
+        # intent: cascade step derived — comparison_keys e' config derivata,
+        # volume minimo e nessun dato utente sensibile. Orfano innocuo.
+        # outcome: fail-open con breadcrumb.
         # Cleanup comparison_keys (config.db) — chiavi di confronto associate
         # ai nodi del canvas, identificate da canvas_id == project_id.
         try:
@@ -423,7 +449,32 @@ class ProjectService:
         except Exception as e:
             logger.warning(
                 f"Cleanup comparison_keys fallito per {project_id}: {e}",
-                op="delete_project"
+                op="delete_project",
+                exc_info=True,
+            )
+            derived_failures.append("comparison_keys")
+
+        # Fail-closed gate: se uno step critical e' fallito, la row config
+        # NON viene rimossa e si solleva RuntimeError. Questo preserva
+        # l'invariante "o progetto cancellato pulito, o progetto ancora
+        # presente", evitando che `config.projects` resti senza orfani
+        # intermediate/results cross-DB (con dati utente residuo).
+        #
+        # Step derivati falliti NON bloccano: vengono riportati nel messaggio
+        # per diagnostica ma il progetto viene comunque cancellato (derived =
+        # tolerabile). Il caller (projects/router) oggi propaga come 500
+        # generico via FastAPI default handler; il mapping strutturato a
+        # shape response dedicata e' materia di C6 (non apre qui).
+        if critical_failures:
+            logger.error(
+                f"[CRASH] delete_project abort: critical cleanup fallito per {project_id}. "
+                f"critical={critical_failures} derived={derived_failures}. "
+                f"Config row preservata, ritenta o escalation richiesta.",
+                op="delete_project",
+            )
+            raise RuntimeError(
+                f"project cleanup partial for '{project_id}': "
+                f"critical={critical_failures} derived={derived_failures}"
             )
 
         db.delete_project(project_id, group_id=group_id)
