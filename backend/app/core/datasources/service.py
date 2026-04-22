@@ -208,9 +208,19 @@ class DataSourceService:
                 message=result.get("message", ""),
                 details=result.get("details"),
             )
+        # intent: boundary / outcome: fail-closed (success=False sanitizzato)
+        # Non propagare str(e) nella response: gli SDK di provider (Office365,
+        # paramiko, ftplib) possono includere URL autenticati, token OAuth,
+        # credenziali parziali o path interni. Stacktrace preservato lato log.
         except Exception as e:
-            logger.error(f"[GESTITO] Errore test connessione {ds_id}: {e}")
-            return DataSourceTestResult(success=False, message=str(e))
+            logger.error(
+                f"[GESTITO] Errore test connessione {ds_id}: {e}",
+                exc_info=True,
+            )
+            return DataSourceTestResult(
+                success=False,
+                message="Impossibile testare la connessione: riprova piu' tardi",
+            )
 
     # ── Operazioni file ───────────────────────────────────────────────────
 
