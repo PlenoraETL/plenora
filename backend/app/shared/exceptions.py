@@ -144,3 +144,62 @@ class ProjectHasDependenciesError(Exception):
             f"Progetto '{project_id}' ha {deps} collegati: "
             f"rimuoverli prima di cancellare il progetto."
         )
+
+
+class ExecutionContextError(Exception):
+    """Sollevata quando l'inizializzazione del contesto di esecuzione
+    per `arricchisci/api_connector.execute_enrichment` fallisce su
+    errore DB durante il lookup del progetto.
+
+    Contesto (reperto: fail-soft silenzioso su bootstrap arricchisci):
+      `_init_execution_context` esegue `db_svc.get_project(project_id)`
+      per ricavare `group_id` (tenant binding usato dai check
+      cross-tenant in `_load_source_project`, `_load_file_source`,
+      `_resolve_file_source_path`, `_assert_file_source_group_access`).
+
+      Pre-fix, un errore DB durante il lookup era degradato a
+      `logger.warning + _current_group_id = None`, delegando il
+      fail-closed ai check downstream. Il comportamento finale era
+      corretto (i check downstream rifiutano `group_id=None` con
+      "Contesto di sicurezza non determinabile") ma mascherava bug
+      infrastrutturali (pool exhausted, DB down, tabella mancante
+      post-migrazione) dietro un messaggio indistinguibile da
+      "progetto non esistente" — ramo dati legittimo.
+
+    Post-fix (questa eccezione):
+      - Su errore DB classificato (`psycopg2.Error`), il contesto
+        solleva `ExecutionContextError` con chain preservata via
+        `from e`.
+      - Il boundary di `execute_enrichment` (Fix-C gia' mergiato) la
+        cattura nel ramo `except Exception` e la traduce in response
+        `{success:False, user_error:False, error:"Errore interno
+        durante l'arricchimento"}`. Dettaglio tecnico solo nei log.
+      - Il comportamento su `_proj_row is None` (progetto inesistente)
+        resta invariato: `_current_group_id = None` + fail-closed
+        downstream. E' ramo dati, non errore.
+
+    Attributi:
+        project_id: id del progetto su cui l'init stava operando.
+        reason: descrizione safe-to-show del problema (es. "errore
+            lettura progetto dal DB"). Non contiene str() dell'errore
+            originale: il dettaglio tecnico resta nell'attributo
+            `original_error` e nei log, non in questo messaggio.
+        original_error: eccezione sottostante (tipicamente
+            `psycopg2.Error` o sottoclasse). Usata per logging
+            strutturato + preservazione chain (`raise ... from e`).
+            Non va esposta al caller via response API.
+    """
+
+    def __init__(
+        self,
+        project_id: str,
+        reason: str,
+        original_error: Optional[Exception] = None,
+    ):
+        self.project_id = project_id
+        self.reason = reason
+        self.original_error = original_error
+        super().__init__(
+            f"Errore inizializzazione contesto esecuzione per "
+            f"progetto '{project_id}': {reason}"
+        )
