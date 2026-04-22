@@ -635,7 +635,13 @@ class ExecutionManager:
                     f"[CRASH] Errore inatteso schedule {schedule_id}: {e}",
                     exc_info=True,
                 )
-                err_msg = f"Errore inatteso: {e}"
+                # intent: boundary top-level sanitize — str(e) di eccezioni
+                # unknown NON deve finire nel result dict Celery user-facing
+                # via _handle_failure. Dettaglio tecnico preservato nel
+                # [CRASH] logger.error sopra + canali admin (close_run,
+                # log_service.create_log_entry) che continuano a ricevere
+                # err_msg_internal-style per postmortem.
+                err_msg = "Errore inatteso durante l'esecuzione dello schedule (consulta log)"
             # Propagazione lock_lost anche nel failure branch: se il
             # lock era perso e la pipeline e' poi fallita, l'operatore
             # deve poter distinguere fail "pulito" da fail "con
@@ -1104,6 +1110,7 @@ class ExecutionManager:
             return {
                 "success": False,
                 "status": "failed",
+                "error": "schedule_execution_fatal",
                 "message": error_message,
                 "log_file": log_path
             }
