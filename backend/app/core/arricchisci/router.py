@@ -548,8 +548,14 @@ def delete_api_connection(api_id: str, current_user: CurrentUser = Depends(requi
     # api_id esistono via il messaggio "in_use_by" o "non trovata".
     _check_api_connection_ownership(api_id, current_user)
 
-    # Controlla se l'api_id è referenziata in canvas di progetti arricchisci
+    # Controlla se l'api_id è referenziata in canvas di progetti arricchisci.
+    # Batch Fix 6.3: il try *interno* per-canvas resta fail-open legittimo
+    # (un canvas corrotto di UN altro progetto non deve bloccare la delete).
+    # Il try *esterno* invece promuove a fail-closed: se list_projects() o
+    # il loop stesso falliscono globalmente (DB down, pool exhausted), non
+    # possiamo escludere dipendenze -> 500, non silent-proceed.
     in_use_by = []
+    check_failed = False
     try:
         if _project_service:
             all_projects = _project_service.list_projects()
@@ -595,7 +601,18 @@ def delete_api_connection(api_id: str, current_user: CurrentUser = Depends(requi
                         in_use_by.append({'project_id': proj_id, 'project_name': proj_name})
                         break
     except Exception as e:
-        logger.warning(f"Errore check canvas per delete {api_id}: {e}")
+        check_failed = True
+        logger.error(
+            f"[CRASH] delete_api_connection: impossibile verificare "
+            f"dipendenze per {api_id}: {e}",
+            exc_info=True,
+        )
+
+    if check_failed:
+        raise HTTPException(
+            status_code=500,
+            detail="Impossibile verificare dipendenze: riprova piu' tardi",
+        )
 
     if in_use_by:
         # Shape 409 cascade canonica (Batch Fix 6.1): error + dependencies

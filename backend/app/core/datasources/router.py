@@ -166,8 +166,21 @@ def delete_datasource(ds_id: str, current_user: CurrentUser = Depends(require_ad
     existing = _svc().get_datasource(ds_id)
     assert_can_modify(existing, current_user, "Data Source")
 
-    # Check dipendenze: progetti il cui canvas usa questo datasource
-    using_projects = _find_projects_using_datasource(ds_id)
+    # Check dipendenze: progetti il cui canvas usa questo datasource.
+    # Batch Fix 6.3: se il helper segnala che tutte le rows sono non
+    # checkabili (RuntimeError sentinel), fail-closed 500 invece di
+    # procedere silent con la delete.
+    try:
+        using_projects = _find_projects_using_datasource(ds_id)
+    except RuntimeError as _check_err:
+        logger.error(
+            f"[CRASH] delete_datasource: pre-check cascade fallito per "
+            f"{ds_id}: {_check_err}"
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Impossibile verificare dipendenze: riprova piu' tardi",
+        )
     if using_projects:
         # Shape 409 cascade canonica (Batch Fix 6.1): dependencies con kind.
         raise HTTPException(
@@ -199,18 +212,33 @@ def _find_projects_using_datasource(ds_id: str) -> List[Dict[str, str]]:
 
     Fix N+1: era 1 + N query (list + get_project per ognuno). Ora fa UNA sola
     query che carica id, name, project_type, canvas in un solo colpo.
+
+    Batch Fix 6.3: ogni per-row skip (JSON malformato, eccezione inattesa)
+    emette un ``logger.warning`` breadcrumb con ``project_id`` (vincolo
+    §5.1.4 kickoff: optional feature + breadcrumb identificante). Se
+    *tutte* le rows falliscono il check, il helper solleva ``RuntimeError``
+    per segnalare al caller che non e' stato possibile escludere
+    dipendenze. Sollevamento intenzionale con built-in: sentinel interno
+    al batch, non va esteso oltre questo scope.
     """
     import app.db.db_service as _db
     rows = _db.fetchall("SELECT id, name, project_type, canvas FROM projects")
     using = []
+    check_failures = 0
     for row in rows:
+        row_id = row.get("id")
         try:
             canvas = row.get("canvas") or {}
             if isinstance(canvas, str):
                 import json as _json
                 try:
                     canvas = _json.loads(canvas)
-                except Exception:
+                except Exception as _json_err:
+                    logger.warning(
+                        f"_find_projects_using_datasource: canvas JSON "
+                        f"malformato per progetto {row_id}: {_json_err}"
+                    )
+                    check_failures += 1
                     continue
             nodes = canvas.get("nodes") or [] if isinstance(canvas, dict) else []
             for n in nodes:
@@ -226,8 +254,22 @@ def _find_projects_using_datasource(ds_id: str) -> List[Dict[str, str]]:
                         "project_type": row.get("project_type", ""),
                     })
                     break
-        except Exception:
+        except Exception as _row_err:
+            logger.warning(
+                f"_find_projects_using_datasource: errore check canvas "
+                f"progetto {row_id}: {_row_err}"
+            )
+            check_failures += 1
             continue
+
+    # Fail-closed se TUTTE le rows hanno fallito il check: in quel caso
+    # il helper non puo' dire se il datasource e' usato o no, e il caller
+    # deve rifiutare la delete con 500 invece di procedere silent.
+    if rows and check_failures == len(rows):
+        raise RuntimeError(
+            f"Impossibile verificare dipendenze datasource: "
+            f"{check_failures} progetto/i non checkabili"
+        )
     return using
 
 
