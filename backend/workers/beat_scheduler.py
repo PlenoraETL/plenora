@@ -467,6 +467,13 @@ class PlenoraBeatScheduler(Scheduler):
         # _catchup_already_emitted_recently() sopra, che legge la
         # history dell'audit.
 
+        # intent: optional feature beat-safe / outcome: fail-open con
+        # diagnostica elevata. Il tick beat continua (nessuna propagazione
+        # — romperebbe altri catchup dello stesso tick), ma il fallimento
+        # e' loggato a severity CRASH per essere captato da alerting:
+        # se l'audit history resta incompleta, il prossimo tick potrebbe
+        # ri-emettere il catchup duplicato (dedupe history-based non
+        # trovera' la riga pertinente).
         try:
             db.execute(
                 "INSERT INTO schedule_catchup_history "
@@ -475,7 +482,11 @@ class PlenoraBeatScheduler(Scheduler):
                 (schedule_id, now.isoformat(), scheduled_for_iso, self._leader_id),
             )
         except Exception as e:
-            logger.warning(f"[CATCHUP] Errore audit insert per {schedule_id}: {e}")
+            logger.error(
+                f"[CRASH] [CATCHUP] Audit insert fallito per {schedule_id}: {e}. "
+                f"Possibile emit duplicato al prossimo tick (dedupe history incompleta).",
+                exc_info=True,
+            )
 
     # ------------------------------------------------------------------
     # Sincronizzazione DB → schedule entries
