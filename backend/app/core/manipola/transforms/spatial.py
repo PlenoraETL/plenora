@@ -290,7 +290,7 @@ def op_geo_buffer(
 
     except Exception as e:
         logger.error(f"[CRASH] Errore Buffer: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -343,7 +343,7 @@ def op_geo_centroid(
 
     except Exception as e:
         logger.error(f"[CRASH] Errore Centroid: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -386,7 +386,7 @@ def op_geo_area(
         
     except Exception as e:
         logger.error(f"[CRASH] Errore Area: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -490,7 +490,7 @@ def op_geo_dissolve(
 
     except Exception as e:
         logger.error(f"[CRASH] Errore Dissolve: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -658,7 +658,7 @@ def op_geo_simplify(
         
     except Exception as e:
         logger.error(f"[CRASH] Errore Simplify: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -695,7 +695,7 @@ def op_geo_convex_hull(
         
     except Exception as e:
         logger.error(f"[CRASH] Errore Convex Hull: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -744,7 +744,7 @@ def op_geo_reproject(
         
     except Exception as e:
         logger.error(f"[CRASH] Errore Reproject: {e}", exc_info=True)
-        return df
+        raise
 
 # =============================================================================
 # BOUNDING BOX (INVILUPPO RETTANGOLARE)
@@ -780,7 +780,7 @@ def op_geo_envelope(
         
     except Exception as e:
         logger.error(f"[CRASH] Errore Envelope: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -974,7 +974,7 @@ def op_geo_length(
 
     except Exception as e:
         logger.error(f"[CRASH] Errore Length: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -1018,7 +1018,7 @@ def op_geo_perimeter(
 
     except Exception as e:
         logger.error(f"[CRASH] Errore Perimeter: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -1053,7 +1053,7 @@ def op_geo_explode(
 
     except Exception as e:
         logger.error(f"[CRASH] Errore Explode: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -1108,7 +1108,7 @@ def op_geo_make_valid(
 
     except Exception as e:
         logger.error(f"[CRASH] Errore Make Valid: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -1203,7 +1203,7 @@ def op_geo_point_on_surface(
 
     except Exception as e:
         logger.error(f"[CRASH] Errore Point on Surface: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -1241,7 +1241,7 @@ def op_geo_boundary(
 
     except Exception as e:
         logger.error(f"[CRASH] Errore Boundary: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -1315,7 +1315,7 @@ def op_geo_voronoi(
 
     except Exception as e:
         logger.error(f"[CRASH] Errore Voronoi: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -1369,7 +1369,7 @@ def op_geo_to_wkt(
 
     except Exception as e:
         logger.error(f"[CRASH] Errore To WKT: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -1626,7 +1626,7 @@ def op_geo_clean_topology(
 
     except Exception as e:
         logger.error(f"[CRASH] Errore CleanTopology: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
