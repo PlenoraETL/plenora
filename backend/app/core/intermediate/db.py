@@ -391,6 +391,18 @@ def delete_all_runs_for_canvas(canvas_id: str) -> int:
     Elimina tutte le run di un canvas (chiamata da delete_project).
     Rimuove tabelle dinamiche, node_meta e righe in runs.
     Ritorna il numero di run eliminate.
+
+    Contratto errori (Batch 8 C5):
+      - Happy path / 0 run / inner per-row fail: ritorna count successi.
+        Un fail su singola run non blocca le altre (best-effort cascade) e
+        viene loggato a warning con exc_info.
+      - Outer catastrophic failure (fetchall esplode, DB down): solleva
+        l'eccezione originale. Il caller (`project_service.delete_project`
+        step 2 critical) accumula in `critical_failures` e solleva
+        `ProjectCleanupPartialError` → response 500 strutturata.
+        Pre-fix il `return 0` silent rendeva indistinguibile "canvas senza
+        run" da "DB catastrofico" → orfani garantiti se lo step 5 cascade
+        procedeva a rimuovere la row config.
     """
     try:
         rows = fetchall(
@@ -402,22 +414,31 @@ def delete_all_runs_for_canvas(canvas_id: str) -> int:
         count = 0
         for row in rows:
             run_id = row["run_id"] if isinstance(row, dict) else row[0]
+            # intent: optional feature — una run singola non cancellabile non
+            # blocca le altre nel contesto cascade / outcome: fail-open con breadcrumb
             try:
                 _delete_run(run_id)
                 count += 1
             except Exception as e:
                 logger.warning(
                     f"delete_all_runs_for_canvas: errore su run {run_id}: {e}",
-                    op="delete_project"
+                    op="delete_project",
+                    exc_info=True,
                 )
         logger.info(
             f"delete_all_runs_for_canvas: canvas={canvas_id} → {count} run eliminate",
             op="delete_project"
         )
         return count
+    # intent: resource guard outer / outcome: fail-closed (scrittura dati)
+    # Il caller deve sapere se la cancellazione e' fallita catastroficamente:
+    # un return 0 silent sarebbe indistinguibile da "canvas senza run" e
+    # garantirebbe orfani cross-DB se il caller procedesse alla rimozione
+    # della row config.projects.
     except Exception as e:
-        logger.warning(
-            f"delete_all_runs_for_canvas: errore canvas={canvas_id}: {e}",
-            op="delete_project"
+        logger.error(
+            f"[CRASH] delete_all_runs_for_canvas: errore canvas={canvas_id}: {e}",
+            op="delete_project",
+            exc_info=True,
         )
-        return 0
+        raise
