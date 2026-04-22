@@ -738,13 +738,13 @@ class ExecutionManager:
             try:
                 from app.core.intermediate.db import close_connection as _close_idb
                 _close_idb()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"close_connection intermediate fallito: {type(e).__name__}: {e}")
             try:
                 from app.db.config_db_service import close_connection as _close_cfg
                 _close_cfg()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"close_connection config fallito: {type(e).__name__}: {e}")
     
     # =========================================================================
     # PRE-CHECK CONNESSIONE

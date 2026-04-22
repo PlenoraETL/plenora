@@ -133,8 +133,8 @@ def execute_carica_task(
         from app.services.project_service import ProjectService as _PS
         _meta = _PS().get_project_metadata(project_id)
         _group_id = getattr(_meta, "group_id", "") if _meta else ""
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"group_id lookup fallito: {type(e).__name__}: {e}")
 
     # --- Apri run su log.db ---
     open_run(
@@ -289,13 +289,13 @@ def execute_carica_task(
         try:
             from app.core.intermediate.db import close_connection as _close_idb
             _close_idb()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"close_connection intermediate fallito: {type(e).__name__}: {e}")
         try:
             from app.db.config_db_service import close_connection as _close_cfg
             _close_cfg()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"close_connection config fallito: {type(e).__name__}: {e}")
 
 
 def _execute_datasource_write(task, df, carica_node_data, project_id, task_id):

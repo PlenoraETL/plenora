@@ -569,8 +569,8 @@ def execute_enrichment_task(
                                 from app.core.intermediate.writer import write_node as _wn
                                 _wn(run_id=_r, node_id=_n, node_type="api_enrich",
                                     rows=_ro, col_schema=_sc, exec_time=0.0, status="ok")
-                            except Exception:
-                                pass  # non bloccante
+                            except Exception as e:
+                                logger.debug(f"async intermediate write fallito: {type(e).__name__}: {e}")
                         threading.Thread(target=_async_write, daemon=True).start()
                 except Exception as _sne:
                     logger.warning(f"[Task {task_id}] Intermediate write nodo {node_id} fallita: {_sne}")
@@ -838,8 +838,8 @@ def execute_enrichment_task(
                     tmp_parent = src_path.parent
                     if tmp_parent.name.startswith("plenora_exec_") and tmp_parent.exists():
                         _shutil.rmtree(tmp_parent, ignore_errors=True)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"cleanup temp dir fallito: {type(e).__name__}: {e}")
                 # src_path non punta piu' a un file locale; conserviamo il nome
                 # per il payload del task result (usato come metadata).
                 src_path = Path(_output_filename)
@@ -1022,8 +1022,8 @@ def execute_enrichment_task(
                         from app.core.intermediate.writer import write_node as _wn
                         _wn(run_id=_r, node_id=_n, node_type="result",
                             rows=_ro, col_schema=_sc, exec_time=0.0, status="ok")
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"cleanup async write fallito: {type(e).__name__}: {e}")
                 threading.Thread(target=_async_write_result, daemon=True).start()
             except Exception as _sne:
                 logger.warning(f"[Task {task_id}] Intermediate write result node fallita: {_sne}")
@@ -1036,8 +1036,8 @@ def execute_enrichment_task(
                     from app.core.intermediate.writer import close_run as _cr
                     _cr(run_id=_r, input_hash="", output_hash="",
                         total_exec_time=_t, success=True)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"cleanup async close_run fallito: {type(e).__name__}: {e}")
             threading.Thread(target=_async_close, daemon=True).start()
 
         # --- Step tracking + close run su log.db ---
@@ -1093,8 +1093,8 @@ def execute_enrichment_task(
                     from app.core.intermediate.writer import close_run as _close_run
                     _close_run(run_id=_run_id, input_hash="", output_hash="",
                                total_exec_time=time.time() - _run_start, success=False)
-                except Exception:
-                    pass
+                except Exception as e_inner:
+                    logger.debug(f"close_run intermediate fallito (early return): {type(e_inner).__name__}: {e_inner}")
             if not is_eseguibile:
                 _elapsed_ms_er = int((time.time() - _run_start) * 1000)
                 close_run(
@@ -1111,8 +1111,8 @@ def execute_enrichment_task(
                 from app.core.intermediate.writer import close_run as _close_run
                 _close_run(run_id=_run_id, input_hash="", output_hash="",
                            total_exec_time=time.time() - _run_start, success=False)
-            except Exception:
-                pass
+            except Exception as e_inner:
+                logger.debug(f"close_connection intermediate fallito (outer except): {type(e_inner).__name__}: {e_inner}")
         error_message = str(e)
         _elapsed_ms_f = int((time.time() - _run_start) * 1000)
         logger.error(f"[CRASH] [Task {task_id}] Errore: {error_message}", project_id=_log_pid)
@@ -1153,8 +1153,8 @@ def execute_enrichment_task(
         # Invece, aggiorniamo con progress negativo ma stato PROGRESS e is_error=True
         try:
             update_task_progress(self, 0, f"Errore: {error_message}", is_error=True, task_id=task_id)
-        except Exception:
-            pass  # Ignora errori di update
+        except Exception as e_prog:
+            logger.debug(f"progress update fallito: {type(e_prog).__name__}: {e_prog}")
 
         # ── Cleanup risorse temporanee anche in caso di errore ──
         _cleanup_temp_file_sources(cleanup_file_source_ids, task_id)

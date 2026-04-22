@@ -122,8 +122,8 @@ def schedule_pipeline_task(
                 execution_info={"retry_attempt": retry_attempt}
             )
             log_service.write_log(entry)
-        except Exception:
-            pass  # Se anche il log fallisce, non possiamo fare nulla
+        except Exception as e:
+            logger.debug(f"log emergenza post-crash fallito: {type(e).__name__}: {e}")
         
         # intent: boundary top-level task Celery / outcome: fail-closed sanitizzato
         # Il dettaglio tecnico resta solo nel logger.error([CRASH]) + nel log_entry

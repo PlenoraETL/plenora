@@ -353,16 +353,16 @@ def execute_pipeline_task(
                 run_id=run_id, input_hash="", output_hash="",
                 total_exec_time=_time.time() - _run_start, success=False,
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"close_run intermediate fallito post-crash: {type(e).__name__}: {e}")
 
         # Chiudi connessione SQLite del thread Celery: senza questo,
         # ogni task lascia aperto un handle che si accumula nel pool.
         try:
             from app.core.intermediate.db import close_connection
             close_connection()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"close_connection intermediate fallito post-crash: {type(e).__name__}: {e}")
 
         raise
 
