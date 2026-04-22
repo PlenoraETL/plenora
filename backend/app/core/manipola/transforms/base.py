@@ -678,7 +678,7 @@ def op_concat_columns(
 
     except Exception as e:
         logger.error(f"[CRASH] Errore concat_columns: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -787,7 +787,7 @@ def op_aggregate(
         
     except Exception as e:
         logger.error(f"[CRASH] Errore Aggregate: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -824,7 +824,7 @@ def op_sort(
         return result
     except Exception as e:
         logger.error(f"[CRASH] Errore Sort: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -860,7 +860,7 @@ def op_distinct(
         
     except Exception as e:
         logger.error(f"[CRASH] Errore Distinct: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -911,7 +911,7 @@ def op_rename(
         return result
     except Exception as e:
         logger.error(f"[CRASH] Errore Rename: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -947,7 +947,7 @@ def op_drop_columns(
         return result
     except Exception as e:
         logger.error(f"[CRASH] Errore Drop Columns: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -995,7 +995,7 @@ def op_fill_na(
         
     except Exception as e:
         logger.error(f"[CRASH] Errore Fill NA: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -1041,7 +1041,7 @@ def op_replace(
         
     except Exception as e:
         logger.error(f"[CRASH] Errore Replace: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -1091,7 +1091,7 @@ def op_split_column(
         
     except Exception as e:
         logger.error(f"[CRASH] Errore Split Column: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -1173,7 +1173,7 @@ def op_md5_hash(
         return result
     except Exception as e:
         logger.error(f"[CRASH] Errore MD5 Hash: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -1374,9 +1374,7 @@ def op_type_cast(
         
     except Exception as e:
         logger.error(f"[CRASH] Errore Type Cast '{column}' -> {target_type}: {e}", exc_info=True)
-        if errors == 'raise':
-            raise
-        return df
+        raise
 
 
 # =============================================================================
@@ -1467,7 +1465,7 @@ def op_geo_from_coords(
         
     except Exception as e:
         logger.error(f"[CRASH] Errore Geo from Coords: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -1559,7 +1557,7 @@ def op_conditional(
         
     except Exception as e:
         logger.error(f"[CRASH] Errore Conditional: {e}", exc_info=True)
-        return df
+        raise
 
 
 def _evaluate_condition(col_values, operator: str, value: str):
@@ -1701,7 +1699,7 @@ def op_text_normalize(
         
     except Exception as e:
         logger.error(f"[CRASH] Errore Text Normalize: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -1872,7 +1870,7 @@ def op_pivot(
         
     except Exception as e:
         logger.error(f"[CRASH] Errore Pivot: {e}", exc_info=True)
-        return df
+        raise
 
 
 # ============================================================================
@@ -2180,7 +2178,7 @@ def op_sample(
 
     except Exception as e:
         logger.error(f"[CRASH] Errore Sample: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -2232,7 +2230,7 @@ def op_melt(
 
     except Exception as e:
         logger.error(f"[CRASH] Errore Melt: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -2282,7 +2280,7 @@ def op_add_row_number(
 
     except Exception as e:
         logger.error(f"[CRASH] Errore AddRowNumber: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -2352,7 +2350,7 @@ def op_date_extract(
 
     except Exception as e:
         logger.error(f"[CRASH] Errore DateExtract: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -2407,7 +2405,7 @@ def op_lookup(
 
     except Exception as e:
         logger.error(f"[CRASH] Errore Lookup: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -2459,7 +2457,7 @@ def op_bin(
 
     except Exception as e:
         logger.error(f"[CRASH] Errore Bin: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -2528,7 +2526,7 @@ def op_flatten_json(
 
     except Exception as e:
         logger.error(f"[CRASH] Errore FlattenJSON: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -2626,7 +2624,7 @@ def op_statistics(
 
     except Exception as e:
         logger.error(f"[CRASH] Errore Statistics: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -2716,7 +2714,7 @@ def op_string_extract(
 
     except Exception as e:
         logger.error(f"[CRASH] Errore StringExtract: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -2756,7 +2754,7 @@ def op_cross_join(
 
     except Exception as e:
         logger.error(f"[CRASH] Errore CrossJoin: {e}", exc_info=True)
-        return dfs[0]
+        raise
 
 
 # =============================================================================
@@ -2800,7 +2798,7 @@ def op_transpose(
 
     except Exception as e:
         logger.error(f"[CRASH] Errore Transpose: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -2847,7 +2845,7 @@ def op_reorder_columns(
 
     except Exception as e:
         logger.error(f"[CRASH] Errore ReorderColumns: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -2902,7 +2900,7 @@ def op_string_pad(
 
     except Exception as e:
         logger.error(f"[CRASH] Errore StringPad: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -2944,7 +2942,7 @@ def op_string_length(
 
     except Exception as e:
         logger.error(f"[CRASH] Errore StringLength: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -3004,7 +3002,7 @@ def op_dedup_advanced(
 
     except Exception as e:
         logger.error(f"[CRASH] Errore DedupAdvanced: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -3119,7 +3117,7 @@ def op_window_function(
 
     except Exception as e:
         logger.error(f"[CRASH] Errore WindowFunction: {e}", exc_info=True)
-        return df
+        raise
 
 
 # =============================================================================
@@ -3156,4 +3154,4 @@ def op_uuid_generator(
 
     except Exception as e:
         logger.error(f"[CRASH] Errore UUIDGenerator: {e}", exc_info=True)
-        return df
+        raise
