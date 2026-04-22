@@ -73,6 +73,7 @@ Non cancellare mai un ADR: il registro e' append-only. Un errore in un ADR si re
 - [ADR-0011](0011-2026-04-21-file-sources-dispatch-s3-threshold.md) — `FileSourcesDispatch` threshold S3 50MB, pattern FS-4 simmetrico
 - [ADR-0012](0012-2026-04-21-preview-execute-policy.md) — Policy preview vs execute per `estrai / manipola / arricchisci` (ratifica D6, post S26)
 - [ADR-0014](0014-2026-04-21-log-archive-pipeline.md) — Log archive pipeline: writer isolato PG-agnostic + SELECT/DELETE callables (O-ARC Batch 1)
+- [ADR-0015](0015-2026-04-22-minio-object-storage-provider.md) — MinIO object storage provider via subclass `AwsS3ObjectStorage` (A1-B2, secondo provider P1 per contract parity)
 
 ## Workflow
 
