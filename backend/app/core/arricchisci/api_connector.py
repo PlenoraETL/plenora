@@ -558,7 +558,20 @@ class ApiConnectionService:
         except requests.exceptions.ConnectionError as e:
             return {"success": False, "error": f"Errore di connessione: {str(e)}"}
         except Exception as e:
-            return {"success": False, "error": str(e)}
+            # Fix-D safety-net #5 ramo Exception: endpoint UI sincrono
+            # di test delle API connection. Eccezioni inattese (bug
+            # interno di _prepare_headers, TypeError su parsing custom
+            # headers, ecc.) NON devono leakare str(e) nella response
+            # JSON esposta al form di setup. Messaggio safe generico,
+            # dettaglio tecnico solo nel log.
+            logger.error(
+                f"[GESTITO] Errore test_api_connection: {e}",
+                exc_info=True,
+            )
+            return {
+                "success": False,
+                "error": "Errore interno durante il test della connessione",
+            }
 
     def _extract_available_fields(self, data: Any, prefix: str = "", max_depth: int = 3) -> List[Dict]:
         """
@@ -1976,8 +1989,23 @@ class ApiConnectionService:
         except requests.RequestException as e:
             return {"success": False, "error": f"Errore HTTP: {e}"}
         except Exception as e:
+            # Fix-D safety-net #22c: copre eccezioni inattese dentro il
+            # main try (build multipart, mkdtemp, download response,
+            # HTTP path oltre Timeout/RequestException). Messaggio safe
+            # generico per il FE; il dettaglio tecnico resta nel log
+            # (logger.error + exc_info=True).
+            # NOTA: i catch narrow #20 (auth prep) e #21 (input resolve)
+            # sono FUORI da questo try. Eccezioni inattese in quei due
+            # step propagano fuori dalla funzione e vengono raccolte
+            # dal boundary top-level di `execute_enrichment` (Fix-C,
+            # commit a10774f) con messaggio "Errore interno durante
+            # l'arricchimento". Un'eventuale estensione della safety-net
+            # locale a #20/#21 e' debito separato (vedi checkpoint).
             logger.error(f"[CRASH] rest_file: {e}", exc_info=True)
-            return {"success": False, "error": str(e)}
+            return {
+                "success": False,
+                "error": "Errore interno nel processore file remoto",
+            }
         finally:
             for fh in opened_handles:
                 try:

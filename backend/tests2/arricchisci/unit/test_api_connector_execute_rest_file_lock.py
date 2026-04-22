@@ -260,6 +260,68 @@ class TestExecuteRestFileConfigValidation:
             "str(original_error): e' il contratto safe-by-construction"
         )
 
+    def test_main_flow_unknown_exception_returns_safe_message(self, rf_env):
+        """Fix-D safety-net #22c: eccezioni inattese dentro il main try
+        di `_execute_rest_file` (post input resolve, durante build
+        multipart / mkdtemp / download response / resto del path HTTP
+        oltre Timeout e RequestException) cadono nel catch broad che
+        ora restituisce messaggio safe generico. Pre-fix ritornava
+        `str(e)` leakando internals. Il dettaglio tecnico resta nel
+        log (`logger.error [CRASH]` + `exc_info=True`).
+
+        Simulazione via `tempfile.mkdtemp` che solleva RuntimeError --
+        punto INTERNO al main try, diverso dai boundary narrow #20/#21
+        che sono strutturalmente esterni e propagano separatamente
+        (vedi commento al safety-net).
+        """
+        rf_env.mkdtemp.side_effect = RuntimeError("disk allocation failed")
+        cfg = _api_config()
+        result = rf_env.svc._execute_rest_file(
+            {}, cfg, [], [], "n1", "p1"
+        )
+        assert result["success"] is False
+        assert result["error"] == "Errore interno nel processore file remoto"
+        assert "disk allocation failed" not in result["error"], (
+            "str(original_exception) non deve comparire nella response FE"
+        )
+
+    def test_auth_prep_unknown_exception_propagates_to_caller(self, rf_env):
+        """Contratto post-C4.3 (Fix-D narrow): un `RuntimeError` fuori
+        dalla tupla narrow `(KeyError, ValueError, RequestException)`
+        di #20 non e' catturato da `_execute_rest_file`. Il main try
+        con il safety-net #22c e' STRUTTURALMENTE dopo il boundary
+        auth (quindi non lo copre), percio' l'eccezione propaga al
+        caller. La safety-net finale FE-facing per questo caso e' il
+        catch top-level di `execute_enrichment` (Fix-C, a10774f) che
+        produce `"Errore interno durante l'arricchimento"`.
+
+        Lock del gap architetturale per documentarlo esplicitamente:
+        un'eventuale estensione della safety-net locale al #20 e'
+        debito separato (fuori scope Commit 4, vincolo 2).
+        """
+        rf_env.prepare_headers.side_effect = RuntimeError("oauth token expired")
+        cfg = _api_config()
+        with pytest.raises(RuntimeError, match="oauth token expired"):
+            rf_env.svc._execute_rest_file(
+                {}, cfg, [], [], "n1", "p1"
+            )
+
+    def test_input_resolve_unknown_exception_propagates_to_caller(self, rf_env):
+        """Contratto post-C4.3 (Fix-D narrow): un `RuntimeError` fuori
+        dalla tupla narrow `(ValueError, SourceLoadingError,
+        FileSourceResolutionError)` di #21 non e' catturato da
+        `_execute_rest_file` per lo stesso motivo strutturale del
+        boundary #20 (cfr. test precedente). Propaga al caller.
+        """
+        rf_env.resolve_path.side_effect = RuntimeError("unexpected internal error")
+        cfg = _api_config(
+            file_fields=[{"name": "file", "source": "node_input", "required": True}],
+        )
+        with pytest.raises(RuntimeError, match="unexpected internal error"):
+            rf_env.svc._execute_rest_file(
+                {}, cfg, [], [], "n1", "p1"
+            )
+
 
 # =============================================================================
 # Section 2: file fields (node_input, extra_input, required vs optional)

@@ -335,3 +335,44 @@ class TestTestApiConnectionExceptions:
         result = tac_env.svc.test_api_connection(config=cfg, test_params={})
         assert result["success"] is False
         assert "Errore di connessione" in result["error"]
+
+    def test_unknown_exception_returns_safe_message(self, tac_env):
+        """Fix-D safety-net #5 ramo Exception: eccezioni inattese
+        (RuntimeError, TypeError, bug interno) diventano un messaggio
+        safe generico nella response FE. Pre-fix, `str(e)` leakava
+        internals nel JSON visibile al form di setup -- oggi il
+        dettaglio resta solo nel log.
+        """
+        tac_env.session.get.side_effect = RuntimeError("internal boom")
+        cfg = {
+            "endpoint": {"url": "https://api.test/q", "method": "GET"},
+            "auth": {},
+        }
+        result = tac_env.svc.test_api_connection(config=cfg, test_params={})
+        assert result["success"] is False
+        assert result["error"] == "Errore interno durante il test della connessione"
+        assert "internal boom" not in result["error"], (
+            "str(original_exception) non deve comparire nella response FE"
+        )
+
+    def test_unknown_exception_logs_with_exc_info_true(self, tac_env):
+        """Fix-D safety-net #5: `logger.error(..., exc_info=True)` e'
+        stato aggiunto in questo commit (pre-fix il ramo Exception
+        non aveva alcun log: il dettaglio tecnico si perdeva
+        silenziosamente). Lock sul contratto di osservabilita':
+        senza `exc_info=True` la diagnostica dei bug interni
+        sarebbe impossibile.
+        """
+        tac_env.session.get.side_effect = RuntimeError("stacktrace needed")
+        cfg = {
+            "endpoint": {"url": "https://api.test/q", "method": "GET"},
+            "auth": {},
+        }
+        with patch("app.core.arricchisci.api_connector.logger") as mock_logger:
+            tac_env.svc.test_api_connection(config=cfg, test_params={})
+        assert mock_logger.error.called, "logger.error non invocato sul ramo Exception"
+        call_kwargs = mock_logger.error.call_args.kwargs
+        assert call_kwargs.get("exc_info") is True, (
+            "logger.error deve essere chiamato con exc_info=True "
+            "per preservare il traceback nel log"
+        )
