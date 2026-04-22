@@ -254,3 +254,104 @@ def test_aws_backends_satisfy_protocols(cb):
 
     s3 = cb.AwsS3ObjectStorage(bucket="b", region="eu-south-1")
     assert isinstance(s3, cb.ObjectStorage)
+
+
+# =============================================================================
+# 5. MinioObjectStorage — provider A1-B2 (ADR-0015)
+# =============================================================================
+
+
+def _set_minio_env(monkeypatch):
+    monkeypatch.setenv("CLOUD_PROVIDER", "minio")
+    monkeypatch.setenv("BACKUP_BUCKET", "onprem-bucket")
+    monkeypatch.setenv("MINIO_ENDPOINT_URL", "http://minio.internal:9000")
+    monkeypatch.setenv("MINIO_ACCESS_KEY", "ak")
+    monkeypatch.setenv("MINIO_SECRET_KEY", "sk")
+
+
+def test_factory_minio_requires_endpoint_url(cb, monkeypatch):
+    _set_minio_env(monkeypatch)
+    monkeypatch.delenv("MINIO_ENDPOINT_URL", raising=False)
+    with pytest.raises(ValueError, match="MINIO_ENDPOINT_URL"):
+        cb.get_object_storage()
+
+
+def test_factory_minio_requires_access_key(cb, monkeypatch):
+    _set_minio_env(monkeypatch)
+    monkeypatch.delenv("MINIO_ACCESS_KEY", raising=False)
+    with pytest.raises(ValueError, match="MINIO_ACCESS_KEY"):
+        cb.get_object_storage()
+
+
+def test_factory_minio_requires_secret_key(cb, monkeypatch):
+    _set_minio_env(monkeypatch)
+    monkeypatch.delenv("MINIO_SECRET_KEY", raising=False)
+    with pytest.raises(ValueError, match="MINIO_SECRET_KEY"):
+        cb.get_object_storage()
+
+
+def test_factory_minio_returns_configured_storage(cb, monkeypatch):
+    _set_minio_env(monkeypatch)
+    storage = cb.get_object_storage()
+    assert isinstance(storage, cb.MinioObjectStorage)
+    assert storage.bucket == "onprem-bucket"
+    assert storage.endpoint_url == "http://minio.internal:9000"
+    assert storage.access_key == "ak"
+    assert storage.secret_key == "sk"
+
+
+def test_minio_client_uses_endpoint_credentials_and_path_style(cb):
+    """Contract: `_client()` passa a boto3 endpoint_url, credenziali esplicite,
+    e addressing_style=path (MinIO non supporta virtual-hosted di default)."""
+    _requires_boto3()
+    storage = cb.MinioObjectStorage(
+        bucket="b",
+        endpoint_url="http://minio:9000",
+        access_key="ak",
+        secret_key="sk",
+        region="us-east-1",
+    )
+    fake_client = MagicMock()
+    with patch("boto3.client", return_value=fake_client) as mock_boto:
+        storage._client()
+
+    mock_boto.assert_called_once()
+    kwargs = mock_boto.call_args.kwargs
+    assert kwargs["region_name"] == "us-east-1"
+    assert kwargs["endpoint_url"] == "http://minio:9000"
+    assert kwargs["aws_access_key_id"] == "ak"
+    assert kwargs["aws_secret_access_key"] == "sk"
+    # Config boto3: addressing_style path
+    config = kwargs["config"]
+    assert config.s3["addressing_style"] == "path"
+
+
+def test_minio_upload_bytes_omits_sse_by_default(cb):
+    """Opzione B: MinIO vanilla non ha SSE configurato. `_extra_args()` non
+    deve includere ServerSideEncryption. StorageClass=STANDARD resta."""
+    _requires_boto3()
+    storage = cb.MinioObjectStorage(
+        bucket="b",
+        endpoint_url="http://minio:9000",
+        access_key="ak",
+        secret_key="sk",
+    )
+    fake_client = MagicMock()
+    with patch("boto3.client", return_value=fake_client):
+        storage.upload_bytes(b"payload", "key.bin")
+
+    fake_client.upload_fileobj.assert_called_once()
+    extra_args = fake_client.upload_fileobj.call_args.kwargs.get("ExtraArgs", {})
+    assert "ServerSideEncryption" not in extra_args
+    assert extra_args.get("StorageClass") == "STANDARD"
+
+
+def test_minio_object_storage_satisfies_protocol(cb):
+    """MinioObjectStorage deve soddisfare il Protocol ObjectStorage."""
+    storage = cb.MinioObjectStorage(
+        bucket="b",
+        endpoint_url="http://minio:9000",
+        access_key="ak",
+        secret_key="sk",
+    )
+    assert isinstance(storage, cb.ObjectStorage)

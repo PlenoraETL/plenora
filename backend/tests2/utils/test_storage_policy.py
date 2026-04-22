@@ -206,14 +206,65 @@ def test_unknown_provider_fails(monkeypatch):
         validate_storage_config()
 
 
-@pytest.mark.parametrize("provider", ["minio", "azure", "gcp"])
+@pytest.mark.parametrize("provider", ["azure", "gcp"])
 def test_known_but_unimplemented_provider_fails(monkeypatch, provider):
-    """minio/azure/gcp sono roadmap ma non implementati: devono failare
+    """azure/gcp sono roadmap P2 ma non implementati: devono failare
     al boot anche in policy=db, per evitare che qualcuno li scriva
-    aspettandosi che funzionino."""
+    aspettandosi che funzionino. minio era in questa lista fino ad A1-B2:
+    ora e' implementato (ADR-0015) e ha test positivi sotto."""
     monkeypatch.setenv("STORAGE_POLICY", "db")
     monkeypatch.setenv("CLOUD_PROVIDER", provider)
     with pytest.raises(StorageConfigError, match="non ancora implementato"):
+        validate_storage_config()
+
+
+# =============================================================================
+# 5.bis CLOUD_PROVIDER=minio (A1-B2, ADR-0015)
+# =============================================================================
+
+
+def _set_minio_boot_env(monkeypatch, *, policy="hybrid"):
+    monkeypatch.setenv("STORAGE_POLICY", policy)
+    monkeypatch.setenv("CLOUD_PROVIDER", "minio")
+    monkeypatch.setenv("BACKUP_BUCKET", "onprem-bucket")
+    monkeypatch.setenv("MINIO_ENDPOINT_URL", "http://minio.internal:9000")
+    monkeypatch.setenv("MINIO_ACCESS_KEY", "ak")
+    monkeypatch.setenv("MINIO_SECRET_KEY", "sk")
+
+
+def test_minio_boot_passes_with_full_config(monkeypatch):
+    _set_minio_boot_env(monkeypatch)
+    validate_storage_config()  # no raise
+
+
+def test_minio_boot_requires_endpoint_url(monkeypatch):
+    _set_minio_boot_env(monkeypatch)
+    monkeypatch.delenv("MINIO_ENDPOINT_URL", raising=False)
+    with pytest.raises(StorageConfigError, match="MINIO_ENDPOINT_URL"):
+        validate_storage_config()
+
+
+def test_minio_boot_requires_access_key(monkeypatch):
+    _set_minio_boot_env(monkeypatch)
+    monkeypatch.delenv("MINIO_ACCESS_KEY", raising=False)
+    with pytest.raises(StorageConfigError, match="MINIO_ACCESS_KEY"):
+        validate_storage_config()
+
+
+def test_minio_boot_requires_secret_key(monkeypatch):
+    _set_minio_boot_env(monkeypatch)
+    monkeypatch.delenv("MINIO_SECRET_KEY", raising=False)
+    with pytest.raises(StorageConfigError, match="MINIO_SECRET_KEY"):
+        validate_storage_config()
+
+
+def test_minio_boot_still_requires_bucket(monkeypatch):
+    """Il check bucket resta attivo: non basta config MinIO completa se manca
+    BACKUP_BUCKET, simmetrico ad AWS."""
+    _set_minio_boot_env(monkeypatch)
+    monkeypatch.delenv("BACKUP_BUCKET", raising=False)
+    monkeypatch.delenv("BACKUP_S3_BUCKET", raising=False)
+    with pytest.raises(StorageConfigError, match="bucket"):
         validate_storage_config()
 
 

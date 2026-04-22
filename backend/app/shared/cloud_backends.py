@@ -152,6 +152,14 @@ class AwsS3ObjectStorage:
         import boto3
         return boto3.client("s3", region_name=self.region)
 
+    def _extra_args(self) -> dict:
+        """ExtraArgs passati a boto3 upload/upload_fileobj.
+
+        Override nei provider S3-compatible che non supportano SSE-S3
+        out-of-the-box (es. MinIO vanilla). Base = SSE AES256 + STANDARD.
+        """
+        return {"ServerSideEncryption": "AES256", "StorageClass": "STANDARD"}
+
     def list_objects(self, prefix: str) -> List[ObjectMeta]:
         client = self._client()
         paginator = client.get_paginator("list_objects_v2")
@@ -171,10 +179,7 @@ class AwsS3ObjectStorage:
             str(local_path),
             self.bucket,
             key,
-            ExtraArgs={
-                "ServerSideEncryption": "AES256",
-                "StorageClass": "STANDARD",
-            },
+            ExtraArgs=self._extra_args(),
         )
 
     def upload_bytes(self, data: bytes, key: str) -> None:
@@ -201,10 +206,7 @@ class AwsS3ObjectStorage:
             io.BytesIO(data),
             self.bucket,
             key,
-            ExtraArgs={
-                "ServerSideEncryption": "AES256",
-                "StorageClass": "STANDARD",
-            },
+            ExtraArgs=self._extra_args(),
             Config=config,
         )
 
@@ -227,6 +229,54 @@ class AwsS3ObjectStorage:
         """DELETE S3 object. Idempotente: S3 non errora se la key non esiste."""
         client = self._client()
         client.delete_object(Bucket=self.bucket, Key=key)
+
+
+class MinioObjectStorage(AwsS3ObjectStorage):
+    """MinIO via boto3 (S3-compatible endpoint).
+
+    Riusa `AwsS3ObjectStorage` per tutti gli operatori S3 (list/upload/
+    download/delete/stream). Override minimi:
+
+    - `_client()`: passa `endpoint_url` + credenziali esplicite +
+      `addressing_style=path` (MinIO non supporta virtual-hosted style
+      per default).
+    - `_extra_args()`: rimuove `ServerSideEncryption` dal default. MinIO
+      vanilla non ha SSE configurato (richiede integrazione KES o
+      auto-encryption abilitata lato bucket); forzarlo a livello client
+      romperebbe l'upload su deploy minimi. Ops puo' abilitare SSE a
+      livello bucket policy, indipendente dal client.
+
+    Ratifica: ADR-0015 (A1-B2, 2026-04-22).
+    """
+
+    def __init__(
+        self,
+        bucket: str,
+        endpoint_url: str,
+        access_key: str,
+        secret_key: str,
+        region: str = "us-east-1",
+    ):
+        super().__init__(bucket=bucket, region=region)
+        self.endpoint_url = endpoint_url
+        self.access_key = access_key
+        self.secret_key = secret_key
+
+    def _client(self):
+        import boto3
+        from botocore.config import Config
+
+        return boto3.client(
+            "s3",
+            region_name=self.region,
+            endpoint_url=self.endpoint_url,
+            aws_access_key_id=self.access_key,
+            aws_secret_access_key=self.secret_key,
+            config=Config(s3={"addressing_style": "path"}),
+        )
+
+    def _extra_args(self) -> dict:
+        return {"StorageClass": "STANDARD"}
 
 
 # ---------------------------------------------------------------------------
@@ -258,6 +308,16 @@ def get_secrets_backend() -> SecretsBackend:
         return AwsSsmSecretsBackend(
             region=os.getenv("AWS_REGION", "eu-south-1"),
         )
+    if provider == "minio":
+        # MinIO e' solo object storage: non fornisce un secrets backend.
+        # Il decoupling di secrets e object storage provider (SECRETS_PROVIDER
+        # separato da CLOUD_PROVIDER) e' follow-up fuori A1-B2 (vedi
+        # a1_storage_policy.md §7.3). Per ora: errore esplicito.
+        raise ValueError(
+            "CLOUD_PROVIDER=minio non supporta SecretsBackend. MinIO e' "
+            "solo object storage; secrets richiedono CLOUD_PROVIDER=aws. "
+            "Decoupling secrets/object-storage provider e' follow-up A1."
+        )
     # Estendere qui per Azure / GCP:
     # if provider == "azure":
     #     from azure_backends import AzureKeyVaultSecretsBackend  # lazy import
@@ -275,6 +335,13 @@ def get_object_storage() -> ObjectStorage:
       CLOUD_PROVIDER=aws (default)
         BACKUP_S3_BUCKET (legacy) / BACKUP_BUCKET (nuovo, cross-provider)
         AWS_REGION (default eu-south-1)
+
+      CLOUD_PROVIDER=minio (A1-B2, ADR-0015)
+        BACKUP_BUCKET          — required
+        MINIO_ENDPOINT_URL     — required (es. http://minio.internal:9000)
+        MINIO_ACCESS_KEY       — required
+        MINIO_SECRET_KEY       — required
+        AWS_REGION             — default us-east-1 (MinIO ignora region)
     """
     provider = _get_provider()
     if provider == "aws":
@@ -286,6 +353,34 @@ def get_object_storage() -> ObjectStorage:
         return AwsS3ObjectStorage(
             bucket=bucket,
             region=os.getenv("AWS_REGION", "eu-south-1"),
+        )
+    if provider == "minio":
+        bucket = os.getenv("BACKUP_BUCKET") or os.getenv("BACKUP_S3_BUCKET")
+        if not bucket:
+            raise ValueError(
+                "BACKUP_BUCKET (o BACKUP_S3_BUCKET legacy) non configurato."
+            )
+        endpoint_url = os.getenv("MINIO_ENDPOINT_URL")
+        access_key = os.getenv("MINIO_ACCESS_KEY")
+        secret_key = os.getenv("MINIO_SECRET_KEY")
+        if not endpoint_url:
+            raise ValueError(
+                "CLOUD_PROVIDER=minio richiede MINIO_ENDPOINT_URL."
+            )
+        if not access_key:
+            raise ValueError(
+                "CLOUD_PROVIDER=minio richiede MINIO_ACCESS_KEY."
+            )
+        if not secret_key:
+            raise ValueError(
+                "CLOUD_PROVIDER=minio richiede MINIO_SECRET_KEY."
+            )
+        return MinioObjectStorage(
+            bucket=bucket,
+            endpoint_url=endpoint_url,
+            access_key=access_key,
+            secret_key=secret_key,
+            region=os.getenv("AWS_REGION", "us-east-1"),
         )
     # Estendere qui per Azure / GCP (vedi get_secrets_backend).
     raise ValueError(f"CLOUD_PROVIDER non supportato: {provider!r}")
@@ -335,7 +430,7 @@ def get_log_archive_storage() -> ObjectStorage:
 
 VALID_STORAGE_POLICIES = ("db", "object_storage", "hybrid")
 # Provider effettivamente implementati in cloud_backends.
-IMPLEMENTED_PROVIDERS = ("aws", "none")
+IMPLEMENTED_PROVIDERS = ("aws", "minio", "none")
 # Provider noti all'enum (inclusi quelli roadmap P1/P2): dichiararli e'
 # accettato in validate_storage_config solo se policy=db (= bucket non
 # consultato), altrimenti fail-fast perche' la factory non li costruisce.
@@ -435,6 +530,17 @@ def validate_storage_config() -> None:
                 "ma ne' BACKUP_BUCKET ne' BACKUP_S3_BUCKET (legacy) sono "
                 "configurati."
             )
+        # A1-B2: MinIO richiede credenziali esplicite + endpoint (no IAM chain).
+        if provider == "minio":
+            for name in (
+                "MINIO_ENDPOINT_URL",
+                "MINIO_ACCESS_KEY",
+                "MINIO_SECRET_KEY",
+            ):
+                if not os.getenv(name):
+                    _fail(
+                        f"CLOUD_PROVIDER=minio richiede {name} configurato."
+                    )
 
     # Soglie dispatch: solo hybrid le consulta effettivamente.
     if policy == "hybrid":

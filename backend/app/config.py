@@ -146,6 +146,12 @@ class Settings:
         # Default 500 MB: limite pratico di un BYTEA PG senza toast tuning.
         # Sopra cap: ResultSaveError al save (caller deve failare).
         "RESULT_DB_HARD_CAP_BYTES": 500 * 1024 * 1024,
+        # MinIO provider (A1-B2, ADR-0015). Required-if CLOUD_PROVIDER=minio,
+        # pattern analogo a LOG_ARCHIVE_BUCKET: validazione fail-fast a boot
+        # in app/shared/cloud_backends.validate_storage_config.
+        "MINIO_ENDPOINT_URL": None,
+        "MINIO_ACCESS_KEY": None,
+        "MINIO_SECRET_KEY": None,
 
         # ==================== LOG ARCHIVE (O-ARC Batch 2, ADR-0014) ====================
         # Master switch archive+purge per plenora.logs e plenora.audit_actions.
