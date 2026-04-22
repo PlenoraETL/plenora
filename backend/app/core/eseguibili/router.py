@@ -31,6 +31,7 @@ from app.core.auth.auth import (
 from app.config import settings
 from app.utils.logger import get_logger
 from app.shared.sharing import visible_resource_ids
+from app.shared.error_sanitizer import sanitize_http_detail
 
 from . import db as eseguibili_db
 from . import service as eseguibili_service
@@ -337,7 +338,10 @@ async def analyze_upload(
                     f"analyze_upload: cleanup tmp post-MIME-reject best-effort "
                     f"fallito per {tmp_file.name}: {_unlink_err}"
                 )
-            raise HTTPException(status_code=400, detail=str(e))
+            # Batch Fix 6.2: sanitize detail prima di esporlo al client.
+            raise HTTPException(
+                status_code=400, detail=sanitize_http_detail(str(e)),
+            )
         tmp_file.write(content)
     finally:
         tmp_file.close()
@@ -359,7 +363,11 @@ async def analyze_upload(
                     f"analyze_upload: cleanup tmp post-ValueError best-effort "
                     f"fallito per {tmp_path}: {_unlink_err}"
                 )
-            raise HTTPException(status_code=400, detail=str(e))
+            # Batch Fix 6.2: sanitize detail (analyze_file_upload puo'
+            # includere path temp + output pyproj/gdal).
+            raise HTTPException(
+                status_code=400, detail=sanitize_http_detail(str(e)),
+            )
 
         # Salva metadata su disco (multi-worker safe: visibile a tutti i worker uvicorn)
         _save_upload_meta(result["file_id"], {

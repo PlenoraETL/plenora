@@ -51,6 +51,7 @@ from app.core.features.models import (
 )
 from app.core.features.features_service import FeaturesService
 from app.shared.path_policy import assert_path_within
+from app.shared.error_sanitizer import sanitize_http_detail
 from app.core.artifacts import ArtifactResolver, LatestProjectArtifactRef
 from app.core.artifacts.types import MaterializedArtifact
 
@@ -206,7 +207,7 @@ async def browse_services(connection_id: str, current_user: CurrentUser = Depend
         services = get_service().browse_services(connection_id)
         return {"services": services}
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=sanitize_http_detail(str(e)))
     except ConnectionError as e:
         raise HTTPException(status_code=502, detail="Servizio esterno non raggiungibile")
     except Exception as e:
@@ -221,7 +222,7 @@ async def list_folders(connection_id: str, current_user: CurrentUser = Depends(r
         folders = get_service().list_folders(connection_id)
         return {"folders": folders}
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=sanitize_http_detail(str(e)))
     except ConnectionError as e:
         raise HTTPException(status_code=502, detail="Servizio esterno non raggiungibile")
     except Exception as e:
@@ -240,7 +241,7 @@ async def browse_layers(
         layers = get_service().browse_layers(connection_id, service_url)
         return {"layers": layers}
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=sanitize_http_detail(str(e)))
     except ConnectionError as e:
         raise HTTPException(status_code=502, detail="Servizio esterno non raggiungibile")
     except Exception as e:
@@ -259,7 +260,7 @@ async def get_layer_schema(
         schema = get_service().get_layer_schema(connection_id, layer_url)
         return schema
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=sanitize_http_detail(str(e)))
     except ConnectionError as e:
         raise HTTPException(status_code=502, detail="Servizio esterno non raggiungibile")
     except Exception as e:
@@ -298,7 +299,7 @@ async def query_preview(
         }
         
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=sanitize_http_detail(str(e)))
     except Exception as e:
         raise HTTPException(status_code=500, detail="Errore interno del server")
 
@@ -461,7 +462,7 @@ async def write_features(request: WriteRequest, current_user: CurrentUser = Depe
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=sanitize_http_detail(str(e)))
     except ConnectionError as e:
         raise HTTPException(status_code=502, detail="Servizio esterno non raggiungibile")
     except Exception as e:
@@ -508,7 +509,7 @@ async def create_service(request: CreateServiceRequest, current_user: CurrentUse
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=sanitize_http_detail(str(e)))
     except ConnectionError as e:
         raise HTTPException(status_code=502, detail="Servizio esterno non raggiungibile")
     except Exception as e:
