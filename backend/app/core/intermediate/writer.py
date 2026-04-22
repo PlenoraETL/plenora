@@ -295,8 +295,18 @@ def close_run(run_id: str, input_hash: str, output_hash: str,
                 op="intermediate_write",
             )
 
+    # intent: resource guard — cleanup best-effort (fallback update_run a status=failed)
+    # + re-raise dell'eccezione originale. Il caller decide il proprio flusso
+    # (Celery task top-level gia' cattura via try/except attorno a idb_close_run).
+    # outcome: fail-closed (chiude il pattern resource guard che pre-fix
+    # ingoiava l'errore lasciando la row intermediate.runs in stato ambiguo
+    # rispetto allo stato Celery task).
     except Exception as e:
-        logger.error(f"[GESTITO] Errore chiusura run {run_id}: {e}", op="intermediate_write")
+        logger.error(
+            f"[CRASH] Errore chiusura run {run_id}: {e}",
+            op="intermediate_write",
+            exc_info=True,
+        )
         try:
             db.update_run(run_id, status="failed")
         except Exception as _cleanup_err:
@@ -305,3 +315,4 @@ def close_run(run_id: str, input_hash: str, output_hash: str,
                 f"{type(_cleanup_err).__name__}: {_cleanup_err}",
                 op="intermediate_write",
             )
+        raise
