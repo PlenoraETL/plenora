@@ -45,6 +45,7 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 import requests
 import pandas as pd
+import psycopg2
 
 from app.config import settings
 from app.utils.logger import get_logger
@@ -67,6 +68,7 @@ from app.utils.result_store import get_temp_output_path, save_result_blob
 from app.utils.template_variables import process_static_fields
 from app.utils.response_parser import ResponseParser, get_preset_config
 from app.shared.crypto import encrypt as _crypto_encrypt, decrypt as _crypto_decrypt
+from app.shared.exceptions import ExecutionContextError
 import app.db.db_service as db_svc
 
 
@@ -931,20 +933,36 @@ class ApiConnectionService:
           troncare i DataFrame in modalita' preview.
         - `self._current_group_id`: tenant binding del progetto
           corrente, usato dai check cross-tenant in `_load_source_project`
-          / `_load_file_source`. Fail-soft: se il lookup DB esplode
-          setta None e lascia fallire i check a valle.
+          / `_load_file_source` / `_resolve_file_source_path` /
+          `_assert_file_source_group_access`.
+
+        Fail-closed su errori DB: se `db_svc.get_project` solleva
+        `psycopg2.Error` (pool exhausted, DB down, deadlock, query
+        error) questo metodo solleva `ExecutionContextError` con
+        chain preservata via `from e`. Il boundary di
+        `execute_enrichment` (Fix-C) la cattura nel ramo
+        `except Exception` e la traduce in response safe per il
+        caller.
+
+        Comportamento su progetto inesistente (`_proj_row is None`):
+        invariato -- `_current_group_id = None`, i check downstream
+        sollevano "Contesto di sicurezza non determinabile". E'
+        ramo dati legittimo, non errore.
         """
         self._preview_limit = preview_limit
+        # Azzera prima del path che puo' fallire: evita stato stale
+        # sul singleton se una chiamata precedente aveva settato
+        # group_id e la nuova solleva ExecutionContextError.
+        self._current_group_id = None
         try:
             _proj_row = db_svc.get_project(project_id)
-            self._current_group_id = _proj_row.get("group_id") if _proj_row else None
-        except Exception as _ctx_err:
-            logger.warning(
-                f"_init_execution_context: get_project({project_id}) fallito "
-                f"({type(_ctx_err).__name__}: {_ctx_err}); group_id=None "
-                f"→ check cross-tenant downstream falliranno fail-closed"
-            )
-            self._current_group_id = None
+        except psycopg2.Error as e:
+            raise ExecutionContextError(
+                project_id,
+                reason="errore lettura progetto dal DB",
+                original_error=e,
+            ) from e
+        self._current_group_id = _proj_row.get("group_id") if _proj_row else None
 
     def execute_enrichment(self, project_id: str, canvas: Dict, format: str = 'csv',
                           force_recalculate: bool = False, preview_limit: int = None,
@@ -965,9 +983,9 @@ class ApiConnectionService:
         - api_enrich: arricchisce (enricher) o genera (generator) dati via API
         - result: nodo terminale, definisce formato e nome output
         """
-        self._init_execution_context(project_id, preview_limit)
-
         try:
+            self._init_execution_context(project_id, preview_limit)
+
             nodes = canvas.get('nodes', [])
             edges = canvas.get('edges', [])
             
