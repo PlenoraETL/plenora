@@ -84,9 +84,25 @@ Principio generale: **fail-fast su dato critico (charter base 8)**, **best-effor
 - **Entry point canonici**:
   - `app/core/*/result_store.py` — dispatch risultati per modulo (result_store policy-aware, commit `1176c32`)
   - `app/services/file_service.py` — dispatch file sorgente (pattern FS-4 simmetrico, commit `c5578db`)
+  - `app/db/results_db_service.py` (`_s3_download_bytes` :67, `_s3_delete_best_effort` :134) — reader/cleanup simmetrico FS-4 (stesso dominio result, log prefisso `[FS-4]`) — registrato review A1-B1 (2026-04-22)
+  - `app/db/config_db_service.py:618-627` — cleanup S3 simmetrico del writer FS-5 (stesso dominio file_source, ramo delete) — registrato review A1-B1 (2026-04-22)
 - **Provider disponibili**: DB locale (Postgres) + AWS S3. MinIO come provider P1 designato (implementazione in Phase 2). Azure/GCP fuori scope (A1 §8).
 - **Vincolo**: nessun accesso diretto a bucket S3 / filesystem / DB bytea fuori da questi entry point. Se un modulo legge/scrive artefatti bypassando il dispatch, e' una violazione della policy e va corretta, non normalizzata via fallback locale.
 - **Config-not-flag**: STORAGE_POLICY non e' un toggle (niente `on`/`off`) ma un enum di deployment. E' registrato in §3 Config-not-flag per trasparenza.
+
+### 1.7.bis Callers ortogonali dichiarati (registro A1-B1 chiuso)
+
+Call site che raggiungono object storage / secrets ma appartengono a domini distinti dal dispatch §1.7. Non sono bypass: hanno governance propria. Registro chiuso — review `A1-B1` 2026-04-22, `orchestrate/phase_2_hardening/a1_bulk_review.md`.
+
+| Caller | Dominio | Fonte ortogonalita' |
+|---|---|---|
+| `app/core/eseguibili/storage.py` + `workers/tasks/enrichment_task.py:833-835` | eseguibili output | Dominio distinto (non result, non file_source). Vedi `a1_bulk_review.md §4.2` |
+| `app/core/imdf/storage.py` | IMDF bundle | Deferito ad `A-D3` (`orchestrate/phase_1_stabilization/d3_imdf_boundaries.md`) |
+| `workers/beat_scheduler.py:918,1099` (`get_log_archive_storage`) | log archive | `ADR-0014` + §1.4 |
+| `scripts/backup_db.py`, `scripts/test_restore.py` | DB backup | `a1_storage_policy.md §7.3` |
+| `scripts/load_secrets.py` (`get_secrets_backend`) | secrets bootstrap | `a1_storage_policy.md §7.3` |
+
+Promozione o rimozione di una riga richiede PR dedicata e nota in `a1_bulk_review.md §8 Follow-up`.
 
 ---
 
@@ -240,7 +256,7 @@ Le seguenti decisioni **non** sono vincolate da questo documento e restano scope
   - S27 cluster IMDF — 5 commit (`92f0c31`, `9e1246b`, `be20d19`, `afe3aba`, `834bf91`)
   - S28 shared layer — triage conformita' 2026-04-20, no code change (dettaglio in `orchestrate/phase_1_stabilization/kickoff.md`)
 - **Log lifecycle — RATIFICATO post cluster O-ARC Batch 1-4 (2026-04-21) + P-CLR (2026-04-22)** (ex carry-over Phase 2): il cluster O-ARC chiude la carry-over su append-only enforcement + retention + purge controllato di `plenora.logs` e `plenora.audit_actions`. Path canonico **archive-before-purge** implementato nel beat (§1.4), ratificato in `backend/docs/architecture/decisions/0014-2026-04-21-log-archive-pipeline.md` + addendum §A Batch 2 (env var `LOG_ARCHIVE_*` + `AUDIT_RETENTION_DAYS` + fail-fast `validate_storage_config`) + addendum §B Batch 4 (observability circolare via `pg_execute` diretta, §1.4). Il commit `a32c9f3` pre-esistente resta la genesi del bypass `SET LOCAL plenora.retention_cleanup='true'` — ora integrato nel writer come unico consumatore autorizzato. Flip `LOG_ARCHIVE_ENABLED=true` e' azione ops post-merge, documentata in `orchestrate/phase_2_hardening/o_arc_runbook.md` (local-only, non tracked). Nessun bypass manuale implicito della policy e' ammesso: il trigger `plenora.block_log_modifications` (migration `2026-04-21_log_immutable_triggers.sql`) resta l'enforcement; il bypass e' esposto unicamente al beat worker sullo stesso cursor di DELETE. **Cluster P-CLR chiuso 2026-04-22** (piano `orchestrate/phase_2_hardening/p_clr_finalization.md`, Option D pura ratificata): rimosso l'ultimo user path che toccava `DELETE plenora.logs` (`POST /logs/clear` + FE button + client + capability) — dettaglio §1.4. Cascade cleanup applicativi ora scoped a `log_runs`. Contract test anti-reintroduzione attivo. Nessun consumer applicativo residuo su DELETE `logs` al di fuori del beat. Rehydrate (lettura archive → ricostruzione riga DB) resta scope `P-VIEW`, non-Phase-2.
-- **Carry-over architetturale Phase 2**: A1 follow-up — provider MinIO P1 implementation + contract test per matrice policy/provider + bulk review dei chiamanti file storage per allineamento al dispatch canonico §1.7.
+- **Carry-over architetturale Phase 2**: A1 follow-up — provider MinIO P1 implementation + contract test per matrice policy/provider (track `A-A1b`). Bulk review chiamanti file storage chiusa 2026-04-22 (review `A1-B1`, `orchestrate/phase_2_hardening/a1_bulk_review.md`, 0 bypass; §1.7 + §1.7.bis aggiornati).
 - **Strategia di rimozione alias retro-compat** (`URBY_*` → `PLENORA_*`): richiede coordinamento con deploy prod (`lab.plenora.it`) prima di rimuovere dal codice. Scope product/env, non invariant.
 
 Queste aree restano aperte: se toccate in Fase 1+, il PR deve dichiarare la scelta con la stessa disciplina delle 7 regole in §5, anche se il punto non e' ancora in tabella §2/§3.
