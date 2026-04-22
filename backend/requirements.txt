@@ -12,6 +12,7 @@ sqlalchemy>=2.0.25
 # Auth & Security
 PyJWT>=2.10.0
 bcrypt>=4.3.0
+argon2-cffi>=23.1.0
 cryptography>=44.0.0
 pyotp>=2.9.0
 qrcode[pil]>=7.4.0

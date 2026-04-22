@@ -27,6 +27,13 @@ from typing import Optional
 
 import bcrypt
 import jwt
+from argon2 import PasswordHasher
+from argon2.exceptions import (
+    VerifyMismatchError,
+    VerificationError,
+    InvalidHashError,
+    HashingError,
+)
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
@@ -230,22 +237,68 @@ class GroupResponse(BaseModel):
 # ============================================================
 # PASSWORD UTILS
 # ============================================================
+#
+# Dual hashing: Argon2id (default per i nuovi hash) + bcrypt (verifica legacy).
+# Gli utenti con hash bcrypt vengono migrati in Argon2id best-effort al primo
+# login riuscito (rehash progressivo). hash_password ritorna SEMPRE Argon2id.
+
+_ph = PasswordHasher()
+
 
 def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    return _ph.hash(password)
+
 
 def verify_password(password: str, hashed: str) -> bool:
-    return bcrypt.checkpw(password.encode(), hashed.encode())
+    if not isinstance(hashed, str) or not hashed:
+        return False
+    if hashed.startswith("$argon2"):
+        try:
+            return _ph.verify(hashed, password)
+        except (VerifyMismatchError, VerificationError, InvalidHashError):
+            return False
+        except Exception:
+            # Difensivo: argon2-cffi ha sollevato eccezioni non documentate
+            # su input corrotti in passato. Fail-closed, no leak.
+            return False
+    if hashed.startswith("$2"):
+        try:
+            return bcrypt.checkpw(password.encode(), hashed.encode())
+        except (ValueError, TypeError):
+            return False
+    return False
 
-# C10: hash bcrypt reale di una password dummy, generato una volta
-# all'import. Usato nel login quando l'username non esiste, cosi'
-# `verify_password` fa comunque il lavoro bcrypt (~200-400ms) e il
-# tempo di risposta non rivela se un utente esiste o no (timing
-# attack / user enumeration). Un hash fittizio tipo "$2b$12$xxx..."
-# farebbe eccezione in bcrypt.checkpw → timing diverso → leak.
-_DUMMY_PASSWORD_HASH = bcrypt.hashpw(
-    b"c10_dummy_password_for_timing_parity", bcrypt.gensalt()
-).decode()
+
+def needs_rehash(hashed: str) -> bool:
+    """True se l'hash va rigenerato in Argon2id al prossimo login riuscito.
+
+    - bcrypt ($2*)            → True (migrazione)
+    - Argon2id valido         → delega a PasswordHasher.check_needs_rehash
+    - altro / corrotto        → False (niente rehash alla cieca, il verify
+                                 avrà già ritornato False a monte)
+    """
+    if not isinstance(hashed, str) or not hashed:
+        return False
+    if hashed.startswith("$2"):
+        return True
+    if hashed.startswith("$argon2"):
+        try:
+            return _ph.check_needs_rehash(hashed)
+        except InvalidHashError:
+            return False
+        except Exception:
+            return False
+    return False
+
+
+# C10: hash dummy reale di una password casuale, generato una volta all'import.
+# Usato nel login quando l'username non esiste, cosi' `verify_password` fa
+# comunque il lavoro di hashing e il tempo di risposta non rivela se un utente
+# esiste o no (timing attack / user enumeration). Dall'introduzione di
+# Argon2id il dummy e' in Argon2id: coerente con i nuovi utenti. Gli utenti
+# legacy bcrypt hanno un costo di verify leggermente diverso finche' non
+# vengono migrati dal rehash progressivo.
+_DUMMY_PASSWORD_HASH = _ph.hash("c10_dummy_password_for_timing_parity")
 
 # ============================================================
 # JWT UTILS
@@ -675,6 +728,18 @@ def login(data: LoginRequest, request: Request):
             )
 
     _clear_failed_logins(client_ip)
+
+    # Rehash progressivo bcrypt → Argon2id (best-effort: un fallimento del DB
+    # non deve negare il login, al prossimo login riproveremo).
+    if needs_rehash(user["password_hash"]):
+        try:
+            db.update_user_password(user["id"], hash_password(data.password))
+        except Exception as e:
+            logger.warning(
+                f"Rehash password fallito per {user['username']}: {e}",
+                op="login_rehash",
+            )
+
     token = create_access_token(
         user_id=user["id"], username=user["username"],
         group_id=user["group_id"], role=user["role"],

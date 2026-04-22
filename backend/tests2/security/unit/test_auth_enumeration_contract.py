@@ -96,17 +96,17 @@ def test_login_calls_verify_password_when_user_exists(monkeypatch):
     assert call_count["n"] == 1
 
 
-def test_login_uses_real_bcrypt_dummy_hash():
-    """Il _DUMMY_PASSWORD_HASH deve essere un hash bcrypt VALIDO
-    (altrimenti bcrypt.checkpw solleva ValueError e il timing diverge
-    comunque)."""
+def test_login_uses_real_argon2id_dummy_hash():
+    """Il _DUMMY_PASSWORD_HASH deve essere un hash Argon2id VALIDO (post
+    migrazione bcrypt→Argon2id). Altrimenti verify_password solleverebbe
+    su hash corrotto e il timing divergerebbe comunque."""
     from app.core.auth.auth import _DUMMY_PASSWORD_HASH, verify_password
 
-    # Deve iniziare con il prefix bcrypt e avere la lunghezza attesa
-    assert _DUMMY_PASSWORD_HASH.startswith("$2b$"), (
-        f"_DUMMY_PASSWORD_HASH non e' bcrypt 2b: {_DUMMY_PASSWORD_HASH[:10]}"
+    # Deve iniziare con il prefix Argon2id
+    assert _DUMMY_PASSWORD_HASH.startswith("$argon2id$"), (
+        f"_DUMMY_PASSWORD_HASH non e' argon2id: {_DUMMY_PASSWORD_HASH[:15]}"
     )
-    # checkpw non deve sollevare su questo hash
+    # verify_password non deve sollevare su questo hash
     # (password random sbagliata → deve ritornare False pulito)
     result = verify_password("random_wrong_pwd", _DUMMY_PASSWORD_HASH)
     assert result is False
