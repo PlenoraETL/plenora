@@ -455,16 +455,16 @@ class ProjectService:
             derived_failures.append("comparison_keys")
 
         # Fail-closed gate: se uno step critical e' fallito, la row config
-        # NON viene rimossa e si solleva RuntimeError. Questo preserva
-        # l'invariante "o progetto cancellato pulito, o progetto ancora
-        # presente", evitando che `config.projects` resti senza orfani
-        # intermediate/results cross-DB (con dati utente residuo).
+        # NON viene rimossa e si solleva ProjectCleanupPartialError. Questo
+        # preserva l'invariante "o progetto cancellato pulito, o progetto
+        # ancora presente", evitando che `config.projects` resti senza
+        # orfani intermediate/results cross-DB (con dati utente residui).
         #
-        # Step derivati falliti NON bloccano: vengono riportati nel messaggio
-        # per diagnostica ma il progetto viene comunque cancellato (derived =
-        # tolerabile). Il caller (projects/router) oggi propaga come 500
-        # generico via FastAPI default handler; il mapping strutturato a
-        # shape response dedicata e' materia di C6 (non apre qui).
+        # Step derivati falliti NON bloccano: vengono riportati sugli attributi
+        # dell'eccezione per diagnostica ma non impediscono la cancellazione
+        # quando solo derived hanno fallito. Il caller `projects/router.py`
+        # cattura l'eccezione e mappa a HTTP 500 con shape strutturata
+        # (Batch 9 C6).
         if critical_failures:
             logger.error(
                 f"[CRASH] delete_project abort: critical cleanup fallito per {project_id}. "
@@ -472,9 +472,11 @@ class ProjectService:
                 f"Config row preservata, ritenta o escalation richiesta.",
                 op="delete_project",
             )
-            raise RuntimeError(
-                f"project cleanup partial for '{project_id}': "
-                f"critical={critical_failures} derived={derived_failures}"
+            from app.shared.exceptions import ProjectCleanupPartialError
+            raise ProjectCleanupPartialError(
+                project_id=project_id,
+                critical_failed=critical_failures,
+                derived_failed=derived_failures,
             )
 
         db.delete_project(project_id, group_id=group_id)

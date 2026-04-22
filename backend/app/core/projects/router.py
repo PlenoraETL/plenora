@@ -24,7 +24,11 @@ from typing import Any, List, Optional
 from app.utils.logger import get_logger
 from app.shared.audit_action import audit_action
 from app.shared.models import CanvasState, Node, Edge
-from app.shared.exceptions import ProjectHasDependenciesError, CanvasCorruptedError
+from app.shared.exceptions import (
+    ProjectHasDependenciesError,
+    CanvasCorruptedError,
+    ProjectCleanupPartialError,
+)
 from app.services.project_lineage import ProjectLineageCycleError
 from app.core.auth.auth import (
     get_current_user,
@@ -224,6 +228,27 @@ def delete_project(project_id: str, current_user: CurrentUser = Depends(require_
                 "error": "project_has_dependencies",
                 "message": str(e),
                 "dependencies": deps,
+            },
+        )
+    except ProjectCleanupPartialError as e:
+        # Shape 500 cleanup-partial (Batch 9 C6):
+        # { error, message, project_id, failed_steps:{critical,derived},
+        #   project_preserved:true }.
+        # Fail-closed: la row config.projects e' preservata (vedi C5).
+        # `project_preserved:true` telegrama l'invariante al caller che puo'
+        # ritentare o escalare senza rischiare di lasciare il sistema in
+        # stato incoerente.
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "project_cleanup_partial",
+                "message": str(e),
+                "project_id": e.project_id,
+                "failed_steps": {
+                    "critical": e.critical_failed,
+                    "derived": e.derived_failed,
+                },
+                "project_preserved": True,
             },
         )
     return {"status": "deleted", "project_id": project_id}

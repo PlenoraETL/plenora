@@ -7,13 +7,14 @@ fallivano → orfani garantiti compensati solo post-hoc da `orphan_cleanup_servi
 
 Post-fix:
   - critical (intermediate_runs, results_blobs): fallimento → `logger.error`
-    + accumulo + gate pre-step5 che solleva `RuntimeError`, preservando la
-    row config. Caller (FastAPI) risponde 500 generico — fail-closed.
+    + accumulo + gate pre-step5 che solleva `ProjectCleanupPartialError`
+    (C6 — pre-C6 era `RuntimeError`), preservando la row config. Caller
+    (`projects/router.py`) mappa a HTTP 500 con shape strutturata.
   - derived (schedules_orphan, comparison_keys): fallimento → `logger.warning`
     + accumulo ma NON blocca step 5, config row rimossa normalmente.
   - Tutti i 4 warning/error ora con `exc_info=True` (coerenza C2/C4).
-  - Nessuna nuova exception class: si usa `RuntimeError` built-in con
-    messaggio strutturato.
+  - `ProjectCleanupPartialError` espone `.project_id`, `.critical_failed`,
+    `.derived_failed` come attributi tipizzati.
   - Pre-check `ProjectHasDependenciesError` invariato.
 
 Nomi canonici step nel messaggio RuntimeError:
@@ -153,61 +154,63 @@ def test_delete_project_happy_path_returns_true_and_deletes_config():
 
 
 def test_delete_project_fail_closed_when_intermediate_runs_delete_fails():
-    """Step 2 (intermediate_runs) solleva → RuntimeError propaga, db.delete_project
-    NON chiamato (config row preservata), messaggio contiene 'intermediate_runs'."""
+    """Step 2 (intermediate_runs) solleva → ProjectCleanupPartialError propaga,
+    db.delete_project NON chiamato (config row preservata), attributi
+    tipizzati contengono 'intermediate_runs'."""
     from app.services.project_service import ProjectService
+    from app.shared.exceptions import ProjectCleanupPartialError
 
     with _patch_cascade(
         intermediate_side_effect=RuntimeError("intermediate DB lock timeout")
     ) as mock_db_delete:
         svc = ProjectService()
-        with pytest.raises(RuntimeError, match=r"intermediate_runs") as exc_info:
+        with pytest.raises(ProjectCleanupPartialError) as exc_info:
             svc.delete_project("p-target")
 
     # Invariante fail-closed: config row NON rimossa
     mock_db_delete.assert_not_called()
-    # Messaggio strutturato: project_id + critical list
-    err_msg = str(exc_info.value)
-    assert "p-target" in err_msg
-    assert "critical=['intermediate_runs']" in err_msg
-    assert "derived=[]" in err_msg
+    # Attributi tipizzati: project_id + critical list + derived vuota
+    assert exc_info.value.project_id == "p-target"
+    assert exc_info.value.critical_failed == ["intermediate_runs"]
+    assert exc_info.value.derived_failed == []
 
 
 def test_delete_project_fail_closed_when_results_blob_delete_fails():
-    """Step 3 (results_blobs) solleva → RuntimeError, db.delete_project NON
-    chiamato, messaggio contiene 'results_blobs'."""
+    """Step 3 (results_blobs) solleva → ProjectCleanupPartialError, db.delete_project
+    NON chiamato, attributi contengono 'results_blobs'."""
     from app.services.project_service import ProjectService
+    from app.shared.exceptions import ProjectCleanupPartialError
 
     with _patch_cascade(
         results_side_effect=RuntimeError("S3 timeout on blob delete")
     ) as mock_db_delete:
         svc = ProjectService()
-        with pytest.raises(RuntimeError, match=r"results_blobs") as exc_info:
+        with pytest.raises(ProjectCleanupPartialError) as exc_info:
             svc.delete_project("p-target")
 
     mock_db_delete.assert_not_called()
-    err_msg = str(exc_info.value)
-    assert "critical=['results_blobs']" in err_msg
+    assert exc_info.value.critical_failed == ["results_blobs"]
+    assert exc_info.value.derived_failed == []
 
 
 def test_delete_project_fail_closed_with_multiple_critical():
-    """Step 2 e 3 entrambi falliscono → RuntimeError con entrambi nel messaggio."""
+    """Step 2 e 3 entrambi falliscono → ProjectCleanupPartialError con entrambi
+    nel `critical_failed`, ordine d'esecuzione preservato."""
     from app.services.project_service import ProjectService
+    from app.shared.exceptions import ProjectCleanupPartialError
 
     with _patch_cascade(
         intermediate_side_effect=RuntimeError("intermediate down"),
         results_side_effect=RuntimeError("results down"),
     ) as mock_db_delete:
         svc = ProjectService()
-        with pytest.raises(RuntimeError) as exc_info:
+        with pytest.raises(ProjectCleanupPartialError) as exc_info:
             svc.delete_project("p-target")
 
     mock_db_delete.assert_not_called()
-    err_msg = str(exc_info.value)
-    assert "intermediate_runs" in err_msg
-    assert "results_blobs" in err_msg
-    # Ordine d'esecuzione preservato nella lista
-    assert err_msg.index("intermediate_runs") < err_msg.index("results_blobs")
+    # Ordine d'esecuzione preservato nella lista critical_failed
+    assert exc_info.value.critical_failed == ["intermediate_runs", "results_blobs"]
+    assert exc_info.value.derived_failed == []
 
 
 # =============================================================================
@@ -268,26 +271,25 @@ def test_delete_project_best_effort_when_comparison_keys_fails():
 
 
 def test_delete_project_mixed_failure_critical_wins():
-    """Step 1 derived + step 3 critical falliscono → RuntimeError (critical
-    prevale), messaggio menziona sia critical che derived."""
+    """Step 1 derived + step 3 critical falliscono → ProjectCleanupPartialError
+    (critical prevale); attributi contengono sia critical che derived."""
     from app.services.project_service import ProjectService
+    from app.shared.exceptions import ProjectCleanupPartialError
 
     with _patch_cascade(
         schedules_side_effect=RuntimeError("scheduler blip"),
         results_side_effect=RuntimeError("s3 down"),
     ) as mock_db_delete:
         svc = ProjectService()
-        with pytest.raises(RuntimeError) as exc_info:
+        with pytest.raises(ProjectCleanupPartialError) as exc_info:
             svc.delete_project("p-target")
 
     # Fail-closed: config row non rimossa (critical wins)
     mock_db_delete.assert_not_called()
-    err_msg = str(exc_info.value)
-    # Critical nel messaggio
-    assert "critical=['results_blobs']" in err_msg
-    # Derived anche nel messaggio (per diagnosticita')
-    assert "schedules_orphan" in err_msg
-    assert "derived=" in err_msg
+    # Critical presente
+    assert exc_info.value.critical_failed == ["results_blobs"]
+    # Derived anche riportato (per diagnosticita')
+    assert exc_info.value.derived_failed == ["schedules_orphan"]
 
 
 # =============================================================================
@@ -299,12 +301,13 @@ def test_delete_project_invariant_config_preserved_on_critical_fail():
     """Invariante fail-closed esplicita: su QUALSIASI fallimento critical,
     db.delete_project NON deve essere chiamato. Test con solo intermediate down."""
     from app.services.project_service import ProjectService
+    from app.shared.exceptions import ProjectCleanupPartialError
 
     with _patch_cascade(
         intermediate_side_effect=RuntimeError("boom"),
     ) as mock_db_delete:
         svc = ProjectService()
-        with pytest.raises(RuntimeError):
+        with pytest.raises(ProjectCleanupPartialError):
             svc.delete_project("p-target")
 
     # Invariante chiave del fix: la row config.projects resta in DB

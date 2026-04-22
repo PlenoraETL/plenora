@@ -146,6 +146,60 @@ class ProjectHasDependenciesError(Exception):
         )
 
 
+class ProjectCleanupPartialError(Exception):
+    """Sollevata quando la cascade cleanup in `delete_project` fallisce su
+    almeno uno step classificato come CRITICO (intermediate_runs o
+    results_blobs). La row `config.projects` NON viene rimossa: invariante
+    fail-closed "o progetto cancellato pulito, o ancora presente".
+
+    Contesto (reperto S1 Batch 9, audit `error_handling_batch9_orchestrator_cleanup_audit.md`):
+      Pre-fix, `delete_project` aveva cascade a 5 step con 4 `except Exception:
+      warning + continue`; lo step 5 (config DELETE) veniva eseguito SEMPRE,
+      anche se intermediate runs / results blobs erano orfani cross-DB. La
+      row in `config.projects` spariva e il caller vedeva `{"status":
+      "deleted"}`: il claim "cancellato" era silenziosamente violato,
+      compensato solo dal job admin `orphan_cleanup_service`.
+
+      Fix C5 ha introdotto l'accumulo `critical_failures` e un gate pre-
+      step 5 che sollevava `RuntimeError` con messaggio strutturato.
+      Fix C6 (questo) promuove la segnalazione a classe tipizzata cosi'
+      che il caller `projects/router.py` possa catturarla via isinstance
+      e mappare a `HTTPException(500)` con shape JSON leggibile sia da
+      umano (FE toast) sia da tool (monitoring/alerting).
+
+    Step critici (falliscono → fail-closed):
+      - `intermediate_runs`: `app.core.intermediate.db.delete_all_runs_for_canvas`
+      - `results_blobs`: `app.db.results_db_service.delete_results_for_project`
+
+    Step derivati (falliscono → tolerati, non bloccano):
+      - `schedules_orphan`: `ScheduleService.mark_as_orphan`
+      - `comparison_keys`: `app.db.config_db_service.delete_comparison_keys`
+
+    Attributi:
+        project_id: id del progetto per cui la cascade e' fallita.
+        critical_failed: lista nomi canonici step critici falliti (non-vuota
+            per definizione: l'eccezione si solleva solo se almeno uno
+            critical ha fallito).
+        derived_failed: lista nomi canonici step derivati falliti, riportati
+            per diagnosticita'. Puo' essere vuota.
+    """
+
+    def __init__(
+        self,
+        project_id: str,
+        critical_failed: List[str],
+        derived_failed: Optional[List[str]] = None,
+    ):
+        self.project_id = project_id
+        self.critical_failed = list(critical_failed)
+        self.derived_failed = list(derived_failed or [])
+        super().__init__(
+            f"Cleanup parziale del progetto '{project_id}': "
+            f"step critici falliti {self.critical_failed}. "
+            f"Il progetto non e' stato cancellato."
+        )
+
+
 class ExecutionContextError(Exception):
     """Sollevata quando l'inizializzazione del contesto di esecuzione
     per `arricchisci/api_connector.execute_enrichment` fallisce su

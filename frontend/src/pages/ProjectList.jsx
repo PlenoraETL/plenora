@@ -268,7 +268,25 @@ function ProjectList() {
         );
         return;
       }
-      toast.error('Errore eliminazione: ' + (err?.response?.data?.detail || err.message));
+      // 500 project_cleanup_partial (Batch 9 C6): cascade cleanup cross-DB
+      // fallita su step critici. Invariante: `project_preserved:true` → il
+      // progetto e' ancora presente, l'utente puo' ritentare.
+      const detail = err?.response?.data?.detail;
+      if (
+        err?.response?.status === 500 &&
+        detail && typeof detail === 'object' &&
+        detail.error === 'project_cleanup_partial'
+      ) {
+        toast.error(
+          `Impossibile eliminare "${name}": ${detail.message || 'cleanup parziale'}. Ritenta o contatta admin.`,
+          10000
+        );
+        return;
+      }
+      // Fallback: se detail e' oggetto (shape inattesa), usa err.message
+      // per evitare "[object Object]" nel toast.
+      const detailText = typeof detail === 'string' ? detail : err.message;
+      toast.error('Errore eliminazione: ' + (detailText || 'errore sconosciuto'));
     }
   };
 
