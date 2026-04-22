@@ -13,6 +13,7 @@ il relativo datasource backend.
 details.multi_host_advisory) — informativo, non fail.
 """
 
+import logging
 import os
 from datetime import datetime
 from typing import Optional
@@ -25,6 +26,8 @@ from app.core.datasources.interface import (
     DataSourcePermissionError,
     FileInfo,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _classify_path_for_multi_host(path: str) -> str:
@@ -160,9 +163,14 @@ class LocalDataSource(DataSourceInterface):
                         if not self._matches_pattern(filename, pattern):
                             continue
                         entry_path = os.path.join(dirpath, filename)
+                        # intent: optional feature / outcome: fail-open (entry skip su stat inaccessibile)
                         try:
                             st = os.stat(entry_path)
-                        except OSError:
+                        except OSError as e:
+                            logger.debug(
+                                "local list_files(recursive): skip %r (stat non disponibile): %s: %s",
+                                entry_path, type(e).__name__, e,
+                            )
                             continue
                         hash_val = None
                         if include_hash:
@@ -187,9 +195,14 @@ class LocalDataSource(DataSourceInterface):
                             continue
                         if entry.is_dir(follow_symlinks=True):
                             # Aggiungi cartella
+                            # intent: optional feature / outcome: fail-open (folder skip su stat inaccessibile)
                             try:
                                 st = entry.stat(follow_symlinks=True)
-                            except OSError:
+                            except OSError as e:
+                                logger.debug(
+                                    "local list_files: skip folder %r (stat non disponibile): %s: %s",
+                                    entry.path, type(e).__name__, e,
+                                )
                                 continue
                             rel = self._rel(entry.path)
                             results.append(FileInfo(
@@ -203,16 +216,25 @@ class LocalDataSource(DataSourceInterface):
                         elif entry.is_file(follow_symlinks=True):
                             if not self._matches_pattern(entry.name, pattern):
                                 continue
+                            # intent: optional feature / outcome: fail-open (file skip su stat inaccessibile)
                             try:
                                 st = entry.stat(follow_symlinks=True)
-                            except OSError:
+                            except OSError as e:
+                                logger.debug(
+                                    "local list_files: skip file %r (stat non disponibile): %s: %s",
+                                    entry.path, type(e).__name__, e,
+                                )
                                 continue
                             hash_val = None
                             if include_hash:
+                                # intent: optional feature / outcome: fail-open (hash opzionale)
                                 try:
                                     hash_val = self._compute_hash(self._raw_read(entry.path))
-                                except OSError:
-                                    pass
+                                except OSError as e:
+                                    logger.debug(
+                                        "local list_files: hash non calcolato per %r: %s: %s",
+                                        entry.path, type(e).__name__, e,
+                                    )
                             rel = self._rel(entry.path)
                             results.append(FileInfo(
                                 name=entry.name,

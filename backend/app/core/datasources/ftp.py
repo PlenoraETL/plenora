@@ -166,11 +166,16 @@ class FTPDataSource(DataSourceInterface):
             name = full_name.split("/")[-1]
             if not self._matches_pattern(name, pattern):
                 continue
+            # intent: optional feature / outcome: fail-open (entry skip su NLST metadata)
             try:
                 size = self._ftp.size(full_name) or 0
                 mdtm = self._ftp.sendcmd(f"MDTM {full_name}")
                 modified_date = self._parse_mdtm(mdtm)
-            except ftplib.all_errors:
+            except ftplib.all_errors as e:
+                logger.debug(
+                    "ftp list_nlst: skip entry %r (metadata unavailable): %s: %s",
+                    full_name, type(e).__name__, e,
+                )
                 continue
             file_path = self._join_path(path, name)
             hash_val = self._maybe_hash(file_path, include_hash)
@@ -259,9 +264,14 @@ class FTPDataSource(DataSourceInterface):
     def _maybe_hash(self, path: str, include_hash: bool) -> Optional[str]:
         if not include_hash:
             return None
+        # intent: optional feature / outcome: fail-open (hash opzionale)
         try:
             return self._compute_hash(self.read_file(path))
-        except Exception:
+        except Exception as e:
+            logger.debug(
+                "ftp _maybe_hash: hash non calcolato per %r: %s: %s",
+                path, type(e).__name__, e,
+            )
             return None
 
     def _mkdirs(self, remote_path: str) -> None:
@@ -270,9 +280,14 @@ class FTPDataSource(DataSourceInterface):
         current = ""
         for part in parts:
             current = f"{current}/{part}" if current else part
+            # intent: optional feature / outcome: fail-open (mkdir idempotent — dir esistente)
             try:
                 self._ftp.mkd(current)
-            except ftplib.error_perm:
+            except ftplib.error_perm as e:
+                logger.debug(
+                    "ftp _mkdirs: mkd %r ignorato (probabile dir esistente): %s",
+                    current, e,
+                )
                 pass
 
     @staticmethod

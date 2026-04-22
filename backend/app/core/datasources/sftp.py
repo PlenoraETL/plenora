@@ -14,6 +14,7 @@ Configurazione extra attesa in config.extra:
 """
 
 import io
+import logging
 import stat
 from datetime import datetime
 from typing import Optional, TYPE_CHECKING
@@ -26,6 +27,8 @@ from app.core.datasources.interface import (
     DataSourcePermissionError,
     FileInfo,
 )
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     import paramiko
@@ -110,10 +113,14 @@ class SFTPDataSource(DataSourceInterface):
     def disconnect(self) -> None:
         for obj in (self._sftp, self._ssh):
             if obj:
+                # intent: optional feature / outcome: fail-open (close best-effort)
                 try:
                     obj.close()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(
+                        "sftp disconnect: close() skipped (%s): %s: %s",
+                        type(obj).__name__, type(e).__name__, e,
+                    )
         self._sftp = None
         self._ssh = None
 
@@ -164,10 +171,14 @@ class SFTPDataSource(DataSourceInterface):
             file_path = self._join_path(path, entry.filename)
             hash_val = None
             if include_hash:
+                # intent: optional feature / outcome: fail-open (hash opzionale)
                 try:
                     hash_val = self._compute_hash(self.read_file(file_path))
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(
+                        "sftp list_files: hash non calcolato per %r: %s: %s",
+                        file_path, type(e).__name__, e,
+                    )
 
             results.append(FileInfo(
                 name=entry.filename,
@@ -248,10 +259,14 @@ class SFTPDataSource(DataSourceInterface):
         current = ""
         for part in parts:
             current = f"{current}/{part}" if current else part
+            # intent: optional feature / outcome: fail-open (mkdir idempotent — dir esistente)
             try:
                 self._sftp.mkdir(current)
-            except IOError:
-                pass  # già esiste
+            except IOError as e:
+                logger.debug(
+                    "sftp _mkdirs: mkdir %r ignorato (probabile dir esistente): %s",
+                    current, e,
+                )
 
     @staticmethod
     def _load_key(paramiko, pem: str, passphrase: Optional[str]):

@@ -340,14 +340,18 @@ class DataSourceService:
             state.processed.append(ProcessedEntry(
                 name=filename, processed_at=now, pipeline_id=pipeline_id,
             ))
+        # intent: optional feature / outcome: fail-open (snapshot entry derivata, non critica)
         try:
             fi = self.file_info(ds_id, filename)
             if filename not in snapshot_names:
                 state.snapshot.append(SnapshotEntry(
                     name=filename, size=fi.size, modified=fi.modified_date.isoformat(),
                 ))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(
+                "mark_as_processed: snapshot entry skipped per %s/%s: %s: %s",
+                ds_id, filename, type(e).__name__, e,
+            )
 
         self.save_scan_state(ds_id, state)
         logger.info(f"File processato: {filename} (ds={ds_id}, pipeline={pipeline_id})")

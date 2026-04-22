@@ -310,28 +310,45 @@ class ArtifactResolver:
 
         suffix = f".{fmt}" if fmt else ""
         tempfile_kwargs = {"delete": False, "suffix": suffix}
+        # intent: optional feature / outcome: fail-open (TEMP_DIR config best-effort)
         try:
             from app.config import settings as _settings
             _tmp_dir = getattr(_settings, "TEMP_DIR", None)
             if _tmp_dir:
                 tempfile_kwargs["dir"] = str(_tmp_dir)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(
+                "_write_temp_blob: TEMP_DIR config skipped, uso default tempfile: %s: %s",
+                type(e).__name__, e,
+            )
 
         tf = tempfile.NamedTemporaryFile(**tempfile_kwargs)
         path = Path(tf.name)
         try:
             tf.write(blob)
-        except Exception:
+        # intent: resource guard / outcome: fail-closed (cleanup + re-raise)
+        except Exception as e:
+            logger.debug(
+                "_write_temp_blob: tf.write fallita per %r, avvio cleanup: %s: %s",
+                str(path), type(e).__name__, e,
+            )
+            # intent: optional feature / outcome: fail-open (close best-effort)
             try:
                 tf.close()
-            except Exception:
-                pass
+            except Exception as _close_err:
+                logger.debug(
+                    "_write_temp_blob: tf.close cleanup skipped: %s: %s",
+                    type(_close_err).__name__, _close_err,
+                )
+            # intent: optional feature / outcome: fail-open (unlink best-effort)
             try:
                 if path.exists():
                     _os.unlink(path)
-            except Exception:
-                pass
+            except Exception as _unlink_err:
+                logger.debug(
+                    "_write_temp_blob: unlink cleanup skipped per %r: %s: %s",
+                    str(path), type(_unlink_err).__name__, _unlink_err,
+                )
             raise
         else:
             tf.close()
