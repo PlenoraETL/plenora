@@ -68,7 +68,7 @@ from app.utils.result_store import get_temp_output_path, save_result_blob
 from app.utils.template_variables import process_static_fields
 from app.utils.response_parser import ResponseParser, get_preset_config
 from app.shared.crypto import encrypt as _crypto_encrypt, decrypt as _crypto_decrypt
-from app.shared.exceptions import ExecutionContextError
+from app.shared.exceptions import ExecutionContextError, FileSourceResolutionError
 import app.db.db_service as db_svc
 
 
@@ -2063,31 +2063,54 @@ class ApiConnectionService:
         import os as _os
         from app.config import settings
 
+        # Fix-A: il broad `except Exception -> warning + return None`
+        # outer e' eliminato. Errori tecnici (DB / FS) sono ora
+        # classificati e sollevati come `FileSourceResolutionError`
+        # con chain preservata. `return None` resta solo sui rami
+        # dati legittimi (metadata assente / blob vuoto).
         try:
-            import app.db.db_service as db_svc
             row_meta = db_svc.get_file_source(file_source_id, include_data=False)
-            if not row_meta:
-                return None
-            expected_name = (
-                row_meta.get("original_filename")
-                or (row_meta.get("metadata") or {}).get("original_filename")
-                or "input.bin"
-            )
+        except psycopg2.Error as e:
+            raise FileSourceResolutionError(
+                file_source_id=file_source_id,
+                cause="lookup",
+                reason="errore lettura metadata file_source dal DB",
+                original_error=e,
+            ) from e
 
-            source_dir = settings.get_file_source_dir(file_source_id)
+        if not row_meta:
+            return None
+        expected_name = (
+            row_meta.get("original_filename")
+            or (row_meta.get("metadata") or {}).get("original_filename")
+            or "input.bin"
+        )
 
-            # Cache hit: se il file gia' materializzato esiste con il
-            # nome atteso, riuso (evita I/O ripetuto tra task che usano
-            # lo stesso file_source nello stesso nodo).
-            target = source_dir / expected_name
-            if target.is_file():
-                return str(target.resolve())
+        source_dir = settings.get_file_source_dir(file_source_id)
 
-            # Cache miss: estrai blob da DB e scrivi atomico
+        # Cache hit: se il file gia' materializzato esiste con il
+        # nome atteso, riuso (evita I/O ripetuto tra task che usano
+        # lo stesso file_source nello stesso nodo).
+        target = source_dir / expected_name
+        if target.is_file():
+            return str(target.resolve())
+
+        # Cache miss: estrai blob da DB e scrivi atomico
+        try:
             row_full = db_svc.get_file_source(file_source_id, include_data=True)
-            if not row_full or not row_full.get("data"):
-                return None
-            raw = row_full["data"]
+        except psycopg2.Error as e:
+            raise FileSourceResolutionError(
+                file_source_id=file_source_id,
+                cause="lookup",
+                reason="errore lettura blob file_source dal DB",
+                original_error=e,
+            ) from e
+
+        if not row_full or not row_full.get("data"):
+            return None
+        raw = row_full["data"]
+
+        try:
             source_dir.mkdir(parents=True, exist_ok=True)
             out_path = source_dir / expected_name
             tmp_path = source_dir / f".{expected_name}.{_os.getpid()}.tmp"
@@ -2103,13 +2126,18 @@ class ApiConnectionService:
                             f"_resolve_file_source_id_path: unlink tmp_path "
                             f"best-effort fallito: {_tmp_err}"
                         )
-            logger.debug(
-                f"file_source {file_source_id}: blob materializzato in cache → {out_path}"
-            )
-            return str(out_path.resolve())
-        except Exception as e:
-            logger.warning(f"errore materializzazione file_source {file_source_id}: {e}")
-            return None
+        except OSError as e:
+            raise FileSourceResolutionError(
+                file_source_id=file_source_id,
+                cause="materialization",
+                reason="scrittura cache file_source su filesystem fallita",
+                original_error=e,
+            ) from e
+
+        logger.debug(
+            f"file_source {file_source_id}: blob materializzato in cache → {out_path}"
+        )
+        return str(out_path.resolve())
 
     def _resolve_file_source_path(self, nodes: List[Dict], edges: List[Dict],
                                    target_node_id: str) -> Optional[str]:
