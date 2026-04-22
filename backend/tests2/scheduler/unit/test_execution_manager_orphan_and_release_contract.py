@@ -172,28 +172,31 @@ def test_finally_release_lock_retries_once_after_transient_db_failure(
     schedule_config, monkeypatch
 ):
     """Blinda il fail-closed sul release nel finally di ``execute()``:
-    se il primo ``concurrency.release`` solleva (DB blip transient),
+    se il primo ``concurrency.release`` solleva una classe transient PG
+    (psycopg2.OperationalError — pool exhausted, connection reset),
     il codice DEVE:
 
-      1. Loggare l'errore come GESTITO.
-      2. ``time.sleep(1)`` (retry backoff).
-      3. Ritentare ``concurrency.release`` una seconda volta.
+      1. Loggare warning [GESTITO] per il tentativo transient.
+      2. Backoff esponenziale con jitter (``time.sleep`` mockato).
+      3. Ritentare ``concurrency.release`` (budget N=3, T=10s post Batch 7.b).
 
-    Questo test verifica il retry chiamando release con
-    ``side_effect=[RuntimeError, None]`` → primo fallisce, secondo
-    riesce. Il counter di chiamate DEVE essere 2.
+    Questo test copre lo scenario ``side_effect=[OperationalError, None]``
+    → 1° fail transient, 2° success → retry classified funziona, count=2.
 
     Regressione: rimuovere il retry significherebbe che ogni blip DB
-    transient lascia un lock orfano (che scadrà per TTL ma intanto
-    blocca il prossimo tick per 10 minuti). Mobilitare il team oncall
-    per ogni blip è troppo.
+    transient lascia un lock orfano (scadrà per TTL ma intanto blocca
+    il prossimo tick per 10 minuti).
 
-    ``time.sleep`` è monkeypatched a no-op per non bloccare il test 1s.
+    Post Batch 7.b: classe transient narrow a psycopg2 (pre-fix era
+    Exception broad); RuntimeError generico NON triggera retry (non-transient).
     """
+    import psycopg2
     manager = _make_manager_for_cleanup_test(schedule_config)
-    # Primo release solleva, secondo riesce
-    manager.concurrency.release = MagicMock(side_effect=[RuntimeError("db blip"), None])
-    # Evita 1s di attesa reale
+    # Primo release solleva transient PG, secondo riesce
+    manager.concurrency.release = MagicMock(
+        side_effect=[psycopg2.OperationalError("db blip"), None]
+    )
+    # Evita attesa reale del backoff
     monkeypatch.setattr(
         "app.core.scheduler.execution_manager.time.sleep",
         lambda _seconds: None,
@@ -216,7 +219,7 @@ def test_finally_release_lock_retries_once_after_transient_db_failure(
         )
         result = manager.execute("s-release")
 
-    # release deve essere chiamata DUE volte: prima fail, poi success
+    # release deve essere chiamata DUE volte: prima fail transient, poi success
     assert manager.concurrency.release.call_count == 2, (
         f"release DEVE essere ritentata dopo transient failure: "
         f"atteso 2 chiamate, ottenuto {manager.concurrency.release.call_count}"
@@ -239,30 +242,34 @@ def test_finally_release_lock_retries_once_after_transient_db_failure(
 def test_finally_does_not_propagate_when_both_release_attempts_fail(
     schedule_config, monkeypatch
 ):
-    """Blinda l'outer ``try/except`` del finally block: se ENTRAMBI i
-    tentativi di release sollevano (DB giù per più di 1s), ``execute()``
-    DEVE:
+    """Blinda l'outer ``try/except`` del finally block: se TUTTI i tentativi
+    di release sollevano transient PG (DB giù per più della budget window
+    del retry wrapper), ``execute()`` DEVE:
 
-      1. Chiamare release esattamente 2 volte (primo + retry).
+      1. Chiamare release esattamente N=3 volte (post Batch 7.b).
       2. Loggare CRITICO (il source cita "scadrà per TTL").
       3. **NON propagare l'eccezione** — il finally completa
          pulitamente e ``execute()`` ritorna il result dal
-         ``_handle_failure`` (non un uncaught RuntimeError).
+         ``_handle_failure`` (non un uncaught OperationalError).
 
     Contract critico: ``execute()`` è chiamato da un task Celery che
-    si aspetta sempre un return value. Una RuntimeError non catturata
+    si aspetta sempre un return value. Una OperationalError non catturata
     marcherebbe il task come failed-with-exception invece di
     failed-with-result → retry automatico di Celery → tick duplicato
     sullo stesso schedule.
 
-    Regressione: rimuovere l'outer ``try/except`` dell'inner retry
-    romperebbe il contract "sempre ritorna un result", anche in DB
-    disaster scenario.
+    Regressione: rimuovere l'outer guard del finally romperebbe il contract
+    "sempre ritorna un result", anche in DB disaster scenario.
     """
+    import psycopg2
     manager = _make_manager_for_cleanup_test(schedule_config)
-    # Entrambi i release sollevano
+    # Tutti N=3 release sollevano transient PG (post-7.b budget N=3)
     manager.concurrency.release = MagicMock(
-        side_effect=[RuntimeError("blip 1"), RuntimeError("blip 2")]
+        side_effect=[
+            psycopg2.OperationalError("blip 1"),
+            psycopg2.OperationalError("blip 2"),
+            psycopg2.OperationalError("blip 3"),
+        ]
     )
     monkeypatch.setattr(
         "app.core.scheduler.execution_manager.time.sleep",
@@ -288,12 +295,12 @@ def test_finally_does_not_propagate_when_both_release_attempts_fail(
         # un'eccezione invece di ritornare un dict.
         result = manager.execute("s-disaster")
 
-    # release chiamata esattamente 2 volte (primo + retry)
-    assert manager.concurrency.release.call_count == 2
+    # release chiamata N=3 volte (budget retry wrapper Batch 7.b)
+    assert manager.concurrency.release.call_count == 3
 
     # execute() ritorna un result dict (no uncaught exception)
     assert isinstance(result, dict), (
-        f"execute() DEVE ritornare dict anche se entrambi release "
+        f"execute() DEVE ritornare dict anche se tutti release "
         f"falliscono, ottenuto {type(result).__name__}"
     )
     # Il result viene dal _handle_failure mockato, status "failed"

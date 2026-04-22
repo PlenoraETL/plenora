@@ -23,12 +23,16 @@ Nota: l'orchestrator viene chiamato con skip_carica=True perché lo scheduler
 gestisce CARICA con la propria configurazione (dallo schedule, non dal canvas).
 """
 
+import random
 import threading
 import time
 import uuid as _uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, Optional
+
+import psycopg2
+import psycopg2.errors
 from app.config import settings
 from app.utils.logger import get_logger, open_run, close_run, set_run_context, append_step
 
@@ -664,16 +668,69 @@ class ExecutionManager:
                 self._stop_lock_heartbeat(heartbeat_state)
             except Exception as hb_err:
                 logger.warning(f"[GESTITO] Errore stop heartbeat {schedule_id}: {hb_err}")
-            # Rilascia sempre il lock — con retry se DB temporaneamente down
+            # Rilascia sempre il lock — retry wrapper classified su classi
+            # transient PG. Budget bounded: N=3 tentativi AND T=10s totali
+            # (prima condizione vince). Backoff esponenziale con jitter ±20%
+            # per evitare thundering-herd se N worker colliderebbero sullo
+            # stesso schedule_id.
+            #
+            # Classi narrow: psycopg2.OperationalError (pool exhausted /
+            # connection reset) + psycopg2.errors.DeadlockDetected. Altri
+            # errori (non-transient) catturati dall'outer guard e loggati
+            # [CRITICO] ma NON propagati — il finally deve sempre completare
+            # altrimenti Celery marca il task FAILED-with-exception invece
+            # di FAILED-with-result -> retry automatico duplicato dello
+            # stesso tick.
+            #
+            # intent: retry wrapper transient only / outcome: retryable
+            # bounded + terminal fail-closed loggato.
             try:
-                self.concurrency.release(schedule_id)
+                _MAX_RETRIES = 3
+                _BACKOFF_BASE_S = 0.5
+                _BACKOFF_MAX_S = 5.0
+                _BUDGET_TOTAL_S = 10.0
+                release_success = False
+                last_transient_err: Optional[BaseException] = None
+                retry_start = time.monotonic()
+                for attempt in range(_MAX_RETRIES):
+                    try:
+                        self.concurrency.release(schedule_id)
+                        release_success = True
+                        break
+                    except (
+                        psycopg2.OperationalError,
+                        psycopg2.errors.DeadlockDetected,
+                    ) as transient_err:
+                        last_transient_err = transient_err
+                        elapsed = time.monotonic() - retry_start
+                        # Budget esaurito: esci senza ulteriore sleep
+                        if attempt >= _MAX_RETRIES - 1 or elapsed >= _BUDGET_TOTAL_S:
+                            break
+                        # Backoff esponenziale cap a _BACKOFF_MAX_S, jitter ±20%
+                        backoff = min(
+                            _BACKOFF_BASE_S * (2 ** attempt),
+                            _BACKOFF_MAX_S,
+                        )
+                        jitter_factor = random.uniform(0.8, 1.2)
+                        logger.warning(
+                            f"[GESTITO] release lock {schedule_id} transient "
+                            f"(tentativo {attempt + 1}/{_MAX_RETRIES}): {transient_err}"
+                        )
+                        time.sleep(backoff * jitter_factor)
+                if not release_success:
+                    logger.error(
+                        f"[CRITICO] Lock {schedule_id} non rilasciato dopo "
+                        f"{_MAX_RETRIES} tentativi transient. Scadra' per TTL.",
+                        exc_info=last_transient_err,
+                    )
             except Exception as release_err:
-                logger.error(f"[GESTITO] Errore rilascio lock {schedule_id}: {release_err}")
-                try:
-                    time.sleep(1)
-                    self.concurrency.release(schedule_id)
-                except Exception:
-                    logger.error(f"[CRITICO] Lock {schedule_id} non rilasciato, scadrà per TTL")
+                # Non-transient (bug logico, classe non-PG): il finally non
+                # deve propagare, altrimenti Celery retry duplicato.
+                logger.error(
+                    f"[CRITICO] Lock {schedule_id} non rilasciato — errore "
+                    f"non-transient: {release_err}. Scadra' per TTL.",
+                    exc_info=True,
+                )
             # Chiudi le connessioni SQLite thread-local del worker Celery:
             # senza questa pulizia ogni esecuzione lascia conn aperte nel
             # thread.local del worker e dopo molte run il file descriptor

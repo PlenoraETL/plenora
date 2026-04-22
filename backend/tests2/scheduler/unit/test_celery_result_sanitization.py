@@ -201,9 +201,11 @@ def test_no_str_e_in_return_dict_error_field_across_all_sites():
     Exception` broad deve avere `"error": str(e)` o `'error': str(e)`.
 
     Whitelist scope-ratificato 7.c:
-      - `execution_manager.py:802` — catch specifico `ArtifactResolutionError`
+      - `execution_manager.py` catch specifico `ArtifactResolutionError`
         (boundary-classe-nota per audit §2.4, fuori dai 6 siti §3.1). Potra'
-        essere ratificato in un batch successivo dedicato.
+        essere ratificato in un batch successivo dedicato. Il numero di linea
+        puo' slittare (vedi 7.b che ha aggiunto imports e retry wrapper);
+        whitelistiamo per contenuto invece che lineno.
     """
     files = [
         "workers/tasks/schedule_task.py",
@@ -211,10 +213,9 @@ def test_no_str_e_in_return_dict_error_field_across_all_sites():
         "workers/tasks/imdf_publish_task.py",
         "app/core/scheduler/execution_manager.py",
     ]
-    # (relpath, lineno) esplicitamente whitelist — scope audit diverso
-    whitelist = {
-        ("app/core/scheduler/execution_manager.py", 802),
-    }
+    # Whitelist per contenuto: la linea che contiene la stringa marker
+    # (catch specifico ArtifactResolutionError) resta fuori scope 7.c.
+    whitelist_marker = 'return {"success": False, "error": str(e)}'
     violations = []
     pattern = re.compile(r'''["']error["']:\s*str\(e\)''')
     for rel in files:
@@ -224,7 +225,12 @@ def test_no_str_e_in_return_dict_error_field_across_all_sites():
                 # Escludi linee dentro DebugPayloadBuilder failure={...}
                 if "failure" in line or "error_type" in line:
                     continue
-                if (rel, lineno) in whitelist:
+                # Whitelist per marker: catch ArtifactResolutionError
+                # execution_manager → fuori scope 7.c (boundary classe-nota).
+                if (
+                    rel == "app/core/scheduler/execution_manager.py"
+                    and whitelist_marker in line
+                ):
                     continue
                 violations.append(f"{rel}:{lineno}: {line.strip()}")
     assert not violations, (
