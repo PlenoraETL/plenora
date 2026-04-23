@@ -70,9 +70,26 @@ class ImdfBundle:
 
     `tmp_dir` e' la directory radice dove l'estrazione e' stata fatta. Il
     chiamante e' responsabile di chiamare `cleanup()` quando finito.
+
+    Invariant site_id (D3, R4 — ratificato 2026-04-22):
+      Il campo `site_id` e' popolato **esclusivamente** da
+      `_build_bundle_index` (manifest.json preferito; fallback al primo
+      candidato alfabetico tra prefissi .gdb, .ifc, top-level dir).
+      Valori consentiti:
+        - stringa non-vuota: site_id risolto correttamente.
+        - stringa vuota: euristica fallita (bundle malformato senza
+          .gdb ne' manifest ne' geojson riconoscibili).
+      Il valore None NON e' consentito: il campo e' tipizzato `str`,
+      inizializzato a "" nell'`__init__` interno di `_build_bundle_index`.
+      Downstream reader (persist, router, validator) NON ricalcolano il
+      site_id: leggono `bundle.site_id` (in-memory) oppure
+      `plenora_metadata.json["site_id"]` (scritto da persist al save) come
+      fonte unica. Ogni riderivazione via scansione dir e' un'euristica
+      divergente proibita dall'invariant.
     """
 
     tmp_dir: Path
+    # Vedi class docstring "Invariant site_id" (D3, R4).
     site_id: str
     gdb_path: Optional[Path] = None
     ifc_path: Optional[Path] = None

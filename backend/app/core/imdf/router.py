@@ -351,31 +351,33 @@ def get_bundle_metadata(
     # Group ownership check
     _assert_bundle_group_access(bundle_dir, current_user)
 
-    # Usa lo stesso loader del task per avere struttura uniforme
-    try:
-        from app.core.imdf.loader import ImdfBundle
-    except Exception:
-        ImdfBundle = None
+    # D3 commit 3 (R3): site_id letto esclusivamente da plenora_metadata.json,
+    # scritto da persist dal valore autoritativo di `loader.ImdfBundle.site_id`.
+    # Nessuna scansione dir per derivarlo. Bundle senza meta o con meta senza
+    # site_id (legacy malformati) -> response site_id=None, FE gestisce.
+    meta_path = bundle_dir / "plenora_metadata.json"
+    site_id: Optional[str] = None
+    if meta_path.exists():
+        try:
+            _meta_for_site = _json.loads(meta_path.read_text(encoding="utf-8"))
+            site_id = _meta_for_site.get("site_id") or None
+        except Exception as _me:
+            logger.warning(f"get_bundle_metadata: plenora_metadata.json illeggibile: {_me}")
 
-    # Scansiona il contenuto del bundle dir per trovare i file chiave
-    site_id = None
     manifest_path = bundle_dir / "manifest.json"
     validation_path = bundle_dir / "validation.json"
     renderers_path = bundle_dir / "renderers.json"
-    imdf_dir = None
+    imdf_dir = (bundle_dir / site_id) if site_id else None
     gdb_path = None
     ifc_path = None
 
+    # Scan residuo solo per gdb_path/ifc_path (nomi file non nel meta come Path).
+    # Branch site_id/imdf_dir rimossa: derivati da meta (D3 commit 3).
     for entry in bundle_dir.iterdir():
         if entry.is_dir() and entry.suffix == ".gdb":
             gdb_path = entry
         elif entry.is_file() and entry.suffix.lower() == ".ifc":
             ifc_path = entry
-        elif entry.is_dir() and entry.suffix != ".gdb":
-            # Cartella {SITE_ID}/ contenente i geojson IMDF
-            if (entry / "manifest.json").exists() or any(entry.glob("*.geojson")):
-                imdf_dir = entry
-                site_id = entry.name
 
     def _read_json(p):
         try:
@@ -550,12 +552,11 @@ def list_bundles(
             if has_gdb is None and entry_local_exists:
                 has_gdb = any(p.is_dir() and p.suffix == ".gdb" for p in entry.iterdir())
 
+            # D3 commit 3 (R3): site_id letto solo da meta (scritto da persist
+            # dal valore autoritativo di loader.ImdfBundle.site_id). Fallback
+            # iterdir rimosso: nessuna scansione cross-node; bundle senza
+            # site_id in meta -> site_id=None nella response.
             site_id = meta.get("site_id")
-            if not site_id and entry_local_exists:
-                for p in entry.iterdir():
-                    if p.is_dir() and p.suffix != ".gdb" and (p / "manifest.json").exists():
-                        site_id = p.name
-                        break
 
             # Counts layer IMDF: preferenza ai valori scritti in metadata
             # (al save time — disponibili anche su S3-only). Fallback counting
