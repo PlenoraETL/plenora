@@ -140,7 +140,15 @@ def test_bulk_info_extras_are_serialized_into_details_jsonb(pg_execute_mock):
 
 
 def test_bulk_info_mysql_success_includes_protocol_and_dialect(pg_execute_mock):
-    """Simmetria MySQL (3.2) — distinzione via `protocol` + `dialect`."""
+    """Contract storico del `PostgresLogHandler.emit` whitelist.
+
+    In origine (3.2) verificava il payload emesso dal runtime
+    `bulk_load_mysql`. Dopo la rimozione LOAD DATA (2026-04-23,
+    kickoff.md §9.5) il runtime MySQL non esiste piu' — ma il
+    contract del handler deve continuare a serializzare correttamente
+    la whitelist se qualche altro consumer emettesse lo stesso payload
+    (es. un retrofit futuro o un test). Test mantenuto come regression
+    guard del log handler, non del path bulk MySQL."""
     _emit_bulk_info(
         "app.core.carica.bulk_writers",
         "Bulk LOAD DATA completato: 2000 righe",

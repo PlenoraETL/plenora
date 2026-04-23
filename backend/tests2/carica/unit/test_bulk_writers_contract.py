@@ -28,7 +28,6 @@ from app.core.carica.bulk_writers import (
     BulkInsertNotSupportedError,
     bulk_copy_postgres,
     bulk_insert,
-    bulk_load_mysql,
     is_bulk_enabled,
 )
 from app.core.carica.models import ColumnMapping
@@ -86,14 +85,6 @@ def test_postgres_with_geometry_raises_not_supported():
     cols = [_col("id"), _col("geom", is_geometry=True)]
     with pytest.raises(BulkInsertNotSupportedError, match="geometry"):
         bulk_copy_postgres(sa_conn, "public", "t", cols, df)
-
-
-def test_mysql_with_geometry_raises_not_supported():
-    sa_conn, _ = _mock_sa_conn()
-    df = pd.DataFrame({"id": [1], "geom": ["POINT(0 0)"]})
-    cols = [_col("id"), _col("geom", is_geometry=True)]
-    with pytest.raises(BulkInsertNotSupportedError, match="geometry"):
-        bulk_load_mysql(sa_conn, "myschema", "t", cols, df)
 
 
 # =============================================================================
@@ -248,68 +239,6 @@ def test_postgres_copy_no_dbapi_cursor_falls_back():
 
 
 # =============================================================================
-# MySQL LOAD DATA
-# =============================================================================
-
-
-def test_mysql_load_happy_path():
-    sa_conn, cursor = _mock_sa_conn()
-    df = pd.DataFrame({"id": [1, 2], "name": ["a", "b"]})
-    cols = [_col("id"), _col("name")]
-
-    n = bulk_load_mysql(sa_conn, "mydb", "users", cols, df)
-
-    assert n == 2
-    cursor.execute.assert_called_once()
-    sql = cursor.execute.call_args.args[0]
-    assert "LOAD DATA LOCAL INFILE" in sql
-    assert "`mydb`.`users`" in sql
-    assert "`id`, `name`" in sql
-    assert "CHARACTER SET utf8mb4" in sql
-
-
-def test_mysql_load_local_infile_disabled_raises_not_supported():
-    """Error 1148 → BulkInsertNotSupportedError esplicito (caller fallback)."""
-    sa_conn, cursor = _mock_sa_conn()
-    cursor.execute.side_effect = RuntimeError(
-        "(1148, 'The used command is not allowed with this MySQL version')"
-    )
-    df = pd.DataFrame({"id": [1]})
-    cols = [_col("id")]
-    with pytest.raises(BulkInsertNotSupportedError, match="LOCAL INFILE disabilitato"):
-        bulk_load_mysql(sa_conn, "db", "t", cols, df)
-
-
-def test_mysql_load_generic_db_error_falls_back():
-    sa_conn, cursor = _mock_sa_conn()
-    cursor.execute.side_effect = RuntimeError("Some other DB error")
-    df = pd.DataFrame({"id": [1]})
-    cols = [_col("id")]
-    with pytest.raises(BulkInsertNotSupportedError, match="Some other DB error"):
-        bulk_load_mysql(sa_conn, "db", "t", cols, df)
-
-
-def test_mysql_load_quotes_dangerous_identifiers():
-    sa_conn, cursor = _mock_sa_conn()
-    df = pd.DataFrame({"x": [1]})
-    cols = [_col("x", "weird`col")]
-    bulk_load_mysql(sa_conn, "db`name", "tab`le", cols, df)
-    sql = cursor.execute.call_args.args[0]
-    # Backtick raddoppiati
-    assert "`db``name`.`tab``le`" in sql
-    assert "`weird``col`" in sql
-
-
-def test_mysql_load_no_schema():
-    sa_conn, cursor = _mock_sa_conn()
-    df = pd.DataFrame({"x": [1]})
-    cols = [_col("x")]
-    bulk_load_mysql(sa_conn, "", "t", cols, df)
-    sql = cursor.execute.call_args.args[0]
-    assert "INTO TABLE `t`" in sql
-
-
-# =============================================================================
 # Dispatch
 # =============================================================================
 
@@ -325,21 +254,16 @@ def test_dispatch_postgres_aliases(dialect):
     cursor.copy_expert.assert_called_once()
 
 
-@pytest.mark.parametrize("dialect", ["mysql", "mariadb", "MySQL", "MariaDB"])
-def test_dispatch_mysql_and_mariadb(dialect):
-    """MariaDB usa lo stesso protocollo wire di MySQL (driver pymysql/
-    mysqlclient comuni) → stesso path LOAD DATA."""
-    sa_conn, cursor = _mock_sa_conn()
-    df = pd.DataFrame({"x": [1]})
-    cols = [_col("x")]
-    bulk_insert(sa_conn, dialect, "db", "t", cols, df)
-    cursor.execute.assert_called_once()
-    sql = cursor.execute.call_args.args[0]
-    assert "LOAD DATA LOCAL INFILE" in sql
-
-
-@pytest.mark.parametrize("dialect", ["oracle", "mssql", "sqlite", ""])
+@pytest.mark.parametrize(
+    "dialect",
+    ["oracle", "mssql", "sqlite", "", "mysql", "mariadb", "MySQL", "MariaDB"],
+)
 def test_dispatch_unsupported_dialect(dialect):
+    """Dialect non supportati dal bulk path cadono nel raise
+    `BulkInsertNotSupportedError(reason="dialect_not_supported")`. Oracle,
+    MSSQL, SQLite non hanno mai avuto bulk dedicato. MySQL/MariaDB sono
+    stati tombstoned il 2026-04-23 (LOAD DATA rimosso — kickoff.md §9.5).
+    Il caller `_execute_batch` fa fallback a executemany per tutti."""
     sa_conn, _ = _mock_sa_conn()
     df = pd.DataFrame({"x": [1]})
     cols = [_col("x")]
@@ -421,45 +345,6 @@ def test_pg_copy_error_emits_structured_warning(bulk_caplog):
     assert r.error_type == "RuntimeError"
 
 
-def test_mysql_local_infile_disabled_emits_structured_warning(bulk_caplog):
-    sa_conn, cursor = _mock_sa_conn()
-    cursor.execute.side_effect = RuntimeError(
-        "(1148, 'The used command is not allowed with this MySQL version')"
-    )
-    df = pd.DataFrame({"id": [1]})
-    cols = [_col("id")]
-    with pytest.raises(BulkInsertNotSupportedError):
-        bulk_load_mysql(sa_conn, "db", "t", cols, df)
-    recs = _bulk_fallback_records(bulk_caplog)
-    assert len(recs) == 1
-    r = recs[0]
-    assert r.levelname == "WARNING"
-    assert r.reason == "server_disable_local_infile"
-    assert r.dialect == "mysql"
-    assert r.schema == "db"
-    assert r.table == "t"
-    assert r.rows == 1
-    assert r.error_type == "RuntimeError"
-
-
-def test_mysql_geometry_emits_structured_info(bulk_caplog):
-    sa_conn, _ = _mock_sa_conn()
-    df = pd.DataFrame({"id": [1], "geom": ["POINT(0 0)"]})
-    cols = [_col("id"), _col("geom", is_geometry=True)]
-    with pytest.raises(BulkInsertNotSupportedError):
-        bulk_load_mysql(sa_conn, "myschema", "t", cols, df)
-    recs = _bulk_fallback_records(bulk_caplog)
-    assert len(recs) == 1
-    r = recs[0]
-    assert r.levelname == "INFO"
-    assert r.reason == "geometry"
-    assert r.dialect == "mysql"
-    assert r.schema == "myschema"
-    assert r.table == "t"
-    assert r.rows == 1
-    assert r.error_type is None
-
-
 def test_dispatcher_unsupported_dialect_emits_info_log(bulk_caplog):
     sa_conn, _ = _mock_sa_conn()
     df = pd.DataFrame({"id": [1, 2]})
@@ -478,15 +363,37 @@ def test_dispatcher_unsupported_dialect_emits_info_log(bulk_caplog):
     assert r.error_type is None
 
 
+def test_dispatcher_mysql_tombstoned_emits_dialect_not_supported(bulk_caplog):
+    """Post-rimozione LOAD DATA (2026-04-23, kickoff.md §9.5): MySQL cade
+    nel raise `dialect_not_supported` come Oracle/MSSQL/SQLite. Guard
+    contro re-introduzione silenziosa: se qualcuno riaggiunge la branch
+    mysql al dispatcher, questo test smette di passare."""
+    sa_conn, _ = _mock_sa_conn()
+    df = pd.DataFrame({"id": [1, 2, 3]})
+    cols = [_col("id")]
+    with pytest.raises(BulkInsertNotSupportedError, match="non implementato"):
+        bulk_insert(sa_conn, "mysql", "mydb", "users", cols, df)
+    recs = _bulk_fallback_records(bulk_caplog)
+    assert len(recs) == 1
+    r = recs[0]
+    assert r.levelname == "INFO"
+    assert r.reason == "dialect_not_supported"
+    assert r.dialect == "mysql"
+    assert r.schema == "mydb"
+    assert r.table == "users"
+    assert r.rows == 3
+
+
 # =============================================================================
-# Success telemetry — event="bulk.success" (Batch 3.2)
+# Success telemetry — event="bulk.success" (Batch 3.2 MySQL, 3.5 PG)
 # =============================================================================
 #
-# Counter simmetrico a bulk.fallback, emesso SOLO sul ramo di successo di
-# bulk_load_mysql. Abilita §6.2.4 della performance_bulk_review: calcolo di
-# success_rate = #bulk.success / (#bulk.success + #bulk.fallback[MySQL])
-# post-deploy 2-4 settimane. Asimmetria PG→MySQL voluta: PG non e'
-# candidato a deprecazione, non richiede success_rate.
+# Counter simmetrico a bulk.fallback, emesso sul ramo di successo di
+# bulk_copy_postgres (3.5). Nota storica: in origine (3.2) lo scope era
+# MySQL-only (bulk_load_mysql); dopo la rimozione LOAD DATA (2026-04-23,
+# kickoff.md §9.5) il success emit MySQL e' tombstoned e non esiste piu'
+# in runtime. PG success counter resta (3.5 chiude simmetria osservativa
+# del ramo non-deprecato).
 
 
 def _bulk_success_records(caplog):
@@ -494,26 +401,6 @@ def _bulk_success_records(caplog):
         r for r in caplog.records
         if getattr(r, "event", None) == "bulk.success"
     ]
-
-
-def test_mysql_success_emits_structured_info_log(bulk_caplog):
-    sa_conn, cursor = _mock_sa_conn()
-    df = pd.DataFrame({"id": [1, 2, 3], "name": ["a", "b", "c"]})
-    cols = [_col("id"), _col("name")]
-    n = bulk_load_mysql(sa_conn, "mydb", "users", cols, df)
-    assert n == 3
-    cursor.execute.assert_called_once()  # happy path: nessuna eccezione
-    recs = _bulk_success_records(bulk_caplog)
-    assert len(recs) == 1
-    r = recs[0]
-    assert r.levelname == "INFO"
-    assert r.dialect == "mysql"
-    assert r.schema == "mydb"
-    assert r.table == "users"
-    assert r.rows == 3
-    assert r.protocol == "load_data_local_infile"
-    # Asserzione negativa: nessun bulk.fallback su success path
-    assert _bulk_fallback_records(bulk_caplog) == []
 
 
 def test_pg_success_emits_copy_from_stdin_protocol_log(bulk_caplog):
@@ -579,21 +466,6 @@ def test_bulk_fallback_includes_correlation_ids(bulk_caplog, with_correlation_id
     with pytest.raises(BulkInsertNotSupportedError):
         bulk_copy_postgres(sa_conn, "public", "t", cols, df)
     recs = _bulk_fallback_records(bulk_caplog)
-    assert len(recs) == 1
-    r = recs[0]
-    assert r.request_id == expected_req
-    assert r.user_id == expected_user
-
-
-def test_bulk_success_mysql_includes_correlation_ids(bulk_caplog, with_correlation_ids):
-    """Happy path MySQL deve portare request_id e user_id. Questo abilita
-    il join post-deploy su log_runs per ottenere tenant/user stratification."""
-    expected_req, expected_user = with_correlation_ids
-    sa_conn, _ = _mock_sa_conn()
-    df = pd.DataFrame({"id": [1, 2], "name": ["a", "b"]})
-    cols = [_col("id"), _col("name")]
-    bulk_load_mysql(sa_conn, "mydb", "users", cols, df)
-    recs = _bulk_success_records(bulk_caplog)
     assert len(recs) == 1
     r = recs[0]
     assert r.request_id == expected_req

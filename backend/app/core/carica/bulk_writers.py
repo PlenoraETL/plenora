@@ -1,19 +1,24 @@
 """
-bulk_writers.py — Bulk INSERT nativi per Postgres (COPY) e MySQL (LOAD DATA).
+bulk_writers.py — Bulk INSERT nativo per Postgres (COPY).
 
-Sostituiscono `conn.execute(text(sql), params_list)` (executemany SQLAlchemy)
-sui dialect dove esiste un protocollo bulk piu' efficiente:
+Sostituisce `conn.execute(text(sql), params_list)` (executemany SQLAlchemy)
+sul dialect Postgres dove esiste un protocollo bulk piu' efficiente:
 
   - Postgres: `COPY ... FROM STDIN WITH (FORMAT CSV)` via psycopg2
               `cursor.copy_expert`. Tipicamente 10-100x piu' veloce di
               executemany su dataset >10k righe.
-  - MySQL:    `LOAD DATA LOCAL INFILE` via tempfile CSV. 5-50x piu' veloce
-              di executemany. Richiede `local_infile=ON` server-side e
-              connection string con `local_infile=1`.
+
+Il path MySQL `LOAD DATA LOCAL INFILE` e' stato rimosso il 2026-04-23
+(decisione pre-deadline: review §3.3 keep-optional, §4 A2, §5.2 ROI
+basso; dettaglio in `kickoff.md §9.5`). Dialects MySQL/MariaDB cadono
+ora nel raise `BulkInsertNotSupportedError(reason="dialect_not_supported")`
+come Oracle/MSSQL/SQLite; il caller `_execute_batch` fa fallback a
+executemany. Per MSSQL il boost e' `fast_executemany=True` sull'engine
+factory (vedi `app/db/query_executor.py:_crea_engine_mssql`).
 
 Scope:
-  - Solo operation == "insert" (COPY/LOAD DATA non supportano UPSERT/UPDATE
-    con clausole ON CONFLICT/ON DUPLICATE KEY UPDATE).
+  - Solo operation == "insert" (COPY non supporta UPSERT/UPDATE con
+    ON CONFLICT).
   - Nessuna colonna geometry (richiederebbe ST_GeomFromText su staging,
     out of scope per la prima iterazione).
   - Fallback automatico ad executemany su qualsiasi exception del bulk
@@ -22,7 +27,7 @@ Scope:
 
 Type marshalling: pandas `df.to_csv()` produce CSV standard con quoting
 QUOTE_MINIMAL. NULL diventa stringa vuota — riconosciuta come NULL dal
-COPY/LOAD DATA via `NULL ''` (Postgres) e `\\N` (MySQL).
+COPY via `NULL ''`.
 
 Sicurezza: gli identificatori (schema, table, column names) vengono
 quotati con la convenzione del dialect — niente SQL injection da nomi
@@ -35,7 +40,6 @@ import csv
 import io
 import logging
 import os
-import tempfile
 from typing import List, TYPE_CHECKING
 
 import pandas as pd
@@ -79,12 +83,6 @@ def _quote_pg_ident(ident: str) -> str:
     """Quota un identificatore Postgres rispettando il case e prevenendo
     injection. Raddoppia eventuali doppi apici interni."""
     return '"' + ident.replace('"', '""') + '"'
-
-
-def _quote_mysql_ident(ident: str) -> str:
-    """Quota un identificatore MySQL con backtick. Raddoppia backtick
-    interni (caso patologico ma valido nel SQL standard MySQL)."""
-    return "`" + ident.replace("`", "``") + "`"
 
 
 def _df_subset_for_bulk(
@@ -304,193 +302,6 @@ def bulk_copy_postgres(
 
 
 # ─────────────────────────────────────────────────────────────────────
-# MYSQL: LOAD DATA LOCAL INFILE
-# ─────────────────────────────────────────────────────────────────────
-
-
-# MySQL error code per "LOAD DATA LOCAL INFILE not allowed"
-_MYSQL_LOCAL_INFILE_DISABLED = 1148
-
-
-def bulk_load_mysql(
-    sa_conn,
-    schema: str,
-    table: str,
-    columns: List["ColumnMapping"],
-    df: pd.DataFrame,
-) -> int:
-    """Bulk INSERT su MySQL via `LOAD DATA LOCAL INFILE`.
-
-    Strategia: scrive un CSV su tempfile (LOCAL = file lato client,
-    inviato sul wire), esegue LOAD DATA, cancella il tempfile.
-
-    Args / Returns / Raises: come bulk_copy_postgres.
-
-    Server prerequisiti:
-      - `local_infile=ON` (mysqld config). Se OFF → error 1148 → raise
-        BulkInsertNotSupportedError.
-      - connection string SQLAlchemy DEVE includere `local_infile=1`,
-        altrimenti il driver pymysql/mysqlclient rifiuta lato client.
-    """
-    if _has_geometry(columns):
-        logger.info(
-            "Bulk LOAD DATA non applicabile: colonne geometry presenti",
-            extra={
-                "event": "bulk.fallback",
-                "reason": "geometry",
-                "dialect": "mysql",
-                "schema": schema,
-                "table": table,
-                "rows": len(df),
-                "error_type": None,
-                "request_id": get_request_id(),
-                "user_id": get_user_id(),
-            },
-        )
-        raise BulkInsertNotSupportedError(
-            "LOAD DATA non supportato con colonne geometry"
-        )
-
-    source_cols = _ordered_source_columns(columns)
-    dest_cols = _ordered_dest_columns(columns)
-    if not source_cols:
-        raise BulkInsertNotSupportedError("Nessuna colonna attiva da scrivere")
-
-    n_rows = len(df)
-    if n_rows == 0:
-        return 0
-
-    subset = _df_subset_for_bulk(df, source_cols)
-
-    # Scrivi CSV su tempfile. Mantieni il path semplice (no Unicode
-    # weirdness) usando suffisso esplicito.
-    fd, tmp_path = tempfile.mkstemp(suffix=".csv", prefix="urby_bulk_")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8", newline="") as fh:
-            subset.to_csv(
-                fh,
-                index=False,
-                header=False,
-                # MySQL LOAD DATA default: \\N per NULL — usiamo questo
-                na_rep="\\N",
-                quoting=csv.QUOTE_MINIMAL,
-                encoding="utf-8",
-            )
-
-        qualified = (
-            f"{_quote_mysql_ident(schema)}.{_quote_mysql_ident(table)}"
-            if schema else _quote_mysql_ident(table)
-        )
-        cols_sql = ", ".join(_quote_mysql_ident(c) for c in dest_cols)
-
-        # LOAD DATA path: MySQL vuole forward-slash anche su Windows
-        load_path = tmp_path.replace("\\", "/")
-        load_sql = (
-            f"LOAD DATA LOCAL INFILE '{load_path}' "
-            f"INTO TABLE {qualified} "
-            f"CHARACTER SET utf8mb4 "
-            f"FIELDS TERMINATED BY ',' "
-            f"OPTIONALLY ENCLOSED BY '\"' "
-            f"ESCAPED BY '\\\\' "
-            f"LINES TERMINATED BY '\\n' "
-            f"({cols_sql})"
-        )
-
-        raw_conn = sa_conn.connection
-        try:
-            cur = raw_conn.cursor()
-        except Exception as e:
-            logger.warning(
-                f"Bulk LOAD DATA: impossibile ottenere cursor DBAPI "
-                f"({type(e).__name__}: {e})",
-                extra={
-                    "event": "bulk.fallback",
-                    "reason": "cursor_acquisition_failure",
-                    "dialect": "mysql",
-                    "schema": schema,
-                    "table": table,
-                    "rows": n_rows,
-                    "error_type": type(e).__name__,
-                    "request_id": get_request_id(),
-                    "user_id": get_user_id(),
-                },
-            )
-            raise BulkInsertNotSupportedError(
-                f"Impossibile ottenere cursor DBAPI: {type(e).__name__}: {e}"
-            ) from e
-
-        try:
-            cur.execute(load_sql)
-        except Exception as e:
-            # Detect local_infile disabled (error 1148)
-            err_str = str(e).lower()
-            if (
-                "1148" in err_str
-                or "local infile" in err_str
-                or "loading local data" in err_str
-            ):
-                logger.warning(
-                    f"MySQL LOCAL INFILE disabilitato server-side: {e}",
-                    extra={
-                        "event": "bulk.fallback",
-                        "reason": "server_disable_local_infile",
-                        "dialect": "mysql",
-                        "schema": schema,
-                        "table": table,
-                        "rows": n_rows,
-                        "error_type": type(e).__name__,
-                        "request_id": get_request_id(),
-                        "user_id": get_user_id(),
-                    },
-                )
-                raise BulkInsertNotSupportedError(
-                    f"MySQL LOCAL INFILE disabilitato server-side: {e}"
-                ) from e
-            logger.warning(
-                f"LOAD DATA fallito ({type(e).__name__}: {e}). "
-                f"Fallback a executemany.",
-                extra={
-                    "event": "bulk.fallback",
-                    "reason": "load_data_error",
-                    "dialect": "mysql",
-                    "schema": schema,
-                    "table": table,
-                    "rows": n_rows,
-                    "error_type": type(e).__name__,
-                    "request_id": get_request_id(),
-                    "user_id": get_user_id(),
-                },
-            )
-            raise BulkInsertNotSupportedError(str(e)) from e
-        finally:
-            try:
-                cur.close()
-            except Exception:
-                pass
-
-        logger.info(
-            f"Bulk LOAD DATA completato: {n_rows} righe su "
-            f"{schema + '.' if schema else ''}{table}",
-            extra={
-                "event": "bulk.success",
-                "dialect": "mysql",
-                "schema": schema,
-                "table": table,
-                "rows": n_rows,
-                "protocol": "load_data_local_infile",
-                "request_id": get_request_id(),
-                "user_id": get_user_id(),
-            },
-        )
-        return n_rows
-    finally:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-
-
-# ─────────────────────────────────────────────────────────────────────
 # Dispatch factory
 # ─────────────────────────────────────────────────────────────────────
 
@@ -507,13 +318,12 @@ def bulk_insert(
 
     Dialect supportati:
       - postgres / postgresql → COPY FROM STDIN
-      - mysql / mariadb       → LOAD DATA LOCAL INFILE (stesso protocollo,
-        MariaDB usa il driver `pymysql`/`mysqlclient` come MySQL e
-        accetta la stessa sintassi LOAD DATA)
-      - oracle / mssql / sqlite → executemany (no bulk in-process). Per
-        MSSQL il boost performance arriva da `fast_executemany=True`
-        impostato all'engine factory (vedi `app/db/query_executor.py`),
-        non da un bulk_writer dedicato.
+      - mysql / mariadb / oracle / mssql / sqlite → executemany (no bulk
+        in-process). Per MSSQL il boost performance arriva da
+        `fast_executemany=True` impostato all'engine factory
+        (vedi `app/db/query_executor.py`), non da un bulk_writer
+        dedicato. MySQL LOAD DATA LOCAL INFILE e' stato rimosso il
+        2026-04-23 (kickoff.md §9.5; tombstoned nei contract test).
 
     Raises:
         BulkInsertNotSupportedError: se il dialect non e' supportato
@@ -523,8 +333,6 @@ def bulk_insert(
     dialect = (db_type or "").lower()
     if dialect in ("postgres", "postgresql"):
         return bulk_copy_postgres(sa_conn, schema, table, columns, df)
-    if dialect in ("mysql", "mariadb"):
-        return bulk_load_mysql(sa_conn, schema, table, columns, df)
     logger.info(
         f"Bulk insert non implementato per dialect '{dialect}'",
         extra={

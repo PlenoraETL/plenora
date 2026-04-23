@@ -83,15 +83,26 @@ def test_insert_postgres_uses_bulk_path(monkeypatch, df, cols, conn):
     conn.execute.assert_not_called()
 
 
-def test_insert_mysql_uses_bulk_path(monkeypatch, df, cols, conn):
+def test_insert_mysql_falls_back_to_executemany(monkeypatch, df, cols, conn):
+    """Post-rimozione LOAD DATA (2026-04-23, kickoff.md §9.5): il dispatcher
+    bulk raise `BulkInsertNotSupportedError(reason="dialect_not_supported")`
+    per mysql/mariadb; `_execute_batch` cattura e fa fallback a
+    executemany (conn.execute). Test anti-regressione della rimozione."""
+    from app.core.carica.bulk_writers import BulkInsertNotSupportedError
     writer = _make_writer("mysql")
     with patch(
-        "app.core.carica.bulk_writers.bulk_insert", return_value=3
+        "app.core.carica.bulk_writers.bulk_insert",
+        side_effect=BulkInsertNotSupportedError(
+            "Bulk insert non implementato per dialect 'mysql'"
+        ),
     ) as mock_bulk:
         n = writer._execute_batch(conn, df, cols, "INSERT INTO ...", "insert")
-    assert n == 3
+    # Bulk tentato ma rifiutato dal dispatcher (mysql tombstoned)
     mock_bulk.assert_called_once()
-    conn.execute.assert_not_called()
+    # Fallback a executemany: conn.execute chiamato
+    conn.execute.assert_called_once()
+    # Il fallback ritorna n == len(params_list) == 3
+    assert n == 3
 
 
 # =============================================================================
@@ -283,8 +294,11 @@ def test_bulk_uses_target_schema_override_when_provided(df, cols, conn):
 
 def test_target_schema_empty_string_is_passed_through(df, cols, conn):
     """target_schema='' (no schema) deve essere rispettato (non sostituito
-    dal default config.schema_name). Caso uso: MySQL senza schema esplicito."""
-    writer = _make_writer("mysql")
+    dal default config.schema_name). Caso uso originario: MySQL senza
+    schema esplicito; post-rimozione LOAD DATA (2026-04-23) il test e'
+    stato reimpostato su postgres — il contract del dispatcher sulla
+    propagazione di target_schema e' dialect-agnostic."""
+    writer = _make_writer("postgres")
     writer.config.table_name = "users"
     writer.config.schema_name = "default_db"
 

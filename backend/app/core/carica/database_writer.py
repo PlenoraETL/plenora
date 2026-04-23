@@ -2059,16 +2059,19 @@ END;"""))
         """Esegue l'operazione SQL in batch.
 
         Strategia (in ordine di preferenza):
-        1. **Bulk nativo** (`COPY` Postgres / `LOAD DATA` MySQL/MariaDB):
-           solo per `operation == "insert"` su Postgres/MySQL/MariaDB
-           senza colonne geometry. 10-100x piu' veloce di executemany
-           su dataset grandi. Per MSSQL il boost arriva da
-           `fast_executemany=True` impostato sull'engine factory
-           (vedi `app/db/query_executor.py:_crea_engine_mssql`).
-           Fallback automatico ad executemany su qualsiasi
-           `BulkInsertNotSupportedError` (geometry, driver mancante,
-           server-side disable, errore COPY non recuperabile).
-           Disabilitabile via env `CARICA_BULK_INSERT=off`.
+        1. **Bulk nativo** (`COPY` Postgres): solo per
+           `operation == "insert"` su Postgres senza colonne geometry.
+           10-100x piu' veloce di executemany su dataset grandi.
+           Per MSSQL il boost arriva da `fast_executemany=True`
+           impostato sull'engine factory (vedi
+           `app/db/query_executor.py:_crea_engine_mssql`).
+           MySQL/MariaDB/Oracle/SQLite cadono su executemany tramite
+           il raise `BulkInsertNotSupportedError(reason="dialect_not_supported")`
+           del dispatcher (MySQL LOAD DATA rimosso 2026-04-23,
+           kickoff.md §9.5). Fallback automatico ad executemany su
+           qualsiasi `BulkInsertNotSupportedError` (geometry, driver
+           mancante, errore COPY non recuperabile, dialect non
+           supportato). Disabilitabile via env `CARICA_BULK_INSERT=off`.
 
         2. **executemany** (default): unico `execute()` con lista params.
            SQLAlchemy mappa a driver-native batching. Errori per-riga
