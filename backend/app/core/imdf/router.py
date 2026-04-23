@@ -300,6 +300,12 @@ def validate_publish_endpoint(
     # Non serve verificare exists qui: il validator gestisce il caso bundle
     # mancante come BUNDLE_MISSING nel report.
     _val_bundle_dir = _safe_bundle_dir(request.bundle_task_id)
+    # R2 multi-host: hydrate cache locale da S3 se necessario (D3 commit 2,
+    # parita' con /publish e /bundles/{id}). Fix bundle solo-S3 ->
+    # BUNDLE_MISSING falso-positivo. Hydrate failure resta silent (warning
+    # in _hydrate_local_cache); il report mantiene BUNDLE_MISSING come
+    # error code unico (R5: nessun HYDRATE_FAILED).
+    _hydrate_local_cache(request.bundle_task_id)
     # Verifica group ownership (skip se il bundle non esiste ancora: in
     # quel caso il validator restituira' BUNDLE_MISSING nel report).
     if _val_bundle_dir.exists() and _val_bundle_dir.is_dir():
