@@ -2,7 +2,7 @@
 Configurazione applicazione Celery — broker e backend su Redis.
 
 Broker:  redis://localhost:6379/0
-Backend: redis://localhost:6379/1
+Backend: redis://localhost:6379/0   (condiviso col broker — pattern Celery upstream; in prod e' cosi')
 Beat:    PlenoraBeatScheduler              (legge schedule da config.db)
 
 Avvio worker (TEST ONLY):
@@ -29,7 +29,7 @@ logger = get_logger(__name__)
 
 # Redis come broker e backend
 BROKER_URL  = settings.CELERY_BROKER_URL    # redis://localhost:6379/0
-BACKEND_URL = settings.CELERY_RESULT_BACKEND  # redis://localhost:6379/1
+BACKEND_URL = settings.CELERY_RESULT_BACKEND  # redis://localhost:6379/0
 
 celery_app = Celery(
     "dataflow_tasks",
