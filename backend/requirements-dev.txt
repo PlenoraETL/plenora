@@ -6,3 +6,12 @@
 # Usato in tests2/scheduler/integration/test_leader_election_e2e.py
 # per simulare scenari di concorrenza, SIGKILL, Redis down.
 fakeredis>=2.20
+
+# Object storage contract matrix (A1-B3). moto v5 intercetta boto3 a
+# livello modulo: AwsS3ObjectStorage e MinioObjectStorage subclass
+# vengono entrambi esercitati end-to-end in-process, validando il
+# Protocol ObjectStorage cross-provider. Opt-in MinIO reale via env
+# MINIO_E2E_ENDPOINT_URL per validazione server-specific (path-style,
+# multipart effettivo).
+# Usato in tests2/shared/test_object_storage_contract.py.
+moto[s3]>=5.0,<6.0
