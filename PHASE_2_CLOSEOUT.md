@@ -205,3 +205,39 @@ Zero item lasciati in limbo ambiguo. La ricognizione 2026-04-23 ha identificato 
 - **Rischio residuo user-visible post-deploy**: regressione ~19x su pipeline CARICA PG con INSERT > 10k righe (accettato esplicitamente).
 
 Eventuale Phase 3 potra' raccogliere i carry-over di `§9.x` + `§6.2.*` review; nessun blocker tecnico trasferito.
+
+---
+
+## 11. Addendum 2026-04-23 — Runtime/config audit cluster #5
+
+**Nota**: cluster aperto via `orchestrate/phase_2_hardening/runtime_config_audit.md` durante la finestra di closeout Phase 2 (stesso giorno della chiusura formale). Trattato come post-hoc cleanup documentato dentro lo scope Phase 2 Hardening, non come riapertura della fase. Nessun blocker tecnico nuovo introdotto.
+
+**Output**: 38 voci di audit (M/S/D/P) portate tutte a stato finale esplicito. Zero voci in limbo.
+
+- **26 chiuse tecnicamente** (commit tracciati in `runtime_config_audit.md §7.1`)
+- **7 accepted risk** documentate con motivazione (`§7.2`)
+- **7 rinviate** con destinazione esplicita (Phase 3 / canale separato / ADR successivo, `§7.3`)
+
+**Commit trail cluster #5** (8 tecnici + questo closeout):
+
+| # | Commit | Titolo |
+|---|---|---|
+| B1 | `008d28c` | celery result backend: default /1 → /0 |
+| B2 | `a8696ae` | ADR-0003 amended: systemd mitigation allineata |
+| B3 | `53aed81` | doc cleanup minor: P1.3 + D4 + D10 + D5 |
+| B4 | `5c69e3e` | env template consolidation: backend canonical + frontend cleanup |
+| B5 | `1a9e23c` | api_utils: URBY→PLENORA loopback flag + guard ENVIRONMENT |
+| B6 | `06126d3` | crypto: guard fail-fast esteso a staging/stage |
+| B7 | `fdf2e78` | admin_backups: convergenza BACKUP_BUCKET + AWS_REGION canonical |
+| B8 | `df71e56` | env.example: PG pool margin — numeri prod verificati |
+| B9 | (questo) | runtime/config audit cluster #5 chiuso |
+
+**Snapshot prod eseguiti** (SSH read-only, zero write):
+
+1. Celery result backend (B1): prod gira con `/0`, coerente col template.
+2. Systemd hardening (B2): `systemd 255`, baseline kernel `/proc/<pid>/environ` `0400 ubuntu:ubuntu`, zero direttive `Protect*=` applicate.
+3. PG pool margin (B8): `max_connections=100`, worst-case aggregate 84 conn (7 proc × `DB_POOL_MAX=12`), margine 13 conn.
+
+**Source of truth dettagliato**: `orchestrate/phase_2_hardening/runtime_config_audit.md §7` (fuori version control, pattern coerente con altri `orchestrate/*.md` citati in questo closeout).
+
+Nessun cambio a runtime code, test, prod, systemd, ADR, `invariants.md`, o `inventory_report.md` dopo il closeout formale di Phase 2 se non nei file ESPLICITAMENTE elencati nel commit trail §11 e nel trail audit §7.5.
