@@ -93,6 +93,26 @@ def op_join(
     left_df = inputs[0].copy()
     right_df = inputs[1].copy()
 
+    # === PRE-VALIDATION CHIAVE JOIN ===
+    # La chiave deve esistere PRIMA di qualsiasi manipolazione (dedup,
+    # conversione tipi, rename suffissi). Senza questo, la KeyError
+    # arriverebbe post-safe_rename con colonne _L / _R fuorvianti:
+    # l'utente vedrebbe nomi suffissati che non esistevano nel config
+    # e interpreterebbe il problema come bug del rename, mentre la
+    # chiave non era presente nemmeno nel DataFrame originale.
+    if left_on not in left_df.columns:
+        raise KeyError(
+            f"Colonna join sinistra '{left_on}' non esiste nel DataFrame di sinistra. "
+            f"Verifica il config del nodo join o lo schema del nodo upstream. "
+            f"Colonne disponibili nel left (prime 20): {list(left_df.columns)[:20]}"
+        )
+    if right_on not in right_df.columns:
+        raise KeyError(
+            f"Colonna join destra '{right_on}' non esiste nel DataFrame di destra. "
+            f"Verifica il config del nodo join o lo schema del nodo upstream. "
+            f"Colonne disponibili nel right (prime 20): {list(right_df.columns)[:20]}"
+        )
+
     # === DEDUPLICAZIONE COLONNE ===
     # Se ci sono colonne duplicate, pandas merge fallisce con KeyError.
     # Strategia: se la chiave è duplicata tieni solo la prima occorrenza,
@@ -188,12 +208,23 @@ def op_join(
     left_df = left_df.loc[:, ~left_df.columns.duplicated(keep='first')]
     right_df = right_df.loc[:, ~right_df.columns.duplicated(keep='first')]
 
-    # Dopo il rename le chiavi sono rimaste invariate (safe_rename le preserva)
-    # ma dobbiamo verificare che esistano ancora
+    # Guard post-rename [internal]: dopo la pre-validation in testa a
+    # op_join, la chiave DEVE esistere qui. Se raggiungiamo questo raise
+    # significa che safe_rename ha un bug (ha rinominato/perso la chiave
+    # nonostante la pre-validation). Non e' un errore utente, e' una
+    # regressione interna: diagnosticarla come tale.
     if left_on not in left_df.columns:
-        raise KeyError(f"Colonna join sinistra '{left_on}' non trovata dopo rename. Colonne disponibili: {list(left_df.columns)}")
+        raise KeyError(
+            f"[internal] chiave join sinistra '{left_on}' scomparsa dopo safe_rename "
+            f"nonostante pre-validation. Possibile bug interno in op_join.safe_rename. "
+            f"Colonne dopo rename: {list(left_df.columns)}"
+        )
     if right_on not in right_df.columns:
-        raise KeyError(f"Colonna join destra '{right_on}' non trovata dopo rename. Colonne disponibili: {list(right_df.columns)}")
+        raise KeyError(
+            f"[internal] chiave join destra '{right_on}' scomparsa dopo safe_rename "
+            f"nonostante pre-validation. Possibile bug interno in op_join.safe_rename. "
+            f"Colonne dopo rename: {list(right_df.columns)}"
+        )
 
     # Esegui merge
     result = pd.merge(
