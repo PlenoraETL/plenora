@@ -434,6 +434,18 @@ def bulk_load_mysql(
             except Exception:
                 pass
 
+        logger.info(
+            f"Bulk LOAD DATA completato: {n_rows} righe su "
+            f"{schema + '.' if schema else ''}{table}",
+            extra={
+                "event": "bulk.success",
+                "dialect": "mysql",
+                "schema": schema,
+                "table": table,
+                "rows": n_rows,
+                "protocol": "load_data_local_infile",
+            },
+        )
         return n_rows
     finally:
         try:

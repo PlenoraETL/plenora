@@ -476,3 +476,56 @@ def test_dispatcher_unsupported_dialect_emits_info_log(bulk_caplog):
     assert r.table == "t"
     assert r.rows == 2
     assert r.error_type is None
+
+
+# =============================================================================
+# Success telemetry — event="bulk.success" (Batch 3.2)
+# =============================================================================
+#
+# Counter simmetrico a bulk.fallback, emesso SOLO sul ramo di successo di
+# bulk_load_mysql. Abilita §6.2.4 della performance_bulk_review: calcolo di
+# success_rate = #bulk.success / (#bulk.success + #bulk.fallback[MySQL])
+# post-deploy 2-4 settimane. Asimmetria PG→MySQL voluta: PG non e'
+# candidato a deprecazione, non richiede success_rate.
+
+
+def _bulk_success_records(caplog):
+    return [
+        r for r in caplog.records
+        if getattr(r, "event", None) == "bulk.success"
+    ]
+
+
+def test_mysql_success_emits_structured_info_log(bulk_caplog):
+    sa_conn, cursor = _mock_sa_conn()
+    df = pd.DataFrame({"id": [1, 2, 3], "name": ["a", "b", "c"]})
+    cols = [_col("id"), _col("name")]
+    n = bulk_load_mysql(sa_conn, "mydb", "users", cols, df)
+    assert n == 3
+    cursor.execute.assert_called_once()  # happy path: nessuna eccezione
+    recs = _bulk_success_records(bulk_caplog)
+    assert len(recs) == 1
+    r = recs[0]
+    assert r.levelname == "INFO"
+    assert r.dialect == "mysql"
+    assert r.schema == "mydb"
+    assert r.table == "users"
+    assert r.rows == 3
+    assert r.protocol == "load_data_local_infile"
+    # Asserzione negativa: nessun bulk.fallback su success path
+    assert _bulk_fallback_records(bulk_caplog) == []
+
+
+def test_pg_success_does_not_emit_bulk_success_log(bulk_caplog):
+    """Asimmetria deliberata: PG COPY success path resta silente.
+    PG e' primario non candidato a deprecazione (review §3.1, §4 A1);
+    nessun success_rate richiesto. Se un giorno verra' aggiunto, sara'
+    un batch separato — non implicito in 3.2."""
+    sa_conn, cursor = _mock_sa_conn()
+    df = pd.DataFrame({"id": [1, 2], "name": ["a", "b"]})
+    cols = [_col("id"), _col("name")]
+    n = bulk_copy_postgres(sa_conn, "public", "users", cols, df)
+    assert n == 2
+    cursor.copy_expert.assert_called_once()  # happy path PG
+    assert _bulk_success_records(bulk_caplog) == []
+    assert _bulk_fallback_records(bulk_caplog) == []
