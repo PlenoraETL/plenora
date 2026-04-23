@@ -14,10 +14,18 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-# ── Config (stessi default di backend/scripts/backup_db.py) ────────────────
+# ── Config — nomi canonical allineati a cloud_backends.py ─────────────────
 
-BUCKET = os.getenv("BACKUP_S3_BUCKET", "plenora-backup-112011134642-eu-south-1-an")
-REGION = os.getenv("BACKUP_S3_REGION", "eu-south-1")
+BUCKET = (
+    os.getenv("BACKUP_BUCKET")
+    or os.getenv("BACKUP_S3_BUCKET")
+    or "plenora-backup-112011134642-eu-south-1-an"
+)
+REGION = (
+    os.getenv("AWS_REGION")
+    or os.getenv("BACKUP_S3_REGION")
+    or "eu-south-1"
+)
 
 # Lock file per evitare trigger concorrenti via API
 MANUAL_LOCK_FILE = Path("/tmp/plenora-backup-manual.lock")
