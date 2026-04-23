@@ -286,6 +286,20 @@ def bulk_copy_postgres(
                 close_err,
             )
 
+    logger.info(
+        f"Bulk COPY completato: {n_rows} righe su "
+        f"{schema + '.' if schema else ''}{table}",
+        extra={
+            "event": "bulk.success",
+            "dialect": "postgres",
+            "schema": schema,
+            "table": table,
+            "rows": n_rows,
+            "protocol": "copy_from_stdin",
+            "request_id": get_request_id(),
+            "user_id": get_user_id(),
+        },
+    )
     return n_rows
 
 

@@ -516,18 +516,32 @@ def test_mysql_success_emits_structured_info_log(bulk_caplog):
     assert _bulk_fallback_records(bulk_caplog) == []
 
 
-def test_pg_success_does_not_emit_bulk_success_log(bulk_caplog):
-    """Asimmetria deliberata: PG COPY success path resta silente.
-    PG e' primario non candidato a deprecazione (review §3.1, §4 A1);
-    nessun success_rate richiesto. Se un giorno verra' aggiunto, sara'
-    un batch separato — non implicito in 3.2."""
+def test_pg_success_emits_copy_from_stdin_protocol_log(bulk_caplog):
+    """Batch 3.5: chiude la simmetria osservativa del punto 3.
+
+    In 3.2 scelsimo deliberatamente di non strumentare il PG success path
+    perche' lo scope era MySQL-only e PG non era candidato a deprecazione
+    (review §3.1, §4 A1). In 3.5 estendiamo la telemetria success anche a
+    PG per abilitare il calcolo di success_rate_pg (criterio "keep
+    confermato" che verra' formalizzato in 3.6 / kickoff.md §9.3).
+    Il protocol="copy_from_stdin" distingue PG da MySQL
+    ("load_data_local_infile") senza richiedere parse di dialect."""
     sa_conn, cursor = _mock_sa_conn()
     df = pd.DataFrame({"id": [1, 2], "name": ["a", "b"]})
     cols = [_col("id"), _col("name")]
     n = bulk_copy_postgres(sa_conn, "public", "users", cols, df)
     assert n == 2
     cursor.copy_expert.assert_called_once()  # happy path PG
-    assert _bulk_success_records(bulk_caplog) == []
+    recs = _bulk_success_records(bulk_caplog)
+    assert len(recs) == 1
+    r = recs[0]
+    assert r.levelname == "INFO"
+    assert r.dialect == "postgres"
+    assert r.protocol == "copy_from_stdin"
+    assert r.schema == "public"
+    assert r.table == "users"
+    assert r.rows == 2
+    # Asserzione negativa: nessun bulk.fallback su success path
     assert _bulk_fallback_records(bulk_caplog) == []
 
 
@@ -582,5 +596,23 @@ def test_bulk_success_mysql_includes_correlation_ids(bulk_caplog, with_correlati
     recs = _bulk_success_records(bulk_caplog)
     assert len(recs) == 1
     r = recs[0]
+    assert r.request_id == expected_req
+    assert r.user_id == expected_user
+
+
+def test_bulk_success_pg_includes_correlation_ids(bulk_caplog, with_correlation_ids):
+    """Simmetrico al test MySQL (3.4): PG COPY success (3.5) deve portare
+    request_id e user_id dai ContextVar. Abilita success_rate_pg
+    stratificato per user via join offline su log_runs."""
+    expected_req, expected_user = with_correlation_ids
+    sa_conn, _ = _mock_sa_conn()
+    df = pd.DataFrame({"id": [1, 2, 3], "name": ["a", "b", "c"]})
+    cols = [_col("id"), _col("name")]
+    bulk_copy_postgres(sa_conn, "public", "users", cols, df)
+    recs = _bulk_success_records(bulk_caplog)
+    assert len(recs) == 1
+    r = recs[0]
+    assert r.dialect == "postgres"
+    assert r.protocol == "copy_from_stdin"
     assert r.request_id == expected_req
     assert r.user_id == expected_user
