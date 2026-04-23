@@ -6,13 +6,49 @@ verso `IMDF_BUNDLES_DIR/{task_id}/` e garantire tramite `try/finally` il
 cleanup SEMPRE della tmp_dir — anche su errori di `shutil.move` che in
 passato lasciavano orfani tipo `/tmp/imdf_XXXX/` su disco.
 
+Boundary (D3, `orchestrate/phase_1_stabilization/d3_imdf_boundaries.md`):
+Persist e' **local materializer puro**. Non conosce S3 ne' object storage
+(R2): l'orchestrazione persist -> storage vive nel worker
+(enrichment_task). Non riderivalo `site_id` (R4): legge `bundle.site_id`
+autoritativo dal loader.
+
 Uso:
     from app.core.imdf.loader import extract_imdf_zip
     from app.core.imdf.persist import persist_imdf_bundle_to_disk
 
     bundle = extract_imdf_zip(str(zip_path))
     result = persist_imdf_bundle_to_disk(bundle, task_id, project_id)
-    # bundle.tmp_dir è stata cancellata in ogni caso
+    # bundle.tmp_dir e' stata cancellata in ogni caso
+
+Schema `plenora_metadata.json` (contratto stabile, letto da router/
+storage/validator):
+
+  Campi sempre presenti:
+    project_id:    str | None   # canvas che ha generato il bundle
+    task_id:       str          # id Celery del task
+    site_id:       str          # da bundle.site_id (R4: "" se euristica
+                                # fallita, mai None)
+    saved_at:      str          # timestamp ISO 8601 UTC
+    has_gdb:       bool
+    has_ifc:       bool
+    has_renderers: bool
+
+  Campi opzionali:
+    validation_summary: {passed: bool, total_errors: int,
+                         total_warnings: int}
+                                # presente se validation.json leggibile
+    building_count: int         # presente se {site_id}/building.geojson
+                                # esiste nel bundle
+    level_count:    int         # idem per level.geojson
+    unit_count:     int         # idem per unit.geojson
+
+Invariant (D3 commit 5, §9.6): `plenora_metadata.json` e' sempre presente
+nel dest dir. Se il write fallisce a meta' persist esegue rollback della
+dest dir (shutil.rmtree) e solleva — mai lasciare una bundle dir senza
+meta (una dir senza meta e' inaccessibile per ACL:
+router._assert_bundle_group_access fail-closed). Il worker
+(enrichment_task) cattura l'eccezione e logga warning senza bloccare
+il task (bundle marcato non-persistito, semantic end-user invariata).
 """
 from __future__ import annotations
 
@@ -137,7 +173,17 @@ def persist_imdf_bundle_to_disk(
                 json.dumps(meta, indent=2), encoding="utf-8"
             )
         except Exception as me:
-            logger.warning(f"[{task_id}] plenora_metadata.json write: {me}")
+            # D3 commit 5 (§9.6): invariant "meta sempre presente nel dest
+            # dir" enforcement. Senza meta la dir e' inaccessibile per ACL
+            # (router._assert_bundle_group_access fail-closed 403). Rollback
+            # della dest dir e re-raise: il worker (enrichment_task) gia'
+            # cattura persist failure e logga warning senza bloccare il task.
+            logger.warning(
+                f"[{task_id}] plenora_metadata.json write fallito, "
+                f"rollback dest: {me}"
+            )
+            shutil.rmtree(root, ignore_errors=True)
+            raise
 
         logger.info(
             f"[{task_id}] IMDF bundle persistito in {root} "
