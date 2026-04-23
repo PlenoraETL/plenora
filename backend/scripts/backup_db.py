@@ -74,12 +74,9 @@ if str(_BACKEND_ROOT) not in sys.path:
 
 # ── Configurazione ──────────────────────────────────────────────────────────
 
-BUCKET = os.getenv("BACKUP_S3_BUCKET", "plenora-backup-112011134642-eu-south-1-an")
-REGION = os.getenv("BACKUP_S3_REGION", "eu-south-1")
 # Scope del dump: default schema applicativo 'plenora'. Vuoto ("") -> intero DB.
 BACKUP_SCHEMA = os.getenv("BACKUP_SCHEMA", "plenora")
 PG_DUMP_TIMEOUT_SEC = int(os.getenv("BACKUP_PG_DUMP_TIMEOUT_SEC", "3600"))
-S3_UPLOAD_TIMEOUT_SEC = int(os.getenv("BACKUP_S3_UPLOAD_TIMEOUT_SEC", "1800"))
 
 # Buffer per log_tail persistito su DB a fine run (ultime N righe per diagnostic).
 _LOG_BUFFER: list[str] = []

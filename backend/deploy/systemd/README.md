@@ -26,8 +26,9 @@ Residui noti:
 
 ## Modello credenziali (C1) + astrazione cloud
 
-I service NON dipendono da `backend/.env`. I secret (`DATABASE_URL`)
-vivono in un SecretsBackend configurabile:
+I service **oneshot di backup** (`plenora-backup`, `plenora-backup-test`)
+NON dipendono da `backend/.env`. I secret (`DATABASE_URL`) vivono in un
+SecretsBackend configurabile:
   - AWS SSM Parameter Store su `/plenora/prod/*` (SecureString) — default
   - Azure Key Vault (future, `CLOUD_PROVIDER=azure`)
   - GCP Secret Manager (future, `CLOUD_PROVIDER=gcp`)
@@ -35,6 +36,12 @@ vivono in un SecretsBackend configurabile:
 Il dispatch e' nella factory `app/shared/cloud_backends.py` — i consumer
 (`backup_db.py`, `test_restore.py`, `load_secrets.py`) parlano solo al
 Protocol `SecretsBackend` / `ObjectStorage`, mai direttamente a boto3.
+
+I service **long-running** (`plenora-backend`, `plenora-celery`,
+`plenora-beat`) INVECE usano `EnvironmentFile=/home/ubuntu/plenora-etl/backend/.env`
+per la configurazione runtime — inclusa `PLENORA_ENCRYPTION_KEY`.
+Migrazione SSM anche per questi service = scope futuro (vedi ADR-0003
+§Consequences e `runtime_config_audit.md §4`).
 Migrazione cross-cloud: aggiungi una classe nel file `cloud_backends.py`
 + aggiorna la IAM policy del nuovo cloud, zero change negli altri file.
 

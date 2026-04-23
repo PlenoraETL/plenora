@@ -79,8 +79,6 @@ if str(_BACKEND_ROOT) not in sys.path:
 
 # ── Configurazione ──────────────────────────────────────────────────────────
 
-BUCKET = os.getenv("BACKUP_S3_BUCKET", "plenora-backup-112011134642-eu-south-1-an")
-REGION = os.getenv("BACKUP_S3_REGION", "eu-south-1")
 SCHEMA = os.getenv("BACKUP_SCHEMA", "plenora")
 
 # Tabelle core dello schema applicativo. Verifica solo che siano queryabili
@@ -89,7 +87,6 @@ SCHEMA = os.getenv("BACKUP_SCHEMA", "plenora")
 SANITY_TABLES = ["users", "projects", "connections", "schedules"]
 
 PG_RESTORE_TIMEOUT_SEC = int(os.getenv("BACKUP_RESTORE_TIMEOUT_SEC", "3600"))
-S3_DOWNLOAD_TIMEOUT_SEC = int(os.getenv("BACKUP_S3_DOWNLOAD_TIMEOUT_SEC", "900"))
 
 # Safety: il test DB name matcha solo questo pattern. Qualsiasi cosa fuori
 # non viene droppata (difesa contro typo/injection nell'env var).
