@@ -16,11 +16,13 @@ Architettura
     3. cifrare in modo idempotente (encrypt() su un valore già cifrato è
        no-op, così le migrazioni e i save ripetuti non doppio-cifrano).
 
-Sorgente della chiave (in ordine di priorità)
----------------------------------------------
-1. ``PLENORA_ENCRYPTION_KEY`` — nome canonico nuovo (consigliato per nuovi deploy)
-   ``URBY_ENCRYPTION_KEY``    — alias retro-compat, ancora supportato
-2. ``CONN_ENCRYPT_KEY``       — nome legacy già usato da connection_service.py
+Sorgente della chiave
+---------------------
+``PLENORA_ENCRYPTION_KEY`` — nome canonico unico.
+
+Gli alias legacy ``URBY_ENCRYPTION_KEY`` e ``CONN_ENCRYPT_KEY`` sono stati
+rimossi il 2026-04-23 (D4 chiuso via O-D4-B rollout ``.env`` prod +
+O-D4-C rimozione codice/doc).
 
 La chain NON fallbacka su ``SECRET_KEY`` / ``JWT_SECRET_KEY``: quei nomi
 appartengono al dominio auth JWT (vedi ``app/core/auth/auth.py``) e vengono
@@ -97,10 +99,11 @@ _MIN_KEY_LENGTH = 16
 def _get_raw_key() -> str:
     """Recupera la raw key dall'env var, con fallback dev e fail-fast in prod.
 
-    Cerca in ordine: PLENORA_ENCRYPTION_KEY → URBY_ENCRYPTION_KEY (legacy) →
-    CONN_ENCRYPT_KEY. Nessun fallback su SECRET_KEY / JWT_SECRET_KEY:
-    quei nomi appartengono al dominio auth JWT, tenerli separati rompe
-    l'accoppiamento rotazione-JWT ↔ decifratura-at-rest.
+    Legge la env var canonical PLENORA_ENCRYPTION_KEY. Gli alias legacy
+    URBY_ENCRYPTION_KEY e CONN_ENCRYPT_KEY non sono piu' supportati
+    (D4 chiuso 2026-04-23, vedi invariants.md §6). Nessun fallback su
+    SECRET_KEY / JWT_SECRET_KEY: quei nomi appartengono al dominio auth JWT,
+    tenerli separati rompe l'accoppiamento rotazione-JWT ↔ decifratura-at-rest.
     Se nessuna è valorizzata e ci troviamo in produzione,
     solleva ``RuntimeError`` (preferito a SystemExit per essere catturabile
     nei test e gestibile dal framework FastAPI in fase di startup).
@@ -114,19 +117,12 @@ def _get_raw_key() -> str:
       - In dev, se PLENORA_DISABLE_DEFAULT_KEY=1 è impostata, fail-fast invece
         di usare la dev key (opt-in per chi vuole replicare prod localmente)
     """
-    # Nome canonico nuovo: PLENORA_ENCRYPTION_KEY. URBY_ENCRYPTION_KEY e'
-    # mantenuto come alias retro-compat finche' il .env sul server viene
-    # aggiornato (rimozione safe dopo il rollout del nuovo nome).
-    found = None
-    for env_name in (
-        "PLENORA_ENCRYPTION_KEY",
-        "URBY_ENCRYPTION_KEY",
-        "CONN_ENCRYPT_KEY",
-    ):
-        val = os.getenv(env_name)
-        if val:
-            found = (env_name, val)
-            break
+    # Unica env crypto supportata: PLENORA_ENCRYPTION_KEY. Gli alias legacy
+    # URBY_ENCRYPTION_KEY e CONN_ENCRYPT_KEY sono stati rimossi il 2026-04-23
+    # (D4 chiuso, vedi invariants.md §6).
+    env_name = "PLENORA_ENCRYPTION_KEY"
+    val = os.getenv(env_name)
+    found = (env_name, val) if val else None
 
     env = os.getenv("ENVIRONMENT", os.getenv("ENV", "development")).lower()
     is_prod = env in ("production", "prod")

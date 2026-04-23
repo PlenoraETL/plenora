@@ -16,9 +16,9 @@ Policy
 Storage
 -------
 Tabella `plenora.user_mfa` (vedi migration 2026-04-21_add_user_mfa.sql).
-Secret cifrato con Fernet via `app.shared.crypto`. La chain della chiave e'
-`PLENORA_ENCRYPTION_KEY` → `URBY_ENCRYPTION_KEY` → `CONN_ENCRYPT_KEY`;
-encrypt() e' idempotente.
+Secret cifrato con Fernet via `app.shared.crypto`. La chain della chiave
+legge solo `PLENORA_ENCRYPTION_KEY` (D4 chiuso 2026-04-23). encrypt() e'
+idempotente.
 
 Trade-off noto: mfa_required leak nel login
 -------------------------------------------

@@ -3,9 +3,9 @@
 Invariants blindati (da ``backend/docs/architecture/invariants.md``):
 
 - §1.5 "Config loading" + coda §1.5 riga "env var crypto-key": la chain
-  di priorità è ``PLENORA_ENCRYPTION_KEY`` → ``URBY_ENCRYPTION_KEY``
-  (alias retro-compat) → ``CONN_ENCRYPT_KEY`` (legacy). Ogni nuovo alias
-  deve passare da qui con PR dedicata.
+  contiene solo ``PLENORA_ENCRYPTION_KEY`` (D4 chiuso 2026-04-23). Gli
+  alias legacy ``URBY_ENCRYPTION_KEY`` e ``CONN_ENCRYPT_KEY`` NON sono
+  piu' letti. Ogni nuovo alias deve passare da qui con PR dedicata.
 - §3 riga ``ENVIRONMENT``: in produzione niente chiave → fail-fast
   ``RuntimeError``; in produzione chiave uguale a ``_DEV_DEFAULT_KEY`` →
   fail-fast; chiave più corta di ``_MIN_KEY_LENGTH`` → fail-fast in
@@ -16,6 +16,10 @@ Invariants blindati (da ``backend/docs/architecture/invariants.md``):
   ``JWT_SECRET_KEY`` è stato RIMOSSO dalla chain. Questo test blinda
   la regressione: un merge futuro che riesuma il fallback deve rompere
   qui.
+- §6 D4 chiusa 2026-04-23 (O-D4-B rollout ``.env`` prod + O-D4-C rimozione
+  codice/doc): gli alias ``URBY_ENCRYPTION_KEY`` e ``CONN_ENCRYPT_KEY``
+  sono tombstoned. Settare queste env var da sole NON produce piu' una
+  chiave valida (fallback a dev default in dev, fail-fast in prod).
 
 Regressioni protette:
 
@@ -24,9 +28,11 @@ Regressioni protette:
   settato per JWT verrebbe usato anche come crypto key → rotazione JWT
   romperebbe silent la decifratura dei record. Test esplicito che
   quei nomi NON vengono più letti.
-- Alias chain priority: PLENORA deve vincere su URBY, URBY su CONN. Una
-  regressione (ordine invertito) causerebbe decrypt fallito in deploy
-  che hanno entrambe le env var settate durante il rollout.
+- Alias legacy tombstoned (D4): se qualcuno riaggiunge
+  ``URBY_ENCRYPTION_KEY`` o ``CONN_ENCRYPT_KEY`` alla chain, i test
+  tombstone sotto rompono. Regressione reale: deploy che ha ancora la
+  env legacy nel ``.env`` produrrebbe chiavi Fernet diverse da quella
+  attesa → record indecifrabili.
 """
 
 from __future__ import annotations
@@ -68,15 +74,16 @@ def _reset_fernet_cache_and_clean_env(monkeypatch):
     crypto._reset_cache_for_tests()
 
 
-# ─── 1) Chain priority ────────────────────────────────────────────────────────
+# ─── 1) Chain canonical + tombstone alias legacy (D4 chiuso 2026-04-23) ──────
 
-def test_key_chain_plenora_wins_over_urby_and_conn(monkeypatch):
-    """Blinda §1.5: PLENORA_ENCRYPTION_KEY vince sulla chain.
+def test_key_chain_plenora_is_used_and_legacy_aliases_are_ignored(monkeypatch):
+    """Blinda §1.5 + §6 D4: la chain legge SOLO PLENORA_ENCRYPTION_KEY.
 
-    Regressione: se qualcuno inverte l'ordine del for-loop in
-    ``_get_raw_key``, deploy con entrambe le var settate (situazione
-    intermedia del rollout D4) decifrano con la chiave sbagliata e
-    il ciphertext diventa inaccessibile silently.
+    Settiamo intenzionalmente anche gli alias legacy URBY_ENCRYPTION_KEY
+    e CONN_ENCRYPT_KEY con valori DIVERSI dal canonical. Se qualcuno
+    riaggiunge gli alias alla chain e la legge PRIMA di PLENORA (ordine
+    invertito), il test rileva la regressione perche' `_get_raw_key()`
+    restituirebbe un valore != `_KEY_PLENORA`.
     """
     monkeypatch.setenv("PLENORA_ENCRYPTION_KEY", _KEY_PLENORA)
     monkeypatch.setenv("URBY_ENCRYPTION_KEY", _KEY_URBY)
@@ -85,19 +92,55 @@ def test_key_chain_plenora_wins_over_urby_and_conn(monkeypatch):
     assert crypto._get_raw_key() == _KEY_PLENORA
 
 
-def test_key_chain_urby_wins_when_plenora_absent(monkeypatch):
-    """URBY_ENCRYPTION_KEY è il secondo in priorità (alias retro-compat)."""
+def test_urby_encryption_key_tombstoned_alone(monkeypatch):
+    """Blinda §6 D4 (chiuso 2026-04-23): URBY_ENCRYPTION_KEY NON e' piu'
+    letta dalla chain. Settata da sola in dev, il comportamento corretto
+    e' ricadere sulla `_DEV_DEFAULT_KEY` (con warning rumoroso), NON usare
+    URBY_ENCRYPTION_KEY.
+
+    Regressione: un merge futuro che riaggiunge l'alias alla chain
+    farebbe questo test passare `_KEY_URBY` invece di `_DEV_DEFAULT_KEY`
+    → test rompe. Deploy con env legacy nel ``.env`` avrebbero chiave
+    diversa da quella canonical attesa.
+    """
     monkeypatch.setenv("URBY_ENCRYPTION_KEY", _KEY_URBY)
+    monkeypatch.setenv("ENVIRONMENT", "development")
+
+    result = crypto._get_raw_key()
+
+    assert result == crypto._DEV_DEFAULT_KEY, (
+        f"URBY_ENCRYPTION_KEY e' tombstoned (D4 chiuso): settarla da sola "
+        f"in dev DEVE ricadere sulla dev default key, NON usare il valore. "
+        f"Ottenuto: {result!r}"
+    )
+
+
+def test_urby_encryption_key_tombstoned_fails_fast_in_prod(monkeypatch):
+    """Blinda §6 D4 + §3 ENVIRONMENT: con URBY_ENCRYPTION_KEY settata da
+    sola in production, il sistema deve fail-fast (chain non la legge,
+    nessuna chiave canonical configurata).
+    """
+    monkeypatch.setenv("URBY_ENCRYPTION_KEY", _KEY_URBY)
+    monkeypatch.setenv("ENVIRONMENT", "production")
+
+    with pytest.raises(RuntimeError, match="chiave di cifratura"):
+        crypto._get_raw_key()
+
+
+def test_conn_encrypt_key_tombstoned_alone(monkeypatch):
+    """Blinda §6 D4: CONN_ENCRYPT_KEY NON e' piu' letta dalla chain.
+    Settata da sola in dev, ricade su dev default key.
+    """
     monkeypatch.setenv("CONN_ENCRYPT_KEY", _KEY_CONN)
+    monkeypatch.setenv("ENVIRONMENT", "development")
 
-    assert crypto._get_raw_key() == _KEY_URBY
+    result = crypto._get_raw_key()
 
-
-def test_key_chain_conn_used_only_when_others_absent(monkeypatch):
-    """CONN_ENCRYPT_KEY è il fallback legacy finale della chain."""
-    monkeypatch.setenv("CONN_ENCRYPT_KEY", _KEY_CONN)
-
-    assert crypto._get_raw_key() == _KEY_CONN
+    assert result == crypto._DEV_DEFAULT_KEY, (
+        f"CONN_ENCRYPT_KEY e' tombstoned (D4 chiuso): settarla da sola "
+        f"in dev DEVE ricadere sulla dev default key, NON usare il valore. "
+        f"Ottenuto: {result!r}"
+    )
 
 
 # ─── 2) D5 regression — niente fallback su SECRET_KEY / JWT_SECRET_KEY ────────
