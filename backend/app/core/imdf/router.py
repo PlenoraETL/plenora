@@ -13,7 +13,6 @@ La pubblicazione e' asincrona: l'endpoint ritorna subito il task_id e il
 frontend polla /api/tasks/{task_id} per il progresso.
 """
 
-import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException
@@ -21,6 +20,7 @@ from pydantic import BaseModel, Field
 
 from app.config import settings
 from app.core.auth.auth import get_current_user, CurrentUser
+from app.shared.path_policy import validate_imdf_task_id
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -31,36 +31,29 @@ router = APIRouter(prefix="/imdf", tags=["imdf"])
 # ══════════════════════════════════════════════════════════════════════
 # VALIDAZIONE PATH TRAVERSAL
 # ══════════════════════════════════════════════════════════════════════
-# I task_id generati da Celery sono UUID v4; qualche task legacy puo' avere
-# formato leggermente diverso quindi accettiamo anche alfanumerico + dash/
-# underscore. La regex esclude `.`, `/`, `\`, spazi e caratteri di controllo
-# — sufficiente per bloccare path traversal (`..`, `../../etc`, ecc.).
-_BUNDLE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
+# Regex + path-traversal guard centralizzati in `app.shared.path_policy.
+# validate_imdf_task_id` (D3 commit 1). Il wrapper locale resta per
+# tradurre `ValueError` in `HTTPException 400` preservando la signature
+# attesa dai call site interni del router.
 
 
 def _safe_bundle_dir(bundle_task_id: str) -> Path:
     """Ritorna il path della cartella bundle validando contro path traversal.
 
-    Due livelli di difesa:
-      1. Regex whitelist sul formato (no slash, no dots, no null bytes)
-      2. `assert_path_within(bundle_dir, [IMDF_BUNDLES_DIR])` come safety
-         net — se nonostante la regex l'input sfugge, solleva ValueError.
+    Thin wrapper attorno a `validate_imdf_task_id`: traduce `ValueError`
+    in `HTTPException 400` con detail stabile.
 
     Raises:
         HTTPException 400 se l'id e' malformato o tenta di uscire dalla root.
     """
-    from app.shared.path_policy import assert_path_within
-
-    if not bundle_task_id or not _BUNDLE_ID_RE.match(bundle_task_id):
+    root = settings.IMDF_BUNDLES_DIR.resolve()
+    try:
+        return validate_imdf_task_id(bundle_task_id, root)
+    except ValueError:
         raise HTTPException(
             status_code=400,
             detail="bundle_task_id non valido (ammessi solo [A-Za-z0-9_-])",
         )
-    root = settings.IMDF_BUNDLES_DIR.resolve()
-    try:
-        return assert_path_within(root / bundle_task_id, [root])
-    except ValueError:
-        raise HTTPException(status_code=400, detail="bundle_task_id non valido")
 
 
 def _hydrate_local_cache(bundle_task_id: str) -> None:

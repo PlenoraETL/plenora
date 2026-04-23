@@ -168,9 +168,14 @@ def validate_publish(
 
     # Validazione bundle_task_id contro path traversal. Il router chiama gia'
     # `_safe_bundle_dir`, ma difesa in profondita' nel modulo validator.
-    import re as _re
-    _bundle_re = _re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
-    if not bundle_task_id or not _bundle_re.match(bundle_task_id):
+    # Utility condivisa in app.shared.path_policy (D3 commit 1): regex +
+    # path-traversal guard centralizzati. Il validator traduce ValueError
+    # in un issue con code INVALID_BUNDLE_ID (shape report preservata).
+    from app.shared.path_policy import validate_imdf_task_id
+    _root = settings.IMDF_BUNDLES_DIR.resolve()
+    try:
+        bundle_dir: Path = validate_imdf_task_id(bundle_task_id, _root)
+    except ValueError:
         _add_top_issue(
             "error", "INVALID_BUNDLE_ID",
             f"bundle_task_id '{bundle_task_id}' malformato "
@@ -178,15 +183,7 @@ def validate_publish(
         )
         return report
 
-    # ── 1. Bundle su disco (con resolve safety net) ───────────────
-    _root = settings.IMDF_BUNDLES_DIR.resolve()
-    bundle_dir: Path = (_root / bundle_task_id).resolve()
-    try:
-        bundle_dir.relative_to(_root)
-    except ValueError:
-        _add_top_issue("error", "INVALID_BUNDLE_ID",
-                       f"bundle_task_id esce da IMDF_BUNDLES_DIR")
-        return report
+    # ── 1. Bundle su disco ────────────────────────────────────────
     if not bundle_dir.exists() or not bundle_dir.is_dir():
         _add_top_issue(
             "error", "BUNDLE_MISSING",

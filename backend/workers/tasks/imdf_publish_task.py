@@ -17,7 +17,6 @@ Il frontend polla il task come fa per l'enrichment (GET /api/tasks/{id}).
 """
 
 import json
-import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -26,28 +25,23 @@ from typing import Any, Dict, Optional
 from celery import current_task
 
 from app.config import settings
+from app.shared.path_policy import validate_imdf_task_id
 from app.utils.logger import get_logger
 from workers.celery_app import celery_app
 
-# Regex whitelist per bundle_task_id. Gli endpoint REST la applicano gia'
-# via `_safe_bundle_dir`, ma il task viene importato anche da code path
-# diversi (retry, chiamate dirette in test) — difesa in profondita'.
-_BUNDLE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
+# Regex + path-traversal guard centralizzati in `app.shared.path_policy.
+# validate_imdf_task_id` (D3 commit 1). Il wrapper locale preserva la
+# signature `Optional[Path]` attesa dal caller task (None su id malformato).
 
 
 def _safe_bundle_dir(bundle_task_id: str) -> Optional[Path]:
     """Valida il bundle_task_id contro path traversal e ritorna il path
     resolved. Ritorna None se l'id e' malformato (il caller deve gestire
     l'errore e propagarlo al task result)."""
-    if not bundle_task_id or not _BUNDLE_ID_RE.match(bundle_task_id):
-        return None
-    root = settings.IMDF_BUNDLES_DIR.resolve()
-    candidate = (root / bundle_task_id).resolve()
     try:
-        candidate.relative_to(root)
+        return validate_imdf_task_id(bundle_task_id, settings.IMDF_BUNDLES_DIR.resolve())
     except ValueError:
         return None
-    return candidate
 
 logger = get_logger(__name__)
 
