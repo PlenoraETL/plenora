@@ -109,7 +109,12 @@ def update_connection(
     """Aggiorna connessione esistente. Solo admin/superadmin del gruppo, e
     solo se non creata da un superadmin (hierarchical ownership)."""
     require_service(_connection_service, "ConnectionService")
-    existing = _connection_service.get_connection(connection_id)
+    # Bug #1: get_connection raise CredentialUnavailableError su password None/corrotta
+    from app.shared.crypto import CredentialUnavailableError
+    try:
+        existing = _connection_service.get_connection(connection_id)
+    except CredentialUnavailableError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     assert_can_modify(existing, current_user, "Connessione")
     conn = _connection_service.update_connection(connection_id, data)
     if not conn:
@@ -131,7 +136,11 @@ def delete_connection(
     al prossimo run).
     """
     require_service(_connection_service, "ConnectionService")
-    existing = _connection_service.get_connection(connection_id)
+    from app.shared.crypto import CredentialUnavailableError
+    try:
+        existing = _connection_service.get_connection(connection_id)
+    except CredentialUnavailableError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     assert_can_modify(existing, current_user, "Connessione")
 
     # Check dipendenze: progetti che usano questa connessione
@@ -173,9 +182,18 @@ def test_connection(
 ):
     """Testa una connessione database. Visibile a chi vede la risorsa (owned + shared)."""
     require_service(_connection_service, "ConnectionService")
-    existing = _connection_service.get_connection(connection_id)
+    # Bug #1 (2026-04-23): password=None o decrypt-fail → 422 esplicito,
+    # non 500 da Pydantic ValidationError.
+    from app.shared.crypto import CredentialUnavailableError
+    try:
+        existing = _connection_service.get_connection(connection_id)
+    except CredentialUnavailableError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     assert_resource_visible(existing, "connections", current_user, "Connessione")
-    return _connection_service.test_connection(connection_id)
+    try:
+        return _connection_service.test_connection(connection_id)
+    except CredentialUnavailableError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
 
 @router.get("/connections/{connection_id}/tables")
@@ -186,7 +204,11 @@ def get_connection_tables(
     """Ottieni tabelle e viste del database (esplora schema). Read-only su risorsa visibile."""
     require_service(_connection_service, "ConnectionService")
     require_service(_database_inspector, "DatabaseInspector")
-    connection = _connection_service.get_connection(connection_id)
+    from app.shared.crypto import CredentialUnavailableError
+    try:
+        connection = _connection_service.get_connection(connection_id)
+    except CredentialUnavailableError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     assert_resource_visible(connection, "connections", current_user, "Connessione")
 
     try:

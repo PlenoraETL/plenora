@@ -95,7 +95,7 @@ def test_test_connection_exception_path_returns_sanitized_message(
     monkeypatch.setattr(
         service,
         "_get_full_config",
-        lambda ds_id: {"id": ds_id, "type": "local", "root_path": "/tmp"},
+        lambda ds_id, **kw: {"id": ds_id, "type": "local", "root_path": "/tmp"},
     )
 
     # Segreti sintetici dentro str(e) — emula il leak SDK Office365 che a
@@ -163,7 +163,7 @@ def test_test_connection_not_found_branch_unaffected_by_sanitize_fix(monkeypatch
     from app.core.datasources.service import DataSourceService
 
     service = DataSourceService()
-    monkeypatch.setattr(service, "_get_full_config", lambda ds_id: None)
+    monkeypatch.setattr(service, "_get_full_config", lambda ds_id, **kw: None)
 
     result = service.test_connection("ds-missing")
 
@@ -190,7 +190,7 @@ def test_test_connection_success_path_unaffected_by_sanitize_fix(monkeypatch):
     monkeypatch.setattr(
         service,
         "_get_full_config",
-        lambda ds_id: {"id": ds_id, "type": "local", "root_path": "/tmp"},
+        lambda ds_id, **kw: {"id": ds_id, "type": "local", "root_path": "/tmp"},
     )
 
     class _OkBackend:

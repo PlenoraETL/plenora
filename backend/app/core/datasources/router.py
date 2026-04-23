@@ -279,7 +279,13 @@ def test_connection(ds_id: str, current_user: CurrentUser = Depends(require_not_
     """Testa la connessione di un Data Source. Read-only su risorsa visibile."""
     existing = _svc().get_datasource(ds_id)
     assert_resource_visible(existing, "datasources", current_user, "Data Source")
-    return _svc().test_connection(ds_id)
+    # Bug #2 (2026-04-23): credenziale cifrata non decriptabile → 422,
+    # non 200-OK fasullo ne' 500 ASGI.
+    from app.shared.crypto import CredentialUnavailableError
+    try:
+        return _svc().test_connection(ds_id)
+    except CredentialUnavailableError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
 
 # =============================================================================

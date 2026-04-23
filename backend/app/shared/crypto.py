@@ -74,6 +74,23 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+# ─── Eccezioni ───────────────────────────────────────────────────────────────
+
+
+class CredentialUnavailableError(Exception):
+    """Raised quando un secret cifrato a-rest non e' ricostruibile.
+
+    Scenari coperti:
+      - valore None nel DB ma obbligatorio per il consumer
+      - prefisso ``enc:`` presente ma ``decrypt()`` ritorna None (chiave
+        mancante/sbagliata o token Fernet corrotto)
+
+    Uso: i path di "test" (test_connection, test_api_connection,
+    test_datasource) devono chiudersi con errore gestito invece di 500
+    o 200-OK apparente. Il router traduce questa eccezione in HTTP 422.
+    """
+
+
 # ─── Costanti ────────────────────────────────────────────────────────────────
 
 #: Prefisso che marca un valore come cifrato. Sceglie ``enc:`` (no versione)
@@ -263,9 +280,22 @@ def encrypt_dict_fields(d: dict, fields: list[str]) -> dict:
     return d
 
 
-def decrypt_dict_fields(d: dict, fields: list[str]) -> dict:
-    """Decifra in-place i campi specificati di un dict (utility per load)."""
+def decrypt_dict_fields(d: dict, fields: list[str], *, strict: bool = False) -> dict:
+    """Decifra in-place i campi specificati di un dict (utility per load).
+
+    Se ``strict=True``, per ogni campo con prefisso ``enc:`` il cui
+    ``decrypt()`` ritorna None la funzione solleva ``CredentialUnavailableError``.
+    Usato nei path di test per non propagare silenziosamente stato invalido
+    (vedi Bug #1 + #2 del 2026-04-23).
+    """
     for f in fields:
         if f in d and isinstance(d.get(f), str):
-            d[f] = decrypt(d[f])
+            val = d[f]
+            was_encrypted = is_encrypted(val)
+            decrypted = decrypt(val)
+            if strict and was_encrypted and decrypted is None:
+                raise CredentialUnavailableError(
+                    f"campo '{f}' non decriptabile (chiave mancante/sbagliata o token corrotto)"
+                )
+            d[f] = decrypted
     return d

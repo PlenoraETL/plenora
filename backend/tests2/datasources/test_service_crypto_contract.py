@@ -331,3 +331,63 @@ def test_update_nonexistent_datasource_returns_none_no_db_write(service, fake_db
     assert fake_db["update"] is None, (
         "update_datasource NON DEVE chiamare db.update_datasource su id inesistente"
     )
+
+
+# =============================================================================
+# Bug #2 (2026-04-23): test_connection decrypt-fail policy
+# =============================================================================
+
+
+def test_get_full_config_strict_raises_on_undecryptable_field(service, monkeypatch):
+    """Bug #2: _get_full_config(strict=True) con campo cifrato corrotto →
+    CredentialUnavailableError invece di passare None al backend."""
+    import app.db.db_service as db
+
+    # Config con password cifrata ma non decriptabile (token random non valido)
+    corrupted_config = {
+        "id": "ds-broken",
+        "name": "ftp-broken",
+        "type": "ftp",
+        "host": "example.test",
+        "port": 21,
+        "username": "user",
+        "password": "enc:Z0FBQUFBQm5vdEF0b2tlbkNvcnJvdHRvQ2hlRmFsbGlzY2U=",  # token corrotto
+    }
+
+    monkeypatch.setattr(db, "get_datasource", lambda _id: {
+        "id": "ds-broken",
+        "config": corrupted_config,
+        "group_id": "grp-1",
+        "created_by": "u-1",
+    })
+
+    with pytest.raises(crypto.CredentialUnavailableError) as exc_info:
+        service._get_full_config("ds-broken", strict=True)
+
+    assert "password" in str(exc_info.value).lower()
+
+
+def test_get_full_config_non_strict_returns_none_field_silently(service, monkeypatch):
+    """Bug #2 guard: retro-compat — senza strict=True, decrypt fallito
+    ritorna None nel campo (comportamento pre-fix per path NON-test).
+    Serve per non rompere list_datasources / get_datasource / enrichment runtime."""
+    import app.db.db_service as db
+
+    corrupted_config = {
+        "id": "ds-broken",
+        "name": "ftp-broken",
+        "type": "ftp",
+        "password": "enc:Z0FBQUFBQm5vdEF0b2tlbkNvcnJvdHRvQ2hlRmFsbGlzY2U=",
+    }
+
+    monkeypatch.setattr(db, "get_datasource", lambda _id: {
+        "id": "ds-broken",
+        "config": corrupted_config,
+        "group_id": "grp-1",
+        "created_by": "u-1",
+    })
+
+    config = service._get_full_config("ds-broken")  # strict default False
+
+    assert config is not None
+    assert config["password"] is None  # decrypt ha fallito silently, campo a None

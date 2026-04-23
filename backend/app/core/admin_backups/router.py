@@ -11,10 +11,11 @@ Endpoint:
 
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.auth.auth import require_superadmin, CurrentUser
 from app.core.admin_backups import service
+from app.core.admin_backups.service import AdminBackupDependencyError
 
 router = APIRouter(prefix="/admin/backups", tags=["admin-backups"])
 
@@ -24,7 +25,22 @@ def list_backups_endpoint(
     _user: CurrentUser = Depends(require_superadmin),
 ) -> Dict[str, Any]:
     """Lista dei dump presenti nel bucket S3."""
-    items = service.list_backups()
+    # Bug #4 (2026-04-23): dep runtime mancante (botocore[crt]) → 503
+    # esplicito invece di lista vuota fuorviante.
+    try:
+        items = service.list_backups()
+    except AdminBackupDependencyError as e:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "aws_crt_missing",
+                "message": (
+                    "Dipendenza runtime AWS mancante (botocore[crt] / awscrt). "
+                    "Installa la dipendenza sul server per abilitare questa pagina."
+                ),
+                "exception": str(e),
+            },
+        )
     return {
         "bucket": service.BUCKET,
         "region": service.REGION,

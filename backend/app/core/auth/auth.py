@@ -1113,7 +1113,13 @@ def list_groups(current_user: CurrentUser = Depends(require_admin)):
     else:
         g = db.get_group(current_user.group_id)
         groups = [g] if g else []
-    return [GroupResponse(group_id=g["id"], name=g["name"], description=g.get("description", ""))
+    # Bug #3 (2026-04-23): description=NULL nel DB ritorna None da dict.get,
+    # non la stringa default; GroupResponse.description: str alza ValidationError.
+    # Stesso pattern null-safe applicato su name per robustezza.
+    return [GroupResponse(
+                group_id=g["id"],
+                name=g.get("name") or "",
+                description=g.get("description") or "")
             for g in groups if g]
 
 @groups_router.post("", response_model=GroupResponse, status_code=201)

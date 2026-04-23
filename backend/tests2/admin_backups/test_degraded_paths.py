@@ -59,6 +59,26 @@ def test_list_backups_when_client_error_returns_empty():
     assert out == []
 
 
+def test_list_backups_raises_on_missing_dependency():
+    """Bug #4 (2026-04-23): MissingDependencyException (es. botocore[crt]
+    assente per SSO provider) → AdminBackupDependencyError esplicito,
+    NON lista vuota silenziosa. Il router traduce in HTTP 503."""
+    from app.core.admin_backups import service
+    from app.core.admin_backups.service import AdminBackupDependencyError
+    from botocore.exceptions import MissingDependencyException
+
+    fake_boto3 = MagicMock()
+    fake_boto3.client.side_effect = MissingDependencyException(
+        msg="Using the login credential provider requires an additional dependency."
+    )
+
+    with patch.dict("sys.modules", {"boto3": fake_boto3}):
+        with pytest.raises(AdminBackupDependencyError) as exc_info:
+            service.list_backups()
+
+    assert "additional dependency" in str(exc_info.value)
+
+
 def test_list_backups_empty_bucket_returns_empty():
     from app.core.admin_backups import service
 

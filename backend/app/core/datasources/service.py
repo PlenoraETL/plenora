@@ -194,7 +194,10 @@ class DataSourceService:
     # ── Test connessione ──────────────────────────────────────────────────
 
     def test_connection(self, ds_id: str) -> DataSourceTestResult:
-        config = self._get_full_config(ds_id)
+        # Bug #2 (2026-04-23): strict=True → se un campo auth cifrato non e'
+        # decifrabile, CredentialUnavailableError propagato al router per
+        # HTTP 422. Evita 200-OK fasullo con secret silent-None.
+        config = self._get_full_config(ds_id, strict=True)
         if not config:
             return DataSourceTestResult(
                 success=False,
@@ -358,7 +361,7 @@ class DataSourceService:
 
     # ── Helpers privati ───────────────────────────────────────────────────
 
-    def _get_full_config(self, ds_id: str) -> Optional[dict]:
+    def _get_full_config(self, ds_id: str, *, strict: bool = False) -> Optional[dict]:
         """Recupera la config completa (con credenziali) dal DB.
 
         I campi sensibili (password, private_key, ...) sono cifrati at-rest
@@ -368,6 +371,11 @@ class DataSourceService:
 
         Su config corrotto in DB, ritorna None (datasource trattata come non
         trovata) loggando warning, invece di sollevare 500.
+
+        Se ``strict=True``, il decrypt di un campo cifrato che torna None
+        (chiave crypto mancante/sbagliata o token Fernet corrotto) solleva
+        ``CredentialUnavailableError``. Usato dal path test_connection
+        (Bug #2, 2026-04-23) per non rispondere 200-OK con secret silent-None.
         """
         import app.db.db_service as db
         row = db.get_datasource(ds_id)
@@ -389,8 +397,8 @@ class DataSourceService:
                 f"{type(config).__name__}. Datasource trattata come non trovata."
             )
             return None
-        # Decifra at-rest i campi sensibili
-        _decrypt_dict_fields(config, _SENSITIVE_FIELDS)
+        # Decifra at-rest i campi sensibili (strict propagato)
+        _decrypt_dict_fields(config, _SENSITIVE_FIELDS, strict=strict)
         # Inietta group_id e created_by dal record DB nel config dict
         config["group_id"] = row.get("group_id", "")
         config["created_by"] = row.get("created_by")

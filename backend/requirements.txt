@@ -42,3 +42,7 @@ filetype>=1.2.0  # MIME sniffing pure-Python (no libmagic dep) per upload valida
 
 # AWS (backup_db.py su S3)
 boto3>=1.34.0
+# Bug #4 (2026-04-23): botocore[crt] richiesto da alcuni login credential
+# provider (SSO/IAM Identity Center). Senza awscrt, admin_backups.list_backups
+# fallisce con MissingDependencyException.
+botocore[crt]>=1.34.0

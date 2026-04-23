@@ -14,6 +14,15 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
+class AdminBackupDependencyError(RuntimeError):
+    """Raised quando una dipendenza AWS runtime manca (es. botocore[crt]).
+
+    Bug #4 (2026-04-23): distingue l'errore "dep mancante" (503 Service
+    Unavailable con detail operativo) da altri fallimenti transitori (auth
+    S3, network, ecc.) che continuano a restituire [] via except Exception.
+    """
+
+
 # ── Config — nomi canonical allineati a cloud_backends.py ─────────────────
 
 BUCKET = (
@@ -71,6 +80,20 @@ def list_backups() -> List[Dict[str, Any]]:
         result.sort(key=lambda o: o["last_modified"], reverse=True)
         return result
     except Exception as e:
+        # Bug #4 (2026-04-23): distingue MissingDependencyException
+        # (es. botocore[crt] assente per SSO/IAM Identity Center provider)
+        # dagli altri errori transitori. Dep mancante → 503 via router;
+        # altri errori → degradazione silenziosa a lista vuota (backward compat).
+        try:
+            from botocore.exceptions import MissingDependencyException
+            if isinstance(e, MissingDependencyException):
+                logger.error(
+                    f"list_backups fallito per dep runtime mancante: {e}",
+                    exc_info=True,
+                )
+                raise AdminBackupDependencyError(str(e)) from e
+        except ImportError:
+            pass  # botocore non importabile: improbabile qui, degrada
         logger.error(f"list_backups fallito: {e}", exc_info=True)
         return []
 

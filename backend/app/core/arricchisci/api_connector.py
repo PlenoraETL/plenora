@@ -68,6 +68,7 @@ from app.utils.result_store import get_temp_output_path, save_result_blob
 from app.utils.template_variables import process_static_fields
 from app.utils.response_parser import ResponseParser, get_preset_config
 from app.shared.crypto import encrypt as _crypto_encrypt, decrypt as _crypto_decrypt
+from app.shared.crypto import CredentialUnavailableError, is_encrypted as _crypto_is_encrypted
 from app.shared.exceptions import ExecutionContextError, FileSourceResolutionError
 import app.db.db_service as db_svc
 
@@ -97,15 +98,28 @@ def _encrypt_auth_in_config(config: Dict) -> Dict:
     return config
 
 
-def _decrypt_auth_in_config(config: Dict) -> Dict:
-    """Decifra in-place i campi sensibili di config['auth']. Idempotente."""
+def _decrypt_auth_in_config(config: Dict, *, strict: bool = False) -> Dict:
+    """Decifra in-place i campi sensibili di config['auth']. Idempotente.
+
+    Se ``strict=True``, un campo con prefisso ``enc:`` il cui decrypt ritorna
+    None solleva ``CredentialUnavailableError`` invece di silenziosamente
+    valorizzare il campo a None. Usato dal path test_api_connection (Bug #2,
+    2026-04-23) per non inviare chiamate HTTP con Authorization: "Bearer None".
+    """
     auth = config.get("auth")
     if not isinstance(auth, dict):
         return config
     for field in _AUTH_SENSITIVE_FIELDS:
         val = auth.get(field)
         if isinstance(val, str) and val:
-            auth[field] = _crypto_decrypt(val)
+            was_encrypted = _crypto_is_encrypted(val)
+            decrypted = _crypto_decrypt(val)
+            if strict and was_encrypted and decrypted is None:
+                raise CredentialUnavailableError(
+                    f"api connection: campo auth.{field} non decriptabile "
+                    "(chiave mancante/sbagliata o token corrotto)"
+                )
+            auth[field] = decrypted
     return config
 
 
@@ -238,13 +252,19 @@ class ApiConnectionService:
             result[api_id] = config
         return result
 
-    def get_api_connection(self, api_id: str, include_token: bool = False) -> Optional[Dict]:
+    def get_api_connection(self, api_id: str, include_token: bool = False, *, strict: bool = False) -> Optional[Dict]:
         """Ottiene una API connection specifica dal DB.
 
         Se ``include_token=True`` decifra i campi auth sensibili (per uso
         interno: chiamate API, test connessione). Se ``False`` (default,
         per esposizione UI) i campi vengono mascherati e quindi non serve
         decifrare nulla.
+
+        Se ``strict=True`` (valido solo con include_token=True), un campo
+        cifrato il cui decrypt ritorna None solleva ``CredentialUnavailableError``
+        invece di propagare None. Usato dal path test_api_connection
+        (Bug #2, 2026-04-23) per fallire esplicitamente invece di eseguire
+        chiamate HTTP con auth invalida silenziosa.
         """
         row = db_svc.get_api_connection(api_id)
         if not row:
@@ -258,7 +278,7 @@ class ApiConnectionService:
         config["created_by"] = row.get("created_by")
         if include_token:
             # Decifra i campi sensibili at-rest prima di restituirli al caller
-            config = _decrypt_auth_in_config(config)
+            config = _decrypt_auth_in_config(config, strict=strict)
         else:
             config = self._mask_credentials(config)
         return config
@@ -488,7 +508,10 @@ class ApiConnectionService:
         ({{NOW}}, {{TODAY}}, etc.) prima della chiamata.
         """
         if api_id:
-            config = self.get_api_connection(api_id, include_token=True)
+            # Bug #2 (2026-04-23): strict=True → se un campo auth cifrato non
+            # e' decifrabile, CredentialUnavailableError propagato al router
+            # per HTTP 422 invece di eseguire la chiamata HTTP con auth None.
+            config = self.get_api_connection(api_id, include_token=True, strict=True)
             if not config:
                 return {"success": False, "error": "API connection non trovata"}
         

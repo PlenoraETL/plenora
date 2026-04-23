@@ -19,6 +19,7 @@ from app.config import settings
 from app.utils.logger import get_logger
 from app.shared.crypto import encrypt as _encrypt_password
 from app.shared.crypto import decrypt as _decrypt_password
+from app.shared.crypto import CredentialUnavailableError, is_encrypted
 from app.models import (
     DatabaseConnection,
     ConnectionCreate,
@@ -55,7 +56,23 @@ class ConnectionService:
         if mask_password:
             display_password = "***"
         else:
+            # Bug #1 (2026-04-23): raise esplicito invece di propagare None
+            # a Pydantic (DatabaseConnection.password: str) → ValidationError → 500.
+            # Due casi distinti, stessa classe CredentialUnavailableError:
+            #   - password NULL nel DB (mai configurata / record legacy invalido)
+            #   - prefisso enc: presente ma decrypt ritorna None (chiave
+            #     mancante/sbagliata o token Fernet corrotto)
+            # Il router traduce in HTTP 422.
+            if raw_password is None:
+                raise CredentialUnavailableError(
+                    f"connection '{row.get('id')}': password non configurata"
+                )
             display_password = _decrypt_password(raw_password)
+            if display_password is None and is_encrypted(raw_password):
+                raise CredentialUnavailableError(
+                    f"connection '{row.get('id')}': password non decriptabile "
+                    "(chiave mancante/sbagliata o token corrotto)"
+                )
         return DatabaseConnection(
             id=row["id"],
             name=row["name"],

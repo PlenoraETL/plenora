@@ -675,6 +675,10 @@ def test_api_config(
     except HTTPException:
         raise
     except Exception as e:
+        # Bug #2 (2026-04-23): CredentialUnavailableError → 422 esplicito
+        from app.shared.crypto import CredentialUnavailableError
+        if isinstance(e, CredentialUnavailableError):
+            raise HTTPException(status_code=422, detail=str(e))
         logger.error(f"[CRASH] Errore test API config: {e}", exc_info=True)
         raise HTTPException(500, "Errore interno del server")
 
@@ -699,6 +703,10 @@ def test_api_connection(
     except HTTPException:
         raise
     except Exception as e:
+        # Bug #2 (2026-04-23): CredentialUnavailableError → 422 esplicito
+        from app.shared.crypto import CredentialUnavailableError
+        if isinstance(e, CredentialUnavailableError):
+            raise HTTPException(status_code=422, detail=str(e))
         logger.error(f"[CRASH] Errore test API connection {api_id}: {e}", exc_info=True)
         raise HTTPException(500, "Errore interno del server")
 
