@@ -207,6 +207,37 @@ def test_fail_fast_when_dev_default_key_leaked_to_production(monkeypatch):
         crypto._get_raw_key()
 
 
+@pytest.mark.parametrize("env_name", ["staging", "stage", "STAGING", "Stage"])
+def test_fail_fast_in_staging_when_no_key_configured(env_name, monkeypatch):
+    """Blinda S1 / P2.5 di runtime_config_audit.md (chiuso 2026-04-23,
+    B6/#5): il guard fail-fast copre anche `staging` / `stage`, simmetrico
+    a `config.py:26 _DOTENV_DISABLED_ENVS`.
+
+    Regressione: prima del fix il tuple era `("production", "prod")` e
+    un deploy con `ENVIRONMENT=staging` senza chiave cadeva silently
+    su `_DEV_DEFAULT_KEY` con solo warning. In staging (ambiente non
+    zero-trust ma non isolato) questo e' un rischio medio: record
+    cifrati con chiave pubblica nota.
+    """
+    monkeypatch.setenv("ENVIRONMENT", env_name)
+
+    with pytest.raises(RuntimeError, match="chiave di cifratura"):
+        crypto._get_raw_key()
+
+
+@pytest.mark.parametrize("env_name", ["staging", "stage"])
+def test_fail_fast_when_dev_default_key_leaked_to_staging(env_name, monkeypatch):
+    """Blinda S1 / P2.5: il leak del dev-default in staging e' fail-fast,
+    identicamente a production. Senza questa guardia lo stesso scenario
+    di copy-paste `.env.example` su server staging bypassa il check.
+    """
+    monkeypatch.setenv("ENVIRONMENT", env_name)
+    monkeypatch.setenv("PLENORA_ENCRYPTION_KEY", crypto._DEV_DEFAULT_KEY)
+
+    with pytest.raises(RuntimeError, match="default di sviluppo"):
+        crypto._get_raw_key()
+
+
 def test_fail_fast_when_key_shorter_than_minimum_in_any_environment(monkeypatch):
     """Blinda hardening: chiave < ``_MIN_KEY_LENGTH`` → RuntimeError
     anche in dev. Probabile errore di configurazione.

@@ -125,7 +125,10 @@ def _get_raw_key() -> str:
     found = (env_name, val) if val else None
 
     env = os.getenv("ENVIRONMENT", os.getenv("ENV", "development")).lower()
-    is_prod = env in ("production", "prod")
+    # Simmetrico a _DOTENV_DISABLED_ENVS di config.py:26 — entrambi gli
+    # ambienti "hardened" (prod + staging) devono fail-fast su missing
+    # key / dev-default. Chiude S1 runtime_config_audit.md.
+    is_prod = env in ("production", "prod", "staging", "stage")
 
     if found:
         env_name, val = found
