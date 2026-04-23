@@ -64,23 +64,36 @@ def conn():
 # =============================================================================
 
 
-def test_insert_postgres_uses_bulk_path(monkeypatch, df, cols, conn):
+def test_insert_postgres_falls_back_to_executemany(monkeypatch, df, cols, conn):
+    """Post-rimozione COPY FROM STDIN (2026-04-23, kickoff §9.6): il
+    dispatcher raise `BulkInsertNotSupportedError(reason=
+    "dialect_not_supported")` anche per PG; `_execute_batch` cattura e
+    fa fallback a executemany (conn.execute). Test anti-regressione
+    della rimozione: se qualcuno riaggiunge la branch postgres al
+    dispatcher, questo test fallisce (`conn.execute` non verrebbe
+    chiamato)."""
+    from app.core.carica.bulk_writers import BulkInsertNotSupportedError
     monkeypatch.delenv("CARICA_BULK_INSERT", raising=False)  # default auto
     writer = _make_writer("postgres")
 
     with patch(
-        "app.core.carica.bulk_writers.bulk_insert", return_value=3
+        "app.core.carica.bulk_writers.bulk_insert",
+        side_effect=BulkInsertNotSupportedError(
+            "Bulk insert non implementato per dialect 'postgres'"
+        ),
     ) as mock_bulk:
         n = writer._execute_batch(conn, df, cols, "INSERT INTO ...", "insert")
 
-    assert n == 3
+    # Bulk tentato ma rifiutato dal dispatcher (PG tombstoned)
     mock_bulk.assert_called_once()
     kwargs = mock_bulk.call_args.kwargs
     assert kwargs["db_type"] == "postgres"
     assert kwargs["schema"] == "public"
     assert kwargs["table"] == "users"
-    # executemany NON chiamato (conn.execute)
-    conn.execute.assert_not_called()
+    # Fallback a executemany: conn.execute chiamato
+    conn.execute.assert_called_once()
+    # Il fallback ritorna n == len(params_list) == 3
+    assert n == 3
 
 
 def test_insert_mysql_falls_back_to_executemany(monkeypatch, df, cols, conn):
