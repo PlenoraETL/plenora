@@ -2,6 +2,7 @@
 
 **Status**: Accepted
 **Date**: 2026-04-21
+**Amended**: 2026-04-23 — Consequences > Negative §`/proc/<pid>/environ`: promessa systemd hardening allineata alla realta' corrente (non applicata in Phase 2). Vedi `orchestrate/phase_2_hardening/runtime_config_audit_addendum_systemd_hardening_snapshot.md`.
 **Deciders**: @CloudIA
 
 ## Context
@@ -67,7 +68,7 @@ Centralizzare crypto at-rest in `app/shared/crypto.py`, unico modulo che esporta
 
 ### Negative
 - Rotazione della chiave = **downtime** (re-encryption di tutti i record). Documentato in `secrets-management.md` §"Rotazione PLENORA_ENCRYPTION_KEY". Non automatizzato by-design: e' un'operazione rara che deve essere pianificata.
-- Chiave vive in `os.environ` → accessibile a qualsiasi processo col PID visibile (via `/proc/<pid>/environ` su Linux). Mitigazione: systemd unit con `ProtectProc=invisible`, hardening OS. Vera soluzione long-term: migrazione a SSM (vedi `secrets-management.md` — stato target).
+- Chiave vive in `os.environ` → leggibile via `/proc/<pid>/environ` su Linux da processi con lo stesso UID (o root). Baseline corrente in prod (verificato 2026-04-23, vedi addendum `runtime_config_audit_addendum_systemd_hardening_snapshot.md`): permessi kernel default `0400 ubuntu:ubuntu` su `/proc/<pid>/environ`, `/proc` montato senza `hidepid`. Un attaccante deve gia' avere code execution come `ubuntu` (o root) per leakare la chiave — perimetro coincidente con accesso al processo. Hardening systemd aggiuntivo (`ProtectProc=invisible` + companion `ProcSubset=pid`/`NoNewPrivileges=yes`/`PrivateTmp=yes`) **NON applicato in Phase 2** — scope di un ADR successivo se/quando si apre una finestra deploy dedicata. Vera soluzione long-term: migrazione a SSM (vedi `secrets-management.md` — stato target).
 - Fernet token size ~ 1.5x del plaintext (base64 + overhead IV/HMAC). Overhead trascurabile per secret brevi (< 1 KB), ma da considerare se si cifrano grandi blob (non nel nostro caso oggi).
 
 ### Neutral
