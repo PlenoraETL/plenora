@@ -131,6 +131,18 @@ def bulk_copy_postgres(
             deve fallback a executemany).
     """
     if _has_geometry(columns):
+        logger.info(
+            "Bulk COPY non applicabile: colonne geometry presenti",
+            extra={
+                "event": "bulk.fallback",
+                "reason": "geometry",
+                "dialect": "postgres",
+                "schema": schema,
+                "table": table,
+                "rows": len(df),
+                "error_type": None,
+            },
+        )
         raise BulkInsertNotSupportedError(
             "COPY non supportato con colonne geometry "
             "(richiederebbe ST_GeomFromText su staging)"
@@ -166,6 +178,18 @@ def bulk_copy_postgres(
     # cursor.copy_expert (psycopg2-specific).
     raw_conn = sa_conn.connection
     if not hasattr(raw_conn, "cursor"):
+        logger.info(
+            "Bulk COPY non applicabile: SA connection senza DBAPI cursor",
+            extra={
+                "event": "bulk.fallback",
+                "reason": "driver_unsupported",
+                "dialect": "postgres",
+                "schema": schema,
+                "table": table,
+                "rows": n_rows,
+                "error_type": None,
+            },
+        )
         raise BulkInsertNotSupportedError(
             "SQLAlchemy connection non espone DBAPI cursor (driver insolito?)"
         )
@@ -184,6 +208,18 @@ def bulk_copy_postgres(
     try:
         cur = raw_conn.cursor()
     except Exception as e:
+        logger.warning(
+            f"Bulk COPY: impossibile ottenere cursor DBAPI ({type(e).__name__}: {e})",
+            extra={
+                "event": "bulk.fallback",
+                "reason": "cursor_acquisition_failure",
+                "dialect": "postgres",
+                "schema": schema,
+                "table": table,
+                "rows": n_rows,
+                "error_type": type(e).__name__,
+            },
+        )
         raise BulkInsertNotSupportedError(
             f"Impossibile ottenere cursor DBAPI: {type(e).__name__}: {e}"
         ) from e
@@ -192,6 +228,18 @@ def bulk_copy_postgres(
         cur.copy_expert(copy_sql, buf)
     except AttributeError as e:
         # Driver non psycopg2 (es. asyncpg via SA non espone copy_expert)
+        logger.info(
+            f"Bulk COPY non applicabile: driver Postgres senza copy_expert ({e})",
+            extra={
+                "event": "bulk.fallback",
+                "reason": "driver_unsupported",
+                "dialect": "postgres",
+                "schema": schema,
+                "table": table,
+                "rows": n_rows,
+                "error_type": type(e).__name__,
+            },
+        )
         raise BulkInsertNotSupportedError(
             f"Driver Postgres non supporta copy_expert: {e}"
         ) from e
@@ -203,7 +251,18 @@ def bulk_copy_postgres(
             f"COPY fallito ({type(e).__name__}: {e}). "
             f"Fallback a executemany per ottenere errore per-riga."
         )
-        logger.warning(msg)
+        logger.warning(
+            msg,
+            extra={
+                "event": "bulk.fallback",
+                "reason": "copy_error",
+                "dialect": "postgres",
+                "schema": schema,
+                "table": table,
+                "rows": n_rows,
+                "error_type": type(e).__name__,
+            },
+        )
         raise BulkInsertNotSupportedError(msg) from e
     finally:
         try:
@@ -248,6 +307,18 @@ def bulk_load_mysql(
         altrimenti il driver pymysql/mysqlclient rifiuta lato client.
     """
     if _has_geometry(columns):
+        logger.info(
+            "Bulk LOAD DATA non applicabile: colonne geometry presenti",
+            extra={
+                "event": "bulk.fallback",
+                "reason": "geometry",
+                "dialect": "mysql",
+                "schema": schema,
+                "table": table,
+                "rows": len(df),
+                "error_type": None,
+            },
+        )
         raise BulkInsertNotSupportedError(
             "LOAD DATA non supportato con colonne geometry"
         )
@@ -301,6 +372,19 @@ def bulk_load_mysql(
         try:
             cur = raw_conn.cursor()
         except Exception as e:
+            logger.warning(
+                f"Bulk LOAD DATA: impossibile ottenere cursor DBAPI "
+                f"({type(e).__name__}: {e})",
+                extra={
+                    "event": "bulk.fallback",
+                    "reason": "cursor_acquisition_failure",
+                    "dialect": "mysql",
+                    "schema": schema,
+                    "table": table,
+                    "rows": n_rows,
+                    "error_type": type(e).__name__,
+                },
+            )
             raise BulkInsertNotSupportedError(
                 f"Impossibile ottenere cursor DBAPI: {type(e).__name__}: {e}"
             ) from e
@@ -315,12 +399,33 @@ def bulk_load_mysql(
                 or "local infile" in err_str
                 or "loading local data" in err_str
             ):
+                logger.warning(
+                    f"MySQL LOCAL INFILE disabilitato server-side: {e}",
+                    extra={
+                        "event": "bulk.fallback",
+                        "reason": "server_disable_local_infile",
+                        "dialect": "mysql",
+                        "schema": schema,
+                        "table": table,
+                        "rows": n_rows,
+                        "error_type": type(e).__name__,
+                    },
+                )
                 raise BulkInsertNotSupportedError(
                     f"MySQL LOCAL INFILE disabilitato server-side: {e}"
                 ) from e
             logger.warning(
                 f"LOAD DATA fallito ({type(e).__name__}: {e}). "
-                f"Fallback a executemany."
+                f"Fallback a executemany.",
+                extra={
+                    "event": "bulk.fallback",
+                    "reason": "load_data_error",
+                    "dialect": "mysql",
+                    "schema": schema,
+                    "table": table,
+                    "rows": n_rows,
+                    "error_type": type(e).__name__,
+                },
             )
             raise BulkInsertNotSupportedError(str(e)) from e
         finally:
@@ -372,6 +477,18 @@ def bulk_insert(
         return bulk_copy_postgres(sa_conn, schema, table, columns, df)
     if dialect in ("mysql", "mariadb"):
         return bulk_load_mysql(sa_conn, schema, table, columns, df)
+    logger.info(
+        f"Bulk insert non implementato per dialect '{dialect}'",
+        extra={
+            "event": "bulk.fallback",
+            "reason": "dialect_not_supported",
+            "dialect": dialect,
+            "schema": schema,
+            "table": table,
+            "rows": len(df),
+            "error_type": None,
+        },
+    )
     raise BulkInsertNotSupportedError(
         f"Bulk insert non implementato per dialect '{dialect}'"
     )

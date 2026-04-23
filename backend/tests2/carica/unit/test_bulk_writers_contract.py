@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import csv
 import io
+import logging
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
@@ -344,3 +345,134 @@ def test_dispatch_unsupported_dialect(dialect):
     cols = [_col("x")]
     with pytest.raises(BulkInsertNotSupportedError, match="non implementato"):
         bulk_insert(sa_conn, dialect, "s", "t", cols, df)
+
+
+# =============================================================================
+# Fallback telemetry — event="bulk.fallback" structured log (Batch 3.1)
+# =============================================================================
+#
+# Ogni attivazione del fallback (BulkInsertNotSupportedError) emette un log
+# strutturato con payload fisso: event, reason, dialect, schema, table, rows,
+# error_type. Livelli: INFO per fallback by-design (geometry, driver
+# unsupported, dialect non implementato), WARNING per fallback operativi
+# (cursor failure, server disable LOCAL INFILE, COPY/LOAD DATA error).
+
+
+@pytest.fixture
+def bulk_caplog(caplog):
+    """Propaga i record di `app.core.carica.bulk_writers` al caplog handler.
+
+    Il logger `app` del progetto ha `propagate=False` (vedi
+    `app.utils.logger.get_logger`), quindi caplog (handler attaccato al
+    root) non riceverebbe nulla. Agganciamo temporaneamente l'handler di
+    caplog direttamente al logger target, senza alterare propagate."""
+    target = logging.getLogger("app.core.carica.bulk_writers")
+    target.addHandler(caplog.handler)
+    orig_level = target.level
+    target.setLevel(logging.DEBUG)
+    try:
+        yield caplog
+    finally:
+        target.removeHandler(caplog.handler)
+        target.setLevel(orig_level)
+
+
+def _bulk_fallback_records(caplog):
+    return [
+        r for r in caplog.records
+        if getattr(r, "event", None) == "bulk.fallback"
+    ]
+
+
+def test_pg_geometry_emits_structured_fallback_log(bulk_caplog):
+    sa_conn, _ = _mock_sa_conn()
+    df = pd.DataFrame({"id": [1], "geom": ["POINT(0 0)"]})
+    cols = [_col("id"), _col("geom", is_geometry=True)]
+    with pytest.raises(BulkInsertNotSupportedError):
+        bulk_copy_postgres(sa_conn, "public", "t", cols, df)
+    recs = _bulk_fallback_records(bulk_caplog)
+    assert len(recs) == 1
+    r = recs[0]
+    assert r.levelname == "INFO"
+    assert r.reason == "geometry"
+    assert r.dialect == "postgres"
+    assert r.schema == "public"
+    assert r.table == "t"
+    assert r.rows == 1
+    assert r.error_type is None
+
+
+def test_pg_copy_error_emits_structured_warning(bulk_caplog):
+    sa_conn, cursor = _mock_sa_conn()
+    cursor.copy_expert.side_effect = RuntimeError("BadCopyFileFormat: line 3")
+    df = pd.DataFrame({"id": [1, 2, 3]})
+    cols = [_col("id")]
+    with pytest.raises(BulkInsertNotSupportedError):
+        bulk_copy_postgres(sa_conn, "public", "t", cols, df)
+    recs = _bulk_fallback_records(bulk_caplog)
+    assert len(recs) == 1
+    r = recs[0]
+    assert r.levelname == "WARNING"
+    assert r.reason == "copy_error"
+    assert r.dialect == "postgres"
+    assert r.schema == "public"
+    assert r.table == "t"
+    assert r.rows == 3
+    assert r.error_type == "RuntimeError"
+
+
+def test_mysql_local_infile_disabled_emits_structured_warning(bulk_caplog):
+    sa_conn, cursor = _mock_sa_conn()
+    cursor.execute.side_effect = RuntimeError(
+        "(1148, 'The used command is not allowed with this MySQL version')"
+    )
+    df = pd.DataFrame({"id": [1]})
+    cols = [_col("id")]
+    with pytest.raises(BulkInsertNotSupportedError):
+        bulk_load_mysql(sa_conn, "db", "t", cols, df)
+    recs = _bulk_fallback_records(bulk_caplog)
+    assert len(recs) == 1
+    r = recs[0]
+    assert r.levelname == "WARNING"
+    assert r.reason == "server_disable_local_infile"
+    assert r.dialect == "mysql"
+    assert r.schema == "db"
+    assert r.table == "t"
+    assert r.rows == 1
+    assert r.error_type == "RuntimeError"
+
+
+def test_mysql_geometry_emits_structured_info(bulk_caplog):
+    sa_conn, _ = _mock_sa_conn()
+    df = pd.DataFrame({"id": [1], "geom": ["POINT(0 0)"]})
+    cols = [_col("id"), _col("geom", is_geometry=True)]
+    with pytest.raises(BulkInsertNotSupportedError):
+        bulk_load_mysql(sa_conn, "myschema", "t", cols, df)
+    recs = _bulk_fallback_records(bulk_caplog)
+    assert len(recs) == 1
+    r = recs[0]
+    assert r.levelname == "INFO"
+    assert r.reason == "geometry"
+    assert r.dialect == "mysql"
+    assert r.schema == "myschema"
+    assert r.table == "t"
+    assert r.rows == 1
+    assert r.error_type is None
+
+
+def test_dispatcher_unsupported_dialect_emits_info_log(bulk_caplog):
+    sa_conn, _ = _mock_sa_conn()
+    df = pd.DataFrame({"id": [1, 2]})
+    cols = [_col("id")]
+    with pytest.raises(BulkInsertNotSupportedError):
+        bulk_insert(sa_conn, "oracle", "s", "t", cols, df)
+    recs = _bulk_fallback_records(bulk_caplog)
+    assert len(recs) == 1
+    r = recs[0]
+    assert r.levelname == "INFO"
+    assert r.reason == "dialect_not_supported"
+    assert r.dialect == "oracle"
+    assert r.schema == "s"
+    assert r.table == "t"
+    assert r.rows == 2
+    assert r.error_type is None
