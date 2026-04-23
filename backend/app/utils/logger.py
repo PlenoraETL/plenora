@@ -501,16 +501,25 @@ def _get_bulk_telemetry_db_handler() -> PostgresLogHandler:
 
 
 def _install_bulk_telemetry_handler() -> None:
-    """Installa idempotentemente il bulk telemetry handler sul logger
-    `app` (parent di `app.core.carica.bulk_writers` e
-    `app.core.carica.writer`). I record propagano fino ad `app`, dove
-    gli handler — default WARNING + bulk-INFO con filter — decidono
-    autonomamente cosa persistere."""
+    """Installa idempotentemente il bulk telemetry handler DIRETTAMENTE
+    sui 2 logger bulk (`_BULK_TELEMETRY_LOGGERS`). Non su `app`: se i
+    bulk logger sono configurati via `get_logger` (es. database_writer.py
+    chiama `get_logger("app.core.carica.writer")` al module-level), hanno
+    `propagate=False` e i loro record NON raggiungono `app`. Attaccare
+    direttamente al logger target evita il problema.
+
+    Il filter (`_bulk_telemetry_filter`) e' ridondante rispetto alla
+    selezione per-logger (gia' solo questi 2 logger avrebbero il
+    handler) ma e' mantenuto come guardia contro configuration drift
+    (es. se un giorno `_BULK_TELEMETRY_LOGGERS` si allarga e il
+    contract INFO-only va preservato)."""
     global _bulk_telemetry_installed
     if _bulk_telemetry_installed:
         return
-    app_logger = logging.getLogger("app")
-    app_logger.addHandler(_get_bulk_telemetry_db_handler())
+    handler = _get_bulk_telemetry_db_handler()
+    for name in _BULK_TELEMETRY_LOGGERS:
+        target = logging.getLogger(name)
+        target.addHandler(handler)
     _bulk_telemetry_installed = True
 
 
