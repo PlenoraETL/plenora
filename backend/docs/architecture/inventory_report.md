@@ -79,13 +79,14 @@ Gli agenti Explore hanno triato rapidamente la superficie. Per la Sezione 2 (fal
 
 ### 1.6 Crypto key sourcing — chain env var per la stessa chiave
 
-- **Path**: `backend/app/shared/crypto.py:121-125`
-- **Chain (post 2026-04-20)**: `PLENORA_ENCRYPTION_KEY` → `URBY_ENCRYPTION_KEY` → `CONN_ENCRYPT_KEY`
-- **Chain precedente (pre 2026-04-20)**: `PLENORA_ENCRYPTION_KEY` → `URBY_ENCRYPTION_KEY` → `CONN_ENCRYPT_KEY` → `SECRET_KEY` → `JWT_SECRET_KEY`
-- **Eta**: ≈fresh (2026-04-10)
+- **Path**: `backend/app/shared/crypto.py:_get_raw_key` (lookup diretto post-O-D4-C)
+- **Chain (post 2026-04-23, D4 chiuso)**: `PLENORA_ENCRYPTION_KEY` (solo).
+- **Chain intermedia (2026-04-20 → 2026-04-23)**: `PLENORA_ENCRYPTION_KEY` → `URBY_ENCRYPTION_KEY` → `CONN_ENCRYPT_KEY` (D5 chiuso, D4 aperto).
+- **Chain pre-2026-04-20**: `PLENORA_ENCRYPTION_KEY` → `URBY_ENCRYPTION_KEY` → `CONN_ENCRYPT_KEY` → `SECRET_KEY` → `JWT_SECRET_KEY`.
+- **Eta**: ≈fresh (2026-04-10), canonical-only dal 2026-04-23
 - **Owner**: `app/shared/crypto.py`
-- **Motivo dichiarato**: docstring `:19-24` — alias retro-compat tra vecchio e nuovo nome durante il rollout (*"nome canonico nuovo (consigliato per nuovi deploy) / URBY_ENCRYPTION_KEY alias retro-compat, ancora supportato"*).
-- **Verdetto applicato**: `D5 chiuso 2026-04-20` — fallback `SECRET_KEY` / `JWT_SECRET_KEY` rimossi dalla chain (chain auth JWT disaccoppiata). `D4 aperto` su `URBY_ENCRYPTION_KEY` e `CONN_ENCRYPT_KEY`: migration-required (rename `.env` prod + verifica SSH) prima della rimozione codice. `keep=PLENORA_ENCRYPTION_KEY` canonico.
+- **Motivo dichiarato**: docstring post-O-D4-C — env var canonical unica; alias legacy rimossi (D4 chiuso).
+- **Verdetto applicato**: `D5 chiuso 2026-04-20` (fallback `SECRET_KEY` / `JWT_SECRET_KEY` rimossi) + `D4 chiuso 2026-04-23` (alias `URBY_ENCRYPTION_KEY` + `CONN_ENCRYPT_KEY` rimossi via O-D4-B rollout `.env` prod + O-D4-C commit `1005018` rimozione codice/test). `keep=PLENORA_ENCRYPTION_KEY` canonico unico.
 
 ### 1.7 Nomi "connessione" paralleli — `ConnectionService` vs `FeaturesService`
 
@@ -360,7 +361,7 @@ Tutti gli item sono stati verificati in `backend/` (codice + `.env.example` + te
 - **Documentato**: docstring `crypto.py` (sezione `SECURITY hardening`), `.env.example`.
 - **Stato**: dev opt-in per replicare fail-fast di prod.
 - **Seconda arch**: no (spegne solo dev-default key).
-- **Verdetto proposto**: `keep`. Alias retro-compat `URBY_DISABLE_DEFAULT_KEY` rimosso (D4 parziale, 2026-04-20).
+- **Verdetto proposto**: `keep`. Alias retro-compat `URBY_DISABLE_DEFAULT_KEY` rimosso 2026-04-20 (D4 parziale); `URBY_ENCRYPTION_KEY` + `CONN_ENCRYPT_KEY` rimossi 2026-04-23 (D4 chiuso via O-D4-C).
 
 ### 3.6 `URBY_ALLOW_LOOPBACK_OUTBOUND`
 
@@ -390,22 +391,23 @@ Tutti gli item sono stati verificati in `backend/` (codice + `.env.example` + te
 
 | Env var | Tipo | Verdetto |
 |---------|------|----------|
-| `PLENORA_ENCRYPTION_KEY` | canonical | keep |
-| `URBY_ENCRYPTION_KEY` | alias retro-compat | mark-legacy (D4 migration-required: rename .env prod prima della rimozione codice) |
-| `CONN_ENCRYPT_KEY` | alias legacy | mark-legacy (D4 migration-required: verifica SSH .env prod prima della rimozione codice) |
+| `PLENORA_ENCRYPTION_KEY` | canonical | keep (unica env crypto supportata post-O-D4-C) |
+| ~~`URBY_ENCRYPTION_KEY`~~ | ~~alias retro-compat~~ | **D4 chiuso 2026-04-23: rimosso dalla chain** (O-D4-B rollout `.env` prod + O-D4-C commit `1005018`); tombstoned nei contract test |
+| ~~`CONN_ENCRYPT_KEY`~~ | ~~alias legacy~~ | **D4 chiuso 2026-04-23: rimosso dalla chain** (stesso O-D4-C); tombstoned nei contract test |
 | ~~`SECRET_KEY`~~ | ~~fallback jwt-shared~~ | **D5 chiuso 2026-04-20: rimosso dalla chain** (non era mai raggiunto in prod; accoppiamento rotazione-JWT→crypto rimosso) |
 | ~~`JWT_SECRET_KEY`~~ | ~~fallback jwt-shared~~ | **D5 chiuso 2026-04-20: rimosso dalla chain** (resta consumatore primario auth.py) |
 
 ### Riepilogo Sezione 3
 
 - **Flag veri**: 6 (`ENVIRONMENT`, `ENABLE_ASYNC_ENRICHMENT`, `CARICA_BULK_INSERT`, `MSSQL_FAST_EXECUTEMANY`, `PLENORA_DISABLE_DEFAULT_KEY`, `URBY_ALLOW_LOOPBACK_OUTBOUND`).
-- **Aliases retro-compat**: 2 (`URBY_ENCRYPTION_KEY`, `CONN_ENCRYPT_KEY`). `URBY_DISABLE_DEFAULT_KEY` rimosso in D4 parziale (2026-04-20). `SECRET_KEY` / `JWT_SECRET_KEY` come fallback crypto rimossi in D5 (2026-04-20).
+- **Aliases retro-compat**: 0. Tutti rimossi: `URBY_DISABLE_DEFAULT_KEY` in D4 parziale (2026-04-20, `3924bfb`), `URBY_ENCRYPTION_KEY` + `CONN_ENCRYPT_KEY` in D4 chiuso (2026-04-23, `1005018` O-D4-C), `SECRET_KEY` / `JWT_SECRET_KEY` fallback crypto in D5 (2026-04-20).
 - **Selectors/config-not-flag**: 3 (`CLOUD_PROVIDER`, `FILE_SOURCE_S3_THRESHOLD_BYTES`, `TEMP_ORPHAN_CLEANUP_HOURS`, `ENRICHMENT_POOL_SIZE`).
 - **Verdetti**:
   - `keep + documenta`: 5 (ENVIRONMENT, CARICA_BULK_INSERT, MSSQL_FAST_EXECUTEMANY, URBY_ALLOW_LOOPBACK_OUTBOUND, CLOUD_PROVIDER)
-  - `investigate → remove/unify`: 1 (ENABLE_ASYNC_ENRICHMENT) **+ 2 aliases crypto residui** (URBY_ENCRYPTION_KEY, CONN_ENCRYPT_KEY — bloccati su verifica `.env` prod / D4 migration-required)
+  - `investigate → remove/unify`: 1 (ENABLE_ASYNC_ENRICHMENT)
   - `config-not-flag`: 3
   - `closed in Phase 1 consolidation (2026-04-20)`: D5 — fallback SECRET_KEY/JWT_SECRET_KEY rimossi dalla chain crypto
+  - `closed in Phase 2 ops (2026-04-23)`: D4 — `URBY_ENCRYPTION_KEY` + `CONN_ENCRYPT_KEY` rimossi dalla chain crypto via O-D4-C (`1005018`)
 
 ---
 
@@ -491,7 +493,7 @@ Tutti gli item sono stati verificati in `backend/` (codice + `.env.example` + te
 3. **database_writer.py introspection return vuoto** (2.4) — decidere: `raise` o `Optional[T]` per differenziare "non trovato" da "non verificato".
    → **Risolto (S2)**: introspection fail-fast applicato alle 4 funzioni (`table_exists`, `get_existing_columns`, `get_schemas`, `get_tables`).
 4. **Alias retro-compat `URBY_ENCRYPTION_KEY` / `CONN_ENCRYPT_KEY`** (1.6 + 3.5) — serve verifica del `.env` di prod (lab.plenora.it, project_deployment) per capire quale nome e' effettivamente settato prima di rimuovere.
-   → **Riclassificato a product/env (D4)**: rimozione coordinata con deploy prod `lab.plenora.it`. Non refactor, decisione governance.
+   → **D4 chiuso 2026-04-23**: O-D4-B ha eseguito verifica SSH + rollout `.env` prod con `PLENORA_ENCRYPTION_KEY` (scenario A, smoke backend+celery+beat ok). O-D4-C commit `1005018` ha rimosso i due alias dalla chain `app/shared/crypto.py` e dai doc runtime (`mfa.py`, `.env.example`), con test tombstone in `tests2/crypto/test_crypto_key_sourcing_contract.py` anti-regressione.
 5. **IMDF `loader`/`persist`/`storage`** (1.5) — non analizzato in dettaglio in Fase A; decidere se audit di Fase B deve tracciarne i confini prima di toccare nulla o se si accetta "keep come-e'".
    → **Riclassificato a product/env (D3)**: boundaries loader/persist/storage = decisione architetturale, richiede allineamento con cliente.
 6. **file_service.py 21 `except: pass`** (2.8) — triage riga-per-riga e' lavoro significativo. Utente: accetta che Fase B dedichi tempo esteso qui o preferisce mark-legacy bulk?
@@ -615,7 +617,7 @@ _Aggiornato 2026-04-21 post Phase 1 close-out._
 - ~~`S26` preview swallow estrai/manipola/arricchisci~~ — **chiuso 2026-04-21** tatticamente (`db9ef03` arricchisci + `6db33c7` manipola). Policy formale D6 resta in carry-over.
 - ~~`S28` shared layer mixed~~ — **chiuso 2026-04-20 come triage**, perimetro gia' conforme a `invariants.md` §4.1/§4.3/§2 (no code change; dettaglio in `orchestrate/phase_1_stabilization/kickoff.md`)
 - `D3` IMDF loader/persist/storage boundaries — **carry-over bucket phase_2** (design doc consolidato, refactor non applicato)
-- `D4` alias crypto retro-compat — **carry-over bucket operation**: `URBY_DISABLE_DEFAULT_KEY` rimosso (`3924bfb`); `URBY_ENCRYPTION_KEY` + `CONN_ENCRYPT_KEY` bloccati su verifica `.env` `lab.plenora.it` via SSH
+- ~~`D4` alias crypto retro-compat~~ — **chiuso 2026-04-23**: `URBY_DISABLE_DEFAULT_KEY` rimosso in Phase 1 (`3924bfb`); `URBY_ENCRYPTION_KEY` + `CONN_ENCRYPT_KEY` rimossi in Phase 2 via O-D4-B (rollout `.env` prod scenario A) + O-D4-C (commit `1005018`); tutti e tre tombstoned nei contract test.
 - ~~`D5` `SECRET_KEY`/`JWT_SECRET_KEY` come crypto fallback~~ — **chiuso 2026-04-20** (`9fc330a` + doc `81ac385`)
 - `D6` policy preview vs execute cross-modulo — **carry-over bucket micro_0bis** (ratifica ADR formale; codice gia' allineato via S26)
 

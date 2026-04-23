@@ -51,7 +51,7 @@ Per ogni operazione fondamentale dichiariamo **il principio**, non l'implementaz
 - **Principio**: l'entry point canonico e' `app.config.settings` (`backend/app/config.py`, classe `Settings` con singleton `settings`). I valori ambientali transitano tutti da qui, con default, type coercion e validazione centralizzate.
 - **Eccezioni documentate**: alcuni moduli leggono direttamente `os.getenv` per:
   - feature flag locali (`ENABLE_ASYNC_ENRICHMENT`, `CARICA_BULK_INSERT`, `MSSQL_FAST_EXECUTEMANY`, `URBY_ALLOW_LOOPBACK_OUTBOUND`) — il flag vive vicino al codice che lo consuma per ridurre indirezione; deve comunque comparire nella tabella §3
-  - crypto key sourcing (`app/shared/crypto.py:_get_raw_key`) — la chain di 5 env var e' deliberata (alias retro-compat post-migrazione), documentata nella docstring del modulo
+  - crypto key sourcing (`app/shared/crypto.py:_get_raw_key`) — legge solo `PLENORA_ENCRYPTION_KEY` (D4 chiuso 2026-04-23, D5 chiuso 2026-04-20). Documentato nella docstring del modulo
   - tuning numerici locali (`ENRICHMENT_POOL_SIZE`, `LOGIN_MAX_ATTEMPTS`, thresholds `DB_SCHEMA_*`) — valori numerici stretti a un solo chiamante
 - **Vincolo**: qualsiasi nuovo `os.getenv` in business code (`core/*`) richiede giustificazione nel PR e aggiornamento di §3 se e' un flag, o promozione a `settings` se e' config.
 
@@ -146,13 +146,13 @@ Ogni flag attivo nel codice deve stare qui con owner, data di introduzione e rim
 
 ### Env var crypto-key (coda di §1.5)
 
-La chain di 3 nomi per la chiave Fernet e' deliberata ma in uscita.
+La chain legge solo `PLENORA_ENCRYPTION_KEY` (D4 chiuso 2026-04-23). Tutti gli alias legacy sono stati rimossi.
 
 | Env var | Tipo | Stato |
 |---------|------|-------|
-| `PLENORA_ENCRYPTION_KEY` | Canonico | Attivo, preferito in tutti i nuovi deploy |
-| `URBY_ENCRYPTION_KEY` | Alias retro-compat | In uscita, D4 parziale in Phase 1 — **bucket operation** post-Phase 1: richiede verifica `.env` su `lab.plenora.it` via SSH prima della rimozione codice |
-| `CONN_ENCRYPT_KEY` | Alias legacy pre-migrazione | In uscita, D4 parziale in Phase 1 — **bucket operation** post-Phase 1: richiede verifica SSH `.env` prod prima della rimozione codice |
+| `PLENORA_ENCRYPTION_KEY` | Canonico | Attivo, unica env crypto supportata |
+| `URBY_ENCRYPTION_KEY` | Alias retro-compat | **Rimosso** 2026-04-23 (commit `1005018`, O-D4-C) — chain non la legge piu'; i test tombstone in `tests2/crypto/test_crypto_key_sourcing_contract.py` impediscono re-introduzione silenziosa |
+| `CONN_ENCRYPT_KEY` | Alias legacy pre-migrazione | **Rimosso** 2026-04-23 (commit `1005018`, O-D4-C) — come sopra |
 | `URBY_DISABLE_DEFAULT_KEY` | Alias ridondante | **Rimosso** 2026-04-21 (commit `3924bfb`) — la funzionalita' e' gia' in `PLENORA_DISABLE_DEFAULT_KEY` |
 
 Il fallback su `SECRET_KEY` / `JWT_SECRET_KEY` (D5) e' stato **rimosso** il 2026-04-20 (commit `9fc330a` + doc `81ac385`): quei nomi appartengono al dominio auth JWT e condividerli con crypto-at-rest rendeva la rotazione `JWT_SECRET_KEY` un'operazione silently distruttiva sui record cifrati. Review futuri che vedessero tentativi di re-introdurre quel fallback devono essere respinti: un secret, un consumatore, un nome canonico.
@@ -244,9 +244,9 @@ Le seguenti decisioni **non** sono vincolate da questo documento e restano scope
 - **Contratti API pubblici verso ICSC/RFI/ANIA**: governati fuori da questo doc (contratti commerciali + versioning API).
 - **Decisioni aperte fascia D (residue dopo Phase 1)**:
   - **D3** IMDF loader/persist/storage boundaries — **chiuso Phase 2** (2026-04-23): design doc `orchestrate/phase_1_stabilization/d3_imdf_boundaries.md` + execute plan `orchestrate/phase_2_hardening/d3_execute_plan.md` ratificati come `ADR-0016`. 5 commit impl atomici: `e86340e` (path_policy), `4d95a85` (hydrate validate-publish), `432b003` (site_id single source), `8593370` (persist decoupling), `0d1b851` (dichiarativi + invariant §9.6).
-  - **D4** alias crypto retro-compat — parziale: `URBY_DISABLE_DEFAULT_KEY` rimosso in Phase 1 (`3924bfb`). `URBY_ENCRYPTION_KEY` + `CONN_ENCRYPT_KEY` → **bucket operation**: bloccato su verifica `.env` produzione via SSH su `lab.plenora.it` prima della rimozione codice.
+  - **D4** alias crypto retro-compat — **chiuso** 2026-04-23: `URBY_DISABLE_DEFAULT_KEY` rimosso in Phase 1 (`3924bfb`). `URBY_ENCRYPTION_KEY` + `CONN_ENCRYPT_KEY` rimossi in Phase 2 via O-D4-B (verifica SSH + rollout `.env` prod `PLENORA_ENCRYPTION_KEY` scenario A) + O-D4-C (commit `1005018` rimozione codice/test + commit doc). Tutti e tre gli alias crypto ora tombstoned nei contract test (`tests2/crypto/test_crypto_key_sourcing_contract.py`).
   - **D6** policy preview vs execute — **chiuso** post Phase 1 (micro-0bis): ratifica formale come `ADR-0012` in `backend/docs/architecture/decisions/0012-2026-04-21-preview-execute-policy.md`. Codice gia' allineato via S26 (`db9ef03` + `6db33c7`); design doc originale `orchestrate/phase_1_stabilization/d6_preview_execute_policy.md`. Le tre righe canoniche sono in §1.6 e il fallback autorizzato `_init_security_context(strict=False)` e' in §2.
-  - D1 (`ENABLE_ASYNC_ENRICHMENT`) e D2 (`_read_csv_*`) chiusi in Fase 0; D5 chiuso in Phase 1 (`9fc330a` + `81ac385`); D4 parziale (`3924bfb`); D6 chiuso post Phase 1 micro-0bis (`ADR-0012`); D3 chiuso Phase 2 (`ADR-0016`, 5 commit).
+  - D1 (`ENABLE_ASYNC_ENRICHMENT`) e D2 (`_read_csv_*`) chiusi in Fase 0; D5 chiuso in Phase 1 (`9fc330a` + `81ac385`); D4 chiuso Phase 2 (`3924bfb` + `1005018` O-D4-C); D6 chiuso post Phase 1 micro-0bis (`ADR-0012`); D3 chiuso Phase 2 (`ADR-0016`, 5 commit).
 - **Triage residui Phase 1 — CHIUSI**:
   - S17 `app/services/file_service.py` silent → debug/warning logs (`91b7109`)
   - S18 `app/core/arricchisci/api_connector.py` retry loop (`60dadc7`)
@@ -260,8 +260,6 @@ Le seguenti decisioni **non** sono vincolate da questo documento e restano scope
   - **A1-B1** bulk review chiamanti file storage — chiusa 2026-04-22, review `orchestrate/phase_2_hardening/a1_bulk_review.md`, 0 bypass (§1.7 + §1.7.bis aggiornati).
   - **A1-B2** provider MinIO P1 impl + boot check + unit tests — chiusa 2026-04-22, commit `a5956f7`, ADR-0015.
   - **A1-B3** contract parity matrix `policy x provider` — chiusa 2026-04-23 **a scope ridotto**, commit `141d894`. Baseline dual-path: 4 scenari forti (C1 roundtrip small, C3 list+prefix, C4 delete idempotent, C5 overwrite) × 2 provider (`AwsS3ObjectStorage`, `MinioObjectStorage`) via `moto` in-process (env `MOTO_S3_CUSTOM_ENDPOINTS` per intercept MinIO subclass); opt-in MinIO reale via env `MINIO_E2E_ENDPOINT_URL`. Esclusi dal baseline (documentati in `backend/tests2/shared/test_object_storage_contract.py`): C2 multipart >8MB — incompat nota boto3 >=1.40 + moto 5.x su flexible-checksum (validabile solo su opt-in real MinIO); C6 content_type default — non e' contract cross-provider (S3/moto/MinIO ritornano `binary/octet-stream`, non `application/octet-stream` della docstring). Nessun workaround applicato, zero tocchi runtime.
-- **Strategia di rimozione alias retro-compat** (`URBY_*` → `PLENORA_*`): richiede coordinamento con deploy prod (`lab.plenora.it`) prima di rimuovere dal codice. Scope product/env, non invariant.
-
 Queste aree restano aperte: se toccate in Fase 1+, il PR deve dichiarare la scelta con la stessa disciplina delle 7 regole in §5, anche se il punto non e' ancora in tabella §2/§3.
 
 ---
