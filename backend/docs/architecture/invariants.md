@@ -17,7 +17,7 @@ Per ogni operazione fondamentale dichiariamo **il principio**, non l'implementaz
 ### 1.1 Scrittura su DB destinazione
 
 - **Principio**: il path canonico passa per la strategia `DestinationWriter` (`backend/app/core/carica/writer_base.py`), la cui unica implementazione attiva e' `DatabaseWriter` (`backend/app/core/carica/database_writer.py`). Un solo entry point, una sola policy di transazione, un solo modello di errore.
-- **Ottimizzazioni native isolate (charter arch 1/5)**: `bulk_writers.py` (COPY Postgres, LOAD DATA MySQL) viene tentato solo quando il dialect lo supporta; il fallback a `executemany` e' governato da `BulkInsertNotSupportedError` con log esplicito. Il kill-switch operazionale e' `CARICA_BULK_INSERT` (vedi §3.3).
+- **Ottimizzazioni native isolate (charter arch 1/5)**: `bulk_writers.py` (COPY Postgres) viene tentato solo quando il dialect lo supporta; il fallback a `executemany` e' governato da `BulkInsertNotSupportedError` con log esplicito. Il kill-switch operazionale e' `CARICA_BULK_INSERT` (vedi §3.3). MySQL LOAD DATA LOCAL INFILE e' stato rimosso il 2026-04-23 (`kickoff.md §9.5`; tombstoned nei contract test `tests2/carica/unit/test_bulk_writers_contract.py`).
 - **Vincolo**: una seconda strada di scrittura DB richiede motivazione scritta nel PR, test di parita' con il path canonico e benchmark documentato. Non sono ammessi writer "paralleli" creati per convenienza.
 
 ### 1.2 Lettura DB sorgente
