@@ -144,19 +144,11 @@ def persist_imdf_bundle_to_disk(
             f"(site={bundle.site_id})"
         )
 
-        # R2 multi-host: upload zip + meta su object storage (S3).
-        # Cache locale resta per performance; S3 e' la fonte di verita'
-        # accessibile dagli altri nodi (backend/worker su altre VM).
-        # Failure non blocca il persist locale — best-effort: il bundle
-        # e' comunque servibile dal nodo corrente finche' la cache dura.
-        try:
-            from app.core.imdf import storage as _imdf_storage
-            _imdf_storage.save_bundle(task_id, root, meta=meta)
-        except Exception as _se:
-            logger.warning(
-                f"[{task_id}] imdf storage upload fallito (non-fatal, "
-                f"bundle disponibile solo sul nodo corrente): {_se}"
-            )
+        # D3 commit 4 (R2): la chiamata inline a storage.save_bundle e' stata
+        # rimossa da qui. L'orchestrazione "persist locale + push remoto" vive
+        # nel worker (enrichment_task) come passi espliciti: dopo questa
+        # funzione, il caller chiama storage.save_bundle. Persist resta local
+        # materializer puro, non conosce S3 ne' object storage.
 
         return {"path": str(root), "meta": meta}
 

@@ -796,6 +796,26 @@ def execute_enrichment_task(
                         )
                         # cleanup già eseguito dal finally interno di persist
 
+                    # ── Push S3 (R2 multi-host) ──────────────────────────
+                    # D3 commit 4 (R2): orchestrazione esplicita persist ->
+                    # storage. Pre-commit la chiamata viveva inline dentro
+                    # persist (inversione di dep loader/persist <- storage).
+                    # Post-commit il worker e' l'orchestratore. Best-effort
+                    # identico al pre-commit: failure logga warning ma non
+                    # blocca il task (il bundle e' comunque servibile dal
+                    # nodo corrente via local cache fino a TTL).
+                    if bundle_persisted_path:
+                        try:
+                            from app.core.imdf import storage as _imdf_storage
+                            _imdf_storage.save_bundle(
+                                task_id, Path(_res["path"]), meta=_res["meta"],
+                            )
+                        except Exception as _save_e:
+                            logger.warning(
+                                f"[{task_id}] imdf storage upload fallito (non-fatal, "
+                                f"bundle disponibile solo sul nodo corrente): {_save_e}"
+                            )
+
                     # ── Task result SLIM ──────────────────────────────
                     # Solo informazioni minime che servono al frontend
                     # per sapere "esiste un bundle IMDF" + link per fetch
