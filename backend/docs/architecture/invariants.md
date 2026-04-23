@@ -97,7 +97,7 @@ Call site che raggiungono object storage / secrets ma appartengono a domini dist
 | Caller | Dominio | Fonte ortogonalita' |
 |---|---|---|
 | `app/core/eseguibili/storage.py` + `workers/tasks/enrichment_task.py:833-835` | eseguibili output | Dominio distinto (non result, non file_source). Vedi `a1_bulk_review.md §4.2` |
-| `app/core/imdf/storage.py` | IMDF bundle | Deferito ad `A-D3` (`orchestrate/phase_1_stabilization/d3_imdf_boundaries.md`) |
+| `app/core/imdf/storage.py` | IMDF bundle | Dominio distinto (IMDF bundle cache multi-host); boundary ratificato `ADR-0016` |
 | `workers/beat_scheduler.py:918,1099` (`get_log_archive_storage`) | log archive | `ADR-0014` + §1.4 |
 | `scripts/backup_db.py`, `scripts/test_restore.py` | DB backup | `a1_storage_policy.md §7.3` |
 | `scripts/load_secrets.py` (`get_secrets_backend`) | secrets bootstrap | `a1_storage_policy.md §7.3` |
@@ -243,10 +243,10 @@ Le seguenti decisioni **non** sono vincolate da questo documento e restano scope
 - **Target di performance, SLO, SLA**: scope Fase 1 PERF; non sono invariant architetturali.
 - **Contratti API pubblici verso ICSC/RFI/ANIA**: governati fuori da questo doc (contratti commerciali + versioning API).
 - **Decisioni aperte fascia D (residue dopo Phase 1)**:
-  - **D3** IMDF loader/persist/storage boundaries — design doc `orchestrate/phase_1_stabilization/d3_imdf_boundaries.md` consolidato, **nessun refactor codice applicato in Phase 1**. Carry-over **bucket phase_2** (refactor boundaries dedicato).
+  - **D3** IMDF loader/persist/storage boundaries — **chiuso Phase 2** (2026-04-23): design doc `orchestrate/phase_1_stabilization/d3_imdf_boundaries.md` + execute plan `orchestrate/phase_2_hardening/d3_execute_plan.md` ratificati come `ADR-0016`. 5 commit impl atomici: `e86340e` (path_policy), `4d95a85` (hydrate validate-publish), `432b003` (site_id single source), `8593370` (persist decoupling), `0d1b851` (dichiarativi + invariant §9.6).
   - **D4** alias crypto retro-compat — parziale: `URBY_DISABLE_DEFAULT_KEY` rimosso in Phase 1 (`3924bfb`). `URBY_ENCRYPTION_KEY` + `CONN_ENCRYPT_KEY` → **bucket operation**: bloccato su verifica `.env` produzione via SSH su `lab.plenora.it` prima della rimozione codice.
   - **D6** policy preview vs execute — **chiuso** post Phase 1 (micro-0bis): ratifica formale come `ADR-0012` in `backend/docs/architecture/decisions/0012-2026-04-21-preview-execute-policy.md`. Codice gia' allineato via S26 (`db9ef03` + `6db33c7`); design doc originale `orchestrate/phase_1_stabilization/d6_preview_execute_policy.md`. Le tre righe canoniche sono in §1.6 e il fallback autorizzato `_init_security_context(strict=False)` e' in §2.
-  - D1 (`ENABLE_ASYNC_ENRICHMENT`) e D2 (`_read_csv_*`) chiusi in Fase 0; D5 chiuso in Phase 1 (`9fc330a` + `81ac385`); D4 parziale (`3924bfb`); D6 chiuso post Phase 1 micro-0bis (`ADR-0012`).
+  - D1 (`ENABLE_ASYNC_ENRICHMENT`) e D2 (`_read_csv_*`) chiusi in Fase 0; D5 chiuso in Phase 1 (`9fc330a` + `81ac385`); D4 parziale (`3924bfb`); D6 chiuso post Phase 1 micro-0bis (`ADR-0012`); D3 chiuso Phase 2 (`ADR-0016`, 5 commit).
 - **Triage residui Phase 1 — CHIUSI**:
   - S17 `app/services/file_service.py` silent → debug/warning logs (`91b7109`)
   - S18 `app/core/arricchisci/api_connector.py` retry loop (`60dadc7`)
