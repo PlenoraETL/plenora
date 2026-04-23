@@ -1,7 +1,7 @@
-"""Benchmark shortlist Fase 2 / punto 3 — Batch 3.7.
+"""Benchmark shortlist Fase 2 / punto 3 — Batch 3.7 + 3.8.
 
-Misura lo speedup atteso di due candidati "forti" emersi dalla shortlist
-pre-refactor (vedi checkpoint 3.7):
+Misura lo speedup atteso di candidati "forti" emersi dalla shortlist
+pre-refactor (vedi checkpoint 3.7 e 3.8):
 
   A. `spatial.py::op_geo_clean_topology` Step 1 — validazione geometrie:
      loop Python su `.at[idx]` con `make_valid` → vettoriale via mask +
@@ -12,6 +12,15 @@ pre-refactor (vedi checkpoint 3.7):
      `df[col].apply(lambda x: wkt.loads(x) if pd.notna(x) else None)` →
      vettoriale via `gpd.GeoSeries.from_wkt` su subset non-NaN.
      Riferimento runtime: backend/app/core/features/features_service.py:1214
+
+  C. `transforms/base.py::op_text_normalize` — normalizzazione testo:
+     `series.apply(lambda v: normalize_text(v, ops))` → chain
+     `pd.Series.str.*` per i sotto-passaggi vectorizzabili, fallback
+     `apply` solo su strip_accents (NFKD non vectorial in pandas).
+     Misurato con 2 varianti `ops`: `"lower"` (upper-bound puramente
+     vectoriale) e `"full"` (lower-bound realistico con strip_accents
+     residuo). Riferimento runtime:
+     backend/app/core/manipola/transforms/base.py:1694-1722
 
 Scopo: produrre numeri concreti (baseline vs alternative, speedup ratio)
 per decidere in Fase 3 se procedere con il refactor runtime o scartare
@@ -363,4 +372,175 @@ def test_bench_wkt_parse_speedup():
     assert t_alt > 0, "alt path misurato 0 — misura inattendibile"
     assert speedup > 0.5, (
         f"speedup anomalo ({speedup:.2f}x) — revisionare"
+    )
+
+
+# =============================================================================
+# Candidato C — transforms/base.py::op_text_normalize (apply-lambda) — Batch 3.8
+# =============================================================================
+
+
+def _baseline_text_normalize(series: pd.Series, ops: str) -> pd.Series:
+    """Replica verbatim del runtime (`base.py:1687-1722`): funzione
+    nested `normalize_text` + `series.apply(lambda v: normalize_text(v, ops))`.
+    Copiata inline per isolamento — NON importa dal runtime."""
+    import re
+    import unicodedata
+
+    def _strip_accents(text):
+        if not isinstance(text, str):
+            return text
+        nfkd = unicodedata.normalize("NFKD", text)
+        return "".join(c for c in nfkd if not unicodedata.combining(c))
+
+    def _normalize(text, op):
+        if pd.isna(text) or not isinstance(text, str):
+            return text
+        s = text
+        if op in ("trim", "full"):
+            s = s.strip()
+        if op == "lower" or op == "full":
+            s = s.lower()
+        elif op == "upper":
+            s = s.upper()
+        elif op == "title":
+            s = s.title()
+        if op in ("strip_accents", "full"):
+            s = _strip_accents(s)
+        if op in ("strip_double_spaces", "full"):
+            s = re.sub(r"\s+", " ", s)
+        return s
+
+    return series.apply(lambda v: _normalize(v, ops))
+
+
+def _alternative_text_normalize_vectorized(series: pd.Series, ops: str) -> pd.Series:
+    """Alternativa vettoriale via chain `pd.Series.str.*`. strip_accents
+    resta Python-per-elemento (pandas non espone NFKD batch); per
+    `ops='full'` rimane un collo di bottiglia, per `ops='lower'` e'
+    assente."""
+    import unicodedata
+
+    s = series
+    if ops in ("trim", "full"):
+        s = s.str.strip()
+    if ops == "lower" or ops == "full":
+        s = s.str.lower()
+    elif ops == "upper":
+        s = s.str.upper()
+    elif ops == "title":
+        s = s.str.title()
+    if ops in ("strip_accents", "full"):
+        # Fallback apply (NFKD non vectorial in pandas). Resta collo Python
+        # per ops='full' ma dato che tutto il resto e' vectorizzato,
+        # l'effetto sull'alternative e' comunque un saldo positivo.
+        def _sa(t):
+            if pd.isna(t) or not isinstance(t, str):
+                return t
+            nfkd = unicodedata.normalize("NFKD", t)
+            return "".join(c for c in nfkd if not unicodedata.combining(c))
+        s = s.apply(_sa)
+    if ops in ("strip_double_spaces", "full"):
+        s = s.str.replace(r"\s+", " ", regex=True)
+    return s
+
+
+def _build_text_df(n: int, nan_fraction: float = 0.05, seed: int = 42) -> pd.DataFrame:
+    """Costruisce DataFrame con colonna `text` di stringhe miste per
+    esercitare tutti i sotto-passaggi di `normalize_text`:
+    - leading/trailing whitespace (trim)
+    - mix maiuscole/minuscole (lower/upper/title)
+    - accenti italiani/francesi/tedeschi (strip_accents)
+    - doppi/tripli spazi interni (strip_double_spaces)
+    - ~5% NaN per esercitare early-return"""
+    rng = np.random.default_rng(seed)
+
+    samples = [
+        "  Città  di  Roma  ",
+        "  MILANO Centrale  ",
+        "Présence française",
+        "  Größe   Ergänzung  ",
+        "Napoli   Piazza   Garibaldi",
+        " àéìòù  MIXED",
+        "UPPER case MIXED",
+        "double    spaces  here",
+        "Torino  Porta  Nuova  ",
+        "città studî Università",
+    ]
+    n_nan = int(n * nan_fraction)
+    n_present = n - n_nan
+
+    indices = rng.integers(0, len(samples), size=n_present)
+    present = [samples[i] for i in indices]
+
+    # Intersperse NaN in posizioni random
+    nan_positions = set(rng.choice(n, size=n_nan, replace=False))
+    full_col = []
+    present_iter = iter(present)
+    for i in range(n):
+        if i in nan_positions:
+            full_col.append(None)
+        else:
+            full_col.append(next(present_iter))
+
+    return pd.DataFrame({"id": range(n), "text": full_col})
+
+
+def _assert_text_normalize_equivalence(baseline: pd.Series, alt: pd.Series):
+    """Equivalenza cell-by-cell. Preserva semantica: NaN per NaN,
+    stringa per stringa (mai re-encoding silenzioso)."""
+    assert len(baseline) == len(alt), "lunghezze divergono"
+    for i in range(len(baseline)):
+        b = baseline.iloc[i]
+        a = alt.iloc[i]
+        # NaN handling: entrambi devono essere NaN (o entrambi None, o
+        # entrambi la stessa stringa)
+        b_is_null = b is None or (isinstance(b, float) and pd.isna(b))
+        a_is_null = a is None or (isinstance(a, float) and pd.isna(a))
+        if b_is_null and a_is_null:
+            continue
+        assert not b_is_null and not a_is_null, (
+            f"null mismatch idx={i}: baseline={b!r} alt={a!r}"
+        )
+        assert b == a, f"valore divergente idx={i}: baseline={b!r} alt={a!r}"
+
+
+@pytest.mark.parametrize("ops", ["lower", "full"])
+def test_bench_text_normalize_speedup(ops):
+    """Candidato C: normalize_text apply-loop.
+
+    Due varianti:
+      - ops='lower'  → upper-bound speedup (catena str.* pura, zero
+                       fallback Python)
+      - ops='full'   → lower-bound realistico (include strip_accents
+                       che resta apply Python anche nell'alternative)
+
+    Dataset: 100k stringhe miste con mix case, accenti, doppi spazi,
+    NaN 5%."""
+    df = _build_text_df(n=100_000, nan_fraction=0.05)
+    col = df["text"]
+
+    # Equivalence check (outside timing)
+    baseline_result = _baseline_text_normalize(col, ops)
+    alt_result = _alternative_text_normalize_vectorized(col, ops)
+    _assert_text_normalize_equivalence(baseline_result, alt_result)
+
+    t_baseline = _median_runtime(
+        _baseline_text_normalize, (col, ops), warmup=1, rounds=3
+    )
+    t_alt = _median_runtime(
+        _alternative_text_normalize_vectorized, (col, ops), warmup=1, rounds=3
+    )
+    speedup = t_baseline / t_alt if t_alt > 0 else float("inf")
+
+    print(
+        f"\n[bench C text_normalize n=100k ops={ops!r:8}] "
+        f"baseline={t_baseline*1000:8.2f}ms  "
+        f"alt={t_alt*1000:8.2f}ms  "
+        f"speedup={speedup:5.2f}x"
+    )
+
+    assert t_alt > 0, "alt path misurato 0 — misura inattendibile"
+    assert speedup > 0.5, (
+        f"speedup anomalo ({speedup:.2f}x) per ops={ops!r} — revisionare"
     )
