@@ -529,3 +529,58 @@ def test_pg_success_does_not_emit_bulk_success_log(bulk_caplog):
     cursor.copy_expert.assert_called_once()  # happy path PG
     assert _bulk_success_records(bulk_caplog) == []
     assert _bulk_fallback_records(bulk_caplog) == []
+
+
+# =============================================================================
+# Correlation IDs nei log (Batch 3.4) — chiude il gap di stratificazione
+# =============================================================================
+#
+# Ogni record bulk.* porta request_id + user_id letti da ContextVar
+# (app.utils.logger). In Celery worker user_id e' stringa vuota (non
+# propagato), request_id e' il task_id via celery_app.py:146-157.
+# Stratificazione per user in §9.2 si ottiene via join offline su
+# log_runs.run_id = bulk_log.request_id.
+
+
+@pytest.fixture
+def with_correlation_ids():
+    """Setta request_id + user_id nei ContextVar e fa reset a fine test."""
+    from app.utils.logger import set_request_id, set_user_id
+    set_request_id("req-3dot4-test")
+    set_user_id("user-3dot4-test")
+    try:
+        yield ("req-3dot4-test", "user-3dot4-test")
+    finally:
+        set_request_id("")
+        set_user_id("")
+
+
+def test_bulk_fallback_includes_correlation_ids(bulk_caplog, with_correlation_ids):
+    """Un fallback tipico (PG geometry, scelto come caso minimo) deve
+    portare request_id e user_id letti dai ContextVar."""
+    expected_req, expected_user = with_correlation_ids
+    sa_conn, _ = _mock_sa_conn()
+    df = pd.DataFrame({"id": [1], "geom": ["POINT(0 0)"]})
+    cols = [_col("id"), _col("geom", is_geometry=True)]
+    with pytest.raises(BulkInsertNotSupportedError):
+        bulk_copy_postgres(sa_conn, "public", "t", cols, df)
+    recs = _bulk_fallback_records(bulk_caplog)
+    assert len(recs) == 1
+    r = recs[0]
+    assert r.request_id == expected_req
+    assert r.user_id == expected_user
+
+
+def test_bulk_success_mysql_includes_correlation_ids(bulk_caplog, with_correlation_ids):
+    """Happy path MySQL deve portare request_id e user_id. Questo abilita
+    il join post-deploy su log_runs per ottenere tenant/user stratification."""
+    expected_req, expected_user = with_correlation_ids
+    sa_conn, _ = _mock_sa_conn()
+    df = pd.DataFrame({"id": [1, 2], "name": ["a", "b"]})
+    cols = [_col("id"), _col("name")]
+    bulk_load_mysql(sa_conn, "mydb", "users", cols, df)
+    recs = _bulk_success_records(bulk_caplog)
+    assert len(recs) == 1
+    r = recs[0]
+    assert r.request_id == expected_req
+    assert r.user_id == expected_user

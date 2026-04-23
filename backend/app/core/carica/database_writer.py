@@ -29,7 +29,8 @@ Uso:
     result = writer.write(df)
 """
 
-from app.utils.logger import get_logger
+from app.utils.logger import get_logger, get_request_id, get_user_id
+import logging
 import math
 import time
 from datetime import datetime, timezone
@@ -57,6 +58,10 @@ from app.config import settings
 
 
 logger = get_logger("app.core.carica.writer")
+# Telemetry emits (event=stage_swap.dispatched, ecc.) vanno via stdlib
+# logger con stesso name: i campi `extra` diventano attributi del LogRecord,
+# cosa che StructuredLogger (wrapper) non supporta di default.
+_telemetry_logger = logging.getLogger("app.core.carica.writer")
 
 
 class DatabaseWriter(DestinationWriter):
@@ -833,6 +838,23 @@ class DatabaseWriter(DestinationWriter):
         stg_table = f"{src_table}__stg"
         backup_table = f"{src_table}__bak"
 
+        _telemetry_logger.info(
+            f"Stage+swap dispatch: dialect={self.db_type} "
+            f"table={schema + '.' if schema else ''}{src_table} "
+            f"rows={len(df)}",
+            extra={
+                "event": "stage_swap.dispatched",
+                "dialect": self.db_type,
+                "path": "stage_swap",
+                "schema": schema,
+                "table": src_table,
+                "rows": len(df),
+                "threshold": int(settings.CARICA_STAGE_SWAP_THRESHOLD or 0),
+                "request_id": get_request_id(),
+                "user_id": get_user_id(),
+            },
+        )
+
         drop_stg_sql = self.ddl.generate_drop_if_exists(schema, stg_table)
         drop_bak_sql = self.ddl.generate_drop_if_exists(schema, backup_table)
         create_like_sql = self.ddl.generate_create_like(
@@ -1484,6 +1506,22 @@ class DatabaseWriter(DestinationWriter):
         interim = f"{src}__RDF"
         src_qualified = f'"{schema}"."{src}"'
         interim_qualified = f'"{schema}"."{interim}"'
+
+        _telemetry_logger.info(
+            f"Stage+swap dispatch: dialect={self.db_type} path=oracle_redef "
+            f"table={schema}.{src} rows={len(df)}",
+            extra={
+                "event": "stage_swap.dispatched",
+                "dialect": self.db_type,
+                "path": "oracle_redef",
+                "schema": schema,
+                "table": src,
+                "rows": len(df),
+                "threshold": int(settings.CARICA_STAGE_SWAP_THRESHOLD or 0),
+                "request_id": get_request_id(),
+                "user_id": get_user_id(),
+            },
+        )
 
         # Insert SQL targeting the interim table (columns match src)
         insert_sql, _ = self.ddl.generate_insert(schema, interim, columns)

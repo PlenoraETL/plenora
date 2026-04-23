@@ -13,6 +13,7 @@ Verifica che:
 
 from __future__ import annotations
 
+import logging
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
@@ -344,3 +345,104 @@ def test_stage_swap_callsite_propagates_stg_table_to_bulk():
         f"Trovati: {callsites_with_target} (totale callsite: "
         f"{callsites_with_target + callsites_without_target})"
     )
+
+
+# =============================================================================
+# Stage+swap dispatch telemetry (Batch 3.4) — chiude il gap di visibilita'
+# sulle invocazioni TRUNCATE_INSERT grandi per dialect
+# =============================================================================
+#
+# Emit 1 log INFO all'ingresso di _truncate_insert_stage_swap e di
+# _truncate_insert_oracle_redef con event="stage_swap.dispatched", path,
+# dialect, threshold. Abilita la decisione di rimozione MySQL LOAD DATA:
+# se stage+swap mysql non appare nel periodo di osservazione, la
+# rimozione del bulk_load_mysql non impatta TRUNCATE_INSERT grandi.
+
+
+@pytest.fixture
+def writer_caplog(caplog):
+    """Caplog per il logger di database_writer (propagate=False via 'app')."""
+    target = logging.getLogger("app.core.carica.writer")
+    target.addHandler(caplog.handler)
+    orig_level = target.level
+    target.setLevel(logging.DEBUG)
+    try:
+        yield caplog
+    finally:
+        target.removeHandler(caplog.handler)
+        target.setLevel(orig_level)
+
+
+def _stage_swap_records(caplog):
+    return [
+        r for r in caplog.records
+        if getattr(r, "event", None) == "stage_swap.dispatched"
+    ]
+
+
+def test_stage_swap_dispatched_emits_for_mysql(writer_caplog):
+    """_truncate_insert_stage_swap emette stage_swap.dispatched con
+    dialect=mysql e path=stage_swap. Forziamo early exit via raise sulla
+    prima chiamata DDL, dopo il log gia' emesso."""
+    from app.core.carica.database_writer import DatabaseWriter
+    writer = DatabaseWriter.__new__(DatabaseWriter)
+    writer.db_type = "mysql"
+    config = MagicMock()
+    config.schema_name = "mydb"
+    config.table_name = "users"
+    writer.config = config
+    # ddl: forza raise subito dopo il log di dispatch
+    ddl = MagicMock()
+    ddl.generate_drop_if_exists.side_effect = RuntimeError("halt after log")
+    writer.ddl = ddl
+
+    df_ = pd.DataFrame({"id": [1, 2, 3]})
+    cols_ = [_col("id")]
+    result = MagicMock()
+
+    with pytest.raises(RuntimeError, match="halt after log"):
+        writer._truncate_insert_stage_swap(df_, cols_, result)
+
+    recs = _stage_swap_records(writer_caplog)
+    assert len(recs) == 1
+    r = recs[0]
+    assert r.levelname == "INFO"
+    assert r.dialect == "mysql"
+    assert r.path == "stage_swap"
+    assert r.schema == "mydb"
+    assert r.table == "users"
+    assert r.rows == 3
+
+
+def test_oracle_redef_dispatched_emits_for_oracle(writer_caplog):
+    """_truncate_insert_oracle_redef emette stage_swap.dispatched con
+    dialect=oracle e path=oracle_redef."""
+    from app.core.carica.database_writer import DatabaseWriter
+    writer = DatabaseWriter.__new__(DatabaseWriter)
+    writer.db_type = "oracle"
+    config = MagicMock()
+    config.schema_name = "hr"
+    config.table_name = "employees"
+    writer.config = config
+    # ddl: forza raise subito dopo il log di dispatch
+    ddl = MagicMock()
+    ddl.generate_insert.side_effect = RuntimeError("halt after log")
+    writer.ddl = ddl
+
+    df_ = pd.DataFrame({"id": [1, 2]})
+    cols_ = [_col("id")]
+    result = MagicMock()
+
+    with pytest.raises(RuntimeError, match="halt after log"):
+        writer._truncate_insert_oracle_redef(df_, cols_, result)
+
+    recs = _stage_swap_records(writer_caplog)
+    assert len(recs) == 1
+    r = recs[0]
+    assert r.levelname == "INFO"
+    assert r.dialect == "oracle"
+    assert r.path == "oracle_redef"
+    # schema e table sono uppercased da _truncate_insert_oracle_redef
+    assert r.schema == "HR"
+    assert r.table == "EMPLOYEES"
+    assert r.rows == 2

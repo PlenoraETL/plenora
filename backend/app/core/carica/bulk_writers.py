@@ -40,6 +40,8 @@ from typing import List, TYPE_CHECKING
 
 import pandas as pd
 
+from app.utils.logger import get_request_id, get_user_id
+
 if TYPE_CHECKING:
     from app.core.carica.models import ColumnMapping
 
@@ -141,6 +143,8 @@ def bulk_copy_postgres(
                 "table": table,
                 "rows": len(df),
                 "error_type": None,
+                "request_id": get_request_id(),
+                "user_id": get_user_id(),
             },
         )
         raise BulkInsertNotSupportedError(
@@ -188,6 +192,8 @@ def bulk_copy_postgres(
                 "table": table,
                 "rows": n_rows,
                 "error_type": None,
+                "request_id": get_request_id(),
+                "user_id": get_user_id(),
             },
         )
         raise BulkInsertNotSupportedError(
@@ -218,6 +224,8 @@ def bulk_copy_postgres(
                 "table": table,
                 "rows": n_rows,
                 "error_type": type(e).__name__,
+                "request_id": get_request_id(),
+                "user_id": get_user_id(),
             },
         )
         raise BulkInsertNotSupportedError(
@@ -238,6 +246,8 @@ def bulk_copy_postgres(
                 "table": table,
                 "rows": n_rows,
                 "error_type": type(e).__name__,
+                "request_id": get_request_id(),
+                "user_id": get_user_id(),
             },
         )
         raise BulkInsertNotSupportedError(
@@ -261,6 +271,8 @@ def bulk_copy_postgres(
                 "table": table,
                 "rows": n_rows,
                 "error_type": type(e).__name__,
+                "request_id": get_request_id(),
+                "user_id": get_user_id(),
             },
         )
         raise BulkInsertNotSupportedError(msg) from e
@@ -317,6 +329,8 @@ def bulk_load_mysql(
                 "table": table,
                 "rows": len(df),
                 "error_type": None,
+                "request_id": get_request_id(),
+                "user_id": get_user_id(),
             },
         )
         raise BulkInsertNotSupportedError(
@@ -383,6 +397,8 @@ def bulk_load_mysql(
                     "table": table,
                     "rows": n_rows,
                     "error_type": type(e).__name__,
+                    "request_id": get_request_id(),
+                    "user_id": get_user_id(),
                 },
             )
             raise BulkInsertNotSupportedError(
@@ -409,6 +425,8 @@ def bulk_load_mysql(
                         "table": table,
                         "rows": n_rows,
                         "error_type": type(e).__name__,
+                        "request_id": get_request_id(),
+                        "user_id": get_user_id(),
                     },
                 )
                 raise BulkInsertNotSupportedError(
@@ -425,6 +443,8 @@ def bulk_load_mysql(
                     "table": table,
                     "rows": n_rows,
                     "error_type": type(e).__name__,
+                    "request_id": get_request_id(),
+                    "user_id": get_user_id(),
                 },
             )
             raise BulkInsertNotSupportedError(str(e)) from e
@@ -444,6 +464,8 @@ def bulk_load_mysql(
                 "table": table,
                 "rows": n_rows,
                 "protocol": "load_data_local_infile",
+                "request_id": get_request_id(),
+                "user_id": get_user_id(),
             },
         )
         return n_rows
@@ -499,6 +521,8 @@ def bulk_insert(
             "table": table,
             "rows": len(df),
             "error_type": None,
+            "request_id": get_request_id(),
+            "user_id": get_user_id(),
         },
     )
     raise BulkInsertNotSupportedError(
