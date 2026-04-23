@@ -70,13 +70,20 @@ def validate_external_url(url: str) -> None:
     IP privato/loopback/link-local/riservato.
 
     Override per test funzionali: se la env var
-    `URBY_ALLOW_LOOPBACK_OUTBOUND=1` e' settata, gli IP loopback
-    (`127.0.0.0/8`, `::1`) sono permessi. Gli IP privati di altre
-    reti (10.x, 172.16.x, 192.168.x), link-local e reserved restano
-    bloccati. Pensata per i test funzionali che lanciano un fake
-    HTTP server su `127.0.0.1`. NON usare in produzione: settarla
-    nella shell di un worker prod abilita SSRF verso servizi
-    bind-loopback (Redis, Postgres, ecc.).
+    `PLENORA_ALLOW_LOOPBACK_OUTBOUND=1` (canonical) o
+    `URBY_ALLOW_LOOPBACK_OUTBOUND=1` (alias retro-compat, deprecato)
+    e' settata, gli IP loopback (`127.0.0.0/8`, `::1`) sono
+    permessi. Gli IP privati di altre reti (10.x, 172.16.x,
+    192.168.x), link-local e reserved restano bloccati. Pensata per
+    i test funzionali che lanciano un fake HTTP server su
+    `127.0.0.1`.
+
+    Guard: in ambienti hardened (`ENVIRONMENT in {production, prod,
+    staging, stage}`, simmetrico a `config.py _DOTENV_DISABLED_ENVS`
+    e `crypto.py` guard) il flag e' IGNORATO indipendentemente dal
+    valore. Chiude S6 del runtime_config_audit.md: anche se il flag
+    finisse per errore in un worker prod/staging, la validazione
+    continua a bloccare il loopback.
     """
     from urllib.parse import urlparse
     import ipaddress
@@ -90,7 +97,17 @@ def validate_external_url(url: str) -> None:
     if not host:
         raise ValueError("URL non valido: hostname mancante")
 
-    allow_loopback = os.environ.get("URBY_ALLOW_LOOPBACK_OUTBOUND", "").strip() == "1"
+    # Guard: in ambienti hardened il flag e' disabilitato by design
+    # (simmetrico a config.py:26 _DOTENV_DISABLED_ENVS e crypto.py guard).
+    _env = os.environ.get("ENVIRONMENT", os.environ.get("ENV", "development")).lower()
+    if _env in ("production", "prod", "staging", "stage"):
+        allow_loopback = False
+    else:
+        # Canonical PLENORA_*, alias retro-compat URBY_* (deprecato).
+        allow_loopback = (
+            os.environ.get("PLENORA_ALLOW_LOOPBACK_OUTBOUND", "").strip() == "1"
+            or os.environ.get("URBY_ALLOW_LOOPBACK_OUTBOUND", "").strip() == "1"
+        )
 
     try:
         _, _, addr_list = socket.gethostbyname_ex(host)

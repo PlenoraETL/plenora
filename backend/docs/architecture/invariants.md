@@ -50,7 +50,7 @@ Per ogni operazione fondamentale dichiariamo **il principio**, non l'implementaz
 
 - **Principio**: l'entry point canonico e' `app.config.settings` (`backend/app/config.py`, classe `Settings` con singleton `settings`). I valori ambientali transitano tutti da qui, con default, type coercion e validazione centralizzate.
 - **Eccezioni documentate**: alcuni moduli leggono direttamente `os.getenv` per:
-  - feature flag locali (`ENABLE_ASYNC_ENRICHMENT`, `CARICA_BULK_INSERT`, `MSSQL_FAST_EXECUTEMANY`, `URBY_ALLOW_LOOPBACK_OUTBOUND`) — il flag vive vicino al codice che lo consuma per ridurre indirezione; deve comunque comparire nella tabella §3
+  - feature flag locali (`ENABLE_ASYNC_ENRICHMENT`, `CARICA_BULK_INSERT`, `MSSQL_FAST_EXECUTEMANY`, `PLENORA_ALLOW_LOOPBACK_OUTBOUND`) — il flag vive vicino al codice che lo consuma per ridurre indirezione; deve comunque comparire nella tabella §3
   - crypto key sourcing (`app/shared/crypto.py:_get_raw_key`) — legge solo `PLENORA_ENCRYPTION_KEY` (D4 chiuso 2026-04-23, D5 chiuso 2026-04-20). Documentato nella docstring del modulo
   - tuning numerici locali (`ENRICHMENT_POOL_SIZE`, `LOGIN_MAX_ATTEMPTS`, thresholds `DB_SCHEMA_*`) — valori numerici stretti a un solo chiamante
 - **Vincolo**: qualsiasi nuovo `os.getenv` in business code (`core/*`) richiede giustificazione nel PR e aggiornamento di §3 se e' un flag, o promozione a `settings` se e' config.
@@ -140,7 +140,7 @@ Ogni flag attivo nel codice deve stare qui con owner, data di introduzione e rim
 | `ENVIRONMENT` / `ENV` | `app/main.py`, `app/shared/crypto.py`, `app/core/auth/auth.py` | 2026-04-10 | Kill-switch prod/dev: disabilita `/docs`, forza fail-fast crypto key, attiva policy JWT strette | Attivo, operazionale | Mai (infrastrutturale) |
 | `CARICA_BULK_INSERT` | `app/core/carica/bulk_writers.py` | 2026-04-10 | Kill-switch operazionale per bulk DB write (`auto`/`on`/`off`) | Attivo, default `auto` | Mai (safety valve prod) |
 | `MSSQL_FAST_EXECUTEMANY` | `app/db/query_executor.py` | 2026-04-10 | Opt-out driver tuning (default `on`, `off` per precisione DATETIME2) | Attivo, default `on` | Mai (dialect-specific) |
-| `URBY_ALLOW_LOOPBACK_OUTBOUND` | `app/shared/api_utils.py` | 2026-04-10 | Test-only: consente loopback in outbound validation | Attivo solo in test harness | Mai (test infra) |
+| `PLENORA_ALLOW_LOOPBACK_OUTBOUND` (canonical) + `URBY_ALLOW_LOOPBACK_OUTBOUND` (alias retro-compat, deprecato) | `app/shared/api_utils.py` | 2026-04-10, rinominato 2026-04-23 (P1.5), guard `ENVIRONMENT` aggiunto 2026-04-23 (P2.4/S6) | Test-only: consente loopback in outbound validation. IGNORATO by-design se `ENVIRONMENT in {production, prod, staging, stage}` | Attivo solo in test harness | Mai (test infra) |
 | `PLENORA_DISABLE_DEFAULT_KEY` | `app/shared/crypto.py` | 2026-04-10 | Dev opt-in per replicare fail-fast di prod | Attivo | Mai (dev ergonomy) |
 | `ENABLE_ASYNC_ENRICHMENT` | `app/core/arricchisci/enrichment_service.py` | 2026-04-10 (security audit) | Routing tra `_execute_parallel` (sync) e `_execute_parallel_async` (async) | Kill-switch operazionale post-D1. Verifica prod 2026-04-20: `true` in `/home/ubuntu/plenora-etl/backend/.env`. Parity rate-limiter + error granularity sanata (D1); divergenze residue accettate e documentate (early stop, progress) | Rimozione non prevista (safety valve analogo a `CARICA_BULK_INSERT`) |
 

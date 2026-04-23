@@ -42,7 +42,9 @@ def functional_env(tmp_path) -> dict:
     # server su 127.0.0.1 e poi fanno chiamare il backend reale verso
     # quell'URL. Senza questa opt-in, `validate_external_url` blocca
     # il loopback come SSRF (corretto in prod, falso positivo qui).
-    env["URBY_ALLOW_LOOPBACK_OUTBOUND"] = "1"
+    # Canonical PLENORA_* (alias retro-compat URBY_* lo stesso valore,
+    # rinominato 2026-04-23 / P1.5).
+    env["PLENORA_ALLOW_LOOPBACK_OUTBOUND"] = "1"
     return env
 
 
