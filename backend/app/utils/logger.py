@@ -270,6 +270,39 @@ MODULE_MAP = {
 
 _configured_loggers: set[str] = set()
 _db_handler: Optional["SQLiteLogHandler"] = None
+
+# Batch 3.10 — Aggregator pre-condizione §9.2/§9.3.
+# Insieme chiuso di logger che emettono telemetria strutturata bulk
+# (bulk.fallback, bulk.success, stage_swap.dispatched). Solo i record
+# INFO di questi logger bypassano il filtro WARNING del PostgresLogHandler
+# default (via _bulk_telemetry_filter + _bulk_telemetry_db_handler).
+# I record WARNING gia' passano via handler default, quindi il filtro
+# INFO-only evita duplicazione.
+_BULK_TELEMETRY_LOGGERS: frozenset[str] = frozenset({
+    "app.core.carica.bulk_writers",
+    "app.core.carica.writer",
+})
+
+# Whitelist di chiavi `extra` strutturate emesse dai batch 3.1/3.2/3.4/3.5.
+# PostgresLogHandler.emit() le serializza nella colonna `details` JSONB se
+# presenti come attributi del LogRecord, cosi' da renderle query-abili via
+# SQL (es. details->>'event' = 'bulk.success'). Qualunque chiave non qui
+# elencata viene ignorata — whitelist esplicita per zero-ambiguita'.
+_BULK_TELEMETRY_EXTRA_WHITELIST: tuple[str, ...] = (
+    "event",       # 3.1/3.2/3.4/3.5 — label primaria di aggregazione
+    "reason",      # 3.1 — classificazione fallback
+    "dialect",     # 3.1/3.2/3.4/3.5 — postgres|mysql|mariadb|...
+    "schema",      # 3.1/3.2/3.4/3.5
+    "table",       # 3.1/3.2/3.4/3.5
+    "rows",        # 3.1/3.2/3.4/3.5
+    "error_type",  # 3.1
+    "protocol",    # 3.2/3.5 — copy_from_stdin|load_data_local_infile
+    "path",        # 3.4 — stage_swap|oracle_redef
+    "threshold",   # 3.4 — CARICA_STAGE_SWAP_THRESHOLD snapshot
+)
+
+_bulk_telemetry_db_handler: Optional["PostgresLogHandler"] = None
+_bulk_telemetry_installed: bool = False
 _db_lock = Lock()
 
 
@@ -328,6 +361,21 @@ class PostgresLogHandler(logging.Handler):
                     details_raw["request_id"] = req_id
                 if uid and "user_id" not in details_raw:
                     details_raw["user_id"] = uid
+            # Batch 3.10: serializzazione whitelist dei campi `extra`
+            # strutturati emessi dai batch 3.1/3.2/3.4/3.5. Se il record
+            # porta almeno uno di questi attributi, viene aggiunto a
+            # `details` JSONB (query-abile via `details->>'event'` in
+            # SQL). Whitelist esplicita — zero chiavi ignote serializzate.
+            for _key in _BULK_TELEMETRY_EXTRA_WHITELIST:
+                _val = getattr(record, _key, None)
+                if _val is None:
+                    continue
+                if details_raw is None:
+                    details_raw = {}
+                elif not isinstance(details_raw, dict):
+                    details_raw = {"value": details_raw}
+                if _key not in details_raw:
+                    details_raw[_key] = _val
             details = json.dumps(details_raw, ensure_ascii=False, default=str) if details_raw else None
             if details:
                 details = _sanitize_log_text(details)
@@ -421,6 +469,51 @@ def _get_db_handler() -> PostgresLogHandler:
     return _db_handler
 
 
+def _bulk_telemetry_filter(record: logging.LogRecord) -> bool:
+    """Batch 3.10 — filter per `_bulk_telemetry_db_handler`.
+
+    Accetta SOLO record INFO provenienti dai logger in
+    `_BULK_TELEMETRY_LOGGERS`. I record WARNING (es. `bulk.fallback`
+    reason=copy_error/load_data_error/server_disable) passano gia' via
+    il PostgresLogHandler default (level WARNING) e il filtro INFO-only
+    qui previene duplicazione INSERT in `logs`."""
+    return (
+        record.name in _BULK_TELEMETRY_LOGGERS
+        and record.levelno == logging.INFO
+    )
+
+
+def _get_bulk_telemetry_db_handler() -> PostgresLogHandler:
+    """Handler PostgresLogHandler dedicato alla telemetria bulk INFO.
+
+    Secondo handler attaccato al logger `app` (via
+    `_install_bulk_telemetry_handler`). Livello INFO + filter che
+    restringe ai 2 logger bulk. Convive con `_get_db_handler()` senza
+    duplicare perche' il filter accetta solo `levelno == INFO` (i
+    WARNING stessi di bulk transitano via handler default)."""
+    global _bulk_telemetry_db_handler
+    if _bulk_telemetry_db_handler is None:
+        h = PostgresLogHandler()
+        h.setLevel(logging.INFO)
+        h.addFilter(_bulk_telemetry_filter)
+        _bulk_telemetry_db_handler = h
+    return _bulk_telemetry_db_handler
+
+
+def _install_bulk_telemetry_handler() -> None:
+    """Installa idempotentemente il bulk telemetry handler sul logger
+    `app` (parent di `app.core.carica.bulk_writers` e
+    `app.core.carica.writer`). I record propagano fino ad `app`, dove
+    gli handler — default WARNING + bulk-INFO con filter — decidono
+    autonomamente cosa persistere."""
+    global _bulk_telemetry_installed
+    if _bulk_telemetry_installed:
+        return
+    app_logger = logging.getLogger("app")
+    app_logger.addHandler(_get_bulk_telemetry_db_handler())
+    _bulk_telemetry_installed = True
+
+
 # =============================================================================
 # STRUCTURED LOGGER
 # =============================================================================
@@ -497,6 +590,11 @@ def get_logger(name: str, level: int = None) -> StructuredLogger:
     sotto LOG_LEVEL_CONSOLE ma sopra LOG_LEVEL_DB arrivano comunque al DB.
     """
     logger = logging.getLogger(name)
+
+    # Batch 3.10: install idempotente del bulk telemetry handler (INFO
+    # per i 2 logger `_BULK_TELEMETRY_LOGGERS`, con filter). Chiamato
+    # alla prima invocazione di `get_logger` da qualunque modulo.
+    _install_bulk_telemetry_handler()
 
     if name not in _configured_loggers:
         # Lazy import per evitare cicli durante il bootstrap di config.
