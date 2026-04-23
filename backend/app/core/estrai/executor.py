@@ -35,6 +35,7 @@ from app.models import CanvasState, Node
 from app.utils.logger import get_logger, append_step
 from app.utils.dataframe import load_dataframe_from_file, sanitize_for_json
 from app.utils.geo import extract_srid_from_column_type
+from app.shared.crypto import CredentialUnavailableError
 
 try:
     from sqlalchemy.exc import DataError as SqlAlchemyDataError
@@ -177,6 +178,15 @@ class EstraiExecutor:
 
         try:
             connection, conn_type = self._resolve_connection(metadata.default_connection_id)
+        except CredentialUnavailableError as e:
+            # Policy uniforme con /test endpoints (fd35cf4): credenziale
+            # cifrata non disponibile o non decriptabile → user_error invece
+            # di [CRASH] worker.
+            return {
+                "success": False,
+                "message": f"credenziale non disponibile o non decriptabile: {e}",
+                "user_error": True,
+            }
         except ValueError as e:
             return {"success": False, "message": str(e)}
 
@@ -314,6 +324,15 @@ class EstraiExecutor:
 
         try:
             connection, conn_type = self._resolve_connection(metadata.default_connection_id)
+        except CredentialUnavailableError as e:
+            # Policy uniforme con /test endpoints (fd35cf4): credenziale
+            # cifrata non disponibile o non decriptabile → user_error invece
+            # di [CRASH] worker.
+            return {
+                "success": False,
+                "message": f"credenziale non disponibile o non decriptabile: {e}",
+                "user_error": True,
+            }
         except ValueError as e:
             return {"success": False, "message": str(e)}
 
