@@ -193,7 +193,7 @@ def get_project(project_id: str, current_user: CurrentUser = Depends(require_not
     }
 
 
-@router.delete("/{project_id}")
+@router.delete("/{project_id}", status_code=204)
 @audit_action(action="project.delete", target_param="project_id")
 def delete_project(project_id: str, current_user: CurrentUser = Depends(require_project_owner)):
     """Elimina un progetto. Solo owner o admin/superadmin.
@@ -255,7 +255,7 @@ def delete_project(project_id: str, current_user: CurrentUser = Depends(require_
                 "project_preserved": True,
             },
         )
-    return {"status": "deleted", "project_id": project_id}
+    # F2-B2 (2026-04-24): DELETE risponde 204 No Content, body vuoto.
 
 
 class CanvasWithPlugins(BaseModel):

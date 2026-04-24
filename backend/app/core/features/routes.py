@@ -173,7 +173,7 @@ async def update_connection(connection_id: str, data: ArcGISUpdate, current_user
     return _mask_secrets(connection)
 
 
-@router.delete("/connections/{connection_id}")
+@router.delete("/connections/{connection_id}", status_code=204)
 async def delete_connection(connection_id: str, current_user: CurrentUser = Depends(require_admin)):
     """Elimina una connessione ArcGIS. Solo admin/superadmin del gruppo,
     e solo se non creata da un superadmin (hierarchical ownership)."""
@@ -181,7 +181,7 @@ async def delete_connection(connection_id: str, current_user: CurrentUser = Depe
     deleted = get_service().delete_connection(connection_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Connessione non trovata")
-    return {"success": True, "message": "Connessione eliminata"}
+    # F2-B2 (2026-04-24): DELETE risponde 204 No Content, body vuoto.
 
 
 @router.post("/connections/{connection_id}/test", response_model=dict)

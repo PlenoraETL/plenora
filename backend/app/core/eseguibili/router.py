@@ -170,7 +170,7 @@ def update_eseguibile(
 # DELETE (solo admin)
 # ──────────────────────────────────────────────────────────────
 
-@router.delete("/{eseguibile_id}")
+@router.delete("/{eseguibile_id}", status_code=204)
 def delete_eseguibile(
     eseguibile_id: str,
     current_user: CurrentUser = Depends(require_admin)
@@ -178,8 +178,11 @@ def delete_eseguibile(
     record = eseguibili_db.get_eseguibile(eseguibile_id)
     _check_group_access(record, current_user)
 
-    ok = eseguibili_db.delete_eseguibile(eseguibile_id)
-    return {"success": ok}
+    eseguibili_db.delete_eseguibile(eseguibile_id)
+    # F2-B2 (2026-04-24): DELETE risponde 204 No Content, body vuoto.
+    # NB: il ritorno `ok` boolean di delete_eseguibile era gia' ignorato
+    # dal FE pre-fix. Debito semantico `ok=False -> 404` esplicito e'
+    # scope separato, NON toccato qui.
 
 
 # ──────────────────────────────────────────────────────────────
