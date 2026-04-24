@@ -50,11 +50,7 @@ from sqlalchemy.engine import Engine
 logger = logging.getLogger(__name__)
 
 # Result store — salva blob nel DB e usa temp files
-try:
-    from app.utils.result_store import get_temp_output_path, save_result_blob
-    _USE_RESULT_STORE = True
-except ImportError:
-    _USE_RESULT_STORE = False
+from app.utils.result_store import get_temp_output_path, save_result_blob
 
 
 # =============================================================================

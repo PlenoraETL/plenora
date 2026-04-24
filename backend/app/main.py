@@ -67,8 +67,7 @@ logger = get_logger(__name__)
 
 # In produzione (ENVIRONMENT=production) disabilita /docs e /openapi.json
 # per non esporre lo schema API pubblicamente. In sviluppo restano attivi.
-import os as _os
-_is_prod = _os.getenv("ENVIRONMENT", _os.getenv("ENV", "development")).lower() in ("production", "prod")
+_is_prod = os.getenv("ENVIRONMENT", os.getenv("ENV", "development")).lower() in ("production", "prod")
 
 from contextlib import asynccontextmanager
 
