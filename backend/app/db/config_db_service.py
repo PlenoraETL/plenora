@@ -729,54 +729,16 @@ def delete_api_connection(api_id: str) -> bool:
 # SCHEDULES
 # ============================================================
 
-def get_schedule(schedule_id: str) -> Optional[Dict]:
-    row = fetchone("SELECT * FROM schedules WHERE id = ?", (schedule_id,))
-    if row and row.get("config"):
-        row["config"] = json.loads(row["config"])
-    return row
-
-
-def list_schedules(group_id: str) -> List[Dict]:
-    rows = fetchall(
-        "SELECT * FROM schedules WHERE group_id = ? ORDER BY created_at DESC",
-        (group_id,)
-    )
-    for r in rows:
-        if r.get("config"):
-            r["config"] = json.loads(r["config"])
-    return rows
-
-
-def save_schedule(schedule_id: str, group_id: str, project_id: str, name: str,
-                  cron_expression: str, is_enabled: bool = True, config: dict = None,
-                  created_by: str = None) -> Dict:
-    from datetime import datetime, timezone
-    now = datetime.now(timezone.utc).isoformat()
-    execute(
-        "INSERT INTO schedules (id, group_id, project_id, name, cron_expression, is_enabled, config, created_at, updated_at, created_by) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT (id) DO UPDATE SET "
-        "name=EXCLUDED.name, cron_expression=EXCLUDED.cron_expression, is_enabled=EXCLUDED.is_enabled, "
-        "config=EXCLUDED.config, updated_at=EXCLUDED.updated_at",
-        (schedule_id, group_id, project_id, name, cron_expression,
-         is_enabled, json.dumps(config or {}), now, now, created_by)
-    )
-    return get_schedule(schedule_id)
-
-
-def update_schedule(schedule_id: str, **fields) -> Optional[Dict]:
-    from datetime import datetime, timezone
-    if "config" in fields and isinstance(fields["config"], dict):
-        fields["config"] = json.dumps(fields["config"])
-    if "is_enabled" in fields:
-        fields["is_enabled"] = bool(fields["is_enabled"])
-    fields["updated_at"] = datetime.now(timezone.utc).isoformat()
-    set_clause, vals = _safe_set_clause("schedules", fields)
-    execute(f"UPDATE schedules SET {set_clause} WHERE id = ?", vals + (schedule_id,))
-    return get_schedule(schedule_id)
-
-
-def delete_schedule(schedule_id: str) -> bool:
-    cur = execute("DELETE FROM schedules WHERE id = ?", (schedule_id,))
-    return cur.rowcount > 0
+# Re-export: estratto in `app/db/config/schedules.py` — scope micro Batch G #9
+# seconda riapertura, invariants §6 commit `61b5058`. Facade preservata per zero
+# call site touched (consumer: db_service.py:27 re-export + core/scheduler/* +
+# core/auth/auth.py + 7 test patch target).
+from app.db.config.schedules import (  # noqa: F401,E402
+    get_schedule,
+    list_schedules,
+    save_schedule,
+    update_schedule,
+    delete_schedule,
+)
 
 
