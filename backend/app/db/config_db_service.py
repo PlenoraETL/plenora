@@ -487,66 +487,20 @@ from app.db.config.datasources import (  # noqa: F401,E402
 # API CONNECTIONS
 # ============================================================
 
-def get_api_connection(api_id: str, group_id: str = None) -> Optional[Dict]:
-    """Recupera API connection. group_id=None → no filter (backward compat)."""
-    if group_id:
-        row = fetchone(
-            "SELECT * FROM api_connections WHERE id = ? AND group_id = ?",
-            (api_id, group_id)
-        )
-    else:
-        row = fetchone("SELECT * FROM api_connections WHERE id = ?", (api_id,))
-    if row and row.get("config"):
-        row["config"] = json.loads(row["config"])
-    return row
-
-
-def list_api_connections(group_id: str) -> List[Dict]:
-    rows = fetchall(
-        "SELECT * FROM api_connections WHERE group_id = ? ORDER BY created_at DESC",
-        (group_id,)
-    )
-    for row in rows:
-        if row.get("config"):
-            row["config"] = json.loads(row["config"])
-    return rows
-
-
-def save_api_connection(api_id: str, group_id: str, config: dict,
-                        created_by: str = None) -> Dict:
-    from datetime import datetime, timezone
-    now = datetime.now(timezone.utc).isoformat()
-    execute(
-        "INSERT INTO api_connections (id, group_id, config, created_at, updated_at, created_by) "
-        "VALUES (?,?,?,?,?,?) ON CONFLICT (id) DO UPDATE SET "
-        "config=EXCLUDED.config, updated_at=EXCLUDED.updated_at",
-        (api_id, group_id, json.dumps(config), now, now, created_by)
-    )
-    return get_api_connection(api_id)
-
-
-def create_api_connection(group_id: str, config: dict, created_by: str = None) -> Dict:
-    """Alias per save_api_connection."""
-    api_id = config.get("id")
-    if not api_id:
-        import uuid as _uuid
-        api_id = f"api_{_uuid.uuid4().hex[:12]}"
-        config["id"] = api_id
-    return save_api_connection(api_id, group_id, config, created_by=created_by)
-
-
-def update_api_connection(api_id: str, config: dict) -> None:
-    from datetime import datetime, timezone
-    now = datetime.now(timezone.utc).isoformat()
-    execute(
-        "UPDATE api_connections SET config = ?, updated_at = ? WHERE id = ?",
-        (json.dumps(config), now, api_id)
-    )
-
-
-def delete_api_connection(api_id: str) -> bool:
-    cur = execute("DELETE FROM api_connections WHERE id = ?", (api_id,))
-    return cur.rowcount > 0
+# Re-export: estratto in `app/db/config/api_connections.py` — scope micro Batch G
+# #9 sesta riapertura (hard-escalation governance), invariants §6 commit
+# `b8b3396`. Facade preservata per zero call site touched (consumer DAL
+# principale: api_connector.py in freeze god-class §6 #9 via `db_svc.` alias
+# L73, 7 chiamate DAL L193/269/324/343/381/388/390 invariate; api_connector.py
+# file NON toccato — freeze vincola massa netta, non dipendenze DAL esterne).
+from app.db.config.api_connections import (  # noqa: F401,E402
+    get_api_connection,
+    list_api_connections,
+    save_api_connection,
+    create_api_connection,
+    update_api_connection,
+    delete_api_connection,
+)
 
 
 # ============================================================
