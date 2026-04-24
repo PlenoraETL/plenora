@@ -602,7 +602,13 @@ def delete_api_connection(api_id: str, current_user: CurrentUser = Depends(requi
                     )
                     if node_api_id == api_id:
                         proj_name = proj_dict.get('name', proj_id)
-                        in_use_by.append({'project_id': proj_id, 'project_name': proj_name})
+                        # F1-B1 (2026-04-24): aggiunto project_type alla shape
+                        # cascade per uniformare con connection/datasource 409.
+                        in_use_by.append({
+                            'project_id': proj_id,
+                            'project_name': proj_name,
+                            'project_type': proj_type,
+                        })
                         break
     except Exception as e:
         check_failed = True
@@ -637,6 +643,9 @@ def delete_api_connection(api_id: str, current_user: CurrentUser = Depends(requi
                         "kind": "project",
                         "id": p["project_id"],
                         "name": p["project_name"],
+                        # F1-B1: project_type ora presente per uniformare
+                        # shape con connection/datasource 409 cascade.
+                        "project_type": p.get("project_type", ""),
                     }
                     for p in in_use_by
                 ],

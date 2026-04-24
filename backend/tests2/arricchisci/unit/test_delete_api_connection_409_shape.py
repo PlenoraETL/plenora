@@ -117,6 +117,10 @@ def test_delete_api_connection_409_shape_has_canonical_dependencies_field(client
     assert dep["kind"] == "project"
     assert dep["id"] == "proj-arr-1"
     assert dep["name"] == "Arricchisci Alpha"
+    # F1-B1 (2026-04-24): project_type presente nella shape cascade,
+    # uniformata con connection/datasource 409.
+    assert dep["project_type"] == "arricchisci"
+    assert isinstance(dep["project_type"], str)
 
     # Campi legacy NON presenti.
     assert "in_use_by" not in detail
