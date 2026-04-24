@@ -75,73 +75,6 @@ export function mapApiTypeToStandard(apiType) {
 }
 
 /**
- * Calcola le colonne finali che arrivano al nodo risultato
- * attraversando il grafo dei nodi e degli edges
- */
-export function calculateOutputColumns(nodes, edges, resultNodeId) {
-  // Trova il nodo risultato
-  const resultNode = nodes.find(n => n.id === resultNodeId);
-  if (!resultNode) return [];
-
-  // Trova tutti gli edges che arrivano al nodo risultato
-  const incomingEdges = edges.filter(e => e.target === resultNodeId);
-  if (incomingEdges.length === 0) return [];
-
-  // Raccoglie tutte le colonne dai nodi collegati
-  const allColumns = [];
-
-  // Per ogni edge in ingresso
-  for (const edge of incomingEdges) {
-    const sourceNode = nodes.find(n => n.id === edge.source);
-    if (!sourceNode) continue;
-
-    // Se è un nodo tabella, prende le colonne visibili - NORMALIZZA A LOWERCASE
-    if (sourceNode.type === 'tableNode') {
-      const visibleColumns = (sourceNode.data.columns || [])
-        .filter(col => col.visible)
-        .map(col => {
-          const normalizedName = col.name.toLowerCase();
-          return {
-            name: normalizedName,
-            alias: col.alias,
-            type: col.type || 'str',
-            source_table: sourceNode.data.alias || sourceNode.data.table_name,
-            full_name: `${sourceNode.data.alias || sourceNode.data.table_name}.${col.alias || normalizedName}`
-          };
-        });
-      
-      allColumns.push(...visibleColumns);
-    }
-
-    // Se è un nodo Feature Layer (ArcGIS)
-    if (sourceNode.type === 'featureLayerNode') {
-      const layerName = sourceNode.data.layer_name || 'feature';
-      const visibleColumns = (sourceNode.data.columns || [])
-        .filter(col => col.visible)
-        .map(col => ({
-          name: col.name,
-          alias: col.alias,
-          type: col.type || 'str',
-          source_table: layerName,
-          full_name: `${layerName}.${col.alias || col.name}`
-        }));
-      
-      allColumns.push(...visibleColumns);
-    }
-  }
-
-  // Rimuovi duplicati in base a full_name
-  const uniqueColumns = allColumns.reduce((acc, col) => {
-    if (!acc.find(c => c.full_name === col.full_name)) {
-      acc.push(col);
-    }
-    return acc;
-  }, []);
-
-  return uniqueColumns;
-}
-
-/**
  * Traversa il grafo ricorsivamente per trovare tutte le colonne
  * che contribuiscono al risultato finale
  */
@@ -335,31 +268,6 @@ export function getColumnSRID(type) {
 export function isGeometryType(type) {
   if (!type) return false;
   return type.toLowerCase().startsWith('geometry');
-}
-
-/**
- * Estrae colonne visibili con formato standard
- * Utile per raccogliere colonne da nodi di tipo diverso
- * 
- * @param {Object} node - Nodo React Flow
- * @returns {Array} Array di colonne normalizzate
- */
-export function extractVisibleColumns(node) {
-  if (!node?.data?.columns) return [];
-  
-  return node.data.columns
-    .filter(col => col.visible !== false)
-    .map(col => {
-      if (typeof col === 'string') {
-        return { name: col.toLowerCase(), type: 'str', visible: true };
-      }
-      return {
-        name: (col.name || col.alias || 'unknown').toLowerCase(),
-        type: normalizeColumnType(col),
-        visible: col.visible !== false,
-        alias: col.alias || null
-      };
-    });
 }
 
 /**
