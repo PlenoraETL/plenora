@@ -209,30 +209,6 @@ def process_template_variables(text: str, reference_date: datetime = None) -> st
     return re.sub(TEMPLATE_REGEX, _sostituisci, text)
 
 
-def extract_template_variables(text: str) -> List[Dict[str, Any]]:
-    """
-    Estrae tutte le variabili template presenti in una stringa.
-
-    Args:
-        text: Testo da analizzare.
-
-    Returns:
-        Lista di dizionari con: match (stringa completa),
-        variable (nome), offset (stringa offset o None).
-    """
-    if not text or not isinstance(text, str):
-        return []
-
-    return [
-        {
-            "match": match.group(0),
-            "variable": match.group(1),
-            "offset": match.group(2)
-        }
-        for match in re.finditer(TEMPLATE_REGEX, text)
-    ]
-
-
 def process_static_fields(
     fields: List[Dict[str, Any]],
     reference_date: datetime = None
