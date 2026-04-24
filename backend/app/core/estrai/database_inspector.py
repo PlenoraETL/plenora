@@ -1042,12 +1042,3 @@ class DatabaseInspector:
                 connection.close()
         except Exception as e:
             raise RuntimeError(f"Errore ispezionando viste SQLite: {e}")
-
-
-# =============================================================================
-# COMPATIBILITÀ ALL'INDIETRO
-# =============================================================================
-
-def create_inspector(connection_factory: ConnectionFactoryProtocol = None) -> DatabaseInspector:
-    """Factory function per creare un inspector con Dependency Injection opzionale."""
-    return DatabaseInspector(connection_factory=connection_factory)
