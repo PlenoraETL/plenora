@@ -157,6 +157,10 @@ def list_projects(current_user: CurrentUser = Depends(require_not_esecutore)):
                 project_dict['source_project_ids'] = []
                 project_dict['file_source_ids'] = []
                 project_dict['canvas_corrupted'] = True
+                # F7-B1 (2026-04-24): espone reason safe-by-construction
+                # per UX diagnostica (l'admin vede il motivo direttamente
+                # nella lista senza dover aprire il progetto corrotto).
+                project_dict['canvas_corrupted_reason'] = e.reason
             except Exception:
                 project_dict['source_project_ids'] = []
                 project_dict['file_source_ids'] = []
