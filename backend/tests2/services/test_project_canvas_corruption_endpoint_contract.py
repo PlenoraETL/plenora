@@ -8,8 +8,6 @@ l'utente salvava sopra i dati corrotti.
 Post-fix: canvas corrotto → CanvasCorruptedError → handler globale
 in main.py → 500 JSON con:
   - detail: messaggio in italiano con project_id e reason
-  - error_code: "canvas_corrupted"
-  - project_id: echo per UX
 
 Questo test monta FastAPI con il router projects + il global handler
 registrato, e verifica che la chain raise→handler→response funzioni.
@@ -89,8 +87,6 @@ def app_with_handler(monkeypatch):
                     f"({exc.reason}). Contattare l'amministratore per il "
                     f"ripristino da backup."
                 ),
-                "error_code": "canvas_corrupted",
-                "project_id": exc.project_id,
             },
         )
 
@@ -122,10 +118,6 @@ def test_get_project_with_corrupted_canvas_returns_500_explicit(app_with_handler
     assert "corrotto" in body["detail"].lower()
     assert "p-corrupt" in body["detail"]
     assert "backup" in body["detail"].lower()
-    # Error code strutturato per la UI
-    assert body["error_code"] == "canvas_corrupted"
-    # Echo del project_id per la UI (mostrare quale progetto ha problemi)
-    assert body["project_id"] == "p-corrupt"
 
     # Il servizio e' stato chiamato (non un falso positivo dal mock setup)
     fake_svc.get_project_canvas.assert_called_once_with("p-corrupt")

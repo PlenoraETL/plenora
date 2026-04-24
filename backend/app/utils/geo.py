@@ -394,23 +394,6 @@ def detect_geometry_column(df: pd.DataFrame) -> Optional[str]:
 # UTILITY DI CONVERSIONE
 # =============================================================================
 
-def geometry_to_wkt(geom: Any) -> Optional[str]:
-    """
-    Converte un oggetto geometria Shapely in formato WKT (Well-Known Text).
-
-    Args:
-        geom: Oggetto geometria Shapely.
-
-    Returns:
-        Stringa WKT (es. "POINT (11.35 44.49)"), o None se geom è None.
-    """
-    if geom is None:
-        return None
-    if hasattr(geom, "wkt"):
-        return geom.wkt
-    return None
-
-
 def ensure_same_crs(
     gdf1: gpd.GeoDataFrame,
     gdf2: gpd.GeoDataFrame

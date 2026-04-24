@@ -119,16 +119,6 @@ export const getDownloadUrl = (projectId) =>
   `${API_ENDPOINT}/projects/${projectId}/download`;
 
 /**
- * Restituisce metadati sul file output (esiste? dimensione? data modifica?).
- * @param {string} projectId
- * @returns {Promise<Object>} { has_output, filename, size_bytes, size_human, modified_at, download_url }
- */
-export const getProjectOutputInfo = async (projectId) => {
-  const response = await http.get(`/projects/${projectId}/output-info`);
-  return response.data;
-};
-
-/**
  * Scarica l'output di un progetto nel browser.
  * @param {string} projectId
  * @param {string} filename  - Nome file opzionale

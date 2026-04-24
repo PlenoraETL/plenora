@@ -39,7 +39,6 @@ export {
   executeProjectQuery,
   previewProject,
   getDownloadUrl,
-  getProjectOutputInfo,
   downloadProjectOutput,
 } from './projects';
 

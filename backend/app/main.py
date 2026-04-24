@@ -171,8 +171,6 @@ async def canvas_corrupted_handler(request: Request, exc: CanvasCorruptedError):
                 f"({exc.reason}). Contattare l'amministratore per il "
                 f"ripristino da backup."
             ),
-            "error_code": "canvas_corrupted",
-            "project_id": exc.project_id,
         },
         headers=headers,
     )
