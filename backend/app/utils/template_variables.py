@@ -209,21 +209,6 @@ def process_template_variables(text: str, reference_date: datetime = None) -> st
     return re.sub(TEMPLATE_REGEX, _sostituisci, text)
 
 
-def has_template_variables(text: str) -> bool:
-    """
-    Verifica se una stringa contiene variabili template.
-
-    Args:
-        text: Testo da analizzare.
-
-    Returns:
-        True se contiene almeno una variabile {{...}}.
-    """
-    if not text or not isinstance(text, str):
-        return False
-    return bool(re.search(TEMPLATE_REGEX, text))
-
-
 def extract_template_variables(text: str) -> List[Dict[str, Any]]:
     """
     Estrae tutte le variabili template presenti in una stringa.
