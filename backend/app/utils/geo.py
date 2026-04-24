@@ -411,24 +411,6 @@ def geometry_to_wkt(geom: Any) -> Optional[str]:
     return None
 
 
-def geometry_to_geojson(geom: Any) -> Optional[dict]:
-    """
-    Converte un oggetto geometria Shapely in dizionario GeoJSON.
-
-    Args:
-        geom: Oggetto geometria Shapely.
-
-    Returns:
-        Dict GeoJSON (es. {"type": "Point", "coordinates": [11.35, 44.49]}),
-        o None se geom è None.
-    """
-    if geom is None:
-        return None
-    if hasattr(geom, "__geo_interface__"):
-        return geom.__geo_interface__
-    return None
-
-
 def geodataframe_to_dataframe_wkt(gdf: gpd.GeoDataFrame) -> pd.DataFrame:
     """
     Converte un GeoDataFrame in DataFrame con geometrie serializzate come WKT.
