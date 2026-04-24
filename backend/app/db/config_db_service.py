@@ -425,12 +425,9 @@ def get_project_retention_n(project_id: str) -> Optional[int]:
 # COMPARISON KEYS (per confronto L3 su intermediate.db)
 # ============================================================
 
-def delete_comparison_keys(canvas_id: str, node_id: str = None) -> None:
-    if node_id:
-        execute("DELETE FROM comparison_keys WHERE canvas_id = ? AND node_id = ?",
-                (canvas_id, node_id))
-    else:
-        execute("DELETE FROM comparison_keys WHERE canvas_id = ?", (canvas_id,))
+# Re-export: estratto in `app/db/config/comparison_keys.py` — scope micro Batch G #9,
+# invariants §6 commit `58d98a0`. Facade preservata per zero call site touched.
+from app.db.config.comparison_keys import delete_comparison_keys  # noqa: F401,E402
 
 
 # ============================================================
