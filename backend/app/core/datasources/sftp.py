@@ -15,6 +15,7 @@ Configurazione extra attesa in config.extra:
 
 import io
 import logging
+import socket
 import stat
 from datetime import datetime
 from typing import Optional, TYPE_CHECKING
@@ -40,6 +41,31 @@ def _import_paramiko():
         return paramiko
     except ImportError:
         return None
+
+
+def _sanitize_sftp_error(e: Exception) -> str:
+    """F5-B2 (2026-04-24): mappa eccezioni paramiko/socket a messaggi
+    canonici user-facing, SENZA esporre str(e) che puo' contenere host,
+    username, key fingerprint, auth method trace. Il dettaglio tecnico
+    resta nei log server-side (logger.warning/error con exc_info=True).
+    """
+    paramiko = _import_paramiko()
+    if paramiko is not None:
+        if isinstance(e, paramiko.AuthenticationException):
+            return "Autenticazione SFTP fallita: credenziali non valide"
+        if isinstance(e, paramiko.BadHostKeyException):
+            return "Host key SSH non verificabile"
+        if isinstance(e, paramiko.SSHException):
+            return "Errore protocollo SSH"
+    if isinstance(e, socket.timeout):
+        return "Timeout connessione SFTP"
+    if isinstance(e, socket.gaierror):
+        return "Host SFTP non risolvibile"
+    if isinstance(e, ConnectionRefusedError):
+        return "Connessione SFTP rifiutata"
+    if isinstance(e, OSError):
+        return "Connessione SFTP rifiutata"
+    return "Connessione SFTP fallita"
 
 
 class SFTPDataSource(DataSourceInterface):
@@ -99,16 +125,33 @@ class SFTPDataSource(DataSourceInterface):
                 try:
                     self._sftp.chdir(root)
                 except IOError as e:
-                    raise DataSourceConnectionError(
-                        f"Root path SFTP non accessibile: {root!r} — {e}"
+                    logger.warning(
+                        f"[GESTITO] SFTP chdir root fallito: root={root!r} "
+                        f"{type(e).__name__}: {e}",
+                        exc_info=True,
                     )
+                    raise DataSourceConnectionError(
+                        f"Root path SFTP non accessibile: {root!r}"
+                    ) from e
 
         except paramiko.AuthenticationException as e:
-            raise DataSourceConnectionError(f"Autenticazione SFTP fallita: {e}") from e
+            logger.warning(
+                f"[GESTITO] SFTP auth fallita: {type(e).__name__}: {e}",
+                exc_info=True,
+            )
+            raise DataSourceConnectionError(_sanitize_sftp_error(e)) from e
         except paramiko.SSHException as e:
-            raise DataSourceConnectionError(f"Errore SSH: {e}") from e
+            logger.warning(
+                f"[GESTITO] SFTP SSH exception: {type(e).__name__}: {e}",
+                exc_info=True,
+            )
+            raise DataSourceConnectionError(_sanitize_sftp_error(e)) from e
         except OSError as e:
-            raise DataSourceConnectionError(f"Connessione SFTP fallita: {e}") from e
+            logger.warning(
+                f"[GESTITO] SFTP OS error: {type(e).__name__}: {e}",
+                exc_info=True,
+            )
+            raise DataSourceConnectionError(_sanitize_sftp_error(e)) from e
 
     def disconnect(self) -> None:
         for obj in (self._sftp, self._ssh):
@@ -141,6 +184,13 @@ class SFTPDataSource(DataSourceInterface):
                 },
             }
         except DataSourceConnectionError as e:
+            # F5-B2: `e` qui e' il nostro wrapper con messaggio gia' canonico
+            # (vedi connect() + _sanitize_sftp_error), quindi str(e) e' safe.
+            logger.warning(
+                f"[GESTITO] SFTP test_connection fallita: {type(e).__name__}: {e} "
+                f"(cause: {type(e.__cause__).__name__ if e.__cause__ else 'none'})",
+                exc_info=True,
+            )
             return {"ok": False, "message": str(e), "details": {}}
         finally:
             self.disconnect()

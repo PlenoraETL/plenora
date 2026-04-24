@@ -120,6 +120,10 @@ class _SSHException(Exception):
     pass
 
 
+class _BadHostKeyException(_SSHException):
+    pass
+
+
 class _FakeParamikoModule:
     """Modulo finto sostituito via monkeypatch di ``_import_paramiko``."""
     SSHClient = FakeSSHClient
@@ -127,6 +131,8 @@ class _FakeParamikoModule:
     AutoAddPolicy = AutoAddPolicy
     AuthenticationException = _AuthenticationException
     SSHException = _SSHException
+    # F5-B2: _sanitize_sftp_error referenzia BadHostKeyException
+    BadHostKeyException = _BadHostKeyException
     # Key classes non usate in questi test (no private_key path testato qui)
     RSAKey = type("RSAKey", (), {})
     Ed25519Key = type("Ed25519Key", (), {})
@@ -371,15 +377,20 @@ def test_connect_maps_ssh_exception_to_connection_error_with_ssh_message():
 
     def init_with_raise(self):
         original_init(self)
-        self.connect_raises = _SSHException("Banner timeout")
+        self.connect_raises = _SSHException("Banner timeout SECRET_HOST_DETAIL")
 
     try:
         FakeSSHClient.__init__ = init_with_raise
+        # F5-B2 (2026-04-24): messaggio canonico "Errore protocollo SSH"
+        # (non "Errore SSH" secco). Match copre entrambe le varianti.
         with pytest.raises(
-            DataSourceConnectionError, match="Errore SSH",
+            DataSourceConnectionError, match="Errore .*SSH|SSH",
         ) as exc:
             ds.connect()
         assert isinstance(exc.value.__cause__, _SSHException)
+        # F5-B2 anti-leak
+        assert "SECRET_HOST_DETAIL" not in str(exc.value)
+        assert "Banner timeout" not in str(exc.value)
     finally:
         FakeSSHClient.__init__ = original_init
 
@@ -406,3 +417,105 @@ def test_operation_without_connect_raises_not_connected_error():
             DataSourceConnectionError, match="Non connesso",
         ):
             op()
+
+
+# =============================================================================
+# F5-B2 Anti-leak (2026-04-24) — sanitize str(e) paramiko in messaggi utente
+# =============================================================================
+
+
+def test_test_connection_sanitizes_auth_exception_no_paramiko_leak():
+    """F5-B2: `test_connection()` su AuthenticationException non deve
+    esporre host/user/fingerprint nel campo `message` — solo un messaggio
+    canonico. Il dettaglio tecnico resta in logger."""
+    ds = _make_ds()
+    original_init = FakeSSHClient.__init__
+
+    def init_with_raise(self):
+        original_init(self)
+        self.connect_raises = _AuthenticationException(
+            "Authentication failed for user 'admin' at host prod-db.internal:2222 "
+            "(fingerprint SHA256:LEAK_FINGERPRINT)"
+        )
+
+    try:
+        FakeSSHClient.__init__ = init_with_raise
+        result = ds.test_connection()
+    finally:
+        FakeSSHClient.__init__ = original_init
+
+    assert result["ok"] is False
+    msg = result["message"]
+    assert "LEAK_FINGERPRINT" not in msg, f"leak fingerprint paramiko: {msg!r}"
+    assert "prod-db.internal" not in msg, f"leak hostname: {msg!r}"
+    assert "admin" not in msg, f"leak username: {msg!r}"
+    # Il messaggio deve essere canonico
+    assert "Autenticazione SFTP" in msg or "credenziali" in msg
+
+
+def test_connect_ssh_exception_sanitizes_banner_no_leak():
+    """F5-B2: SSHException generica in connect() -> messaggio canonico
+    "Errore protocollo SSH", senza leak di banner / version strings."""
+    ds = _make_ds()
+    original_init = FakeSSHClient.__init__
+
+    def init_with_raise(self):
+        original_init(self)
+        self.connect_raises = _SSHException(
+            "Error reading SSH protocol banner: SECRET_BANNER_CONTENT_HERE"
+        )
+
+    try:
+        FakeSSHClient.__init__ = init_with_raise
+        with pytest.raises(DataSourceConnectionError) as exc:
+            ds.connect()
+    finally:
+        FakeSSHClient.__init__ = original_init
+
+    msg = str(exc.value)
+    assert "SECRET_BANNER_CONTENT_HERE" not in msg
+    assert "Error reading SSH protocol banner" not in msg
+    # Il canonico deve essere presente
+    assert "protocollo SSH" in msg or "Errore" in msg
+
+
+def test_sftp_log_preserves_technical_detail_on_sanitize(monkeypatch):
+    """F5-B2: il logger.warning server-side deve preservare type(e).__name__
+    + str(e) full per troubleshooting, nonostante il messaggio utente sia
+    sanitizzato.
+
+    Usa monkeypatch su logger.warning (caplog e' inconsistente tra
+    run singolo/gruppo a causa di interazioni con altri conftest)."""
+    from app.core.datasources import sftp as sftp_module
+
+    captured_warnings = []
+    original_warning = sftp_module.logger.warning
+
+    def _capture(msg, *args, **kwargs):
+        captured_warnings.append(str(msg))
+        return original_warning(msg, *args, **kwargs)
+
+    monkeypatch.setattr(sftp_module.logger, "warning", _capture)
+
+    ds = _make_ds()
+    original_init = FakeSSHClient.__init__
+
+    def init_with_raise(self):
+        original_init(self)
+        self.connect_raises = _AuthenticationException(
+            "TECHNICAL_DETAIL_FOR_LOGS credenziali"
+        )
+
+    try:
+        FakeSSHClient.__init__ = init_with_raise
+        with pytest.raises(DataSourceConnectionError):
+            ds.connect()
+    finally:
+        FakeSSHClient.__init__ = original_init
+
+    all_log_text = " ".join(captured_warnings)
+    assert "TECHNICAL_DETAIL_FOR_LOGS" in all_log_text, (
+        f"dettaglio SDK deve essere nei log (contract observability): "
+        f"records = {captured_warnings}"
+    )
+    assert "_AuthenticationException" in all_log_text or "Authentication" in all_log_text

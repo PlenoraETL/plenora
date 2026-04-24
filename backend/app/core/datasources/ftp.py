@@ -15,10 +15,32 @@ Configurazione extra attesa in config.extra:
 import ftplib
 import io
 import logging
+import socket
 from datetime import datetime
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_ftp_error(e: Exception) -> str:
+    """F5-B2 (2026-04-24): mappa eccezioni ftplib/socket a messaggi canonici
+    user-facing, SENZA esporre str(e) che puo' contenere banner, response
+    code dettagli, hostname nel raw string. Il dettaglio tecnico resta
+    nei log server-side (logger.warning/error con exc_info=True).
+    """
+    if isinstance(e, ftplib.error_perm):
+        return "Accesso FTP negato o risorsa non disponibile"
+    if isinstance(e, ftplib.error_temp):
+        return "Errore temporaneo del server FTP, riprova piu' tardi"
+    if isinstance(e, socket.timeout):
+        return "Timeout connessione FTP"
+    if isinstance(e, socket.gaierror):
+        return "Host FTP non risolvibile"
+    if isinstance(e, ConnectionRefusedError):
+        return "Connessione FTP rifiutata"
+    if isinstance(e, OSError):
+        return "Connessione FTP rifiutata"
+    return "Connessione FTP fallita"
 
 from app.core.datasources.interface import (
     BackendConfig,
@@ -70,10 +92,19 @@ class FTPDataSource(DataSourceInterface):
                 try:
                     self._ftp.cwd(root)
                 except ftplib.error_perm as e:
-                    raise DataSourceConnectionError(
-                        f"Root path FTP non accessibile: {root!r} — {e}"
+                    logger.warning(
+                        f"[GESTITO] FTP cwd root fallito: root={root!r} "
+                        f"{type(e).__name__}: {e}",
+                        exc_info=True,
                     )
+                    raise DataSourceConnectionError(
+                        f"Root path FTP non accessibile: {root!r}"
+                    ) from e
         except ftplib.all_errors as e:
+            logger.warning(
+                f"[GESTITO] FTP connect fallita: {type(e).__name__}: {e}",
+                exc_info=True,
+            )
             # Chiudi connessione se è stata aperta ma l'inizializzazione è fallita
             if self._ftp:
                 try:
@@ -81,7 +112,7 @@ class FTPDataSource(DataSourceInterface):
                 except Exception:
                     pass
                 self._ftp = None
-            raise DataSourceConnectionError(f"Connessione FTP fallita: {e}") from e
+            raise DataSourceConnectionError(_sanitize_ftp_error(e)) from e
 
     def disconnect(self) -> None:
         if self._ftp:
@@ -110,6 +141,14 @@ class FTPDataSource(DataSourceInterface):
                 },
             }
         except DataSourceConnectionError as e:
+            # F5-B2: `e` qui e' il nostro wrapper con messaggio gia' canonico
+            # (vedi connect() + _sanitize_ftp_error), quindi str(e) e' safe.
+            # Log dettaglio tecnico dell'eventuale original cause.
+            logger.warning(
+                f"[GESTITO] FTP test_connection fallita: {type(e).__name__}: {e} "
+                f"(cause: {type(e.__cause__).__name__ if e.__cause__ else 'none'})",
+                exc_info=True,
+            )
             return {"ok": False, "message": str(e), "details": {}}
         finally:
             self.disconnect()
@@ -149,7 +188,11 @@ class FTPDataSource(DataSourceInterface):
             # Server senza MLSD — fallback a NLST + SIZE + MDTM
             results = self._list_nlst(path, pattern, include_hash)
         except ftplib.all_errors as e:
-            raise DataSourceConnectionError(f"Errore list_files FTP: {e}") from e
+            logger.warning(
+                f"[GESTITO] FTP list_files fallita: {type(e).__name__}: {e}",
+                exc_info=True,
+            )
+            raise DataSourceConnectionError(f"Errore list_files FTP: {_sanitize_ftp_error(e)}") from e
 
         results.sort(key=lambda f: f.modified_date, reverse=True)
         return results
@@ -201,7 +244,12 @@ class FTPDataSource(DataSourceInterface):
         except ftplib.error_perm as e:
             raise DataSourceFileNotFoundError(f"File non trovato: {path!r}") from e
         except ftplib.all_errors as e:
-            raise DataSourceConnectionError(f"Errore file_info FTP: {e}") from e
+            logger.warning(
+                f"[GESTITO] FTP file_info fallita: path={path!r} "
+                f"{type(e).__name__}: {e}",
+                exc_info=True,
+            )
+            raise DataSourceConnectionError(f"Errore file_info FTP: {_sanitize_ftp_error(e)}") from e
 
         return FileInfo(
             name=name,
@@ -221,7 +269,12 @@ class FTPDataSource(DataSourceInterface):
                 raise DataSourceFileNotFoundError(f"File non trovato: {path!r}") from e
             raise DataSourcePermissionError(f"Accesso negato: {path!r}") from e
         except ftplib.all_errors as e:
-            raise DataSourceConnectionError(f"Errore read_file FTP: {e}") from e
+            logger.warning(
+                f"[GESTITO] FTP read_file fallita: path={path!r} "
+                f"{type(e).__name__}: {e}",
+                exc_info=True,
+            )
+            raise DataSourceConnectionError(f"Errore read_file FTP: {_sanitize_ftp_error(e)}") from e
         return buf.getvalue()
 
     def write_file(self, path: str, content: bytes) -> None:
@@ -235,7 +288,12 @@ class FTPDataSource(DataSourceInterface):
         except ftplib.error_perm as e:
             raise DataSourcePermissionError(f"Scrittura negata: {path!r}") from e
         except ftplib.all_errors as e:
-            raise DataSourceConnectionError(f"Errore write_file FTP: {e}") from e
+            logger.warning(
+                f"[GESTITO] FTP write_file fallita: path={path!r} "
+                f"{type(e).__name__}: {e}",
+                exc_info=True,
+            )
+            raise DataSourceConnectionError(f"Errore write_file FTP: {_sanitize_ftp_error(e)}") from e
 
     def delete_file(self, path: str) -> None:
         self._check()
@@ -246,7 +304,12 @@ class FTPDataSource(DataSourceInterface):
                 raise DataSourceFileNotFoundError(f"File non trovato: {path!r}") from e
             raise DataSourcePermissionError(f"Cancellazione negata: {path!r}") from e
         except ftplib.all_errors as e:
-            raise DataSourceConnectionError(f"Errore delete_file FTP: {e}") from e
+            logger.warning(
+                f"[GESTITO] FTP delete_file fallita: path={path!r} "
+                f"{type(e).__name__}: {e}",
+                exc_info=True,
+            )
+            raise DataSourceConnectionError(f"Errore delete_file FTP: {_sanitize_ftp_error(e)}") from e
 
     def file_exists(self, path: str) -> bool:
         self._check()

@@ -175,8 +175,14 @@ def test_connect_wraps_generic_ftplib_error_as_connection_error_chained(monkeypa
 
     ds = _make_ds()
 
+    # F5-B2 (2026-04-24): il messaggio utente-facing e' sanitizzato dal
+    # mapping `_sanitize_ftp_error`. OSError generico -> "Connessione FTP
+    # rifiutata". Il match e' stato rilassato a "Connessione FTP" per
+    # coprire tutte le varianti canoniche ("fallita"/"rifiutata"/
+    # "Timeout"/"Host non risolvibile"). Il dettaglio tecnico
+    # "timeout network" resta nel `__cause__`, non nel messaggio utente.
     with pytest.raises(
-        DataSourceConnectionError, match="Connessione FTP fallita",
+        DataSourceConnectionError, match="Connessione FTP|Timeout|Host FTP",
     ) as exc:
         ds.connect()
 
@@ -186,6 +192,10 @@ def test_connect_wraps_generic_ftplib_error_as_connection_error_chained(monkeypa
         f"ottenuto __cause__={exc.value.__cause__!r}"
     )
     assert "timeout network" in str(exc.value.__cause__)
+    # F5-B2: il dettaglio SDK NON deve comparire nel messaggio utente
+    assert "timeout network" not in str(exc.value), (
+        f"leak regression: str(e) SDK in messaggio utente-facing: {exc.value!r}"
+    )
 
 
 # ─── 3) Auth failure (error_perm su login) → ConnectionError ──────────────
@@ -201,17 +211,23 @@ def test_connect_wraps_auth_failure_as_connection_error(monkeypatch):
     penserebbe di ritentare con stessi cred. Il caller che riceve
     ConnectionError sa che la connect globale è rotta.
     """
-    _FakeFTP.login_raises = ftplib.error_perm("530 Login incorrect")
+    _FakeFTP.login_raises = ftplib.error_perm("530 Login incorrect SECRET_DETAIL")
     monkeypatch.setattr(ftplib, "FTP", _FakeFTP)
 
     ds = _make_ds()
 
+    # F5-B2: ftplib.error_perm -> "Accesso FTP negato o risorsa non disponibile"
+    # (non include il response code 530 ne' dettagli login). Il match copre
+    # entrambe le varianti canoniche di auth-fail.
     with pytest.raises(
-        DataSourceConnectionError, match="Connessione FTP fallita",
+        DataSourceConnectionError, match="Accesso FTP negato|Connessione FTP",
     ) as exc:
         ds.connect()
 
     assert isinstance(exc.value.__cause__, ftplib.error_perm)
+    # F5-B2: anti-leak — token sensibile nello str(e) SDK NON deve comparire
+    assert "SECRET_DETAIL" not in str(exc.value)
+    assert "530" not in str(exc.value)
 
 
 # ─── 4) Root path inaccessibile → messaggio specifico ─────────────────────
@@ -347,3 +363,94 @@ def test_file_exists_swallows_ftplib_errors_and_returns_false(monkeypatch):
     assert ds.file_exists("any.csv") is False, (
         "file_exists su error ftplib DEVE ritornare False silent, no raise"
     )
+
+
+# =============================================================================
+# F5-B2 Anti-leak (2026-04-24) — sanitize str(e) SDK in messaggi utente
+# =============================================================================
+
+
+def test_test_connection_sanitizes_ftplib_error_no_sdk_leak(monkeypatch):
+    """F5-B2: `test_connection()` non deve esporre banner/response code FTP
+    nel campo `message`. Il mapping `_sanitize_ftp_error` produce un
+    messaggio canonico; il dettaglio tecnico resta in logger."""
+    _FakeFTP.connect_raises = ftplib.error_perm(
+        "530 LEAK_BANNER secret_internal.example.com"
+    )
+    monkeypatch.setattr(ftplib, "FTP", _FakeFTP)
+
+    ds = _make_ds()
+    result = ds.test_connection()
+
+    assert result["ok"] is False
+    assert "LEAK_BANNER" not in result["message"], (
+        f"regression leak: banner SDK ftplib nel message: {result['message']!r}"
+    )
+    assert "secret_internal.example.com" not in result["message"]
+    assert "530" not in result["message"]
+    # Il messaggio deve essere uno dei canonici
+    assert any(canonical in result["message"] for canonical in (
+        "Accesso FTP negato", "Connessione FTP", "Timeout", "Host FTP",
+    )), f"message non canonico: {result['message']!r}"
+
+
+def test_read_file_error_sanitizes_ftplib_detail_no_sdk_leak(monkeypatch):
+    """F5-B2: errori generici di `read_file` via ftplib.all_errors (non 550)
+    wrappano in DataSourceConnectionError con messaggio canonico, senza
+    str(e) raw."""
+    class _FakeFTPRetrFails(_FakeFTP):
+        def retrbinary(self, cmd, callback):
+            raise OSError("pipe broken LEAK_INTERNAL_DETAIL")
+
+    monkeypatch.setattr(ftplib, "FTP", _FakeFTPRetrFails)
+
+    ds = _make_ds()
+    ds.connect()
+
+    with pytest.raises(DataSourceConnectionError) as exc:
+        ds.read_file("file.csv")
+
+    msg = str(exc.value)
+    assert "LEAK_INTERNAL_DETAIL" not in msg, (
+        f"leak regression: str(OSError) SDK in messaggio: {msg!r}"
+    )
+    assert "pipe broken" not in msg
+    # __cause__ preserva il dettaglio tecnico per diagnostica
+    assert isinstance(exc.value.__cause__, OSError)
+
+
+def test_ftp_log_preserves_technical_detail_on_sanitize(monkeypatch):
+    """F5-B2: mentre il messaggio utente e' sanitizzato, logger.warning deve
+    preservare type(e).__name__ + str(e) full per troubleshooting.
+
+    Usa monkeypatch su logger.warning per osservazione deterministica
+    (caplog e' inconsistente tra run singolo/gruppo a causa di interazioni
+    con altri conftest del progetto)."""
+    from app.core.datasources import ftp as ftp_module
+
+    captured_warnings = []
+    original_warning = ftp_module.logger.warning
+
+    def _capture(msg, *args, **kwargs):
+        captured_warnings.append(str(msg))
+        return original_warning(msg, *args, **kwargs)
+
+    monkeypatch.setattr(ftp_module.logger, "warning", _capture)
+
+    _FakeFTP.connect_raises = ftplib.error_perm(
+        "530 TECHNICAL_DETAIL_FOR_LOGS only"
+    )
+    monkeypatch.setattr(ftplib, "FTP", _FakeFTP)
+
+    ds = _make_ds()
+
+    with pytest.raises(DataSourceConnectionError):
+        ds.connect()
+
+    # Il dettaglio tecnico DEVE essere nei log server-side
+    all_log_text = " ".join(captured_warnings)
+    assert "TECHNICAL_DETAIL_FOR_LOGS" in all_log_text, (
+        f"dettaglio SDK deve essere nei log (contract observability): "
+        f"records = {captured_warnings}"
+    )
+    assert "error_perm" in all_log_text  # type(e).__name__
