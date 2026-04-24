@@ -189,7 +189,7 @@ def preview_file_temp(
         raise HTTPException(status_code=500, detail="Errore interno durante la lettura del file")
 
 
-@router.post("/upload", response_model=FileSource)
+@router.post("/upload", response_model=FileSource, status_code=201)
 @audit_action(action="file.upload")
 def upload_file(
     file: UploadFile = File(...),
@@ -340,7 +340,7 @@ def upload_file(
         raise HTTPException(status_code=500, detail="Errore interno durante l'upload")
 
 
-@router.post("/upload-multi-layer", response_model=List[FileSource])
+@router.post("/upload-multi-layer", response_model=List[FileSource], status_code=201)
 @audit_action(action="file.upload_multi_layer")
 def upload_multi_layer(
     file: UploadFile = File(...),

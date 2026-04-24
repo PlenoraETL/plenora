@@ -60,7 +60,8 @@ def test_arricchisci_execute_from_uploaded_file_reaches_success(
         headers=auth_headers,
         timeout=10.0,
     )
-    assert status == 200
+    # F3-B3 (2026-04-24): POST /api/files/upload ora risponde 201 Created.
+    assert status == 201
     file_source_id = uploaded["id"]
 
     create_payload = {
@@ -77,7 +78,8 @@ def test_arricchisci_execute_from_uploaded_file_reaches_success(
         headers=auth_headers,
         timeout=10.0,
     )
-    assert status == 200
+    # F3-B2 (2026-04-24): POST /api/projects ora risponde 201 Created.
+    assert status == 201
     project_id = created_project["metadata"]["id"]
 
     try:
