@@ -114,7 +114,7 @@ def _check_arcgis_access(connection_id: str, current_user: CurrentUser) -> ArcGI
     return conn
 
 
-@router.post("/connections", response_model=dict, status_code=201)
+@router.post("/connections", response_model=ArcGISConnection, status_code=201)
 async def create_connection(data: ArcGISCreate, current_user: CurrentUser = Depends(require_admin)):
     """Crea una nuova connessione ArcGIS. Solo admin/superadmin."""
     try:
@@ -134,7 +134,7 @@ async def create_connection(data: ArcGISCreate, current_user: CurrentUser = Depe
         raise HTTPException(status_code=500, detail="Errore interno del server")
 
 
-@router.get("/connections", response_model=dict)
+@router.get("/connections", response_model=ArcGISList)
 async def list_connections(current_user: CurrentUser = Depends(require_not_esecutore)):
     """Lista connessioni ArcGIS visibili: owned dal gruppo + condivise via allowed_groups.
     Ogni record include `can_edit` calcolato per l'utente corrente."""
@@ -161,7 +161,7 @@ async def list_connections(current_user: CurrentUser = Depends(require_not_esecu
         raise HTTPException(status_code=500, detail="Errore interno del server")
 
 
-@router.put("/connections/{connection_id}", response_model=dict)
+@router.put("/connections/{connection_id}", response_model=ArcGISConnection)
 async def update_connection(connection_id: str, data: ArcGISUpdate, current_user: CurrentUser = Depends(require_admin)):
     """Aggiorna una connessione ArcGIS esistente. Solo admin/superadmin del gruppo,
     e solo se non creata da un superadmin (hierarchical ownership)."""
@@ -184,13 +184,13 @@ async def delete_connection(connection_id: str, current_user: CurrentUser = Depe
     # F2-B2 (2026-04-24): DELETE risponde 204 No Content, body vuoto.
 
 
-@router.post("/connections/{connection_id}/test", response_model=dict)
+@router.post("/connections/{connection_id}/test", response_model=ArcGISTestResult)
 async def test_connection(connection_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
     """Testa una connessione ArcGIS. Qualsiasi utente del gruppo."""
     _check_arcgis_access(connection_id, current_user)
     try:
         result = get_service().test_connection(connection_id)
-        return result.model_dump()
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail="Errore interno del server")
 
