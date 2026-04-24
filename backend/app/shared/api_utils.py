@@ -13,7 +13,6 @@ Usato da:
 
 import base64
 import json
-import logging
 import time
 import threading
 from typing import Any, Dict, Optional
@@ -21,7 +20,9 @@ from typing import Any, Dict, Optional
 import requests
 from requests.adapters import HTTPAdapter
 
-logger = logging.getLogger(__name__)
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 # ──────────────────────────────────────────────────────────────────────

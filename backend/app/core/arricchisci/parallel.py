@@ -14,13 +14,14 @@ Due feature:
 Usato internamente — non esposto come API.
 """
 import re
-import logging
 from typing import Any, Dict, List, Optional, Set, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pandas as pd
 
-logger = logging.getLogger(__name__)
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 # ============================================================

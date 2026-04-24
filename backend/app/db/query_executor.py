@@ -36,7 +36,6 @@ Uso:
     righe, colonne = executor.execute_raw(connessione, sql, params)
 """
 
-import logging
 import time
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple, Protocol
@@ -47,7 +46,9 @@ import pandas as pd
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 
-logger = logging.getLogger(__name__)
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 # Result store — salva blob nel DB e usa temp files
 from app.utils.result_store import get_temp_output_path, save_result_blob

@@ -18,7 +18,6 @@ Questo modulo esiste SOLO per codice async.
 """
 
 import asyncio
-import logging
 import os
 import random
 import time
@@ -26,7 +25,9 @@ from typing import Optional, Dict, Any
 
 import httpx
 
-logger = logging.getLogger(__name__)
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 # ──────────────────────────────────────────────────────────────────────
