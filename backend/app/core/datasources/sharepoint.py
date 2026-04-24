@@ -30,6 +30,49 @@ from app.core.datasources.interface import (
 )
 
 
+def _sanitize_sharepoint_error(e: Exception) -> str:
+    """F5-B4 (2026-04-24): mappa eccezioni Office365 / msal / requests /
+    socket a messaggi canonici user-facing, SENZA esporre str(e) che puo'
+    contenere site_url autenticati, tenant_id, client_id, Bearer token,
+    AADSTS error codes, HTTP response body con cookie/trace. Il dettaglio
+    tecnico resta nei log server-side (logger.warning con exc_info=True).
+
+    Priorita': AADSTS/OAuth codes -> HTTP status -> network/TLS -> fallback.
+    Messaggi canonici italiani coerenti con FTP/SFTP/MSSQL (F5-B2/B3).
+    """
+    msg = str(e)
+    msg_l = msg.lower()
+    # ── Auth failures (Azure AD / OAuth2 client_credentials) ────────────
+    if "aadsts" in msg_l:
+        return "Autenticazione SharePoint fallita: verifica tenant/client_id/secret"
+    if "invalid_client" in msg_l or "unauthorized_client" in msg_l:
+        return "Autenticazione SharePoint fallita: client credentials non valide"
+    if "invalid_grant" in msg_l or "invalid_scope" in msg_l:
+        return "Autorizzazione SharePoint negata: scope o grant non configurati"
+    # ── HTTP status codes ───────────────────────────────────────────────
+    if " 401" in msg or "unauthorized" in msg_l:
+        return "Accesso SharePoint non autorizzato"
+    if " 403" in msg or "forbidden" in msg_l:
+        return "Accesso SharePoint negato dal server"
+    if " 404" in msg or "not found" in msg_l:
+        return "Risorsa SharePoint non trovata"
+    if " 429" in msg or "throttle" in msg_l or "too many requests" in msg_l:
+        return "SharePoint sta limitando le richieste (throttling), riprova piu' tardi"
+    if any(code in msg for code in (" 500", " 502", " 503", " 504")):
+        return "Errore del server SharePoint (5xx), riprova piu' tardi"
+    # ── Network / TLS ───────────────────────────────────────────────────
+    if "ssl" in msg_l or "tls" in msg_l or "certificate" in msg_l or "handshake" in msg_l:
+        return "Errore protocollo TLS con SharePoint"
+    if isinstance(e, TimeoutError) or "timeout" in msg_l:
+        return "Timeout connessione SharePoint"
+    if isinstance(e, ConnectionRefusedError) or "connection refused" in msg_l:
+        return "Connessione SharePoint rifiutata"
+    if "name or service not known" in msg_l or "nodename nor servname" in msg_l:
+        return "Host SharePoint non risolvibile"
+    # ── Fallback ───────────────────────────────────────────────────────
+    return "Errore connessione SharePoint"
+
+
 def _import_office365():
     try:
         from office365.runtime.auth.client_credential import ClientCredential
@@ -89,7 +132,11 @@ class SharePointDataSource(DataSourceInterface):
             self._ctx = ctx
 
         except Exception as e:
-            raise DataSourceConnectionError(f"Autenticazione SharePoint fallita: {e}") from e
+            logger.warning(
+                f"[GESTITO] SharePoint auth fallita: {type(e).__name__}: {e}",
+                exc_info=True,
+            )
+            raise DataSourceConnectionError(_sanitize_sharepoint_error(e)) from e
 
     def disconnect(self) -> None:
         self._ctx = None
@@ -111,9 +158,28 @@ class SharePointDataSource(DataSourceInterface):
                 },
             }
         except DataSourceConnectionError as e:
+            # F5-B4: `e` e' il nostro wrapper con messaggio gia' canonico
+            # (vedi connect() + _sanitize_sharepoint_error), quindi str(e)
+            # e' safe.
+            logger.warning(
+                f"[GESTITO] SharePoint test_connection fallita: {type(e).__name__}: {e} "
+                f"(cause: {type(e.__cause__).__name__ if e.__cause__ else 'none'})",
+                exc_info=True,
+            )
             return {"ok": False, "message": str(e), "details": {}}
         except Exception as e:
-            return {"ok": False, "message": f"Errore inatteso: {e}", "details": {}}
+            # F5-B4: eccezione inattesa fuori dal wrap di connect() —
+            # sanitize via helper invece di f"Errore inatteso: {e}".
+            logger.warning(
+                f"[GESTITO] SharePoint test_connection eccezione inattesa: "
+                f"{type(e).__name__}: {e}",
+                exc_info=True,
+            )
+            return {
+                "ok": False,
+                "message": _sanitize_sharepoint_error(e),
+                "details": {},
+            }
         finally:
             self.disconnect()
 
@@ -147,7 +213,13 @@ class SharePointDataSource(DataSourceInterface):
         except (DataSourceFileNotFoundError, DataSourceConnectionError):
             raise
         except Exception as e:
-            raise DataSourceConnectionError(f"Errore list_files SharePoint: {e}") from e
+            logger.warning(
+                f"[GESTITO] SharePoint list_files fallita: {type(e).__name__}: {e}",
+                exc_info=True,
+            )
+            raise DataSourceConnectionError(
+                f"Errore list_files SharePoint: {_sanitize_sharepoint_error(e)}"
+            ) from e
 
         results = []
 
@@ -229,7 +301,14 @@ class SharePointDataSource(DataSourceInterface):
             self._ctx.load(files)
             self._ctx.execute_query()
         except Exception as e:
-            raise DataSourceConnectionError(f"Errore file_info SharePoint: {e}") from e
+            logger.warning(
+                f"[GESTITO] SharePoint file_info fallita: path={path!r} "
+                f"{type(e).__name__}: {e}",
+                exc_info=True,
+            )
+            raise DataSourceConnectionError(
+                f"Errore file_info SharePoint: {_sanitize_sharepoint_error(e)}"
+            ) from e
 
         for f in files:
             if f.properties.get("Name") == name:
@@ -259,7 +338,14 @@ class SharePointDataSource(DataSourceInterface):
                 raise DataSourceFileNotFoundError(f"File non trovato: {path!r}") from e
             if "unauthorized" in msg or "403" in msg or "401" in msg:
                 raise DataSourcePermissionError(f"Accesso negato: {path!r}") from e
-            raise DataSourceConnectionError(f"Errore read_file SharePoint: {e}") from e
+            logger.warning(
+                f"[GESTITO] SharePoint read_file fallita: path={path!r} "
+                f"{type(e).__name__}: {e}",
+                exc_info=True,
+            )
+            raise DataSourceConnectionError(
+                f"Errore read_file SharePoint: {_sanitize_sharepoint_error(e)}"
+            ) from e
 
     # Soglia per upload a chunk (10 MB)
     _CHUNK_SIZE = 10 * 1024 * 1024
@@ -290,7 +376,14 @@ class SharePointDataSource(DataSourceInterface):
             msg = str(e).lower()
             if "unauthorized" in msg or "403" in msg or "401" in msg:
                 raise DataSourcePermissionError(f"Scrittura negata: {path!r}") from e
-            raise DataSourceConnectionError(f"Errore write_file SharePoint: {e}") from e
+            logger.warning(
+                f"[GESTITO] SharePoint write_file fallita: path={path!r} "
+                f"{type(e).__name__}: {e}",
+                exc_info=True,
+            )
+            raise DataSourceConnectionError(
+                f"Errore write_file SharePoint: {_sanitize_sharepoint_error(e)}"
+            ) from e
 
     def _upload_chunked(self, folder, name: str, content: bytes) -> None:
         """Upload a chunk per file grandi (>10 MB). Usa le API SharePoint resumable upload."""
@@ -338,7 +431,14 @@ class SharePointDataSource(DataSourceInterface):
                 chunk_index += 1
 
         except Exception as e:
-            raise DataSourceConnectionError(f"Errore upload chunked SharePoint: {e}") from e
+            logger.warning(
+                f"[GESTITO] SharePoint upload chunked fallita: name={name!r} "
+                f"{type(e).__name__}: {e}",
+                exc_info=True,
+            )
+            raise DataSourceConnectionError(
+                f"Errore upload chunked SharePoint: {_sanitize_sharepoint_error(e)}"
+            ) from e
 
     def delete_file(self, path: str) -> None:
         self._check()
@@ -353,7 +453,14 @@ class SharePointDataSource(DataSourceInterface):
                 raise DataSourceFileNotFoundError(f"File non trovato: {path!r}") from e
             if "unauthorized" in msg or "403" in msg or "401" in msg:
                 raise DataSourcePermissionError(f"Cancellazione negata: {path!r}") from e
-            raise DataSourceConnectionError(f"Errore delete_file SharePoint: {e}") from e
+            logger.warning(
+                f"[GESTITO] SharePoint delete_file fallita: path={path!r} "
+                f"{type(e).__name__}: {e}",
+                exc_info=True,
+            )
+            raise DataSourceConnectionError(
+                f"Errore delete_file SharePoint: {_sanitize_sharepoint_error(e)}"
+            ) from e
 
     def file_exists(self, path: str) -> bool:
         self._check()
