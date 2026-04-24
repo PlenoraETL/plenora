@@ -54,6 +54,17 @@ export async function getLayerSchema(connectionId, layerUrl) {
 }
 
 // ============================================================
+// API-ready senza consumer UI (ADR-0017 Sub-B keep)
+// ------------------------------------------------------------
+// Le 3 funzioni seguenti — queryLayer, writeFeatures,
+// createFeatureService — chiamano endpoint BE live
+// (/features/query/preview, /features/write, /features/create-service)
+// ma NON sono attualmente consumate da alcun componente UI.
+// Il contract FE↔BE è protetto dai test in
+// tests/api/features.contract.test.js. Wiring UI: scope post-launch.
+// ============================================================
+
+// ============================================================
 // QUERY
 // ============================================================
 
