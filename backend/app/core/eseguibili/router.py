@@ -94,7 +94,7 @@ def list_eseguibili(current_user: CurrentUser = Depends(get_current_user)):
 # CREATE (solo admin)
 # ──────────────────────────────────────────────────────────────
 
-@router.post("", response_model=EseguibileDetails)
+@router.post("", response_model=EseguibileDetails, status_code=201)
 def create_eseguibile(
     payload: EseguibileCreate,
     current_user: CurrentUser = Depends(require_admin)

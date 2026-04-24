@@ -114,7 +114,7 @@ def _check_arcgis_access(connection_id: str, current_user: CurrentUser) -> ArcGI
     return conn
 
 
-@router.post("/connections", response_model=dict)
+@router.post("/connections", response_model=dict, status_code=201)
 async def create_connection(data: ArcGISCreate, current_user: CurrentUser = Depends(require_admin)):
     """Crea una nuova connessione ArcGIS. Solo admin/superadmin."""
     try:

@@ -69,7 +69,7 @@ def init_projects(project_service):
 
 # ==================== CRUD PROGETTI ====================
 
-@router.post("")
+@router.post("", status_code=201)
 @audit_action(action="project.create")
 def create_project(data: ProjectCreateWithCanvas, current_user: CurrentUser = Depends(require_user_or_above)):
     """Crea nuovo progetto. Se canvas è presente lo salva direttamente. Viewer non può creare."""

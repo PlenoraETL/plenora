@@ -103,7 +103,9 @@ def create_project_via_api(
         headers=auth_headers,
         timeout=30.0,
     )
-    if status != 200:
+    # F3-B2 (2026-04-24): POST /api/projects ora risponde 201 Created
+    # (shape canonica #6 F3). Check stretto, no transizione permissiva.
+    if status != 201:
         raise RuntimeError(f"create_project_via_api fallito: HTTP {status} - {body}")
     _assert_clean_project_payload(
         body=body,
