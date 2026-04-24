@@ -411,25 +411,6 @@ def geometry_to_wkt(geom: Any) -> Optional[str]:
     return None
 
 
-def geodataframe_to_dataframe_wkt(gdf: gpd.GeoDataFrame) -> pd.DataFrame:
-    """
-    Converte un GeoDataFrame in DataFrame con geometrie serializzate come WKT.
-
-    Utile per salvare in formati non geospaziali (CSV, JSON, Excel)
-    mantenendo l'informazione geometrica come testo leggibile.
-
-    Args:
-        gdf: GeoDataFrame da convertire.
-
-    Returns:
-        DataFrame con la colonna 'geometry' convertita in stringhe WKT.
-    """
-    df = pd.DataFrame(gdf)
-    if "geometry" in df.columns:
-        df["geometry"] = df["geometry"].apply(geometry_to_wkt)
-    return df
-
-
 def ensure_same_crs(
     gdf1: gpd.GeoDataFrame,
     gdf2: gpd.GeoDataFrame
