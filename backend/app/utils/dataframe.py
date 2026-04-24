@@ -820,26 +820,6 @@ def filter_visible_columns(
     return result
 
 
-def get_visible_column_names(node_columns: List[Dict[str, Any]]) -> List[str]:
-    """
-    Estrae i nomi delle colonne visibili dalla configurazione di un nodo.
-
-    Args:
-        node_columns: Lista di dizionari con 'name' e 'visible'.
-
-    Returns:
-        Lista dei nomi delle colonne con visible=True (o senza il campo).
-    """
-    if not node_columns:
-        return []
-
-    return [
-        col["name"]
-        for col in node_columns
-        if col.get("visible", True)
-    ]
-
-
 # =============================================================================
 # SERIALIZZAZIONE JSON
 # =============================================================================
