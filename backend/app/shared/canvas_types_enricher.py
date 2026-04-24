@@ -33,6 +33,8 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+from app.services.project_service import ProjectService
+
 
 def enrich_canvas_types_from_metadata(
     carica_node_data: Dict[str, Any],
@@ -63,7 +65,6 @@ def enrich_canvas_types_from_metadata(
 
     project_column_types: Dict[str, str] = {}
     try:
-        from app.services.project_service import ProjectService
         cols_md = ProjectService().get_project_columns_metadata(project_id)
         project_column_types = metadata_to_dict(cols_md)
     except Exception as e:

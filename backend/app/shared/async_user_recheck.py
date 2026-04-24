@@ -16,7 +16,12 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
+from fastapi import HTTPException
+
 from app.utils.logger import get_logger
+from app.db.config_db_service import get_user
+from app.core.auth.auth import CurrentUser
+from app.shared.authz_helpers import assert_project_access
 
 logger = get_logger(__name__)
 
@@ -45,11 +50,6 @@ def recheck_user_authorized(
         return None
 
     try:
-        from app.db.config_db_service import get_user
-        from app.core.auth.auth import CurrentUser
-        from app.shared.authz_helpers import assert_project_access
-        from fastapi import HTTPException
-
         user = get_user(user_id)
         if not user or not user.get("is_active"):
             logger.warning(

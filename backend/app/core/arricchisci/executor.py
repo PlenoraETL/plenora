@@ -26,6 +26,8 @@ from typing import Dict, Any
 from app.models import CanvasState
 from app.config import settings
 from app.utils.logger import get_logger, append_step
+from app.core.arricchisci.api_connector import api_connection_service
+from app.shared.columns_metadata import save_columns_metadata_with_retry
 
 logger = get_logger(__name__)
 
@@ -48,8 +50,6 @@ class EnrichExecutor:
         """Esegue la pipeline di arricchimento tramite API esterne."""
         logger.info(f"Esecuzione ARRICCHISCI: {project_id}", op="execute", project_id=project_id)
         _step_start = _time.time()
-
-        from app.core.arricchisci.api_connector import api_connection_service
 
         canvas_dict = canvas.model_dump()
 
@@ -97,7 +97,6 @@ class EnrichExecutor:
                 # Helper condiviso: retry transient + raise non-transient (vedi shared/columns_metadata.py).
                 cm = result.get("columns_metadata") or []
                 if cm:
-                    from app.shared.columns_metadata import save_columns_metadata_with_retry
                     save_columns_metadata_with_retry(
                         project_service=self.project_service,
                         project_id=project_id,
@@ -130,7 +129,6 @@ class EnrichExecutor:
         try:
             import copy
             import pandas as pd
-            from app.core.arricchisci.api_connector import api_connection_service
             from app.core.arricchisci.enrichment_service import EnrichmentExecutor
             from app.core.arricchisci.models import EnrichmentOptions
             from app.utils.dataframe import sanitize_for_json

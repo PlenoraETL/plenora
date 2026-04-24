@@ -19,6 +19,8 @@ from app.core.auth.auth import (
     assert_group_access,
     assert_resource_visible,
 )
+from app.services.project_service import ProjectService
+import app.db.db_service as db_svc
 
 
 def assert_project_access(project_id: str, current_user: CurrentUser) -> dict:
@@ -31,7 +33,6 @@ def assert_project_access(project_id: str, current_user: CurrentUser) -> dict:
     """
     if not project_id:
         raise HTTPException(status_code=400, detail="project_id mancante")
-    from app.services.project_service import ProjectService
     meta = ProjectService().get_project_metadata(project_id)
     if not meta:
         raise HTTPException(status_code=404, detail=f"Progetto '{project_id}' non trovato")
@@ -45,7 +46,6 @@ def assert_project_visible(project_id: str, current_user: CurrentUser) -> dict:
     `assert_project_access`."""
     if not project_id:
         raise HTTPException(status_code=400, detail="project_id mancante")
-    from app.services.project_service import ProjectService
     meta = ProjectService().get_project_metadata(project_id)
     if not meta:
         raise HTTPException(status_code=404, detail=f"Progetto '{project_id}' non trovato")
@@ -62,7 +62,6 @@ def assert_file_source_access(file_source_id: str, current_user: CurrentUser) ->
     """
     if not file_source_id:
         raise HTTPException(status_code=400, detail="file_source_id mancante")
-    import app.db.db_service as db_svc
     row = db_svc.get_file_source(file_source_id)
     if not row:
         raise HTTPException(status_code=404, detail=f"File source '{file_source_id}' non trovato")
