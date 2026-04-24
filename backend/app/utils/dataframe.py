@@ -907,23 +907,6 @@ def sanitize_for_json(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return rows
 
 
-def dataframe_to_json_records(df: pd.DataFrame) -> List[Dict[str, Any]]:
-    """
-    Converte un DataFrame in una lista di dizionari JSON-safe.
-
-    Combina pandas to_dict(orient='records') con sanitize_for_json
-    per garantire compatibilità con json.dumps().
-
-    Args:
-        df: DataFrame da convertire.
-
-    Returns:
-        Lista di dizionari con valori sanitizzati.
-    """
-    records = df.to_dict(orient="records")
-    return sanitize_for_json(records)
-
-
 # =============================================================================
 # UTILITY COLONNE
 # =============================================================================
