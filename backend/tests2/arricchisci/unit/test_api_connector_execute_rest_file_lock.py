@@ -208,13 +208,17 @@ class TestExecuteRestFileConfigValidation:
         assert "oauth server unreachable" in result["error"]
 
     def test_input_resolve_value_error_returns_error_with_prefix(self, rf_env):
-        """Fix-D narrow #21: `ValueError` dalla catena di risoluzione
-        input (`_resolve_file_source_path` -> ValueError domain con
-        messaggi "Accesso negato:", "Contesto di sicurezza...",
-        "Errore progetto sorgente...") viene catturato dalla clausola
-        narrow `(ValueError, SourceLoadingError, FileSourceResolutionError)`
-        e restituito con prefisso `"Risoluzione input fallita:"` +
-        messaggio domain. Questi messaggi sono safe by construction.
+        """Fix-D narrow #21 + F5 primo batch (2026-04-24): `ValueError`
+        dalla catena di risoluzione input (`_resolve_file_source_path` ->
+        ValueError domain con messaggi "Accesso negato:", "Contesto di
+        sicurezza...", "Errore progetto sorgente...") viene catturato
+        dalla clausola narrow `(ValueError, SourceLoadingError,
+        FileSourceResolutionError)`.
+
+        Post F5: il caso "Accesso negato" e' ora classificato come
+        `error_kind='file_source_forbidden'` e il messaggio e' restituito
+        raw (safe by construction) senza prefisso "Risoluzione input
+        fallita:" — la taxonomy rende il prefisso ridondante.
         """
         rf_env.resolve_path.side_effect = ValueError(
             "Accesso negato: risorsa cross-tenant"
@@ -226,7 +230,8 @@ class TestExecuteRestFileConfigValidation:
             {}, cfg, [], [], "n1", "p1"
         )
         assert result["success"] is False
-        assert "Risoluzione input fallita" in result["error"]
+        assert result["error_kind"] == "file_source_forbidden"
+        assert result["user_error"] is True
         assert "Accesso negato" in result["error"]
 
     def test_input_resolve_file_source_resolution_error_returns_error_with_prefix(

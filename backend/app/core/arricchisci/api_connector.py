@@ -1685,10 +1685,10 @@ class ApiConnectionService:
             if source == 'node_input':
                 if not input_path:
                     if required:
-                        return files, data, {
-                            "success": False,
-                            "error": f"Campo file '{name}' richiesto ma nessun file di input collegato al nodo",
-                        }
+                        return files, data, ApiConnectionService._rest_file_error(
+                            "internal",
+                            f"Campo file '{name}' richiesto ma nessun file di input collegato al nodo",
+                        )
                     continue
                 # FS-5: input_path puo' essere str (path su disco) OPPURE
                 # tuple(bytes, filename) dal materialize in-memory.
@@ -1702,10 +1702,10 @@ class ApiConnectionService:
                     ip = Path(input_path)
                     if not ip.exists():
                         if required:
-                            return files, data, {
-                                "success": False,
-                                "error": f"File di input {ip} non trovato",
-                            }
+                            return files, data, ApiConnectionService._rest_file_error(
+                                "file_source_not_found",
+                                f"File di input {ip} non trovato",
+                            )
                         continue
                     fh = open(ip, 'rb')
                     opened_handles.append(fh)
@@ -1716,18 +1716,19 @@ class ApiConnectionService:
                 fs_id = entry.get('file_source_id') if isinstance(entry, dict) else entry
                 if not fs_id:
                     if required:
-                        return files, data, {
-                            "success": False,
-                            "error": f"Campo file extra '{name}' richiesto ma non configurato sul nodo",
-                        }
+                        return files, data, ApiConnectionService._rest_file_error(
+                            "internal",
+                            f"Campo file extra '{name}' richiesto ma non configurato sul nodo",
+                        )
                     continue
                 extra_path = self._resolve_file_source_id_path(fs_id)
                 if not extra_path:
                     if required:
-                        return files, data, {
-                            "success": False,
-                            "error": f"Campo file extra '{name}': file_source '{fs_id}' non trovato",
-                        }
+                        return files, data, ApiConnectionService._rest_file_error(
+                            "file_source_not_found",
+                            f"Campo file extra '{name}': file_source '{fs_id}' non trovato "
+                            f"(verifica che il file esista ancora nel catalogo e sia nel tuo gruppo)",
+                        )
                     logger.warning(
                         f"rest_file extra_input '{name}': file_source {fs_id} "
                         f"non risolvibile, saltato"
@@ -1780,28 +1781,30 @@ class ApiConnectionService:
         url = endpoint.get('url')
         method = (endpoint.get('method') or 'POST').upper()
         if not url:
-            return None, {"success": False, "error": "Endpoint URL mancante nella configurazione"}
+            return None, ApiConnectionService._rest_file_error(
+                "internal", "Endpoint URL mancante nella configurazione",
+            )
         if method != 'POST':
-            return None, {
-                "success": False,
-                "error": f"Metodo {method} non supportato per rest_file (usare POST)",
-            }
+            return None, ApiConnectionService._rest_file_error(
+                "internal",
+                f"Metodo {method} non supportato per rest_file (usare POST)",
+            )
 
         ssrf_error = self._validate_outbound_url(url)
         if ssrf_error:
             logger.warning(f"rest_file SSRF block: {url} → {ssrf_error}")
-            return None, {
-                "success": False,
-                "error": f"URL non consentito: {ssrf_error}",
-            }
+            return None, ApiConnectionService._rest_file_error(
+                "remote_processor_error",
+                f"URL non consentito: {ssrf_error}",
+            )
 
         response_cfg = api_config.get('response', {}) or {}
         response_format = response_cfg.get('format', 'binary_file')
         if response_format != 'binary_file':
-            return None, {
-                "success": False,
-                "error": f"response.format '{response_format}' non supportato (usare 'binary_file')",
-            }
+            return None, ApiConnectionService._rest_file_error(
+                "internal",
+                f"response.format '{response_format}' non supportato (usare 'binary_file')",
+            )
         output_ext = response_cfg.get('output_extension') or '.bin'
         if not output_ext.startswith('.'):
             output_ext = '.' + output_ext
@@ -1823,6 +1826,24 @@ class ApiConnectionService:
             'timeout': timeout,
             'output_ext': output_ext,
         }, None
+
+    @staticmethod
+    def _rest_file_error(error_kind: str, message: str, *, user_error: bool = True) -> Dict:
+        """Return dict standard per errori _execute_rest_file con taxonomy
+        `error_kind` (F5 primo batch, 2026-04-24).
+
+        error_kind validi:
+          - 'file_source_not_found'   — file_source_id referenziato non esiste in DB
+          - 'file_source_forbidden'   — cross-tenant access denied
+          - 'remote_processor_error'  — HTTP 4xx/5xx, timeout, connessione upstream
+          - 'internal'                — bug o catch-all inatteso (user_error=False)
+        """
+        return {
+            "success": False,
+            "user_error": user_error,
+            "error_kind": error_kind,
+            "error": message,
+        }
 
     def _execute_rest_file(self, node_data: Dict, api_config: Dict,
                            nodes: List[Dict], edges: List[Dict],
@@ -1886,7 +1907,10 @@ class ApiConnectionService:
         try:
             headers = self._prepare_headers(api_config.get('auth', {}) or {}, {})
         except (KeyError, ValueError, requests.RequestException) as e:
-            return {"success": False, "error": f"Preparazione auth fallita: {e}"}
+            return self._rest_file_error(
+                "internal",
+                f"Preparazione auth fallita: {e}",
+            )
 
         # Formato di materializzazione per input da upstream DataFrame.
         # Default xlsx; override via node_data.materialize_format o
@@ -1915,7 +1939,13 @@ class ApiConnectionService:
                 materialize_format=materialize_format,
             )
         except (ValueError, SourceLoadingError, FileSourceResolutionError) as e:
-            return {"success": False, "error": f"Risoluzione input fallita: {e}"}
+            msg = str(e)
+            if "Accesso negato" in msg or "non appartiene al tuo gruppo" in msg:
+                return self._rest_file_error("file_source_forbidden", msg)
+            return self._rest_file_error(
+                "internal",
+                f"Risoluzione input fallita: {msg}",
+            )
 
         # `extra_files` e' il dict {field_name: file_source_id} salvato sul
         # nodo api_enrich quando l'utente carica inline file aggiuntivi
@@ -1966,29 +1996,27 @@ class ApiConnectionService:
             )
 
             if response.status_code >= 400:
-                return {
-                    "success": False,
-                    "error": f"HTTP {response.status_code}: {self._parse_http_error_body(response)}",
-                }
+                return self._rest_file_error(
+                    "remote_processor_error",
+                    f"HTTP {response.status_code}: {self._parse_http_error_body(response)}",
+                )
 
             total_bytes, download_timed_out = self._download_binary_response(
                 response, output_path, start_time, timeout
             )
 
             if download_timed_out:
-                return {
-                    "success": False,
-                    "error": (
-                        f"Timeout download response dopo {timeout}s "
-                        f"(ricevuti {total_bytes // 1024} KB parziali) da {url}"
-                    ),
-                }
+                return self._rest_file_error(
+                    "remote_processor_error",
+                    f"Timeout download response dopo {timeout}s "
+                    f"(ricevuti {total_bytes // 1024} KB parziali) da {url}",
+                )
 
             if total_bytes == 0:
-                return {
-                    "success": False,
-                    "error": "Risposta vuota dal servizio remoto",
-                }
+                return self._rest_file_error(
+                    "remote_processor_error",
+                    "Risposta vuota dal servizio remoto",
+                )
 
             elapsed_ms = (time.time() - start_time) * 1000
             logger.info(f"REST File Processor: output {output_path} ({total_bytes // 1024} KB, {elapsed_ms:.0f}ms)")
@@ -2008,9 +2036,32 @@ class ApiConnectionService:
             }
 
         except requests.Timeout:
-            return {"success": False, "error": f"Timeout dopo {timeout}s chiamando {url}"}
+            return self._rest_file_error(
+                "remote_processor_error",
+                f"Timeout dopo {timeout}s chiamando {url}",
+            )
         except requests.RequestException as e:
-            return {"success": False, "error": f"Errore HTTP: {e}"}
+            return self._rest_file_error(
+                "remote_processor_error",
+                f"Errore HTTP: {e}",
+            )
+        except ValueError as e:
+            # F5 primo batch (2026-04-24): un ValueError con prefisso
+            # "Accesso negato" arriva da `_assert_file_source_group_access`
+            # (chiamato da `_resolve_file_source_id_path` in
+            # `_build_rest_file_multipart` per extra_input). Senza questo
+            # catch specifico cadrebbe nel safety-net sotto e risulterebbe
+            # "internal" opaco — ma e' un denial cross-tenant semantico.
+            msg = str(e)
+            if "Accesso negato" in msg or "non appartiene al tuo gruppo" in msg:
+                return self._rest_file_error("file_source_forbidden", msg)
+            # Altri ValueError imprevisti fluiscono al safety-net
+            logger.error(f"[CRASH] rest_file ValueError inatteso: {e}", exc_info=True)
+            return self._rest_file_error(
+                "internal",
+                "Errore interno nel processore file remoto",
+                user_error=False,
+            )
         except Exception as e:
             # Fix-D safety-net #22c: copre eccezioni inattese dentro il
             # main try (build multipart, mkdtemp, download response,
@@ -2025,10 +2076,11 @@ class ApiConnectionService:
             # l'arricchimento". Un'eventuale estensione della safety-net
             # locale a #20/#21 e' debito separato (vedi checkpoint).
             logger.error(f"[CRASH] rest_file: {e}", exc_info=True)
-            return {
-                "success": False,
-                "error": "Errore interno nel processore file remoto",
-            }
+            return self._rest_file_error(
+                "internal",
+                "Errore interno nel processore file remoto",
+                user_error=False,
+            )
         finally:
             for fh in opened_handles:
                 try:
