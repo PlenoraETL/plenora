@@ -32,6 +32,47 @@ import app.db.db_service as db
 logger = get_logger(__name__)
 
 
+def _sanitize_mssql_error(e: Exception) -> str:
+    """F5-B3 (2026-04-24): mappa eccezioni pyodbc/pymssql/socket a messaggi
+    canonici user-facing, SENZA esporre str(e) che puo' contenere hostname,
+    UID, driver version, SQLSTATE raw, TLS handshake details. Il dettaglio
+    tecnico resta nei log server-side (logger.warning/error con exc_info=True).
+
+    Pattern-match su str(e) per SQLSTATE: pyodbc non espone tipi distinti
+    per ogni SQLSTATE (tutte cadono in pyodbc.Error / OperationalError),
+    quindi il discriminante deterministico e' il prefisso [XXXXX] o
+    parole-chiave del driver.
+    """
+    msg = str(e)
+    msg_l = msg.lower()
+    # SQLSTATE prima (piu' deterministico dei text match; un messaggio
+    # pyodbc puo' contenere sia SQLSTATE che testo ambiguo).
+    if "[08001]" in msg:
+        return "Connessione MS SQL rifiutata o host irraggiungibile"
+    if "[08004]" in msg:
+        return "Timeout connessione MS SQL"
+    if "[28000]" in msg:
+        return "Autenticazione MS SQL fallita: credenziali non valide"
+    if "[42s02]" in msg_l:
+        return "Database MS SQL non trovato o accesso negato"
+    # Text patterns (fallback se SQLSTATE non presente, es. pymssql / socket)
+    if "cannot open server" in msg_l or "cannot connect" in msg_l:
+        return "Connessione MS SQL rifiutata o host irraggiungibile"
+    if "login timeout" in msg_l or "timeout expired" in msg_l:
+        return "Timeout connessione MS SQL"
+    if "login failed" in msg_l:
+        return "Autenticazione MS SQL fallita: credenziali non valide"
+    if "invalid object name" in msg_l:
+        return "Database MS SQL non trovato o accesso negato"
+    if "ssl" in msg_l or "tls" in msg_l or "handshake" in msg_l or "certificate" in msg_l:
+        return "Errore protocollo TLS/TDS con MS SQL"
+    if isinstance(e, TimeoutError) or "timeout" in msg_l:
+        return "Timeout connessione MS SQL"
+    if isinstance(e, ConnectionRefusedError) or "refused" in msg_l:
+        return "Connessione MS SQL rifiutata"
+    return "Errore connessione MS SQL"
+
+
 # ─── Service ─────────────────────────────────────────────────────────────────
 
 class ConnectionService:
@@ -297,7 +338,13 @@ class ConnectionService:
                     # Filtra IM002 (driver non installato): non aiuta capire il problema
                     err_msg = str(e)
                     if "IM002" not in err_msg:
-                        errors.append(f"[{driver_name}] {err_msg}")
+                        # F5-B3: sanitize str(e) pyodbc — log server-side il raw
+                        logger.warning(
+                            f"[GESTITO] MS SQL driver={driver_name!r} fallito: "
+                            f"{type(e).__name__}: {e}",
+                            exc_info=True,
+                        )
+                        errors.append(f"[{driver_name}] {_sanitize_mssql_error(e)}")
                     continue
 
             # Fallback finale: pymssql (usa FreeTDS, più tollerante con server vecchi
@@ -327,7 +374,13 @@ class ConnectionService:
                     finally:
                         c.close()
                 except Exception as e:
-                    errors.append(f"[pymssql] {e}")
+                    # F5-B3: sanitize str(e) pymssql — log server-side il raw
+                    logger.warning(
+                        f"[GESTITO] MS SQL pymssql fallback fallito: "
+                        f"{type(e).__name__}: {e}",
+                        exc_info=True,
+                    )
+                    errors.append(f"[pymssql] {_sanitize_mssql_error(e)}")
             except ImportError:
                 errors.append("[pymssql non installato] Per server vecchi installa: pip install pymssql")
 
@@ -341,7 +394,13 @@ class ConnectionService:
                 details={"errors": errors},
             )
         except Exception as e:
-            return ConnectionTestResult(success=False, message=f"Errore MS SQL: {str(e)}")
+            # F5-B3: catch-all outer — sanitize invece di str(e) raw.
+            logger.error(
+                f"[GESTITO] MS SQL _test_mssql safety-net: "
+                f"{type(e).__name__}: {e}",
+                exc_info=True,
+            )
+            return ConnectionTestResult(success=False, message=_sanitize_mssql_error(e))
 
     def _test_mysql(self, conn):
         try:
