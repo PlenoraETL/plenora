@@ -123,7 +123,7 @@ def update_connection(
     return conn
 
 
-@router.delete("/connections/{connection_id}")
+@router.delete("/connections/{connection_id}", status_code=204)
 def delete_connection(
     connection_id: str,
     current_user: CurrentUser = Depends(require_admin),
@@ -172,7 +172,9 @@ def delete_connection(
         )
 
     _connection_service.delete_connection(connection_id)
-    return {"status": "deleted", "connection_id": connection_id}
+    # F2-B1 (2026-04-24): DELETE risponde 204 No Content, body vuoto.
+    # FastAPI ignora il return quando status_code=204; return esplicito
+    # rimosso per coerenza col contract.
 
 
 @router.post("/connections/{connection_id}/test", response_model=ConnectionTestResult)

@@ -540,7 +540,7 @@ def update_api_connection(api_id: str, data: dict, current_user: CurrentUser = D
         raise HTTPException(500, "Errore interno del server")
 
 
-@api_connections_router.delete("/api-connections/{api_id}")
+@api_connections_router.delete("/api-connections/{api_id}", status_code=204)
 @audit_action(action="api_connection.delete", target_param="api_id")
 def delete_api_connection(api_id: str, current_user: CurrentUser = Depends(require_admin)):
     """Elimina una API connection, con check se è in uso in qualche canvas. Solo admin/superadmin."""
@@ -654,7 +654,7 @@ def delete_api_connection(api_id: str, current_user: CurrentUser = Depends(requi
 
     if not _api_connection_service.delete_api_connection(api_id):
         raise HTTPException(404, f"API connection '{api_id}' non trovata")
-    return {"status": "deleted", "api_id": api_id}
+    # F2-B1 (2026-04-24): DELETE risponde 204 No Content, body vuoto.
 
 
 @api_connections_router.post("/api-connections/test")

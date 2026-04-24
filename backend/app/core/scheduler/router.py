@@ -246,14 +246,14 @@ async def update_schedule(schedule_id: str, data: ScheduleUpdate, current_user: 
         raise HTTPException(status_code=500, detail="Errore interno del server")
 
 
-@router.delete("/{schedule_id}")
+@router.delete("/{schedule_id}", status_code=204)
 async def delete_schedule(schedule_id: str, current_user: CurrentUser = Depends(require_schedule_owner)):
     """Elimina uno schedule e i suoi log. Solo owner o admin/superadmin."""
     from app.core.scheduler.schedule_service import ScheduleService
     try:
         service = ScheduleService()
         service.delete_schedule(schedule_id)
-        return {"status": "deleted", "schedule_id": schedule_id}
+        # F2-B1 (2026-04-24): DELETE risponde 204 No Content, body vuoto.
     except HTTPException:
         raise
     except Exception as e:

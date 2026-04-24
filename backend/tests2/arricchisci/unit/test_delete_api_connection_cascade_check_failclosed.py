@@ -133,6 +133,7 @@ def test_delete_api_connection_per_consumer_canvas_error_proceeds(current_user, 
     response = client.delete("/api/api-connections/api-1")
 
     # Delete procede: un canvas checkato (proj-b) non usa l'api_id.
-    assert response.status_code == 200
-    assert response.json() == {"status": "deleted", "api_id": "api-1"}
+    # F2-B1 (2026-04-24): DELETE risponde 204 No Content, body vuoto.
+    assert response.status_code == 204
+    assert response.content == b""
     mock_api_service.delete_api_connection.assert_called_once()

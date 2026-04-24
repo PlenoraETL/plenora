@@ -126,12 +126,15 @@ def test_delete_api_connection_409_shape_has_canonical_dependencies_field(client
     assert "in_use_by" not in detail
 
 
-def test_delete_api_connection_happy_path_returns_200(client, monkeypatch):
+def test_delete_api_connection_happy_path_returns_204(client, monkeypatch):
+    """F2-B1 (2026-04-24): DELETE /api/api-connections/{id} risponde 204
+    No Content con body vuoto. Pre-fix ritornava 200 + dict
+    {"status": "deleted", "api_id": X}."""
     # Canvas senza match → niente dipendenze, happy path.
     empty_list = SimpleNamespace(projects=[])
     client.app.state.mock_project_service.list_projects.return_value = empty_list
 
     response = client.delete("/api/api-connections/api-not-used")
 
-    assert response.status_code == 200
-    assert response.json() == {"status": "deleted", "api_id": "api-not-used"}
+    assert response.status_code == 204
+    assert response.content == b""

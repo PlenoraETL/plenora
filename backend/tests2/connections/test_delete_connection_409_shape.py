@@ -101,12 +101,16 @@ def test_delete_connection_409_shape_has_canonical_dependencies_field(client, mo
     assert "in_use_by" not in detail
 
 
-def test_delete_connection_happy_path_returns_200(client, monkeypatch):
+def test_delete_connection_happy_path_returns_204(client, monkeypatch):
+    """F2-B1 (2026-04-24): DELETE /api/connections/{id} risponde 204 No
+    Content con body vuoto. Pre-fix ritornava 200 + dict
+    {"status": "deleted", "connection_id": X} (ridondante — ID gia' noto
+    al client che ha chiamato DELETE)."""
     import app.db.db_service as db_service
     monkeypatch.setattr(db_service, "fetchall", lambda *a, **kw: [])
     client.app.state.mock_service.delete_connection.return_value = None
 
     response = client.delete("/api/connections/conn-1")
 
-    assert response.status_code == 200
-    assert response.json() == {"status": "deleted", "connection_id": "conn-1"}
+    assert response.status_code == 204
+    assert response.content == b""
