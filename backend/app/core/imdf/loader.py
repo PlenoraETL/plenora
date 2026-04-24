@@ -307,27 +307,3 @@ def load_imdf_layers(
     return result
 
 
-def summarize_layers(layers: Dict) -> List[Dict]:
-    """Ritorna un riassunto leggibile dei layer IMDF caricati.
-
-    Utile per logging/preview lato UI senza dover serializzare interi
-    GeoDataFrame.
-    """
-    out = []
-    for name, gdf in layers.items():
-        try:
-            geom_type = gdf.geometry.geom_type.iloc[0] if len(gdf) > 0 else None
-        except Exception:
-            geom_type = None
-        try:
-            crs = str(gdf.crs) if gdf.crs else None
-        except Exception:
-            crs = None
-        out.append({
-            "name": name,
-            "rows": len(gdf),
-            "geom_type": geom_type,
-            "crs": crs,
-            "fields": [c for c in gdf.columns if c != "geometry"],
-        })
-    return out
