@@ -139,7 +139,7 @@ async def list_schedules(project_id: Optional[str] = Query(None, description="Fi
         raise HTTPException(status_code=500, detail="Errore interno del server")
 
 
-@router.post("", response_model=ScheduleConfig)
+@router.post("", response_model=ScheduleConfig, status_code=201)
 async def create_schedule(data: ScheduleCreate, current_user: CurrentUser = Depends(require_admin)):
     """
     Crea un nuovo schedule dai dati del wizard (6 step). Solo admin/superadmin.

@@ -58,7 +58,7 @@ def init_connections(connection_service, database_inspector):
 
 # ==================== CONNESSIONI DATABASE ====================
 
-@router.post("/connections", response_model=DatabaseConnection)
+@router.post("/connections", response_model=DatabaseConnection, status_code=201)
 def create_connection(
     data: ConnectionCreate,
     current_user: CurrentUser = Depends(require_admin),

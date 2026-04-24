@@ -476,7 +476,7 @@ def get_api_connection(api_id: str, current_user: CurrentUser = Depends(require_
         raise HTTPException(500, "Errore interno del server")
 
 
-@api_connections_router.post("/api-connections")
+@api_connections_router.post("/api-connections", status_code=201)
 @audit_action(action="api_connection.create")
 def create_api_connection(data: dict, current_user: CurrentUser = Depends(require_admin)):
     """Crea una nuova API connection. Solo admin/superadmin.
