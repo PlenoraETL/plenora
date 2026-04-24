@@ -4,8 +4,8 @@ Intermediate Router — endpoint FastAPI per feature inspection e confronto run.
 Endpoints:
   GET  /api/runs/{canvas_id}                          — lista run per canvas
   GET  /api/runs/{run_id}/nodes/{node_id}/data        — righe di un nodo
-  GET  /api/runs/compare                              — confronto L1 tra due run
-  GET  /api/runs/compare/{run_id_a}/{run_id_b}/diff   — confronto L2 (righe aggiunte/rimosse)
+  GET  /api/runs/compare/l1                           — confronto L1 (hash+contatori), query: run_id_a, run_id_b
+  GET  /api/runs/compare/l2                           — confronto L2 (righe aggiunte/rimosse), query: run_id_a, run_id_b, node_id
   POST /api/runs/{run_id}/pin                         — pinna/spinna una run
 """
 
