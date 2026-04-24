@@ -321,18 +321,6 @@ def list_projects(group_id: Optional[str] = None, project_type: str = None) -> L
     )
 
 
-def list_all_projects(project_type: str = None) -> List[Dict]:
-    """Lista tutti i progetti senza filtro gruppo — solo per superadmin."""
-    if project_type:
-        return fetchall(
-            "SELECT id, group_id, name, project_type, connection_id, created_at, updated_at FROM projects WHERE project_type = ? ORDER BY updated_at DESC",
-            (project_type,)
-        )
-    return fetchall(
-        "SELECT id, group_id, name, project_type, connection_id, created_at, updated_at FROM projects ORDER BY updated_at DESC"
-    )
-
-
 def create_project(project_id: str, group_id: str, name: str, project_type: str,
                    connection_id: str = None, created_by: str = None) -> Dict:
     from datetime import datetime, timezone
@@ -436,26 +424,6 @@ def get_project_retention_n(project_id: str) -> Optional[int]:
 # ============================================================
 # COMPARISON KEYS (per confronto L3 su intermediate.db)
 # ============================================================
-
-def get_comparison_keys(canvas_id: str, node_id: str) -> Optional[List[str]]:
-    row = fetchone(
-        "SELECT key_columns FROM comparison_keys WHERE canvas_id = ? AND node_id = ?",
-        (canvas_id, node_id)
-    )
-    return json.loads(row["key_columns"]) if row else None
-
-
-def save_comparison_keys(canvas_id: str, node_id: str, group_id: str,
-                         key_columns: List[str]) -> None:
-    from datetime import datetime, timezone
-    now = datetime.now(timezone.utc).isoformat()
-    execute(
-        "INSERT INTO comparison_keys (canvas_id, node_id, group_id, key_columns, created_at, updated_at) "
-        "VALUES (?,?,?,?,?,?) ON CONFLICT (canvas_id, node_id) DO UPDATE SET "
-        "group_id=EXCLUDED.group_id, key_columns=EXCLUDED.key_columns, updated_at=EXCLUDED.updated_at",
-        (canvas_id, node_id, group_id, json.dumps(key_columns), now, now)
-    )
-
 
 def delete_comparison_keys(canvas_id: str, node_id: str = None) -> None:
     if node_id:
@@ -813,52 +781,5 @@ def update_schedule(schedule_id: str, **fields) -> Optional[Dict]:
 def delete_schedule(schedule_id: str) -> bool:
     cur = execute("DELETE FROM schedules WHERE id = ?", (schedule_id,))
     return cur.rowcount > 0
-
-
-# ============================================================
-# BEAT HEARTBEAT
-# ============================================================
-
-def update_beat_heartbeat() -> None:
-    from datetime import datetime, timezone
-    now = datetime.now(timezone.utc).isoformat()
-    execute("INSERT INTO beat_heartbeat (id, ts) VALUES ('beat', ?) ON CONFLICT (id) DO UPDATE SET ts=EXCLUDED.ts", (now,))
-
-
-def get_beat_heartbeat() -> Optional[str]:
-    row = fetchone("SELECT ts FROM beat_heartbeat WHERE id = 'beat'")
-    return row["ts"] if row else None
-
-
-# ============================================================
-# APP SETTINGS
-# ============================================================
-
-def get_setting(key: str, default: Any = None) -> Any:
-    row = fetchone("SELECT value FROM app_settings WHERE key = ?", (key,))
-    return row["value"] if row else default
-
-
-def set_setting(key: str, value: Any) -> None:
-    execute(
-        "INSERT INTO app_settings (key, value) VALUES (?,?) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value",
-        (key, str(value))
-    )
-
-
-def get_app_setting(key: str) -> Optional[str]:
-    row = fetchone("SELECT value FROM app_settings WHERE key = ?", (key,))
-    return row["value"] if row else None
-
-
-def set_app_setting(key: str, value: str) -> None:
-    execute(
-        "INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value",
-        (key, value)
-    )
-
-
-def delete_app_setting(key: str) -> None:
-    execute("DELETE FROM app_settings WHERE key = ?", (key,))
 
 
