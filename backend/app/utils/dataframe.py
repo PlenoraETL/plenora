@@ -949,27 +949,3 @@ def infer_column_types(df: pd.DataFrame) -> List[Dict[str, str]]:
         colonne.append({"name": col, "type": tipo})
 
     return colonne
-
-
-def get_column_from_node(node, attr_name: str, default=None):
-    """
-    Estrae un attributo da un nodo del canvas in modo sicuro.
-
-    Gestisce sia oggetti Pydantic (modelli Node) che dizionari,
-    cercando anche nel campo 'data' del nodo come fallback.
-
-    Args:
-        node: Nodo del canvas (oggetto Pydantic o dict).
-        attr_name: Nome dell'attributo da estrarre.
-        default: Valore di default se l'attributo non è trovato.
-
-    Returns:
-        Valore dell'attributo, o il default se non trovato.
-    """
-    if hasattr(node, attr_name):
-        return getattr(node, attr_name)
-    elif isinstance(node, dict):
-        return node.get(attr_name, default)
-    elif hasattr(node, "data") and node.data:
-        return node.data.get(attr_name, default)
-    return default
