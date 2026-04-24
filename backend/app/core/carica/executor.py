@@ -382,7 +382,7 @@ class CaricaExecutor:
                 return conn
             raise ValueError(f"Connessione '{connection_id}' non trovata")
 
-        # Fallback: leggi dal DB SQLite con decriptazione password
+        # Fallback: leggi dal DB PostgreSQL con decriptazione password
         import app.db.db_service as db_svc
         from app.services.connection_service import _decrypt_password
         row = db_svc.fetchone("SELECT * FROM connections WHERE id = ?", (connection_id,))
@@ -448,7 +448,7 @@ class CaricaExecutor:
         project_id: str,
         triggered_by: str,
     ):
-        """Salva il record di audit su log.db."""
+        """Salva il record di audit su plenora.logs (PostgreSQL)."""
         try:
             audit = AuditRecord.from_write_result(
                 result, config, project_id, triggered_by

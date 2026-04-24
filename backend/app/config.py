@@ -76,6 +76,10 @@ class Settings:
         "DATA_DIR": "./data",
 
         # ==================== LOG DB ====================
+        # Legacy post-PG (O-ARC 2026-04-21): keys stale. LOG_DB_FILE/MAX_ROWS
+        # lette da utils/logger.py:250-251 ma non consumate (SQLiteLogHandler
+        # dead; sink canonico = PostgresLogHandler su plenora.logs). CONNECT/
+        # BUSY_TIMEOUT orfani. Mantenute per .env retro-compat + Settings init.
         "LOG_DB_FILE":              "log.db",
         "LOG_DB_MAX_ROWS":          100_000,
         "LOG_DB_CONNECT_TIMEOUT":   5,

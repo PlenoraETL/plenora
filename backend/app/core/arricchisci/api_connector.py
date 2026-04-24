@@ -158,7 +158,7 @@ class ApiConnectionService:
         self.results_dir = settings.RESULTS_DIR
 
     # =========================================================================
-    # CRUD CONNESSIONI API — storage SQLite tramite db_service
+    # CRUD CONNESSIONI API — storage PostgreSQL tramite db_service
     # =========================================================================
 
     def _mask_credentials(self, config: Dict) -> Dict:
