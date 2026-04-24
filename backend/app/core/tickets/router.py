@@ -342,12 +342,12 @@ async def upload_attachment_endpoint(
     }
 
 
-@router.delete("/{ticket_id}")
+@router.delete("/{ticket_id}", status_code=204)
 def delete_ticket_endpoint(
     ticket_id: str,
     hard: bool = False,
     current_user: CurrentUser = Depends(_require_not_esecutore),
-) -> Dict[str, Any]:
+) -> None:
     """Cancellazione ticket.
 
     Default: soft delete (set `deleted_at`, ticket sparisce dalle query
@@ -376,7 +376,9 @@ def delete_ticket_endpoint(
         f"by={current_user.username}",
         op="ticket_delete",
     )
-    return {"ok": True, "hard": result.get("hard", False)}
+    # F2-B3 (2026-04-24): DELETE risponde 204 No Content. La semantica
+    # soft/hard resta visibile via `?hard=true` query param + logger op
+    # "ticket_delete" (PURGED vs soft-deleted); non e' piu' echoed nel body.
 
 
 @router.get("/{ticket_id}/attachments/{attachment_id}/download")
@@ -429,12 +431,12 @@ def download_attachment_endpoint(
     return Response(content=blob, media_type=mime, headers=headers)
 
 
-@router.delete("/{ticket_id}/attachments/{attachment_id}")
+@router.delete("/{ticket_id}/attachments/{attachment_id}", status_code=204)
 def delete_attachment_endpoint(
     ticket_id: str,
     attachment_id: str,
     current_user: CurrentUser = Depends(_require_not_esecutore),
-) -> Dict[str, Any]:
+) -> None:
     """Rimuove l'allegato dal ticket. Admin/superadmin sempre, uploader
     sui propri allegati."""
     ticket = svc.check_access(tdb.get_ticket(ticket_id), current_user)
@@ -447,7 +449,7 @@ def delete_attachment_endpoint(
     if not is_admin and not is_uploader:
         raise HTTPException(403, "Puoi rimuovere solo i tuoi allegati")
 
-    ok = tdb.delete_attachment(attachment_id)
+    tdb.delete_attachment(attachment_id)
 
     # Best-effort: elimina anche il file_source sottostante (pulizia storage)
     try:
@@ -459,4 +461,4 @@ def delete_attachment_endpoint(
             f"{attachment['file_source_id']} fallito (orfano): {e}"
         )
 
-    return {"ok": ok}
+    # F2-B3 (2026-04-24): DELETE risponde 204 No Content, body vuoto.

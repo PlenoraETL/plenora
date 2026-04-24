@@ -479,14 +479,14 @@ def get_file(file_id: str, current_user: CurrentUser = Depends(require_not_esecu
     return file_source
 
 
-@router.delete("/{file_id}")
+@router.delete("/{file_id}", status_code=204)
 @audit_action(action="file.delete", target_param="file_id")
 def delete_file(file_id: str, current_user: CurrentUser = Depends(require_file_owner)):
     """Elimina un file source e tutti i suoi file. Solo owner o admin."""
     success = file_source_service.delete_file_source(file_id)
     if not success:
         raise HTTPException(status_code=404, detail=f"File source '{file_id}' non trovato")
-    return {"status": "deleted", "file_id": file_id}
+    # F2-B3 (2026-04-24): DELETE risponde 204 No Content, body vuoto.
 
 
 def _svc_group(current_user: CurrentUser) -> str:

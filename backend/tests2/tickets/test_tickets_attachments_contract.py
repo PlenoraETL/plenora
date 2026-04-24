@@ -309,7 +309,8 @@ def test_delete_uploader_can_remove_own_attachment(mock_tdb, mock_file_service):
     mock_tdb.get_ticket.return_value = _ticket(created_by="u1", group_id="g1")
     client = _make_client(_user("user", user_id="u1", group_id="g1"))
     response = client.delete("/api/tickets/t1/attachments/att-1")
-    assert response.status_code == 200
+    # F2-B3 (2026-04-24): DELETE attachment risponde 204 No Content.
+    assert response.status_code == 204
     mock_tdb.delete_attachment.assert_called_once_with("att-1")
     mock_file_service.delete_file_source.assert_called_once_with("fs-1")
 
@@ -323,7 +324,7 @@ def test_delete_admin_can_remove_others_attachment(mock_tdb, mock_file_service):
     mock_tdb.get_ticket.return_value = _ticket(created_by="u1", group_id="g1")
     client = _make_client(_user("admin", user_id="admin1", group_id="g1"))
     response = client.delete("/api/tickets/t1/attachments/att-1")
-    assert response.status_code == 200
+    assert response.status_code == 204
     mock_tdb.delete_attachment.assert_called_once_with("att-1")
 
 
@@ -483,5 +484,7 @@ def test_delete_cleanup_failure_does_not_break_response(mock_tdb, mock_file_serv
 
     client = _make_client(_user("user", user_id="u1", group_id="g1"))
     response = client.delete("/api/tickets/t1/attachments/att-1")
-    assert response.status_code == 200
+    # F2-B3: DELETE attachment risponde 204 anche se cleanup file_source
+    # secondario fallisce (best-effort — vedi logger.warning nel router).
+    assert response.status_code == 204
     mock_tdb.delete_attachment.assert_called_once_with("att-1")

@@ -90,12 +90,14 @@ def mock_file_service():
 
 
 def test_admin_soft_deletes_own_group_ticket(mock_tdb, mock_file_service):
+    """F2-B3 (2026-04-24): DELETE /api/tickets/{id} risponde 204 No
+    Content. Semantica soft/hard verificata via mock call (il body
+    {"ok": True, "hard": bool} esposto pre-fix e' rimosso)."""
     client = _make_client(_user("admin", user_id="adm", group_id="g1"))
     response = client.delete("/api/tickets/t1")
-    assert response.status_code == 200
-    body = response.json()
-    assert body["ok"] is True
-    assert body["hard"] is False
+    assert response.status_code == 204
+    assert response.content == b""
+    # Semantica soft-delete verificata via dispatch al DB
     mock_tdb.soft_delete_ticket.assert_called_once_with("t1")
     mock_tdb.delete_ticket.assert_not_called()
     mock_file_service.delete_file_source.assert_not_called()
@@ -105,9 +107,11 @@ def test_superadmin_soft_deletes_cross_group(mock_tdb, mock_file_service):
     mock_tdb.get_ticket.return_value = _ticket(group_id="g1", created_by="u1")
     client = _make_client(_user("superadmin", user_id="sa", group_id="gX"))
     response = client.delete("/api/tickets/t1")
-    assert response.status_code == 200
-    assert response.json()["hard"] is False
+    assert response.status_code == 204
+    # hard=False verificato via dispatch: soft_delete_ticket chiamato,
+    # delete_ticket NON chiamato (il body echo "hard: false" e' rimosso).
     mock_tdb.soft_delete_ticket.assert_called_once_with("t1")
+    mock_tdb.delete_ticket.assert_not_called()
 
 
 def test_soft_delete_does_not_cleanup_blob(mock_tdb, mock_file_service):
@@ -118,7 +122,7 @@ def test_soft_delete_does_not_cleanup_blob(mock_tdb, mock_file_service):
     ]
     client = _make_client(_user("admin", group_id="g1"))
     response = client.delete("/api/tickets/t1")
-    assert response.status_code == 200
+    assert response.status_code == 204
     mock_file_service.delete_file_source.assert_not_called()
 
 
@@ -128,6 +132,8 @@ def test_soft_delete_does_not_cleanup_blob(mock_tdb, mock_file_service):
 
 
 def test_superadmin_hard_deletes_with_cascade(mock_tdb, mock_file_service):
+    """F2-B3: hard=True verificato via dispatch (body echo "hard: true"
+    rimosso)."""
     mock_tdb.list_attachments.return_value = [
         {"id": "att-1", "file_source_id": "fs-1"},
         {"id": "att-2", "file_source_id": "fs-2"},
@@ -135,9 +141,9 @@ def test_superadmin_hard_deletes_with_cascade(mock_tdb, mock_file_service):
     ]
     client = _make_client(_user("superadmin", user_id="sa"))
     response = client.delete("/api/tickets/t1?hard=true")
-    assert response.status_code == 200
-    body = response.json()
-    assert body["hard"] is True
+    assert response.status_code == 204
+    # hard=True verificato via dispatch: delete_ticket chiamato,
+    # soft_delete_ticket NON chiamato.
     mock_tdb.delete_ticket.assert_called_once_with("t1")
     mock_tdb.soft_delete_ticket.assert_not_called()
     # Tutti e 3 i file_source cleanati
@@ -164,7 +170,7 @@ def test_hard_delete_cleanup_failure_does_not_block(mock_tdb, mock_file_service)
     ]
     client = _make_client(_user("superadmin"))
     response = client.delete("/api/tickets/t1?hard=true")
-    assert response.status_code == 200
+    assert response.status_code == 204
     assert mock_file_service.delete_file_source.call_count == 2
 
 
@@ -172,7 +178,7 @@ def test_hard_delete_with_no_attachments_skips_cleanup(mock_tdb, mock_file_servi
     mock_tdb.list_attachments.return_value = []
     client = _make_client(_user("superadmin"))
     response = client.delete("/api/tickets/t1?hard=true")
-    assert response.status_code == 200
+    assert response.status_code == 204
     mock_file_service.delete_file_source.assert_not_called()
 
 

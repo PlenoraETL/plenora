@@ -620,7 +620,7 @@ def list_bundles(
     return out
 
 
-@router.delete("/bundles/{bundle_task_id}")
+@router.delete("/bundles/{bundle_task_id}", status_code=204)
 def delete_bundle(
     bundle_task_id: str,
     current_user: CurrentUser = Depends(get_current_user),
@@ -671,4 +671,4 @@ def delete_bundle(
     logger.info(
         f"[User {current_user.username}] IMDF bundle '{bundle_task_id}' cancellato"
     )
-    return {"status": "deleted", "task_id": bundle_task_id}
+    # F2-B3 (2026-04-24): DELETE risponde 204 No Content, body vuoto.
