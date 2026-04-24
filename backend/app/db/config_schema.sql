@@ -180,11 +180,6 @@ CREATE TABLE IF NOT EXISTS beat_heartbeat (
     ts TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS app_settings (
-    key   TEXT PRIMARY KEY,
-    value TEXT NOT NULL
-);
-
 -- ============================================================
 -- ESEGUIBILI — Catene pubblicate come template on-demand
 -- Isolato da projects: canvas cloneato al momento della creazione,
