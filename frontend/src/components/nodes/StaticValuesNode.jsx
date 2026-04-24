@@ -269,11 +269,6 @@ function StaticValuesNode({ id, data, selected }) {
   );
 }
 
-export const staticValuesNodeConfig = {
-  type: 'staticValues',
-  data: { label: 'Valori Statici', fields: [] }
-};
-
 export const createStaticValuesNode = (position = { x: 100, y: 100 }) => ({
   id: `static_${Date.now()}`,
   type: 'staticValues',
