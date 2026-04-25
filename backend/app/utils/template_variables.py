@@ -121,7 +121,6 @@ def apply_offset(dt: datetime, offset_str: str) -> datetime:
 
     match = re.match(r"([+-])(\d+)([hdmsMHDMS])", offset_str)
     if not match:
-        import logging
         logger.warning(f"Offset template non valido: '{offset_str}' (formato atteso: ±N[hdms])")
         return dt
 

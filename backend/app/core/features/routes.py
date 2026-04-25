@@ -59,6 +59,9 @@ from app.shared.path_policy import assert_path_within
 from app.shared.error_sanitizer import sanitize_http_detail
 from app.core.artifacts import ArtifactResolver, LatestProjectArtifactRef
 from app.core.artifacts.types import MaterializedArtifact
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/features", tags=["features"])
 
