@@ -48,6 +48,8 @@ from app.core.features.models import (
     ArcGISList,
     ArcGISTestResult,
     FeatureWriteRequest,
+    WriteFeaturesResponse,
+    CreateServiceResponse,
 )
 from app.core.features.features_service import FeaturesService
 from app.shared.path_policy import assert_path_within
@@ -424,7 +426,7 @@ def _resolve_input_path(
     raise FileNotFoundError(f"Nessun output trovato per progetto: {project_id}")
 
 
-@router.post("/write")
+@router.post("/write", response_model=WriteFeaturesResponse)
 async def write_features(request: WriteRequest, current_user: CurrentUser = Depends(require_not_esecutore)):
     """Scrittura su Feature Service esistente (add/update/delete)."""
     _check_arcgis_access(request.connection_id, current_user)
@@ -469,7 +471,7 @@ async def write_features(request: WriteRequest, current_user: CurrentUser = Depe
         raise HTTPException(status_code=500, detail="Errore interno del server")
 
 
-@router.post("/create-service")
+@router.post("/create-service", response_model=CreateServiceResponse)
 async def create_service(request: CreateServiceRequest, current_user: CurrentUser = Depends(require_not_esecutore)):
     """
     Crea un nuovo Feature Service su ArcGIS Online.

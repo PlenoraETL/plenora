@@ -110,3 +110,27 @@ class FeatureWriteRequest(BaseModel):
     operation: Literal["add", "update", "delete"] = "add"
     input_path: str = ""  # Path del file GeoDataFrame sorgente
     object_ids: Optional[List[int]] = None  # Per delete
+
+
+class WriteFeaturesResponse(BaseModel):
+    """Response di POST /api/features/write — fotografia 1:1 di
+    `features_service.write_features` (4 branch ritornano questa stessa shape:
+    add/update/delete + features-vuote). `errors` resta opaco (item Esri).
+    """
+    success: bool
+    message: str
+    count: int
+    errors: List[Dict[str, Any]] = []
+
+
+class CreateServiceResponse(BaseModel):
+    """Response di POST /api/features/create-service — fotografia 1:1 di
+    `arcgis_client.create_service` (single return path post createService +
+    addToDefinition + addFeatures). `errors` resta opaco (item Esri).
+    """
+    success: bool
+    service_url: str
+    layer_url: str
+    item_id: str
+    feature_count: int
+    errors: List[Dict[str, Any]] = []

@@ -34,9 +34,10 @@ def test_mask_secrets_hides_password_and_client_secret(fixed_now):
 
 
 def test_write_features_checks_project_visibility_before_loading_project_output(client, current_user):
-    service = SimpleNamespace(
-        write_features=lambda **kwargs: {"success": True, "input_path": kwargs["input_path"]},
-    )
+    write_features_mock = MagicMock(return_value={
+        "success": True, "message": "Aggiunte 0 features", "count": 0, "errors": [],
+    })
+    service = SimpleNamespace(write_features=write_features_mock)
 
     with patch("app.core.features.routes._check_arcgis_access"), \
          patch("app.core.features.routes.get_service", return_value=service), \
@@ -52,14 +53,15 @@ def test_write_features_checks_project_visibility_before_loading_project_output(
         )
 
     assert response.status_code == 200
-    assert Path(response.json()["input_path"]) == Path("/tmp/result.parquet")
+    assert Path(write_features_mock.call_args.kwargs["input_path"]) == Path("/tmp/result.parquet")
     assert_project_visible.assert_called_once_with("proj-1", current_user)
 
 
 def test_write_features_skips_project_visibility_for_explicit_input_path(client):
-    service = SimpleNamespace(
-        write_features=lambda **kwargs: {"success": True, "input_path": kwargs["input_path"]},
-    )
+    write_features_mock = MagicMock(return_value={
+        "success": True, "message": "Aggiunte 0 features", "count": 0, "errors": [],
+    })
+    service = SimpleNamespace(write_features=write_features_mock)
 
     with patch("app.core.features.routes._check_arcgis_access"), \
          patch("app.core.features.routes.get_service", return_value=service), \
@@ -79,9 +81,12 @@ def test_write_features_skips_project_visibility_for_explicit_input_path(client)
 
 
 def test_create_service_checks_project_visibility_before_loading_project_output(client, current_user):
-    service = SimpleNamespace(
-        create_service=lambda **kwargs: {"success": True, "input_path": kwargs["input_path"]},
-    )
+    create_service_mock = MagicMock(return_value={
+        "success": True, "service_url": "https://example.test/svc",
+        "layer_url": "https://example.test/svc/0", "item_id": "item-1",
+        "feature_count": 0, "errors": [],
+    })
+    service = SimpleNamespace(create_service=create_service_mock)
 
     with patch("app.core.features.routes._check_arcgis_access"), \
          patch("app.core.features.routes.get_service", return_value=service), \
@@ -97,5 +102,5 @@ def test_create_service_checks_project_visibility_before_loading_project_output(
         )
 
     assert response.status_code == 200
-    assert Path(response.json()["input_path"]) == Path("/tmp/result.parquet")
+    assert Path(create_service_mock.call_args.kwargs["input_path"]) == Path("/tmp/result.parquet")
     assert_project_visible.assert_called_once_with("proj-1", current_user)
