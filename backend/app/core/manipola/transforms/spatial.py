@@ -724,24 +724,42 @@ def op_geo_reproject(
         GeoDataFrame riproiettato
     """
     try:
-        # Passa source_crs a to_geodataframe se specificato
-        crs_hint = source_crs if source_crs else "EPSG:4326"
+        # Passa source_crs a to_geodataframe se specificato.
+        # B2 Phase 4: NIENTE fallback silente a EPSG:4326 quando source_crs
+        # manca. Un dataset metrico (es. EPSG:32632) trattato come
+        # geografico viene "riproiettato" producendo coordinate plausibili
+        # ma traslate di centinaia di km: il bug resta silenzioso finche'
+        # qualcuno nota le geometrie nel posto sbagliato. Fail-loud sotto
+        # se nessun CRS e' recuperabile.
+        crs_hint = source_crs  # puo' essere None: nessun default
         gdf = to_geodataframe(df, geom_column, crs=crs_hint)
-        
+
         # Se source_crs è fornito esplicitamente, forzalo (override auto-detect)
         if source_crs and gdf.crs and str(gdf.crs) != source_crs:
             logger.info(f"Override CRS sorgente: {gdf.crs} -> {source_crs}")
             gdf = gdf.set_crs(source_crs, allow_override=True)
-        
+
+        if gdf.crs is None and source_crs:
+            gdf = gdf.set_crs(source_crs)
+
         if gdf.crs is None:
-            gdf = gdf.set_crs(crs_hint)
-        
+            # B2 Phase 4: source_crs mancante e nessun CRS auto-rilevabile
+            # (no EWKB SRID, no CRS sul GeoDataFrame). Preferenza reviewer:
+            # fail-loud chiaro invece di assumere EPSG:4326.
+            raise ValueError(
+                "op_geo_reproject: source_crs non fornito e nessun CRS "
+                "rilevabile dalle geometrie (no EWKB SRID, no CRS sul "
+                f"GeoDataFrame). Specificare 'source_crs' esplicito "
+                f"(es. 'EPSG:4326', 'EPSG:32632') per riproiettare verso "
+                f"'{target_crs}'."
+            )
+
         original_crs = gdf.crs
         result = gdf.to_crs(target_crs)
-        
+
         logger.info(f"Reproject completato: {original_crs} -> {target_crs}")
         return result
-        
+
     except Exception as e:
         logger.error(f"[CRASH] Errore Reproject: {e}", exc_info=True)
         raise
