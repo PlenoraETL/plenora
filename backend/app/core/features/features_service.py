@@ -581,7 +581,7 @@ class FeaturesService:
             }
             
         except Exception as e:
-            logger.error(f"[GESTITO] Errore execute_query ArcGIS: {e}")
+            logger.error(f"[GESTITO] Errore execute_query ArcGIS: {e}", exc_info=True)
             return {
                 "success": False,
                 "message": str(e),
@@ -1063,7 +1063,7 @@ class FeaturesService:
                     if oid is not None and match_val is not None:
                         oid_map[match_val] = oid
             except Exception as e:
-                logger.error(f"Errore query OBJECTID per upsert: {e}")
+                logger.error(f"Errore query OBJECTID per upsert: {e}", exc_info=True)
 
         to_update = []
         to_add = []
@@ -1151,7 +1151,7 @@ class FeaturesService:
                     if oid is not None and match_val is not None:
                         oid_map[match_val] = oid
             except Exception as e:
-                logger.error(f"Errore query OBJECTID per match: {e}")
+                logger.error(f"Errore query OBJECTID per match: {e}", exc_info=True)
 
         logger.info(f"Risolti {len(oid_map)} OBJECTID su {len(match_values)} valori match")
 

@@ -161,7 +161,7 @@ class ManipolaExecutor:
             _proj_row = _db.get_project(project_id)
             self._current_group_id = _proj_row.get("group_id") if _proj_row else None
         except Exception as e:
-            logger.error(f"[GESTITO] Impossibile determinare group_id per {project_id}: {e}")
+            logger.error(f"[GESTITO] Impossibile determinare group_id per {project_id}: {e}", exc_info=True)
             self._current_group_id = None
 
         if strict and self._current_group_id is None:

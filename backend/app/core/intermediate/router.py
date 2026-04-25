@@ -119,7 +119,7 @@ def list_runs(
             runs = idb.list_runs(canvas_id, gid, limit=limit)
         return [_run_to_summary(r) for r in runs]
     except Exception as e:
-        logger.error(f"[GESTITO] Errore lista runs canvas {canvas_id}: {e}", op="intermediate_api")
+        logger.error(f"[GESTITO] Errore lista runs canvas {canvas_id}: {e}", op="intermediate_api", exc_info=True)
         raise HTTPException(status_code=500, detail="Errore recupero runs")
 
 
@@ -166,7 +166,7 @@ def get_node_data(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"[GESTITO] Errore dati nodo {node_id} run {run_id}: {e}", op="intermediate_api")
+        logger.error(f"[GESTITO] Errore dati nodo {node_id} run {run_id}: {e}", op="intermediate_api", exc_info=True)
         raise HTTPException(status_code=500, detail="Errore recupero dati nodo")
 
 
@@ -216,7 +216,7 @@ def compare_runs_l1(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"[GESTITO] Errore confronto L1 {run_id_a}/{run_id_b}: {e}", op="intermediate_api")
+        logger.error(f"[GESTITO] Errore confronto L1 {run_id_a}/{run_id_b}: {e}", op="intermediate_api", exc_info=True)
         raise HTTPException(status_code=500, detail="Errore confronto runs")
 
 
@@ -334,7 +334,7 @@ def compare_runs_l2(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"[GESTITO] Errore confronto L2 {run_id_a}/{run_id_b}: {e}", op="intermediate_api")
+        logger.error(f"[GESTITO] Errore confronto L2 {run_id_a}/{run_id_b}: {e}", op="intermediate_api", exc_info=True)
         raise HTTPException(status_code=500, detail="Errore confronto L2")
 
 
@@ -362,5 +362,5 @@ def pin_run(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"[GESTITO] Errore pin run {run_id}: {e}", op="intermediate_api")
+        logger.error(f"[GESTITO] Errore pin run {run_id}: {e}", op="intermediate_api", exc_info=True)
         raise HTTPException(status_code=500, detail="Errore pin run")

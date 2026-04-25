@@ -74,7 +74,7 @@ def _s3_download_bytes(storage_key: str) -> Optional[bytes]:
         chunks = list(stream["body"])
         return b"".join(chunks)
     except Exception as e:
-        logger.error(f"[FS-4] S3 download {storage_key} fallito: {e}")
+        logger.error(f"[FS-4] S3 download {storage_key} fallito: {e}", exc_info=True)
         return None
 
 

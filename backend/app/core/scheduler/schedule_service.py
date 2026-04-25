@@ -154,7 +154,7 @@ class ScheduleService:
                 config_data = json.loads(config_data)
             return ScheduleConfig.model_validate(config_data)
         except Exception as e:
-            logger.error(f"[GESTITO] Errore parsing schedule {row.get('id')}: {e}")
+            logger.error(f"[GESTITO] Errore parsing schedule {row.get('id')}: {e}", exc_info=True)
             return None
 
     def _config_to_db(self, config: ScheduleConfig, group_id: str) -> dict:

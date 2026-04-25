@@ -233,7 +233,7 @@ def encrypt(value: Optional[str]) -> Optional[str]:
         token = _get_fernet().encrypt(value.encode("utf-8")).decode("utf-8")
         return f"{ENC_PREFIX}{token}"
     except Exception as e:
-        logger.error(f"crypto.encrypt fallita: {e}")
+        logger.error(f"crypto.encrypt fallita: {e}", exc_info=True)
         raise RuntimeError(
             "crypto.encrypt broken — refusing to save plaintext"
         ) from e
@@ -264,7 +264,7 @@ def decrypt(value: Optional[str]) -> Optional[str]:
         )
         return None
     except Exception as e:  # pragma: no cover
-        logger.error(f"crypto.decrypt fallita: {e}")
+        logger.error(f"crypto.decrypt fallita: {e}", exc_info=True)
         return None
 
 

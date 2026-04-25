@@ -94,7 +94,7 @@ class PlenoraBeatScheduler(Scheduler):
             self._redis_client = client
             return client
         except Exception as e:
-            logger.error(f"[LEADER] Redis non raggiungibile: {e}")
+            logger.error(f"[LEADER] Redis non raggiungibile: {e}", exc_info=True)
             return None
 
     def _record_leader_transition(self, transition_type: str) -> None:
