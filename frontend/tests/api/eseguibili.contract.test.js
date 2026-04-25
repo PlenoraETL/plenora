@@ -94,4 +94,46 @@ describe('eseguibili api contract', () => {
     await deleteEseguibile('e-9');
     expect(httpMock.delete).toHaveBeenCalledWith('/eseguibili/e-9');
   });
+
+  // ─── B3 Phase 4: client-side size guard + 413 propagation ────────────────
+
+  it('analyzeUpload rejects oversized files client-side without calling backend', async () => {
+    const { analyzeUpload } = await import('../../src/api/eseguibili');
+    const { MAX_UPLOAD_SIZE_BYTES, UploadTooLargeError } = await import(
+      '../../src/api/uploadGuards'
+    );
+
+    const oversized = new File(['stub'], 'big.csv', { type: 'text/csv' });
+    Object.defineProperty(oversized, 'size', {
+      value: MAX_UPLOAD_SIZE_BYTES + 1,
+    });
+
+    await expect(analyzeUpload('eseg-1', oversized)).rejects.toBeInstanceOf(
+      UploadTooLargeError,
+    );
+    expect(httpMock.post).not.toHaveBeenCalled();
+  });
+
+  it('analyzeUpload propagates backend 413 as UploadTooLargeError', async () => {
+    const { analyzeUpload } = await import('../../src/api/eseguibili');
+    const { UploadTooLargeError } = await import('../../src/api/uploadGuards');
+
+    httpMock.post.mockRejectedValueOnce({
+      response: {
+        status: 413,
+        data: { detail: 'File troppo grande (110MB). Limite massimo: 100MB.' },
+      },
+    });
+
+    const file = new File(['ok'], 'ok.csv', { type: 'text/csv' });
+    let caught;
+    try {
+      await analyzeUpload('eseg-1', file);
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(UploadTooLargeError);
+    expect(caught.source).toBe('server');
+    expect(caught.message).toContain('110MB');
+  });
 });

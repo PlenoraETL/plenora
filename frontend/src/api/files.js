@@ -16,6 +16,7 @@
  * Auth, error handling e logout 401 sono già gestiti dagli interceptor di http.js.
  */
 import http from './http';
+import { assertFileSize, throwIfUploadTooLarge } from './uploadGuards';
 
 /**
  * Upload un nuovo file
@@ -29,6 +30,11 @@ import http from './http';
  * @returns {Promise<Object>} FileSource creato
  */
 export const uploadFile = async (file, name, description = '', layer = '', sheet = '', selectedColumns = null, srid = null) => {
+  // B3 Phase 4: pre-check size lato client; il backend cappa a
+  // settings.MAX_FILE_SIZE (default 100MB) e risponde 413, ma evitiamo
+  // il roundtrip per file ovviamente fuori soglia.
+  assertFileSize(file);
+
   const formData = new FormData();
   formData.append('file', file);
   formData.append('name', name);
@@ -42,9 +48,16 @@ export const uploadFile = async (file, name, description = '', layer = '', sheet
     formData.append('srid', String(srid));
   }
 
-  const response = await http.post('/files/upload', formData);
-
-  return response.data;
+  try {
+    const response = await http.post('/files/upload', formData);
+    return response.data;
+  } catch (err) {
+    // Normalizza 413: i caller possono branchare su
+    // err instanceof UploadTooLargeError sia per rifiuto client-side
+    // che server-side. Tutti gli altri errori passano invariati.
+    throwIfUploadTooLarge(err);
+    throw err;
+  }
 };
 
 /**
@@ -82,6 +95,9 @@ export const getFile = async (fileId) => {
  * @returns {Promise<Array>} Lista di FileSource creati
  */
 export const uploadMultiLayer = async (file, name, description = '', layersConfig = [], srid = null) => {
+  // B3 Phase 4: pre-check size lato client (vedi uploadFile sopra).
+  assertFileSize(file);
+
   const formData = new FormData();
   formData.append('file', file);
   formData.append('name', name);
@@ -89,8 +105,13 @@ export const uploadMultiLayer = async (file, name, description = '', layersConfi
   formData.append('layers_config', JSON.stringify(layersConfig));
   if (srid) formData.append('srid', String(srid));
 
-  const response = await http.post('/files/upload-multi-layer', formData);
-  return response.data;
+  try {
+    const response = await http.post('/files/upload-multi-layer', formData);
+    return response.data;
+  } catch (err) {
+    throwIfUploadTooLarge(err);
+    throw err;
+  }
 };
 
 /**
@@ -133,14 +154,22 @@ export const getFilePreview = async (fileId, limit = 100) => {
  * @returns {Promise<{columns: Array, row_count: number}>}
  */
 export const previewFileTemp = async (file, layer = null, sheet = null) => {
+  // B3 Phase 4: anche la preview-temp passa per il cap backend
+  // (`_enforce_upload_size_limit`). Pre-check client per coerenza UX.
+  assertFileSize(file);
+
   const formData = new FormData();
   formData.append('file', file);
   if (layer) formData.append('layer', layer);
   if (sheet) formData.append('sheet', sheet);
 
-  const response = await http.post('/files/preview-temp', formData);
-
-  return response.data;
+  try {
+    const response = await http.post('/files/preview-temp', formData);
+    return response.data;
+  } catch (err) {
+    throwIfUploadTooLarge(err);
+    throw err;
+  }
 };
 
 export default {

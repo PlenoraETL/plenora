@@ -16,6 +16,11 @@
  */
 
 import http from './http';
+import {
+  assertFileSize,
+  throwIfUploadTooLarge,
+  TICKET_ATTACHMENT_MAX_SIZE_BYTES,
+} from './uploadGuards';
 
 export const getTicketsMeta = async () => {
   const res = await http.get('/tickets/meta');
@@ -82,12 +87,25 @@ export const addComment = async (ticketId, body) => {
 };
 
 export const uploadAttachment = async (ticketId, file) => {
+  // B3 Phase 4: pre-check size lato client allineato al cap backend
+  // *specifico* per i ticket (10MB). Il default generale di
+  // uploadGuards e' 100MB e accetterebbe file che `tickets/router.py`
+  // (TICKET_ATTACHMENT_MAX_BYTES = 10MB) rifiuta.
+  assertFileSize(file, { maxBytes: TICKET_ATTACHMENT_MAX_SIZE_BYTES });
+
   const form = new FormData();
   form.append('file', file);
-  const res = await http.post(`/tickets/${ticketId}/attachments`, form, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });
-  return res.data;
+  // B3 Phase 4: NIENTE Content-Type manuale. Forzare "multipart/form-data"
+  // senza boundary blocca il parsing lato Starlette/python-multipart
+  // (vedi commento speculare in `eseguibili.js#analyzeUpload`). Lasciamo
+  // che axios costruisca header + boundary a partire dal FormData.
+  try {
+    const res = await http.post(`/tickets/${ticketId}/attachments`, form);
+    return res.data;
+  } catch (err) {
+    throwIfUploadTooLarge(err);
+    throw err;
+  }
 };
 
 export const deleteAttachment = async (ticketId, attachmentId) => {
