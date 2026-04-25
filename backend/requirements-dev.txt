@@ -1,6 +1,17 @@
 # Dev / test dependencies — non installate in produzione.
 # Uso: `pip install -r requirements-dev.txt` dopo requirements.txt.
 
+# Test runner + plugin coverage/asyncio. Necessari per riprodurre la suite
+# tests2/ su macchine pulite e su CI runner. Senza queste entry, una macchina
+# nuova clonava il repo e `pytest` falliva con command-not-found anche se i
+# test erano passanti localmente sulle macchine dev (pytest installato global).
+pytest>=8.0
+pytest-cov>=5.0
+pytest-asyncio>=0.24
+
+# Property-based testing. Usato in tests2/shared/test_hypothesis_property_contract.py.
+hypothesis>=6.100
+
 # Redis in-memory per integration test (fakeredis e' drop-in di
 # redis-py, supporta SET NX EX / EXPIRE / TTL / DELETE senza Docker).
 # Usato in tests2/scheduler/integration/test_leader_election_e2e.py

@@ -1,0 +1,96 @@
+name: CI
+
+# Phase 3 Batch A — CI minima. Scope: backend pytest + frontend vitest.
+# Niente coverage gate, niente mutation, niente DB matrix integration:
+# i test che richiedono DB live (oracle/mysql/mssql/postgres) si auto-skip
+# via _<dialect>_reachable() guard interno (vedi tests2/integration/),
+# quindi la suite in CI esegue il subset locale-friendly.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Annulla run precedenti sullo stesso PR/branch quando arriva un nuovo push.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend pytest
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # Test session vive in storage policy DB (no S3 reale, no BACKUP_BUCKET
+      # required) — coerente con tests2/conftest.py:21.
+      STORAGE_POLICY: db
+      # Redis broker per test che chiamano Celery/blacklist (fakeredis copre
+      # gli unit, ma alcuni integration usano client redis-py reale).
+      CELERY_BROKER_URL: redis://localhost:6379/0
+      CELERY_RESULT_BACKEND: redis://localhost:6379/0
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run pytest
+        working-directory: backend
+        # -c puntando al file dedicato di tests2/. Niente coverage gate in
+        # questo batch (T-01 vincolo). Niente -p no:randomly perche'
+        # pytest-randomly non e' in deps (P1-3 separato).
+        run: pytest tests2/ -c tests2/pytest.ini
+
+  frontend:
+    name: Frontend vitest
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run vitest
+        working-directory: frontend
+        # `npm test` e' aliasato a `vitest run` (single-shot, no watch).
+        run: npm test
