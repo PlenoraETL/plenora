@@ -191,12 +191,56 @@ def list_node_meta(run_id: str) -> List[Dict]:
 # ============================================================
 
 
+# ============================================================
+# F-DATA-01 / P1-04: SENTINEL per NaN/Inf in JSONB
+# ============================================================
+#
+# JSON strict non ammette NaN / +Inf / -Inf. Pre-fix `_to_jsonable` li
+# mappava a None: divergenza fantasma con `compute_row_hash` (che li
+# preserva come "nan" / "+inf" / "-inf" via `_format_float_stable`).
+# Reload da `node_rows.row_data` perdeva la distinzione e ricalcolare
+# l'hash dei dati ricostruiti dava un hash diverso da quello stored.
+#
+# Fix simmetrico via sentinel object JSONB namespaced. Sentinel string
+# semplici (es. "__nan__") sarebbero rischiosi: un valore utente reale
+# uguale alla stringa sentinel verrebbe convertito a NaN al reverse,
+# corrompendo dati legittimi. Usiamo invece un dict di forma esatta:
+#
+#     {"__plenora_special_float__": "nan"}
+#     {"__plenora_special_float__": "+inf"}
+#     {"__plenora_special_float__": "-inf"}
+#
+# Il reverse mapping converte SOLO dict con esattamente quella chiave
+# (singola, valore in {"nan","+inf","-inf"}). Stringhe omonime e dict
+# utente con altre chiavi restano invariati. Hash storico invariato
+# (writer.py NON e' toccato).
+#
+# Compat: dati pre-fix scritti come `null` continuano a venire letti
+# come `None` (il reverse tocca solo dict di forma esatta). Nessuna
+# migration richiesta.
+
+_SPECIAL_FLOAT_KEY = "__plenora_special_float__"
+_SPECIAL_FLOAT_TAG_NAN = "nan"
+_SPECIAL_FLOAT_TAG_INF_POS = "+inf"
+_SPECIAL_FLOAT_TAG_INF_NEG = "-inf"
+
+
+def _make_special_float_sentinel(tag: str) -> dict:
+    """Costruisce il dict-sentinel canonico per NaN/+Inf/-Inf."""
+    return {_SPECIAL_FLOAT_KEY: tag}
+
+
 def _to_jsonable(v):
     """Normalizza un valore per la serializzazione JSONB.
 
     JSONB non accetta nativamente: datetime, date, Decimal, bytes, geometrie
     Shapely, pandas Timestamp, numpy scalar. Questa funzione li converte in
     tipi primitivi JSON-compatibili (str, int, float, bool, None, list, dict).
+
+    NaN / +Inf / -Inf sono mappati a un dict-sentinel namespaced
+    (`{"__plenora_special_float__": "nan"|"+inf"|"-inf"}`) per allineamento
+    con il row hash (vedi commento sezione sopra). La forma object-namespaced
+    evita la collisione con valori utente uguali a stringhe sentinel.
     """
     if v is None:
         return None
@@ -221,9 +265,16 @@ def _to_jsonable(v):
     if isinstance(v, int):
         return int(v)
     if isinstance(v, float):
-        # NaN/Inf non sono validi in JSON strict — convertiamo a None
-        if v != v or v in (float("inf"), float("-inf")):
-            return None
+        # NaN / Inf non sono validi in JSON strict: usiamo dict-sentinel
+        # namespaced invece di None, cosi' il reverse mapping ricostruisce
+        # esattamente il float originale e l'hash recompute matcha lo
+        # stored (F-DATA-01).
+        if v != v:  # NaN: distinto da +Inf/-Inf perche' nan != nan
+            return _make_special_float_sentinel(_SPECIAL_FLOAT_TAG_NAN)
+        if v == float("inf"):
+            return _make_special_float_sentinel(_SPECIAL_FLOAT_TAG_INF_POS)
+        if v == float("-inf"):
+            return _make_special_float_sentinel(_SPECIAL_FLOAT_TAG_INF_NEG)
         return float(v)
     # bytes/bytearray → base64 o hex-repr; per intermediate usiamo un
     # placeholder lungo quanto servono sapere bytes_len
@@ -235,6 +286,42 @@ def _to_jsonable(v):
     if isinstance(v, dict):
         return {str(k): _to_jsonable(val) for k, val in v.items()}
     return str(v)
+
+
+def _from_jsonable_value(v):
+    """Reverse mapping di `_to_jsonable` per i sentinel NaN/Inf.
+
+    Converte SOLO dict di forma ESATTA
+    `{_SPECIAL_FLOAT_KEY: "nan"|"+inf"|"-inf"}` (singola chiave, valore
+    nel set noto) in float speciale. Tutto il resto passa invariato:
+      - stringhe omonime ai vecchi sentinel (es. "__nan__") restano stringhe
+      - dict utente che includono `_SPECIAL_FLOAT_KEY` ma con altre chiavi
+        o tag sconosciuti vengono ricorsi come dict normali
+      - list/dict propagano la trasformazione ricorsivamente
+      - `None`, numeri, bool, stringhe non-sentinel: invariati
+
+    Compat: dati pre-fix scritti come `null` JSONB restano `None`.
+    """
+    # Dict-sentinel: forma esatta, singola chiave, tag noto.
+    if (
+        isinstance(v, dict)
+        and len(v) == 1
+        and _SPECIAL_FLOAT_KEY in v
+    ):
+        tag = v[_SPECIAL_FLOAT_KEY]
+        if tag == _SPECIAL_FLOAT_TAG_NAN:
+            return float("nan")
+        if tag == _SPECIAL_FLOAT_TAG_INF_POS:
+            return float("inf")
+        if tag == _SPECIAL_FLOAT_TAG_INF_NEG:
+            return float("-inf")
+        # Tag sconosciuto: NON consumiamo il dict, lo trattiamo come
+        # dato utente normale e ricorriamo (sotto).
+    if isinstance(v, list):
+        return [_from_jsonable_value(x) for x in v]
+    if isinstance(v, dict):
+        return {k: _from_jsonable_value(val) for k, val in v.items()}
+    return v
 
 
 def insert_node_rows(run_id: str, node_id: str,
@@ -309,13 +396,17 @@ def get_node_table_rows(run_id: str, node_id: str,
     raw_rows = fetchall(sql, params)
 
     # Ricostruisci il formato originale: _row_hash + colonne row_data
-    # (row_data arriva già come dict da psycopg2 per JSONB)
+    # (row_data arriva già come dict da psycopg2 per JSONB).
+    # F-DATA-01 / P1-04: applichiamo `_from_jsonable_value` per
+    # ricostruire NaN / +Inf / -Inf dai sentinel persistiti in JSONB.
+    # Hash recompute sui dati ricostruiti matcha l'hash originale stored.
     result = []
     for r in raw_rows:
         row_data = r.get("row_data") or {}
         if isinstance(row_data, str):
             # Safety: se arriva come stringa JSON invece che dict
             row_data = json.loads(row_data)
+        row_data = {k: _from_jsonable_value(v) for k, v in row_data.items()}
         result.append({"_row_hash": r.get("row_hash", ""), **row_data})
     return result
 
