@@ -336,12 +336,49 @@ def execute_parallel_enrichers(
     # Non bloccare su errori singoli se continue_on_error e attivo
     # (il caller decide come gestire)
 
-    # Merge: input_df + colonne nuove da ciascun nodo
+    # Merge: input_df + colonne nuove da ciascun nodo.
+    #
+    # F-DATA-07 / P1-06: il merge usa positional alignment (`.values` bypassa
+    # l'index pandas). Sicuro oggi perche' tutti i path attuali di
+    # `EnrichmentExecutor` preservano cardinalita' E ordine dell'input_df
+    # (vedi branch `all_exec=True` e `all_exec=False` con `sort_index`).
+    # Se un futuro executor dedupplica internamente, riordina o cambia
+    # cardinalita', il positional align diventa silent corruption per riga
+    # (valori API associati alla riga sbagliata).
+    #
+    # Guard fail-loud: prima del merge richiediamo che ogni `result_df`
+    # abbia lo stesso index del `merged` (preserva ordine + cardinalita').
+    # Fallback ristretto: se entrambi gli index sono il RangeIndex default
+    # `RangeIndex(0, N)` (caso post-`reset_index(drop=True)` su input
+    # gia' default), il positional align e' ancora ben definito. RangeIndex
+    # con start != 0 (es. RangeIndex(10, 13)) NON sono accettati: l'identita'
+    # dell'index e' stata persa e il positional merge resta ambiguo.
+    # Tutto il resto -> RuntimeError diagnostico.
     merged = input_df.copy()
     for nid in node_ids:
         result_df = node_results.get(nid)
         if result_df is None or not isinstance(result_df, pd.DataFrame):
             continue
+
+        if not result_df.index.equals(merged.index):
+            same_len = len(result_df) == len(merged)
+            default_range = pd.RangeIndex(len(merged))
+            both_default_range = (
+                result_df.index.equals(default_range)
+                and merged.index.equals(default_range)
+            )
+            if not (same_len and both_default_range):
+                raise RuntimeError(
+                    f"[parallel-merge] mismatch index/cardinalita' su nodo "
+                    f"{nid}: result_df ha {len(result_df)} righe vs "
+                    f"merged {len(merged)}; index uguali={result_df.index.equals(merged.index)}. "
+                    f"Il merge positional .values produrrebbe silent "
+                    f"corruption riga<->valore. L'executor del nodo deve "
+                    f"preservare l'index di input_df, oppure produrre il "
+                    f"RangeIndex default (0..N-1) coerente con un input "
+                    f"a RangeIndex default."
+                )
+
         new_cols = [c for c in result_df.columns if c not in merged.columns]
         for c in new_cols:
             merged[c] = result_df[c].values
