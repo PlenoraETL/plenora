@@ -3,7 +3,6 @@
  *
  * Endpoints intermediate.db:
  *   GET /runs/{canvas_id}                        — lista run per canvas
- *   GET /runs/{run_id}/nodes                     — nodi di una run
  *   GET /runs/{run_id}/nodes/{node_id}/data      — righe di un nodo
  *   GET /runs/compare/l1?run_id_a=&run_id_b=     — confronto hash/contatori
  *   GET /runs/compare/l2?run_id_a=&run_id_b=&node_id= — righe aggiunte/rimosse
@@ -20,16 +19,6 @@ import http from './http';
  */
 export const listRuns = async (canvasId, limit = 50) => {
   const response = await http.get(`/runs/${canvasId}`, { params: { limit } });
-  return response.data;
-};
-
-/**
- * Metadati di tutti i nodi di una run.
- * @param {string} runId
- * @returns {Promise<Array>}
- */
-export const getRunNodes = async (runId) => {
-  const response = await http.get(`/runs/${runId}/nodes`);
   return response.data;
 };
 

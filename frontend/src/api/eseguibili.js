@@ -60,9 +60,10 @@ export const deleteEseguibile = async (id) => {
 export const analyzeUpload = async (eseguibileId, file) => {
   const fd = new FormData();
   fd.append('file', file);
-  const r = await http.post(`/eseguibili/${eseguibileId}/analyze-upload`, fd, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });
+  // intent: lasciare che axios setti Content-Type con il boundary corretto
+  // a partire da FormData. Forzare manualmente "multipart/form-data" senza
+  // boundary fa rifiutare il body al backend (Starlette/python-multipart).
+  const r = await http.post(`/eseguibili/${eseguibileId}/analyze-upload`, fd);
   return r.data;
 };
 

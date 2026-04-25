@@ -15,7 +15,9 @@ import http from './http';
  * @param {Object} filters
  * @param {string} filters.category        - Filtra per categoria (geocoding, routing, ml_model, ...)
  * @param {string} filters.connection_type - Filtra per tipo (manual, template, openapi, rest_file, datasource)
- * @returns {Promise<Object>} { connections: [...] }
+ * @returns {Promise<{api_connections: Array<Object>}>} shape backend: `arricchisci/router.py:458`
+ *   ritorna `{"api_connections": all_conns}`. Niente alias `connections`
+ *   lato BE.
  */
 export const listApiConnections = async (filters = {}) => {
   const params = new URLSearchParams();
