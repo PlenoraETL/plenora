@@ -33,6 +33,7 @@ from app.utils.logger import get_logger
 from app.shared.audit_action import audit_action
 from app.shared.sharing import visible_resource_ids
 from app.shared.error_sanitizer import sanitize_http_detail
+from app.shared.upload_guards import enforce_upload_size_limit
 
 from . import db as eseguibili_db
 from . import service as eseguibili_service
@@ -311,6 +312,11 @@ async def analyze_upload(
     """
     record = eseguibili_db.get_eseguibile(eseguibile_id)
     _check_visible(record, current_user)
+
+    # Size cap pre-read (helper centralizzato, vedi `app.shared.upload_guards`).
+    # Coerente con `files/router.py`: rifiuta con 413 prima di leggere il
+    # contenuto in RAM, evitando DoS interno credenziato via upload N GB.
+    enforce_upload_size_limit(file)
 
     # Salva in temp dir
     tmp_dir = settings.DATA_DIR / "temp" / "eseguibili_uploads"

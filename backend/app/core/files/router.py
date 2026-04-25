@@ -52,32 +52,19 @@ def _sanitize_upload_filename(raw: Optional[str]) -> str:
 
 
 def _enforce_upload_size_limit(file: "UploadFile") -> int:
-    """Rifiuta con 413 gli upload che superano `settings.MAX_FILE_SIZE`.
+    """Wrapper locale al cap di upload: delega a `app.shared.upload_guards`.
 
-    Determina la dimensione **senza leggere il contenuto in RAM**: usa
-    `seek(end) → tell() → seek(0)`, lasciando il cursore a 0 per il caller.
-    Questo evita il pattern fragile "MIME validate via `read()` poi enforce
-    size dopo" — un attaccante autenticato puo' altrimenti forzare la lettura
-    di N GB in RAM (DoS interno credenziato) prima del rifiuto.
+    L'implementazione canonica vive in `app/shared/upload_guards.py`
+    (T-04 + B1 Phase 4: riuso da `eseguibili/router.py`).
 
-    Ritorna la dimensione in byte se sotto soglia, solleva HTTPException 413
-    altrimenti. Cap configurabile via env `MAX_FILE_SIZE` (default 100MB,
-    `app/config.py:139`).
+    Risolviamo `MAX_FILE_SIZE` dal `settings` di QUESTO modulo prima di
+    invocare l'helper, cosi' i test che monkeypatchano `files_router.settings`
+    continuano a controllare il cap (preserva il contratto di
+    `tests2/security/unit/test_files_router_size_cap_contract.py`).
     """
-    file.file.seek(0, 2)  # seek to end
-    file_size = file.file.tell()
-    file.file.seek(0)
+    from app.shared.upload_guards import enforce_upload_size_limit
     max_size = settings.get("MAX_FILE_SIZE", 100 * 1024 * 1024)
-    if file_size > max_size:
-        max_mb = max_size // (1024 * 1024)
-        raise HTTPException(
-            status_code=413,
-            detail=(
-                f"File troppo grande ({file_size // (1024*1024)}MB). "
-                f"Limite massimo: {max_mb}MB."
-            ),
-        )
-    return file_size
+    return enforce_upload_size_limit(file, max_bytes=max_size)
 
 
 def _assert_path_within(child: Path, parent: Path, label: str = "Percorso") -> Path:
