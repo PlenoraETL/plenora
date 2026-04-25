@@ -40,13 +40,14 @@ per i layer 2-5 questo modulo costruisce direttamente il payload
 from __future__ import annotations
 
 import json
-import logging
 from typing import Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 import requests
 
-logger = logging.getLogger(__name__)
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 # Ordine canonico dei layer IMDF dentro il Feature Service.
 # Importante: il layer 0 e' "Localita" (gerarchia top-down).

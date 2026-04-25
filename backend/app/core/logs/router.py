@@ -3,7 +3,6 @@ Router API per la consultazione dei log — lettura da PostgreSQL.
 """
 
 import json
-import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
@@ -11,8 +10,9 @@ from app.config import settings
 from app.core.auth.auth import get_current_user, require_not_esecutore, CurrentUser, group_filter
 from app.db.pg_connection import fetchone as _fetchone, fetchall as _fetchall
 from app.shared.authz_helpers import assert_project_visible
+from app.utils.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/logs", tags=["logs"])
 

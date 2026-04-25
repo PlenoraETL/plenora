@@ -14,11 +14,12 @@ Configurazione extra attesa in config.extra:
 """
 
 import io
-import logging
 from datetime import datetime
 from typing import Optional
 
-logger = logging.getLogger(__name__)
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 from app.core.datasources.interface import (
     BackendConfig,

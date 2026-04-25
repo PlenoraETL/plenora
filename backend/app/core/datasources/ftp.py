@@ -14,12 +14,13 @@ Configurazione extra attesa in config.extra:
 
 import ftplib
 import io
-import logging
 import socket
 from datetime import datetime
 from typing import Optional
 
-logger = logging.getLogger(__name__)
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def _sanitize_ftp_error(e: Exception) -> str:

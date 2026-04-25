@@ -14,7 +14,6 @@ Configurazione extra attesa in config.extra:
 """
 
 import io
-import logging
 import socket
 import stat
 from datetime import datetime
@@ -28,8 +27,9 @@ from app.core.datasources.interface import (
     DataSourcePermissionError,
     FileInfo,
 )
+from app.utils.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     import paramiko

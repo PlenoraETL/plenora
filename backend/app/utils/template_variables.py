@@ -38,12 +38,13 @@ Uso:
     # → {'q': 'reftime:>=2026-02-02 09:30'}
 """
 
-import logging
 import re
 from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any
 
-logger = logging.getLogger(__name__)
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 # Espressione regolare per riconoscere le variabili template.
 # Cattura: gruppo 1 = nome variabile (es. NOW), gruppo 2 = offset opzionale (es. +2h)
@@ -121,7 +122,7 @@ def apply_offset(dt: datetime, offset_str: str) -> datetime:
     match = re.match(r"([+-])(\d+)([hdmsMHDMS])", offset_str)
     if not match:
         import logging
-        logging.getLogger(__name__).warning(f"Offset template non valido: '{offset_str}' (formato atteso: ±N[hdms])")
+        logger.warning(f"Offset template non valido: '{offset_str}' (formato atteso: ±N[hdms])")
         return dt
 
     segno, quantita, unita = match.groups()

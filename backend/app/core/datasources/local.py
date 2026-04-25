@@ -13,7 +13,6 @@ il relativo datasource backend.
 details.multi_host_advisory) — informativo, non fail.
 """
 
-import logging
 import os
 from datetime import datetime
 from typing import Optional
@@ -26,8 +25,9 @@ from app.core.datasources.interface import (
     DataSourcePermissionError,
     FileInfo,
 )
+from app.utils.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def _classify_path_for_multi_host(path: str) -> str:

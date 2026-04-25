@@ -36,12 +36,13 @@ Database supportati:
 - SQLite (PRAGMA table_info per ogni tabella)
 """
 
-import logging
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, TypedDict, Protocol, Callable, Any, Tuple
 from dataclasses import dataclass
 
-logger = logging.getLogger(__name__)
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 # =============================================================================
