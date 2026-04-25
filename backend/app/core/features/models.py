@@ -134,3 +134,27 @@ class CreateServiceResponse(BaseModel):
     item_id: str
     feature_count: int
     errors: List[Dict[str, Any]] = []
+
+
+class BrowseServicesResponse(BaseModel):
+    """Wrapper triviale di GET /api/features/connections/{id}/services.
+    Item ArcGIS opaco per natura: shape interna documentata `{name, url, folder}`
+    ma ArcGIS può aggiungere campi non garantiti — `Dict[str, Any]` preserva
+    tolleranza piena.
+    """
+    services: List[Dict[str, Any]]
+
+
+class ListFoldersResponse(BaseModel):
+    """Wrapper triviale di GET /api/features/connections/{id}/folders.
+    Item ArcGIS opaco per natura: shape interna documentata `{id, title}`.
+    """
+    folders: List[Dict[str, Any]]
+
+
+class BrowseLayersResponse(BaseModel):
+    """Wrapper triviale di GET /api/features/connections/{id}/layers.
+    Item ArcGIS opaco per natura: shape interna documentata
+    `{id, name, geometry_type, feature_count, url}`.
+    """
+    layers: List[Dict[str, Any]]

@@ -50,6 +50,9 @@ from app.core.features.models import (
     FeatureWriteRequest,
     WriteFeaturesResponse,
     CreateServiceResponse,
+    BrowseServicesResponse,
+    ListFoldersResponse,
+    BrowseLayersResponse,
 )
 from app.core.features.features_service import FeaturesService
 from app.shared.path_policy import assert_path_within
@@ -201,7 +204,7 @@ async def test_connection(connection_id: str, current_user: CurrentUser = Depend
 # BROWSE: SERVIZI E LAYER
 # =============================================================================
 
-@router.get("/connections/{connection_id}/services")
+@router.get("/connections/{connection_id}/services", response_model=BrowseServicesResponse)
 async def browse_services(connection_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
     """Lista i Feature Service disponibili nella connessione."""
     _check_arcgis_access(connection_id, current_user)
@@ -216,7 +219,7 @@ async def browse_services(connection_id: str, current_user: CurrentUser = Depend
         raise HTTPException(status_code=500, detail="Errore interno del server")
 
 
-@router.get("/connections/{connection_id}/folders")
+@router.get("/connections/{connection_id}/folders", response_model=ListFoldersResponse)
 async def list_folders(connection_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
     """Lista le cartelle dell'utente nella connessione ArcGIS."""
     _check_arcgis_access(connection_id, current_user)
@@ -231,7 +234,7 @@ async def list_folders(connection_id: str, current_user: CurrentUser = Depends(r
         raise HTTPException(status_code=500, detail="Errore interno del server")
 
 
-@router.get("/connections/{connection_id}/layers")
+@router.get("/connections/{connection_id}/layers", response_model=BrowseLayersResponse)
 async def browse_layers(
     connection_id: str,
     service_url: str = Query(..., description="URL del FeatureServer"),
