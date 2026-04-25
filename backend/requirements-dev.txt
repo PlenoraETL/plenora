@@ -26,3 +26,11 @@ fakeredis>=2.20
 # multipart effettivo).
 # Usato in tests2/shared/test_object_storage_contract.py.
 moto[s3]>=5.0,<6.0
+
+# SBOM generation + CVE check (T-05 Phase 3 Batch D). pip-audit 2.7+
+# supporta export CycloneDX-JSON dai requirements file (--format=cyclonedx-json
+# + --requirement). Usato da `scripts/generate_sbom.py` per generare
+# `docs/compliance/sbom.json` baseline. Niente CI scheduled, niente PR
+# automatica: cadenza manuale trimestrale per ora (vedi
+# `docs/compliance/sbom.md`).
+pip-audit>=2.7
