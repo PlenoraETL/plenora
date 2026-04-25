@@ -16,17 +16,18 @@ Questo documento si attiva quando **qualcosa e' andato storto**.
 | Componente | Dettaglio | Doc |
 |---|---|---|
 | DB prod | Postgres su `15.161.59.22:5432/plenora`, schema `plenora` | DATABASE_URL su SSM |
-| Backup | Daily 02:00 UTC via systemd, dump schema-only | `deploy/backup-runbook.md` |
+| Backup | Daily 02:00 UTC via systemd, dump `--schema=plenora` (schema + dati), non full-DB | `deploy/backup-runbook.md` |
 | Test restore | Weekly Sun 03:00 UTC verifica restorability | `deploy/systemd/README.md` |
 | Bucket S3 | `plenora-backup-112011134642-eu-south-1-an` (eu-south-1) | — |
 | Retention S3 | Standard 30gg → Standard-IA → delete 365gg | lifecycle rule AWS |
 | IAM role EC2 | `plenora-backup-role` (account 112011134642) | `deploy/iam/` |
 | Secrets | AWS SSM `/plenora/prod/*` SecureString | `deploy/iam/README.md` |
 
-**Punto critico a sapere a memoria**: il backup dump e' **schema-only**
-(`--schema=plenora`), NON un full-DB dump. Il target di restore deve
-avere le estensioni gia' installate: `postgis`, `postgis_raster`,
-`postgis_topology`, `h3`, `h3_postgis`.
+**Punto critico a sapere a memoria**: il backup dump e' **scoped allo
+schema applicativo `plenora` via `--schema=plenora` (schema + dati),
+non full-DB**. Il target di restore deve avere le estensioni gia'
+installate: `postgis`, `postgis_raster`, `postgis_topology`, `h3`,
+`h3_postgis`.
 
 ---
 
@@ -389,18 +390,30 @@ direttamente, non email — l'email puo' non essere vista in tempo utile.
 
 ## 8. Test DR (consigliato trimestrale)
 
-Un DR plan che non viene mai testato non e' un DR plan. Ogni 3 mesi:
+Un DR plan che non viene mai testato non e' un DR plan. Ogni 3 mesi
+eseguire il drill end-to-end seguendo il playbook dedicato:
 
-1. **Simula** scenario A su un DB temp su Postgres locale o staging
-2. Cronometra end-to-end: download + createdb + extension + restore +
-   verifica smoke
-3. Aggiorna questo runbook se i tempi cambiano significativamente
-4. Registra data + esito + owner: ultimo test effettuato _________
+- Procedura ripetibile: [`dr_drill_playbook.md`](dr_drill_playbook.md)
+- Storico esecuzioni: [`dr_drill_log.md`](dr_drill_log.md)
+
+Il playbook copre: download dump da S3, restore su DB vergine, verifica
+estensioni (postgis/h3), smoke applicativo (login + healthcheck),
+misurazione RPO/RTO reali.
+
+### Target RPO / RTO dichiarati
+
+| Metrica | Target | Razionale |
+|---|---|---|
+| **RPO** | ≤ 24h | Backup giornaliero `plenora-backup.timer` alle 02:00 UTC |
+| **RTO** | ≤ 2h | dump `--schema=plenora` ~12 MB (schema + dati, non full-DB), restore osservato 10-60s + buffer per estensioni + smoke |
+
+Soglie di alert: `RPO_measured > 36h` o `RTO_measured > 2h` apre P1
+(vedi [`incident_response.md §1`](incident_response.md)).
 
 Il timer weekly `plenora-backup-test.timer` copre il **restore
 restorability** automaticamente, ma NON il full DR (non restarta
 backend, non aggiorna SSM, ecc.). E' un subset, utile ma non
-sostitutivo.
+sostitutivo del drill trimestrale.
 
 ---
 
@@ -424,6 +437,9 @@ Dopo ogni intervento DR:
 ## Riferimenti
 
 - Operazioni normali: [backup-runbook.md](../../deploy/backup-runbook.md)
+- DR drill ripetibile: [dr_drill_playbook.md](dr_drill_playbook.md)
+- DR drill log storico: [dr_drill_log.md](dr_drill_log.md)
+- Incident response generale: [incident_response.md](incident_response.md)
 - Unit systemd + install: [deploy/systemd/README.md](../../deploy/systemd/README.md)
 - IAM policies + SSM setup: [deploy/iam/README.md](../../deploy/iam/README.md)
 - Script di backup: [scripts/backup_db.py](../../scripts/backup_db.py)
