@@ -30,6 +30,7 @@ from app.core.auth.auth import (
 )
 from app.config import settings
 from app.utils.logger import get_logger
+from app.shared.audit_action import audit_action
 from app.shared.sharing import visible_resource_ids
 from app.shared.error_sanitizer import sanitize_http_detail
 
@@ -95,6 +96,7 @@ def list_eseguibili(current_user: CurrentUser = Depends(get_current_user)):
 # ──────────────────────────────────────────────────────────────
 
 @router.post("", response_model=EseguibileDetails, status_code=201)
+@audit_action(action="eseguibile.create")
 def create_eseguibile(
     payload: EseguibileCreate,
     current_user: CurrentUser = Depends(require_admin)
@@ -146,6 +148,7 @@ def get_eseguibile(
 # ──────────────────────────────────────────────────────────────
 
 @router.put("/{eseguibile_id}", response_model=EseguibileDetails)
+@audit_action(action="eseguibile.update", target_param="eseguibile_id")
 def update_eseguibile(
     eseguibile_id: str,
     payload: EseguibileUpdate,
@@ -171,6 +174,7 @@ def update_eseguibile(
 # ──────────────────────────────────────────────────────────────
 
 @router.delete("/{eseguibile_id}", status_code=204)
+@audit_action(action="eseguibile.delete", target_param="eseguibile_id")
 def delete_eseguibile(
     eseguibile_id: str,
     current_user: CurrentUser = Depends(require_admin)
@@ -293,6 +297,7 @@ def _delete_task_owner(task_id: str) -> None:
 
 
 @router.post("/{eseguibile_id}/analyze-upload", response_model=AnalyzeUploadResponse)
+@audit_action(action="eseguibile.analyze_upload", target_param="eseguibile_id")
 async def analyze_upload(
     eseguibile_id: str,
     file: UploadFile = File(...),
@@ -396,6 +401,7 @@ async def analyze_upload(
 # ──────────────────────────────────────────────────────────────
 
 @router.post("/{eseguibile_id}/execute")
+@audit_action(action="eseguibile.execute", target_param="eseguibile_id")
 def execute_eseguibile(
     eseguibile_id: str,
     payload: ExecuteRequest,

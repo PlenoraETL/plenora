@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.core.auth.auth import require_superadmin, CurrentUser
 from app.core.admin_backups import service
 from app.core.admin_backups.service import AdminBackupDependencyError
+from app.shared.audit_action import audit_action
 
 router = APIRouter(prefix="/admin/backups", tags=["admin-backups"])
 
@@ -66,8 +67,15 @@ def backup_schedule_endpoint(
 
 
 @router.post("/trigger")
+@audit_action(action="admin.backup.trigger")
 def backup_trigger_endpoint(
-    _user: CurrentUser = Depends(require_superadmin),
+    # Rinominato `_user` -> `current_user` solo qui: l'extractor di
+    # `audit_action` legge il `user_id` dal kwarg `current_user` (vedi
+    # audit_action.py:147). Senza il rename, l'audit row registrava
+    # `user_id=NULL` proprio sul trigger super-admin, dove la forensics
+    # "chi ha lanciato il backup" e' la sola informazione interessante.
+    # RBAC invariato: la dependency e' sempre `require_superadmin`.
+    current_user: CurrentUser = Depends(require_superadmin),
 ) -> Dict[str, Any]:
     """Lancia un backup manuale on-demand. Rifiuta se gia' in corso."""
     return service.trigger_manual_backup()

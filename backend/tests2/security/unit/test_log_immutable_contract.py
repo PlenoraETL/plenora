@@ -139,13 +139,45 @@ def test_migration_covers_only_declared_tables(migration_sql: str) -> None:
 
 
 # ===========================================================================
-# B) INTEGRATION CONTRACT (richiede PG)
+# B) INTEGRATION CONTRACT (richiede PG live, opt-in esplicito)
 # ===========================================================================
+#
+# Questi test fanno `psycopg2.connect` reale e applicano la migration
+# `2026-04-21_log_immutable_triggers.sql` su un DB di test condiviso.
+# Sono marcati `integration` E gated da una env opt-in esplicita.
+#
+# Run policy:
+#   - default `pytest tests2/security`            -> SKIP (env opt-in mancante)
+#   - default `pytest tests2/`                    -> SKIP (env opt-in mancante)
+#   - opt-in  `URBY_RUN_DB_LIVE_TESTS=1 + DATABASE_URL` -> RUN
+#   - selezione `pytest -m integration`           -> raccolti, ma comunque
+#     skip se env opt-in non e' settata (env-gate ha priorita').
+#
+# Razionale del double-gate (env + marker):
+#   - su Windows, `psycopg2.connect` puo' produrre access violation nativa
+#     prima di sollevare OperationalError. Il probe `connect_timeout=2` non
+#     e' garanzia: se il driver crasha lato C, il try/except Python non
+#     intercetta. La sola difesa solida e' NON chiamare `psycopg2.connect`.
+#   - skipif su `DATABASE_URL` non basta: in dev locale `.env` carica
+#     DATABASE_URL anche quando i dev non vogliono che i DB-live partano.
+#   - env opt-in `URBY_RUN_DB_LIVE_TESTS=1` rende l'attivazione un atto
+#     volontario, scriptabile in CI quando esiste un job dedicato DB-live.
+#
+# Test che richiedono `pg_tx` ottengono skip pulito in default locale e
+# CI minimal (`ci.yml` non setta l'env opt-in, vedi Batch A T-01).
 
 _DATABASE_URL = os.getenv("DATABASE_URL")
-_SKIP_NO_PG = pytest.mark.skipif(
-    not _DATABASE_URL,
-    reason="Richiede DATABASE_URL configurato con PG + migration applicata",
+_RUN_DB_LIVE = os.getenv("URBY_RUN_DB_LIVE_TESTS") == "1"
+
+_SKIP_NO_DB_LIVE_OPT_IN = pytest.mark.skipif(
+    not (_RUN_DB_LIVE and _DATABASE_URL),
+    reason=(
+        "DB-live opt-in mancante: settare URBY_RUN_DB_LIVE_TESTS=1 + "
+        "DATABASE_URL con PG raggiungibile e migration applicata. "
+        "Skip default per evitare access violation su psycopg2.connect "
+        "in ambienti dove DATABASE_URL e' settato ma il DB non e' "
+        "destinato a questi test."
+    ),
 )
 
 
@@ -157,10 +189,28 @@ def pg_tx():
     Assumption: la migration `2026-04-21_log_immutable_triggers.sql`
     e' gia' stata applicata (via migrations_runner al boot del backend
     in ambiente di test / staging).
+
+    Doppio guard PRIMA di `psycopg2.connect`:
+      1. env opt-in `URBY_RUN_DB_LIVE_TESTS=1` mancante -> pytest.skip.
+      2. `DATABASE_URL` mancante                       -> pytest.skip.
+    Solo con entrambi present arriviamo a `connect`, dove `connect_timeout=2`
+    + skip su `OperationalError` chiudono lo scenario "DB temporaneamente
+    irraggiungibile" senza propagare l'errore al test.
     """
+    if not _RUN_DB_LIVE:
+        pytest.skip(
+            "DB-live test non opt-in: settare URBY_RUN_DB_LIVE_TESTS=1 "
+            "per eseguire i test che fanno psycopg2.connect reale."
+        )
+    if not _DATABASE_URL:
+        pytest.skip("DATABASE_URL non configurato")
+
     import psycopg2
 
-    conn = psycopg2.connect(_DATABASE_URL)
+    try:
+        conn = psycopg2.connect(_DATABASE_URL, connect_timeout=2)
+    except psycopg2.OperationalError as exc:
+        pytest.skip(f"PG non raggiungibile per integration test: {exc}")
     conn.autocommit = False
     cur = conn.cursor()
     try:
@@ -171,7 +221,8 @@ def pg_tx():
         conn.close()
 
 
-@_SKIP_NO_PG
+@pytest.mark.integration
+@_SKIP_NO_DB_LIVE_OPT_IN
 def test_update_on_audit_actions_is_blocked(pg_tx) -> None:
     """UPDATE su audit_actions → RAISE EXCEPTION, tx abortita.
 
@@ -202,7 +253,8 @@ def test_update_on_audit_actions_is_blocked(pg_tx) -> None:
     )
 
 
-@_SKIP_NO_PG
+@pytest.mark.integration
+@_SKIP_NO_DB_LIVE_OPT_IN
 def test_delete_on_audit_actions_without_bypass_is_blocked(pg_tx) -> None:
     """DELETE senza `SET LOCAL plenora.retention_cleanup` → blocked."""
     import psycopg2
@@ -228,7 +280,8 @@ def test_delete_on_audit_actions_without_bypass_is_blocked(pg_tx) -> None:
     )
 
 
-@_SKIP_NO_PG
+@pytest.mark.integration
+@_SKIP_NO_DB_LIVE_OPT_IN
 def test_delete_on_audit_actions_with_bypass_succeeds(pg_tx) -> None:
     """DELETE con `SET LOCAL plenora.retention_cleanup = 'true'` → passa.
 
@@ -251,7 +304,8 @@ def test_delete_on_audit_actions_with_bypass_succeeds(pg_tx) -> None:
     )
 
 
-@_SKIP_NO_PG
+@pytest.mark.integration
+@_SKIP_NO_DB_LIVE_OPT_IN
 def test_update_with_retention_bypass_still_blocked(pg_tx) -> None:
     """Il bypass riguarda SOLO DELETE. L'immutabilita' su UPDATE e'
     totale: anche un retention job non puo' modificare una riga
@@ -282,7 +336,8 @@ def test_update_with_retention_bypass_still_blocked(pg_tx) -> None:
     )
 
 
-@_SKIP_NO_PG
+@pytest.mark.integration
+@_SKIP_NO_DB_LIVE_OPT_IN
 def test_update_on_logs_is_blocked(pg_tx) -> None:
     """Stesso contratto anche su plenora.logs: UPDATE sempre vietato."""
     import psycopg2

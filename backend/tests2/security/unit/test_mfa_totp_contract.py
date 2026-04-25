@@ -218,13 +218,45 @@ def test_pyotp_provisioning_uri_format() -> None:
 
 
 # ===========================================================================
-# C) INTEGRATION (richiede DATABASE_URL + migration user_mfa applicata)
+# C) INTEGRATION DB-LIVE (opt-in esplicito)
 # ===========================================================================
+#
+# Questi test fanno INSERT/DELETE reali su `plenora.users`, `plenora.groups`,
+# `plenora.user_mfa` via `app.db.pg_connection.execute` (pool globale). Sono
+# DB-live a tutti gli effetti: stesso pattern e stessa policy di
+# `test_log_immutable_contract.py` parte B.
+#
+# Run policy:
+#   - default `pytest tests2/security`             -> SKIP (env opt-in mancante)
+#   - default `pytest tests2/`                     -> SKIP (env opt-in mancante)
+#   - opt-in  `URBY_RUN_DB_LIVE_TESTS=1 + DATABASE_URL` -> RUN
+#   - selezione `pytest -m integration`            -> raccolti, ma comunque
+#     skip se env opt-in non e' settata.
+#
+# Razionale:
+#   skipif su `DATABASE_URL` non basta. Su Windows `psycopg2` puo' produrre
+#   access violation nativa lato C prima di sollevare OperationalError, e
+#   in dev locale `.env` carica DATABASE_URL anche quando i dev non vogliono
+#   far partire i DB-live. La sola difesa solida e' NON chiamare
+#   `pg_connection.execute` -> env opt-in esplicito gate' alla fonte.
+#
+# Nota su `tests2/conftest.py::_PG_LIVE_FIXTURES`: la whitelist contiene
+# `mfa_user` per esonerare la fixture dagli autouse stub di pg_connection.
+# Quella esonerazione e' attiva *solo se la fixture viene invocata*: se i
+# test sono skipped via `_SKIP_NO_DB_LIVE_OPT_IN` la fixture non parte e
+# non c'e' alcuna chiamata a psycopg2.
 
 _DATABASE_URL = os.getenv("DATABASE_URL")
-_SKIP_NO_PG = pytest.mark.skipif(
-    not _DATABASE_URL,
-    reason="Richiede DATABASE_URL configurato con PG + migration user_mfa applicata",
+_RUN_DB_LIVE = os.getenv("URBY_RUN_DB_LIVE_TESTS") == "1"
+
+_SKIP_NO_DB_LIVE_OPT_IN = pytest.mark.skipif(
+    not (_RUN_DB_LIVE and _DATABASE_URL),
+    reason=(
+        "DB-live opt-in mancante: settare URBY_RUN_DB_LIVE_TESTS=1 + "
+        "DATABASE_URL con PG raggiungibile e migration user_mfa applicata. "
+        "Skip default per evitare access violation su psycopg2 in ambienti "
+        "dove DATABASE_URL e' settato ma il DB non e' destinato a questi test."
+    ),
 )
 
 
@@ -237,7 +269,23 @@ def mfa_user(request):
     Non usa SAVEPOINT come il log_immutable test perche' mfa.py usa il
     pool globale (pg_connection.get_connection) e non vede le tx del
     fixture. Cleanup e' esplicito via DELETE su users.
+
+    Doppio guard PRIMA di importare/usare `pg_connection`:
+      1. env opt-in `URBY_RUN_DB_LIVE_TESTS=1` mancante -> pytest.skip.
+      2. `DATABASE_URL` mancante                       -> pytest.skip.
+    Necessario perche' `tests2/conftest.py::_PG_LIVE_FIXTURES` esonera
+    `mfa_user` dallo stub autouse di `pg_connection.execute`: senza il
+    gate qui, un test che ottiene la fixture senza il marker corretto
+    chiamerebbe psycopg2 reale.
     """
+    if not _RUN_DB_LIVE:
+        pytest.skip(
+            "DB-live test non opt-in: settare URBY_RUN_DB_LIVE_TESTS=1 "
+            "per eseguire i test MFA che fanno pg_connection.execute reale."
+        )
+    if not _DATABASE_URL:
+        pytest.skip("DATABASE_URL non configurato")
+
     import uuid
     from datetime import datetime, timezone
     from app.db import pg_connection
@@ -267,7 +315,8 @@ def mfa_user(request):
     return {"user_id": user_id, "username": username, "group_id": group_id}
 
 
-@_SKIP_NO_PG
+@pytest.mark.integration
+@_SKIP_NO_DB_LIVE_OPT_IN
 def test_enroll_creates_pending_row(mfa_user):
     """/mfa/enroll → riga creata con enabled=FALSE, secret cifrato."""
     from app.core.auth import mfa
@@ -294,7 +343,8 @@ def test_enroll_creates_pending_row(mfa_user):
     assert row["enrolled_at"] is None
 
 
-@_SKIP_NO_PG
+@pytest.mark.integration
+@_SKIP_NO_DB_LIVE_OPT_IN
 def test_verify_enrollment_activates_mfa(mfa_user):
     """/mfa/verify con codice valido → enabled=TRUE + enrolled_at valorizzato."""
     import pyotp
@@ -312,7 +362,8 @@ def test_verify_enrollment_activates_mfa(mfa_user):
     assert st["last_verified_at"] is not None
 
 
-@_SKIP_NO_PG
+@pytest.mark.integration
+@_SKIP_NO_DB_LIVE_OPT_IN
 def test_verify_with_wrong_code_fails(mfa_user):
     """Codice errato → False, enabled resta FALSE."""
     from app.core.auth import mfa
@@ -323,7 +374,8 @@ def test_verify_with_wrong_code_fails(mfa_user):
     assert mfa.is_enabled(mfa_user["user_id"]) is False
 
 
-@_SKIP_NO_PG
+@pytest.mark.integration
+@_SKIP_NO_DB_LIVE_OPT_IN
 def test_reenroll_resets_activation(mfa_user):
     """Un nuovo /enroll su utente con MFA attiva → disattiva finche' non ri-verifica.
 
@@ -352,7 +404,8 @@ def test_reenroll_resets_activation(mfa_user):
     assert mfa.is_enabled(mfa_user["user_id"]) is True
 
 
-@_SKIP_NO_PG
+@pytest.mark.integration
+@_SKIP_NO_DB_LIVE_OPT_IN
 def test_disable_requires_valid_code(mfa_user):
     """Disable con codice errato → False, riga preservata (MFA resta attiva)."""
     import pyotp
@@ -369,7 +422,8 @@ def test_disable_requires_valid_code(mfa_user):
     )
 
 
-@_SKIP_NO_PG
+@pytest.mark.integration
+@_SKIP_NO_DB_LIVE_OPT_IN
 def test_disable_with_valid_code_removes_row(mfa_user):
     """Disable con codice valido → riga rimossa, is_enabled False."""
     import pyotp
@@ -389,7 +443,8 @@ def test_disable_with_valid_code_removes_row(mfa_user):
     assert st == {"enabled": False, "enrolled_at": None, "last_verified_at": None}
 
 
-@_SKIP_NO_PG
+@pytest.mark.integration
+@_SKIP_NO_DB_LIVE_OPT_IN
 def test_verify_code_rejects_non_numeric_input(mfa_user):
     """Codice non-numerico / vuoto → False senza raise (fail-closed)."""
     from app.core.auth import mfa

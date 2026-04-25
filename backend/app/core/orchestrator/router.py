@@ -24,6 +24,7 @@ from app.utils.logger import get_logger
 from app.shared.models import ExecuteRequest
 from app.services.task_service import TaskType
 from app.utils.router_utils import require_service
+from app.shared.audit_action import audit_action
 from app.core.auth.auth import get_current_user, require_not_esecutore, assert_group_access, CurrentUser
 
 # ── Content-Type per formato file ─────────────────────────────────────────
@@ -421,6 +422,7 @@ def get_task_status(task_id: str, current_user: CurrentUser = Depends(get_curren
 
 
 @tasks_router.delete("/{task_id}")
+@audit_action(action="task.cancel", target_param="task_id")
 def cancel_task(task_id: str, current_user: CurrentUser = Depends(get_current_user)):
     """Annulla un task in esecuzione.
 
@@ -457,6 +459,7 @@ def cancel_task(task_id: str, current_user: CurrentUser = Depends(get_current_us
         },
     },
 )
+@audit_action(action="task.cleanup_complete", target_param="task_id")
 def cleanup_task_completely(task_id: str, current_user: CurrentUser = Depends(get_current_user)):
     """
     Cleanup completo di un task: elimina result file/blob, log entries e revoca

@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 
 from app.config import settings
 from app.core.auth.auth import get_current_user, CurrentUser
+from app.shared.audit_action import audit_action
 from app.shared.path_policy import validate_imdf_task_id
 from app.utils.logger import get_logger
 
@@ -219,6 +220,9 @@ class ImdfBundleSummary(BaseModel):
 # ══════════════════════════════════════════════════════════════════════
 
 @router.post("/publish", response_model=ImdfPublishResponse)
+# bundle_task_id e' nel body Pydantic, l'extractor accetta solo str/int da
+# kwarg diretto (vedi audit_action.py:190): target=NULL.
+@audit_action(action="imdf.publish")
 def publish_imdf(
     request: ImdfPublishRequest,
     current_user: CurrentUser = Depends(get_current_user),
@@ -280,6 +284,7 @@ def publish_imdf(
 
 
 @router.post("/validate-publish")
+@audit_action(action="imdf.validate_publish")
 def validate_publish_endpoint(
     request: ImdfValidateRequest,
     current_user: CurrentUser = Depends(get_current_user),
@@ -621,6 +626,7 @@ def list_bundles(
 
 
 @router.delete("/bundles/{bundle_task_id}", status_code=204)
+@audit_action(action="imdf.bundle.delete", target_param="bundle_task_id")
 def delete_bundle(
     bundle_task_id: str,
     current_user: CurrentUser = Depends(get_current_user),

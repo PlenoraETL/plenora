@@ -66,8 +66,16 @@ def test_enricher_populates_canvas_types_from_project_metadata(monkeypatch):
         def get_project_columns_metadata(self, pid):
             return fake_metadata
 
+    # NB: l'enricher fa `from app.services.project_service import ProjectService`
+    # al module load (canvas_types_enricher.py:36), quindi il symbol da
+    # patchare e' quello bound nel modulo enricher, non l'origine. Patchare
+    # `app.services.project_service.ProjectService` lascia il symbol nel
+    # modulo enricher invariato → fallback al ProjectService reale →
+    # `ProjectService().get_project_columns_metadata(...)` chiama
+    # `pg_connection.fetchone` reale → access violation se DB non
+    # raggiungibile (vedi review #7 Batch B).
     monkeypatch.setattr(
-        "app.services.project_service.ProjectService",
+        "app.shared.canvas_types_enricher.ProjectService",
         FakeProjectService,
     )
 
@@ -88,8 +96,16 @@ def test_enricher_respects_node_data_priority_over_project_metadata(monkeypatch)
             # Project dice "real" ma node_data ha "int" esplicito per id
             return [{"name": "id", "type": "real"}, {"name": "prezzo", "type": "real"}]
 
+    # NB: l'enricher fa `from app.services.project_service import ProjectService`
+    # al module load (canvas_types_enricher.py:36), quindi il symbol da
+    # patchare e' quello bound nel modulo enricher, non l'origine. Patchare
+    # `app.services.project_service.ProjectService` lascia il symbol nel
+    # modulo enricher invariato → fallback al ProjectService reale →
+    # `ProjectService().get_project_columns_metadata(...)` chiama
+    # `pg_connection.fetchone` reale → access violation se DB non
+    # raggiungibile (vedi review #7 Batch B).
     monkeypatch.setattr(
-        "app.services.project_service.ProjectService",
+        "app.shared.canvas_types_enricher.ProjectService",
         FakeProjectService,
     )
 
@@ -111,7 +127,7 @@ def test_enricher_best_effort_on_project_service_failure(monkeypatch):
             raise RuntimeError("DB down")
 
     monkeypatch.setattr(
-        "app.services.project_service.ProjectService",
+        "app.shared.canvas_types_enricher.ProjectService",
         BrokenProjectService,
     )
 
@@ -131,7 +147,7 @@ def test_enricher_handles_empty_metadata(monkeypatch):
             return []
 
     monkeypatch.setattr(
-        "app.services.project_service.ProjectService",
+        "app.shared.canvas_types_enricher.ProjectService",
         EmptyProjectService,
     )
 
