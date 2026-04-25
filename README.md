@@ -1,5 +1,7 @@
 # 📋 TODO DataFlow Manager - Gennaio 2026
 
+Mappa rapida del codice: [CODE_MAP.md](CODE_MAP.md).
+
 ## 📊 STATO PROGETTO ATTUALE
 
 | Modulo | Completamento | Note |
