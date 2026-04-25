@@ -325,7 +325,7 @@ def validate_publish_endpoint(
         raise
     except Exception as e:
         logger.error(f"validate_publish error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Validazione fallita: {e}")
+        raise HTTPException(status_code=500, detail="Errore interno del server")
 
 
 @router.get("/bundles/{bundle_task_id}")
@@ -653,7 +653,7 @@ def delete_bundle(
         )
         raise HTTPException(
             status_code=500,
-            detail=f"Errore cancellazione bundle: {e}",
+            detail="Errore interno del server",
         )
 
     # R2 multi-host: cancella anche da S3 (best-effort, separato dal delete
