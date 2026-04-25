@@ -55,6 +55,7 @@ from app.core.features.models import (
     BrowseLayersResponse,
 )
 from app.core.features.features_service import FeaturesService
+from app.shared.audit_action import audit_action
 from app.shared.path_policy import assert_path_within
 from app.shared.error_sanitizer import sanitize_http_detail
 from app.core.artifacts import ArtifactResolver, LatestProjectArtifactRef
@@ -123,6 +124,7 @@ def _check_arcgis_access(connection_id: str, current_user: CurrentUser) -> ArcGI
 
 
 @router.post("/connections", response_model=ArcGISConnection, status_code=201)
+@audit_action(action="arcgis.connection.create")
 async def create_connection(data: ArcGISCreate, current_user: CurrentUser = Depends(require_admin)):
     """Crea una nuova connessione ArcGIS. Solo admin/superadmin."""
     try:
@@ -170,6 +172,7 @@ async def list_connections(current_user: CurrentUser = Depends(require_not_esecu
 
 
 @router.put("/connections/{connection_id}", response_model=ArcGISConnection)
+@audit_action(action="arcgis.connection.update", target_param="connection_id")
 async def update_connection(connection_id: str, data: ArcGISUpdate, current_user: CurrentUser = Depends(require_admin)):
     """Aggiorna una connessione ArcGIS esistente. Solo admin/superadmin del gruppo,
     e solo se non creata da un superadmin (hierarchical ownership)."""
@@ -182,6 +185,7 @@ async def update_connection(connection_id: str, data: ArcGISUpdate, current_user
 
 
 @router.delete("/connections/{connection_id}", status_code=204)
+@audit_action(action="arcgis.connection.delete", target_param="connection_id")
 async def delete_connection(connection_id: str, current_user: CurrentUser = Depends(require_admin)):
     """Elimina una connessione ArcGIS. Solo admin/superadmin del gruppo,
     e solo se non creata da un superadmin (hierarchical ownership)."""
@@ -193,6 +197,7 @@ async def delete_connection(connection_id: str, current_user: CurrentUser = Depe
 
 
 @router.post("/connections/{connection_id}/test", response_model=ArcGISTestResult)
+@audit_action(action="arcgis.connection.test", target_param="connection_id")
 async def test_connection(connection_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
     """Testa una connessione ArcGIS. Qualsiasi utente del gruppo."""
     _check_arcgis_access(connection_id, current_user)
@@ -433,6 +438,10 @@ def _resolve_input_path(
 
 
 @router.post("/write", response_model=WriteFeaturesResponse)
+# target_param non disponibile: `connection_id` e' dentro al body Pydantic
+# `request: WriteRequest`, l'extractor accetta solo str/int (vedi
+# audit_action.py:190). Audit registra action+user+status, non il target.
+@audit_action(action="arcgis.feature.write")
 async def write_features(request: WriteRequest, current_user: CurrentUser = Depends(require_not_esecutore)):
     """Scrittura su Feature Service esistente (add/update/delete)."""
     _check_arcgis_access(request.connection_id, current_user)
@@ -478,6 +487,7 @@ async def write_features(request: WriteRequest, current_user: CurrentUser = Depe
 
 
 @router.post("/create-service", response_model=CreateServiceResponse)
+@audit_action(action="arcgis.service.create")
 async def create_service(request: CreateServiceRequest, current_user: CurrentUser = Depends(require_not_esecutore)):
     """
     Crea un nuovo Feature Service su ArcGIS Online.

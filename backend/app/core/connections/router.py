@@ -31,6 +31,7 @@ from app.core.auth.auth import (
     group_filter,
 )
 from app.utils.router_utils import require_service
+from app.shared.audit_action import audit_action
 from app.shared.sharing import visible_resource_ids
 from .models import (
     DatabaseConnection,
@@ -59,6 +60,7 @@ def init_connections(connection_service, database_inspector):
 # ==================== CONNESSIONI DATABASE ====================
 
 @router.post("/connections", response_model=DatabaseConnection, status_code=201)
+@audit_action(action="connection.create")
 def create_connection(
     data: ConnectionCreate,
     current_user: CurrentUser = Depends(require_admin),
@@ -101,6 +103,7 @@ def list_connections(current_user: CurrentUser = Depends(require_not_esecutore))
 
 
 @router.put("/connections/{connection_id}", response_model=DatabaseConnection)
+@audit_action(action="connection.update", target_param="connection_id")
 def update_connection(
     connection_id: str,
     data: ConnectionUpdate,
@@ -124,6 +127,7 @@ def update_connection(
 
 
 @router.delete("/connections/{connection_id}", status_code=204)
+@audit_action(action="connection.delete", target_param="connection_id")
 def delete_connection(
     connection_id: str,
     current_user: CurrentUser = Depends(require_admin),
@@ -178,6 +182,7 @@ def delete_connection(
 
 
 @router.post("/connections/{connection_id}/test", response_model=ConnectionTestResult)
+@audit_action(action="connection.test", target_param="connection_id")
 def test_connection(
     connection_id: str,
     current_user: CurrentUser = Depends(require_not_esecutore),

@@ -39,6 +39,7 @@ from app.core.auth.auth import (
     group_filter,
 )
 import app.db.db_service as db
+from app.shared.audit_action import audit_action
 
 logger = get_logger(__name__)
 
@@ -140,6 +141,7 @@ async def list_schedules(project_id: Optional[str] = Query(None, description="Fi
 
 
 @router.post("", response_model=ScheduleConfig, status_code=201)
+@audit_action(action="schedule.create")
 async def create_schedule(data: ScheduleCreate, current_user: CurrentUser = Depends(require_admin)):
     """
     Crea un nuovo schedule dai dati del wizard (6 step). Solo admin/superadmin.
@@ -214,6 +216,7 @@ async def get_schedule(schedule_id: str, current_user: CurrentUser = Depends(req
 
 
 @router.put("/{schedule_id}", response_model=ScheduleConfig)
+@audit_action(action="schedule.update", target_param="schedule_id")
 async def update_schedule(schedule_id: str, data: ScheduleUpdate, current_user: CurrentUser = Depends(require_schedule_owner)):
     """
     Modifica uno schedule esistente (wizard precompilato).
@@ -247,6 +250,7 @@ async def update_schedule(schedule_id: str, data: ScheduleUpdate, current_user: 
 
 
 @router.delete("/{schedule_id}", status_code=204)
+@audit_action(action="schedule.delete", target_param="schedule_id")
 async def delete_schedule(schedule_id: str, current_user: CurrentUser = Depends(require_schedule_owner)):
     """Elimina uno schedule e i suoi log. Solo owner o admin/superadmin."""
     from app.core.scheduler.schedule_service import ScheduleService
@@ -264,6 +268,7 @@ async def delete_schedule(schedule_id: str, current_user: CurrentUser = Depends(
 # ==================== TOGGLE + RUN MANUALE ====================
 
 @router.patch("/{schedule_id}/toggle", response_model=ScheduleConfig)
+@audit_action(action="schedule.toggle", target_param="schedule_id")
 async def toggle_schedule(schedule_id: str, data: ScheduleToggle, current_user: CurrentUser = Depends(require_schedule_owner)):
     """Abilita o disabilita uno schedule. Solo owner o admin/superadmin."""
     from app.core.scheduler.schedule_service import ScheduleService
@@ -291,6 +296,7 @@ async def toggle_schedule(schedule_id: str, data: ScheduleToggle, current_user: 
 
 
 @router.patch("/{schedule_id}/catchup", response_model=ScheduleConfig)
+@audit_action(action="schedule.catchup", target_param="schedule_id")
 async def update_schedule_catchup(
     schedule_id: str,
     data: ScheduleCatchupUpdate,
@@ -318,6 +324,7 @@ async def update_schedule_catchup(
 
 
 @router.post("/{schedule_id}/run")
+@audit_action(action="schedule.run_now", target_param="schedule_id")
 async def run_schedule_now(schedule_id: str, current_user: CurrentUser = Depends(require_schedule_owner)):
     """
     Esegui uno schedule immediatamente (manuale).
