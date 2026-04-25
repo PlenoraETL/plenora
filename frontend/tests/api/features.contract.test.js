@@ -41,13 +41,13 @@ describe('features api contract', () => {
   });
 
   it('writeFeatures preserves project/file mutually optional payload fields', async () => {
-    httpMock.post.mockResolvedValueOnce({ data: { task_id: 'task-1' } });
+    httpMock.post.mockResolvedValueOnce({ data: { success: true, message: 'Aggiunte 2 features su 2 totali', count: 2, errors: [] } });
 
     const { writeFeatures } = await import('../../src/api/features');
     const result = await writeFeatures({
       connectionId: 'feat-2',
       layerUrl: 'https://example/layer/1',
-      operation: 'upsert',
+      operation: 'add',
       inputPath: '/tmp/export.csv',
       projectId: '',
       geometryColumn: 'geom',
@@ -59,7 +59,7 @@ describe('features api contract', () => {
     expect(httpMock.post).toHaveBeenCalledWith('/features/write', {
       connection_id: 'feat-2',
       layer_url: 'https://example/layer/1',
-      operation: 'upsert',
+      operation: 'add',
       input_path: '/tmp/export.csv',
       project_id: '',
       geometry_column: 'geom',
@@ -67,11 +67,11 @@ describe('features api contract', () => {
       object_ids: [1, 2],
       where: 'status = 1',
     });
-    expect(result).toEqual({ task_id: 'task-1' });
+    expect(result).toEqual({ success: true, message: 'Aggiunte 2 features su 2 totali', count: 2, errors: [] });
   });
 
   it('createFeatureService preserves defaults for layer name and geometry column', async () => {
-    httpMock.post.mockResolvedValueOnce({ data: { service_id: 'svc-1' } });
+    httpMock.post.mockResolvedValueOnce({ data: { success: true, service_url: 'https://services.arcgis.com/xxx/FeatureServer', layer_url: 'https://services.arcgis.com/xxx/FeatureServer/0', item_id: 'abc123', feature_count: 42, errors: [] } });
 
     const { createFeatureService } = await import('../../src/api/features');
     const result = await createFeatureService({
@@ -90,6 +90,6 @@ describe('features api contract', () => {
       geometry_column: 'geometry',
       source_srid: null,
     });
-    expect(result).toEqual({ service_id: 'svc-1' });
+    expect(result).toEqual({ success: true, service_url: 'https://services.arcgis.com/xxx/FeatureServer', layer_url: 'https://services.arcgis.com/xxx/FeatureServer/0', item_id: 'abc123', feature_count: 42, errors: [] });
   });
 });
