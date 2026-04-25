@@ -39,15 +39,21 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
 
 
 def test_write_node_happy_path_returns_real_hash():
-    """Baseline: status='ok' + rows → insert_node_rows + upsert_node_meta
-    ok → ritorna hash reale (64 hex), NON il sentinel sha256(b'error').
-    Il fix non tocca il ramo success."""
+    """Baseline: status='ok' + rows → write_node_atomic ok → ritorna hash
+    reale (64 hex), NON il sentinel sha256(b'error'). Il fix C7 non tocca
+    il ramo success.
+
+    Phase 4 A3 (atomicity refactor): il ramo success ora chiama
+    `db.write_node_atomic` (singola transazione idempotente) invece di
+    `insert_node_rows` + `upsert_node_meta` separati. Il test verifica
+    che il helper sia invocato una sola volta sul ramo success.
+    """
     from app.core.intermediate import writer as w
 
     rows = [{"col_a": 1, "col_b": "x"}, {"col_a": 2, "col_b": "y"}]
     schema = {"col_a": "int64", "col_b": "object"}
 
-    with patch.object(w.db, "insert_node_rows") as mock_insert, \
+    with patch.object(w.db, "write_node_atomic") as mock_atomic, \
          patch.object(w.db, "upsert_node_meta") as mock_meta:
         result = w.write_node(
             run_id="run-ok", node_id="node-1", node_type="estrai",
@@ -60,8 +66,11 @@ def test_write_node_happy_path_returns_real_hash():
     import hashlib
     fake_sentinel = hashlib.sha256(b"error").hexdigest()
     assert result != fake_sentinel
-    mock_insert.assert_called_once()
-    mock_meta.assert_called_once()
+    # Phase 4 A3: success branch usa il helper atomico (rows non vuoto).
+    mock_atomic.assert_called_once()
+    # upsert_node_meta NON viene chiamato direttamente sul ramo success
+    # perche' write_node_atomic gia' include l'upsert in singola tx.
+    mock_meta.assert_not_called()
 
 
 # =============================================================================
@@ -70,15 +79,20 @@ def test_write_node_happy_path_returns_real_hash():
 
 
 def test_write_node_primary_fail_raises_intermediate_write_error():
-    """`db.insert_node_rows` solleva → `pytest.raises(IntermediateWriteError)`
-    invece di ritornare il sentinel fake. Attributi tipizzati popolati."""
+    """`db.write_node_atomic` solleva → `pytest.raises(IntermediateWriteError)`
+    invece di ritornare il sentinel fake. Attributi tipizzati popolati.
+
+    Phase 4 A3: il primary call ora e' write_node_atomic (atomico
+    rows+meta), non insert_node_rows separato. Il fail-closed semantico
+    e' invariato.
+    """
     from app.core.intermediate import writer as w
 
-    original_exc = RuntimeError("insert_node_rows DB pool exhausted")
+    original_exc = RuntimeError("write_node_atomic DB pool exhausted")
     rows = [{"col_a": 1}]
     schema = {"col_a": "int64"}
 
-    with patch.object(w.db, "insert_node_rows", side_effect=original_exc), \
+    with patch.object(w.db, "write_node_atomic", side_effect=original_exc), \
          patch.object(w.db, "upsert_node_meta"):
         with pytest.raises(IntermediateWriteError) as exc_info:
             w.write_node(
@@ -99,14 +113,19 @@ def test_write_node_primary_fail_raises_intermediate_write_error():
 
 def test_write_node_fallback_upsert_node_meta_called_before_raise():
     """Quando primary fallisce, il fallback `upsert_node_meta(status='error',
-    error_msg=...)` viene chiamato PRIMA del raise come resource guard."""
+    error_msg=...)` viene chiamato PRIMA del raise come resource guard.
+
+    Phase 4 A3: primary = write_node_atomic; il fallback meta-only resta
+    `db.upsert_node_meta` standalone (l'helper atomico ha gia' fatto
+    rollback, ne' senso ne' possibilita' di riusarlo qui).
+    """
     from app.core.intermediate import writer as w
 
-    original_exc = RuntimeError("primary insert fail")
+    original_exc = RuntimeError("primary atomic write fail")
     rows = [{"col_a": 1}]
     schema = {"col_a": "int64"}
 
-    with patch.object(w.db, "insert_node_rows", side_effect=original_exc), \
+    with patch.object(w.db, "write_node_atomic", side_effect=original_exc), \
          patch.object(w.db, "upsert_node_meta") as mock_meta:
         with pytest.raises(IntermediateWriteError):
             w.write_node(
@@ -122,7 +141,7 @@ def test_write_node_fallback_upsert_node_meta_called_before_raise():
     assert kwargs["node_type"] == "manipola"
     assert kwargs["row_count"] == 0
     assert kwargs["status"] == "error"
-    assert "primary insert fail" in kwargs["error_msg"]
+    assert "primary atomic write fail" in kwargs["error_msg"]
 
 
 # =============================================================================
@@ -131,29 +150,19 @@ def test_write_node_fallback_upsert_node_meta_called_before_raise():
 
 
 def test_write_node_primary_and_fallback_fail_still_raises_with_original():
-    """Primary e fallback upsert_node_meta entrambi sollevano → raise
-    `IntermediateWriteError` con `original_error` = primary (NOT fallback).
-    Debug log per fallback fail emesso."""
+    """Primary (write_node_atomic) e fallback (upsert_node_meta) entrambi
+    sollevano → raise `IntermediateWriteError` con `original_error` =
+    primary (NOT fallback). Debug log per fallback fail emesso."""
     from app.core.intermediate import writer as w
 
     primary_exc = RuntimeError("primary fail original")
     fallback_exc = RuntimeError("fallback upsert_node_meta also fail")
 
-    call_count = {"n": 0}
-
-    def upsert_side_effect(*args, **kwargs):
-        call_count["n"] += 1
-        # La prima chiamata a upsert_node_meta e' nel ramo success (dopo
-        # insert_node_rows). Ma insert_node_rows solleva prima → non si
-        # arriva al primo upsert del ramo success. Solo il fallback viene
-        # chiamato, e noi facciamo fallire pure quello.
-        raise fallback_exc
-
     rows = [{"col_a": 1}]
     schema = {"col_a": "int64"}
 
-    with patch.object(w.db, "insert_node_rows", side_effect=primary_exc), \
-         patch.object(w.db, "upsert_node_meta", side_effect=upsert_side_effect), \
+    with patch.object(w.db, "write_node_atomic", side_effect=primary_exc), \
+         patch.object(w.db, "upsert_node_meta", side_effect=fallback_exc), \
          patch.object(w, "logger") as mock_logger:
         with pytest.raises(IntermediateWriteError) as exc_info:
             w.write_node(
@@ -185,7 +194,7 @@ def test_write_node_exception_chain_preserved():
     rows = [{"col_a": 1}]
     schema = {"col_a": "int64"}
 
-    with patch.object(w.db, "insert_node_rows", side_effect=original_exc), \
+    with patch.object(w.db, "write_node_atomic", side_effect=original_exc), \
          patch.object(w.db, "upsert_node_meta"):
         with pytest.raises(IntermediateWriteError) as exc_info:
             w.write_node(
@@ -211,7 +220,7 @@ def test_write_node_logs_crash_with_exc_info():
     from app.core.intermediate import writer as w
 
     with patch.object(
-        w.db, "insert_node_rows",
+        w.db, "write_node_atomic",
         side_effect=RuntimeError("bang"),
     ), patch.object(w.db, "upsert_node_meta"), \
         patch.object(w, "logger") as mock_logger:

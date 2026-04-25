@@ -180,7 +180,7 @@ def write_node(run_id: str, node_id: str, node_type: str,
     try:
         if status == "ok" and rows:
             # Calcola _row_hash per ogni riga. Non serve piu' sanitizzare
-            # list/dict/geometry qui: db.insert_node_rows usa _to_jsonable
+            # list/dict/geometry qui: db.write_node_atomic usa _to_jsonable
             # che gestisce tutti i tipi per la serializzazione in JSONB.
             col_names_sorted = sorted(col_schema.keys())
             rows_with_hash = [
@@ -188,25 +188,36 @@ def write_node(run_id: str, node_id: str, node_type: str,
                 for row in rows
             ]
 
-            # Bulk insert nella tabella unificata plenora.node_rows
-            db.insert_node_rows(run_id, node_id, rows_with_hash, col_schema)
+            # A3 (Phase 4): scrittura node_rows + node_meta in singola
+            # transazione. Idempotent (DELETE-then-INSERT) e atomic (qualsiasi
+            # fallimento rollback-a entrambi). Pre-fix erano due tx separate
+            # con duplicati silenti su retry Celery.
+            db.write_node_atomic(
+                run_id=run_id,
+                node_id=node_id,
+                node_type=node_type,
+                rows=rows_with_hash,
+                col_schema=col_schema,
+                exec_time=exec_time,
+                status=status,
+                error_msg=error_msg,
+            )
 
             # Hash aggregato per questo nodo
             node_hash = compute_aggregate_hash(rows, col_schema)
         else:
             node_hash = hashlib.sha256(b"empty").hexdigest()
-
-        # Scrive node_meta
-        db.upsert_node_meta(
-            run_id=run_id,
-            node_id=node_id,
-            node_type=node_type,
-            row_count=len(rows) if rows else 0,
-            col_schema=col_schema,
-            exec_time=exec_time,
-            status=status,
-            error_msg=error_msg,
-        )
+            # Branch error/empty: nessuna riga da scrivere, solo meta.
+            db.upsert_node_meta(
+                run_id=run_id,
+                node_id=node_id,
+                node_type=node_type,
+                row_count=len(rows) if rows else 0,
+                col_schema=col_schema,
+                exec_time=exec_time,
+                status=status,
+                error_msg=error_msg,
+            )
 
         logger.info(
             f"Nodo scritto: run={run_id} node={node_id} "

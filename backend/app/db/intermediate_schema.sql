@@ -87,7 +87,17 @@ CREATE TABLE IF NOT EXISTS node_rows (
     row_data  JSONB NOT NULL          -- valori della riga
 );
 
--- Lookup per-nodo di tutte le righe di una run
+-- Lookup per-nodo di tutte le righe di una run.
+-- Phase 4 A3 — idempotency invariant (no schema change required):
+-- `app/core/intermediate/db.py` garantisce che la coppia
+-- (DELETE FROM node_rows WHERE run_id=? AND node_id=?) + (INSERT bulk)
+-- sia atomica e venga ripetuta a ogni invocazione di insert_node_rows o
+-- write_node_atomic. Effetto: invocazioni N >= 2 sullo stesso
+-- (run_id, node_id) lasciano sempre solo l'ultima scrittura. Nessun
+-- vincolo UNIQUE aggiunto: dati legacy potrebbero contenere duplicati
+-- da retry pre-fix, e una migration richiederebbe cleanup batch
+-- documentato. L'idempotency e' applicata application-side senza schema
+-- breaking change.
 CREATE INDEX IF NOT EXISTS idx_node_rows_run_node
     ON node_rows(run_id, node_id);
 

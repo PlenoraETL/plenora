@@ -324,9 +324,67 @@ def _from_jsonable_value(v):
     return v
 
 
+# A3 (Phase 4): SQL costanti riusate da insert_node_rows + write_node_atomic.
+# Il placeholder e' %s diretto (non ?): scriviamo via cursor PG nativo, fuori
+# dal wrapper _adapt_params di pg_connection. Tenere allineati questi due nomi
+# e' importante perche' i contract test sotto verificano testualmente che il
+# DELETE preceda l'INSERT.
+_SQL_DELETE_NODE_ROWS = (
+    "DELETE FROM node_rows WHERE run_id = %s AND node_id = %s"
+)
+_SQL_INSERT_NODE_ROW = (
+    "INSERT INTO node_rows (run_id, node_id, row_idx, row_hash, row_data) "
+    "VALUES (%s, %s, %s, %s, %s::jsonb)"
+)
+_SQL_UPSERT_NODE_META = (
+    "INSERT INTO node_meta "
+    "(run_id, node_id, node_type, row_count, col_schema, exec_time, status, error_msg) "
+    "VALUES (%s,%s,%s,%s,%s,%s,%s,%s) "
+    "ON CONFLICT (run_id, node_id) DO UPDATE SET "
+    "node_type=EXCLUDED.node_type, row_count=EXCLUDED.row_count, "
+    "col_schema=EXCLUDED.col_schema, exec_time=EXCLUDED.exec_time, "
+    "status=EXCLUDED.status, error_msg=EXCLUDED.error_msg"
+)
+
+
+def _build_node_row_records(
+    run_id: str, node_id: str, rows: List[Dict],
+) -> List[tuple]:
+    """Materializza la lista (run_id, node_id, row_idx, row_hash, row_data_json).
+
+    Estratto per condividere la logica fra insert_node_rows (idempotent
+    standalone) e write_node_atomic (idempotent + meta in singola tx).
+    Comportamento serializzazione invariato: row_hash da `_row_hash`,
+    row_data normalizzato via `_to_jsonable` (NaN/Inf sentinel inclusi).
+    """
+    records: List[tuple] = []
+    for idx, row in enumerate(rows or []):
+        row_hash = row.get("_row_hash", "")
+        # row_data = tutti i valori della riga ECCETTO _row_hash
+        row_data = {
+            k: _to_jsonable(v) for k, v in row.items() if k != "_row_hash"
+        }
+        records.append((
+            run_id, node_id, idx, row_hash,
+            json.dumps(row_data, ensure_ascii=False),
+        ))
+    return records
+
+
 def insert_node_rows(run_id: str, node_id: str,
                      rows: List[Dict], col_schema: dict) -> None:
-    """Bulk insert delle righe di un nodo in plenora.node_rows.
+    """Bulk insert IDEMPOTENTE delle righe di un nodo in plenora.node_rows.
+
+    A3 (Phase 4) idempotency: la funzione DELETE pre-esistenti righe per
+    (run_id, node_id) PRIMA dell'INSERT, dentro una singola transazione.
+    Pre-fix una doppia invocazione (es. retry Celery con `acks_late=True`)
+    produceva duplicati silenti, perche' lo schema `node_rows` non ha
+    UNIQUE su (run_id, node_id, row_idx) e l'INSERT era plain.
+    Post-fix invocazioni N >= 2 sullo stesso (run_id, node_id) lasciano
+    sempre solo l'ultima scrittura.
+
+    Caso `rows=[]`: la funzione esegue comunque il DELETE per evitare
+    inconsistenza con node_meta.row_count=0 dopo un retry "vuoto".
 
     Args:
         run_id: uuid della run
@@ -337,27 +395,75 @@ def insert_node_rows(run_id: str, node_id: str,
               row_data (jsonb).
         col_schema: {"col_name": "dtype_str", ...} — ignorato dal nuovo
               design ma mantenuto nella signature per compat col writer.
+
+    Nota atomicita': insert_node_rows e' atomico per se' stesso (DELETE +
+    INSERT in singola tx), ma NON copre la successiva scrittura di
+    node_meta. Per atomicita' end-to-end usare `write_node_atomic`.
     """
-    if not rows:
-        return
+    records = _build_node_row_records(run_id, node_id, rows)
 
-    # Costruisci i record nel formato target:
-    # (run_id, node_id, row_idx, row_hash, row_data_json)
-    records = []
-    for idx, row in enumerate(rows):
-        row_hash = row.get("_row_hash", "")
-        # row_data = tutti i valori della riga ECCETTO _row_hash
-        row_data = {k: _to_jsonable(v) for k, v in row.items() if k != "_row_hash"}
-        records.append((
-            run_id, node_id, idx, row_hash,
-            json.dumps(row_data, ensure_ascii=False),
-        ))
+    with transaction() as conn:
+        with conn.cursor() as cur:
+            cur.execute(_SQL_DELETE_NODE_ROWS, (run_id, node_id))
+            if records:
+                cur.executemany(_SQL_INSERT_NODE_ROW, records)
 
-    sql = (
-        "INSERT INTO node_rows (run_id, node_id, row_idx, row_hash, row_data) "
-        "VALUES (?, ?, ?, ?, ?::jsonb)"
+
+def write_node_atomic(
+    run_id: str,
+    node_id: str,
+    *,
+    node_type: Optional[str] = None,
+    rows: Optional[List[Dict]] = None,
+    col_schema: Optional[dict] = None,
+    exec_time: Optional[float] = None,
+    status: Optional[str] = None,
+    error_msg: Optional[str] = None,
+) -> None:
+    """Scrittura atomica e idempotente di node_rows + node_meta.
+
+    A3 (Phase 4): unica transazione che:
+      1. DELETE eventuali righe pre-esistenti per (run_id, node_id) — idempotency
+      2. INSERT tutte le nuove righe (executemany)
+      3. INSERT ... ON CONFLICT DO UPDATE su node_meta
+
+    Pre-fix `writer.write_node` chiamava `insert_node_rows` + `upsert_node_meta`
+    in DUE transazioni separate. Se la seconda falliva (DB pool exhausted,
+    psycopg2.OperationalError, ecc.), node_rows era gia' committato e
+    node_meta restava al valore della run precedente — divergenza permanente
+    fra row_count meta e count effettivo di node_rows.
+
+    Post-fix: tutto succede su una singola conn dentro `transaction()`. Su
+    qualsiasi exception il rollback rimuove sia il DELETE che gli INSERT
+    (incluso l'upsert meta), preservando lo stato pre-call.
+
+    Idempotency garantita anche su rows vuoto: il DELETE evicts pre-esistenti.
+
+    Args:
+        run_id, node_id: chiave logica
+        rows: lista [{_row_hash, ...col}] gia' arricchita dal writer
+        col_schema: schema usato anche per node_meta.col_schema (JSON)
+        node_type, exec_time, status, error_msg: campi node_meta
+
+    Note:
+      - row_data format invariato (passa per _to_jsonable / sentinel NaN/Inf)
+      - row_hash invariato (il writer lo calcola, qui lo persistiamo verbatim)
+      - signature kw-only per evitare confusione posizionale con upsert_node_meta
+    """
+    records = _build_node_row_records(run_id, node_id, rows or [])
+    meta_params = (
+        run_id, node_id, node_type,
+        len(records),
+        json.dumps(col_schema) if col_schema else None,
+        exec_time, status, error_msg,
     )
-    executemany(sql, records)
+
+    with transaction() as conn:
+        with conn.cursor() as cur:
+            cur.execute(_SQL_DELETE_NODE_ROWS, (run_id, node_id))
+            if records:
+                cur.executemany(_SQL_INSERT_NODE_ROW, records)
+            cur.execute(_SQL_UPSERT_NODE_META, meta_params)
 
 
 def get_node_table_rows(run_id: str, node_id: str,
