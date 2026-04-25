@@ -564,6 +564,14 @@ def op_formula(
         eval_df = result
 
     try:
+        # SECURITY: validazione AST PRIMA di qualsiasi engine eval (pandas.eval
+        # incluso). pandas.eval ha backend `numexpr`/`python` e in alcune
+        # configurazioni puo' valutare attribute access / call: senza gate AST
+        # davanti, un payload malicioso potrebbe sfuggire al solo controllo
+        # del fallback path. Spostando il validator qui copriamo entrambi i
+        # tentativi con la stessa whitelist.
+        _validate_formula_ast(formula)
+
         # --- Tentativo 1: pandas.eval() ---
         # Gestisce espressioni matematiche e booleane vettoriali.
         # Non regge per: metodi stringa (.str.upper()), concatenazioni con costanti stringa.
@@ -607,19 +615,8 @@ def op_formula(
             else:
                 local_vars[col] = series
 
-        # SECURITY: validazione AST della formula PRIMA dell'eval.
-        # Senza questa protezione, un utente che può editare un canvas potrebbe
-        # iniettare codice arbitrario via formule come:
-        #   __import__('os').system('rm -rf /')
-        #   [x for x in ().__class__.__bases__[0].__subclasses__() if 'Popen' in x.__name__][0](['id'])
-        # Il namespace ristretto (__builtins__={}) NON basta a prevenire queste
-        # tecniche di escape (class traversal, attribute chain, ecc.).
-        #
-        # La validazione AST blocca:
-        #   - Import / ImportFrom
-        #   - Attribute access su oggetti non-pandas (es. __class__, __bases__)
-        #   - Call a funzioni non autorizzate (solo metodi .str.*, .dt.*, .fillna, ecc.)
-        _validate_formula_ast(formula)
+        # SECURITY: validazione AST gia' eseguita all'inizio del try (sopra),
+        # prima di qualsiasi engine eval. Niente da rifare qui.
         result[new_column] = eval(formula, {"__builtins__": {}, "pd": pd}, local_vars)
         logger.info(f"Formula (eval namespace) ok: '{new_column}'")
         return result
@@ -762,9 +759,12 @@ def op_aggregate(
         return df
     
     try:
-        # Se nessuna aggregazione, solo count
+        # Se nessuna aggregazione, solo count.
+        # dropna=False: includiamo i gruppi con NaN nelle chiavi per non
+        # perdere righe silenziosamente (default pandas e' dropna=True che
+        # le scarta — comportamento sorprendente per chi aggrega).
         if not aggregations:
-            result = df.groupby(group_by).size().reset_index(name='count')
+            result = df.groupby(group_by, dropna=False).size().reset_index(name='count')
             logger.info(f"Aggregate (count): {len(df)} -> {len(result)} righe")
             return result
         
@@ -820,10 +820,10 @@ def op_aggregate(
         
         if not agg_dict:
             logger.warning(f"agg_dict vuoto dopo parsing aggregazioni! Fallback a count")
-            result = df.groupby(group_by).size().reset_index(name='count')
+            result = df.groupby(group_by, dropna=False).size().reset_index(name='count')
         else:
             logger.info(f"agg_dict finale: {agg_dict}")
-            result = df.groupby(group_by).agg(agg_dict).reset_index()
+            result = df.groupby(group_by, dropna=False).agg(agg_dict).reset_index()
             # Flatten multi-index columns
             if isinstance(result.columns, pd.MultiIndex):
                 result.columns = ['_'.join(col).strip('_') for col in result.columns]

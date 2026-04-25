@@ -179,31 +179,32 @@ def base_log_records():
 
 
 def test_op_formula_skips_dunder_column_from_eval_namespace():
-    """Colonna chiamata '__import__' deve essere esclusa da local_vars:
-    una formula che la referenzia fallisce (NameError), perche' il nome
-    non e' nel namespace dell'eval."""
+    """Colonna chiamata '__import__' deve essere esclusa da local_vars
+    e la formula che la referenzia deve essere rifiutata fail-loud
+    (ValueError). Contratto attuale: op_formula rilancia errori AST/eval
+    come ValueError invece di tornare il df originale silenziosamente."""
     from app.core.manipola.transforms.base import op_formula
 
     df = pd.DataFrame({
         "normal": [1, 2, 3],
         "__import__": [10, 20, 30],
     })
-    result = op_formula(df, "__import__ + 1", new_column="calc")
-    # La formula fallisce silenziosamente (catch-all in op_formula);
-    # 'calc' non viene creata oppure e' uguale a df originale.
-    assert "calc" not in result.columns or result.equals(df)
+    with pytest.raises(ValueError):
+        op_formula(df, "__import__ + 1", new_column="calc")
 
 
 def test_op_formula_skips_single_underscore_prefix():
-    """Colonne con prefix _ (semi-private) escluse per defense-in-depth."""
+    """Colonne con prefix _ (semi-private) escluse per defense-in-depth.
+    Una formula che le referenzia non trova il nome nel namespace eval
+    e op_formula solleva ValueError (contratto fail-loud)."""
     from app.core.manipola.transforms.base import op_formula
 
     df = pd.DataFrame({
         "normal": [1, 2, 3],
         "_hidden": [100, 200, 300],
     })
-    result = op_formula(df, "_hidden + 1", new_column="calc")
-    assert "calc" not in result.columns or result.equals(df)
+    with pytest.raises(ValueError):
+        op_formula(df, "_hidden + 1", new_column="calc")
 
 
 def test_op_formula_accepts_normal_column_names():
