@@ -451,26 +451,43 @@ class DatabaseWriter(DestinationWriter):
             logger.info("DataFrame vuoto, nessuna riga da scrivere")
             return result
 
-        # C4: avviso difensivo sulla combo rischiosa. Se il write fallisce
-        # a meta' con batch gia' committati (PER_BATCH) + write_mode=APPEND
-        # + nessun match_columns per conflict detection, un rilancio
-        # manuale duplicherebbe le righe gia' scritte. La combo non e'
-        # bloccata (puo' essere legittima per tabelle append-only con
-        # lineage esterno), ma va loggata esplicitamente per l'operatore.
+        # F-DATA-08 / P1-05: gate fail-loud sulla combo rischiosa.
+        # Se il write fallisce a meta' con batch gia' committati (PER_BATCH)
+        # + write_mode=APPEND + nessun match_columns per conflict detection,
+        # un rilancio manuale duplicherebbe le righe gia' scritte.
+        # Pre-fix la combo era solo "warning"-livel: in produzione il
+        # warning e' di fatto silent → corruzione dati su retry partial.
+        # Ora la combo e' rifiutata fail-loud, opt-in tramite
+        # `WriteConfig.allow_unsafe_append=True` per chi accetta
+        # consapevolmente il rischio (es. tabelle append-only con
+        # lineage esterno che gestisce dedup downstream).
         if (
             self.config.write_mode == WriteMode.APPEND
             and self.config.transaction_mode == TransactionMode.PER_BATCH
             and not self.config.match_columns
         ):
+            if not self.config.allow_unsafe_append:
+                raise ValueError(
+                    f"[UNSAFE WRITE CONFIG] Tabella "
+                    f"{self.config.schema_name}.{self.config.table_name}: "
+                    f"combo non sicura write_mode=append + "
+                    f"transaction_mode=per_batch + nessun match_columns. "
+                    f"In caso di errore parziale, i batch gia' committati "
+                    f"restano scritti e un rilancio duplicherebbe le righe. "
+                    f"Scegli una delle alternative: "
+                    f"(1) usare transaction_mode=all_or_nothing per rollback "
+                    f"completo; "
+                    f"(2) configurare match_columns per conflict detection; "
+                    f"(3) settare allow_unsafe_append=true consapevolmente "
+                    f"se la tabella e' append-only con lineage esterno."
+                )
+            # Opt-in: warning informativo per l'operatore, write procede.
             logger.warning(
-                f"[UNSAFE WRITE CONFIG] Tabella "
+                f"[UNSAFE WRITE CONFIG opt-in] Tabella "
                 f"{self.config.schema_name}.{self.config.table_name}: "
-                f"write_mode=append + transaction_mode=per_batch + nessun "
-                f"match_columns configurato. In caso di errore parziale, "
-                f"i batch gia' committati restano scritti e un rilancio "
-                f"manuale duplicherebbe le righe. Considera: "
-                f"(a) transaction_mode=all_or_nothing (rollback completo), "
-                f"oppure (b) aggiungere match_columns per conflict detection."
+                f"write_mode=append + transaction_mode=per_batch + "
+                f"nessun match_columns + allow_unsafe_append=True. "
+                f"Retry parziali possono duplicare righe."
             )
 
         try:

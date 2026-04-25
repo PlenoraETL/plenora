@@ -156,6 +156,11 @@ class WriteConfig:
         create_spatial_index: crea indice spaziale su CREATE (default True)
         conflict_policy: policy per CRON automatico (default SKIP)
         if_table_exists: comportamento se tabella esiste con CREATE ("error" o "replace")
+        allow_unsafe_append: opt-in esplicito per la combo APPEND + PER_BATCH
+            + nessun match_columns. Default False: la combo viene rifiutata
+            con ValueError dal writer (vedi F-DATA-08 / P1-05). Settare True
+            solo se la tabella e' append-only con lineage esterno e si
+            accetta consapevolmente il rischio di duplicati su retry parziale.
     """
     connection_id: str
     schema_name: str = "public"
@@ -172,6 +177,7 @@ class WriteConfig:
     conflict_policy: ConflictPolicy = ConflictPolicy.SKIP
     if_table_exists: str = "error"
     unique_key_column: str = ""
+    allow_unsafe_append: bool = False
 
     @staticmethod
     def from_node_data(data: Dict[str, Any]) -> "WriteConfig":
@@ -211,6 +217,12 @@ class WriteConfig:
             conflict_policy=ConflictPolicy(data.get("conflict_policy", "skip")),
             if_table_exists=data.get("if_table_exists", "error"),
             unique_key_column=data.get("unique_key_column", ""),
+            # F-DATA-08 / P1-05: default sicuro False. Il frontend deve
+            # settare esplicitamente il boolean True per opt-in alla combo
+            # unsafe. Strict identity check: stringhe come "true"/"false"/
+            # "0"/"1" restano False, perche' `bool("false")` e' True in
+            # Python e abiliterebbe silently la modalita' unsafe.
+            allow_unsafe_append=data.get("allow_unsafe_append") is True,
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -242,6 +254,7 @@ class WriteConfig:
             "conflict_policy": self.conflict_policy.value,
             "if_table_exists": self.if_table_exists,
             "unique_key_column": self.unique_key_column,
+            "allow_unsafe_append": self.allow_unsafe_append,
         }
 
 
