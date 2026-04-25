@@ -1966,29 +1966,45 @@ class EnrichmentExecutor:
 # FUNZIONI HELPER GLOBALI
 # =============================================================================
 
-def generate_error_report(errors: List[RowError], output_path: str) -> str:
+def generate_error_report(
+    errors: List[RowError],
+    output_path: str,
+    auth: Optional[Dict[str, Any]] = None,
+) -> str:
     """
     Genera report CSV degli errori di arricchimento.
-    
+
     Ogni riga del CSV contiene: indice riga originale, status, tipo errore,
     messaggio, HTTP status, numero retry, parametri input, timestamp.
     Il file viene salvato accanto all'output con suffisso '_errors.csv'.
+
+    Phase 4 (P0-01): `input_params` viene redatto via `sanitize_for_log`
+    prima della serializzazione. La path CSV pre-fix scriveva in chiaro
+    api_key/token/password presenti in `params` (es. api_key in query
+    string materializzata da `_build_params`), causando credential leak
+    nel file `<output>_errors.csv` distribuito ai consumer del task.
+    Ora la stessa redaction usata sul logger debug (`sanitize_for_log`)
+    e' applicata anche a questa path. Se il caller passa `auth`, anche
+    `auth.key_name` viene oscurato (api_key con nome custom es. `apikey`,
+    `subscription-key`).
     """
     if not errors:
         return None
-    
+
     import csv
-    
+
     file_path = f"{output_path}_errors.csv"
-    
+
     with open(file_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=[
             "row_index", "status", "error_type", "error_message",
             "http_status", "retry_count", "input_params", "timestamp"
         ])
         writer.writeheader()
-        
+
         for error in errors:
+            raw_params = getattr(error, "input_params", None) or {}
+            safe_params = sanitize_for_log(raw_params, auth)
             writer.writerow({
                 "row_index": error.row_index,
                 "status": error.status.value,
@@ -1996,9 +2012,9 @@ def generate_error_report(errors: List[RowError], output_path: str) -> str:
                 "error_message": error.error_message,
                 "http_status": error.http_status or "",
                 "retry_count": error.retry_count,
-                "input_params": json.dumps(error.input_params) if hasattr(error, 'input_params') else "{}",
+                "input_params": json.dumps(safe_params, ensure_ascii=False),
                 "timestamp": error.timestamp
             })
-    
+
     logger.info(f"Report errori salvato: {file_path}")
     return file_path

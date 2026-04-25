@@ -543,7 +543,8 @@ def execute_enrichment_task(
                             output_dir.mkdir(parents=True, exist_ok=True)
                             error_report_file = generate_error_report(
                                 enrichment_result.errors,
-                                str(output_dir / f"enrichment_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}")
+                                str(output_dir / f"enrichment_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"),
+                                auth=api_config_local.get("auth"),
                             )
                         logger.info(
                             f"[Task {task_id}] {api_name}: "
