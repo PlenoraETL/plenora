@@ -120,8 +120,14 @@ Responsabilita: governa scrittura DataFrame su DB target con DDL automatica, bul
 |---|---|---|
 | `router.py` | `init_carica_service`, `AutoMappingRequest` | contratto API carica |
 | `executor.py` | `CaricaExecutor`, `_resolve_aliases_in_mappings`, `_dict_to_conn_obj`, `_short_err` | orchestrazione di una scrittura |
-| `database_writer.py` | `DatabaseWriter` (estende `DestinationWriter`) | scrittura effettiva su DB target |
+| `database_writer.py` | (orchestrator-class, 460 righe post-Phase-5-B2, -81% vs baseline 2443) — `DatabaseWriter(DataPrepMixin, SchemaIntrospectionMixin, TransactionExecutionMixin, ReplaceStrategiesMixin, WriterPreflightLifecycleMixin, BatchDispatchMixin, DestinationWriter)`. Resta nel ruolo orchestrator: `__init__` + `write` (entry point) + `_dispatch_write_mode` (orchestrator interno) + `_oracle_setup` (utility cross-mixin chiamata da TransactionExecutionMixin + ReplaceStrategiesMixin via `self._oracle_setup` MRO; cross-mixin → resta in core class) | entry point + dispatch |
 | `writer_base.py` | `DestinationWriter` (base) | interfaccia writer |
+| `writer_data_prep.py` | `DataPrepMixin` (4 metodi: `_prepare_dataframe`, `_fix_mixed_type_columns`, `_geometry_to_wkt`, `_build_params`) | data transformation pre-write (B2.1) |
+| `writer_introspection.py` | `SchemaIntrospectionMixin` (6 metodi: `table_exists`, `get_existing_columns`, `get_schemas`, `get_tables`, `_table_exists_for`, `_compute_schema_hints`) | schema introspection DB-side + DataFrame-side (B2.2) |
+| `writer_transaction_exec.py` | `TransactionExecutionMixin` (4 metodi: `_execute_in_batches`, `_execute_all_or_nothing`, `_execute_per_batch`, `_execute_batch`) | batch execution con strategia transazionale (B2.3) |
+| `writer_replace_strategies.py` | `ReplaceStrategiesMixin` (6 metodi: `_truncate_insert_atomic`, `_truncate_insert_stage_swap`, `_truncate_insert_oracle_redef`, `_replace_atomic`, `_mssql_replicate_schema_to_shadow`, `_generate_single_rename`) | replace/truncate strategies + helper SQL (B2.4b) |
+| `writer_preflight_lifecycle.py` | `WriterPreflightLifecycleMixin` (8 metodi: `validate`, `_check_create_permission`, `_assert_safe_write_config`, `_build_initial_result`, `check_conflicts`, `create_table`, `drop_table`, `truncate_table`) | preflight validation + DDL lifecycle (B2.5b) |
+| `writer_batch_dispatch.py` | `BatchDispatchMixin` (3 metodi: `_batch_insert`, `_batch_update`, `_batch_upsert`) | dispatch per write mode + delegate a `_execute_in_batches` (B2.6) |
 | `bulk_writers.py` | `bulk_insert`, `is_bulk_enabled`, `BulkInsertNotSupportedError` | path bulk + telemetry |
 | `ddl_generator.py` | `DDLGenerator` | DDL automatico da DataFrame |
 | `column_mapper.py` | `ColumnMapper` | mapping colonne sorgente->destinazione |
@@ -129,15 +135,45 @@ Responsabilita: governa scrittura DataFrame su DB target con DDL automatica, bul
 | `idempotency.py` | `is_already_completed` (re-export da `app.shared.idempotency`) | dedup tra retry |
 | `models.py` | `WriteMode`, `WriteStatus`, `TransactionMode`, `ConflictPolicy`, `ColumnMapping`, `WriteConfig`, `BatchProgress`, `ConflictDetail`, `ConflictReport`, `WriteResult`, `AuditRecord` | enum/contratti scrittura |
 
-Keywords: `CaricaExecutor`, `DatabaseWriter`, `DDLGenerator`, `ColumnMapper`, `ConflictChecker`, `WriteConfig`, `ConflictPolicy`, `bulk_insert`
+Keywords: `CaricaExecutor`, `DatabaseWriter`, `DDLGenerator`, `ColumnMapper`, `ConflictChecker`, `WriteConfig`, `ConflictPolicy`, `bulk_insert`, `DataPrepMixin`, `SchemaIntrospectionMixin`, `TransactionExecutionMixin`, `ReplaceStrategiesMixin`, `WriterPreflightLifecycleMixin`, `BatchDispatchMixin`
 
 Punti di intervento tipici:
 - nuovo dialect/destination -> sottoclasse di `DestinationWriter` in `writer_base.py` + registrazione in `executor.py`
-- nuova `ConflictPolicy` -> enum in `models.py` + branch in `ConflictChecker` e `DatabaseWriter`
+- nuova `ConflictPolicy` -> enum in `models.py` + branch in `ConflictChecker` e `BatchDispatchMixin._batch_upsert`
 - DDL su nuovo tipo colonna -> `DDLGenerator` (mapping tipo) + `ColumnMapper`
 - regressione bulk -> `bulk_writers.py` (`bulk_insert`, `is_bulk_enabled`) e telemetry whitelist
+- nuovo data-prep step -> `writer_data_prep.py` (`DataPrepMixin`)
+- nuova introspection schema -> `writer_introspection.py` (`SchemaIntrospectionMixin`)
+- nuova transaction strategy -> `writer_transaction_exec.py` (`TransactionExecutionMixin`)
+- nuova replace strategy -> `writer_replace_strategies.py` (`ReplaceStrategiesMixin`)
+- nuova preflight check / DDL lifecycle -> `writer_preflight_lifecycle.py` (`WriterPreflightLifecycleMixin`)
+- nuovo write mode helper -> `writer_batch_dispatch.py` (`BatchDispatchMixin`)
+- modifiche a `_dispatch_write_mode` o `write` -> `database_writer.py` (orchestrator core)
 
 Intervento/confini: leggere dataset solo da `intermediate`. Credenziali via `connections`+`shared/crypto`. Preservare `ConflictPolicy` e idempotency keys; nuovi writer estendono `writer_base.DestinationWriter`. Non bypassare `ConflictChecker` quando policy != overwrite.
+
+**MRO post-Phase-5-B2** (decisione architetturale ratificata B2.6):
+```
+DatabaseWriter
+  → DataPrepMixin
+  → SchemaIntrospectionMixin
+  → TransactionExecutionMixin
+  → ReplaceStrategiesMixin
+  → WriterPreflightLifecycleMixin
+  → BatchDispatchMixin
+  → DestinationWriter (ABC)
+  → object
+```
+31 metodi distribuiti su 6 mixin specializzati per dominio. `inspect.getsource(DatabaseWriter.<method>)` legge il source dal mixin tramite `__code__.co_filename` + line numbers. Le call-site `self.<method>(...)` interne (sia da `_dispatch_write_mode` sia inter-mixin) risolvono via MRO senza modifiche.
+
+**Logger naming contract** (uniforme per tutti i 6 mixin + core class): tutti i moduli usano esplicitamente `get_logger("app.core.carica.writer")` (NOT `__name__`). `StructuredLogger` wrapper di `app/utils/logger.py` delega a `_logger.log(...)` sul logger stdlib omonimo (singleton per nome) → handler/caplog agganciati nei test catturano emit indistintamente da quale modulo li produce.
+
+**Test contract modernization** (3 commit B2):
+- **B2.0** (`test_database_writer_log_consistency_contract.py`): `monkeypatch.setattr(dw_module, "logger", ...)` → handler stdlib agganciato al logger canonico per nome (cattura emit dei mixin); `inspect.getsource(dw_module)` (cleanup guards) → `inspect.getsource(DatabaseWriter._method)` per ciascuno dei 3 metodi caller.
+- **B2.4a** (`test_database_writer_bulk_integration_contract.py:test_stage_swap_callsite_propagates_stg_table_to_bulk`): `ast.parse(database_writer.py)` → `ast.parse("class _S:\n" + inspect.getsource(method))` per ciascuno dei 3 metodi (dedent via class scaffold per i body con SQL multiline).
+- **B2.5a** (`test_unsafe_append_gate_contract.py:test_unsafe_append_combo_with_flag_proceeds`): `monkeypatch.setattr(dw_mod, "logger", ...)` → handler stdlib agganciato al logger canonico per nome (stesso pattern B2.0).
+
+Tutti i 3 test contract ora behavior-bound (non source-location-bound): indipendenti dalla posizione fisica dei metodi. Anti-fragili rispetto a future estrazioni / refactor.
 
 ---
 
