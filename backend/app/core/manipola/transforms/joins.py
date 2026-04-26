@@ -48,7 +48,17 @@ from typing import List, Union
 
 from app.utils.logger import get_logger
 
-logger = get_logger(__name__)
+# Logger naming intenzionale: usiamo "app.core.manipola.transforms.base"
+# (NON `__name__` che sarebbe `...joins`) per preservare il contratto
+# osservabile pre-extraction. I record `[JOIN]` / `Join completato` /
+# warning chiavi NaN escono dallo stesso logger di base, cosi' i test
+# che attaccano handler a "app.core.manipola.transforms.base" (vedi
+# `test_op_join_nan_key_contract.py::base_log_records`) e i consumer
+# di log aggregation che filtrano per quel logger name continuano a
+# vedere identicamente i record di op_join. Questo e' parte
+# dell'invariante "zero call-site changes" del facade re-export
+# (vedi `PHASE_5_ENTRY_PLAN.md` §6.1).
+logger = get_logger("app.core.manipola.transforms.base")
 
 # Stesso alias dtype-union usato in base.py: copre sia pandas DataFrame
 # sia geopandas GeoDataFrame (op_join supporta entrambi via copy + merge).
