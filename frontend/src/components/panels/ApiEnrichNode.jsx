@@ -12,8 +12,8 @@
  *
  * Usato in: ArricchisciEditor
  */
-import http from '../../api/http';
 import { uploadFile } from '../../api/files';
+import { getApiConnection } from '../../api/apiConnections';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Handle, Position, useReactFlow, useStore } from 'reactflow';
 import { getColumnTypeIcon, getColumnTypeLabel } from '../../utils/columnUtils';
@@ -94,14 +94,17 @@ function ApiEnrichNode({ id, data, selected }) {
   const loadApiDetails = async (apiId) => {
     try {
       setLoadingApi(true);
-      const res = await http.get(`/api-connections/${apiId}`);
-      if (res.data) {
+      // C3.4 Phase 4: passa per il boundary api/apiConnections.
+      // getApiConnection ritorna direttamente il body (data), non il
+      // wrapper axios — quindi il check di presenza si fa sull'oggetto.
+      const apiData = await getApiConnection(apiId);
+      if (apiData) {
         // Segna come fetchato SOLO dopo il successo: in caso di errore di rete
         // il prossimo render potrà riprovare (fetchedApiIdRef rimane null/precedente)
         fetchedApiIdRef.current = apiId;
         // Solo setFetchedApi — NON setNodes, che causa loop ReactFlow↔Zustand
         // I dati sono disponibili via fetchedApi per tutta la vita del componente
-        setFetchedApi(res.data);
+        setFetchedApi(apiData);
       }
     } catch (error) {
       console.error('Errore caricamento API:', error);

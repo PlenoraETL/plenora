@@ -4,27 +4,22 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
- * Contract test — ApiEnrichNode FE/API boundary (C3.1 Phase 4).
+ * Contract test — ApiEnrichNode FE/API boundary (C3.1 + C3.4 Phase 4).
  *
- * ApiEnrichNode.jsx (componente UI in components/panels/) faceva upload
- * file diretto via `http.post('/files/upload', form, { headers: ... })`,
- * bypassando l'API boundary frontend/src/api/. Conseguenze pre-C3.1:
- *  - bypass del guard B3 size pre-flight (UploadTooLargeError client-side)
- *  - bypass della propagazione 413 normalizzata
- *  - violazione del contratto architetturale "frontend/src/api/ unico
- *    punto HTTP del frontend" (CODE_MAP.md §"Contratti da non rompere")
+ * Pre-C3.1 ApiEnrichNode.jsx faceva DUE chiamate dirette al client http
+ * fuori dal boundary api/:
+ *   1. http.post('/files/upload', form, { headers: ... }) — upload
+ *      extra-input file. C3.1 lo ha consolidato dietro api/files.uploadFile,
+ *      ereditando il guard B3 (size pre-flight + 413 propagation).
+ *   2. http.get('/api-connections/:id') — fetch dettaglio API connection.
+ *      C3.4 lo ha consolidato dietro api/apiConnections.getApiConnection
+ *      (gia' esportata da C3.2). Con questo, l'import http puo' essere
+ *      rimosso interamente dal componente.
  *
- * C3.1 fix: l'upload extra-input passa per `api/files.uploadFile`,
- * eredita guard + 413 + no manual Content-Type a costo zero.
- *
- * Questo test e' una contract assertion sulla SORGENTE del componente
- * (regex-based, non rendering): se qualcuno reintroduce la chiamata
- * diretta in PR futuro, il test rompe. Niente jsdom, niente render del
- * canvas — il pattern di violazione e' visibile sui token del file.
- *
- * Lo scope C3.1 NON copre l'altra chiamata diretta in ApiEnrichNode
- * (`http.get('/api-connections/:id')` riga ~96): rimossa in C3.2 con il
- * batch connections boundary.
+ * Test source-level (regex su sorgente JSX letta via node:fs): niente
+ * render React, nessuna dipendenza da jsdom + ReactFlow + canvas mock.
+ * Una regressione che reintroduce import http o http.<verb>() rompe il
+ * test al primo `npm test`.
  */
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -61,6 +56,33 @@ describe('ApiEnrichNode boundary contract (C3.1)', () => {
   it('actually invokes uploadFile in the upload code path', () => {
     // Sanity: l'import non deve essere "morto". Cerchiamo l'invocazione.
     const pattern = /\buploadFile\s*\(/;
+    expect(pattern.test(SOURCE)).toBe(true);
+  });
+
+  // ─── C3.4 Phase 4: ultimo residual boundary chiuso ────────────────────
+
+  it('does NOT import http directly from api/http (C3.4)', () => {
+    // C3.4 ha rimosso `import http from '../../api/http'`: l'unica
+    // chiamata residua /api-connections/:id ora passa per
+    // api/apiConnections.getApiConnection.
+    const pattern = /import\s+http\s+from\s+['"]\.\.\/\.\.\/api\/http['"]/;
+    expect(pattern.test(SOURCE)).toBe(false);
+  });
+
+  it('does NOT call http.<verb>(...) anywhere (C3.4)', () => {
+    // Niente invocazione del client http residua. Se il file vuole
+    // chiamare un endpoint, deve passare per il boundary api/.
+    const pattern = /\bhttp\.(get|post|put|delete|patch)\s*\(/;
+    expect(pattern.test(SOURCE)).toBe(false);
+  });
+
+  it('imports getApiConnection from api/apiConnections (C3.4)', () => {
+    const pattern = /import\s*\{[^}]*\bgetApiConnection\b[^}]*\}\s*from\s*['"][^'"]*\/api\/apiConnections['"]/;
+    expect(pattern.test(SOURCE)).toBe(true);
+  });
+
+  it('actually invokes getApiConnection in the loadApiDetails path (C3.4)', () => {
+    const pattern = /\bgetApiConnection\s*\(/;
     expect(pattern.test(SOURCE)).toBe(true);
   });
 });

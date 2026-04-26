@@ -15,7 +15,6 @@ import { getFiles } from '../api/files';
 import { listSchedules } from '../api/schedules';
 import { listDataSources } from '../api/datasources';
 import { handleCascade409, formatCascadeDependencies } from '../api/errors';
-import http from '../api/http';
 import { useHexCanvas } from '../utils/hexCanvas';
 import PublishEseguibileModal from '../components/eseguibili/PublishEseguibileModal';
 import EseguibileExecuteWizard from '../components/eseguibili/EseguibileExecuteWizard';
@@ -42,19 +41,11 @@ function ProjectList() {
   const [loading,           setLoading]           = useState(true);
   const [creating,          setCreating]          = useState(false);
   const [showModal,         setShowModal]         = useState(false);
-  const [nl2Input,   setNl2Input]   = useState('');
-  const [nl2Loading, setNl2Loading] = useState(false);
-  const [nl2Error,   setNl2Error]   = useState(null);
-  const [nl2Preview, setNl2Preview] = useState(null);  // risultato pipeline {project_ids, warnings}
-  const [nl2ConnId,  setNl2ConnId]  = useState('');    // connessione selezionata
-  const [nl2Modal,   setNl2Modal]   = useState(false); // modal aperto
   const [publishProject, setPublishProject] = useState(null); // progetto da pubblicare come eseguibile
   const [eseguibili, setEseguibili] = useState([]);            // lista eseguibili (catene on-demand)
   const [executeEseguibileId, setExecuteEseguibileId] = useState(null); // id eseguibile da lanciare nel wizard
   const [showEsegSelector, setShowEsegSelector] = useState(false);      // selettore progetto sorgente per nuovo eseguibile
   const [esegSelectorSearch, setEsegSelectorSearch] = useState('');
-  const [nl2Logs,    setNl2Logs]    = useState([]);    // log progressivi
-  const nl2LogsRef = useRef(null);                     // ref per autoscroll
   const [newProjectName,    setNewProjectName]    = useState('');
   const [newProjectDesc,    setNewProjectDesc]    = useState('');
   const [newProjectType,    setNewProjectType]    = useState('estrai');
@@ -72,99 +63,6 @@ function ProjectList() {
 
   const canvasRef = useRef(null);
   useHexCanvas(canvasRef);
-
-  // ── NL2Pipeline polling — controllo lifecycle ────────────────────────────
-  // Ref usata per:
-  //   - cancellare il polling quando il componente smonta
-  //   - cancellare un polling vecchio se l'utente clicca "Genera" di nuovo
-  //   - cancellare quando l'utente chiude il modal
-  // Usa AbortController, supportato nativamente da axios via `signal`.
-  const nl2AbortRef = useRef(null);
-  const POLL_INTERVAL_MS = 2000;
-  const POLL_MAX_ITERATIONS = 300;  // 300 × 2s = 10 minuti max
-
-  // Cancella il polling NL2 quando il componente smonta
-  useEffect(() => {
-    return () => {
-      nl2AbortRef.current?.abort();
-    };
-  }, []);
-
-  // NL2Pipeline — chiama il backend e fa polling sui log
-  const handleNl2Generate = async (load = false) => {
-    if (!nl2Input.trim() || !nl2ConnId) return;
-
-    // Cancella eventuale polling precedente prima di partire
-    nl2AbortRef.current?.abort();
-    const controller = new AbortController();
-    nl2AbortRef.current = controller;
-
-    setNl2Loading(true);
-    setNl2Error(null);
-    setNl2Logs([]);
-    setNl2Preview(null);
-    setNl2Modal(true);
-
-    try {
-      // Avvia task — usa il client http (interceptor gestisce auth + 401)
-      const startResp = await http.post(
-        '/nl2pipeline',
-        { query: nl2Input, connection_id: nl2ConnId, load },
-        { signal: controller.signal }
-      );
-      const { run_id } = startResp.data;
-
-      // Polling con timeout massimo (safety net contro loop infinito)
-      let done = false;
-      let iterations = 0;
-      while (!done && !controller.signal.aborted) {
-        if (iterations++ >= POLL_MAX_ITERATIONS) {
-          throw new Error(
-            `Timeout polling NL2: nessuna risposta dopo ${POLL_MAX_ITERATIONS * POLL_INTERVAL_MS / 1000}s`
-          );
-        }
-        await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
-        if (controller.signal.aborted) break;
-
-        const pollResp = await http.get(
-          `/nl2pipeline/${run_id}`,
-          { signal: controller.signal }
-        );
-        const data = pollResp.data;
-
-        if (data.logs) {
-          setNl2Logs(data.logs);
-          // Autoscroll
-          setTimeout(() => {
-            if (nl2LogsRef.current) nl2LogsRef.current.scrollTop = nl2LogsRef.current.scrollHeight;
-          }, 50);
-        }
-
-        if (data.status === 'success') {
-          setNl2Preview(data.result);
-          if (!load) {
-            // Ricarica lista progetti
-            loadData();
-          }
-          done = true;
-        } else if (data.status === 'failure') {
-          throw new Error(data.error || 'Pipeline fallita');
-        }
-      }
-    } catch (err) {
-      // AbortError è normale (modal chiuso o nuovo polling avviato), non logghiamo
-      if (err.name === 'AbortError' || err.name === 'CanceledError' || controller.signal.aborted) {
-        return;
-      }
-      setNl2Error(err.message);
-      setNl2Logs(prev => [...prev, { msg: `❌ ${err.message}`, ts: new Date().toISOString() }]);
-    } finally {
-      // Solo se questo controller è ancora quello attivo (no race con un nuovo handleNl2Generate)
-      if (nl2AbortRef.current === controller) {
-        setNl2Loading(false);
-      }
-    }
-  };
 
   const toggleTheme = () => {
     const next = theme === 'dark' ? 'light' : 'dark';
@@ -413,141 +311,6 @@ function ProjectList() {
         {/* Content */}
         <div className="pl__content">
           <canvas ref={canvasRef} className="pl__hex-bg" />
-
-          {/* ── NL2Pipeline bar ── */}
-          <div className="pl__nl2-bar" style={{position:'relative',zIndex:1}}>
-            <div className="pl__nl2-icon">✦</div>
-            <input
-              className="pl__nl2-input"
-              placeholder="Descrivi la pipeline... Es: 'ESTRAI contratti attivi CALCOLA canone al mq ARRICCHISCI con OMI'"
-              value={nl2Input}
-              onChange={e => setNl2Input(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter' && nl2Input.trim() && !nl2Loading && nl2ConnId)
-                  handleNl2Generate(true);
-              }}
-              disabled={nl2Loading}
-            />
-            <select
-              value={nl2ConnId}
-              onChange={e => setNl2ConnId(e.target.value)}
-              disabled={nl2Loading}
-              title="Connessione DB"
-              style={{
-                height: 36, padding: '0 10px', borderRadius: 8,
-                border: '1px solid var(--pl-border)',
-                background: nl2ConnId ? 'rgba(75,139,255,0.08)' : 'var(--pl-surface-2)',
-                color: nl2ConnId ? 'var(--pl-accent)' : 'var(--pl-text-sub)',
-                fontSize: 12.5, cursor: 'pointer', flexShrink: 0, minWidth: 140,
-              }}
-            >
-              <option value="">🔌 Connessione...</option>
-              {(connections || []).filter(c => c.category !== 'arcgis').map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-            <button
-              className="pl__nl2-btn"
-              disabled={!nl2Input.trim() || !nl2ConnId || nl2Loading}
-              onClick={() => handleNl2Generate(true)}>
-              {nl2Loading ? '◌' : '→'}
-            </button>
-            {nl2Error && <div className="pl__nl2-error">{nl2Error}</div>}
-          </div>
-
-          {/* Modal NL2Pipeline — log progressivi + preview risultato */}
-          {nl2Modal && (
-            <ModalWrapper
-              isOpen={true}
-              onClose={() => { setNl2Modal(false); setNl2Preview(null); setNl2Logs([]); }}
-              title={nl2Loading ? 'Generazione in corso...' : nl2Preview ? 'Pipeline generata' : 'NL2Pipeline'}
-              icon="✦"
-              size="md"
-              closeOnOverlay={!nl2Loading}
-              closeOnEsc={!nl2Loading}
-              showCloseButton={!nl2Loading}
-              footer={
-                <>
-                  <ModalButton variant="secondary" onClick={() => { setNl2Modal(false); setNl2Preview(null); setNl2Logs([]); }}>
-                    {nl2Loading ? 'Annulla' : 'Chiudi'}
-                  </ModalButton>
-                  {!nl2Loading && (!nl2Preview || Object.keys(nl2Preview?.project_ids || {}).length === 0) && (
-                    <ModalButton variant="primary" onClick={() => { setNl2Preview(null); setNl2Logs([]); handleNl2Generate(true); }}>
-                      ＋ Crea progetti su Plenora
-                    </ModalButton>
-                  )}
-                </>
-              }
-            >
-                  {/* Log progressivi */}
-                  <div ref={nl2LogsRef} style={{
-                    background: 'var(--pl-surface-2)', borderRadius: 8, padding: '10px 14px',
-                    fontFamily: 'monospace', fontSize: 11.5, maxHeight: 220, overflowY: 'auto',
-                    marginBottom: nl2Preview ? 16 : 0,
-                  }}>
-                    {nl2Logs.length === 0 && <div style={{color:'var(--pl-text-sub)'}}>In coda...</div>}
-                    {nl2Logs.map((log, i) => (
-                      <div key={i} style={{
-                        color: log.msg.startsWith('❌') ? '#ef4444'
-                             : log.msg.startsWith('✅') || log.msg.startsWith('🎉') ? '#22c55e'
-                             : log.msg.startsWith('⚠') ? '#f59e0b'
-                             : 'var(--pl-text-sub)',
-                        lineHeight: 1.6,
-                      }}>
-                        {log.msg}
-                      </div>
-                    ))}
-                    {nl2Loading && <div style={{color:'var(--pl-accent)'}}>▌</div>}
-                  </div>
-
-                  {/* Preview risultato — progetti creati */}
-                  {nl2Preview && nl2Preview.project_ids && (
-                    <div style={{marginTop: 16}}>
-                      <div style={{fontSize: 12, fontWeight: 600, color: 'var(--pl-text-sub)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em'}}>
-                        Progetti creati
-                      </div>
-                      {[
-                        { type: 'estrai',    icon: '↓', label: 'ESTRAI',    color: '#4B8BFF', rgb: '75,139,255'  },
-                        { type: 'manipola',  icon: '⚙', label: 'MANIPOLA',  color: '#9B6DFF', rgb: '155,109,255' },
-                        { type: 'arricchisci', icon: '◈', label: 'ARRICCHISCI', color: '#34C17A', rgb: '52,193,122' },
-                      ].map(({ type, icon, label, color, rgb }) => {
-                        const pid = nl2Preview.project_ids[type];
-                        if (!pid) return null;
-                        return (
-                          <div key={type} style={{
-                            display: 'flex', alignItems: 'center', gap: 10,
-                            padding: '8px 12px', borderRadius: 8, marginBottom: 6,
-                            background: `rgba(${rgb},0.08)`,
-                            border: `1px solid ${color}33`,
-                          }}>
-                            <span style={{fontSize: 16, color}}>{icon}</span>
-                            <span style={{fontSize: 12.5, fontWeight: 600, color}}>{label}</span>
-                            <span style={{fontSize: 11.5, color: 'var(--pl-text-sub)', marginLeft: 4}}>{pid}</span>
-                            <button
-                              onClick={() => {
-                                setNl2Modal(false);
-                                loadData();
-                                if (type === 'estrai') navigate(`/project/${pid}`);
-                                else if (type === 'manipola') navigate(`/editor/manipola/${pid}`);
-                                else navigate(`/arricchisci/${pid}`);
-                              }}
-                              style={{
-                                marginLeft: 'auto', fontSize: 11.5, padding: '3px 10px',
-                                borderRadius: 6, border: `1px solid ${color}55`,
-                                background: 'transparent', color, cursor: 'pointer',
-                              }}>
-                              Apri →
-                            </button>
-                          </div>
-                        );
-                      })}
-                      {nl2Preview.warnings?.length > 0 && nl2Preview.warnings.map((w, i) => (
-                        <div key={i} style={{fontSize: 11.5, color: '#f59e0b', marginTop: 6}}>⚠ {w}</div>
-                      ))}
-                    </div>
-                  )}
-            </ModalWrapper>
-          )}
 
           {/* Stats */}
           <div className="pl__stats-row">

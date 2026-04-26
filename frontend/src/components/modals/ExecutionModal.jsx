@@ -5,8 +5,8 @@
  * e, a completamento, le opzioni di download dell'output nei formati disponibili.
  * Usato da tutti e tre gli editor dopo il click su "Esegui".
  */
-import { API_ENDPOINT } from '../../api/config';
 import React from 'react';
+import { downloadProjectFile } from '../../api/projects';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import './ExecutionModal.css';
 
@@ -60,11 +60,21 @@ function ExecutionModal({
   const hasEnrichmentErrors = totalErrors > 0;
   const errorReportPath = result?.error_report;
 
-  // URL per scaricare il report errori
-  const getErrorReportUrl = () => {
-    if (!errorReportPath || !result?.project_id) return null;
+  // C3.4 Phase 4: download del report errori passa per il boundary
+  // api/projects.downloadProjectFile. Pre-C3.4 il componente faceva un
+  // dynamic `import('../../api/http')` dentro l'onClick — boundary
+  // violation + import dinamico inutile su un componente sempre
+  // attivo dietro isOpen.
+  const handleDownloadErrorReport = async () => {
+    if (!errorReportPath || !result?.project_id) return;
     const filename = errorReportPath.split(/[/\\]/).pop();
-    return `${API_ENDPOINT}/projects/${result.project_id}/download?file=${filename}`;
+    const r = await downloadProjectFile(result.project_id, filename);
+    const b = window.URL.createObjectURL(new Blob([r.data]));
+    const a = document.createElement('a');
+    a.href = b;
+    a.download = 'error_report.csv';
+    a.click();
+    window.URL.revokeObjectURL(b);
   };
 
   // Footer con pulsanti
@@ -239,7 +249,7 @@ function ExecutionModal({
                     {totalErrors} righe hanno generato errori durante l'arricchimento.
                     Scarica il report CSV per vedere i dettagli di ogni errore.
                   </p>
-                  <button type="button" className="execution-modal__error-report-btn" onClick={async () => { const url = getErrorReportUrl(); if (url) { const { default: http } = await import('../../api/http'); const r = await http.get(url, { responseType: 'blob' }); const b = window.URL.createObjectURL(new Blob([r.data])); const a = document.createElement('a'); a.href = b; a.download = 'error_report.csv'; a.click(); window.URL.revokeObjectURL(b); } }}>
+                  <button type="button" className="execution-modal__error-report-btn" onClick={handleDownloadErrorReport}>
                     📋 Scarica Report Errori
                   </button>
                 </div>

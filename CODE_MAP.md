@@ -491,7 +491,7 @@ File principali:
   - `enrichment.js` - run/preview enrichment
   - `schedules.js` - CRUD schedule + toggle/catchup
   - `runs.js` + `logRuns.js` - run/log run intermediate
-- altri client per-modulo: `datasources.js`, `carica.js`, `eseguibili.js`, `files.js`, `imdf.js`, `logs.js`, `nl2pipelinePresets.js`, `shares.js`, `tasks.js`, `templates.js`, `tickets.js`, `transforms.js`, `users.js`, `adminBackups.js`, `adminSystemStatus.js`
+- altri client per-modulo: `auth.js`, `datasources.js`, `carica.js`, `eseguibili.js`, `files.js`, `imdf.js`, `logs.js`, `shares.js`, `tasks.js`, `templates.js`, `tickets.js`, `transforms.js`, `uploadGuards.js`, `users.js`, `adminBackups.js`, `adminSystemStatus.js`
 
 Keywords: `client`, `http`, `config`, `errors`, `projects`, `connections`, `apiConnections`, `features`, `enrichment`, `schedules`, `runs`
 

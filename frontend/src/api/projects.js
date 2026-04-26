@@ -132,6 +132,33 @@ export const downloadProjectOutput = async (projectId, filename = null) => {
   return { success: true };
 };
 
+/**
+ * Scarica un file specifico associato a un progetto come Blob.
+ *
+ * Backend: GET /projects/:projectId/download?file=:filename. La query
+ * string viene preservata letterale (senza encoding axios `params`) per
+ * mantenere bit-per-bit la URL semantics del consumer storico
+ * (ExecutionModal, error_report.csv): pre-C3.4 il componente costruiva
+ * lui stesso `${API_ENDPOINT}/projects/.../download?file=...` e faceva
+ * `import('../../api/http').then(...)` — boundary violation + dynamic
+ * import inutile su un componente sempre montato dietro `isOpen`.
+ *
+ * Ritorna l'AxiosResponse grezzo (non solo .data) cosi' il caller puo'
+ * accedere a headers (es. Content-Disposition) se serve, senza
+ * ulteriori giri.
+ *
+ * @param {string} projectId
+ * @param {string} filename - basename del file lato server
+ * @returns {Promise<import('axios').AxiosResponse<Blob>>}
+ */
+export const downloadProjectFile = async (projectId, filename) => {
+  const response = await http.get(
+    `/projects/${projectId}/download?file=${filename}`,
+    { responseType: 'blob' },
+  );
+  return response;
+};
+
 // ─── Schema Inference ────────────────────────────────────────────────────────
 
 /**

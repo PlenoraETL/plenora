@@ -16,18 +16,17 @@ import { fileURLToPath } from 'node:url';
  * authFetch dalla Context surface, e ripulito il dead import di UserManager.
  *
  * Test source-level: niente render React, regex sui token. Coerente col
- * pattern di C3.1/C3.2 (apiEnrichNode.boundary, connections.boundary).
+ * pattern di C3.1/C3.2/C3.4 (apiEnrichNode.boundary, connections.boundary,
+ * nl2.cleanup).
  *
- * Scope NON coperto qui (deliberato, lasciato a C3.4):
- *   - pages/ProjectList.jsx ha ancora `import http` e 2 chiamate dirette
- *     `/nl2pipeline*`. Decisione: la feature NL2Pipeline e' classificata
- *     come superficie morta/stale (vedi triage Phase 4). Verra' rimossa
- *     interamente in C3.4 (UI + state + polling + import + stub
- *     api/nl2pipelinePresets.js + CSS legacy + voci CODE_MAP), non
- *     migrata a un nuovo boundary api/.
- *   - components/panels/ApiEnrichNode.jsx ha ancora `import http` per
- *     un'unica chiamata residua a `/api-connections/:id` (riga ~96).
- *     Da chiudere insieme a C3.4 come "ultimo residual boundary".
+ * Note storiche (chiuse):
+ *   - ProjectList.jsx aveva 2 chiamate dirette `/nl2pipeline*` deferite
+ *     a C3.4: la superficie NL2Pipeline e' stata RIMOSSA interamente
+ *     (UI + state + polling + stub presets + CSS), vedi
+ *     `nl2.cleanup.contract.test.js`.
+ *   - ApiEnrichNode.jsx aveva una chiamata residua a `/api-connections/:id`:
+ *     migrata a `getApiConnection` in C3.4, vedi
+ *     `apiEnrichNode.boundary.contract.test.js`.
  */
 
 const __dirname = dirname(fileURLToPath(import.meta.url));

@@ -70,4 +70,54 @@ describe('projects api contract', () => {
     );
     expect(result).toEqual({ success: true });
   });
+
+  // ─── C3.4 Phase 4: per-file download (boundary helper for ExecutionModal) ──
+
+  it('downloadProjectFile GETs /projects/:id/download?file=... with responseType blob', async () => {
+    const blob = new Blob(['error data']);
+    httpMock.get.mockResolvedValueOnce({ data: blob, status: 200 });
+
+    const { downloadProjectFile } = await import('../../src/api/projects');
+    const r = await downloadProjectFile('proj-77', 'error_report_xyz.csv');
+
+    expect(httpMock.get).toHaveBeenCalledWith(
+      '/projects/proj-77/download?file=error_report_xyz.csv',
+      { responseType: 'blob' },
+    );
+    expect(r.data).toBe(blob);
+  });
+
+  it('downloadProjectFile preserves the raw query string (no axios params encoding)', async () => {
+    httpMock.get.mockResolvedValueOnce({ data: new Blob(), status: 200 });
+
+    const { downloadProjectFile } = await import('../../src/api/projects');
+    await downloadProjectFile('proj-1', 'my file.csv');
+
+    // Contratto deliberato: la query string viene concatenata letterale
+    // (preserva URL semantics pre-C3.4 dove ExecutionModal costruiva
+    // ${API_ENDPOINT}/projects/.../download?file=${filename}). Niente
+    // `params: { file }` che invece encoderebbe lo spazio.
+    const [url, config] = httpMock.get.mock.calls[0];
+    expect(url).toBe('/projects/proj-1/download?file=my file.csv');
+    expect(config.params).toBeUndefined();
+  });
+
+  it('downloadProjectFile returns the full AxiosResponse (not just data)', async () => {
+    const blob = new Blob(['x']);
+    const axiosResp = {
+      data: blob,
+      status: 200,
+      headers: { 'content-type': 'text/csv' },
+    };
+    httpMock.get.mockResolvedValueOnce(axiosResp);
+
+    const { downloadProjectFile } = await import('../../src/api/projects');
+    const r = await downloadProjectFile('p-1', 'r.csv');
+
+    // Il caller (ExecutionModal) puo' accedere a headers per leggere
+    // Content-Disposition se in futuro vuole rispettare il filename
+    // server-side. Oggi forza 'error_report.csv', ma il contratto resta.
+    expect(r).toBe(axiosResp);
+    expect(r.headers['content-type']).toBe('text/csv');
+  });
 });
