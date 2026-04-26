@@ -334,7 +334,7 @@ Responsabilita: governa trasformazioni tabellari e spaziali via registry plugin,
 | `executor.py` | `ManipolaExecutor`, `_get_execution_chain`, `_assert_no_lineage_cycle_on_chain`, `_applica_crs_da_colonne` | esecutore principale + lineage |
 | `plugin_executor.py` | `PluginExecutor`, `PluginExecutorCompatibility`, `get_executor`, `reload_executor` | dispatch plugin trasformazioni |
 | `transforms_registry.json` | (registry JSON delle trasformazioni esposte) | catalogo nomi/parametri esposto al frontend |
-| `transforms/base.py` | (facade re-export) — post-Phase-5-B1 split: nessun body, solo `from .<cluster> import op_*` per preservare i path `from .base import op_X` e la risoluzione `getattr(base, "op_X")` del registry | facade modulo |
+| `transforms/base.py` | (facade re-export, 358 righe post-B1, -89.4% vs baseline 3385) — nessun body, solo `from .<cluster> import op_*` per preservare i path `from .base import op_X` e la risoluzione `getattr(base, "op_X")` del registry | facade modulo |
 | `transforms/joins.py` | `op_join`, `op_union`, `op_cross_join` | join e unione tabelle |
 | `transforms/strings.py` | `op_string_pad`, `op_string_length`, `op_string_extract`, `op_text_normalize` | manipolazione stringhe |
 | `transforms/utility.py` | `op_add_row_number`, `op_date_extract`, `op_uuid_generator` | utility riga (numerazione, date, UUID) |
