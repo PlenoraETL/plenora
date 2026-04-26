@@ -13,11 +13,14 @@ l'altro LEGGE al boot dei task systemd. Un workflow end-to-end:
        partono con `ExecStart=python load_secrets.py <target>`, fetchano
        da SSM, eseguono il target con os.environ popolato
 
-Secret migrati (whitelist, hardcoded): `DATABASE_URL`, `PLENORA_ENCRYPTION_KEY`
-(con alias `URBY_ENCRYPTION_KEY`), `JWT_SECRET_KEY`. Variabili di
-configurazione non-sensibili (DB_SCHEMA, DB_POOL_MIN/MAX, UVICORN_WORKERS,
-ecc.) NON vengono migrate: vivono nei systemd unit EnvironmentFile o nel
-`data/config.json`.
+Secret migrati (whitelist, hardcoded): `DATABASE_URL`,
+`PLENORA_ENCRYPTION_KEY` (alias `URBY_ENCRYPTION_KEY` accettato in
+**input-only**: il valore viene comunque scritto su SSM sotto il nome
+canonico `PLENORA_ENCRYPTION_KEY`. Il runtime non legge piu' l'alias
+dal 2026-04-23, D4 chiuso commit `1005018`), `JWT_SECRET_KEY`.
+Variabili di configurazione non-sensibili (DB_SCHEMA, DB_POOL_MIN/MAX,
+UVICORN_WORKERS, ecc.) NON vengono migrate: vivono nei systemd unit
+EnvironmentFile o nel `data/config.json`.
 
 Idempotenza
 -----------
@@ -61,6 +64,15 @@ from typing import Dict, List, Optional, Tuple
 
 # Secret whitelist: nomi env che vanno in SSM.
 # Ordine: il primo che risolve non-vuoto vince (retro-compat per aliasing).
+#
+# `URBY_ENCRYPTION_KEY` come secondo source per `PLENORA_ENCRYPTION_KEY`
+# e' **input-only legacy tolerance**: lo script accetta `.env` non ancora
+# normalizzati (es. backup pre-migration o dev env non aggiornati) e
+# scrive comunque su SSM sotto il nome canonico. Il RUNTIME applicativo
+# non legge piu' l'alias dal 2026-04-23 (D4 chiuso, `app/shared/crypto.py`,
+# tombstoned in `tests2/crypto/test_crypto_key_sourcing_contract.py`).
+# Una volta che tutti i `.env` operativi sono normalizzati a
+# `PLENORA_ENCRYPTION_KEY`, l'alias puo' sparire anche da qui.
 SECRET_ENV_SPECS: List[Tuple[str, List[str]]] = [
     # (nome canonico SSM, [env names ammessi come source, in ordine di priorita'])
     ("DATABASE_URL",            ["DATABASE_URL"]),
