@@ -424,6 +424,70 @@ class DatabaseWriter(DestinationWriter):
     # SCRITTURA PRINCIPALE
     # ========================================================================
 
+    def _build_initial_result(
+        self, total_rows: int, started_at: str
+    ) -> WriteResult:
+        """Costruisce lo skeleton del WriteResult prima dell'esecuzione.
+
+        Estratto da `write()` (C4.1 Phase 4) come pura factory: nessuna
+        logica di business, nessun side-effect. Mantiene unique-source-of-
+        truth per i campi `table_name` e `write_mode` derivati da
+        `self.config`, evitando duplicazioni inline nei branch di write.
+        """
+        return WriteResult(
+            started_at=started_at,
+            total_rows=total_rows,
+            table_name=f"{self.config.schema_name}.{self.config.table_name}",
+            write_mode=self.config.write_mode.value,
+        )
+
+    def _assert_safe_write_config(self) -> None:
+        """F-DATA-08 / P1-05: gate fail-loud sulla combo rischiosa.
+
+        Se il write fallisce a meta' con batch gia' committati (PER_BATCH)
+        + write_mode=APPEND + nessun match_columns per conflict detection,
+        un rilancio manuale duplicherebbe le righe gia' scritte.
+        Pre-fix la combo era solo "warning"-livel: in produzione il
+        warning e' di fatto silent → corruzione dati su retry partial.
+        Ora la combo e' rifiutata fail-loud, opt-in tramite
+        `WriteConfig.allow_unsafe_append=True` per chi accetta
+        consapevolmente il rischio (es. tabelle append-only con
+        lineage esterno che gestisce dedup downstream).
+
+        Estratto da `write()` (C4.1 Phase 4) come helper privato.
+        Comportamento bit-per-bit invariato: stessa condizione, stesso
+        messaggio di errore, stesso warning su opt-in.
+        """
+        if not (
+            self.config.write_mode == WriteMode.APPEND
+            and self.config.transaction_mode == TransactionMode.PER_BATCH
+            and not self.config.match_columns
+        ):
+            return
+        if not self.config.allow_unsafe_append:
+            raise ValueError(
+                f"[UNSAFE WRITE CONFIG] Tabella "
+                f"{self.config.schema_name}.{self.config.table_name}: "
+                f"combo non sicura write_mode=append + "
+                f"transaction_mode=per_batch + nessun match_columns. "
+                f"In caso di errore parziale, i batch gia' committati "
+                f"restano scritti e un rilancio duplicherebbe le righe. "
+                f"Scegli una delle alternative: "
+                f"(1) usare transaction_mode=all_or_nothing per rollback "
+                f"completo; "
+                f"(2) configurare match_columns per conflict detection; "
+                f"(3) settare allow_unsafe_append=true consapevolmente "
+                f"se la tabella e' append-only con lineage esterno."
+            )
+        # Opt-in: warning informativo per l'operatore, write procede.
+        logger.warning(
+            f"[UNSAFE WRITE CONFIG opt-in] Tabella "
+            f"{self.config.schema_name}.{self.config.table_name}: "
+            f"write_mode=append + transaction_mode=per_batch + "
+            f"nessun match_columns + allow_unsafe_append=True. "
+            f"Retry parziali possono duplicare righe."
+        )
+
     def write(self, df: pd.DataFrame) -> WriteResult:
         """Esegue la scrittura effettiva dei dati.
 
@@ -438,12 +502,7 @@ class DatabaseWriter(DestinationWriter):
         started_at = datetime.now(timezone.utc).isoformat()
         total_rows = len(df)
 
-        result = WriteResult(
-            started_at=started_at,
-            total_rows=total_rows,
-            table_name=f"{self.config.schema_name}.{self.config.table_name}",
-            write_mode=self.config.write_mode.value,
-        )
+        result = self._build_initial_result(total_rows, started_at)
 
         if total_rows == 0:
             result.status = WriteStatus.SUCCESS
@@ -451,44 +510,7 @@ class DatabaseWriter(DestinationWriter):
             logger.info("DataFrame vuoto, nessuna riga da scrivere")
             return result
 
-        # F-DATA-08 / P1-05: gate fail-loud sulla combo rischiosa.
-        # Se il write fallisce a meta' con batch gia' committati (PER_BATCH)
-        # + write_mode=APPEND + nessun match_columns per conflict detection,
-        # un rilancio manuale duplicherebbe le righe gia' scritte.
-        # Pre-fix la combo era solo "warning"-livel: in produzione il
-        # warning e' di fatto silent → corruzione dati su retry partial.
-        # Ora la combo e' rifiutata fail-loud, opt-in tramite
-        # `WriteConfig.allow_unsafe_append=True` per chi accetta
-        # consapevolmente il rischio (es. tabelle append-only con
-        # lineage esterno che gestisce dedup downstream).
-        if (
-            self.config.write_mode == WriteMode.APPEND
-            and self.config.transaction_mode == TransactionMode.PER_BATCH
-            and not self.config.match_columns
-        ):
-            if not self.config.allow_unsafe_append:
-                raise ValueError(
-                    f"[UNSAFE WRITE CONFIG] Tabella "
-                    f"{self.config.schema_name}.{self.config.table_name}: "
-                    f"combo non sicura write_mode=append + "
-                    f"transaction_mode=per_batch + nessun match_columns. "
-                    f"In caso di errore parziale, i batch gia' committati "
-                    f"restano scritti e un rilancio duplicherebbe le righe. "
-                    f"Scegli una delle alternative: "
-                    f"(1) usare transaction_mode=all_or_nothing per rollback "
-                    f"completo; "
-                    f"(2) configurare match_columns per conflict detection; "
-                    f"(3) settare allow_unsafe_append=true consapevolmente "
-                    f"se la tabella e' append-only con lineage esterno."
-                )
-            # Opt-in: warning informativo per l'operatore, write procede.
-            logger.warning(
-                f"[UNSAFE WRITE CONFIG opt-in] Tabella "
-                f"{self.config.schema_name}.{self.config.table_name}: "
-                f"write_mode=append + transaction_mode=per_batch + "
-                f"nessun match_columns + allow_unsafe_append=True. "
-                f"Retry parziali possono duplicare righe."
-            )
+        self._assert_safe_write_config()
 
         try:
             # Prepara il DataFrame (conversione geometrie, ecc.)
