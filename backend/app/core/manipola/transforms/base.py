@@ -143,38 +143,50 @@ def op_join(
     right_df = dedup_columns(right_df, right_on)
 
     # === AUTO-CONVERSIONE TIPI CHIAVI DI JOIN ===
-    # Se i tipi delle chiavi non corrispondono, prova a convertire
+    # Se i tipi delle chiavi non corrispondono, prova a convertire.
     if left_on in left_df.columns and right_on in right_df.columns:
         left_dtype = left_df[left_on].dtype
         right_dtype = right_df[right_on].dtype
-        
+
         if left_dtype != right_dtype:
-            
-            # Strategia: converti entrambi a stringa se uno è object, altrimenti a float
+
+            # Strategia: converti entrambi a stringa se uno è object, altrimenti a numerico.
             if left_dtype == 'object' or right_dtype == 'object':
-                # Funzione per convertire a stringa pulita (float 123.0 -> "123")
+                # C1 Phase 4: niente .replace({'nan': None, '<NA>': None, ...}).
+                # Il pattern legacy mappava le stringhe 'nan' / '<NA>' / 'None' / ''
+                # a None per "ripulire" i missing dopo astype(str). Due bug:
+                #  1. una stringa LEGITTIMA "nan" (testo, non missing) veniva
+                #     trasformata in None -> esclusa silenziosamente dal join.
+                #  2. asimmetria: se la coercion non scattava (stessi dtype),
+                #     stringhe "nan" vere collidevano fra di loro come match
+                #     fittizi.
+                # Fix: cattura la maschera dei missing PRIMA di astype(str) e
+                # riapplicala con pd.NA dopo. Solo i veri null tornano null;
+                # le stringhe identiche a "nan" / "<NA>" passano invariate.
                 def clean_to_str(series):
+                    null_mask = series.isna()
                     if pd.api.types.is_numeric_dtype(series):
-                        # Converti float a int dove possibile, poi a stringa
-                        # Usa fillna per gestire NaN, converti a Int64 (nullable), poi a str
+                        # Numeric -> stringa pulita (1.0 -> "1") via Int64 nullable.
                         try:
-                            # Prova conversione a Int64 (gestisce NaN)
-                            int_series = series.astype('Int64').astype(str)
-                            # '<NA>' diventa da Int64 -> sostituisci con None
-                            int_series = int_series.replace('<NA>', None)
-                            return int_series
+                            str_series = series.astype('Int64').astype(str)
                         except (ValueError, TypeError):
-                            return series.astype(str).replace('nan', None)
+                            # Fallback per float non-integer (es. 1.5): astype(str)
+                            # diretto, produce "1.5" / "2.0" / "nan".
+                            str_series = series.astype(str)
                     else:
-                        result = series.astype(str).str.strip()
-                        result = result.replace({'nan': None, 'None': None, '': None, '<NA>': None})
-                        return result
-                
+                        str_series = series.astype(str).str.strip()
+                    # Riapplica la mask: i veri NaN/None/pd.NA tornano pd.NA,
+                    # qualunque cosa abbia scritto astype(str) in quelle posizioni
+                    # (es. "<NA>" da Int64, "nan" da float, "None" da object con None).
+                    return str_series.mask(null_mask, other=pd.NA)
+
                 left_df[left_on] = clean_to_str(left_df[left_on])
                 right_df[right_on] = clean_to_str(right_df[right_on])
-                    
+
             else:
-                # Converti entrambi a float
+                # Converti entrambi a numerico. errors='coerce' produce NaN reali
+                # per i valori non parsabili, gestiti correttamente da pandas merge
+                # (no NaN==NaN). Niente downstream cleanup serve qui.
                 try:
                     left_df[left_on] = pd.to_numeric(left_df[left_on], errors='coerce')
                     right_df[right_on] = pd.to_numeric(right_df[right_on], errors='coerce')
@@ -226,6 +238,54 @@ def op_join(
             f"Colonne dopo rename: {list(right_df.columns)}"
         )
 
+    # === C1 Phase 4: telemetria + sentinel substitution per chiavi NaN ===
+    # pandas non considera "NaN==NaN" in linea generale, MA:
+    #  - how='outer' con NaN su entrambi i lati: pandas fonde le due righe
+    #    NaN in un'unica riga di output (regression vs policy "righe
+    #    separate, no cross-NaN match").
+    #  - dtype mismatch + roundtrip stringa: i null possono finire come
+    #    stringhe "<NA>" / "nan" / "None" e collidere con stringhe
+    #    legittime omonime sull'altro lato.
+    # Soluzione: ogni NaN viene rimpiazzato con una sentinel univoca per
+    # riga e lato. Nessuna sentinel collide con un'altra (left vs right),
+    # ne con valori reali (sentinel string casuale). Dopo il merge,
+    # ripristiniamo NaN nelle posizioni dei sentinel.
+    left_null_mask = left_df[left_on].isna()
+    right_null_mask = right_df[right_on].isna()
+    left_null_keys = int(left_null_mask.sum())
+    right_null_keys = int(right_null_mask.sum())
+
+    if left_null_keys or right_null_keys:
+        effetto = (
+            "escluse dal risultato" if how == 'inner'
+            else "preservate senza match"
+        )
+        logger.warning(
+            f"Join {how}: chiavi NaN — sinistra '{left_on}'={left_null_keys}, "
+            f"destra '{right_on}'={right_null_keys}. pandas non matcha "
+            f"NaN==NaN, le righe key-NaN saranno {effetto}."
+        )
+
+    _join_nan_token = uuid.uuid4().hex[:12]
+    _left_sentinel_prefix = f"__JOIN_NULL_L_{_join_nan_token}_"
+    _right_sentinel_prefix = f"__JOIN_NULL_R_{_join_nan_token}_"
+
+    if left_null_keys or right_null_keys:
+        # Forza object dtype su ENTRAMBE le key (anche quella senza null):
+        # se ne casta una sola, pandas merge solleva "trying to merge object
+        # and float64 columns". L'object dtype ospita le sentinel string
+        # accanto ai valori originali; ripristineremo NaN dopo il merge.
+        left_df[left_on] = left_df[left_on].astype(object)
+        right_df[right_on] = right_df[right_on].astype(object)
+        if left_null_keys:
+            left_df.loc[left_null_mask, left_on] = [
+                f"{_left_sentinel_prefix}{i}" for i in range(left_null_keys)
+            ]
+        if right_null_keys:
+            right_df.loc[right_null_mask, right_on] = [
+                f"{_right_sentinel_prefix}{i}" for i in range(right_null_keys)
+            ]
+
     # Esegui merge
     result = pd.merge(
         left_df, right_df,
@@ -234,7 +294,24 @@ def op_join(
         how=how,
         suffixes=('', '_dup')
     )
-    
+
+    # Ripristina NaN nelle posizioni dei sentinel sulle key di output.
+    if left_null_keys or right_null_keys:
+        def _restore_join_nans(series):
+            if series.dtype != object:
+                return series
+            str_view = series.astype(str)
+            is_sentinel = (
+                str_view.str.startswith(_left_sentinel_prefix, na=False)
+                | str_view.str.startswith(_right_sentinel_prefix, na=False)
+            )
+            return series.mask(is_sentinel, other=np.nan)
+
+        if left_on in result.columns:
+            result[left_on] = _restore_join_nans(result[left_on])
+        if left_on != right_on and right_on in result.columns:
+            result[right_on] = _restore_join_nans(result[right_on])
+
     # Rimuovi colonna join duplicata se nomi diversi
     if left_on != right_on and right_on in result.columns:
         result = result.drop(columns=[right_on])
