@@ -1,0 +1,347 @@
+"""
+Cluster FORMULA — colonna calcolata via espressione utente con
+gate AST anti-RCE.
+
+Origine
+=======
+Estratto da `app.core.manipola.transforms.base` come parte di Phase 5
+Batch B1.5 (cluster split, vedi
+`orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B1 + §6.1 facade pattern).
+
+Razionale dell'isolamento
+=========================
+Questo cluster contiene il path piu' security-critical del modulo
+manipola: l'espressione formula utente arriva come stringa dal canvas
+e viene valutata via `pandas.eval` + fallback `eval(formula, ...)`.
+Senza il gate AST a monte, un payload malicioso (gadget chain
+`__class__.__bases__.__subclasses__()`, `__import__('os').system(...)`,
+ecc.) bypasserebbe il namespace ristretto `__builtins__={}` ed
+otterrebbe RCE.
+
+Mettere AST whitelists + validator + op_formula in un modulo dedicato:
+  - Rende il perimetro di sicurezza esplicito (un solo file da
+    auditare per modifiche al sandbox).
+  - Permette al test contract N4
+    (`tests2/security/unit/test_n4_formula_validator_contract.py`,
+    69 test) di restare leggibile senza dover navigare tra le 25+
+    `op_*` di `base.py`.
+  - Allinea il file alla policy "ogni cluster un dominio chiaro"
+    (gli altri cluster split — joins/strings/utility/columns —
+    sono tabular ops; questo e' security boundary).
+
+Contenuto:
+  - **AST whitelist constants** (frozenset, immutabili):
+    - `_SAFE_PANDAS_ATTRS`    — attributi pandas ammessi su `Attribute`
+    - `_ALLOWED_AST_NODES`    — whitelist positiva di nodi AST
+    - `_FORBIDDEN_ATTR_NAMES` — dunder + escape patterns vietati
+    - `_FORBIDDEN_NAMES`      — builtin pericolosi vietati come `Name`
+  - **AST validator**:
+    - `_validate_formula_ast` — chiamata PRIMA di pandas.eval/eval
+  - **Public op**:
+    - `op_formula`            — colonna calcolata user-facing
+
+Invarianti pubbliche preservate (regola §6.1 zero call-site changes):
+  - `from app.core.manipola.transforms.base import op_formula`
+    continua a funzionare grazie al facade re-export in `base.py`.
+  - `from app.core.manipola.transforms.base import _validate_formula_ast`
+    continua a funzionare: nome underscore-prefixed re-exported
+    intenzionalmente perche' il test contract N4 lo importa
+    direttamente (verificato: 3 occorrenze in
+    `test_n4_formula_validator_contract.py`).
+  - `from app.core.manipola.transforms import op_formula` continua a
+    funzionare (`__init__.py` resta `from .base import op_formula` e
+    cattura il facade).
+  - `transforms_registry.json` con entry `"base.op_formula"` continua
+    a risolvere via `getattr(<base module>, "op_formula")` dal
+    `PluginExecutor`.
+  - Nuovo path canonico `from app.core.manipola.transforms.formula
+    import op_formula, _validate_formula_ast` disponibile.
+
+Logger naming
+=============
+Logger creato esplicitamente come
+`"app.core.manipola.transforms.base"` (NON `__name__`) per preservare
+il contratto osservabile pre-extraction: i record `Formula vuota`,
+`Formula (pandas.eval) ok`, `[GESTITO] Formula '...' non valida`,
+`Formula: colonne ... scartate` continuano ad apparire sotto il
+logger name dei consumer. Stesso pattern di `joins.py` (B1.1b),
+`strings.py` (B1.3a), `utility.py` (B1.3c), `columns.py` (B1.4).
+
+Il body sotto e' una copia BIT-PER-BIT delle implementazioni in
+`base.py` al momento di B1.5. Nessuna modifica di logica AST,
+contenuto delle whitelist, ordine di operazione, log payload, fail-
+closed semantics. Le 4 frozenset sono `_*` underscore-prefix (private
+al modulo) ma usate dal validator interno; il fatto che siano private
+non viola il contratto pubblico (nessun consumer le importa).
+"""
+
+import ast as _ast
+
+import pandas as pd
+import geopandas as gpd
+from typing import Union
+
+from app.utils.logger import get_logger
+
+# Stesso logger name di `base.py`: i record sono indistinguibili dai
+# consumer che attaccano handler / filtrano per
+# "app.core.manipola.transforms.base" (pattern §6.1 facade).
+logger = get_logger("app.core.manipola.transforms.base")
+
+DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
+
+
+# =============================================================================
+# COLONNA CALCOLATA (FORMULA) — Validazione AST anti-RCE
+# =============================================================================
+
+# Attributi pandas "safe" che le formule possono chiamare (es. col.str.upper()).
+# Tutto ciò che NON è in questa whitelist viene rifiutato dall'AST validator.
+_SAFE_PANDAS_ATTRS = frozenset({
+    # Series.str.*
+    "str", "upper", "lower", "strip", "lstrip", "rstrip", "replace", "contains",
+    "startswith", "endswith", "len", "split", "join", "cat", "slice", "get",
+    "pad", "center", "zfill", "wrap", "extract", "findall", "match", "count",
+    "title", "capitalize", "swapcase", "normalize", "isnumeric", "isalpha",
+    "isdigit", "isspace", "isdecimal",
+    # Series.dt.*
+    "dt", "year", "month", "day", "hour", "minute", "second", "dayofweek",
+    "date", "time", "normalize", "strftime", "floor", "ceil", "round",
+    # Series methods comuni
+    "fillna", "astype", "round", "abs", "clip", "map", "apply",
+    "isnull", "notnull", "isna", "notna",
+    # Pandas top-level
+    "to_numeric", "to_datetime", "to_timedelta",
+    "concat", "cut", "qcut",
+})
+
+# Nomi AST ammessi (whitelist positiva).
+#
+# Ogni nodo che appare nell'AST di una formula deve essere in questo set,
+# altrimenti la formula viene rifiutata. Whitelist e' piu' sicura di
+# blocklist: i nodi futuri/esotici (walrus, match-case, f-string con
+# expression embed, comprehension con gadget chain, lambda, ecc.) sono
+# rifiutati per default.
+#
+# Include:
+#   - wrapper (Expression, Load)
+#   - riferimenti (Constant, Name, Attribute, keyword per kwargs)
+#   - chiamate (Call)
+#   - operatori (BinOp, UnaryOp, BoolOp, Compare)
+#   - tutti gli operator types (Add, Sub, Mult, ..., Eq, Lt, ..., And, Or, Not)
+#
+# NON include (consapevolmente):
+#   - Lambda, FunctionDef, ClassDef, AsyncFunctionDef
+#   - ListComp, SetComp, DictComp, GeneratorExp
+#   - NamedExpr (walrus), JoinedStr/FormattedValue (f-string)
+#   - IfExp (ternary), Subscript, Slice
+#   - List, Tuple, Set, Dict literal
+#   - Import, ImportFrom, Global, Nonlocal, Delete, Yield, Await, Try
+_ALLOWED_AST_NODES = frozenset({
+    # Wrappers / context
+    "Expression", "Load",
+    # Valori e riferimenti
+    "Constant", "Name", "Attribute", "keyword",
+    # Chiamate
+    "Call",
+    # Operator kinds
+    "BinOp", "UnaryOp", "BoolOp", "Compare",
+    # BinOp operators
+    "Add", "Sub", "Mult", "Div", "Mod", "Pow", "FloorDiv",
+    "BitAnd", "BitOr", "BitXor", "LShift", "RShift", "MatMult",
+    # UnaryOp operators
+    "USub", "UAdd", "Not", "Invert",
+    # BoolOp operators
+    "And", "Or",
+    # Compare operators (Is/IsNot/In/NotIn esclusi consapevolmente)
+    "Eq", "NotEq", "Lt", "LtE", "Gt", "GtE",
+})
+
+# Nomi di attributo vietati: pattern di escape dal sandbox
+_FORBIDDEN_ATTR_NAMES = frozenset({
+    "__class__", "__bases__", "__subclasses__", "__mro__",
+    "__init__", "__globals__", "__builtins__", "__import__",
+    "__code__", "__func__", "__self__", "__module__",
+    "__dict__", "__weakref__", "__reduce__", "__reduce_ex__",
+    "__getattr__", "__setattr__", "__delattr__",
+})
+
+# Nomi builtin vietati come ast.Name (aggirerebbero __builtins__={}
+# se l'utente avesse una colonna con lo stesso nome).
+_FORBIDDEN_NAMES = frozenset({
+    "__import__", "__builtins__", "eval", "exec",
+    "compile", "open", "getattr", "setattr", "delattr",
+    "globals", "locals", "vars", "dir", "type",
+    "breakpoint", "exit", "quit",
+})
+
+
+def _validate_formula_ast(formula: str) -> None:
+    """Valida una formula utente via whitelist AST per prevenire code injection.
+
+    Parsa la formula come espressione Python, poi attraversa l'albero AST
+    richiedendo che ogni nodo sia in `_ALLOWED_AST_NODES`. Nodi sconosciuti
+    (future syntax, costrutti esotici) vengono rifiutati per default.
+
+    Su `Attribute` blocca anche accessi a dunder / attributi privati non
+    whitelisted. Su `Name` blocca builtin pericolosi anche se passati come
+    colonne.
+
+    Solleva ValueError se la formula contiene costrutti non sicuri.
+    Chiamata PRIMA di eval() in op_formula().
+    """
+    try:
+        tree = _ast.parse(formula, mode="eval")
+    except SyntaxError as e:
+        raise ValueError(f"Formula non valida (syntax error): {e}")
+
+    for node in _ast.walk(tree):
+        node_name = type(node).__name__
+
+        # Whitelist: il nodo DEVE essere ammesso
+        if node_name not in _ALLOWED_AST_NODES:
+            raise ValueError(
+                f"Formula non consentita: nodo AST '{node_name}' non in whitelist "
+                f"(costrutti ammessi: aritmetica, confronti, method call su pandas)"
+            )
+
+        # Controlli aggiuntivi sul contenuto dei nodi ammessi
+        if isinstance(node, _ast.Attribute):
+            attr_name = node.attr
+            if attr_name in _FORBIDDEN_ATTR_NAMES:
+                raise ValueError(
+                    f"Formula non consentita: accesso a '{attr_name}' non ammesso "
+                    f"(possibile tentativo di escape dal sandbox)"
+                )
+            # Attributi che iniziano con _ ma non sono in whitelist pandas
+            if attr_name.startswith("_") and attr_name not in _SAFE_PANDAS_ATTRS:
+                raise ValueError(
+                    f"Formula non consentita: attributo privato '{attr_name}' non ammesso"
+                )
+
+        if isinstance(node, _ast.Name) and node.id in _FORBIDDEN_NAMES:
+            raise ValueError(
+                f"Formula non consentita: '{node.id}' non ammesso "
+                f"(funzione pericolosa)"
+            )
+
+
+# =============================================================================
+# COLONNA CALCOLATA (FORMULA)
+# Aggiunge colonna con espressione Python/Pandas valutata per riga.
+# =============================================================================
+
+def op_formula(
+    df: DataFrame,
+    formula: str,
+    new_column: str = "calculated"
+) -> DataFrame:
+    """
+    Crea una nuova colonna calcolata con un'espressione.
+
+    Strategia di valutazione (in ordine):
+    1. pandas.eval() — veloce, sicuro, gestisce operazioni vettoriali
+    2. eval() con namespace colonne — fallback per espressioni pandas.eval non regge
+       Le colonne vengono passate come variabili locali, non sostituite nel testo.
+       Le colonne object vengono auto-convertite a numerico dove possibile.
+
+    Args:
+        df: DataFrame input
+        formula: Espressione da valutare (es. "col1 * col2", "'Prefisso: ' + nome")
+        new_column: Nome della nuova colonna
+
+    Returns:
+        DataFrame con nuova colonna aggiunta, o df invariato se la formula è invalida.
+    """
+    if not formula or not formula.strip():
+        logger.warning("Formula vuota")
+        return df
+
+    result = df.copy()
+    formula = formula.strip()
+
+    # N4 defense-in-depth: scarta colonne con nome _-prefix/dunder prima di
+    # esporle al motore eval (sia pandas.eval sia eval manuale). L'AST
+    # validator blocca gia' i builtin pericolosi come ast.Name, ma evitiamo
+    # comunque di esporre nomi strani nel namespace: se un attacker riuscisse
+    # a iniettare una colonna chiamata come un builtin o un dunder, non
+    # entrerebbe comunque nelle variabili dell'eval.
+    unsafe_cols = [c for c in result.columns if isinstance(c, str) and c.startswith("_")]
+    if unsafe_cols:
+        logger.warning(
+            f"Formula: colonne {unsafe_cols} scartate dal namespace eval "
+            f"(nomi _-prefix/dunder, defense-in-depth)"
+        )
+        eval_df = result.drop(columns=unsafe_cols)
+    else:
+        eval_df = result
+
+    try:
+        # SECURITY: validazione AST PRIMA di qualsiasi engine eval (pandas.eval
+        # incluso). pandas.eval ha backend `numexpr`/`python` e in alcune
+        # configurazioni puo' valutare attribute access / call: senza gate AST
+        # davanti, un payload malicioso potrebbe sfuggire al solo controllo
+        # del fallback path. Spostando il validator qui copriamo entrambi i
+        # tentativi con la stessa whitelist.
+        _validate_formula_ast(formula)
+
+        # --- Tentativo 1: pandas.eval() ---
+        # Gestisce espressioni matematiche e booleane vettoriali.
+        # Non regge per: metodi stringa (.str.upper()), concatenazioni con costanti stringa.
+        try:
+            result[new_column] = eval_df.eval(formula)
+            logger.info(f"Formula (pandas.eval) ok: '{new_column}'")
+            return result
+        except Exception as _pd_eval_err:
+            logger.debug(
+                f"pandas.eval fallita per '{new_column}', fallback a "
+                f"eval() con namespace colonne: {_pd_eval_err}"
+            )
+
+        # --- Tentativo 2: eval() con namespace colonne ---
+        # Passa le colonne come variabili locali — nessuna sostituzione nel testo della formula.
+        # Auto-conversione a numerico per colonne object (es. CSV importato come stringa).
+        local_vars = {}
+        for col in eval_df.columns:
+            series = eval_df[col]
+            if series.dtype == 'object':
+                # Prova conversione a numerico (gestisce formato IT: 1.234,56)
+                converted = pd.to_numeric(series, errors='coerce')
+                nan_ratio = converted.isna().sum() / max(len(converted), 1)
+                original_na = series.isna().sum() / max(len(series), 1)
+                if nan_ratio - original_na > 0.3:
+                    # Troppi NaN nuovi → prova formato italiano
+                    # Single-pass regex: rimuove €$ e separatori migliaia, converte , in .
+                    cleaned = (
+                        series.astype(str)
+                        .str.strip()
+                        .str.replace(r'[€$]', '', regex=True)
+                        .str.replace('.', '', regex=False)  # separatore migliaia IT
+                        .str.replace(',', '.', regex=False)  # decimale IT
+                    )
+                    converted = pd.to_numeric(cleaned, errors='coerce')
+                # Se la conversione ha senso (pochi NaN aggiuntivi), usa numerica
+                if nan_ratio - original_na <= 0.3:
+                    local_vars[col] = converted
+                else:
+                    local_vars[col] = series  # mantieni stringa
+            else:
+                local_vars[col] = series
+
+        # SECURITY: validazione AST gia' eseguita all'inizio del try (sopra),
+        # prima di qualsiasi engine eval. Niente da rifare qui.
+        result[new_column] = eval(formula, {"__builtins__": {}, "pd": pd}, local_vars)
+        logger.info(f"Formula (eval namespace) ok: '{new_column}'")
+        return result
+
+    # intent: fail-closed — formula utente non valida (sintassi, AST
+    # bloccata per security, runtime error) solleva ValueError con
+    # messaggio safe. Dettaglio tecnico preservato nel logger.warning
+    # server-side. Security-win (audit §7.5): il blocco AST validator
+    # ora e' visibile all'utente invece di silent "non ha effetto".
+    except Exception as e:
+        logger.warning(f"[GESTITO] Formula '{formula}' non valida: {e}")
+        raise ValueError(
+            f"Formula '{formula}' non valida o non consentita. "
+            f"Verificare sintassi e operatori ammessi."
+        ) from e
