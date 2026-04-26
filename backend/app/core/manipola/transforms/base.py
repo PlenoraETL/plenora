@@ -65,53 +65,23 @@ DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
 # Supporta: inner, left, right, outer, cross. Gestisce suffissi per colonne omonime.
 # =============================================================================
 
-# Phase 5 B1.1b cutover: implementazione spostata in
+# Phase 5 B1.1b + B1.2 cutover: cluster JOINS spostato in
 # `app.core.manipola.transforms.joins`. Re-export per preservare i path
 # pubblici esistenti:
 #   - `from app.core.manipola.transforms.base import op_join`
+#       (idem op_union, op_cross_join)
 #   - `from app.core.manipola.transforms import op_join` (via __init__)
-#   - `transforms_registry.json` entry "base.op_join" risolta da
-#     plugin_executor via `getattr(<base module>, "op_join")`.
+#   - `transforms_registry.json` entries "base.op_join" / "base.op_union"
+#     / "base.op_cross_join" risolte da plugin_executor via
+#     `getattr(<base module>, "<func>")`.
 # Single-source canonica ora vive in `joins.py`. Vedi anche
 # `orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B1 + §6.1 facade pattern.
-from .joins import op_join  # noqa: F401  (re-export, consumato via getattr)
+from .joins import op_join, op_union, op_cross_join  # noqa: F401  (re-export, consumato via getattr)
 
-
-# =============================================================================
-# MULTI-JOIN: Unisce N DataFrame su chiavi comuni
-# =============================================================================
-
-# =============================================================================
-# UNIONE / CONCATENAZIONE VERTICALE
-# Impila righe di più DataFrame. Allinea automaticamente colonne per nome.
-# =============================================================================
-
-def op_union(
-    inputs: List[DataFrame],
-    ignore_index: bool = True
-) -> DataFrame:
-    """
-    Concatena più DataFrame verticalmente (append righe).
-    
-    Args:
-        inputs: Lista di DataFrame da concatenare
-        ignore_index: Se True, resetta gli indici
-        
-    Returns:
-        DataFrame concatenato
-    """
-    if not inputs:
-        return pd.DataFrame()
-    
-    if len(inputs) == 1:
-        return inputs[0]
-    
-    result = pd.concat(inputs, ignore_index=ignore_index)
-    logger.info(f"Union completato: {len(result)} righe da {len(inputs)} sorgenti")
-    return result
-
-
-# Alias per retrocompatibilità
+# Alias storico per retrocompatibilità: `op_concat` = `op_union`.
+# Re-bind dopo l'import facade per mantenere il nome importabile da
+# `app.core.manipola.transforms.base` (consumer noto: __init__.py
+# `from .base import op_union as op_concat`).
 op_concat = op_union
 
 
@@ -2703,44 +2673,9 @@ def op_string_extract(
         raise
 
 
-# =============================================================================
-# CROSS JOIN — Prodotto cartesiano di due DataFrame
-# Genera tutte le combinazioni possibili di righe tra due tabelle.
-# =============================================================================
-
-def op_cross_join(
-    dfs: List[DataFrame],
-    **kwargs
-) -> DataFrame:
-    """
-    Prodotto cartesiano (cross join) di due DataFrame.
-
-    Args:
-        dfs: Lista di 2 DataFrame [left, right]
-
-    Returns:
-        DataFrame con tutte le combinazioni di righe
-    """
-    if not dfs:
-        return pd.DataFrame()
-    if len(dfs) < 2:
-        logger.warning("CrossJoin richiede 2 input, ricevuto meno")
-        return dfs[0]
-
-    try:
-        left_df = dfs[0]
-        right_df = dfs[1]
-
-        result = pd.merge(left_df, right_df, how="cross")
-
-        logger.info(
-            f"CrossJoin completato: {len(left_df)} x {len(right_df)} = {len(result)} righe"
-        )
-        return result
-
-    except Exception as e:
-        logger.error(f"[CRASH] Errore CrossJoin: {e}", exc_info=True)
-        raise
+# Phase 5 B1.2 cutover: op_cross_join moved to `transforms.joins`
+# (re-exported in testa al file via facade). Sezione lasciata vuota
+# per preservare l'ancoraggio storico delle linee successive.
 
 
 # =============================================================================

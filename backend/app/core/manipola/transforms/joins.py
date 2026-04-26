@@ -323,3 +323,73 @@ def op_join(
 
     logger.info(f"Join completato: {len(result)} righe, {len(result.columns)} colonne")
     return result
+
+
+# =============================================================================
+# UNIONE / CONCATENAZIONE VERTICALE
+# Impila righe di più DataFrame. Allinea automaticamente colonne per nome.
+# =============================================================================
+
+def op_union(
+    inputs: List[DataFrame],
+    ignore_index: bool = True
+) -> DataFrame:
+    """
+    Concatena più DataFrame verticalmente (append righe).
+
+    Args:
+        inputs: Lista di DataFrame da concatenare
+        ignore_index: Se True, resetta gli indici
+
+    Returns:
+        DataFrame concatenato
+    """
+    if not inputs:
+        return pd.DataFrame()
+
+    if len(inputs) == 1:
+        return inputs[0]
+
+    result = pd.concat(inputs, ignore_index=ignore_index)
+    logger.info(f"Union completato: {len(result)} righe da {len(inputs)} sorgenti")
+    return result
+
+
+# =============================================================================
+# CROSS JOIN — Prodotto cartesiano di due DataFrame
+# Genera tutte le combinazioni possibili di righe tra due tabelle.
+# =============================================================================
+
+def op_cross_join(
+    dfs: List[DataFrame],
+    **kwargs
+) -> DataFrame:
+    """
+    Prodotto cartesiano (cross join) di due DataFrame.
+
+    Args:
+        dfs: Lista di 2 DataFrame [left, right]
+
+    Returns:
+        DataFrame con tutte le combinazioni di righe
+    """
+    if not dfs:
+        return pd.DataFrame()
+    if len(dfs) < 2:
+        logger.warning("CrossJoin richiede 2 input, ricevuto meno")
+        return dfs[0]
+
+    try:
+        left_df = dfs[0]
+        right_df = dfs[1]
+
+        result = pd.merge(left_df, right_df, how="cross")
+
+        logger.info(
+            f"CrossJoin completato: {len(left_df)} x {len(right_df)} = {len(result)} righe"
+        )
+        return result
+
+    except Exception as e:
+        logger.error(f"[CRASH] Errore CrossJoin: {e}", exc_info=True)
+        raise
