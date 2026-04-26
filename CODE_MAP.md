@@ -334,19 +334,32 @@ Responsabilita: governa trasformazioni tabellari e spaziali via registry plugin,
 | `executor.py` | `ManipolaExecutor`, `_get_execution_chain`, `_assert_no_lineage_cycle_on_chain`, `_applica_crs_da_colonne` | esecutore principale + lineage |
 | `plugin_executor.py` | `PluginExecutor`, `PluginExecutorCompatibility`, `get_executor`, `reload_executor` | dispatch plugin trasformazioni |
 | `transforms_registry.json` | (registry JSON delle trasformazioni esposte) | catalogo nomi/parametri esposto al frontend |
-| `transforms/base.py` | `op_join`, `op_union`, `op_filter`, `op_formula`, `_validate_formula_ast`, `op_concat_columns`, `op_aggregate`, `op_sort`, `op_distinct`, `op_rename`, `op_drop_columns`, `op_fill_na` | trasformazioni tabellari |
+| `transforms/base.py` | (facade re-export) — post-Phase-5-B1 split: nessun body, solo `from .<cluster> import op_*` per preservare i path `from .base import op_X` e la risoluzione `getattr(base, "op_X")` del registry | facade modulo |
+| `transforms/joins.py` | `op_join`, `op_union`, `op_cross_join` | join e unione tabelle |
+| `transforms/strings.py` | `op_string_pad`, `op_string_length`, `op_string_extract`, `op_text_normalize` | manipolazione stringhe |
+| `transforms/utility.py` | `op_add_row_number`, `op_date_extract`, `op_uuid_generator` | utility riga (numerazione, date, UUID) |
+| `transforms/columns.py` | `op_drop_columns`, `op_rename`, `op_reorder_columns`, `op_concat_columns`, `op_split_column` | shaping colonne |
+| `transforms/formula.py` | `op_formula`, `_validate_formula_ast` | espressioni Python con AST whitelist |
+| `transforms/cleansing.py` | `op_fill_na`, `op_replace`, `op_type_cast` | pulizia + type coercion |
+| `transforms/aggregation.py` | `op_aggregate`, `op_sort`, `op_distinct`, `op_dedup_advanced`, `op_window_function` | aggregazioni e window functions |
+| `transforms/filtering.py` | `op_filter`, `op_conditional` | filtri + case/when |
+| `transforms/analysis.py` | `op_sample`, `op_lookup`, `op_bin`, `op_flatten_json`, `op_statistics` | sampling, lookup, binning, JSON flatten, stats |
+| `transforms/reshape.py` | `op_pivot`, `op_table_diff`, `op_melt`, `op_transpose` | pivot/melt/diff/transpose |
+| `transforms/security.py` | `op_md5_hash`, `op_mask_data`, `MASK_FUNCTIONS` (+ helper privati `_mask_cf/email/phone/iban/custom`) | hashing + mascheramento PII fail-closed |
+| `transforms/geo.py` | `op_geo_from_coords` | costruzione geometria da lat/lon o WKT |
 | `transforms/spatial.py` | `op_sjoin`, `op_geo_buffer`, `op_geo_centroid`, `op_geo_area`, `op_geo_clip`, `op_geo_dissolve`, `op_geo_intersection`, `op_geo_union`, `op_geo_difference`, `op_geo_simplify`, `op_geo_convex_hull`, `op_geo_reproject`, `op_geo_envelope`, `op_geo_distance`, `op_geo_nearest` | trasformazioni spaziali |
 | `api/transforms_api.py` | `get_registry` (endpoint `/registry`) | espone il registry al frontend |
 
 Keywords: `ManipolaExecutor`, `PluginExecutor`, `op_join`, `op_filter`, `op_aggregate`, `op_formula`, `op_sjoin`, `transforms_registry`
 
 Punti di intervento tipici:
-- nuova trasformazione tabellare -> `transforms/base.py` (nuovo `op_*`) + entry in `transforms_registry.json`
+- nuova trasformazione tabellare -> selezionare il cluster `transforms/<cluster>.py` per dominio (joins/strings/columns/cleansing/aggregation/filtering/analysis/reshape/security/geo/utility/formula) + entry in `transforms_registry.json` con prefisso `"base.<func>"` (il facade in `base.py` re-exporta tutti i public ops dei figli, quindi il dispatcher `getattr(base, func)` continua a risolvere)
 - nuova trasformazione spaziale -> `transforms/spatial.py` (nuovo `op_geo_*`) + entry in `transforms_registry.json`
-- estensione formula language -> `op_formula` + `_validate_formula_ast` (mai allargare l'AST whitelist senza test)
+- estensione formula language -> `transforms/formula.py`: `op_formula` + `_validate_formula_ast` (mai allargare l'AST whitelist senza test)
+- nuovo tipo di mascheramento PII -> `transforms/security.py`: estendere `MASK_FUNCTIONS` (NON sostituire il dict object — il test contract `test_op_mask_data_fail_closed.py` patcha via `patch.dict` con identita' preservata)
 - ciclo lineage tra progetti -> `executor.py` (`_assert_no_lineage_cycle_on_chain`)
 
-Intervento/confini: I/O via `intermediate`. Nuove trasformazioni: aggiungere `op_*` in `transforms/base.py` o `transforms/spatial.py` e registrare in `transforms_registry.json`, mai hardcoded nel router. Preservare AST validation in `op_formula` (`_validate_formula_ast`).
+Intervento/confini: I/O via `intermediate`. Nuove trasformazioni: aggiungere `op_*` nel cluster `transforms/<cluster>.py` appropriato (oppure `spatial.py`) e registrare in `transforms_registry.json` come `"base.<func>"`, mai hardcoded nel router. Il facade `base.py` re-exporta tutti i public op dei figli — preservare i `from .<cluster> import op_*` non rimuoverli. Preservare AST validation in `op_formula` (`_validate_formula_ast`). Logger naming: tutti i moduli figli usano esplicitamente `get_logger("app.core.manipola.transforms.base")` (NOT `__name__`) per non spostare il name dei record.
 
 ---
 
