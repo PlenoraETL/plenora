@@ -13,6 +13,7 @@
  * Usato in: ArricchisciEditor
  */
 import http from '../../api/http';
+import { uploadFile } from '../../api/files';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Handle, Position, useReactFlow, useStore } from 'reactflow';
 import { getColumnTypeIcon, getColumnTypeLabel } from '../../utils/columnUtils';
@@ -812,14 +813,17 @@ function ExtraFileSlot({ field, label, current, onUploaded, onRemoved }) {
     setError('');
     setUploading(true);
     try {
-      const form = new FormData();
-      form.append('file', file);
-      form.append('name', `extra_${field.name}_${file.name}`);
-      form.append('description', `Extra input "${field.name}" per nodo api_enrich`);
-      const res = await http.post('/files/upload', form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-      const fs = res.data;
+      // C3.1 Phase 4: passa per il boundary api/files.uploadFile per
+      // ereditare il guard B3 (size pre-flight + 413 propagation come
+      // UploadTooLargeError) e niente Content-Type manuale.
+      // L'errore catchato qui copre sia UploadTooLargeError (err.message
+      // contiene il detail user-friendly) sia gli AxiosError preservati
+      // (err?.response?.data?.detail intatto).
+      const fs = await uploadFile(
+        file,
+        `extra_${field.name}_${file.name}`,
+        `Extra input "${field.name}" per nodo api_enrich`,
+      );
       onUploaded({
         file_source_id:   fs.id,
         original_filename: fs.original_filename || file.name,
