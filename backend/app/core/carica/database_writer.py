@@ -488,6 +488,76 @@ class DatabaseWriter(DestinationWriter):
             f"Retry parziali possono duplicare righe."
         )
 
+    def _compute_schema_hints(
+        self,
+        prepared_df: pd.DataFrame,
+        columns: List[ColumnMapping],
+    ) -> Tuple[Dict[str, str], Dict[str, int]]:
+        """Calcola `(real_dtypes, max_lengths)` per `generate_create_table`.
+
+        Estratto da `write()` (C4.2 Phase 4). Pre-extraction la stessa
+        logica era duplicata bit-per-bit nei branch CREATE puro e
+        CREATE-via-REPLACE atomic. Helper privato, pura computazione,
+        nessun side-effect, nessuna chiamata DB.
+
+        - `real_dtypes`: mapping colonna → dtype string. Include sia i
+          nomi colonna del DataFrame sia i `source_column`/`dest_column`
+          dei `ColumnMapping` (override esplicito quando entrambi presenti
+          nel DataFrame). Serve a `DDLGenerator` per type mapping
+          deterministico, evitando inferenze sbagliate quando la sorgente
+          ha alias diversi dalla destinazione.
+
+        - `max_lengths`: mapping colonna string-like → lunghezza massima
+          osservata (one-shot pass). Su Oracle abilita la promozione
+          automatica VARCHAR2(4000) → CLOB per colonne lunghe (C5 fix 2);
+          su altri dialetti l'info viene ignorata da `generate_create_table`,
+          ma il calcolo resta cheap su DataFrame gia' in RAM.
+
+        Dtype check difensivo: `_fix_mixed_type_columns` puo' aver
+        convertito colonne a dtype='str' (non 'object'). La whitelist
+        copre `object`/`string`/`category`/`str` + qualunque dtype che
+        inizi con `string` (pandas StringDtype moderno).
+        """
+        real_dtypes: Dict[str, str] = {
+            col: str(prepared_df[col].dtype) for col in prepared_df.columns
+        }
+        for cm in columns:
+            if cm.source_column in prepared_df.columns:
+                real_dtypes[cm.source_column] = str(
+                    prepared_df[cm.source_column].dtype
+                )
+            if cm.dest_column in prepared_df.columns:
+                real_dtypes[cm.dest_column] = str(
+                    prepared_df[cm.dest_column].dtype
+                )
+
+        max_lengths: Dict[str, int] = {}
+        _STRING_DTYPES = ("object", "string", "category", "str")
+        for col_name in prepared_df.columns:
+            col_dtype = str(prepared_df[col_name].dtype).lower()
+            is_string_like = (
+                col_dtype in _STRING_DTYPES
+                or col_dtype.startswith("string")
+            )
+            if is_string_like:
+                try:
+                    max_len = int(
+                        prepared_df[col_name].astype(str).str.len().max() or 0
+                    )
+                except Exception as max_len_err:
+                    logger.debug(
+                        "[MAX_LEN] calcolo lunghezza colonna '%s' "
+                        "fallito, assumo 0: %s: %s",
+                        col_name,
+                        type(max_len_err).__name__,
+                        max_len_err,
+                    )
+                    max_len = 0
+                if max_len > 0:
+                    max_lengths[col_name] = max_len
+
+        return real_dtypes, max_lengths
+
     def write(self, df: pd.DataFrame) -> WriteResult:
         """Esegue la scrittura effettiva dei dati.
 
@@ -533,46 +603,11 @@ class DatabaseWriter(DestinationWriter):
                     # RENAME atomico → target mai esposto a stato
                     # intermedio. Route REPLACE attraverso questo path
                     # e saltiamo l'attuale drop/create/insert in-line.
-                    # Calcolo dtypes e max_lengths qui (prima del branch)
-                    # cosi' sono disponibili a _replace_atomic.
-                    real_dtypes = {
-                        col: str(prepared_df[col].dtype)
-                        for col in prepared_df.columns
-                    }
-                    for cm in columns:
-                        if cm.source_column in prepared_df.columns:
-                            real_dtypes[cm.source_column] = str(
-                                prepared_df[cm.source_column].dtype
-                            )
-                        if cm.dest_column in prepared_df.columns:
-                            real_dtypes[cm.dest_column] = str(
-                                prepared_df[cm.dest_column].dtype
-                            )
-                    max_lengths = {}
-                    _STRING_DTYPES = ("object", "string", "category", "str")
-                    for col_name in prepared_df.columns:
-                        col_dtype = str(prepared_df[col_name].dtype).lower()
-                        is_string_like = (
-                            col_dtype in _STRING_DTYPES
-                            or col_dtype.startswith("string")
-                        )
-                        if is_string_like:
-                            try:
-                                max_len = int(
-                                    prepared_df[col_name].astype(str)
-                                    .str.len().max() or 0
-                                )
-                            except Exception as max_len_err:
-                                logger.debug(
-                                    "[MAX_LEN] calcolo lunghezza colonna '%s' "
-                                    "fallito, assumo 0: %s: %s",
-                                    col_name,
-                                    type(max_len_err).__name__,
-                                    max_len_err,
-                                )
-                                max_len = 0
-                            if max_len > 0:
-                                max_lengths[col_name] = max_len
+                    # Calcolo dtypes/max_lengths via helper condiviso
+                    # (C4.2 Phase 4) cosi' sono disponibili a _replace_atomic.
+                    real_dtypes, max_lengths = self._compute_schema_hints(
+                        prepared_df, columns
+                    )
 
                     result = self._replace_atomic(
                         prepared_df, columns, result, real_dtypes, max_lengths
@@ -583,46 +618,13 @@ class DatabaseWriter(DestinationWriter):
                 # CREATE puro (senza if_table_exists=replace): path
                 # originale — no drop (se la tabella esiste e
                 # if_table_exists=error, il create_table() fallira').
-                # Passa i dtypes reali del DataFrame per type mapping corretto
-                # Chiavi: sia nome colonna DataFrame che source_column del mapping
-                real_dtypes = {col: str(prepared_df[col].dtype) for col in prepared_df.columns}
-                for cm in columns:
-                    if cm.source_column in prepared_df.columns:
-                        real_dtypes[cm.source_column] = str(prepared_df[cm.source_column].dtype)
-                    if cm.dest_column in prepared_df.columns:
-                        real_dtypes[cm.dest_column] = str(prepared_df[cm.dest_column].dtype)
-
-                # C5 fix 2: calcola max_lengths per colonne string (dtype=object
-                # o string) cosi' `generate_create_table` puo' auto-promuovere
-                # VARCHAR2(4000) → CLOB su Oracle per colonne lunghe. Per
-                # dialetti non-Oracle l'informazione viene ignorata — calcolo
-                # comunque one-shot, costo trascurabile su DataFrame gia' in RAM.
-                # Dtype check difensivo: `_fix_mixed_type_columns` puo'
-                # aver convertito colonne a dtype='str' (non 'object').
-                # Aggiungiamo anche 'str' + tutti gli startswith("string")
-                # per coprire pandas StringDtype moderno.
-                max_lengths = {}
-                _STRING_DTYPES = ("object", "string", "category", "str")
-                for col_name in prepared_df.columns:
-                    col_dtype = str(prepared_df[col_name].dtype).lower()
-                    is_string_like = (
-                        col_dtype in _STRING_DTYPES
-                        or col_dtype.startswith("string")
-                    )
-                    if is_string_like:
-                        try:
-                            max_len = int(prepared_df[col_name].astype(str).str.len().max() or 0)
-                        except Exception as max_len_err:
-                            logger.debug(
-                                "[MAX_LEN] calcolo lunghezza colonna '%s' "
-                                "fallito, assumo 0: %s: %s",
-                                col_name,
-                                type(max_len_err).__name__,
-                                max_len_err,
-                            )
-                            max_len = 0
-                        if max_len > 0:
-                            max_lengths[col_name] = max_len
+                # Calcolo dtypes/max_lengths via helper condiviso
+                # (C4.2 Phase 4): real_dtypes copre sia nomi colonna del
+                # DataFrame sia source/dest dei ColumnMapping (override
+                # esplicito); max_lengths abilita VARCHAR2->CLOB su Oracle.
+                real_dtypes, max_lengths = self._compute_schema_hints(
+                    prepared_df, columns
+                )
 
                 self.create_table(columns, pandas_dtypes=real_dtypes, max_lengths=max_lengths)
                 result = self._batch_insert(prepared_df, columns, result)
