@@ -2769,101 +2769,15 @@ def op_reorder_columns(
         raise
 
 
-# =============================================================================
-# STRING PAD — Riempimento stringa a larghezza fissa
-# Aggiunge caratteri di riempimento a sinistra o a destra.
-# =============================================================================
-
-def op_string_pad(
-    df: DataFrame,
-    column: str,
-    width: int = 5,
-    side: str = "left",
-    fill_char: str = "0",
-    output_column: str = None
-) -> DataFrame:
-    """
-    Riempimento (padding) di una colonna stringa a larghezza fissa.
-
-    Args:
-        df: DataFrame input
-        column: Colonna da elaborare
-        width: Larghezza finale della stringa
-        side: Lato del riempimento: 'left' o 'right'
-        fill_char: Carattere di riempimento (default '0')
-        output_column: Colonna di output (default: sovrascrive la colonna originale)
-
-    Returns:
-        DataFrame con colonna paddata
-    """
-    if len(df) == 0:
-        return df
-
-    if column not in df.columns:
-        logger.warning(f"StringPad: colonna '{column}' non trovata")
-        return df
-
-    try:
-        result = df.copy()
-        out_col = output_column if output_column else column
-        text_series = result[column].astype(str)
-
-        if side == "left":
-            result[out_col] = text_series.str.pad(width, side="left", fillchar=fill_char)
-        else:
-            result[out_col] = text_series.str.pad(width, side="right", fillchar=fill_char)
-
-        logger.info(
-            f"StringPad completato: colonna='{column}', larghezza={width}, "
-            f"lato='{side}', output='{out_col}'"
-        )
-        return result
-
-    except Exception as e:
-        logger.error(f"[CRASH] Errore StringPad: {e}", exc_info=True)
-        raise
-
-
-# =============================================================================
-# STRING LENGTH — Calcola la lunghezza delle stringhe
-# Aggiunge una colonna con la lunghezza di ogni valore.
-# =============================================================================
-
-def op_string_length(
-    df: DataFrame,
-    column: str,
-    output_column: str = None
-) -> DataFrame:
-    """
-    Calcola la lunghezza delle stringhe in una colonna.
-
-    Args:
-        df: DataFrame input
-        column: Colonna di cui calcolare la lunghezza
-        output_column: Nome della colonna di output (default: column + '_length')
-
-    Returns:
-        DataFrame con colonna lunghezza aggiunta
-    """
-    if len(df) == 0:
-        return df
-
-    if column not in df.columns:
-        logger.warning(f"StringLength: colonna '{column}' non trovata")
-        return df
-
-    try:
-        result = df.copy()
-        out_col = output_column if output_column else f"{column}_length"
-
-        result[out_col] = result[column].astype(str).str.len()
-
-        logger.info(f"StringLength completato: '{column}' -> '{out_col}'")
-        return result
-
-    except Exception as e:
-        logger.error(f"[CRASH] Errore StringLength: {e}", exc_info=True)
-        raise
+# Phase 5 B1.3a cutover: cluster STRINGS (subset 1) spostato in
+# `app.core.manipola.transforms.strings`. Re-export per preservare i
+# path pubblici esistenti:
+#   - `from app.core.manipola.transforms.base import op_string_pad`
+#       (idem op_string_length)
+#   - `transforms_registry.json` entries "base.op_string_pad" /
+#     "base.op_string_length" risolte via `getattr(<base>, "<func>")`.
+# Vedi anche `orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B1 + §6.1.
+from .strings import op_string_pad, op_string_length  # noqa: F401  (re-export)
 
 
 # =============================================================================
