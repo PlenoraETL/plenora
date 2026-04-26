@@ -558,6 +558,200 @@ class DatabaseWriter(DestinationWriter):
 
         return real_dtypes, max_lengths
 
+    def _dispatch_write_mode(
+        self,
+        prepared_df: pd.DataFrame,
+        columns: List[ColumnMapping],
+        result: WriteResult,
+    ) -> Tuple[WriteResult, bool]:
+        """Esegue il branch di write per `self.config.write_mode`.
+
+        Estratto da `write()` (C4.3 Phase 4). Pure routing: nessuna
+        modifica di algoritmo, nessun cambio di transaction boundary,
+        nessuna riscrittura dei lower-level helper (`_batch_insert`,
+        `_batch_update`, `_batch_upsert`, `_replace_atomic`,
+        `_truncate_insert_*`).
+
+        Ritorna `(result, early_return)`:
+          - `early_return=True` -> il caller `write()` deve restituire
+            `result` cosi' com'e', SENZA assegnare `completed_at` finale.
+            Tre branch usano questo flag per preservare il comportamento
+            bit-per-bit pre-C4.3:
+              * REPLACE atomic: assegna `completed_at` qui dentro e ritorna.
+              * APPEND ABORT: NON assegna `completed_at` (preservato).
+              * APPEND SKIP con DataFrame vuoto: assegna `completed_at` qui.
+          - `early_return=False` -> il caller esegue il finalize standard
+            (`completed_at = now()`).
+
+        Eccezioni si propagano fuori dal helper per essere catturate dal
+        try/except di `write()` con stesso effetto di pre-C4.3 (set
+        `WriteStatus.WRITE_ERROR`, `error_message`, `error_details`,
+        log `[CRASH]`).
+        """
+        mode = self.config.write_mode
+
+        # === CREATE / REPLACE ===
+        if mode in (WriteMode.CREATE, WriteMode.REPLACE):
+            if mode == WriteMode.REPLACE or (
+                mode == WriteMode.CREATE
+                and self.config.if_table_exists == "replace"
+            ):
+                # C6 critical: REPLACE pre-fix faceva drop_table()
+                # (DDL auto-commit) + create_table() + _batch_insert().
+                # Se l'INSERT falliva, la tabella del cliente non
+                # esisteva piu' -> data loss deterministica.
+                # Con _replace_atomic: CREATE shadow + INSERT +
+                # RENAME atomico -> target mai esposto a stato
+                # intermedio. Route REPLACE attraverso questo path
+                # e saltiamo l'attuale drop/create/insert in-line.
+                # Calcolo dtypes/max_lengths via helper condiviso
+                # (C4.2 Phase 4) cosi' sono disponibili a _replace_atomic.
+                real_dtypes, max_lengths = self._compute_schema_hints(
+                    prepared_df, columns
+                )
+                result = self._replace_atomic(
+                    prepared_df, columns, result, real_dtypes, max_lengths
+                )
+                # Skip il path non-atomic originale (drop+create+insert)
+                result.completed_at = datetime.now(timezone.utc).isoformat()
+                return result, True
+            # CREATE puro (senza if_table_exists=replace): path
+            # originale — no drop (se la tabella esiste e
+            # if_table_exists=error, il create_table() fallira').
+            # Calcolo dtypes/max_lengths via helper condiviso
+            # (C4.2 Phase 4): real_dtypes copre sia nomi colonna del
+            # DataFrame sia source/dest dei ColumnMapping (override
+            # esplicito); max_lengths abilita VARCHAR2->CLOB su Oracle.
+            real_dtypes, max_lengths = self._compute_schema_hints(
+                prepared_df, columns
+            )
+            self.create_table(
+                columns, pandas_dtypes=real_dtypes, max_lengths=max_lengths,
+            )
+            result = self._batch_insert(prepared_df, columns, result)
+            return result, False
+
+        # === APPEND ===
+        if mode == WriteMode.APPEND:
+            # Applica conflict_policy se ci sono match_columns configurate
+            if self.config.match_columns:
+                conflict_report = self.check_conflicts(
+                    prepared_df, self.config.match_columns,
+                )
+                result.conflict_report = conflict_report
+
+                if conflict_report.has_conflicts:
+                    policy = self.config.conflict_policy
+
+                    if policy == ConflictPolicy.ABORT:
+                        # Blocca l'intera operazione.
+                        # Pre-C4.3: completed_at NON viene assegnato qui
+                        # ne' dal caller (early-return prima del trailing).
+                        # Preserviamo il comportamento bit-per-bit.
+                        result.status = WriteStatus.CONFLICT
+                        result.error_message = (
+                            f"Operazione annullata: {conflict_report.total_conflicts} "
+                            f"conflitti trovati (policy: abort)."
+                        )
+                        return result, True
+
+                    elif policy == ConflictPolicy.SKIP:
+                        # Filtra le righe in conflitto, inserisce solo le nuove
+                        if conflict_report.details:
+                            conflict_indices = {
+                                d.row_index for d in conflict_report.details
+                            }
+                            pre_filter = len(prepared_df)
+                            prepared_df = prepared_df.drop(
+                                index=list(conflict_indices), errors='ignore',
+                            ).reset_index(drop=True)
+                            result.rows_skipped = pre_filter - len(prepared_df)
+                            logger.info(
+                                f"APPEND SKIP: {result.rows_skipped} righe saltate, "
+                                f"{len(prepared_df)} righe da inserire"
+                            )
+                        if prepared_df.empty:
+                            result.status = WriteStatus.SUCCESS
+                            result.completed_at = datetime.now(
+                                timezone.utc,
+                            ).isoformat()
+                            return result, True
+
+                    # FORCE: inserisce tutto senza filtri (comportamento default)
+                    else:
+                        logger.info(
+                            f"APPEND FORCE: {conflict_report.total_conflicts} conflitti "
+                            f"ignorati, inserimento forzato"
+                        )
+
+            result = self._batch_insert(prepared_df, columns, result)
+            return result, False
+
+        # === UPDATE ===
+        if mode == WriteMode.UPDATE:
+            result = self._batch_update(prepared_df, columns, result)
+            return result, False
+
+        # === UPSERT ===
+        if mode == WriteMode.UPSERT:
+            result = self._batch_upsert(prepared_df, columns, result)
+            return result, False
+
+        # === TRUNCATE + INSERT ===
+        if mode == WriteMode.TRUNCATE_INSERT:
+            # C5 fix 1/3: per ALL_OR_NOTHING scegliamo la strategia
+            # in base al volume:
+            # - sotto CARICA_STAGE_SWAP_THRESHOLD: atomic DELETE+INSERT
+            #   in UNA transazione (safe fino a ~500k righe su
+            #   qualunque DBMS con UNDO/log ragionevole; no privilegi
+            #   DDL richiesti)
+            # - sopra soglia: stage+swap (CREATE shadow, INSERT
+            #   batch nella shadow, RENAME atomico) — richiede
+            #   CREATE TABLE, fallback a atomic con WARNING se i
+            #   grant mancano
+            if self.config.transaction_mode == TransactionMode.ALL_OR_NOTHING:
+                threshold = int(settings.CARICA_STAGE_SWAP_THRESHOLD or 0)
+                if threshold > 0 and len(prepared_df) >= threshold:
+                    # C6: Oracle usa DBMS_REDEFINITION (atomic +
+                    # schema preservato). Postgres/MySQL/MSSQL
+                    # usano stage+swap standard (Postgres/MySQL
+                    # preservano schema nativamente; MSSQL ha
+                    # schema replication via introspection).
+                    if self.db_type == "oracle":
+                        logger.info(
+                            f"[TRUNCATE_INSERT] {len(prepared_df)} >= "
+                            f"{threshold}: uso DBMS_REDEFINITION (Oracle)"
+                        )
+                        result = self._truncate_insert_oracle_redef(
+                            prepared_df, columns, result,
+                        )
+                    else:
+                        logger.info(
+                            f"[TRUNCATE_INSERT] {len(prepared_df)} >= "
+                            f"{threshold}: uso stage+swap"
+                        )
+                        result = self._truncate_insert_stage_swap(
+                            prepared_df, columns, result,
+                        )
+                else:
+                    result = self._truncate_insert_atomic(
+                        prepared_df, columns, result,
+                    )
+            else:
+                # PER_BATCH: semantica "fire-and-commit" dichiarata dal
+                # caller. Accettiamo lo stesso trade-off del flow APPEND
+                # per_batch (vedi WARNING difensivo in write() per la
+                # combo rischiosa).
+                self.truncate_table()
+                result = self._batch_insert(prepared_df, columns, result)
+            return result, False
+
+        # Mode non riconosciuto (defensive): pre-C4.3 il flow cadeva fuori
+        # dal blocco if/elif e arrivava al trailing `completed_at = now()`
+        # senza modifiche al result. Preserviamo identico ritornando
+        # early_return=False.
+        return result, False
+
     def write(self, df: pd.DataFrame) -> WriteResult:
         """Esegue la scrittura effettiva dei dati.
 
@@ -587,147 +781,11 @@ class DatabaseWriter(DestinationWriter):
             prepared_df = self._prepare_dataframe(df)
             columns = self.config.column_mappings
 
-            mode = self.config.write_mode
-
-            # === CREATE / REPLACE ===
-            if mode in (WriteMode.CREATE, WriteMode.REPLACE):
-                if mode == WriteMode.REPLACE or (
-                    mode == WriteMode.CREATE
-                    and self.config.if_table_exists == "replace"
-                ):
-                    # C6 critical: REPLACE pre-fix faceva drop_table()
-                    # (DDL auto-commit) + create_table() + _batch_insert().
-                    # Se l'INSERT falliva, la tabella del cliente non
-                    # esisteva piu' → data loss deterministica.
-                    # Con _replace_atomic: CREATE shadow + INSERT +
-                    # RENAME atomico → target mai esposto a stato
-                    # intermedio. Route REPLACE attraverso questo path
-                    # e saltiamo l'attuale drop/create/insert in-line.
-                    # Calcolo dtypes/max_lengths via helper condiviso
-                    # (C4.2 Phase 4) cosi' sono disponibili a _replace_atomic.
-                    real_dtypes, max_lengths = self._compute_schema_hints(
-                        prepared_df, columns
-                    )
-
-                    result = self._replace_atomic(
-                        prepared_df, columns, result, real_dtypes, max_lengths
-                    )
-                    # Skip il path non-atomic originale (drop+create+insert)
-                    result.completed_at = datetime.now(timezone.utc).isoformat()
-                    return result
-                # CREATE puro (senza if_table_exists=replace): path
-                # originale — no drop (se la tabella esiste e
-                # if_table_exists=error, il create_table() fallira').
-                # Calcolo dtypes/max_lengths via helper condiviso
-                # (C4.2 Phase 4): real_dtypes copre sia nomi colonna del
-                # DataFrame sia source/dest dei ColumnMapping (override
-                # esplicito); max_lengths abilita VARCHAR2->CLOB su Oracle.
-                real_dtypes, max_lengths = self._compute_schema_hints(
-                    prepared_df, columns
-                )
-
-                self.create_table(columns, pandas_dtypes=real_dtypes, max_lengths=max_lengths)
-                result = self._batch_insert(prepared_df, columns, result)
-
-            # === APPEND ===
-            elif mode == WriteMode.APPEND:
-                # Applica conflict_policy se ci sono match_columns configurate
-                if self.config.match_columns:
-                    conflict_report = self.check_conflicts(prepared_df, self.config.match_columns)
-                    result.conflict_report = conflict_report
-
-                    if conflict_report.has_conflicts:
-                        policy = self.config.conflict_policy
-
-                        if policy == ConflictPolicy.ABORT:
-                            # Blocca l'intera operazione
-                            result.status = WriteStatus.CONFLICT
-                            result.error_message = (
-                                f"Operazione annullata: {conflict_report.total_conflicts} "
-                                f"conflitti trovati (policy: abort)."
-                            )
-                            return result
-
-                        elif policy == ConflictPolicy.SKIP:
-                            # Filtra le righe in conflitto, inserisce solo le nuove
-                            if conflict_report.details:
-                                conflict_indices = {d.row_index for d in conflict_report.details}
-                                pre_filter = len(prepared_df)
-                                prepared_df = prepared_df.drop(index=list(conflict_indices), errors='ignore').reset_index(drop=True)
-                                result.rows_skipped = pre_filter - len(prepared_df)
-                                logger.info(
-                                    f"APPEND SKIP: {result.rows_skipped} righe saltate, "
-                                    f"{len(prepared_df)} righe da inserire"
-                                )
-                            if prepared_df.empty:
-                                result.status = WriteStatus.SUCCESS
-                                result.completed_at = datetime.now(timezone.utc).isoformat()
-                                return result
-
-                        # FORCE: inserisce tutto senza filtri (comportamento default)
-                        else:
-                            logger.info(
-                                f"APPEND FORCE: {conflict_report.total_conflicts} conflitti "
-                                f"ignorati, inserimento forzato"
-                            )
-
-                result = self._batch_insert(prepared_df, columns, result)
-
-            # === UPDATE ===
-            elif mode == WriteMode.UPDATE:
-                result = self._batch_update(prepared_df, columns, result)
-
-            # === UPSERT ===
-            elif mode == WriteMode.UPSERT:
-                result = self._batch_upsert(prepared_df, columns, result)
-
-            # === TRUNCATE + INSERT ===
-            elif mode == WriteMode.TRUNCATE_INSERT:
-                # C5 fix 1/3: per ALL_OR_NOTHING scegliamo la strategia
-                # in base al volume:
-                # - sotto CARICA_STAGE_SWAP_THRESHOLD: atomic DELETE+INSERT
-                #   in UNA transazione (safe fino a ~500k righe su
-                #   qualunque DBMS con UNDO/log ragionevole; no privilegi
-                #   DDL richiesti)
-                # - sopra soglia: stage+swap (CREATE shadow, INSERT
-                #   batch nella shadow, RENAME atomico) — richiede
-                #   CREATE TABLE, fallback a atomic con WARNING se i
-                #   grant mancano
-                if self.config.transaction_mode == TransactionMode.ALL_OR_NOTHING:
-                    threshold = int(settings.CARICA_STAGE_SWAP_THRESHOLD or 0)
-                    if threshold > 0 and len(prepared_df) >= threshold:
-                        # C6: Oracle usa DBMS_REDEFINITION (atomic +
-                        # schema preservato). Postgres/MySQL/MSSQL
-                        # usano stage+swap standard (Postgres/MySQL
-                        # preservano schema nativamente; MSSQL ha
-                        # schema replication via introspection).
-                        if self.db_type == "oracle":
-                            logger.info(
-                                f"[TRUNCATE_INSERT] {len(prepared_df)} >= "
-                                f"{threshold}: uso DBMS_REDEFINITION (Oracle)"
-                            )
-                            result = self._truncate_insert_oracle_redef(
-                                prepared_df, columns, result
-                            )
-                        else:
-                            logger.info(
-                                f"[TRUNCATE_INSERT] {len(prepared_df)} >= "
-                                f"{threshold}: uso stage+swap"
-                            )
-                            result = self._truncate_insert_stage_swap(
-                                prepared_df, columns, result
-                            )
-                    else:
-                        result = self._truncate_insert_atomic(
-                            prepared_df, columns, result
-                        )
-                else:
-                    # PER_BATCH: semantica "fire-and-commit" dichiarata dal
-                    # caller. Accettiamo lo stesso trade-off del flow APPEND
-                    # per_batch (vedi WARNING difensivo in write() per la
-                    # combo rischiosa).
-                    self.truncate_table()
-                    result = self._batch_insert(prepared_df, columns, result)
+            result, early_return = self._dispatch_write_mode(
+                prepared_df, columns, result,
+            )
+            if early_return:
+                return result
 
         except Exception as e:
             result.status = WriteStatus.WRITE_ERROR
