@@ -59,6 +59,7 @@ from app.core.carica.writer_introspection import SchemaIntrospectionMixin
 from app.core.carica.writer_transaction_exec import TransactionExecutionMixin
 from app.core.carica.writer_replace_strategies import ReplaceStrategiesMixin
 from app.core.carica.writer_preflight_lifecycle import WriterPreflightLifecycleMixin
+from app.core.carica.writer_batch_dispatch import BatchDispatchMixin
 from app.config import settings
 
 
@@ -75,6 +76,7 @@ class DatabaseWriter(
     TransactionExecutionMixin,
     ReplaceStrategiesMixin,
     WriterPreflightLifecycleMixin,
+    BatchDispatchMixin,
     DestinationWriter,
 ):
     """Scrive dati su database relazionali via SQLAlchemy.
@@ -116,12 +118,21 @@ class DatabaseWriter(
         Warning informativo di `_assert_safe_write_config` catturato
         da test contract modernizzato B2.5a via handler stdlib
         agganciato al logger canonico per nome.
+      - `BatchDispatchMixin` (`writer_batch_dispatch.py`, B2.6) fornisce
+        i 3 metodi batch dispatch: `_batch_insert`, `_batch_update`,
+        `_batch_upsert`. Pattern unico "build SQL template per write
+        mode + delegate a `_execute_in_batches`". `_batch_upsert` ha
+        SAVEPOINT scope-limitato (PG-only auto-create UNIQUE INDEX
+        B-BE-61) preservato bit-per-bit. Livello d'astrazione tra
+        `_dispatch_write_mode` (resta in `database_writer.py`) e
+        `TransactionExecutionMixin._execute_in_batches`.
       MRO: DatabaseWriter → DataPrepMixin → SchemaIntrospectionMixin →
       TransactionExecutionMixin → ReplaceStrategiesMixin →
-      WriterPreflightLifecycleMixin → DestinationWriter. I metodi
-      restano accessibili come `DatabaseWriter.<method>` e
-      `inspect.getsource(DatabaseWriter.<method>)` legge il source dal
-      mixin tramite `__code__.co_filename` + line numbers.
+      WriterPreflightLifecycleMixin → BatchDispatchMixin →
+      DestinationWriter. I metodi restano accessibili come
+      `DatabaseWriter.<method>` e `inspect.getsource(DatabaseWriter
+      .<method>)` legge il source dal mixin tramite
+      `__code__.co_filename` + line numbers.
     """
 
     def __init__(
@@ -392,125 +403,18 @@ class DatabaseWriter(
         result.completed_at = datetime.now(timezone.utc).isoformat()
         return result
 
-    # ========================================================================
-    # BATCH INSERT
-    # ========================================================================
 
-    def _batch_insert(
-        self,
-        df: pd.DataFrame,
-        columns: List[ColumnMapping],
-        result: WriteResult,
-    ) -> WriteResult:
-        """Inserisce righe in batch."""
-        sql_template, param_names = self.ddl.generate_insert(
-            self.config.schema_name,
-            self.config.table_name,
-            columns,
-        )
-
-        return self._execute_in_batches(df, columns, sql_template, result, "insert")
-
-
-    # Phase 5 B2.4b cutover: cluster REPLACE_STRATEGIES
-    # (`_truncate_insert_atomic`, `_truncate_insert_stage_swap`,
-    # `_truncate_insert_oracle_redef`, `_replace_atomic`,
-    # `_mssql_replicate_schema_to_shadow`, `_generate_single_rename`)
-    # spostato in
-    # `app.core.carica.writer_replace_strategies.ReplaceStrategiesMixin`.
+    # Phase 5 B2.6 cutover: cluster BATCH_DISPATCH (`_batch_insert`,
+    # `_batch_update`, `_batch_upsert`) spostato in
+    # `app.core.carica.writer_batch_dispatch.BatchDispatchMixin`.
     # `DatabaseWriter` eredita dal mixin (vedi class declaration sopra).
-    # Le 6 cleanup guards distribuite su 3 metodi sono ancora verificate
-    # da `inspect.getsource(DatabaseWriter._method)` (test #5 B2.0
-    # modernizzato). I 3 callsite di `_execute_batch(target_table=...)`
-    # nei metodi shadow/interim sono ancora verificati dal test
-    # modernizzato B2.4a. Vedi `orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B2.
+    # I 3 metodi seguono il pattern unico "build SQL template +
+    # delegate a `_execute_in_batches`". `_batch_upsert` ha SAVEPOINT
+    # scope-limitato (PG-only auto-create UNIQUE INDEX B-BE-61)
+    # preservato bit-per-bit. Le call-site `self._batch_*(...)` da
+    # `_dispatch_write_mode` continuano a risolvere via MRO senza
+    # modifiche. Vedi `orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B2.
 
-    # ========================================================================
-    # BATCH UPDATE
-    # ========================================================================
-
-    def _batch_update(
-        self,
-        df: pd.DataFrame,
-        columns: List[ColumnMapping],
-        result: WriteResult,
-    ) -> WriteResult:
-        """Aggiorna righe in batch."""
-        # Filtra colonne da aggiornare
-        if self.config.update_columns:
-            update_cols = [c for c in columns
-                         if c.dest_column in self.config.update_columns
-                         and not c.skip]
-        else:
-            update_cols = [c for c in columns
-                         if c.dest_column not in self.config.match_columns
-                         and not c.skip and not c.is_primary_key]
-
-        sql_template, param_names = self.ddl.generate_update(
-            self.config.schema_name,
-            self.config.table_name,
-            update_cols,
-            self.config.match_columns,
-        )
-
-        return self._execute_in_batches(df, columns, sql_template, result, "update")
-
-    # ========================================================================
-    # BATCH UPSERT
-    # ========================================================================
-
-    def _batch_upsert(
-        self,
-        df: pd.DataFrame,
-        columns: List[ColumnMapping],
-        result: WriteResult,
-    ) -> WriteResult:
-        """Esegue UPSERT in batch."""
-        # B-BE-61: verifica che esista un UNIQUE/PK constraint sulle match_columns
-        # Se non esiste, lo crea automaticamente (CREATE UNIQUE INDEX IF NOT EXISTS)
-        if self.db_type == 'postgres' and self.config.match_columns:
-            with self.engine.begin() as check_conn:
-                for mc in self.config.match_columns:
-                    mc = mc.strip()
-                    table = self.config.table_name.strip()
-                    schema = self.config.schema_name.strip()
-                    check_sql = text("""
-                        SELECT COUNT(*) FROM information_schema.table_constraints tc
-                        JOIN information_schema.key_column_usage kcu
-                          ON tc.constraint_name = kcu.constraint_name
-                         AND tc.table_schema = kcu.table_schema
-                        WHERE tc.constraint_type IN ('PRIMARY KEY','UNIQUE')
-                          AND tc.table_schema = :schema
-                          AND tc.table_name = :table
-                          AND kcu.column_name = :col
-                    """)
-                    constraint_count = check_conn.execute(check_sql, {"schema": schema, "table": table, "col": mc}).scalar()
-                    if not constraint_count:
-                        # Crea indice UNIQUE automaticamente
-                        idx_name = f"uq_{table}_{mc}"
-                        create_idx = text(
-                            f'CREATE UNIQUE INDEX IF NOT EXISTS "{idx_name}" '
-                            f'ON "{schema}"."{table}" ("{mc}")'
-                        )
-                        try:
-                            check_conn.execute(create_idx)
-                            logger.info(
-                                f"Creato indice UNIQUE automatico: {idx_name} su {schema}.{table}({mc})"
-                            )
-                        except Exception as idx_err:
-                            raise ValueError(
-                                f"La colonna '{mc}' non ha un indice UNIQUE sulla tabella "
-                                f"'{schema}.{table}' e la creazione automatica è fallita: {idx_err}"
-                            ) from idx_err
-        sql_template, param_names = self.ddl.generate_upsert(
-            self.config.schema_name,
-            self.config.table_name,
-            columns,
-            self.config.match_columns,
-            self.config.update_columns or None,
-        )
-
-        return self._execute_in_batches(df, columns, sql_template, result, "upsert")
 
     # ========================================================================
     # MOTORE BATCH GENERICO
