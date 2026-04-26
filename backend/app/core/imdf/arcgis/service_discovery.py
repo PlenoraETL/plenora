@@ -16,8 +16,9 @@ chiamate REST con autenticazione token + Referer header:
   - `_list_user_folders`         — read-only: lista folder utente.
                                    Consumata dal validator per
                                    risolvere ownerFolder id → title.
-  - `_ensure_folder`              — find-or-create folder; chiama
-                                   `_list_user_folders` intra-cluster.
+  - `_ensure_folder`              — find-or-create folder; legge le
+                                   folder direttamente e crea quella
+                                   mancante quando necessario.
   - `_is_service_name_available` — check disponibilita' service name
                                    via `/portals/self/isServiceNameAvailable`.
   - `_enumerate_all_user_items`  — paginated enumeration tutti gli
@@ -62,18 +63,14 @@ Strategia di preservazione, verificata pre-implementazione (cfr.
    risolve allo stesso modulo `arcgis_uploader` → vede il fake. ✓
 
 3. **Path C — chiamate intra-cluster (NON patchate dai test esistenti)**:
-   `_ensure_folder` → `_list_user_folders` (entrambi qui in
-   service_discovery.py). Name lookup in `_ensure_folder` cerca
-   `_list_user_folders` nello scope `service_discovery`, NON nel facade
-   `arcgis_uploader`. **Conseguenza**: se un test patcha
-   `uploader_mod._list_user_folders` E triggera un path che attraversa
-   `_ensure_folder`, il fake NON e' visto dalla chiamata
-   `_list_user_folders` interna a `_ensure_folder`. Verificato che
-   nessun test contract attuale usa questo path:
-     - `validator.publish_validate` chiama `_list_user_folders`
-       direttamente (NON tramite `_ensure_folder`).
-     - `_ensure_folder` e' chiamato solo da `upload_imdf_layers`
-       (non testato unit).
+   `_find_existing_service` → `_search_user_items` →
+   `_enumerate_all_user_items` vivono tutti in `service_discovery.py`.
+   Questi name lookup interni risolvono nello scope del modulo figlio,
+   NON nel facade `arcgis_uploader`. **Conseguenza**: un eventuale test
+   futuro che patchasse `uploader_mod._search_user_items` e poi chiamasse
+   `_find_existing_service` attraverso il modulo figlio non vedrebbe il
+   fake. Nessun test contract attuale dipende da questo path; i test
+   esistenti patchano e chiamano attraverso il facade/lazy import.
    Documentato qui per future modifiche del cluster.
 
 `_search_user_items` e' chiamato da `_delete_existing_service`
