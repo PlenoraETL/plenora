@@ -334,43 +334,112 @@ def test_target_schema_empty_string_is_passed_through(df, cols, conn):
 
 
 def test_stage_swap_callsite_propagates_stg_table_to_bulk():
-    """Smoke che i 3 callsite stage+swap/interim passano effettivamente
-    target_table al bulk path (regression guard via grep AST-based).
+    """Smoke che i 3 metodi shadow/interim passano effettivamente
+    `target_table` al bulk path (regression guard via AST scan).
 
-    Codice cercato: occorrenze di `_execute_batch(...target_table=...)`
-    dentro i 3 metodi che lavorano su shadow:
-      - _replace_atomic (line ~850)
-      - _stage_swap_replace (line ~1076)
-      - _oracle_online_redefinition (line ~1521)
+    Contract verificato: ognuno dei 3 metodi caller deve avere almeno
+    1 callsite di `_execute_batch(..., target_table=...)`. Indipendente
+    dalla posizione fisica del metodo (modulo facade, mixin, sotto-modulo).
+
+    Modernization B2.4a — behavior contract vs source-location contract
+    ====================================================================
+    Pre-B2.4a il test parsava `Path(.../database_writer.py).read_text()`
+    cercando i callsite nel sorgente del MODULO. Questo legava il test
+    alla posizione fisica dei 3 metodi: spostarli in mixin (B2.4b
+    `ReplaceStrategiesMixin`) avrebbe rotto il test (i callsite non
+    sarebbero piu' stati nel source di `database_writer.py`).
+
+    Post-B2.4a: parsa `inspect.getsource(<unbound_method>)` per ciascuno
+    dei 3 metodi caller. `inspect.getsource` legge via
+    `__code__.co_filename` + line numbers, quindi trova il source
+    dovunque il metodo sia fisicamente definito (modulo facade, mixin,
+    sotto-modulo). Il contract bit-per-bit "ogni metodo caller deve
+    avere ≥1 callsite di `_execute_batch(target_table=...)`" e' preservato.
+
+    Inoltre la modernizzazione e' piu' precisa: prima un eventuale
+    spostamento di un callsite in un metodo NON-target sarebbe stato
+    accettato dal vecchio test (purche' restassero ≥3 callsite totali
+    nel file). Ora il contract e' per-metodo: ogni dei 3 metodi target
+    DEVE avere il callsite (anti-regressione piu' stretta).
     """
     import ast
-    from pathlib import Path
+    import inspect
 
-    src = Path(__file__).parents[3] / "app" / "core" / "carica" / "database_writer.py"
-    tree = ast.parse(src.read_text(encoding="utf-8"))
+    # Lazy import allineato al pattern degli altri test in questo file
+    # (vedi `_make_writer` linea 37).
+    from app.core.carica.database_writer import DatabaseWriter
 
-    callsites_with_target = []
-    callsites_without_target = []
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
-            continue
-        func = node.func
-        if not isinstance(func, ast.Attribute):
-            continue
-        if func.attr != "_execute_batch":
-            continue
-        has_target = any(kw.arg == "target_table" for kw in node.keywords)
-        if has_target:
-            callsites_with_target.append(node.lineno)
-        else:
-            callsites_without_target.append(node.lineno)
+    # I 3 metodi shadow/interim che DEVONO passare target_table al bulk
+    # path. Rappresentati come unbound method della classe DatabaseWriter:
+    # `inspect.getsource(method)` risolve via __code__.co_filename →
+    # funziona dovunque il metodo sia definito (database_writer.py o
+    # ReplaceStrategiesMixin in writer_replace_strategies.py post-B2.4b).
+    methods = {
+        "_replace_atomic": DatabaseWriter._replace_atomic,
+        "_truncate_insert_stage_swap": DatabaseWriter._truncate_insert_stage_swap,
+        "_truncate_insert_oracle_redef": DatabaseWriter._truncate_insert_oracle_redef,
+    }
 
-    # Almeno 3 callsite devono passare target_table (i 3 path shadow/interim).
-    assert len(callsites_with_target) >= 3, (
-        f"Aspettati almeno 3 callsite di _execute_batch con target_table "
-        f"esplicito (stage+swap, replace_atomic, oracle interim). "
-        f"Trovati: {callsites_with_target} (totale callsite: "
-        f"{callsites_with_target + callsites_without_target})"
+    method_callsite_summary: dict[str, dict[str, list[int]]] = {}
+
+    for method_name, method in methods.items():
+        try:
+            method_src = inspect.getsource(method)
+        except (OSError, TypeError) as e:
+            pytest.fail(
+                f"inspect.getsource({method.__qualname__}) ha fallito: {e}. "
+                f"Se il metodo e' stato rinominato/spostato/wrappato, "
+                f"aggiornare il riferimento nel test (NON rimuovere il "
+                f"contract: il callsite di _execute_batch(target_table=...) "
+                f"deve restare per il path shadow/interim)."
+            )
+
+        # `inspect.getsource(method)` ritorna il source con indentazione
+        # di classe (4 spazi). `ast.parse` rifiuta indented code a top
+        # level → IndentationError. `textwrap.dedent` NON funziona perche'
+        # i metodi (es. `_truncate_insert_oracle_redef`) contengono
+        # multiline raw SQL con `BEGIN`/`END;` a colonna 0 — common
+        # leading whitespace risulta 0 → nessun dedent.
+        # Soluzione: wrap in scaffold sintetico `class _S:\n<src>` →
+        # `ast.parse` accetta il metodo indented dentro la classe scope.
+        # Walking l'AST trova le `ast.Call` indipendentemente dal wrapping.
+        tree = ast.parse("class _S:\n" + method_src)
+
+        with_target: list[int] = []
+        without_target: list[int] = []
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            if not isinstance(func, ast.Attribute):
+                continue
+            if func.attr != "_execute_batch":
+                continue
+            has_target = any(kw.arg == "target_table" for kw in node.keywords)
+            if has_target:
+                with_target.append(node.lineno)
+            else:
+                without_target.append(node.lineno)
+
+        method_callsite_summary[method_name] = {
+            "with_target": with_target,
+            "without_target": without_target,
+        }
+
+    # Contract per-metodo: ognuno dei 3 metodi target DEVE avere
+    # almeno 1 callsite di `_execute_batch(target_table=...)`.
+    methods_missing_callsite = [
+        name for name, info in method_callsite_summary.items()
+        if not info["with_target"]
+    ]
+    assert not methods_missing_callsite, (
+        f"Aspettato che ognuno dei 3 metodi shadow/interim abbia "
+        f"≥1 callsite di `_execute_batch(target_table=...)`, ma "
+        f"questi metodi NON ne hanno: {methods_missing_callsite}. "
+        f"Summary completo: {method_callsite_summary}. "
+        f"Senza target_table il bulk path scrive sulla tabella finale "
+        f"invece che sulla shadow/interim, rompendo la semantica di "
+        f"stage+swap / replace_atomic / oracle redef."
     )
 
 
