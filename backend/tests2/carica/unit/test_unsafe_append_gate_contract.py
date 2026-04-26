@@ -122,9 +122,39 @@ def test_unsafe_append_combo_with_flag_proceeds(monkeypatch):
     """`allow_unsafe_append=True` consente la combo + emette warning.
 
     Verifichiamo che la write proceda oltre il gate (raggiunge
-    `_prepare_dataframe`) e che il logger emetta un warning informativo.
+    `_prepare_dataframe`) e che venga emesso un WARNING sul logger
+    canonico `app.core.carica.writer` con il payload atteso.
+
+    Modernization B2.5a — behavior contract vs source-location contract
+    ====================================================================
+    Pre-B2.5a il test patchava `monkeypatch.setattr(dw_mod, "logger",
+    spy_logger)` (riga 141 pre-B2.5a). Questo legava il test alla
+    posizione fisica del metodo che emette il warning
+    (`_assert_safe_write_config`): se il metodo viene spostato in
+    mixin/sotto-modulo (come previsto da B2.5b
+    `WriterPreflightLifecycleMixin`), il `logger` letto dal metodo
+    rilocato e' un altro StructuredLogger wrapper instance — il
+    rebind di `dw_mod.logger` non lo affecta → mock non chiamato →
+    test rosso anche se il warning viene emesso correttamente.
+
+    Post-B2.5a: aggancio un `logging.Handler` custom al logger stdlib
+    canonico `"app.core.carica.writer"` per nome. Lo `StructuredLogger`
+    wrapper di `app/utils/logger.py` delega a `_logger.log(...)` sul
+    logger stdlib omonimo, quindi qualunque chiamata sul wrapper
+    (anche da un futuro modulo figlio estratto) viene catturata —
+    purche' il wrapper sia ottenuto via
+    `get_logger("app.core.carica.writer")`. Indipendente dalla
+    posizione fisica. Stesso pattern modernizzato in
+    `test_database_writer_log_consistency_contract.py` (B2.0).
+
+    Anti-regressione preservata: se un futuro fix spostasse il
+    warning su un logger ad-hoc con nome diverso (es.
+    `logging.getLogger(__name__)`), il record NON arriverebbe al
+    collector handler → test fallirebbe come voluto (loggers con
+    nomi diversi sono separati: la sibling-propagation non esiste,
+    solo verso parent → root).
     """
-    from app.core.carica import database_writer as dw_mod
+    import logging
 
     config = WriteConfig(
         connection_id="conn",
@@ -136,29 +166,55 @@ def test_unsafe_append_combo_with_flag_proceeds(monkeypatch):
     )
     writer = _make_writer(config)
 
-    # Spy sul logger del modulo: dobbiamo vedere il warning informativo.
-    spy_logger = MagicMock()
-    monkeypatch.setattr(dw_mod, "logger", spy_logger)
+    # Cattura WARNING sul logger canonico per nome (vedi docstring per
+    # razionale modernization). Imposto setLevel(WARNING) DOPO
+    # addHandler perche' `get_logger` inizializza il logger a INFO;
+    # senza questa riga il filtro e' redundant ma esplicito.
+    captured_records: list[logging.LogRecord] = []
 
-    # Stub `_prepare_dataframe` per fermarsi prima delle operazioni DB:
-    # confermiamo che il flow ha superato il gate raggiungendo questo step.
-    # KeyboardInterrupt e' BaseException, NON viene catturato dal
-    # `try/except Exception` di `write()`: usiamo questo come sentinel
-    # per fermarci esattamente dopo aver superato il gate.
-    def _stop_after_gate(self, df):
-        raise KeyboardInterrupt("gate passed")
+    class _Collector(logging.Handler):
+        def emit(self, record):  # noqa: D401
+            captured_records.append(record)
 
-    monkeypatch.setattr(DatabaseWriter, "_prepare_dataframe", _stop_after_gate)
+    stdlib_logger = logging.getLogger("app.core.carica.writer")
+    handler = _Collector()
+    handler.setLevel(logging.WARNING)
+    prev_level = stdlib_logger.level
+    stdlib_logger.addHandler(handler)
+    stdlib_logger.setLevel(logging.WARNING)
+    try:
+        # Stub `_prepare_dataframe` per fermarsi prima delle operazioni DB:
+        # confermiamo che il flow ha superato il gate raggiungendo questo step.
+        # KeyboardInterrupt e' BaseException, NON viene catturato dal
+        # `try/except Exception` di `write()`: usiamo questo come sentinel
+        # per fermarci esattamente dopo aver superato il gate.
+        def _stop_after_gate(self, df):
+            raise KeyboardInterrupt("gate passed")
 
-    with pytest.raises(KeyboardInterrupt, match="gate passed"):
-        writer.write(_df())
+        monkeypatch.setattr(DatabaseWriter, "_prepare_dataframe", _stop_after_gate)
 
-    # Warning informativo emesso (opt-in path).
-    assert spy_logger.warning.called, (
-        "Atteso warning [UNSAFE WRITE CONFIG opt-in] quando "
-        "allow_unsafe_append=True"
+        with pytest.raises(KeyboardInterrupt, match="gate passed"):
+            writer.write(_df())
+    finally:
+        stdlib_logger.removeHandler(handler)
+        stdlib_logger.setLevel(prev_level)
+
+    # Warning informativo emesso (opt-in path) sul logger canonico.
+    warning_records = [r for r in captured_records if r.levelno == logging.WARNING]
+    assert warning_records, (
+        f"Atteso almeno 1 record WARNING sul logger canonico "
+        f"'app.core.carica.writer' quando allow_unsafe_append=True. "
+        f"Tutti i record catturati: "
+        f"{[(r.levelname, r.getMessage()) for r in captured_records]!r}"
     )
-    warning_msg = spy_logger.warning.call_args[0][0]
+    # Cerca il messaggio specifico del gate opt-in (filtra eventuali
+    # warning rumore da altri sites del flow pre-prepare_dataframe).
+    optin_msgs = [r.getMessage() for r in warning_records if "opt-in" in r.getMessage()]
+    assert optin_msgs, (
+        f"Atteso WARNING con marker '[UNSAFE WRITE CONFIG opt-in]'. "
+        f"Warning ricevuti: {[r.getMessage() for r in warning_records]!r}"
+    )
+    warning_msg = optin_msgs[0]
     assert "opt-in" in warning_msg
     assert "allow_unsafe_append=True" in warning_msg
 
