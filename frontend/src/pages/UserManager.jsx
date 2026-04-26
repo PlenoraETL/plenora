@@ -550,8 +550,6 @@ export default function UserManager() {
             </div>
           )}
 
-          {/* ── TAB AI CONTEXT ── */}
-
           {/* ── TAB GRUPPI ── */}
           {tab === 'groups' && (
             <div className="um__groups-grid">
