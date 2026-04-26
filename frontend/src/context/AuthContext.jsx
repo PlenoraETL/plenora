@@ -1,17 +1,23 @@
 /**
  * AuthContext.jsx — Contesto React per autenticazione JWT
  *
- * Fornisce a tutta l'app: user, token, login(), logout(), authFetch().
+ * Fornisce a tutta l'app: user, token, login(), logout().
  * Il token viene letto/scritto in sessionStorage per persistere tra refresh.
  * Registra authBus.onUnauthorized per ricevere gli eventi 401 da axios.
  *
  * Uso: const { user, token, login, logout } = useAuth();
+ *
+ * C3.3 Phase 4: le chiamate a /auth/login e /auth/logout passano ora per
+ * `api/auth.js`. Rimosso anche l'helper `authFetch` (wrapper di
+ * `fetch()`) perche' non aveva consumer in src/ e violava il contratto
+ * "src/api/ unico punto HTTP". Se in futuro serve un wrapper di fetch
+ * con auth, esporlo da `api/`.
  */
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authBus } from '../utils/authBus';
-import http from '../api/http';
+import { login as apiLogin, logout as apiLogout } from '../api/auth';
 
 const AuthContext = createContext(null);
 const TOKEN_KEY = 'urby_token';
@@ -46,9 +52,10 @@ export function AuthProvider({ children }) {
     const currentToken = sessionStorage.getItem(TOKEN_KEY);
     if (currentToken) {
       try {
-        const p = http.post('/auth/logout', null, {
-          headers: { Authorization: `Bearer ${currentToken}` },
-        });
+        // apiLogout NON e' async: ritorna il Promise grezzo cosi' il
+        // pattern fire-and-forget (no await) e' preservato bit-per-bit
+        // dal comportamento pre-C3.3.
+        const p = apiLogout(currentToken);
         if (p && typeof p.then === 'function') {
           p.catch(() => {});
         }
@@ -77,7 +84,7 @@ export function AuthProvider({ children }) {
   const login = useCallback(async (username, password) => {
     // Nota: http non ha ancora il token in questo momento,
     // ma l'interceptor lo aggiunge solo se presente — quindi va bene.
-    const { data } = await http.post('/auth/login', { username, password });
+    const data = await apiLogin(username, password);
 
     const userData = {
       user_id:  data.user_id,
@@ -94,29 +101,8 @@ export function AuthProvider({ children }) {
     return userData;
   }, []);
 
-  /**
-   * authFetch — wrapper di fetch che aggiunge Authorization header.
-   * Usalo al posto di fetch() in tutti i componenti.
-   * Se il server risponde 401, fa logout automatico.
-   */
-  const authFetch = useCallback(async (url, options = {}) => {
-    const headers = {
-      ...(options.headers || {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    };
-
-    const res = await fetch(url, { ...options, headers });
-
-    if (res.status === 401) {
-      logout();
-      throw new Error('Sessione scaduta — effettua nuovamente il login');
-    }
-
-    return res;
-  }, [token, logout]);
-
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, authFetch }}>
+    <AuthContext.Provider value={{ user, token, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

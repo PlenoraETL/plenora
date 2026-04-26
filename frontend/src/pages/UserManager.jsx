@@ -13,7 +13,6 @@ import {
   listUsers, createUser, updateUser, deleteUser, resetPassword,
   listGroups, createGroup, deleteGroup, getGroupSummary,
 } from '../api/users';
-import http from '../api/http';
 import ChangePasswordModal from '../components/ChangePasswordModal';
 import AppSidebar from '../components/AppSidebar';
 import ModalWrapper, { ModalButton } from '../components/common/ModalWrapper';
