@@ -5,8 +5,8 @@
  * configurati in ApiConnectionManager. Usato dall'editor Arricchisci
  * quando si aggiunge un nuovo nodo ApiEnrich senza creare un nuovo connettore.
  */
-import http from '../../api/http';
 import React, { useState, useEffect, useMemo } from 'react';
+import { listApiConnections } from '../../api/apiConnections';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import './ConnectionSelectorModal.css';
 
@@ -40,9 +40,7 @@ function ConnectionSelectorModal({
         setLoading(true);
         setError(null);
         
-        const response = await http.get(`/api-connections?connection_type=${category}`);
-        
-        const data = response.data;
+        const data = await listApiConnections({ connection_type: category });
         setConnections(data.api_connections || []);
       } catch (err) {
         console.error(`Errore caricamento connessioni ${category}:`, err);

@@ -61,4 +61,24 @@ describe('datasources api contract', () => {
 
     expect(httpMock.delete).toHaveBeenCalledWith('/datasources/ds-3');
   });
+
+  // ─── C3.2 Phase 4: file schema endpoint ─────────────────────────────────
+  // Pre-C3.2 era una chiamata diretta http.get in DataSourceNode.jsx; ora
+  // passa per il boundary api/datasources.
+
+  it('getFileSchema calls GET /datasources/:id/files/schema with path query param', async () => {
+    httpMock.get.mockResolvedValueOnce({
+      data: { columns: [{ name: 'id', type: 'int' }], format: 'csv' },
+    });
+
+    const { getFileSchema } = await import('../../src/api/datasources');
+    const result = await getFileSchema('ds-7', '/inbound/cities.csv');
+
+    expect(httpMock.get).toHaveBeenCalledWith(
+      '/datasources/ds-7/files/schema',
+      { params: { path: '/inbound/cities.csv' } },
+    );
+    expect(result.columns).toHaveLength(1);
+    expect(result.format).toBe('csv');
+  });
 });

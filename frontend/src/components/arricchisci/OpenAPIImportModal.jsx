@@ -3,7 +3,7 @@
  * Redesign Plenora design system
  */
 import React, { useState } from 'react';
-import http from '../../api/http';
+import { fetchOpenApiSchema } from '../../api/apiConnections';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import './OpenAPIImportModal.css';
 
@@ -105,8 +105,7 @@ function OpenAPIImportModal({ onClose, onImport }) {
       let schema;
       if (importMode === 'url') {
         if (!url) throw new Error('Inserisci un URL');
-        const r = await http.post('/api-connections/fetch-openapi-schema', { url });
-        schema = r.data;
+        schema = await fetchOpenApiSchema(url);
       } else {
         if (!pastedSchema) throw new Error('Incolla lo schema OpenAPI');
         schema = JSON.parse(pastedSchema);

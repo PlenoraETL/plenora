@@ -3,7 +3,6 @@
  * Redesign Plenora design system
  * Route: /external-connectors
  */
-import http from '../api/http';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useToast } from '../hooks/useToast';
 import { useNavigate } from 'react-router-dom';
@@ -16,17 +15,20 @@ import { useHexCanvas } from '../utils/hexCanvas';
 import AllowedGroupsSelector from '../components/shared/AllowedGroupsSelector';
 import AppSidebar from '../components/AppSidebar';
 import { handleCascade409, formatCascadeDependencies } from '../api/errors';
+// C3.2 Phase 4: tutte le chiamate /api-connections e /datasources passano
+// per il boundary api/ (ex shadow inline in cima al file).
+import {
+  listApiConnections,
+  createApiConnection,
+  updateApiConnection,
+  deleteApiConnection,
+  testApiConfig,
+  testApiConnection,
+} from '../api/apiConnections';
+import { createDataSource } from '../api/datasources';
 import { can, role } from '../utils/permissions';
 import '../styles/ApiConnectionManager.css';
 import '../components/panels/ResponseConfigBuilder.css';
-
-// ── API helpers ───────────────────────────────────────────────────────────
-const listApiConnections  = async () => (await http.get('/api-connections')).data;
-const createDatasource    = async (d) => (await http.post('/datasources', d)).data;
-const createApiConnection = async (d) => (await http.post('/api-connections', d)).data;
-const updateApiConnection = async (id, d) => (await http.put(`/api-connections/${id}`, d)).data;
-const deleteApiConnection = async (id) => (await http.delete(`/api-connections/${id}`)).data;
-const testApiConnection   = async (d) => (await http.post('/api-connections/test', d)).data;
 
 // ── Constants ─────────────────────────────────────────────────────────────
 const CATEGORIES = [
@@ -283,7 +285,10 @@ function ApiConnectionManager() {
       } else {
         testPayload = { url:formData.url, method:formData.method, auth:formData.auth, custom_headers:getCustomHeadersObject(), test_params:{...formData.static_parameters,...testParams}, include_raw:true };
       }
-      const result = await testApiConnection(testPayload);
+      // C3.2: testApiConfig (no id) e' il draft test pre-save; non
+      // confondere con testApiConnection(id, payload) che testa una
+      // connessione gia' persistita.
+      const result = await testApiConfig(testPayload);
       setTestResult(result);
       if (result.raw_response) setTestRawResponse(result.raw_response);
       if (result.success && result.available_fields) {
@@ -298,7 +303,7 @@ function ApiConnectionManager() {
     if (mappable.length===0) runQuickTest(api, {}); else setQuickTestInput({api, params:{...(api.test_data||{})}});
   };
   const runQuickTest = async (api, extraParams) => {
-    try { const r=await http.post(`/api-connections/${api.id}/test`,{test_params:{...(api.static_parameters||{}),...extraParams}}).then(r=>r.data); setQuickTestInput(null); setQuickTestResult({api,result:r}); }
+    try { const r=await testApiConnection(api.id,{test_params:{...(api.static_parameters||{}),...extraParams}}); setQuickTestInput(null); setQuickTestResult({api,result:r}); }
     catch(e) { setQuickTestInput(null); setQuickTestResult({api,result:{success:false,error:e.message}}); }
   };
 
@@ -504,7 +509,7 @@ function ApiConnectionManager() {
         <DataSourceConfigModal
           onClose={()=>setShowDataSourceConfig(false)}
           onSave={async(dsConfig)=>{
-            try { await createDatasource({name:dsConfig.name,description:dsConfig.description||'',ds_type:dsConfig.datasource?.type||dsConfig.source_type||'',config:JSON.stringify(dsConfig.datasource||dsConfig)}); setShowDataSourceConfig(false); }
+            try { await createDataSource({name:dsConfig.name,description:dsConfig.description||'',ds_type:dsConfig.datasource?.type||dsConfig.source_type||'',config:JSON.stringify(dsConfig.datasource||dsConfig)}); setShowDataSourceConfig(false); }
             catch(e){console.error(e);}
           }}
         />

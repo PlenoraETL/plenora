@@ -40,3 +40,21 @@ export const listFiles = async (id, { path = '', pattern = null, include_hash = 
   return res.data;
 };
 
+/**
+ * Restituisce lo schema (colonne + format) di un file specifico esposto
+ * da un Data Source. Usato dal nodo canvas DataSource per popolare la
+ * lista colonne disponibile a valle (manipola/arricchisci).
+ *
+ * Backend: GET /datasources/:id/files/schema?path=...
+ *
+ * @param {string} id   - id del data source
+ * @param {string} path - path del file dentro il data source
+ * @returns {Promise<{columns: Array<Object>, format?: string}>}
+ */
+export const getFileSchema = async (id, path) => {
+  const res = await http.get(`/datasources/${id}/files/schema`, {
+    params: { path },
+  });
+  return res.data;
+};
+

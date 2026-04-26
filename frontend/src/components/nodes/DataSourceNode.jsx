@@ -10,8 +10,7 @@
 import React, { useState, useEffect, useCallback, memo } from 'react';
 import { Handle, Position } from 'reactflow';
 import useCanvasStore from '../../store/useCanvasStore';
-import { listDataSources, listFiles } from '../../api/datasources';
-import http from '../../api/http';
+import { listDataSources, listFiles, getFileSchema } from '../../api/datasources';
 import './DataSourceNode.css';
 
 /**
@@ -117,7 +116,7 @@ const DataSourceNode = memo(({ id, data }) => {
     try {
       // Chiama endpoint datasource read_file per ottenere schema
       // Il backend MANIPOLA può ricevere {datasource_id, file_path} e restituire colonne
-      const schema = await http.get(`/datasources/${dsId}/files/schema`, { params: { path: filePath } }).then(r => r.data);
+      const schema = await getFileSchema(dsId, filePath);
       upd({ columns: schema.columns || [], format: schema.format || data.format });
     } catch {
       // Schema opzionale — non blocca l'uso del nodo

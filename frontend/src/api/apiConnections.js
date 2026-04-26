@@ -4,7 +4,10 @@
  * Connettori esterni = API REST, eseguibili Python/Shell, Data Sources (SharePoint, FTP, S3...).
  * Usati dal modulo Arricchisci per arricchire i dataset con dati esterni.
  *
- * Precedentemente queste funzioni erano definite direttamente in ApiConnectionManager.jsx.
+ * Precedentemente alcune di queste funzioni erano definite direttamente in
+ * ApiConnectionManager.jsx / ConnectionSelectorModal.jsx / OpenAPIImportModal.jsx
+ * come shadow inline. C3.2 Phase 4 le ha consolidate qui per riportare il
+ * frontend al contratto "src/api/ unico punto HTTP" (CODE_MAP.md).
  */
 
 import http from './http';
@@ -31,3 +34,82 @@ export const listApiConnections = async (filters = {}) => {
   return response.data;
 };
 
+/**
+ * Restituisce il dettaglio di una singola connessione API.
+ * @param {string} apiId
+ * @returns {Promise<Object>}
+ */
+export const getApiConnection = async (apiId) => {
+  const response = await http.get(`/api-connections/${apiId}`);
+  return response.data;
+};
+
+/**
+ * Crea una nuova connessione API.
+ * @param {Object} payload — body validato dal backend
+ * @returns {Promise<Object>}
+ */
+export const createApiConnection = async (payload) => {
+  const response = await http.post('/api-connections', payload);
+  return response.data;
+};
+
+/**
+ * Aggiorna una connessione esistente.
+ * @param {string} apiId
+ * @param {Object} payload
+ * @returns {Promise<Object>}
+ */
+export const updateApiConnection = async (apiId, payload) => {
+  const response = await http.put(`/api-connections/${apiId}`, payload);
+  return response.data;
+};
+
+/**
+ * Elimina una connessione.
+ * @param {string} apiId
+ * @returns {Promise<Object>}
+ */
+export const deleteApiConnection = async (apiId) => {
+  const response = await http.delete(`/api-connections/${apiId}`);
+  return response.data;
+};
+
+/**
+ * Test di una configurazione API NON ancora salvata (draft).
+ * Mirror del backend `test_api_config` — POST /api-connections/test.
+ * Da non confondere con `testApiConnection` che richiede l'id di una
+ * connessione gia' persistita.
+ *
+ * @param {Object} payload — config draft completa
+ * @returns {Promise<Object>}
+ */
+export const testApiConfig = async (payload) => {
+  const response = await http.post('/api-connections/test', payload);
+  return response.data;
+};
+
+/**
+ * Test di una connessione gia' salvata (by-id).
+ * Mirror del backend `test_api_connection` — POST /api-connections/:id/test.
+ *
+ * @param {string} apiId
+ * @param {Object} payload — tipicamente `{ test_params: {...} }`
+ * @returns {Promise<Object>}
+ */
+export const testApiConnection = async (apiId, payload) => {
+  const response = await http.post(`/api-connections/${apiId}/test`, payload);
+  return response.data;
+};
+
+/**
+ * Scarica e parsifica uno schema OpenAPI/Swagger da un URL pubblico.
+ * Backend: POST /api-connections/fetch-openapi-schema.
+ *
+ * @param {string} url — URL di uno schema OpenAPI raggiungibile
+ * @returns {Promise<Object>} schema OpenAPI grezzo cosi' come ritornato dal BE
+ */
+export const fetchOpenApiSchema = async (url) => {
+  const response = await http.post('/api-connections/fetch-openapi-schema', { url });
+  return response.data;
+};
