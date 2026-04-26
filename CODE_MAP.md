@@ -268,22 +268,33 @@ Responsabilita: governa pipeline IMDF (DXF -> IMDF/IFC/GDB) e pubblicazione su A
 |---|---|---|
 | `router.py` | `_safe_bundle_dir`, `_hydrate_local_cache`, `_assert_bundle_group_access`, `ImdfPublishRequest`, `ImdfValidateRequest`, `ImdfPublishResponse`, `ImdfBundleSummary`, `publish_imdf`, `validate_publish_endpoint`, `get_bundle_metadata`, `list_bundles`, `delete_bundle` | contratto API IMDF + ownership bundle |
 | `loader.py` | `ImdfBundle`, `extract_imdf_zip`, `_build_bundle_index`, `load_imdf_layers` | parsing bundle ZIP IMDF |
-| `validator.py` | `validate_publish`, `_count_features_where_via_post`, `_coarse_type_from_esri`, `_coarse_type_from_dtype` | validazione pre-publish |
-| `arcgis_uploader.py` | `upload_imdf_layers`, `_publish_mode_existing`, `_ensure_folder`, `_try_cleanup_zombie_service`, `_is_service_name_available`, `_search_user_items`, `_delete_existing_service`, `_add_layer_to_service`, `_query_oid_by_key` | upload effettivo verso ArcGIS |
+| `validator.py` | `validate_publish`, `_count_features_where_via_post`, `_coarse_type_from_esri`, `_coarse_type_from_dtype` | validazione pre-publish (lazy-import simboli da `arcgis_uploader` via facade) |
+| `arcgis_uploader.py` | (orchestrator + facade, 573 righe post-Phase-5-B4, -56% vs baseline 1315) — `upload_imdf_layers` (orchestrator end-to-end) + costanti `LAYER_ORDER` / `DEFAULT_MATCH_COLUMNS` / `PUBLISH_MODES` + facade re-export di tutti gli helper privati distribuiti nel package `arcgis/` | entry point semantico publish ArcGIS |
+| `arcgis/__init__.py` | (package marker vuoto, no auto-import per evitare cicli) | sub-package cluster split B4 |
+| `arcgis/sql_helpers.py` | `_quote_sql_value`, `_chunked`, `_query_oid_by_key` | quoting SQL ArcGIS-safe + chunking + batch OBJECTID resolution (B4.1) |
+| `arcgis/service_discovery.py` | `_list_user_folders`, `_ensure_folder`, `_is_service_name_available`, `_enumerate_all_user_items`, `_search_user_items`, `_find_existing_service` | folder + Feature Service discovery/lookup (B4.2) |
+| `arcgis/service_lifecycle.py` | `_try_cleanup_zombie_service`, `_delete_existing_service` | rimozione/cleanup FS (B4.3, include bugfix `UnboundLocalError` contatori) |
+| `arcgis/publish_ops.py` | `_add_layer_to_service`, `_publish_mode_existing` | scrittura layer-level su FS: replace + append/upsert/update (B4.4) |
 | `persist.py` | `persist_imdf_bundle_to_disk`, `_count_features` | persistenza bundle su disco |
 | `storage.py` | `_storage`, `_zip_key`, `_meta_key`, `_local_dir` | storage isolato per task |
 
-Keywords: `upload_imdf_layers`, `validate_publish`, `persist_imdf_bundle_to_disk`, `ImdfPublishRequest`, `_publish_mode_existing`, `extract_imdf_zip`
+Keywords: `upload_imdf_layers`, `validate_publish`, `persist_imdf_bundle_to_disk`, `ImdfPublishRequest`, `_publish_mode_existing`, `extract_imdf_zip`, `arcgis_uploader`, `arcgis/`
 
 Punti di intervento tipici:
-- nuovo layer IMDF da pubblicare -> `loader.py` (`load_imdf_layers`) + `arcgis_uploader.py` (`_add_layer_to_service`)
-- regressione publish "esistente" -> `_publish_mode_existing` + `_query_oid_by_key`
+- nuovo layer IMDF da pubblicare -> `loader.py` (`load_imdf_layers`) + `arcgis/publish_ops.py` (`_add_layer_to_service`)
+- regressione publish "esistente" -> `arcgis/publish_ops.py` (`_publish_mode_existing`) + `arcgis/sql_helpers.py` (`_query_oid_by_key`)
+- nuovo helper di discovery/lookup ArcGIS -> `arcgis/service_discovery.py` (mai aggiungere a `arcgis_uploader.py` direttamente; il facade re-exporta solo)
+- nuovo helper di cleanup/delete -> `arcgis/service_lifecycle.py`
+- nuovo helper SQL/quoting -> `arcgis/sql_helpers.py`
 - check pre-publish (count/types) -> `validator.py` (`validate_publish`)
 - gestione bundle su disco/cleanup -> `persist.py` + `storage.py`
 
-Intervento/confini: pubblicazione ArcGIS solo via `features` (HTTP client) - non chiamare ArcGIS REST direttamente da qui se non tramite il client. Preservare contratto bundle/validation. Bundle access via `_assert_bundle_group_access`.
+Intervento/confini: pubblicazione ArcGIS solo via `features` (HTTP client) — non chiamare ArcGIS REST direttamente da qui se non tramite il client. Preservare contratto bundle/validation. Bundle access via `_assert_bundle_group_access`. **`arcgis_uploader.py` resta entry point semantico (orchestrator + facade, decisione B4.5 NO-OP)**: nuovi helper privati vanno nel cluster `arcgis/<dominio>.py` appropriato, MAI direttamente nel facade. Logger naming: tutti i moduli figli di `arcgis/` usano esplicitamente `get_logger("app.core.imdf.arcgis_uploader")` (NOT `__name__`) per non spostare il name dei record.
 
-> File grande (`arcgis_uploader.py` ~1100+ righe): elencate solo le funzioni principali del flusso publish; helper minori (`_chunked`, `_quote_sql_value`, `_list_user_folders`, `_enumerate_all_user_items`, `_find_existing_service`) sono interni al flusso.
+Monkeypatch semantics (test contract `tests2/security/unit/test_imdf_validate_publish_*.py`):
+- **Path A** (validator lazy import): `validator.py:130` lazy-importa `_find_existing_service` / `_is_service_name_available` / `_list_user_folders` da `arcgis_uploader` al call time. Patch via `monkeypatch.setattr(uploader_mod, "<helper>", fake)` rebinda l'attributo del facade prima del lazy import → fake visto. ✓
+- **Path B** (`upload_imdf_layers` interno): chiama i 7 helper privati per name lookup nello scope del facade `arcgis_uploader`, che li re-exporta come attributi. Rebind del facade visto dal chiamante locale. ✓ Preservato dalla decisione B4.5 NO-OP che mantiene l'orchestrator nel facade.
+- **Path C** (chiamate intra-cluster nei moduli figli `arcgis/*.py`): name lookup nello scope del modulo figlio. Esempi veri post-B4: `_find_existing_service → _search_user_items → _enumerate_all_user_items` (tutte in `service_discovery.py`); `_delete_existing_service → _search_user_items` via `from .service_discovery import _search_user_items` in `service_lifecycle.py`; `_publish_mode_existing → _query_oid_by_key` / `_chunked` / `_quote_sql_value` via `from .sql_helpers import ...` in `publish_ops.py`. Patch su `uploader_mod.<helper>` NON visto su questi path. Trade-off documentato in ogni docstring figlio: nessun test contract attuale dipende da Path C.
 
 ---
 
