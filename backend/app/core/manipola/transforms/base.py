@@ -45,15 +45,23 @@ Uso diretto (per test):
     result = op_join([df1, df2], left_column="id", right_column="id", join_type="inner")
 """
 
-import uuid
-
-import numpy as np
 import pandas as pd
 import geopandas as gpd
-from typing import List, Dict, Any, Optional, Union
+from typing import Union
 
 from app.utils.logger import get_logger
 
+# Cleanup imports B1.11 (Phase 5 closeout):
+#   - `import uuid` rimosso (era usato solo da op_uuid_generator,
+#     extracted in B1.3c — oversight residuale chiuso ora).
+#   - `import numpy as np` rimosso (era usato solo da op_md5_hash,
+#     extracted in B1.11).
+#   - `List, Dict, Any, Optional` rimossi da `typing` (erano usati
+#     solo nelle signature delle funzioni; tutte le funzioni con
+#     body sono extracted post-B1.11).
+# Restano: `pd`, `gpd`, `Union` per il tipo alias `DataFrame`;
+# `get_logger` + `logger` mantenuti come scheletro modulo (no
+# function body, ma future-proof + symmetry con altri transforms.*).
 logger = get_logger(__name__)
 
 DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
@@ -118,317 +126,31 @@ op_concat = op_union
 # (re-exported in testa al file via facade).
 
 
-# =============================================================================
-# HASH MD5 (Rilevamento modifiche)
-# Calcola hash MD5 di colonne selezionate per change detection e anonimizzazione.
-# =============================================================================
-
-def op_md5_hash(
-    df: DataFrame,
-    columns: List[str],
-    output_column: str = "md5_hash",
-    normalize: bool = True
-) -> DataFrame:
-    """
-    Crea una colonna hash MD5 da una o più colonne.
-    
-    Utile per change detection: confrontando l'hash tra due estrazioni
-    si identifica rapidamente quali righe sono cambiate.
-    
-    Args:
-        df: DataFrame input
-        columns: Lista colonne da includere nell'hash
-        output_column: Nome colonna output (default: md5_hash)
-        normalize: Se True, applica trim+lowercase prima del calcolo
-        
-    Returns:
-        DataFrame con nuova colonna hash
-    """
-    import hashlib
-    
-    if not columns:
-        logger.warning("MD5 Hash: nessuna colonna selezionata")
-        return df
-    
-    # Filtra solo colonne esistenti
-    valid_columns = [c for c in columns if c in df.columns]
-    if not valid_columns:
-        logger.warning(f"MD5 Hash: nessuna colonna valida tra {columns}")
-        return df
-    
-    # Ordine alfabetico — deterministico
-    valid_columns = sorted(valid_columns)
-    
-    result = df.copy()
-    separator = "\x1f"  # Unit Separator — non appare nei dati reali
-
-    try:
-        # Per-column prep vettoriale (pandas-native, non e' l'hotspot).
-        # Hotspot storico: il doppio passaggio .agg(join, axis=1) + .map(md5)
-        # — due row-iter Python consecutivi. Qui li fondiamo in un singolo
-        # list-comp su numpy arrays: zip() itera in C, separator.join/
-        # hashlib.md5/encode sono tutti C-impl nativi. Speedup tipico ~10x
-        # su 10k righe vs il legacy "agg+map".
-        col_arrs: List[np.ndarray] = []
-        for col in valid_columns:
-            s = result[col]
-            if s.dtype == object:
-                col_str = s.map(
-                    lambda v: "" if pd.isna(v) else (v.wkt if hasattr(v, "wkt") else str(v))
-                )
-            else:
-                col_str = s.astype(object).where(s.notna(), "").astype(str)
-                col_str = col_str.where(s.notna(), "")
-            if normalize:
-                col_str = col_str.str.strip().str.lower()
-            col_arrs.append(col_str.to_numpy())
-
-        n = len(result)
-        if n == 0:
-            result[output_column] = pd.Series([], dtype=object)
-        else:
-            md5 = hashlib.md5
-            out = [
-                md5(separator.join(row).encode("utf-8")).hexdigest()
-                for row in zip(*col_arrs)
-            ]
-            result[output_column] = np.array(out, dtype=object)
-        logger.info(f"MD5 Hash: {len(valid_columns)} colonne -> {output_column}")
-        return result
-    except Exception as e:
-        logger.error(f"[CRASH] Errore MD5 Hash: {e}", exc_info=True)
-        raise
-
-
-# =============================================================================
-# MASCHERAMENTO DATI SENSIBILI
-# Nasconde dati sensibili con pattern (es: Mario Rossi → M**** R*****).
-# =============================================================================
-
-def _mask_cf(value: str) -> str:
-    """Maschera codice fiscale: RSSMRA80A01H501Z → RSS***********01Z"""
-    if not value or len(value) < 6:
-        return value
-    return value[:3] + '*' * (len(value) - 6) + value[-3:]
-
-
-def _mask_email(value: str) -> str:
-    """Maschera email: mario.rossi@gmail.com → m****@gmail.com"""
-    if not value or '@' not in value:
-        return value
-    local, domain = value.rsplit('@', 1)
-    if len(local) <= 1:
-        masked_local = '*'
-    else:
-        masked_local = local[0] + '*' * (len(local) - 1)
-    return f"{masked_local}@{domain}"
-
-
-def _mask_phone(value: str) -> str:
-    """Maschera telefono: +39 333 1234567 → +39 ***4567"""
-    import re
-    digits_only = re.sub(r'[^\d+]', '', str(value))
-    if len(digits_only) < 6:
-        return value
-    # Mostra prefisso (primi 3) e ultimi 4
-    return digits_only[:3] + '*' * (len(digits_only) - 7) + digits_only[-4:]
-
-
-def _mask_iban(value: str) -> str:
-    """Maschera IBAN: IT60X0542811101000000123456 → IT60********************3456"""
-    if not value or len(value) < 8:
-        return value
-    return value[:4] + '*' * (len(value) - 8) + value[-4:]
-
-
-def _mask_custom(value: str, chars_start: int = 3, chars_end: int = 3, mask_char: str = '*') -> str:
-    """Mascheramento personalizzato con N caratteri visibili inizio/fine"""
-    if not value:
-        return value
-    s = str(value)
-    if len(s) <= chars_start + chars_end:
-        return s  # Troppo corto per mascherare
-    return s[:chars_start] + mask_char * (len(s) - chars_start - chars_end) + s[-chars_end:] if chars_end > 0 else s[:chars_start] + mask_char * (len(s) - chars_start)
-
-
-# Mappa tipo mascheramento → funzione
-MASK_FUNCTIONS = {
-    'cf': _mask_cf,
-    'email': _mask_email,
-    'phone': _mask_phone,
-    'iban': _mask_iban,
-}
-
-
-def op_mask_data(
-    df: DataFrame,
-    maskings: List[Dict[str, Any]],
-    overwrite: bool = False
-) -> DataFrame:
-    """
-    Maschera dati sensibili in modo irreversibile.
-    
-    Args:
-        df: DataFrame input
-        maskings: Lista di configurazioni mascheramento, ognuna con:
-            - column: nome colonna da mascherare
-            - mask_type: tipo (cf, email, phone, iban, custom)
-            - chars_start: (solo custom) caratteri visibili inizio
-            - chars_end: (solo custom) caratteri visibili fine
-            - mask_char: (solo custom) carattere di maschera
-        overwrite: Se True sovrascrive la colonna, altrimenti crea {col}_masked
-        
-    Returns:
-        DataFrame con colonne mascherate
-    """
-    if not maskings:
-        logger.warning("Mask Data: nessuna configurazione di mascheramento")
-        return df
-    
-    result = df.copy()
-    
-    for masking in maskings:
-        column = masking.get('column', '')
-        mask_type = masking.get('mask_type', 'custom')
-        
-        if not column or column not in result.columns:
-            logger.warning(f"Mask Data: colonna '{column}' non trovata, skip")
-            continue
-        
-        # Nome colonna output
-        out_col = column if overwrite else f"{column}_masked"
-        
-        try:
-            if mask_type in MASK_FUNCTIONS:
-                mask_fn = MASK_FUNCTIONS[mask_type]
-                result[out_col] = result[column].astype(str).apply(
-                    lambda v: mask_fn(v) if v and v != 'nan' and v != 'None' else v
-                )
-            elif mask_type == 'custom':
-                chars_start = int(masking.get('chars_start', 3))
-                chars_end = int(masking.get('chars_end', 3))
-                mask_char = masking.get('mask_char', '*')
-                result[out_col] = result[column].astype(str).apply(
-                    lambda v: _mask_custom(v, chars_start, chars_end, mask_char) if v and v != 'nan' and v != 'None' else v
-                )
-            else:
-                logger.warning(f"Mask Data: tipo '{mask_type}' non supportato per '{column}'")
-                continue
-            
-            logger.info(f"Mask Data: {column} -> {out_col} (tipo: {mask_type})")
-            
-        # intent: fail-closed all-or-nothing masking — privacy-safe.
-        # Se una colonna fallisce, l'intero transform fallisce prima di
-        # ritornare un `result` con colonne parzialmente mascherate (leak
-        # PII). Il caller executor manipola (batch 5 E1 chiuso) cattura
-        # RuntimeError e traduce in error dict del nodo. str(e) tecnico
-        # preservato nel logger.error [CRASH] server-side per postmortem.
-        except Exception as e:
-            logger.error(
-                f"[CRASH] Errore mascheramento colonna '{column}': {e}",
-                exc_info=True,
-            )
-            raise RuntimeError(
-                f"Mask Data: mascheramento fallito per la colonna '{column}'. "
-                f"Operazione interrotta per prevenire leak PII parziale."
-            ) from e
-    
-    return result
+# Phase 5 B1.11 cutover: cluster SECURITY (op_md5_hash + op_mask_data
+# + 5 helper privati `_mask_*` + dict `MASK_FUNCTIONS`) spostato in
+# `app.core.manipola.transforms.security`. Re-export in coda al file
+# via facade. I 5 helper privati restano single-source nel nuovo
+# modulo (verificato pre-extraction: zero consumer esterni).
+#
+# IMPORTANTE — patch.dict identita' oggetto:
+# `MASK_FUNCTIONS` e' re-exported da `base.py` via `from .security
+# import MASK_FUNCTIONS` (NON ribindato): il test contract
+# `tests2/manipola/unit/test_op_mask_data_fail_closed.py:69,110`
+# patcha `"app.core.manipola.transforms.base.MASK_FUNCTIONS"` con
+# `patch.dict` (mutazione in-place). Poiche' base e security puntano
+# allo stesso dict object, la mutazione e' visibile da `op_mask_data`
+# (in security.py) che legge il dict via module-level lookup. Vedi
+# docstring `transforms/security.py` sezione "Coupling".
 
 
 # Phase 5 B1.6 cutover: op_type_cast moved to `transforms.cleansing`
 # (re-exported in testa al file via facade).
 
 
-# =============================================================================
-# GEOMETRIA DA COORDINATE
-# Crea colonna geometry Point da colonne latitudine/longitudine.
-# =============================================================================
-
-def op_geo_from_coords(
-    df: DataFrame,
-    mode: str = "latlon",
-    lat_column: str = "",
-    lon_column: str = "",
-    wkt_column: str = "",
-    output_column: str = "geometry",
-    crs: str = "EPSG:4326"
-) -> DataFrame:
-    """
-    Crea colonna geometria da coordinate lat/lon o da WKT.
-    
-    Args:
-        df: DataFrame input
-        mode: 'latlon' per colonne lat/lon, 'wkt' per colonna WKT
-        lat_column: Nome colonna latitudine
-        lon_column: Nome colonna longitudine
-        wkt_column: Nome colonna WKT
-        output_column: Nome colonna geometria output
-        crs: Sistema di riferimento (default EPSG:4326)
-        
-    Returns:
-        GeoDataFrame con colonna geometria
-    """
-    from shapely.geometry import Point
-    from shapely import wkt
-    
-    result = df.copy()
-    
-    try:
-        if mode == 'latlon':
-            if not lat_column or lat_column not in result.columns:
-                logger.warning(f"Geo from Coords: colonna lat '{lat_column}' non trovata")
-                return df
-            if not lon_column or lon_column not in result.columns:
-                logger.warning(f"Geo from Coords: colonna lon '{lon_column}' non trovata")
-                return df
-            
-            # Converti a numerico
-            lats = pd.to_numeric(result[lat_column], errors='coerce')
-            lons = pd.to_numeric(result[lon_column], errors='coerce')
-            
-            # Crea Point (lon, lat) - ordine GIS standard
-            geometries = []
-            for lat, lon in zip(lats, lons):
-                if pd.notna(lat) and pd.notna(lon):
-                    geometries.append(Point(lon, lat))
-                else:
-                    geometries.append(None)
-            
-            result[output_column] = geometries
-            
-        elif mode == 'wkt':
-            if not wkt_column or wkt_column not in result.columns:
-                logger.warning(f"Geo from Coords: colonna WKT '{wkt_column}' non trovata")
-                return df
-            
-            def safe_wkt_parse(val):
-                """Parsa una stringa WKT in oggetto Shapely; restituisce None per valori vuoti o malformati."""
-                if pd.isna(val) or not val or str(val).strip() == '':
-                    return None
-                try:
-                    return wkt.loads(str(val))
-                except Exception as _wkt_err:
-                    # Parse WKT fallito per riga singola — debug (row-loop:
-                    # warning causerebbe flood su dataset con WKT malformati).
-                    logger.debug(f"safe_wkt_parse fallita: {_wkt_err}")
-                    return None
-            
-            result[output_column] = result[wkt_column].apply(safe_wkt_parse)
-        
-        else:
-            logger.warning(f"Geo from Coords: modo '{mode}' non supportato")
-            return df
-        
-        # Converti a GeoDataFrame
-        gdf = gpd.GeoDataFrame(result, geometry=output_column, crs=crs)
-        
-        logger.info(f"Geo from Coords ({mode}): -> {output_column} [{crs}]")
-        return gdf
-        
-    except Exception as e:
-        logger.error(f"[CRASH] Errore Geo from Coords: {e}", exc_info=True)
-        raise
+# Phase 5 B1.11 cutover: op_geo_from_coords moved to `transforms.geo`
+# (re-exported in coda al file via facade). Singleton self-contained
+# senza helper privati ne' coupling. Imports `Point`/`wkt` restano
+# function-local (lazy) preservati bit-per-bit.
 
 
 # Phase 5 B1.8 cutover: op_conditional + _evaluate_condition (helper
@@ -654,6 +376,47 @@ from .reshape import (  # noqa: F401  (re-export)
     op_melt,
     op_transpose,
 )
+
+# Phase 5 B1.11 cutover: cluster SECURITY (op_md5_hash, op_mask_data
+# + 5 helper privati `_mask_*` + dict `MASK_FUNCTIONS`) spostato in
+# `app.core.manipola.transforms.security`. Re-export delle 2 funzioni
+# pubbliche + del dict `MASK_FUNCTIONS`:
+#   - `from app.core.manipola.transforms.base import op_md5_hash` /
+#     `op_mask_data`
+#   - `from app.core.manipola.transforms import op_md5_hash` /
+#     `op_mask_data` — `__init__.py` resta `from .base import ...`
+#     e cattura il facade.
+#   - `transforms_registry.json` entries "base.op_md5_hash" /
+#     "base.op_mask_data" risolte via `getattr(<base>, "<func>")`.
+#   - `MASK_FUNCTIONS` re-exported (NON ribindato) per preservare
+#     l'identita' del dict object: `base.MASK_FUNCTIONS is
+#     security.MASK_FUNCTIONS` → True. Il test
+#     `tests2/manipola/unit/test_op_mask_data_fail_closed.py:69,110`
+#     usa `patch.dict("...base.MASK_FUNCTIONS", ...)` che muta in-place;
+#     la mutazione e' visibile da `op_mask_data` (in security.py) che
+#     legge il dict via module-level lookup. NON sostituire con un
+#     nuovo dict ne' con MappingProxyType: il contract di patch
+#     richiede identita' preservata.
+#   - I 5 helper `_mask_*` NON re-exported (verificato: zero consumer
+#     esterni). Restano single-source in security.py.
+# Vedi anche `orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B1 + §6.1.
+from .security import (  # noqa: F401  (re-export)
+    op_md5_hash,
+    op_mask_data,
+    MASK_FUNCTIONS,
+)
+
+# Phase 5 B1.11 cutover: op_geo_from_coords (singleton geo) spostato
+# in `app.core.manipola.transforms.geo`. Re-export della singola
+# funzione pubblica:
+#   - `from app.core.manipola.transforms.base import op_geo_from_coords`
+#   - `from app.core.manipola.transforms import op_geo_from_coords` —
+#     `__init__.py` resta `from .base import op_geo_from_coords` e
+#     cattura il facade.
+#   - `transforms_registry.json` entry "base.op_geo_from_coords"
+#     risolta via `getattr(<base module>, "op_geo_from_coords")`.
+# Vedi anche `orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B1 + §6.1.
+from .geo import op_geo_from_coords  # noqa: F401  (re-export)
 
 
 # Phase 5 B1.7 cutover: op_dedup_advanced + op_window_function moved to
