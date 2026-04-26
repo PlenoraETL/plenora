@@ -1001,6 +1001,81 @@ def op_drop_columns(
 # Riempie NULL con: valore costante, media, mediana, moda, ffill, bfill.
 # =============================================================================
 
+def _is_strict_numeric_series(s: "pd.Series") -> bool:
+    """True se la Series ha dtype numerico (int/float) ma NON booleano.
+
+    `pd.api.types.is_numeric_dtype` ritorna True anche su bool: lo
+    escludiamo perche' una colonna boolean riempita con 0/1 e' un caso
+    di tipo a parte (non vogliamo upcast bool->int silenzioso ne
+    ValueError su `value=False`).
+    """
+    return (
+        pd.api.types.is_numeric_dtype(s) and not pd.api.types.is_bool_dtype(s)
+    )
+
+
+def _coerce_fill_value_for_numeric(value: Any, col_name: str, dtype: Any) -> Any:
+    """Valida un fill `value` contro una colonna numerica.
+
+    Policy C2 Phase 4 (no upcast a object silenzioso):
+      - None / NaN / numerici (int, float esclusi bool) -> accept as-is.
+      - Stringa numericamente coercibile ("0", "1.5", "-3e2") -> coerce.
+      - Tutto il resto (bool, "N/A", "", date string, dict, ...) -> ValueError.
+
+    Bool e' rifiutato esplicitamente: `True/False` su colonna numerica e'
+    quasi sempre un bug del canvas (fill flag invece che fill numero); il
+    cast 0/1 silenzioso nasconderebbe la confusione.
+    """
+    # None: pandas semantics consentono None su colonna float (diventa NaN).
+    if value is None:
+        return value
+    # NaN float: idem, nessun upcast.
+    if isinstance(value, float) and pd.isna(value):
+        return value
+    # Bool e' un sottotipo di int in Python: gestiamolo PRIMA del check int.
+    if isinstance(value, bool):
+        raise ValueError(
+            f"op_fill_na: colonna numerica '{col_name}' (dtype={dtype}) "
+            f"non puo' essere riempita con valore booleano {value!r}: "
+            f"fornire un valore numerico (int/float) o una stringa "
+            f"numericamente coercibile (es. '0', '1.5')."
+        )
+    if isinstance(value, (int, float)):
+        return value
+    if isinstance(value, str):
+        # Stringa vuota e whitespace-only NON sono coercibili: rifiutali.
+        # Senza questo check pd.to_numeric("") solleverebbe (gia' coperto),
+        # ma vogliamo un messaggio chiaro che cita anche il fix tipico.
+        if not value.strip():
+            raise ValueError(
+                f"op_fill_na: colonna numerica '{col_name}' (dtype={dtype}) "
+                f"non puo' essere riempita con stringa vuota: il fillna "
+                f"forzerebbe l'upcast a object, perdendo il dtype numerico. "
+                f"Fornire un numero (es. 0) o omettere il fill su questa "
+                f"colonna."
+            )
+        try:
+            coerced = pd.to_numeric(value)
+        except (ValueError, TypeError):
+            raise ValueError(
+                f"op_fill_na: colonna numerica '{col_name}' (dtype={dtype}) "
+                f"non puo' essere riempita con valore non-numerico {value!r}: "
+                f"il fillna upcast la colonna a object/testo, perdendo "
+                f"semantica numerica downstream. Fornire un numero (es. 0) "
+                f"o una stringa numericamente coercibile (es. '0', '1.5')."
+            )
+        # pd.to_numeric su scalar puo' ritornare numpy scalar: estrai .item()
+        # per consistenza tipo-Python (float/int nativo).
+        return coerced.item() if hasattr(coerced, "item") else coerced
+    # Dict, list, tuple, datetime, ecc.: niente upcast accettabile.
+    raise ValueError(
+        f"op_fill_na: colonna numerica '{col_name}' (dtype={dtype}) "
+        f"non puo' essere riempita con valore di tipo {type(value).__name__} "
+        f"({value!r}): fornire un numero o una stringa numericamente "
+        f"coercibile."
+    )
+
+
 def op_fill_na(
     df: DataFrame,
     column: str = None,
@@ -1009,18 +1084,25 @@ def op_fill_na(
 ) -> DataFrame:
     """
     Riempie valori nulli.
-    
+
     Args:
         df: DataFrame input
         column: Colonna specifica (None = tutte)
         method: 'value', 'ffill', o 'bfill'
         value: Valore da usare se method='value'
-        
+
     Returns:
         DataFrame con valori nulli riempiti
+
+    Raises:
+        ValueError: se `method='value'` e `value` non e' compatibile con
+            il dtype numerico di una colonna target. Senza questo guard
+            (Phase 4 C2), `fillna("N/A")` su colonna float demoteva
+            silenziosamente la colonna a object/testo, rompendo le
+            aggregazioni e i join numerici a valle.
     """
     result = df.copy()
-    
+
     try:
         if method in ['ffill', 'bfill']:
             # FIX: fillna(method=) è deprecato in pandas 2.0+.
@@ -1031,14 +1113,26 @@ def op_fill_na(
             else:
                 result = getattr(result, fill_func)()
         else:
-            if column and column in result.columns:
-                result[column] = result[column].fillna(value)
-            else:
-                result = result.fillna(value)
-        
+            # method='value': itera per colonna cosi' possiamo validare il
+            # type-vs-dtype prima del fillna (cf. C2 Phase 4). Comportamento
+            # invariato sulle colonne object/string: il fill raw passa.
+            target_cols = (
+                [column] if (column and column in result.columns)
+                else list(result.columns)
+            )
+            for col in target_cols:
+                s = result[col]
+                if _is_strict_numeric_series(s):
+                    fill_for_col = _coerce_fill_value_for_numeric(
+                        value, col_name=col, dtype=s.dtype,
+                    )
+                else:
+                    fill_for_col = value
+                result[col] = s.fillna(fill_for_col)
+
         logger.info(f"Fill NA: column={column}, method={method}, value={value}")
         return result
-        
+
     except Exception as e:
         logger.error(f"[CRASH] Errore Fill NA: {e}", exc_info=True)
         raise
