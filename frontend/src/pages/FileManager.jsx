@@ -320,7 +320,19 @@ const FileManager = () => {
     try {
       const preview = await getFilePreview(file.id, 50);
       setPreviewData(preview); setPreviewFile(file); setShowPreviewModal(true);
-    } catch { toast.error('Errore nel caricamento della preview'); }
+    } catch (err) {
+      // RB.5 (2026-04-27): se il file e' stato eliminato tra il caricamento
+      // della lista e il click "Preview" (race condition: altra tab,
+      // scheduler cleanup, share revocato, ecc.) il backend risponde 404
+      // legittimamente. UX dedicata: messaggio specifico + auto-refresh
+      // della lista per rimuovere lo stato sporco.
+      if (err?.response?.status === 404) {
+        toast.error('File non trovato: potrebbe essere stato eliminato. Aggiorno la lista...');
+        loadFiles();
+        return;
+      }
+      toast.error('Errore nel caricamento della preview');
+    }
   };
 
   // ── Delete ───────────────────────────────────────────────────────────────
