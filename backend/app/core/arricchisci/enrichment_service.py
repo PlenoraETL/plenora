@@ -167,12 +167,27 @@ from app.core.arricchisci.enrichment_execution_engines import (
     EnrichmentExecutionEnginesMixin,
 )
 
+# Phase 5 B3-A.8 cutover: cluster GROUPING (`_group_by_params`,
+# `_count_unique_combinations`) spostato in
+# `app.core.arricchisci.enrichment_grouping.EnrichmentGroupingMixin`.
+# `EnrichmentExecutor` eredita dal mixin (vedi class declaration sotto).
+# I 2 metodi restano accessibili via MRO. Le call-site
+# `self._group_by_params` da `_execute_*` (ExecutionEngines mixin) +
+# `self._count_unique_combinations` da `preview` (ValidationPreview
+# mixin) continuano a risolvere via MRO. Vedi
+# `orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B3-A.
+from app.core.arricchisci.enrichment_grouping import (
+    EnrichmentGroupingMixin,
+)
+
 logger = get_logger(__name__)
 
 
-def _geojson_to_wkt(geom: dict) -> str:
-    """Converte un dict geometry GeoJSON in WKT. Delegato a shared/api_utils."""
-    return _shared_geojson_to_wkt(geom)
+# Phase 5 B3-A.8 cleanup: il wrapper module-level `_geojson_to_wkt`
+# era dead code post-B3-A.3: `EnrichmentResponseProcessingMixin` ha
+# la sua copia locale (`enrichment_response_processing.py:137`) per
+# evitare circular import; nessun consumer esterno verificato (grep
+# `from enrichment_service import _geojson_to_wkt` → 0 match). Rimosso.
 
 
 # Phase 5 B3-A.1 cutover: `class RateLimiter` spostato in
@@ -187,6 +202,7 @@ class EnrichmentExecutor(
     EnrichmentValidationPreviewMixin,
     EnrichmentRetryHttpMixin,
     EnrichmentExecutionEnginesMixin,
+    EnrichmentGroupingMixin,
 ):
     """
     Esecutore avanzato per enrichment API.
@@ -392,33 +408,10 @@ class EnrichmentExecutor(
     # `_group_by_params` + `_count_unique_combinations` restano qui:
     # candidati per B3-A.7 ExecutionEngines o cluster progress separato.
 
-    def _group_by_params(self, df: pd.DataFrame) -> Dict[str, List[int]]:
-        """
-        Raggruppa righe per combinazione unica di parametri (deduplicazione).
-        
-        Genera un hash MD5 per ogni combinazione di parametri (escludendo
-        la API key) e raggruppa gli indici riga per hash identico.
-        Questo permette di fare una sola chiamata API per N righe identiche.
-        
-        Returns:
-            Dict {cache_key_md5: [lista indici riga con stessi parametri]}
-        """
-        groups = defaultdict(list)
-        
-        for idx, row in df.iterrows():
-            params = self._build_params(row)
-            # Rimuovi API key dalla cache key
-            cache_params = {k: v for k, v in params.items() 
-                          if k != self.auth.get("key_name", "apiKey")}
-            cache_key = self._make_cache_key(cache_params)
-            groups[cache_key].append(idx)
-        
-        return dict(groups)
-    
-    def _count_unique_combinations(self, df: pd.DataFrame) -> int:
-        """Conta combinazioni uniche di parametri."""
-        return len(self._group_by_params(df))
-    
+    # Phase 5 B3-A.8 cutover: cluster GROUPING (`_group_by_params`,
+    # `_count_unique_combinations`) spostato in
+    # `EnrichmentGroupingMixin`. Risolvono via MRO. Vedi class
+    # declaration + import block in testa.
 
     # Phase 5 B3-A.2 cutover: `_make_cache_key` (staticmethod, MD5 cache
     # key da dict params) spostato in `EnrichmentTemplateParamsMixin`.
