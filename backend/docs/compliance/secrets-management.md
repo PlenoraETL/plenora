@@ -24,7 +24,7 @@ Per chiarezza: certe decisioni hanno evitato di creare secret applicativi.
 
 ### Stato attuale (file-based)
 1. `backend/.env` presente sulla macchina di deploy, `chmod 0600`, owner dell'unit systemd.
-2. systemd unit `urby-backend.service` carica `EnvironmentFile=/opt/urby-etl/backend/.env`.
+2. systemd unit `plenora-backend.service` carica `EnvironmentFile=/home/ubuntu/plenora-etl/backend/.env`.
 3. L'app legge `os.getenv(...)` al boot.
 
 Limite: il file `.env` e' presente in clear sul filesystem; l'accesso e' limitato ai permessi, ma una compromissione root sul nodo espone tutti i secret simultaneamente.
@@ -77,7 +77,7 @@ python backend/scripts/migrate_env_to_ssm.py --env-file backend/.env --force
 5. Configurare systemd unit con `load_secrets.py` wrapper.
 
 ### Rotazione `JWT_SECRET_KEY`
-Vedi `docs/ops/jwt-incident-response.md`. In sintesi: (a) aggiornare valore in `.env` locale; (b) `migrate_env_to_ssm.py --force`; (c) restart `urby-backend.service`; (d) comunicare agli utenti il logout forzato.
+Vedi `docs/ops/jwt-incident-response.md`. In sintesi: (a) aggiornare valore in `.env` locale; (b) `migrate_env_to_ssm.py --force`; (c) restart `plenora-backend.service`; (d) comunicare agli utenti il logout forzato.
 
 ### Rotazione `PLENORA_ENCRYPTION_KEY`
 **Non supportata a caldo**. Richiede uno script one-shot di re-encryption su tutti i record cifrati (`connections.password`, `api_connections.config.auth.*`, `datasources.config.auth.*`, `user_mfa.secret_encrypted`). Pianificare con downtime. Rotazione non automatica by design: la chain di crypto e' documentata in `app/shared/crypto.py:18-31`.

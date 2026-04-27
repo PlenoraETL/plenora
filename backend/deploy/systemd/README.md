@@ -13,16 +13,18 @@ Migrazione server eseguita via `deploy/migrations/2026-04-18_rename-urby-to-plen
 - Unit installate: `plenora-backend`, `plenora-celery`, `plenora-beat`,
   `plenora-backup{,.timer}`, `plenora-backup-test{,.timer}`
 - Backup dei vecchi unit file: `/etc/systemd/system/*.pre-plenora-rename.bak`
-  (safe da rimuovere dopo qualche giorno di stabilita')
+  (rimossi dopo periodo di stabilita')
 - Venv shebangs aggiornati (19 script + `pyvenv.cfg`)
 
-Residui noti:
-- `plenora-beat.service` invoca ancora la classe `UrbyBeatScheduler` tramite
-  l'alias retro-compat in `workers/beat_scheduler.py`. Quando si aggiornera'
-  il service a `PlenoraBeatScheduler` l'alias puo' essere rimosso.
-- Le `Description=` nei 3 unit installati sul server dicono ancora
-  "URBY-ETL ..." (il `sed` del migration non le ha intercettate). I file
-  nel repo hanno Description corretta; la prossima re-install allinea.
+Stato post-migration (verificato via probe SSH read-only 2026-04-27):
+- `plenora-beat.service` invoca `PlenoraBeatScheduler` (la classe e' definita
+  in `workers/beat_scheduler.py`).
+- `Description=` nei 3 unit installati sul server: "PLENORA-ETL ...".
+- I file unit installati su `/etc/systemd/system/` sono allineati a quelli
+  in `deploy/systemd/` del repo (verifica `systemctl cat <unit>`).
+- Residui legacy `urby-*.service`/`*.timer` lasciati `disabled` in
+  `/etc/systemd/system/` per consultazione storica; safe da rimuovere
+  in una finestra di manutenzione futura insieme al cutover server.
 
 ## Modello credenziali (C1) + astrazione cloud
 

@@ -1,5 +1,5 @@
 /**
- * useCanvasStore.js — Store Zustand per il canvas urby-etl
+ * useCanvasStore.js — Store Zustand per il canvas plenora-etl
  *
  * Centralizza lo stato nodes/edges e tutte le azioni comuni ai tre editor.
  * I componenti nodo leggono direttamente dallo store invece di ricevere
