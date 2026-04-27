@@ -136,22 +136,34 @@ ApiConnectionService
 
 **Logger naming contract** (uniforme per tutti i mixin che loggano + core class): tutti i moduli che emettono log usano esplicitamente `get_logger("app.core.arricchisci.api_connector")` (canonical pattern, parita' B2/B3-A). `StructuredLogger` wrapper di `app/utils/logger.py` delega a `_logger.log(...)` sul logger stdlib omonimo (singleton per nome) → handler/caplog agganciati nei test catturano emit indistintamente da quale mixin module li produce. `_assert_source_project_in_tenant` usa kwarg `op="load_source_project"` (StructuredLogger interface).
 
-**Residui intenzionali in `api_connector.py` core (post-B3-B.7)**:
+**Residui intenzionali in `api_connector.py` core (post-B3-B.9, 669 linee finali)**:
 - `__init__` (~3 body) — orchestrator constructor (instance attrs `data_dir`, `results_dir` da `settings`)
 - `execute_enrichment` (~194 body) — entry point pubblico orchestrator (boundary safety-net per ValueError/Exception domain-safe → response user_error)
 - `_init_execution_context` (~37 body) — tenant binding + preview_limit setup (fail-closed via `ExecutionContextError`)
 - `_get_execution_order` (~32 body) — topological sort algoritmo Kahn
 - `_run_single_enricher` (~16 body) — dispatch generator vs enricher
 - `_is_file_source_for_file_processor` (~25 body) — branch logic file_source passthrough vs `_load_file_source`
-- `_prepare_headers` (~3 body) — 3-line stub di delega a `_shared_prepare_headers` (`app.shared.api_utils`); RESTA in core perche' `tests2/security/unit/test_temp_lifecycle_core.py:325` patch `app.core.arricchisci.api_connector._shared_prepare_headers` source-bound. Estrazione richiede test modernization in initiative dedicata.
-- B3-B.1 helper re-export (linee 85-90): `_AUTH_SENSITIVE_FIELDS`, `_encrypt_auth_in_config`, `_decrypt_auth_in_config`, `_nd` per back-compat con direct imports `from app.core.arricchisci.api_connector import _decrypt_auth_in_config` (test_api_connection_decrypt_policy) e `_nd` (test_api_connector_contract).
-- back-compat `save_dataframe`/`save_result_blob`/`get_temp_output_path` imports con `# noqa: F401` (linee 60-66) — patch in `test_api_connector_execute_enrichment_lock.py:137,141,156` sono inattive post-extraction ma rimuovere il binding causerebbe `AttributeError` al `patch("api_connector.<sym>")`. Cleanup posticipato a initiative dedicata con test modernization.
+- `_prepare_headers` (~3 body) — 3-line stub di delega a `_shared_prepare_headers` (`app.shared.api_utils`); RESTA in core perche' `tests2/security/unit/test_temp_lifecycle_core.py:325` patch `app.core.arricchisci.api_connector._shared_prepare_headers` source-bound. Estrazione richiede test modernization in initiative dedicata (carry-over Run 0/5).
+- B3-B.1 helper re-export: `_AUTH_SENSITIVE_FIELDS`, `_encrypt_auth_in_config`, `_decrypt_auth_in_config`, `_nd` per back-compat con direct imports `from app.core.arricchisci.api_connector import _decrypt_auth_in_config` (test_api_connection_decrypt_policy) e `_nd` (test_api_connector_contract).
 - Singleton `api_connection_service = ApiConnectionService()` (linea finale) — usato da `app/main.py`, `executor.py`, `router.py`, `eseguibili/scanner.py`.
 
 **Cleanup B3-B.7** (post-cluster extraction):
 - 9 stdlib imports orphan rimossi: `io`, `os`, `re`, `json`, `uuid`, `datetime`, `timezone`, `Path`, `requests` (tutti con body migrato in mixin).
 - 9 app imports orphan rimossi: `_shared_extract_json_value`, `_shared_get_oauth2_token`, `_shared_get_oauth2_cc_token`, `sanitize_for_log`, `load_dataframe_from_file`, `filter_visible_columns`, `find_latest_output_file`, `process_static_fields`, `ResponseParser`/`get_preset_config`, `FileSourceResolutionError`.
 - 2 dead-code stub OAuth rimossi (prova forte: 0 self-call sites, 0 external refs, 0 test patches, 0 direct imports): `_get_oauth2_client_credentials_token` + `_get_oauth2_token` (3 linee ognuno; EnrichmentService class ha le sue copie separate in `enrichment_service.py:424,428`).
+
+**Bugfix security B3-B.8** (`app/shared/api_utils.py:validate_external_url`, commit `be987d1`):
+- DNS resolution via `socket.getaddrinfo(host, None)` invece di `gethostbyname_ex` per coprire ANCHE record AAAA (IPv6). Pre-fix: hostname che risolveva esclusivamente a IPv6 privato/loopback/link-local (`fc00::/7`, `::1`, `fe80::/10`) bypassava silenziosamente il check (fail-OPEN).
+- Aggiunto blocco `ip.is_unspecified` per `0.0.0.0` / `::` (edge case minor).
+- Interfaccia preservata: `raise ValueError`, loopback opt-in `PLENORA_ALLOW_LOOPBACK_OUTBOUND` + alias retro-compat `URBY_ALLOW_LOOPBACK_OUTBOUND`, hardened guard `ENVIRONMENT in {production/prod/staging/stage}`.
+- 19 nuovi test cases B3-B.8 in `tests2/security/unit/test_validate_external_url_contract.py`: IPv6 loopback/private/link-local/multicast/ULA + `0.0.0.0` + `::` + dedup + opt-in IPv6 loopback + opt-in non sblocca IPv6 ULA.
+- NON modificato `_validate_outbound_url` (B3-B.4b mixin, return-string interface). Carry-over Run 0/5: consolidamento architetturale single-source con wrapper raise-mode.
+
+**Cleanup B3-B.9 dead patches** (commit `cac2d20`):
+- Rimosse 3 patches dead in `tests2/arricchisci/unit/test_api_connector_execute_enrichment_lock.py`: `save_dataframe` (0 usages), `save_result_blob` (3 usages dead by indirection — sum `call_count + save_blob_bytes.call_count` con `save_blob.call_count` sempre 0 + 2 `return_value =` su mock mai chiamato), `get_temp_output_path` (0 usages).
+- Conseguentemente rimossi 3 import back-compat fragili da `api_connector.py` (`save_dataframe`, `save_result_blob`, `get_temp_output_path` con `# noqa: F401`).
+- Test modernizzati: `env.save_blob_bytes.call_count == 1` (rinforzato da somma generica), 2 `return_value = ` ridotti al solo canonical path (`save_blob_bytes`).
+- Per scenari path-based futuri (gpkg/shp): patchare canonical `app.utils.result_store.save_result_blob`, NON l'alias api_connector ormai rimosso.
 
 **Test modernizations B3-B** (necessarie pre-extraction per evitare source-bound patch breakage):
 - **B3-B.2a**: `tests2/arricchisci/unit/test_api_connector_test_api_connection_lock.py` modernizzato da `patch("app.core.arricchisci.api_connector.logger")` source-bound a handler stdlib agganciato al logger canonico per nome. Pattern behavior-bound (singleton stdlib per nome → record indistinguibili dai consumer).
