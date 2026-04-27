@@ -391,11 +391,15 @@ def _collect_canvas_resource_refs(canvas: CanvasState) -> dict:
             nodi `project_source` (cerca sia `node.source_project_id` sia
             `node.data.get('source_project_id')`, allineato a `list_projects`
             che gia' supporta entrambi i path)
+          - "arcgis_connections": set[str] di connection_id ArcGIS
+            referenziati da nodi `carica_arcgis` (`arcgis_connection_id`)
+            o `imdf_publisher` (`imdf_arcgis_connection_id`).
 
-    Used by RB.4.A `update_project_canvas` per il check cross-tenant.
+    Used by RB.4.A / RB.7.A `update_project_canvas` per il check cross-tenant.
     """
     file_source_ids: set = set()
     project_ids: set = set()
+    arcgis_connection_ids: set = set()
     for n in canvas.nodes:
         if n.type == 'file_source':
             fsid = getattr(n, 'file_source_id', None) or (
@@ -409,7 +413,23 @@ def _collect_canvas_resource_refs(canvas: CanvasState) -> dict:
             )
             if spid:
                 project_ids.add(spid)
-    return {"file_sources": file_source_ids, "projects": project_ids}
+        elif n.type == 'carica_arcgis':
+            agid = getattr(n, 'arcgis_connection_id', None) or (
+                n.data.get('arcgis_connection_id') if getattr(n, 'data', None) else None
+            )
+            if agid:
+                arcgis_connection_ids.add(agid)
+        elif n.type == 'imdf_publisher':
+            agid = getattr(n, 'imdf_arcgis_connection_id', None) or (
+                n.data.get('imdf_arcgis_connection_id') if getattr(n, 'data', None) else None
+            )
+            if agid:
+                arcgis_connection_ids.add(agid)
+    return {
+        "file_sources": file_source_ids,
+        "projects": project_ids,
+        "arcgis_connections": arcgis_connection_ids,
+    }
 
 
 @router.put("/{project_id}/canvas")
@@ -470,7 +490,7 @@ def update_project_canvas(
     # `arricchisci/api_connection_rest_file._assert_file_source_group_access`
     # non viene rimosso.
     refs = _collect_canvas_resource_refs(canvas)
-    if refs["file_sources"] or refs["projects"]:
+    if refs["file_sources"] or refs["projects"] or refs["arcgis_connections"]:
         from app.shared.sharing import visible_resource_ids
         # `metadata` puo' essere ProjectMetadata pydantic (prod) o dict
         # (test): coerente con assert_group_access che gia' supporta entrambi.
@@ -481,6 +501,7 @@ def update_project_canvas(
         is_super = current_user.role == "superadmin"
         invalid_file_sources: set = set()
         invalid_projects: set = set()
+        invalid_arcgis_connections: set = set()
         if refs["file_sources"]:
             visible_fs = visible_resource_ids(
                 "file_sources", owner_group_id, is_superadmin=is_super,
@@ -491,7 +512,17 @@ def update_project_canvas(
                 "projects", owner_group_id, is_superadmin=is_super,
             )
             invalid_projects = refs["projects"] - visible_pr
-        if invalid_file_sources or invalid_projects:
+        if refs["arcgis_connections"]:
+            # RB.7.A: estensione del check cross-tenant alle connessioni
+            # ArcGIS referenziate da nodi `carica_arcgis` / `imdf_publisher`
+            # (post rebrand 2026-04-18 alcuni id urby_* sono diventati
+            # stantii nei canvas, generando 404 a `listFolders` e fail
+            # opachi al publish).
+            visible_ag = visible_resource_ids(
+                "arcgis_connections", owner_group_id, is_superadmin=is_super,
+            )
+            invalid_arcgis_connections = refs["arcgis_connections"] - visible_ag
+        if invalid_file_sources or invalid_projects or invalid_arcgis_connections:
             parts = []
             if invalid_file_sources:
                 parts.append(
@@ -500,6 +531,10 @@ def update_project_canvas(
             if invalid_projects:
                 parts.append(
                     f"project_source: {', '.join(sorted(invalid_projects))}"
+                )
+            if invalid_arcgis_connections:
+                parts.append(
+                    f"arcgis_connection: {', '.join(sorted(invalid_arcgis_connections))}"
                 )
             logger.warning(
                 f"[SECURITY] update_project_canvas blocked cross-tenant refs "

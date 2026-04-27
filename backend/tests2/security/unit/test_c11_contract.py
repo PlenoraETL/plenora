@@ -396,6 +396,183 @@ def test_canvas_put_superadmin_can_save_any_ref():
 
 
 # =============================================================================
+# RB.7.A (2026-04-27): estensione cross-tenant validation a ArcGIS connections
+# =============================================================================
+#
+# BUG.md #7: post rebrand 2026-04-18 (urby-* -> plenora-*) alcuni canvas
+# storici contenevano `arcgis_connection_id` / `imdf_arcgis_connection_id`
+# che ora puntavano a connection rinominate o non visibili al gruppo.
+# Il save passava in silenzio, il successivo `listFolders` rispondeva 404
+# con messaggio opaco.
+# Post-RB.7.A: il save rifiuta esplicitamente con 400 e detail che elenca
+# `arcgis_connection: <ids>` non validi.
+
+
+def test_canvas_put_rejects_arcgis_connection_not_visible_to_owner_group():
+    """Nodo `carica_arcgis` con `arcgis_connection_id` di altro gruppo
+    (riferimento stantio post rebrand) -> 400 con id nel messaggio."""
+    from fastapi import HTTPException
+
+    from app.core.projects.router import CanvasWithPlugins, update_project_canvas
+    from app.shared.models import Edge, Node
+
+    body = CanvasWithPlugins(
+        nodes=[
+            Node(id="src", type="source", position={"x": 0, "y": 0}, columns=[]),
+            Node(
+                id="carica_ag",
+                type="carica_arcgis",
+                position={"x": 200, "y": 0},
+                arcgis_connection_id="arcgis_Arcgis_Online_Urby_OLD",
+            ),
+        ],
+        edges=[Edge(id="e1", source="src", target="carica_ag")],
+    )
+
+    fake_svc = _rb4_make_svc(owner_group_id="g1")
+
+    def _fake_visible(resource_table, group_id, is_superadmin=False):
+        if resource_table == "arcgis_connections":
+            # OLD non e' nel set -> ref non visibile
+            return {"arcgis_Arcgis_Online_Plenora_NEW"}
+        return set()
+
+    with patch("app.core.projects.router._project_service", fake_svc), patch(
+        "app.shared.sharing.visible_resource_ids", side_effect=_fake_visible
+    ):
+        with pytest.raises(HTTPException) as excinfo:
+            update_project_canvas("p1", body, _RB4User())
+
+    assert excinfo.value.status_code == 400
+    detail = excinfo.value.detail
+    assert "arcgis_connection: arcgis_Arcgis_Online_Urby_OLD" in detail
+    fake_svc.update_canvas.assert_not_called()
+
+
+def test_canvas_put_rejects_imdf_arcgis_connection_not_visible_to_owner_group():
+    """Nodo `imdf_publisher` con `imdf_arcgis_connection_id` di altro
+    gruppo -> 400 con id nel messaggio."""
+    from fastapi import HTTPException
+
+    from app.core.projects.router import CanvasWithPlugins, update_project_canvas
+    from app.shared.models import Edge, Node
+
+    body = CanvasWithPlugins(
+        nodes=[
+            Node(id="src", type="source", position={"x": 0, "y": 0}, columns=[]),
+            Node(
+                id="imdf_pub",
+                type="imdf_publisher",
+                position={"x": 200, "y": 0},
+                imdf_arcgis_connection_id="arcgis_Arcgis_Online_Urby_IMDF_OLD",
+            ),
+        ],
+        edges=[Edge(id="e1", source="src", target="imdf_pub")],
+    )
+
+    fake_svc = _rb4_make_svc(owner_group_id="g1")
+
+    def _fake_visible(resource_table, group_id, is_superadmin=False):
+        if resource_table == "arcgis_connections":
+            return {"arcgis_Arcgis_Online_Plenora_IMDF_NEW"}
+        return set()
+
+    with patch("app.core.projects.router._project_service", fake_svc), patch(
+        "app.shared.sharing.visible_resource_ids", side_effect=_fake_visible
+    ):
+        with pytest.raises(HTTPException) as excinfo:
+            update_project_canvas("p1", body, _RB4User())
+
+    assert excinfo.value.status_code == 400
+    assert "arcgis_connection: arcgis_Arcgis_Online_Urby_IMDF_OLD" in excinfo.value.detail
+    fake_svc.update_canvas.assert_not_called()
+
+
+def test_canvas_put_accepts_when_arcgis_connection_is_visible():
+    """Regression: canvas con arcgis_connection visibile al gruppo del
+    progetto -> 200, save invocato regolarmente."""
+    from app.core.projects.router import CanvasWithPlugins, update_project_canvas
+    from app.shared.models import Edge, Node
+
+    body = CanvasWithPlugins(
+        nodes=[
+            Node(id="src", type="source", position={"x": 0, "y": 0}, columns=[]),
+            Node(
+                id="carica_ag",
+                type="carica_arcgis",
+                position={"x": 200, "y": 0},
+                arcgis_connection_id="arcgis_safe",
+            ),
+            Node(
+                id="imdf_pub",
+                type="imdf_publisher",
+                position={"x": 400, "y": 0},
+                imdf_arcgis_connection_id="arcgis_safe_imdf",
+            ),
+        ],
+        edges=[
+            Edge(id="e1", source="src", target="carica_ag"),
+            Edge(id="e2", source="src", target="imdf_pub"),
+        ],
+    )
+
+    fake_svc = _rb4_make_svc(owner_group_id="g1")
+
+    def _fake_visible(resource_table, group_id, is_superadmin=False):
+        if resource_table == "arcgis_connections":
+            return {"arcgis_safe", "arcgis_safe_imdf"}
+        return set()
+
+    with patch("app.core.projects.router._project_service", fake_svc), patch(
+        "app.shared.sharing.visible_resource_ids", side_effect=_fake_visible
+    ):
+        resp = update_project_canvas("p1", body, _RB4User())
+
+    assert resp.get("status") == "ok"
+    fake_svc.update_canvas.assert_called_once()
+
+
+def test_canvas_put_collects_arcgis_connection_id_from_node_data_dict():
+    """Compat: il frontend puo' salvare arcgis_connection_id sia come
+    field top-level del Node sia dentro `data` (`node.data['arcgis_connection_id']`).
+    `_collect_canvas_resource_refs` deve catturare entrambi i path."""
+    from fastapi import HTTPException
+
+    from app.core.projects.router import CanvasWithPlugins, update_project_canvas
+    from app.shared.models import Edge, Node
+
+    body = CanvasWithPlugins(
+        nodes=[
+            Node(id="src", type="source", position={"x": 0, "y": 0}, columns=[]),
+            Node(
+                id="carica_ag",
+                type="carica_arcgis",
+                position={"x": 200, "y": 0},
+                # Solo dentro data, NON come field top-level
+                data={"arcgis_connection_id": "arcgis_inside_data_BAD"},
+            ),
+        ],
+        edges=[Edge(id="e1", source="src", target="carica_ag")],
+    )
+
+    fake_svc = _rb4_make_svc(owner_group_id="g1")
+
+    def _fake_visible(resource_table, group_id, is_superadmin=False):
+        if resource_table == "arcgis_connections":
+            return set()  # nessun id visibile
+        return set()
+
+    with patch("app.core.projects.router._project_service", fake_svc), patch(
+        "app.shared.sharing.visible_resource_ids", side_effect=_fake_visible
+    ):
+        with pytest.raises(HTTPException) as excinfo:
+            update_project_canvas("p1", body, _RB4User())
+
+    assert excinfo.value.status_code == 400
+    assert "arcgis_inside_data_BAD" in excinfo.value.detail
+
+
+# =============================================================================
 # F. Pydantic tight contract
 # =============================================================================
 
