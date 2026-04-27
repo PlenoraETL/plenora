@@ -45,19 +45,18 @@ from app.shared.api_utils import (
     prepare_headers as _shared_prepare_headers,
 )
 
-# `save_dataframe` / `save_result_blob` / `get_temp_output_path`:
-# import top-level preservato per back-compat con patches in
+# B3-B.9 cleanup (2026-04-27): rimossi 3 import back-compat fragili
+# (`save_dataframe`, `save_result_blob`, `get_temp_output_path`) dopo
+# modernization delle 3 patch dead in
 # `tests2/arricchisci/unit/test_api_connector_execute_enrichment_lock.py`
-# (linee 137, 141, 156). Le patch sono inattive post-extraction
-# (`_save_and_build_dataframe_response` + `_build_file_result_response`
-# vivono nel SupportMixin con import lazy diversi), ma rimuovere il
-# binding causerebbe `AttributeError` al `patch("api_connector.<sym>")`.
-# Cleanup posticipato a initiative dedicata con test modernization.
-from app.utils.dataframe import save_dataframe  # noqa: F401  (back-compat patch)
-from app.utils.result_store import (  # noqa: F401  (back-compat patch)
-    get_temp_output_path,
-    save_result_blob,
-)
+# (linee 137, 141, 156 pre-B3-B.9). Le patch erano inattive post-B3-B
+# extraction (`_save_and_build_dataframe_response` +
+# `_build_file_result_response` vivono nel SupportMixin con import
+# lazy diversi). Test ora patchano solo il source canonico
+# `app.utils.result_store.save_result_blob_from_bytes` per il code path
+# in-memory; eventuali test path-based futuri devono patchare il
+# canonical `app.utils.result_store.save_result_blob`, NON l'alias
+# api_connector ormai rimosso.
 from app.shared.exceptions import ExecutionContextError
 import app.db.db_service as db_svc
 

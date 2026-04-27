@@ -133,17 +133,23 @@ def env(api_service):
                 "_execute_rest_file",
                 return_value=pd.DataFrame([{"rf": "ok"}]),
             ),
-            save_df=_p(
-                "app.core.arricchisci.api_connector.save_dataframe",
-                side_effect=lambda df, path, fmt: Path(str(path)),
-            ),
-            save_blob=_p(
-                "app.core.arricchisci.api_connector.save_result_blob",
-                return_value="res-stubbed-id",
-            ),
-            # Post-refactor in-memory: per formati csv/xlsx/json/parquet/
-            # geojson il flusso passa da save_result_blob_from_bytes invece
-            # che dal path-based. Patchiamo entrambi per coprire le due code path.
+            # B3-B.9 cleanup: rimossi 3 patches dead post-B3-B extraction.
+            #   - `app.core.arricchisci.api_connector.save_dataframe` (0 usages
+            #     in test): post-extraction `_save_and_build_dataframe_response`
+            #     vive nel SupportMixin (B3-B.3) e usa `save_pipeline_result`
+            #     lazy import — il binding api_connector.save_dataframe non
+            #     veniva mai invocato.
+            #   - `app.core.arricchisci.api_connector.save_result_blob`: il
+            #     binding alias api_connector e' dead post-extraction; la
+            #     canonical via `app.utils.result_store.save_result_blob_from_bytes`
+            #     resta patchata sotto (`save_blob_bytes`) e copre il code
+            #     path csv/xlsx/json/parquet/geojson (in-memory).
+            #   - `app.core.arricchisci.api_connector.get_temp_output_path`
+            #     (0 usages): mai invocato post-extraction.
+            #
+            # Per scenari path-based (gpkg/shp) un eventuale futuro test deve
+            # patchare il canonical `app.utils.result_store.save_result_blob`,
+            # NON l'alias re-import ormai rimosso da api_connector.
             save_blob_bytes=_p(
                 "app.utils.result_store.save_result_blob_from_bytes",
                 return_value="res-stubbed-id",
@@ -151,10 +157,6 @@ def env(api_service):
             save_df_bytes=_p(
                 "app.utils.dataframe.save_dataframe_to_bytes",
                 return_value=b"stub-bytes",
-            ),
-            get_tmp=_p(
-                "app.core.arricchisci.api_connector.get_temp_output_path",
-                side_effect=lambda name: Path("/tmp") / name,
             ),
             db_get_project=_p(
                 "app.db.db_service.get_project",
@@ -372,11 +374,10 @@ class TestExecuteEnrichmentFinalResult:
         assert "result_id" in result
         assert "output_filename" in result
         # Post-refactor in-memory: per csv (default) passa da
-        # save_result_blob_from_bytes. Per gpkg/shp resta path-based.
-        called_count = (
-            env.save_blob.call_count + env.save_blob_bytes.call_count
-        )
-        assert called_count == 1
+        # save_result_blob_from_bytes. B3-B.9 cleanup: il path-based
+        # `save_result_blob` non e' piu' patchato via alias api_connector
+        # (dead post-extraction); il default csv usa solo save_blob_bytes.
+        assert env.save_blob_bytes.call_count == 1
 
     def test_dataframe_result_does_NOT_emit_stale_output_path(self, env):
         """Regression guard: i campi legacy `output_path`/`output_file`
@@ -505,7 +506,8 @@ class TestExecuteEnrichmentResponseIncludesResultId:
 
     def test_dataframe_response_contains_result_id_from_save_blob(self, env):
         # Post-refactor in-memory: csv/xlsx/... passano da save_result_blob_from_bytes
-        env.save_blob.return_value = "res-df-42"
+        # B3-B.9 cleanup: rimosso `env.save_blob.return_value = ...` (binding
+        # api_connector alias dead post-extraction).
         env.save_blob_bytes.return_value = "res-df-42"
 
         result = env.svc.execute_enrichment(
@@ -524,7 +526,8 @@ class TestExecuteEnrichmentResponseIncludesResultId:
         di `PipelineArtifact.artifact_kind == 'blob'`."""
         from app.core.artifacts.types import PipelineArtifact
 
-        env.save_blob.return_value = "res-abc"
+        # B3-B.9 cleanup: rimosso `env.save_blob.return_value = ...` (alias
+        # api_connector dead post-extraction).
         env.save_blob_bytes.return_value = "res-abc"
 
         result = env.svc.execute_enrichment(
