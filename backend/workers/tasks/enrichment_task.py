@@ -43,6 +43,70 @@ from app.core.arricchisci.models import EnrichmentOptions, EnrichmentResult
 logger = get_logger(__name__)
 
 
+def _merge_batch_parallel_node_results(
+    common_input_df,
+    node_results: dict,
+    node_ids: list,
+    task_id: str,
+):
+    """Merge dei DataFrame prodotti da un batch parallel di nodi enrichment.
+
+    Invariante: ogni nodo del batch deve ritornare un DataFrame della stessa
+    cardinalita' del `common_input_df`. Se un nodo riduce o aumenta le righe
+    (es. esplosione FeatureCollection in via sequenziale, dedup interna),
+    il merge column-by-column non e' applicabile e produrrebbe corruption
+    silenziosa.
+
+    RB.#14 (2026-04-27): pre-fix il merge era avvolto da try/except generico
+    che catturava il ValueError pandas (`Length of values (X) does not match
+    length of index (Y)`), emetteva warning, e proseguiva senza le colonne
+    arricchite del nodo problematico. Il task chiudeva success=True con
+    `rows_processed=0` (PDF generato senza arricchimenti). Post-fix il guard
+    fail-hard solleva RuntimeError diagnostico -> global handler chiude
+    `close_run(success=False)`. Meglio task fallito visibile che success
+    silente con dati persi.
+
+    Args:
+        common_input_df: DataFrame di input condiviso dai nodi del batch.
+        node_results: dict {node_id: DataFrame|other} con i risultati dei nodi.
+        node_ids: lista degli id dei nodi del batch da mergiare.
+        task_id: id del task Celery, usato nel messaggio diagnostico.
+
+    Side effects:
+        - Sovrascrive `node_results[nid]` per ogni `nid` in `node_ids` con il
+          DataFrame merged, cosi' i nodi a valle nel DAG leggono colonne complete.
+
+    Raises:
+        RuntimeError: se un node_result ha cardinalita' diversa da
+            `common_input_df`. Il messaggio cita task_id, node_id,
+            len(result_df), len(common_input_df), e cause probabili.
+    """
+    import pandas as _pd
+
+    merged = common_input_df.copy() if hasattr(common_input_df, "copy") else common_input_df
+    expected_len = len(merged)
+    for nid in node_ids:
+        nr = node_results.get(nid)
+        if not isinstance(nr, _pd.DataFrame):
+            continue
+        if len(nr) != expected_len:
+            raise RuntimeError(
+                f"[Task {task_id}] Batch parallel merge mismatch su "
+                f"nodo '{nid}': result_df ha {len(nr)} righe vs "
+                f"common_input_df {expected_len}. Cause probabili: "
+                f"esplosione FeatureCollection (multi-feature response "
+                f"in via sequenziale `_execute_internal`) o deduplica "
+                f"interna che riduce le righe. Il merge column-by-column "
+                f"produrrebbe corruption silenziosa o perdita dati. "
+                f"Task fallito esplicitamente."
+            )
+        new_cols = [c for c in nr.columns if c not in merged.columns]
+        for c in new_cols:
+            merged[c] = nr[c].values
+    for nid in node_ids:
+        node_results[nid] = merged
+
+
 @celery_app.task(bind=True, name="tasks.execute_enrichment")
 def execute_enrichment_task(
     self,
@@ -636,27 +700,18 @@ def execute_enrichment_task(
                     # altre eccezioni → propagate al global handler del task
                     future.result()
 
-            # Merge: costruiamo un unico DataFrame che contiene common_input_df
-            # + tutte le colonne nuove prodotte dai nodi del batch. Poi
-            # sovrascriviamo node_results[nid] di OGNI nodo del batch con
-            # il merged, cosi' il nodo successivo nel DAG (che ha edge
-            # verso l'ultimo nodo del batch) legge un DataFrame completo.
-            try:
-                import pandas as _pd
-                merged = common_input_df.copy() if hasattr(common_input_df, "copy") else common_input_df
-                for nid in node_ids:
-                    nr = node_results.get(nid)
-                    if isinstance(nr, _pd.DataFrame):
-                        new_cols = [c for c in nr.columns if c not in merged.columns]
-                        for c in new_cols:
-                            merged[c] = nr[c].values
-                for nid in node_ids:
-                    node_results[nid] = merged
-            except Exception as _me:
-                logger.warning(
-                    f"[Task {task_id}] Merge batch parallelo fallito: {_me}. "
-                    f"Proseguo con node_results per-nodo (potrebbe mancare qualche colonna)"
-                )
+            # Merge batch parallel: helper module-level con guard fail-hard
+            # su cardinality mismatch (RB.#14). Side-effect: sovrascrive
+            # node_results[nid] di ogni nodo del batch con il merged DataFrame,
+            # cosi' i nodi a valle nel DAG leggono tutte le colonne. Solleva
+            # RuntimeError se un nodo ritorna len diverso da common_input_df:
+            # bubble-up al global handler -> close_run(success=False).
+            _merge_batch_parallel_node_results(
+                common_input_df=common_input_df,
+                node_results=node_results,
+                node_ids=node_ids,
+                task_id=task_id,
+            )
 
         update_task_progress(self, 90, "Salvataggio risultati...", task_id=task_id)
         
