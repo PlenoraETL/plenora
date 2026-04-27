@@ -229,6 +229,24 @@ const ProjectSourceNode = ({ id, data }) => {
           <div className="project-source-node__error">⚠️ {error}</div>
         )}
 
+        {/* RB.4.C: progetto sorgente non accessibile al gruppo del progetto.
+            Backend (RB.4.B) marca data.access_denied=true sui canvas
+            storici sporchi. UX: banner visibile, no rimozione automatica. */}
+        {data.access_denied && (
+          <div
+            className="project-source-node__error"
+            role="alert"
+            title={data.access_denied_reason || 'Progetto sorgente non accessibile'}
+          >
+            🔒 Progetto sorgente non accessibile al tuo gruppo.
+            {data.access_denied_reason ? (
+              <div style={{ fontSize: '0.85em', marginTop: 4, opacity: 0.85 }}>
+                {data.access_denied_reason}
+              </div>
+            ) : null}
+          </div>
+        )}
+
         {/* Colonne */}
         {columns.length > 0 && !loading && (
           <>

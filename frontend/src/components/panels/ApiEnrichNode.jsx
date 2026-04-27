@@ -124,9 +124,30 @@ function ApiEnrichNode({ id, data, selected }) {
     if (!srcNode || srcNode.type !== 'file_source') return null;
     return {
       id: srcNode.data?.file_source_id,
-      name: srcNode.data?.fileName || srcNode.data?.file_source_id || 'File'
+      name: srcNode.data?.fileName || srcNode.data?.file_source_id || 'File',
+      // RB.4.C: backend (RB.4.B) marca i file_source non visibili al
+      // gruppo del progetto. Lo propaghiamo nella validation per
+      // disabilitare run/preview con messaggio operativo.
+      access_denied: !!srcNode.data?.access_denied,
+      access_denied_reason: srcNode.data?.access_denied_reason || null,
     };
   }, [isExecutable, id, getEdges, getNodes, incomingEdgeCount]);
+
+  // RB.4.C: rileva se QUALSIASI nodo upstream e' marcato access_denied
+  // (file_source o project_source). La validation a valle blocca
+  // l'esecuzione anche per il flusso standard non-executable.
+  const upstreamAccessDenied = useMemo(() => {
+    const edges = getEdges();
+    const nodes = getNodes();
+    const inEdge = edges.find(e => e.target === id);
+    if (!inEdge) return null;
+    const srcNode = nodes.find(n => n.id === inEdge.source);
+    if (!srcNode?.data?.access_denied) return null;
+    return {
+      type: srcNode.data?.inaccessible_resource_type || srcNode.type,
+      reason: srcNode.data?.access_denied_reason || 'Sorgente non accessibile al tuo gruppo',
+    };
+  }, [id, getEdges, getNodes, incomingEdgeCount]);
 
   // ── EXECUTABLE: aggiorna exec_params ──
   const handleExecParamChange = (key, value) => {
@@ -320,14 +341,31 @@ function ApiEnrichNode({ id, data, selected }) {
   
   // Validazione
   const validation = useMemo(() => {
+    // RB.4.C: blocca il run se la sorgente upstream e' marcata dal backend
+    // come non visibile al gruppo del progetto (canvas storico cross-tenant).
+    // Defense-in-depth: il runtime check (api_connection_rest_file
+    // _assert_file_source_group_access) resta fail-closed lato backend.
+    if (upstreamAccessDenied) {
+      return {
+        valid: false,
+        message: `Sorgente non accessibile: ${upstreamAccessDenied.reason}`,
+      };
+    }
+
     if (!data.api_id) {
       return { valid: false, message: 'Nessuna API configurata' };
     }
-    
+
     // Executable: valido se ha api_id e file source collegato
     if (isExecutable) {
       if (!connectedFileSource) {
         return { valid: false, message: 'Collega un File Source' };
+      }
+      if (connectedFileSource.access_denied) {
+        return {
+          valid: false,
+          message: `File sorgente non accessibile: ${connectedFileSource.access_denied_reason || 'permesso negato'}`,
+        };
       }
       return { valid: true, message: 'Pronto' };
     }
@@ -337,16 +375,16 @@ function ApiEnrichNode({ id, data, selected }) {
     if (apiParameters.length === 0 || mappableRequired.length === 0) {
       return { valid: true, message: 'Pronto' };
     }
-    
+
     if (inputColumns.length === 0) {
       return { valid: false, message: 'Collega una sorgente dati' };
     }
 
     const missingParams = mappableRequired.filter(p => !paramMapping[p.name]);
     if (missingParams.length > 0) {
-      return { 
-        valid: false, 
-        message: `Mappa: ${missingParams.map(p => p.name).join(', ')}` 
+      return {
+        valid: false,
+        message: `Mappa: ${missingParams.map(p => p.name).join(', ')}`
       };
     }
 
@@ -357,7 +395,7 @@ function ApiEnrichNode({ id, data, selected }) {
     }
 
     return { valid: true, message: 'Pronto' };
-  }, [data.api_id, isExecutable, connectedFileSource, inputColumns, apiParameters, paramMapping, apiOutputMapping]);
+  }, [data.api_id, isExecutable, connectedFileSource, upstreamAccessDenied, inputColumns, apiParameters, paramMapping, apiOutputMapping]);
 
   const execConfig = data.response || fetchedApi?.response || {};
 
