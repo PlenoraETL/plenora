@@ -203,6 +203,7 @@ def _annotate_inaccessible_canvas_refs(
     # Estrazione ref dal dict serializzato (fonte canonica per la response).
     file_source_ids: set = set()
     project_ids: set = set()
+    arcgis_connection_ids: set = set()
     for n in nodes:
         ntype = n.get("type")
         ndata = n.get("data") or {}
@@ -214,8 +215,19 @@ def _annotate_inaccessible_canvas_refs(
             spid = n.get("source_project_id") or ndata.get("source_project_id")
             if spid:
                 project_ids.add(spid)
+        elif ntype == "carica_arcgis":
+            agid = n.get("arcgis_connection_id") or ndata.get("arcgis_connection_id")
+            if agid:
+                arcgis_connection_ids.add(agid)
+        elif ntype == "imdf_publisher":
+            agid = (
+                n.get("imdf_arcgis_connection_id")
+                or ndata.get("imdf_arcgis_connection_id")
+            )
+            if agid:
+                arcgis_connection_ids.add(agid)
 
-    if not file_source_ids and not project_ids:
+    if not file_source_ids and not project_ids and not arcgis_connection_ids:
         return  # fast-path: zero DB hit
 
     from app.shared.sharing import visible_resource_ids
@@ -229,10 +241,15 @@ def _annotate_inaccessible_canvas_refs(
         if project_ids
         else set()
     )
+    visible_ag = (
+        visible_resource_ids("arcgis_connections", owner_group_id, is_superadmin=False)
+        if arcgis_connection_ids
+        else set()
+    )
 
     # Annotazione in-place: muta SOLO il dict di response. Il canvas in DB
-    # resta intatto (RB.4.A blocca i save futuri con ref invalidi; canvas
-    # storici sporchi vengono solo segnalati al frontend).
+    # resta intatto (RB.4.A / RB.7.A bloccano i save futuri con ref invalidi;
+    # canvas storici sporchi vengono solo segnalati al frontend).
     for n in nodes:
         ntype = n.get("type")
         ndata = n.get("data")
@@ -255,6 +272,25 @@ def _annotate_inaccessible_canvas_refs(
                     f"Progetto sorgente '{spid}' non visibile al gruppo del progetto"
                 )
                 ndata["inaccessible_resource_type"] = "project_source"
+        elif ntype == "carica_arcgis":
+            agid = n.get("arcgis_connection_id") or ndata.get("arcgis_connection_id")
+            if agid and agid not in visible_ag:
+                ndata["access_denied"] = True
+                ndata["access_denied_reason"] = (
+                    f"Connessione ArcGIS '{agid}' non visibile al gruppo del progetto"
+                )
+                ndata["inaccessible_resource_type"] = "arcgis_connection"
+        elif ntype == "imdf_publisher":
+            agid = (
+                n.get("imdf_arcgis_connection_id")
+                or ndata.get("imdf_arcgis_connection_id")
+            )
+            if agid and agid not in visible_ag:
+                ndata["access_denied"] = True
+                ndata["access_denied_reason"] = (
+                    f"Connessione ArcGIS '{agid}' non visibile al gruppo del progetto"
+                )
+                ndata["inaccessible_resource_type"] = "arcgis_connection"
 
 
 @router.get("/{project_id}")
