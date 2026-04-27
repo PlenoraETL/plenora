@@ -21,6 +21,40 @@ import AppSidebar from '../components/AppSidebar';
 import '../styles/AdminBackupsPage.css';
 
 
+// ── Helpers di error handling ────────────────────────────────────────────
+//
+// RB.#9: il backend (RB.2 / admin_backups.router) ora ritorna 503 con
+//        body strutturato `{detail: {error, message}}` quando le credenziali
+//        AWS sono scadute. Passare `detail` (object) a `toast.error` causava
+//        crash React: "Objects are not valid as a React child".
+//        Questi helper garantiscono che messaggio e codice siano sempre
+//        scalari prima di toccare il DOM o il toast.
+//
+// RB.#10: il codice errore consente alla UI di mostrare un banner
+//         persistente con istruzioni operative ("aws sso login"), invece di
+//         un toast effimero che scompare e lascia l'utente nel buio.
+
+function extractErrorMessage(err) {
+  // axios error -> response.data.detail (string | object)
+  const detail = err?.response?.data?.detail;
+  if (typeof detail === 'string' && detail.trim()) return detail;
+  if (detail && typeof detail === 'object') {
+    if (typeof detail.message === 'string' && detail.message.trim()) return detail.message;
+    if (typeof detail.error === 'string' && detail.error.trim()) return detail.error;
+  }
+  if (typeof err?.message === 'string' && err.message.trim()) return err.message;
+  return 'Errore generico';
+}
+
+function extractErrorCode(err) {
+  const detail = err?.response?.data?.detail;
+  if (detail && typeof detail === 'object' && typeof detail.error === 'string') {
+    return detail.error;
+  }
+  return null;
+}
+
+
 // ── Helpers di formattazione ─────────────────────────────────────────────
 function fmtDate(iso) {
   if (!iso) return '—';
@@ -124,6 +158,10 @@ export default function AdminBackupsPage() {
   const [schedule, setSchedule] = useState(null);
   const [loading, setLoading] = useState(true);
   const [triggering, setTriggering] = useState(false);
+  // RB.#10: stato dedicato per credenziali AWS scadute. Bloccato in
+  // banner persistente + nessun auto-refresh finche' l'operatore non
+  // clicca "Riprova" (dopo aver fatto `aws sso login` lato server).
+  const [awsCredentialsError, setAwsCredentialsError] = useState(null);
 
   // Guard della rotta: /admin/backups e' protetta da <SuperadminRoute>
   // in App.jsx che fa il redirect PRIMA del mount. Qui nessun check
@@ -140,14 +178,28 @@ export default function AdminBackupsPage() {
       setData(list);
       setStatus(st);
       setSchedule(sch);
+      // Reset stato AWS-error se eravamo in errore e ora la chiamata torna OK.
+      setAwsCredentialsError(null);
     } catch (e) {
-      toast.error(e.response?.data?.detail || e.message || 'Errore caricamento backup');
+      const code = extractErrorCode(e);
+      const message = extractErrorMessage(e);
+      if (code === 'aws_credentials_expired') {
+        // Banner persistente, no toast effimero. Stop auto-refresh.
+        setAwsCredentialsError(message);
+      } else {
+        toast.error(message);
+      }
     } finally {
       setLoading(false);
     }
   }, [toast]);
 
   useEffect(() => {
+    loadAll();
+  }, [loadAll]);
+
+  const handleRetryAws = useCallback(() => {
+    setAwsCredentialsError(null);
     loadAll();
   }, [loadAll]);
 
@@ -160,13 +212,24 @@ export default function AdminBackupsPage() {
       const res = await triggerBackup();
       if (res.started) {
         toast.success(res.message);
-        // Ricarica lista tra 5 secondi (tempo tipico per pg_dump + upload)
-        setTimeout(() => loadAll(), 5000);
+        // Ricarica lista tra 5 secondi (tempo tipico per pg_dump + upload).
+        // RB.#10: se siamo in stato AWS-credentials-expired, il refresh
+        // automatico sarebbe inutile (la list_backups continuera' a 503);
+        // l'utente riavvia manualmente con "Riprova" dopo `aws sso login`.
+        setTimeout(() => {
+          if (!awsCredentialsError) loadAll();
+        }, 5000);
       } else {
-        toast.error(res.message);
+        toast.error(res.message || 'Trigger backup non avviato');
       }
     } catch (e) {
-      toast.error(e.response?.data?.detail || e.message || 'Errore trigger backup');
+      const code = extractErrorCode(e);
+      const message = extractErrorMessage(e);
+      if (code === 'aws_credentials_expired') {
+        setAwsCredentialsError(message);
+      } else {
+        toast.error(message);
+      }
     } finally {
       setTriggering(false);
     }
@@ -176,6 +239,51 @@ export default function AdminBackupsPage() {
     <div className="ab">
       <AppSidebar />
       <main className="ab__main">
+        {awsCredentialsError && (
+          <div
+            role="alert"
+            style={{
+              background: '#fff4e5',
+              border: '1px solid #d97706',
+              borderRadius: 6,
+              color: '#92400e',
+              padding: '12px 14px',
+              marginBottom: 16,
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 12,
+            }}
+          >
+            <div style={{ flex: 1 }}>
+              <strong>Credenziali AWS scadute o non disponibili.</strong>
+              <div style={{ marginTop: 4, fontSize: '0.92em', lineHeight: 1.4 }}>
+                {awsCredentialsError}
+              </div>
+              <div style={{ marginTop: 6, fontSize: '0.85em', opacity: 0.85 }}>
+                L'auto-refresh e' sospeso finche' non riprovi. Esegui
+                <code style={{ margin: '0 4px' }}>aws sso login</code>
+                sul server, poi clicca "Riprova".
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleRetryAws}
+              disabled={loading}
+              style={{
+                background: '#d97706',
+                border: 'none',
+                borderRadius: 4,
+                color: '#fff',
+                cursor: loading ? 'wait' : 'pointer',
+                fontWeight: 600,
+                padding: '6px 14px',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {loading ? 'Verifica...' : '↻ Riprova'}
+            </button>
+          </div>
+        )}
         <header className="ab__header">
           <div>
             <h1 className="ab__title">Backup Database</h1>
