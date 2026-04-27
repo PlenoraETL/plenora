@@ -234,6 +234,72 @@ def test_last_run_status_running_has_no_duration():
     assert out["duration_sec"] is None
 
 
+def test_last_run_status_duration_with_iso_string_timestamps():
+    """Bug runtime-bugs #3 (2026-04-27): il driver PG puo' restituire
+    started_at/finished_at come stringhe ISO TZ-aware invece che datetime.
+    Pre-fix: TypeError sulla sottrazione str-str -> WARNING + duration_sec=None.
+    Post-fix: normalizzazione via _to_datetime -> duration_sec calcolato.
+
+    Telemetria osservata:
+        Impossibile calcolare duration_sec
+        (started='2026-04-27 02:02:45.362688+00:00',
+         finished='2026-04-27 02:02:50.417383+00:00'):
+        TypeError: unsupported operand type(s) for -: 'str' and 'str'
+    """
+    from app.core.admin_backups import service
+
+    started_iso = "2026-04-27 02:02:45.362688+00:00"
+    finished_iso = "2026-04-27 02:02:50.417383+00:00"
+    row = {
+        "id": 99,
+        "started_at": started_iso,
+        "finished_at": finished_iso,
+        "exit_code": 0,
+        "result": "success",
+        "bucket_key": "plenora_20260427_020245Z.dump",
+        "size_bytes": 1024,
+        "log_tail": None,
+        "error_message": None,
+    }
+    with patch("app.db.pg_connection.fetchone", return_value=row):
+        out = service.get_last_run_status()
+
+    assert out["result"] == "success"
+    # Atteso: 5.054695s (50.417383 - 45.362688). Tolleranza floating-point.
+    assert out["duration_sec"] is not None, (
+        "duration_sec deve essere calcolato anche con timestamp stringa ISO"
+    )
+    assert abs(out["duration_sec"] - 5.054695) < 1e-3
+    # Stringhe ISO conservate via str() fallback (no .isoformat() su str)
+    assert out["started_at"] == started_iso
+    assert out["finished_at"] == finished_iso
+
+
+def test_last_run_status_duration_unparsable_iso_string_logs_warning():
+    """Difesa: stringa non-ISO (es. driver custom corrotto) NON deve far
+    crashare get_last_run_status. Cade nell'except (ValueError) -> warning
+    + duration_sec=None, coerente con il pre-fix per altri tipi inattesi."""
+    from app.core.admin_backups import service
+
+    row = {
+        "id": 100,
+        "started_at": "non-una-data-iso",
+        "finished_at": "neanche-questa",
+        "exit_code": 0,
+        "result": "success",
+        "bucket_key": None,
+        "size_bytes": None,
+        "log_tail": None,
+        "error_message": None,
+    }
+    with patch("app.db.pg_connection.fetchone", return_value=row):
+        out = service.get_last_run_status()
+
+    # No crash, no traceback all'utente
+    assert out["result"] == "success"
+    assert out["duration_sec"] is None
+
+
 # =============================================================================
 # get_schedule_info — metadati statici (container-friendly, no systemctl)
 # =============================================================================

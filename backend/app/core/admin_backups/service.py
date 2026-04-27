@@ -23,6 +23,27 @@ class AdminBackupDependencyError(RuntimeError):
     """
 
 
+def _to_datetime(value: Any) -> datetime:
+    """Normalizza a `datetime` un valore proveniente da `plenora.backup_runs`.
+
+    Il driver psycopg2 ritorna `started_at`/`finished_at` come `datetime`
+    in modalita' default, ma alcuni adapter / cursor mode (RealDict in
+    contesti specifici) possono restituirli come stringa ISO 8601 con TZ
+    aware (es. ``"2026-04-27 02:02:45.362688+00:00"``). Idempotente:
+    se gia' datetime, ritorna invariato.
+
+    Raises ValueError se la stringa non e' parsabile come ISO 8601.
+    """
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        # Postgres usa lo space separator, fromisoformat (3.11+) accetta
+        # entrambi space e 'T'. Piu' robusto sostituire space con 'T' per
+        # coerenza con interpreti precedenti, ma 3.12 lo gestisce nativo.
+        return datetime.fromisoformat(value)
+    raise TypeError(f"Tipo non normalizzabile a datetime: {type(value).__name__}")
+
+
 # ── Config — nomi canonical allineati a cloud_backends.py ─────────────────
 
 BUCKET = (
@@ -160,9 +181,15 @@ def get_last_run_status() -> Dict[str, Any]:
     if finished:
         out["finished_at"] = finished.isoformat() if hasattr(finished, "isoformat") else str(finished)
     if started and finished:
+        # Driver PG puo' ritornare timestamp come datetime (psycopg2 default)
+        # o come stringa ISO (alcuni adapter / cursor mode). Normalizziamo
+        # entrambi a datetime per la sottrazione. Idempotente: se gia' datetime,
+        # _to_datetime e' no-op.
         try:
-            out["duration_sec"] = (finished - started).total_seconds()
-        except (TypeError, AttributeError) as e:
+            started_dt = _to_datetime(started)
+            finished_dt = _to_datetime(finished)
+            out["duration_sec"] = (finished_dt - started_dt).total_seconds()
+        except (TypeError, ValueError, AttributeError) as e:
             logger.warning(
                 "Impossibile calcolare duration_sec (started=%r, finished=%r): %s: %s",
                 started,

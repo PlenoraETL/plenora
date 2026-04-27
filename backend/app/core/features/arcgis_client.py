@@ -924,7 +924,7 @@ class ArcGISClient:
                         continue
                     
                     # Non normalizzare qui — list_layers gestisce il fallback
-                    logger.info(f"Content API item: {item.get('title')} → {item_url}")
+                    logger.info(f"Content API item: {item.get('title')} -> {item_url}")
                     
                     services.append({
                         "name": item.get("title", item.get("name", "Senza nome")),
