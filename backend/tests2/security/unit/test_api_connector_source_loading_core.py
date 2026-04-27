@@ -221,9 +221,16 @@ def test_load_file_source_preserves_geodataframe():
     gdf.columns = ["id"]
     gdf.__getitem__ = lambda self, key: pd.Series([1])
 
+    # B3-B.4a modernization: patch su source canonico
+    # `app.utils.dataframe.filter_visible_columns` invece dell'alias
+    # ri-esportato `app.core.arricchisci.api_connector.filter_visible_columns`.
+    # Identita' simbolica: `api_connector.filter_visible_columns is
+    # app.utils.dataframe.filter_visible_columns` (re-import top-level).
+    # Patch su source modulo intercetta TUTTI i lookup (api_connector
+    # caller + futuri consumer estratti in mixin via MRO).
     with patch("app.shared.sharing.is_resource_visible", return_value=True), \
          patch("app.services.file_service.file_source_service") as svc_fs, \
-         patch("app.core.arricchisci.api_connector.filter_visible_columns",
+         patch("app.utils.dataframe.filter_visible_columns",
                side_effect=lambda d, _cols: d):
         svc_fs.load_dataframe.return_value = (df, gdf)
         out = svc._load_file_source({"file_source_id": "fs-spatial", "columns": []})
@@ -238,9 +245,10 @@ def test_load_file_source_falls_back_to_df_when_no_gdf():
     svc = _make_service(group_id="grp-1")
     df = pd.DataFrame({"id": [1, 2]})
 
+    # B3-B.4a modernization: vedi commento sopra.
     with patch("app.shared.sharing.is_resource_visible", return_value=True), \
          patch("app.services.file_service.file_source_service") as svc_fs, \
-         patch("app.core.arricchisci.api_connector.filter_visible_columns",
+         patch("app.utils.dataframe.filter_visible_columns",
                side_effect=lambda d, _cols: d):
         svc_fs.load_dataframe.return_value = (df, None)
         out = svc._load_file_source({"file_source_id": "fs-flat", "columns": []})
