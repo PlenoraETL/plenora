@@ -477,19 +477,45 @@ def get_host_resources() -> Dict[str, Any]:
     # Disco sul mount di DATA_DIR
     data_dir = None
     usage_path = None
+    psutil_error: Optional[BaseException] = None
     try:
         from app.config import settings
         data_dir_path = Path(settings.DATA_DIR)
         data_dir = str(data_dir_path)
         usage_path = _disk_usage_probe_path(data_dir_path)
-        du = psutil.disk_usage(str(usage_path))
-        pct = round(du.percent, 1)
+        # R-2 (2026-04-27): psutil.disk_usage emette
+        # `SystemError("argument 1 (impossible<bad format char>)")` su Windows
+        # locale (telemetria locale post-diagnostic patch). Causa probabile:
+        # bug/edge case in psutil._psplatform (Windows) sulla `struct` C.
+        # Fallback: `shutil.disk_usage` (stdlib) usa GetDiskFreeSpaceExW
+        # diretto e non passa per psutil. Se anche shutil fallisce -> graceful
+        # con log enriched.
+        try:
+            du = psutil.disk_usage(str(usage_path))
+            total = du.total
+            used = du.used
+            free = du.free
+            pct = round(du.percent, 1)
+        except Exception as _pse:
+            psutil_error = _pse
+            import shutil as _shutil
+            su = _shutil.disk_usage(str(usage_path))
+            total = su.total
+            used = su.used
+            free = su.free
+            # shutil.disk_usage non espone `percent`: lo calcoliamo.
+            pct = round((used / total * 100.0) if total > 0 else 0.0, 1)
+            logger.info(
+                "host_resources disk: psutil.disk_usage fallito "
+                f"({type(_pse).__module__}.{type(_pse).__name__}: {_pse!r}), "
+                f"fallback shutil.disk_usage OK su usage_path={usage_path!r}"
+            )
         disk_info = {
             "path": data_dir,
             "usage_path": str(usage_path),
-            "total_gb": round(du.total / (1024 ** 3), 2),
-            "used_gb": round(du.used / (1024 ** 3), 2),
-            "free_gb": round(du.free / (1024 ** 3), 2),
+            "total_gb": round(total / (1024 ** 3), 2),
+            "used_gb": round(used / (1024 ** 3), 2),
+            "free_gb": round(free / (1024 ** 3), 2),
             "percent": pct,
         }
         if pct >= _DISK_ERROR_PCT:
@@ -497,14 +523,8 @@ def get_host_resources() -> Dict[str, Any]:
         elif pct >= _DISK_WARN_PCT and worst_status == "ok":
             worst_status = "warn"
     except Exception as e:
-        # R-2 (2026-04-27): diagnostica enriched. Se `f254d7c` (probe-path
-        # normalization) non bastasse, queste informazioni dicono al volo
-        # se il problema e' il path costruito (relative? non esistente?
-        # encoding?) oppure un bug interno di psutil su questa architettura
-        # (es. struct.error("argument 1 (impossible<bad format char>)")
-        # noto su psutil/aarch64 con certi filesystem).
-        # Errori non classificati: graceful. La response prosegue, gli
-        # altri campi (memory, cpu) restano popolati.
+        # Entrambi i path (psutil + shutil) hanno fallito, o errore early
+        # (Path/settings). Diagnostica enriched per ridiagnosi rapida.
         try:
             cwd_str = str(Path.cwd())
         except Exception:
@@ -514,11 +534,20 @@ def get_host_resources() -> Dict[str, Any]:
         # Includere il modulo rende il log azionabile a colpo d'occhio.
         exc_type = type(e)
         exc_qualname = f"{exc_type.__module__}.{exc_type.__name__}"
+        # Se psutil aveva fallito prima di shutil, includi entrambi i tipi
+        # eccezione per debug.
+        psutil_part = ""
+        if psutil_error is not None and psutil_error is not e:
+            pet = type(psutil_error)
+            psutil_part = (
+                f" psutil_error={pet.__module__}.{pet.__name__}({psutil_error!r})"
+            )
         logger.warning(
             "host_resources disk error: "
             f"{exc_qualname}({e!r}) | "
             f"data_dir={data_dir!r} usage_path={usage_path!r} "
             f"usage_path_type={type(usage_path).__name__} cwd={cwd_str!r}"
+            f"{psutil_part}"
         )
 
     # Memoria

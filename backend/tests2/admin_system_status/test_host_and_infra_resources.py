@@ -113,38 +113,24 @@ def test_host_resources_uses_existing_parent_for_missing_data_dir(monkeypatch, t
     assert out["disk"]["usage_path"] == str(tmp_path)
 
 
-def test_host_resources_logs_enriched_diagnostics_on_disk_error(monkeypatch, tmp_path):
-    """R-2 (2026-04-27): se psutil.disk_usage solleva (es. struct.error
-    'argument 1 (impossible<bad format char>)' noto su psutil/aarch64 con
-    certi filesystem, oppure OSError su path edge case), il warning deve
-    portare TUTTO il contesto diagnostico:
-      - tipo eccezione + repr
-      - data_dir configurato
-      - usage_path effettivamente probato
-      - tipo di usage_path
-      - cwd
-
-    Senza questi campi, dopo il deploy ci troveremmo a guardare una sola
-    riga 'host_resources disk error: <bad format char>' senza poter
-    distinguere se f254d7c (probe-path) ha funzionato e il problema
-    e' altro, o se la probe ha ritornato un path inaspettato.
-
-    Behavior funzionale invariato: la response prosegue graceful.
-    """
-    import struct as _struct
-
+def test_host_resources_falls_back_to_shutil_when_psutil_disk_fails(monkeypatch, tmp_path):
+    """R-2 (2026-04-27, fix funzionale): su Windows locale `psutil.disk_usage`
+    solleva `SystemError("argument 1 (impossible<bad format char>)")`.
+    Pre-fix: warning + disk=None per ogni call.
+    Post-fix: fallback a `shutil.disk_usage` (stdlib, GetDiskFreeSpaceExW
+    diretto). Se shutil ha successo, disk_info popolato e nessun warning
+    di fallimento (solo logger.info diagnostico sul fallback)."""
     from app.core.admin_system_status import service
     import app.config as config_mod
 
     data_dir = tmp_path / "data"
     fake_settings = SimpleNamespace(DATA_DIR=data_dir)
 
-    # Simula esattamente il messaggio osservato in produzione (BUG.md R-2)
-    boom = _struct.error("argument 1 (impossible<bad format char>)")
+    # psutil.disk_usage scoppia come in produzione locale
+    boom = SystemError("argument 1 (impossible<bad format char>)")
 
     fake_psutil = MagicMock()
     fake_psutil.disk_usage.side_effect = boom
-    # Memoria/CPU restano ok per testare che la response prosegue
     fake_psutil.virtual_memory.return_value = MagicMock(
         total=16 * 1024 ** 3,
         used=4 * 1024 ** 3,
@@ -155,42 +141,131 @@ def test_host_resources_logs_enriched_diagnostics_on_disk_error(monkeypatch, tmp
     fake_psutil.cpu_count.return_value = 4
     fake_psutil.cpu_percent.return_value = 10.0
 
+    # shutil.disk_usage ritorna namedtuple-like con total/used/free
+    shutil_result = SimpleNamespace(
+        total=200 * 1024 ** 3,
+        used=50 * 1024 ** 3,
+        free=150 * 1024 ** 3,
+    )
+    import shutil as _shutil_mod
+
     monkeypatch.setattr(config_mod, "settings", fake_settings)
     monkeypatch.setitem(sys.modules, "psutil", fake_psutil)
+    monkeypatch.setattr(_shutil_mod, "disk_usage", lambda p: shutil_result)
+
+    spy_warning = MagicMock()
+    spy_info = MagicMock()
+    monkeypatch.setattr(service.logger, "warning", spy_warning)
+    monkeypatch.setattr(service.logger, "info", spy_info)
+
+    out = service.get_host_resources()
+
+    # disk_info popolato dal fallback shutil
+    assert out["disk"] is not None, (
+        "Atteso disk_info popolato dal fallback shutil, ricevuto None"
+    )
+    assert out["disk"]["path"] == str(data_dir)
+    assert out["disk"]["total_gb"] == 200.0
+    assert out["disk"]["used_gb"] == 50.0
+    assert out["disk"]["free_gb"] == 150.0
+    # percent calcolato manualmente: 50/200 = 25%
+    assert out["disk"]["percent"] == 25.0
+
+    # Memory + CPU normali
+    assert out["memory"] is not None
+    assert out["cpu"] is not None
+    # Status ok (25% < 80% warn threshold)
+    assert out["status"] == "ok"
+
+    # NESSUN warning di fallimento finale (il fallback ha successo)
+    assert spy_warning.call_count == 0, (
+        f"Nessun warning atteso quando shutil ha successo, trovati: "
+        f"{spy_warning.call_args_list}"
+    )
+
+    # Logger.info traccia il fallback (utile per ops in produzione,
+    # informa che psutil ha fallito senza spammare warning)
+    assert spy_info.call_count >= 1
+    info_msgs = [c.args[0] for c in spy_info.call_args_list]
+    fallback_msg = next(
+        (m for m in info_msgs if "fallback shutil" in m), None
+    )
+    assert fallback_msg is not None, (
+        f"Atteso info di fallback, trovati: {info_msgs}"
+    )
+    assert "SystemError" in fallback_msg
+    assert "argument 1" in fallback_msg
+
+
+def test_host_resources_logs_enriched_diagnostics_when_both_psutil_and_shutil_fail(
+    monkeypatch, tmp_path
+):
+    """R-2 case negativo: se ANCHE shutil.disk_usage fallisce (es. drive
+    smontato, permessi rotti), graceful con warning enriched diagnostico
+    che include ENTRAMBI i tipi di eccezione (psutil + shutil)."""
+    import struct as _struct
+
+    from app.core.admin_system_status import service
+    import app.config as config_mod
+
+    data_dir = tmp_path / "data"
+    fake_settings = SimpleNamespace(DATA_DIR=data_dir)
+
+    psutil_boom = _struct.error("argument 1 (impossible<bad format char>)")
+    shutil_boom = OSError("disk gone")
+
+    fake_psutil = MagicMock()
+    fake_psutil.disk_usage.side_effect = psutil_boom
+    fake_psutil.virtual_memory.return_value = MagicMock(
+        total=16 * 1024 ** 3,
+        used=4 * 1024 ** 3,
+        available=12 * 1024 ** 3,
+        percent=25.0,
+    )
+    fake_psutil.getloadavg.side_effect = AttributeError("no load avg")
+    fake_psutil.cpu_count.return_value = 4
+    fake_psutil.cpu_percent.return_value = 10.0
+
+    import shutil as _shutil_mod
+
+    def _shutil_boom(p):
+        raise shutil_boom
+
+    monkeypatch.setattr(config_mod, "settings", fake_settings)
+    monkeypatch.setitem(sys.modules, "psutil", fake_psutil)
+    monkeypatch.setattr(_shutil_mod, "disk_usage", _shutil_boom)
 
     spy_warning = MagicMock()
     monkeypatch.setattr(service.logger, "warning", spy_warning)
 
     out = service.get_host_resources()
 
-    # Graceful: response prosegue, disk=None ma altri campi popolati
+    # Graceful: response prosegue, disk=None
     assert out["disk"] is None
     assert out["memory"] is not None
     assert out["cpu"] is not None
 
-    # Esattamente 1 warning emesso per il disk path
-    assert spy_warning.call_count == 1, (
-        f"Atteso 1 warning, trovati {spy_warning.call_count}: "
-        f"{spy_warning.call_args_list}"
-    )
+    # 1 warning enriched (entrambi gli errori dichiarati)
+    assert spy_warning.call_count == 1
     msg = spy_warning.call_args.args[0]
 
-    # Campi diagnostici presenti
+    # Diagnostica enriched
     assert "host_resources disk error" in msg
-    assert "struct.error" in msg, f"Tipo eccezione mancante in: {msg}"
-    assert "argument 1 (impossible<bad format char>)" in msg, (
-        f"Messaggio eccezione mancante in: {msg}"
+    # shutil error e' quello "finale" -> tipo qualified
+    assert "OSError" in msg
+    assert "disk gone" in msg
+    # data_dir / usage_path / type / cwd
+    assert "data_dir=" in msg
+    assert "usage_path=" in msg
+    assert "usage_path_type=" in msg
+    assert "cwd=" in msg
+    # psutil_error dichiarato esplicito (cosi' sappiamo che il path
+    # primario ha fallito con un'eccezione DIVERSA da quella shutil)
+    assert "psutil_error=" in msg
+    assert "struct.error" in msg, (
+        f"struct.error mancante in psutil_error: {msg}"
     )
-    assert "data_dir=" in msg, f"data_dir mancante in: {msg}"
-    assert "usage_path=" in msg, f"usage_path mancante in: {msg}"
-    assert "usage_path_type=" in msg, f"usage_path_type mancante in: {msg}"
-    assert "cwd=" in msg, f"cwd mancante in: {msg}"
-    # Il path data_dir configurato deve essere visibile (anche se non esiste).
-    # Il log usa repr() per evitare ambiguita' su path con spazi/quote: su
-    # Windows i backslash vengono raddoppiati, quindi confronto su repr().
-    assert repr(str(data_dir)) in msg, (
-        f"repr(data_dir) mancante in: {msg}"
-    )
+    assert "impossible<bad format char>" in msg
 
 
 def test_host_resources_disk_over_error_threshold(monkeypatch):
