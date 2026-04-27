@@ -12,6 +12,7 @@ Usato da:
 """
 
 import base64
+import functools
 import json
 import time
 import threading
@@ -63,6 +64,25 @@ def get_shared_session() -> requests.Session:
 # ──────────────────────────────────────────────────────────────────────
 # Anti-SSRF: validazione URL esterni
 # ──────────────────────────────────────────────────────────────────────
+
+
+@functools.lru_cache(maxsize=1)
+def _warn_urby_loopback_alias_once() -> None:
+    """Emette un warning una sola volta per processo quando viene letto
+    l'alias deprecato ``URBY_ALLOW_LOOPBACK_OUTBOUND`` senza il canonical
+    ``PLENORA_ALLOW_LOOPBACK_OUTBOUND``.
+
+    Idempotente via ``functools.lru_cache(maxsize=1)``: chiamate successive
+    sono cache hit silenti. Per i test, ``_warn_urby_loopback_alias_once.
+    cache_clear()`` permette di re-osservare l'emit (vedi fixture in
+    ``tests2/security/unit/test_validate_external_url_contract.py``).
+    """
+    logger.warning(
+        "[DEPRECATED] URBY_ALLOW_LOOPBACK_OUTBOUND e' un alias retro-compat. "
+        "Migrare a PLENORA_ALLOW_LOOPBACK_OUTBOUND. "
+        "L'alias verra' rimosso in una release futura."
+    )
+
 
 def validate_external_url(url: str) -> None:
     """Anti-SSRF: valida che l'URL sia http(s) verso un host pubblico.
@@ -116,10 +136,14 @@ def validate_external_url(url: str) -> None:
         allow_loopback = False
     else:
         # Canonical PLENORA_*, alias retro-compat URBY_* (deprecato).
-        allow_loopback = (
-            os.environ.get("PLENORA_ALLOW_LOOPBACK_OUTBOUND", "").strip() == "1"
-            or os.environ.get("URBY_ALLOW_LOOPBACK_OUTBOUND", "").strip() == "1"
-        )
+        plenora_set = os.environ.get("PLENORA_ALLOW_LOOPBACK_OUTBOUND", "").strip() == "1"
+        urby_set = os.environ.get("URBY_ALLOW_LOOPBACK_OUTBOUND", "").strip() == "1"
+        allow_loopback = plenora_set or urby_set
+        # A3: warning loud one-shot quando si usa SOLO l'alias deprecato.
+        # Nessuna semantica cambia: l'alias resta funzionante. Pattern
+        # functools.lru_cache → cache hit silente dalla 2a chiamata in poi.
+        if urby_set and not plenora_set:
+            _warn_urby_loopback_alias_once()
 
     # B3-B.8: getaddrinfo copre IPv4 (A) + IPv6 (AAAA). Dedup via set —
     # uno stesso IP puo' apparire piu' volte (es. multipli protocolli
