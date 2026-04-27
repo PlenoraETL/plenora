@@ -579,6 +579,14 @@ def get_oauth2_token(auth: Dict) -> Optional[str]:
 
     Wrapper backward-compatible: usa internamente get_cached_oauth2_token
     per riutilizzare il token se ancora valido.
+
+    .. deprecated::
+        Wrapper legacy. Nuovi caller devono usare ``get_cached_oauth2_token``
+        passando ``auth["type"] = "oauth2_password"``. Mantenuto per
+        backward-compat con caller interni (``api_utils.py`` stesso e
+        ``arricchisci.enrichment_service`` via alias ``_shared_get_oauth2_token``).
+        Nessuna data di rimozione fissata: rimovibile quando i caller interni
+        saranno migrati a ``get_cached_oauth2_token`` (audit Phase 1+).
     """
     auth_with_type = dict(auth)
     auth_with_type.setdefault("type", "oauth2_password")
@@ -589,6 +597,14 @@ def get_oauth2_client_credentials_token(auth: Dict) -> Optional[str]:
     """Ottiene token OAuth2 client_credentials grant (via cache).
 
     Wrapper backward-compatible: usa internamente get_cached_oauth2_token.
+
+    .. deprecated::
+        Wrapper legacy. Nuovi caller devono usare ``get_cached_oauth2_token``
+        passando ``auth["type"] = "oauth2_client_credentials"``. Mantenuto per
+        backward-compat con caller interni (``api_utils.py`` stesso e
+        ``arricchisci.enrichment_service`` via alias
+        ``_shared_get_oauth2_cc_token``). Vedi ``get_oauth2_token`` per la
+        nota generale sulla migrazione.
     """
     auth_with_type = dict(auth)
     auth_with_type.setdefault("type", "oauth2_client_credentials")
