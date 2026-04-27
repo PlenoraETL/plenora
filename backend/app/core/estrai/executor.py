@@ -108,6 +108,75 @@ def _is_user_error_message(message: str) -> bool:
     return any(p in msg_lower for p in _USER_ERROR_PATTERNS)
 
 
+def _dedup_column_names(columns: List[str]) -> Tuple[List[str], List[Tuple[str, str]]]:
+    """Rinomina nomi colonna duplicati aggiungendo suffisso `_2`, `_3`, ...
+
+    Stabile (preserva ordine). Gestisce collisioni con nomi gia' presenti
+    (es. colonne ``["id", "id_2", "id"]`` -> ``["id", "id_2", "id_3"]``).
+
+    Returns:
+        (new_columns, renames) dove `renames` e' la lista di
+        ``(original_name, new_name)`` per ogni colonna rinominata.
+        Se non ci sono duplicati, `new_columns == columns` e `renames` e' [].
+    """
+    seen: Dict[str, int] = {}
+    new_columns: List[str] = []
+    renames: List[Tuple[str, str]] = []
+    for col in columns:
+        if col not in seen:
+            seen[col] = 1
+            new_columns.append(col)
+            continue
+        # Duplicato: incrementa il counter finche' il nuovo nome e' libero
+        # (necessario quando un suffisso candidato e' gia' un altro nome)
+        candidate = None
+        while candidate is None or candidate in seen:
+            seen[col] += 1
+            candidate = f"{col}_{seen[col]}"
+        seen[candidate] = 1
+        new_columns.append(candidate)
+        renames.append((col, candidate))
+    return new_columns, renames
+
+
+def _dedup_dataframe_columns_for_serialization(
+    df: pd.DataFrame,
+) -> Tuple[pd.DataFrame, List[str]]:
+    """Se ``df`` ha nomi colonna duplicati, li rinomina in modo stabile e
+    ritorna ``(df_dedup, warnings)``. Senza duplicati, ritorna il df
+    originale e una lista vuota.
+
+    Risolve BUG.md #6: ``df.to_dict(orient='records')`` con colonne duplicate
+    emette ``UserWarning: DataFrame columns are not unique, some columns
+    will be omitted`` e perde silenziosamente colonne. Qui rinominiamo
+    invece di scartare, cosi' nessuna colonna sparisce dalla preview.
+
+    Tipica causa upstream: JOIN SQL senza alias espliciti che produce
+    due colonne con lo stesso nome (es. ``a.id`` e ``b.id``).
+    """
+    columns = list(df.columns)
+    new_columns, renames = _dedup_column_names(columns)
+    if not renames:
+        return df, []
+
+    # Rinomina posizionale: pd.DataFrame(rows, columns=...) col costruttore
+    # attuale conserva l'ordine; assegniamo direttamente la nuova lista.
+    df_renamed = df.copy()
+    df_renamed.columns = new_columns
+
+    # Warning visibili: uno per coppia rinominata + log server-side aggregato
+    warnings_list = [
+        f"Colonna duplicata rinominata: '{orig}' -> '{new}'"
+        for orig, new in renames
+    ]
+    rename_summary = ", ".join(f"{o}->{n}" for o, n in renames)
+    logger.warning(
+        f"Preview DataFrame con {len(renames)} colonne duplicate "
+        f"rinominate per evitare perdita silenziosa: {rename_summary}",
+        op="preview",
+    )
+    return df_renamed, warnings_list
+
 
 class EstraiExecutor:
     """
@@ -368,20 +437,28 @@ class EstraiExecutor:
 
             df = pd.DataFrame(rows, columns=columns)
 
+            # BUG.md #6: dedup colonne duplicate PRIMA di costruire columns_info
+            # e PRIMA di to_dict, altrimenti pandas le scarta silenziosamente
+            # e l'utente non se ne accorge.
+            df, dedup_warnings = _dedup_dataframe_columns_for_serialization(df)
+
             canvas_type_map = self._build_canvas_type_map(canvas)
             columns_info = self._costruisci_colonne_con_tipi_canvas(df, canvas_type_map)
 
             rows_json = sanitize_for_json(df.to_dict(orient='records'))
 
-            return {
+            response: Dict[str, Any] = {
                 "success": True,
                 "columns": columns_info,
                 "rows": rows_json,
                 "total_count": total_count,
                 "preview_count": len(rows_json),
                 "truncated": truncated,
-                "query": base_sql
+                "query": base_sql,
             }
+            if dedup_warnings:
+                response["warnings"] = dedup_warnings
+            return response
 
         except Exception as e:
             if SqlAlchemyDataError and isinstance(e, SqlAlchemyDataError):
@@ -439,20 +516,27 @@ class EstraiExecutor:
 
             df = pd.DataFrame(rows, columns=columns)
 
+            # BUG.md #6: dedup colonne duplicate PRIMA di columns_info e to_dict
+            # (vedi _preview_database per il razionale).
+            df, dedup_warnings = _dedup_dataframe_columns_for_serialization(df)
+
             canvas_type_map = self._build_canvas_type_map(canvas)
             columns_info = self._costruisci_colonne_con_tipi_canvas(df, canvas_type_map)
 
             rows_json = sanitize_for_json(df.to_dict(orient='records'))
 
-            return {
+            response: Dict[str, Any] = {
                 "success": True,
                 "columns": columns_info,
                 "rows": rows_json,
                 "total_count": total_count,
                 "preview_count": len(rows_json),
                 "truncated": truncated,
-                "query": f"ArcGIS REST: {layer_url} WHERE {where}"
+                "query": f"ArcGIS REST: {layer_url} WHERE {where}",
             }
+            if dedup_warnings:
+                response["warnings"] = dedup_warnings
+            return response
 
         except Exception as e:
             logger.error(f"[GESTITO] Errore preview Feature Service: {e}", op="preview", exc_info=True)
