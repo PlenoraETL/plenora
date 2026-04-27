@@ -362,17 +362,120 @@ class TestTestApiConnectionExceptions:
         silenziosamente). Lock sul contratto di osservabilita':
         senza `exc_info=True` la diagnostica dei bug interni
         sarebbe impossibile.
+
+        Modernization B3-B.2a — behavior contract vs source-location contract
+        ====================================================================
+        Pre-B3-B.2a il test patchava
+        `patch("app.core.arricchisci.api_connector.logger")` per
+        intercettare il `logger.error([GESTITO]...)` emesso dal ramo
+        Exception fail-safe di `test_api_connection`. Patch
+        source-location-bound: spostando il metodo in mixin/sotto-modulo
+        (come previsto da B3-B.2b `ApiConnectionManagementMixin`), il
+        `logger` letto dal mixin e' un altro StructuredLogger wrapper
+        instance — il rebind di `api_connector.logger` non lo affecta
+        → mock non chiamato → test rosso anche se il ramo Exception
+        emette il log correttamente.
+
+        Post-B3-B.2a: aggancio un `logging.Handler` custom al logger
+        stdlib canonico `"app.core.arricchisci.api_connector"` per nome.
+        Lo `StructuredLogger` wrapper di `app/utils/logger.py` delega a
+        `_logger.log(level, msg, ...)` sul logger stdlib omonimo, quindi
+        qualunque chiamata su `logger.error(...)` (anche da un futuro
+        modulo figlio estratto) viene catturata via handler — purche'
+        il wrapper sia ottenuto via `get_logger("app.core.arricchisci.api_connector")`.
+        Indipendente dalla posizione fisica. Stesso pattern modernizzato
+        in `test_database_writer_log_consistency_contract.py` (B2.0) +
+        `test_unsafe_append_gate_contract.py` (B2.5a).
+
+        Anti-regressione preservata: se un futuro fix spostasse il
+        `logger.error` su un logger ad-hoc con nome diverso (es.
+        `logging.getLogger(__name__)` con `__name__ != "...api_connector"`),
+        il record NON arriverebbe al collector handler → test fallisce
+        come voluto (loggers con nomi diversi sono separati: la
+        sibling-propagation non esiste, solo verso parent → root).
+
+        Contract preservato bit-per-bit:
+          1. ramo Exception emette `logger.error(...)` (almeno 1 record);
+          2. record di livello ERROR (`levelno == logging.ERROR`);
+          3. emit con `exc_info=True` per preservare il traceback;
+          4. il messaggio contiene `"[GESTITO]"` marker (anti-regressione
+             aggiuntiva: assicura che il fail-safe usi il marker
+             distintivo invece di un altro qualunque error log).
         """
+        import logging
+
         tac_env.session.get.side_effect = RuntimeError("stacktrace needed")
         cfg = {
             "endpoint": {"url": "https://api.test/q", "method": "GET"},
             "auth": {},
         }
-        with patch("app.core.arricchisci.api_connector.logger") as mock_logger:
+
+        # Cattura ERROR sul logger canonico per nome (vedi docstring
+        # per razionale modernization). Imposto setLevel(ERROR) per
+        # filtrare emit di altri livelli + `exc_info=True` viene
+        # registrato nel `LogRecord.exc_info` field.
+        captured_records: list[logging.LogRecord] = []
+
+        class _Collector(logging.Handler):
+            def emit(self, record):  # noqa: D401
+                captured_records.append(record)
+
+        stdlib_logger = logging.getLogger("app.core.arricchisci.api_connector")
+        handler = _Collector()
+        handler.setLevel(logging.ERROR)
+        prev_level = stdlib_logger.level
+        stdlib_logger.addHandler(handler)
+        stdlib_logger.setLevel(logging.ERROR)
+        try:
             tac_env.svc.test_api_connection(config=cfg, test_params={})
-        assert mock_logger.error.called, "logger.error non invocato sul ramo Exception"
-        call_kwargs = mock_logger.error.call_args.kwargs
-        assert call_kwargs.get("exc_info") is True, (
+        finally:
+            stdlib_logger.removeHandler(handler)
+            stdlib_logger.setLevel(prev_level)
+
+        # Almeno 1 record ERROR sul logger canonico
+        error_records = [r for r in captured_records if r.levelno == logging.ERROR]
+        assert error_records, (
+            f"Atteso almeno 1 record ERROR sul logger canonico "
+            f"'app.core.arricchisci.api_connector' nel ramo Exception "
+            f"fail-safe. Tutti i record catturati: "
+            f"{[(r.levelname, r.getMessage()) for r in captured_records]!r}"
+        )
+
+        # Filtra il record specifico del fail-safe via marker [GESTITO]
+        # (anti-regressione: assicura che il fail-safe usi il marker
+        # distintivo invece di un altro qualunque error log che potrebbe
+        # essere emesso nel flow).
+        gestito_records = [
+            r for r in error_records if "[GESTITO]" in r.getMessage()
+        ]
+        assert gestito_records, (
+            f"Atteso ERROR record con marker '[GESTITO]' (fail-safe ramo "
+            f"Exception). ERROR ricevuti: "
+            f"{[r.getMessage() for r in error_records]!r}"
+        )
+
+        # exc_info=True popola `LogRecord.exc_info` con la tupla
+        # `(exc_type, exc_value, tb)` — nel nostro caso il RuntimeError
+        # iniettato. Anti-regressione: senza `exc_info=True` la
+        # diagnostica del traceback sarebbe persa.
+        target_record = gestito_records[0]
+        assert target_record.exc_info is not None, (
             "logger.error deve essere chiamato con exc_info=True "
-            "per preservare il traceback nel log"
+            "per preservare il traceback nel log; "
+            f"LogRecord.exc_info e' None su record: {target_record.getMessage()!r}"
+        )
+        # `exc_info` e' una tupla (exc_type, exc_value, tb) quando
+        # exc_info=True viene serializzato dal logging stdlib.
+        assert isinstance(target_record.exc_info, tuple) and len(target_record.exc_info) == 3, (
+            f"LogRecord.exc_info atteso tuple di 3 elementi (type, value, tb); "
+            f"ottenuto: {target_record.exc_info!r}"
+        )
+        # Il RuntimeError iniettato deve essere preservato come exc_value
+        exc_type, exc_value, _tb = target_record.exc_info
+        assert exc_type is RuntimeError, (
+            f"exc_type atteso RuntimeError; ottenuto: {exc_type!r}"
+        )
+        assert "stacktrace needed" in str(exc_value), (
+            f"exc_value deve preservare il messaggio originale "
+            f"'stacktrace needed'; ottenuto: {exc_value!r}"
         )
