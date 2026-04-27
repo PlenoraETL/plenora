@@ -475,6 +475,8 @@ def get_host_resources() -> Dict[str, Any]:
     worst_status = "ok"
 
     # Disco sul mount di DATA_DIR
+    data_dir = None
+    usage_path = None
     try:
         from app.config import settings
         data_dir_path = Path(settings.DATA_DIR)
@@ -495,7 +497,29 @@ def get_host_resources() -> Dict[str, Any]:
         elif pct >= _DISK_WARN_PCT and worst_status == "ok":
             worst_status = "warn"
     except Exception as e:
-        logger.warning(f"host_resources disk error: {e}")
+        # R-2 (2026-04-27): diagnostica enriched. Se `f254d7c` (probe-path
+        # normalization) non bastasse, queste informazioni dicono al volo
+        # se il problema e' il path costruito (relative? non esistente?
+        # encoding?) oppure un bug interno di psutil su questa architettura
+        # (es. struct.error("argument 1 (impossible<bad format char>)")
+        # noto su psutil/aarch64 con certi filesystem).
+        # Errori non classificati: graceful. La response prosegue, gli
+        # altri campi (memory, cpu) restano popolati.
+        try:
+            cwd_str = str(Path.cwd())
+        except Exception:
+            cwd_str = "<unavailable>"
+        # Qualified type: alcune eccezioni famose hanno __name__ generico
+        # (es. struct.error.__name__ == 'error'), che da solo non aiuta.
+        # Includere il modulo rende il log azionabile a colpo d'occhio.
+        exc_type = type(e)
+        exc_qualname = f"{exc_type.__module__}.{exc_type.__name__}"
+        logger.warning(
+            "host_resources disk error: "
+            f"{exc_qualname}({e!r}) | "
+            f"data_dir={data_dir!r} usage_path={usage_path!r} "
+            f"usage_path_type={type(usage_path).__name__} cwd={cwd_str!r}"
+        )
 
     # Memoria
     try:

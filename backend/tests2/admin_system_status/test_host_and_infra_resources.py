@@ -113,6 +113,86 @@ def test_host_resources_uses_existing_parent_for_missing_data_dir(monkeypatch, t
     assert out["disk"]["usage_path"] == str(tmp_path)
 
 
+def test_host_resources_logs_enriched_diagnostics_on_disk_error(monkeypatch, tmp_path):
+    """R-2 (2026-04-27): se psutil.disk_usage solleva (es. struct.error
+    'argument 1 (impossible<bad format char>)' noto su psutil/aarch64 con
+    certi filesystem, oppure OSError su path edge case), il warning deve
+    portare TUTTO il contesto diagnostico:
+      - tipo eccezione + repr
+      - data_dir configurato
+      - usage_path effettivamente probato
+      - tipo di usage_path
+      - cwd
+
+    Senza questi campi, dopo il deploy ci troveremmo a guardare una sola
+    riga 'host_resources disk error: <bad format char>' senza poter
+    distinguere se f254d7c (probe-path) ha funzionato e il problema
+    e' altro, o se la probe ha ritornato un path inaspettato.
+
+    Behavior funzionale invariato: la response prosegue graceful.
+    """
+    import struct as _struct
+
+    from app.core.admin_system_status import service
+    import app.config as config_mod
+
+    data_dir = tmp_path / "data"
+    fake_settings = SimpleNamespace(DATA_DIR=data_dir)
+
+    # Simula esattamente il messaggio osservato in produzione (BUG.md R-2)
+    boom = _struct.error("argument 1 (impossible<bad format char>)")
+
+    fake_psutil = MagicMock()
+    fake_psutil.disk_usage.side_effect = boom
+    # Memoria/CPU restano ok per testare che la response prosegue
+    fake_psutil.virtual_memory.return_value = MagicMock(
+        total=16 * 1024 ** 3,
+        used=4 * 1024 ** 3,
+        available=12 * 1024 ** 3,
+        percent=25.0,
+    )
+    fake_psutil.getloadavg.side_effect = AttributeError("no load avg")
+    fake_psutil.cpu_count.return_value = 4
+    fake_psutil.cpu_percent.return_value = 10.0
+
+    monkeypatch.setattr(config_mod, "settings", fake_settings)
+    monkeypatch.setitem(sys.modules, "psutil", fake_psutil)
+
+    spy_warning = MagicMock()
+    monkeypatch.setattr(service.logger, "warning", spy_warning)
+
+    out = service.get_host_resources()
+
+    # Graceful: response prosegue, disk=None ma altri campi popolati
+    assert out["disk"] is None
+    assert out["memory"] is not None
+    assert out["cpu"] is not None
+
+    # Esattamente 1 warning emesso per il disk path
+    assert spy_warning.call_count == 1, (
+        f"Atteso 1 warning, trovati {spy_warning.call_count}: "
+        f"{spy_warning.call_args_list}"
+    )
+    msg = spy_warning.call_args.args[0]
+
+    # Campi diagnostici presenti
+    assert "host_resources disk error" in msg
+    assert "struct.error" in msg, f"Tipo eccezione mancante in: {msg}"
+    assert "argument 1 (impossible<bad format char>)" in msg, (
+        f"Messaggio eccezione mancante in: {msg}"
+    )
+    assert "data_dir=" in msg, f"data_dir mancante in: {msg}"
+    assert "usage_path=" in msg, f"usage_path mancante in: {msg}"
+    assert "usage_path_type=" in msg, f"usage_path_type mancante in: {msg}"
+    assert "cwd=" in msg, f"cwd mancante in: {msg}"
+    # Il path data_dir configurato deve essere visibile (anche se non esiste).
+    # Il log usa repr() per evitare ambiguita' su path con spazi/quote: su
+    # Windows i backslash vengono raddoppiati, quindi confronto su repr().
+    assert repr(str(data_dir)) in msg, (
+        f"repr(data_dir) mancante in: {msg}"
+    )
+
+
 def test_host_resources_disk_over_error_threshold(monkeypatch):
     """Disk > 92% → status=error."""
     from app.core.admin_system_status import service
