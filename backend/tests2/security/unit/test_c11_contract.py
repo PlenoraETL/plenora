@@ -169,6 +169,233 @@ def test_canvas_put_accepts_source_nodes_without_incoming_edges():
 
 
 # =============================================================================
+# RB.4.A (2026-04-27): cross-tenant ref validation in update_project_canvas
+# =============================================================================
+#
+# BUG.md #8: un canvas con file_source_id / source_project_id non visibili
+# al gruppo del progetto poteva essere salvato senza errore (passava i
+# vecchi check orphan + group_access). L'errore arrivava solo a runtime via
+# `_assert_file_source_group_access` con messaggio opaco.
+# Post-RB.4.A: il save rifiuta esplicitamente con 400 e messaggio che
+# elenca i ref non validi.
+
+
+class _RB4User:
+    role = "admin"
+    user_id = "u1"
+    username = "u"
+    group_id = "g1"
+
+
+def _rb4_make_svc(owner_group_id: str = "g1"):
+    """Service mock minimo per i test RB.4.A."""
+    fake_svc = MagicMock()
+    fake_svc.get_project_metadata.return_value = {
+        "id": "p1",
+        "group_id": owner_group_id,
+    }
+    fake_svc.update_canvas.return_value = True
+    fake_svc.update_project_columns_metadata.return_value = None
+    return fake_svc
+
+
+def test_canvas_put_rejects_file_source_not_visible_to_owner_group():
+    """Canvas con `file_source_id` di altro gruppo (riferimento stantio
+    da progetto duplicato/condiviso): 400 con messaggio operativo che
+    nomina l'id non visibile."""
+    from fastapi import HTTPException
+
+    from app.core.projects.router import CanvasWithPlugins, update_project_canvas
+    from app.shared.models import Edge, Node
+
+    body = CanvasWithPlugins(
+        nodes=[
+            Node(
+                id="fs",
+                type="file_source",
+                position={"x": 0, "y": 0},
+                file_source_id="file_extra_excel_UDPN_BAD",
+            ),
+            Node(id="res", type="result", position={"x": 200, "y": 0}, columns=[]),
+        ],
+        edges=[Edge(id="e1", source="fs", target="res")],
+    )
+
+    fake_svc = _rb4_make_svc(owner_group_id="g1")
+
+    # visible_resource_ids ritorna SOLO i fs visibili a g1; UDPN_BAD NON e' nel set.
+    def _fake_visible(resource_table, group_id, is_superadmin=False):
+        if resource_table == "file_sources":
+            return {"file_safe_for_g1"}  # NB: UDPN_BAD assente
+        return set()
+
+    with patch("app.core.projects.router._project_service", fake_svc), patch(
+        "app.shared.sharing.visible_resource_ids", side_effect=_fake_visible
+    ):
+        with pytest.raises(HTTPException) as excinfo:
+            update_project_canvas("p1", body, _RB4User())
+
+    assert excinfo.value.status_code == 400
+    detail = excinfo.value.detail
+    assert "non visibili" in detail
+    assert "file_extra_excel_UDPN_BAD" in detail
+    # Il save NON deve essere stato chiamato (fail-closed, no side-effect)
+    fake_svc.update_canvas.assert_not_called()
+
+
+def test_canvas_put_rejects_source_project_not_visible_to_owner_group():
+    """Stesso pattern per `source_project_id` cross-tenant."""
+    from fastapi import HTTPException
+
+    from app.core.projects.router import CanvasWithPlugins, update_project_canvas
+    from app.shared.models import Edge, Node
+
+    body = CanvasWithPlugins(
+        nodes=[
+            Node(
+                id="ps",
+                type="project_source",
+                position={"x": 0, "y": 0},
+                source_project_id="project_other_group",
+            ),
+            Node(id="res", type="result", position={"x": 200, "y": 0}, columns=[]),
+        ],
+        edges=[Edge(id="e1", source="ps", target="res")],
+    )
+
+    fake_svc = _rb4_make_svc(owner_group_id="g1")
+
+    def _fake_visible(resource_table, group_id, is_superadmin=False):
+        if resource_table == "projects":
+            return {"project_safe_for_g1"}
+        return set()
+
+    with patch("app.core.projects.router._project_service", fake_svc), patch(
+        "app.shared.sharing.visible_resource_ids", side_effect=_fake_visible
+    ):
+        with pytest.raises(HTTPException) as excinfo:
+            update_project_canvas("p1", body, _RB4User())
+
+    assert excinfo.value.status_code == 400
+    assert "project_source: project_other_group" in excinfo.value.detail
+    fake_svc.update_canvas.assert_not_called()
+
+
+def test_canvas_put_accepts_when_all_refs_visible_to_owner_group():
+    """Regression: canvas con file_source_id e source_project_id tutti
+    visibili al gruppo del progetto -> 200, save invocato regolarmente."""
+    from app.core.projects.router import CanvasWithPlugins, update_project_canvas
+    from app.shared.models import Edge, Node
+
+    body = CanvasWithPlugins(
+        nodes=[
+            Node(
+                id="fs",
+                type="file_source",
+                position={"x": 0, "y": 0},
+                file_source_id="file_safe",
+            ),
+            Node(
+                id="ps",
+                type="project_source",
+                position={"x": 100, "y": 0},
+                source_project_id="project_safe",
+            ),
+            Node(id="res", type="result", position={"x": 200, "y": 0}, columns=[]),
+        ],
+        edges=[
+            Edge(id="e1", source="fs", target="res"),
+            Edge(id="e2", source="ps", target="res"),
+        ],
+    )
+
+    fake_svc = _rb4_make_svc(owner_group_id="g1")
+
+    def _fake_visible(resource_table, group_id, is_superadmin=False):
+        if resource_table == "file_sources":
+            return {"file_safe", "file_other_safe"}
+        if resource_table == "projects":
+            return {"project_safe"}
+        return set()
+
+    with patch("app.core.projects.router._project_service", fake_svc), patch(
+        "app.shared.sharing.visible_resource_ids", side_effect=_fake_visible
+    ):
+        resp = update_project_canvas("p1", body, _RB4User())
+
+    assert resp.get("status") == "ok"
+    fake_svc.update_canvas.assert_called_once()
+
+
+def test_canvas_put_skips_visibility_check_when_no_cross_tenant_refs():
+    """Canvas senza nodi file_source / project_source: nessun chiamata a
+    visible_resource_ids (no overhead, no DB hit). Verifica la fast-path."""
+    from app.core.projects.router import CanvasWithPlugins, update_project_canvas
+    from app.shared.models import Edge, Node
+
+    body = CanvasWithPlugins(
+        nodes=[
+            Node(id="src", type="source", position={"x": 0, "y": 0}, columns=[]),
+            Node(id="res", type="result", position={"x": 200, "y": 0}, columns=[]),
+        ],
+        edges=[Edge(id="e1", source="src", target="res")],
+    )
+
+    fake_svc = _rb4_make_svc(owner_group_id="g1")
+    visible_spy = MagicMock(return_value=set())
+
+    with patch("app.core.projects.router._project_service", fake_svc), patch(
+        "app.shared.sharing.visible_resource_ids", visible_spy
+    ):
+        resp = update_project_canvas("p1", body, _RB4User())
+
+    assert resp.get("status") == "ok"
+    visible_spy.assert_not_called()  # fast-path: skip se refs vuoti
+
+
+def test_canvas_put_superadmin_can_save_any_ref():
+    """superadmin bypassa il check (visible_resource_ids ritorna TUTTI gli
+    id quando is_superadmin=True). Coerente con la policy globale."""
+    from app.core.projects.router import CanvasWithPlugins, update_project_canvas
+    from app.shared.models import Edge, Node
+
+    body = CanvasWithPlugins(
+        nodes=[
+            Node(
+                id="fs",
+                type="file_source",
+                position={"x": 0, "y": 0},
+                file_source_id="file_anywhere",
+            ),
+            Node(id="res", type="result", position={"x": 200, "y": 0}, columns=[]),
+        ],
+        edges=[Edge(id="e1", source="fs", target="res")],
+    )
+
+    fake_svc = _rb4_make_svc(owner_group_id="g1")
+
+    def _fake_visible(resource_table, group_id, is_superadmin=False):
+        # is_superadmin=True nel chiamante -> qualsiasi id presente
+        if is_superadmin and resource_table == "file_sources":
+            return {"file_anywhere"}
+        return set()
+
+    class _Super:
+        role = "superadmin"
+        user_id = "u_super"
+        username = "super"
+        group_id = "g1"
+
+    with patch("app.core.projects.router._project_service", fake_svc), patch(
+        "app.shared.sharing.visible_resource_ids", side_effect=_fake_visible
+    ):
+        resp = update_project_canvas("p1", body, _Super())
+
+    assert resp.get("status") == "ok"
+    fake_svc.update_canvas.assert_called_once()
+
+
+# =============================================================================
 # F. Pydantic tight contract
 # =============================================================================
 

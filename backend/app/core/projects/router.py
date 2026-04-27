@@ -273,6 +273,39 @@ class CanvasWithPlugins(BaseModel):
     plugins: Optional[dict] = None   # ignorato — rimasto per compatibilità frontend
 
 
+def _collect_canvas_resource_refs(canvas: CanvasState) -> dict:
+    """Estrae da `canvas` gli id di risorse cross-tenant referenziate dai
+    nodi che le richiedono.
+
+    Returns:
+        dict con chiavi:
+          - "file_sources": set[str] di `file_source_id` referenziati dai
+            nodi `file_source`
+          - "projects": set[str] di `source_project_id` referenziati dai
+            nodi `project_source` (cerca sia `node.source_project_id` sia
+            `node.data.get('source_project_id')`, allineato a `list_projects`
+            che gia' supporta entrambi i path)
+
+    Used by RB.4.A `update_project_canvas` per il check cross-tenant.
+    """
+    file_source_ids: set = set()
+    project_ids: set = set()
+    for n in canvas.nodes:
+        if n.type == 'file_source':
+            fsid = getattr(n, 'file_source_id', None) or (
+                n.data.get('file_source_id') if getattr(n, 'data', None) else None
+            )
+            if fsid:
+                file_source_ids.add(fsid)
+        elif n.type == 'project_source':
+            spid = getattr(n, 'source_project_id', None) or (
+                n.data.get('source_project_id') if getattr(n, 'data', None) else None
+            )
+            if spid:
+                project_ids.add(spid)
+    return {"file_sources": file_source_ids, "projects": project_ids}
+
+
 @router.put("/{project_id}/canvas")
 @audit_action(action="project.update_canvas", target_param="project_id")
 def update_project_canvas(
@@ -320,6 +353,63 @@ def update_project_canvas(
                 f"canvas prima di salvare."
             ),
         )
+
+    # RB.4.A (2026-04-27): rifiuta canvas con riferimenti cross-tenant a
+    # file_source / source_project non visibili al gruppo del progetto.
+    # Senza questo check, un canvas duplicato/condiviso da un altro gruppo
+    # poteva essere salvato con riferimenti stantii: il save passava in
+    # silenzio, ma la successiva esecuzione veniva bloccata da
+    # `_assert_file_source_group_access` con un errore opaco.
+    # Backend resta autorita': il runtime check fail-closed in
+    # `arricchisci/api_connection_rest_file._assert_file_source_group_access`
+    # non viene rimosso.
+    refs = _collect_canvas_resource_refs(canvas)
+    if refs["file_sources"] or refs["projects"]:
+        from app.shared.sharing import visible_resource_ids
+        # `metadata` puo' essere ProjectMetadata pydantic (prod) o dict
+        # (test): coerente con assert_group_access che gia' supporta entrambi.
+        owner_group_id = (
+            getattr(metadata, "group_id", None)
+            or (metadata.get("group_id") if isinstance(metadata, dict) else None)
+        )
+        is_super = current_user.role == "superadmin"
+        invalid_file_sources: set = set()
+        invalid_projects: set = set()
+        if refs["file_sources"]:
+            visible_fs = visible_resource_ids(
+                "file_sources", owner_group_id, is_superadmin=is_super,
+            )
+            invalid_file_sources = refs["file_sources"] - visible_fs
+        if refs["projects"]:
+            visible_pr = visible_resource_ids(
+                "projects", owner_group_id, is_superadmin=is_super,
+            )
+            invalid_projects = refs["projects"] - visible_pr
+        if invalid_file_sources or invalid_projects:
+            parts = []
+            if invalid_file_sources:
+                parts.append(
+                    f"file_source: {', '.join(sorted(invalid_file_sources))}"
+                )
+            if invalid_projects:
+                parts.append(
+                    f"project_source: {', '.join(sorted(invalid_projects))}"
+                )
+            logger.warning(
+                f"[SECURITY] update_project_canvas blocked cross-tenant refs "
+                f"on {project_id} (owner_group={owner_group_id}): "
+                f"{'; '.join(parts)}",
+                op="update_canvas",
+            )
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Il canvas contiene riferimenti a risorse non visibili "
+                    "al gruppo proprietario del progetto: "
+                    f"{'; '.join(parts)}. Rimuovi o sostituisci i nodi "
+                    "interessati prima di salvare."
+                ),
+            )
 
     # C9: backend single source of truth per result_node.columns.
     # Pre-fix, il frontend poteva inviare columns stale/vuote (vedi
