@@ -65,13 +65,25 @@ Responsabilita: governa l'enrichment di dataset via API esterne, con parallelism
 | `enrichment_grouping.py` | `EnrichmentGroupingMixin` (2 metodi: `_group_by_params`, `_count_unique_combinations`) | raggruppamento parametri unici per cache_key MD5 (B3-A.8) |
 | `executor.py` | `EnrichExecutor` | wrapper di livello pipeline |
 | `parallel.py` | `compute_parallel_groups`, `should_execute_node`, `get_execute_mask`, `_extract_consumed_columns`, `_extract_produced_columns`, `execute_parallel_enrichers` | parallelizzazione + execute_if |
-| `api_connector.py` | `ApiConnectionService`, `_encrypt_auth_in_config`, `_decrypt_auth_in_config` | crud connessioni API + cifratura auth (target B3-B futuro) |
+| `api_connector.py` | (orchestrator/core, 669 righe post-Phase-5-B3-B, -77.6% vs baseline 2992) — `ApiConnectionService(5 mixin)` shell + `__init__` + `execute_enrichment` (entry point orchestrator) + `_init_execution_context` (tenant binding) + `_get_execution_order` (Kahn topological sort) + `_run_single_enricher` (generator vs enricher dispatch) + `_is_file_source_for_file_processor` (passthrough branch logic) + `_prepare_headers` (3-line shim, source-bound test patch) + B3-B.1 helper re-export + back-compat `save_dataframe`/`save_result_blob`/`get_temp_output_path` imports | entry point + orchestrator + tenant context |
+| `_api_connection_helpers.py` | `_AUTH_SENSITIVE_FIELDS`, `_encrypt_auth_in_config`, `_decrypt_auth_in_config`, `_nd` (module-level helpers, B3-B.1) | crypto auth utilities + node-data accessor standalone |
+| `api_connection_management.py` | `ApiConnectionManagementMixin` (11 metodi: CRUD `_mask_credentials`, `list_api_connections`, `list_api_connections_decrypted`, `get_api_connection`, `create_api_connection`, `update_api_connection`, `delete_api_connection` + TEST_CONNECTION `_build_test_call_params`, `_inject_auth_query_params`, `_parse_test_response_json`, `test_api_connection`) | CRUD lifecycle + interactive test (B3-B.2b) |
+| `api_connection_support.py` | `ApiConnectionSupportMixin` (9 metodi: FIELD_INTROSPECTION 5 `_extract_available_fields`, `_extract_geojson_fields`, `_is_geometry`, `_get_field_type`, `_get_sample_value` + RESULT_BUILDING 4 `_find_final_result`, `_build_file_result_response`, `_save_and_build_dataframe_response`, `_write_intermediate_snapshot`) | JSON response field analysis + execute_enrichment helpers (B3-B.3) |
+| `api_connection_source_loading.py` | `ApiConnectionSourceLoadingMixin` (7 metodi: SOURCE_LOADING 6 `_assert_source_project_in_tenant`, `_recompute_upstream_project`, `_filesystem_fallback_load_project`, `_load_source_project`, `_load_file_source`, `_load_static_values` + SSRF 1 `_validate_outbound_url` `@staticmethod`) | tenant-fail-closed source loading + outbound URL guard (B3-B.4b) |
+| `api_connection_rest_file.py` | `ApiConnectionRestFileMixin` (10 metodi: REST_FILE PIPELINE 6 `_parse_http_error_body`, `_download_binary_response`, `_build_rest_file_multipart`, `_parse_rest_file_config`, `_rest_file_error`, `_execute_rest_file` + FILE_SOURCE RESOLUTION 4 `_assert_file_source_group_access`, `_resolve_file_source_id_path`, `_resolve_file_source_path`, `_resolve_input_path_for_file_processor`) | file-to-file HTTP multipart + file_source materialization (B3-B.5b) |
+| `api_connection_generator_enricher.py` | `ApiConnectionGeneratorEnricherMixin` (9 metodi: API GENERATOR 5 `_paginate_generator_results`, `_substitute_url_path_params` `@staticmethod`, `_call_generator_endpoint`, `_build_generator_base_params`, `_execute_api_generator` + API ENRICHER 3 `_extract_rows_from_response`, `_enrich_one_row`, `_execute_api_enricher` + JSON UTIL 1 `_extract_json_value`) | DataFrame from JSON + row-by-row enrichment + JSON path delegate (B3-B.6) |
 | `models.py` | `RowStatus`, `BatchInputFormat`, `BatchConfig`, `RowError`, `EnrichmentStats`, `EnrichmentOptions`, `EnrichmentResult`, `PreviewResult`, `EnrichmentValidationResult` | shape stato/configurazione enrichment |
 
-Keywords: `EnrichmentExecutor`, `ApiConnectionService`, `RateLimiter`, `compute_parallel_groups`, `should_execute_node`, `_encrypt_auth_in_config`, `EnrichmentResult`, `EnrichmentTemplateParamsMixin`, `EnrichmentResponseProcessingMixin`, `EnrichmentBatchModeMixin`, `EnrichmentValidationPreviewMixin`, `EnrichmentRetryHttpMixin`, `EnrichmentExecutionEnginesMixin`, `EnrichmentGroupingMixin`
+Keywords: `EnrichmentExecutor`, `ApiConnectionService`, `RateLimiter`, `compute_parallel_groups`, `should_execute_node`, `_encrypt_auth_in_config`, `EnrichmentResult`, `EnrichmentTemplateParamsMixin`, `EnrichmentResponseProcessingMixin`, `EnrichmentBatchModeMixin`, `EnrichmentValidationPreviewMixin`, `EnrichmentRetryHttpMixin`, `EnrichmentExecutionEnginesMixin`, `EnrichmentGroupingMixin`, `ApiConnectionManagementMixin`, `ApiConnectionSupportMixin`, `ApiConnectionSourceLoadingMixin`, `ApiConnectionRestFileMixin`, `ApiConnectionGeneratorEnricherMixin`
 
 Punti di intervento tipici:
-- nuova auth API (es. OAuth flow) -> `api_connector.py` (`_encrypt_auth_in_config`/`_decrypt_auth_in_config`) + `models.py`
+- nuova auth API (es. OAuth flow) -> `_api_connection_helpers.py` (`_encrypt_auth_in_config`/`_decrypt_auth_in_config`) + `api_connection_management.py` (CRUD lifecycle) + `models.py`
+- nuovo CRUD/test API connection -> `api_connection_management.py` (`ApiConnectionManagementMixin`)
+- nuovo introspection JSON / result building per `execute_enrichment` -> `api_connection_support.py` (`ApiConnectionSupportMixin`)
+- tenant binding / source loading / SSRF guard -> `api_connection_source_loading.py` (`ApiConnectionSourceLoadingMixin`)
+- nuovo connector REST file-to-file / file_source resolution -> `api_connection_rest_file.py` (`ApiConnectionRestFileMixin`)
+- nuova strategia generator/enricher / pagination / JSON path -> `api_connection_generator_enricher.py` (`ApiConnectionGeneratorEnricherMixin`)
+- modifiche all'orchestrator `execute_enrichment` o `_init_execution_context` -> `api_connector.py` (core)
 - nuova policy di parallelizzazione/dipendenze tra nodi -> `parallel.py` (`compute_parallel_groups`)
 - nuovo formato risposta API -> `enrichment_response_processing.py` (`EnrichmentResponseProcessingMixin`)
 - regola `execute_if` per-riga -> `parallel.py` (`get_execute_mask`, `should_execute_node`)
@@ -109,6 +121,44 @@ EnrichmentExecutor
 - `RateLimiter` re-exported via `from app.core.arricchisci._rate_limiter import RateLimiter` (back-compat)
 
 **Cleanup B3-A.8**: rimosso module-level wrapper `_geojson_to_wkt` di `enrichment_service.py` (5 righe). Era dead code post-B3-A.3: `EnrichmentResponseProcessingMixin` ha sua copia locale per evitare circular import; nessun consumer esterno verificato.
+
+**MRO post-Phase-5-B3-B** (decisione architetturale ratificata B3-B.7):
+```
+ApiConnectionService
+  → ApiConnectionManagementMixin       (B3-B.2b)
+  → ApiConnectionSupportMixin          (B3-B.3)
+  → ApiConnectionSourceLoadingMixin    (B3-B.4b)
+  → ApiConnectionRestFileMixin         (B3-B.5b)
+  → ApiConnectionGeneratorEnricherMixin (B3-B.6)
+  → object
+```
+46 metodi distribuiti su 5 mixin specializzati per dominio + 1 standalone helpers module (`_api_connection_helpers.py` con `_AUTH_SENSITIVE_FIELDS` constant + `_encrypt_auth_in_config` + `_decrypt_auth_in_config` + `_nd`). `inspect.getsource(ApiConnectionService.<method>)` legge il source dal mixin tramite `__code__.co_filename`. Le call-site `self.<method>(...)` interne (cross-mixin) risolvono via MRO senza modifiche. Cross-mixin INVERSO documentato: `test_api_connection` (mgmt) → `_substitute_url_path_params` (gen_enr); `_execute_rest_file` (rest_file) → `_validate_outbound_url` (source_loading); `_execute_api_generator/enricher` (gen_enr) + `_execute_rest_file` (rest_file) + `test_api_connection` (mgmt) → `_prepare_headers` (core).
+
+**Logger naming contract** (uniforme per tutti i mixin che loggano + core class): tutti i moduli che emettono log usano esplicitamente `get_logger("app.core.arricchisci.api_connector")` (canonical pattern, parita' B2/B3-A). `StructuredLogger` wrapper di `app/utils/logger.py` delega a `_logger.log(...)` sul logger stdlib omonimo (singleton per nome) → handler/caplog agganciati nei test catturano emit indistintamente da quale mixin module li produce. `_assert_source_project_in_tenant` usa kwarg `op="load_source_project"` (StructuredLogger interface).
+
+**Residui intenzionali in `api_connector.py` core (post-B3-B.7)**:
+- `__init__` (~3 body) — orchestrator constructor (instance attrs `data_dir`, `results_dir` da `settings`)
+- `execute_enrichment` (~194 body) — entry point pubblico orchestrator (boundary safety-net per ValueError/Exception domain-safe → response user_error)
+- `_init_execution_context` (~37 body) — tenant binding + preview_limit setup (fail-closed via `ExecutionContextError`)
+- `_get_execution_order` (~32 body) — topological sort algoritmo Kahn
+- `_run_single_enricher` (~16 body) — dispatch generator vs enricher
+- `_is_file_source_for_file_processor` (~25 body) — branch logic file_source passthrough vs `_load_file_source`
+- `_prepare_headers` (~3 body) — 3-line stub di delega a `_shared_prepare_headers` (`app.shared.api_utils`); RESTA in core perche' `tests2/security/unit/test_temp_lifecycle_core.py:325` patch `app.core.arricchisci.api_connector._shared_prepare_headers` source-bound. Estrazione richiede test modernization in initiative dedicata.
+- B3-B.1 helper re-export (linee 85-90): `_AUTH_SENSITIVE_FIELDS`, `_encrypt_auth_in_config`, `_decrypt_auth_in_config`, `_nd` per back-compat con direct imports `from app.core.arricchisci.api_connector import _decrypt_auth_in_config` (test_api_connection_decrypt_policy) e `_nd` (test_api_connector_contract).
+- back-compat `save_dataframe`/`save_result_blob`/`get_temp_output_path` imports con `# noqa: F401` (linee 60-66) — patch in `test_api_connector_execute_enrichment_lock.py:137,141,156` sono inattive post-extraction ma rimuovere il binding causerebbe `AttributeError` al `patch("api_connector.<sym>")`. Cleanup posticipato a initiative dedicata con test modernization.
+- Singleton `api_connection_service = ApiConnectionService()` (linea finale) — usato da `app/main.py`, `executor.py`, `router.py`, `eseguibili/scanner.py`.
+
+**Cleanup B3-B.7** (post-cluster extraction):
+- 9 stdlib imports orphan rimossi: `io`, `os`, `re`, `json`, `uuid`, `datetime`, `timezone`, `Path`, `requests` (tutti con body migrato in mixin).
+- 9 app imports orphan rimossi: `_shared_extract_json_value`, `_shared_get_oauth2_token`, `_shared_get_oauth2_cc_token`, `sanitize_for_log`, `load_dataframe_from_file`, `filter_visible_columns`, `find_latest_output_file`, `process_static_fields`, `ResponseParser`/`get_preset_config`, `FileSourceResolutionError`.
+- 2 dead-code stub OAuth rimossi (prova forte: 0 self-call sites, 0 external refs, 0 test patches, 0 direct imports): `_get_oauth2_client_credentials_token` + `_get_oauth2_token` (3 linee ognuno; EnrichmentService class ha le sue copie separate in `enrichment_service.py:424,428`).
+
+**Test modernizations B3-B** (necessarie pre-extraction per evitare source-bound patch breakage):
+- **B3-B.2a**: `tests2/arricchisci/unit/test_api_connector_test_api_connection_lock.py` modernizzato da `patch("app.core.arricchisci.api_connector.logger")` source-bound a handler stdlib agganciato al logger canonico per nome. Pattern behavior-bound (singleton stdlib per nome → record indistinguibili dai consumer).
+- **B3-B.4a**: `tests2/security/unit/test_api_connector_source_loading_core.py` modernizzato da `patch("app.core.arricchisci.api_connector.filter_visible_columns", ...)` (alias re-export) a `patch("app.utils.dataframe.filter_visible_columns", ...)` (source canonico). Identita' simbolica preservata; patch ora resiliente all'extraction.
+- **B3-B.5a**: `tests2/arricchisci/unit/test_api_connector_rest_file_error_taxonomy.py` (×2) + `tests2/security/unit/test_temp_lifecycle_core.py` (×1) modernizzati da `patch("app.core.arricchisci.api_connector.requests.post", ...)` a `patch("requests.post", ...)` (source canonico — `requests.post is requests.api.post`, intercept funziona via module binding).
+
+**Behavior-equivalent rewrite dichiarato B3-B.5b**: 8 forward-ref `ApiConnectionService._rest_file_error(...)` riscritti come `self._rest_file_error(...)` in `_build_rest_file_multipart` (×4) e `_parse_rest_file_config` (×4). Necessario per evitare import circolare nel mixin module (api_connector importa il mixin a module-load, prima che `ApiConnectionService` sia definita). Runtime-identico per staticmethod via descriptor protocol. Documentato esplicitamente nel docstring di `ApiConnectionRestFileMixin`.
 
 **Carry-over fuori scope Phase 5** (futura nuova Phase 0/5):
 - Redis-distributed rate limiter: il `RateLimiter` corrente e' in-memory thread-safe. Sostituzione con Redis-based per distributed scenarios e' miglioramento architetturale, non refactor behavior-preserving.
