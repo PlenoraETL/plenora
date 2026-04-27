@@ -35,39 +35,30 @@ Integrazione con altri moduli:
 - utils/response_parser.py: parsing strutturato risposte JSON
 """
 
-import io
-import os
-import re
-import json
-import uuid
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import List, Optional, Dict, Any
-import requests
+from typing import Any, Dict, List, Optional
 import pandas as pd
 import psycopg2
 
 from app.config import settings
 from app.utils.logger import get_logger
 from app.shared.api_utils import (
-    extract_json_value as _shared_extract_json_value,
     prepare_headers as _shared_prepare_headers,
-    get_oauth2_token as _shared_get_oauth2_token,
-    get_oauth2_client_credentials_token as _shared_get_oauth2_cc_token,
-    sanitize_for_log,
 )
 
-# Import nuove utility centralizzate
-from app.utils.dataframe import (
-    load_dataframe_from_file,
-    save_dataframe,
-    filter_visible_columns,
-    find_latest_output_file
+# `save_dataframe` / `save_result_blob` / `get_temp_output_path`:
+# import top-level preservato per back-compat con patches in
+# `tests2/arricchisci/unit/test_api_connector_execute_enrichment_lock.py`
+# (linee 137, 141, 156). Le patch sono inattive post-extraction
+# (`_save_and_build_dataframe_response` + `_build_file_result_response`
+# vivono nel SupportMixin con import lazy diversi), ma rimuovere il
+# binding causerebbe `AttributeError` al `patch("api_connector.<sym>")`.
+# Cleanup posticipato a initiative dedicata con test modernization.
+from app.utils.dataframe import save_dataframe  # noqa: F401  (back-compat patch)
+from app.utils.result_store import (  # noqa: F401  (back-compat patch)
+    get_temp_output_path,
+    save_result_blob,
 )
-from app.utils.result_store import get_temp_output_path, save_result_blob
-from app.utils.template_variables import process_static_fields
-from app.utils.response_parser import ResponseParser, get_preset_config
-from app.shared.exceptions import ExecutionContextError, FileSourceResolutionError
+from app.shared.exceptions import ExecutionContextError
 import app.db.db_service as db_svc
 
 # Phase 5 B3-B.1 cutover: cluster MODULE-LEVEL HELPERS
@@ -137,6 +128,10 @@ from app.core.arricchisci.api_connection_management import (
 # api_connector + tests), `_extract_json_value` denso nei consumer
 # API_GENERATOR/ENRICHER non ancora estratti — extraction posticipata
 # a batch dedicato. Vedi `orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B3-B.
+# Aggiornamento B3-B.7: `_get_oauth2_*` rimossi come dead code (prova
+# forte verificata). `_extract_json_value` migrato in B3-B.6 nel
+# GeneratorEnricherMixin. Resta in core solo `_prepare_headers` (3
+# linee) per source-bound patch in test_temp_lifecycle_core.
 from app.core.arricchisci.api_connection_support import (
     ApiConnectionSupportMixin,
 )
@@ -607,14 +602,16 @@ class ApiConnectionService(
         """Prepara headers HTTP per chiamata API. Delegato a shared/api_utils."""
         return _shared_prepare_headers(auth, custom_headers)
 
-    def _get_oauth2_client_credentials_token(self, auth: Dict) -> Optional[str]:
-        """Ottiene token OAuth2 con client_credentials flow. Delegato a shared/api_utils."""
-        return _shared_get_oauth2_cc_token(auth)
-    
-    def _get_oauth2_token(self, auth: Dict) -> Optional[str]:
-        """Ottiene token OAuth2 con password flow. Delegato a shared/api_utils."""
-        return _shared_get_oauth2_token(auth)
-    
+    # B3-B.7 cleanup: rimossi `_get_oauth2_client_credentials_token` e
+    # `_get_oauth2_token` come dead code (prova forte: 0 self-call sites
+    # in api_connector, 0 external refs in app/, 0 test patches, 0 direct
+    # imports, EnrichmentService class ha le sue proprie copie separate
+    # in `enrichment_service.py:424,428`). Erano shim 3-line verso
+    # `_shared_get_oauth2_token` / `_shared_get_oauth2_cc_token` di
+    # `app.shared.api_utils`, importati ma mai chiamati dal namespace
+    # `ApiConnectionService`. Vedi B3-B.3 mini-scan `_get_oauth2_*`
+    # dead-code candidate flag.
+
     # =========================================================================
     # SOURCE_LOADING / TENANCY + SSRF — extracted in B3-B.4b
     # -------------------------------------------------------------------------
