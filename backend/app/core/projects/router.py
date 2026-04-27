@@ -170,6 +170,93 @@ def list_projects(current_user: CurrentUser = Depends(require_not_esecutore)):
     return {"projects": enriched_projects}
 
 
+def _annotate_inaccessible_canvas_refs(
+    canvas_dict: dict,
+    owner_group_id: Optional[str],
+    is_superadmin: bool,
+) -> None:
+    """RB.4.B (2026-04-27): annota in-place i nodi del canvas serializzato
+    che referenziano risorse non visibili al gruppo proprietario del progetto.
+
+    Per ogni nodo `file_source` con `file_source_id` non visibile, oppure
+    `project_source` con `source_project_id` non visibile, inietta nel
+    sub-dict `data` del nodo:
+      - `access_denied`: True
+      - `access_denied_reason`: stringa breve operativa
+      - `inaccessible_resource_type`: "file_source" | "project_source"
+
+    Non rimuove nodi. Non muta il canvas persistito (riceve un dict gia'
+    `model_dump()`-ato). superadmin -> no-op (vede tutto).
+
+    Args:
+        canvas_dict: output di `CanvasState.model_dump()` (mutato in-place
+            sul campo `data` dei nodi affected).
+        owner_group_id: gruppo proprietario del progetto (da `metadata`).
+        is_superadmin: True se chi sta caricando e' superadmin.
+    """
+    if is_superadmin or canvas_dict is None or not owner_group_id:
+        return
+    nodes = canvas_dict.get("nodes") or []
+    if not nodes:
+        return
+
+    # Estrazione ref dal dict serializzato (fonte canonica per la response).
+    file_source_ids: set = set()
+    project_ids: set = set()
+    for n in nodes:
+        ntype = n.get("type")
+        ndata = n.get("data") or {}
+        if ntype == "file_source":
+            fsid = n.get("file_source_id") or ndata.get("file_source_id")
+            if fsid:
+                file_source_ids.add(fsid)
+        elif ntype == "project_source":
+            spid = n.get("source_project_id") or ndata.get("source_project_id")
+            if spid:
+                project_ids.add(spid)
+
+    if not file_source_ids and not project_ids:
+        return  # fast-path: zero DB hit
+
+    from app.shared.sharing import visible_resource_ids
+    visible_fs = (
+        visible_resource_ids("file_sources", owner_group_id, is_superadmin=False)
+        if file_source_ids
+        else set()
+    )
+    visible_pr = (
+        visible_resource_ids("projects", owner_group_id, is_superadmin=False)
+        if project_ids
+        else set()
+    )
+
+    # Annotazione in-place: muta SOLO il dict di response. Il canvas in DB
+    # resta intatto (RB.4.A blocca i save futuri con ref invalidi; canvas
+    # storici sporchi vengono solo segnalati al frontend).
+    for n in nodes:
+        ntype = n.get("type")
+        ndata = n.get("data")
+        if ndata is None:
+            ndata = {}
+            n["data"] = ndata
+        if ntype == "file_source":
+            fsid = n.get("file_source_id") or ndata.get("file_source_id")
+            if fsid and fsid not in visible_fs:
+                ndata["access_denied"] = True
+                ndata["access_denied_reason"] = (
+                    f"File sorgente '{fsid}' non visibile al gruppo del progetto"
+                )
+                ndata["inaccessible_resource_type"] = "file_source"
+        elif ntype == "project_source":
+            spid = n.get("source_project_id") or ndata.get("source_project_id")
+            if spid and spid not in visible_pr:
+                ndata["access_denied"] = True
+                ndata["access_denied_reason"] = (
+                    f"Progetto sorgente '{spid}' non visibile al gruppo del progetto"
+                )
+                ndata["inaccessible_resource_type"] = "project_source"
+
+
 @router.get("/{project_id}")
 def get_project(project_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
     """Ottieni progetto specifico (metadata + canvas + columns_metadata).
@@ -179,6 +266,13 @@ def get_project(project_id: str, current_user: CurrentUser = Depends(require_not
     con detail esplicito + error_code=canvas_corrupted. Pre-fix il
     fallback silenzioso a canvas vuoto portava l'utente a sovrascrivere
     i dati corrotti originali senza accorgersene.
+
+    RB.4.B (2026-04-27): canvas storici contenenti riferimenti cross-tenant
+    a file_source / source_project (es. progetti duplicati o condivisi tra
+    gruppi prima dell'introduzione di RB.4.A) sono ritornati as-is dal DB,
+    ma i nodi affected vengono marcati con `data.access_denied = True`.
+    Il frontend usa il flag per disabilitare run/preview e mostrare un
+    warning all'utente. Nessuna mutazione del canvas persistito.
     """
     metadata = _project_service.get_project_metadata(project_id)
     assert_group_access(metadata, current_user, f"Progetto '{project_id}'")
@@ -186,9 +280,21 @@ def get_project(project_id: str, current_user: CurrentUser = Depends(require_not
     canvas = _project_service.get_project_canvas(project_id)
     columns_metadata = _project_service.get_project_columns_metadata(project_id)
 
+    canvas_dict = canvas.model_dump() if canvas else None
+    if canvas_dict is not None:
+        owner_group_id = (
+            getattr(metadata, "group_id", None)
+            or (metadata.get("group_id") if isinstance(metadata, dict) else None)
+        )
+        _annotate_inaccessible_canvas_refs(
+            canvas_dict,
+            owner_group_id=owner_group_id,
+            is_superadmin=(current_user.role == "superadmin"),
+        )
+
     return {
         "metadata": metadata.model_dump(),
-        "canvas": canvas.model_dump() if canvas else None,
+        "canvas": canvas_dict,
         "columns_metadata": columns_metadata
     }
 
