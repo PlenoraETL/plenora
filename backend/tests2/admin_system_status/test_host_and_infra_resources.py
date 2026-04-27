@@ -7,6 +7,7 @@ ritornare un dict valido con `status`. Mai sollevare al chiamante.
 from __future__ import annotations
 
 import sys
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -74,6 +75,42 @@ def test_host_resources_happy_path(monkeypatch):
     assert out["cpu"]["count"] == 4
     assert out["cpu"]["load_1m"] == 1.0
     assert "disco" in out["message"]
+
+
+def test_host_resources_uses_existing_parent_for_missing_data_dir(monkeypatch, tmp_path):
+    """DATA_DIR non ancora creato: misura il parent esistente, non crasha."""
+    from app.core.admin_system_status import service
+    import app.config as config_mod
+
+    missing_data_dir = tmp_path / "missing" / "data"
+    fake_settings = SimpleNamespace(DATA_DIR=missing_data_dir)
+
+    fake_psutil = MagicMock()
+    fake_psutil.disk_usage.return_value = MagicMock(
+        total=100 * 1024 ** 3,
+        used=20 * 1024 ** 3,
+        free=80 * 1024 ** 3,
+        percent=20.0,
+    )
+    fake_psutil.virtual_memory.return_value = MagicMock(
+        total=16 * 1024 ** 3,
+        used=4 * 1024 ** 3,
+        available=12 * 1024 ** 3,
+        percent=25.0,
+    )
+    fake_psutil.getloadavg.side_effect = AttributeError("Windows non ha load avg")
+    fake_psutil.cpu_count.return_value = 4
+    fake_psutil.cpu_percent.return_value = 10.0
+
+    monkeypatch.setattr(config_mod, "settings", fake_settings)
+    monkeypatch.setitem(sys.modules, "psutil", fake_psutil)
+
+    out = service.get_host_resources()
+
+    fake_psutil.disk_usage.assert_called_once_with(str(tmp_path))
+    assert out["status"] == "ok"
+    assert out["disk"]["path"] == str(missing_data_dir)
+    assert out["disk"]["usage_path"] == str(tmp_path)
 
 
 def test_host_resources_disk_over_error_threshold(monkeypatch):

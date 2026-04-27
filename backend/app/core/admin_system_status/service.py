@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from app.utils.logger import get_logger
@@ -424,6 +425,31 @@ _MEM_WARN_PCT = 85
 _MEM_ERROR_PCT = 95
 
 
+def _disk_usage_probe_path(data_dir: Path) -> Path:
+    """Return an existing path suitable for psutil.disk_usage().
+
+    On Windows, psutil can fail on relative or not-yet-created paths. The
+    metric we need is the filesystem containing DATA_DIR, so measuring the
+    nearest existing parent is equivalent for capacity/usage purposes.
+    """
+    try:
+        resolved = data_dir.expanduser().resolve(strict=False)
+    except Exception:
+        resolved = data_dir
+
+    for candidate in (resolved, *resolved.parents):
+        try:
+            if candidate.exists():
+                return candidate
+        except OSError:
+            continue
+
+    try:
+        return Path.cwd()
+    except OSError:
+        return Path(".")
+
+
 def get_host_resources() -> Dict[str, Any]:
     """Metriche host via psutil: disco (sul mount DATA_DIR), RAM, CPU.
 
@@ -451,11 +477,14 @@ def get_host_resources() -> Dict[str, Any]:
     # Disco sul mount di DATA_DIR
     try:
         from app.config import settings
-        data_dir = str(settings.DATA_DIR)
-        du = psutil.disk_usage(data_dir)
+        data_dir_path = Path(settings.DATA_DIR)
+        data_dir = str(data_dir_path)
+        usage_path = _disk_usage_probe_path(data_dir_path)
+        du = psutil.disk_usage(str(usage_path))
         pct = round(du.percent, 1)
         disk_info = {
             "path": data_dir,
+            "usage_path": str(usage_path),
             "total_gb": round(du.total / (1024 ** 3), 2),
             "used_gb": round(du.used / (1024 ** 3), 2),
             "free_gb": round(du.free / (1024 ** 3), 2),
