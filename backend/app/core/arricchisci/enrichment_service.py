@@ -76,6 +76,16 @@ from app.shared.api_utils import (
     sanitize_url_for_log,
 )
 
+# Phase 5 B3-A.1 cutover: `RateLimiter` (token bucket thread-safe
+# in-memory) spostato in `app.core.arricchisci._rate_limiter`.
+# `EnrichmentExecutor.__init__` continua a usare
+# `RateLimiter(self.options.rate_limit)` via l'import sotto; le 4
+# callsite `self._rate_limiter.acquire()` sono invariate (instance
+# attribute). Re-import per preservare retrocompat di eventuali
+# consumer storici di `RateLimiter` da `enrichment_service` direct
+# (verificato pre-extraction: zero consumer esterni, ma cheap insurance).
+from app.core.arricchisci._rate_limiter import RateLimiter  # noqa: F401  (re-export)
+
 logger = get_logger(__name__)
 
 
@@ -84,39 +94,9 @@ def _geojson_to_wkt(geom: dict) -> str:
     return _shared_geojson_to_wkt(geom)
 
 
-class RateLimiter:
-    """
-    Rate limiter thread-safe con algoritmo token bucket.
-    
-    Garantisce che le chiamate API non superino il rate specificato.
-    Usato sia dall'esecuzione sequenziale che parallela per rispettare
-    i limiti delle API esterne (es. Nominatim: 1 req/s).
-    """
-    
-    def __init__(self, rate: float):
-        """
-        Args:
-            rate: Richieste al secondo (es. 5.0 = 5 req/s)
-        """
-        self.rate = rate
-        self.interval = 1.0 / rate if rate > 0 else 0
-        self.lock = threading.Lock()
-        self.last_call = 0.0
-    
-    def acquire(self):
-        """Attende se necessario per rispettare il rate limit."""
-        if self.interval == 0:
-            return
-        
-        with self.lock:
-            now = time.time()
-            time_since_last = now - self.last_call
-            
-            if time_since_last < self.interval:
-                sleep_time = self.interval - time_since_last
-                time.sleep(sleep_time)
-            
-            self.last_call = time.time()
+# Phase 5 B3-A.1 cutover: `class RateLimiter` spostato in
+# `app.core.arricchisci._rate_limiter`. Re-import in testa al file
+# (vedi block sopra) per preservare i path simbolici esistenti.
 
 
 class EnrichmentExecutor:
