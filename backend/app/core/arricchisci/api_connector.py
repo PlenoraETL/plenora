@@ -119,10 +119,36 @@ from app.core.arricchisci.api_connection_management import (
 )
 
 
+# Phase 5 B3-B.3 cutover: cluster SUPPORT (FIELD_INTROSPECTION 5
+# metodi: `_extract_available_fields`, `_extract_geojson_fields`,
+# `_is_geometry`, `_get_field_type`, `_get_sample_value` +
+# RESULT_BUILDING 4 metodi: `_find_final_result`,
+# `_build_file_result_response`, `_save_and_build_dataframe_response`,
+# `_write_intermediate_snapshot`) spostato in
+# `app.core.arricchisci.api_connection_support.ApiConnectionSupportMixin`.
+# Sono leaf utilities (zero `self.<state>`, zero cross-cluster calls
+# fra FIELD e RESULT). Logger canonico
+# `get_logger("app.core.arricchisci.api_connector")` (singleton stdlib).
+# I 4 thin AUTH/UTILITY delegates (`_prepare_headers`,
+# `_get_oauth2_client_credentials_token`, `_get_oauth2_token`,
+# `_extract_json_value`) restano in core: `_prepare_headers` ha
+# source-bound patch via `_shared_prepare_headers` in test_temp_lifecycle_core,
+# `_get_oauth2_*` sono dead-code candidate (0 self-call sites in
+# api_connector + tests), `_extract_json_value` denso nei consumer
+# API_GENERATOR/ENRICHER non ancora estratti — extraction posticipata
+# a batch dedicato. Vedi `orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B3-B.
+from app.core.arricchisci.api_connection_support import (
+    ApiConnectionSupportMixin,
+)
+
+
 logger = get_logger(__name__)
 
 
-class ApiConnectionService(ApiConnectionManagementMixin):
+class ApiConnectionService(
+    ApiConnectionManagementMixin,
+    ApiConnectionSupportMixin,
+):
     """
     Servizio per gestire le connessioni API esterne.
     
@@ -160,161 +186,19 @@ class ApiConnectionService(ApiConnectionManagementMixin):
     # file (sopra il `logger = get_logger(__name__)`).
     # =========================================================================
 
-    def _extract_available_fields(self, data: Any, prefix: str = "", max_depth: int = 3) -> List[Dict]:
-        """
-        Estrae i campi disponibili da una risposta JSON.
-        
-        Analizza ricorsivamente la struttura JSON fino a max_depth livelli,
-        generando un elenco piatto di campi con path, tipo e valore di esempio.
-        Gestisce casi speciali: GeoJSON FeatureCollection, array di oggetti,
-        geometrie (non esplorate ricorsivamente).
-        
-        Returns:
-            Lista di {name, path, type, sample_value} per ogni campo trovato
-        """
-        fields = []
-        
-        if max_depth <= 0:
-            return fields
-        
-        # Caso: array - analizza il primo elemento
-        if isinstance(data, list):
-            if len(data) > 0:
-                first_item = data[0]
-                # Se è un array alla root, indica che ogni elemento ha questi campi
-                if not prefix:
-                    # GeoJSON FeatureCollection check
-                    if isinstance(first_item, dict) and first_item.get('type') == 'Feature':
-                        return self._extract_geojson_fields(data)
-                    # Path senza prefisso [0]: `_extract_rows_from_response`
-                    # itera gia' su ogni item, quindi i path devono
-                    # essere relativi all'item.
-                    fields.extend(self._extract_available_fields(first_item, "", max_depth - 1))
-                else:
-                    fields.extend(self._extract_available_fields(first_item, f"{prefix}[0]", max_depth - 1))
-            return fields
-        
-        # Caso: GeoJSON FeatureCollection
-        if isinstance(data, dict) and data.get('type') == 'FeatureCollection':
-            return self._extract_geojson_fields(data)
-        
-        # Caso: oggetto
-        if isinstance(data, dict):
-            for key, value in data.items():
-                field_path = f"{prefix}.{key}" if prefix else key
-                field_type = self._get_field_type(value)
-                
-                # Aggiungi il campo
-                fields.append({
-                    "name": key,
-                    "path": field_path,
-                    "type": field_type,
-                    "sample_value": self._get_sample_value(value)
-                })
-                
-                # Se è un oggetto nested, estrai anche i suoi campi
-                if isinstance(value, dict) and not self._is_geometry(value):
-                    fields.extend(self._extract_available_fields(value, field_path, max_depth - 1))
-                elif isinstance(value, list) and len(value) > 0:
-                    if isinstance(value[0], dict):
-                        fields.extend(self._extract_available_fields(value[0], f"{field_path}[0]", max_depth - 1))
-                    else:
-                        # Array di primitivi (es. latlng: [42.83, 12.83]) —
-                        # espandi tutti gli indici presenti (max 10)
-                        for idx, item in enumerate(value[:10]):
-                            item_path = f"{field_path}[{idx}]"
-                            fields.append({
-                                "name": f"{field_path}[{idx}]",
-                                "path": item_path,
-                                "type": self._get_field_type(item),
-                                "sample_value": self._get_sample_value(item)
-                            })
-        
-        return fields
-    
-    def _extract_geojson_fields(self, data: Any) -> List[Dict]:
-        """Estrae campi da GeoJSON FeatureCollection."""
-        fields = []
-        
-        features = data.get('features', []) if isinstance(data, dict) else data
-        if not features or not isinstance(features, list):
-            return fields
-        
-        first_feature = features[0]
-        if not isinstance(first_feature, dict):
-            return fields
-        
-        # Geometry
-        if first_feature.get('geometry'):
-            fields.append({
-                "name": "geometry",
-                "path": "features[].geometry",
-                "type": "geojson",
-                "sample_value": first_feature['geometry'].get('type', 'Unknown')
-            })
-        
-        # Properties
-        properties = first_feature.get('properties', {})
-        if isinstance(properties, dict):
-            for key, value in properties.items():
-                fields.append({
-                    "name": key,
-                    "path": f"features[].properties.{key}",
-                    "type": self._get_field_type(value),
-                    "sample_value": self._get_sample_value(value)
-                })
-        
-        # ID
-        if 'id' in first_feature:
-            fields.insert(0, {
-                "name": "id",
-                "path": "features[].id",
-                "type": self._get_field_type(first_feature['id']),
-                "sample_value": self._get_sample_value(first_feature['id'])
-            })
-        
-        return fields
-    
-    def _is_geometry(self, value: Any) -> bool:
-        """Verifica se un valore è una geometria GeoJSON."""
-        if not isinstance(value, dict):
-            return False
-        return value.get('type') in ['Point', 'LineString', 'Polygon', 
-                                      'MultiPoint', 'MultiLineString', 'MultiPolygon',
-                                      'GeometryCollection']
-    
-    def _get_field_type(self, value: Any) -> str:
-        """Determina il tipo di un campo."""
-        if value is None:
-            return "null"
-        if isinstance(value, bool):
-            return "boolean"
-        if isinstance(value, int):
-            return "integer"
-        if isinstance(value, float):
-            return "number"
-        if isinstance(value, str):
-            return "string"
-        if isinstance(value, list):
-            return "array"
-        if isinstance(value, dict):
-            if self._is_geometry(value):
-                return "geojson"
-            return "object"
-        return "unknown"
-    
-    def _get_sample_value(self, value: Any, max_len: int = 50) -> str:
-        """Restituisce un valore di esempio come stringa."""
-        if value is None:
-            return "null"
-        if isinstance(value, (dict, list)):
-            if self._is_geometry(value):
-                return value.get('type', 'Geometry')
-            return f"[{len(value)} items]" if isinstance(value, list) else "{...}"
-        sample = str(value)
-        if len(sample) > max_len:
-            return sample[:max_len] + "..."
-        return sample
+    # =========================================================================
+    # SUPPORT (FIELD_INTROSPECTION + RESULT_BUILDING) — extracted in B3-B.3
+    # -------------------------------------------------------------------------
+    # I 9 metodi (FIELD_INTROSPECTION 5: `_extract_available_fields`,
+    # `_extract_geojson_fields`, `_is_geometry`, `_get_field_type`,
+    # `_get_sample_value`; RESULT_BUILDING 4: `_find_final_result`,
+    # `_build_file_result_response`, `_save_and_build_dataframe_response`,
+    # `_write_intermediate_snapshot`) sono stati spostati in
+    # `app.core.arricchisci.api_connection_support.ApiConnectionSupportMixin`
+    # ed ereditati via MRO da `ApiConnectionService`. Behavior bit-per-bit
+    # identico al pre-extraction. Vedi B3-B.3 cutover comment in testa al
+    # file (sopra il `logger = get_logger(__name__)`).
+    # =========================================================================
 
     # =========================================================================
     # ESECUZIONE ARRICCHIMENTO
@@ -322,166 +206,6 @@ class ApiConnectionService(ApiConnectionManagementMixin):
     # arricchisci via API → salva output finale.
     # Supporta nodi: project_source, file_source, staticValues, api_enrich, result
     # =========================================================================
-    
-    def _find_final_result(
-        self,
-        node_results: Dict[str, Any],
-        result_node: Optional[Dict],
-        execution_order: List[str],
-    ) -> Any:
-        """Risolve il risultato finale della pipeline.
-
-        Priorita':
-          1. Output del nodo `result` se presente e ha prodotto qualcosa
-          2. Fallback: ultimo nodo in execution_order con un risultato
-             non-None e non-marker passthrough file_source
-
-        Ritorna `None` se nessun nodo ha prodotto output.
-        """
-        if result_node is not None:
-            candidate = node_results.get(result_node['id'])
-            if candidate is not None:
-                return candidate
-
-        for node_id in reversed(execution_order):
-            r = node_results.get(node_id)
-            if r is None:
-                continue
-            if isinstance(r, dict) and r.get('_passthrough_file_source'):
-                continue
-            return r
-        return None
-
-    def _build_file_result_response(
-        self, final_result: Dict, project_id: str
-    ) -> Dict:
-        """Costruisce la response dict per un risultato file-based
-        (tipicamente `_execute_rest_file` con `is_file_result=True`).
-
-        Persiste il blob + pulisce la dir temporanea `plenora_exec_*` se
-        presente (best-effort).
-
-        Il dict ritornato espone `result_id` (riferimento canonico al
-        blob nel DB results) e `output_filename` per display, ma NON
-        `output_path`/`output_file`: dopo `save_result_blob` il file
-        temp non esiste piu' (vedi `app/utils/result_store.py:80`),
-        quindi qualunque path emesso sarebbe stale. I consumer
-        downstream usano `result_id` via `PipelineArtifact.artifact_kind
-        == "blob"` e l'ArtifactResolver per materializzare dal DB.
-        """
-        src_path = Path(final_result['output_path'])
-        src_name = src_path.name
-        # Leggi la size PRIMA del save: save_result_blob cancella il
-        # file temp nel finally su success, quindi src_path.stat()
-        # dopo la chiamata solleverebbe FileNotFoundError.
-        size_bytes = src_path.stat().st_size
-
-        result_id = save_result_blob(
-            project_id, src_path, src_path.suffix.lstrip('.') or 'bin', 0
-        )
-
-        response = {
-            "success": True,
-            "result_id": result_id,
-            "output_type": "file",
-            "output_filename": src_name,
-            "output_size_bytes": size_bytes,
-            "rows": 0,
-            "rows_count": 0,
-            "rows_processed": 0,
-            "columns": [],
-            "columns_count": 0,
-            "execution_time_ms": final_result.get('execution_time_ms', 0),
-            "metadata": final_result.get('metadata', {}),
-            "message": f"Processamento completato: {src_name} ({size_bytes // 1024} KB)",
-        }
-
-        # Cleanup dir tmp dell'executable (solo se il nome combacia con
-        # il pattern `plenora_exec_*`: niente rimozioni di cartelle altrui).
-        try:
-            import shutil
-            tmp_dir = src_path.parent
-            if tmp_dir.name.startswith("plenora_exec_"):
-                shutil.rmtree(tmp_dir, ignore_errors=True)
-        except Exception as _cleanup_err:
-            logger.debug(
-                f"cleanup plenora_exec_ dir best-effort fallito: {_cleanup_err}"
-            )
-
-        return response
-
-    def _save_and_build_dataframe_response(
-        self,
-        final_df: pd.DataFrame,
-        output_name: str,
-        output_format: str,
-        project_id: str,
-    ) -> Dict:
-        """Salva il DataFrame finale nel formato richiesto, persiste il
-        blob, costruisce la response dict standard.
-
-        Il dict ritornato espone `result_id` (riferimento canonico al
-        blob nel DB results) e `output_filename` per display, ma NON
-        `output_path`/`output_file`: dopo `save_result_blob` il file
-        temp non esiste piu' (vedi `app/utils/result_store.py:80`),
-        quindi qualunque path emesso sarebbe stale. I consumer
-        downstream usano `result_id` via `PipelineArtifact.artifact_kind
-        == "blob"` e l'ArtifactResolver per materializzare dal DB.
-        """
-        from app.utils.result_store import save_pipeline_result
-
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-        filename_stem = f"{output_name}_{timestamp}"
-
-        saved = save_pipeline_result(
-            project_id=project_id,
-            df=final_df,
-            output_format=output_format,
-            filename_stem=filename_stem,
-            rows_count=len(final_df),
-        )
-
-        return {
-            "success": True,
-            "result_id": saved["result_id"],
-            "output_filename": saved["output_filename"],
-            "rows": len(final_df),
-            "rows_count": len(final_df),
-            "rows_processed": len(final_df),
-            "columns": list(final_df.columns),
-            "columns_metadata": [
-                {"name": c, "type": str(final_df[c].dtype)} for c in final_df.columns
-            ],
-            "columns_count": len(final_df.columns),
-            "message": f"Arricchimento completato: {len(final_df)} righe processate",
-        }
-
-    def _write_intermediate_snapshot(
-        self, run_id: str, node_id: str, node_type: str, df: Any
-    ) -> None:
-        """Scrive uno snapshot del DataFrame nell'intermediate.db.
-
-        Best-effort: errori loggati come warning ma non propagati
-        (lo snapshot e' per inspection, non bloccante per la pipeline).
-        No-op se `df` non e' un DataFrame non vuoto.
-        """
-        if not isinstance(df, pd.DataFrame) or df.empty:
-            return
-        try:
-            from app.core.intermediate.writer import write_node
-            write_node(
-                run_id=run_id,
-                node_id=node_id,
-                node_type=node_type,
-                rows=df.to_dict(orient="records"),
-                col_schema=df.dtypes.astype(str).to_dict(),
-                exec_time=0.0,
-                status="ok",
-            )
-        except Exception as e:
-            logger.warning(
-                f"Intermediate write {node_id} fallita (non bloccante): {e}"
-            )
 
     def _is_file_source_for_file_processor(
         self,
