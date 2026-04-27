@@ -100,6 +100,21 @@ from app.core.arricchisci.enrichment_template_params import (
     EnrichmentTemplateParamsMixin,
 )
 
+# Phase 5 B3-A.3 cutover: cluster RESPONSE_PROCESSING (`_extract_output`,
+# `_explode_rows`, `_auto_flatten`, `_detect_geometry_type`,
+# `_infer_scalar_type`, `_flatten_dict`, `_apply_result`,
+# `_resolve_nested_list`, `_extract_json_value`) spostato in
+# `app.core.arricchisci.enrichment_response_processing.EnrichmentResponseProcessingMixin`.
+# `EnrichmentExecutor` eredita dal mixin (vedi class declaration sotto).
+# I 9 metodi restano accessibili via MRO. Le call-site
+# `self._apply_result / _extract_output / _extract_json_value` da
+# `_call_api_with_retry / _execute_* / _call_batch_api` continuano a
+# risolvere via MRO senza modifiche. Vedi
+# `orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B3-A.
+from app.core.arricchisci.enrichment_response_processing import (
+    EnrichmentResponseProcessingMixin,
+)
+
 logger = get_logger(__name__)
 
 
@@ -113,7 +128,10 @@ def _geojson_to_wkt(geom: dict) -> str:
 # (vedi block sopra) per preservare i path simbolici esistenti.
 
 
-class EnrichmentExecutor(EnrichmentTemplateParamsMixin):
+class EnrichmentExecutor(
+    EnrichmentTemplateParamsMixin,
+    EnrichmentResponseProcessingMixin,
+):
     """
     Esecutore avanzato per enrichment API.
     
@@ -1516,215 +1534,18 @@ class EnrichmentExecutor(EnrichmentTemplateParamsMixin):
             last_error.status = RowStatus.RETRY_EXHAUSTED
         return None, last_error
     
-    def _extract_output(self, data: Any) -> List[Dict]:
-        """Estrae campi output dalla response. Restituisce SEMPRE una lista di dict.
 
-        - Con output_mapping vuoto (auto-flatten, B-BE-27):
-            - GeoJSON FeatureCollection -> lista con 1 dict per feature (esplosione)
-            - Dict generico -> lista con 1 dict (chiavi di primo livello come colonne)
-            - List -> lista di dict (1 dict per elemento se sono dict, altrimenti 1 dict con _response)
-        - Con output_mapping configurato:
-            - Path con [] o [*] (es. "features[].properties.x") -> multi-row, 1 dict per elemento
-            - Path con livelli annidati diversi (es. "features[*].nome" + "features[*].valori[*].anno")
-              -> prodotto cartesiano: 1 riga per ogni combinazione (feature, valore)
-            - Altrimenti -> lista con 1 dict (comportamento standard)
-        """
-        if not self.output_mapping:
-            return self._auto_flatten(data)
+    # Phase 5 B3-A.3 cutover: cluster RESPONSE_PROCESSING (`_extract_output`,
+    # `_explode_rows`, `_auto_flatten`, `_detect_geometry_type`,
+    # `_infer_scalar_type`, `_flatten_dict`, `_apply_result`) spostato in
+    # `EnrichmentResponseProcessingMixin`. I 7 metodi restano accessibili
+    # via MRO. Le call-site `self._extract_output / _apply_result` da
+    # `_call_api_with_retry / _execute_*` continuano a risolvere via MRO.
+    # `_resolve_nested_list` + `_extract_json_value` (cluster B3-A.3
+    # parte 2) anch'essi nel mixin (vedi cutover sotto).
+    # `_group_by_params` + `_count_unique_combinations` restano qui:
+    # candidati per B3-A.7 ExecutionEngines o cluster progress separato.
 
-        # Normalizza [*] → [] per uniformare la logica multi-row
-        def _norm(path: str) -> str:
-            return path.replace("[*]", "[]") if path else path
-
-        # Trova il path più profondo (max numero di [])
-        max_depth = 0
-        normalized_mappings = []
-        for mapping in self.output_mapping:
-            path = _norm(mapping.get("path", ""))
-            depth = path.count("[]")
-            max_depth = max(max_depth, depth)
-            normalized_mappings.append({
-                "path": path,
-                "column": mapping.get("column") or mapping.get("path", ""),
-                "depth": depth,
-            })
-
-        # ── SINGLE-ROW: nessun path usa [] ──
-        if max_depth == 0:
-            result = {}
-            for m in normalized_mappings:
-                result[m["column"]] = self._extract_json_value(data, m["path"])
-
-            if result and all(v is None for v in result.values()):
-                # Tutti None è legittimo quando il punto non ha dati per questo
-                # servizio (es. Tiranti idrici NoData, Frana PAI fuori zona).
-                # NON fare fallback ad auto_flatten: scaricherebbe le chiavi
-                # della struttura response (results, fields, fieldAliases, ecc.)
-                # come colonne fantasma nel DataFrame. Ritorna la riga con None.
-                # DEBUG level: e' un evento normale (punti fuori area di copertura)
-                # e si ripete per ogni riga senza dati → rumore inutile a INFO.
-                logger.debug(
-                    f"output_mapping ha prodotto tutti None per path={[m['path'] for m in normalized_mappings]}. "
-                    f"Risposta top-level keys: {list(data.keys()) if isinstance(data, dict) else type(data).__name__}"
-                )
-            return [result]
-
-        # ── MULTI-ROW: esplora ricorsivamente i livelli di [] e costruisce righe ──
-        # Per ogni livello k (1..max_depth) raccoglie il "contesto" (elemento corrente
-        # a quel livello), poi per ogni mapping estrae il valore dal contesto giusto.
-        rows = []
-        self._explode_rows(data, normalized_mappings, contexts=[data], rows=rows, current_depth=0, max_depth=max_depth)
-        return rows if rows else [{}]
-
-    def _explode_rows(self, current_data: Any, mappings: List[Dict], contexts: List[Any],
-                       rows: List[Dict], current_depth: int, max_depth: int):
-        """Esplora ricorsivamente i livelli di [] producendo una riga per ogni foglia.
-
-        contexts[k] = elemento corrente al livello k (0 = root, 1 = primo []-iterator, ...)
-        Una volta raggiunto max_depth, costruisce una riga leggendo ogni mapping dal
-        contesto corrispondente alla sua profondità.
-        """
-        if current_depth == max_depth:
-            row = {}
-            for m in mappings:
-                path = m["path"]
-                depth = m["depth"]
-                # Il contesto da cui leggere il valore è contexts[depth]
-                # Il suffix è la porzione del path dopo l'ultimo []
-                if depth == 0:
-                    suffix = path
-                    ctx = contexts[0]
-                else:
-                    # Dopo il depth-esimo [], quello che resta è il suffix
-                    parts = path.split("[]", depth)
-                    suffix = parts[-1].lstrip(".") if len(parts) > depth else ""
-                    ctx = contexts[depth]
-                row[m["column"]] = self._extract_json_value(ctx, suffix) if suffix else ctx
-            rows.append(row)
-            return
-
-        # Trova la base del prossimo livello: prefix fino al (current_depth+1)-esimo []
-        # Usa il primo mapping che ha almeno quella profondità
-        next_base = None
-        for m in mappings:
-            if m["depth"] > current_depth:
-                parts = m["path"].split("[]", current_depth + 1)
-                # parts[0..current_depth] sono i prefix separati da []
-                # Il segmento da applicare al contesto corrente è parts[current_depth]
-                next_base = parts[current_depth].rstrip(".")
-                break
-
-        if next_base is None:
-            return
-
-        # Estrai la lista al livello corrente
-        items = self._extract_json_value(current_data, next_base) if next_base else current_data
-        if not isinstance(items, list):
-            return
-
-        for item in items:
-            new_contexts = contexts + [item]
-            self._explode_rows(item, mappings, new_contexts, rows, current_depth + 1, max_depth)
-
-    def _auto_flatten(self, data: Any) -> List[Dict]:
-        """Auto-flatten senza output_mapping: restituisce lista di righe.
-        Popola self.detected_column_types con i tipi rilevati (es. geometry:point).
-        """
-        # GeoJSON FeatureCollection -> 1 riga per feature
-        if isinstance(data, dict) and data.get("type") == "FeatureCollection":
-            rows = []
-            features = data.get("features", [])
-            for feature in features:
-                row = {}
-                props = feature.get("properties") or {}
-                for k, v in props.items():
-                    # Fix: interi rimangono interi (pandas li upcastava a float con NaN)
-                    row[k] = int(v) if isinstance(v, float) and v == int(v) else v
-                geom = feature.get("geometry")
-                if geom:
-                    row["geometry"] = _geojson_to_wkt(geom)
-                    # Rileva tipo geometria
-                    geom_type = geom.get("type", "").lower()
-                    self._detect_geometry_type("geometry", geom_type)
-                if "id" in feature:
-                    row.setdefault("id", feature["id"])
-                rows.append(row)
-            # Rileva tipi delle properties dalla prima feature
-            if features:
-                first_props = features[0].get("properties") or {}
-                for k, v in first_props.items():
-                    if k not in self.detected_column_types:
-                        self.detected_column_types[k] = self._infer_scalar_type(v)
-                if "id" in features[0]:
-                    self.detected_column_types.setdefault("id", "int")
-            return rows if rows else [{}]
-
-        # Lista di dict -> 1 riga per elemento
-        if isinstance(data, list):
-            if data and isinstance(data[0], dict):
-                rows = [self._flatten_dict(item) for item in data]
-                # Rileva tipi dal primo elemento
-                for k, v in data[0].items():
-                    self.detected_column_types[k] = self._infer_scalar_type(v)
-                return rows
-            return [{"_response": json.dumps(data, ensure_ascii=False)}]
-
-        # Dict generico -> 1 riga, primo livello come colonne
-        if isinstance(data, dict):
-            for k, v in data.items():
-                self.detected_column_types[k] = self._infer_scalar_type(v)
-            return [self._flatten_dict(data)]
-
-        return [{"_response": str(data)}]
-
-    def _detect_geometry_type(self, col_name: str, geom_type: str):
-        """Mappa tipo GeoJSON -> tipo sistema (geometry:point, geometry:polygon, ecc.)"""
-        geo_map = {
-            "point": "geometry:point",
-            "multipoint": "geometry:multipoint",
-            "linestring": "geometry:line",
-            "multilinestring": "geometry:line",
-            "polygon": "geometry:polygon",
-            "multipolygon": "geometry:multipolygon",
-            "geometrycollection": "geometry",
-        }
-        self.detected_column_types[col_name] = geo_map.get(geom_type, "geometry")
-
-    def _infer_scalar_type(self, value: Any) -> str:
-        """Inferisce tipo colonna da un valore scalare."""
-        if isinstance(value, bool):
-            return "bool"
-        if isinstance(value, int):
-            return "int"
-        if isinstance(value, float):
-            return "real"
-        if isinstance(value, dict) and value.get("type") in (
-            "Point", "MultiPoint", "LineString", "MultiLineString",
-            "Polygon", "MultiPolygon", "GeometryCollection"
-        ):
-            self._detect_geometry_type("_tmp", value.get("type", "").lower())
-            return self.detected_column_types.pop("_tmp", "geometry")
-        return "str"
-
-    def _flatten_dict(self, data: Dict) -> Dict:
-        """Appiattisce un dict: valori scalari diretti, dict/list -> JSON string.
-        Fix: interi floats (es 114367654.0) vengono convertiti a int.
-        """
-        result = {}
-        for key, value in data.items():
-            if isinstance(value, float) and value == int(value):
-                result[key] = int(value)
-            elif isinstance(value, (dict, list)):
-                result[key] = json.dumps(value, ensure_ascii=False)
-            else:
-                result[key] = value
-        return result
-    
-    def _apply_result(self, df: pd.DataFrame, idx: int, result: Dict):
-        """Applica risultato API a una riga del DataFrame."""
-        for col_name, value in result.items():
-            df.at[idx, col_name] = value
-    
     def _group_by_params(self, df: pd.DataFrame) -> Dict[str, List[int]]:
         """
         Raggruppa righe per combinazione unica di parametri (deduplicazione).
@@ -1769,50 +1590,11 @@ class EnrichmentExecutor(EnrichmentTemplateParamsMixin):
         """Ottiene token OAuth2 con client_credentials flow. Delegato a shared/api_utils."""
         return _shared_get_oauth2_cc_token(self.auth)
 
-    def _resolve_nested_list(self, data: Any, path: str) -> List[Any]:
-        """Risolve un path con [] annidati, restituendo la lista "flat" di tutti
-        gli elementi al livello più profondo.
 
-        Es: path = 'features[].properties.valori'
-            data = {features: [{properties: {valori: [1,2]}}, {properties: {valori: [3]}}]}
-            → [1, 2, 3]
+    # Phase 5 B3-A.3 cutover: `_resolve_nested_list` + `_extract_json_value`
+    # spostati in `EnrichmentResponseProcessingMixin`. Risolvono via MRO.
+    # Vedi class declaration + import block in testa.
 
-        Accetta sia [] che [*] come marker di iterazione.
-        Se non ci sono marker, applica extract_json_value normale.
-        """
-        # Normalizza [*] → []
-        path = path.replace("[*]", "[]") if path else path
-        if "[]" not in path:
-            return self._extract_json_value(data, path)
-
-        # Split sul primo [] per processare a strati
-        prefix, _, rest = path.partition("[]")
-        prefix = prefix.rstrip(".")
-        rest = rest.lstrip(".")
-
-        # Estrai la lista al livello corrente
-        items = self._extract_json_value(data, prefix) if prefix else data
-        if not isinstance(items, list):
-            return []
-
-        # Se non c'è altro dopo [], restituisci la lista
-        if not rest:
-            return items
-
-        # Altrimenti, per ogni elemento, ricorsa e appiattisci
-        result = []
-        for item in items:
-            sub = self._resolve_nested_list(item, rest)
-            if isinstance(sub, list):
-                result.extend(sub)
-            else:
-                result.append(sub)
-        return result
-
-    def _extract_json_value(self, data: Any, path: str) -> Any:
-        """Estrae valore da JSON usando dot notation. Delegato a shared/api_utils."""
-        return _shared_extract_json_value(data, path)
-    
     def _update_progress(self, processed: int, total: int, stats: EnrichmentStats):
         """Aggiorna progress callback."""
         if self.progress_callback:
