@@ -86,6 +86,20 @@ from app.shared.api_utils import (
 # (verificato pre-extraction: zero consumer esterni, ma cheap insurance).
 from app.core.arricchisci._rate_limiter import RateLimiter  # noqa: F401  (re-export)
 
+# Phase 5 B3-A.2 cutover: cluster TEMPLATE_PARAMS (`_is_template`,
+# `_template_columns`, `_interpolate_template`, `_build_params`,
+# `_has_null_params`, `_make_cache_key`) spostato in
+# `app.core.arricchisci.enrichment_template_params.EnrichmentTemplateParamsMixin`.
+# `EnrichmentExecutor` eredita dal mixin (vedi class declaration sotto).
+# I 6 metodi restano accessibili via MRO. Le call-site
+# `self._is_template / _interpolate_template / _build_params / _has_null_params /
+# _template_columns / _make_cache_key` da `validate_input` /
+# `_execute_*` / `_group_by_params` continuano a risolvere via MRO
+# senza modifiche. Vedi `orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B3-A.
+from app.core.arricchisci.enrichment_template_params import (
+    EnrichmentTemplateParamsMixin,
+)
+
 logger = get_logger(__name__)
 
 
@@ -99,7 +113,7 @@ def _geojson_to_wkt(geom: dict) -> str:
 # (vedi block sopra) per preservare i path simbolici esistenti.
 
 
-class EnrichmentExecutor:
+class EnrichmentExecutor(EnrichmentTemplateParamsMixin):
     """
     Esecutore avanzato per enrichment API.
     
@@ -1330,157 +1344,28 @@ class EnrichmentExecutor:
 
         return result_df, stats, errors
     
+
     # =========================================================================
-    # METODI HELPER
-    # Costruzione parametri, chiamate API con retry, estrazione output JSON,
-    # deduplicazione tramite cache MD5, autenticazione OAuth2/API key.
+    # METODI HELPER (post-Phase-5-B3-A)
+    # Phase 5 B3-A.2 cutover: cluster TEMPLATE_PARAMS (`_is_template`,
+    # `_template_columns`, `_interpolate_template`, `_build_params`,
+    # `_has_null_params`) spostato in
+    # `app.core.arricchisci.enrichment_template_params.EnrichmentTemplateParamsMixin`.
+    # `EnrichmentExecutor` eredita dal mixin (vedi class declaration sopra).
+    # I 5 metodi restano accessibili via MRO. Le call-site
+    # `self._is_template / _interpolate_template / _build_params /
+    # _has_null_params / _template_columns` da `validate_input` /
+    # `_execute_*` continuano a risolvere via MRO senza modifiche.
+    # `_make_cache_key` (staticmethod) idem (vedi cutover B3-A.2 #2).
+    # Restano in questa sezione (gia' nel file): `_call_api_with_retry`
+    # (HTTP retry + 429), `_extract_output`, `_explode_rows`,
+    # `_auto_flatten`, `_detect_geometry_type`, `_infer_scalar_type`,
+    # `_flatten_dict`, `_apply_result`, `_resolve_nested_list`,
+    # `_extract_json_value`, `_prepare_headers`, OAuth2 helpers
+    # (candidati per future B3-A.3+ extraction).
+    # Vedi `orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B3-A.
     # =========================================================================
 
-    @staticmethod
-    def _is_template(value: Any) -> bool:
-        """True se il valore è una stringa con almeno un placeholder {colonna}."""
-        return isinstance(value, str) and bool(re.search(r"\{(\w+)\}", value))
-
-    @staticmethod
-    def _template_columns(template: str) -> List[str]:
-        """Estrae i nomi di colonna referenziati nel template."""
-        return re.findall(r"\{(\w+)\}", template)
-
-    @staticmethod
-    def _interpolate_template(template: str, row: "pd.Series") -> Optional[str]:
-        """Sostituisce {col} con i valori della riga.
-
-        Ritorna None se almeno una colonna referenziata è null/NaN
-        (così il chiamante può gestirla come parametro nullo).
-        """
-        out_parts: List[str] = []
-        last_end = 0
-        for m in re.finditer(r"\{(\w+)\}", template):
-            col_name = m.group(1)
-            out_parts.append(template[last_end:m.start()])
-            if col_name not in row.index:
-                # Colonna non esiste → consideriamo il template "non risolvibile"
-                return None
-            val = row[col_name]
-            if val is None:
-                return None
-            try:
-                if pd.isna(val) if not isinstance(val, (list, dict)) else False:
-                    return None
-            except Exception as _isna_err:
-                logger.debug(
-                    f"pd.isna probe fallito per tipo {type(val).__name__}: {_isna_err}"
-                )
-            # Converti numpy → Python nativo per str()
-            try:
-                import numpy as _np
-                if isinstance(val, (_np.integer,)):
-                    val = int(val)
-                elif isinstance(val, (_np.floating,)):
-                    val = float(val)
-                elif isinstance(val, _np.bool_):
-                    val = bool(val)
-            except Exception as _np_err:
-                logger.debug(
-                    f"numpy→native conversion probe fallita per tipo "
-                    f"{type(val).__name__}: {_np_err}"
-                )
-            # Formattazione: int/float/bool senza decoration, str raw
-            out_parts.append(str(val))
-            last_end = m.end()
-        out_parts.append(template[last_end:])
-        return "".join(out_parts)
-
-    def _build_params(self, row: pd.Series) -> Dict[str, Any]:
-        """
-        Costruisce parametri API dalla riga DataFrame.
-
-        Ordine di priorità (i successivi sovrascrivono i precedenti):
-        1. static_parameters dalla config API (fissi per tutte le righe)
-        2. Parametri dinamici dal param_mapping (colonna -> parametro API,
-           oppure template stringa con placeholder {col})
-        3. API key in query string (se configurata come query param)
-
-        Sintassi del param_mapping value:
-          - "nome_colonna"      → legge la colonna direttamente (default)
-          - "{X},{Y}"           → template: interpola colonne X e Y
-          - "address: {via}"    → template misto con prefisso fisso
-        """
-        params = {}
-
-        # 1. Prima aggiungi static_parameters dalla config API
-        static_params = self.api_config.get("static_parameters", {})
-        if static_params:
-            params.update(static_params)
-
-        # 2. Poi aggiungi parametri dinamici dal mapping
-        for api_param, mapping_value in self.param_mapping.items():
-            if not mapping_value:
-                continue
-
-            # ── 2a. Template con placeholder {col} ──
-            if self._is_template(mapping_value):
-                interpolated = self._interpolate_template(mapping_value, row)
-                if interpolated is None:
-                    # Una delle colonne referenziate è null o non esiste
-                    if self._has_param_definitions and api_param not in self._required_param_names:
-                        continue
-                    params[api_param] = None
-                else:
-                    params[api_param] = interpolated
-                continue
-
-            # ── 2b. Mapping classico: nome di una colonna ──
-            if mapping_value not in row.index:
-                continue
-            value = row[mapping_value]
-            if pd.isna(value) if not isinstance(value, (list, dict)) else False:
-                # Parametro null: se è opzionale (e abbiamo definizioni dei parametri),
-                # NON lo aggiungiamo affatto — così l'API riceve solo i campi presenti
-                # e _has_null_params non lo segnala come bloccante.
-                if self._has_param_definitions and api_param not in self._required_param_names:
-                    continue
-                params[api_param] = None
-            elif isinstance(value, (bool, int, float)):
-                # Preserva tipo nativo Python: {"id": 10} non diventa {"id": "10"}
-                params[api_param] = value
-            else:
-                # numpy int64/float64 -> converti in tipo Python nativo
-                import numpy as np
-                if isinstance(value, (np.integer,)):
-                    params[api_param] = int(value)
-                elif isinstance(value, (np.floating,)):
-                    params[api_param] = float(value)
-                elif isinstance(value, np.bool_):
-                    params[api_param] = bool(value)
-                else:
-                    params[api_param] = str(value)
-
-        # 3. API Key in query string
-        if self.auth.get("type") == "api_key" and self.auth.get("location") == "query":
-            params[self.auth.get("key_name", "apiKey")] = self.auth.get("key_value", "")
-
-        return params
-    
-    def _has_null_params(self, params: Dict) -> bool:
-        """Verifica se ci sono parametri OBBLIGATORI nulli (esclusa API key).
-
-        Se le definizioni dei parametri sono disponibili (api_config["parameters"]),
-        controlla solo quelli con required=True. Se non lo sono, fallback al
-        comportamento legacy che blocca su qualsiasi null.
-        """
-        api_key_name = self.auth.get("key_name", "apiKey") if self.auth.get("type") == "api_key" else None
-
-        for key, value in params.items():
-            if key == api_key_name:
-                continue
-            # Se abbiamo le definizioni dei parametri, ignora gli opzionali
-            if self._has_param_definitions and key not in self._required_param_names:
-                continue
-            if value is None or value == "" or value == "None":
-                return True
-        return False
-    
     def _call_api_with_retry(
         self, 
         params: Dict, 
@@ -1867,14 +1752,11 @@ class EnrichmentExecutor:
         """Conta combinazioni uniche di parametri."""
         return len(self._group_by_params(df))
     
-    @staticmethod
-    def _make_cache_key(params: Dict) -> str:
-        """Genera chiave cache da parametri."""
-        # Ordina per consistenza
-        sorted_items = sorted(params.items())
-        param_str = json.dumps(sorted_items, sort_keys=True)
-        return hashlib.md5(param_str.encode()).hexdigest()
-    
+
+    # Phase 5 B3-A.2 cutover: `_make_cache_key` (staticmethod, MD5 cache
+    # key da dict params) spostato in `EnrichmentTemplateParamsMixin`.
+    # Risolve via MRO. Vedi class declaration + import block in testa.
+
     def _prepare_headers(self) -> Dict:
         """Prepara headers HTTP. Delegato a shared/api_utils."""
         return _shared_prepare_headers(self.auth)
