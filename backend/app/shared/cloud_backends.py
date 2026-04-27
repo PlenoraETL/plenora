@@ -105,6 +105,86 @@ class ObjectStorage(Protocol):
 
 
 # ---------------------------------------------------------------------------
+# AWS credential error classification (helper boundary)
+# ---------------------------------------------------------------------------
+
+
+# Messaggio operativo unico per tutti i casi di credenziali AWS scadute o
+# non disponibili. Usato da result_store + admin_backups per uniformare
+# l'errore percepito dall'utente. Mantenere conciso e azionabile.
+_AWS_CREDENTIALS_ERROR_HINT = (
+    "AWS credentials expired/unavailable. "
+    "Run 'aws sso login' or refresh AWS credentials, then retry."
+)
+
+
+def aws_credentials_error_message(exc: BaseException) -> "str | None":
+    """Riconosce errori boto3/botocore di credenziali scadute o assenti
+    e ritorna un messaggio operativo unico.
+
+    Ritorna None se `exc` non e' un errore di credenziali AWS riconosciuto
+    (il caller deve trattarlo come errore generico). Ritorna il messaggio
+    da propagare all'utente se la causa e' SSO refresh expired, token
+    retrieval fallito, credenziali assenti o un AccessDenied legato al
+    refresh token.
+
+    Riconosce:
+      - botocore.exceptions.LoginRefreshRequired (SSO token scaduto)
+      - botocore.exceptions.NoCredentialsError (~/.aws/credentials assente)
+      - botocore.exceptions.TokenRetrievalError
+      - botocore.exceptions.UnauthorizedSSOTokenError
+      - botocore.exceptions.SSOTokenLoadError
+      - botocore.exceptions.CredentialRetrievalError
+      - botocore.exceptions.ClientError con codice AccessDeniedException
+        e messaggio che menziona "refresh token" / "CreateOAuth2Token"
+        (il provider SSO veicola la scadenza in questo modo)
+    """
+    try:
+        from botocore.exceptions import (
+            ClientError,
+            CredentialRetrievalError,
+            LoginRefreshRequired,
+            NoCredentialsError,
+            SSOTokenLoadError,
+            TokenRetrievalError,
+            UnauthorizedSSOTokenError,
+        )
+    except ImportError:
+        # botocore non installato: il caller probabilmente non sta neanche
+        # entrando in questo path; nessuna classificazione possibile.
+        return None
+
+    credential_error_types = (
+        LoginRefreshRequired,
+        NoCredentialsError,
+        TokenRetrievalError,
+        UnauthorizedSSOTokenError,
+        SSOTokenLoadError,
+        CredentialRetrievalError,
+    )
+    if isinstance(exc, credential_error_types):
+        return _AWS_CREDENTIALS_ERROR_HINT
+
+    # AccessDeniedException con messaggio refresh-token-expired:
+    # botocore wrappa la risposta SSO in ClientError con Error.Code =
+    # 'AccessDeniedException' e Message che cita 'refresh token has expired'
+    # o 'CreateOAuth2Token'. Riconosciamo solo questa combinazione:
+    # un AccessDenied "vero" su una API S3 (es. policy bucket sbagliata)
+    # NON deve essere mappato come credenziali scadute.
+    if isinstance(exc, ClientError):
+        err = getattr(exc, "response", {}) or {}
+        info = err.get("Error", {}) or {}
+        code = (info.get("Code") or "").strip()
+        message = (info.get("Message") or "").lower()
+        if code == "AccessDeniedException" and (
+            "refresh token" in message or "createoauth2token" in message
+        ):
+            return _AWS_CREDENTIALS_ERROR_HINT
+
+    return None
+
+
+# ---------------------------------------------------------------------------
 # AWS implementations
 # ---------------------------------------------------------------------------
 

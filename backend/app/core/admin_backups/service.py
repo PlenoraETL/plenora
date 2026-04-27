@@ -23,6 +23,22 @@ class AdminBackupDependencyError(RuntimeError):
     """
 
 
+class AdminBackupCredentialsError(RuntimeError):
+    """Raised quando le credenziali AWS sono scadute o non disponibili.
+
+    Runtime-bugs RB.2 (2026-04-27): distingue il caso "AWS SSO scaduto"
+    (operatore deve eseguire `aws sso login`) dagli altri errori transitori
+    su S3. Il router lo cattura -> 503 con detail strutturato e messaggio
+    operativo, evitando il fallback silenzioso a lista vuota che faceva
+    apparire l'endpoint come "success" senza backup elencati.
+
+    Cause riconosciute (vedi `app.shared.cloud_backends.aws_credentials_error_message`):
+      - LoginRefreshRequired / TokenRetrievalError / UnauthorizedSSOTokenError
+      - NoCredentialsError / SSOTokenLoadError / CredentialRetrievalError
+      - ClientError AccessDeniedException con "refresh token" / "CreateOAuth2Token"
+    """
+
+
 def _to_datetime(value: Any) -> datetime:
     """Normalizza a `datetime` un valore proveniente da `plenora.backup_runs`.
 
@@ -103,8 +119,8 @@ def list_backups() -> List[Dict[str, Any]]:
     except Exception as e:
         # Bug #4 (2026-04-23): distingue MissingDependencyException
         # (es. botocore[crt] assente per SSO/IAM Identity Center provider)
-        # dagli altri errori transitori. Dep mancante → 503 via router;
-        # altri errori → degradazione silenziosa a lista vuota (backward compat).
+        # dagli altri errori transitori. Dep mancante -> 503 via router;
+        # altri errori -> degradazione silenziosa a lista vuota (backward compat).
         try:
             from botocore.exceptions import MissingDependencyException
             if isinstance(e, MissingDependencyException):
@@ -115,6 +131,16 @@ def list_backups() -> List[Dict[str, Any]]:
                 raise AdminBackupDependencyError(str(e)) from e
         except ImportError:
             pass  # botocore non importabile: improbabile qui, degrada
+        # RB.2 (2026-04-27): credenziali AWS scadute / SSO refresh required
+        # -> 503 con detail strutturato. Niente lista vuota fuorviante.
+        from app.shared.cloud_backends import aws_credentials_error_message
+        hint = aws_credentials_error_message(e)
+        if hint is not None:
+            logger.error(
+                f"list_backups fallito per credenziali AWS: {e}",
+                exc_info=True,
+            )
+            raise AdminBackupCredentialsError(hint) from e
         logger.error(f"list_backups fallito: {e}", exc_info=True)
         return []
 

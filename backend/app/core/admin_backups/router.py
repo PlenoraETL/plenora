@@ -15,7 +15,10 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.auth.auth import require_superadmin, CurrentUser
 from app.core.admin_backups import service
-from app.core.admin_backups.service import AdminBackupDependencyError
+from app.core.admin_backups.service import (
+    AdminBackupCredentialsError,
+    AdminBackupDependencyError,
+)
 from app.shared.audit_action import audit_action
 
 router = APIRouter(prefix="/admin/backups", tags=["admin-backups"])
@@ -26,8 +29,11 @@ def list_backups_endpoint(
     _user: CurrentUser = Depends(require_superadmin),
 ) -> Dict[str, Any]:
     """Lista dei dump presenti nel bucket S3."""
-    # Bug #4 (2026-04-23): dep runtime mancante (botocore[crt]) → 503
+    # Bug #4 (2026-04-23): dep runtime mancante (botocore[crt]) -> 503
     # esplicito invece di lista vuota fuorviante.
+    # RB.2 (2026-04-27): credenziali AWS scadute -> 503 strutturato con
+    # messaggio operativo (cattura LoginRefreshRequired / NoCredentialsError /
+    # TokenRetrievalError / AccessDenied refresh-token, vedi service.py).
     try:
         items = service.list_backups()
     except AdminBackupDependencyError as e:
@@ -40,6 +46,14 @@ def list_backups_endpoint(
                     "Installa la dipendenza sul server per abilitare questa pagina."
                 ),
                 "exception": str(e),
+            },
+        )
+    except AdminBackupCredentialsError as e:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "aws_credentials_expired",
+                "message": str(e),
             },
         )
     return {

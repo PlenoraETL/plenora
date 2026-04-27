@@ -192,10 +192,22 @@ def save_result_blob(project_id: str, path: Path, fmt: str,
             # Ordine: upload prima (no row DB orfana se upload fallisce).
             storage_key = f"results/{project_id}/{result_id}.bin"
             try:
-                from app.shared.cloud_backends import get_object_storage
+                from app.shared.cloud_backends import (
+                    aws_credentials_error_message,
+                    get_object_storage,
+                )
                 storage = get_object_storage()
                 storage.upload(path, storage_key)
             except Exception as _se:
+                # Nessun fallback silenzioso: se la policy/threshold dice S3,
+                # un fallimento upload deve far fallire il job. Differenziamo
+                # solo il MESSAGGIO per dare all'operatore un'azione chiara
+                # quando la causa root sono credenziali AWS scadute.
+                hint = aws_credentials_error_message(_se)
+                if hint is not None:
+                    raise ResultSaveError(
+                        f"{hint} (result {result_id}, file {path.name})"
+                    ) from _se
                 raise ResultSaveError(
                     f"Upload object storage fallito per result {result_id} "
                     f"({path.name}): {_se}"
@@ -224,8 +236,16 @@ def save_result_blob(project_id: str, path: Path, fmt: str,
 
         return result_id
 
+    except ResultSaveError:
+        # I rami interni (hard cap, upload S3 con credenziali AWS scadute,
+        # ecc.) sollevano gia' un ResultSaveError con messaggio operativo
+        # specifico. Non re-wrappare con prefisso generico, altrimenti il
+        # messaggio diventa "Salvataggio risultato nel DB fallito ..." anche
+        # quando la causa e' upload S3 + credenziali. Simmetrico a
+        # save_result_blob_from_bytes (vedi sotto, except ResultSaveError).
+        raise
     except Exception as e:
-        # Prima era un warning silenzioso → il task Celery non se ne accorgeva
+        # Prima era un warning silenzioso -> il task Celery non se ne accorgeva
         # e ritornava success=True pur non avendo salvato nulla, lasciando
         # l'utente a scaricare blob stantii. Ora failiamo esplicitamente.
         logger.error(
@@ -311,10 +331,22 @@ def save_result_blob_from_bytes(
             # (ordine importante: no row DB orfana su upload failure).
             storage_key = f"results/{project_id}/{result_id}.bin"
             try:
-                from app.shared.cloud_backends import get_object_storage
+                from app.shared.cloud_backends import (
+                    aws_credentials_error_message,
+                    get_object_storage,
+                )
                 storage = get_object_storage()
                 storage.upload_bytes(data, storage_key)
             except Exception as _se:
+                # Nessun fallback silenzioso: se la policy/threshold dice S3,
+                # un fallimento upload deve far fallire il job. Differenziamo
+                # solo il MESSAGGIO per dare all'operatore un'azione chiara
+                # quando la causa root sono credenziali AWS scadute.
+                hint = aws_credentials_error_message(_se)
+                if hint is not None:
+                    raise ResultSaveError(
+                        f"{hint} (result {result_id})"
+                    ) from _se
                 raise ResultSaveError(
                     f"Upload object storage fallito per result {result_id}: {_se}"
                 ) from _se

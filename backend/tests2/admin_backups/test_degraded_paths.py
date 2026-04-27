@@ -79,6 +79,54 @@ def test_list_backups_raises_on_missing_dependency():
     assert "additional dependency" in str(exc_info.value)
 
 
+def test_list_backups_raises_on_aws_credentials_expired():
+    """RB.2 (2026-04-27): credenziali AWS scadute (LoginRefreshRequired)
+    -> AdminBackupCredentialsError con messaggio operativo, NON lista
+    vuota silenziosa. Il router traduce in HTTP 503 con
+    detail.error='aws_credentials_expired'."""
+    from botocore.exceptions import LoginRefreshRequired
+
+    from app.core.admin_backups import service
+    from app.core.admin_backups.service import AdminBackupCredentialsError
+
+    fake_boto3 = MagicMock()
+    fake_boto3.client.return_value.list_objects_v2.side_effect = LoginRefreshRequired()
+
+    with patch.dict("sys.modules", {"boto3": fake_boto3}):
+        with pytest.raises(AdminBackupCredentialsError) as exc_info:
+            service.list_backups()
+
+    msg = str(exc_info.value)
+    assert "AWS credentials expired" in msg
+    assert "aws sso login" in msg
+
+
+def test_list_backups_raises_on_access_denied_refresh_token():
+    """RB.2: AccessDeniedException con 'refresh token has expired' nel
+    Message (caso reale dalla telemetria, BUG.md sezione 1) e' il modo
+    in cui il provider SSO veicola la scadenza dietro un ClientError.
+    Deve essere mappato come credentials expired, non come errore generico."""
+    from botocore.exceptions import ClientError
+
+    from app.core.admin_backups import service
+    from app.core.admin_backups.service import AdminBackupCredentialsError
+
+    error_response = {
+        "Error": {
+            "Code": "AccessDeniedException",
+            "Message": "CreateOAuth2Token: The refresh token has expired",
+        }
+    }
+    fake_boto3 = MagicMock()
+    fake_boto3.client.return_value.list_objects_v2.side_effect = ClientError(
+        error_response, "ListObjectsV2"
+    )
+
+    with patch.dict("sys.modules", {"boto3": fake_boto3}):
+        with pytest.raises(AdminBackupCredentialsError):
+            service.list_backups()
+
+
 def test_list_backups_empty_bucket_returns_empty():
     from app.core.admin_backups import service
 
