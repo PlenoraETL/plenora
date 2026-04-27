@@ -322,8 +322,13 @@ def test_rest_file_cleans_up_tmp_dir_on_http_error_path():
     fake_response.json.side_effect = Exception("not json")
     fake_response.iter_content.return_value = iter([])
 
+    # B3-B.5a modernization: `requests.post` patchato sul source canonico
+    # invece dell'alias `app.core.arricchisci.api_connector.requests.post`.
+    # `_shared_prepare_headers` resta source-bound al modulo api_connector
+    # perche' `_prepare_headers` (3-line shim) resta in core (vedi B3-B.3
+    # mini-scan: AUTH/UTILITY non estratto).
     with patch("app.core.arricchisci.api_connector._shared_prepare_headers", return_value={}), \
-         patch("app.core.arricchisci.api_connector.requests.post", return_value=fake_response):
+         patch("requests.post", return_value=fake_response):
         result = svc._execute_rest_file(node_data, api_config, nodes, edges, node_id, "proj-1")
 
     assert result["success"] is False

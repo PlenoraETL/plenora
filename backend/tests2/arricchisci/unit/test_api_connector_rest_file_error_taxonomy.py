@@ -159,8 +159,14 @@ def test_remote_processor_http_error_returns_structured_error_kind(
     fake_response = MagicMock()
     fake_response.status_code = 503
 
+    # B3-B.5a modernization: patch su source canonico `requests.post`
+    # invece dell'alias `app.core.arricchisci.api_connector.requests.post`.
+    # `requests.post is requests.api.post` (re-export); il patch sulla
+    # binding del modulo `requests` intercetta TUTTI i lookup
+    # (api_connector caller corrente + futuri consumer estratti in mixin
+    # via MRO). Pattern simmetrico a B3-B.4a (filter_visible_columns).
     with patch.object(service, "_resolve_file_source_id_path", return_value=str(fake_excel)), \
-         patch("app.core.arricchisci.api_connector.requests.post", return_value=fake_response), \
+         patch("requests.post", return_value=fake_response), \
          patch.object(service, "_parse_http_error_body", return_value="Service Unavailable"):
 
         result = service._execute_rest_file(
@@ -192,8 +198,9 @@ def test_remote_processor_timeout_returns_structured_error_kind(
         },
     }
 
+    # B3-B.5a modernization: vedi commento sopra.
     with patch.object(service, "_resolve_file_source_id_path", return_value=str(fake_excel)), \
-         patch("app.core.arricchisci.api_connector.requests.post", side_effect=requests.Timeout("upstream timeout")):
+         patch("requests.post", side_effect=requests.Timeout("upstream timeout")):
 
         result = service._execute_rest_file(
             node_data=node_data,
