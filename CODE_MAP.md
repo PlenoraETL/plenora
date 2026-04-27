@@ -54,21 +54,65 @@ Responsabilita: governa l'enrichment di dataset via API esterne, con parallelism
 | file | funzioni/classi chiave | cosa guardare |
 |---|---|---|
 | `router.py` | `init_arricchisci`, `_check_api_connection_ownership`, `_check_project_ownership`, `fetch_openapi_schema`, `FetchSchemaRequest`, `ValidateRequest` | contratto API arricchisci, ownership |
-| `enrichment_service.py` | `EnrichmentExecutor`, `RateLimiter`, `_geojson_to_wkt`, `generate_error_report` | esecutore principale, rate-limit, output errori |
+| `enrichment_service.py` | (orchestrator-class, 502 righe post-Phase-5-B3-A, -75% vs baseline 2019) — `EnrichmentExecutor(7 mixin)` shell + `__init__` (orchestrator constructor) + `execute` (entry point dispatcher) + `_update_progress` (utility cross-mixin singleton) + 3 auth helper stub di delega a `app.shared.api_utils` (`_prepare_headers`, `_get_oauth2_token`, `_get_oauth2_client_credentials_token`) + module-level `generate_error_report` (back-compat con worker + test). RateLimiter re-exported per back-compat | entry point + dispatch + utility cross-mixin |
+| `_rate_limiter.py` | `RateLimiter` (token bucket thread-safe in-memory, B3-A.1) | rate limiting standalone class |
+| `enrichment_template_params.py` | `EnrichmentTemplateParamsMixin` (6 metodi: `_is_template`, `_template_columns`, `_interpolate_template`, `_build_params`, `_has_null_params`, `_make_cache_key`) | template parsing + params building + cache keying (B3-A.2) |
+| `enrichment_response_processing.py` | `EnrichmentResponseProcessingMixin` (9 metodi: `_extract_output`, `_explode_rows`, `_auto_flatten`, `_detect_geometry_type`, `_infer_scalar_type`, `_flatten_dict`, `_apply_result`, `_resolve_nested_list`, `_extract_json_value`) | response → DataFrame rows transformation (B3-A.3) |
+| `enrichment_batch_mode.py` | `EnrichmentBatchModeMixin` (4 metodi: `_execute_batch_native`, `_call_batch_api`, `_build_batch_payload`, `_extract_batch_output`) | batch native API path + 429+Retry-After + payload format dispatcher (B3-A.4) |
+| `enrichment_validation_preview.py` | `EnrichmentValidationPreviewMixin` (2 metodi: `validate_input`, `preview`) | preflight validation + preview campione (B3-A.5) |
+| `enrichment_retry_http.py` | `EnrichmentRetryHttpMixin` (1 metodo: `_call_api_with_retry`) | HTTP per-row retry chain + 429+Retry-After + ArcGIS token injection (B3-A.6) |
+| `enrichment_execution_engines.py` | `EnrichmentExecutionEnginesMixin` (3 metodi: `_execute_parallel`, `_execute_parallel_async`, `_execute_internal`) | runtime engines (sync ThreadPoolExecutor / async asyncio.Semaphore / sequential per-row) (B3-A.7) |
+| `enrichment_grouping.py` | `EnrichmentGroupingMixin` (2 metodi: `_group_by_params`, `_count_unique_combinations`) | raggruppamento parametri unici per cache_key MD5 (B3-A.8) |
 | `executor.py` | `EnrichExecutor` | wrapper di livello pipeline |
 | `parallel.py` | `compute_parallel_groups`, `should_execute_node`, `get_execute_mask`, `_extract_consumed_columns`, `_extract_produced_columns`, `execute_parallel_enrichers` | parallelizzazione + execute_if |
-| `api_connector.py` | `ApiConnectionService`, `_encrypt_auth_in_config`, `_decrypt_auth_in_config` | crud connessioni API + cifratura auth |
+| `api_connector.py` | `ApiConnectionService`, `_encrypt_auth_in_config`, `_decrypt_auth_in_config` | crud connessioni API + cifratura auth (target B3-B futuro) |
 | `models.py` | `RowStatus`, `BatchInputFormat`, `BatchConfig`, `RowError`, `EnrichmentStats`, `EnrichmentOptions`, `EnrichmentResult`, `PreviewResult`, `EnrichmentValidationResult` | shape stato/configurazione enrichment |
 
-Keywords: `EnrichmentExecutor`, `ApiConnectionService`, `RateLimiter`, `compute_parallel_groups`, `should_execute_node`, `_encrypt_auth_in_config`, `EnrichmentResult`
+Keywords: `EnrichmentExecutor`, `ApiConnectionService`, `RateLimiter`, `compute_parallel_groups`, `should_execute_node`, `_encrypt_auth_in_config`, `EnrichmentResult`, `EnrichmentTemplateParamsMixin`, `EnrichmentResponseProcessingMixin`, `EnrichmentBatchModeMixin`, `EnrichmentValidationPreviewMixin`, `EnrichmentRetryHttpMixin`, `EnrichmentExecutionEnginesMixin`, `EnrichmentGroupingMixin`
 
 Punti di intervento tipici:
 - nuova auth API (es. OAuth flow) -> `api_connector.py` (`_encrypt_auth_in_config`/`_decrypt_auth_in_config`) + `models.py`
 - nuova policy di parallelizzazione/dipendenze tra nodi -> `parallel.py` (`compute_parallel_groups`)
-- nuovo formato risposta API -> `enrichment_service.py` (`EnrichmentExecutor` + path che produce `EnrichmentResult`)
+- nuovo formato risposta API -> `enrichment_response_processing.py` (`EnrichmentResponseProcessingMixin`)
 - regola `execute_if` per-riga -> `parallel.py` (`get_execute_mask`, `should_execute_node`)
+- nuovo template params helper -> `enrichment_template_params.py`
+- nuovo retry chain HTTP -> `enrichment_retry_http.py` (per-row) o `enrichment_batch_mode.py` (batch path)
+- nuova strategy parallelismo -> `enrichment_execution_engines.py` (sync/async/sequential)
+- nuovo preflight check / preview -> `enrichment_validation_preview.py`
+- nuovo grouping/dedup helper -> `enrichment_grouping.py`
+- modifiche a `execute()` o `__init__` -> `enrichment_service.py` (orchestrator core)
 
 Intervento/confini: I/O dataset solo via `intermediate`. Auth API solo cifrata via `shared/crypto.py`. Nuove regole di parallelizzazione/`execute_if` vanno in `parallel.py`, non duplicarle nel router.
+
+**MRO post-Phase-5-B3-A** (decisione architetturale ratificata B3-A.8):
+```
+EnrichmentExecutor
+  → EnrichmentTemplateParamsMixin
+  → EnrichmentResponseProcessingMixin
+  → EnrichmentBatchModeMixin
+  → EnrichmentValidationPreviewMixin
+  → EnrichmentRetryHttpMixin
+  → EnrichmentExecutionEnginesMixin
+  → EnrichmentGroupingMixin
+  → object
+```
+27 metodi distribuiti su 7 mixin specializzati per dominio + 1 standalone class (`RateLimiter`). `inspect.getsource(EnrichmentExecutor.<method>)` legge il source dal mixin tramite `__code__.co_filename` + line numbers. Le call-site `self.<method>(...)` interne (cross-mixin) risolvono via MRO senza modifiche.
+
+**Logger naming contract** (uniforme per tutti i mixin che loggano + core class): tutti i moduli che emettono log usano esplicitamente `get_logger("app.core.arricchisci.enrichment_service")` (canonical pattern, parita' B2 carica/writer). I 2 mixin che NON loggano (`EnrichmentValidationPreviewMixin`, `EnrichmentGroupingMixin`) NON definiscono `logger` — documentato esplicitamente nei docstring. `StructuredLogger` wrapper di `app/utils/logger.py` delega a `_logger.log(...)` sul logger stdlib omonimo (singleton per nome) → handler/caplog agganciati nei test catturano emit indistintamente da quale modulo li produce.
+
+**Residui intenzionali in `enrichment_service.py` core (post-B3-A.8)**:
+- `__init__` (~80 body) — orchestrator constructor (instance attrs `api_config`, `param_mapping`, `auth`, `options`, `_rate_limiter`, `_cache`, ecc.)
+- `execute` (~112 body) — entry point pubblico dispatcher (sync/async/parallel/sequential branch)
+- `_update_progress` (~15 body) — utility cross-mixin singleton (pattern `_oracle_setup` di B2 carica/writer)
+- 3 auth helper stub (`_prepare_headers`, `_get_oauth2_token`, `_get_oauth2_client_credentials_token`, ~17 totali) — 3-line di delega a `app.shared.api_utils`, infra-class
+- `generate_error_report` (~52 body, module-level) — utility back-compat per `workers/tasks/enrichment_task.py` + `tests2/arricchisci/unit/test_generate_error_report_secret_redaction.py`
+- `RateLimiter` re-exported via `from app.core.arricchisci._rate_limiter import RateLimiter` (back-compat)
+
+**Cleanup B3-A.8**: rimosso module-level wrapper `_geojson_to_wkt` di `enrichment_service.py` (5 righe). Era dead code post-B3-A.3: `EnrichmentResponseProcessingMixin` ha sua copia locale per evitare circular import; nessun consumer esterno verificato.
+
+**Carry-over fuori scope Phase 5** (futura nuova Phase 0/5):
+- Redis-distributed rate limiter: il `RateLimiter` corrente e' in-memory thread-safe. Sostituzione con Redis-based per distributed scenarios e' miglioramento architetturale, non refactor behavior-preserving.
+- Retry per-row vs batch retry consolidation: `_call_api_with_retry` (`EnrichmentRetryHttpMixin`) e `_call_batch_api` (`EnrichmentBatchModeMixin`) condividono retry chain pattern (max_retries + 429 + retry_on_status + exponential backoff) ma con body distinto (per-row index vs batch_indices[0], path params URL substitution vs payload builder). Consolidamento candidato in helper standalone `_retry_http_machinery`.
 
 ---
 
