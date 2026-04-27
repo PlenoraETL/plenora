@@ -101,6 +101,51 @@ def test_list_backups_raises_on_aws_credentials_expired():
     assert "aws sso login" in msg
 
 
+def test_list_backups_aws_credentials_logs_warning_without_traceback():
+    """R-1 (2026-04-27): credenziali AWS scadute = condizione operativa nota
+    (l'operatore deve fare `aws sso login`), gia' tradotta in 503 strutturato
+    dal router. Il backend NON deve emettere traceback botocore completo per
+    ogni 503: rumoreggia il journal e nasconde i bug veri.
+
+    Pre-fix: `logger.error + exc_info=True` -> traceback ad ogni client call.
+    Post-fix: `logger.warning` conciso con tipo eccezione + messaggio.
+    Errori NON classificati continuano a usare logger.error + exc_info=True
+    (test successivo `test_list_backups_when_client_error_returns_empty`
+    indirettamente).
+    """
+    from botocore.exceptions import LoginRefreshRequired
+
+    from app.core.admin_backups import service
+    from app.core.admin_backups.service import AdminBackupCredentialsError
+
+    fake_boto3 = MagicMock()
+    fake_boto3.client.return_value.list_objects_v2.side_effect = LoginRefreshRequired()
+
+    spy_warning = MagicMock()
+    spy_error = MagicMock()
+
+    with patch.dict("sys.modules", {"boto3": fake_boto3}), patch.object(
+        service.logger, "warning", spy_warning
+    ), patch.object(service.logger, "error", spy_error):
+        with pytest.raises(AdminBackupCredentialsError):
+            service.list_backups()
+
+    # Esattamente 1 warning conciso, nessuna chiamata error+exc_info per
+    # questo path (path classificato AWS-credentials).
+    assert spy_warning.call_count == 1, (
+        f"Atteso 1 warning conciso, trovati {spy_warning.call_count}"
+    )
+    warn_msg = spy_warning.call_args.args[0]
+    assert "credenziali AWS" in warn_msg
+    assert "LoginRefreshRequired" in warn_msg
+    # logger.error NON deve essere chiamato (no traceback)
+    assert spy_error.call_count == 0, (
+        f"logger.error non deve girare per aws-creds: chiamate={spy_error.call_args_list}"
+    )
+    # Il warning concise NON deve essere chiamato con exc_info=True
+    assert spy_warning.call_args.kwargs.get("exc_info") in (None, False)
+
+
 def test_list_backups_raises_on_access_denied_refresh_token():
     """RB.2: AccessDeniedException con 'refresh token has expired' nel
     Message (caso reale dalla telemetria, BUG.md sezione 1) e' il modo

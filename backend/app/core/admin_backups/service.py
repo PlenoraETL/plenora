@@ -136,11 +136,18 @@ def list_backups() -> List[Dict[str, Any]]:
         from app.shared.cloud_backends import aws_credentials_error_message
         hint = aws_credentials_error_message(e)
         if hint is not None:
-            logger.error(
-                f"list_backups fallito per credenziali AWS: {e}",
-                exc_info=True,
+            # R-1 (2026-04-27): log conciso. La causa e' classificata
+            # (credenziali AWS scadute = condizione operativa nota, non bug
+            # applicativo) e gestita esplicitamente dal router con 503
+            # strutturato. Un traceback botocore completo per ogni client
+            # call durante il refresh expiry rumoreggia il journal senza
+            # aggiungere informazione: il tipo di eccezione e' gia' loggato.
+            logger.warning(
+                "list_backups: credenziali AWS non disponibili "
+                f"({type(e).__name__}: {e})",
             )
             raise AdminBackupCredentialsError(hint) from e
+        # Errori non classificati: traceback completo resta utile per debug.
         logger.error(f"list_backups fallito: {e}", exc_info=True)
         return []
 
