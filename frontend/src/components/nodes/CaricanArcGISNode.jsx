@@ -56,6 +56,15 @@ const CaricanArcGISNode = memo(({ data, id }) => {
   const availableColumns = data.availableColumns || [];
   const executeResult = data.executeResult || null;
 
+  // RB.7.C: backend (RB.7.B) marca data.access_denied=true quando la
+  // connessione ArcGIS riferita dal canvas non e' visibile al gruppo del
+  // progetto (canvas storico cross-tenant, post rebrand 2026-04-18).
+  // Non rimuoviamo il nodo: l'utente deve poterlo correggere o eliminare
+  // manualmente. Disabilitiamo le chiamate API (eviterebbero 404 fail-loud
+  // a vuoto su listFolders/browseServices/...) e marchiamo isValid=false.
+  const isAccessDenied = !!data.access_denied;
+  const accessDeniedReason = data.access_denied_reason || '';
+
   // =========================================================================
   // OPZIONI STATICHE
   // =========================================================================
@@ -76,37 +85,56 @@ const CaricanArcGISNode = memo(({ data, id }) => {
   }, []);
 
   useEffect(() => {
+    // RB.7.C: skip API calls quando la connection e' marcata access_denied
+    // dal backend (RB.7.B). Pulisce stato derivato per evitare flash di
+    // dati stantii.
+    if (isAccessDenied) {
+      setArcgisServices([]); setArcgisLayers([]); setArcgisLayerSchema(null);
+      return;
+    }
     if (arcgisConnectionId) {
       loadArcgisServices(arcgisConnectionId);
     } else {
       setArcgisServices([]); setArcgisLayers([]); setArcgisLayerSchema(null);
     }
-  }, [arcgisConnectionId]);
+  }, [arcgisConnectionId, isAccessDenied]);
 
   useEffect(() => {
+    if (isAccessDenied) {
+      setArcgisLayers([]); setArcgisLayerSchema(null);
+      return;
+    }
     if (arcgisConnectionId && arcgisServiceUrl && arcgisOperation !== 'create_service') {
       loadArcgisLayers(arcgisConnectionId, arcgisServiceUrl);
     } else {
       setArcgisLayers([]); setArcgisLayerSchema(null);
     }
-  }, [arcgisConnectionId, arcgisServiceUrl, arcgisOperation]);
+  }, [arcgisConnectionId, arcgisServiceUrl, arcgisOperation, isAccessDenied]);
 
   // Carica cartelle quando connessione selezionata e operazione create_service
   useEffect(() => {
+    if (isAccessDenied) {
+      setArcgisFolders([]);
+      return;
+    }
     if (arcgisConnectionId && arcgisOperation === 'create_service') {
       loadArcgisFolders(arcgisConnectionId);
     } else {
       setArcgisFolders([]);
     }
-  }, [arcgisConnectionId, arcgisOperation]);
+  }, [arcgisConnectionId, arcgisOperation, isAccessDenied]);
 
   useEffect(() => {
+    if (isAccessDenied) {
+      setArcgisLayerSchema(null);
+      return;
+    }
     if (arcgisConnectionId && arcgisLayerUrl && arcgisOperation !== 'create_service') {
       loadArcgisLayerSchema(arcgisConnectionId, arcgisLayerUrl);
     } else {
       setArcgisLayerSchema(null);
     }
-  }, [arcgisConnectionId, arcgisLayerUrl, arcgisOperation]);
+  }, [arcgisConnectionId, arcgisLayerUrl, arcgisOperation, isAccessDenied]);
 
   // =========================================================================
   // FUNZIONI API — ArcGIS
@@ -260,9 +288,11 @@ const CaricanArcGISNode = memo(({ data, id }) => {
   const needsMatchColumn = ['update', 'upsert', 'delete'].includes(arcgisOperation);
   const matchColumnValid = !needsMatchColumn || arcgisMatchColumn;
 
-  const isValid = arcgisOperation === 'create_service'
-    ? (arcgisConnectionId && arcgisNewServiceName)
-    : (arcgisConnectionId && arcgisLayerUrl && matchColumnValid);
+  const isValid = !isAccessDenied && (
+    arcgisOperation === 'create_service'
+      ? (arcgisConnectionId && arcgisNewServiceName)
+      : (arcgisConnectionId && arcgisLayerUrl && matchColumnValid)
+  );
 
   const arcgisDestFields = (arcgisLayerSchema?.fields || [])
     .filter(f => f.type !== 'esriFieldTypeOID' && f.type !== 'esriFieldTypeGlobalID')
@@ -303,6 +333,31 @@ const CaricanArcGISNode = memo(({ data, id }) => {
       {/* Body */}
       {isExpanded && (
         <div className="carica-arcgis-node__body">
+
+          {/* RB.7.C: connessione ArcGIS non accessibile al gruppo del progetto.
+              Banner visibile, no rimozione automatica del nodo. */}
+          {isAccessDenied && (
+            <div
+              className="carica-arcgis-node__error"
+              role="alert"
+              title={accessDeniedReason || 'Connessione ArcGIS non accessibile'}
+              style={{
+                background: '#fff4e5',
+                border: '1px solid #d97706',
+                borderRadius: 4,
+                color: '#92400e',
+                padding: '8px 10px',
+                marginBottom: 8,
+              }}
+            >
+              🔒 Connessione ArcGIS non accessibile al tuo gruppo.
+              {accessDeniedReason ? (
+                <div style={{ fontSize: '0.85em', marginTop: 4, opacity: 0.85 }}>
+                  {accessDeniedReason}
+                </div>
+              ) : null}
+            </div>
+          )}
 
           {/* Operazione */}
           <div className="carica-arcgis-node__section">

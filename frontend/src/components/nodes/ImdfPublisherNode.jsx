@@ -65,6 +65,15 @@ const ImdfPublisherNode = memo(({ data, id }) => {
   const applyRenderers = !!data.imdf_apply_renderers;
   const publishMode    = data.imdf_publish_mode         || 'replace';
 
+  // RB.7.C: backend (RB.7.B) marca data.access_denied=true quando la
+  // connessione ArcGIS riferita dal canvas non e' visibile al gruppo del
+  // progetto. Disabilitiamo le call API (eviterebbero 404 a vuoto su
+  // listFolders/publish) e marchiamo isValid=false. Nessuna rimozione
+  // automatica del nodo: l'utente deve poter sostituire la connessione
+  // o eliminare il nodo.
+  const isAccessDenied = !!data.access_denied;
+  const accessDeniedReason = data.access_denied_reason || '';
+
   // Bundle attivo: letto SOLO dallo store (il Result/Output node è
   // responsabile della selezione/cronologia; il Publisher pubblica
   // quel che il browser di bundle sta mostrando).
@@ -94,6 +103,9 @@ const ImdfPublisherNode = memo(({ data, id }) => {
 
   // ── Carica folder quando cambia connessione ────────────────────
   useEffect(() => {
+    // RB.7.C: skip API call quando la connection e' marcata access_denied
+    // dal backend (eviterebbe 404 a vuoto su listFolders).
+    if (isAccessDenied) { setFolders([]); return; }
     if (!connectionId) { setFolders([]); return; }
     let cancelled = false;
     (async () => {
@@ -108,14 +120,14 @@ const ImdfPublisherNode = memo(({ data, id }) => {
       }
     })();
     return () => { cancelled = true; };
-  }, [connectionId]);
+  }, [connectionId, isAccessDenied]);
 
   // ── Cleanup polling on unmount ─────────────────────────────────
   useEffect(() => () => {
     if (pollingRef.current) clearInterval(pollingRef.current);
   }, []);
 
-  const isValid = connectionId && (fsNameTemplate || '').trim().length > 0;
+  const isValid = !isAccessDenied && connectionId && (fsNameTemplate || '').trim().length > 0;
   const canPublish = isValid && !!bundleTaskId && !publishing;
 
   // ── Avvia pubblicazione ──────────────────────────────────────────
@@ -188,6 +200,7 @@ const ImdfPublisherNode = memo(({ data, id }) => {
   // Motivo per cui i pulsanti sono disabilitati (mostrato inline nel nodo
   // + come tooltip). Rende trasparente cosa manca.
   const disabledReasons = [];
+  if (isAccessDenied)                       disabledReasons.push('connessione ArcGIS non accessibile al gruppo');
   if (!connectionId)                        disabledReasons.push('connessione ArcGIS');
   if (!(fsNameTemplate || '').trim())       disabledReasons.push('nome Feature Service');
   if (!bundleTaskId)                        disabledReasons.push('bundle IMDF (esegui arricchimento)');
@@ -259,6 +272,30 @@ const ImdfPublisherNode = memo(({ data, id }) => {
 
       {isExpanded && (
         <div className="imdf-pub-node__body">
+
+          {/* RB.7.C: connessione ArcGIS non accessibile al gruppo del progetto.
+              Banner visibile, no rimozione automatica del nodo. */}
+          {isAccessDenied && (
+            <div
+              role="alert"
+              title={accessDeniedReason || 'Connessione ArcGIS non accessibile'}
+              style={{
+                background: '#fff4e5',
+                border: '1px solid #d97706',
+                borderRadius: 4,
+                color: '#92400e',
+                padding: '8px 10px',
+                marginBottom: 8,
+              }}
+            >
+              🔒 Connessione ArcGIS non accessibile al tuo gruppo.
+              {accessDeniedReason ? (
+                <div style={{ fontSize: '0.85em', marginTop: 4, opacity: 0.85 }}>
+                  {accessDeniedReason}
+                </div>
+              ) : null}
+            </div>
+          )}
 
           {/* Bundle read-only: letto dall'Output node (store condiviso) */}
           <div className={`imdf-pub-node__bundle ${bundleTaskId ? 'ok' : 'missing'}`}>
