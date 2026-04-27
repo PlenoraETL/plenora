@@ -157,3 +157,132 @@ def test_flag_ignored_in_hardened_environments(hardened_env, flag_name, monkeypa
 
     with pytest.raises(ValueError, match="URL bloccato"):
         validate_external_url("http://127.0.0.1:6379/")
+
+
+# =============================================================================
+# B3-B.8 bugfix (2026-04-27): IPv6 (AAAA) coverage + is_unspecified
+# =============================================================================
+#
+# Pre-B3-B.8 `validate_external_url` usava `socket.gethostbyname_ex` che
+# ritorna solo record A (IPv4). Un hostname che risolveva esclusivamente
+# a IPv6 privato/loopback/link-local (`fc00::/7`, `::1`, `fe80::/10`)
+# passava silenziosamente il check — security gap SSRF su servizi
+# IPv6-only o dual-stack con bind interno IPv6.
+#
+# Post-B3-B.8: `socket.getaddrinfo(host, None)` copre A + AAAA. Test
+# mockano `getaddrinfo` per simulare scenari IPv6 deterministicamente
+# (no DNS reale).
+
+
+def _mk_addrinfo_result(addrs):
+    """Costruisce il return value di `socket.getaddrinfo` con i campi
+    minimi richiesti: `info[4][0]` deve contenere l'IP literal.
+    """
+    import socket as _sock
+    return [
+        (_sock.AF_INET6 if ":" in addr else _sock.AF_INET,
+         _sock.SOCK_STREAM, 0, "", (addr, 0))
+        for addr in addrs
+    ]
+
+
+@pytest.mark.parametrize("ipv6_addr", [
+    "::1",                # IPv6 loopback
+    "fc00::1",            # IPv6 ULA (Unique Local Address) — equivalente IPv6 di 10.x
+    "fd12:3456::1",       # IPv6 ULA
+    "fe80::1",            # IPv6 link-local
+    "ff02::1",            # IPv6 multicast
+])
+def test_rejects_ipv6_private_loopback_linklocal_multicast(ipv6_addr, monkeypatch):
+    """B3-B.8: hostname che risolve a IPv6 privato/loopback/link-local/
+    multicast deve essere bloccato. Pre-B3-B.8 (gethostbyname_ex) il
+    check su questi indirizzi era silenziosamente skippato perche'
+    non venivano mai esposti al loop di validazione."""
+    import socket as _sock
+    monkeypatch.setattr(
+        _sock, "getaddrinfo",
+        lambda host, port=None: _mk_addrinfo_result([ipv6_addr]),
+    )
+    with pytest.raises(ValueError, match="URL bloccato"):
+        validate_external_url("http://internal.example.test/q")
+
+
+def test_rejects_ipv6_when_dual_stack_resolves_aaaa_only(monkeypatch):
+    """B3-B.8: hostname dual-stack che risolve a IPv6 privato (fc00::)
+    deve essere bloccato anche se IPv4 non c'e'. Pre-B3-B.8
+    `gethostbyname_ex` non vedeva il record AAAA → fail-OPEN."""
+    import socket as _sock
+    monkeypatch.setattr(
+        _sock, "getaddrinfo",
+        lambda host, port=None: _mk_addrinfo_result(["fc00::dead:beef"]),
+    )
+    with pytest.raises(ValueError, match="URL bloccato"):
+        validate_external_url("http://intranet.example.test/secret")
+
+
+def test_rejects_ipv6_in_url_literal():
+    """URL con literal IPv6 in brackets `http://[::1]/` viene parsato
+    da urlparse → hostname='::1' (senza brackets) → getaddrinfo lo
+    risolve direttamente come literal → blocked."""
+    with pytest.raises(ValueError, match="URL bloccato"):
+        validate_external_url("http://[::1]/")
+
+
+def test_rejects_ipv6_ula_literal():
+    """URL con literal IPv6 ULA (fc00::/7) deve essere bloccato senza
+    dipendere da DNS — il literal e' parsato direttamente da
+    ipaddress."""
+    with pytest.raises(ValueError, match="URL bloccato"):
+        validate_external_url("http://[fc00::1]/intranet")
+
+
+@pytest.mark.parametrize("unspecified_url", [
+    "http://0.0.0.0/q",
+    "http://[::]/q",
+])
+def test_rejects_unspecified_address(unspecified_url):
+    """B3-B.8: `0.0.0.0` (IPv4) e `::` (IPv6) sono `is_unspecified`.
+    Edge case minor (cliente bind-all che si auto-referenzia) ma
+    teoricamente exploitabile in setup malconfigurati. Pre-B3-B.8
+    NON era bloccato esplicitamente; passava silenziosamente."""
+    with pytest.raises(ValueError, match="URL bloccato"):
+        validate_external_url(unspecified_url)
+
+
+def test_dedup_addrinfo_results(monkeypatch):
+    """B3-B.8: getaddrinfo puo' ritornare lo stesso IP piu' volte
+    (es. SOCK_STREAM + SOCK_DGRAM + SOCK_RAW per la stessa famiglia).
+    La dedup via `set` evita check ripetuti — comportamento
+    invariato per il caller, regressione test che documenta la dedup."""
+    import socket as _sock
+    # Stesso IP duplicato 3 volte: dedup → 1 sola validazione
+    monkeypatch.setattr(
+        _sock, "getaddrinfo",
+        lambda host, port=None: _mk_addrinfo_result(["10.0.0.1", "10.0.0.1", "10.0.0.1"]),
+    )
+    with pytest.raises(ValueError, match="URL bloccato"):
+        validate_external_url("http://corp-internal.example.test/")
+
+
+def test_loopback_opt_in_still_works_for_ipv6_loopback(monkeypatch):
+    """B3-B.8: l'opt-in `PLENORA_ALLOW_LOOPBACK_OUTBOUND=1` permette
+    sia IPv4 loopback (`127.0.0.0/8`) sia IPv6 loopback (`::1`).
+    Test funzionali con fake server in dual-stack vedono entrambi.
+    Le altre categorie IPv6 (private/link-local/multicast) restano
+    bloccate — coerente con il blast radius minimo dell'opt-in."""
+    import socket as _sock
+    monkeypatch.setenv("PLENORA_ALLOW_LOOPBACK_OUTBOUND", "1")
+    # IPv6 loopback con opt-in: passa
+    monkeypatch.setattr(
+        _sock, "getaddrinfo",
+        lambda host, port=None: _mk_addrinfo_result(["::1"]),
+    )
+    validate_external_url("http://localhost-test.example/q")  # non solleva
+
+    # IPv6 ULA con opt-in: blocca (l'opt-in non sblocca private)
+    monkeypatch.setattr(
+        _sock, "getaddrinfo",
+        lambda host, port=None: _mk_addrinfo_result(["fc00::1"]),
+    )
+    with pytest.raises(ValueError, match="URL bloccato"):
+        validate_external_url("http://internal-test.example/q")

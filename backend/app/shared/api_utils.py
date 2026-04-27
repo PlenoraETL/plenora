@@ -68,16 +68,16 @@ def validate_external_url(url: str) -> None:
     """Anti-SSRF: valida che l'URL sia http(s) verso un host pubblico.
 
     Solleva ValueError se URL malformato o l'host risolve a un
-    IP privato/loopback/link-local/riservato.
+    IP privato/loopback/link-local/riservato/unspecified.
 
     Override per test funzionali: se la env var
     `PLENORA_ALLOW_LOOPBACK_OUTBOUND=1` (canonical) o
     `URBY_ALLOW_LOOPBACK_OUTBOUND=1` (alias retro-compat, deprecato)
     e' settata, gli IP loopback (`127.0.0.0/8`, `::1`) sono
     permessi. Gli IP privati di altre reti (10.x, 172.16.x,
-    192.168.x), link-local e reserved restano bloccati. Pensata per
-    i test funzionali che lanciano un fake HTTP server su
-    `127.0.0.1`.
+    192.168.x, IPv6 ULA `fc00::/7`), link-local e reserved restano
+    bloccati. Pensata per i test funzionali che lanciano un fake
+    HTTP server su `127.0.0.1`.
 
     Guard: in ambienti hardened (`ENVIRONMENT in {production, prod,
     staging, stage}`, simmetrico a `config.py _DOTENV_DISABLED_ENVS`
@@ -85,6 +85,17 @@ def validate_external_url(url: str) -> None:
     valore. Chiude S6 del runtime_config_audit.md: anche se il flag
     finisse per errore in un worker prod/staging, la validazione
     continua a bloccare il loopback.
+
+    B3-B.8 bugfix (2026-04-27, security):
+      - DNS resolution via `socket.getaddrinfo(host, None)` invece
+        di `gethostbyname_ex` per coprire ANCHE i record AAAA (IPv6).
+        Senza questo, un hostname che risolve solo a IPv6 privato/
+        loopback/link-local (`fc00::/7`, `::1`, `fe80::/10`) passava
+        silenziosamente il check (`gethostbyname_ex` ritornava solo
+        IPv4 o falliva senza vedere AAAA).
+      - Aggiunto blocco `ip.is_unspecified` per `0.0.0.0` / `::`.
+        Edge case minor ma teoricamente exploitabile in setup
+        malconfigurati.
     """
     from urllib.parse import urlparse
     import ipaddress
@@ -110,10 +121,14 @@ def validate_external_url(url: str) -> None:
             or os.environ.get("URBY_ALLOW_LOOPBACK_OUTBOUND", "").strip() == "1"
         )
 
+    # B3-B.8: getaddrinfo copre IPv4 (A) + IPv6 (AAAA). Dedup via set —
+    # uno stesso IP puo' apparire piu' volte (es. multipli protocolli
+    # SOCK_STREAM/SOCK_DGRAM/SOCK_RAW).
     try:
-        _, _, addr_list = socket.gethostbyname_ex(host)
+        infos = socket.getaddrinfo(host, None)
     except socket.gaierror:
         raise ValueError(f"Host non risolvibile: {host}")
+    addr_list = list({info[4][0] for info in infos})
     for addr in addr_list:
         try:
             ip = ipaddress.ip_address(addr)
@@ -121,7 +136,14 @@ def validate_external_url(url: str) -> None:
             continue
         if allow_loopback and ip.is_loopback:
             continue  # opt-in di test
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
+            or ip.is_unspecified
+        ):
             raise ValueError(f"URL bloccato: l'host risolve a un IP privato/interno ({addr})")
 
 
