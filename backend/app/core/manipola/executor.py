@@ -501,7 +501,29 @@ class ManipolaExecutor:
                 except Exception as _ce:
                     logger.warning(f"Chiusura run upstream {source_project_id} fallita (non bloccante): {_ce}")
             if not upstream.success:
-                return upstream
+                # Bug #25 (2026-04-28): pre-fix `return upstream`
+                # propagava un PipelineArtifact con project_id=
+                # source_project_id (canvas upstream). Saliva fino
+                # a `OrchestratorService.execute_pipeline` che lo
+                # passa a `PipelineArtifact.from_executor_result(
+                # result, project_id=<corrente>)`. Il safety net
+                # rilevava il mismatch e sollevava ValueError
+                # "from_executor_result: project_id mismatch ..."
+                # — fuorviante: nascondeva la vera causa upstream
+                # (es. SSO scaduto) dietro un errore di consistenza.
+                # Post-fix: ritorniamo un dict locale senza
+                # project_id, con messaggio diagnostico che cita il
+                # source_project_id colpevole + il messaggio
+                # upstream. `from_executor_result` populera' il
+                # project_id col valore corrente (caller-side).
+                return {
+                    "success": False,
+                    "message": (
+                        f"Errore caricamento sorgente upstream "
+                        f"'{source_project_id}': "
+                        f"{upstream.message or 'errore non specificato'}"
+                    ),
+                }
 
             # Legge il risultato upstream via ArtifactResolver.
             # Tenant binding fail-closed con expected_group_id: il check
