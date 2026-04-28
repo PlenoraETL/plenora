@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -354,6 +355,10 @@ class ArtifactResolver:
                 type(e).__name__, e,
             )
 
+        # RB.#19 Step A: timing log per quantificare l'I/O wasteful
+        # del path bytes -> tempfile -> read. Step B (futuro) elimina
+        # questo round-trip per format BytesIO-safe (CSV/Parquet/JSON).
+        _t0 = time.monotonic()
         tf = tempfile.NamedTemporaryFile(**tempfile_kwargs)
         path = Path(tf.name)
         try:
@@ -384,4 +389,9 @@ class ArtifactResolver:
             raise
         else:
             tf.close()
+            duration_ms = round((time.monotonic() - _t0) * 1000, 1)
+            logger.info(
+                f"[PERF] write_temp_blob op=materialize fmt={fmt or '<none>'} "
+                f"size_bytes={len(blob)} duration_ms={duration_ms}"
+            )
             return path

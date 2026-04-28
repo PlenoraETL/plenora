@@ -87,7 +87,17 @@ def load_dataframe_from_file(
 
     estensione = file_path.suffix.lower()
 
+    # RB.#19 Step A: timing log per quantificare il parse pandas/geopandas.
+    # Misurato indipendentemente da S3 download / temp blob write per
+    # poter isolare il bottleneck reale (parser CSV vs I/O temp file vs
+    # download remoto).
+    import time as _time_mod
+    _t0 = _time_mod.monotonic()
     try:
+        try:
+            file_size = file_path.stat().st_size
+        except OSError:
+            file_size = -1
         if estensione == ".csv":
             df = _read_csv_safe(file_path)
 
@@ -149,6 +159,12 @@ def load_dataframe_from_file(
             logger.warning(f"Formato {estensione} non riconosciuto, tentativo come CSV")
             df = _read_csv_safe(file_path)
 
+        duration_ms = round((_time_mod.monotonic() - _t0) * 1000, 1)
+        logger.info(
+            f"[PERF] load_dataframe op=parse fmt={estensione or '<none>'} "
+            f"file={file_path.name} file_size={file_size} "
+            f"rows={len(df)} cols={len(df.columns)} duration_ms={duration_ms}"
+        )
         logger.info(f"Caricato {file_path.name}: {len(df)} righe, {len(df.columns)} colonne", op="load")
         return df
 

@@ -5,8 +5,20 @@ Contiene: results (output pipeline), execution_logs.
 Migrato a PostgreSQL: usa pg_connection pool.
 """
 
+import time
 from typing import Dict, List, Optional
 from app.utils.logger import get_logger
+
+
+def _short_key(storage_key: Optional[str], max_len: int = 60) -> str:
+    """Abbrevia una storage_key per log: prime 12 + '...' + ultimi 30 char.
+    Evita di loggare path interi che possano contenere project_id/result_id
+    sensibili o filenames lunghi rumorosi."""
+    if not storage_key:
+        return "<none>"
+    if len(storage_key) <= max_len:
+        return storage_key
+    return f"{storage_key[:12]}...{storage_key[-30:]}"
 
 # Importa tutto da pg_connection
 from app.db.pg_connection import (
@@ -66,15 +78,29 @@ def get_result(result_id: str) -> Optional[Dict]:
 
 def _s3_download_bytes(storage_key: str) -> Optional[bytes]:
     """Scarica un oggetto S3-backed come bytes. None su errore loggato."""
+    # RB.#19 Step A: timing log per profilare hot path source loading.
+    # Misura il roundtrip S3 GET + concat chunks.
+    _t0 = time.monotonic()
     try:
         # Lazy import per non forzare cloud_backends in ogni path
         from app.shared.cloud_backends import get_object_storage
         storage = get_object_storage()
         stream = storage.get_object_stream(storage_key)
         chunks = list(stream["body"])
-        return b"".join(chunks)
+        data = b"".join(chunks)
+        duration_ms = round((time.monotonic() - _t0) * 1000, 1)
+        logger.info(
+            f"[PERF] s3_download op=get_bytes storage_key={_short_key(storage_key)} "
+            f"size_bytes={len(data)} duration_ms={duration_ms}"
+        )
+        return data
     except Exception as e:
-        logger.error(f"[FS-4] S3 download {storage_key} fallito: {e}", exc_info=True)
+        duration_ms = round((time.monotonic() - _t0) * 1000, 1)
+        logger.error(
+            f"[FS-4] S3 download {_short_key(storage_key)} fallito "
+            f"(duration_ms={duration_ms}): {e}",
+            exc_info=True,
+        )
         return None
 
 
@@ -84,6 +110,8 @@ def get_result_data(result_id: str, group_id: str = None) -> Optional[bytes]:
     FS-4: se `storage_key` e' presente sulla row, scarica da S3 invece
     che leggere BYTEA. Semantica caller-side invariata (bytes in memory).
     """
+    # RB.#19 Step A: timing log per separare DB lookup da S3 download.
+    _t0 = time.monotonic()
     if group_id:
         row = fetchone(
             "SELECT data, storage_key FROM results WHERE id = ? AND group_id = ?",
@@ -99,12 +127,27 @@ def get_result_data(result_id: str, group_id: str = None) -> Optional[bytes]:
 
     storage_key = row.get("storage_key")
     if storage_key:
-        return _s3_download_bytes(storage_key)
+        # _s3_download_bytes logga il proprio timing dettagliato; qui
+        # logghiamo il tempo totale (DB lookup + S3 fetch).
+        data = _s3_download_bytes(storage_key)
+        duration_ms = round((time.monotonic() - _t0) * 1000, 1)
+        size = len(data) if data else 0
+        logger.info(
+            f"[PERF] get_result_data op=fetch_blob backend=s3 "
+            f"result_id={result_id} size_bytes={size} duration_ms={duration_ms}"
+        )
+        return data
 
     data = row.get("data")
     # PostgreSQL BYTEA: psycopg2 ritorna memoryview, convertiamo a bytes
     if isinstance(data, memoryview):
-        return bytes(data)
+        data = bytes(data)
+    duration_ms = round((time.monotonic() - _t0) * 1000, 1)
+    size = len(data) if data else 0
+    logger.info(
+        f"[PERF] get_result_data op=fetch_blob backend=db "
+        f"result_id={result_id} size_bytes={size} duration_ms={duration_ms}"
+    )
     return data
 
 

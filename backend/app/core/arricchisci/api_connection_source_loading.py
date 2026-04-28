@@ -359,6 +359,12 @@ class ApiConnectionSourceLoadingMixin:
         )
         from app.utils.dataframe import load_dataframe_from_file
 
+        # RB.#19 Step A: timing log totale del source project load.
+        # Aggrega tutti i sub-step (DB lookup, S3/blob fetch, temp write,
+        # parse) gia' loggati individualmente downstream.
+        import time as _time_mod
+        _t0 = _time_mod.monotonic()
+
         source_project_id = node_data.get('source_project_id')
         if not source_project_id:
             raise ValueError("source_project_id non specificato")
@@ -423,6 +429,12 @@ class ApiConnectionSourceLoadingMixin:
         node_columns = node_data.get('columns', [])
         df = filter_visible_columns(df, node_columns)
 
+        duration_ms = round((_time_mod.monotonic() - _t0) * 1000, 1)
+        logger.info(
+            f"[PERF] load_source_project op=load_total "
+            f"project_id={source_project_id} rows={len(df)} cols={len(df.columns)} "
+            f"force_recalculate={force_recalculate} duration_ms={duration_ms}"
+        )
         logger.info(f"Caricato progetto {source_project_id}: {len(df)} righe")
         return df
 
@@ -438,6 +450,12 @@ class ApiConnectionSourceLoadingMixin:
             SourceLoadingError,
             SourceRef,
         )
+
+        # RB.#19 Step A: timing log totale del file source load (analogo
+        # a _load_source_project). Sub-step (DB blob fetch, temp write,
+        # parse) gia' loggati downstream individualmente.
+        import time as _time_mod
+        _t0 = _time_mod.monotonic()
 
         file_source_id = node_data.get('file_source_id')
         if not file_source_id:
@@ -466,6 +484,12 @@ class ApiConnectionSourceLoadingMixin:
         node_columns = node_data.get('columns', [])
         df = filter_visible_columns(df, node_columns)
 
+        duration_ms = round((_time_mod.monotonic() - _t0) * 1000, 1)
+        logger.info(
+            f"[PERF] load_file_source op=load_total "
+            f"file_source_id={file_source_id} rows={len(df)} cols={len(df.columns)} "
+            f"duration_ms={duration_ms}"
+        )
         return df
 
     def _load_static_values(self, node_data: Dict) -> pd.DataFrame:
