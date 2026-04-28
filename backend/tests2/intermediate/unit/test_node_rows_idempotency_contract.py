@@ -49,7 +49,7 @@ pytestmark = [
 
 
 def _make_fake_transaction():
-    """Ritorna `(fake_tx, cur)` dove fake_tx e' un context manager
+    """Ritorna `(fake_tx, cur, conn)` dove fake_tx e' un context manager
     compatibile con db.transaction() e cur e' il MagicMock del cursor
     su cui si possono ispezionare execute/executemany.
 
@@ -72,6 +72,24 @@ def _make_fake_transaction():
     return fake_tx, cur, conn
 
 
+@contextmanager
+def _patch_db_io(idb):
+    """Patcha sia `idb.transaction` sia `idb.execute_values` (Bug #22).
+
+    Rende osservabili in un singolo gancio:
+      - le chiamate al cursor (execute, ecc.) per DELETE / UPSERT meta
+      - le chiamate batch INSERT che ora passano per
+        `psycopg2.extras.execute_values` invece di `cur.executemany`.
+
+    Yields `(cur, ev_spy)` cosi' i test possono ispezionare entrambi.
+    """
+    fake_tx, cur, _conn = _make_fake_transaction()
+    ev_spy = MagicMock(name="execute_values_spy")
+    with patch.object(idb, "transaction", fake_tx), \
+         patch.object(idb, "execute_values", ev_spy):
+        yield cur, ev_spy
+
+
 def _delete_calls(cur) -> list:
     """Filtra le chiamate cur.execute(...) che cominciano per DELETE FROM node_rows."""
     return [
@@ -80,8 +98,36 @@ def _delete_calls(cur) -> list:
     ]
 
 
-def _insert_row_calls(cur) -> list:
-    """Filtra le chiamate cur.executemany(INSERT INTO node_rows ...)."""
+def _insert_row_calls(cur, ev_spy=None) -> list:
+    """Filtra le chiamate batch INSERT su `node_rows`.
+
+    Bug #22 (perf, 2026-04-28): post-fix l'INSERT batch passa per
+    `psycopg2.extras.execute_values` (1 round-trip) invece di
+    `cur.executemany` (500 round-trip serializzati). Restano comunque
+    riconoscibili come "INSERT INTO node_rows ... VALUES %s" su
+    `execute_values(cur, sql, records, ...)`. I test passano
+    `ev_spy` per inspect:
+        ev_spy.call_args_list -> [call(cur, sql, records, ...), ...]
+    Adattiamo allo shape `(sql_str, records_list)` di executemany
+    per non duplicare la logica di assert nei test esistenti.
+    """
+    if ev_spy is not None:
+        results = []
+        for c in ev_spy.call_args_list:
+            sql_arg = None
+            records_arg = None
+            if len(c.args) >= 3:
+                sql_arg = c.args[1]
+                records_arg = c.args[2]
+            elif "sql" in c.kwargs and "argslist" in c.kwargs:
+                sql_arg = c.kwargs["sql"]
+                records_arg = c.kwargs["argslist"]
+            if sql_arg and "INSERT INTO node_rows" in sql_arg:
+                # Mimica lo shape vecchio (sql, records) -> Munge call
+                fake = MagicMock()
+                fake.args = (sql_arg, records_arg)
+                results.append(fake)
+        return results
     return [
         c for c in cur.executemany.call_args_list
         if c.args and "INSERT INTO node_rows" in c.args[0]
@@ -105,24 +151,26 @@ def _upsert_meta_calls(cur) -> list:
 
 def test_insert_node_rows_emits_delete_before_insert():
     """Singola invocazione: DELETE FROM node_rows ... eseguita PRIMA della
-    executemany INSERT. Ordine garantito dentro la stessa tx."""
-    from app.core.intermediate import db as idb
+    INSERT batch. Ordine garantito dentro la stessa tx.
 
-    fake_tx, cur, _conn = _make_fake_transaction()
+    Bug #22 (perf): l'INSERT batch passa per `execute_values`, ispezione
+    via `ev_spy`. La sequenza temporale resta DELETE -> INSERT -> ...
+    """
+    from app.core.intermediate import db as idb
 
     rows = [{"_row_hash": "h1", "a": 1}, {"_row_hash": "h2", "a": 2}]
     schema = {"a": "int64"}
 
-    with patch.object(idb, "transaction", fake_tx):
+    with _patch_db_io(idb) as (cur, ev_spy):
         idb.insert_node_rows("run-1", "node-x", rows, schema)
 
     deletes = _delete_calls(cur)
-    inserts = _insert_row_calls(cur)
+    inserts = _insert_row_calls(cur, ev_spy=ev_spy)
     assert len(deletes) == 1, f"atteso 1 DELETE, trovati: {cur.execute.call_args_list}"
-    assert len(inserts) == 1, f"atteso 1 executemany INSERT, trovati: {cur.executemany.call_args_list}"
+    assert len(inserts) == 1, f"atteso 1 INSERT batch, trovati: {ev_spy.call_args_list}"
     # DELETE filtra per (run_id, node_id)
     assert deletes[0].args[1] == ("run-1", "node-x")
-    # INSERT executemany contiene 2 record con row_idx 0 e 1
+    # INSERT batch contiene 2 record con row_idx 0 e 1
     insert_records = inserts[0].args[1]
     assert len(insert_records) == 2
     assert [r[2] for r in insert_records] == [0, 1]  # row_idx
@@ -135,18 +183,16 @@ def test_insert_node_rows_double_invocation_evicts_previous():
     DELETE → INSERT(N1) → DELETE → INSERT(N2). Nessuna duplicazione."""
     from app.core.intermediate import db as idb
 
-    fake_tx, cur, _conn = _make_fake_transaction()
-
     rows1 = [{"_row_hash": "h1", "a": 1}]
     rows2 = [{"_row_hash": "h2", "a": 2}, {"_row_hash": "h3", "a": 3}]
     schema = {"a": "int64"}
 
-    with patch.object(idb, "transaction", fake_tx):
+    with _patch_db_io(idb) as (cur, ev_spy):
         idb.insert_node_rows("run-1", "node-x", rows1, schema)
         idb.insert_node_rows("run-1", "node-x", rows2, schema)
 
     deletes = _delete_calls(cur)
-    inserts = _insert_row_calls(cur)
+    inserts = _insert_row_calls(cur, ev_spy=ev_spy)
     # Due cicli completi
     assert len(deletes) == 2
     assert len(inserts) == 2
@@ -164,17 +210,16 @@ def test_insert_node_rows_empty_rows_still_emits_delete():
     "node_meta.row_count=0 ma node_rows residue da run pre-fix"."""
     from app.core.intermediate import db as idb
 
-    fake_tx, cur, _conn = _make_fake_transaction()
-
-    with patch.object(idb, "transaction", fake_tx):
+    with _patch_db_io(idb) as (cur, ev_spy):
         idb.insert_node_rows("run-empty", "node-x", [], {"a": "int64"})
 
     deletes = _delete_calls(cur)
-    inserts = _insert_row_calls(cur)
+    inserts = _insert_row_calls(cur, ev_spy=ev_spy)
     assert len(deletes) == 1
     assert deletes[0].args[1] == ("run-empty", "node-x")
-    # Nessun executemany (rows vuoto)
+    # Nessun INSERT batch (rows vuoto)
     assert len(inserts) == 0
+    ev_spy.assert_not_called()
 
 
 # =============================================================================
@@ -185,30 +230,28 @@ def test_insert_node_rows_empty_rows_still_emits_delete():
 def test_write_node_atomic_emits_delete_insert_upsert_in_order():
     """Sequenza dentro singola transazione:
         DELETE FROM node_rows
-        executemany INSERT INTO node_rows
+        execute_values INSERT INTO node_rows VALUES %s
         INSERT INTO node_meta ... ON CONFLICT DO UPDATE
     """
     from app.core.intermediate import db as idb
 
-    fake_tx, cur, _conn = _make_fake_transaction()
-
     rows = [{"_row_hash": "h1", "a": 1}, {"_row_hash": "h2", "a": 2}]
     schema = {"a": "int64"}
 
-    with patch.object(idb, "transaction", fake_tx):
+    with _patch_db_io(idb) as (cur, ev_spy):
         idb.write_node_atomic(
             "run-A", "node-1",
             node_type="estrai", rows=rows, col_schema=schema,
             exec_time=0.5, status="ok",
         )
 
-    # 1 DELETE + 1 executemany INSERT + 1 INSERT meta
+    # 1 DELETE + 1 batch INSERT + 1 INSERT meta
     assert len(_delete_calls(cur)) == 1
-    assert len(_insert_row_calls(cur)) == 1
+    assert len(_insert_row_calls(cur, ev_spy=ev_spy)) == 1
     assert len(_upsert_meta_calls(cur)) == 1
 
-    # Ordine: il DELETE deve precedere l'INSERT meta (verifica via
-    # call ordering globale: l'ultimo execute e' l'upsert meta).
+    # Ordine: il DELETE precede l'INSERT meta (verifica via
+    # call ordering su cur.execute: l'ultimo e' l'upsert meta).
     all_executes = cur.execute.call_args_list
     assert "DELETE FROM node_rows" in all_executes[0].args[0]
     assert "INSERT INTO node_meta" in all_executes[-1].args[0]
@@ -220,12 +263,10 @@ def test_write_node_atomic_meta_row_count_matches_inserted_rows():
     Coerenza meta-rows garantita per costruzione (stessa tx)."""
     from app.core.intermediate import db as idb
 
-    fake_tx, cur, _conn = _make_fake_transaction()
-
     rows = [{"_row_hash": "h1", "a": 1}, {"_row_hash": "h2", "a": 2},
             {"_row_hash": "h3", "a": 3}]
 
-    with patch.object(idb, "transaction", fake_tx):
+    with _patch_db_io(idb) as (cur, _ev_spy):
         idb.write_node_atomic(
             "run-rc", "node-rc",
             node_type="manipola", rows=rows, col_schema={"a": "int64"},
@@ -249,13 +290,11 @@ def test_write_node_atomic_double_invocation_no_duplicates_meta_consistent():
     la seconda INSERT-meta upserta. Stato finale = solo seconda scrittura."""
     from app.core.intermediate import db as idb
 
-    fake_tx, cur, _conn = _make_fake_transaction()
-
     rows1 = [{"_row_hash": "h1", "a": 1}]
     rows2 = [{"_row_hash": "h2", "a": 2}, {"_row_hash": "h3", "a": 3}]
     schema = {"a": "int64"}
 
-    with patch.object(idb, "transaction", fake_tx):
+    with _patch_db_io(idb) as (cur, ev_spy):
         idb.write_node_atomic(
             "run-2x", "node-y", node_type="estrai",
             rows=rows1, col_schema=schema, exec_time=0.1, status="ok",
@@ -267,7 +306,7 @@ def test_write_node_atomic_double_invocation_no_duplicates_meta_consistent():
 
     # Due cicli completi
     assert len(_delete_calls(cur)) == 2
-    assert len(_insert_row_calls(cur)) == 2
+    assert len(_insert_row_calls(cur, ev_spy=ev_spy)) == 2
     assert len(_upsert_meta_calls(cur)) == 2
 
     # L'ultimo upsert meta riflette rows2 (row_count=2)
@@ -277,14 +316,12 @@ def test_write_node_atomic_double_invocation_no_duplicates_meta_consistent():
 
 def test_write_node_atomic_empty_rows_still_evicts_and_upserts_meta():
     """rows=[] con status='ok' (caso edge): DELETE comunque + nessun
-    executemany + upsert meta con row_count=0. Garantisce consistency
+    INSERT batch + upsert meta con row_count=0. Garantisce consistency
     quando un retry "vuoto" deve sovrascrivere una run precedente che
     aveva inserito righe."""
     from app.core.intermediate import db as idb
 
-    fake_tx, cur, _conn = _make_fake_transaction()
-
-    with patch.object(idb, "transaction", fake_tx):
+    with _patch_db_io(idb) as (cur, ev_spy):
         idb.write_node_atomic(
             "run-e", "node-e", node_type="estrai",
             rows=[], col_schema={"a": "int64"},
@@ -292,7 +329,8 @@ def test_write_node_atomic_empty_rows_still_evicts_and_upserts_meta():
         )
 
     assert len(_delete_calls(cur)) == 1
-    assert len(_insert_row_calls(cur)) == 0  # nessun INSERT executemany
+    assert len(_insert_row_calls(cur, ev_spy=ev_spy)) == 0  # nessun INSERT batch
+    ev_spy.assert_not_called()
     upserts = _upsert_meta_calls(cur)
     assert len(upserts) == 1
     assert upserts[0].args[1][3] == 0  # row_count=0
@@ -313,7 +351,8 @@ def test_write_node_atomic_meta_fail_rollback_propagates():
     """
     from app.core.intermediate import db as idb
 
-    fake_tx, cur, conn = _make_fake_transaction()
+    fake_tx, cur, _conn = _make_fake_transaction()
+    ev_spy = MagicMock(name="execute_values_spy")
 
     # Simula fallimento solo sull'INSERT meta. Per gli altri execute
     # ritorna None (no-op) — non vogliamo richiamare il mock stesso
@@ -326,7 +365,8 @@ def test_write_node_atomic_meta_fail_rollback_propagates():
 
     cur.execute.side_effect = execute_side_effect
 
-    with patch.object(idb, "transaction", fake_tx):
+    with patch.object(idb, "transaction", fake_tx), \
+         patch.object(idb, "execute_values", ev_spy):
         with pytest.raises(RuntimeError, match="meta INSERT fail simulated"):
             idb.write_node_atomic(
                 "run-rb", "node-rb", node_type="estrai",
@@ -340,8 +380,8 @@ def test_write_node_atomic_meta_fail_rollback_propagates():
         "DELETE FROM node_rows" in str(c)
         for c in cur.execute.call_args_list
     )
-    # executemany INSERT chiamato (prima del fail)
-    assert len(_insert_row_calls(cur)) == 1
+    # INSERT batch chiamato (prima del fail meta)
+    assert len(_insert_row_calls(cur, ev_spy=ev_spy)) == 1
 
 
 # =============================================================================

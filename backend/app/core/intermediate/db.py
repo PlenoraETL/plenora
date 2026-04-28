@@ -14,6 +14,8 @@ retention atomica.
 import json
 from typing import Dict, List, Optional
 
+from psycopg2.extras import execute_values
+
 from app.utils.logger import get_logger
 
 # Importa da pg_connection (stesso pool di config/results)
@@ -267,8 +269,7 @@ def write_node_snapshot_atomic(
     with transaction() as conn:
         with conn.cursor() as cur:
             cur.execute(_SQL_DELETE_NODE_ROWS, (run_id, node_id))
-            if records:
-                cur.executemany(_SQL_INSERT_NODE_ROW, records)
+            _bulk_insert_node_rows(cur, records)
             cur.execute(
                 # _adapt_params su execute() converte ? -> %s; qui usiamo
                 # la connessione PG nativa, quindi sostituiamo manualmente.
@@ -464,6 +465,44 @@ _SQL_INSERT_NODE_ROW = (
     "INSERT INTO node_rows (run_id, node_id, row_idx, row_hash, row_data) "
     "VALUES (%s, %s, %s, %s, %s::jsonb)"
 )
+
+# Bug #22 (perf, 2026-04-28): SQL e template per insert batch via
+# `psycopg2.extras.execute_values`. Pre-fix: `cur.executemany(...)` su
+# 500 record preview faceva 500 round-trip al server (4–8s misurati).
+# Post-fix: 1 sola INSERT multi-VALUES, ~50–300ms.
+# - `_SQL_INSERT_NODE_ROWS_HEAD`: prefisso INSERT condiviso da
+#   execute_values; il placeholder `VALUES %s` viene espanso da
+#   psycopg2 nelle tuple del template.
+# - `_INSERT_NODE_ROW_TEMPLATE`: cast `::jsonb` esplicito preservato
+#   verbatim dal singolo-row pattern. Senza, psycopg2 manda `row_data`
+#   come stringa e PG la persiste come text non-jsonb.
+_SQL_INSERT_NODE_ROWS_HEAD = (
+    "INSERT INTO node_rows (run_id, node_id, row_idx, row_hash, row_data) "
+    "VALUES %s"
+)
+_INSERT_NODE_ROW_TEMPLATE = "(%s, %s, %s, %s, %s::jsonb)"
+
+
+def _bulk_insert_node_rows(cur, records: List[tuple]) -> None:
+    """Bulk insert via `psycopg2.extras.execute_values`.
+
+    Wrapper unico riusato dai 3 call site (`write_node_snapshot_atomic`,
+    `insert_node_rows`, `write_node_atomic`). No-op se `records` e' vuoto:
+    coerente con il branch legacy `if records: cur.executemany(...)`.
+
+    `page_size=1000`: cap sicuro su payload INSERT (preview default = 500,
+    full_pg legacy puo' essere maggiore). Sopra 1000 psycopg2 split in
+    piu' INSERT, mantenendo deterministico l'ordine.
+    """
+    if not records:
+        return
+    execute_values(
+        cur,
+        _SQL_INSERT_NODE_ROWS_HEAD,
+        records,
+        template=_INSERT_NODE_ROW_TEMPLATE,
+        page_size=1000,
+    )
 _SQL_UPSERT_NODE_META = (
     "INSERT INTO node_meta "
     "(run_id, node_id, node_type, row_count, col_schema, exec_time, status, error_msg) "
@@ -533,8 +572,7 @@ def insert_node_rows(run_id: str, node_id: str,
     with transaction() as conn:
         with conn.cursor() as cur:
             cur.execute(_SQL_DELETE_NODE_ROWS, (run_id, node_id))
-            if records:
-                cur.executemany(_SQL_INSERT_NODE_ROW, records)
+            _bulk_insert_node_rows(cur, records)
 
 
 def write_node_atomic(
@@ -589,8 +627,7 @@ def write_node_atomic(
     with transaction() as conn:
         with conn.cursor() as cur:
             cur.execute(_SQL_DELETE_NODE_ROWS, (run_id, node_id))
-            if records:
-                cur.executemany(_SQL_INSERT_NODE_ROW, records)
+            _bulk_insert_node_rows(cur, records)
             cur.execute(_SQL_UPSERT_NODE_META, meta_params)
 
 
