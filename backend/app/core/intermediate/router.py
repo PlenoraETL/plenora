@@ -175,28 +175,127 @@ def get_node_data(
             effective_group = None
         else:
             effective_group = (run or {}).get("group_id") or current_user.group_id
-        rows = idb.get_node_table_rows(
-            run_id=run_id,
-            node_id=node_id,
-            group_id=effective_group,
-            limit=limit,
-        )
         node = idb.get_node_meta(run_id, node_id)
-        row_count = node["row_count"] if node and node.get("row_count") is not None else len(rows)
-        col_schema = node["col_schema"] if node and node.get("col_schema") is not None else {}
+        # Phase 6 batch API preview da artifact (2026-04-28): dispatch
+        # per `persistence_mode`:
+        #   - full_artifact + status=complete  -> read parquet (object storage)
+        #   - full_artifact + altri status     -> 200 con rows=[] + warning
+        #   - metadata_only                    -> 200 con rows=[] + warning
+        #   - full_pg / preview_only / NULL    -> read da node_rows (legacy)
+        #
+        # Tutti i path sanitizzano NaN/Inf via `_sanitize_for_json`
+        # (Bug #23) prima del JSONResponse.
+        from app.core.intermediate.policy import (
+            persistence_mode_for_record,
+            MODE_FULL_ARTIFACT,
+            MODE_METADATA_ONLY,
+            ARTIFACT_STATUS_COMPLETE,
+        )
+
+        node_dict = node or {}
+        row_count = (
+            node_dict.get("row_count")
+            if node_dict.get("row_count") is not None
+            else 0
+        )
+        col_schema = (
+            node_dict.get("col_schema")
+            if node_dict.get("col_schema") is not None
+            else {}
+        )
+        persistence_mode = persistence_mode_for_record(node_dict)
+        artifact_uri = node_dict.get("artifact_uri")
+        artifact_status = node_dict.get("artifact_status")
+        artifact_format = node_dict.get("artifact_format")
+        persisted_rows_count = node_dict.get("persisted_rows_count")
+        preview_truncated_meta = bool(node_dict.get("preview_truncated"))
+
+        rows: list = []
+        message: Optional[str] = None
+
+        if persistence_mode == MODE_FULL_ARTIFACT:
+            if artifact_status == ARTIFACT_STATUS_COMPLETE and artifact_uri:
+                from app.core.intermediate.artifact_reader import (
+                    load_preview_from_artifact,
+                )
+                preview = load_preview_from_artifact(
+                    artifact_uri, limit=limit,
+                )
+                if preview.error:
+                    # 200 operativo: niente 500 sul boundary HTTP.
+                    rows = []
+                    message = (
+                        f"Preview da artifact non disponibile: {preview.error}"
+                    )
+                else:
+                    rows = preview.rows
+                    # Aggiorna col_schema dal Parquet (autorevole sui
+                    # tipi reali post-roundtrip) se il meta era vuoto.
+                    if not col_schema:
+                        col_schema = preview.col_schema
+                    # row_count autorevole resta da node_meta; il
+                    # parquet conferma se il meta era stale.
+                    if not row_count:
+                        row_count = preview.row_count
+            else:
+                rows = []
+                # Stati possibili: pending, failed, none, missing.
+                msg_status = artifact_status or "none"
+                if msg_status == "failed":
+                    artifact_error = node_dict.get("artifact_error") or "errore non specificato"
+                    message = (
+                        f"Artifact preview non disponibile "
+                        f"(status=failed): {artifact_error}"
+                    )
+                elif msg_status == "pending":
+                    message = (
+                        "Artifact preview non ancora pronto "
+                        "(status=pending). Riprova fra qualche secondo."
+                    )
+                else:
+                    message = (
+                        f"Artifact preview non disponibile "
+                        f"(status={msg_status})."
+                    )
+        elif persistence_mode == MODE_METADATA_ONLY:
+            rows = []
+            message = (
+                "Dati intermedi non salvati per questo nodo "
+                "(persistence_mode=metadata_only). "
+                "node_meta + node_hash sono comunque disponibili."
+            )
+        else:
+            # full_pg / preview_only / legacy NULL -> legge node_rows.
+            rows = idb.get_node_table_rows(
+                run_id=run_id,
+                node_id=node_id,
+                group_id=effective_group,
+                limit=limit,
+            )
+
         # Bug #23: NaN / +Inf / -Inf non sono JSON compliant.
-        # Sanitizziamo prima del JSONResponse senza alterare il
-        # contenuto persistito.
+        # Vale per tutte le sorgenti (node_rows, artifact, fallback).
         rows = _sanitize_for_json(rows)
         col_schema = _sanitize_for_json(col_schema)
-        return {
+
+        response = {
             "run_id": run_id,
             "node_id": node_id,
             "row_count": row_count,
             "col_schema": col_schema,
             "rows": rows,
-            "truncated": row_count > limit,
+            "truncated": (row_count or 0) > limit,
+            # Campi additivi (compat: i client esistenti li ignorano).
+            "persistence_mode": persistence_mode,
+            "persisted_rows_count": persisted_rows_count,
+            "preview_truncated": preview_truncated_meta,
+            "artifact_uri": artifact_uri,
+            "artifact_status": artifact_status,
+            "artifact_format": artifact_format,
         }
+        if message:
+            response["message"] = message
+        return response
     except HTTPException:
         raise
     except Exception as e:
