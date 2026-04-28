@@ -135,9 +135,19 @@ def save_result_blob(project_id: str, path: Path, fmt: str,
 
     Dispatch policy-aware (A1, STORAGE_POLICY):
       - `db`             -> sempre DB BYTEA, fail se size > RESULT_DB_HARD_CAP_BYTES
-      - `object_storage` -> sempre object storage (streaming dal disk)
+      - `object_storage` -> sempre object storage (streaming dal disk).
+                            Nessun fallback BYTEA: capability off o bucket
+                            mancante => ResultSaveError esplicito (fail-closed).
+                            Validazione coerenza al boot in
+                            cloud_backends.validate_storage_config.
       - `hybrid`         -> threshold-based su RESULT_S3_THRESHOLD_BYTES;
-                            il ramo DB e' protetto dallo stesso hard cap
+                            il ramo DB e' protetto dallo stesso hard cap.
+                            Manutenuto per retro-compat dev/test.
+
+    Reader (`results_db_service.get_result_data`) gestisce trasparente
+    storage_key (object_storage) vs `data` BYTEA (db_legacy) — i nuovi
+    result in policy=object_storage hanno sempre storage_key valorizzato
+    e data=NULL. Le row legacy con data BYTEA continuano a essere lette.
 
     Applica la retention policy dopo il salvataggio. Elimina il file temp
     solo dopo che il blob/object e' stato scritto.
@@ -277,13 +287,18 @@ def save_result_blob_from_bytes(
     rows_count: int = None,
     group_id: str = None,
 ) -> str:
-    """Salva result bytes. Dispatch automatico DB blob vs S3 sulla soglia.
+    """Salva result bytes. Dispatch policy-aware (A1, STORAGE_POLICY).
 
-    Threshold config: `RESULT_S3_THRESHOLD_BYTES` (default 50 MB).
-      - size < threshold -> DB blob (BYTEA). Veloce, transazionale,
-        retention gestita lato app.
-      - size >= threshold -> S3 (via cloud_backends). La row DB tiene
-        solo metadata + storage_key; get_result_data risolve trasparente.
+    Stessa semantica di `save_result_blob` ma input in-memory (bytes
+    gia' serializzati). Vedi docstring di `save_result_blob` per i
+    dettagli del dispatch e del fail-closed in policy=object_storage.
+
+    Threshold config (solo policy=hybrid): `RESULT_S3_THRESHOLD_BYTES`
+    (default 50 MB).
+      - size < threshold -> DB blob (BYTEA).
+      - size >= threshold -> object storage via cloud_backends. La row
+        DB tiene solo metadata + storage_key; get_result_data risolve
+        trasparente.
 
     Hard cap S3: `MAX_RESULT_S3_SIZE` (default 5 GB, limite S3 single PUT).
     Sopra il cap: ResultSaveError (file troppo grosso — da questo caso

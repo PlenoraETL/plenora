@@ -793,6 +793,37 @@ def validate_storage_config() -> None:
                 "ma ne' BACKUP_BUCKET ne' BACKUP_S3_BUCKET (legacy) sono "
                 "configurati."
             )
+        # Policy `object_storage` richiede bucket runtime esplicito:
+        # niente fallback silenzioso su BACKUP_BUCKET (semanticamente
+        # diverso, IAM/lifecycle distinti). Con `hybrid` il fallback
+        # legacy resta consentito per retro-compat dev/test.
+        if policy == "object_storage":
+            runtime_bucket = (
+                os.getenv("OBJECT_STORAGE_BUCKET")
+                or os.getenv("PLENORA_ARTIFACT_BUCKET")
+            )
+            if not runtime_bucket:
+                _fail(
+                    "STORAGE_POLICY=object_storage richiede "
+                    "OBJECT_STORAGE_BUCKET (o alias PLENORA_ARTIFACT_BUCKET) "
+                    "configurato esplicitamente. Niente fallback su "
+                    "BACKUP_BUCKET in questa policy: i due bucket sono "
+                    "semanticamente distinti (runtime artifacts vs backup "
+                    "amministrativi). Imposta OBJECT_STORAGE_BUCKET o "
+                    "cambia policy a hybrid."
+                )
+            # OBJECT_STORAGE_ENABLED deve essere true: senza la capability
+            # i writer dei nuovi result fallirebbero comunque al primo upload,
+            # meglio fail-fast al boot con messaggio operativo.
+            enabled_raw = (os.getenv("OBJECT_STORAGE_ENABLED") or "true").strip().lower()
+            if enabled_raw not in ("true", "1", "yes"):
+                _fail(
+                    "STORAGE_POLICY=object_storage richiede "
+                    "OBJECT_STORAGE_ENABLED=true. Con la capability "
+                    "disabilitata il path runtime (result/file_source/eseguibili/"
+                    "IMDF/intermediate) non e' operativo. Abilita la "
+                    "capability o cambia policy a db/hybrid."
+                )
         # A1-B2: MinIO richiede credenziali esplicite + endpoint (no IAM chain).
         if provider == "minio":
             for name in (

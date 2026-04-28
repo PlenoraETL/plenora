@@ -44,6 +44,9 @@ def _clean_storage_env(monkeypatch):
         "CLOUD_PROVIDER",
         "BACKUP_BUCKET",
         "BACKUP_S3_BUCKET",
+        "OBJECT_STORAGE_BUCKET",
+        "PLENORA_ARTIFACT_BUCKET",
+        "OBJECT_STORAGE_ENABLED",
         "RESULT_S3_THRESHOLD_BYTES",
         "FILE_SOURCE_S3_THRESHOLD_BYTES",
         "RESULT_DB_HARD_CAP_BYTES",
@@ -137,13 +140,46 @@ def test_object_storage_requires_bucket(monkeypatch):
         validate_storage_config()
 
 
-def test_object_storage_accepts_legacy_bucket_env(monkeypatch):
-    """Boot passa se solo BACKUP_S3_BUCKET (legacy) e' settato: coerente
-    col comportamento di get_object_storage che accetta entrambi."""
+def test_object_storage_rejects_legacy_bucket_only(monkeypatch):
+    """Policy=object_storage: solo BACKUP_S3_BUCKET (legacy) NON e' piu'
+    sufficiente. Il bucket runtime deve essere esplicito tramite
+    OBJECT_STORAGE_BUCKET (canonical) o PLENORA_ARTIFACT_BUCKET (alias) —
+    niente fallback silenzioso su BACKUP_BUCKET."""
     monkeypatch.setenv("STORAGE_POLICY", "object_storage")
     monkeypatch.setenv("CLOUD_PROVIDER", "aws")
     monkeypatch.setenv("BACKUP_S3_BUCKET", "legacy-name")
-    validate_storage_config()
+    with pytest.raises(StorageConfigError, match="OBJECT_STORAGE_BUCKET"):
+        validate_storage_config()
+
+
+def test_object_storage_accepts_canonical_bucket(monkeypatch):
+    """Policy=object_storage passa con OBJECT_STORAGE_BUCKET esplicito."""
+    monkeypatch.setenv("STORAGE_POLICY", "object_storage")
+    monkeypatch.setenv("CLOUD_PROVIDER", "aws")
+    monkeypatch.setenv("BACKUP_BUCKET", "backup-b")
+    monkeypatch.setenv("OBJECT_STORAGE_BUCKET", "runtime-b")
+    validate_storage_config()  # no raise
+
+
+def test_object_storage_accepts_artifact_alias(monkeypatch):
+    """Alias PLENORA_ARTIFACT_BUCKET soddisfa il gate (Batch 1 prep)."""
+    monkeypatch.setenv("STORAGE_POLICY", "object_storage")
+    monkeypatch.setenv("CLOUD_PROVIDER", "aws")
+    monkeypatch.setenv("BACKUP_BUCKET", "backup-b")
+    monkeypatch.setenv("PLENORA_ARTIFACT_BUCKET", "runtime-b")
+    validate_storage_config()  # no raise
+
+
+def test_object_storage_requires_capability_enabled(monkeypatch):
+    """Policy=object_storage richiede OBJECT_STORAGE_ENABLED=true:
+    capability off => fail-fast al boot, niente fallback BYTEA al runtime."""
+    monkeypatch.setenv("STORAGE_POLICY", "object_storage")
+    monkeypatch.setenv("CLOUD_PROVIDER", "aws")
+    monkeypatch.setenv("BACKUP_BUCKET", "backup-b")
+    monkeypatch.setenv("OBJECT_STORAGE_BUCKET", "runtime-b")
+    monkeypatch.setenv("OBJECT_STORAGE_ENABLED", "false")
+    with pytest.raises(StorageConfigError, match="OBJECT_STORAGE_ENABLED"):
+        validate_storage_config()
 
 
 def test_object_storage_rejects_provider_none(monkeypatch):
@@ -314,6 +350,10 @@ def test_log_archive_enabled_requires_bucket(monkeypatch):
     monkeypatch.setenv("STORAGE_POLICY", "object_storage")
     monkeypatch.setenv("CLOUD_PROVIDER", "aws")
     monkeypatch.setenv("BACKUP_BUCKET", "b")
+    # Il nuovo gate (policy=object_storage richiede runtime bucket esplicito)
+    # va soddisfatto qui, altrimenti scatta prima del check LOG_ARCHIVE_BUCKET
+    # che e' l'invariante che vogliamo blindare.
+    monkeypatch.setenv("OBJECT_STORAGE_BUCKET", "runtime-b")
     monkeypatch.setenv("LOG_ARCHIVE_ENABLED", "true")
     with pytest.raises(StorageConfigError, match="LOG_ARCHIVE_BUCKET"):
         validate_storage_config()
@@ -389,6 +429,8 @@ def test_log_archive_enabled_truthy_variants(monkeypatch, truthy_value):
     monkeypatch.setenv("STORAGE_POLICY", "object_storage")
     monkeypatch.setenv("CLOUD_PROVIDER", "aws")
     monkeypatch.setenv("BACKUP_BUCKET", "b")
+    # Soddisfa il gate policy=object_storage (runtime bucket esplicito).
+    monkeypatch.setenv("OBJECT_STORAGE_BUCKET", "runtime-b")
     monkeypatch.setenv("LOG_ARCHIVE_ENABLED", truthy_value)
     with pytest.raises(StorageConfigError, match="LOG_ARCHIVE_BUCKET"):
         validate_storage_config()

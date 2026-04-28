@@ -141,16 +141,20 @@ def get_result_data(result_id: str, group_id: str = None) -> Optional[bytes]:
     storage_key = row.get("storage_key")
     if storage_key:
         # _s3_download_bytes logga il proprio timing dettagliato; qui
-        # logghiamo il tempo totale (DB lookup + S3 fetch).
+        # logghiamo il tempo totale (DB lookup + object storage fetch).
         data = _s3_download_bytes(storage_key)
         duration_ms = round((time.monotonic() - _t0) * 1000, 1)
         size = len(data) if data else 0
         logger.info(
-            f"[PERF] get_result_data op=fetch_blob backend=s3 "
+            f"[PERF] get_result_data op=fetch_blob backend=object_storage "
             f"result_id={result_id} size_bytes={size} duration_ms={duration_ms}"
         )
         return data
 
+    # Fallback BYTEA: row legacy pre-migration object storage. Mantenuto
+    # per retro-compatibilita' (storage_key=NULL + data BYTEA presente).
+    # backend=db_legacy distingue dal path nuovo (sempre object_storage
+    # quando STORAGE_POLICY=object_storage).
     data = row.get("data")
     # PostgreSQL BYTEA: psycopg2 ritorna memoryview, convertiamo a bytes
     if isinstance(data, memoryview):
@@ -158,7 +162,7 @@ def get_result_data(result_id: str, group_id: str = None) -> Optional[bytes]:
     duration_ms = round((time.monotonic() - _t0) * 1000, 1)
     size = len(data) if data else 0
     logger.info(
-        f"[PERF] get_result_data op=fetch_blob backend=db "
+        f"[PERF] get_result_data op=fetch_blob backend=db_legacy "
         f"result_id={result_id} size_bytes={size} duration_ms={duration_ms}"
     )
     return data
