@@ -888,21 +888,27 @@ class QueryExecutor:
             timings["total"] = time.time() - inizio_totale
             self._logger.info(f"TOTALE: {timings['total']:.2f}s")
 
-            # Snapshot intermediate.db (non bloccante).
-            # C11: cap sulle righe serializzate. Pre-fix, df.to_dict(
-            # orient="records") materializzava l'intero result set UNA
-            # SECONDA VOLTA (dopo query/DataFrame build) → double
-            # memory footprint. Sopra INTERMEDIATE_SNAPSHOT_MAX_ROWS
-            # scriviamo solo schema + count con status "ok_sampled"
-            # (l'intermediate serve al debug UI, non al re-run integrale).
+            # Snapshot intermediate (non bloccante).
+            # Phase 6 Batch 3A (2026-04-28): passa per `record_final_snapshot`
+            # con module="estrai". La policy globale
+            # `INTERMEDIATE_PERSISTENCE_MODE` decide il comportamento:
+            #   - metadata_only -> solo node_meta + node_hash, zero righe
+            #   - preview_only  -> meta + hash + prime N righe (default 500)
+            #   - full_pg       -> tutte le righe (legacy)
+            # Niente cap custom legacy (`INTERMEDIATE_SNAPSHOT_MAX_ROWS`):
+            # la policy centrale gestisce il dimensionamento.
+            #
+            # Streaming (df=None): conserviamo lo status "ok_streamed" via
+            # write_node legacy perche' qui non c'e' un DataFrame da
+            # fingerprintare; il record_final_snapshot policy-based richiede
+            # un DataFrame. Lo streaming era gia' un branch dedicato e
+            # rimane tale fino all'introduzione di un fingerprint streaming
+            # (out of scope Batch 3).
             if run_id and node_id:
                 try:
-                    from app.core.intermediate.writer import write_node
-                    from app.config import settings as _s
-                    _isnap_cap = int(getattr(_s, "INTERMEDIATE_SNAPSHOT_MAX_ROWS", 100_000) or 0)
-                    # In streaming df=None → snapshot solo metadata (sempre
-                    # ok_streamed, no re-materialization dal file).
                     if df is None:
+                        # Streaming branch: niente DataFrame -> meta-only legacy.
+                        from app.core.intermediate.writer import write_node
                         write_node(
                             run_id=run_id,
                             node_id=node_id,
@@ -913,32 +919,16 @@ class QueryExecutor:
                             status="ok_streamed",
                         )
                     else:
-                        col_schema = df.dtypes.astype(str).to_dict()
-                        if _isnap_cap > 0 and len(df) > _isnap_cap:
-                            self._logger.info(
-                                f"Intermediate snapshot: {len(df)} righe > cap "
-                                f"{_isnap_cap}, salvo solo schema + count "
-                                f"(status=ok_sampled)"
-                            )
-                            write_node(
-                                run_id=run_id,
-                                node_id=node_id,
-                                node_type="estrai",
-                                rows=[],  # niente payload — sopra cap
-                                col_schema=col_schema,
-                                exec_time=timings.get("total", 0),
-                                status="ok_sampled",
-                            )
-                        else:
-                            write_node(
-                                run_id=run_id,
-                                node_id=node_id,
-                                node_type="estrai",
-                                rows=df.to_dict(orient="records"),
-                                col_schema=col_schema,
-                                exec_time=timings.get("total", 0),
-                                status="ok",
-                            )
+                        from app.core.intermediate.snapshot import record_final_snapshot
+                        record_final_snapshot(
+                            run_id=run_id,
+                            module="estrai",
+                            node_id=node_id,
+                            node_type="estrai",
+                            df=df,
+                            exec_time=timings.get("total", 0),
+                            status="ok",
+                        )
                     self._logger.info(f"Intermediate snapshot: run={run_id} node={node_id}")
                 except Exception as _iex:
                     self._logger.warning(f"Intermediate write fallita (non bloccante): {_iex}")
