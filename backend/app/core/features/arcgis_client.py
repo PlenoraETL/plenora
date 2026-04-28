@@ -396,7 +396,7 @@ class EsriJsonConverter:
                 return None
                 
         except Exception as e:
-            logger.warning(f"Errore conversione geometria Shapely → Esri JSON: {e}")
+            logger.warning(f"Errore conversione geometria Shapely -> Esri JSON: {e}")
             return None
 
 
@@ -2151,7 +2151,7 @@ class ArcGISClient:
             service_url = result.get("serviceurl", "")
             service_item_id = result.get("itemId", "")
             
-            logger.info(f"Servizio creato: {service_name} → {service_url}")
+            logger.info(f"Servizio creato: {service_name} -> {service_url}")
             
         except requests.RequestException as e:
             raise ConnectionError(f"Errore creazione servizio: {e}")

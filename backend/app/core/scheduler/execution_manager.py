@@ -272,7 +272,7 @@ class ExecutionManager:
         # (cron normale o manuale).
         _scheduled_for_display = scheduled_for or "now"
         logger.info(
-            f"Esecuzione schedule {schedule_id} → progetto {project_id} "
+            f"Esecuzione schedule {schedule_id} -> progetto {project_id} "
             f"(tentativo {retry_attempt}, triggered_by={triggered_by}, "
             f"scheduled_for={_scheduled_for_display})"
         )
@@ -816,7 +816,7 @@ class ExecutionManager:
         """
         dest = config.destination
         logger.info(
-            f"CARICA scheduler: {dest.write_mode} → "
+            f"CARICA scheduler: {dest.write_mode} -> "
             f"{dest.connection_id}/{dest.table_name}",
             op="carica"
         )
@@ -931,7 +931,7 @@ class ExecutionManager:
             rows_skipped = (write_result.total_rows or 0) - rows_written
 
             logger.info(
-                f"CARICA scheduler completato: {rows_written} righe → "
+                f"CARICA scheduler completato: {rows_written} righe -> "
                 f"{dest.connection_id}/{dest.table_name}",
                 op="carica"
             )

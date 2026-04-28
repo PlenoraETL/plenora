@@ -186,7 +186,7 @@ def upload_imdf_layers(
         try:
             folder_id = _ensure_folder(client, conn, folder_name) or ""
             result["folder_id"] = folder_id
-            logger.info(f"Folder '{folder_name}' → id={folder_id or '(root)'}")
+            logger.info(f"Folder '{folder_name}' -> id={folder_id or '(root)'}")
         except Exception as e:
             result["errors"].append(f"Errore ensure_folder: {e}")
             return result

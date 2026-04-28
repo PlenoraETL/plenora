@@ -230,7 +230,7 @@ def _load_upload_meta(file_id: str) -> Optional[dict]:
         logger.warning(
             f"_load_upload_meta: metadata file_id={file_id} presente ma non "
             f"decodificabile ({type(_meta_err).__name__}: {_meta_err}); "
-            f"ritorno None → analyze/execute vedranno 'upload non trovato'"
+            f"ritorno None -> analyze/execute vedranno 'upload non trovato'"
         )
         return None
 
@@ -280,7 +280,7 @@ def _load_task_owner(task_id: str) -> Optional[dict]:
         logger.warning(
             f"_load_task_owner: ownership file task_id={task_id} presente ma "
             f"non decodificabile ({type(_owner_err).__name__}: {_owner_err}); "
-            f"ritorno None → download endpoint fail-closed per non-superadmin"
+            f"ritorno None -> download endpoint fail-closed per non-superadmin"
         )
         return None
 

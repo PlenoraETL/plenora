@@ -205,7 +205,7 @@ class DataPrepMixin:
                     # ad hoc — inconsistente col resto del file).
                     # Il `pass` morto dopo il warning e' stato rimosso:
                     # era dead statement, cade naturalmente al ramo WKB.
-                    logger.warning(f"GeoJSON→WKT fallito, provo WKB: {e}")
+                    logger.warning(f"GeoJSON->WKT fallito, provo WKB: {e}")
             # Potrebbe essere WKB hex
             try:
                 from shapely import wkb

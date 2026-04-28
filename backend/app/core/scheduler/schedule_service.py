@@ -256,7 +256,7 @@ class ScheduleService:
             config.runtime.next_execution = next_exec
 
         self._save_to_db(config, group_id, created_by=created_by)
-        logger.info(f"Schedule creato: {schedule_id} → progetto {schedule_data.project_id}")
+        logger.info(f"Schedule creato: {schedule_id} -> progetto {schedule_data.project_id}")
         return config
 
     # =========================================================================

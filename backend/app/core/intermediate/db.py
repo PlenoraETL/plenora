@@ -623,7 +623,7 @@ def delete_all_runs_for_canvas(canvas_id: str) -> int:
                     exc_info=True,
                 )
         logger.info(
-            f"delete_all_runs_for_canvas: canvas={canvas_id} → {count} run eliminate",
+            f"delete_all_runs_for_canvas: canvas={canvas_id} -> {count} run eliminate",
             op="delete_project"
         )
         return count

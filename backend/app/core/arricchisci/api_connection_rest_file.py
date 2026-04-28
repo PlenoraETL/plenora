@@ -511,7 +511,7 @@ class ApiConnectionRestFileMixin:
 
         ssrf_error = self._validate_outbound_url(url)
         if ssrf_error:
-            logger.warning(f"rest_file SSRF block: {url} → {ssrf_error}")
+            logger.warning(f"rest_file SSRF block: {url} -> {ssrf_error}")
             # B3-B.5b rewrite #7/8: forward-ref classe → self
             return None, self._rest_file_error(
                 "remote_processor_error",
@@ -985,7 +985,7 @@ class ApiConnectionRestFileMixin:
             ) from e
 
         logger.debug(
-            f"file_source {file_source_id}: blob materializzato in cache → {out_path}"
+            f"file_source {file_source_id}: blob materializzato in cache -> {out_path}"
         )
         return str(out_path.resolve())
 

@@ -173,7 +173,7 @@ class EnrichmentTemplateParamsMixin:
                     val = bool(val)
             except Exception as _np_err:
                 logger.debug(
-                    f"numpy→native conversion probe fallita per tipo "
+                    f"numpy->native conversion probe fallita per tipo "
                     f"{type(val).__name__}: {_np_err}"
                 )
             # Formattazione: int/float/bool senza decoration, str raw
