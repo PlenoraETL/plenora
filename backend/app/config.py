@@ -232,11 +232,16 @@ class Settings:
         #     consigliato in produzione.
         #   - "full_pg": comportamento legacy, tutte le righe in
         #     node_rows. Compat/debug temporaneo.
-        # Mode "full_artifact" e' riservato per Batch 5 (artifact su
-        # object storage); in Batch 1 e' rifiutato a startup.
+        # Mode "full_artifact": persiste data.parquet + manifest.json
+        # su runtime object storage (richiede OBJECT_STORAGE_ENABLED=true
+        # + OBJECT_STORAGE_BUCKET configurato). Zero `node_rows`,
+        # `node_meta.artifact_uri/_status/_format` valorizzati.
         # Validazione fail-fast in
         # `app/core/intermediate/policy.validate_intermediate_settings`.
-        "INTERMEDIATE_PERSISTENCE_MODE": "preview_only",
+        # Default produzione: metadata_only (Batch object storage
+        # intermedi, 2026-04-28). Postgres resta catalogo leggero.
+        # Per audit/debug: preview_only (legacy) o full_artifact.
+        "INTERMEDIATE_PERSISTENCE_MODE": "metadata_only",
         # Numero righe persistite quando MODE=preview_only. Tagliato
         # dalle prime N (df.head). UI mostra "preview NN su YYY".
         "INTERMEDIATE_PREVIEW_ROWS": 500,

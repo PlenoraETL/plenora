@@ -39,18 +39,20 @@ MODE_PREVIEW_ONLY = "preview_only"
 MODE_FULL_PG = "full_pg"
 MODE_FULL_ARTIFACT = "full_artifact"  # Batch 5
 
-# Valori che la pipeline puo' effettivamente eseguire in Batch 1.
+# Valori che la pipeline puo' effettivamente eseguire.
+# `full_artifact` aggiunto nel batch object storage intermedi
+# (2026-04-28): richiede OBJECT_STORAGE_ENABLED=true e bucket runtime
+# configurato (vedi validate_intermediate_settings).
 SUPPORTED_PERSISTENCE_MODES = frozenset({
     MODE_METADATA_ONLY,
     MODE_PREVIEW_ONLY,
     MODE_FULL_PG,
-})
-
-# Valori riconosciuti ma non ancora implementati. Restano in elenco per
-# differenziare "errore di battitura" da "non ancora pronto".
-PLANNED_PERSISTENCE_MODES = frozenset({
     MODE_FULL_ARTIFACT,
 })
+
+# Mode pianificate ma non ancora implementate (riservato per evitare
+# typo). Mantenuto come hook per future estensioni.
+PLANNED_PERSISTENCE_MODES = frozenset()
 
 # MANIPOLA checkpoint policy. Vedi `manipola_checkpoint_policy.md`.
 MANIPOLA_CHECKPOINTS_NONE = "none"
@@ -236,15 +238,31 @@ def validate_intermediate_settings(values: Optional[dict] = None) -> None:
     mode = cfg.get("mode")
     if mode in PLANNED_PERSISTENCE_MODES:
         raise IntermediateSettingsError(
-            f"INTERMEDIATE_PERSISTENCE_MODE={mode!r} non e' implementato in "
-            f"Batch 1. Mode supportati: {sorted(SUPPORTED_PERSISTENCE_MODES)}. "
-            f"`full_artifact` arrivera' in Batch 5."
+            f"INTERMEDIATE_PERSISTENCE_MODE={mode!r} non e' ancora "
+            f"implementato. Mode supportati: {sorted(SUPPORTED_PERSISTENCE_MODES)}."
         )
     if mode not in SUPPORTED_PERSISTENCE_MODES:
         raise IntermediateSettingsError(
             f"INTERMEDIATE_PERSISTENCE_MODE={mode!r} non riconosciuto. "
             f"Valori ammessi: {sorted(SUPPORTED_PERSISTENCE_MODES)}."
         )
+
+    # Object storage capability cross-check (Batch object storage
+    # intermedi, 2026-04-28). `full_artifact` richiede object storage
+    # runtime attivo + bucket configurato. Senza, l'unica via e'
+    # cambiare mode (es. metadata_only) o abilitare la capability.
+    if mode == MODE_FULL_ARTIFACT:
+        # Lazy import per evitare cicli (cloud_backends importa
+        # eventualmente settings indirettamente).
+        from app.shared.cloud_backends import object_storage_enabled
+        if not object_storage_enabled():
+            raise IntermediateSettingsError(
+                "INTERMEDIATE_PERSISTENCE_MODE=full_artifact richiede "
+                "OBJECT_STORAGE_ENABLED=true (capability runtime object "
+                "storage). Imposta OBJECT_STORAGE_ENABLED=true e "
+                "OBJECT_STORAGE_BUCKET, oppure cambia mode a "
+                "metadata_only / preview_only / full_pg."
+            )
 
     preview_rows = cfg.get("preview_rows")
     try:
@@ -491,6 +509,18 @@ def _build_record_policy(
             persistence_mode=MODE_FULL_PG,
             # preview_rows = 0 segnala "no head cap, scrivi tutto" al
             # writer. La distinzione effettiva e' su persistence_mode.
+            preview_rows=0,
+            reason=reason,
+        )
+    if mode == MODE_FULL_ARTIFACT:
+        # full_artifact: meta + hash + artifact su object storage.
+        # ZERO `node_rows` (lo snapshot full vive in object storage).
+        # Il writer in `snapshot.py` gestisce la persistenza Parquet +
+        # manifest e popola `node_meta.artifact_uri/_status/_format`.
+        return IntermediatePolicy(
+            should_record_meta=True,
+            should_record_rows=False,
+            persistence_mode=MODE_FULL_ARTIFACT,
             preview_rows=0,
             reason=reason,
         )

@@ -390,13 +390,63 @@ def _record_snapshot(
             rows_to_persist = _build_full_rows_legacy(df)
         elif persistence_mode == _policy.MODE_PREVIEW_ONLY:
             rows_to_persist = _build_preview_rows(df, policy.preview_rows)
-        # mode metadata_only non entra in questo branch (should_record_rows=False).
+        # mode metadata_only / full_artifact non entrano in questo branch
+        # (should_record_rows=False -> zero node_rows).
 
     persisted_rows_count = len(rows_to_persist)
     preview_truncated = (
         persistence_mode == _policy.MODE_PREVIEW_ONLY
         and persisted_rows_count < row_count
     )
+
+    # Batch object storage intermedi (2026-04-28): in mode full_artifact
+    # serializziamo data.parquet + manifest.json su runtime object
+    # storage. Il caller persistera' artifact_uri / _status / _format
+    # in `node_meta`. Best-effort: errori tornano `failed` e proseguono.
+    artifact_uri: Optional[str] = None
+    artifact_format: Optional[str] = None
+    artifact_status: str = _policy.ARTIFACT_STATUS_NONE
+    artifact_error: Optional[str] = None
+    artifact_ms: float = 0.0
+
+    if persistence_mode == _policy.MODE_FULL_ARTIFACT and df is not None:
+        _t_art = time.monotonic()
+        # Lookup group_id + project_id dalla run intermediate.
+        run_meta = _db.get_run(run_id) or {}
+        run_project_id = run_meta.get("canvas_id") or ""
+        run_group_id = run_meta.get("group_id") or ""
+        if not run_project_id or not run_group_id:
+            artifact_status = "failed"
+            artifact_error = (
+                "run intermediate priva di canvas_id/group_id; "
+                "impossibile costruire layout artifact"
+            )
+            artifact_format = "parquet"
+            logger.warning(
+                "[ARTIFACT] run_meta incompleto per run=%s: %s",
+                run_id, run_meta,
+            )
+        else:
+            from app.core.intermediate.artifact_writer import persist_full_artifact
+            res = persist_full_artifact(
+                df=df,
+                run_id=run_id,
+                project_id=run_project_id,
+                group_id=run_group_id,
+                module=module,
+                node_id=node_id,
+                node_type=node_type,
+                snapshot_kind=snapshot_kind,
+                node_hash=node_hash,
+                hash_algo=hash_algo,
+                row_count=row_count,
+                column_count=len(col_schema or {}),
+            )
+            artifact_uri = res.artifact_uri
+            artifact_format = res.artifact_format
+            artifact_status = res.artifact_status
+            artifact_error = res.error
+        artifact_ms = _ms(_t_art)
 
     _t_db = time.monotonic()
     _db.write_node_snapshot_atomic(
@@ -413,10 +463,10 @@ def _record_snapshot(
         hash_algo=hash_algo,
         persistence_mode=persistence_mode,
         preview_truncated=preview_truncated,
-        # Batch 1: artifact non implementato. Status "none" esplicito
-        # per distinguerlo dai record legacy NULL (che si interpretano
-        # come full_pg).
-        artifact_status=_policy.ARTIFACT_STATUS_NONE,
+        artifact_uri=artifact_uri,
+        artifact_format=artifact_format,
+        artifact_status=artifact_status,
+        artifact_error=artifact_error,
     )
     db_ms = _ms(_t_db)
 
@@ -429,11 +479,13 @@ def _record_snapshot(
         "[PERF] op=%s module=%s node_id=%s node_type=%s snapshot_kind=%s "
         "persistence_mode=%s reason=%s row_count=%d "
         "persisted_rows_count=%d preview_truncated=%s "
-        "fingerprint_ms=%s db_ms=%s total_ms=%s",
+        "fingerprint_ms=%s db_ms=%s artifact_ms=%s artifact_status=%s "
+        "total_ms=%s",
         op, module, node_id, node_type, snapshot_kind,
         persistence_mode, policy.reason,
         row_count, persisted_rows_count, preview_truncated,
-        fingerprint_ms, db_ms, _ms(_t_total),
+        fingerprint_ms, db_ms, artifact_ms, artifact_status,
+        _ms(_t_total),
     )
 
     return SnapshotHandle(
@@ -447,7 +499,7 @@ def _record_snapshot(
         preview_truncated=preview_truncated,
         node_hash=node_hash,
         hash_algo=hash_algo,
-        artifact_status=_policy.ARTIFACT_STATUS_NONE,
+        artifact_status=artifact_status,
     )
 
 

@@ -54,11 +54,29 @@ def test_validate_settings_baseline_ok():
     validate_intermediate_settings(_settings_baseline())  # no raise
 
 
-def test_validate_settings_rejects_full_artifact_in_batch1():
+def test_validate_settings_rejects_full_artifact_when_object_storage_disabled():
+    """Batch object storage intermedi (2026-04-28): `full_artifact` e'
+    supportato ma richiede OBJECT_STORAGE_ENABLED=true. Senza, validate
+    fail-fast con messaggio operativo."""
     from app.core.intermediate.policy import (
         IntermediateSettingsError, validate_intermediate_settings,
     )
-    with pytest.raises(IntermediateSettingsError, match="Batch 1"):
+    with patch(
+        "app.shared.cloud_backends.object_storage_enabled",
+        return_value=False,
+    ):
+        with pytest.raises(IntermediateSettingsError, match="OBJECT_STORAGE_ENABLED"):
+            validate_intermediate_settings(_settings_baseline(mode="full_artifact"))
+
+
+def test_validate_settings_accepts_full_artifact_when_object_storage_enabled():
+    """Counterpart: con OBJECT_STORAGE_ENABLED=true, `full_artifact`
+    passa la validazione."""
+    from app.core.intermediate.policy import validate_intermediate_settings
+    with patch(
+        "app.shared.cloud_backends.object_storage_enabled",
+        return_value=True,
+    ):
         validate_intermediate_settings(_settings_baseline(mode="full_artifact"))
 
 
