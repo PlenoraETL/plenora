@@ -442,14 +442,20 @@ class TestExecuteEnrichmentFinalResult:
 
 
 class TestExecuteEnrichmentIntermediateSnapshot:
-    def test_intermediate_write_node_called_when_run_id_present(self, env):
+    """Phase 6 Batch 3B: l'arricchisci snapshot per i nodi `api_enrich`
+    passa per `record_checkpoint_snapshot(module="arricchisci")` invece
+    di `write_node` legacy. La policy globale
+    `ARRICCHISCI_INTERMEDIATE_CHECKPOINTS=final_only` decide poi lo
+    skip; il test verifica solo l'API call dell'executor."""
+
+    def test_intermediate_snapshot_called_when_run_id_present(self, env):
         env.list_conns.return_value = {
             "api-1": {"api_type": "enricher", "connection_type": "manual"},
         }
 
         with patch(
-            "app.core.intermediate.writer.write_node"
-        ) as mock_write_node:
+            "app.core.intermediate.snapshot.record_checkpoint_snapshot"
+        ) as mock_record:
             env.svc.execute_enrichment(
                 "proj-1",
                 _canvas(
@@ -459,20 +465,23 @@ class TestExecuteEnrichmentIntermediateSnapshot:
                 run_id="run-xyz",
             )
 
-        assert mock_write_node.called
-        # Almeno una chiamata per il nodo api_enrich
+        assert mock_record.called
+        # Almeno una chiamata per il nodo api_enrich con module=arricchisci
         api_enrich_calls = [
-            c for c in mock_write_node.call_args_list
+            c for c in mock_record.call_args_list
             if c.kwargs.get("node_type") == "api_enrich"
+            and c.kwargs.get("module") == "arricchisci"
         ]
         assert len(api_enrich_calls) >= 1
 
-    def test_intermediate_write_NOT_called_when_run_id_absent(self, env):
+    def test_intermediate_snapshot_NOT_called_when_run_id_absent(self, env):
         env.list_conns.return_value = {
             "api-1": {"api_type": "enricher", "connection_type": "manual"},
         }
 
         with patch(
+            "app.core.intermediate.snapshot.record_checkpoint_snapshot"
+        ) as mock_record, patch(
             "app.core.intermediate.writer.write_node"
         ) as mock_write_node:
             env.svc.execute_enrichment(
@@ -484,6 +493,7 @@ class TestExecuteEnrichmentIntermediateSnapshot:
                 run_id=None,
             )
 
+        mock_record.assert_not_called()
         mock_write_node.assert_not_called()
 
 

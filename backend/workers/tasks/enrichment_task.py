@@ -619,24 +619,33 @@ def execute_enrichment_task(
                         )
             node_results[node_id] = result
 
-            # Snapshot intermediate.db — fire-and-forget thread (non bloccante)
+            # Snapshot intermediate per nodo api_enrich.
+            # Phase 6 Batch 3B (2026-04-28): la policy globale
+            # `ARRICCHISCI_INTERMEDIATE_CHECKPOINTS=final_only` esclude i
+            # nodi api_enrich dagli snapshot intermedi. La nuova API
+            # `record_checkpoint_snapshot` ritorna immediatamente
+            # `recorded=False` PRIMA di toccare il DataFrame: niente
+            # `df.to_dict(full)`, niente thread daemon, niente DB.
+            # Pre-fix: ogni nodo materializzava le righe nel thread
+            # principale prima del thread daemon, doppia memoria + costo
+            # to_dict sincrono sul critical path.
             if _run_id:
                 try:
                     import pandas as _pd
                     _df = result if isinstance(result, _pd.DataFrame) else None
                     if _df is not None and not _df.empty:
-                        _rows = _df.to_dict(orient="records")
-                        _schema = _df.dtypes.astype(str).to_dict()
-                        _nid = node_id
-                        _rid = _run_id
-                        def _async_write(_r=_rid, _n=_nid, _ro=_rows, _sc=_schema):
-                            try:
-                                from app.core.intermediate.writer import write_node as _wn
-                                _wn(run_id=_r, node_id=_n, node_type="api_enrich",
-                                    rows=_ro, col_schema=_sc, exec_time=0.0, status="ok")
-                            except Exception as e:
-                                logger.debug(f"async intermediate write fallito: {type(e).__name__}: {e}")
-                        threading.Thread(target=_async_write, daemon=True).start()
+                        from app.core.intermediate.snapshot import (
+                            record_checkpoint_snapshot,
+                        )
+                        record_checkpoint_snapshot(
+                            run_id=_run_id,
+                            module="arricchisci",
+                            node_id=node_id,
+                            node_type="api_enrich",
+                            df=_df,
+                            exec_time=0.0,
+                            status="ok",
+                        )
                 except Exception as _sne:
                     logger.warning(f"[Task {task_id}] Intermediate write nodo {node_id} fallita: {_sne}")
 
@@ -1086,21 +1095,29 @@ def execute_enrichment_task(
 
         logger.info(f"[Task {task_id}] Completato in {elapsed_time:.2f}s - {len(final_df)} righe", project_id=_log_pid)
 
-        # Snapshot result node su intermediate.db — fire-and-forget thread
+        # Snapshot result node ARRICCHISCI.
+        # Phase 6 Batch 3B (2026-04-28): passa per `record_final_snapshot`
+        # con module="arricchisci". La policy globale
+        # `INTERMEDIATE_PERSISTENCE_MODE` decide il dimensionamento
+        # (default `preview_only` -> 500 righe + hash + meta).
+        # Pre-fix: thread daemon che materializzava `final_df.to_dict(full)`
+        # nel thread principale prima del dispatch -> double memory peak
+        # sui DataFrame grandi.
+        # Post-fix: chiamata sync. Hash via pandas_hash_v1 senza
+        # materializzare. Lo skip-path o il preview-cap rendono il
+        # costo trascurabile rispetto al df.to_dict(full) precedente.
         if _run_id and result_node and not is_eseguibile:
             try:
-                _rows_r = final_df.to_dict(orient="records")
-                _schema_r = final_df.dtypes.astype(str).to_dict()
-                _nid_r = result_node["id"]
-                _rid_r = _run_id
-                def _async_write_result(_r=_rid_r, _n=_nid_r, _ro=_rows_r, _sc=_schema_r):
-                    try:
-                        from app.core.intermediate.writer import write_node as _wn
-                        _wn(run_id=_r, node_id=_n, node_type="result",
-                            rows=_ro, col_schema=_sc, exec_time=0.0, status="ok")
-                    except Exception as e:
-                        logger.debug(f"cleanup async write fallito: {type(e).__name__}: {e}")
-                threading.Thread(target=_async_write_result, daemon=True).start()
+                from app.core.intermediate.snapshot import record_final_snapshot
+                record_final_snapshot(
+                    run_id=_run_id,
+                    module="arricchisci",
+                    node_id=result_node["id"],
+                    node_type="result",
+                    df=final_df,
+                    exec_time=0.0,
+                    status="ok",
+                )
             except Exception as _sne:
                 logger.warning(f"[Task {task_id}] Intermediate write result node fallita: {_sne}")
 

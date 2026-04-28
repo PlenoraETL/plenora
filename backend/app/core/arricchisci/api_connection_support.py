@@ -460,22 +460,27 @@ class ApiConnectionSupportMixin:
     def _write_intermediate_snapshot(
         self, run_id: str, node_id: str, node_type: str, df: Any
     ) -> None:
-        """Scrive uno snapshot del DataFrame nell'intermediate.db.
+        """Best-effort snapshot del DataFrame del nodo arricchisci.
 
-        Best-effort: errori loggati come warning ma non propagati
-        (lo snapshot e' per inspection, non bloccante per la pipeline).
+        Phase 6 Batch 3B (2026-04-28): instradato attraverso la nuova
+        `record_checkpoint_snapshot(module="arricchisci")`. La policy
+        globale `ARRICCHISCI_INTERMEDIATE_CHECKPOINTS=final_only` (default)
+        esclude i nodi `api_enrich` dagli snapshot intermedi: il
+        resolver ritorna `recorded=False` PRIMA di toccare il DataFrame
+        (no `df.to_dict`, no fingerprint, no DB).
+
         No-op se `df` non e' un DataFrame non vuoto.
         """
         if not isinstance(df, pd.DataFrame) or df.empty:
             return
         try:
-            from app.core.intermediate.writer import write_node
-            write_node(
+            from app.core.intermediate.snapshot import record_checkpoint_snapshot
+            record_checkpoint_snapshot(
                 run_id=run_id,
+                module="arricchisci",
                 node_id=node_id,
                 node_type=node_type,
-                rows=df.to_dict(orient="records"),
-                col_schema=df.dtypes.astype(str).to_dict(),
+                df=df,
                 exec_time=0.0,
                 status="ok",
             )
