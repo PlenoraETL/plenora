@@ -88,8 +88,17 @@ def test_no_bare_except_pass_in_target_files():
 # =============================================================================
 
 
-# Mapping (file, stringa-contesto-breadcrumb) dei 15 siti attesi.
+# Mapping (file, stringa-contesto-breadcrumb) dei siti attesi.
 # La stringa-contesto deve essere unica nel file post-fix per isolarla.
+#
+# Phase 6 Batch 3B (2026-04-28): rimossi 2 contesti che vivevano nel
+# pattern `_async_write` thread daemon di enrichment_task.py (api_enrich
+# snapshot + result snapshot). Quel pattern non esiste piu': il routing
+# passa per `record_*_snapshot` sync via la policy. I 2 contesti rimossi
+# erano:
+#   - "async intermediate write fallito"  (in _async_write body)
+#   - "cleanup async write fallito"       (in _async_write_result body)
+# Restano i 13 siti che NON dipendevano dal pattern async daemon.
 _BREADCRUMB_CONTEXTS = [
     ("workers/tasks/schedule_task.py",
      "log emergenza post-crash fallito"),
@@ -104,11 +113,7 @@ _BREADCRUMB_CONTEXTS = [
     ("workers/tasks/carica_task.py",
      "close_connection config fallito"),
     ("workers/tasks/enrichment_task.py",
-     "async intermediate write fallito"),
-    ("workers/tasks/enrichment_task.py",
      "cleanup temp dir fallito"),
-    ("workers/tasks/enrichment_task.py",
-     "cleanup async write fallito"),
     ("workers/tasks/enrichment_task.py",
      "cleanup async close_run fallito"),
     ("workers/tasks/enrichment_task.py",
@@ -152,8 +157,13 @@ def test_each_cleanup_site_has_logger_debug_breadcrumb():
 
 def test_cleanup_sites_count_matches_scope():
     """Sanity aggregata: conta quante occorrenze di `logger.debug(f"`
-    con `type(e).__name__` esistono nei 5 file. Atteso >= 15 (i 15 siti
-    7.f + eventuali altri debug pre-esistenti del batch 7.c/7.b).
+    con `type(e).__name__` esistono nei 5 file.
+
+    Phase 6 Batch 3B: soglia abbassata da 15 a 13 dopo la rimozione del
+    pattern `_async_write` thread daemon in enrichment_task.py (vedi
+    `_BREADCRUMB_CONTEXTS` per il dettaglio). Restano i 13 siti
+    cleanup non-async, piu' eventuali altri debug pre-esistenti dei
+    batch 7.c/7.b.
     """
     # Pattern flessibile: accetta `type(e)`, `type(e_inner)`, `type(e_prog)`,
     # ecc. (alcuni siti nested usano variable name diverso per evitare shadow).
@@ -168,8 +178,9 @@ def test_cleanup_sites_count_matches_scope():
         per_file[rel] = count
         total_breadcrumbs += count
 
-    # Minimo atteso = 15 siti 7.f. Altri batch potrebbero averne aggiunti.
-    assert total_breadcrumbs >= 15, (
-        f"Atteso >=15 breadcrumb cleanup, ricevuto {total_breadcrumbs}.\n"
+    # Minimo atteso = 13 siti 7.f post-Batch 3B. Altri batch potrebbero
+    # averne aggiunti.
+    assert total_breadcrumbs >= 13, (
+        f"Atteso >=13 breadcrumb cleanup, ricevuto {total_breadcrumbs}.\n"
         f"Per-file: {per_file}"
     )
