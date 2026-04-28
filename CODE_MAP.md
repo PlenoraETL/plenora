@@ -4,7 +4,7 @@ Bibbia operativa del repo. Una sezione per modulo: dove entrare, file principali
 
 Indice rapido:
 - Backend core: [admin_backups](#admin_backups), [admin_system_status](#admin_system_status), [arricchisci](#arricchisci), [artifacts](#artifacts), [auth](#auth), [carica](#carica), [connections](#connections), [datasources](#datasources), [eseguibili](#eseguibili), [estrai](#estrai), [features](#features), [files](#files), [imdf](#imdf), [intermediate](#intermediate), [logs](#logs), [manipola](#manipola), [orchestrator](#orchestrator), [projects](#projects), [scheduler](#scheduler), [tickets](#tickets)
-- Backend shared: [shared/crypto](#sharedcrypto)
+- Backend shared: [shared/crypto](#sharedcrypto), [shared/storage-results](#sharedstorageresults)
 - Frontend: [pages](#frontendpages), [api](#frontendapi), [store](#frontendstore), [components](#frontendcomponents)
 
 Nota: file in ASCII puro (no accenti, no caratteri Unicode speciali) per evitare mojibake su viewer non-UTF8.
@@ -451,10 +451,14 @@ Responsabilita: governa dataset intermedi e contratto di scambio tra step pipeli
 | `router.py` | `RunSummary`, `CompareL1Result`, `PinRequest`, `_run_to_summary`, `_check_run_access`, `list_runs`, `get_node_data`, `compare_runs_l1`, `compare_runs_l2`, `pin_run` | contratto API intermediate |
 | `db.py` | `init_db`, `create_run`, `get_run`, `list_runs`, `update_run`, `pin_run`, `upsert_node_meta`, `get_node_meta`, `list_node_meta`, `close_connection` | persistenza run + node meta |
 | `writer.py` | `compute_aggregate_hash`, `compute_row_hash`, `_format_float_stable`, `_normalize_value`, `write_node`, `close_run` | scrittura node data + hash di confronto |
+| `policy.py` | `validate_intermediate_settings`, `resolve_intermediate_policy`, `persistence_mode_for_record`, `reset_validation_cache` | mode `metadata_only`/`preview_only`/`full_pg`/`full_artifact` + checkpoint policy |
+| `snapshot.py` | `record_checkpoint_snapshot`, `record_final_snapshot`, `_fingerprint_dataframe`, `_preview_rows_for_policy` | snapshot DataFrame policy-aware senza `df.to_dict` full sul path metadata |
+| `artifact_writer.py` | `persist_full_artifact`, `build_artifact_key_prefix`, `ArtifactPersistResult` | `full_artifact`: Parquet + manifest su runtime object storage |
+| `artifact_reader.py` | `load_preview_from_artifact`, `ArtifactPreviewResult` | preview da artifact full per API `get_node_data` |
 
-Keywords: `RunSummary`, `create_run`, `pin_run`, `compare_runs_l1`, `get_node_data`, `upsert_node_meta`, `compute_row_hash`, `write_node`
+Keywords: `RunSummary`, `create_run`, `pin_run`, `compare_runs_l1`, `compare_runs_l2`, `get_node_data`, `upsert_node_meta`, `compute_row_hash`, `write_node`, `metadata_only`, `full_artifact`, `artifact_uri`
 
-Intervento/confini: preservare schema/compatibilita dei dataset intermedi (e' il contratto di scambio). Non accoppiare a UI o scheduler. Pin/compare sono read-side; non scrivere stato pipeline da qui.
+Intervento/confini: preservare schema/compatibilita dei dataset intermedi (e' il contratto di scambio). Non accoppiare a UI o scheduler. Pin/compare sono read-side; non scrivere stato pipeline da qui. Postgres resta catalogo leggero (`runs`, `node_meta`, hash, row count); payload completi solo via `full_artifact` su runtime object storage. `metadata_only` deve avere zero `node_rows`; `compare/l2` deve dichiarare esplicitamente diff non disponibile quando non ci sono righe persistite.
 
 ---
 
@@ -619,6 +623,30 @@ Intervento/confini: unico punto di encrypt/decrypt - non reimplementare crypto a
 
 ---
 
+## Storage result e runtime object storage <a id="sharedstorageresults"></a>
+
+Entry-point: `backend/app/utils/result_store.py`, `backend/app/db/results_db_service.py`, `backend/app/shared/cloud_backends.py`
+
+Responsabilita: salva e legge result finali, separando catalogo DB e payload runtime. In `STORAGE_POLICY=object_storage` i nuovi result devono andare sempre su runtime object storage; il fallback BYTEA resta solo per legacy read.
+
+| file | funzioni/classi chiave | cosa guardare |
+|---|---|---|
+| `app/utils/result_store.py` | `save_result_blob`, `save_result_blob_from_bytes`, `ResultSaveError`, `_storage_policy`, `_should_use_object_storage`, `_apply_results_retention` | writer result policy-aware |
+| `app/db/results_db_service.py` | `save_result`, `get_latest_result`, `get_result_data`, `delete_results_for_project`, `_s3_download_bytes`, `_s3_delete_best_effort` | catalogo result + reader compat legacy |
+| `app/shared/cloud_backends.py` | `ObjectStorage`, `ObjectStorageDisabledError`, `object_storage_enabled`, `get_runtime_object_storage`, `get_backup_object_storage`, `get_log_archive_storage`, `validate_storage_config` | factory e gate object storage |
+| `app/config/storage_config.py` | `StoragePolicy`, `StorageProvider`, `get_storage_policy`, `get_storage_provider` | policy storage dichiarativa |
+
+Keywords: `STORAGE_POLICY`, `OBJECT_STORAGE_BUCKET`, `PLENORA_ARTIFACT_BUCKET`, `OBJECT_STORAGE_ENABLED`, `get_runtime_object_storage`, `backend=object_storage`, `backend=db_legacy`, `storage_key`, `delete_results_for_project`
+
+Intervento/confini:
+- Nuovi result in `STORAGE_POLICY=object_storage`: `storage_key` valorizzato, `data=NULL`, nessun fallback BYTEA su errore upload/capability off/bucket mancante.
+- Reader invariato compat: `get_result_data` legge `storage_key` da object storage oppure `data` BYTEA legacy; logga `backend=object_storage` o `backend=db_legacy`.
+- `validate_storage_config` deve fallire al boot se `STORAGE_POLICY=object_storage` non ha `OBJECT_STORAGE_ENABLED=true` e bucket runtime esplicito (`OBJECT_STORAGE_BUCKET` o alias `PLENORA_ARTIFACT_BUCKET`). Non usare `BACKUP_BUCKET` come fallback runtime in questa policy.
+- Non chiamare `boto3.client("s3")` dai moduli business: passare dalle factory `cloud_backends`.
+- `RESULT_S3_THRESHOLD_BYTES` resta solo per `hybrid`; non usarlo per decidere i nuovi result in policy `object_storage`.
+
+---
+
 ## `frontend/src/pages/` <a id="frontendpages"></a>
 
 Responsabilita: schermate route-level del canvas ETL builder e gestione risorse (progetti, connessioni, file, log, schedule, eseguibili, ticket, admin).
@@ -700,6 +728,7 @@ Intervento/confini: leggere stato da `store/` (`useCanvasStore`); nessun fetch d
 Sintesi trasversale dei confini operativi piu' importanti del repo. Toccarli senza pensarci rompe sicurezza, isolamento o compatibilita' dei dataset.
 
 - **`backend/app/core/intermediate/`** = contratto dati tra step pipeline. Estrai/Manipola/Arricchisci/Carica scambiano dataset *solo* tramite intermediate. Cambiare lo schema `RunSummary`/`node_meta` o il formato di `write_node`/`compute_row_hash` significa rompere tutti gli step a valle.
+- **Storage result/runtime object storage**: in `STORAGE_POLICY=object_storage`, i nuovi result non vanno mai in BYTEA. Il DB conserva metadata + `storage_key`; `data` BYTEA e' solo legacy read path. Runtime artifacts/result usano `OBJECT_STORAGE_BUCKET`/`PLENORA_ARTIFACT_BUCKET`, non `BACKUP_BUCKET`.
 - **`backend/app/shared/crypto.py`** = unico punto di crypto-at-rest. Env canonica unica `PLENORA_ENCRYPTION_KEY` (gli alias legacy sono rimossi dal 2026-04-23). Qualsiasi nuovo segreto persistito passa da `encrypt`/`decrypt`/`encrypt_dict_fields`. Mai reimplementare Fernet altrove ne reintrodurre fallback runtime.
 - **`frontend/src/api/`** = unico punto HTTP del frontend. Pagine, componenti e store NON chiamano `fetch`/`axios` direttamente; auth/header/error globali vivono in `client.js`/`http.js`/`errors.js`.
 - **`backend/app/core/orchestrator/`** coordina, non duplica logica step. Nuovi pezzi di pipeline vanno nel modulo step (`estrai`/`manipola`/`arricchisci`/`carica` + executor dedicato), non in `OrchestratorService`. Cancel/cleanup task devono restare idempotenti.
