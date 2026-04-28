@@ -41,6 +41,9 @@ def _settings_baseline(**overrides) -> dict:
         "arricchisci_checkpoints": "final_only",
         "artifact_bucket": None,
         "artifact_prefix": "intermediate",
+        # Bug #24: nuove settings fingerprint mode + sample rows
+        "fingerprint_mode": "sample",
+        "fingerprint_sample_rows": 1000,
     }
     base.update(overrides)
     return base
@@ -351,11 +354,15 @@ def test_checkpoint_skip_does_not_touch_dataframe_or_db():
 
 
 def test_fingerprint_deterministic_on_identical_dataframe():
+    """Bug #24: API ora ritorna `(hex_digest, hash_algo)`. Determinismo
+    invariato."""
     from app.core.intermediate.snapshot import compute_dataframe_fingerprint
     df = pd.DataFrame({"a": [1, 2, 3], "b": ["x", "y", "z"]})
-    h1 = compute_dataframe_fingerprint(df.copy())
-    h2 = compute_dataframe_fingerprint(df.copy())
+    with _patch_settings():
+        h1, algo1 = compute_dataframe_fingerprint(df.copy())
+        h2, algo2 = compute_dataframe_fingerprint(df.copy())
     assert h1 == h2
+    assert algo1 == algo2
     assert len(h1) == 64  # sha256 hex
 
 
@@ -363,20 +370,26 @@ def test_fingerprint_changes_when_data_changes():
     from app.core.intermediate.snapshot import compute_dataframe_fingerprint
     df_a = pd.DataFrame({"a": [1, 2, 3]})
     df_b = pd.DataFrame({"a": [1, 2, 4]})
-    assert compute_dataframe_fingerprint(df_a) != compute_dataframe_fingerprint(df_b)
+    with _patch_settings():
+        assert compute_dataframe_fingerprint(df_a)[0] != compute_dataframe_fingerprint(df_b)[0]
 
 
 def test_fingerprint_changes_when_schema_changes():
     from app.core.intermediate.snapshot import compute_dataframe_fingerprint
     df_a = pd.DataFrame({"a": [1, 2, 3]})
     df_b = pd.DataFrame({"b": [1, 2, 3]})
-    assert compute_dataframe_fingerprint(df_a) != compute_dataframe_fingerprint(df_b)
+    with _patch_settings():
+        assert compute_dataframe_fingerprint(df_a)[0] != compute_dataframe_fingerprint(df_b)[0]
 
 
 def test_fingerprint_none_dataframe():
     from app.core.intermediate.snapshot import compute_dataframe_fingerprint
-    h = compute_dataframe_fingerprint(None)
+    with _patch_settings():
+        h, algo = compute_dataframe_fingerprint(None)
     assert len(h) == 64
+    # Default mode = sample -> algo riflette la mode richiesta anche
+    # quando il DataFrame e' None (deterministico).
+    assert algo == "pandas_sample_hash_v1"
 
 
 # ============================================================
@@ -415,7 +428,9 @@ def test_record_final_metadata_only_zero_rows_real_count_hash_present():
     assert handle.persisted_rows_count == 0
     assert handle.preview_truncated is False  # in metadata_only non c'e' preview
     assert handle.node_hash and len(handle.node_hash) == 64
-    assert handle.hash_algo == "pandas_hash_v1"
+    # Bug #24: default fingerprint mode = "sample" -> hash_algo
+    # = pandas_sample_hash_v1. Audit forte richiede mode="full".
+    assert handle.hash_algo == "pandas_sample_hash_v1"
 
     # DB call: rows_to_persist vuoto, row_count reale, node_hash presente.
     assert captured["row_count"] == 2000

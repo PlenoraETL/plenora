@@ -109,7 +109,21 @@ MANIPOLA_CRITICAL_TRANSFORMS = frozenset({
 })
 
 # Hash algo versione corrente. Persistito in node_meta.hash_algo.
+# Bug #24 (2026-04-28): la mode globale `INTERMEDIATE_FINGERPRINT_MODE`
+# decide quale algoritmo applicare al checkpoint:
+#   - "sample" -> HASH_ALGO_PANDAS_SAMPLE_V1 (default operativo)
+#   - "full"   -> HASH_ALGO_PANDAS_HASH_V1   (audit forte)
+# `node_meta.hash_algo` riflette quello effettivamente usato per il
+# record, cosi' un consumer downstream sa se confrontare apple-to-apple.
 HASH_ALGO_PANDAS_HASH_V1 = "pandas_hash_v1"
+HASH_ALGO_PANDAS_SAMPLE_V1 = "pandas_sample_hash_v1"
+
+FINGERPRINT_MODE_SAMPLE = "sample"
+FINGERPRINT_MODE_FULL = "full"
+SUPPORTED_FINGERPRINT_MODES = frozenset({
+    FINGERPRINT_MODE_SAMPLE,
+    FINGERPRINT_MODE_FULL,
+})
 
 # Artifact status legali (Batch 1 usa solo "none"; gli altri sono per Batch 5).
 ARTIFACT_STATUS_NONE = "none"
@@ -189,6 +203,9 @@ def _read_settings() -> dict:
         "arricchisci_checkpoints": settings.get("ARRICCHISCI_INTERMEDIATE_CHECKPOINTS"),
         "artifact_bucket": settings.get("PLENORA_ARTIFACT_BUCKET"),
         "artifact_prefix": settings.get("INTERMEDIATE_ARTIFACT_PREFIX"),
+        # Bug #24
+        "fingerprint_mode": settings.get("INTERMEDIATE_FINGERPRINT_MODE"),
+        "fingerprint_sample_rows": settings.get("INTERMEDIATE_FINGERPRINT_SAMPLE_ROWS"),
     }
 
 
@@ -260,6 +277,25 @@ def validate_intermediate_settings(values: Optional[dict] = None) -> None:
         raise IntermediateSettingsError(
             f"ARRICCHISCI_INTERMEDIATE_CHECKPOINTS={arricchisci!r} non ammesso "
             f"in Batch 1. Valori ammessi: {sorted(SUPPORTED_FINAL_ONLY_CHECKPOINTS)}."
+        )
+
+    # Bug #24: fingerprint mode + sample rows.
+    fp_mode = cfg.get("fingerprint_mode")
+    if fp_mode not in SUPPORTED_FINGERPRINT_MODES:
+        raise IntermediateSettingsError(
+            f"INTERMEDIATE_FINGERPRINT_MODE={fp_mode!r} non riconosciuto. "
+            f"Valori ammessi: {sorted(SUPPORTED_FINGERPRINT_MODES)}."
+        )
+    fp_sample = cfg.get("fingerprint_sample_rows")
+    try:
+        fp_sample_int = int(fp_sample)
+    except (TypeError, ValueError):
+        raise IntermediateSettingsError(
+            f"INTERMEDIATE_FINGERPRINT_SAMPLE_ROWS={fp_sample!r} non e' un intero."
+        ) from None
+    if fp_sample_int <= 0:
+        raise IntermediateSettingsError(
+            f"INTERMEDIATE_FINGERPRINT_SAMPLE_ROWS={fp_sample_int} deve essere > 0."
         )
 
     # PLENORA_ARTIFACT_BUCKET e INTERMEDIATE_ARTIFACT_PREFIX in Batch 1 sono

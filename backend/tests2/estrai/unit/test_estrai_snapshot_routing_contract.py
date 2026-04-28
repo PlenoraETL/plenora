@@ -30,6 +30,8 @@ def _patch_settings(**overrides):
         "arricchisci_checkpoints": "final_only",
         "artifact_bucket": None,
         "artifact_prefix": "intermediate",
+        "fingerprint_mode": "sample",
+        "fingerprint_sample_rows": 1000,
     }
     cfg.update(overrides)
     reset_validation_cache()
@@ -161,7 +163,8 @@ def test_estrai_metadata_only_writes_meta_and_hash_no_rows(monkeypatch):
     assert captured["rows_to_persist"] == []
     assert captured["persistence_mode"] == "metadata_only"
     assert captured["node_hash"] is not None
-    assert captured["hash_algo"] == "pandas_hash_v1"
+    # Bug #24: default fingerprint mode = sample.
+    assert captured["hash_algo"] == "pandas_sample_hash_v1"
 
 
 # ============================================================

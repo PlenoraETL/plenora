@@ -33,6 +33,8 @@ def _patch_settings(**overrides):
         "arricchisci_checkpoints": "final_only",
         "artifact_bucket": None,
         "artifact_prefix": "intermediate",
+        "fingerprint_mode": "sample",
+        "fingerprint_sample_rows": 1000,
     }
     cfg.update(overrides)
     reset_validation_cache()

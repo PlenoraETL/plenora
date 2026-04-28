@@ -94,80 +94,163 @@ class FlushResult:
 # Hash dataframe — pandas_hash_v1
 # ============================================================
 
-def compute_dataframe_fingerprint(df: Any) -> str:
-    """Fingerprint di un DataFrame senza materializzare to_dict.
+def _hash_pandas_block(digest, df, *, label: str) -> None:
+    """Aggiorna `digest` con `pd.util.hash_pandas_object(df).tobytes()`.
 
-    Algoritmo `pandas_hash_v1` (versionato in `policy.HASH_ALGO_PANDAS_HASH_V1`):
-
-      1. Schema payload:    `<col>=<dtype>|<col>=<dtype>|...` ordinato
-         per nome colonna.
-      2. Row count payload: stringa decimale.
-      3. Row hash payload:  `pd.util.hash_pandas_object(df[ordered_cols],
-         index=False, categorize=True)` -> ndarray uint64 -> bytes raw.
-      4. SHA256 di (schema || rowcount || rowhashes).
-
-    Note:
-      - Order-sensitive: due DataFrame con righe permutate danno hash
-        diversi (decisione v1 documentata in to-be).
-      - Per geometrie Shapely `pd.util.hash_pandas_object` chiama
-        `__hash__`/`repr` → consistente fra run dello stesso oggetto
-        ma puo' divergere fra Python differenti. Per Batch 1 accettiamo
-        questo limite; in Batch 2 valuteremo conversione preventiva
-        a WKB stabile per le colonne geometriche.
-
-    Ritorna stringa esadecimale SHA256 (64 char).
-
-    Su DataFrame None o vuoti il fingerprint e' costruito comunque
-    per restare deterministico:
-      - None -> sha256(b"none-df")
-      - empty -> sha256(schema || "0" || "")
+    Estratto in helper per riusarlo dal full mode e dal sample mode.
+    Su exception logga warning e marca il digest con un tag stabile
+    (deterministico per (schema, len, type-of-error)).
     """
-    if df is None:
-        return hashlib.sha256(b"none-df").hexdigest()
-
     import pandas as pd
+    try:
+        row_hashes = pd.util.hash_pandas_object(
+            df, index=False, categorize=True,
+        ).to_numpy(dtype="uint64", copy=False)
+        digest.update(row_hashes.tobytes())
+    except Exception as e:  # pragma: no cover - difensivo
+        logger.warning(
+            "compute_dataframe_fingerprint(%s): hash_pandas_object fallito: %s",
+            label, e,
+        )
+        digest.update(f"hash-failed:{type(e).__name__}".encode("utf-8"))
 
-    if not isinstance(df, pd.DataFrame):
-        # Coercion difensiva: non supportato nel design ma evitiamo
-        # crash misteriosi in test.
-        try:
-            df = pd.DataFrame(df)
-        except Exception:
-            return hashlib.sha256(
-                f"non-dataframe:{type(df).__name__}".encode("utf-8")
-            ).hexdigest()
 
+def _compute_dataframe_fingerprint_full(df: Any) -> str:
+    """Algoritmo `pandas_hash_v1`: hash di tutto il DataFrame.
+
+    Costo O(n*cols) — su DF da 275k righe e 56 colonne 1.0–1.5 s.
+    Esatto: ogni cambio in qualunque riga produce hash diverso.
+
+    1. Schema payload:    `<col>=<dtype>|<col>=<dtype>|...` ordinato.
+    2. Row count payload: stringa decimale.
+    3. Row hash payload:  `pd.util.hash_pandas_object(df[ordered_cols],
+       index=False, categorize=True)` -> ndarray uint64 -> bytes raw.
+    4. SHA256 di (schema || rowcount || rowhashes).
+    """
+    digest, ordered_cols, row_count = _init_digest_with_schema(df)
+    if row_count > 0 and ordered_cols:
+        _hash_pandas_block(digest, df[ordered_cols], label="full")
+    return digest.hexdigest()
+
+
+def _compute_dataframe_fingerprint_sample(df: Any, sample_rows: int) -> str:
+    """Algoritmo `pandas_sample_hash_v1`: hash sample-based.
+
+    Bug #24 (perf, 2026-04-28). Trade-off:
+      + costo O(min(n, sample_rows) * cols) -> ~10–20 ms anche su DF
+        grandi
+      - cambi che toccano SOLO righe oltre la N-esima possono non
+        essere rilevati al checkpoint (audit alto livello, non
+        equivalence check)
+
+    1. Schema payload identico al full mode.
+    2. Row count payload: stringa decimale (cambi di cardinalita'
+       sono SEMPRE rilevati anche se il sample e' identico).
+    3. Sample size payload: `sample_rows` (cambiando sample_rows fra
+       run l'hash diventa diverso -> documentato).
+    4. Sample hash payload: `pd.util.hash_pandas_object(df.head(N))`.
+    5. SHA256 finale.
+
+    `df.head(sample_rows)` e' deterministico (no shuffle, no random
+    seed). Su DataFrame piu' piccoli del sample, l'hash equivale al
+    full hash modulo lo schema-tag aggiuntivo.
+    """
+    if sample_rows <= 0:
+        # Difensivo: validate dovrebbe gia' aver bloccato. Restiamo
+        # deterministici fallback.
+        sample_rows = 1
+    digest, ordered_cols, row_count = _init_digest_with_schema(df)
+    digest.update(f"sample={sample_rows}".encode("ascii"))
+    digest.update(b"\x00")
+    if row_count > 0 and ordered_cols:
+        sample = df[ordered_cols].head(sample_rows)
+        _hash_pandas_block(digest, sample, label="sample")
+    return digest.hexdigest()
+
+
+def _init_digest_with_schema(df: Any):
+    """Inizializza il SHA256 con `schema || row_count` comuni a full e
+    sample. Ritorna `(digest, ordered_cols, row_count)`.
+    """
     digest = hashlib.sha256()
-
     ordered_cols = sorted(df.columns.tolist(), key=str)
     schema_payload = "|".join(
         f"{col}={str(df[col].dtype)}" for col in ordered_cols
     ).encode("utf-8", errors="replace")
     digest.update(schema_payload)
     digest.update(b"\x00")
-
     row_count = len(df)
     digest.update(str(row_count).encode("ascii"))
     digest.update(b"\x00")
+    return digest, ordered_cols, row_count
 
-    if row_count > 0 and ordered_cols:
-        normalized = df[ordered_cols]
+
+def compute_dataframe_fingerprint(df: Any) -> tuple[str, str]:
+    """Fingerprint del DataFrame con dispatch via policy.
+
+    Dispatch sul setting globale `INTERMEDIATE_FINGERPRINT_MODE`:
+      - "sample" (default): `pandas_sample_hash_v1`, sample
+        `INTERMEDIATE_FINGERPRINT_SAMPLE_ROWS` (default 1000).
+      - "full": `pandas_hash_v1`, hash sull'intero DataFrame.
+
+    Ritorna `(node_hash_hex, hash_algo)`. Il caller persiste entrambi
+    in `node_meta.node_hash` / `node_meta.hash_algo` cosi' un
+    consumer downstream sa con quale algoritmo confrontare.
+
+    Su DataFrame None / non-DataFrame il fingerprint resta
+    deterministico (sha256 di un tag), `hash_algo` riflette comunque
+    la mode richiesta.
+
+    Note (sample mode):
+      - Cambi su righe oltre la N-esima possono non cambiare l'hash:
+        questo e' il trade-off documentato. Audit forte richiede
+        `INTERMEDIATE_FINGERPRINT_MODE=full`.
+      - `len(df)` e' sempre incluso: cambi di cardinalita' sono
+        rilevati anche con sample.
+      - `df.head(N)` e' deterministico (no shuffle, no random seed).
+    """
+    # Risoluzione mode + sample size dalla policy (lazy lettura env).
+    cfg = _policy._read_settings()
+    mode = (cfg.get("fingerprint_mode") or _policy.FINGERPRINT_MODE_SAMPLE)
+    sample_rows = int(cfg.get("fingerprint_sample_rows") or 1000)
+
+    if df is None:
+        # None DF: stesso digest legacy, ma algo riflette la mode.
+        digest_hex = hashlib.sha256(b"none-df").hexdigest()
+        algo = (
+            _policy.HASH_ALGO_PANDAS_SAMPLE_V1
+            if mode == _policy.FINGERPRINT_MODE_SAMPLE
+            else _policy.HASH_ALGO_PANDAS_HASH_V1
+        )
+        return digest_hex, algo
+
+    import pandas as pd
+
+    if not isinstance(df, pd.DataFrame):
+        # Coercion difensiva
         try:
-            row_hashes = pd.util.hash_pandas_object(
-                normalized, index=False, categorize=True,
-            ).to_numpy(dtype="uint64", copy=False)
-            digest.update(row_hashes.tobytes())
-        except Exception as e:  # pragma: no cover - difensivo
-            # Difensivo: hash failure non deve crashare la pipeline.
-            # Marca il fingerprint con un tag esplicito per
-            # diagnostica; resta deterministico per (schema, len, type).
-            logger.warning(
-                "compute_dataframe_fingerprint: hash_pandas_object fallito: %s",
-                e,
+            df = pd.DataFrame(df)
+        except Exception:
+            digest_hex = hashlib.sha256(
+                f"non-dataframe:{type(df).__name__}".encode("utf-8")
+            ).hexdigest()
+            algo = (
+                _policy.HASH_ALGO_PANDAS_SAMPLE_V1
+                if mode == _policy.FINGERPRINT_MODE_SAMPLE
+                else _policy.HASH_ALGO_PANDAS_HASH_V1
             )
-            digest.update(f"hash-failed:{type(e).__name__}".encode("utf-8"))
+            return digest_hex, algo
 
-    return digest.hexdigest()
+    if mode == _policy.FINGERPRINT_MODE_FULL:
+        return (
+            _compute_dataframe_fingerprint_full(df),
+            _policy.HASH_ALGO_PANDAS_HASH_V1,
+        )
+    # Default sample
+    return (
+        _compute_dataframe_fingerprint_sample(df, sample_rows),
+        _policy.HASH_ALGO_PANDAS_SAMPLE_V1,
+    )
 
 
 # ============================================================
@@ -296,7 +379,7 @@ def _record_snapshot(
     col_schema = _col_schema_from_df(df)
 
     _t_fp = time.monotonic()
-    node_hash = compute_dataframe_fingerprint(df)
+    node_hash, hash_algo = compute_dataframe_fingerprint(df)
     fingerprint_ms = _ms(_t_fp)
 
     rows_to_persist: List[Dict] = []
@@ -327,7 +410,7 @@ def _record_snapshot(
         error_msg=error_msg,
         row_count=row_count,
         node_hash=node_hash,
-        hash_algo=_policy.HASH_ALGO_PANDAS_HASH_V1,
+        hash_algo=hash_algo,
         persistence_mode=persistence_mode,
         preview_truncated=preview_truncated,
         # Batch 1: artifact non implementato. Status "none" esplicito
@@ -363,7 +446,7 @@ def _record_snapshot(
         persisted_rows_count=persisted_rows_count,
         preview_truncated=preview_truncated,
         node_hash=node_hash,
-        hash_algo=_policy.HASH_ALGO_PANDAS_HASH_V1,
+        hash_algo=hash_algo,
         artifact_status=_policy.ARTIFACT_STATUS_NONE,
     )
 

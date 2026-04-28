@@ -245,6 +245,27 @@ class Settings:
         # ma non viene letto a runtime: il mode e' rifiutato.
         "INTERMEDIATE_FULL_ARTIFACT_FORMAT": "parquet",
 
+        # Bug #24 (perf, 2026-04-28): mode di calcolo del node_hash
+        # del DataFrame al checkpoint/final snapshot.
+        #   - "sample": hash di (schema, len(df), df.head(N)). Costo
+        #     ~10-20 ms anche su DataFrame da 275k righe (vs 1.0-1.5 s
+        #     del full-DF su DF grandi). Trade-off: cambi che toccano
+        #     SOLO righe oltre la N-esima possono non essere rilevati
+        #     dal change-detection L1; accettabile per audit alto
+        #     livello (default operativo).
+        #   - "full": hash di tutto il DataFrame via pd.util.hash_
+        #     pandas_object. Lento sui DF grandi ma esatto. Per audit
+        #     forte su run specifici si puo' temporaneamente alzare
+        #     la mode a "full" via env senza redeploy.
+        # node_hash NON e' usato da alcun branch di correttezza pipeline
+        # (transform/join/save non lo leggono); serve solo a UI run/diff
+        # e a future feature di change-detection. Default = sample.
+        "INTERMEDIATE_FINGERPRINT_MODE": "sample",
+        # Cap righe usate dal mode sample. >0. Default 1000: copre la
+        # head dei dataset reali e mantiene il costo nell'ordine dei ms.
+        # Rendere troppo alto vanifica il vantaggio del sample.
+        "INTERMEDIATE_FINGERPRINT_SAMPLE_ROWS": 1000,
+
         # ==================== CHECKPOINT POLICY PER MODULO ====================
         # Granularita' selezione nodi che producono snapshot in MANIPOLA.
         # Policy applicata al layer `intermediate.policy`, non agli
