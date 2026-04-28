@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS node_meta (
     persistence_mode      TEXT,           -- metadata_only | preview_only | full_pg | full_artifact
     persisted_rows_count  INTEGER,        -- righe in node_rows per questo nodo
     preview_truncated     BOOLEAN,        -- true se persisted_rows_count < row_count
-    artifact_uri          TEXT,           -- pointer artifact full (Batch 5)
+    artifact_uri          TEXT,           -- pointer artifact full (full_artifact mode)
     artifact_format       TEXT,           -- es. "parquet"
     artifact_status       TEXT,           -- none | pending | complete | failed
     artifact_error        TEXT,           -- messaggio errore artifact

@@ -570,7 +570,7 @@ def _build_object_storage(bucket: str, *, region_default: str) -> ObjectStorage:
 
 def get_runtime_object_storage() -> ObjectStorage:
     """ObjectStorage per runtime artifacts (result, file_source,
-    eseguibili, IMDF, intermediate Batch 5).
+    eseguibili, IMDF, intermediate full_artifact).
 
     Solleva `ObjectStorageDisabledError` se la capability e' off.
 

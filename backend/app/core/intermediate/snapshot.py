@@ -1,11 +1,11 @@
 """
-Intermediate snapshot API — Phase 6 Batch 1.
+Intermediate snapshot API.
 
-Punto di ingresso unico per gli executor (MANIPOLA/ESTRAI/ARRICCHISCI in
-Batch 2/3) per persistere lo stato di un nodo. La funzione interroga la
-policy globale (`policy.resolve_intermediate_policy`) PRIMA di toccare
-il DataFrame, in modo che lo skip-path sia economico (no
-`df.to_dict`, no hash, no DB).
+Punto di ingresso unico per gli executor (MANIPOLA/ESTRAI/ARRICCHISCI)
+per persistere lo stato di un nodo. La funzione interroga la policy
+globale (`policy.resolve_intermediate_policy`) PRIMA di toccare il
+DataFrame, in modo che lo skip-path sia economico (no `df.to_dict`,
+no hash, no DB).
 
 API pubbliche:
     record_final_snapshot(run_id, module, node_id, node_type, df, ...)
@@ -14,15 +14,19 @@ API pubbliche:
     SnapshotHandle, FlushResult
     compute_dataframe_fingerprint(df)
 
-Vincoli Batch 1:
-  - mode `metadata_only`, `preview_only`, `full_pg` implementati;
-  - mode `full_artifact` rifiutato a settings-validation;
+Vincoli runtime:
+  - mode supportati: metadata_only / preview_only / full_pg / full_artifact.
+  - full_artifact richiede capability runtime object storage attiva
+    (`OBJECT_STORAGE_ENABLED=true`) + bucket configurato; cross-validato
+    al boot da `policy.validate_intermediate_settings`. Persistenza
+    Parquet + manifest delegata ad `artifact_writer.persist_full_artifact`.
   - **niente** `df.to_dict(orient="records")` salvo `full_pg`;
-  - hash via `pd.util.hash_pandas_object` (vettoriale, no Python loop);
-  - `flush_snapshots` e' un no-op stub: in Batch 1 le scritture sono
-    sync, non c'e' coda. Stub esiste per stabilizzare l'API che gli
-    executor di Batch 2 chiameranno prima di `close_run`.
-  - **niente** S3 reale: `full_artifact` non e' raggiungibile.
+    full_artifact serializza via `df.to_parquet(BytesIO)`.
+  - fingerprint via `pd.util.hash_pandas_object` (vettoriale, no Python
+    loop). Mode `sample` (default) o `full` da `INTERMEDIATE_FINGERPRINT_MODE`.
+  - `flush_snapshots` resta no-op stub: le scritture sono sync, non c'e'
+    coda async. Lo stub esiste per stabilizzare l'API che gli executor
+    chiamano prima di `close_run`. Async writer e' follow-up futuro.
 """
 
 from __future__ import annotations

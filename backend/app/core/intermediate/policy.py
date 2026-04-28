@@ -1,19 +1,19 @@
 """
-Intermediate persistence policy — Batch 1.
+Intermediate persistence policy.
 
 Centralizza la decisione "questo snapshot va registrato? in che mode?".
-Gli executor in Batch 2/3 chiameranno `record_*_snapshot()` da
-`snapshot.py`, che a sua volta interroga `resolve_intermediate_policy`
+Gli executor (MANIPOLA/ESTRAI/ARRICCHISCI) chiamano `record_*_snapshot()`
+da `snapshot.py`, che a sua volta interroga `resolve_intermediate_policy`
 per evitare lavoro inutile (no `df.to_dict`, no hash, no DB) quando la
 policy globale dice di non registrare.
 
-Mode implementati in Batch 1:
-  - metadata_only
-  - preview_only
-  - full_pg
-
-`full_artifact` e' riservato per Batch 5 e viene rifiutato a startup
-(validate_intermediate_settings).
+Mode supportati:
+  - metadata_only (default produzione): solo node_meta + node_hash
+  - preview_only (legacy/debug): meta + hash + prime N righe in node_rows
+  - full_pg (legacy compat): tutte le righe in node_rows
+  - full_artifact: meta + hash + Parquet/manifest su runtime object
+    storage. Richiede `OBJECT_STORAGE_ENABLED=true` + bucket runtime;
+    cross-validato in `validate_intermediate_settings`.
 
 Il modulo contiene SOLO logica pura: lettura settings, validazione,
 calcolo policy. Nessun side-effect (no DB, no I/O).
@@ -33,11 +33,13 @@ from typing import Optional
 # Costanti / valori ammessi
 # ============================================================
 
-# Mode globale di persistenza. `full_artifact` riservato per Batch 5.
+# Mode globale di persistenza. Tutti supportati end-to-end:
+# metadata_only/preview_only/full_pg via node_rows (PG); full_artifact
+# via Parquet + manifest su runtime object storage.
 MODE_METADATA_ONLY = "metadata_only"
 MODE_PREVIEW_ONLY = "preview_only"
 MODE_FULL_PG = "full_pg"
-MODE_FULL_ARTIFACT = "full_artifact"  # Batch 5
+MODE_FULL_ARTIFACT = "full_artifact"
 
 # Valori che la pipeline puo' effettivamente eseguire.
 # `full_artifact` aggiunto nel batch object storage intermedi
@@ -127,7 +129,11 @@ SUPPORTED_FINGERPRINT_MODES = frozenset({
     FINGERPRINT_MODE_FULL,
 })
 
-# Artifact status legali (Batch 1 usa solo "none"; gli altri sono per Batch 5).
+# Artifact status legali. Popolati da `snapshot._record_snapshot` quando
+# mode=full_artifact: "complete" su upload Parquet+manifest riuscito,
+# "failed" su errore best-effort (capability off, serialize/upload fail),
+# "none" su tutti gli altri mode (metadata_only/preview_only/full_pg).
+# "pending" riservato per future async writer.
 ARTIFACT_STATUS_NONE = "none"
 ARTIFACT_STATUS_PENDING = "pending"
 ARTIFACT_STATUS_COMPLETE = "complete"
@@ -286,15 +292,15 @@ def validate_intermediate_settings(values: Optional[dict] = None) -> None:
     estrai = cfg.get("estrai_checkpoints")
     if estrai not in SUPPORTED_FINAL_ONLY_CHECKPOINTS:
         raise IntermediateSettingsError(
-            f"ESTRAI_INTERMEDIATE_CHECKPOINTS={estrai!r} non ammesso in Batch 1. "
+            f"ESTRAI_INTERMEDIATE_CHECKPOINTS={estrai!r} non ammesso. "
             f"Valori ammessi: {sorted(SUPPORTED_FINAL_ONLY_CHECKPOINTS)}."
         )
 
     arricchisci = cfg.get("arricchisci_checkpoints")
     if arricchisci not in SUPPORTED_FINAL_ONLY_CHECKPOINTS:
         raise IntermediateSettingsError(
-            f"ARRICCHISCI_INTERMEDIATE_CHECKPOINTS={arricchisci!r} non ammesso "
-            f"in Batch 1. Valori ammessi: {sorted(SUPPORTED_FINAL_ONLY_CHECKPOINTS)}."
+            f"ARRICCHISCI_INTERMEDIATE_CHECKPOINTS={arricchisci!r} non ammesso. "
+            f"Valori ammessi: {sorted(SUPPORTED_FINAL_ONLY_CHECKPOINTS)}."
         )
 
     # Bug #24: fingerprint mode + sample rows.
@@ -316,9 +322,15 @@ def validate_intermediate_settings(values: Optional[dict] = None) -> None:
             f"INTERMEDIATE_FINGERPRINT_SAMPLE_ROWS={fp_sample_int} deve essere > 0."
         )
 
-    # PLENORA_ARTIFACT_BUCKET e INTERMEDIATE_ARTIFACT_PREFIX in Batch 1 sono
-    # campi di prenotazione per Batch 5: bucket puo' essere None, prefix
-    # puo' essere stringa libera. Niente validazione stringente.
+    # PLENORA_ARTIFACT_BUCKET e INTERMEDIATE_ARTIFACT_PREFIX sono ora
+    # consumati dal path full_artifact:
+    #   - bucket: fallback in `cloud_backends._resolve_runtime_bucket`
+    #     dietro a OBJECT_STORAGE_BUCKET (priorita' 2);
+    #   - prefix: usato da `artifact_writer.build_artifact_key_prefix`
+    #     per il layout dell'object storage.
+    # Niente validazione stringente qui: bucket puo' restare None se
+    # OBJECT_STORAGE_BUCKET e' settato; prefix accetta qualunque stringa
+    # (sanity check applicato lato writer).
 
 
 # Cache: validazione idempotente, una volta sola per processo. Reset

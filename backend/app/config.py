@@ -245,9 +245,10 @@ class Settings:
         # Numero righe persistite quando MODE=preview_only. Tagliato
         # dalle prime N (df.head). UI mostra "preview NN su YYY".
         "INTERMEDIATE_PREVIEW_ROWS": 500,
-        # Formato artifact full quando MODE=full_artifact (Batch 5).
-        # In Batch 1 lo conserviamo come setting per chiusura design,
-        # ma non viene letto a runtime: il mode e' rifiutato.
+        # Formato artifact full quando MODE=full_artifact. Dichiarativo
+        # (`artifact_writer` oggi serializza Parquet hardcoded e popola
+        # `node_meta.artifact_format` con questo valore). Future-proof
+        # per supporto multi-formato senza schema change.
         "INTERMEDIATE_FULL_ARTIFACT_FORMAT": "parquet",
 
         # Bug #24 (perf, 2026-04-28): mode di calcolo del node_hash
@@ -291,10 +292,14 @@ class Settings:
         # nodo api_enrich). Solo "final_only" ammesso in Batch 1.
         "ARRICCHISCI_INTERMEDIATE_CHECKPOINTS": "final_only",
 
-        # ==================== ARTIFACT STORE (Batch 5 prep) ====================
-        # Bucket dedicato runtime artifact intermedi. Separato da
-        # backup/terraform-state. Required quando MODE=full_artifact in
-        # Batch 5; in Batch 1 e' campo di prenotazione (None ok).
+        # ==================== ARTIFACT STORE ====================
+        # Bucket dedicato runtime artifact intermedi (full_artifact).
+        # Separato da BACKUP_BUCKET (IAM boundary distinto) e dal
+        # terraform-state. Required quando MODE=full_artifact +
+        # OBJECT_STORAGE_ENABLED=true. Funziona come fallback retro-
+        # compat dietro a OBJECT_STORAGE_BUCKET in
+        # `cloud_backends._resolve_runtime_bucket`. None ammesso se
+        # OBJECT_STORAGE_BUCKET e' settato.
         "PLENORA_ARTIFACT_BUCKET": None,
         # Prefix logico dentro il bucket. Layout completo:
         #   <prefix>/group=.../project=.../run=.../module=.../node=...
