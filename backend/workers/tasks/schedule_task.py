@@ -103,7 +103,7 @@ def schedule_pipeline_task(
             scheduled_for=scheduled_for,
         )
         
-        logger.info(f"Task schedule completato: {schedule_id} → {result.get('status')}")
+        logger.info(f"Task schedule completato: {schedule_id} -> {result.get('status')}")
         return result
         
     except Exception as e:

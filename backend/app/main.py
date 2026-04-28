@@ -133,7 +133,7 @@ async def global_exception_handler(request: Request, exc: Exception):
         headers["Access-Control-Allow-Origin"] = origin
         headers["Access-Control-Allow-Credentials"] = "false"
     logger.error(
-        f"Eccezione non gestita: {request.method} {request.url.path} → {exc}",
+        f"Eccezione non gestita: {request.method} {request.url.path} -> {exc}",
         exc_info=True
     )
     return JSONResponse(
