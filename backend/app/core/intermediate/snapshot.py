@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -36,6 +37,11 @@ from app.core.intermediate import db as _db
 from app.core.intermediate import policy as _policy
 
 logger = logging.getLogger(__name__)
+
+
+def _ms(t0: float) -> float:
+    """Round monotonic delta in millisecondi (1 decimale)."""
+    return round((time.monotonic() - t0) * 1000, 1)
 
 
 # ============================================================
@@ -256,6 +262,7 @@ def _record_snapshot(
          - full_pg       -> rows_to_persist = full to_dict + _row_hash
       5. write_node_snapshot_atomic(...) -> persiste meta + rows.
     """
+    _t_total = time.monotonic()
     policy = _policy.resolve_intermediate_policy(
         module=module,
         snapshot_kind=snapshot_kind,
@@ -264,6 +271,17 @@ def _record_snapshot(
         transform_id=transform_id,
     )
     if not policy.recorded:
+        # [PERF] skip: deve restare estremamente economico.
+        # `total_ms` quantifica il costo del policy-resolve da solo
+        # (no fingerprint, no DB) per validare la correttezza dello
+        # skip-path su dataset grandi (Batch 2/3).
+        logger.info(
+            "[PERF] op=skip_checkpoint module=%s node_id=%s node_type=%s "
+            "snapshot_kind=%s reason=%s total_ms=%s",
+            module, node_id, node_type, snapshot_kind,
+            policy.reason or f"{module}_{snapshot_kind}_skip",
+            _ms(_t_total),
+        )
         return SnapshotHandle(
             recorded=False,
             reason=policy.reason or f"{module}_{snapshot_kind}_skip",
@@ -276,7 +294,10 @@ def _record_snapshot(
     # da scrivere variano per mode.
     row_count = 0 if df is None else int(len(df))
     col_schema = _col_schema_from_df(df)
+
+    _t_fp = time.monotonic()
     node_hash = compute_dataframe_fingerprint(df)
+    fingerprint_ms = _ms(_t_fp)
 
     rows_to_persist: List[Dict] = []
     persistence_mode = policy.persistence_mode
@@ -294,6 +315,7 @@ def _record_snapshot(
         and persisted_rows_count < row_count
     )
 
+    _t_db = time.monotonic()
     _db.write_node_snapshot_atomic(
         run_id=run_id,
         node_id=node_id,
@@ -312,6 +334,23 @@ def _record_snapshot(
         # per distinguerlo dai record legacy NULL (che si interpretano
         # come full_pg).
         artifact_status=_policy.ARTIFACT_STATUS_NONE,
+    )
+    db_ms = _ms(_t_db)
+
+    op = (
+        "record_final_snapshot"
+        if snapshot_kind == _policy.SNAPSHOT_KIND_FINAL
+        else "record_checkpoint_snapshot"
+    )
+    logger.info(
+        "[PERF] op=%s module=%s node_id=%s node_type=%s snapshot_kind=%s "
+        "persistence_mode=%s reason=%s row_count=%d "
+        "persisted_rows_count=%d preview_truncated=%s "
+        "fingerprint_ms=%s db_ms=%s total_ms=%s",
+        op, module, node_id, node_type, snapshot_kind,
+        persistence_mode, policy.reason,
+        row_count, persisted_rows_count, preview_truncated,
+        fingerprint_ms, db_ms, _ms(_t_total),
     )
 
     return SnapshotHandle(
