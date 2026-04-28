@@ -28,6 +28,35 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/runs", tags=["intermediate"])
 
 
+# Bug #23 (2026-04-28): JSON spec non ammette NaN / +Inf / -Inf.
+# `db.get_node_table_rows` ricostruisce questi valori dai sentinel
+# JSONB persistiti (`_from_jsonable_value`) per garantire hash
+# roundtrip-safe. Sul boundary HTTP non serve quella semantica:
+# FastAPI/json.dumps(allow_nan=False) solleva ValueError. Mappiamo
+# qui i non-finite float a None *solo nella response*. Niente
+# mutazione di node_rows, niente impatto sull'hash.
+import math
+
+
+def _sanitize_for_json(value):
+    """Mappa NaN/+Inf/-Inf a None ricorsivamente.
+
+    Lascia invariato il resto (int, str, bool, None, datetime-as-str,
+    sub-list/dict). Equivalente a `df.replace({np.nan: None, np.inf:
+    None, -np.inf: None})` ma operante su dict/list gia' costruiti.
+    """
+    if isinstance(value, float):
+        # NaN: nan != nan; +/-Inf: math.isfinite False ma not nan
+        if not math.isfinite(value):
+            return None
+        return value
+    if isinstance(value, list):
+        return [_sanitize_for_json(v) for v in value]
+    if isinstance(value, dict):
+        return {k: _sanitize_for_json(v) for k, v in value.items()}
+    return value
+
+
 # ============================================================
 # MODELS
 # ============================================================
@@ -155,6 +184,11 @@ def get_node_data(
         node = idb.get_node_meta(run_id, node_id)
         row_count = node["row_count"] if node and node.get("row_count") is not None else len(rows)
         col_schema = node["col_schema"] if node and node.get("col_schema") is not None else {}
+        # Bug #23: NaN / +Inf / -Inf non sono JSON compliant.
+        # Sanitizziamo prima del JSONResponse senza alterare il
+        # contenuto persistito.
+        rows = _sanitize_for_json(rows)
+        col_schema = _sanitize_for_json(col_schema)
         return {
             "run_id": run_id,
             "node_id": node_id,
