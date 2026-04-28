@@ -125,6 +125,57 @@ def _extract_produced_columns(node_data: Dict) -> Set[str]:
     return {m.get("column", "") for m in om if m.get("column")}
 
 
+def _node_may_explode_cardinality(
+    node: Dict, api_connections: Optional[Dict[str, Dict]] = None
+) -> bool:
+    """RB.#15 (2026-04-28): True se il nodo api_enrich puo' produrre piu'
+    righe in output rispetto all'input (cardinality-changing).
+
+    Marker statico unico (alta affidabilita`):
+      - `output_mapping[].path` contiene `[]` o `[*]` -> path A di
+        `_extract_output` (`enrichment_response_processing.py:148-206`):
+        l'utente ha esplicitamente configurato un mapping multi-row.
+
+    Cerca il marker in cascata (canvas-first, api_config fallback per
+    config centralizzato in `api_connections.config` JSON):
+      1. node.output_mapping (top-level Pydantic Node)
+      2. node.data.output_mapping (frontend canvas data dict)
+      3. api_connections[node.api_id].output_mapping (DB centralized)
+
+    Falso negativo accettato (path B `_auto_flatten` con response runtime
+    `FeatureCollection`, `enrichment_response_processing.py:263`): nessun
+    marker statico disponibile. Se accade, la rete di sicurezza e` il
+    fail-hard di RB.#14 (`_merge_batch_parallel_node_results` raise
+    `RuntimeError` su cardinality mismatch) -> task fallisce visibilmente
+    invece di silent data loss.
+
+    Falso positivo accettato (output_mapping con `[*]` ma response runtime
+    sempre singleton, es. `XeYdellParticellaDaCoordinate`): perdita di
+    parallelismo per il singolo nodo. Mitigazione futura via opt-out
+    dichiarativo `api_config.may_explode_cardinality=false`.
+
+    Used by `compute_parallel_groups` per escludere i nodi cardinality-
+    changing dai batch paralleli column-by-column merge.
+    """
+    if node.get("type") != "api_enrich":
+        return False
+    om = (
+        node.get("output_mapping")
+        or (node.get("data") or {}).get("output_mapping")
+        or []
+    )
+    if not om and api_connections is not None:
+        api_id = node.get("api_id") or (node.get("data") or {}).get("api_id")
+        if api_id:
+            cfg = api_connections.get(api_id) or {}
+            om = cfg.get("output_mapping") or []
+    for m in om:
+        path = (m.get("path") or "")
+        if "[]" in path or "[*]" in path:
+            return True
+    return False
+
+
 def compute_parallel_groups(
     execution_order: List[str],
     nodes: List[Dict],
@@ -211,6 +262,25 @@ def compute_parallel_groups(
         # emissione come single, cosi' a runtime riceve il DataFrame
         # mergiato del batch precedente via node_results[upstream].
         if _is_file_processor(node):
+            if current_batch:
+                groups.append(("parallel", list(current_batch)))
+                current_batch = []
+                current_batch_produces = set()
+            groups.append(("single", [node_id]))
+            continue
+
+        # RB.#15 (2026-04-28): nodi cardinality-changing (esplosione
+        # FeatureCollection / multi-row via `output_mapping` con `[]`/`[*]`)
+        # non possono stare nello stesso batch parallel di nodi
+        # cardinality-preserving: il merge column-by-column post-batch
+        # (`enrichment_task._merge_batch_parallel_node_results`) violerebbe
+        # l'invariante cardinality e fallirebbe fail-hard (RB.#14).
+        # Flush del batch corrente + emissione come single -> il nodo
+        # esegue sequenzialmente DOPO i batch cardinality-preserving
+        # gia' emessi, e propaga la sua cardinality esplosa ai nodi
+        # downstream nel DAG.
+        # Pattern simmetrico a `_is_file_processor` flush.
+        if _node_may_explode_cardinality(node, api_connections):
             if current_batch:
                 groups.append(("parallel", list(current_batch)))
                 current_batch = []
