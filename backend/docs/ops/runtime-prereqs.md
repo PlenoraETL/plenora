@@ -60,6 +60,11 @@ Lette da `.env` via systemd unit wrapper o SSM secrets (vedi `deploy/iam/README.
 
 | Variabile | Default | Consumato da |
 |---|---|---|
+| `STORAGE_POLICY` | `hybrid` (`object_storage` raccomandato in prod cloud) | `app/utils/result_store.py`, `app/shared/cloud_backends.py` |
+| `OBJECT_STORAGE_ENABLED` | `true` | Gate capability object storage runtime; con `STORAGE_POLICY=object_storage` deve essere true |
+| `OBJECT_STORAGE_BUCKET` | -- (obbligatoria in `object_storage`) | Bucket runtime per result, file sources e artifact intermedi |
+| `PLENORA_ARTIFACT_BUCKET` | alias di `OBJECT_STORAGE_BUCKET` | Alias legacy/operativo per artifact runtime |
+| `BACKUP_BUCKET` | `plenora-backup-112011134642-eu-south-1-an` | Nome canonico bucket backup |
 | `DATABASE_URL` | — (obbligatoria) | `scripts/backup_db.py`, `scripts/test_restore.py`, `app/db/*` |
 | `BACKUP_S3_BUCKET` | `plenora-backup-112011134642-eu-south-1-an` | `admin_backups.service`, `scripts/backup_db.py` |
 | `BACKUP_S3_REGION` | `eu-south-1` | come sopra |
@@ -92,11 +97,18 @@ Permessi SSM per secrets (`/plenora/prod/*`):
 
 ## Bucket S3 e convenzioni di prefix
 
+`OBJECT_STORAGE_BUCKET` e' il bucket runtime per artefatti applicativi. Deve
+restare distinto da `BACKUP_BUCKET`: in `STORAGE_POLICY=object_storage` il boot
+fallisce se e' configurato solo il bucket backup.
+
 | Bucket | Prefix | TTL | Uso |
 |---|---|---|---|
 | `plenora-backup-...` | `plenora_` | Standard 30gg → Standard-IA → delete 365gg | Dump DB daily |
-| stesso bucket | `eseguibili-outputs/` | 7gg delete (safety net sopra eager cleanup) | Output eseguibili workflow |
-| stesso bucket | `imdf-bundles/` | 7gg delete (safety net sopra eager cleanup) | Bundle IMDF (zip + meta.json) |
+| `plenora-runtime-artifacts-...` | `results/` | Retention TBD | Blob dei result pipeline |
+| `plenora-runtime-artifacts-...` | `file-sources/` | Retention TBD | File source sopra soglia / object storage |
+| `plenora-runtime-artifacts-...` | `intermediate/` | Retention TBD | Artifact intermedi `full_artifact` |
+| `plenora-runtime-artifacts-...` | `eseguibili-outputs/` | 7gg delete (safety net sopra eager cleanup) | Output eseguibili workflow |
+| `plenora-runtime-artifacts-...` | `imdf-bundles/` | 7gg delete (safety net sopra eager cleanup) | Bundle IMDF (zip + meta.json) |
 
 Lifecycle rule gestite via Terraform (`deploy/terraform/lifecycle.tf`), state su `s3://plenora-terraform-state-112011134642/plenora-etl/lifecycle.tfstate`.
 
