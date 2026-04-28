@@ -237,25 +237,26 @@ class ManipolaExecutor:
 
         current_df = self._applica_group_by(current_df, result_node)
 
-        # Snapshot intermediate.db per il nodo result (non bloccante).
-        # Cap a 10.000 righe: lo snapshot serve per inspection/confronto run,
-        # non per riprodurre il dataset intero. Senza cap, to_dict() su un
-        # DataFrame con milioni di righe crea una lista di milioni di dict
-        # in memoria → OOM.
-        _MAX_INTERMEDIATE_SNAPSHOT_ROWS = 10_000
+        # Snapshot intermediate.db per il nodo result.
+        # Phase 6 Batch 2 (2026-04-28): passa per `record_final_snapshot`,
+        # che applica la policy globale `INTERMEDIATE_PERSISTENCE_MODE`
+        # (default `preview_only` -> prime 500 righe + hash + meta).
+        # Pre-fix: cap fisso a 10.000 righe + write_node legacy che
+        # materializzava `df.head(10k).to_dict(records)` sempre.
+        # Post-fix: niente df.to_dict(full); l'hash del DataFrame e' calcolato
+        # via pandas_hash_v1 senza materializzare; preview cap dalla policy.
         if run_id and current_df is not None:
             try:
-                from app.core.intermediate.writer import write_node as _write_node
-                snapshot_df = current_df.head(_MAX_INTERMEDIATE_SNAPSHOT_ROWS)
-                _col_schema = current_df.dtypes.astype(str).to_dict()
-                _write_node(
+                from app.core.intermediate.snapshot import record_final_snapshot
+                record_final_snapshot(
                     run_id=run_id,
+                    module="manipola",
                     node_id=result_node.id,
                     node_type="result",
-                    rows=snapshot_df.to_dict(orient="records"),
-                    col_schema=_col_schema,
+                    df=current_df,
                     exec_time=0.0,
                     status="ok",
+                    node_data=getattr(result_node, "data", None),
                 )
             except Exception as _iex:
                 logger.warning(f"Intermediate write result node fallita (non bloccante): {_iex}")
@@ -717,23 +718,39 @@ class ManipolaExecutor:
             # Salva risultato per nodi successivi
             dataframes[node.id] = current_df
 
-            # Snapshot intermediate.db (non bloccante)
+            # Snapshot checkpoint intermediate (non bloccante).
+            # Phase 6 Batch 2: la policy globale
+            # `MANIPOLA_INTERMEDIATE_CHECKPOINTS` (default `critical`)
+            # decide se questo specifico nodo va salvato, PRIMA di
+            # toccare il DataFrame. Per nodi `transform` non-critical
+            # `record_checkpoint_snapshot` ritorna subito con
+            # `recorded=False`: zero `df.to_dict`, zero hash, zero DB.
+            # Per `multi_join` e per i transform critical (join, filter,
+            # aggregate, geo_explode, ...) registra meta + hash + preview
+            # secondo `INTERMEDIATE_PERSISTENCE_MODE` globale.
+            # Pre-fix: write_node + df.to_dict(full) DOPO ogni transform,
+            # bloccante sul critical path su DataFrame grandi.
             if run_id and current_df is not None:
                 try:
-                    from app.core.intermediate.writer import write_node as _write_node
-                    _col_schema = current_df.dtypes.astype(str).to_dict()
-                    _write_node(
+                    from app.core.intermediate.snapshot import record_checkpoint_snapshot
+                    transform_id = (
+                        _nf(node, "transform_op")
+                        if node.type == "transform" else None
+                    )
+                    record_checkpoint_snapshot(
                         run_id=run_id,
+                        module="manipola",
                         node_id=node.id,
                         node_type=node.type,
-                        rows=current_df.to_dict(orient="records"),
-                        col_schema=_col_schema,
+                        df=current_df,
                         exec_time=0.0,
                         status="ok",
+                        node_data=getattr(node, "data", None),
+                        transform_id=transform_id,
                     )
                 except Exception as _iex:
                     logger.warning(f"Intermediate write nodo {node.id} fallita (non bloccante): {_iex}")
-        
+
         return current_df
     
     def _ordina_topologicamente(self, nodes, edges, dataframes):

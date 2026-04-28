@@ -304,7 +304,16 @@ def _checkpoint_decision_manipola(
     # `result` e' final, gestito dal caller -> qui non capita.
     if node_type == "result":
         return True, "manipola_result_final"
+
+    # Policy `none`: nessun checkpoint, anche multi_join. Vince su tutto.
+    if checkpoints_setting == MANIPOLA_CHECKPOINTS_NONE:
+        return False, "manipola_skip_none_policy"
+
     # `multi_join` e' sempre critical, indipendentemente da transform_id.
+    # (NB: `none` sopra ha gia' fatto opt-out; `marked` sotto puo' richiedere
+    # save_intermediate, ma il design e2e considera multi_join come sempre
+    # critico nelle policy non-none — vedi manipola_checkpoint_policy.md
+    # "Implementazione proposta" §2: multi_join -> critical.)
     if node_type == "multi_join":
         return True, "manipola_multi_join"
 
@@ -313,9 +322,6 @@ def _checkpoint_decision_manipola(
         transform_id is not None
         and transform_id in MANIPOLA_CRITICAL_TRANSFORMS
     )
-
-    if checkpoints_setting == MANIPOLA_CHECKPOINTS_NONE:
-        return False, "manipola_skip_none_policy"
     if checkpoints_setting == MANIPOLA_CHECKPOINTS_ALL:
         return True, "manipola_all_policy"
     if checkpoints_setting == MANIPOLA_CHECKPOINTS_MARKED:
