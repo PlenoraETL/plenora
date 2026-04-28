@@ -244,7 +244,12 @@ def test_canvas_put_rejects_file_source_not_visible_to_owner_group():
 
 
 def test_canvas_put_rejects_source_project_not_visible_to_owner_group():
-    """Stesso pattern per `source_project_id` cross-tenant."""
+    """Stesso pattern per `source_project_id` cross-tenant.
+
+    RB.4.A.16: projects non e' shareable (no project_shares table) ->
+    il check passa per `_visible_project_ids_strict` invece di
+    `visible_resource_ids`. Mocchiamo l'helper a livello di modulo.
+    """
     from fastapi import HTTPException
 
     from app.core.projects.router import CanvasWithPlugins, update_project_canvas
@@ -266,12 +271,17 @@ def test_canvas_put_rejects_source_project_not_visible_to_owner_group():
     fake_svc = _rb4_make_svc(owner_group_id="g1")
 
     def _fake_visible(resource_table, group_id, is_superadmin=False):
-        if resource_table == "projects":
-            return {"project_safe_for_g1"}
         return set()
+
+    def _fake_strict(project_ids, owner_group_id, is_superadmin):
+        # Solo "project_safe_for_g1" e' visibile a g1; OTHER non lo e'
+        return {pid for pid in (project_ids or ()) if pid == "project_safe_for_g1"}
 
     with patch("app.core.projects.router._project_service", fake_svc), patch(
         "app.shared.sharing.visible_resource_ids", side_effect=_fake_visible
+    ), patch(
+        "app.core.projects.router._visible_project_ids_strict",
+        side_effect=_fake_strict,
     ):
         with pytest.raises(HTTPException) as excinfo:
             update_project_canvas("p1", body, _RB4User())
@@ -314,12 +324,17 @@ def test_canvas_put_accepts_when_all_refs_visible_to_owner_group():
     def _fake_visible(resource_table, group_id, is_superadmin=False):
         if resource_table == "file_sources":
             return {"file_safe", "file_other_safe"}
-        if resource_table == "projects":
-            return {"project_safe"}
         return set()
+
+    def _fake_strict(project_ids, owner_group_id, is_superadmin):
+        visible = {"project_safe"}
+        return {pid for pid in (project_ids or ()) if pid in visible}
 
     with patch("app.core.projects.router._project_service", fake_svc), patch(
         "app.shared.sharing.visible_resource_ids", side_effect=_fake_visible
+    ), patch(
+        "app.core.projects.router._visible_project_ids_strict",
+        side_effect=_fake_strict,
     ):
         resp = update_project_canvas("p1", body, _RB4User())
 
@@ -570,6 +585,129 @@ def test_canvas_put_collects_arcgis_connection_id_from_node_data_dict():
 
     assert excinfo.value.status_code == 400
     assert "arcgis_inside_data_BAD" in excinfo.value.detail
+
+
+# =============================================================================
+# RB.4.A.16 (2026-04-27): _visible_project_ids_strict
+# =============================================================================
+#
+# BUG.md #16: `visible_resource_ids("projects",...)` solleva ValueError
+# perche' projects non e' nel whitelist `_SHAREABLE` (no project_shares
+# table). Pre-fix: PUT canvas con un project_source restituiva 500
+# "Tabella 'projects' non e' shareable". Post-fix: helper ownership-only
+# `_visible_project_ids_strict` che fa una sola query batch
+# `WHERE id IN (...) AND group_id = ?`.
+
+
+def test_visible_project_ids_strict_returns_empty_set_for_empty_input():
+    """Fast-path: input vuoto -> set() senza DB hit."""
+    from app.core.projects.router import _visible_project_ids_strict
+
+    fetchall_spy = MagicMock()
+    with patch("app.db.pg_connection.fetchall", fetchall_spy):
+        assert _visible_project_ids_strict([], "g1", is_superadmin=False) == set()
+        assert _visible_project_ids_strict(None, "g1", is_superadmin=False) == set()
+        assert (
+            _visible_project_ids_strict(set(), "g1", is_superadmin=False) == set()
+        )
+
+    fetchall_spy.assert_not_called()
+
+
+def test_visible_project_ids_strict_superadmin_returns_input_no_query():
+    """superadmin -> tutti gli id passati sono visibili, nessun DB hit."""
+    from app.core.projects.router import _visible_project_ids_strict
+
+    fetchall_spy = MagicMock()
+    ids = {"p_a", "p_b", "p_c"}
+    with patch("app.db.pg_connection.fetchall", fetchall_spy):
+        result = _visible_project_ids_strict(ids, "g_super", is_superadmin=True)
+
+    assert result == ids
+    fetchall_spy.assert_not_called()
+
+
+def test_visible_project_ids_strict_filters_by_owner_group():
+    """Non-superadmin: query batch filtra per group_id e ritorna SOLO
+    gli id di proprieta' del gruppo del progetto."""
+    from app.core.projects.router import _visible_project_ids_strict
+
+    # Mock fetchall: ritorna SOLO p_a (p_b e' di altro gruppo, p_c non esiste)
+    def _fake_fetchall(sql, params):
+        # Verifica IN clause + group_id binding (params = ids... + group_id)
+        assert "IN (" in sql.upper().replace("  ", " ")
+        assert "GROUP_ID" in sql.upper()
+        assert params[-1] == "g1"
+        return [{"id": "p_a"}]
+
+    with patch("app.db.pg_connection.fetchall", side_effect=_fake_fetchall):
+        result = _visible_project_ids_strict(
+            ["p_a", "p_b", "p_c"], "g1", is_superadmin=False,
+        )
+
+    assert result == {"p_a"}
+
+
+def test_visible_project_ids_strict_returns_empty_when_owner_group_missing():
+    """Difensivo: senza owner_group_id non possiamo filtrare -> set()
+    invece di esporre tutti i progetti dei gruppi."""
+    from app.core.projects.router import _visible_project_ids_strict
+
+    fetchall_spy = MagicMock()
+    with patch("app.db.pg_connection.fetchall", fetchall_spy):
+        result = _visible_project_ids_strict(
+            {"p_a"}, owner_group_id=None, is_superadmin=False,
+        )
+
+    assert result == set()
+    fetchall_spy.assert_not_called()
+
+
+def test_canvas_put_with_project_source_does_not_raise_value_error_anymore():
+    """Anti-regression #16: PRE-fix `update_project_canvas` con un
+    project_source ref triggherava `visible_resource_ids("projects",...)`
+    -> ValueError("Tabella 'projects' non e' shareable") -> 500 generico.
+    POST-fix: la chiamata passa per `_visible_project_ids_strict`
+    (no ValueError). Il test verifica che il path raggiunge 400 (cross-tenant)
+    o 200 (ref valido) ma MAI un'eccezione non-HTTPException."""
+    from fastapi import HTTPException
+
+    from app.core.projects.router import CanvasWithPlugins, update_project_canvas
+    from app.shared.models import Edge, Node
+
+    body = CanvasWithPlugins(
+        nodes=[
+            Node(
+                id="ps",
+                type="project_source",
+                position={"x": 0, "y": 0},
+                source_project_id="some_project",
+            ),
+            Node(id="res", type="result", position={"x": 200, "y": 0}, columns=[]),
+        ],
+        edges=[Edge(id="e1", source="ps", target="res")],
+    )
+
+    fake_svc = _rb4_make_svc(owner_group_id="g1")
+
+    # Mock fetchall: simula DB che ritorna some_project come visibile a g1
+    def _fake_fetchall(sql, params):
+        return [{"id": "some_project"}]
+
+    with patch("app.core.projects.router._project_service", fake_svc), patch(
+        "app.db.pg_connection.fetchall", side_effect=_fake_fetchall
+    ):
+        # Non deve sollevare ValueError. Puo' sollevare HTTPException
+        # (404 o altre validazioni a valle), ma non un errore generico.
+        try:
+            resp = update_project_canvas("p1", body, _RB4User())
+            assert resp.get("status") == "ok"
+        except HTTPException:
+            # Accettato: significa che il path e' stato valutato
+            # correttamente (no crash interno).
+            pass
+        except ValueError as e:  # pragma: no cover - regression
+            pytest.fail(f"Regression #16: ValueError leaked: {e}")
 
 
 # =============================================================================

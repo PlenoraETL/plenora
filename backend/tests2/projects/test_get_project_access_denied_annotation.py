@@ -126,7 +126,11 @@ def test_get_project_annotates_inaccessible_file_source_node():
 
 
 def test_get_project_annotates_inaccessible_project_source_node():
-    """Stesso pattern per source_project_id cross-tenant."""
+    """Stesso pattern per source_project_id cross-tenant.
+
+    RB.4.A.16: projects non e' shareable -> il check passa per
+    `_visible_project_ids_strict` invece di `visible_resource_ids`.
+    """
     metadata = _make_metadata(group_id="g1")
     canvas = CanvasState(
         nodes=[
@@ -147,12 +151,17 @@ def test_get_project_annotates_inaccessible_project_source_node():
     fake_svc.get_project_columns_metadata.return_value = []
 
     def _fake_visible(resource_table, group_id, is_superadmin=False):
-        if resource_table == "projects":
-            return {"project_safe_for_g1"}
         return set()
+
+    def _fake_strict(project_ids, owner_group_id, is_superadmin):
+        visible = {"project_safe_for_g1"}
+        return {pid for pid in (project_ids or ()) if pid in visible}
 
     with patch("app.core.projects.router._project_service", fake_svc), patch(
         "app.shared.sharing.visible_resource_ids", side_effect=_fake_visible
+    ), patch(
+        "app.core.projects.router._visible_project_ids_strict",
+        side_effect=_fake_strict,
     ):
         resp = get_project("p1", _User())
 

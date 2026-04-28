@@ -170,6 +170,44 @@ def list_projects(current_user: CurrentUser = Depends(require_not_esecutore)):
     return {"projects": enriched_projects}
 
 
+def _visible_project_ids_strict(
+    project_ids,
+    owner_group_id: Optional[str],
+    is_superadmin: bool,
+) -> set:
+    """RB.4.A.16 (2026-04-27): visibilita' progetti, ownership-only.
+
+    I progetti NON hanno tabella `project_shares` (a differenza di
+    file_sources, connections, ecc.): la visibilita' coincide col gruppo
+    proprietario. `visible_resource_ids("projects",...)` solleva
+    `ValueError` perche' "projects" non e' nel whitelist `_SHAREABLE`,
+    rompendo `update_project_canvas` e `_annotate_inaccessible_canvas_refs`
+    con un 500 opaco.
+
+    Questo helper sostituisce quella chiamata per il caso "validazione di
+    una lista di project_id noti": ritorna il sottoinsieme di `project_ids`
+    realmente visibile a `owner_group_id` (stesso group_id) o l'input
+    integrale se `is_superadmin`.
+
+    Batch-safe: una sola query `WHERE id IN (...)` invece di N lookups.
+    """
+    ids = {pid for pid in (project_ids or ()) if pid}
+    if not ids:
+        return set()
+    if is_superadmin:
+        return ids
+    if not owner_group_id:
+        return set()
+    from app.db.pg_connection import fetchall
+    placeholders = ",".join(["?"] * len(ids))
+    rows = fetchall(
+        f"SELECT id FROM projects WHERE id IN ({placeholders}) "
+        f"AND group_id = ?",
+        tuple(ids) + (owner_group_id,),
+    )
+    return {r["id"] for r in rows}
+
+
 def _annotate_inaccessible_canvas_refs(
     canvas_dict: dict,
     owner_group_id: Optional[str],
@@ -236,10 +274,13 @@ def _annotate_inaccessible_canvas_refs(
         if file_source_ids
         else set()
     )
-    visible_pr = (
-        visible_resource_ids("projects", owner_group_id, is_superadmin=False)
-        if project_ids
-        else set()
+    # RB.4.A.16: projects non e' shareable -> _visible_project_ids_strict
+    # filtra per ownership invece di chiamare visible_resource_ids che
+    # solleverebbe ValueError.
+    visible_pr = _visible_project_ids_strict(
+        project_ids,
+        owner_group_id=owner_group_id,
+        is_superadmin=False,
     )
     visible_ag = (
         visible_resource_ids("arcgis_connections", owner_group_id, is_superadmin=False)
@@ -544,8 +585,13 @@ def update_project_canvas(
             )
             invalid_file_sources = refs["file_sources"] - visible_fs
         if refs["projects"]:
-            visible_pr = visible_resource_ids(
-                "projects", owner_group_id, is_superadmin=is_super,
+            # RB.4.A.16: projects non e' nel whitelist `_SHAREABLE` (no
+            # tabella project_shares). Usiamo l'helper ownership-only
+            # invece di visible_resource_ids che solleverebbe ValueError.
+            visible_pr = _visible_project_ids_strict(
+                refs["projects"],
+                owner_group_id=owner_group_id,
+                is_superadmin=is_super,
             )
             invalid_projects = refs["projects"] - visible_pr
         if refs["arcgis_connections"]:
