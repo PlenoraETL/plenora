@@ -365,8 +365,21 @@ def compare_runs_l2(
     Ritorna righe aggiunte in B (non presenti in A) e rimosse da A (non
     presenti in B), confrontando tramite row_hash.
 
-    Dopo il refactor a tabella unificata plenora.node_rows, tutto il diff
-    e' una singola query con NOT EXISTS che sfrutta l'indice
+    Phase 6 batch L2 semantics (2026-04-28): dispatch su
+    `persistence_mode` di entrambe le run. L'endpoint NON finge un
+    diff completo se i dati non sono entrambi su `node_rows`:
+      - full_pg + full_pg (o legacy NULL): 200, diff completo come prima.
+      - preview_only + preview_only: 200, diff parziale dichiarato
+        (`partial=true`, `reason="preview_only"`).
+      - metadata_only su almeno un lato: 422 "diff_available=false,
+        reason=metadata_only_no_rows".
+      - full_artifact + complete: 501 "non ancora implementato"
+        (diff completo da artifact = batch successivo).
+      - full_artifact pending/failed/missing: 422 "non pronto".
+      - mode mismatch (preview_only vs full_pg): 422 conservativo.
+
+    Dopo il refactor a tabella unificata plenora.node_rows, il diff
+    full e' una singola query con NOT EXISTS che sfrutta l'indice
     (run_id, node_id, row_hash).
     """
     try:
@@ -374,6 +387,14 @@ def compare_runs_l2(
         _check_run_access(run_id_b, current_user)
 
         from app.db.pg_connection import fetchall, fetchone
+        from app.core.intermediate.policy import (
+            persistence_mode_for_record,
+            MODE_FULL_PG,
+            MODE_PREVIEW_ONLY,
+            MODE_METADATA_ONLY,
+            MODE_FULL_ARTIFACT,
+            ARTIFACT_STATUS_COMPLETE,
+        )
 
         # Verifica che il nodo esista in entrambe le run via node_meta
         # (piu' robusto che controllare la presenza di righe in node_rows:
@@ -390,6 +411,102 @@ def compare_runs_l2(
                 status_code=404,
                 detail=f"Dati nodo '{node_id}' non trovati per run {run_id_b}"
             )
+
+        # Classifica le mode (legacy NULL -> "full_pg" via helper).
+        mode_a = persistence_mode_for_record(meta_a)
+        mode_b = persistence_mode_for_record(meta_b)
+
+        def _common(reason: str, message: str, *, diff_available: bool) -> dict:
+            return {
+                "run_id_a": run_id_a,
+                "run_id_b": run_id_b,
+                "node_id": node_id,
+                "persistence_mode_a": mode_a,
+                "persistence_mode_b": mode_b,
+                "diff_available": diff_available,
+                "reason": reason,
+                "message": message,
+            }
+
+        # ---- Casi non-diff (HTTP 422 / 501) ----
+
+        # full_artifact e' supportato in scrittura (parquet+manifest)
+        # ma il diff completo da artifact richiede download + set-diff
+        # cross-run. Out of scope di questo batch: rispondiamo 501
+        # esplicito invece di silently fallback su node_rows vuoti.
+        if MODE_FULL_ARTIFACT in (mode_a, mode_b):
+            # Se uno dei due e' artifact, distinguiamo "complete vs altro"
+            def _artifact_status(meta):
+                return (meta or {}).get("artifact_status")
+            status_a = _artifact_status(meta_a) if mode_a == MODE_FULL_ARTIFACT else None
+            status_b = _artifact_status(meta_b) if mode_b == MODE_FULL_ARTIFACT else None
+            both_complete_or_na = (
+                (mode_a != MODE_FULL_ARTIFACT or status_a == ARTIFACT_STATUS_COMPLETE)
+                and (mode_b != MODE_FULL_ARTIFACT or status_b == ARTIFACT_STATUS_COMPLETE)
+            )
+            if both_complete_or_na:
+                detail = _common(
+                    reason="full_artifact_diff_not_implemented",
+                    message=(
+                        "Diff riga-per-riga da artifact full non ancora "
+                        "implementato. Per ora possibile solo confronto "
+                        "L1 (compare/l1) tramite hash aggregati."
+                    ),
+                    diff_available=False,
+                )
+                detail["artifact_status_a"] = status_a
+                detail["artifact_status_b"] = status_b
+                raise HTTPException(status_code=501, detail=detail)
+            # almeno un lato pending/failed/missing
+            detail = _common(
+                reason="full_artifact_not_ready",
+                message=(
+                    "Diff non disponibile: artifact full non ancora "
+                    "pronto (pending/failed) su almeno una delle due run."
+                ),
+                diff_available=False,
+            )
+            detail["artifact_status_a"] = status_a
+            detail["artifact_status_b"] = status_b
+            raise HTTPException(status_code=422, detail=detail)
+
+        if MODE_METADATA_ONLY in (mode_a, mode_b):
+            raise HTTPException(
+                status_code=422,
+                detail=_common(
+                    reason="metadata_only_no_rows",
+                    message=(
+                        "Diff riga-per-riga non disponibile: almeno una "
+                        "delle due run usa persistence_mode=metadata_only "
+                        "(salva solo metadata + hash, niente node_rows). "
+                        "Per change-detection L1: usa /compare/l1."
+                    ),
+                    diff_available=False,
+                ),
+            )
+
+        # Mode mismatch fra full_pg e preview_only: il diff sarebbe
+        # asimmetrico (full vs preview-cap) e darebbe falsi positivi.
+        # Rispondiamo conservativo invece di mascherarlo.
+        if {mode_a, mode_b} == {MODE_FULL_PG, MODE_PREVIEW_ONLY}:
+            raise HTTPException(
+                status_code=422,
+                detail=_common(
+                    reason="persistence_mode_mismatch",
+                    message=(
+                        "Diff non disponibile: le due run hanno "
+                        "persistence_mode diversi (full_pg vs preview_only). "
+                        "Il confronto L2 produrrebbe risultati asimmetrici. "
+                        "Riallinea le run alla stessa mode oppure usa "
+                        "/compare/l1 per change-detection via hash."
+                    ),
+                    diff_available=False,
+                ),
+            )
+
+        # ---- Casi diff (HTTP 200) ----
+        # Solo full_pg+full_pg e preview_only+preview_only arrivano qui.
+        is_partial = (mode_a == MODE_PREVIEW_ONLY and mode_b == MODE_PREVIEW_ONLY)
 
         # Righe rimosse: in A ma non in B (confronto su row_hash).
         # L'indice idx_node_rows_hash su (run_id, node_id, row_hash) rende
@@ -452,7 +569,14 @@ def compare_runs_l2(
         removed_list = [_expand(r) for r in removed_raw]
         added_list = [_expand(r) for r in added_raw]
 
-        return {
+        # Sanitize NaN/+Inf/-Inf nelle righe espanse: i record possono
+        # contenere sentinel JSONB ricostruiti come float speciali (vedi
+        # `_from_jsonable_value` nei branch consumer di `node_rows`).
+        # Sul boundary HTTP non sono JSON-compliant. Bug #23 invariato.
+        removed_list = _sanitize_for_json(removed_list)
+        added_list = _sanitize_for_json(added_list)
+
+        response = {
             "run_id_a": run_id_a,
             "run_id_b": run_id_b,
             "node_id": node_id,
@@ -463,7 +587,20 @@ def compare_runs_l2(
             "removed": removed_list,   # righe in A non in B
             "added": added_list,        # righe in B non in A
             "truncated": len(removed_list) == 500 or len(added_list) == 500,
+            # Campi additivi Phase 6 batch L2 semantics (2026-04-28)
+            "persistence_mode_a": mode_a,
+            "persistence_mode_b": mode_b,
+            "diff_available": True,
+            "partial": is_partial,
         }
+        if is_partial:
+            response["reason"] = "preview_only"
+            response["message"] = (
+                "Diff calcolato solo sulle righe preview persistite "
+                "(persistence_mode=preview_only su entrambe le run). "
+                "Cambi su righe oltre il preview cap NON sono rilevati."
+            )
+        return response
     except HTTPException:
         raise
     except Exception as e:
