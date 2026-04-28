@@ -248,6 +248,15 @@ export function createCaricanArcGISNode(node) {
     type:     'caricaArcgis',
     position: node.position,
     data: {
+      // RB.#12/#13 (2026-04-27): spread `...node.data` come prima entry
+      // preserva i flag annotati dal backend RB.7.B (access_denied,
+      // access_denied_reason, inaccessible_resource_type) quando una
+      // connection ArcGIS riferita dal canvas non e' visibile al gruppo
+      // del progetto. Senza, la deserializzazione li scartava
+      // silenziosamente -> banner RB.7.C non visibile, useEffect
+      // chiamava listFolders 404, save canvas con id stantio 400.
+      // Pattern simmetrico a createProjectSourceNode / createFileSourceNode.
+      ...node.data,
       arcgis_connection_id:    nd(node, 'arcgis_connection_id', ''),
       arcgis_service_url:      nd(node, 'arcgis_service_url', ''),
       arcgis_layer_url:        nd(node, 'arcgis_layer_url', ''),
@@ -277,6 +286,11 @@ export function createImdfPublisherNode(node) {
     type:     'imdf_publisher',
     position: node.position,
     data: {
+      // RB.#12/#13 (2026-04-27): preserva i flag annotati dal backend
+      // RB.7.B (access_denied, access_denied_reason,
+      // inaccessible_resource_type). Vedi createCaricanArcGISNode per
+      // il razionale completo.
+      ...node.data,
       imdf_arcgis_connection_id: nd(node, 'imdf_arcgis_connection_id', ''),
       imdf_arcgis_folder:        nd(node, 'imdf_arcgis_folder',        ''),
       imdf_fs_name_template:     nd(node, 'imdf_fs_name_template',     ''),
