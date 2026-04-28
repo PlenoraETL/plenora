@@ -46,7 +46,7 @@ class _FailingStorage:
 def stub_storage(monkeypatch):
     stub = _StubStorage()
     from app.shared import cloud_backends
-    monkeypatch.setattr(cloud_backends, "get_object_storage", lambda: stub)
+    monkeypatch.setattr(cloud_backends, "get_runtime_object_storage", lambda: stub)
     return stub
 
 
@@ -183,7 +183,7 @@ def test_object_storage_policy_upload_failure_no_db_row(mock_db, monkeypatch):
 
     monkeypatch.setenv("STORAGE_POLICY", "object_storage")
     failing = _FailingStorage()
-    monkeypatch.setattr(cloud_backends, "get_object_storage", lambda: failing)
+    monkeypatch.setattr(cloud_backends, "get_runtime_object_storage", lambda: failing)
 
     svc = FileSourceService()
     payload = b"anything"

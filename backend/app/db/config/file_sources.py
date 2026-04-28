@@ -115,9 +115,26 @@ def delete_file_source(file_id: str) -> bool:
 
     if storage_key:
         try:
-            from app.shared.cloud_backends import get_object_storage
-            storage = get_object_storage()
-            storage.delete(storage_key)
+            from app.shared.cloud_backends import (
+                ObjectStorageDisabledError,
+                object_storage_enabled,
+                get_runtime_object_storage,
+            )
+            if not object_storage_enabled():
+                # Batch 1.5: capability off -> niente da pulire.
+                # File era marcato come S3-backed ma il deployment non
+                # ha piu' object storage attivo. Log debug, non warning.
+                logger.debug(
+                    f"delete_file_source: skip cleanup S3 per {file_id} "
+                    f"(object storage disabilitato)"
+                )
+            else:
+                storage = get_runtime_object_storage()
+                storage.delete(storage_key)
+        except ObjectStorageDisabledError as e:
+            logger.debug(
+                f"delete_file_source: cleanup S3 skip per {file_id}: {e}"
+            )
         except Exception as e:
             logger.warning(
                 f"delete_file_source: cleanup S3 fallito per "

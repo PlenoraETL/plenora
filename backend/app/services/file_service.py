@@ -897,8 +897,8 @@ class FileSourceService:
         # mirror di `eseguibili-outputs/` e `imdf-bundles/` nel naming bucket.
         storage_key = f"file-sources/{file_id}/{filename}"
         try:
-            from app.shared.cloud_backends import get_object_storage
-            storage = get_object_storage()
+            from app.shared.cloud_backends import get_runtime_object_storage
+            storage = get_runtime_object_storage()
             storage.upload_bytes(raw_data, storage_key)
         except Exception as e:
             self._logger.error(
@@ -945,8 +945,8 @@ class FileSourceService:
                 return row["data"]
             storage_key = row.get("storage_key")
             if storage_key:
-                from app.shared.cloud_backends import get_object_storage
-                storage = get_object_storage()
+                from app.shared.cloud_backends import get_runtime_object_storage
+                storage = get_runtime_object_storage()
                 # download_bytes o download-in-memory: il Protocol espone
                 # `download(key, path)`, quindi passiamo per temp file.
                 import tempfile

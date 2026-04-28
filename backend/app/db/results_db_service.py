@@ -83,8 +83,21 @@ def _s3_download_bytes(storage_key: str) -> Optional[bytes]:
     _t0 = time.monotonic()
     try:
         # Lazy import per non forzare cloud_backends in ogni path
-        from app.shared.cloud_backends import get_object_storage
-        storage = get_object_storage()
+        from app.shared.cloud_backends import (
+            ObjectStorageDisabledError,
+            get_runtime_object_storage,
+        )
+        try:
+            storage = get_runtime_object_storage()
+        except ObjectStorageDisabledError as _disabled:
+            # Batch 1.5: capability off -> non possiamo scaricare nulla.
+            # Il caller (get_result_data) tratta None come "non disponibile".
+            duration_ms = round((time.monotonic() - _t0) * 1000, 1)
+            logger.warning(
+                f"[FS-4] S3 download skip su {_short_key(storage_key)}: "
+                f"object storage disabilitato (duration_ms={duration_ms}). {_disabled}"
+            )
+            return None
         stream = storage.get_object_stream(storage_key)
         chunks = list(stream["body"])
         data = b"".join(chunks)
@@ -179,9 +192,19 @@ def _s3_delete_best_effort(storage_key: str) -> None:
     sollevati (il record DB e' gia' andato, orfano S3 e' meno grave di
     fallire un delete che l'utente ha richiesto)."""
     try:
-        from app.shared.cloud_backends import get_object_storage
-        storage = get_object_storage()
+        from app.shared.cloud_backends import (
+            ObjectStorageDisabledError,
+            object_storage_enabled,
+            get_runtime_object_storage,
+        )
+        if not object_storage_enabled():
+            # Capability off: non c'e' nulla da cancellare lato storage.
+            # Best-effort, niente warning rumoroso.
+            return
+        storage = get_runtime_object_storage()
         storage.delete(storage_key)
+    except ObjectStorageDisabledError as e:
+        logger.debug(f"[FS-4] S3 delete skip (storage disabilitato): {e}")
     except Exception as e:
         logger.warning(f"[FS-4] S3 delete {storage_key} fallito (non-fatal): {e}")
 

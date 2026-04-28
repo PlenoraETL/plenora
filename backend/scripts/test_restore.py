@@ -208,13 +208,13 @@ def make_target_url(admin_url: str, test_db: str) -> str:
 
 
 def _storage():
-    """Lazy import + factory del backend object storage."""
+    """Lazy import + factory del backend object storage (backup bucket)."""
     try:
-        from app.shared.cloud_backends import get_object_storage
+        from app.shared.cloud_backends import get_backup_object_storage
     except ImportError as e:
         log("ERROR", f"cloud_backends import fallito: {e}")
         sys.exit(4)
-    return get_object_storage()
+    return get_backup_object_storage()
 
 
 def latest_dump_key() -> str:

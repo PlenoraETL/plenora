@@ -274,6 +274,36 @@ class Settings:
         #   <prefix>/group=.../project=.../run=.../module=.../node=...
         # Default "intermediate". Trim slash a destra.
         "INTERMEDIATE_ARTIFACT_PREFIX": "intermediate",
+
+        # ==================== OBJECT STORAGE CAPABILITY (Batch 1.5) ====================
+        # Capability globale: se False, NESSUN modulo runtime (result/
+        # file_source/eseguibili/IMDF/intermediate) deve tentare upload o
+        # download via object storage. La factory `get_runtime_object_storage`
+        # solleva `ObjectStorageDisabledError`; i caller che hanno fallback
+        # locale (IMDF list_bundles cache locale) degradano graceful, gli
+        # altri sollevano errori operativi chiari.
+        # Backup amministrativo (`get_backup_object_storage`) e log archive
+        # (`get_log_archive_storage`) seguono la stessa capability: se
+        # False, admin_backups list ritorna feature-disabled invece di
+        # importare boto3 e fare list_objects_v2 diretta.
+        # Default True per non rompere deployment esistenti che usano
+        # CLOUD_PROVIDER=aws + BACKUP_BUCKET. Per disabilitare: setta
+        # OBJECT_STORAGE_ENABLED=false in env.
+        "OBJECT_STORAGE_ENABLED": True,
+        # Backend logico. "s3"=AWS, "minio"=S3-compatible, "local"=futuro
+        # filesystem-backed (dev), "webdav"=futuro, "none"=esplicitamente
+        # disattivato (equivalente a OBJECT_STORAGE_ENABLED=False).
+        # Default None = derivato da CLOUD_PROVIDER (aws->s3, minio->minio,
+        # none->none).
+        "OBJECT_STORAGE_BACKEND": None,
+        # Bucket runtime per result/file_source/eseguibili/IMDF. Distinto
+        # da BACKUP_BUCKET per design (lifecycle, IAM boundary diverso).
+        # Se None, fallback su PLENORA_ARTIFACT_BUCKET; se anche quello
+        # None, fallback retro-compat su BACKUP_BUCKET (con warning) per
+        # non rompere deployment legacy. Configurazione canonica futura:
+        # OBJECT_STORAGE_BUCKET per runtime, BACKUP_BUCKET per backup,
+        # LOG_ARCHIVE_BUCKET per log archive.
+        "OBJECT_STORAGE_BUCKET": None,
     }
 
     def __init__(self):

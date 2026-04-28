@@ -83,16 +83,22 @@ def test_list_backups_raises_on_aws_credentials_expired():
     """RB.2 (2026-04-27): credenziali AWS scadute (LoginRefreshRequired)
     -> AdminBackupCredentialsError con messaggio operativo, NON lista
     vuota silenziosa. Il router traduce in HTTP 503 con
-    detail.error='aws_credentials_expired'."""
+    detail.error='aws_credentials_expired'.
+
+    Batch 1.5: list_backups passa per `get_backup_object_storage()` invece
+    di `boto3.client` diretto, quindi mockiamo l'ObjectStorage."""
     from botocore.exceptions import LoginRefreshRequired
 
     from app.core.admin_backups import service
     from app.core.admin_backups.service import AdminBackupCredentialsError
 
-    fake_boto3 = MagicMock()
-    fake_boto3.client.return_value.list_objects_v2.side_effect = LoginRefreshRequired()
+    fake_storage = MagicMock()
+    fake_storage.list_objects.side_effect = LoginRefreshRequired()
 
-    with patch.dict("sys.modules", {"boto3": fake_boto3}):
+    with patch(
+        "app.shared.cloud_backends.get_backup_object_storage",
+        return_value=fake_storage,
+    ):
         with pytest.raises(AdminBackupCredentialsError) as exc_info:
             service.list_backups()
 
@@ -118,13 +124,16 @@ def test_list_backups_aws_credentials_logs_warning_without_traceback():
     from app.core.admin_backups import service
     from app.core.admin_backups.service import AdminBackupCredentialsError
 
-    fake_boto3 = MagicMock()
-    fake_boto3.client.return_value.list_objects_v2.side_effect = LoginRefreshRequired()
+    fake_storage = MagicMock()
+    fake_storage.list_objects.side_effect = LoginRefreshRequired()
 
     spy_warning = MagicMock()
     spy_error = MagicMock()
 
-    with patch.dict("sys.modules", {"boto3": fake_boto3}), patch.object(
+    with patch(
+        "app.shared.cloud_backends.get_backup_object_storage",
+        return_value=fake_storage,
+    ), patch.object(
         service.logger, "warning", spy_warning
     ), patch.object(service.logger, "error", spy_error):
         with pytest.raises(AdminBackupCredentialsError):
@@ -162,12 +171,15 @@ def test_list_backups_raises_on_access_denied_refresh_token():
             "Message": "CreateOAuth2Token: The refresh token has expired",
         }
     }
-    fake_boto3 = MagicMock()
-    fake_boto3.client.return_value.list_objects_v2.side_effect = ClientError(
+    fake_storage = MagicMock()
+    fake_storage.list_objects.side_effect = ClientError(
         error_response, "ListObjectsV2"
     )
 
-    with patch.dict("sys.modules", {"boto3": fake_boto3}):
+    with patch(
+        "app.shared.cloud_backends.get_backup_object_storage",
+        return_value=fake_storage,
+    ):
         with pytest.raises(AdminBackupCredentialsError):
             service.list_backups()
 
@@ -190,25 +202,24 @@ def test_list_backups_sorts_newest_first():
     """
     from app.core.admin_backups import service
 
-    fake_boto3 = MagicMock()
-    fake_boto3.client.return_value.list_objects_v2.return_value = {
-        "Contents": [
-            {
-                "Key": "plenora_20260301_020000Z.dump",
-                "Size": 100,
-                "LastModified": datetime(2026, 3, 1, 2, 0, tzinfo=timezone.utc),
-                "StorageClass": "STANDARD",
-            },
-            {
-                "Key": "plenora_20260418_020000Z.dump",
-                "Size": 200,
-                "LastModified": datetime(2026, 4, 18, 2, 0, tzinfo=timezone.utc),
-                "StorageClass": "STANDARD",
-            },
-        ]
-    }
+    fake_storage = MagicMock()
+    fake_storage.list_objects.return_value = [
+        {
+            "key": "plenora_20260301_020000Z.dump",
+            "size": 100,
+            "last_modified": datetime(2026, 3, 1, 2, 0, tzinfo=timezone.utc),
+        },
+        {
+            "key": "plenora_20260418_020000Z.dump",
+            "size": 200,
+            "last_modified": datetime(2026, 4, 18, 2, 0, tzinfo=timezone.utc),
+        },
+    ]
 
-    with patch.dict("sys.modules", {"boto3": fake_boto3}):
+    with patch(
+        "app.shared.cloud_backends.get_backup_object_storage",
+        return_value=fake_storage,
+    ):
         out = service.list_backups()
 
     assert len(out) == 2

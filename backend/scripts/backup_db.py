@@ -280,7 +280,7 @@ def upload_to_storage(dump_file: Path, key: str) -> None:
     per AWS, Managed Identity per Azure, SA per GCP).
     """
     try:
-        from app.shared.cloud_backends import get_object_storage
+        from app.shared.cloud_backends import get_backup_object_storage
     except ImportError as e:
         log("ERROR", f"cloud_backends import fallito: {e}")
         sys.exit(4)
@@ -288,7 +288,7 @@ def upload_to_storage(dump_file: Path, key: str) -> None:
     provider = os.getenv("CLOUD_PROVIDER", "aws")
     log("INFO", f"upload [{provider}] key={key}...")
     try:
-        storage = get_object_storage()
+        storage = get_backup_object_storage()
         storage.upload(dump_file, key)
     except Exception as e:
         log("ERROR", f"Upload fallito: {type(e).__name__}: {e}")

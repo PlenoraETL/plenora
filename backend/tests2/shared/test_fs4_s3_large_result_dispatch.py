@@ -62,7 +62,7 @@ class _StubStorage:
 def stub_storage(monkeypatch):
     stub = _StubStorage()
     from app.shared import cloud_backends
-    monkeypatch.setattr(cloud_backends, "get_object_storage", lambda: stub)
+    monkeypatch.setattr(cloud_backends, "get_runtime_object_storage", lambda: stub)
     return stub
 
 

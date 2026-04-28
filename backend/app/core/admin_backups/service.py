@@ -39,6 +39,16 @@ class AdminBackupCredentialsError(RuntimeError):
     """
 
 
+class AdminBackupDisabledError(RuntimeError):
+    """Raised quando admin_backups e' chiamato ma `OBJECT_STORAGE_ENABLED=false`.
+
+    Batch 1.5 (2026-04-28): la capability globale object storage e' off
+    in questo deployment. Il router cattura -> 503 con detail "Feature
+    non disponibile in questa configurazione" invece di provare e
+    fallire con messaggio AWS confuso.
+    """
+
+
 def _to_datetime(value: Any) -> datetime:
     """Normalizza a `datetime` un valore proveniente da `plenora.backup_runs`.
 
@@ -87,33 +97,52 @@ BACKUP_SCRIPT = _BACKEND_ROOT / "scripts" / "backup_db.py"
 
 
 def list_backups() -> List[Dict[str, Any]]:
-    """Lista oggetti del bucket con prefix 'plenora_'.
+    """Lista oggetti del bucket backup con prefix 'plenora_'.
+
+    Batch 1.5 (2026-04-28): passa per `get_backup_object_storage()`
+    invece di `boto3.client("s3")` diretto, cosi' la capability globale
+    `OBJECT_STORAGE_ENABLED=false` e' rispettata. Senza questo, in un
+    deployment senza object storage l'endpoint provava list_objects_v2
+    e ritornava lista vuota, mascherando "feature disabilitata" come
+    "nessun backup".
 
     Returns:
         Lista di dict con key/size_bytes/last_modified/storage_class, ordinata
         dal piu' recente al piu' vecchio.
+
+    Raises:
+        AdminBackupDisabledError: capability object storage off.
+        AdminBackupDependencyError: botocore[crt] o altre dep AWS mancanti.
+        AdminBackupCredentialsError: credenziali AWS scadute / SSO refresh.
     """
-    try:
-        import boto3
-    except ImportError:
-        logger.error("boto3 non installato sul server")
-        return []
+    from app.shared.cloud_backends import (
+        ObjectStorageDisabledError,
+        get_backup_object_storage,
+    )
 
     try:
-        client = boto3.client("s3", region_name=REGION)
-        response = client.list_objects_v2(Bucket=BUCKET, Prefix="plenora_")
-        objects = response.get("Contents", [])
+        storage = get_backup_object_storage()
+    except ObjectStorageDisabledError as e:
+        logger.info(
+            "list_backups: object storage capability disabilitata, "
+            "feature non disponibile."
+        )
+        raise AdminBackupDisabledError(str(e)) from e
+
+    try:
+        objects = storage.list_objects("plenora_")
         result = [
             {
-                "key": o["Key"],
-                "size_bytes": o["Size"],
-                "size_mb": round(o["Size"] / 1024 / 1024, 2),
-                "last_modified": o["LastModified"].isoformat(),
-                "storage_class": o.get("StorageClass", "STANDARD"),
+                "key": o["key"],
+                "size_bytes": o["size"],
+                "size_mb": round(o["size"] / 1024 / 1024, 2),
+                "last_modified": o["last_modified"].isoformat(),
+                # `list_objects` di cloud_backends non espone storage_class
+                # nello shape ObjectMeta; default STANDARD per UI compat.
+                "storage_class": "STANDARD",
             }
             for o in objects
         ]
-        # Piu' recenti per primi
         result.sort(key=lambda o: o["last_modified"], reverse=True)
         return result
     except Exception as e:

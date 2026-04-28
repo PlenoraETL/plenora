@@ -40,9 +40,15 @@ PREFIX = "eseguibili-outputs"
 
 
 def _storage():
-    """Lazy load della factory cloud (evita hard dep su boto3 ai test unit)."""
-    from app.shared.cloud_backends import get_object_storage
-    return get_object_storage()
+    """Lazy load della factory cloud (evita hard dep su boto3 ai test unit).
+
+    Batch 1.5: passa per `get_runtime_object_storage`. Solleva
+    `ObjectStorageDisabledError` se la capability globale e' off; il
+    caller (write/upload eseguibili output) deve trattarlo come
+    "feature non disponibile" (eseguibili senza storage non possono
+    persistere output → fail-fast con messaggio operativo)."""
+    from app.shared.cloud_backends import get_runtime_object_storage
+    return get_runtime_object_storage()
 
 
 def _key_for(task_id: str, filename: str) -> str:

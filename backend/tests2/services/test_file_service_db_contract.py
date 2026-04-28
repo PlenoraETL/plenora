@@ -329,7 +329,7 @@ def test_dispatch_above_threshold_uploads_s3_and_nulls_data(monkeypatch):
             uploaded[key] = data
 
     fake_module = MagicMock()
-    fake_module.get_object_storage.return_value = FakeStorage()
+    fake_module.get_runtime_object_storage.return_value = FakeStorage()
     monkeypatch.setitem(sys.modules, "app.shared.cloud_backends", fake_module)
 
     svc = FileSourceService()
@@ -367,7 +367,7 @@ def test_upload_failure_does_not_create_db_row(monkeypatch):
             raise RuntimeError("S3 simulata down")
 
     fake_module = MagicMock()
-    fake_module.get_object_storage.return_value = FakeStorage()
+    fake_module.get_runtime_object_storage.return_value = FakeStorage()
     monkeypatch.setitem(sys.modules, "app.shared.cloud_backends", fake_module)
 
     svc = FileSourceService()
@@ -407,7 +407,7 @@ def test_read_blob_from_s3_downloads_and_cleans_temp(monkeypatch, tmp_path):
             Path(path).write_bytes(s3_payload)
 
     fake_module = MagicMock()
-    fake_module.get_object_storage.return_value = FakeStorage()
+    fake_module.get_runtime_object_storage.return_value = FakeStorage()
     monkeypatch.setitem(sys.modules, "app.shared.cloud_backends", fake_module)
 
     # Prepopola il fake DB con una row S3-backed
@@ -476,7 +476,7 @@ def test_read_blob_from_s3_cleanup_temp_on_download_exception(monkeypatch):
             raise RuntimeError("S3 403 AccessDenied simulato")
 
     fake_module = MagicMock()
-    fake_module.get_object_storage.return_value = FakeStorage()
+    fake_module.get_runtime_object_storage.return_value = FakeStorage()
     monkeypatch.setitem(sys.modules, "app.shared.cloud_backends", fake_module)
 
     def _fake_get(file_id, include_data=False):

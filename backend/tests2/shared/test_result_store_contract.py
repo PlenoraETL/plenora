@@ -136,7 +136,7 @@ def test_save_result_blob_aws_credentials_expired_raises_operational_message(
             raise LoginRefreshRequired()
 
     monkeypatch.setattr(
-        "app.shared.cloud_backends.get_object_storage",
+        "app.shared.cloud_backends.get_runtime_object_storage",
         lambda: _ExpiredStorage(),
     )
 
@@ -170,7 +170,7 @@ def test_save_result_blob_no_credentials_error_raises_operational_message(
             raise NoCredentialsError()
 
     monkeypatch.setattr(
-        "app.shared.cloud_backends.get_object_storage",
+        "app.shared.cloud_backends.get_runtime_object_storage",
         lambda: _NoCredsStorage(),
     )
 
@@ -197,7 +197,7 @@ def test_save_result_blob_generic_storage_error_keeps_old_message(
             raise RuntimeError("connection reset by peer")
 
     monkeypatch.setattr(
-        "app.shared.cloud_backends.get_object_storage",
+        "app.shared.cloud_backends.get_runtime_object_storage",
         lambda: _NetworkErrorStorage(),
     )
 

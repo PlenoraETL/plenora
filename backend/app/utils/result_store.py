@@ -194,9 +194,9 @@ def save_result_blob(project_id: str, path: Path, fmt: str,
             try:
                 from app.shared.cloud_backends import (
                     aws_credentials_error_message,
-                    get_object_storage,
+                    get_runtime_object_storage,
                 )
-                storage = get_object_storage()
+                storage = get_runtime_object_storage()
                 storage.upload(path, storage_key)
             except Exception as _se:
                 # Nessun fallback silenzioso: se la policy/threshold dice S3,
@@ -333,9 +333,9 @@ def save_result_blob_from_bytes(
             try:
                 from app.shared.cloud_backends import (
                     aws_credentials_error_message,
-                    get_object_storage,
+                    get_runtime_object_storage,
                 )
-                storage = get_object_storage()
+                storage = get_runtime_object_storage()
                 storage.upload_bytes(data, storage_key)
             except Exception as _se:
                 # Nessun fallback silenzioso: se la policy/threshold dice S3,

@@ -18,6 +18,7 @@ from app.core.admin_backups import service
 from app.core.admin_backups.service import (
     AdminBackupCredentialsError,
     AdminBackupDependencyError,
+    AdminBackupDisabledError,
 )
 from app.shared.audit_action import audit_action
 
@@ -36,6 +37,16 @@ def list_backups_endpoint(
     # TokenRetrievalError / AccessDenied refresh-token, vedi service.py).
     try:
         items = service.list_backups()
+    except AdminBackupDisabledError as e:
+        # Batch 1.5: capability object storage off -> feature non
+        # disponibile. NON e' lo stesso di "credenziali scadute".
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "object_storage_disabled",
+                "message": str(e),
+            },
+        )
     except AdminBackupDependencyError as e:
         raise HTTPException(
             status_code=503,

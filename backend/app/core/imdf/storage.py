@@ -46,9 +46,14 @@ ZIP_SUFFIX = ".zip"
 
 
 def _storage():
-    """Lazy load della factory cloud."""
-    from app.shared.cloud_backends import get_object_storage
-    return get_object_storage()
+    """Lazy load della factory cloud (Batch 1.5).
+
+    Solleva `ObjectStorageDisabledError` se la capability globale e' off:
+    i caller list/get_meta_only/list_task_ids degradano graceful
+    (cache locale only) catturando l'eccezione; save_bundle invece
+    deve fallire perche' il pubblico richiede deve completare l'upload."""
+    from app.shared.cloud_backends import get_runtime_object_storage
+    return get_runtime_object_storage()
 
 
 def _zip_key(task_id: str) -> str:
@@ -215,8 +220,11 @@ def get_meta_only(task_id: str) -> Optional[Dict[str, Any]]:
 
     Usato dal list endpoint per enumerare bundle senza costi di estrazione.
     Ritorna None se il meta non esiste su S3 (bundle non ancora pubblicato
-    o solo local-cached).
+    o solo local-cached) oppure se la capability object storage e' off.
     """
+    from app.shared.cloud_backends import object_storage_enabled
+    if not object_storage_enabled():
+        return None
     storage = _storage()
     mk = _meta_key(task_id)
     try:
@@ -232,8 +240,12 @@ def list_task_ids() -> List[str]:
     """Elenca task_id dei bundle presenti su S3 (via meta.json).
 
     Usato dal list endpoint per vedere bundle da tutti i nodi (non solo
-    quelli cached sul nodo corrente).
-    """
+    quelli cached sul nodo corrente). Batch 1.5: ritorna [] se la
+    capability object storage e' disabilitata (router fallback su
+    cache locale only)."""
+    from app.shared.cloud_backends import object_storage_enabled
+    if not object_storage_enabled():
+        return []
     storage = _storage()
     objs = storage.list_objects(f"{PREFIX}/")
     task_ids = []

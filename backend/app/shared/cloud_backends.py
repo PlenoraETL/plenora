@@ -408,8 +408,231 @@ def get_secrets_backend() -> SecretsBackend:
     raise ValueError(f"CLOUD_PROVIDER non supportato: {provider!r}")
 
 
+# ---------------------------------------------------------------------------
+# Object storage capability (Batch 1.5)
+# ---------------------------------------------------------------------------
+#
+# Tre factory pubbliche, una per dominio:
+#   - get_runtime_object_storage(): result/file_source/eseguibili/IMDF/intermediate.
+#     Bucket = OBJECT_STORAGE_BUCKET / PLENORA_ARTIFACT_BUCKET / BACKUP_BUCKET (legacy).
+#   - get_backup_object_storage(): admin_backups + scripts/backup_db.py.
+#     Bucket = BACKUP_BUCKET (o legacy BACKUP_S3_BUCKET).
+#   - get_log_archive_storage(): log archive pipeline (gia' separato).
+#     Bucket = LOG_ARCHIVE_BUCKET.
+#
+# Capability globale `OBJECT_STORAGE_ENABLED=false`:
+#   - object_storage_enabled() -> False
+#   - get_runtime_object_storage() / get_backup_object_storage() sollevano
+#     ObjectStorageDisabledError con messaggio operativo
+#   - I caller con fallback locale (IMDF list_bundles cache, file_sources
+#     delete) controllano `object_storage_enabled()` PRIMA di chiamare la
+#     factory, oppure catturano l'eccezione e degradano.
+#
+# `get_object_storage()` legacy resta come wrapper deprecato verso
+# `get_runtime_object_storage()` per non rompere callsite gia' migrati.
+
+
+class ObjectStorageDisabledError(RuntimeError):
+    """Raised quando un caller chiede object storage ma la capability
+    globale e' disabilitata (`OBJECT_STORAGE_ENABLED=false` o
+    `OBJECT_STORAGE_BACKEND=none`).
+
+    I caller devono trattarlo come "feature non disponibile in questo
+    deployment" e produrre una risposta operativa (503 / messaggio
+    user-facing chiaro), non come bug applicativo.
+    """
+
+
+def _read_object_storage_capability() -> dict:
+    """Lettura settings capability object storage.
+
+    Usa `os.getenv` direttamente (con default coerenti con
+    `app.config.Settings.DEFAULTS`) per non dipendere dal singleton
+    Settings: alcuni test patchano `app.config.settings` con stub
+    minimali che non implementano `.get()`. La capability deve restare
+    valutabile in quei contesti senza false positive.
+
+    Fallback a CLOUD_PROVIDER quando `OBJECT_STORAGE_BACKEND` non e'
+    settato.
+    """
+    enabled_raw = os.getenv("OBJECT_STORAGE_ENABLED")
+    if enabled_raw is None:
+        enabled = True  # Default DEFAULTS["OBJECT_STORAGE_ENABLED"]
+    else:
+        enabled = str(enabled_raw).strip().lower() in ("true", "1", "yes")
+
+    backend = os.getenv("OBJECT_STORAGE_BACKEND") or None
+    if backend is None:
+        # Deriva da CLOUD_PROVIDER per retro-compat: aws->s3, minio->minio,
+        # none->none. Provider sconosciuti vengono passati through come
+        # backend = nome provider, cosi' la capability check resta True
+        # e la build factory solleva il proprio ValueError("non supportato")
+        # sul provider — niente short-circuit silenzioso.
+        provider = _get_provider()
+        if provider == "aws":
+            backend = "s3"
+        elif provider == "minio":
+            backend = "minio"
+        elif provider == "none":
+            backend = "none"
+        else:
+            backend = provider  # unknown -> let _build_object_storage raise
+    backend = str(backend).strip().lower()
+
+    return {"enabled": enabled, "backend": backend}
+
+
+def object_storage_enabled() -> bool:
+    """True se la capability runtime object storage e' attiva.
+
+    Ritorna False se `OBJECT_STORAGE_ENABLED=false` o se il backend
+    risolto e' "none". I caller con fallback locale (IMDF list,
+    file_sources delete cleanup) usano questo helper come gate
+    invece di catturare eccezioni.
+    """
+    cap = _read_object_storage_capability()
+    return cap["enabled"] and cap["backend"] not in ("none", "")
+
+
+def _resolve_runtime_bucket() -> "str | None":
+    """Bucket per runtime artifacts.
+
+    Priorita':
+      1. OBJECT_STORAGE_BUCKET (canonical, distinto da BACKUP_BUCKET)
+      2. PLENORA_ARTIFACT_BUCKET (alias, Batch 1 prep)
+      3. BACKUP_BUCKET / BACKUP_S3_BUCKET (retro-compat con WARNING:
+         deployment legacy che usavano lo stesso bucket per backup e
+         runtime artifact)
+
+    None se nessuno e' settato (factory solleva).
+    """
+    bucket = os.getenv("OBJECT_STORAGE_BUCKET")
+    if bucket:
+        return str(bucket)
+    bucket = os.getenv("PLENORA_ARTIFACT_BUCKET")
+    if bucket:
+        return str(bucket)
+    legacy = os.getenv("BACKUP_BUCKET") or os.getenv("BACKUP_S3_BUCKET")
+    if legacy:
+        logger.warning(
+            "OBJECT_STORAGE_BUCKET non configurato: fallback su "
+            "BACKUP_BUCKET=%s per retro-compatibilita'. Configurare "
+            "OBJECT_STORAGE_BUCKET (runtime artifacts) distinto da "
+            "BACKUP_BUCKET (backup amministrativi).",
+            legacy,
+        )
+        return legacy
+    return None
+
+
+def _resolve_backup_bucket() -> "str | None":
+    """Bucket dedicato backup amministrativi.
+
+    Solo `BACKUP_BUCKET` / `BACKUP_S3_BUCKET` (legacy). Mai fallback
+    su OBJECT_STORAGE_BUCKET: i due bucket sono semanticamente distinti
+    per IAM boundary e lifecycle policy.
+    """
+    return os.getenv("BACKUP_BUCKET") or os.getenv("BACKUP_S3_BUCKET")
+
+
+def _build_object_storage(bucket: str, *, region_default: str) -> ObjectStorage:
+    """Costruisce l'impl ObjectStorage per il backend configurato.
+
+    Riusa la classificazione `_get_provider` esistente per backward
+    compat: `aws -> AwsS3ObjectStorage`, `minio -> MinioObjectStorage`.
+    Caller assicura `object_storage_enabled()=True` prima di chiamare.
+    """
+    provider = _get_provider()
+    if provider == "aws":
+        return AwsS3ObjectStorage(
+            bucket=bucket,
+            region=os.getenv("AWS_REGION", region_default),
+        )
+    if provider == "minio":
+        endpoint_url = os.getenv("MINIO_ENDPOINT_URL")
+        access_key = os.getenv("MINIO_ACCESS_KEY")
+        secret_key = os.getenv("MINIO_SECRET_KEY")
+        if not endpoint_url:
+            raise ValueError("CLOUD_PROVIDER=minio richiede MINIO_ENDPOINT_URL.")
+        if not access_key:
+            raise ValueError("CLOUD_PROVIDER=minio richiede MINIO_ACCESS_KEY.")
+        if not secret_key:
+            raise ValueError("CLOUD_PROVIDER=minio richiede MINIO_SECRET_KEY.")
+        return MinioObjectStorage(
+            bucket=bucket,
+            endpoint_url=endpoint_url,
+            access_key=access_key,
+            secret_key=secret_key,
+            region=os.getenv("AWS_REGION", "us-east-1"),
+        )
+    raise ValueError(f"CLOUD_PROVIDER non supportato: {provider!r}")
+
+
+def get_runtime_object_storage() -> ObjectStorage:
+    """ObjectStorage per runtime artifacts (result, file_source,
+    eseguibili, IMDF, intermediate Batch 5).
+
+    Solleva `ObjectStorageDisabledError` se la capability e' off.
+
+    Bucket:
+      - OBJECT_STORAGE_BUCKET (canonical)
+      - PLENORA_ARTIFACT_BUCKET (alias, Batch 1)
+      - BACKUP_BUCKET (legacy fallback con warning)
+    """
+    if not object_storage_enabled():
+        raise ObjectStorageDisabledError(
+            "Object storage disabilitato in questo deployment "
+            "(OBJECT_STORAGE_ENABLED=false o OBJECT_STORAGE_BACKEND=none). "
+            "I moduli che richiedono object storage runtime "
+            "(result, file_source, eseguibili, IMDF) non sono operativi. "
+            "Per abilitare: configura OBJECT_STORAGE_ENABLED=true + "
+            "OBJECT_STORAGE_BUCKET + provider credentials."
+        )
+    bucket = _resolve_runtime_bucket()
+    if not bucket:
+        raise ValueError(
+            "OBJECT_STORAGE_BUCKET non configurato (e nessun fallback "
+            "PLENORA_ARTIFACT_BUCKET / BACKUP_BUCKET disponibile). "
+            "Configurare OBJECT_STORAGE_BUCKET in env."
+        )
+    return _build_object_storage(bucket, region_default="eu-south-1")
+
+
+def get_backup_object_storage() -> ObjectStorage:
+    """ObjectStorage per backup amministrativi (admin_backups, backup_db.py).
+
+    Bucket: solo `BACKUP_BUCKET` / `BACKUP_S3_BUCKET`. Mai fallback su
+    OBJECT_STORAGE_BUCKET: IAM boundary e lifecycle distinti.
+
+    Solleva `ObjectStorageDisabledError` se la capability globale e' off:
+    senza object storage non c'e' admin_backups list S3 sensata
+    (admin_backups deve ritornare "feature disabilitata" lato router).
+    """
+    if not object_storage_enabled():
+        raise ObjectStorageDisabledError(
+            "Object storage disabilitato in questo deployment "
+            "(OBJECT_STORAGE_ENABLED=false o OBJECT_STORAGE_BACKEND=none). "
+            "Admin backups S3 list non disponibile. "
+            "Per abilitare: configura OBJECT_STORAGE_ENABLED=true + "
+            "BACKUP_BUCKET + provider credentials."
+        )
+    bucket = _resolve_backup_bucket()
+    if not bucket:
+        raise ValueError(
+            "BACKUP_BUCKET (o BACKUP_S3_BUCKET legacy) non configurato."
+        )
+    return _build_object_storage(bucket, region_default="eu-south-1")
+
+
 def get_object_storage() -> ObjectStorage:
-    """Ritorna l'ObjectStorage appropriato per il provider configurato.
+    """[DEPRECATED] Alias di `get_runtime_object_storage`.
+
+    Mantenuto come compat shim per i callsite gia' migrati nei batch
+    precedenti che non distinguevano runtime vs backup. Da Batch 1.5
+    in poi i nuovi callsite devono usare `get_runtime_object_storage()`
+    o `get_backup_object_storage()` esplicitamente. Behavior identico
+    a `get_runtime_object_storage` (capability check + runtime bucket
+    resolution con fallback BACKUP_BUCKET legacy).
 
     Config via env:
       CLOUD_PROVIDER=aws (default)
@@ -423,47 +646,7 @@ def get_object_storage() -> ObjectStorage:
         MINIO_SECRET_KEY       — required
         AWS_REGION             — default us-east-1 (MinIO ignora region)
     """
-    provider = _get_provider()
-    if provider == "aws":
-        bucket = os.getenv("BACKUP_BUCKET") or os.getenv("BACKUP_S3_BUCKET")
-        if not bucket:
-            raise ValueError(
-                "BACKUP_BUCKET (o BACKUP_S3_BUCKET legacy) non configurato."
-            )
-        return AwsS3ObjectStorage(
-            bucket=bucket,
-            region=os.getenv("AWS_REGION", "eu-south-1"),
-        )
-    if provider == "minio":
-        bucket = os.getenv("BACKUP_BUCKET") or os.getenv("BACKUP_S3_BUCKET")
-        if not bucket:
-            raise ValueError(
-                "BACKUP_BUCKET (o BACKUP_S3_BUCKET legacy) non configurato."
-            )
-        endpoint_url = os.getenv("MINIO_ENDPOINT_URL")
-        access_key = os.getenv("MINIO_ACCESS_KEY")
-        secret_key = os.getenv("MINIO_SECRET_KEY")
-        if not endpoint_url:
-            raise ValueError(
-                "CLOUD_PROVIDER=minio richiede MINIO_ENDPOINT_URL."
-            )
-        if not access_key:
-            raise ValueError(
-                "CLOUD_PROVIDER=minio richiede MINIO_ACCESS_KEY."
-            )
-        if not secret_key:
-            raise ValueError(
-                "CLOUD_PROVIDER=minio richiede MINIO_SECRET_KEY."
-            )
-        return MinioObjectStorage(
-            bucket=bucket,
-            endpoint_url=endpoint_url,
-            access_key=access_key,
-            secret_key=secret_key,
-            region=os.getenv("AWS_REGION", "us-east-1"),
-        )
-    # Estendere qui per Azure / GCP (vedi get_secrets_backend).
-    raise ValueError(f"CLOUD_PROVIDER non supportato: {provider!r}")
+    return get_runtime_object_storage()
 
 
 def get_log_archive_storage() -> ObjectStorage:
