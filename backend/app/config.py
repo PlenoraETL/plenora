@@ -220,6 +220,60 @@ class Settings:
         # query output nell'intermediate DB. Default 100k: l'intermediate
         # serve per debug UI, non per re-esecuzione integrale.
         "INTERMEDIATE_SNAPSHOT_MAX_ROWS": 100_000,
+
+        # ==================== INTERMEDIATE PERSISTENCE POLICY ====================
+        # Phase 6 product-grade Batch 1 (2026-04-28). Nuova policy
+        # globale che separa "persistenza righe" (UI/debug) da "change
+        # detection" (hash). Tre mode implementati in Batch 1:
+        #   - "metadata_only": runs + node_meta + node_hash, zero
+        #     node_rows. Massima velocita'. Diff L2 non disponibile.
+        #   - "preview_only": metadata + hash + prime
+        #     INTERMEDIATE_PREVIEW_ROWS righe in node_rows. Default
+        #     consigliato in produzione.
+        #   - "full_pg": comportamento legacy, tutte le righe in
+        #     node_rows. Compat/debug temporaneo.
+        # Mode "full_artifact" e' riservato per Batch 5 (artifact su
+        # object storage); in Batch 1 e' rifiutato a startup.
+        # Validazione fail-fast in
+        # `app/core/intermediate/policy.validate_intermediate_settings`.
+        "INTERMEDIATE_PERSISTENCE_MODE": "preview_only",
+        # Numero righe persistite quando MODE=preview_only. Tagliato
+        # dalle prime N (df.head). UI mostra "preview NN su YYY".
+        "INTERMEDIATE_PREVIEW_ROWS": 500,
+        # Formato artifact full quando MODE=full_artifact (Batch 5).
+        # In Batch 1 lo conserviamo come setting per chiusura design,
+        # ma non viene letto a runtime: il mode e' rifiutato.
+        "INTERMEDIATE_FULL_ARTIFACT_FORMAT": "parquet",
+
+        # ==================== CHECKPOINT POLICY PER MODULO ====================
+        # Granularita' selezione nodi che producono snapshot in MANIPOLA.
+        # Policy applicata al layer `intermediate.policy`, non agli
+        # executor (Batch 2). Valori:
+        #   - "none": solo final, nessun nodo intermedio
+        #   - "critical": nodi critici (join/aggregate/filter/...) + final
+        #   - "marked": solo nodi con flag canvas save_intermediate=true
+        #     + final
+        #   - "critical_or_marked": critici O marcati + final
+        #   - "all": tutti i nodi (debug/legacy)
+        # Vedi `manipola_checkpoint_policy.md` per la classifica
+        # transform-by-transform.
+        "MANIPOLA_INTERMEDIATE_CHECKPOINTS": "critical",
+        # ESTRAI: solo final output del modulo (no checkpoint per
+        # query intermedie). Solo "final_only" ammesso in Batch 1.
+        "ESTRAI_INTERMEDIATE_CHECKPOINTS": "final_only",
+        # ARRICCHISCI: solo final output del modulo (no snapshot per
+        # nodo api_enrich). Solo "final_only" ammesso in Batch 1.
+        "ARRICCHISCI_INTERMEDIATE_CHECKPOINTS": "final_only",
+
+        # ==================== ARTIFACT STORE (Batch 5 prep) ====================
+        # Bucket dedicato runtime artifact intermedi. Separato da
+        # backup/terraform-state. Required quando MODE=full_artifact in
+        # Batch 5; in Batch 1 e' campo di prenotazione (None ok).
+        "PLENORA_ARTIFACT_BUCKET": None,
+        # Prefix logico dentro il bucket. Layout completo:
+        #   <prefix>/group=.../project=.../run=.../module=.../node=...
+        # Default "intermediate". Trim slash a destra.
+        "INTERMEDIATE_ARTIFACT_PREFIX": "intermediate",
     }
 
     def __init__(self):

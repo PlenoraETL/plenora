@@ -156,6 +156,134 @@ def upsert_node_meta(run_id: str, node_id: str, node_type: str = None,
     )
 
 
+# Phase 6 Batch 1 (2026-04-28): UPSERT esteso con colonne policy.
+# Tenuto separato da `upsert_node_meta` legacy per evitare regressioni
+# sui caller esistenti (`writer.write_node` resta full_pg).
+_SQL_UPSERT_NODE_META_EXT = """
+INSERT INTO node_meta (
+    run_id, node_id, node_type, row_count, col_schema, exec_time, status, error_msg,
+    node_hash, hash_algo, persistence_mode, persisted_rows_count,
+    preview_truncated, artifact_uri, artifact_format, artifact_status, artifact_error
+) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+ON CONFLICT (run_id, node_id) DO UPDATE SET
+    node_type=EXCLUDED.node_type, row_count=EXCLUDED.row_count,
+    col_schema=EXCLUDED.col_schema, exec_time=EXCLUDED.exec_time,
+    status=EXCLUDED.status, error_msg=EXCLUDED.error_msg,
+    node_hash=EXCLUDED.node_hash, hash_algo=EXCLUDED.hash_algo,
+    persistence_mode=EXCLUDED.persistence_mode,
+    persisted_rows_count=EXCLUDED.persisted_rows_count,
+    preview_truncated=EXCLUDED.preview_truncated,
+    artifact_uri=EXCLUDED.artifact_uri, artifact_format=EXCLUDED.artifact_format,
+    artifact_status=EXCLUDED.artifact_status, artifact_error=EXCLUDED.artifact_error
+"""
+
+
+def upsert_node_meta_extended(
+    run_id: str,
+    node_id: str,
+    *,
+    node_type: Optional[str] = None,
+    row_count: Optional[int] = None,
+    col_schema: Optional[dict] = None,
+    exec_time: Optional[float] = None,
+    status: Optional[str] = None,
+    error_msg: Optional[str] = None,
+    node_hash: Optional[str] = None,
+    hash_algo: Optional[str] = None,
+    persistence_mode: Optional[str] = None,
+    persisted_rows_count: Optional[int] = None,
+    preview_truncated: Optional[bool] = None,
+    artifact_uri: Optional[str] = None,
+    artifact_format: Optional[str] = None,
+    artifact_status: Optional[str] = None,
+    artifact_error: Optional[str] = None,
+) -> None:
+    """UPSERT node_meta con le colonne Phase 6 Batch 1.
+
+    Usata da `intermediate.snapshot.record_*_snapshot`. I caller legacy
+    continuano a usare `upsert_node_meta` (le colonne nuove restano
+    NULL = trattate come full_pg).
+    """
+    execute(
+        _SQL_UPSERT_NODE_META_EXT,
+        (
+            run_id, node_id, node_type, row_count,
+            json.dumps(col_schema) if col_schema else None,
+            exec_time, status, error_msg,
+            node_hash, hash_algo, persistence_mode, persisted_rows_count,
+            preview_truncated,
+            artifact_uri, artifact_format, artifact_status, artifact_error,
+        ),
+    )
+
+
+def write_node_snapshot_atomic(
+    run_id: str,
+    node_id: str,
+    *,
+    node_type: Optional[str] = None,
+    rows_to_persist: Optional[List[Dict]] = None,
+    col_schema: Optional[dict] = None,
+    exec_time: Optional[float] = None,
+    status: Optional[str] = None,
+    error_msg: Optional[str] = None,
+    row_count: Optional[int] = None,
+    node_hash: Optional[str] = None,
+    hash_algo: Optional[str] = None,
+    persistence_mode: Optional[str] = None,
+    preview_truncated: Optional[bool] = None,
+    artifact_uri: Optional[str] = None,
+    artifact_format: Optional[str] = None,
+    artifact_status: Optional[str] = None,
+    artifact_error: Optional[str] = None,
+) -> None:
+    """Scrittura atomica node_rows + node_meta (estesa, Batch 1).
+
+    Differenze rispetto a `write_node_atomic` legacy:
+      - separa `row_count` reale (passato esplicitamente dal writer
+        che conosce la lunghezza del DataFrame originale) da
+        `persisted_rows_count` (= len(rows_to_persist));
+      - persiste le nuove colonne policy.
+
+    `rows_to_persist`:
+      - None / [] -> nessun INSERT in `node_rows`, ma il DELETE
+        idempotente continua a girare (mode metadata_only o full_pg
+        con dataset vuoto).
+      - lista [{_row_hash, ...}] -> INSERT executemany (legacy
+        serializzazione invariata).
+
+    Atomicita': singola transazione, semantica simmetrica a
+    `write_node_atomic`. Su exception rollback completo.
+    """
+    records = _build_node_row_records(run_id, node_id, rows_to_persist or [])
+    persisted_rows_count = len(records)
+    # row_count reale: se il caller non lo passa cadiamo sul fallback
+    # legacy (count = righe persistite). Per metadata_only il caller
+    # DEVE passare row_count esplicito, altrimenti perdiamo l'invariante
+    # "row_count e' sempre la lunghezza reale del dataset".
+    if row_count is None:
+        row_count = persisted_rows_count
+
+    with transaction() as conn:
+        with conn.cursor() as cur:
+            cur.execute(_SQL_DELETE_NODE_ROWS, (run_id, node_id))
+            if records:
+                cur.executemany(_SQL_INSERT_NODE_ROW, records)
+            cur.execute(
+                # _adapt_params su execute() converte ? -> %s; qui usiamo
+                # la connessione PG nativa, quindi sostituiamo manualmente.
+                _SQL_UPSERT_NODE_META_EXT.replace("?", "%s"),
+                (
+                    run_id, node_id, node_type, row_count,
+                    json.dumps(col_schema) if col_schema else None,
+                    exec_time, status, error_msg,
+                    node_hash, hash_algo, persistence_mode,
+                    persisted_rows_count, preview_truncated,
+                    artifact_uri, artifact_format, artifact_status, artifact_error,
+                ),
+            )
+
+
 def get_node_meta(run_id: str, node_id: str) -> Optional[Dict]:
     row = fetchone(
         "SELECT * FROM node_meta WHERE run_id = ? AND node_id = ?",

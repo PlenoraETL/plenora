@@ -59,6 +59,17 @@ CREATE TABLE IF NOT EXISTS node_meta (
     exec_time   REAL,                    -- secondi impiegati dal nodo
     status      TEXT,                    -- ok / error / skipped
     error_msg   TEXT,                    -- messaggio di errore se status=error
+    -- Phase 6 Batch 1 (2026-04-28): policy persistenza intermedi.
+    -- Tutte nullable -> record legacy = full_pg.
+    node_hash             TEXT,           -- fingerprint DataFrame (es. SHA256)
+    hash_algo             TEXT,           -- es. "pandas_hash_v1"
+    persistence_mode      TEXT,           -- metadata_only | preview_only | full_pg | full_artifact
+    persisted_rows_count  INTEGER,        -- righe in node_rows per questo nodo
+    preview_truncated     BOOLEAN,        -- true se persisted_rows_count < row_count
+    artifact_uri          TEXT,           -- pointer artifact full (Batch 5)
+    artifact_format       TEXT,           -- es. "parquet"
+    artifact_status       TEXT,           -- none | pending | complete | failed
+    artifact_error        TEXT,           -- messaggio errore artifact
     PRIMARY KEY (run_id, node_id)
 );
 
