@@ -43,6 +43,11 @@ import useCanvasStore from '../store/useCanvasStore';
 import { useToast } from '../hooks/useToast';
 import useColumnPropagation from '../hooks/useColumnPropagation';
 import { deserializeNodes, createEdgeFromData } from '../utils/nodeFactories';
+import {
+  hasAccessDeniedNodes,
+  describeAccessDeniedNodes,
+  getAccessDeniedNodes,
+} from '../utils/canvasAccessControl';
 import '../styles/ManipolaEditor.css';
 import '../components/nodes/StaticValuesNode.css';
 import '../components/nodes/AnnotationNode.css';
@@ -269,7 +274,17 @@ const ManipolaEditorContent = () => {
   useEffect(() => {
     useCanvasStore.getState().setEditorActions({
       onPreview:                    () => preview.handlePreview(),
-      onExecute:                    (nodeId, opts) => execution.handleExecute(opts),
+      onExecute:                    (nodeId, opts) => {
+        // Pre-flight access_denied (RB.4.B/RB.7.B): blocca run se il
+        // canvas contiene nodi con risorse non visibili al gruppo.
+        const denied = describeAccessDeniedNodes(nodesRef.current);
+        if (denied) {
+          toast.error('Esecuzione bloccata: rimuovi o sostituisci i nodi con risorse non accessibili.');
+          console.warn('[run-blocked] access_denied nodes:\n' + denied.summary);
+          return;
+        }
+        return execution.handleExecute(opts);
+      },
       onCaricanExecute:             (nodeId, cfg) => caricaExecution.handleExecute({ carica_node_data: cfg }),
       onUpdateProjectSource:        handleUpdateProjectSource,
       onUpdateProjectSourceColumns: handleUpdateProjectSourceColumns,
@@ -439,6 +454,22 @@ const ManipolaEditorContent = () => {
 
   return (
     <div className="manipola-editor">
+      {hasAccessDeniedNodes(nodes) && (
+        <div
+          role="alert"
+          style={{
+            background: '#fff4e5',
+            border: '1px solid #d97706',
+            borderRadius: 4,
+            color: '#92400e',
+            padding: '10px 14px',
+            margin: '8px 16px 0',
+            fontSize: '0.92em',
+          }}
+        >
+          🔒 Il canvas contiene {getAccessDeniedNodes(nodes).length} nodo/i con risorse non accessibili al tuo gruppo. Rimuovili o sostituiscili prima di eseguire.
+        </div>
+      )}
       <div className="manipola-toolbar">
         <div className="manipola-toolbar__left">
           <div className="manipola-toolbar__logo">
