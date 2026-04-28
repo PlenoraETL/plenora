@@ -432,27 +432,79 @@ class TypeInferrer:
         else:
             return cls._infer_from_values(series)
     
+    # RB.#11 (2026-04-28): formati esplicitamente accettati per la
+    # detection del tipo `date` durante upload. Cascata in ordine di
+    # preferenza, ISO prima (universale, non-ambiguo) poi italiano.
+    #
+    # NON includiamo `%m/%d/%Y` (US): collide con `%d/%m/%Y` su date
+    # come `"03/04/2025"` e su utenza italiana invertirebbe la scelta.
+    # Se in futuro serve, va aggiunto un setting locale/date policy
+    # esplicito, non un fallback ambiguo.
+    #
+    # Pre-fix: `pd.to_datetime(series.head(10))` senza format usava il
+    # fallback dateutil interno di pandas 3.x, che:
+    #   - emette `UserWarning: Could not infer format ...` ad ogni upload
+    #   - sceglie month-first come default -> mm/dd US su utenza IT
+    #   - parsa anche stringhe semi-numeriche tipo `"42-3-1"` -> falsi
+    #     positivi tipo `date` su colonne che dovrebbero essere `str`.
+    _DATE_FORMATS = (
+        "%Y-%m-%d %H:%M:%S",       # ISO con time
+        "%Y-%m-%dT%H:%M:%S",       # ISO8601 strict
+        "%Y-%m-%d",                # ISO date only
+        "%d/%m/%Y %H:%M:%S",       # IT con time
+        "%d/%m/%Y",                # IT date only
+        "%d-%m-%Y",                # IT con dashes
+    )
+    _DATE_PARSE_THRESHOLD = 0.8    # almeno 80% del sample deve matchare
+
+    @classmethod
+    def _looks_like_date_column(cls, series: pd.Series) -> bool:
+        """Type detection conservativa per colonne data.
+
+        Prova i formati di `_DATE_FORMATS` in cascata sul sample (10 valori
+        non-null). Classifica `date` solo se almeno `_DATE_PARSE_THRESHOLD`
+        del sample matcha un formato esplicito. Non emette warning pandas
+        (no fallback dateutil), non modifica i dati: e' solo type detection
+        per popolare il metadata della colonna al momento dell'upload.
+
+        Decisione di design: meglio classificare come `str` che come
+        `date` sbagliata. `errors='coerce'` su un format che non matcha
+        produce NaT senza eccezione: la soglia decide. Date ambigue
+        (es. `"03/04/2025"`) vengono interpretate come `dd/mm/yyyy`
+        (italiano) deterministicamente. Date US-style con day > 12
+        (es. `"03/15/2025"`) NON matchano nessun format -> resta `str`,
+        evitando interpretazione errata.
+        """
+        sample = series.dropna().head(10)
+        if sample.empty:
+            return False
+        n = len(sample)
+        threshold = max(1, int(n * cls._DATE_PARSE_THRESHOLD))
+        for fmt in cls._DATE_FORMATS:
+            parsed = pd.to_datetime(sample, format=fmt, errors='coerce')
+            if parsed.notna().sum() >= threshold:
+                return True
+        return False
+
     @classmethod
     def _infer_from_values(cls, series: pd.Series) -> str:
         """Inferisce tipo da valori"""
         if series.dropna().empty:
             return 'str'
-        
+
         sample = str(series.dropna().iloc[0])
-        
+
         # Check WKT geometry
         sample_upper = sample.strip().upper()
         if any(sample_upper.startswith(prefix) for prefix in cls.WKT_PREFIXES):
             return 'geometry'
-        
-        # Check date
+
+        # Check date — RB.#11: cascata di formati espliciti + soglia,
+        # niente piu' fallback dateutil ambiguo / warning pandas.
         if len(sample) >= 8 and any(c in sample for c in ['-', '/']):
-            try:
-                pd.to_datetime(series.dropna().head(10))
+            if cls._looks_like_date_column(series):
                 return 'date'
-            except Exception:
-                pass  # pd.to_datetime fallisce → non è data
-        
+
         return 'str'
     
     @classmethod
