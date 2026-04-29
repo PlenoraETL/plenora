@@ -36,10 +36,19 @@ def integration_env(tmp_path_factory) -> dict:
     env["PYTHONPATH"] = os.getcwd()
     env["ENVIRONMENT"] = "development"
     env["JWT_SECRET_KEY"] = "tests2-integration-jwt-secret"
-    # DB: usa la configurazione gia' funzionante del progetto (.env/defaults).
-    # I tentativi di forzare manualmente il DSN dei container hanno mostrato
-    # uno schema non inizializzato rispetto al backend reale.
-    env.pop("DATABASE_URL", None)
+    # DATABASE_URL: in CI il workflow ci-functional.yml lo fornisce
+    # esplicitamente per il subprocess uvicorn (B-2 tier). In dev locale
+    # il subprocess legge .env via app.config dotenv import-time.
+    # Preserviamo il valore se gia' impostato dall'ambiente (CI scenario),
+    # altrimenti il subprocess si appoggia al .env di progetto.
+    # Storia: prima il pop era incondizionato (per impedire shadow di
+    # valori shell stale), ma rompeva il subprocess in CI ephemeral
+    # senza .env, generando RuntimeError("DATABASE_URL non configurato")
+    # in pg_connection.py:113 e uvicorn exit code 1 al boot.
+    # Se in dev locale hai DATABASE_URL nell'env shell e vuoi forzare
+    # l'uso di .env, rimuovi DATABASE_URL dall'ambiente shell prima di
+    # eseguire pytest.
+    # DB_SCHEMA resta poppato per usare il default 'plenora'.
     env.pop("DB_SCHEMA", None)
     env["CELERY_BROKER_URL"] = "redis://127.0.0.1:6379/0"
     env["CELERY_RESULT_BACKEND"] = "redis://127.0.0.1:6379/1"
