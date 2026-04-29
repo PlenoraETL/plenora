@@ -20,7 +20,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.connection_service import (
+# Skip a collection time se pyodbc non e' installato. I test patchano
+# pyodbc.drivers / pyodbc.connect via unittest.mock.patch, che risolve
+# il target string all'enter del with → richiede pyodbc importabile,
+# altrimenti ModuleNotFoundError. Allineato col pattern degli harness
+# integration (tests2/integration/harness/{mssql,mariadb,mysql,oracle}.py).
+pytest.importorskip("pyodbc")
+
+from app.services.connection_service import (  # noqa: E402
     ConnectionService,
     _sanitize_mssql_error,
 )
