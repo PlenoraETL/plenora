@@ -102,13 +102,22 @@ load_profile() {
 load_profile
 
 # ------------------------------------------------------------
-# PEM SSH: solo via env operatore. Mai nei profili.
-# Default per back-compat operatore Marco (sostituibile via env).
+# PEM SSH: solo via env operatore. Mai nei profili, mai default
+# nello script (no path personali nel file versionato).
 # ------------------------------------------------------------
-PEM="${PLENORA_DEPLOY_PEM:-C:/Users/Marco/OneDrive-Marco/OneDrive/Plenora/plenora.pem}"
+# Solo `check-deps` puo' funzionare senza PEM? No: e' SSH read-only ma
+# richiede comunque la chiave per autenticarsi. PEM e' obbligatorio per
+# qualunque mode che faccia rete sul server.
+if [ -z "${PLENORA_DEPLOY_PEM:-}" ]; then
+    echo "ERRORE: variabile d'ambiente PLENORA_DEPLOY_PEM non impostata." >&2
+    echo "Imposta il path al PEM SSH dell'operatore prima di lanciare deploy.sh:" >&2
+    echo "  export PLENORA_DEPLOY_PEM=/path/al/tuo/plenora.pem" >&2
+    exit 1
+fi
+PEM="${PLENORA_DEPLOY_PEM}"
 if [ ! -f "$PEM" ]; then
-    echo "ERRORE: PEM non trovato: ${PEM}" >&2
-    echo "Imposta PLENORA_DEPLOY_PEM env override col path corretto." >&2
+    echo "ERRORE: PEM non trovato sul filesystem locale: ${PEM}" >&2
+    echo "Verifica PLENORA_DEPLOY_PEM e che il file esista." >&2
     exit 1
 fi
 
@@ -232,8 +241,9 @@ post_restart_health_gate() {
 deploy_backend() {
     echo "=== BACKEND: push + deploy ==="
 
-    # 0. Branch + working tree guard
-    guard_git_state
+    # NB: working-tree-clean + branch guard sono gia' stati applicati
+    # globalmente (vedi case dispatch in coda al file) per qualunque mode
+    # che faccia deploy. Qui ci limitiamo al pre-deploy check + flusso.
 
     # 1. Pre-deploy check (read-only sul server)
     pre_deploy_check
@@ -309,6 +319,17 @@ check_deps() {
     echo "=== CHECK DEPS sul server ==="
     check_deps_inner
 }
+
+# ------------------------------------------------------------
+# Guard comune ai mode che fanno deploy (backend/frontend/all).
+# `check-deps` resta read-only: niente push, niente restart, niente swap
+# frontend -> non richiede branch/working-tree guard.
+# ------------------------------------------------------------
+case "$MODE" in
+    backend|frontend|all)
+        guard_git_state
+        ;;
+esac
 
 case "$MODE" in
     backend)    deploy_backend ;;

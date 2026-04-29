@@ -56,13 +56,46 @@ Lo script fallisce esplicitamente se una di queste manca nel profilo:
 
 I file `<profile>.conf` sono **versionati** e **public**. Non devono mai contenere:
 
-- **PEM path** → resta env `PLENORA_DEPLOY_PEM` per-operatore
+- **PEM path** → resta env `PLENORA_DEPLOY_PEM` per-operatore (vedi sotto)
 - **AWS access keys / credentials** → mai. Il server usa IAM role attached, gli script backup usano SSM Parameter Store
 - **Contenuto `.env`** (`DATABASE_URL`, `JWT_SECRET_KEY`, `PLENORA_ENCRYPTION_KEY`, ecc.) → resta sul server target in `${REMOTE_BACKEND_PATH}/.env`
 - **Valori SSM Parameter Store** → mai
 - **Token o secret di terze parti** → mai
 
 Review della PR di un profilo deve verificare l'assenza di queste classi.
+
+## PEM SSH per-operatore
+
+`deploy.sh` non contiene **alcun path PEM hardcoded** e non usa default
+nello script. La variabile `PLENORA_DEPLOY_PEM` e' **obbligatoria**: se
+manca o il file non esiste, lo script esce con `exit 1` prima di toccare
+qualunque server.
+
+### Configurazione operatore
+
+Esempio bash / WSL / Linux / macOS:
+
+```bash
+export PLENORA_DEPLOY_PEM="$HOME/secrets/plenora.pem"
+chmod 600 "$PLENORA_DEPLOY_PEM"
+```
+
+Esempio Windows (Git Bash):
+
+```bash
+export PLENORA_DEPLOY_PEM="/c/Users/<utente>/secrets/plenora.pem"
+```
+
+Persistenza tra shell: aggiungere la riga `export ...` al proprio
+`~/.bashrc` / `~/.zshrc` (o `.bash_profile` su Git Bash). Il file PEM
+**non va mai committato** nel repo, mai condiviso fra operatori senza
+canale sicuro, e dovrebbe vivere fuori dalla working copy del repo.
+
+### Multi-operatore
+
+Operatori diversi possono avere path PEM diversi senza modificare lo
+script: ognuno esporta la propria variabile. Non c'e' alcun valore
+"di default" che privilegi un singolo operatore.
 
 ## Come aggiungere un profilo
 
