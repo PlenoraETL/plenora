@@ -1,0 +1,135 @@
+name: CI — Functional (HTTP-live)
+
+# Phase 1 / B-2 — Workflow tier separato per i test marcati
+# `requires_backend_http_service`. Sono i 38 test (al baseline post-PR #12)
+# che spawnano un backend HTTP reale (uvicorn `app.main:app`) tramite
+# fixture `backend_server` / `integration_backend_server` /
+# `integration_fake_api_server`. Questi test NON girano nella CI
+# principale push/PR (deselezionati via `-m "not
+# requires_backend_http_service"` in `.github/workflows/ci.yml`) perche'
+# richiedono un Postgres reale che il runner CI principale non fornisce.
+#
+# Stato iniziale (Step 1 scaffold):
+#   - trigger SOLO `workflow_dispatch` (manual, opt-in)
+#   - niente cron nightly finche' il workflow non e' stabile
+#   - `continue-on-error: true` sul job per non bloccare nulla in fase
+#     diagnostica
+#   - NON aggiungere come "required check" su branch protection finche'
+#     non e' stabile (3-4 run consecutivi verdi)
+#
+# Promozione successiva (B-2 follow-up, NON in questo scaffold):
+#   - aggiungere `schedule: cron "0 2 * * *"` (nightly UTC)
+#   - rimuovere `continue-on-error`
+#   - eventualmente promuovere a required check
+
+on:
+  workflow_dispatch:
+    inputs:
+      pytest_extra_args:
+        description: "Extra args passati a pytest (es. -k test_name, -x, ecc.)"
+        required: false
+        default: ""
+
+# Annulla run precedenti se ne arriva uno nuovo sullo stesso ref.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  functional:
+    name: Backend HTTP-live tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Fase diagnostica: il fail del job non blocca nulla. Rimuovere
+    # quando il workflow e' stabile.
+    continue-on-error: true
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: plenora_test
+          POSTGRES_PASSWORD: plenora_test
+          POSTGRES_DB: plenora_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U plenora_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      ENVIRONMENT: development
+      # Storage policy DB (no S3 reale richiesto per la maggior parte
+      # dei flow). I test che richiedono S3 sono coperti dal moto v5
+      # mock in requirements-dev.
+      STORAGE_POLICY: db
+      # DATABASE_URL reale al Postgres del service. A differenza della
+      # CI principale (dove DATABASE_URL e' un dummy non-raggiungibile
+      # per consentire l'import-time check senza connect reale), qui
+      # serve un PG vivo perche' uvicorn `app.main:app` chiama
+      # `init_all_dbs()` a startup (vedi backend/app/main.py:50-51).
+      DATABASE_URL: postgresql://plenora_test:plenora_test@127.0.0.1:5432/plenora_test
+      # JWT secret coerente con il default usato dalle fixture
+      # functional/integration (vedi tests2/{functional,integration}
+      # /conftest.py).
+      JWT_SECRET_KEY: tests2-functional-jwt-secret
+      # Celery broker/backend al Redis del service.
+      CELERY_BROKER_URL: redis://127.0.0.1:6379/0
+      CELERY_RESULT_BACKEND: redis://127.0.0.1:6379/1
+      # Opt-in SSRF loopback: i test functional spawnano un fake HTTP
+      # server su 127.0.0.1 e poi fanno chiamare il backend reale verso
+      # quell'URL. Senza opt-in, validate_external_url blocca il loopback
+      # come SSRF (corretto in prod, falso positivo qui).
+      PLENORA_ALLOW_LOOPBACK_OUTBOUND: "1"
+      # Backup bucket dummy (stesso pattern di PR #5).
+      BACKUP_BUCKET: test-backup-bucket-no-real-s3
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Generate ephemeral PLENORA_ENCRYPTION_KEY
+        # Encryption-at-rest richiesto da app/shared/crypto.py per le
+        # credenziali PG-stored. Generato al volo perche' non e'
+        # necessario persisterlo fra run (nessun dato cifrato vive
+        # oltre il run del test).
+        run: |
+          echo "PLENORA_ENCRYPTION_KEY=$(openssl rand -base64 32)" >> "$GITHUB_ENV"
+
+      - name: Run pytest (HTTP-live tier)
+        working-directory: backend
+        # Marker positivo: gira SOLO i test che la CI principale ha
+        # deselezionato. Extra args opzionali via input workflow_dispatch
+        # per debug mirato (es. -k test_name, -x stop-on-first-fail).
+        run: |
+          pytest tests2/ -c tests2/pytest.ini \
+            -m "requires_backend_http_service" \
+            ${{ inputs.pytest_extra_args }}
