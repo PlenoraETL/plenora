@@ -26,6 +26,16 @@ pandas>=3.0.0
 numpy>=1.26.0
 geopandas>=1.1.0
 shapely>=2.1.0
+# Parquet I/O — usato da app/core/intermediate/artifact_writer.py
+# (engine="pyarrow" esplicito), app/utils/dataframe.py, app/utils/result_store.py.
+# Senza pyarrow installato, pd.to_parquet/read_parquet falliscono con ImportError
+# in produzione (intermediate snapshot, runtime preview, result download).
+pyarrow>=15.0.0
+# Excel I/O — usato da app/services/file_service.py, app/utils/dataframe.py,
+# app/db/query_executor.py, app/core/features/features_service.py.
+# Senza openpyxl installato, pd.to_excel/read_excel falliscono con
+# ModuleNotFoundError in produzione (export risultati, ingest Excel).
+openpyxl>=3.1.0
 
 # Network
 requests>=2.32.0
