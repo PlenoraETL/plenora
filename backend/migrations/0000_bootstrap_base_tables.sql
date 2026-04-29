@@ -979,3 +979,42 @@ EXCEPTION
     WHEN invalid_schema_name THEN NULL;
 END $$;
 
+
+-- ----------------------------------------------------------------------------
+-- Phase G: COLUMN DEFAULTS / sequence linkage (3 idempotent DO blocks)
+--          ALTER COLUMN id SET DEFAULT nextval(...) per le 3 sequence base.
+--          Senza queste, INSERT senza id esplicito fallirebbe NOT NULL
+--          violation. Riproduce esattamente quanto presente nel dump prod
+--          (linee 797/804/811 del dump source).
+-- ----------------------------------------------------------------------------
+
+DO $$ BEGIN
+    ALTER TABLE ONLY "plenora"."logs"
+        ALTER COLUMN "id" SET DEFAULT nextval('"plenora"."logs_id_seq"'::regclass);
+EXCEPTION
+    WHEN undefined_table THEN NULL;
+    WHEN undefined_column THEN NULL;
+    WHEN undefined_object THEN NULL;
+    WHEN invalid_schema_name THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    ALTER TABLE ONLY "plenora"."node_rows"
+        ALTER COLUMN "id" SET DEFAULT nextval('"plenora"."node_rows_id_seq"'::regclass);
+EXCEPTION
+    WHEN undefined_table THEN NULL;
+    WHEN undefined_column THEN NULL;
+    WHEN undefined_object THEN NULL;
+    WHEN invalid_schema_name THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    ALTER TABLE ONLY "plenora"."schedule_catchup_history"
+        ALTER COLUMN "id" SET DEFAULT nextval('"plenora"."schedule_catchup_history_id_seq"'::regclass);
+EXCEPTION
+    WHEN undefined_table THEN NULL;
+    WHEN undefined_column THEN NULL;
+    WHEN undefined_object THEN NULL;
+    WHEN invalid_schema_name THEN NULL;
+END $$;
+
