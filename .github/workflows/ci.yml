@@ -36,7 +36,7 @@ jobs:
 
     env:
       # Test session vive in storage policy DB (no S3 reale, no BACKUP_BUCKET
-      # required) — coerente con tests2/conftest.py:21.
+      # required runtime) — coerente con tests2/conftest.py:21.
       STORAGE_POLICY: db
       # DATABASE_URL dummy: necessario perche' app/db/pg_connection.py:111-113
       # legge l'env var a module-level e solleva RuntimeError a import time
@@ -48,6 +48,16 @@ jobs:
       # pg_connection.execute a no-op per ogni test non-integration. Vedi
       # orchestrate/phase_0_consolidation/ci_red_baseline_analysis.md §1.4.
       DATABASE_URL: postgresql://nobody:nopass@127.0.0.1:1/test_unit_no_real_db
+      # BACKUP_BUCKET dummy: i test in tests2/admin_backups/test_degraded_paths.py
+      # importano app.core.admin_backups.service che invoca
+      # cloud_backends.get_backup_object_storage() -> _get_backup_bucket() che
+      # legge os.getenv("BACKUP_BUCKET") (o BACKUP_S3_BUCKET legacy) e solleva
+      # ValueError se entrambe vuote. I test sono "degraded paths": mockano
+      # internamente boto3 / ClientError, quindi il bucket non viene mai
+      # realmente toccato — serve solo a far passare il guard env. Pattern
+      # identico a DATABASE_URL: nome formato valido, nessun S3 reale.
+      # Vedi orchestrate/phase_0_consolidation/ci_red_3binari_plan.md §A1.
+      BACKUP_BUCKET: test-backup-bucket-no-real-s3
       # Redis broker per test che chiamano Celery/blacklist (fakeredis copre
       # gli unit, ma alcuni integration usano client redis-py reale).
       CELERY_BROKER_URL: redis://localhost:6379/0
