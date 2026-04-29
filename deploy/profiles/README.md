@@ -39,16 +39,30 @@ exit 1 al primo fail.
 2. **Branch allowlist** — il branch corrente deve essere in
    `ALLOWED_BRANCHES` del profilo (es. `main` per `prod`).
 3. **Upstream-sync** — il branch corrente deve essere allineato col
-   suo upstream (`origin/<branch>`):
+   suo upstream, e l'upstream deve essere esattamente
+   `origin/<branch>`:
    - manca upstream → `git push -u origin <branch>` esplicito;
-   - branch ahead di upstream → `git push origin <branch>` esplicito;
-   - branch behind di upstream → `git pull --rebase origin <branch>`;
+   - upstream ≠ `origin/<branch>` (es. fork personale, mirror, altro
+     remote) → exit 1, riconfigura con
+     `git branch --set-upstream-to=origin/<branch> <branch>`;
+   - branch ahead di `origin/<branch>` → `git push origin <branch>`
+     esplicito;
+   - branch behind → `git pull --rebase origin <branch>`;
    - branch divergente → risolvi con rebase + push esplicito.
 
-   La guard fa solo un `git fetch --quiet origin <branch>` (read-only),
-   **non esegue mai `git push` automatico**. La pubblicazione resta a
-   carico dell'operatore. Questo evita che `bash deploy.sh frontend`
-   pubblichi un `dist/` costruito da codice locale non ancora su GitHub.
+   Il vincolo `upstream == origin/<branch>` evita drift fra il ref
+   verificato dalla guard e il ref usato runtime: `deploy_backend` fa
+   `git pull origin <branch>` sul server, quindi qualunque upstream
+   diverso renderebbe la guard inconsistente con il deploy reale.
+
+   La guard esegue un `git fetch --quiet origin
+   +refs/heads/<branch>:refs/remotes/origin/<branch>` (refspec esplicito
+   per aggiornare `origin/<branch>`, non solo `FETCH_HEAD`). Il fetch
+   è read-only: niente merge, niente rebase, niente modifiche al
+   working tree. **Nessun `git push` automatico** — la pubblicazione
+   resta a carico dell'operatore. Questo evita che
+   `bash deploy.sh frontend` pubblichi un `dist/` costruito da codice
+   locale non ancora su GitHub.
 
 `check-deps` non applica queste guardie (e' solo un probe SSH read-only
 sul server, niente push, niente restart, niente swap frontend).

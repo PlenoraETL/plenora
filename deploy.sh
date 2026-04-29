@@ -226,35 +226,51 @@ guard_git_state() {
         exit 1
     fi
 
-    # 2. Fetch read-only del solo upstream (no merge, no rebase, no
-    # modifiche al working tree). Senza fetch, i counts sotto userebbero
-    # un riferimento stantio. In dry-run lo eseguiamo comunque: e' una
-    # query remota read-only, non muta lo stato del repo lato server git.
-    if ! git fetch --quiet origin "$current_branch" 2>/dev/null; then
-        echo "ERRORE: git fetch origin ${current_branch} fallito." >&2
+    # 1b. Enforce upstream == origin/<branch>: deploy_backend fa
+    # `git pull origin "$CURRENT_BRANCH"` sul server, quindi qualunque
+    # upstream diverso (es. fork personale, mirror, altro remote)
+    # condurrebbe la guard a confrontare un ref che il deploy non
+    # rispetta. Restringiamo esplicitamente il supporto al pattern
+    # canonico origin/<branch>.
+    local expected_upstream="origin/${current_branch}"
+    if [ "$upstream" != "$expected_upstream" ]; then
+        echo "ERRORE: upstream non supportato per deploy: '${upstream}'." >&2
+        echo "Atteso: '${expected_upstream}' (deploy_backend pulla da 'origin'). Configura:" >&2
+        echo "  git branch --set-upstream-to=${expected_upstream} ${current_branch}" >&2
+        exit 1
+    fi
+
+    # 2. Fetch coerente con il ref confrontato. Il refspec esplicito
+    # garantisce l'aggiornamento di refs/remotes/origin/<branch>
+    # (e non solo FETCH_HEAD), cosi' i counts ahead/behind contro
+    # `origin/<branch>` siano sempre freschi.
+    # Read-only: nessuna modifica al working tree, nessun merge.
+    if ! git fetch --quiet origin \
+        "+refs/heads/${current_branch}:refs/remotes/origin/${current_branch}" 2>/dev/null; then
+        echo "ERRORE: git fetch origin refs/heads/${current_branch} fallito." >&2
         echo "Verifica connettivita' GitHub e accesso al repo." >&2
         exit 1
     fi
 
-    # 3. Confronto local vs upstream.
+    # 3. Confronto local vs origin/<branch> (== upstream, verificato sopra).
     local ahead behind
-    ahead="$(git rev-list --count "${upstream}..HEAD" 2>/dev/null || echo "0")"
-    behind="$(git rev-list --count "HEAD..${upstream}" 2>/dev/null || echo "0")"
+    ahead="$(git rev-list --count "${expected_upstream}..HEAD" 2>/dev/null || echo "0")"
+    behind="$(git rev-list --count "HEAD..${expected_upstream}" 2>/dev/null || echo "0")"
 
     if [ "$ahead" -gt 0 ] && [ "$behind" -gt 0 ]; then
-        echo "ERRORE: branch '${current_branch}' divergente da '${upstream}'." >&2
+        echo "ERRORE: branch '${current_branch}' divergente da '${expected_upstream}'." >&2
         echo "  ahead:  ${ahead} commit non pushati" >&2
         echo "  behind: ${behind} commit non pullati" >&2
         echo "Risolvi con git pull --rebase + git push prima del deploy." >&2
         exit 1
     fi
     if [ "$ahead" -gt 0 ]; then
-        echo "ERRORE: branch '${current_branch}' ahead di '${upstream}' di ${ahead} commit." >&2
+        echo "ERRORE: branch '${current_branch}' ahead di '${expected_upstream}' di ${ahead} commit." >&2
         echo "Pusha esplicitamente prima del deploy: git push origin ${current_branch}" >&2
         exit 1
     fi
     if [ "$behind" -gt 0 ]; then
-        echo "ERRORE: branch '${current_branch}' behind di '${upstream}' di ${behind} commit." >&2
+        echo "ERRORE: branch '${current_branch}' behind di '${expected_upstream}' di ${behind} commit." >&2
         echo "Aggiorna il branch prima del deploy: git pull --rebase origin ${current_branch}" >&2
         exit 1
     fi
