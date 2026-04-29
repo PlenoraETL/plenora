@@ -21,6 +21,16 @@ qrcode[pil]>=7.4.0
 celery>=5.6.0
 redis>=5.0.0
 
+# Scheduler
+# Cron parsing — usato da app/core/scheduler/schedule_service.py
+# (detect_missed_run + _calculate_next_execution) e router.py per
+# validazione/calcolo cron expressions. Senza croniter, entrambe le
+# funzioni ritornano None via fallback ImportError.
+croniter>=2.0.0
+# Timezone database — usato da _calculate_next_execution per
+# pytz.timezone(<string>).
+pytz>=2024.1
+
 # Data
 pandas>=3.0.0
 numpy>=1.26.0
