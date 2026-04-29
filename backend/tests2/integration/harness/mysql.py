@@ -5,7 +5,17 @@ from __future__ import annotations
 from contextlib import contextmanager
 from typing import Iterator
 
-import pymysql
+import pytest
+
+# Skip pulito a collection time se pymysql non e' installato (es. CI runner
+# senza driver DB optional). I test integration che dipendono da questo
+# harness vengono saltati con messaggio esplicito invece di rompere la
+# collection con ModuleNotFoundError. Allineato con intent workflow CI:
+# i test integration si auto-skippano via guard interno (_<dialect>_
+# reachable), ma l'ImportError esploderebbe prima del guard.
+pytest.importorskip("pymysql")
+
+import pymysql  # noqa: E402
 
 from tests2.integration.harness.db import make_it_id
 
