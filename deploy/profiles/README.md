@@ -28,6 +28,41 @@ bash deploy.sh --profile=prod
 
 L'ordine di precedenza: `--profile=` flag > env `PLENORA_DEPLOY_PROFILE` > default `prod`.
 
+## Dry-run / check-only
+
+Prima di un deploy reale, **sempre** verificare la configurazione con
+una passata dry-run. In quella modalita' lo script:
+
+- carica e valida il profilo + required vars
+- verifica `PLENORA_DEPLOY_PEM` (env + file esistente)
+- applica branch + working-tree guard per i mode che deployano
+- stampa cosa farebbe (banner + comandi remoti pianificati con prefisso `[DRY-RUN] would run:`)
+- **NON esegue** ssh, scp, npm run build, git push, systemctl restart, rm sul server
+
+Selezione dry-run (entrambe equivalenti):
+
+```bash
+# Flag CLI
+bash deploy.sh --check-only backend
+bash deploy.sh --dry-run backend     # alias
+
+# Env var
+DRY_RUN=1 bash deploy.sh backend
+```
+
+Anche in dry-run i guard locali sono pienamente attivi: working tree
+sporco o branch fuori `ALLOWED_BRANCHES` -> `exit 1` come in modalita'
+reale. Questo significa che il dry-run e' anche il modo sicuro per
+testare i guard del nuovo `deploy.sh` senza rischiare side-effect
+remoti (vedi
+[`incident_note_step0_unintended_restart.md`](../../../orchestrate/phase_0_consolidation/incident_note_step0_unintended_restart.md)
+per il razionale).
+
+**Regola operativa**: qualunque modifica futura a `deploy.sh` deve
+essere testata via dry-run su `prod` (o profilo dedicato) prima di un
+deploy reale. Il banner mostra esplicitamente `[DRY-RUN: nessun comando
+remoto verra' eseguito]` quando il flag e' attivo.
+
 ## Variabili obbligatorie
 
 Lo script fallisce esplicitamente se una di queste manca nel profilo:
