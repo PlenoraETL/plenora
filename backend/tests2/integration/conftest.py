@@ -210,6 +210,7 @@ def integration_db_probe():
 # nota analoga in tests2/functional/conftest.py per dettagli.
 _HTTP_FIXTURES = frozenset({
     "integration_backend_server",
+    "integration_fake_api_server",
     "integration_user_seed",
     "integration_auth_headers",
 })
