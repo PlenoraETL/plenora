@@ -69,7 +69,7 @@ def integration_backend_server(integration_env):
         workdir=INTEGRATION_ROOT.parent.parent,
         env=integration_env,
     )
-    wait_for_http_ready(f"{url}/", timeout_s=30.0)
+    wait_for_http_ready(f"{url}/", timeout_s=30.0, process=proc)
     try:
         yield {"base_url": url, "process": proc}
     finally:
@@ -99,7 +99,7 @@ def integration_fake_api_server(integration_env):
         workdir=INTEGRATION_ROOT.parent.parent,
         env=integration_env,
     )
-    wait_for_http_ready(f"{url}/health", timeout_s=20.0)
+    wait_for_http_ready(f"{url}/health", timeout_s=20.0, process=proc)
     try:
         yield {"base_url": url, "process": proc}
     finally:

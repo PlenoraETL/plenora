@@ -79,8 +79,25 @@ def spawn_process(
     return managed
 
 
-def wait_for_http_ready(url: str, *, timeout_s: float = 20.0) -> None:
-    """Attende che un endpoint HTTP locale risponda 2xx/3xx."""
+def wait_for_http_ready(
+    url: str,
+    *,
+    timeout_s: float = 20.0,
+    process: Optional["ManagedProcess"] = None,
+) -> None:
+    """Attende che un endpoint HTTP locale risponda 2xx/3xx.
+
+    Args:
+        url: endpoint da pollare.
+        timeout_s: deadline assoluta (default 20s).
+        process: se passato, in caso di timeout il RuntimeError include
+            l'exit code del processo (None = ancora vivo, int = morto)
+            e le ultime ~80 righe di stdout/stderr catturate da
+            spawn_process. Permette di vedere PERCHE' uvicorn (o altro
+            child) e' uscito prima di ascoltare, invece di vedere solo
+            "Connection refused" senza contesto. Comportamento
+            invariato se process=None.
+    """
     deadline = time.time() + timeout_s
     last_error: Optional[Exception] = None
     while time.time() < deadline:
@@ -91,7 +108,30 @@ def wait_for_http_ready(url: str, *, timeout_s: float = 20.0) -> None:
         except Exception as exc:  # pragma: no cover - harness infra
             last_error = exc
             time.sleep(0.25)
-    raise RuntimeError(f"Service not ready at {url}: {last_error}")
+
+    if process is None:
+        raise RuntimeError(f"Service not ready at {url}: {last_error}")
+
+    # Diagnostica arricchita: exit code + tail dell'output catturato.
+    # Permette al CI log di mostrare il traceback del child che e'
+    # uscito prima di ascoltare (es. ImportError in app.main, missing
+    # env, OperationalError DB, ecc.).
+    poll_status = process.process.poll()
+    exit_state = (
+        "still running" if poll_status is None
+        else f"exited with code {poll_status}"
+    )
+    captured = getattr(process, "captured_output", None) or []
+    tail_lines = captured[-80:] if captured else []
+    tail_block = "".join(tail_lines).rstrip()
+    if not tail_block:
+        tail_block = "(no output captured)"
+    raise RuntimeError(
+        f"Service not ready at {url}: {last_error}\n"
+        f"--- child process [{process.name}] {exit_state} ---\n"
+        f"{tail_block}\n"
+        f"--- end output ---"
+    )
 
 
 def stop_process(proc: ManagedProcess, *, timeout_s: float = 10.0) -> None:
