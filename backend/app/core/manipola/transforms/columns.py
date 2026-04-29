@@ -286,10 +286,19 @@ def op_concat_columns(
                     out[i] = joined
             result[output_column] = np.array(out, dtype=object)
         else:
-            # NULL come stringa vuota: il path esistente e' gia' senza
-            # lambda; lasciato invariato (non-hotspot nel dominio default).
+            # NULL come stringa vuota (skip_null=False). Pandas 3.0 puo'
+            # preservare NaN/NaT su dtype numerici/datetime anche dopo
+            # `fillna("")` o `where(notna, "")` perche' la coercion
+            # implicita a object dtype e' stata rimossa: i sostitutivi
+            # stringa vengono silenziosamente non-applicati e il
+            # successivo `astype(str)` non converte affidabilmente NaN.
+            # Fix bulletproof: conversione per-cella che bypassa la
+            # type-coercion DataFrame e gestisce esplicitamente NaN/NaT.
+            def _cell_to_str(x):
+                return "" if pd.isna(x) else str(x)
+
             result[output_column] = (
-                subset.fillna("").astype(str).agg(separator.join, axis=1)
+                subset.map(_cell_to_str).agg(separator.join, axis=1)
             )
 
         return result
