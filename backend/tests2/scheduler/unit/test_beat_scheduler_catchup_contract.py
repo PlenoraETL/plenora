@@ -23,6 +23,22 @@ from workers.beat_scheduler import PlenoraBeatScheduler
 pytestmark = [pytest.mark.unit, pytest.mark.scheduler, pytest.mark.contract]
 
 
+# Test fixture relativi a "today" per evitare drift temporale. Le date
+# hardcoded "2026-04-15"/"2026-04-16" del fixture originale erano stale
+# rispetto al wall-clock CI: dopo ~24h dall'inserimento dei test, il
+# grace window di detect_missed_run (24h) si chiude e _emit_catchup_runs
+# non rileva piu' alcun missed → tutti i test catchup falliscono.
+# Calcolando _NOW_FIXED relativamente a datetime.now(UTC) all'import del
+# modulo, i test restano green nel tempo. La finestra (now=today 10:00,
+# last_run=yesterday 06:00, expected_last=today 06:00, grace=24h)
+# preserva la semantica originale.
+_NOW_FIXED = datetime.now(timezone.utc).replace(
+    hour=10, minute=0, second=0, microsecond=0
+)
+_TODAY_06_ISO = _NOW_FIXED.replace(hour=6).isoformat()
+_YESTERDAY_06_ISO = (_NOW_FIXED.replace(hour=6) - timedelta(days=1)).isoformat()
+
+
 class _FakeScheduler(PlenoraBeatScheduler):
     """Scheduler senza bootstrap Celery + app.send_task mockato."""
 
@@ -50,7 +66,7 @@ def _schedule_row(
     *,
     sid: str = "sched-1",
     cron: str = "0 6 * * *",
-    last_run: str = "2026-04-15T06:00:00+00:00",
+    last_run: str = _YESTERDAY_06_ISO,
     catchup_enabled: bool = True,
     grace_hours: int = 24,
 ) -> dict:
@@ -69,10 +85,6 @@ def _schedule_row(
         "config": json.dumps(config),
         "is_enabled": True,
     }
-
-
-# Fixed `now` compatible con last_run "ieri 06:00" → expected_last = oggi 06:00
-_NOW_FIXED = datetime(2026, 4, 16, 10, 0, tzinfo=timezone.utc)
 
 
 # =============================================================================
@@ -122,7 +134,7 @@ def test_emits_task_with_triggered_by_catchup_and_scheduled_for(scheduler):
     row = _schedule_row(
         sid="sched-1",
         cron="0 6 * * *",
-        last_run="2026-04-15T06:00:00+00:00",
+        last_run=_YESTERDAY_06_ISO,
     )
 
     with patch("app.db.db_service.fetchall", return_value=[row]), \
@@ -141,7 +153,7 @@ def test_emits_task_with_triggered_by_catchup_and_scheduled_for(scheduler):
     assert kwargs["schedule_id"] == "sched-1"
     assert kwargs["triggered_by"] == "catchup"
     # scheduled_for deve essere il timestamp dell'expected_last
-    assert kwargs["scheduled_for"] == "2026-04-16T06:00:00+00:00"
+    assert kwargs["scheduled_for"] == _TODAY_06_ISO
 
 
 # =============================================================================
@@ -162,7 +174,7 @@ def test_emits_task_with_triggered_by_catchup_and_scheduled_for(scheduler):
 
 
 def test_writes_audit_entry_in_schedule_catchup_history(scheduler):
-    row = _schedule_row(sid="sched-1", last_run="2026-04-15T06:00:00+00:00")
+    row = _schedule_row(sid="sched-1", last_run=_YESTERDAY_06_ISO)
 
     executed_queries = []
 
@@ -183,7 +195,7 @@ def test_writes_audit_entry_in_schedule_catchup_history(scheduler):
     _q, params = audit_calls[0]
     params_str = str(params)
     assert "sched-1" in params_str
-    assert "2026-04-16T06:00:00+00:00" in params_str  # scheduled_for
+    assert _TODAY_06_ISO in params_str  # scheduled_for
     assert "beat-test@host" in params_str              # leader_id
 
 
@@ -197,7 +209,7 @@ def test_cap_exceeded_skips_emit_and_logs_warning(scheduler, caplog):
     (lookup su schedule_catchup_history), skip del catchup + WARNING."""
     import logging
 
-    row = _schedule_row(sid="sched-hot", last_run="2026-04-15T06:00:00+00:00")
+    row = _schedule_row(sid="sched-hot", last_run=_YESTERDAY_06_ISO)
 
     # Mock fetchall per:
     #   1. SELECT schedules WHERE catchup_missed_runs → [row]
@@ -221,7 +233,7 @@ def test_cap_exceeded_skips_emit_and_logs_warning(scheduler, caplog):
 
 def test_cap_not_exceeded_still_emits(scheduler):
     """Se ci sono < 5 catchup nei 10min precedenti, procede normalmente."""
-    row = _schedule_row(sid="sched-ok", last_run="2026-04-15T06:00:00+00:00")
+    row = _schedule_row(sid="sched-ok", last_run=_YESTERDAY_06_ISO)
 
     fetchall_responses = [[row], [{"count": 2}]]
 
@@ -257,7 +269,7 @@ def test_db_error_on_main_query_is_swallowed(scheduler, caplog):
 def test_emits_nothing_when_no_missed_run_detected(scheduler):
     """last_run recente → detect_missed_run ritorna None → no emit."""
     # last_run = oggi alle 06:00, now = oggi alle 10:00 → non c'e' missed
-    row = _schedule_row(sid="s1", last_run="2026-04-16T06:00:00+00:00")
+    row = _schedule_row(sid="s1", last_run=_TODAY_06_ISO)
 
     with patch("app.db.db_service.fetchall", return_value=[row]), \
          patch("app.db.db_service.execute"), \

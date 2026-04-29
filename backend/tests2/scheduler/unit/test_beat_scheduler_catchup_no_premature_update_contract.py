@@ -13,7 +13,7 @@ il re-emit e' permesso (il task era molto probabilmente fallito).
 """
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -22,6 +22,15 @@ from workers.beat_scheduler import PlenoraBeatScheduler
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.scheduler, pytest.mark.contract]
+
+
+# Test fixture relativi a "today" per evitare drift temporale. Vedi
+# nota in test_beat_scheduler_catchup_contract.py per dettagli.
+_NOW_FIXED = datetime.now(timezone.utc).replace(
+    hour=10, minute=0, second=0, microsecond=0
+)
+_TODAY_06_ISO = _NOW_FIXED.replace(hour=6).isoformat()
+_YESTERDAY_06_ISO = (_NOW_FIXED.replace(hour=6) - timedelta(days=1)).isoformat()
 
 
 class _FakeScheduler(PlenoraBeatScheduler):
@@ -45,7 +54,7 @@ def scheduler():
 
 
 def _schedule_row(sid="sched-1", cron="0 6 * * *",
-                  last_run="2026-04-15T06:00:00+00:00", catchup_enabled=True):
+                  last_run=_YESTERDAY_06_ISO, catchup_enabled=True):
     config = {
         "schedule": {
             "cron_expression": cron,
@@ -59,9 +68,6 @@ def _schedule_row(sid="sched-1", cron="0 6 * * *",
     }
 
 
-_NOW_FIXED = datetime(2026, 4, 16, 10, 0, tzinfo=timezone.utc)
-
-
 # =============================================================================
 # Fix 2a: last_run NON aggiornato al emit
 # =============================================================================
@@ -72,7 +78,7 @@ def test_emit_catchup_does_not_update_last_run_to_expected(scheduler):
     UPDATE schedules SET last_run=... — quello spetta al task al suo
     successo. Se il task fallisce, al tick successivo detect_missed_run
     deve ancora vedere il missed."""
-    row = _schedule_row(sid="sched-1", last_run="2026-04-15T06:00:00+00:00")
+    row = _schedule_row(sid="sched-1", last_run=_YESTERDAY_06_ISO)
     executed_queries = []
 
     def capture(query, params=None):
@@ -108,8 +114,8 @@ def test_skips_reemit_when_recent_catchup_for_same_scheduled_for_exists(schedule
     scheduled_for emessa nelle ultime 2h, _emit_catchup_runs NON
     deve re-emettere un duplicato. Evita spam finche' il primo task
     e' in volo nella coda Celery."""
-    row = _schedule_row(sid="sched-1", last_run="2026-04-15T06:00:00+00:00")
-    # expected_last per cron "0 6 * * *" con now=10:00 del 16 → 2026-04-16 06:00
+    row = _schedule_row(sid="sched-1", last_run=_YESTERDAY_06_ISO)
+    # expected_last per cron "0 6 * * *" con now=today 10:00 → today 06:00
     # In history c'e' gia' una riga emessa 30 minuti fa per quel scheduled_for
     history_query_responses = [
         [row],                           # main query
@@ -131,7 +137,7 @@ def test_skips_reemit_when_recent_catchup_for_same_scheduled_for_exists(schedule
 def test_reemits_when_previous_catchup_is_stale(scheduler):
     """Se l'ultima emit per lo stesso scheduled_for e' piu' vecchia
     di 2h (task quasi certamente morto), consenti il re-emit."""
-    row = _schedule_row(sid="sched-1", last_run="2026-04-15T06:00:00+00:00")
+    row = _schedule_row(sid="sched-1", last_run=_YESTERDAY_06_ISO)
     history_query_responses = [
         [row],
         [{"count": 0}],    # runaway OK
@@ -158,7 +164,7 @@ def test_emit_catchup_still_writes_audit_history_entry(scheduler):
     """Il dedupe si basa sulla history → quindi ogni emit deve
     inserire la sua riga in schedule_catchup_history, anche senza
     aggiornare last_run."""
-    row = _schedule_row(sid="sched-1", last_run="2026-04-15T06:00:00+00:00")
+    row = _schedule_row(sid="sched-1", last_run=_YESTERDAY_06_ISO)
     executed = []
 
     def capture(query, params=None):
