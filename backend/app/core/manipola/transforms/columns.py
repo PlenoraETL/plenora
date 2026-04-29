@@ -286,19 +286,19 @@ def op_concat_columns(
                     out[i] = joined
             result[output_column] = np.array(out, dtype=object)
         else:
-            # NULL come stringa vuota (skip_null=False). Pandas 3.0 ha
-            # rimosso la coercion implicita a object dtype: su colonne
-            # float64/datetime64[ns] con NaN/NaT, `fillna("")` lascia il
-            # valore invariato anziche' sostituirlo con "". Il successivo
-            # `astype(str)` su dtype misti produce un mix di stringhe e
-            # NaN/float, facendo esplodere `separator.join` con TypeError.
-            # Fix: `where(notna, "")` prima di `astype(str)` forza dtype
-            # object e sostituisce NaN/NaT con "" stringa Python (non
-            # con "nan"/"NaT" che otterremmo invertendo l'ordine).
+            # NULL come stringa vuota (skip_null=False). Pandas 3.0 puo'
+            # preservare NaN/NaT su dtype numerici/datetime anche dopo
+            # `fillna("")` o `where(notna, "")` perche' la coercion
+            # implicita a object dtype e' stata rimossa: i sostitutivi
+            # stringa vengono silenziosamente non-applicati e il
+            # successivo `astype(str)` non converte affidabilmente NaN.
+            # Fix bulletproof: conversione per-cella che bypassa la
+            # type-coercion DataFrame e gestisce esplicitamente NaN/NaT.
+            def _cell_to_str(x):
+                return "" if pd.isna(x) else str(x)
+
             result[output_column] = (
-                subset.where(subset.notna(), "")
-                .astype(str)
-                .agg(separator.join, axis=1)
+                subset.map(_cell_to_str).agg(separator.join, axis=1)
             )
 
         return result
