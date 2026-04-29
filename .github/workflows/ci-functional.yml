@@ -124,6 +124,30 @@ jobs:
         run: |
           echo "PLENORA_ENCRYPTION_KEY=$(openssl rand -base64 32)" >> "$GITHUB_ENV"
 
+      - name: Ensure 'plenora' schema exists in test DB
+        # Diagnosi run #25115729294 (PR #14 diagnostic patch): uvicorn
+        # `app.main:app` chiama init_all_dbs() -> apply_pending_migrations()
+        # che esegue `CREATE TABLE IF NOT EXISTS plenora.schema_migrations`.
+        # Postgres non auto-crea schemi: senza un `CREATE SCHEMA plenora`
+        # preventivo, la query fallisce con
+        # `psycopg2.errors.InvalidSchemaName: schema "plenora" does not exist`
+        # e uvicorn esce con exit code 1, facendo fallire il setup di
+        # tutti i 38 test HTTP-live.
+        #
+        # Workflow-only fix (B-2 ephemeral test DB): pre-creiamo lo schema
+        # vuoto prima del pytest. In produzione lo schema viene
+        # provisionato dal deploy script o esiste gia' sul DB managed.
+        # Niente patch a app/db/* finche' non serve un fix prod-side.
+        #
+        # `psql` e' preinstallato sui runner ubuntu-latest (parte di
+        # postgresql-client-16). Fallback apt-install se mai mancasse.
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -yqq postgresql-client
+          fi
+          psql "$DATABASE_URL" -c 'CREATE SCHEMA IF NOT EXISTS plenora;'
+
       - name: Run pytest (HTTP-live tier)
         working-directory: backend
         # Marker positivo: gira SOLO i test che la CI principale ha
