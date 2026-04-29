@@ -26,7 +26,8 @@ def test_preview_task_reaches_terminal_state_with_real_worker(
         headers=auth_headers,
         timeout=10.0,
     )
-    assert status == 200
+    # POST /api/projects risponde 201 Created (router status_code=201)
+    assert status == 201
     project_id = created_project["metadata"]["id"]
 
     try:
@@ -57,4 +58,5 @@ def test_preview_task_reaches_terminal_state_with_real_worker(
             headers=auth_headers,
             timeout=10.0,
         )
-        assert status in (200, 404)
+        # DELETE /api/projects/{id} risponde 204 No Content (F2-B2 2026-04-24)
+        assert status in (200, 204, 404)

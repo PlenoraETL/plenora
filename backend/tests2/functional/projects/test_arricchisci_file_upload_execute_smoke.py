@@ -124,7 +124,8 @@ def test_arricchisci_execute_from_uploaded_file_reaches_success(
                 headers=auth_headers,
                 timeout=30.0,
             )
-            assert status in (200, 404)
+            # DELETE /api/projects/{id} risponde 204 No Content (F2-B2 2026-04-24)
+            assert status in (200, 204, 404)
         except (TimeoutError, SocketTimeout):
             pass
         try:
@@ -134,6 +135,7 @@ def test_arricchisci_execute_from_uploaded_file_reaches_success(
                 headers=auth_headers,
                 timeout=30.0,
             )
-            assert status in (200, 404)
+            # DELETE /api/files/{id} accetta 200/204/404 per cleanup idempotency
+            assert status in (200, 204, 404)
         except (TimeoutError, SocketTimeout):
             pass

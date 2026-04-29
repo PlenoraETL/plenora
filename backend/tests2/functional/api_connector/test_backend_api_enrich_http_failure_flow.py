@@ -75,7 +75,8 @@ def test_arricchisci_http_api_generator_failure_surfaces_task_error(
         headers=auth_headers,
         timeout=10.0,
     )
-    assert status == 200
+    # POST /api/api-connections risponde 201 Created (router status_code=201)
+    assert status == 201
     api_id = api_connection["id"]
 
     status, tested, _ = http_json_response(
@@ -101,7 +102,8 @@ def test_arricchisci_http_api_generator_failure_surfaces_task_error(
         headers=auth_headers,
         timeout=10.0,
     )
-    assert status == 200
+    # POST /api/projects risponde 201 Created (router status_code=201)
+    assert status == 201
     project_id = created_project["metadata"]["id"]
 
     try:
@@ -147,7 +149,8 @@ def test_arricchisci_http_api_generator_failure_surfaces_task_error(
                 headers=auth_headers,
                 timeout=30.0,
             )
-            assert status in (200, 404)
+            # DELETE /api/projects/{id} risponde 204 No Content (F2-B2 2026-04-24)
+            assert status in (200, 204, 404)
         except (TimeoutError, SocketTimeout):
             pass
         try:
@@ -157,6 +160,7 @@ def test_arricchisci_http_api_generator_failure_surfaces_task_error(
                 headers=auth_headers,
                 timeout=30.0,
             )
-            assert status in (200, 404, 409)
+            # DELETE /api/api-connections/{id} risponde 204 (router status_code=204)
+            assert status in (200, 204, 404, 409)
         except (TimeoutError, SocketTimeout):
             pass

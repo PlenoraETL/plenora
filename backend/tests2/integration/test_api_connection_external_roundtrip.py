@@ -40,7 +40,8 @@ def test_api_connection_test_calls_fake_api_and_preserves_record(
         headers=integration_auth_headers,
         timeout=10.0,
     )
-    assert status == 200
+    # POST /api/api-connections risponde 201 Created (router status_code=201)
+    assert status == 201
     api_id = created["id"]
 
     status, tested, _ = http_json_response(

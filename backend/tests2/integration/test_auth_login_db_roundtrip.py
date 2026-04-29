@@ -58,7 +58,8 @@ def test_create_api_connection_persists_to_postgres(
         headers=integration_auth_headers,
         timeout=10.0,
     )
-    assert status == 200
+    # POST /api/api-connections risponde 201 Created (router status_code=201)
+    assert status == 201
     assert created["name"] == payload["name"]
     assert created["group_id"] == integration_user_seed["group_id"]
 

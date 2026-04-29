@@ -26,7 +26,9 @@ def _create_postgres_connection(base_url: str, auth_headers: dict) -> dict:
         headers=auth_headers,
         timeout=10.0,
     )
-    assert status == 200
+    # POST /api/connections risponde 201 Created
+    # (backend/app/core/connections/router.py:62 status_code=201)
+    assert status == 201
     return created
 
 
@@ -37,7 +39,9 @@ def _delete_connection(base_url: str, auth_headers: dict, connection_id: str) ->
         headers=auth_headers,
         timeout=10.0,
     )
-    assert status in (200, 404, 409)
+    # DELETE /api/connections/{id} risponde 204
+    # (backend/app/core/connections/router.py:129 status_code=204)
+    assert status in (200, 204, 404, 409)
 
 
 def _estrai_postgres_canvas(table_name: str) -> dict:
