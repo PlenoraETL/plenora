@@ -37,7 +37,13 @@ def _sanitize_upload_filename(raw: Optional[str]) -> str:
     """
     if not raw:
         raise HTTPException(status_code=400, detail="Nome file non valido")
-    name = Path(raw).name
+    # Normalizza backslash -> forward slash PRIMA di Path(raw).name. Su
+    # POSIX (CI Linux runner, container backend) pathlib.PosixPath non
+    # riconosce '\' come separatore: senza questa pre-normalizzazione,
+    # input Windows-style come "..\\nested\\report.csv" sopravvivrebbero
+    # intatti come basename, bypassando il filtro path traversal. Cross-
+    # platform safe: input gia' POSIX ('/') resta invariato dopo replace.
+    name = Path(raw.replace("\\", "/")).name
     # Anche dopo Path().name, certi input strani sopravvivono (es. ".." → "..")
     if name in _FORBIDDEN_BASENAMES:
         raise HTTPException(status_code=400, detail="Nome file non valido")
