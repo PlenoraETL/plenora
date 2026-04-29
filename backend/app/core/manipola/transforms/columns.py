@@ -286,10 +286,19 @@ def op_concat_columns(
                     out[i] = joined
             result[output_column] = np.array(out, dtype=object)
         else:
-            # NULL come stringa vuota: il path esistente e' gia' senza
-            # lambda; lasciato invariato (non-hotspot nel dominio default).
+            # NULL come stringa vuota (skip_null=False). Pandas 3.0 ha
+            # rimosso la coercion implicita a object dtype: su colonne
+            # float64/datetime64[ns] con NaN/NaT, `fillna("")` lascia il
+            # valore invariato anziche' sostituirlo con "". Il successivo
+            # `astype(str)` su dtype misti produce un mix di stringhe e
+            # NaN/float, facendo esplodere `separator.join` con TypeError.
+            # Fix: `where(notna, "")` prima di `astype(str)` forza dtype
+            # object e sostituisce NaN/NaT con "" stringa Python (non
+            # con "nan"/"NaT" che otterremmo invertendo l'ordine).
             result[output_column] = (
-                subset.fillna("").astype(str).agg(separator.join, axis=1)
+                subset.where(subset.notna(), "")
+                .astype(str)
+                .agg(separator.join, axis=1)
             )
 
         return result
