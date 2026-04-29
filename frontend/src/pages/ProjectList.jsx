@@ -550,8 +550,9 @@ function ProjectList() {
 
             {newProjectType === 'estrai' && (
               <div className="pl__modal-field">
-                <label className="pl__modal-label">Connessione *</label>
+                <label className="pl__modal-label" htmlFor="new-project-connection">Connessione *</label>
                 <select
+                  id="new-project-connection"
                   className="pl__modal-select"
                   value={newProjectConnId}
                   onChange={e => setNewProjectConnId(e.target.value)}
