@@ -183,7 +183,15 @@ run_or_dry() {
 }
 
 # ------------------------------------------------------------
-# Branch guard parametrico: rifiuta deploy da branch fuori allowlist.
+# Branch guard parametrico + upstream-sync guard:
+# rifiuta deploy da branch fuori allowlist o non allineato a origin.
+#
+# Upstream-sync: deploy_frontend non fa git push (solo deploy_backend
+# pubblicava in remoto), quindi senza questa guard `bash deploy.sh
+# frontend` da branch ahead di origin pubblicava un dist costruito da
+# codice non ancora pushato. La guard agisce come gate comune: il
+# `git push` resta a carico dell'operatore (esplicito), questa funzione
+# rifiuta solo di proseguire se il branch non e' allineato.
 # ------------------------------------------------------------
 guard_git_state() {
     cd "$BACKEND_LOCAL"
@@ -205,6 +213,49 @@ guard_git_state() {
     if [ "$allowed_match" -ne 1 ]; then
         echo "ERRORE: branch '${current_branch}' non in ALLOWED_BRANCHES='${ALLOWED_BRANCHES}' del profilo '${PROFILE}'." >&2
         echo "Cambia branch oppure aggiorna il profilo se l'ambiente lo permette." >&2
+        exit 1
+    fi
+
+    # Upstream-sync guard.
+    # 1. Il branch deve avere upstream configurato (no detached / no orfano).
+    local upstream
+    if ! upstream="$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null)"; then
+        echo "ERRORE: branch '${current_branch}' non ha upstream configurato." >&2
+        echo "Imposta l'upstream prima del deploy:" >&2
+        echo "  git push -u origin ${current_branch}" >&2
+        exit 1
+    fi
+
+    # 2. Fetch read-only del solo upstream (no merge, no rebase, no
+    # modifiche al working tree). Senza fetch, i counts sotto userebbero
+    # un riferimento stantio. In dry-run lo eseguiamo comunque: e' una
+    # query remota read-only, non muta lo stato del repo lato server git.
+    if ! git fetch --quiet origin "$current_branch" 2>/dev/null; then
+        echo "ERRORE: git fetch origin ${current_branch} fallito." >&2
+        echo "Verifica connettivita' GitHub e accesso al repo." >&2
+        exit 1
+    fi
+
+    # 3. Confronto local vs upstream.
+    local ahead behind
+    ahead="$(git rev-list --count "${upstream}..HEAD" 2>/dev/null || echo "0")"
+    behind="$(git rev-list --count "HEAD..${upstream}" 2>/dev/null || echo "0")"
+
+    if [ "$ahead" -gt 0 ] && [ "$behind" -gt 0 ]; then
+        echo "ERRORE: branch '${current_branch}' divergente da '${upstream}'." >&2
+        echo "  ahead:  ${ahead} commit non pushati" >&2
+        echo "  behind: ${behind} commit non pullati" >&2
+        echo "Risolvi con git pull --rebase + git push prima del deploy." >&2
+        exit 1
+    fi
+    if [ "$ahead" -gt 0 ]; then
+        echo "ERRORE: branch '${current_branch}' ahead di '${upstream}' di ${ahead} commit." >&2
+        echo "Pusha esplicitamente prima del deploy: git push origin ${current_branch}" >&2
+        exit 1
+    fi
+    if [ "$behind" -gt 0 ]; then
+        echo "ERRORE: branch '${current_branch}' behind di '${upstream}' di ${behind} commit." >&2
+        echo "Aggiorna il branch prima del deploy: git pull --rebase origin ${current_branch}" >&2
         exit 1
     fi
 
@@ -296,22 +347,19 @@ post_restart_health_gate() {
 }
 
 deploy_backend() {
-    echo "=== BACKEND: push + deploy ==="
+    echo "=== BACKEND: deploy ==="
 
-    # NB: working-tree-clean + branch guard sono gia' stati applicati
-    # globalmente (vedi case dispatch in coda al file) per qualunque mode
-    # che faccia deploy. Qui ci limitiamo al pre-deploy check + flusso.
+    # NB: working-tree-clean + branch allowlist + upstream-sync guard sono
+    # gia' stati applicati globalmente dal case dispatch (in coda al file)
+    # per qualunque mode che faccia deploy. In particolare, l'upstream-sync
+    # guard garantisce che il branch corrente sia allineato a origin: se
+    # ahead, l'operatore deve `git push` esplicitamente prima di lanciare
+    # deploy.sh. Qui non c'e' piu' alcun auto-push.
 
     # 1. Pre-deploy check (read-only sul server)
     pre_deploy_check
 
-    # 2. Push del branch corrente (no auto-commit: rifiutiamo working tree sporco a monte).
-    run_or_dry git push origin "$CURRENT_BRANCH" || { echo "ERRORE: push fallito" >&2; exit 1; }
-    if [ "$DRY_RUN" -ne 1 ]; then
-        echo ">>> Pushato su GitHub (branch: ${CURRENT_BRANCH})"
-    fi
-
-    # 3. Pull sul server + sync dipendenze venv + restart
+    # 2. Pull sul server + sync dipendenze venv + restart
     # NB: pip install e' idempotente — quando requirements.txt non cambia,
     # finisce in ~1s con "Requirement already satisfied" per ogni pacchetto.
     # Fail-fast: se pip fallisce (dipendenza rotta) i servizi NON vengono
@@ -323,7 +371,7 @@ deploy_backend() {
         echo ">>> Server aggiornato (venv sincronizzato) e riavviato"
     fi
 
-    # 4. Post-restart health gate (polling /ready + is-active).
+    # 3. Post-restart health gate (polling /ready + is-active).
     post_restart_health_gate
 
     echo ""

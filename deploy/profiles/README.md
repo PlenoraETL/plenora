@@ -28,6 +28,31 @@ bash deploy.sh --profile=prod
 
 L'ordine di precedenza: `--profile=` flag > env `PLENORA_DEPLOY_PROFILE` > default `prod`.
 
+## Guardie pre-deploy (applicate a `backend|frontend|all`)
+
+Prima di qualunque deploy reale o dry-run su un mode che pubblica codice
+o build, lo script applica un set di guardie locali. Tutte read-only,
+exit 1 al primo fail.
+
+1. **Working tree pulito** — niente file modificati o untracked in
+   `backend/`. Mai auto-commit.
+2. **Branch allowlist** — il branch corrente deve essere in
+   `ALLOWED_BRANCHES` del profilo (es. `main` per `prod`).
+3. **Upstream-sync** — il branch corrente deve essere allineato col
+   suo upstream (`origin/<branch>`):
+   - manca upstream → `git push -u origin <branch>` esplicito;
+   - branch ahead di upstream → `git push origin <branch>` esplicito;
+   - branch behind di upstream → `git pull --rebase origin <branch>`;
+   - branch divergente → risolvi con rebase + push esplicito.
+
+   La guard fa solo un `git fetch --quiet origin <branch>` (read-only),
+   **non esegue mai `git push` automatico**. La pubblicazione resta a
+   carico dell'operatore. Questo evita che `bash deploy.sh frontend`
+   pubblichi un `dist/` costruito da codice locale non ancora su GitHub.
+
+`check-deps` non applica queste guardie (e' solo un probe SSH read-only
+sul server, niente push, niente restart, niente swap frontend).
+
 ## Dry-run / check-only
 
 Prima di un deploy reale, **sempre** verificare la configurazione con
