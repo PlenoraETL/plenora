@@ -71,7 +71,7 @@ def fake_api_server(functional_env):
         workdir=FUNCTIONAL_ROOT.parent.parent,
         env=functional_env,
     )
-    wait_for_http_ready(f"{url}/health", timeout_s=20.0)
+    wait_for_http_ready(f"{url}/health", timeout_s=20.0, process=proc)
     try:
         yield {"base_url": url, "process": proc}
     finally:
@@ -101,7 +101,7 @@ def backend_server(functional_env):
         workdir=FUNCTIONAL_ROOT.parent.parent,
         env=functional_env,
     )
-    wait_for_http_ready(f"{url}/", timeout_s=30.0)
+    wait_for_http_ready(f"{url}/", timeout_s=30.0, process=proc)
     try:
         yield {"base_url": url, "process": proc}
     finally:
