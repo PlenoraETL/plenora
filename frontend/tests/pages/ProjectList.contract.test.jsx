@@ -106,7 +106,10 @@ describe('ProjectList', () => {
 
     await userEvent.clear(screen.getByPlaceholderText(/catasto campania q2/i));
     await userEvent.type(screen.getByPlaceholderText(/catasto campania q2/i), 'Orders ETL');
-    await userEvent.selectOptions(screen.getAllByRole('combobox')[1], 'conn-1');
+    await userEvent.selectOptions(
+      await screen.findByRole('combobox', { name: /connessione/i }),
+      'conn-1',
+    );
     await userEvent.click(screen.getByRole('button', { name: /crea progetto/i }));
 
     await waitFor(() => {
