@@ -88,7 +88,15 @@ jobs:
         # -c puntando al file dedicato di tests2/. Niente coverage gate in
         # questo batch (T-01 vincolo). Niente -p no:randomly perche'
         # pytest-randomly non e' in deps (P1-3 separato).
-        run: pytest tests2/ -c tests2/pytest.ini
+        #
+        # Binario B-1: deselect dei test che spawnano un backend HTTP live
+        # (uvicorn app.main:app via fixture backend_server / integration_
+        # backend_server). Restano vivi nel codebase, marcati automaticamente
+        # via pytest_collection_modifyitems in tests2/{functional,integration}
+        # /conftest.py. Gireranno in workflow tier functional/manual/nightly
+        # separato (Binario B-2, follow-up). Vedi tests2/pytest.ini per la
+        # definizione del marker requires_backend_http_service.
+        run: pytest tests2/ -c tests2/pytest.ini -m "not requires_backend_http_service"
 
   frontend:
     name: Frontend vitest

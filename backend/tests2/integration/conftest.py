@@ -199,3 +199,24 @@ def integration_db_probe():
         "execute": pg_execute,
         "make_id": make_it_id,
     }
+
+
+# =============================================================================
+# Auto-marker: requires_backend_http_service
+# =============================================================================
+#
+# Marca i test che dipendono direttamente o transitivamente da una fixture
+# che spawna un backend HTTP live (uvicorn) per i test integration. Vedi
+# nota analoga in tests2/functional/conftest.py per dettagli.
+_HTTP_FIXTURES = frozenset({
+    "integration_backend_server",
+    "integration_fake_api_server",
+    "integration_user_seed",
+    "integration_auth_headers",
+})
+
+
+def pytest_collection_modifyitems(config, items):
+    for item in items:
+        if _HTTP_FIXTURES & set(item.fixturenames):
+            item.add_marker(pytest.mark.requires_backend_http_service)

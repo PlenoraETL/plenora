@@ -170,3 +170,28 @@ def auth_token(backend_server, functional_user_seed):
 @pytest.fixture
 def auth_headers(auth_token):
     return {"Authorization": f"Bearer {auth_token}"}
+
+
+# =============================================================================
+# Auto-marker: requires_backend_http_service
+# =============================================================================
+#
+# Marca i test che dipendono direttamente o transitivamente da una fixture
+# che spawna un backend HTTP live (uvicorn). Permette il deselect dalla CI
+# principale push/PR via `-m "not requires_backend_http_service"`. Vedi
+# tests2/pytest.ini per la definizione del marker e
+# .github/workflows/ci.yml per l'opt-out a livello workflow.
+#
+# I test marcati restano vivi nel codebase: gireranno in workflow tier
+# functional/manual/nightly separato (Binario B-2, follow-up).
+_HTTP_FIXTURES = frozenset({
+    "backend_server",
+    "fake_api_server",
+    "auth_token",
+})
+
+
+def pytest_collection_modifyitems(config, items):
+    for item in items:
+        if _HTTP_FIXTURES & set(item.fixturenames):
+            item.add_marker(pytest.mark.requires_backend_http_service)
