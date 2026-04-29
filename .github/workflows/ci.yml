@@ -38,6 +38,16 @@ jobs:
       # Test session vive in storage policy DB (no S3 reale, no BACKUP_BUCKET
       # required) — coerente con tests2/conftest.py:21.
       STORAGE_POLICY: db
+      # DATABASE_URL dummy: necessario perche' app/db/pg_connection.py:111-113
+      # legge l'env var a module-level e solleva RuntimeError a import time
+      # se manca, prima che pytest possa applicare gli stub di conftest.py.
+      # Il valore e' un URL postgres formato valido ma irraggiungibile (porta
+      # 1, host loopback): nessun psycopg2.connect reale viene invocato
+      # perche' conftest.py:73-85 stubpa init_db/init_all_dbs/apply_pending
+      # _migrations a no-op, e la fixture autouse (riga 247-282) stubpa
+      # pg_connection.execute a no-op per ogni test non-integration. Vedi
+      # orchestrate/phase_0_consolidation/ci_red_baseline_analysis.md §1.4.
+      DATABASE_URL: postgresql://nobody:nopass@127.0.0.1:1/test_unit_no_real_db
       # Redis broker per test che chiamano Celery/blacklist (fakeredis copre
       # gli unit, ma alcuni integration usano client redis-py reale).
       CELERY_BROKER_URL: redis://localhost:6379/0
