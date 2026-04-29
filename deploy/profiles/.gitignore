@@ -1,0 +1,4 @@
+# Profili locali per esperimenti operatore (non versionati).
+# I profili pubblici per ambiente (prod.conf, staging.conf, ...) sono
+# committati nel repo.
+*.local.conf
