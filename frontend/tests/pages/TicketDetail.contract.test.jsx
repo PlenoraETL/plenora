@@ -346,7 +346,9 @@ describe('TicketDetail', () => {
   });
 
   it('click "Rimuovi" su allegato chiama deleteAttachment dopo conferma', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    // PR-A2: window.confirm sostituito da useConfirmModal (ConfirmDialog
+    // promise-based). Il test ora simula il click sul button "Rimuovi"
+    // del ConfirmDialog renderizzato.
     getTicketMock.mockResolvedValue({
       ...BASE_DETAIL,
       attachments: [
@@ -361,16 +363,22 @@ describe('TicketDetail', () => {
     renderDetail();
     await waitFor(() => screen.getByText('log.log'));
 
+    // Apre il modal cliccando "Rimuovi" sull'allegato
     await user.click(screen.getByRole('button', { name: /rimuovi/i }));
+
+    // Conferma cliccando "Rimuovi" nel ConfirmDialog (title "Rimuovi
+    // allegato"). Dopo apertura ci sono due button con nome "Rimuovi":
+    // quello dell'allegato (lista) + quello di conferma (dialog).
+    // Prendiamo il secondo, che e' nel ConfirmDialog.
+    const removeButtons = await screen.findAllByRole('button', { name: /^rimuovi$/i });
+    await user.click(removeButtons[removeButtons.length - 1]);
 
     await waitFor(() => {
       expect(deleteAttachmentMock).toHaveBeenCalledWith('tk-1', 'att-1');
     });
-    confirmSpy.mockRestore();
   });
 
   it('click "Rimuovi" annullato dalla conferma NON chiama deleteAttachment', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
     getTicketMock.mockResolvedValue({
       ...BASE_DETAIL,
       attachments: [
@@ -385,10 +393,14 @@ describe('TicketDetail', () => {
     renderDetail();
     await waitFor(() => screen.getByText('log.log'));
 
+    // Apre il modal
     await user.click(screen.getByRole('button', { name: /rimuovi/i }));
 
+    // Annulla cliccando "Annulla" nel ConfirmDialog
+    const cancelBtn = await screen.findByRole('button', { name: /annulla/i });
+    await user.click(cancelBtn);
+
     expect(deleteAttachmentMock).not.toHaveBeenCalled();
-    confirmSpy.mockRestore();
   });
 
   // ──────────────────────────────────────────────────────────────────────
@@ -420,35 +432,44 @@ describe('TicketDetail', () => {
   });
 
   it('click "Elimina" dopo confirm chiama deleteTicket e naviga a /tickets', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    // PR-A2: window.confirm sostituito da useConfirmModal. Il test ora
+    // clicca prima "Elimina ticket" (toolbar, apre il modal) poi
+    // "Elimina" nel ConfirmDialog.
     const user = userEvent.setup();
     renderDetail();
     await waitFor(() => screen.getByText('SSO non funziona'));
 
+    // Apre il modal
     await user.click(screen.getByRole('button', { name: /elimina ticket/i }));
+
+    // Conferma nel ConfirmDialog (title "Elimina ticket", confirm
+    // button label "Elimina"). Cerchiamo specificamente "Elimina" senza
+    // " ticket" — match esatto distingue dalla toolbar.
+    const confirmBtn = await screen.findByRole('button', { name: /^elimina$/i });
+    await user.click(confirmBtn);
 
     await waitFor(() => {
       expect(deleteTicketMock).toHaveBeenCalledWith('tk-1');
       expect(navigateMock).toHaveBeenCalledWith('/tickets');
     });
-    confirmSpy.mockRestore();
   });
 
   it('click "Elimina" annullato dalla conferma NON chiama API', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
     const user = userEvent.setup();
     renderDetail();
     await waitFor(() => screen.getByText('SSO non funziona'));
 
     await user.click(screen.getByRole('button', { name: /elimina ticket/i }));
 
+    // Annulla nel ConfirmDialog
+    const cancelBtn = await screen.findByRole('button', { name: /annulla/i });
+    await user.click(cancelBtn);
+
     expect(deleteTicketMock).not.toHaveBeenCalled();
     expect(navigateMock).not.toHaveBeenCalled();
-    confirmSpy.mockRestore();
   });
 
   it('errore su deleteTicket mostra toast e NON naviga', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     deleteTicketMock.mockRejectedValue({
       response: { data: { detail: 'Permesso negato' } },
     });
@@ -458,11 +479,13 @@ describe('TicketDetail', () => {
 
     await user.click(screen.getByRole('button', { name: /elimina ticket/i }));
 
+    const confirmBtn = await screen.findByRole('button', { name: /^elimina$/i });
+    await user.click(confirmBtn);
+
     await waitFor(() => {
       expect(toastMock.error).toHaveBeenCalledWith('Permesso negato');
     });
     expect(navigateMock).not.toHaveBeenCalled();
-    confirmSpy.mockRestore();
   });
 
   // ──────────────────────────────────────────────────────────────────────
