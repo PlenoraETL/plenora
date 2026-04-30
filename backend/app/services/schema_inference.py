@@ -305,16 +305,9 @@ class SchemaInferenceService:
 
             columns = []
             for col in columns_metadata:
-                # `result_node.columns` puo' avere `alias` (rename utente);
-                # `columns_metadata` no. Usa alias se presente per coerenza
-                # col downstream del progetto sorgente.
-                col_name = col.get("alias") or col.get("name", "")
-                if not col_name:
-                    continue
+                col_name = col.get("name", "")
 
-                # Skip se non visibile (sia da result.columns sia da metadata)
-                if not col.get("visible", True):
-                    continue
+                # Skip se non visibile
                 if visible_columns and col_name not in visible_columns:
                     continue
 
