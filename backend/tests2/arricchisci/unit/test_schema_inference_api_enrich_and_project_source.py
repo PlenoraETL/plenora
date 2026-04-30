@@ -292,3 +292,95 @@ def test_infer_project_source_schema_fallback_to_columns_metadata_when_result_em
 
     names = [c.name for c in schema]
     assert names == ["id", "value"], names
+
+
+# =============================================================================
+# Test 6 — rollback semantica fuori scope: alias non usato come nome
+# =============================================================================
+# Pre-fix `columns_metadata` non aveva campo `alias`, quindi il consumer
+# riceveva sempre `name`. Il primo tentativo di Fix 2 introduceva
+# `col_name = alias or name`: scope-creep che avrebbe rotto i consumer
+# che matchano via `visible_columns` (set di `name`). Rollback in commit
+# 2c0a071 ripristina la semantica 1:1 con pre-fix.
+
+
+def test_infer_project_source_schema_does_not_rename_columns_via_alias():
+    """Anche se result_node.columns ha `alias`, il consumer riceve
+    `name` (compat 1:1 con pre-fix che leggeva da columns_metadata)."""
+    svc = _svc()
+
+    fake_canvas = {
+        "nodes": [
+            {
+                "id": "res1",
+                "type": "result",
+                "columns": [
+                    # User ha rinominato "x" → "X_renamed" via alias
+                    {"name": "x", "alias": "X_renamed", "type": "int", "visible": True},
+                    {"name": "y", "type": "str", "visible": True},
+                ],
+            }
+        ],
+        "columns_metadata": [],
+    }
+
+    import app.db.db_service as _db
+    orig_get = _db.get_project
+    _db.get_project = lambda pid: {"canvas": fake_canvas}
+    try:
+        ps_node = _node("ps1", "project_source", source_project_id="src-proj-1")
+        schema = svc._infer_project_source_schema(ps_node)
+    finally:
+        _db.get_project = orig_get
+
+    names = [c.name for c in schema]
+    assert names == ["x", "y"], names
+    assert "X_renamed" not in names
+
+
+# =============================================================================
+# Test 7 — rollback semantica fuori scope: niente filtro intrinseco visible=False
+# =============================================================================
+# Pre-fix `columns_metadata` non aveva campo `visible`, quindi tutte le
+# colonne dei metadata venivano sempre emesse. Il primo tentativo di
+# Fix 2 introduceva `if not col.get("visible", True): continue` che
+# avrebbe nascosto colonne pre-fix sempre visibili. Rollback ripristina:
+# il filtro visibility resta SOLO via `node_columns` (lato consumer
+# project_source), non via campo intrinseco della colonna source.
+
+
+def test_infer_project_source_schema_does_not_filter_by_intrinsic_visible_flag():
+    """Una colonna con `visible: False` in result_node.columns deve
+    comunque essere emessa, perche' pre-fix (lettura da metadata senza
+    campo visible) la includeva sempre. Il filtraggio visibility
+    avviene solo via project_source node.columns (consumer-side)."""
+    svc = _svc()
+
+    fake_canvas = {
+        "nodes": [
+            {
+                "id": "res1",
+                "type": "result",
+                "columns": [
+                    {"name": "shown", "type": "int", "visible": True},
+                    # visible: False — il consumer deve comunque vederla
+                    {"name": "hidden_in_source", "type": "str", "visible": False},
+                ],
+            }
+        ],
+        "columns_metadata": [],
+    }
+
+    import app.db.db_service as _db
+    orig_get = _db.get_project
+    _db.get_project = lambda pid: {"canvas": fake_canvas}
+    try:
+        # Consumer node senza filtro proprio (node.columns vuoto): tutte
+        # le colonne del source devono passare.
+        ps_node = _node("ps1", "project_source", source_project_id="src-proj-1")
+        schema = svc._infer_project_source_schema(ps_node)
+    finally:
+        _db.get_project = orig_get
+
+    names = [c.name for c in schema]
+    assert names == ["shown", "hidden_in_source"], names
