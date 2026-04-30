@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
 import ResultNode from '../../src/components/nodes/ResultNode';
+import { ConfirmProvider } from '../../src/context/ConfirmContext';
 
 const {
   onPreviewMock,
@@ -158,17 +159,21 @@ describe('ResultNode contract', () => {
 
   it('hydrates the latest IMDF bundle, opens the manager and executes through the shared editor contract', async () => {
     render(
-      <ResultNode
-        id="result-1"
-        data={{
-          isArricchisci: true,
-          fileName: 'imdf-output',
-          format: 'csv',
-          columns: [],
-          availableColumns: [],
-          project_id: 'proj-1',
-        }}
-      />,
+      // PR-B: ResultNode ora richiede ConfirmProvider nell'albero React
+      // (useConfirm hook). Wrap minimal del test esistente.
+      <ConfirmProvider>
+        <ResultNode
+          id="result-1"
+          data={{
+            isArricchisci: true,
+            fileName: 'imdf-output',
+            format: 'csv',
+            columns: [],
+            availableColumns: [],
+            project_id: 'proj-1',
+          }}
+        />
+      </ConfirmProvider>,
     );
 
     await waitFor(() => {

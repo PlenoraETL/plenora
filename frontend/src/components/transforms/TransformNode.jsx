@@ -13,6 +13,7 @@ import DynamicConfig from './DynamicConfig';
 import { authBus } from '../../utils/authBus';
 import { getTransformRegistry } from '../../api/transforms';
 import RunHistoryModal from '../modals/RunHistoryModal';
+import { useConfirm } from '../../context/ConfirmContext';
 
 // Cache globale per il registry
 let registryCache = null;
@@ -82,6 +83,7 @@ const TransformNode = memo(({ data, id }) => {
 
   const updateNodeData = useCanvasStore(s => s.updateNodeData);
   const deleteNode     = useCanvasStore(s => s.deleteNode);
+  const confirm        = useConfirm();
 
   const toggleCollapsed = () => {
     updateNodeData(id, { collapsed: !collapsed });
@@ -203,8 +205,14 @@ const TransformNode = memo(({ data, id }) => {
     updateNodeData(id, { transform_op: evt.target.value, config: {} });
   };
 
-  const handleDelete = () => {
-    if (confirm('Eliminare questo nodo?')) deleteNode(id);
+  const handleDelete = async () => {
+    const ok = await confirm({
+      title: 'Elimina nodo',
+      message: 'Eliminare questo nodo?',
+      confirmText: 'Elimina',
+      variant: 'danger',
+    });
+    if (ok) deleteNode(id);
   };
 
   // Determina se l'operazione richiede multi-input

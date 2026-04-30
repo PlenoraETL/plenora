@@ -15,6 +15,7 @@ import React, { useState, useEffect, memo } from 'react';
 import { Handle, Position } from 'reactflow';
 import { getLayerSchema } from '../../api/features';
 import useCanvasStore from '../../store/useCanvasStore';
+import { useConfirm } from '../../context/ConfirmContext';
 import './FeatureLayerNode.css';
 
 // ============================================================
@@ -115,10 +116,19 @@ const FeatureLayerNode = memo(({ data, id }) => {
   const toggleAllColumns = useCanvasStore(s => s.toggleAllColumns);
   const deleteNode       = useCanvasStore(s => s.deleteNode);
   const updateNodeData   = useCanvasStore(s => s.updateNodeData);
+  const confirm          = useConfirm();
 
   const handleToggleColumn = (columnIndex) => toggleColumn(id, columnIndex);
   const handleToggleAll    = (makeVisible)  => toggleAllColumns(id, makeVisible);
-  const handleDelete       = () => { if (confirm('Eliminare questo nodo?')) deleteNode(id); };
+  const handleDelete       = async () => {
+    const ok = await confirm({
+      title: 'Elimina nodo',
+      message: 'Eliminare questo nodo?',
+      confirmText: 'Elimina',
+      variant: 'danger',
+    });
+    if (ok) deleteNode(id);
+  };
 
   const handleSaveWhere = () => {
     const trimmed = tempWhere.trim();
