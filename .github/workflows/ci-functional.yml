@@ -29,6 +29,15 @@ on:
         description: "Extra args passati a pytest (es. -k test_name, -x, ecc.)"
         required: false
         default: ""
+  # B3a (Phase 1): nightly diagnostic tier, not required check yet.
+  # `continue-on-error: true` resta per ora — il fail del job non blocca
+  # niente. Dopo 3-5 nightly consecutive verdi:
+  #   - B3b: rimuovere `continue-on-error`
+  #   - valutare promozione a required check solo per release branch
+  #     (non per ogni PR — l'opt-in via marker `requires_backend_http_
+  #     service` ha gia' tagliato 38 test dalla CI principale push/PR).
+  schedule:
+    - cron: "0 2 * * *"  # 02:00 UTC daily
 
 # Annulla run precedenti se ne arriva uno nuovo sullo stesso ref.
 concurrency:
