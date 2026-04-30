@@ -262,7 +262,8 @@ def test_schedule_runs_response_has_expected_shape(
             headers=integration_auth_headers,
             timeout=10.0,
         )
-        assert status == 200
+        # POST /api/schedules risponde 201 Created (router status_code=201)
+        assert status == 201
         schedule_id = schedule_created["id"]
 
         try:
