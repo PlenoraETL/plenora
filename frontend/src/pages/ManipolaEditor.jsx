@@ -181,7 +181,11 @@ const ManipolaEditorContent = () => {
     useCanvasStore.getState().markClean();
     setTimeout(() => { propagateColumns(loadedNodes, rawEdges); }, 300);
     setTimeout(() => { refreshSchemas(); }, 100);
-  }, [project, loading]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // setNodes/setEdges/propagateColumns/refreshSchemas/deserializeNodes
+    // omessi: load programmatico una sola volta per project, non ad ogni
+    // re-bind degli handler.
+  }, [project, loading]);
 
   // Propaga schemi ai nodi transform
   useEffect(() => {
@@ -230,7 +234,10 @@ const ManipolaEditorContent = () => {
         return node;
       });
     });
-  }, [edges, schemas, setNodes, edgesRef]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // 'nodes' volutamente assente: viene letto via callback di setNodes
+    // (snapshot React aggiornato) per evitare il loop nodes->effect->setNodes.
+  }, [edges, schemas, setNodes, edgesRef]);
 
   // ===== NODE HANDLERS =====
 
@@ -292,9 +299,12 @@ const ManipolaEditorContent = () => {
       onUpdateFileSourceColumns:    handleUpdateFileSourceColumns,
       onUpdateTransform:            handleUpdateTransform,
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // toast/nodesRef/describeAccessDeniedNodes letti via closure stabile;
+    // re-bind solo al cambio degli handler hook delle azioni canvas.
   }, [preview, execution, caricaExecution,
       handleUpdateProjectSource, handleUpdateProjectSourceColumns,
-      handleUpdateFileSourceColumns, handleUpdateTransform]); // eslint-disable-line react-hooks/exhaustive-deps
+      handleUpdateFileSourceColumns, handleUpdateTransform]);
 
   // Sincronizza connections nello store
   useEffect(() => {

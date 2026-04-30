@@ -64,6 +64,7 @@ Non cancellare mai un ADR: il registro e' append-only. Un errore in un ADR si re
 - [ADR-0004](0004-2026-04-21-jwt-hs256-ttl-8h-no-refresh.md) — JWT HS256 vs RS256, TTL 8h, no refresh token
 - [ADR-0009](0009-2026-04-21-jwt-blacklist-redis-fail-open-read-fail-loud-write.md) — JWT JTI blacklist Redis: policy fail-open READ + fail-loud WRITE
 - [ADR-0010](0010-2026-04-21-trusted-proxies-allowlist.md) — Trusted proxies anti-spoofing: allowlist-based vs trust-all
+- [ADR-0018](0018-2026-04-30-mfa-required-disclosure-tradeoff.md) — MFA enrollment-state disclosure: 403 `mfa_required` vs 401 generico (chiusura TODO `mfa.py`)
 
 ### Architecture patterns
 - [ADR-0005](0005-2026-04-21-async-user-recheck-helper.md) — Helper condiviso `recheck_user_authorized` (DRY su 4 task Celery)

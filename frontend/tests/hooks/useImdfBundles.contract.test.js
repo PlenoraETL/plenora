@@ -20,20 +20,35 @@ const {
   getImdfBundleMetadataMock,
   deleteImdfBundleMock,
   useCanvasStoreMock,
+  toastErrorMock,
+  toastMock,
+  useToastMock,
   storeRef,
-} = vi.hoisted(() => ({
-  listImdfBundlesMock: vi.fn(),
-  getImdfBundleMetadataMock: vi.fn(),
-  deleteImdfBundleMock: vi.fn(),
-  useCanvasStoreMock: vi.fn(),
-  storeRef: {
-    current: {
-      projectId: 'p1',
-      lastTaskResult: null,
-      setLastTaskResult: vi.fn(),
+} = vi.hoisted(() => {
+  const toastErrorMock = vi.fn();
+  const toastMock = {
+    error: toastErrorMock,
+    success: vi.fn(),
+    warning: vi.fn(),
+    info: vi.fn(),
+  };
+  return {
+    listImdfBundlesMock: vi.fn(),
+    getImdfBundleMetadataMock: vi.fn(),
+    deleteImdfBundleMock: vi.fn(),
+    useCanvasStoreMock: vi.fn(),
+    toastErrorMock,
+    toastMock,
+    useToastMock: vi.fn(() => toastMock),
+    storeRef: {
+      current: {
+        projectId: 'p1',
+        lastTaskResult: null,
+        setLastTaskResult: vi.fn(),
+      },
     },
-  },
-}));
+  };
+});
 
 vi.mock('../../src/api/imdf', () => ({
   listImdfBundles: listImdfBundlesMock,
@@ -43,6 +58,10 @@ vi.mock('../../src/api/imdf', () => ({
 
 vi.mock('../../src/store/useCanvasStore', () => ({
   default: useCanvasStoreMock,
+}));
+
+vi.mock('../../src/hooks/useToast', () => ({
+  useToast: useToastMock,
 }));
 
 // Simula il pattern di Zustand: useCanvasStore(selector) invoca selector(state),
@@ -56,6 +75,11 @@ beforeEach(() => {
   listImdfBundlesMock.mockReset();
   getImdfBundleMetadataMock.mockReset();
   deleteImdfBundleMock.mockReset();
+  toastErrorMock.mockReset();
+  toastMock.success.mockReset();
+  toastMock.warning.mockReset();
+  toastMock.info.mockReset();
+  useToastMock.mockReturnValue(toastMock);
   storeRef.current = {
     projectId: 'p1',
     lastTaskResult: null,
@@ -163,6 +187,51 @@ describe('useImdfBundles — contract', () => {
     expect(deleteImdfBundleMock).toHaveBeenCalledWith('a');
     expect(result.current.bundles).toEqual([{ task_id: 'b' }]);
     expect(result.current.selectedBundleId).toBeNull();
+  });
+
+  it('handleDeleteBundle: errore server -> toast.error, lista invariata, selezione invariata', async () => {
+    listImdfBundlesMock.mockResolvedValue([
+      { task_id: 'a' },
+      { task_id: 'b' },
+    ]);
+    const apiErr = Object.assign(new Error('Boom'), {
+      response: { data: { detail: 'bundle in uso' } },
+    });
+    deleteImdfBundleMock.mockRejectedValue(apiErr);
+
+    const { result } = renderHook(() => useImdfBundles({ isImdfMode: true }));
+
+    await waitFor(() => {
+      expect(result.current.bundles.length).toBe(2);
+      expect(result.current.selectedBundleId).toBe('a');
+    });
+
+    await act(async () => {
+      await result.current.handleDeleteBundle('a');
+    });
+
+    // API tentata, ma niente mutazione locale e niente alert():
+    // l'errore va al toast con il detail server.
+    expect(deleteImdfBundleMock).toHaveBeenCalledWith('a');
+    expect(toastErrorMock).toHaveBeenCalledTimes(1);
+    expect(toastErrorMock.mock.calls[0][0]).toMatch(/bundle in uso/);
+    expect(result.current.bundles.length).toBe(2);
+    expect(result.current.selectedBundleId).toBe('a');
+  });
+
+  it('handleDeleteBundle: errore senza response.data.detail -> fallback a e.message', async () => {
+    listImdfBundlesMock.mockResolvedValue([{ task_id: 'a' }]);
+    deleteImdfBundleMock.mockRejectedValue(new Error('network down'));
+
+    const { result } = renderHook(() => useImdfBundles({ isImdfMode: true }));
+    await waitFor(() => { expect(result.current.bundles.length).toBe(1); });
+
+    await act(async () => {
+      await result.current.handleDeleteBundle('a');
+    });
+
+    expect(toastErrorMock).toHaveBeenCalledTimes(1);
+    expect(toastErrorMock.mock.calls[0][0]).toMatch(/network down/);
   });
 
   it('setSelectedBundleId: override manuale fa scattare bundleTaskId senza live', async () => {

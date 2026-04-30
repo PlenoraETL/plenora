@@ -27,8 +27,8 @@ assente dal body. Differisce da 401 per password errata. Un attaccante con
 password valida impara "MFA attiva per questo account". E' un leak
 accettato in quasi tutti i sistemi MFA via API: l'alternativa (401 generico
 sempre) romperebbe l'UX del client MFA-aware. Rate limit login gia' in
-vigore (LOGIN_MAX_ATTEMPTS + LOGIN_LOCKOUT_SECONDS). Documentato in ADR
-dedicato (TODO: ADR-0002).
+vigore (LOGIN_MAX_ATTEMPTS + LOGIN_LOCKOUT_SECONDS). Documentato in ADR-0018
+(`backend/docs/architecture/decisions/0018-2026-04-30-mfa-required-disclosure-tradeoff.md`).
 """
 from __future__ import annotations
 

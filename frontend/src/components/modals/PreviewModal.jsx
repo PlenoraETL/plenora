@@ -271,6 +271,8 @@ const MapTab = memo(({ rows, columns, active }) => {
       }, 50);
     }, 80);
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  // colorBy + buildGeoLayer omessi: bootstrap mappa una sola volta per apertura
+  // del tab. Il restyle al cambio colorBy avviene nell'effect dedicato sotto.
   }, [active]);
 
   // Lazy-load Leaflet CSS+JS se non già caricato
@@ -298,6 +300,8 @@ const MapTab = memo(({ rows, columns, active }) => {
     };
     document.head.appendChild(script);
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  // Lazy-load Leaflet asset una sola volta per ciclo di vita modal: deps statici
+  // intenzionali, evita ricaricamenti CDN se active/colorBy cambiano.
   }, []);
 
   const buildGeoLayer = (map, currentColorBy) => {
@@ -380,6 +384,8 @@ const MapTab = memo(({ rows, columns, active }) => {
       weight: 0.8,
     }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  // getColor stabile (pure fn module-level): non serve in deps; vogliamo
+  // restyle solo al cambio dell'asse di colorazione.
   }, [colorBy]);
 
   // Cambia basemap
