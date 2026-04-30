@@ -15,6 +15,7 @@ import {
   downloadTaskOutput,
 } from '../../api';
 import { useToast } from '../../hooks/useToast';
+import PermissionRevokedBanner from '../common/PermissionRevokedBanner';
 import './EseguibileExecuteWizard.css';
 
 const OUTPUT_FORMATS = [
@@ -144,7 +145,17 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
           toast.success('Esecuzione completata!');
         } else if (data.status === 'failure' || data.status === 'revoked') {
           setExecuting(false);
-          setError(data.error || 'Esecuzione fallita');
+          // PR-A UX Tier 1: distinguiamo permission_revoked (ruolo
+          // declassato/utenza disabilitata mid-task) dal failure
+          // generico. Banner inline mantenuto via setTaskResult per
+          // restare visibile durante la review.
+          const innerStatus = data.result?.status;
+          if (innerStatus === 'permission_revoked') {
+            setTaskResult({ ...data.result, permissionRevoked: true });
+            setError(null);
+          } else {
+            setError(data.error || data.result?.message || 'Esecuzione fallita');
+          }
           clearInterval(pollRef.current);
         }
       } catch (e) {
@@ -224,7 +235,12 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
           })}
         </div>
 
-        {error && (
+        {/* PR-A UX Tier 1: banner inline quando permessi revocati
+            mid-esecuzione. Prevale sul generic error rendering. */}
+        {taskResult?.permissionRevoked && (
+          <PermissionRevokedBanner message={taskResult?.message} />
+        )}
+        {error && !taskResult?.permissionRevoked && (
           <div className="esw-error">❌ {error}</div>
         )}
 

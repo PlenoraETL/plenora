@@ -16,6 +16,8 @@ import ScheduleWizard from '../components/modals/ScheduleWizard';
 import { useHexCanvas } from '../utils/hexCanvas';
 import AppSidebar from '../components/AppSidebar';
 import { can } from '../utils/permissions';
+import ConfirmDialog from '../components/common/ConfirmDialog';
+import { useConfirmModal } from '../hooks/useConfirmModal';
 import '../styles/ScheduleList.css';
 
 // ── Theme toggle ──────────────────────────────────────────────────────────
@@ -99,6 +101,7 @@ const getLogIcon = (event) => {
 // ── Main ──────────────────────────────────────────────────────────────────
 function ScheduleList() {
   const toast   = useToast();
+  const confirmModal = useConfirmModal();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user, logout } = useAuth();
@@ -173,7 +176,13 @@ function ScheduleList() {
     catch (e) { toast.error('Errore toggle: ' + (e.response?.data?.detail || e.message)); }
   };
   const handleDelete = async (id, desc) => {
-    if (!confirm(`Eliminare "${desc || id}"?`)) return;
+    const ok = await confirmModal.confirm({
+      title: 'Elimina schedule',
+      message: `Eliminare "${desc || id}"?`,
+      confirmText: 'Elimina',
+      variant: 'danger',
+    });
+    if (!ok) return;
     try { await deleteSchedule(id); loadData(); }
     catch (e) { toast.error('Errore eliminazione: ' + (e.response?.data?.detail || e.message)); }
   };
@@ -347,6 +356,7 @@ function ScheduleList() {
           defaultProjectId={projectFilter}
         />
       )}
+      <ConfirmDialog {...confirmModal} />
     </div>
   );
 }

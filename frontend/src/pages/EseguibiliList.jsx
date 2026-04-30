@@ -16,11 +16,14 @@ import AllowedGroupsSelector from '../components/shared/AllowedGroupsSelector';
 import AppSidebar from '../components/AppSidebar';
 import { useToast } from '../hooks/useToast';
 import { role } from '../utils/permissions';
+import ConfirmDialog from '../components/common/ConfirmDialog';
+import { useConfirmModal } from '../hooks/useConfirmModal';
 import './EseguibiliList.css';
 
 function EseguibiliList() {
   const navigate = useNavigate();
   const toast = useToast();
+  const confirmModal = useConfirmModal();
   const { user } = useAuth();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -66,7 +69,13 @@ function EseguibiliList() {
   };
 
   const handleDelete = async (eid, name) => {
-    if (!window.confirm(`Eliminare l'eseguibile "${name}"?`)) return;
+    const ok = await confirmModal.confirm({
+      title: 'Elimina eseguibile',
+      message: `Eliminare l'eseguibile "${name}"?`,
+      confirmText: 'Elimina',
+      variant: 'danger',
+    });
+    if (!ok) return;
     try {
       await deleteEseguibile(eid);
       toast.success('Eseguibile eliminato');
@@ -244,6 +253,7 @@ function EseguibiliList() {
           }}
         />
       )}
+      <ConfirmDialog {...confirmModal} />
       </div>
     </div>
   );

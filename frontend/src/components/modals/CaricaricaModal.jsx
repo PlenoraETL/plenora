@@ -6,6 +6,7 @@
  */
 import React from 'react';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
+import PermissionRevokedBanner from '../common/PermissionRevokedBanner';
 import './CaricaricaModal.css';
 
 /**
@@ -56,7 +57,17 @@ function CaricaricaModal({
 
   // Determina se ci sono errori
   const hasErrors = (caricaricaInfo.rowsFailed || 0) > 0;
-  const isSuccess = result?.success || result?.status === 'success';
+  // PR-A UX Tier 1:
+  //   - 'skipped_idempotent' e' un success-no-op (run gia' completata in
+  //     precedenza). Riconosciuto sia dal flag esposto da useCaricarica
+  //     sia dal status grezzo per backward-compat consumer esterni.
+  //   - 'permission_revoked' NON e' success: usa banner inline dedicato.
+  const isSkippedIdempotent = !!result?.skippedIdempotent
+    || result?.status === 'skipped_idempotent';
+  const isPermissionRevoked = !!result?.permissionRevoked
+    || result?.status === 'permission_revoked';
+  const isSuccess = (result?.success || result?.status === 'success' || isSkippedIdempotent)
+    && !isPermissionRevoked;
 
   // Footer
   const footer = (
@@ -155,20 +166,27 @@ function CaricaricaModal({
       {/* Result State */}
       {!isExecuting && result && (
         <div className="caricarica-modal__result">
+          {isPermissionRevoked && (
+            <PermissionRevokedBanner message={result?.message || result?.result?.message} />
+          )}
           {isSuccess ? (
             <>
               {/* Success Message */}
               <div className={`caricarica-modal__success ${hasErrors ? 'caricarica-modal__success--with-warnings' : ''}`}>
                 <div className="caricarica-modal__success-icon">
-                  {hasErrors ? '⚠️' : '✅'}
+                  {isSkippedIdempotent ? 'ⓘ' : (hasErrors ? '⚠️' : '✅')}
                 </div>
                 <h4 className="caricarica-modal__success-title">
-                  {hasErrors ? 'Completato con errori' : 'Caricamento completato!'}
+                  {isSkippedIdempotent
+                    ? 'Run già completata in precedenza'
+                    : (hasErrors ? 'Completato con errori' : 'Caricamento completato!')}
                 </h4>
                 <p className="caricarica-modal__success-message">
-                  {hasErrors 
-                    ? `${caricaricaInfo.rowsFailed} righe su ${caricaricaInfo.totalRows} non sono state caricate`
-                    : `${caricaricaInfo.rowsWritten} righe caricate con successo`
+                  {isSkippedIdempotent
+                    ? 'Questa run era già stata completata. Nessuna scrittura effettuata (idempotency).'
+                    : (hasErrors
+                      ? `${caricaricaInfo.rowsFailed} righe su ${caricaricaInfo.totalRows} non sono state caricate`
+                      : `${caricaricaInfo.rowsWritten} righe caricate con successo`)
                   }
                 </p>
               </div>

@@ -19,6 +19,8 @@ import { useHexCanvas } from '../utils/hexCanvas';
 import AllowedGroupsSelector from '../components/shared/AllowedGroupsSelector';
 import AppSidebar from '../components/AppSidebar';
 import ModalWrapper, { ModalButton } from '../components/common/ModalWrapper';
+import ConfirmDialog from '../components/common/ConfirmDialog';
+import { useConfirmModal } from '../hooks/useConfirmModal';
 import { handleCascade409, formatCascadeDependencies } from '../api/errors';
 import { can, role } from '../utils/permissions';
 import '../styles/ConnectionManager.css';
@@ -55,6 +57,7 @@ function ThemeToggle() {
 // ── Main component ───────────────────────────────────────────────────────
 function ConnectionManager() {
   const toast    = useToast();
+  const confirmModal = useConfirmModal();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const canvasRef = useRef(null);
@@ -146,7 +149,13 @@ function ConnectionManager() {
   };
 
   const handleDelete = async (conn) => {
-    if (!confirm(`Eliminare "${conn.name}"?`)) return;
+    const ok = await confirmModal.confirm({
+      title: 'Elimina connessione',
+      message: `Eliminare "${conn.name}"?`,
+      confirmText: 'Elimina',
+      variant: 'danger',
+    });
+    if (!ok) return;
     try {
       conn._category === 'arcgis' ? await deleteFeatureConnection(conn.id) : await deleteConnection(conn.id);
       loadConnections();
@@ -423,6 +432,7 @@ function ConnectionManager() {
           />
         </ModalWrapper>
       )}
+      <ConfirmDialog {...confirmModal} />
     </div>
   );
 }
