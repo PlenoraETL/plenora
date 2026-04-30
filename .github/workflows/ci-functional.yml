@@ -88,11 +88,17 @@ jobs:
       # Celery broker/backend al Redis del service.
       CELERY_BROKER_URL: redis://127.0.0.1:6379/0
       CELERY_RESULT_BACKEND: redis://127.0.0.1:6379/1
-      # Opt-in SSRF loopback: i test functional spawnano un fake HTTP
-      # server su 127.0.0.1 e poi fanno chiamare il backend reale verso
-      # quell'URL. Senza opt-in, validate_external_url blocca il loopback
-      # come SSRF (corretto in prod, falso positivo qui).
-      PLENORA_ALLOW_LOOPBACK_OUTBOUND: "1"
+      # NOTA SSRF loopback opt-in (rimosso dal job-level in PR #21):
+      # `PLENORA_ALLOW_LOOPBACK_OUTBOUND=1` resta settato a livello
+      # fixture in `tests2/functional/conftest.py:47` (`functional_env`),
+      # cosi' i test functional che spawnano un fake HTTP server su
+      # 127.0.0.1 e fanno chiamare il backend verso quell'URL continuano
+      # a funzionare. I subprocess `integration_backend_server` (che
+      # usano `integration_env`, line 30-47 del conftest integration)
+      # NON ereditano l'opt-in: il loro backend rispetta la policy SSRF
+      # default, permettendo a `test_api_connection_test_calls_fake_api_
+      # and_preserves_record` di verificare il blocco SSRF (asserzione
+      # `tested["success"] is False` + "URL bloccato" nell'errore).
       # Backup bucket dummy (stesso pattern di PR #5).
       BACKUP_BUCKET: test-backup-bucket-no-real-s3
 
