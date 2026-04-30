@@ -148,6 +148,58 @@ jobs:
           fi
           psql "$DATABASE_URL" -c 'CREATE SCHEMA IF NOT EXISTS plenora;'
 
+      - name: Ensure 'dataflow' user + 'dataflow_test' DB for postgres_ext tests
+        # Helper backend/tests2/integration/harness/postgres_ext.py si
+        # aspetta un secondo PG database `dataflow_test` con user
+        # `dataflow` per simulare un PG cliente esterno (separato da
+        # plenora_test che ospita lo schema applicativo). Il PG service
+        # del workflow espone una sola istanza, quindi creiamo user+DB
+        # aggiuntivi via psql usando plenora_test come SUPERUSER (default
+        # del docker-entrypoint POSTGRES_USER).
+        #
+        # Idempotente: re-run safe via DO block (CREATE USER) e check
+        # pg_database (CREATE DATABASE non e' ammesso in DO block).
+        #
+        # ALTER SCHEMA public OWNER TO dataflow: PG 15+ ha REVOKE CREATE
+        # ON SCHEMA public FROM PUBLIC di default. Per consentire al
+        # helper postgres_ext.py di fare `CREATE TABLE public.<name>` con
+        # user dataflow, ALTER OWNER e' robusto (copre CREATE/USAGE/DROP).
+        # GRANT ALL aggiuntivo per safety net.
+        #
+        # `set -e` interrompe lo step su qualunque psql error fuori
+        # dalla pipe `||`. ON_ERROR_STOP=1 aborta SQL multi-statement
+        # al primo errore. `psql` e' gia' installato dal step precedente.
+        env:
+          PGPASSWORD: plenora_test
+        run: |
+          set -e
+
+          # 1. CREATE USER 'dataflow' (idempotente via DO + pg_roles)
+          psql -h 127.0.0.1 -U plenora_test -d plenora_test -v ON_ERROR_STOP=1 <<'SQL'
+          DO $$
+          BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'dataflow') THEN
+              CREATE USER "dataflow" WITH PASSWORD 'dataflow_test_2026';
+            END IF;
+          END $$;
+          SQL
+
+          # 2. CREATE DATABASE 'dataflow_test' (idempotente via grep su pg_database)
+          # CREATE DATABASE non e' ammesso in DO block / transaction (limitazione PG).
+          psql -h 127.0.0.1 -U plenora_test -d plenora_test -tAc \
+            "SELECT 1 FROM pg_database WHERE datname = 'dataflow_test'" \
+            | grep -q 1 || \
+            psql -h 127.0.0.1 -U plenora_test -d plenora_test -v ON_ERROR_STOP=1 -c \
+            "CREATE DATABASE dataflow_test OWNER dataflow;"
+
+          # 3. Schema public ownership + grant (PG 15+ default REVOKE).
+          # ALTER OWNER e' robusto: dataflow puo' CREATE TABLE public.X come
+          # fa il helper postgres_ext.py:49.
+          psql -h 127.0.0.1 -U plenora_test -d dataflow_test -v ON_ERROR_STOP=1 -c \
+            "ALTER SCHEMA public OWNER TO dataflow;"
+          psql -h 127.0.0.1 -U plenora_test -d dataflow_test -v ON_ERROR_STOP=1 -c \
+            "GRANT ALL ON SCHEMA public TO dataflow;"
+
       - name: Run pytest (HTTP-live tier)
         working-directory: backend
         # Marker positivo: gira SOLO i test che la CI principale ha
