@@ -76,9 +76,13 @@ def test_delete_connection_409_shape_has_canonical_dependencies_field(client, mo
     monkeypatch.setattr(
         db_service,
         "fetchall",
+        # PR-δ: la SELECT include `group_id` per consentire filtro
+        # cross-tenant in fase di costruzione del 409 detail. Per non
+        # rompere lo shape test, entrambi i progetti appartengono al
+        # gruppo di current_user (grp-1) → tutti visibili, hidden=0.
         lambda *args, **kwargs: [
-            {"id": "proj-1", "name": "Progetto A", "project_type": "estrai"},
-            {"id": "proj-2", "name": "Progetto B", "project_type": "manipola"},
+            {"id": "proj-1", "name": "Progetto A", "project_type": "estrai",  "group_id": "grp-1"},
+            {"id": "proj-2", "name": "Progetto B", "project_type": "manipola", "group_id": "grp-1"},
         ],
     )
 
