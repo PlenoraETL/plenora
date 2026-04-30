@@ -1,0 +1,172 @@
+"""LockHeartbeat — class per il TTL refresh thread del lock scheduler
+(PR-#36 REFACTOR-EXEC-MGR c1).
+
+Estratto 1:1 da `execution_manager._start_lock_heartbeat` (line 152-200
+pre-refactor). Behavior change: zero.
+
+Lock lost handling (C3 follow-up fix A): se `refresh_lock` ritorna
+False, il thread tenta re-acquire. Se riesce → WARNING; se fallisce →
+ERROR + flag `state["lock_lost"] = True` cosi' `execute()` lo include
+nel risultato.
+
+Design:
+  - `start()`/`stop()` API esplicita
+  - `get_state_dict()` ritorna **reference** mutabile (non copia) per
+    far vedere a `execute()` le mutazioni live di `state["lock_lost"]`
+  - Wrapper compat in `execution_manager` aggiunge chiave opaca `_hb`
+    al dict ritornato (vedi `get_state_dict` per accoppiamento noto).
+
+Out of scope c1 (deferred c2): context manager `__enter__/__exit__` per
+uso `with LockHeartbeat(...) as hb` in `execute()`. Non aggiunti qui
+perche' non usati e aumentano LOC senza coverage rilevante.
+"""
+
+from __future__ import annotations
+
+import threading
+from typing import Any, Dict, Optional
+
+from app.utils.logger import get_logger
+
+
+logger = get_logger(__name__)
+
+
+class LockHeartbeat:
+    """Thread daemon che rinfresca periodicamente il lock scheduler.
+
+    Uso (wrapper compat — pattern attuale):
+        hb = LockHeartbeat(concurrency, schedule_id, interval)
+        hb.start()
+        state = hb.get_state_dict()  # reference live, NON copia
+        ...
+        hb.stop()  # set stop_event + join(timeout=5s)
+    """
+
+    def __init__(
+        self,
+        concurrency,
+        schedule_id: str,
+        interval: float,
+    ):
+        self._concurrency = concurrency
+        self._schedule_id = schedule_id
+        self._interval = interval
+        self._stop_event = threading.Event()
+        # State mutabile condiviso tra thread loop e get_state_dict().
+        # `lock_lost` viene mutato dal loop quando il lock e' perso e
+        # non re-acquisibile. `execute()` legge questa stessa reference
+        # via wrapper compat.
+        self._state: Dict[str, Any] = {
+            "stop_event": self._stop_event,
+            "lock_lost": False,
+        }
+        self._thread: Optional[threading.Thread] = None
+
+    def start(self) -> "LockHeartbeat":
+        """Spawn del thread daemon. Ritorna self per chaining."""
+        thread = threading.Thread(
+            target=self._heartbeat_loop,
+            daemon=True,
+            name=f"heartbeat-{self._schedule_id}",
+        )
+        self._state["thread"] = thread
+        self._thread = thread
+        thread.start()
+        return self
+
+    def stop(self) -> None:
+        """Segnala stop al thread + join(timeout=5s). Idempotente."""
+        self._stop_event.set()
+        if self._thread is not None and self._thread.is_alive():
+            self._thread.join(timeout=5.0)
+
+    def get_state_dict(self) -> Dict[str, Any]:
+        """Ritorna la **reference** al dict interno mutabile.
+
+        Non e' una copia: mutazioni del thread loop (es.
+        `state["lock_lost"] = True`) sono visibili al chiamante
+        immediatamente. Questo e' essenziale per preservare il contract
+        pubblico del wrapper compat in `execution_manager`.
+
+        ACCOPPIAMENTO NOTO (Finding H, PR-#36):
+        Il wrapper compat `execution_manager._start_lock_heartbeat`
+        aggiunge la chiave `"_hb"` (reference a self) al dict ritornato
+        da questo metodo. Poiche' `_state` E' la stessa reference, il
+        wrapper di fatto MUTA `LockHeartbeat._state` aggiungendo
+        `_state["_hb"] = self`. E' una leaky abstraction documentata,
+        non un bug: l'unica alternativa (dict copia) perderebbe la
+        reference live su `lock_lost` e romperebbe il contract verso
+        `execute()`. Risoluzione completa richiede c2 (uso del context
+        manager direttamente in `execute()`), che e' deferred.
+
+        Effetti collaterali del ciclo `_state["_hb"] = self`:
+          - GC: Python gestisce cicli, no leak reale
+          - lettori del dict: vedono una chiave extra `_hb` oltre a
+            `stop_event`, `thread`, `lock_lost`. `execute()` legge solo
+            `lock_lost`, ignora il resto: safe
+          - test che assert su shape esatta del dict devono prevedere
+            `_hb` se istanziato via wrapper, NON se istanziato diretto
+        """
+        return self._state
+
+    @property
+    def lock_lost(self) -> bool:
+        """True se il thread loop ha rilevato perdita del lock e
+        re-acquire fallito. Read-only, mutato dal solo thread loop."""
+        return bool(self._state.get("lock_lost", False))
+
+    # ------------------------------------------------------------------
+    # Internal loop — copiato 1:1 da execution_manager._start_lock_heartbeat
+    # (line 152-200 pre-refactor). Niente behavior change.
+    # ------------------------------------------------------------------
+
+    def _heartbeat_loop(self) -> None:
+        # Usa stop_event.wait(timeout) invece di time.sleep: il
+        # wait ritorna immediatamente True se stop_event e' settato,
+        # cosi' lo stop e' deterministico e non aspettiamo l'intero
+        # interval prima di fermarci.
+        while not self._stop_event.wait(self._interval):
+            try:
+                ok = self._concurrency.refresh_lock(self._schedule_id)
+            except Exception as e:
+                # Transient DB blip: logga warning ma continua
+                # (il prossimo tick riprovera').
+                logger.warning(
+                    f"[HEARTBEAT] refresh_lock exception per "
+                    f"{self._schedule_id}: {e}"
+                )
+                continue
+
+            if ok:
+                continue
+
+            # refresh_lock ritornato False: il lock e' scaduto o
+            # rilasciato. Tenta re-acquire — se riesce, nessuno ha
+            # ripreso nel frattempo; se fallisce, un altro processo
+            # sta potenzialmente eseguendo lo stesso schedule.
+            try:
+                reacquired = self._concurrency.try_acquire(self._schedule_id)
+            except Exception as e:
+                logger.warning(
+                    f"[HEARTBEAT] re-acquire exception per "
+                    f"{self._schedule_id}: {e}"
+                )
+                continue
+
+            if reacquired == "acquired":
+                logger.warning(
+                    f"[HEARTBEAT] Lock {self._schedule_id} temporaneamente "
+                    f"perso, riacquisito con successo. "
+                    f"Possibile blip DB/TTL expired, no concorrenza."
+                )
+            else:
+                # Un altro processo detiene il lock. Segnaliamo
+                # nello state cosi' execute() puo' portarlo nel
+                # result come warning di esecuzione non piu' protetta.
+                self._state["lock_lost"] = True
+                logger.error(
+                    f"[HEARTBEAT] Lock {self._schedule_id} perso e non "
+                    f"riacquisibile (try_acquire={reacquired}). "
+                    f"Esecuzione concorrente possibile — run marcato."
+                )

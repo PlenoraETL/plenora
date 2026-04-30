@@ -118,12 +118,19 @@ class ExecutionManager:
         """Lancia un thread daemon che rinfresca periodicamente il lock
         scheduler fino a `_stop_lock_heartbeat()`.
 
-        Motivazione: il TTL del lock e' corto (10min) per permettere
-        recovery veloce su SIGKILL del worker. Finche' la pipeline
-        e' attiva, il worker rinfresca il TTL via questo thread.
-        Se il worker muore, il thread daemon muore con lui, non
-        rinfresca piu', e il lock scade entro il TTL invece di
-        restare appeso.
+        PR-#36 (REFACTOR-EXEC-MGR c1): la logica del thread e' stata
+        estratta in `LockHeartbeat` (`app.core.scheduler._lock_heartbeat`).
+        Questo metodo resta come thin wrapper compat: l'API pubblica
+        verso `execute()` e' invariata 1:1. Il dict ritornato espone le
+        stesse chiavi (`stop_event`, `thread`, `lock_lost`) + chiave
+        opaca `_hb` consumata solo da `_stop_lock_heartbeat`.
+
+        Motivazione (estratta da implementazione originale): il TTL del
+        lock e' corto (10min) per permettere recovery veloce su SIGKILL
+        del worker. Finche' la pipeline e' attiva, il worker rinfresca
+        il TTL via questo thread. Se il worker muore, il thread daemon
+        muore con lui, non rinfresca piu', e il lock scade entro il TTL
+        invece di restare appeso.
 
         Lock lost handling (C3 follow-up fix A): se `refresh_lock`
         ritorna False (lock scaduto/rilasciato), il thread tenta
@@ -139,77 +146,37 @@ class ExecutionManager:
         Returns:
             Stato opaco (dict) da passare a `_stop_lock_heartbeat`.
             Chiavi pubblicate: `stop_event`, `thread`, `lock_lost`.
+            La chiave `lock_lost` riflette LIVE le mutazioni del thread
+            loop (il dict e' la stessa reference dello state interno
+            di `LockHeartbeat`, non una copia).
         """
+        from app.core.scheduler._lock_heartbeat import LockHeartbeat
+
         if interval is None:
             interval = float(settings.SCHEDULE_LOCK_HEARTBEAT_INTERVAL_SECONDS)
 
-        stop_event = threading.Event()
-        state: Dict[str, Any] = {
-            "stop_event": stop_event,
-            "lock_lost": False,
-        }
-
-        def _heartbeat_loop():
-            # Usa stop_event.wait(timeout) invece di time.sleep: il
-            # wait ritorna immediatamente True se stop_event e' settato,
-            # cosi' lo stop e' deterministico e non aspettiamo l'intero
-            # interval prima di fermarci.
-            while not stop_event.wait(interval):
-                try:
-                    ok = self.concurrency.refresh_lock(schedule_id)
-                except Exception as e:
-                    # Transient DB blip: logga warning ma continua
-                    # (il prossimo tick riprovera').
-                    logger.warning(
-                        f"[HEARTBEAT] refresh_lock exception per "
-                        f"{schedule_id}: {e}"
-                    )
-                    continue
-
-                if ok:
-                    continue
-
-                # refresh_lock ritornato False: il lock e' scaduto o
-                # rilasciato. Tenta re-acquire — se riesce, nessuno ha
-                # ripreso nel frattempo; se fallisce, un altro processo
-                # sta potenzialmente eseguendo lo stesso schedule.
-                try:
-                    reacquired = self.concurrency.try_acquire(schedule_id)
-                except Exception as e:
-                    logger.warning(
-                        f"[HEARTBEAT] re-acquire exception per "
-                        f"{schedule_id}: {e}"
-                    )
-                    continue
-
-                if reacquired == "acquired":
-                    logger.warning(
-                        f"[HEARTBEAT] Lock {schedule_id} temporaneamente "
-                        f"perso, riacquisito con successo. "
-                        f"Possibile blip DB/TTL expired, no concorrenza."
-                    )
-                else:
-                    # Un altro processo detiene il lock. Segnaliamo
-                    # nello state cosi' execute() puo' portarlo nel
-                    # result come warning di esecuzione non piu' protetta.
-                    state["lock_lost"] = True
-                    logger.error(
-                        f"[HEARTBEAT] Lock {schedule_id} perso e non "
-                        f"riacquisibile (try_acquire={reacquired}). "
-                        f"Esecuzione concorrente possibile — run marcato."
-                    )
-
-        thread = threading.Thread(
-            target=_heartbeat_loop,
-            daemon=True,
-            name=f"heartbeat-{schedule_id}",
+        hb = LockHeartbeat(
+            concurrency=self.concurrency,
+            schedule_id=schedule_id,
+            interval=interval,
         )
-        state["thread"] = thread
-        thread.start()
+        hb.start()
+        # Reference LIVE allo state interno: mutazioni del thread loop
+        # (es. `state["lock_lost"] = True`) sono visibili al chiamante
+        # tramite `state.get("lock_lost", False)`. Aggiungiamo una
+        # chiave opaca `_hb` consumata solo da `_stop_lock_heartbeat`,
+        # NON letta da `execute()`.
+        state = hb.get_state_dict()
+        state["_hb"] = hb
         return state
 
     def _stop_lock_heartbeat(self, state: Dict[str, Any]) -> None:
         """Segnala lo stop al thread heartbeat e aspetta la sua fine.
+
+        PR-#36: usa `state["_hb"].stop()` quando presente (path
+        post-refactor). Fallback su pattern legacy `stop_event` +
+        `thread.join` se la chiave opaca non e' presente (back-compat
+        con eventuali state dict costruiti a mano).
 
         Idempotente: chiamarlo due volte non solleva.
         Timeout del join: 5s — se il thread non finisce per qualche
@@ -218,6 +185,11 @@ class ExecutionManager:
         """
         if not state:
             return
+        hb = state.get("_hb")
+        if hb is not None:
+            hb.stop()
+            return
+        # Fallback compat (state senza chiave _hb).
         stop_event = state.get("stop_event")
         thread = state.get("thread")
         if stop_event is not None:
