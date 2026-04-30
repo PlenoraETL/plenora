@@ -19,8 +19,15 @@
  * o null se non è un 409 cascade riconosciuto.
  *
  * Ritorna:
- *   { error: string, message: string, dependencies: Array<{kind, id, name, project_type?}> }
+ *   { error: string, message: string,
+ *     dependencies: Array<{kind, id, name, project_type?}>,
+ *     hiddenCount: number }
  *   oppure null.
+ *
+ * PR-δ (2026-04-30): aggiunto `hiddenCount`. Il backend filtra ora le
+ * dependencies non visibili al chiamante (cross-tenant leak fix) e popola
+ * `detail.hidden_count` con il numero di progetti bloccanti nascosti.
+ * Default 0 per backward-compatibility con response shape pre-PR-δ.
  */
 export function handleCascade409(err) {
   if (!err || err.response?.status !== 409) return null;
@@ -28,10 +35,16 @@ export function handleCascade409(err) {
   if (!detail || typeof detail !== 'object') return null;
   if (typeof detail.error !== 'string' || !detail.error) return null;
   if (!Array.isArray(detail.dependencies)) return null;
+  const hiddenCount = (
+    typeof detail.hidden_count === 'number' && detail.hidden_count > 0
+      ? detail.hidden_count
+      : 0
+  );
   return {
     error: detail.error,
     message: typeof detail.message === 'string' ? detail.message : '',
     dependencies: detail.dependencies,
+    hiddenCount,
   };
 }
 
@@ -39,11 +52,21 @@ export function handleCascade409(err) {
  * Formatta un array di dependencies in stringa user-facing, raggruppando
  * per kind. Esempio: "2 eseguibile/i (foo, bar) e 1 progetto/i (baz)".
  * Ritorna stringa vuota se l'input è vuoto o invalido.
+ *
+ * PR-δ: se passato `hiddenCount > 0`, appende "+ N altri" alla sezione
+ * project/i per segnalare progetti bloccanti non visibili al chiamante.
+ * Backward compat: chiamate senza secondo argomento si comportano come
+ * prima.
  */
-export function formatCascadeDependencies(dependencies) {
-  if (!Array.isArray(dependencies) || dependencies.length === 0) return '';
+export function formatCascadeDependencies(dependencies, hiddenCount = 0) {
+  const safeHidden = (typeof hiddenCount === 'number' && hiddenCount > 0)
+    ? hiddenCount
+    : 0;
+  const list = Array.isArray(dependencies) ? dependencies : [];
+  if (list.length === 0 && safeHidden === 0) return '';
+
   const byKind = {};
-  for (const d of dependencies) {
+  for (const d of list) {
     const kind = d?.kind || 'altro';
     (byKind[kind] ||= []).push(d);
   }
@@ -52,9 +75,21 @@ export function formatCascadeDependencies(dependencies) {
     const names = byKind.eseguibile.map(e => e.name).filter(Boolean).join(', ');
     parts.push(`${byKind.eseguibile.length} eseguibile/i (${names})`);
   }
-  if (byKind.project?.length) {
-    const names = byKind.project.map(p => p.name).filter(Boolean).join(', ');
-    parts.push(`${byKind.project.length} progetto/i (${names})`);
+
+  const projects = byKind.project || [];
+  if (projects.length || safeHidden > 0) {
+    const names = projects.map(p => p.name).filter(Boolean).join(', ');
+    const totalProjects = projects.length + safeHidden;
+    let segment = `${totalProjects} progetto/i`;
+    if (names) segment += ` (${names}`;
+    if (safeHidden > 0) {
+      segment += names
+        ? `, + ${safeHidden} altro/i non visibili)`
+        : ` (${safeHidden} non visibili)`;
+    } else if (names) {
+      segment += ')';
+    }
+    parts.push(segment);
   }
   return parts.join(' e ');
 }

@@ -72,9 +72,12 @@ def test_delete_datasource_409_shape_has_canonical_dependencies_field(client, mo
     monkeypatch.setattr(
         ds_router_module,
         "_find_projects_using_datasource",
+        # PR-δ: il helper ora include `group_id` nelle row per consentire
+        # filtro cross-tenant a valle. Per non rompere lo shape test,
+        # entrambi i progetti sono dello stesso gruppo del current_user.
         lambda ds_id: [
-            {"id": "proj-1", "name": "Canvas A", "project_type": "manipola"},
-            {"id": "proj-2", "name": "Canvas B", "project_type": "arricchisci"},
+            {"id": "proj-1", "name": "Canvas A", "project_type": "manipola",    "group_id": "grp-1"},
+            {"id": "proj-2", "name": "Canvas B", "project_type": "arricchisci", "group_id": "grp-1"},
         ],
     )
 

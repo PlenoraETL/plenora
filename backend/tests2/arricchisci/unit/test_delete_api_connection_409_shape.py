@@ -70,10 +70,13 @@ def client(current_user: CurrentUser, monkeypatch) -> TestClient:
     fake_project_list = SimpleNamespace(
         projects=[
             SimpleNamespace(
+                # PR-δ: aggiunto `group_id` (visibile a current_user grp-1)
+                # cosi' il filtro cross-tenant non scarta la dipendenza.
                 model_dump=lambda: {
                     "project_id": "proj-arr-1",
                     "name": "Arricchisci Alpha",
                     "project_type": "arricchisci",
+                    "group_id": "grp-1",
                 }
             )
         ]

@@ -147,14 +147,30 @@ def delete_connection(
         raise HTTPException(status_code=422, detail=str(e))
     assert_can_modify(existing, current_user, "Connessione")
 
-    # Check dipendenze: progetti che usano questa connessione
+    # Check dipendenze: progetti che usano questa connessione.
+    # PR-δ: filtrare `dependencies` per visibility lato chiamante per non
+    # leakare nomi di progetti cross-tenant nell'errore 409 (la connessione
+    # puo' essere shared con altri gruppi via allowed_groups: i loro
+    # progetti che la usano restano dipendenze legittime, ma admin del
+    # gruppo proprietario non deve vederne i nomi). Superadmin: nessun
+    # filtro.
     import app.db.db_service as _db
     using_projects = _db.fetchall(
-        "SELECT id, name, project_type FROM projects WHERE connection_id = ?",
+        "SELECT id, name, project_type, group_id FROM projects WHERE connection_id = ?",
         (connection_id,)
     )
     if using_projects:
+        is_super = current_user.role == "superadmin"
+        if is_super:
+            visible = list(using_projects)
+            hidden_count = 0
+        else:
+            visible = [p for p in using_projects if p.get("group_id") == current_user.group_id]
+            hidden_count = len(using_projects) - len(visible)
+
         # Shape 409 cascade canonica (Batch Fix 6.1): dependencies con kind.
+        # PR-δ: aggiunto `hidden_count` opzionale (0 di default, FE
+        # backward-compatible: se 0 o assente, formatter ignora).
         raise HTTPException(
             status_code=409,
             detail={
@@ -170,8 +186,9 @@ def delete_connection(
                         "name": p["name"],
                         "project_type": p["project_type"],
                     }
-                    for p in using_projects
+                    for p in visible
                 ],
+                "hidden_count": hidden_count,
             },
         )
 

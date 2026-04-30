@@ -134,4 +134,68 @@ describe('formatCascadeDependencies', () => {
     expect(formatCascadeDependencies(undefined)).toBe('');
     expect(formatCascadeDependencies({})).toBe('');
   });
+
+  // PR-δ — hidden_count cross-tenant
+  it('appende "+ N altro/i non visibili" quando hiddenCount > 0 e progetti visibili', () => {
+    const deps = [{ kind: 'project', id: 'p-1', name: 'Mio' }];
+    const text = formatCascadeDependencies(deps, 2);
+    expect(text).toBe('3 progetto/i (Mio, + 2 altro/i non visibili)');
+  });
+
+  it('mostra solo count se hiddenCount > 0 senza progetti visibili', () => {
+    const text = formatCascadeDependencies([], 3);
+    expect(text).toBe('3 progetto/i (3 non visibili)');
+  });
+
+  it('ignora hiddenCount = 0 (backward compat con response pre-PR-δ)', () => {
+    const deps = [{ kind: 'project', id: 'p-1', name: 'Foo' }];
+    expect(formatCascadeDependencies(deps, 0)).toBe('1 progetto/i (Foo)');
+    expect(formatCascadeDependencies(deps)).toBe('1 progetto/i (Foo)');
+  });
+
+  it('ignora hiddenCount non numerico o negativo', () => {
+    const deps = [{ kind: 'project', id: 'p-1', name: 'Foo' }];
+    expect(formatCascadeDependencies(deps, -1)).toBe('1 progetto/i (Foo)');
+    expect(formatCascadeDependencies(deps, null)).toBe('1 progetto/i (Foo)');
+    expect(formatCascadeDependencies(deps, 'invalid')).toBe('1 progetto/i (Foo)');
+  });
+});
+
+describe('handleCascade409 — PR-δ hidden_count', () => {
+  it('estrae hiddenCount dal detail.hidden_count', () => {
+    const err = fakeError(409, {
+      detail: {
+        error: 'datasource_in_use',
+        message: 'usato',
+        dependencies: [{ kind: 'project', id: 'p-1', name: 'Mio' }],
+        hidden_count: 2,
+      },
+    });
+    const result = handleCascade409(err);
+    expect(result.hiddenCount).toBe(2);
+  });
+
+  it('default hiddenCount = 0 quando hidden_count manca (backward compat)', () => {
+    const err = fakeError(409, {
+      detail: {
+        error: 'connection_in_use',
+        message: 'usata',
+        dependencies: [{ kind: 'project', id: 'p-1', name: 'P1' }],
+      },
+    });
+    const result = handleCascade409(err);
+    expect(result.hiddenCount).toBe(0);
+  });
+
+  it('ignora hidden_count negativo o non numerico (default 0)', () => {
+    const err = fakeError(409, {
+      detail: {
+        error: 'connection_in_use',
+        message: '',
+        dependencies: [],
+        hidden_count: -1,
+      },
+    });
+    expect(handleCascade409(err).hiddenCount).toBe(0);
+  });
 });

@@ -182,7 +182,17 @@ def delete_datasource(ds_id: str, current_user: CurrentUser = Depends(require_ad
             detail="Impossibile verificare dipendenze: riprova piu' tardi",
         )
     if using_projects:
+        # PR-δ: filtrare dependencies per visibility lato chiamante.
+        is_super = current_user.role == "superadmin"
+        if is_super:
+            visible = list(using_projects)
+            hidden_count = 0
+        else:
+            visible = [p for p in using_projects if p.get("group_id") == current_user.group_id]
+            hidden_count = len(using_projects) - len(visible)
+
         # Shape 409 cascade canonica (Batch Fix 6.1): dependencies con kind.
+        # PR-δ: aggiunto `hidden_count` opzionale (FE backward-compatible).
         raise HTTPException(
             status_code=409,
             detail={
@@ -198,8 +208,9 @@ def delete_datasource(ds_id: str, current_user: CurrentUser = Depends(require_ad
                         "name": p["name"],
                         "project_type": p.get("project_type", ""),
                     }
-                    for p in using_projects
+                    for p in visible
                 ],
+                "hidden_count": hidden_count,
             },
         )
 
@@ -222,7 +233,10 @@ def _find_projects_using_datasource(ds_id: str) -> List[Dict[str, str]]:
     al batch, non va esteso oltre questo scope.
     """
     import app.db.db_service as _db
-    rows = _db.fetchall("SELECT id, name, project_type, canvas FROM projects")
+    # PR-δ: includere group_id nella SELECT per consentire al caller di
+    # filtrare le dipendenze visibili al chiamante (no leak nomi
+    # cross-tenant nell'errore 409).
+    rows = _db.fetchall("SELECT id, name, project_type, canvas, group_id FROM projects")
     using = []
     check_failures = 0
     for row in rows:
@@ -252,6 +266,7 @@ def _find_projects_using_datasource(ds_id: str) -> List[Dict[str, str]]:
                         "id": row["id"],
                         "name": row["name"],
                         "project_type": row.get("project_type", ""),
+                        "group_id": row.get("group_id", ""),
                     })
                     break
         except Exception as _row_err:
