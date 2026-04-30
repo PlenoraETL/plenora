@@ -84,38 +84,42 @@ def _warn_urby_loopback_alias_once() -> None:
     )
 
 
-def validate_external_url(url: str) -> None:
-    """Anti-SSRF: valida che l'URL sia http(s) verso un host pubblico.
+def _check_outbound_address(
+    url: str, allow_loopback_opt_in: bool = True
+) -> Optional[str]:
+    """Anti-SSRF primitive: valida che l'URL sia http(s) verso un
+    host pubblico. Ritorna None se OK, altrimenti una stringa col
+    motivo del rifiuto (return-string contract).
 
-    Solleva ValueError se URL malformato o l'host risolve a un
-    IP privato/loopback/link-local/riservato/unspecified.
+    Single source of truth per i 2 wrapper:
+      - `validate_external_url` (raise contract)
+      - `validate_external_url_silent` (return-string contract pubblico)
+    e per il shim REST_FILE strict (`api_connection_source_loading.
+    _validate_outbound_url`) che chiama con
+    `allow_loopback_opt_in=False`.
 
-    Override per test funzionali: se la env var
-    `PLENORA_ALLOW_LOOPBACK_OUTBOUND=1` (canonical) o
-    `URBY_ALLOW_LOOPBACK_OUTBOUND=1` (alias retro-compat, deprecato)
-    e' settata, gli IP loopback (`127.0.0.0/8`, `::1`) sono
-    permessi. Gli IP privati di altre reti (10.x, 172.16.x,
-    192.168.x, IPv6 ULA `fc00::/7`), link-local e reserved restano
-    bloccati. Pensata per i test funzionali che lanciano un fake
-    HTTP server su `127.0.0.1`.
+    Args:
+      url: URL da validare.
+      allow_loopback_opt_in: se True, l'env var
+        `PLENORA_ALLOW_LOOPBACK_OUTBOUND=1` (canonical) o
+        `URBY_ALLOW_LOOPBACK_OUTBOUND=1` (alias retro-compat,
+        deprecato) sblocca loopback (`127.0.0.0/8`, `::1`) per i
+        test funzionali. Gli IP privati di altre reti (10.x,
+        172.16.x, 192.168.x, IPv6 ULA `fc00::/7`), link-local e
+        reserved restano bloccati. Se False (REST_FILE strict),
+        loopback resta bloccato anche con env settata.
 
     Guard: in ambienti hardened (`ENVIRONMENT in {production, prod,
     staging, stage}`, simmetrico a `config.py _DOTENV_DISABLED_ENVS`
-    e `crypto.py` guard) il flag e' IGNORATO indipendentemente dal
-    valore. Chiude S6 del runtime_config_audit.md: anche se il flag
-    finisse per errore in un worker prod/staging, la validazione
+    e `crypto.py` guard) il flag opt-in e' IGNORATO indipendentemente
+    dal valore. Chiude S6 del runtime_config_audit.md: anche se il
+    flag finisse per errore in un worker prod/staging, la validazione
     continua a bloccare il loopback.
 
     B3-B.8 bugfix (2026-04-27, security):
       - DNS resolution via `socket.getaddrinfo(host, None)` invece
         di `gethostbyname_ex` per coprire ANCHE i record AAAA (IPv6).
-        Senza questo, un hostname che risolve solo a IPv6 privato/
-        loopback/link-local (`fc00::/7`, `::1`, `fe80::/10`) passava
-        silenziosamente il check (`gethostbyname_ex` ritornava solo
-        IPv4 o falliva senza vedere AAAA).
       - Aggiunto blocco `ip.is_unspecified` per `0.0.0.0` / `::`.
-        Edge case minor ma teoricamente exploitabile in setup
-        malconfigurati.
     """
     from urllib.parse import urlparse
     import ipaddress
@@ -124,26 +128,40 @@ def validate_external_url(url: str) -> None:
 
     parsed = urlparse(url or "")
     if parsed.scheme not in ("http", "https"):
-        raise ValueError("URL non valido: solo schemi http/https sono permessi")
+        return "URL non valido: solo schemi http/https sono permessi"
     host = parsed.hostname
     if not host:
-        raise ValueError("URL non valido: hostname mancante")
+        return "URL non valido: hostname mancante"
 
-    # Guard: in ambienti hardened il flag e' disabilitato by design
-    # (simmetrico a config.py:26 _DOTENV_DISABLED_ENVS e crypto.py guard).
-    _env = os.environ.get("ENVIRONMENT", os.environ.get("ENV", "development")).lower()
-    if _env in ("production", "prod", "staging", "stage"):
-        allow_loopback = False
+    # Determina allow_loopback effettivo. REST_FILE strict
+    # (`allow_loopback_opt_in=False`) salta interamente il blocco env:
+    # loopback resta bloccato.
+    if allow_loopback_opt_in:
+        # Guard: in ambienti hardened il flag e' disabilitato by design
+        # (simmetrico a config.py:26 _DOTENV_DISABLED_ENVS e crypto.py
+        # guard).
+        _env = os.environ.get(
+            "ENVIRONMENT", os.environ.get("ENV", "development")
+        ).lower()
+        if _env in ("production", "prod", "staging", "stage"):
+            allow_loopback = False
+        else:
+            # Canonical PLENORA_*, alias retro-compat URBY_* (deprecato).
+            plenora_set = os.environ.get(
+                "PLENORA_ALLOW_LOOPBACK_OUTBOUND", ""
+            ).strip() == "1"
+            urby_set = os.environ.get(
+                "URBY_ALLOW_LOOPBACK_OUTBOUND", ""
+            ).strip() == "1"
+            allow_loopback = plenora_set or urby_set
+            # A3: warning loud one-shot quando si usa SOLO l'alias
+            # deprecato. Nessuna semantica cambia: l'alias resta
+            # funzionante. Pattern functools.lru_cache → cache hit
+            # silente dalla 2a chiamata in poi.
+            if urby_set and not plenora_set:
+                _warn_urby_loopback_alias_once()
     else:
-        # Canonical PLENORA_*, alias retro-compat URBY_* (deprecato).
-        plenora_set = os.environ.get("PLENORA_ALLOW_LOOPBACK_OUTBOUND", "").strip() == "1"
-        urby_set = os.environ.get("URBY_ALLOW_LOOPBACK_OUTBOUND", "").strip() == "1"
-        allow_loopback = plenora_set or urby_set
-        # A3: warning loud one-shot quando si usa SOLO l'alias deprecato.
-        # Nessuna semantica cambia: l'alias resta funzionante. Pattern
-        # functools.lru_cache → cache hit silente dalla 2a chiamata in poi.
-        if urby_set and not plenora_set:
-            _warn_urby_loopback_alias_once()
+        allow_loopback = False
 
     # B3-B.8: getaddrinfo copre IPv4 (A) + IPv6 (AAAA). Dedup via set —
     # uno stesso IP puo' apparire piu' volte (es. multipli protocolli
@@ -151,7 +169,7 @@ def validate_external_url(url: str) -> None:
     try:
         infos = socket.getaddrinfo(host, None)
     except socket.gaierror:
-        raise ValueError(f"Host non risolvibile: {host}")
+        return f"Host non risolvibile: {host}"
     addr_list = list({info[4][0] for info in infos})
     for addr in addr_list:
         try:
@@ -168,7 +186,34 @@ def validate_external_url(url: str) -> None:
             or ip.is_multicast
             or ip.is_unspecified
         ):
-            raise ValueError(f"URL bloccato: l'host risolve a un IP privato/interno ({addr})")
+            return f"URL bloccato: l'host risolve a un IP privato/interno ({addr})"
+    return None
+
+
+def validate_external_url(url: str) -> None:
+    """Anti-SSRF: valida che l'URL sia http(s) verso un host pubblico.
+
+    Wrapper raise sopra `_check_outbound_address` con
+    `allow_loopback_opt_in=True` (comportamento pre-fix invariato).
+
+    Solleva ValueError se URL malformato o l'host risolve a un
+    IP privato/loopback/link-local/riservato/unspecified.
+
+    Per il contratto return-string (no eccezione), vedi
+    `validate_external_url_silent`. Per il REST_FILE strict-no-opt-in,
+    vedi `api_connection_source_loading._validate_outbound_url`
+    (shim che chiama la primitive con `allow_loopback_opt_in=False`).
+    """
+    motivo = _check_outbound_address(url, allow_loopback_opt_in=True)
+    if motivo is not None:
+        raise ValueError(motivo)
+
+
+def validate_external_url_silent(url: str) -> Optional[str]:
+    """Anti-SSRF return-string contract: come `validate_external_url`
+    ma ritorna None se OK, motivo string altrimenti. Stesso comportamento
+    sul loopback opt-in (env PLENORA_*/URBY_* + hardened env guard)."""
+    return _check_outbound_address(url, allow_loopback_opt_in=True)
 
 
 # ──────────────────────────────────────────────────────────────────────
