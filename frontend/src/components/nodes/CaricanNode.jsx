@@ -305,7 +305,6 @@ const CaricanNode = memo(({ data, id }) => {
       const dfMatchCols = rawMatchCols.map(col => aliasLookup[col] || col);
 
       const sourceNodeData = getSourceNodeData();
-      console.log('[C07] projectId:', projectId, 'rawMatchCols:', rawMatchCols, 'effectiveMatchCols:', effectiveMatchCols, 'sourceNode:', sourceNodeData);
       const result = await postCaricaCheckConflicts({
         connection_id: connectionId,
         schema_name: schemaName,

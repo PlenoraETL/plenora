@@ -10,6 +10,7 @@
 import React, { useState, useEffect, useRef, memo, useMemo } from 'react';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import PreviewTable from './PreviewTable';
+import PermissionRevokedBanner from '../common/PermissionRevokedBanner';
 import './PreviewModal.css';
 
 /* ─── WKB hex → GeoJSON parser ──────────────────────────────────── */
@@ -540,6 +541,11 @@ const PreviewModal = memo(({
   data,
   loading = false,
   error = null,
+  // PR-cleanup UX Tier 1: quando il task preview ha rilevato permessi
+  // revocati mid-task, il consumer passa flag dedicato e PreviewModal
+  // renderizza <PermissionRevokedBanner> inline invece dell'errore
+  // generico. Default false: backward-compat per chi non passa la prop.
+  permissionRevoked = false,
   title = 'Anteprima Dati',
   projectType = 'estrai',
   initialLimit = 100,
@@ -680,8 +686,14 @@ const PreviewModal = memo(({
       loading={loading}
       loadingText="Caricamento anteprima..."
     >
-      {/* Error */}
-      {error && !loading && (
+      {/* Permission revoked banner (PR-cleanup UX Tier 1) */}
+      {permissionRevoked && !loading && (
+        <PermissionRevokedBanner message={error} />
+      )}
+
+      {/* Error generico (skip se permission_revoked: il banner sopra
+          gia' veicola l'esito specifico) */}
+      {error && !loading && !permissionRevoked && (
         <div className="preview-modal__error">
           <div className="preview-modal__error-icon">❌</div>
           <p className="preview-modal__error-title">Errore caricamento anteprima</p>

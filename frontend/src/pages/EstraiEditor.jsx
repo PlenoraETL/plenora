@@ -771,6 +771,7 @@ function EstraiEditor() {
           return { ...preview.data, columns: enrichedColumns };
         })()}
         loading={preview.loading} error={preview.error}
+        permissionRevoked={preview.permissionRevoked}
         title="Anteprima Query SQL" projectType="estrai"
       />
       </Suspense>

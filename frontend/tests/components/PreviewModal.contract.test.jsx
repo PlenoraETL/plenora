@@ -177,3 +177,45 @@ describe('PreviewModal — contract (post split PreviewTable)', () => {
     expect(screen.getByText('1 / 5')).toBeInTheDocument();
   });
 });
+
+
+// =============================================================================
+// PR-cleanup UX Tier 1: permission_revoked banner inline
+// =============================================================================
+
+describe('PreviewModal — permission_revoked banner', () => {
+  it('rende <PermissionRevokedBanner> quando permissionRevoked=true e niente errore generico', () => {
+    render(
+      <PreviewModal
+        isOpen={true}
+        onClose={() => {}}
+        loading={false}
+        error="Ruolo declassato durante la preview"
+        permissionRevoked={true}
+        title="Test Preview"
+      />,
+    );
+
+    // Banner rendered (titolo "Permessi revocati ...")
+    expect(screen.getByText(/Permessi revocati/i)).toBeInTheDocument();
+    // Errore generico NON rendered: il banner prevale
+    expect(screen.queryByText('Errore caricamento anteprima')).toBeNull();
+  });
+
+  it('senza permissionRevoked (default false) mostra il blocco errore generico', () => {
+    render(
+      <PreviewModal
+        isOpen={true}
+        onClose={() => {}}
+        loading={false}
+        error="Errore qualunque"
+        title="Test Preview"
+      />,
+    );
+
+    // Banner NON rendered
+    expect(screen.queryByText(/Permessi revocati/i)).toBeNull();
+    // Errore generico rendered (backward compat)
+    expect(screen.getByText('Errore caricamento anteprima')).toBeInTheDocument();
+  });
+});
