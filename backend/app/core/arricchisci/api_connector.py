@@ -453,6 +453,41 @@ class ApiConnectionService(
                             if input_df is not None:
                                 node_results[node_id] = input_df
 
+                    elif node_type == 'api_enrich':
+                        # PR #22: api_enrich emesso come step "single" da
+                        # `compute_parallel_groups` quando RB.#15 flagga il
+                        # nodo come cardinality-changing (output_mapping con
+                        # `[]`/`[*]`) o quando e' un nodo isolato. Senza
+                        # questo branch il nodo veniva silenziosamente
+                        # saltato: `node_results[node_id]` non era mai
+                        # settato → `_find_final_result` cadeva su un
+                        # fallback upstream → task ritornava success=True
+                        # mascherando errori HTTP del generator (regression
+                        # di copertura del fix RB.#15 group_error).
+                        #
+                        # Riuso di `_run_single_enricher` (line 317-332):
+                        # gia' fa il dispatch su api_type=generator vs
+                        # enricher e propaga ValueError sollevato da
+                        # `_call_generator_endpoint:480-482` su HTTP error.
+                        # Catturato dal boundary `execute_enrichment:556`
+                        # come {"success": False, "user_error": True, ...}.
+                        input_edge = next(
+                            (e for e in edges if e['target'] == node_id), None
+                        )
+                        input_df = (
+                            node_results.get(input_edge['source'])
+                            if input_edge else None
+                        )
+                        result = self._run_single_enricher(
+                            node_data, api_connections, input_df
+                        )
+                        # Propaga dict di errore senza convertirlo in success.
+                        if isinstance(result, dict) and not result.get(
+                            'success', True
+                        ):
+                            return result
+                        node_results[node_id] = result
+
                 else:
                     # ── Gruppo parallelo di api_enrich ──
                     # Trova l'input_df comune: output del predecessore del primo nodo del gruppo

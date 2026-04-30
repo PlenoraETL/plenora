@@ -345,6 +345,113 @@ class TestExecuteEnrichmentApiEnrichDispatch:
         assert result["success"] is False
         assert "param mapping mismatch" in (result.get("error") or "")
 
+    def test_generator_in_single_step_invokes_execute_api_generator(self, env):
+        """PR #22 regression test.
+
+        RB.#15 (`compute_parallel_groups`) flusha gli api_enrich
+        cardinality-changing (output_mapping con `[*]`/`[]`) come step
+        ("single", [node_id]) invece di accumularli nel batch
+        ("parallel", ...). Prima di PR #22 il branch `step_type ==
+        "single"` di `execute_enrichment` (api_connector.py:421-454)
+        non aveva un handler per `node_type == 'api_enrich'`: il nodo
+        veniva silenziosamente saltato, l'API non veniva mai chiamata
+        e `_find_final_result` cadeva su un DataFrame upstream
+        (staticValues), facendo uscire la pipeline con success=True
+        mascherando errori HTTP del generator.
+
+        Questo test costruisce esattamente il flow problematico:
+        `staticValues -> api_enrich(generator + output_mapping[*]) -> result`
+        e verifica che `_execute_api_generator` venga effettivamente
+        invocato (=> il branch single api_enrich e' attivo).
+        """
+        env.list_conns.return_value = {
+            "api-1": {
+                "api_type": "generator",
+                "connection_type": "manual",
+                # output_mapping con `[*]` triggera RB.#15 →
+                # cardinality-changing → emit ("single", [ae-1]).
+                "output_mapping": [
+                    {"path": "data[*].value", "column": "value"}
+                ],
+            },
+        }
+
+        # Costruzione esplicita del nodo api_enrich con output_mapping
+        # contenente `[*]` (helper `_api_enrich` di base non lo include).
+        ae_node = {
+            "id": "ae-1",
+            "type": "api_enrich",
+            "api_id": "api-1",
+            "param_mapping": {},
+            "output_mapping": [
+                {"path": "data[*].value", "column": "value"}
+            ],
+        }
+
+        env.svc.execute_enrichment(
+            "proj-1",
+            _canvas(
+                nodes=[_static_values(), ae_node, _result()],
+                edges=[_edge("sv-1", "ae-1"), _edge("ae-1", "r-1")],
+            ),
+        )
+
+        # Pre-PR #22: assert_called_once() falliva (mai chiamato).
+        # Post-PR #22: il branch single dispatcha a _run_single_enricher
+        # che chiama _execute_api_generator.
+        env.generator.assert_called_once()
+        env.enricher.assert_not_called()
+
+    def test_generator_in_single_step_propagates_http_error_as_failure(self, env):
+        """PR #22 regression test.
+
+        Quando `_execute_api_generator` solleva ValueError (es. HTTP 422
+        dal generator API, vedi `_call_generator_endpoint:480-482`),
+        il branch single api_enrich di PR #22 deve propagare l'errore
+        attraverso il boundary `execute_enrichment:556-561` che lo
+        cattura come `{success: False, user_error: True, error: ...}`.
+
+        Pre-PR #22: il nodo veniva saltato silenziosamente → success=True
+        con DataFrame upstream → bug funzionale documentato in
+        `test_backend_api_enrich_http_failure_flow`.
+        """
+        env.list_conns.return_value = {
+            "api-1": {
+                "api_type": "generator",
+                "connection_type": "manual",
+                "output_mapping": [
+                    {"path": "data[*].value", "column": "value"}
+                ],
+            },
+        }
+        env.generator.side_effect = ValueError(
+            "API error: HTTP 422 — invalid payload"
+        )
+
+        ae_node = {
+            "id": "ae-1",
+            "type": "api_enrich",
+            "api_id": "api-1",
+            "param_mapping": {},
+            "output_mapping": [
+                {"path": "data[*].value", "column": "value"}
+            ],
+        }
+
+        result = env.svc.execute_enrichment(
+            "proj-1",
+            _canvas(
+                nodes=[_static_values(), ae_node, _result()],
+                edges=[_edge("sv-1", "ae-1"), _edge("ae-1", "r-1")],
+            ),
+        )
+
+        # ValueError sollevato dal generator deve emergere come failure.
+        # Niente fallback su DataFrame upstream (silent data loss).
+        assert result["success"] is False
+        assert result.get("user_error") is True
+        assert "HTTP 422" in (result.get("error") or "")
+
 
 # =============================================================================
 # Section 5: risultato finale (dataframe / file / fallback / persistence)
