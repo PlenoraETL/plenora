@@ -521,72 +521,24 @@ class ApiConnectionSourceLoadingMixin:
 
     @staticmethod
     def _validate_outbound_url(url: str) -> Optional[str]:
-        """Valida un URL per uscite outbound (SSRF guard).
+        """Shim REST_FILE strict-no-opt-in: SSRF guard per uscite
+        outbound del flusso REST_FILE.
 
-        Blocca:
-          - schema non http/https
-          - hostname mancante
-          - IP privati / loopback / link-local / metadata EC2 (169.254.*)
-          - IP multicast / reserved
+        PR-#35 (P1-C SSRF single-source design): delega alla primitive
+        condivisa `app.shared.api_utils._check_outbound_address` con
+        `allow_loopback_opt_in=False`. REST_FILE NON accetta loopback
+        nemmeno con env `PLENORA_ALLOW_LOOPBACK_OUTBOUND` settata: la
+        coerenza col threat model REST_FILE (file processor via HTTP
+        invocato dal canvas) richiede che resti strict anche in dev/test.
 
-        Ritorna None se OK, altrimenti una stringa con il motivo.
-        La risoluzione DNS e' fatta al momento della validazione: un attacker
-        puo' teoricamente fare DNS rebinding (TOCTOU tra resolve e connect),
-        ma per il nostro threat model (admin compromesso) questo e' sufficiente.
+        Signature `(url: str) -> Optional[str]` invariata pre-/post-fix
+        per preservare:
+          - call site `api_connection_rest_file.py:512`
+            (`ssrf_error = self._validate_outbound_url(url)`)
+          - test che fanno `monkeypatch.setattr(svc, "_validate_outbound_url",
+            lambda url: None)` su istanza
+
+        Ritorna None se URL safe, stringa con il motivo altrimenti.
         """
-        import ipaddress as _ip
-        import socket as _sock
-        from urllib.parse import urlparse as _urlparse
-
-        if not url or not isinstance(url, str):
-            return "URL vuoto"
-
-        try:
-            parsed = _urlparse(url.strip())
-        except Exception as e:
-            return f"URL non parsabile: {e}"
-
-        scheme = (parsed.scheme or "").lower()
-        if scheme not in ("http", "https"):
-            return f"schema '{scheme}' non consentito (solo http/https)"
-        if not parsed.hostname:
-            return "hostname mancante"
-
-        host = parsed.hostname
-        # Prova a parsare direttamente come IP (short-circuit)
-        candidates: List[str] = []
-        try:
-            _ip.ip_address(host)
-            candidates.append(host)
-        except ValueError:
-            # E' un hostname → risolvi tutti i record A/AAAA
-            try:
-                infos = _sock.getaddrinfo(host, None)
-                candidates = list({info[4][0] for info in infos})
-            except _sock.gaierror as ge:
-                return f"hostname '{host}' non risolvibile: {ge}"
-
-        if not candidates:
-            return f"nessun IP risolto per '{host}'"
-
-        for ip_str in candidates:
-            try:
-                ip_obj = _ip.ip_address(ip_str)
-            except ValueError:
-                logger.debug(
-                    f"_validate_outbound_url: IP non parsabile skippato: {ip_str}"
-                )
-                continue
-            if ip_obj.is_loopback:
-                return f"IP loopback bloccato: {ip_str}"
-            if ip_obj.is_private:
-                return f"IP privato bloccato: {ip_str}"
-            if ip_obj.is_link_local:
-                return f"IP link-local bloccato: {ip_str} (es. AWS IMDS 169.254.*)"
-            if ip_obj.is_multicast:
-                return f"IP multicast bloccato: {ip_str}"
-            if ip_obj.is_reserved:
-                return f"IP reserved bloccato: {ip_str}"
-            if ip_obj.is_unspecified:
-                return f"IP unspecified bloccato: {ip_str}"
-        return None
+        from app.shared.api_utils import _check_outbound_address
+        return _check_outbound_address(url, allow_loopback_opt_in=False)
