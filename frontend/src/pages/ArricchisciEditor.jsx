@@ -18,6 +18,7 @@ import ReactFlow, { Background, Controls, MiniMap, addEdge, useReactFlow, ReactF
 import 'reactflow/dist/style.css';
 import { useParams, useNavigate } from 'react-router-dom';
 import { isValidProjectId } from '../utils/validateRouteParam';
+import { ConfirmProvider } from '../context/ConfirmContext';
 import { executeEnrichmentAsync } from '../api';
 import { getFiles } from '../api/files';
 import { useAuth } from '../context/AuthContext';
@@ -659,7 +660,9 @@ const ArricchisciEditorContent = () => {
 
 const ArricchisciEditor = () => (
   <ReactFlowProvider>
-    <ArricchisciEditorContent />
+    <ConfirmProvider>
+      <ArricchisciEditorContent />
+    </ConfirmProvider>
   </ReactFlowProvider>
 );
 

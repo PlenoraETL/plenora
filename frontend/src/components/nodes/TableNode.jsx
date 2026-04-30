@@ -13,6 +13,7 @@ import FilterModal from '../modals/FilterModal';
 import ColumnBuilderModal from '../modals/ColumnBuilderModal';
 import { getColumnTypeIcon, getColumnTypeLabel, getColumnSRID, isGeometryType } from '../../utils/columnUtils';
 import useCanvasStore from '../../store/useCanvasStore';
+import { useConfirm } from '../../context/ConfirmContext';
 import './TableNode.css';
 
 /**
@@ -68,6 +69,7 @@ const TableNode = memo(({ data, id }) => {
   // ─── Store actions (subscription selettiva: non causa re-render se altre parti dello store cambiano) ───
   const updateNodeData       = useCanvasStore(s => s.updateNodeData);
   const deleteNode           = useCanvasStore(s => s.deleteNode);
+  const confirm              = useConfirm();
   const toggleColumn         = useCanvasStore(s => s.toggleColumn);
   const toggleAllColumns     = useCanvasStore(s => s.toggleAllColumns);
   const updateColumnAlias    = useCanvasStore(s => s.updateColumnAlias);
@@ -83,7 +85,15 @@ const TableNode = memo(({ data, id }) => {
 
   const handleToggleColumn    = (columnIndex) => toggleColumn(id, columnIndex);
   const handleToggleAll       = (makeVisible) => toggleAllColumns(id, makeVisible);
-  const handleDelete          = () => { if (confirm('Eliminare questo nodo?')) deleteNode(id); };
+  const handleDelete          = async () => {
+    const ok = await confirm({
+      title: 'Elimina nodo',
+      message: 'Eliminare questo nodo?',
+      confirmText: 'Elimina',
+      variant: 'danger',
+    });
+    if (ok) deleteNode(id);
+  };
 
   const handleStartEditColumnAlias = (columnIndex) => {
     setEditingColumnIndex(columnIndex);

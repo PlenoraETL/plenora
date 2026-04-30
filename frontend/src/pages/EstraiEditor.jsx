@@ -23,6 +23,7 @@ const ExecutionModal = lazy(() => import('../components/modals/ExecutionModal'))
 const CaricaricaModal = lazy(() => import('../components/modals/CaricaricaModal'));
 import StaticValuesNode from '../components/nodes/StaticValuesNode';
 import AnnotationNode from '../components/nodes/AnnotationNode';
+import { ConfirmProvider } from '../context/ConfirmContext';
 import DataSourceNode from '../components/nodes/DataSourceNode';
 import '../components/nodes/DataSourceNode.css';
 import { calculateOutputColumnsRecursive } from '../utils/columnUtils';
@@ -399,6 +400,7 @@ function EstraiEditor() {
   );
 
   return (
+    <ConfirmProvider>
     <div className="estrai-editor">
 
       {hasAccessDeniedNodes(nodes) && (
@@ -774,6 +776,7 @@ function EstraiEditor() {
       </Suspense>
       </ModalErrorBoundary>
     </div>
+    </ConfirmProvider>
   );
 }
 

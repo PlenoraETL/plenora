@@ -11,6 +11,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useToast } from '../../hooks/useToast';
 import { getColumnTypeIcon, getColumnTypeLabel } from '../../utils/columnUtils';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
+import { useConfirm } from '../../context/ConfirmContext';
 import './JoinModal.css';
 
 /**
@@ -214,8 +215,16 @@ function JoinModal({ edge, sourceNode, targetNode, onSave, onCancel, isEditing =
     }
   };
 
-  const handleDelete = () => {
-    if (confirm('Eliminare questa relazione join?')) {
+  const confirm = useConfirm();
+
+  const handleDelete = async () => {
+    const ok = await confirm({
+      title: 'Elimina relazione join',
+      message: 'Eliminare questa relazione join?',
+      confirmText: 'Elimina',
+      variant: 'danger',
+    });
+    if (ok) {
       onDelete(edge.id);
     }
   };

@@ -19,6 +19,7 @@ import ReactFlow, { Background, Controls, addEdge, useReactFlow, ReactFlowProvid
 import 'reactflow/dist/style.css';
 import { useParams, useNavigate } from 'react-router-dom';
 import { isValidProjectId } from '../utils/validateRouteParam';
+import { ConfirmProvider } from '../context/ConfirmContext';
 import { getDownloadUrl, createTask } from '../api';
 import { getFiles } from '../api/files';
 import ProjectSourceNode from '../components/nodes/ProjectSourceNode';
@@ -558,7 +559,9 @@ const ManipolaEditorContent = () => {
 
 const ManipolaEditor = () => (
   <ReactFlowProvider>
-    <ManipolaEditorContent />
+    <ConfirmProvider>
+      <ManipolaEditorContent />
+    </ConfirmProvider>
   </ReactFlowProvider>
 );
 

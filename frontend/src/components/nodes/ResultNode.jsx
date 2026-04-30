@@ -25,6 +25,7 @@ import { validateArricchisciCanvas } from '../../utils/validateArricchisciCanvas
 import useCanvasStore from '../../store/useCanvasStore';
 import ResultNodeImdfView from './result/ResultNodeImdfView';
 import ResultNodeStandardView from './result/ResultNodeStandardView';
+import { useConfirm } from '../../context/ConfirmContext';
 import './ResultNode.css';
 
 /**
@@ -113,8 +114,16 @@ const ResultNode = memo(({ data, id }) => {
   const [showValidation, setShowValidation] = useState(false);
   const [validationResult, setValidationResult] = useState({ isValid: true, issues: [] });
 
-  const handleDelete = () => {
-    if (confirm('Eliminare il nodo risultato?')) {
+  const confirm = useConfirm();
+
+  const handleDelete = async () => {
+    const ok = await confirm({
+      title: 'Elimina nodo risultato',
+      message: 'Eliminare il nodo risultato?',
+      confirmText: 'Elimina',
+      variant: 'danger',
+    });
+    if (ok) {
       useCanvasStore.getState().deleteNode(id);
     }
   };

@@ -9,6 +9,7 @@ import { Handle, Position, useReactFlow, useStore } from 'reactflow';
 import useCanvasStore from '../../store/useCanvasStore';
 import './MultiJoinNode.css';
 import RunHistoryModal from '../modals/RunHistoryModal';
+import { useConfirm } from '../../context/ConfirmContext';
 
 const MultiJoinNode = memo(({ data, id }) => {
   const { setNodes, getEdges, getNodes } = useReactFlow();
@@ -75,6 +76,7 @@ const MultiJoinNode = memo(({ data, id }) => {
 
   const updateNodeData = useCanvasStore(s => s.updateNodeData);
   const deleteNode     = useCanvasStore(s => s.deleteNode);
+  const confirm        = useConfirm();
 
   const updateConfig = useCallback((field, value) => {
     updateNodeData(id, { config: { ...config, [field]: value } });
@@ -87,12 +89,18 @@ const MultiJoinNode = memo(({ data, id }) => {
     updateConfig('join_keys', newKeys);
   }, [joinKeys, updateConfig]);
 
-  const handleDelete = useCallback((e) => {
+  const handleDelete = useCallback(async (e) => {
     e.stopPropagation();
     e.preventDefault();
-    if (!confirm('Eliminare questo nodo?')) return;
+    const ok = await confirm({
+      title: 'Elimina nodo',
+      message: 'Eliminare questo nodo?',
+      confirmText: 'Elimina',
+      variant: 'danger',
+    });
+    if (!ok) return;
     deleteNode(id);
-  }, [id, deleteNode]);
+  }, [id, deleteNode, confirm]);
 
   // ========== PREVIEW OUTPUT ==========
   // Mostra preview delle colonne che usciranno (per info utente)
