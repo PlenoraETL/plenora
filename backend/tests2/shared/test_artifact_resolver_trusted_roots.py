@@ -17,9 +17,9 @@ Post-fix:
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
 
 import pytest
 
@@ -28,6 +28,37 @@ from app.core.artifacts.types import ArtifactResolutionError, RunArtifactRef
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
+
+
+# PR #34 P1-B: pattern B2.0 modernization. Sostituisce
+# `with patch("app.core.artifacts.resolver.logger") as mock_logger`
+# (test logger-bound fragile) con un handler stdlib agganciato al
+# logger reale. `StructuredLogger` ha `propagate=False`, quindi
+# `caplog` non funziona out-of-the-box: usiamo un handler custom
+# clone-da `tests2/security/unit/test_n4_formula_validator_contract.py:157`.
+class _ListHandler(logging.Handler):
+    """Handler custom: colleziona LogRecord in lista. Aggira il
+    logger custom con propagate=False (caplog non arriva al target)."""
+
+    def __init__(self):
+        super().__init__(level=logging.DEBUG)
+        self.records = []
+
+    def emit(self, record):
+        self.records.append(record)
+
+
+def _attach_handler(logger_name: str):
+    """Attacca un _ListHandler al logger stdlib indicato. Ritorna
+    (handler, target_logger): caller deve chiamare
+    `target_logger.removeHandler(handler)` nel finally."""
+    target = logging.getLogger(logger_name)
+    handler = _ListHandler()
+    target.addHandler(handler)
+    return handler, target
+
+
+_RESOLVER_LOGGER = "app.core.artifacts.resolver"
 
 
 @pytest.fixture
@@ -84,18 +115,22 @@ def test_trusted_roots_temp_and_data_none_skip_legit(resolver, monkeypatch, tmp_
     )
     monkeypatch.setattr(_cfg, "settings", fake_settings, raising=False)
 
-    with patch("app.core.artifacts.resolver.logger") as mock_logger:
+    handler, target_logger = _attach_handler(_RESOLVER_LOGGER)
+    try:
         ref = RunArtifactRef(project_id="proj-1", output_path=str(target))
         m = resolver.materialize_run(ref)
+    finally:
+        target_logger.removeHandler(handler)
 
     assert m.path == target.resolve()
     # Nessun warning: None su TEMP_DIR/DATA_DIR e' skip legittimo
     trusted_warnings = [
-        c for c in mock_logger.warning.call_args_list
-        if "trusted_roots build" in str(c)
+        r for r in handler.records
+        if r.levelno == logging.WARNING and "trusted_roots build" in r.getMessage()
     ]
     assert trusted_warnings == [], (
-        f"atteso 0 warning su skip legittimo, ricevuto: {trusted_warnings}"
+        f"atteso 0 warning su skip legittimo, ricevuto: "
+        f"{[r.getMessage() for r in trusted_warnings]}"
     )
 
 
@@ -125,18 +160,26 @@ def test_trusted_roots_results_dir_resolve_fails_logs_warning(
     )
     monkeypatch.setattr(_cfg, "settings", fake_settings, raising=False)
 
-    with patch("app.core.artifacts.resolver.logger") as mock_logger:
+    handler, target_logger = _attach_handler(_RESOLVER_LOGGER)
+    try:
         ref = RunArtifactRef(project_id="proj-1", output_path=str(target))
         m = resolver.materialize_run(ref)
+    finally:
+        target_logger.removeHandler(handler)
 
     assert m.path == target.resolve()
-    # Warning emesso per RESULTS_DIR, con exc_info=True
+    # Warning emesso per RESULTS_DIR, con exc_info presente
     results_warnings = [
-        c for c in mock_logger.warning.call_args_list
-        if "trusted_roots build" in str(c) and "RESULTS_DIR" in str(c)
+        r for r in handler.records
+        if r.levelno == logging.WARNING
+        and "trusted_roots build" in r.getMessage()
+        and "RESULTS_DIR" in r.getMessage()
     ]
     assert len(results_warnings) == 1
-    assert results_warnings[0].kwargs.get("exc_info") is True
+    # exc_info=True su un record diventa una tuple (exc_type, exc, tb)
+    # popolata da Logger.findCaller; assert non-None per evitare
+    # accoppiamento al tipo specifico.
+    assert results_warnings[0].exc_info is not None
 
 
 def test_trusted_roots_temp_dir_resolve_fails_logs_warning_and_continues(
@@ -164,18 +207,23 @@ def test_trusted_roots_temp_dir_resolve_fails_logs_warning_and_continues(
     )
     monkeypatch.setattr(_cfg, "settings", fake_settings, raising=False)
 
-    with patch("app.core.artifacts.resolver.logger") as mock_logger:
+    handler, target_logger = _attach_handler(_RESOLVER_LOGGER)
+    try:
         ref = RunArtifactRef(project_id="proj-1", output_path=str(target))
         m = resolver.materialize_run(ref)
+    finally:
+        target_logger.removeHandler(handler)
 
     # Path legit dentro RESULTS_DIR accettato (TEMP_DIR fail non blocca)
     assert m.path == target.resolve()
     temp_warnings = [
-        c for c in mock_logger.warning.call_args_list
-        if "trusted_roots build" in str(c) and "attr=TEMP_DIR" in str(c)
+        r for r in handler.records
+        if r.levelno == logging.WARNING
+        and "trusted_roots build" in r.getMessage()
+        and "attr=TEMP_DIR" in r.getMessage()
     ]
     assert len(temp_warnings) == 1
-    assert temp_warnings[0].kwargs.get("exc_info") is True
+    assert temp_warnings[0].exc_info is not None
 
 
 # =============================================================================
