@@ -30,7 +30,9 @@ def test_api_connection_create_and_test_flow(backend_server, fake_api_server, au
         headers=auth_headers,
         timeout=10.0,
     )
-    assert status == 200
+    # POST /api/api-connections risponde 201 Created (vedi
+    # backend/app/core/arricchisci/router.py:479 status_code=201).
+    assert status == 201
     assert created["name"] == "Functional Fake JSON"
     assert created["can_edit"] is True
     api_id = created["id"]

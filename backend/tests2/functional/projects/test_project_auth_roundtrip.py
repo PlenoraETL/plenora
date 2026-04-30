@@ -21,7 +21,8 @@ def test_project_create_get_delete_roundtrip(backend_server, auth_headers):
         headers=auth_headers,
         timeout=10.0,
     )
-    assert status == 200
+    # POST /api/projects risponde 201 Created (router status_code=201)
+    assert status == 201
     project_id = created["metadata"]["id"]
     assert created["metadata"]["project_type"] == "estrai"
 
@@ -42,4 +43,5 @@ def test_project_create_get_delete_roundtrip(backend_server, auth_headers):
             headers=auth_headers,
             timeout=10.0,
         )
-        assert status in (200, 404)
+        # DELETE /api/projects/{id} risponde 204 No Content (F2-B2 2026-04-24)
+        assert status in (200, 204, 404)

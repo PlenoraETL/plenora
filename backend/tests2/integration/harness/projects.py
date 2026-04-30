@@ -162,14 +162,22 @@ def delete_project_via_api(
     auth_headers: dict,
     project_id: str,
 ) -> None:
-    """Elimina un progetto via API. Tollerante ai 404 in cleanup."""
+    """Elimina un progetto via API. Tollerante ai 404 in cleanup.
+
+    Status accettati:
+    - 200: legacy (prima del cambio F2-B2 2026-04-24)
+    - 204: contratto attuale (DELETE /api/projects/{id} risponde
+           204 No Content, body vuoto — vedi
+           backend/app/core/projects/router.py:379 + commento line 441)
+    - 404: idempotency (progetto gia' cancellato durante teardown)
+    """
     status, _, _ = http_json_response(
         f"{base_url}/api/projects/{project_id}",
         method="DELETE",
         headers=auth_headers,
         timeout=30.0,
     )
-    if status not in (200, 404):
+    if status not in (200, 204, 404):
         raise RuntimeError(f"delete_project_via_api fallito: HTTP {status}")
 
 
