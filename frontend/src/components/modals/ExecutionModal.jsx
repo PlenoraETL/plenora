@@ -8,6 +8,7 @@
 import React from 'react';
 import { downloadProjectFile } from '../../api/projects';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
+import PermissionRevokedBanner from '../common/PermissionRevokedBanner';
 import './ExecutionModal.css';
 
 
@@ -159,6 +160,14 @@ function ExecutionModal({
       {/* Result State */}
       {!isExecuting && result && (
         <div>
+          {/* PR-A UX Tier 1: banner inline quando il task ha rilevato
+              permessi revocati mid-esecuzione (status='permission_revoked'
+              propagato dai task carica/enrichment/pipeline). */}
+          {(result.permissionRevoked
+            || result.status === 'permission_revoked'
+            || result.result?.status === 'permission_revoked') && (
+            <PermissionRevokedBanner message={result.message || result.result?.message} />
+          )}
           {result.success ? (
             <div>
               {/* Success Message */}

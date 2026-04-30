@@ -15,6 +15,8 @@ import { getFiles } from '../api/files';
 import { listSchedules } from '../api/schedules';
 import { listDataSources } from '../api/datasources';
 import { handleCascade409, formatCascadeDependencies } from '../api/errors';
+import ConfirmDialog from '../components/common/ConfirmDialog';
+import { useConfirmModal } from '../hooks/useConfirmModal';
 import { useHexCanvas } from '../utils/hexCanvas';
 import PublishEseguibileModal from '../components/eseguibili/PublishEseguibileModal';
 import EseguibileExecuteWizard from '../components/eseguibili/EseguibileExecuteWizard';
@@ -26,6 +28,7 @@ import '../styles/ProjectList.css';
 // ── Main component ───────────────────────────────────────────────────────
 function ProjectList() {
   const toast    = useToast();
+  const confirmModal = useConfirmModal();
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
@@ -151,7 +154,13 @@ function ProjectList() {
   };
 
   const handleDeleteProject = async (id, name) => {
-    if (!confirm(`Eliminare "${name}"?`)) return;
+    const ok = await confirmModal.confirm({
+      title: 'Elimina progetto',
+      message: `Eliminare "${name}"?`,
+      confirmText: 'Elimina',
+      variant: 'danger',
+    });
+    if (!ok) return;
     try {
       await deleteProject(id);
       loadData();
@@ -192,7 +201,13 @@ function ProjectList() {
   const canCreateProj = can.createProject(user);
 
   const handleDeleteEseguibile = async (id, name) => {
-    if (!confirm(`Eliminare l'eseguibile "${name}"?`)) return;
+    const ok = await confirmModal.confirm({
+      title: 'Elimina eseguibile',
+      message: `Eliminare l'eseguibile "${name}"?`,
+      confirmText: 'Elimina',
+      variant: 'danger',
+    });
+    if (!ok) return;
     try {
       await deleteEseguibile(id);
       toast.success('Eseguibile eliminato');
@@ -688,6 +703,7 @@ function ProjectList() {
         </ModalWrapper>
       )}
 
+      <ConfirmDialog {...confirmModal} />
     </div>
   );
 }

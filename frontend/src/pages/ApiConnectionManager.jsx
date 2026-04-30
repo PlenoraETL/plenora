@@ -13,6 +13,8 @@ import DataSourceConfigModal from '../components/arricchisci/DataSourceConfigMod
 import ResponseConfigBuilder from '../components/panels/ResponseConfigBuilder';
 import { useHexCanvas } from '../utils/hexCanvas';
 import AllowedGroupsSelector from '../components/shared/AllowedGroupsSelector';
+import ConfirmDialog from '../components/common/ConfirmDialog';
+import { useConfirmModal } from '../hooks/useConfirmModal';
 import AppSidebar from '../components/AppSidebar';
 import { handleCascade409, formatCascadeDependencies } from '../api/errors';
 // C3.2 Phase 4: tutte le chiamate /api-connections e /datasources passano
@@ -110,6 +112,7 @@ function ThemeToggle() {
 // ── Main ──────────────────────────────────────────────────────────────────
 function ApiConnectionManager() {
   const toast = useToast();
+  const confirmModal = useConfirmModal();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const canvasRef = React.useRef(null);
@@ -225,7 +228,13 @@ function ApiConnectionManager() {
   const closeWizard = () => { setShowWizard(false); setEditingApi(null); setWizardStep(0); setTestResult(null); setCustomHeadersList([]); };
 
   const handleDelete = async (apiId, apiName) => {
-    if (!confirm(`Eliminare "${apiName}"?`)) return;
+    const ok = await confirmModal.confirm({
+      title: 'Elimina connessione API',
+      message: `Eliminare "${apiName}"?`,
+      confirmText: 'Elimina',
+      variant: 'danger',
+    });
+    if (!ok) return;
     try { await deleteApiConnection(apiId); loadApiConnections(); }
     catch (e) {
       const cascade = handleCascade409(e);
@@ -1176,6 +1185,7 @@ function ApiConnectionManager() {
           </div>
         </div>
       )}
+      <ConfirmDialog {...confirmModal} />
     </div>
   );
 }

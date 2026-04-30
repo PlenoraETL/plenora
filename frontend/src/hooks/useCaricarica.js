@@ -140,17 +140,34 @@ export function useCaricarica(projectId, options = {}) {
 
           if (data.status === 'success') {
             setIsExecuting(false);
+            // PR-A UX Tier 1:
+            //   - 'success' / 'skipped_idempotent' → success-no-op (run gia'
+            //     completata in precedenza, niente da scrivere)
+            //   - 'permission_revoked' → banner inline dedicato (vedi
+            //     PermissionRevokedBanner)
+            const innerStatus = data.result?.status;
+            const isInnerSuccess = innerStatus === 'success' || innerStatus === 'skipped_idempotent';
+            const isPermissionRevoked = innerStatus === 'permission_revoked'
+              || data.result?.status === 'permission_revoked';
             setResult({
-              success: data.result?.status === 'success',
+              success: isInnerSuccess && !isPermissionRevoked,
+              permissionRevoked: isPermissionRevoked,
+              skippedIdempotent: innerStatus === 'skipped_idempotent',
               ...data.result,
               task_id: taskResult.task_id
             });
             return true;
           } else if (data.status === 'failure') {
             setIsExecuting(false);
+            // PR-A UX Tier 1: il task puo' fallire con result.status =
+            // 'permission_revoked' propagato dai 4 task Celery — banner
+            // inline invece di errore generico.
+            const innerStatus = data.result?.status;
+            const isPermissionRevoked = innerStatus === 'permission_revoked';
             setResult({
               success: false,
-              message: data.error || data.result?.error_message || 'Errore durante il caricamento',
+              permissionRevoked: isPermissionRevoked,
+              message: data.error || data.result?.error_message || data.result?.message || 'Errore durante il caricamento',
               ...data.result
             });
             return true;

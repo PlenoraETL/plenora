@@ -18,6 +18,30 @@ import './RunHistoryModal.css';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
+/**
+ * Mappa un errore di /compare/l2 al messaggio user-facing in base al
+ * `detail.reason` ritornato dal backend (intermediate/router.py).
+ *
+ * Reason noti:
+ *   - 'metadata_only_no_rows': almeno una run usa persistence_mode=metadata_only
+ *   - 'persistence_mode_mismatch': le due run hanno mode diverso (full_pg vs preview_only)
+ *
+ * Per qualsiasi altra reason (o errore generico) ritorna un fallback.
+ * Esportato per test isolato (PR-A UX Tier 1).
+ */
+export function mapCompareErrorReason(reason, beMessage) {
+  const safeBe = typeof beMessage === 'string' && beMessage ? beMessage : null;
+  if (reason === 'metadata_only_no_rows') {
+    return safeBe
+      || 'Diff riga-per-riga non disponibile: almeno una delle due run usa persistence_mode=metadata_only. Per change-detection L1: usa il confronto hash.';
+  }
+  if (reason === 'persistence_mode_mismatch') {
+    return safeBe
+      || 'Diff non disponibile: le due run hanno persistence_mode diversi (full_pg vs preview_only). Riallinea le run alla stessa mode oppure usa /compare/l1 per change-detection via hash.';
+  }
+  return safeBe || 'Errore durante il confronto';
+}
+
 const formatTimestamp = (ts) => {
   if (!ts) return '—';
   const d = new Date(ts);
@@ -146,7 +170,13 @@ export default function RunHistoryModal({ isOpen, onClose, canvasId, nodeId, nod
         setCompareL2(l2);
         setActiveTab('compare');
       })
-      .catch(() => setCompareError('Errore durante il confronto'))
+      .catch((err) => {
+        // PR-A UX Tier 1: backend (intermediate/router.py) ritorna 422
+        // con detail.reason per i casi noti di diff non disponibile.
+        // Mostriamo il messaggio specifico invece dell'errore generico.
+        const detail = err?.response?.data?.detail;
+        setCompareError(mapCompareErrorReason(detail?.reason, detail?.message));
+      })
       .finally(() => setCompareLoading(false));
   }, [compareMode, selectedA, selectedB, nodeId]);
 
