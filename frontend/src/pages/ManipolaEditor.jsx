@@ -550,6 +550,7 @@ const ManipolaEditorContent = () => {
         <ExecutionModal isOpen={caricaExecution.showModal} onClose={() => caricaExecution.closeModal()} isExecuting={caricaExecution.isExecuting} result={caricaExecution.result} title="📤 Caricamento Dati" projectType="arricchisci" progress={caricaExecution.progress} progressMessage={caricaExecution.progressMessage} taskStatus={caricaExecution.taskStatus} onCancel={caricaExecution.cancelTask} />
         <PreviewModal isOpen={preview.showModal} onClose={preview.closeModal} onRefresh={limit => preview.handlePreview(limit)}
           data={preview.data} loading={preview.loading} error={preview.error}
+          permissionRevoked={preview.permissionRevoked}
           title="Anteprima Pipeline Manipola" projectType="manipola" disableGrouping />
       </Suspense>
       </ModalErrorBoundary>

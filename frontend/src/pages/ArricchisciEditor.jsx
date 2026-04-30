@@ -645,7 +645,9 @@ const ArricchisciEditorContent = () => {
           );
           return { ...preview.data, columns: enrichedColumns };
         })()}
-        loading={preview.loading} error={preview.error} title="Anteprima Arricchimento" projectType="arricchisci" />
+        loading={preview.loading} error={preview.error}
+        permissionRevoked={preview.permissionRevoked}
+        title="Anteprima Arricchimento" projectType="arricchisci" />
       <ConnectionSelectorModal isOpen={modals.isOpen('template')} onClose={() => modals.close('template')} onSelect={conn => handleSelectConnection(conn, 'template')} category="template" title="Seleziona Template API" icon="🍪" emptyMessage="Nessun template API configurato" emptyHint="Crea una connessione da template in Gestione API" createLink="/external-connectors" />
       <ConnectionSelectorModal isOpen={modals.isOpen('manual')} onClose={() => modals.close('manual')} onSelect={conn => handleSelectConnection(conn, 'manual')} category="manual" title="Seleziona API Manuale" icon="✏️" emptyMessage="Nessuna API manuale configurata" emptyHint="Crea una nuova connessione API in Gestione API" createLink="/api-connections" />
       <ConnectionSelectorModal isOpen={modals.isOpen('openapi')} onClose={() => modals.close('openapi')} onSelect={conn => handleSelectConnection(conn, 'openapi')} category="openapi" title="Seleziona API OpenAPI" icon="📋" emptyMessage="Nessuna API OpenAPI importata" emptyHint="Importa uno schema OpenAPI in Gestione API" createLink="/api-connections" />

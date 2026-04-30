@@ -21,6 +21,12 @@ export function usePreview(projectId, onBeforePreview = null) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  // PR-cleanup UX Tier 1: il task preview (`pipeline_task.py:392-398`)
+  // puo' propagare result.status='permission_revoked' quando il ruolo
+  // utente viene declassato/disabilitato mid-task. Espone flag dedicato
+  // cosi' il consumer (PreviewModal) puo' renderizzare
+  // <PermissionRevokedBanner> inline invece dell'errore generico.
+  const [permissionRevoked, setPermissionRevoked] = useState(false);
   const [progress, setProgress] = useState(0);
   const [progressMessage, setProgressMessage] = useState('');
 
@@ -32,6 +38,7 @@ export function usePreview(projectId, onBeforePreview = null) {
     setLoading(true);
     setError(null);
     setData(null);
+    setPermissionRevoked(false);
     setProgress(0);
     setProgressMessage('Avvio...');
     cancelledRef.current = false;
@@ -54,7 +61,12 @@ export function usePreview(projectId, onBeforePreview = null) {
           if (task.status === 'success') {
             setLoading(false);
             const result = task.result || {};
-            if (result.success === false) {
+            // PR-cleanup UX Tier 1: distingui permission_revoked dal
+            // generic failure -> banner inline dedicato lato consumer.
+            if (result.status === 'permission_revoked') {
+              setPermissionRevoked(true);
+              setError(result.message || 'Permessi revocati durante la preview');
+            } else if (result.success === false) {
               setError(result.message || 'Errore preview');
             } else {
               setData(result);
@@ -62,7 +74,13 @@ export function usePreview(projectId, onBeforePreview = null) {
             return true;
           } else if (task.status === 'failure') {
             setLoading(false);
-            setError(task.error || 'Errore durante la preview');
+            const innerStatus = task.result?.status;
+            if (innerStatus === 'permission_revoked') {
+              setPermissionRevoked(true);
+              setError(task.result?.message || 'Permessi revocati durante la preview');
+            } else {
+              setError(task.error || 'Errore durante la preview');
+            }
             return true;
           }
           return false;
@@ -94,12 +112,13 @@ export function usePreview(projectId, onBeforePreview = null) {
     setData(null);
     setLoading(false);
     setError(null);
+    setPermissionRevoked(false);
     setProgress(0);
     setProgressMessage('');
   }, [stopPolling]);
 
   return {
-    showModal, data, loading, error,
+    showModal, data, loading, error, permissionRevoked,
     progress, progressMessage,
     handlePreview, closeModal, reset,
   };
