@@ -268,8 +268,32 @@ class SchemaInferenceService:
                     f"{type(canvas).__name__}. Schema vuoto."
                 )
                 return []
-            columns_metadata = canvas.get("columns_metadata", [])
-            
+
+            # Fonte primaria: `result_node.columns` del canvas sorgente, scritto
+            # autorevolmente al PUT /canvas dal C9 fix
+            # (app/shared/canvas_columns.compute_result_columns -> mutate
+            # canvas.nodes[result].columns prima della persistenza).
+            # Fallback: `canvas.columns_metadata` (legacy / canvas mai salvato
+            # post-C9 / progetti pre-fix). Niente chiamata a
+            # compute_result_columns qui per evitare import/costo/ricorsione.
+            primary_columns = []
+            for n in canvas.get("nodes", []) or []:
+                if not isinstance(n, dict):
+                    continue
+                if n.get("type") != "result":
+                    continue
+                cols = n.get("columns") or []
+                if not cols and isinstance(n.get("data"), dict):
+                    cols = n["data"].get("columns") or []
+                primary_columns = [c for c in cols if isinstance(c, dict)]
+                break
+
+            columns_metadata = (
+                primary_columns
+                if primary_columns
+                else canvas.get("columns_metadata", [])
+            )
+
             # Filtra per colonne visibili se specificato
             node_columns = node.columns or (node.data.get("columns") if node.data else None) or []
             visible_columns = None
@@ -278,22 +302,22 @@ class SchemaInferenceService:
                     col["name"] for col in node_columns
                     if col.get("visible", True)
                 }
-            
+
             columns = []
             for col in columns_metadata:
                 col_name = col.get("name", "")
-                
+
                 # Skip se non visibile
                 if visible_columns and col_name not in visible_columns:
                     continue
-                
+
                 columns.append(ColumnSchema(
                     name=col_name,
                     type=col.get("type", "str"),
                     source_node=node.id,
                     is_calculated=False
                 ))
-            
+
             return columns
             
         except Exception as e:
@@ -417,8 +441,8 @@ class SchemaInferenceService:
             return self._schema_passthrough(input_schemas, node.id)
     
     def _infer_api_enrich_schema(
-        self, 
-        node, 
+        self,
+        node,
         input_schemas: List[List[ColumnSchema]]
     ) -> List[ColumnSchema]:
         """
@@ -433,18 +457,31 @@ class SchemaInferenceService:
             source_node=node.id,
             is_calculated=col.is_calculated
         ) for col in base_schema]
-        
-        # Aggiungi campi output dall'API (se configurati)
-        output_fields = node.data.get("output_fields", []) if node.data else []
-        if output_fields:
-            for field in output_fields:
-                result.append(ColumnSchema(
-                    name=field.get("name", "api_field"),
-                    type=field.get("type", "str"),
-                    source_node=node.id,
-                    is_calculated=True  # Considera come "calcolato"
-                ))
-        
+
+        # Campi output dall'API: chiave canonica `output_mapping` (con fallback
+        # tolleranti su nomi storici/varianti FE). `output_fields` non e' mai
+        # stato popolato in produzione — sostituito qui per allineamento al
+        # resto del codebase (api_connector / enrichment_response_processing).
+        output_mapping = node.data.get("output_mapping", []) if node.data else []
+        existing = {col.name for col in result}
+        for mapping in output_mapping:
+            if not isinstance(mapping, dict):
+                continue
+            name = (
+                mapping.get("column")
+                or mapping.get("target_column")
+                or mapping.get("name")
+            )
+            if not name or name in existing:
+                continue
+            result.append(ColumnSchema(
+                name=name,
+                type=mapping.get("type", "str"),
+                source_node=node.id,
+                is_calculated=True,
+            ))
+            existing.add(name)
+
         return result
     
     # =========================================================================
