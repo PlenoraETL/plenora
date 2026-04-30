@@ -16,7 +16,9 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import AppSidebar from '../components/AppSidebar';
+import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useAuth } from '../context/AuthContext';
+import { useConfirmModal } from '../hooks/useConfirmModal';
 import { useToast } from '../hooks/useToast';
 import {
   addComment, deleteAttachment, deleteTicket, getTicket, getTicketsMeta,
@@ -48,6 +50,7 @@ export default function TicketDetail() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const toast = useToast();
+  const confirmModal = useConfirmModal();
   const fileInputRef = useRef(null);
 
   const [meta, setMeta] = useState(null);
@@ -136,10 +139,20 @@ export default function TicketDetail() {
   };
 
   const handleDeleteTicket = async () => {
-    if (!window.confirm(
-      `Eliminare definitivamente il ticket "${ticket.title}"?\n\n` +
-      `Verranno cancellati anche commenti e allegati. L'azione e\' irreversibile.`,
-    )) return;
+    const ok = await confirmModal.confirm({
+      title: 'Elimina ticket',
+      message: (
+        <>
+          Eliminare definitivamente il ticket "{ticket.title}"?
+          <br /><br />
+          Verranno cancellati anche commenti e allegati. L'azione è
+          irreversibile.
+        </>
+      ),
+      confirmText: 'Elimina',
+      variant: 'danger',
+    });
+    if (!ok) return;
     try {
       await deleteTicket(id);
       toast.success('Ticket eliminato');
@@ -158,7 +171,13 @@ export default function TicketDetail() {
   };
 
   const handleDeleteAttachment = async (attachmentId) => {
-    if (!window.confirm('Rimuovere questo allegato?')) return;
+    const ok = await confirmModal.confirm({
+      title: 'Rimuovi allegato',
+      message: 'Rimuovere questo allegato?',
+      confirmText: 'Rimuovi',
+      variant: 'danger',
+    });
+    if (!ok) return;
     try {
       await deleteAttachment(id, attachmentId);
       load();
@@ -367,6 +386,7 @@ export default function TicketDetail() {
           </div>
         </section>
       </main>
+      <ConfirmDialog {...confirmModal} />
     </div>
   );
 }

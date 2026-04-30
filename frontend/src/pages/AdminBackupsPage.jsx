@@ -18,6 +18,8 @@ import {
   listBackups, getBackupStatus, getBackupSchedule, triggerBackup,
 } from '../api/adminBackups';
 import AppSidebar from '../components/AppSidebar';
+import ConfirmDialog from '../components/common/ConfirmDialog';
+import { useConfirmModal } from '../hooks/useConfirmModal';
 import '../styles/AdminBackupsPage.css';
 
 
@@ -152,6 +154,7 @@ function ScheduleCard({ schedule }) {
 // ── Pagina principale ────────────────────────────────────────────────────
 export default function AdminBackupsPage() {
   const toast = useToast();
+  const confirmModal = useConfirmModal();
 
   const [data, setData] = useState(null);
   const [status, setStatus] = useState(null);
@@ -204,9 +207,20 @@ export default function AdminBackupsPage() {
   }, [loadAll]);
 
   const handleTrigger = async () => {
-    if (!confirm('Avviare un backup manuale adesso?\n\nIl pg_dump e l\'upload S3 richiedono qualche secondo. I backup schedulati continuano normalmente.')) {
-      return;
-    }
+    const ok = await confirmModal.confirm({
+      title: 'Backup manuale',
+      message: (
+        <>
+          Avviare un backup manuale adesso?
+          <br /><br />
+          Il pg_dump e l'upload S3 richiedono qualche secondo. I backup
+          schedulati continuano normalmente.
+        </>
+      ),
+      confirmText: 'Avvia backup',
+      variant: 'warning',
+    });
+    if (!ok) return;
     setTriggering(true);
     try {
       const res = await triggerBackup();
@@ -369,6 +383,7 @@ export default function AdminBackupsPage() {
           </ul>
         </section>
       </main>
+      <ConfirmDialog {...confirmModal} />
     </div>
   );
 }
