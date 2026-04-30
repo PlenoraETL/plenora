@@ -19,6 +19,26 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 
+@pytest.fixture(autouse=True)
+def _isolate_bucket_env(monkeypatch):
+    """Test-only env isolation per i factory bucket di cloud_backends.
+
+    `_resolve_runtime_bucket()` legge in priorita' OBJECT_STORAGE_BUCKET →
+    PLENORA_ARTIFACT_BUCKET → BACKUP_BUCKET → BACKUP_S3_BUCKET. Senza
+    questo isolamento i test che asseriscono "ValueError quando bucket
+    mancante" falliscono in locale dove `.env` ha OBJECT_STORAGE_BUCKET
+    valorizzato (CI passa perche' `.env` non e' presente).
+
+    Ogni test setta esplicitamente le var bucket che gli servono."""
+    for var in (
+        "OBJECT_STORAGE_BUCKET",
+        "PLENORA_ARTIFACT_BUCKET",
+        "BACKUP_BUCKET",
+        "BACKUP_S3_BUCKET",
+    ):
+        monkeypatch.delenv(var, raising=False)
+
+
 @pytest.fixture(scope="module")
 def cb():
     from app.shared import cloud_backends
@@ -57,6 +77,10 @@ def test_factory_unknown_provider_raises(cb, monkeypatch):
     monkeypatch.setenv("CLOUD_PROVIDER", "oracle")
     with pytest.raises(ValueError, match="non supportato"):
         cb.get_secrets_backend()
+    # get_object_storage richiede un bucket per arrivare al provider
+    # dispatch (la resolution bucket avviene prima). Settiamo un bucket
+    # generico cosi' isoliamo la prova del provider check.
+    monkeypatch.setenv("BACKUP_BUCKET", "any-bucket-for-provider-check")
     with pytest.raises(ValueError, match="non supportato"):
         cb.get_object_storage()
 
