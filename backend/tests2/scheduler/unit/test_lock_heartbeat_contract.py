@@ -170,26 +170,39 @@ def test_refresh_exception_does_not_propagate_or_set_lock_lost(
     assert hb._thread is not None  # esiste ancora
 
 
-def test_context_manager_starts_and_stops(fake_concurrency):
-    """`with LockHeartbeat(...) as hb:` chiama start nel __enter__ e
-    stop nel __exit__. Pattern previsto per c2 (uso futuro in
-    execute()), ma test garantisce che il context manager funziona."""
+def test_state_dict_includes_external_hb_key_when_wrapper_injects_it():
+    """Finding H (PR-#36): il wrapper compat `_start_lock_heartbeat` in
+    `execution_manager` aggiunge la chiave `_hb` al dict ritornato da
+    `get_state_dict()`. Poiche' il dict E' la stessa reference dello
+    `_state` interno, l'iniezione muta anche `LockHeartbeat._state`.
+
+    Questo test blinda il behavior accoppiato (NON un bug, e' design
+    documentato): se la shape pulita di `_state` cambia in futuro, il
+    wrapper compat va aggiornato di conseguenza."""
+    from unittest.mock import MagicMock
+
     from app.core.scheduler._lock_heartbeat import LockHeartbeat
+    from app.core.scheduler.execution_manager import ExecutionManager
 
-    captured_thread = []
+    cm = MagicMock()
+    cm.refresh_lock = MagicMock(return_value=True)
+    em = ExecutionManager.__new__(ExecutionManager)
+    em.concurrency = cm
 
-    with LockHeartbeat(
-        concurrency=fake_concurrency,
-        schedule_id="sch-1",
-        interval=10.0,
-    ) as hb:
-        assert hb._thread is not None
-        assert hb._thread.is_alive()
-        captured_thread.append(hb._thread)
-
-    # Post __exit__: stop_event settato, thread joinato (timeout 5s)
-    assert captured_thread[0].is_alive() is False or (
-        # Edge: il join ha timeout 5s; in CI lento potrebbe servire
-        # piu' tempo. Diamo un buffer extra di 1s prima di fallire.
-        time.sleep(1.0) or captured_thread[0].is_alive() is False
-    )
+    state = em._start_lock_heartbeat("sch-test", interval=10.0)
+    try:
+        # 1. Il dict pubblico include _hb iniettato dal wrapper
+        assert "_hb" in state
+        # 2. _hb e' una LockHeartbeat, NON viene letto da execute()
+        assert isinstance(state["_hb"], LockHeartbeat)
+        # 3. Stessa reference dello state interno (accoppiamento atteso)
+        hb = state["_hb"]
+        assert state is hb._state
+        # 4. Reference circolare _state["_hb"] -> hb (documentata)
+        assert hb._state["_hb"] is hb
+        # 5. Shape pulita PRE-iniezione (LockHeartbeat costruito diretto):
+        #    chiavi note sono stop_event, lock_lost, thread; nessun _hb
+        clean = LockHeartbeat(concurrency=cm, schedule_id="x", interval=10.0)
+        assert "_hb" not in clean._state
+    finally:
+        em._stop_lock_heartbeat(state)

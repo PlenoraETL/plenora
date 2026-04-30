@@ -1,33 +1,24 @@
-"""LockHeartbeat — context manager + class per il TTL refresh thread
-del lock scheduler (PR-#36 REFACTOR-EXEC-MGR c1).
+"""LockHeartbeat — class per il TTL refresh thread del lock scheduler
+(PR-#36 REFACTOR-EXEC-MGR c1).
 
-Motivazione (estratta da `execution_manager._start_lock_heartbeat`):
-il TTL del lock scheduler e' corto (10min) per permettere recovery
-veloce su SIGKILL del worker. Finche' la pipeline e' attiva, il worker
-rinfresca il TTL via un thread daemon. Se il worker muore, il thread
-daemon muore con lui, non rinfresca piu', e il lock scade entro il
-TTL invece di restare appeso.
+Estratto 1:1 da `execution_manager._start_lock_heartbeat` (line 152-200
+pre-refactor). Behavior change: zero.
 
 Lock lost handling (C3 follow-up fix A): se `refresh_lock` ritorna
-False (lock scaduto/rilasciato), il thread tenta re-acquire atomico.
-Se riesce → WARNING, continua. Se fallisce → ERROR + flag
-`state["lock_lost"] = True` cosi' `execute()` puo' includere il warning
+False, il thread tenta re-acquire. Se riesce → WARNING; se fallisce →
+ERROR + flag `state["lock_lost"] = True` cosi' `execute()` lo include
 nel risultato.
 
-Design (PR-#36):
-  - `LockHeartbeat.start()` spawn del thread daemon
-  - `LockHeartbeat.stop()` set stop_event + join(timeout=5s), idempotente
-  - `LockHeartbeat.get_state_dict()` ritorna la **reference** del dict
-    interno mutabile (non copia) cosi' `execute()` legge live le
-    mutazioni di `state["lock_lost"]` dal thread loop
-  - Supporta `with LockHeartbeat(...) as hb: hb.lock_lost` per uso
-    futuro (c2), non usato ancora dal wrapper compat di execution_manager
+Design:
+  - `start()`/`stop()` API esplicita
+  - `get_state_dict()` ritorna **reference** mutabile (non copia) per
+    far vedere a `execute()` le mutazioni live di `state["lock_lost"]`
+  - Wrapper compat in `execution_manager` aggiunge chiave opaca `_hb`
+    al dict ritornato (vedi `get_state_dict` per accoppiamento noto).
 
-Wrapper compat in `execution_manager._start_lock_heartbeat` /
-`_stop_lock_heartbeat` preserva la firma pubblica e restituisce un
-dict shape `{stop_event, thread, lock_lost, _hb}` dove `_hb` e' la
-reference opaca al `LockHeartbeat` (consumata solo da
-`_stop_lock_heartbeat`, NON da `execute()`).
+Out of scope c1 (deferred c2): context manager `__enter__/__exit__` per
+uso `with LockHeartbeat(...) as hb` in `execute()`. Non aggiunti qui
+perche' non usati e aumentano LOC senza coverage rilevante.
 """
 
 from __future__ import annotations
@@ -50,12 +41,6 @@ class LockHeartbeat:
         state = hb.get_state_dict()  # reference live, NON copia
         ...
         hb.stop()  # set stop_event + join(timeout=5s)
-
-    Uso (futuro c2 — context manager):
-        with LockHeartbeat(concurrency, schedule_id, interval) as hb:
-            ...
-            if hb.lock_lost: ...
-        # stop automatico nel __exit__
     """
 
     def __init__(
@@ -103,6 +88,25 @@ class LockHeartbeat:
         `state["lock_lost"] = True`) sono visibili al chiamante
         immediatamente. Questo e' essenziale per preservare il contract
         pubblico del wrapper compat in `execution_manager`.
+
+        ACCOPPIAMENTO NOTO (Finding H, PR-#36):
+        Il wrapper compat `execution_manager._start_lock_heartbeat`
+        aggiunge la chiave `"_hb"` (reference a self) al dict ritornato
+        da questo metodo. Poiche' `_state` E' la stessa reference, il
+        wrapper di fatto MUTA `LockHeartbeat._state` aggiungendo
+        `_state["_hb"] = self`. E' una leaky abstraction documentata,
+        non un bug: l'unica alternativa (dict copia) perderebbe la
+        reference live su `lock_lost` e romperebbe il contract verso
+        `execute()`. Risoluzione completa richiede c2 (uso del context
+        manager direttamente in `execute()`), che e' deferred.
+
+        Effetti collaterali del ciclo `_state["_hb"] = self`:
+          - GC: Python gestisce cicli, no leak reale
+          - lettori del dict: vedono una chiave extra `_hb` oltre a
+            `stop_event`, `thread`, `lock_lost`. `execute()` legge solo
+            `lock_lost`, ignora il resto: safe
+          - test che assert su shape esatta del dict devono prevedere
+            `_hb` se istanziato via wrapper, NON se istanziato diretto
         """
         return self._state
 
@@ -111,12 +115,6 @@ class LockHeartbeat:
         """True se il thread loop ha rilevato perdita del lock e
         re-acquire fallito. Read-only, mutato dal solo thread loop."""
         return bool(self._state.get("lock_lost", False))
-
-    def __enter__(self) -> "LockHeartbeat":
-        return self.start()
-
-    def __exit__(self, exc_type, exc, tb) -> None:
-        self.stop()
 
     # ------------------------------------------------------------------
     # Internal loop — copiato 1:1 da execution_manager._start_lock_heartbeat
