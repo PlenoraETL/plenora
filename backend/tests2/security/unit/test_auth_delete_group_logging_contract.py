@@ -16,14 +16,30 @@ stack trace prima che il client riceva il 500.
 
 from __future__ import annotations
 
+import logging
 from types import SimpleNamespace
-from unittest.mock import MagicMock
 
 import pytest
 from fastapi import HTTPException
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
+
+
+# PR #34 P1-B: pattern B2.0 — handler stdlib agganciato al logger
+# reale invece di monkeypatch del symbol module-level con MagicMock.
+# `StructuredLogger` ha propagate=False, caplog non funziona out-of-
+# the-box: usiamo handler custom (clone-da test_n4_formula_validator).
+class _ListHandler(logging.Handler):
+    def __init__(self):
+        super().__init__(level=logging.DEBUG)
+        self.records = []
+
+    def emit(self, record):
+        self.records.append(record)
+
+
+_AUTH_LOGGER = "app.core.auth.auth"
 
 
 def _superadmin_user():
@@ -49,25 +65,33 @@ def test_delete_group_cascade_failure_is_logged_then_raised_as_500(monkeypatch):
 
     monkeypatch.setattr(auth_mod.cfg_db, "delete_group_cascade", _raising_cascade)
 
-    spy_logger = MagicMock()
-    monkeypatch.setattr(auth_mod, "logger", spy_logger)
-
-    with pytest.raises(HTTPException) as excinfo:
-        auth_mod.delete_group("some_group", _superadmin_user())
+    target_logger = logging.getLogger(_AUTH_LOGGER)
+    handler = _ListHandler()
+    target_logger.addHandler(handler)
+    try:
+        with pytest.raises(HTTPException) as excinfo:
+            auth_mod.delete_group("some_group", _superadmin_user())
+    finally:
+        target_logger.removeHandler(handler)
 
     assert excinfo.value.status_code == 500
 
-    assert spy_logger.error.called, (
-        "REGRESSIONE S5: delete_group_cascade ha sollevato ma il logger.error "
-        "non e' stato chiamato → silent swallow, diagnostica lato server persa."
+    error_records = [r for r in handler.records if r.levelno == logging.ERROR]
+    assert error_records, (
+        "REGRESSIONE S5: delete_group_cascade ha sollevato ma nessun record "
+        "ERROR e' stato emesso → silent swallow, diagnostica lato server persa."
     )
-    call_args, call_kwargs = spy_logger.error.call_args
-    assert call_kwargs.get("exc_info") is True, (
-        "REGRESSIONE S5: logger.error chiamato senza exc_info=True, lo stack "
+
+    # Almeno un record ERROR deve avere exc_info popolato (= logger.error fu
+    # chiamato con exc_info=True, oppure dentro un except con exception()).
+    error_with_exc = [r for r in error_records if r.exc_info is not None]
+    assert error_with_exc, (
+        "REGRESSIONE S5: logger.error chiamato senza exc_info, lo stack "
         "trace dell'eccezione originale non viene registrato."
     )
-    logged_msg = call_args[0] if call_args else ""
-    assert "some_group" in logged_msg, (
+
+    # Il messaggio di log deve menzionare il group_id per correlazione
+    assert any("some_group" in r.getMessage() for r in error_records), (
         "REGRESSIONE S5: il messaggio di log non include il group_id → "
         "difficile correlare il crash a una specifica operazione."
     )

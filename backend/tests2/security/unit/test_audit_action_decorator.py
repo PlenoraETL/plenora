@@ -22,6 +22,7 @@ Scope:
 
 from __future__ import annotations
 
+import logging
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -30,6 +31,23 @@ from fastapi import HTTPException
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
+
+
+# PR #34 P1-B: pattern B2.0 — handler stdlib agganciato al logger
+# reale invece di monkeypatch del symbol module-level con MagicMock.
+# La fixture `audit_write_raises` ora ritorna un `_ListHandler` invece
+# di un MagicMock spy: i 3 consumer (line ~235, 239, 268) leggono i
+# record reali emessi dal logger.
+class _ListHandler(logging.Handler):
+    def __init__(self):
+        super().__init__(level=logging.DEBUG)
+        self.records = []
+
+    def emit(self, record):
+        self.records.append(record)
+
+
+_AUDIT_LOGGER = "app.shared.audit_action"
 
 
 # ---------------------------------------------------------------------------
@@ -86,10 +104,15 @@ def audit_write_raises(monkeypatch):
 
     monkeypatch.setattr(audit_mod, "_execute_write", _raising_execute)
 
-    spy_logger = MagicMock()
-    monkeypatch.setattr(audit_mod, "logger", spy_logger)
-
-    return SimpleNamespace(exc=boom, logger=spy_logger)
+    # PR #34 P1-B: handler stdlib clean-up via yield (no monkeypatch
+    # del symbol logger).
+    target_logger = logging.getLogger(_AUDIT_LOGGER)
+    handler = _ListHandler()
+    target_logger.addHandler(handler)
+    try:
+        yield SimpleNamespace(exc=boom, handler=handler)
+    finally:
+        target_logger.removeHandler(handler)
 
 
 def _fake_user(user_id="u_42"):
@@ -232,12 +255,17 @@ def test_audit_write_failure_does_not_break_business_path(audit_write_raises):
     )
 
     # Warning osservabile: il segnale che l'audit non ha scritto.
-    assert audit_write_raises.logger.warning.called, (
+    warnings = [
+        r for r in audit_write_raises.handler.records
+        if r.levelno == logging.WARNING
+    ]
+    assert warnings, (
         "REGRESSIONE fail-open: il warning di audit_action_write_failed "
         "deve essere emesso per dare visibilita' al problema"
     )
-    call_args, _ = audit_write_raises.logger.warning.call_args
-    assert "audit_action_write_failed" in call_args[0]
+    assert any(
+        "audit_action_write_failed" in r.getMessage() for r in warnings
+    )
 
     # Metrica incrementata.
     metrics = get_metrics()
@@ -265,7 +293,9 @@ def test_audit_write_failure_does_not_mask_business_exception(audit_write_raises
 
     # Warning comunque emesso: l'audit fail-open ha comunque tentato di
     # tracciare il 403 prima di propagare.
-    assert audit_write_raises.logger.warning.called
+    assert any(
+        r.levelno == logging.WARNING for r in audit_write_raises.handler.records
+    )
 
 
 # ---------------------------------------------------------------------------

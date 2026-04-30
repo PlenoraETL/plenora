@@ -16,12 +16,35 @@ Siti coperti:
 
 from __future__ import annotations
 
+import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
+
+
+# PR #34 P1-B: pattern B2.0. `StructuredLogger` ha propagate=False
+# quindi caplog non funziona; usiamo handler stdlib agganciato per
+# nome (clone-da test_n4_formula_validator_contract.py:157).
+class _ListHandler(logging.Handler):
+    def __init__(self):
+        super().__init__(level=logging.DEBUG)
+        self.records = []
+
+    def emit(self, record):
+        self.records.append(record)
+
+
+def _attach_handler(logger_name: str):
+    target = logging.getLogger(logger_name)
+    handler = _ListHandler()
+    target.addHandler(handler)
+    return handler, target
+
+
+_PROJ_SVC_LOGGER = "app.services.project_service"
 
 
 # =============================================================================
@@ -56,19 +79,24 @@ def test_find_dependent_projects_skips_malformed_json_canvas(monkeypatch):
     monkeypatch.setattr(real_db, "get_project", lambda pid, group_id=None: {"group_id": "grp-1"})
 
     svc = ProjectService()
-    with patch("app.services.project_service.logger") as mock_logger:
+    handler, target_logger = _attach_handler(_PROJ_SVC_LOGGER)
+    try:
         deps = svc._find_dependent_projects(target_pid)
+    finally:
+        target_logger.removeHandler(handler)
 
     # Il candidato valido deve essere identificato come dipendente
     assert len(deps) == 1
     assert deps[0]["id"] == "cand-valid"
 
     # Warning emesso per il candidato malformato, con il suo id nel messaggio
-    warnings = [str(c) for c in mock_logger.warning.call_args_list]
-    assert any("cand-malformed" in w for w in warnings), (
-        f"atteso warning menzionante cand-malformed, ricevuto: {warnings}"
+    warning_msgs = [
+        r.getMessage() for r in handler.records if r.levelno == logging.WARNING
+    ]
+    assert any("cand-malformed" in m for m in warning_msgs), (
+        f"atteso warning menzionante cand-malformed, ricevuto: {warning_msgs}"
     )
-    assert any("canvas JSON malformato" in w for w in warnings)
+    assert any("canvas JSON malformato" in m for m in warning_msgs)
 
 
 def test_find_dependent_projects_propagates_non_parse_exceptions(monkeypatch):
@@ -109,14 +137,17 @@ def test_find_dependent_projects_narrow_catches_typeerror_in_json_loads(monkeypa
     monkeypatch.setattr(real_db, "get_project", lambda pid, group_id=None: {"group_id": "grp-1"})
 
     svc = ProjectService()
-    with patch("json.loads", side_effect=TypeError("stub TypeError")), \
-         patch("app.services.project_service.logger") as mock_logger:
-        deps = svc._find_dependent_projects("target")
+    handler, target_logger = _attach_handler(_PROJ_SVC_LOGGER)
+    try:
+        with patch("json.loads", side_effect=TypeError("stub TypeError")):
+            deps = svc._find_dependent_projects("target")
+    finally:
+        target_logger.removeHandler(handler)
 
     assert deps == []
     assert any(
-        "canvas JSON malformato" in str(c)
-        for c in mock_logger.warning.call_args_list
+        "canvas JSON malformato" in r.getMessage()
+        for r in handler.records if r.levelno == logging.WARNING
     )
 
 
@@ -144,9 +175,12 @@ def test_assert_no_lineage_cycle_skips_malformed_canvas_in_sources(monkeypatch):
     # Canvas nuovo del progetto corrente senza cycle
     new_canvas = CanvasState(nodes=[], edges=[])
 
-    with patch("app.services.project_service.logger") as mock_logger:
+    handler, target_logger = _attach_handler(_PROJ_SVC_LOGGER)
+    try:
         # Il check deve completare senza sollevare (no cycle detected)
         svc._assert_no_lineage_cycle("current-proj", new_canvas)
+    finally:
+        target_logger.removeHandler(handler)
 
     # Se il cycle detector ha invocato get_sources su "other-proj", avremmo il warning
     # Altrimenti questo test protegge almeno contro il path di chiamata diretta:
