@@ -291,7 +291,7 @@ const ManipolaEditorContent = () => {
           console.warn('[run-blocked] access_denied nodes:\n' + denied.summary);
           return;
         }
-        return execution.handleExecute(opts);
+        return execution.prepareExecute(opts);
       },
       onCaricanExecute:             (nodeId, cfg) => caricaExecution.handleExecute({ carica_node_data: cfg }),
       onUpdateProjectSource:        handleUpdateProjectSource,
@@ -556,7 +556,7 @@ const ManipolaEditorContent = () => {
 
       <ModalErrorBoundary>
       <Suspense fallback={null}>
-        <ExecutionModal isOpen={execution.showModal} onClose={() => execution.closeModal()} isExecuting={execution.isExecuting} result={execution.result} onDownload={execution.downloadTaskResult} title="🔄 Esecuzione Pipeline Manipola" projectType="manipola" caricaTasks={execution.caricaTasks} caricaPolling={execution.caricaPolling} />
+        <ExecutionModal isOpen={execution.showModal} onClose={() => execution.closeModal()} isExecuting={execution.isExecuting} result={execution.result} onDownload={execution.downloadTaskResult} title="🔄 Esecuzione Pipeline Manipola" projectType="manipola" caricaTasks={execution.caricaTasks} caricaPolling={execution.caricaPolling} awaitingLaunch={execution.awaitingLaunch} onLaunch={execution.launch} user={user} />
         <ExecutionModal isOpen={caricaExecution.showModal} onClose={() => caricaExecution.closeModal()} isExecuting={caricaExecution.isExecuting} result={caricaExecution.result} title="📤 Caricamento Dati" projectType="arricchisci" progress={caricaExecution.progress} progressMessage={caricaExecution.progressMessage} taskStatus={caricaExecution.taskStatus} onCancel={caricaExecution.cancelTask} />
         <PreviewModal isOpen={preview.showModal} onClose={preview.closeModal} onRefresh={limit => preview.handlePreview(limit)}
           data={preview.data} loading={preview.loading} error={preview.error}

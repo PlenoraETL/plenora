@@ -33,6 +33,13 @@ export function useExecution(projectId, options = {}) {
   const [caricaTasks, setCaricaTasks]       = useState([]);
   const [caricaPolling, setCaricaPolling]   = useState(false);
 
+  // R-25 PR-B5: stato "config pre-launch" usato dal modal per mostrare
+  // il toggle intermediate_mode (visibile solo a superadmin) prima che
+  // la pipeline parta davvero. Se nessuno chiama prepareExecute, il flow
+  // resta quello classico (handleExecute parte subito).
+  const [awaitingLaunch, setAwaitingLaunch] = useState(false);
+  const pendingOptsRef = useRef(null);
+
   const caricaRefs    = useRef({});
   const isCancelledRef = useRef(false);
 
@@ -171,6 +178,7 @@ export function useExecution(projectId, options = {}) {
   const handleExecute = useCallback(async (executeOptions = {}) => {
     setShowModal(true);
     setIsExecuting(true);
+    setAwaitingLaunch(false);   // exit dal config-step se proveniamo da launch()
     setResult(null);
     setTaskId(null);
     setProgress(0);
@@ -231,6 +239,8 @@ export function useExecution(projectId, options = {}) {
 
   const closeModal = useCallback((resetResult = false) => {
     setShowModal(false);
+    setAwaitingLaunch(false);
+    pendingOptsRef.current = null;
     if (resetResult) {
       setResult(null); setProgress(0); setProgressMessage('');
       setTaskId(null); setTaskStatus(null);
@@ -243,8 +253,38 @@ export function useExecution(projectId, options = {}) {
     setShowModal(false); setResult(null); setIsExecuting(false);
     setTaskId(null); setProgress(0); setProgressMessage('');
     setTaskStatus(null); setCaricaTasks([]); setCaricaPolling(false);
+    setAwaitingLaunch(false); pendingOptsRef.current = null;
     isCancelledRef.current = false;
   }, [stopPolling, stopAllCaricaPolling]);
+
+  // R-25 PR-B5: apre il modal in stato "config" (awaitingLaunch=true)
+  // SENZA partire. Il modal mostra il toggle intermediate_mode ai
+  // superadmin e il bottone "Avvia"; chiamare launch() per partire.
+  // Per chiamanti che non passano per il modal config, handleExecute()
+  // resta invariato (back-compat).
+  const prepareExecute = useCallback((executeOptions = {}) => {
+    pendingOptsRef.current = executeOptions || {};
+    setShowModal(true);
+    setAwaitingLaunch(true);
+    setIsExecuting(false);
+    setResult(null);
+    setTaskId(null);
+    setProgress(0);
+    setProgressMessage('');
+    setTaskStatus(null);
+    setCaricaTasks([]);
+    setCaricaPolling(false);
+    isCancelledRef.current = false;
+  }, []);
+
+  const launch = useCallback((intermediateMode = null) => {
+    const baseOpts = pendingOptsRef.current || {};
+    const merged = intermediateMode
+      ? { ...baseOpts, intermediate_mode: intermediateMode }
+      : baseOpts;
+    pendingOptsRef.current = null;
+    return handleExecute(merged);
+  }, [handleExecute]);
 
   const downloadTaskResult = useCallback(async () => {
     // Estrae il filename reale dal result (output_file o output_path)
@@ -264,6 +304,8 @@ export function useExecution(projectId, options = {}) {
     caricaTasks, caricaPolling,
     handleExecute, closeModal, reset, cancelTask, downloadTaskResult,
     setShowModal, setResult,
+    // R-25 PR-B5
+    awaitingLaunch, prepareExecute, launch,
   };
 }
 

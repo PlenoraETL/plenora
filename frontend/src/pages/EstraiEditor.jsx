@@ -225,7 +225,7 @@ function EstraiEditor() {
           console.warn('[run-blocked] access_denied nodes:\n' + denied.summary);
           return;
         }
-        return execution.handleExecute(opts);
+        return execution.prepareExecute(opts);
       },
       onCaricanExecute:   (nodeId, cfg) => caricarica.handleExecute(nodeId, cfg),
       onAddRelatedLayer:  handleAddRelatedLayer,
@@ -233,7 +233,7 @@ function EstraiEditor() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     // toast/nodesRef/describeAccessDeniedNodes letti via closure stabile;
     // re-bind solo quando cambiano gli handler hook delle azioni canvas.
-  }, [preview.handlePreview, execution.handleExecute, caricarica.handleExecute, handleAddRelatedLayer]);
+  }, [preview.handlePreview, execution.prepareExecute, caricarica.handleExecute, handleAddRelatedLayer]);
 
   useEffect(() => { useCanvasStore.getState().setConnections(connections); }, [connections]);
 
@@ -742,6 +742,7 @@ function EstraiEditor() {
           onDownload={execution.downloadTaskResult}
           title="▶ Esecuzione Query" projectType="estrai"
           caricaTasks={execution.caricaTasks} caricaPolling={execution.caricaPolling}
+          awaitingLaunch={execution.awaitingLaunch} onLaunch={execution.launch} user={user}
         />
         <CaricaricaModal
           isOpen={caricarica.showModal} onClose={() => caricarica.closeModal()}

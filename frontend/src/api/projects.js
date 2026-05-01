@@ -81,19 +81,32 @@ export const deleteProject = async (projectId) => {
  *
  * @param {string}         projectId
  * @param {string|Object}  optionsOrConnectionId
+ * @param {string}         [optionsOrConnectionId.intermediate_mode] - R-25 PR-B5:
+ *   override per-call della INTERMEDIATE_PERSISTENCE_MODE globale
+ *   ('metadata_only'|'preview_only'|'full_pg'|'full_artifact').
+ *   Backend: opt-in superadmin (BE rifiuta 403 a non-super; 422 su valore
+ *   invalido). Se omesso/falsy, NON viene serializzato come query param
+ *   per preservare la compat con caller esistenti.
  * @returns {Promise<Object>} { task_id, status, ... }
  */
 export const executeProjectQuery = async (projectId, optionsOrConnectionId = null) => {
   let payload = {};
+  let intermediate_mode = null;
 
   if (optionsOrConnectionId && typeof optionsOrConnectionId === 'object') {
-    const { force_recalculate = false } = optionsOrConnectionId;
+    const { force_recalculate = false, intermediate_mode: im = null } = optionsOrConnectionId;
     payload = { force_recalculate };
+    intermediate_mode = im;
   } else if (optionsOrConnectionId && typeof optionsOrConnectionId === 'string') {
     payload = { connection_id: optionsOrConnectionId };
   }
 
-  const response = await http.post(`/projects/${projectId}/execute`, payload);
+  // Query param solo se valorizzato. Branch evita di passare un 3o arg
+  // undefined a http.post (preserva contract-arity dei test esistenti).
+  const url = `/projects/${projectId}/execute`;
+  const response = intermediate_mode
+    ? await http.post(url, payload, { params: { intermediate_mode } })
+    : await http.post(url, payload);
   return response.data;
 };
 
