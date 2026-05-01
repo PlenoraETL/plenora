@@ -481,6 +481,7 @@ def resolve_intermediate_policy(
     node_type: Optional[str],
     node_data: Optional[dict] = None,
     transform_id: Optional[str] = None,
+    mode_override: Optional[str] = None,
 ) -> IntermediatePolicy:
     """Calcola la policy effettiva per uno snapshot.
 
@@ -494,6 +495,14 @@ def resolve_intermediate_policy(
         transform_id: per nodi MANIPOLA `transform`, l'id transform
             specifico (es. "join", "filter"). Usato solo per la
             classificazione critical/noncritical.
+        mode_override: override per-call della
+            `INTERMEDIATE_PERSISTENCE_MODE` globale. None = nessun
+            override (bit-compat default-path). Validazione enum via
+            `resolve_intermediate_mode` (fail-loud su valori invalidi:
+            tipo non-str, stringa vuota, mode non riconosciuto, mode
+            planned). Capability runtime (full_artifact + object
+            storage) NON e' verificata qui — resta startup-side
+            (`validate_intermediate_settings`) o write-time.
 
     Ritorna:
         IntermediatePolicy. Se la policy decide di NON registrare,
@@ -501,7 +510,9 @@ def resolve_intermediate_policy(
         caller deve uscire prima di calcolare hash/preview.
 
     Raises:
-        IntermediateSettingsError: settings invalide al primo uso.
+        IntermediateSettingsError: settings invalide al primo uso, o
+            `mode_override` non valido (propagato da
+            `resolve_intermediate_mode`).
         ValueError: module/snapshot_kind non riconosciuto.
     """
     if module not in SUPPORTED_MODULES:
@@ -518,7 +529,14 @@ def resolve_intermediate_policy(
     _ensure_validated()
     cfg = _read_settings()
 
-    mode = cfg["mode"]
+    # mode globale, eventualmente sostituita dall'override per-call.
+    # `resolve_intermediate_mode` ritorna `cfg["mode"]` se override e' None,
+    # altrimenti l'override valido. Su override invalido solleva
+    # IntermediateSettingsError che si propaga al chiamante (fail-loud).
+    mode = resolve_intermediate_mode(
+        default_mode=cfg["mode"],
+        override_mode=mode_override,
+    )
     preview_rows = int(cfg["preview_rows"])
 
     # ESTRAI / ARRICCHISCI: in Batch 1 solo final viene registrato.
