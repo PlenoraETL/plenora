@@ -37,6 +37,14 @@ def client_with_auth_router(monkeypatch):
     with auth_mod._rate_lock:
         auth_mod._failed_attempts.clear()
 
+    # R-01: il limiter ora prova Redis prima del fallback in-memory.
+    # Questo test esercita il path in-memory (resetta `_failed_attempts`),
+    # quindi forziamo Redis client a None cosi' il wrapper cade sempre
+    # sul fallback indipendentemente da un Redis attivo sull'host di test.
+    from app.shared import login_rate_limiter as _rl_mod
+    _rl_mod._set_client_for_tests(None)
+    _rl_mod._reset_state_for_tests()
+
     # Mock dipendenze che toccano DB/bcrypt
     monkeypatch.setattr(auth_mod.db, "get_user_by_username", lambda _: None)
     monkeypatch.setattr(auth_mod, "verify_password", lambda *a, **kw: False)
@@ -62,6 +70,7 @@ def client_with_auth_router(monkeypatch):
     # Cleanup dopo
     with auth_mod._rate_lock:
         auth_mod._failed_attempts.clear()
+    _rl_mod._reset_client_for_tests()
 
 
 def _login_fail(client: TestClient, xff_ip: str):
@@ -126,6 +135,9 @@ def test_login_untrusted_peer_xff_ignored_shared_bucket(client_with_auth_router,
     from app.core.auth import auth as auth_mod
     with auth_mod._rate_lock:
         auth_mod._failed_attempts.clear()
+    # R-01: vedi sopra — forziamo il fallback in-memory.
+    from app.shared import login_rate_limiter as _rl_mod
+    _rl_mod._set_client_for_tests(None)
 
     # 127.0.0.1 non e' piu' trusted → XFF ignorato → tutti condividono
     # il bucket di 127.0.0.1

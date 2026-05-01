@@ -17,7 +17,7 @@ be considered product-grade.
 
 | ID | Area | Status | Why it matters | Suggested next action |
 |---|---|---|---|---|
-| R-01 | Auth rate limiter in-memory | NEXT | Safe on single-node, weak in multi-replica because attempts are process-local. | Redis-backed limiter with ADR and staging test. |
+| R-01 | Auth rate limiter in-memory | CLOSED | Redis-backed sliding-window limiter (`app/shared/login_rate_limiter.py`) with in-memory fallback when Redis is unavailable; single-node behaviour preserved byte-per-byte. Covered by 19 passing security tests (unit + contract). | Done. |
 | R-30 | DB snapshot pre-deploy | NEXT | A deploy just before the daily backup can leave a long recovery window. | Add pre-deploy snapshot after staging rehearsal. |
 | R-33 | DR drill not executed | NEXT manual | Recovery playbook exists but has not been proven end-to-end. | Run one documented SSH drill. |
 | OBSERV-001 | Observability sink deferred | NEXT | Production support needs a clear metrics/log sink. | Decide and implement Metabase or alternative. |
@@ -60,7 +60,7 @@ be considered product-grade.
 2. Verify a new PC can work from Git using `docs/development/onboarding.md`.
 3. Run one FE batch: hotspot tests on top remaining pages/components (FE-TEST-001 remainder).
 4. Run one ops batch: DR drill.
-5. Plan R-01 Redis rate limiter as a dedicated Phase 2 backend batch.
+5. ~~Plan R-01 Redis rate limiter as a dedicated Phase 2 backend batch.~~ **Done** (Redis-backed limiter + in-memory fallback, 19 tests passed).
 
 ## Non-Goals For The Next Batch
 

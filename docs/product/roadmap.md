@@ -21,7 +21,7 @@ tests, see [Residual Register](residual-register.md).
 
 | ID | Item | Status | Note |
 |---|---|---|---|
-| **R-01** | Rate-limiter cluster-safe (Redis-backed) | NEXT Phase 2 | Oggi `auth.py:79-110` in-memory threading.Lock, ok single-node. Multi-replica = bypass. M effort. |
+| **R-01** | Rate-limiter cluster-safe (Redis-backed) | CLOSED | Modulo `app/shared/login_rate_limiter.py` (sliding window via sorted-set + pipeline `MULTI`, TTL = window+60s buffer). Wrapper in `auth.py` mantiene fallback in-memory legacy quando Redis non disponibile, comportamento single-node invariato. 19 test verdi (8 nuovi Redis-backed + 11 esistenti riverificati). |
 | **R-02** | Doppio password hasher bcrypt+Argon2 — timeline migrazione | LATER | Funziona, manca solo policy formale. S effort doc + M migration. |
 | MFA-001 | MFA opt-in (no enforcement globale) | DROP/LATER | Decisione di prodotto in ADR-0018. Cambio = nuova ADR + onboarding. |
 | JWT-001 | JWT secret hardcoded fallback in dev | DROP | Comportamento corretto/voluto (ADR-0004). |
@@ -58,7 +58,7 @@ tests, see [Residual Register](residual-register.md).
 | STRUCT-002 | `services/schema_inference.py` 1502 LOC | LATER | Tocca canvas types fallback. M-L effort. |
 | STRUCT-003 | `core/manipola/transforms/spatial.py` 1941 LOC | WATCH/LATER | Cohesive (single concern), refactor non urgente. |
 | STRUCT-004 | `core/scheduler/execution_manager.py` 1097 LOC | LATER | Toccato indirettamente da PR #36 LockHeartbeat. |
-| STRUCT-005 | `core/auth/auth.py` 1171 LOC | LATER | Bloccato da R-01. |
+| STRUCT-005 | `core/auth/auth.py` 1171 LOC | LATER | R-01 chiuso; eventuale split rate-limit ora isolato in `app/shared/login_rate_limiter.py`. Resta debito strutturale residuo dell'auth. |
 | STRUCT-006 | `db/sql_functions.py` 1717 LOC | WATCH | SQL builders, single-concern. |
 
 ---
@@ -149,7 +149,7 @@ per dettaglio.
 
 Focus: **chiudere gap operativi e debiti security ad alta priorita'**.
 
-- R-01 rate-limiter Redis-backed
+- ~~R-01 rate-limiter Redis-backed~~ → **CLOSED** (Redis-backed sliding-window + in-memory fallback)
 - R-30 DB snapshot pre-deploy
 - R-33 DR drill execution (manuale ops)
 - FE-TEST-001 (subset top-2: api connections + result node)

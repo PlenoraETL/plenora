@@ -71,6 +71,16 @@ logger = get_logger(__name__)
 # ============================================================
 # RATE LIMITING
 # ============================================================
+#
+# R-01: backend Redis-backed cluster-safe con fallback in-memory.
+# La logica Redis vive in `app.shared.login_rate_limiter`; qui restano
+# i wrapper che il login() chiama e lo store in-memory di fallback,
+# mantenuto compatibile con i test esistenti che resettano
+# `_failed_attempts` / `_rate_lock` direttamente.
+#
+# Le costanti LOGIN_MAX_ATTEMPTS / LOGIN_WINDOW_SECONDS / LOGIN_LOCKOUT_SECONDS
+# restano modulo-level e vengono lette al volo dai wrapper, cosi' i test
+# possono ancora monkeypatcharle (vedi tests2/security/unit/test_login_rate_limit_per_ip.py).
 
 import threading
 import time
@@ -84,7 +94,12 @@ LOGIN_WINDOW_SECONDS  = int(os.getenv("LOGIN_WINDOW_SECONDS", "60"))
 LOGIN_LOCKOUT_SECONDS = int(os.getenv("LOGIN_LOCKOUT_SECONDS", "300"))
 
 
-def _check_rate_limit(ip: str):
+def _check_rate_limit_in_memory(ip: str):
+    """Implementazione in-memory (fallback se Redis non disponibile).
+
+    Identica al pre-R-01: sliding window su `_failed_attempts[ip]`,
+    Retry-After = lockout - (now - oldest_in_window), clamp >=1.
+    """
     now = time.monotonic()
     with _rate_lock:
         _failed_attempts[ip] = [
@@ -100,14 +115,47 @@ def _check_rate_limit(ip: str):
             )
 
 
-def _record_failed_login(ip: str):
+def _record_failed_login_in_memory(ip: str):
     with _rate_lock:
         _failed_attempts[ip].append(time.monotonic())
 
 
-def _clear_failed_logins(ip: str):
+def _clear_failed_logins_in_memory(ip: str):
     with _rate_lock:
         _failed_attempts.pop(ip, None)
+
+
+def _check_rate_limit(ip: str):
+    """Wrapper R-01: tenta Redis, fallback in-memory.
+
+    Le costanti LOGIN_* vengono rilette ad ogni chiamata per mantenere
+    monkeypatch-friendly i test esistenti.
+    """
+    from app.shared import login_rate_limiter as _rl
+    _rl.check_rate_limit(
+        ip,
+        max_attempts=LOGIN_MAX_ATTEMPTS,
+        window_seconds=LOGIN_WINDOW_SECONDS,
+        lockout_seconds=LOGIN_LOCKOUT_SECONDS,
+        fallback=_check_rate_limit_in_memory,
+    )
+
+
+def _record_failed_login(ip: str):
+    from app.shared import login_rate_limiter as _rl
+    _rl.record_failed_login(
+        ip,
+        window_seconds=LOGIN_WINDOW_SECONDS,
+        fallback=_record_failed_login_in_memory,
+    )
+
+
+def _clear_failed_logins(ip: str):
+    from app.shared import login_rate_limiter as _rl
+    _rl.clear_failed_logins(
+        ip,
+        fallback=_clear_failed_logins_in_memory,
+    )
 
 
 # ============================================================
