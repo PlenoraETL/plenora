@@ -2,6 +2,9 @@
 
 Residui audit aperti e direzioni future. Status as of **2026-05-01**.
 
+For the shorter operational list of what is still open across FE, BE and
+tests, see [Residual Register](residual-register.md).
+
 > **Convenzione**:
 > - **CLOSED** — chiuso, citato per tracciabilita'.
 > - **NEXT** — candidato Phase 2 (post-launch immediato).
