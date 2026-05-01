@@ -107,13 +107,25 @@ def test_carica_task_accepts_run_id_kwarg():
     assert sig.parameters["run_id"].default is None
 
 
-def test_carica_task_source_checks_idempotency_when_run_id_passed():
-    """Il body del task deve invocare is_already_completed (o equivalente)
-    PRIMA di procedere se run_id e' stato passato dall'esterno."""
+def test_carica_task_references_idempotency_helper():
+    """Il task deve referenziare `is_already_completed` come callee.
+
+    Replacement R-04b di `inspect.getsource(...) + "is_already_completed" in source`:
+    bytecode probe sul callee identifier (refactor-resilient).
+    """
     from workers.tasks.carica_task import execute_carica_task
 
-    source = inspect.getsource(execute_carica_task)
-    assert "is_already_completed" in source or "idempotency" in source.lower(), (
-        "Il task non fa check di idempotency. Un retry manuale con "
-        "stesso run_id eseguirebbe due volte."
+    code = getattr(execute_carica_task, "__wrapped__", execute_carica_task).__code__
+
+    def _walk(co):
+        if "is_already_completed" in co.co_names:
+            return True
+        for const in co.co_consts:
+            if hasattr(const, "co_names") and _walk(const):
+                return True
+        return False
+
+    assert _walk(code), (
+        "execute_carica_task non riferisce is_already_completed. "
+        "Retry manuale con stesso run_id eseguirebbe due volte."
     )

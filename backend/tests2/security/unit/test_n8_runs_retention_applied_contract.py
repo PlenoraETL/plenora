@@ -20,7 +20,6 @@ Questo contract congela due cose:
 from __future__ import annotations
 
 import inspect
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -28,35 +27,47 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
 
 
-def test_apply_runs_retention_is_called_from_close_run():
-    """Il source di writer.close_run deve referenziare apply_runs_retention."""
+def _references_name(callable_or_task, name: str) -> bool:
+    """Bytecode probe: True se il callable referenzia `name` come
+    callee/attr (anche in nested code objects). Refactor-resilient."""
+    code = getattr(callable_or_task, "__wrapped__", callable_or_task).__code__
+
+    def _walk(co) -> bool:
+        if name in co.co_names:
+            return True
+        for const in co.co_consts:
+            if hasattr(const, "co_names") and _walk(const):
+                return True
+        return False
+
+    return _walk(code)
+
+
+def test_close_run_references_apply_runs_retention():
+    """writer.close_run deve referenziare apply_runs_retention come callee.
+
+    Replacement R-04b di `inspect.getsource(close_run) + "apply_runs_retention" in src`:
+    bytecode probe sul callee identifier (refactor-resilient ai rinames
+    locali). L'invariant ordering "DOPO update_run" e' coperto dal
+    test funzionale spy `test_close_run_invokes_retention_with_correct_args`
+    sotto, che asserisce direttamente l'ordine osservabile delle call.
+    """
     from app.core.intermediate.writer import close_run
 
-    src = inspect.getsource(close_run)
-    assert "apply_runs_retention" in src, (
-        "writer.close_run non chiama apply_runs_retention. La funzione "
+    assert _references_name(close_run, "apply_runs_retention"), (
+        "writer.close_run non riferisce apply_runs_retention. La funzione "
         "esiste in intermediate/db.py ma nessuno la invoca -> disk fill "
         "nel tempo su intermediate.runs + node_meta + node_rows."
     )
 
 
-def test_retention_called_after_update_run_not_before():
-    """apply_runs_retention deve essere invocata DOPO db.update_run, non
-    prima: una retention prematura eliminerebbe righe che stiamo ancora
-    aggiornando con il nuovo status/hash/stats."""
-    from app.core.intermediate.writer import close_run
-
-    src = inspect.getsource(close_run)
-    # Trova le posizioni delle due chiamate e verifica l'ordine
-    idx_update = src.find("db.update_run(")
-    idx_retention = src.find("apply_runs_retention")
-    assert idx_update > -1 and idx_retention > -1, (
-        "Almeno una delle due chiamate manca nel source."
-    )
-    assert idx_retention > idx_update, (
-        "apply_runs_retention deve essere chiamata DOPO db.update_run, "
-        "non prima (altrimenti cancella righe non ancora finalizzate)."
-    )
+# Test droppato (R-04b, 2026-05-01):
+#   `test_retention_called_after_update_run_not_before` (pre-PR)
+#   verificava `idx_retention > idx_update` cercando le stringhe nel
+#   source. Ridondante con `test_close_run_invokes_retention_with_correct_args`
+#   sotto che asserisce direttamente
+#   `ops.index("apply_runs_retention") > ops.index("update_run")`
+#   come ordine osservabile delle call (behavior-bound).
 
 
 def test_close_run_invokes_retention_with_correct_args(monkeypatch):

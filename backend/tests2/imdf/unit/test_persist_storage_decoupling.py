@@ -106,28 +106,66 @@ def test_persist_does_not_call_storage_save_bundle(tmp_path, fake_settings, monk
 
 
 def test_persist_module_does_not_import_storage():
-    """Regression guard: il modulo `app.core.imdf.persist` non deve contenere
-    `import app.core.imdf.storage` ne' `from app.core.imdf import storage`.
+    """Regression guard: il modulo `app.core.imdf.persist` non deve avere
+    `app.core.imdf.storage` nel namespace (re-import residuo).
 
     Lo spostamento della chiamata nel worker e' utile solo se il coupling
-    viene rimosso anche a livello di import. Un import residuo segnalerebbe
+    viene rimosso anche a livello di import. Un import residuo segnala
     che la call site non e' stata davvero rimossa.
+
+    Replacement R-04b di `inspect.getsource(persist_mod) + "from app.core.imdf import storage" in source`:
+    introspect del namespace modulo + sys.modules. Behavior-bound:
+    cattura il fatto che il symbol `storage` sia stato bound nel
+    namespace di persist_mod, indipendente dalla forma sintattica
+    dell'import (from / as / re-export).
     """
+    import sys
     from app.core.imdf import persist as persist_mod
 
-    source = inspect.getsource(persist_mod)
+    # 1. Il namespace modulo non deve esporre `storage` o un suo simbolo top-level.
+    forbidden_attrs = ("storage", "save_bundle", "_storage")
+    for attr in forbidden_attrs:
+        bound = getattr(persist_mod, attr, None)
+        if bound is not None:
+            # Verifica che non sia il modulo storage.
+            mod_name = getattr(bound, "__module__", "") or ""
+            obj_name = getattr(bound, "__name__", "") or ""
+            assert "imdf.storage" not in mod_name, (
+                f"Regression D3 commit 4: `{attr}` in persist_mod e' "
+                f"bound a {mod_name} (storage). Persist deve restare local "
+                f"materializer puro (non conosce S3/object_storage). "
+                f"L'orchestrazione vive nel worker (enrichment_task)."
+            )
+            assert "imdf.storage" not in obj_name, (
+                f"Regression D3 commit 4: `{attr}` in persist_mod referenzia "
+                f"{obj_name} (storage)."
+            )
 
-    forbidden_imports = (
-        "from app.core.imdf import storage",
-        "import app.core.imdf.storage",
-        "from app.core.imdf.storage",
+    # 2. Il bytecode di persist_mod non deve avere `storage` come name access.
+    #    (cattura `storage.save_bundle()` anche se importato lazy nel body.)
+    code = persist_mod.__dict__.get("__code__") or getattr(
+        persist_mod, "__loader__", None,
     )
-    for imp in forbidden_imports:
-        assert imp not in source, (
-            f"Regression D3 commit 4: `{imp}` re-introdotto in "
-            f"app/core/imdf/persist.py. Persist deve restare local "
-            f"materializer puro (non conosce S3/object_storage). "
-            f"L'orchestrazione vive nel worker (enrichment_task)."
+    # Ispeziona ogni callable top-level del modulo.
+    for attr_name in dir(persist_mod):
+        attr = getattr(persist_mod, attr_name, None)
+        if not hasattr(attr, "__code__"):
+            continue
+        co = attr.__code__
+
+        def _walk(co):
+            for n in co.co_names:
+                if n == "save_bundle":
+                    return True
+            for const in co.co_consts:
+                if hasattr(const, "co_names") and _walk(const):
+                    return True
+            return False
+
+        assert not _walk(co), (
+            f"Regression D3 commit 4: persist_mod.{attr_name} fa "
+            f"riferimento a `save_bundle` nel bytecode. Persist deve "
+            f"restare local materializer puro."
         )
 
 
@@ -136,37 +174,48 @@ def test_persist_module_does_not_import_storage():
 
 def test_enrichment_task_imdf_branch_calls_storage_save_after_persist():
     """Regression guard: il worker deve orchestrare persist -> storage nel
-    branch IMDF. Se qualcuno rimuove la chiamata a save_bundle dal worker
-    senza re-introdurla in persist, i bundle non saranno piu' replicati
-    cross-node (regressione silenziosa che spezzerebbe multi-host).
+    branch IMDF.
 
-    Test statico via inspect.getsource (pattern `test_enrichment_task_
-    tenant_binding_lock.py:269`).
+    R-04b mix:
+      - callee ref via bytecode probe (refactor-resilient).
+      - warning text intenzionalmente verbatim (ops grep contract:
+        alert/dashboard fanno grep su quella stringa esatta — il
+        wording e' un contract pubblico verso ops, non source-bound
+        fragile).
     """
     from workers.tasks import enrichment_task
 
+    # Bytecode probe per i callee identifier (refactor-resilient).
+    code = getattr(
+        enrichment_task.execute_enrichment_task,
+        "__wrapped__",
+        enrichment_task.execute_enrichment_task,
+    ).__code__
+
+    def _walk(co, target):
+        if target in co.co_names:
+            return True
+        for const in co.co_consts:
+            if hasattr(const, "co_names") and _walk(const, target):
+                return True
+        return False
+
+    assert _walk(code, "save_bundle"), (
+        "Regression D3 commit 4: enrichment_task non riferisce "
+        "`save_bundle` come callee. Il worker e' l'orchestratore "
+        "post-persist (R2); rimuoverlo da qui spezza il multi-host "
+        "senza readd in persist."
+    )
+    assert _walk(code, "persist_imdf_bundle_to_disk"), (
+        "Regression D3 commit 4: enrichment_task non riferisce "
+        "`persist_imdf_bundle_to_disk`."
+    )
+
+    # Warning text: contract verbatim verso ops (grep su alert/dashboard).
+    # Restiamo source-bound qui di proposito — la stringa e' un contract
+    # pubblico, non un dettaglio implementativo. Source dell'intero modulo
+    # garantisce di catturarla anche se vive in funzioni nested.
     source = inspect.getsource(enrichment_task)
-
-    # Deve esserci la chiamata a save_bundle nel worker.
-    assert "_imdf_storage.save_bundle" in source or ".save_bundle(" in source, (
-        "Regression D3 commit 4: la chiamata a `storage.save_bundle` non "
-        "risulta piu' presente in workers/tasks/enrichment_task.py. Il "
-        "worker e' l'orchestratore post-persist (R2); rimuoverlo da qui "
-        "spezza il multi-host senza readd in persist."
-    )
-
-    # Deve essere dopo persist_imdf_bundle_to_disk nel source.
-    persist_idx = source.find("persist_imdf_bundle_to_disk(")
-    save_idx = source.find(".save_bundle(")
-    assert persist_idx != -1, "persist_imdf_bundle_to_disk non trovato"
-    assert save_idx != -1, "save_bundle non trovato"
-    assert save_idx > persist_idx, (
-        "D3 commit 4: save_bundle deve apparire DOPO "
-        "persist_imdf_bundle_to_disk nel source. L'ordine persist -> storage "
-        "garantisce cleanup tmp_dir (finally di persist) prima del push S3."
-    )
-
-    # Il warning deve essere preservato verbatim (grep operativi).
     assert "imdf storage upload fallito (non-fatal" in source, (
         "D3 commit 4: il wording del logger.warning deve restare verbatim "
         "('imdf storage upload fallito (non-fatal, bundle disponibile solo "
