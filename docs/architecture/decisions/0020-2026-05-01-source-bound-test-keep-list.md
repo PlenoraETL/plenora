@@ -1,6 +1,6 @@
 # ADR-0020: Source-bound test KEEP list (post R-04 / R-04b modernization)
 
-**Status**: Accepted
+**Status**: Accepted — Categoria 3 superata da TR-002 (2026-05-01, vedi Update sotto)
 **Date**: 2026-05-01
 **Deciders**: @CloudIA
 
@@ -71,7 +71,14 @@ Stesso paradigma di `test_audit_action_coverage_contract.py:120`,
 `test_mfa_totp_contract.py:65,70` — gia' tutti riconosciuti come
 "static-analysis scanner pattern" (vedi audit Phase 1 conclusioni).
 
-### Categoria 3 — Scheduler integration deferred
+### Categoria 3 — Scheduler integration deferred  ✅ SUPERSEDED da TR-002 (2026-05-01)
+
+> **Update 2026-05-01 (TR-002)**: i 3 casi originali listati qui sono
+> stati migrati a behavior-bound. Il contenuto sotto e' mantenuto per
+> tracciabilita' storica del ragionamento pre-TR-002, ma **non e' piu'
+> autoritativo**. Vedi sezione "Update — TR-002 closure" in fondo al
+> documento per lo stato corrente. Nuovi `inspect.getsource` non
+> rientrano piu' sotto la Categoria 3: vanno modernizzati direttamente.
 
 L'uso di `inspect.getsource` e' un compromesso pragmatico per testare
 proprieta' di un task body senza richiedere full integration eager con
@@ -79,14 +86,14 @@ proprieta' di un task body senza richiedere full integration eager con
 possibile ma richiede infrastruttura test pesante (database test
 isolato, scheduler mock harness, ecc.) fuori scope dei batch test-only.
 
-**Files in questa categoria**:
+**Files in questa categoria** (storico, ora migrati):
 
-| File:line | Symbol | Body property |
+| File:line (storico) | Symbol | Body property |
 |---|---|---|
-| `tests2/scheduler/unit/test_execution_manager_scheduled_for_persist_contract.py:28,43` | `ExecutionManager.execute` | `scheduled_for` kwarg e' usato nel body oltre la signature (≥3 occorrenze) e arriva a logger / log entry / open_run. |
-| `tests2/scheduler/unit/test_schedule_task_scheduled_for_contract.py:35` | `schedule_pipeline_task` | `scheduled_for` propagato dal beat al task. |
+| `tests2/scheduler/unit/test_execution_manager_scheduled_for_persist_contract.py:28,43` ✅ migrato | `ExecutionManager.execute` | `scheduled_for` kwarg e' usato nel body oltre la signature (≥3 occorrenze) e arriva a logger / log entry / open_run. |
+| `tests2/scheduler/unit/test_schedule_task_scheduled_for_contract.py:35` ✅ migrato | `schedule_pipeline_task` | `scheduled_for` propagato dal beat al task. |
 
-**Perche' KEEP per ora**: convertire richiede:
+**Perche' KEEP per ora** (storico): convertire richiede:
 - Setup DB scheduler test (intermediate.runs + log_runs + scheduled_for column).
 - Mock harness per `ExecutionManager` + `BeatScheduler` integrazione.
 - Eager mode propagation di `scheduled_for` con stub di run lifecycle.
@@ -94,9 +101,9 @@ isolato, scheduler mock harness, ecc.) fuori scope dei batch test-only.
 Effort stimato: 1 PR dedicata di tipo "scheduler test infrastructure",
 analoga a PR #37 che ha chiuso la stessa cosa per `enrichment_task`.
 
-**Quando convertire**: appena viene aperto un batch "scheduler test
+**Quando convertire** (storico): appena viene aperto un batch "scheduler test
 reliability" mirato, riusando il pattern `_helpers/celery_eager.py`
-esteso a `ExecutionManager`.
+esteso a `ExecutionManager`. — Risolto da TR-002.
 
 ## Rationale
 
@@ -164,3 +171,35 @@ esteso a `ExecutionManager`.
   `test_datetime_utc_aware_contract.py`, `test_mfa_totp_contract.py`.
 - Related: ADR-0007 (Protocol vs ABC) — analogia con scelte di test
   pattern che hanno trade-off documentati.
+
+## Update — TR-002 closure (2026-05-01)
+
+I 3 casi originariamente classificati Categoria 3 (scheduler integration
+deferred) sono stati migrati a behavior-bound nel batch TR-002:
+
+| File | Cambio |
+|---|---|
+| `tests2/scheduler/unit/test_execution_manager_scheduled_for_persist_contract.py` | 2 test source-bound rimpiazzati con 3 test behavior-bound che invocano `ExecutionManager.execute(scheduled_for=...)` con dipendenze stubbate e asseriscono che il valore raggiunga `log_service.create_log_entry` (`schedule_info` + `execution_info`) e `_execute_carica` (kwarg). |
+| `tests2/scheduler/unit/test_schedule_task_scheduled_for_contract.py` | Test source-bound `count("scheduled_for") >= 2` rimpiazzato con behavior-bound che asserisce propagazione del kwarg a `ExecutionManager.execute`. Il check di signature resta invariato. |
+
+**Pattern usato**: `ExecutionManager.__new__` + `MagicMock` per le
+dipendenze (riuso di `test_execution_manager_contract.py::_make_manager`
+e `test_execution_manager_orphan_and_release_contract.py`).
+**Niente helper condiviso esportato** — l'estrazione di
+`_helpers/scheduler_harness.py` non e' stata necessaria per 3
+migrazioni e sarebbe stato premature abstraction.
+
+**Stato Categoria 3 post-TR-002**: chiusa. Nessun `inspect.getsource`
+residuo riconducibile a "scheduler integration deferred" rientra piu'
+sotto questa categoria. Eventuali future occorrenze in scheduler test
+devono essere modernizzate al pattern behavior-bound usato in TR-002,
+non aggiunte come nuove voci Categoria 3.
+
+**Categorie 1 e 2 restano valide** e autoritative.
+
+**Nota**: l'unica residua `inspect.getsource` in `tests2/scheduler/`
+(in `test_n15b_scheduled_for_always_set_contract.py:40`) NON era nello
+scope ADR-0020/TR-002 originale: e' un sentinel "fallback computation"
+per il task ed e' gia' coperta behavior-bound nello stesso file. Se in
+futuro si vuole modernizzarla, rientra in Categoria 2 (AST-style sentinel)
+o va modernizzata come pattern TR-002.

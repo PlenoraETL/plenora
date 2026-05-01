@@ -69,8 +69,8 @@ tests, see [Residual Register](residual-register.md).
 |---|---|---|---|
 | **R-04** | N9 source-bound `inspect.getsource` (11 occorrenze) | CLOSED | #44. Modernizzato a behavior-bound (bytecode probe + spy + SQL capture + TestClient + eager). |
 | **R-04b** | Batch non-auth source-bound (9 file) | CLOSED | #46. Stesso pattern di R-04. |
-| TR-001 | Source-bound `inspect.getsource` residui (7 in 6 file) | DROP/KEEP | Documentato in **ADR-0020** come scelta intenzionale: Cat. 1 policy enforcement, Cat. 2 AST sentinel, Cat. 3 scheduler integration deferred. |
-| **TR-002** | Scheduler test infrastructure (Cat. 3 ADR-0020) | NEXT | Estendere `_helpers/celery_eager.py` a `ExecutionManager`. ~2 PR (foundation + migration). |
+| TR-001 | Source-bound `inspect.getsource` residui post TR-002 | DROP/KEEP | **5 occorrenze in 5 file** = 4 voci ADR-0020 ancora valide (Cat. 1: `test_database_writer_log_consistency_contract.py:299`; Cat. 2: `test_n13_alias_resolution_contract.py:193`, `test_type_dispatch_contract.py:153`, `test_persist_storage_decoupling.py:218`) **+ 1 fuori ADR** (`test_n15b_scheduled_for_always_set_contract.py:40` — fallback sentinel scheduler, non listato in ADR-0020). Cat. 3 chiusa da **TR-002** (vedi nota Superseded in ADR-0020). |
+| **TR-002** | Scheduler test infrastructure (Cat. 3 ADR-0020) | CLOSED | I 3 casi Cat. 3 ADR-0020 migrati a behavior-bound (PR TR-002): `ExecutionManager.__new__` + MagicMock pattern senza harness condiviso (riusa pattern di `test_execution_manager_contract.py`). Vedi nota Superseded in ADR-0020. |
 | TR-003 | `test_columns_metadata_save_retry_contract.py` lazy psycopg2 imports | DROP | Pattern intenzionale per optional dep. |
 | TR-004 | Datetime non frozen in admin_system_status tests | DROP | Pattern relative-age legitimate. |
 | **R-05** | `time.sleep` in scheduler heartbeat tests | NEXT Phase 3 | Non flake reale: testano thread reali. Fix richiede clock injection in prod. |
@@ -83,7 +83,7 @@ tests, see [Residual Register](residual-register.md).
 |---|---|---|---|
 | **FE-22** | Polling single-flight | CLOSED | #42 (`useTaskPolling`) + #43 (-353 righe orphan + dedup keyframe) + #45 (12 CSS classi missing). |
 | **R-25-B5** | UI ExecutionModal toggle staff-only | CLOSED | #47. R-25 al 100%. |
-| FE-CLN-001 | `ThemeToggle` dedup | NEXT | XS-S. Estrarre `useTheme` hook + componente shared. |
+| **FE-CLN-001** | `ThemeToggle` dedup | CLOSED | Commit `d309e0d`. Estratti `useTheme` hook + `ThemeToggle` componente shared, applicati a sidebar + 7 page/editor; coperto da test hook (`useTheme`). |
 | FE-CLN-002 | Inline styles vs design tokens | LATER | M effort. Richiede design system review. |
 | FE-CLN-003 | Stray `local_*.log` working tree | DROP | Gitignored, non in repo. |
 | FE-SPLIT-001 | `pages/ApiConnectionManager.jsx` 1193 LOC, 6 concerns | LATER | L effort. Modal extraction + context split. |
@@ -152,8 +152,6 @@ Focus: **chiudere gap operativi e debiti security ad alta priorita'**.
 - R-01 rate-limiter Redis-backed
 - R-30 DB snapshot pre-deploy
 - R-33 DR drill execution (manuale ops)
-- TR-002 scheduler test infrastructure
-- FE-CLN-001 ThemeToggle dedup
 - FE-TEST-001 (subset top-2: api connections + result node)
 - OBSERV-001 observability sink decision implementation
 - Setup checklist nuovo operatore ops
