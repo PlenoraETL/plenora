@@ -15,26 +15,11 @@ import {
 import ScheduleWizard from '../components/modals/ScheduleWizard';
 import { useHexCanvas } from '../utils/hexCanvas';
 import AppSidebar from '../components/AppSidebar';
+import ThemeToggle from '../components/common/ThemeToggle';
 import { can } from '../utils/permissions';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useConfirmModal } from '../hooks/useConfirmModal';
 import '../styles/ScheduleList.css';
-
-// ── Theme toggle ──────────────────────────────────────────────────────────
-function ThemeToggle() {
-  const [theme, setTheme] = useState(() => {
-    const saved = localStorage.getItem('plenora-theme') || 'dark';
-    document.documentElement.setAttribute('data-theme', saved);
-    return saved;
-  });
-  const toggle = (t) => { document.documentElement.setAttribute('data-theme', t); localStorage.setItem('plenora-theme', t); setTheme(t); };
-  return (
-    <div className="sl__theme-toggle">
-      <div className={`sl__theme-opt ${theme === 'dark'  ? 'sl__theme-opt--on' : ''}`} onClick={() => toggle('dark')}>🌙 Scuro</div>
-      <div className={`sl__theme-opt ${theme === 'light' ? 'sl__theme-opt--on' : ''}`} onClick={() => toggle('light')}>☀️ Chiaro</div>
-    </div>
-  );
-}
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 const formatDate = (s) => {
@@ -255,7 +240,7 @@ function ScheduleList() {
           <div className="sl__page-title">{projectFilter ? 'Scheduler (filtrato)' : 'Scheduler'}</div>
           <div className="sl__topbar-right">
             {projectFilter && <button type="button" className="sl__btn sl__btn--ghost" onClick={() => navigate('/schedules')}>Mostra tutti</button>}
-            <ThemeToggle />
+            <ThemeToggle classPrefix="sl" />
             {can.createSchedule(user) && (
               <button type="button" className="sl__btn sl__btn--primary" onClick={() => { setEditingId(null); setShowWizard(true); }}>＋ Nuovo Schedule</button>
             )}

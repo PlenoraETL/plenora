@@ -21,6 +21,8 @@ import { useHexCanvas } from '../utils/hexCanvas';
 import PublishEseguibileModal from '../components/eseguibili/PublishEseguibileModal';
 import EseguibileExecuteWizard from '../components/eseguibili/EseguibileExecuteWizard';
 import AppSidebar from '../components/AppSidebar';
+import ThemeToggle from '../components/common/ThemeToggle';
+import { useTheme } from '../hooks/useTheme';
 import ModalWrapper, { ModalButton } from '../components/common/ModalWrapper';
 import { can, role } from '../utils/permissions';
 import '../styles/ProjectList.css';
@@ -56,23 +58,11 @@ function ProjectList() {
   const [projectSources,    setProjectSources]    = useState({});
   const [projectFileSources,setProjectFileSources]= useState({});
   const [search,            setSearch]            = useState('');
-  const [theme,             setTheme]             = useState(() => {
-    const saved = localStorage.getItem('plenora-theme');
-    const initial = saved || document.documentElement.getAttribute('data-theme') || 'dark';
-    document.documentElement.setAttribute('data-theme', initial);
-    return initial;
-  });
+  const { theme } = useTheme();
 
 
   const canvasRef = useRef(null);
   useHexCanvas(canvasRef);
-
-  const toggleTheme = () => {
-    const next = theme === 'dark' ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', next);
-    localStorage.setItem('plenora-theme', next);
-    setTheme(next);
-  };
 
   // Load data
   useEffect(() => { loadData(); }, []);
@@ -306,16 +296,7 @@ function ProjectList() {
                 onChange={e => setSearch(e.target.value)}
               />
             </div>
-            <div className="pl__theme-toggle">
-              <div
-                className={`pl__theme-opt ${theme === 'dark' ? 'pl__theme-opt--on' : ''}`}
-                onClick={() => theme !== 'dark' && toggleTheme()}
-              >🌙 Scuro</div>
-              <div
-                className={`pl__theme-opt ${theme === 'light' ? 'pl__theme-opt--on' : ''}`}
-                onClick={() => theme !== 'light' && toggleTheme()}
-              >☀️ Chiaro</div>
-            </div>
+            <ThemeToggle classPrefix="pl" />
             <button type="button" className="pl__btn pl__btn--ghost" onClick={loadData}>⟳ Aggiorna</button>
             {canCreateProj && (
               <button type="button" className="pl__btn pl__btn--primary" onClick={() => setShowModal(true)}>＋ Nuovo Progetto</button>

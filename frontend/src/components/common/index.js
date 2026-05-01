@@ -16,3 +16,4 @@ export {
 } from './LoadingOverlay';
 export { default as SearchInput, SearchInputWithFilter } from './SearchInput';
 export { default as ToastContainer } from './ToastContainer';
+export { default as ThemeToggle } from './ThemeToggle';

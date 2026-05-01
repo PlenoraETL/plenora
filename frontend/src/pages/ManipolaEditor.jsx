@@ -42,6 +42,7 @@ import { useSchemaInference, usePreview, useExecution, useCanvasCore } from '../
 import { useEditorData } from '../hooks/useEditorData';
 import useCanvasStore from '../store/useCanvasStore';
 import { useToast } from '../hooks/useToast';
+import { useTheme } from '../hooks/useTheme';
 import useColumnPropagation from '../hooks/useColumnPropagation';
 import { deserializeNodes, createEdgeFromData } from '../utils/nodeFactories';
 import {
@@ -84,19 +85,9 @@ const ManipolaEditorContent = () => {
   const toast = useToast();
 
   // ===== THEME =====
-  const [theme, setThemeState] = useState(() => {
-    const saved = localStorage.getItem('plenora-theme') || 'dark';
-    document.documentElement.setAttribute('data-theme', saved);
-    return saved;
-  });
+  const { theme, setTheme } = useTheme();
   const hexCanvasRef = useRef(null);
   useHexCanvas(hexCanvasRef);
-
-  const setTheme = (t) => {
-    document.documentElement.setAttribute('data-theme', t);
-    localStorage.setItem('plenora-theme', t);
-    setThemeState(t);
-  };
 
   // ===== CANVAS CORE =====
   // Sostituisce: useNodesState, useEdgesState, useNodeHandlers, nodesRef, edgesRef,

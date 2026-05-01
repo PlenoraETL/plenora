@@ -14,6 +14,7 @@ import {
 import { useHexCanvas } from '../utils/hexCanvas';
 import AllowedGroupsSelector from '../components/shared/AllowedGroupsSelector';
 import AppSidebar from '../components/AppSidebar';
+import ThemeToggle from '../components/common/ThemeToggle';
 import { handleCascade409, formatCascadeDependencies } from '../api/errors';
 import { can, role } from '../utils/permissions';
 import '../styles/DataSourceManager.css';
@@ -45,17 +46,6 @@ const formatDate = (iso) => {
   if (!iso) return '—';
   return new Date(iso).toLocaleString('it-IT', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
 };
-
-function ThemeToggle() {
-  const [theme, setTheme] = useState(() => { const s=localStorage.getItem('plenora-theme')||'dark'; document.documentElement.setAttribute('data-theme',s); return s; });
-  const toggle = t => { document.documentElement.setAttribute('data-theme',t); localStorage.setItem('plenora-theme',t); setTheme(t); };
-  return (
-    <div className="dsm__theme-toggle">
-      <div className={`dsm__theme-opt${theme==='dark'?' dsm__theme-opt--on':''}`} onClick={()=>toggle('dark')}>🌙 Scuro</div>
-      <div className={`dsm__theme-opt${theme==='light'?' dsm__theme-opt--on':''}`} onClick={()=>toggle('light')}>☀️ Chiaro</div>
-    </div>
-  );
-}
 
 // ── Main ──────────────────────────────────────────────────────────────────
 export default function DataSourceManager() {
@@ -162,7 +152,7 @@ export default function DataSourceManager() {
           <button type="button" className="dsm__back-btn" onClick={() => navigate(-1)}>← Indietro</button>
           <div className="dsm__page-title">Data Source</div>
           <div className="dsm__topbar-right">
-            <ThemeToggle />
+            <ThemeToggle classPrefix="dsm" />
             {canCreateDs && (
               <button type="button" className="dsm__btn dsm__btn--primary" onClick={openNew}>＋ Nuovo Data Source</button>
             )}

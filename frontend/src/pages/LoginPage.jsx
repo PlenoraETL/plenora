@@ -10,6 +10,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { role } from '../utils/permissions';
+import { useTheme } from '../hooks/useTheme';
 import '../styles/LoginPage.css';
 
 // Helper: dove mandare l'utente dopo il login in base al ruolo.
@@ -91,19 +92,7 @@ export default function LoginPage() {
   const navigate         = useNavigate();
   const canvasRef        = useRef(null);
 
-  const [theme,    setTheme]    = useState(() => {
-    const saved = localStorage.getItem('plenora-theme');
-    const initial = saved || document.documentElement.getAttribute('data-theme') || 'dark';
-    document.documentElement.setAttribute('data-theme', initial);
-    return initial;
-  });
-
-  const toggleTheme = () => {
-    const next = theme === 'dark' ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', next);
-    localStorage.setItem('plenora-theme', next);
-    setTheme(next);
-  };
+  const { theme, toggleTheme } = useTheme();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPw,   setShowPw]   = useState(false);
@@ -122,7 +111,6 @@ export default function LoginPage() {
 
     const observer = new MutationObserver(() => {
       drawHexTransition(canvas);
-      setTheme(document.documentElement.getAttribute('data-theme') || 'dark');
     });
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 

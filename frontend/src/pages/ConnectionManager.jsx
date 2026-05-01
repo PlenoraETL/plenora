@@ -18,6 +18,7 @@ import {
 import { useHexCanvas } from '../utils/hexCanvas';
 import AllowedGroupsSelector from '../components/shared/AllowedGroupsSelector';
 import AppSidebar from '../components/AppSidebar';
+import ThemeToggle from '../components/common/ThemeToggle';
 import ModalWrapper, { ModalButton } from '../components/common/ModalWrapper';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useConfirmModal } from '../hooks/useConfirmModal';
@@ -33,26 +34,6 @@ const ALL_TYPES = [
   { value: 'sqlite',   label: '📁 SQLite',        color: '#6B7280', colorRgb: '107,114,128', defaultPort: 0,    defaultSchema: '',       category: 'database' },
   { value: 'arcgis',   label: '🌐 ArcGIS Server', color: '#F5A623', colorRgb: '245,166,35',  defaultPort: 0,    defaultSchema: '',       category: 'arcgis'   },
 ];
-
-// ── Theme toggle ─────────────────────────────────────────────────────────
-function ThemeToggle() {
-  const [theme, setTheme] = useState(() => {
-    const saved = localStorage.getItem('plenora-theme') || 'dark';
-    document.documentElement.setAttribute('data-theme', saved);
-    return saved;
-  });
-  const toggle = (t) => {
-    document.documentElement.setAttribute('data-theme', t);
-    localStorage.setItem('plenora-theme', t);
-    setTheme(t);
-  };
-  return (
-    <div className="cm__theme-toggle">
-      <div className={`cm__theme-opt ${theme === 'dark'  ? 'cm__theme-opt--on' : ''}`} onClick={() => toggle('dark')}>🌙 Scuro</div>
-      <div className={`cm__theme-opt ${theme === 'light' ? 'cm__theme-opt--on' : ''}`} onClick={() => toggle('light')}>☀️ Chiaro</div>
-    </div>
-  );
-}
 
 // ── Main component ───────────────────────────────────────────────────────
 function ConnectionManager() {
@@ -208,7 +189,7 @@ function ConnectionManager() {
           <button type="button" className="cm__back-btn" onClick={() => navigate(-1)}>← Indietro</button>
           <div className="cm__page-title">Connessioni</div>
           <div className="cm__topbar-right">
-            <ThemeToggle />
+            <ThemeToggle classPrefix="cm" />
             {canCreateConnection && (
               <button type="button" className="cm__btn cm__btn--primary" onClick={() => handleOpenModal()}>＋ Nuova Connessione</button>
             )}

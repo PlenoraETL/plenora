@@ -16,6 +16,7 @@ import AllowedGroupsSelector from '../components/shared/AllowedGroupsSelector';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useConfirmModal } from '../hooks/useConfirmModal';
 import AppSidebar from '../components/AppSidebar';
+import ThemeToggle from '../components/common/ThemeToggle';
 import { handleCascade409, formatCascadeDependencies } from '../api/errors';
 // C3.2 Phase 4: tutte le chiamate /api-connections e /datasources passano
 // per il boundary api/ (ex shadow inline in cima al file).
@@ -102,12 +103,6 @@ const formatTimeAgo = (d) => {
   if (s < 86400) return `${Math.floor(s/3600)}h fa`;
   return `${Math.floor(s/86400)}g fa`;
 };
-
-function ThemeToggle() {
-  const [theme,setTheme] = useState(()=>{const s=localStorage.getItem('plenora-theme')||'dark';document.documentElement.setAttribute('data-theme',s);return s;});
-  const toggle = t=>{document.documentElement.setAttribute('data-theme',t);localStorage.setItem('plenora-theme',t);setTheme(t);};
-  return (<div className="acm__theme-toggle"><div className={`acm__theme-opt${theme==='dark'?' acm__theme-opt--on':''}`} onClick={()=>toggle('dark')}>🌙 Scuro</div><div className={`acm__theme-opt${theme==='light'?' acm__theme-opt--on':''}`} onClick={()=>toggle('light')}>☀️ Chiaro</div></div>);
-}
 
 // ── Main ──────────────────────────────────────────────────────────────────
 function ApiConnectionManager() {
@@ -339,7 +334,7 @@ function ApiConnectionManager() {
           <button type="button" className="acm__back-btn" onClick={()=>navigate(-1)}>← Indietro</button>
           <div className="acm__page-title">Connettori Esterni</div>
           <div className="acm__topbar-right">
-            <ThemeToggle />
+            <ThemeToggle classPrefix="acm" />
             {canCreateApi && (
               <div className="acm__new-wrapper">
                 <button type="button" className="acm__btn acm__btn--primary" onClick={()=>setShowNewApiDropdown(!showNewApiDropdown)}>

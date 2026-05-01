@@ -50,6 +50,7 @@ const ConnectionSelectorModal = lazy(() => import('../components/arricchisci/Con
 const EnrichmentConfirmModal = lazy(() => import('../components/modals/EnrichmentConfirmModal'));
 import { usePreview, useExecution, useCanvasCore, useMultiModal, useEnrichmentValidation, useCaricarica } from '../hooks';
 import { useToast } from '../hooks/useToast';
+import { useTheme } from '../hooks/useTheme';
 import '../styles/ArricchisciEditor.css';
 import '../components/arricchisci/ConnectionSelectorModal.css';
 import '../components/nodes/StaticValuesNode.css';
@@ -107,19 +108,9 @@ const ArricchisciEditorContent = () => {
   const { screenToFlowPosition } = useReactFlow();
 
   // ===== THEME =====
-  const [theme, setThemeState] = useState(() => {
-    const saved = localStorage.getItem('plenora-theme') || 'dark';
-    document.documentElement.setAttribute('data-theme', saved);
-    return saved;
-  });
+  const { theme, setTheme } = useTheme();
   const hexCanvasRef = useRef(null);
   useHexCanvas(hexCanvasRef);
-
-  const setTheme = (t) => {
-    document.documentElement.setAttribute('data-theme', t);
-    localStorage.setItem('plenora-theme', t);
-    setThemeState(t);
-  };
 
   const toast = useToast();
 

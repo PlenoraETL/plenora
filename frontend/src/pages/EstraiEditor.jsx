@@ -38,6 +38,7 @@ import {
 } from '../utils/canvasAccessControl';
 import useCanvasStore from '../store/useCanvasStore';
 import { useToast } from '../hooks/useToast';
+import { useTheme } from '../hooks/useTheme';
 import '../styles/EstraiEditor.css';
 import '../components/nodes/StaticValuesNode.css';
 import '../components/nodes/AnnotationNode.css';
@@ -92,18 +93,7 @@ function EstraiEditor() {
   const [tablesCollapsed, setTablesCollapsed]     = useState(false);
   const [visibleTableCount, setVisibleTableCount] = useState(TABLES_PAGE_SIZE);
   const [visibleViewCount,  setVisibleViewCount]  = useState(TABLES_PAGE_SIZE);
-  const [theme, setTheme] = useState(() => {
-    const saved = localStorage.getItem('plenora-theme');
-    const initial = saved || document.documentElement.getAttribute('data-theme') || 'dark';
-    document.documentElement.setAttribute('data-theme', initial);
-    return initial;
-  });
-
-  const toggleTheme = (next) => {
-    document.documentElement.setAttribute('data-theme', next);
-    localStorage.setItem('plenora-theme', next);
-    setTheme(next);
-  };
+  const { theme, setTheme: toggleTheme } = useTheme();
 
   // Reset visible count when search changes
   useEffect(() => { setVisibleTableCount(TABLES_PAGE_SIZE); }, [searchQuery]);

@@ -33,20 +33,13 @@ import { useAuth } from '../context/AuthContext';
 import { can, role } from '../utils/permissions';
 import { getTicketsCounts } from '../api/tickets';
 import ChangePasswordModal from './ChangePasswordModal';
+import { useTheme } from '../hooks/useTheme';
 import './AppSidebar.css';
 
 // ── Logo Plenora (dark/light aware) ─────────────────────────────────────
 function Logo() {
-  const [isDark, setIsDark] = useState(
-    () => (localStorage.getItem('plenora-theme') || 'dark') !== 'light'
-  );
-  useEffect(() => {
-    const obs = new MutationObserver(() =>
-      setIsDark(document.documentElement.getAttribute('data-theme') !== 'light')
-    );
-    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-    return () => obs.disconnect();
-  }, []);
+  const { theme } = useTheme();
+  const isDark = theme !== 'light';
   return (
     <svg width="130" height="36" viewBox="0 0 350 90" xmlns="http://www.w3.org/2000/svg">
       <polygon points="16,58 52,40 88,58 52,76" fill="rgba(245,166,35,0.10)"  stroke="#F5A623" strokeWidth="1.4" strokeLinejoin="round"/>

@@ -13,6 +13,7 @@ import RunsTab from '../components/logviewer/RunsTab';
 
 import { useHexCanvas } from '../utils/hexCanvas';
 import AppSidebar from '../components/AppSidebar';
+import ThemeToggle from '../components/common/ThemeToggle';
 import { can } from '../utils/permissions';
 import '../styles/LogViewer.css';
 
@@ -32,22 +33,6 @@ const MODULE_COLORS = {
   orchestrator: '#60A5FA', scheduler: '#34D399', connections: '#FBBF24', projects: '#818CF8',
   files: '#A78BFA', services: '#94A3B8', db: '#F87171', utils: '#6B7280', workers: '#F472B6',
 };
-
-// ── ThemeToggle ───────────────────────────────────────────────────────────
-function ThemeToggle() {
-  const [theme, setTheme] = useState(() => {
-    const s = localStorage.getItem('plenora-theme') || 'dark';
-    document.documentElement.setAttribute('data-theme', s);
-    return s;
-  });
-  const toggle = t => { document.documentElement.setAttribute('data-theme', t); localStorage.setItem('plenora-theme', t); setTheme(t); };
-  return (
-    <div className="lv__theme-toggle">
-      <div className={`lv__theme-opt${theme === 'dark'  ? ' lv__theme-opt--on' : ''}`} onClick={() => toggle('dark')}>🌙 Scuro</div>
-      <div className={`lv__theme-opt${theme === 'light' ? ' lv__theme-opt--on' : ''}`} onClick={() => toggle('light')}>☀️ Chiaro</div>
-    </div>
-  );
-}
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 function formatTime(ts) {
@@ -188,7 +173,7 @@ function LogViewer() {
             {canSeeTechnicalLog && mainTab === 'logs' && (
               <button type="button" className="lv__btn lv__btn--ghost" onClick={handleExportCSV}>↓ Export CSV</button>
             )}
-            <ThemeToggle />
+            <ThemeToggle classPrefix="lv" />
           </div>
         </header>
 

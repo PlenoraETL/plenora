@@ -21,6 +21,7 @@ import {
 import { useHexCanvas } from '../utils/hexCanvas';
 import AllowedGroupsSelector from '../components/shared/AllowedGroupsSelector';
 import AppSidebar from '../components/AppSidebar';
+import ThemeToggle from '../components/common/ThemeToggle';
 import ModalWrapper, { ModalButton } from '../components/common/ModalWrapper';
 import { can, role } from '../utils/permissions';
 import '../styles/FileManager.css';
@@ -53,26 +54,6 @@ const FILTER_TABS = [
   { key: 'spatial', label: 'Spaziali' },
 ];
 const SPATIAL_FORMATS = ['gpkg','shp','gdb','geojson'];
-
-// ── Theme toggle ──────────────────────────────────────────────────────────
-function ThemeToggle() {
-  const [theme, setThemeState] = useState(() => {
-    const saved = localStorage.getItem('plenora-theme') || 'dark';
-    document.documentElement.setAttribute('data-theme', saved);
-    return saved;
-  });
-  const toggle = (t) => {
-    document.documentElement.setAttribute('data-theme', t);
-    localStorage.setItem('plenora-theme', t);
-    setThemeState(t);
-  };
-  return (
-    <div className="fm__theme-toggle">
-      <div className={`fm__theme-opt ${theme === 'dark'  ? 'fm__theme-opt--on' : ''}`} onClick={() => toggle('dark')}>🌙 Scuro</div>
-      <div className={`fm__theme-opt ${theme === 'light' ? 'fm__theme-opt--on' : ''}`} onClick={() => toggle('light')}>☀️ Chiaro</div>
-    </div>
-  );
-}
 
 // ── Main component ────────────────────────────────────────────────────────
 const FileManager = () => {
@@ -384,7 +365,7 @@ const FileManager = () => {
           <button type="button" className="fm__back-btn" onClick={() => navigate(-1)}>← Indietro</button>
           <div className="fm__page-title">File Manager</div>
           <div className="fm__topbar-right">
-            <ThemeToggle />
+            <ThemeToggle classPrefix="fm" />
             {can.uploadFile(user) && (
               <button type="button" className="fm__btn fm__btn--primary" onClick={() => setShowUploadModal(true)}>↑ Carica File</button>
             )}
