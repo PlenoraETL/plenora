@@ -1,4 +1,4 @@
-"""Heartbeat thread dentro ExecutionManager.execute (C3 fix 4).
+"""Heartbeat thread dentro ExecutionManager.execute (C3 fix 4) - R-05 deterministic.
 
 Contratto:
 1. Helper `_start_lock_heartbeat(schedule_id)` lancia un thread daemon
@@ -7,19 +7,21 @@ Contratto:
 2. Helper `_stop_lock_heartbeat(state)` segnala lo stop e fa join con
    timeout. Idempotente.
 3. Thread e' daemon=True: muore col processo Python (se SIGKILL del
-   worker Celery, il thread non sopravvive — il lock scade per TTL).
+   worker Celery, il thread non sopravvive - il lock scade per TTL).
 4. Il thread NON rinfresca piu' dopo lo stop_event.
 5. execute() integra: dopo try_acquire success chiama _start, nel
    finally chiama _stop.
+
+R-05: tutti i tick sono pilotati da FakeClock.advance(); zero time.sleep
+reali.
 """
 
-import threading
-import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from app.core.scheduler.execution_manager import ExecutionManager
+from app.shared.clock import FakeClock
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.scheduler, pytest.mark.contract]
@@ -31,21 +33,31 @@ pytestmark = [pytest.mark.unit, pytest.mark.scheduler, pytest.mark.contract]
 
 
 def _build_manager_with_mock_concurrency():
-    manager = ExecutionManager()
+    """Pattern leggero (vedi test_lock_heartbeat_contract.py): bypassa
+    `ExecutionManager.__init__` (che istanzia ScheduleService /
+    LogService / PolicyEngine / ArtifactStore: ~4s di setup) e setta
+    solo `concurrency`, l'unico attributo letto da
+    `_start_lock_heartbeat`/`_stop_lock_heartbeat`."""
+    manager = ExecutionManager.__new__(ExecutionManager)
     fake = MagicMock()
     fake.refresh_lock = MagicMock(return_value=True)
     manager.concurrency = fake
     return manager, fake
 
 
+def _tick(fc: FakeClock, interval: float) -> None:
+    """Forza un tick deterministico del loop heartbeat."""
+    fc.wait_for_pending_waiters(1)
+    fc.advance(interval + 0.001)
+
+
 def test_start_lock_heartbeat_returns_state_and_starts_thread():
     """_start_lock_heartbeat crea un thread attivo con name 'heartbeat-*'."""
-    manager, fake_conc = _build_manager_with_mock_concurrency()
+    manager, _fake_conc = _build_manager_with_mock_concurrency()
 
-    state = manager._start_lock_heartbeat("sched-xyz", interval=0.01)
+    state = manager._start_lock_heartbeat("sched-xyz", interval=10.0, clock=FakeClock())
     try:
         assert state is not None
-        # Il thread deve esistere ed essere vivo
         thread = state["thread"]
         assert thread.is_alive()
         assert "heartbeat-sched-xyz" in thread.name
@@ -58,7 +70,7 @@ def test_heartbeat_thread_is_daemon():
     thread non sopravvive a rinfrescare un lock post-mortem."""
     manager, _ = _build_manager_with_mock_concurrency()
 
-    state = manager._start_lock_heartbeat("sched-1", interval=0.01)
+    state = manager._start_lock_heartbeat("sched-1", interval=10.0, clock=FakeClock())
     try:
         assert state["thread"].daemon is True
     finally:
@@ -66,18 +78,21 @@ def test_heartbeat_thread_is_daemon():
 
 
 def test_heartbeat_calls_refresh_lock_repeatedly():
-    """Con interval corto, in una finestra di ~150ms il thread chiama
-    refresh_lock almeno 2-3 volte."""
+    """Tre tick virtuali -> tre invocazioni di refresh_lock."""
     manager, fake_conc = _build_manager_with_mock_concurrency()
 
-    state = manager._start_lock_heartbeat("sched-1", interval=0.03)
+    fc = FakeClock()
+    state = manager._start_lock_heartbeat("sched-1", interval=10.0, clock=fc)
     try:
-        time.sleep(0.15)
+        _tick(fc, 10.0)
+        _tick(fc, 10.0)
+        _tick(fc, 10.0)
+        # Aspetta che il thread sia di nuovo parked dopo l'ultimo tick
+        fc.wait_for_pending_waiters(1)
     finally:
         manager._stop_lock_heartbeat(state)
 
-    # Almeno 2 refresh (tolleranza su timing: 150ms/30ms = 5, margine)
-    assert fake_conc.refresh_lock.call_count >= 2
+    assert fake_conc.refresh_lock.call_count >= 3
     fake_conc.refresh_lock.assert_any_call("sched-1")
 
 
@@ -85,11 +100,10 @@ def test_stop_lock_heartbeat_stops_thread_deterministically():
     """Dopo _stop_lock_heartbeat, il thread non e' piu' vivo."""
     manager, _ = _build_manager_with_mock_concurrency()
 
-    state = manager._start_lock_heartbeat("sched-1", interval=0.01)
+    fc = FakeClock()
+    state = manager._start_lock_heartbeat("sched-1", interval=10.0, clock=fc)
+    fc.wait_for_pending_waiters(1)
     manager._stop_lock_heartbeat(state)
-
-    # Piccolo grace per il join
-    time.sleep(0.05)
 
     assert state["thread"].is_alive() is False
 
@@ -98,9 +112,8 @@ def test_stop_lock_heartbeat_is_idempotent():
     """Chiamare _stop due volte non deve sollevare."""
     manager, _ = _build_manager_with_mock_concurrency()
 
-    state = manager._start_lock_heartbeat("sched-1", interval=0.01)
+    state = manager._start_lock_heartbeat("sched-1", interval=10.0, clock=FakeClock())
     manager._stop_lock_heartbeat(state)
-    # Secondo stop: no-op
     manager._stop_lock_heartbeat(state)
 
 
@@ -108,26 +121,32 @@ def test_heartbeat_does_not_call_refresh_after_stop():
     """Dopo stop, il contatore di refresh non incrementa piu'."""
     manager, fake_conc = _build_manager_with_mock_concurrency()
 
-    state = manager._start_lock_heartbeat("sched-1", interval=0.01)
-    time.sleep(0.05)
+    fc = FakeClock()
+    state = manager._start_lock_heartbeat("sched-1", interval=10.0, clock=fc)
+    _tick(fc, 10.0)
+    fc.wait_for_pending_waiters(1)
     manager._stop_lock_heartbeat(state)
 
     count_after_stop = fake_conc.refresh_lock.call_count
-    time.sleep(0.1)
-
+    # Avanza ancora il tempo virtuale: il thread e' fermato, niente piu'
+    # refresh anche su un advance() arbitrariamente grande.
+    fc.advance(100.0)
     assert fake_conc.refresh_lock.call_count == count_after_stop
 
 
 def test_heartbeat_swallows_refresh_errors():
     """Se refresh_lock solleva, il thread non muore (prossimo tick
-    riproverà). Protezione contro transient DB blip."""
+    riprovera'). Protezione contro transient DB blip."""
     manager, fake_conc = _build_manager_with_mock_concurrency()
     fake_conc.refresh_lock.side_effect = RuntimeError("db blip")
 
-    state = manager._start_lock_heartbeat("sched-1", interval=0.02)
+    fc = FakeClock()
+    state = manager._start_lock_heartbeat("sched-1", interval=10.0, clock=fc)
     try:
-        time.sleep(0.1)
-        # Il thread deve essere ancora vivo nonostante refresh abbia sollevato
+        _tick(fc, 10.0)
+        _tick(fc, 10.0)
+        # Thread ancora vivo dopo 2 exception, parked sul prossimo wait
+        fc.wait_for_pending_waiters(1)
         assert state["thread"].is_alive()
     finally:
         manager._stop_lock_heartbeat(state)

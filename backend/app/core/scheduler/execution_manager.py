@@ -114,7 +114,7 @@ class ExecutionManager:
     # HEARTBEAT LOCK (C3 fix 4)
     # =========================================================================
 
-    def _start_lock_heartbeat(self, schedule_id: str, interval: float = None) -> Dict[str, Any]:
+    def _start_lock_heartbeat(self, schedule_id: str, interval: float = None, clock=None) -> Dict[str, Any]:
         """Lancia un thread daemon che rinfresca periodicamente il lock
         scheduler fino a `_stop_lock_heartbeat()`.
 
@@ -159,6 +159,7 @@ class ExecutionManager:
             concurrency=self.concurrency,
             schedule_id=schedule_id,
             interval=interval,
+            clock=clock,  # R-05: None -> default WALL_CLOCK in produzione
         )
         hb.start()
         # Reference LIVE allo state interno: mutazioni del thread loop

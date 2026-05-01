@@ -26,6 +26,7 @@ from __future__ import annotations
 import threading
 from typing import Any, Dict, Optional
 
+from app.shared.clock import Clock, WALL_CLOCK
 from app.utils.logger import get_logger
 
 
@@ -48,11 +49,15 @@ class LockHeartbeat:
         concurrency,
         schedule_id: str,
         interval: float,
+        clock: Optional[Clock] = None,
     ):
         self._concurrency = concurrency
         self._schedule_id = schedule_id
         self._interval = interval
         self._stop_event = threading.Event()
+        # R-05 seam: in produzione usa WALL_CLOCK (stop_event.wait); i test
+        # iniettano FakeClock per avanzare il tempo deterministicamente.
+        self._clock: Clock = clock if clock is not None else WALL_CLOCK
         # State mutabile condiviso tra thread loop e get_state_dict().
         # `lock_lost` viene mutato dal loop quando il lock e' perso e
         # non re-acquisibile. `execute()` legge questa stessa reference
@@ -122,11 +127,11 @@ class LockHeartbeat:
     # ------------------------------------------------------------------
 
     def _heartbeat_loop(self) -> None:
-        # Usa stop_event.wait(timeout) invece di time.sleep: il
-        # wait ritorna immediatamente True se stop_event e' settato,
-        # cosi' lo stop e' deterministico e non aspettiamo l'intero
-        # interval prima di fermarci.
-        while not self._stop_event.wait(self._interval):
+        # Usa clock.wait(stop_event, timeout): in produzione e' equivalente
+        # a stop_event.wait(timeout) (singleton WALL_CLOCK), nei test e'
+        # FakeClock che avanza il tempo virtuale via advance(). Lo stop
+        # resta deterministico (set() del stop_event sblocca subito).
+        while not self._clock.wait(self._stop_event, self._interval):
             try:
                 ok = self._concurrency.refresh_lock(self._schedule_id)
             except Exception as e:

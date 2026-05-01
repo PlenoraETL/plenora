@@ -1,4 +1,4 @@
-"""Contract test PR-#36 — LockHeartbeat class API.
+"""Contract test PR-#36 - LockHeartbeat class API (R-05 deterministic).
 
 Scope: blinda l'API pubblica della class estratta in
 `app.core.scheduler._lock_heartbeat.LockHeartbeat`.
@@ -13,15 +13,20 @@ Invarianti testati:
   - exception in refresh_lock / try_acquire NON propaga ma logga
     warning e continua (transient blip safe)
   - context manager (`with LockHeartbeat(...)`) chiama start/stop
+
+R-05: i test usano FakeClock invece di time.sleep reali. Il thread
+heartbeat e' parked su clock.wait(stop, interval); per forzare un tick
+basta wait_for_pending_waiters(1) + advance(interval+epsilon).
 """
 
 from __future__ import annotations
 
 import threading
-import time
 from unittest.mock import MagicMock
 
 import pytest
+
+from app.shared.clock import FakeClock
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.scheduler, pytest.mark.contract]
@@ -36,6 +41,17 @@ def fake_concurrency():
     return cm
 
 
+def _tick(fc: FakeClock, interval: float) -> None:
+    """Forza un tick deterministico del loop heartbeat parked sul wait virtuale.
+
+    Pattern: il thread chiama clock.wait(stop, interval) -> si parka.
+    Il test aspetta che sia parked (1 waiter), poi advance(interval+eps)
+    libera il wait, il loop esegue refresh_lock/try_acquire e si re-parka.
+    """
+    fc.wait_for_pending_waiters(1)
+    fc.advance(interval + 0.001)
+
+
 def test_start_spawns_daemon_thread(fake_concurrency):
     """start() crea un thread daemon nominato per lo schedule_id."""
     from app.core.scheduler._lock_heartbeat import LockHeartbeat
@@ -44,6 +60,7 @@ def test_start_spawns_daemon_thread(fake_concurrency):
         concurrency=fake_concurrency,
         schedule_id="sch-1",
         interval=10.0,
+        clock=FakeClock(),
     )
     hb.start()
     try:
@@ -64,6 +81,7 @@ def test_get_state_dict_returns_live_reference(fake_concurrency):
         concurrency=fake_concurrency,
         schedule_id="sch-1",
         interval=10.0,
+        clock=FakeClock(),
     )
     state = hb.get_state_dict()
     # Stesso identity, non copia
@@ -83,6 +101,7 @@ def test_stop_is_idempotent(fake_concurrency):
         concurrency=fake_concurrency,
         schedule_id="sch-1",
         interval=10.0,
+        clock=FakeClock(),
     )
     hb.start()
     hb.stop()
@@ -94,28 +113,29 @@ def test_lock_lost_flag_true_when_refresh_false_and_reacquire_fails(
     fake_concurrency,
 ):
     """Pattern critico C3: refresh_lock False + try_acquire != 'acquired'
-    → state['lock_lost'] = True via mutazione thread loop.
-
-    Forza un solo tick dell'heartbeat (interval molto piccolo) e
-    verifica che dopo lo state riflette lock_lost=True."""
+    -> state['lock_lost'] = True via mutazione thread loop."""
     from app.core.scheduler._lock_heartbeat import LockHeartbeat
 
     fake_concurrency.refresh_lock = MagicMock(return_value=False)
     fake_concurrency.try_acquire = MagicMock(return_value="failed")
 
+    fc = FakeClock()
     hb = LockHeartbeat(
         concurrency=fake_concurrency,
         schedule_id="sch-1",
-        interval=0.05,  # 50ms tick
+        interval=10.0,
+        clock=fc,
     )
     hb.start()
-    # Aspetta che almeno un tick venga processato
-    deadline = time.time() + 2.0
-    while time.time() < deadline:
-        if hb.lock_lost:
-            break
-        time.sleep(0.05)
-    hb.stop()
+    try:
+        # Forza 1 tick: thread esegue refresh=False + try_acquire="failed"
+        # -> mutazione _state["lock_lost"] = True.
+        _tick(fc, 10.0)
+        # Aspetta che il thread si re-parka cosi' siamo sicuri che il
+        # body dell'iterazione (incluso il set di lock_lost) e' completo.
+        fc.wait_for_pending_waiters(1)
+    finally:
+        hb.stop()
 
     assert hb.lock_lost is True, (
         "lock_lost dovrebbe essere True dopo refresh False + reacquire failed"
@@ -125,29 +145,35 @@ def test_lock_lost_flag_true_when_refresh_false_and_reacquire_fails(
 
 
 def test_lock_lost_flag_remains_false_when_refresh_ok(fake_concurrency):
-    """Happy path: refresh_lock sempre True → lock_lost resta False."""
+    """Happy path: refresh_lock sempre True -> lock_lost resta False."""
     from app.core.scheduler._lock_heartbeat import LockHeartbeat
 
     fake_concurrency.refresh_lock = MagicMock(return_value=True)
 
+    fc = FakeClock()
     hb = LockHeartbeat(
         concurrency=fake_concurrency,
         schedule_id="sch-1",
-        interval=0.05,
+        interval=10.0,
+        clock=fc,
     )
     hb.start()
-    time.sleep(0.2)  # 4 tick max
-    hb.stop()
+    try:
+        # Almeno 2 tick deterministici
+        _tick(fc, 10.0)
+        _tick(fc, 10.0)
+        fc.wait_for_pending_waiters(1)
+    finally:
+        hb.stop()
 
     assert hb.lock_lost is False
-    # Verifica che il loop e' partito
-    assert fake_concurrency.refresh_lock.call_count >= 1
+    assert fake_concurrency.refresh_lock.call_count >= 2
 
 
 def test_refresh_exception_does_not_propagate_or_set_lock_lost(
     fake_concurrency,
 ):
-    """Transient blip: refresh_lock solleva → loop continua, no
+    """Transient blip: refresh_lock solleva -> loop continua, no
     state['lock_lost']=True (e' una situazione retry-safe)."""
     from app.core.scheduler._lock_heartbeat import LockHeartbeat
 
@@ -155,19 +181,28 @@ def test_refresh_exception_does_not_propagate_or_set_lock_lost(
         side_effect=RuntimeError("transient DB blip")
     )
 
+    fc = FakeClock()
     hb = LockHeartbeat(
         concurrency=fake_concurrency,
         schedule_id="sch-1",
-        interval=0.05,
+        interval=10.0,
+        clock=fc,
     )
     hb.start()
-    time.sleep(0.15)  # ~3 tick: il loop deve sopravvivere
-    hb.stop()
+    try:
+        _tick(fc, 10.0)
+        _tick(fc, 10.0)
+        _tick(fc, 10.0)
+        # Il thread deve essere ancora parked (vivo) dopo 3 exception
+        fc.wait_for_pending_waiters(1)
+    finally:
+        hb.stop()
 
     assert hb.lock_lost is False, (
         "Exception in refresh_lock e' transient: NON deve marcare lock_lost"
     )
     assert hb._thread is not None  # esiste ancora
+    assert fake_concurrency.refresh_lock.call_count >= 3
 
 
 def test_state_dict_includes_external_hb_key_when_wrapper_injects_it():
@@ -179,8 +214,6 @@ def test_state_dict_includes_external_hb_key_when_wrapper_injects_it():
     Questo test blinda il behavior accoppiato (NON un bug, e' design
     documentato): se la shape pulita di `_state` cambia in futuro, il
     wrapper compat va aggiornato di conseguenza."""
-    from unittest.mock import MagicMock
-
     from app.core.scheduler._lock_heartbeat import LockHeartbeat
     from app.core.scheduler.execution_manager import ExecutionManager
 
@@ -189,7 +222,8 @@ def test_state_dict_includes_external_hb_key_when_wrapper_injects_it():
     em = ExecutionManager.__new__(ExecutionManager)
     em.concurrency = cm
 
-    state = em._start_lock_heartbeat("sch-test", interval=10.0)
+    fc = FakeClock()
+    state = em._start_lock_heartbeat("sch-test", interval=10.0, clock=fc)
     try:
         # 1. Il dict pubblico include _hb iniettato dal wrapper
         assert "_hb" in state
@@ -202,7 +236,9 @@ def test_state_dict_includes_external_hb_key_when_wrapper_injects_it():
         assert hb._state["_hb"] is hb
         # 5. Shape pulita PRE-iniezione (LockHeartbeat costruito diretto):
         #    chiavi note sono stop_event, lock_lost, thread; nessun _hb
-        clean = LockHeartbeat(concurrency=cm, schedule_id="x", interval=10.0)
+        clean = LockHeartbeat(
+            concurrency=cm, schedule_id="x", interval=10.0, clock=FakeClock()
+        )
         assert "_hb" not in clean._state
     finally:
         em._stop_lock_heartbeat(state)

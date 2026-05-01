@@ -1,4 +1,4 @@
-"""Propagazione del flag lock_lost al result dict di execute (C3 round 3).
+"""Propagazione del flag lock_lost al result dict di execute (C3 round 3) - R-05.
 
 Contract: se durante l'esecuzione il thread heartbeat rileva che il
 lock e' stato perso e non riacquisibile (stato['lock_lost']=True),
@@ -28,18 +28,17 @@ osservabile** che il source-scan voleva proteggere:
     transita verso lock_lost (catturato via _ListHandler agganciato
     al logger di `_lock_heartbeat`)
 
-La proprieta' "execute() inserisce result['lock_lost']" e' gia'
-coperta dai 5 test in `test_execution_manager_lock_lost_contract.py`
-(behavior-bound, baseline verde).
+R-05: tick deterministici via FakeClock, niente time.sleep reali.
 """
 
 from __future__ import annotations
 
 import logging
-import time
 from unittest.mock import MagicMock
 
 import pytest
+
+from app.shared.clock import FakeClock
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.scheduler, pytest.mark.contract]
@@ -64,8 +63,6 @@ def _build_em_with_fake_concurrency():
     """
     from app.core.scheduler.execution_manager import ExecutionManager
 
-    # Mock concurrency: refresh_lock False + try_acquire failed forza
-    # il path lock_lost=True nel thread loop.
     cm = MagicMock()
     cm.refresh_lock = MagicMock(return_value=False)
     cm.try_acquire = MagicMock(return_value="failed")
@@ -75,18 +72,22 @@ def _build_em_with_fake_concurrency():
     return em, cm
 
 
+def _tick(fc: FakeClock, interval: float) -> None:
+    fc.wait_for_pending_waiters(1)
+    fc.advance(interval + 0.001)
+
+
 def test_start_lock_heartbeat_returns_dict_with_lock_lost_key():
     """Il dict ritornato espone `lock_lost` come chiave: la proprieta'
     pubblica che `execute()` consuma in `heartbeat_state.get("lock_lost", False)`.
     """
     em, _ = _build_em_with_fake_concurrency()
-    state = em._start_lock_heartbeat("sch-1", interval=10.0)
+    state = em._start_lock_heartbeat("sch-1", interval=10.0, clock=FakeClock())
     try:
         assert "lock_lost" in state, (
             "Il dict ritornato da _start_lock_heartbeat DEVE contenere "
             "'lock_lost'. execute() lo legge via state.get('lock_lost')."
         )
-        # Pre-tick il flag e' False
         assert state["lock_lost"] is False
     finally:
         em._stop_lock_heartbeat(state)
@@ -102,17 +103,13 @@ def test_start_lock_heartbeat_state_lock_lost_is_live_reference():
     non potrebbe mantenere la signature pubblica invariata e
     l'invariante "execute() include lock_lost nel result"."""
     em, _ = _build_em_with_fake_concurrency()
-    # Interval molto piccolo per forzare un tick rapido
-    state = em._start_lock_heartbeat("sch-1", interval=0.05)
+    fc = FakeClock()
+    state = em._start_lock_heartbeat("sch-1", interval=10.0, clock=fc)
     try:
-        # Aspetta che almeno un tick venga processato (refresh False
-        # + reacquire failed → state['lock_lost']=True)
-        deadline = time.time() + 2.0
-        while time.time() < deadline:
-            if state.get("lock_lost"):
-                break
-            time.sleep(0.05)
-
+        _tick(fc, 10.0)
+        # Aspetta la re-park per garantire che l'iterazione (incluso
+        # il set di lock_lost) sia completa.
+        fc.wait_for_pending_waiters(1)
         assert state.get("lock_lost") is True, (
             "state['lock_lost'] deve riflettere live la mutazione del "
             "thread loop. Senza reference live, execute() non vedrebbe "
@@ -134,20 +131,15 @@ def test_lock_heartbeat_emits_error_log_when_lock_definitively_lost():
     target_logger.addHandler(handler)
 
     em, _ = _build_em_with_fake_concurrency()
-    state = em._start_lock_heartbeat("sch-test", interval=0.05)
+    fc = FakeClock()
+    state = em._start_lock_heartbeat("sch-test", interval=10.0, clock=fc)
     try:
-        # Aspetta un tick
-        deadline = time.time() + 2.0
-        while time.time() < deadline:
-            if state.get("lock_lost"):
-                break
-            time.sleep(0.05)
+        _tick(fc, 10.0)
+        fc.wait_for_pending_waiters(1)
     finally:
         em._stop_lock_heartbeat(state)
         target_logger.removeHandler(handler)
 
-    # Almeno un record ERROR deve essere stato emesso, con menzione
-    # di "perso" / "concorrente" / "sch-test" per audit trail.
     error_records = [r for r in handler.records if r.levelno == logging.ERROR]
     assert error_records, (
         "Nessun log ERROR emesso quando il lock e' perso e re-acquire "
