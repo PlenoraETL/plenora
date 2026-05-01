@@ -140,6 +140,7 @@
 .lv__th--module  { width:110px; }
 .lv__th--op      { width:90px; }
 .lv__th--project { width:150px; }
+.lv__th--msg     { width:auto; white-space:normal; }
 
 .lv__td    { padding:9px 14px; border-bottom:1px solid var(--lv-border); vertical-align:middle; }
 .lv__row   { transition:background .1s; }

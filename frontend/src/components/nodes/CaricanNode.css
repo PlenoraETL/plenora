@@ -598,6 +598,8 @@
   color: #34D399;
 }
 
+.carica-conflict-modal__details { margin-top: 12px; }
+
 .carica-conflict-modal__details-title {
   font-family: 'DM Mono', monospace;
   font-size: 10px;
