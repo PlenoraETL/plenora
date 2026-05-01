@@ -20,6 +20,7 @@ be considered product-grade.
 |---|---|---|---|---|
 | R-01 | Auth rate limiter in-memory | CLOSED | Redis-backed sliding-window limiter (`app/shared/login_rate_limiter.py`) with in-memory fallback when Redis is unavailable; single-node behaviour preserved byte-per-byte. Covered by 19 passing security tests (unit + contract). | Done. |
 | R-05 | Scheduler heartbeat wall-clock tests | CLOSED | `app/shared/clock.py` adds `Clock`/`WallClock`/`FakeClock`; scheduler heartbeat tests were migrated off real `time.sleep`, reducing the heartbeat subset from ~50s to sub-second while preserving production `Event.wait` behaviour. | Commit `cf00387`. |
+| STRUCT-001 | File service pure helpers | PARTIAL | `file_service.py` was reduced from 1847 to 1609 LOC by extracting pure helpers (`FormatDetector`, `TypeInferrer`, `FileIdGenerator`, `ColumnInfoBuilder`) to `app/shared/file_helpers.py` with compatibility re-exports. Remaining upload/storage/preview orchestration is still structural debt. | Next file-service work should extract one I/O seam at a time; do not do a broad rewrite. |
 | STRUCT-005 | Auth module seams | PARTIAL | `auth.py` was reduced from ~1219 LOC to ~856 LOC by extracting rate limiting, password hashing, models, ownership helpers and JWT token helpers into focused modules with compatibility re-exports. Remaining auth endpoint mass is lower priority and should be handled only when touching auth routes. | Keep new auth work go-ready: thin router, explicit service/helper seams, contract tests. |
 | R-30 | DB snapshot pre-deploy | NEXT | A deploy just before the daily backup can leave a long recovery window. | Add pre-deploy snapshot after staging rehearsal. |
 | R-33 | DR drill not executed | NEXT manual | Recovery playbook exists but has not been proven end-to-end. | Run one documented SSH drill. |
@@ -34,7 +35,7 @@ be considered product-grade.
 | ID | Area | Status | Why it matters | Suggested next action |
 |---|---|---|---|---|
 | FE-CLN-001 | ThemeToggle / useTheme dedup | CLOSED | Shared `useTheme` hook + `ThemeToggle` component extracted across pages/editors. | Commit `d309e0d`. |
-| FE-TEST-001 | Remaining hotspot coverage | PARTIAL | Major hotspot batches now cover manager pages, flow modals, runs, result gating, transform/builders and editor guard/save-failure paths. Residuals are narrower: editor mock harness branches, low-ROI page branches and future split targets. | Continue only with focused batches that close a real residual; do not re-open covered groups. |
+| FE-TEST-001 | Remaining hotspot coverage | CLOSED | Major hotspot batches now cover manager pages, flow modals, runs, result gating, transform/builders, editor guards/save-failure and high-ROI residual branches. Remaining items are low-ROI, fragile, or structural split work tracked separately. | Done. |
 | FE-A11Y-001 | Accessibility audit | LATER | Focus, ARIA, keyboard and contrast have not had a full pass. | Run an axe/manual audit batch. |
 | FE-CLN-002 | Inline styles and design tokens | LATER | UI works, but design-system consistency is incomplete. | Move repeated inline patterns into CSS tokens. |
 | FE-SPLIT-001..006 | Large component splits | LATER | Maintainability issue, not a safe pre-launch rush. | Split after product stabilization. |
@@ -45,7 +46,7 @@ be considered product-grade.
 | ID | Area | Status | Why it matters | Suggested next action |
 |---|---|---|---|---|
 | FE-NEXT-1 | High-ROI utility/hook coverage | CLOSED | Covered validators, template variables, `useExecution`, graph/column utils. | Keep tests focused; avoid broad snapshot tests. |
-| FE-TEST-001 remainder | Page/component coverage | PARTIAL | The main page/component hotspots are now covered by product-flow contract tests. Remaining work is selective: editor validation/readOnly/reload behind mock-harness cleanup, plus minor branches in already covered pages. | Add tests by residual risk, not raw coverage percentage. |
+| FE-TEST-001 remainder | Page/component coverage | CLOSED | High-ROI residuals were covered in the final FE batch (`19cc007`). Remaining branches are accepted as low-ROI or belong to FE-SPLIT/A11Y/design-token tracks. | Do not re-open unless a concrete regression or product risk appears. |
 | Visual smoke | Light/dark and modal polish | LATER | CSS regressions may not be caught by unit tests. | Add manual smoke checklist or lightweight browser pass. |
 
 ## Test BE

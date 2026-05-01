@@ -55,7 +55,7 @@ tests, see [Residual Register](residual-register.md).
 |---|---|---|---|
 | **R-19** | `core/features/arcgis_client.py` 2476 LOC monolith | LATER Phase 5-7 | XL refactor multi-PR. Seam: auth handler / pagination / write batch. |
 | **R-20** | `workers/tasks/enrichment_task.py` 1430 LOC | LATER Phase 5-7 | XL. `run_enrichment_task` 500+ LOC mix. |
-| STRUCT-001 | `services/file_service.py` 1847 LOC | LATER Phase 5-7 | Multi-responsabilita' (CRUD + parsing + format detection). |
+| STRUCT-001 | `services/file_service.py` 1609 LOC | PARTIAL | Seam A chiuso (`fe2ab49`): helper puri `FormatDetector`, `TypeInferrer`, `FileIdGenerator`, `ColumnInfoBuilder` estratti in `app/shared/file_helpers.py` con re-export compatibili. Restano upload/storage/preview orchestration come debito strutturale. |
 | STRUCT-002 | `services/schema_inference.py` 1502 LOC | LATER | Tocca canvas types fallback. M-L effort. |
 | STRUCT-003 | `core/manipola/transforms/spatial.py` 1941 LOC | WATCH/LATER | Cohesive (single concern), refactor non urgente. |
 | STRUCT-004 | `core/scheduler/execution_manager.py` 1097 LOC | LATER | R-05 ha introdotto `app/shared/clock.py` e migrato i test heartbeat/lock-lost a `FakeClock`; il retry release-lock resta volutamente fuori scope e gia' mockabile. |
@@ -93,7 +93,7 @@ tests, see [Residual Register](residual-register.md).
 | FE-SPLIT-004 | `EditorCore` extraction (Estrai/Manipola/Arricchisci ~85% duplicazione) | LATER Phase 3-4 | L effort. Riduce skew tra editor. |
 | FE-SPLIT-005 | `components/nodes/result/ResultNodeStandardView.jsx` 880 LOC | LATER | M effort. |
 | FE-SPLIT-006 | `pages/FileManager.jsx` 887 LOC | LATER | STRUCTURAL DEBT classificato. |
-| FE-TEST-001 | Coverage hotspot pages/components | PARTIAL | Major batches completed for manager pages, ScheduleList, LogViewer, ProjectList, ResultNode gating, PublishEseguibileModal, RunsTab, ParameterInput, ResponseConfigBuilder, PivotMappingBuilder and editor guard/save-failure paths. Remaining work is selective: editor mock-harness branches, minor page branches, and future split targets. |
+| FE-TEST-001 | Coverage hotspot pages/components | CLOSED | Major batches completed for manager pages, ScheduleList, LogViewer, ProjectList, ResultNode gating, PublishEseguibileModal, RunsTab, ParameterInput, ResponseConfigBuilder, PivotMappingBuilder, editor guards/save-failure and high-ROI residual branches (`19cc007`). Remaining items are low-ROI, fragile, or covered by FE-SPLIT/A11Y/design-token tracks. |
 | FE-TEST-002 | `useColumnPropagation` hardcoded transform_op | DROP | Verificato `applyTransformation` ha switch completo. |
 | FE-TEST-003 | `ApiEnrichNode` outputColumns loop | DROP | Mitigato lato code (normalize-then-compare guard). |
 | FE-A11Y-001 | Accessibility audit (ARIA, focus mgmt, contrast) | LATER | Tool axe-core + fix puntuali. M-L effort. |
@@ -153,7 +153,7 @@ Focus: **chiudere gap operativi e debiti security ad alta priorita'**.
 - ~~R-01 rate-limiter Redis-backed~~ → **CLOSED** (Redis-backed sliding-window + in-memory fallback)
 - R-30 DB snapshot pre-deploy
 - R-33 DR drill execution (manuale ops)
-- FE-TEST-001 follow-up only for concrete residual branches (covered groups should not be re-opened)
+- ~~FE-TEST-001 hotspot coverage~~ -> **CLOSED** (high-ROI residuals covered; do not re-open without concrete regression)
 - OBSERV-001 observability sink decision implementation
 - Setup checklist nuovo operatore ops
 
@@ -165,7 +165,7 @@ Focus: **compliance automation + test reliability completion**.
 - R-29 SAST scanner
 - R-35 SBOM frontend
 - ~~R-05 clock injection scheduler~~ -> **CLOSED** (clock seam + heartbeat tests migrated)
-- FE-TEST-001 selective residuals (editor mock harness branches, minor branches in covered pages)
+- FE-SPLIT/A11Y/design-token work only when it is structural or product-driven, not as FE-TEST-001 residue
 - R-21/R-22/R-23 removal effettiva alias deprecated (target 2026-Q4)
 
 ### Phase 4 (Q4 2026)
@@ -185,7 +185,7 @@ Focus: **structural refactor + capability services**.
 
 - R-19 arcgis_client.py split
 - R-20 enrichment_task.py split
-- STRUCT-001 file_service.py split
+- STRUCT-001 file_service.py remaining I/O seams (upload/storage/preview) after pure helper extraction
 - STRUCT-002/003/004/005/006 a seguire
 - Capability services al trigger business
 
