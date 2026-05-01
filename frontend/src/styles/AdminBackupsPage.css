@@ -109,7 +109,9 @@
 .ab__card--ok    { border-left: 3px solid #34D399; }
 .ab__card--err   { border-left: 3px solid #F87171; }
 .ab__card--info  { border-left: 3px solid #4B8BFF; }
-.ab__card--muted { border-left: 3px solid #7D8BA8; }
+.ab__card--muted,
+.ab__card--status,
+.ab__card--schedule { border-left: 3px solid #7D8BA8; }
 
 .ab__card-title {
   font-family: 'Syne', 'Trebuchet MS', sans-serif;

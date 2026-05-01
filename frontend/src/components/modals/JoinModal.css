@@ -395,7 +395,10 @@
 .join-modal__on-filter-grid select:focus,
 .join-modal__on-filter-grid input:focus { border-color: #34C17A; }
 
-.join-modal__on-filter-col { display: flex; flex-direction: column; gap: 4px; }
+.join-modal__on-filter-col,
+.join-modal__on-filter-func,
+.join-modal__on-filter-op,
+.join-modal__on-filter-value { display: flex; flex-direction: column; gap: 4px; }
 
 .join-modal__add-on-filter {
   width: 100%;
@@ -450,6 +453,11 @@
 .join-modal__sql-and     { color: #4B8BFF; font-weight: 700; }
 .join-modal__sql-spatial { color: #34C17A; font-weight: 600; }
 .join-modal__sql-filter  { color: #FBBF24; font-style: italic; }
+
+/* ── Footer actions ─────────────────────────────────────────────── */
+.join-modal__actions               { display: flex; gap: 8px; align-items: center; justify-content: flex-end; }
+.join-modal__actions--with-delete  { justify-content: space-between; }
+.join-modal__actions-right         { display: flex; gap: 8px; }
 
 /* ── Form group ─────────────────────────────────────────────────── */
 .join-modal .form-group { margin-bottom: 14px; }

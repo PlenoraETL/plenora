@@ -198,7 +198,7 @@
 .cm__status-err { color: var(--cm-err); }
 
 .cm__td-actions { text-align: right; }
-.cm__row-actions { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+.cm__row-actions, .cm__actions { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
 
 /* Test error */
 .cm__test-error {
