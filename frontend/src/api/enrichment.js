@@ -66,14 +66,20 @@ export const estimateEnrichment = async (projectId, apiId, paramMapping, fileSou
  * @param {Object}  options
  * @param {boolean} options.force_recalculate - Ignora la cache (default false)
  * @param {string}  options.format            - Formato output (default 'csv')
+ * @param {string}  [options.intermediate_mode] - R-25 PR-B5: override per-call
+ *   della INTERMEDIATE_PERSISTENCE_MODE globale (vedi executeProjectQuery).
+ *   Opt-in superadmin lato BE (403 a non-super, 422 su valore invalido).
+ *   Se omesso/falsy NON viene serializzato come query param.
  * @returns {Promise<Object>} { success, async: true, task_id, status, message }
  */
 export const executeEnrichmentAsync = async (projectId, options = {}) => {
-  const { force_recalculate = false, format = 'csv' } = options;
-  const response = await http.post(`/projects/${projectId}/enrich-async`, {
-    force_recalculate,
-    format,
-  });
+  const { force_recalculate = false, format = 'csv', intermediate_mode = null } = options;
+  const url = `/projects/${projectId}/enrich-async`;
+  const body = { force_recalculate, format };
+  // Branch evita di passare un 3o arg undefined (preserva i test esistenti).
+  const response = intermediate_mode
+    ? await http.post(url, body, { params: { intermediate_mode } })
+    : await http.post(url, body);
   return response.data;
 };
 

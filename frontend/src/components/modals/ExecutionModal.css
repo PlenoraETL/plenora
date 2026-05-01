@@ -505,6 +505,16 @@
 .execution-modal__carica-icon { font-size: 13px; flex-shrink: 0; }
 .execution-modal__carica-info { flex: 1; }
 
+/* ── Config (R-25 PR-B5: pre-launch toggle staff) ───────────────── */
+.execution-modal__config         { padding: 18px 4px; }
+.execution-modal__config-msg     { color: var(--plen-text, #DDE4F2); font-size: 13px; margin: 0 0 14px; font-family: 'Inter', sans-serif; }
+.execution-modal__config-row     { display: flex; flex-direction: column; gap: 6px; }
+.execution-modal__config-label   { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--plen-text-dim, #7D8BA8); font-family: 'DM Mono', monospace; }
+.execution-modal__config-select  { padding: 8px 11px; background: var(--plen-surface-2, #111525); border: 1px solid var(--plen-border-hi, rgba(255,255,255,0.11)); border-radius: 7px; color: var(--plen-text, #DDE4F2); font-size: 12.5px; font-family: 'Inter', sans-serif; outline: none; }
+.execution-modal__config-select:focus { border-color: var(--plen-blue, #4B8BFF); }
+.execution-modal__config-hint    { font-size: 11px; color: var(--plen-text-dim, #7D8BA8); font-family: 'Inter', sans-serif; }
+[data-theme='light'] .execution-modal__config-select { background: #F4F7FD; border-color: rgba(0,0,0,0.10); color: #0F1729; }
+
 /* ── Responsive ─────────────────────────────────────────────────── */
 @media (max-width: 500px) {
   .execution-modal__enrichment-stats-grid { grid-template-columns: repeat(2, 1fr); }

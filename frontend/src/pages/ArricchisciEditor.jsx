@@ -307,7 +307,7 @@ const ArricchisciEditorContent = () => {
     if (hasFileProcessor) {
       const resultNode = currentNodes.find(n => n.type === 'result');
       const format = resultNode?.data?.format || exportFormat || 'csv';
-      execution.handleExecute({ format });
+      execution.prepareExecute({ format });
       return;
     }
     setShowConfirmModal(true);
@@ -320,7 +320,7 @@ const ArricchisciEditorContent = () => {
     // Leggi il formato dal nodo Result al momento dell'esecuzione
     const resultNode = nodesRef.current.find(n => n.type === 'result');
     const format = resultNode?.data?.format || exportFormat || 'csv';
-    execution.handleExecute({ format });
+    execution.prepareExecute({ format });
   }, [execution, exportFormat]);
   const handleCloseConfirmModal = useCallback(() => { setShowConfirmModal(false); enrichmentValidation.reset(); }, [enrichmentValidation]);
 
@@ -622,7 +622,7 @@ const ArricchisciEditorContent = () => {
       {/* Modals (lazy-loaded) */}
       <ModalErrorBoundary>
       <Suspense fallback={null}>
-      <ExecutionModal isOpen={execution.showModal} onClose={() => execution.closeModal()} isExecuting={execution.isExecuting} result={execution.result} onDownload={execution.downloadTaskResult} title="🔗 Esegui Arricchimento" projectType="arricchisci" progress={execution.progress} progressMessage={execution.progressMessage} taskStatus={execution.taskStatus} onCancel={execution.cancelTask} caricaTasks={execution.caricaTasks} caricaPolling={execution.caricaPolling} />
+      <ExecutionModal isOpen={execution.showModal} onClose={() => execution.closeModal()} isExecuting={execution.isExecuting} result={execution.result} onDownload={execution.downloadTaskResult} title="🔗 Esegui Arricchimento" projectType="arricchisci" progress={execution.progress} progressMessage={execution.progressMessage} taskStatus={execution.taskStatus} onCancel={execution.cancelTask} caricaTasks={execution.caricaTasks} caricaPolling={execution.caricaPolling} awaitingLaunch={execution.awaitingLaunch} onLaunch={execution.launch} user={user} />
       <CaricaricaModal isOpen={caricarica.showModal} onClose={() => caricarica.closeModal()} isExecuting={caricarica.isExecuting} result={caricarica.result} progress={caricarica.progress} progressMessage={caricarica.progressMessage} taskStatus={caricarica.taskStatus} caricaricaInfo={caricarica.caricaricaInfo} onCancel={caricarica.cancelTask} />
       <PreviewModal isOpen={preview.showModal} onClose={preview.closeModal} onRefresh={limit => preview.handlePreview(limit)}
         data={(() => {

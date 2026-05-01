@@ -5,11 +5,24 @@
  * e, a completamento, le opzioni di download dell'output nei formati disponibili.
  * Usato da tutti e tre gli editor dopo il click su "Esegui".
  */
-import React from 'react';
+import React, { useState } from 'react';
 import { downloadProjectFile } from '../../api/projects';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import PermissionRevokedBanner from '../common/PermissionRevokedBanner';
+import { role } from '../../utils/permissions';
 import './ExecutionModal.css';
+
+// R-25 PR-B5: lista mode supportati lato BE (vedi
+// orchestrator/router.py:133-143 + arricchisci/router.py:792-801).
+// L'opzione "" (default) significa "non inviare il param" -> il BE
+// usa la INTERMEDIATE_PERSISTENCE_MODE delle settings globali.
+const INTERMEDIATE_MODE_OPTIONS = [
+  { value: '',               label: 'Default (settings globali)' },
+  { value: 'metadata_only',  label: 'metadata_only' },
+  { value: 'preview_only',   label: 'preview_only' },
+  { value: 'full_pg',        label: 'full_pg' },
+  { value: 'full_artifact',  label: 'full_artifact' },
+];
 
 
 /**
@@ -17,11 +30,11 @@ import './ExecutionModal.css';
  * 
  * REFACTORED: Usa ModalWrapper per struttura base
  */
-function ExecutionModal({ 
-  isOpen, 
-  onClose, 
-  isExecuting, 
-  result, 
+function ExecutionModal({
+  isOpen,
+  onClose,
+  isExecuting,
+  result,
   onDownload,
   title = '🚀 Esecuzione',
   projectType = 'estrai',
@@ -31,8 +44,18 @@ function ExecutionModal({
   onCancel = null,
   caricaTasks = [],
   caricaPolling = false,
+  // R-25 PR-B5 — opt-in: se awaitingLaunch + onLaunch sono passati il
+  // modal mostra uno step "config" prima di partire (toggle intermediate_mode
+  // visibile SOLO ai superadmin). Caller esistenti che non passano
+  // questi prop hanno comportamento invariato.
+  awaitingLaunch = false,
+  onLaunch = null,
+  user = null,
 }) {
   const isAsync = projectType === 'arricchisci';
+  const isSuper = role.isSuperadmin(user);
+  const showConfig = awaitingLaunch && !isExecuting && !result && typeof onLaunch === 'function';
+  const [intermediateMode, setIntermediateMode] = useState('');
 
   // Calcola il numero di colonne
   const getColumnsCount = () => {
@@ -81,16 +104,32 @@ function ExecutionModal({
   // Footer con pulsanti
   const isStillWorking = isExecuting || caricaPolling;
 
-  const footer = (
+  const handleLaunchClick = () => {
+    if (typeof onLaunch !== 'function') return;
+    // Stringa vuota = "default": passa null al hook che decide se
+    // serializzare il query param a livello API.
+    onLaunch(intermediateMode || null);
+  };
+
+  const footer = showConfig ? (
+    <div className="execution-modal__actions">
+      <ModalButton variant="secondary" onClick={onClose}>
+        Annulla
+      </ModalButton>
+      <ModalButton variant="primary" onClick={handleLaunchClick}>
+        ▶ Avvia esecuzione
+      </ModalButton>
+    </div>
+  ) : (
     <div className="execution-modal__actions">
       {isExecuting && isAsync && onCancel && (
         <ModalButton variant="danger" onClick={onCancel}>
           🛑 Annulla
         </ModalButton>
       )}
-      
-      <ModalButton 
-        variant="secondary" 
+
+      <ModalButton
+        variant="secondary"
         onClick={onClose}
         disabled={isExecuting && !isAsync}
       >
@@ -116,6 +155,45 @@ function ExecutionModal({
       closeOnEsc={!isExecuting || isAsync}
       showCloseButton={!isExecuting || isAsync}
     >
+      {/* R-25 PR-B5: config step (pre-launch). Visibile solo se il consumer
+          ha passato awaitingLaunch+onLaunch. Il toggle intermediate_mode e'
+          mostrato solo a superadmin (BE comunque rifiuta 403 a non-super,
+          questo e' solo UX). Per gli altri ruoli mostra solo la conferma
+          di lancio. */}
+      {showConfig && (
+        <div className="execution-modal__config">
+          <p className="execution-modal__config-msg">
+            Pronto a lanciare l'esecuzione. Conferma con &quot;Avvia esecuzione&quot;.
+          </p>
+          {isSuper && (
+            <div className="execution-modal__config-row">
+              <label
+                htmlFor="execution-modal-intermediate-mode"
+                className="execution-modal__config-label"
+              >
+                🔧 intermediate_mode (staff)
+              </label>
+              <select
+                id="execution-modal-intermediate-mode"
+                className="execution-modal__config-select"
+                value={intermediateMode}
+                onChange={(e) => setIntermediateMode(e.target.value)}
+              >
+                {INTERMEDIATE_MODE_OPTIONS.map((opt) => (
+                  <option key={opt.value || 'default'} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              <span className="execution-modal__config-hint">
+                Override per-call della modalita&apos; di persistenza intermedi.
+                &quot;Default&quot; non invia il param.
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Loading State con Progress Bar */}
       {isExecuting && (
         <div className="execution-modal__loading">
