@@ -104,6 +104,13 @@ export function useExecution(projectId, options = {}) {
       }
     };
 
+    // Single-flight per task_id: se startCaricaPolling viene richiamato
+    // sullo stesso task (retry, ri-build del result), non lasciare due
+    // interval orfani — clear del precedente prima di reassign.
+    // Cfr. RESOURCE_LEAKS.md §3.
+    if (caricaRefs.current[task_id]) {
+      clearInterval(caricaRefs.current[task_id]);
+    }
     poll();
     caricaRefs.current[task_id] = setInterval(poll, pollInterval);
   }, [pollInterval, mountedRef]);

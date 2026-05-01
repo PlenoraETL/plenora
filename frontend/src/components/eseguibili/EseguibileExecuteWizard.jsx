@@ -6,15 +6,15 @@
  * Step 3: Output format + nome + Esegui + progress + download
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   getEseguibile,
   analyzeEseguibileUpload,
   executeEseguibile,
-  getTaskStatus,
   downloadTaskOutput,
 } from '../../api';
 import { useToast } from '../../hooks/useToast';
+import { useTaskPolling } from '../../hooks/useTaskPolling';
 import PermissionRevokedBanner from '../common/PermissionRevokedBanner';
 import './EseguibileExecuteWizard.css';
 
@@ -52,7 +52,9 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
   const [taskProgress, setTaskProgress] = useState(0);
   const [taskMessage, setTaskMessage] = useState('');
   const [taskResult, setTaskResult] = useState(null);
-  const pollRef = useRef(null);
+
+  // Polling task Celery: il hook gestisce single-flight + cleanup unmount.
+  const { startPolling } = useTaskPolling({ interval: 1500 });
 
   // Load eseguibile details
   useEffect(() => {
@@ -82,10 +84,7 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
     return () => { mounted = false; };
   }, [eseguibileId]);
 
-  // Cleanup polling on unmount
-  useEffect(() => () => {
-    if (pollRef.current) clearInterval(pollRef.current);
-  }, []);
+  // Cleanup polling on unmount: gestito da useTaskPolling.
 
   // Handle file upload & analyze
   const handleUpload = async () => {
@@ -124,26 +123,27 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
       setTaskId(resp.task_id);
       setTaskStatus('pending');
       setTaskMessage('Task in coda...');
-      startPolling(resp.task_id);
+      startTaskPolling(resp.task_id);
     } catch (e) {
       setError(e?.response?.data?.detail || e.message);
       setExecuting(false);
     }
   };
 
-  const startPolling = (tid) => {
-    const poll = async () => {
-      try {
-        const data = await getTaskStatus(tid);
+  const startTaskPolling = (tid) => {
+    startPolling(
+      tid,
+      (data) => {
         setTaskStatus(data.status);
         setTaskProgress(data.progress || 0);
         setTaskMessage(data.message || '');
         if (data.status === 'success') {
           setTaskResult(data.result);
           setExecuting(false);
-          clearInterval(pollRef.current);
           toast.success('Esecuzione completata!');
-        } else if (data.status === 'failure' || data.status === 'revoked') {
+          return true;
+        }
+        if (data.status === 'failure' || data.status === 'revoked') {
           setExecuting(false);
           // PR-A UX Tier 1: distinguiamo permission_revoked (ruolo
           // declassato/utenza disabilitata mid-task) dal failure
@@ -156,17 +156,12 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
           } else {
             setError(data.error || data.result?.message || 'Esecuzione fallita');
           }
-          clearInterval(pollRef.current);
+          return true;
         }
-      } catch (e) {
-        // Task not registered yet — keep polling
-        if (!e.message?.includes('non trovato')) {
-          console.error('[Wizard] Polling error:', e);
-        }
-      }
-    };
-    poll();
-    pollRef.current = setInterval(poll, 1500);
+        return false;
+      },
+      { immediate: true },
+    );
   };
 
   const handleDownload = async () => {

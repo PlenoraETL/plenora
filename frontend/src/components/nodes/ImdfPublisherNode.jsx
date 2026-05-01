@@ -15,12 +15,12 @@
  *  - Modalita': replace | append | upsert
  *  - Apply renderers (solo replace)
  */
-import React, { memo, useEffect, useRef, useState, lazy, Suspense } from 'react';
+import React, { memo, useEffect, useState, lazy, Suspense } from 'react';
 import { Handle, Position } from 'reactflow';
 import useCanvasStore from '../../store/useCanvasStore';
 import { listFeatureConnections, listFolders } from '../../api/features';
 import { publishImdf, validateImdfPublish } from '../../api/imdf';
-import { getTaskStatus } from '../../api/tasks';
+import { useTaskPolling } from '../../hooks/useTaskPolling';
 import './ImdfPublisherNode.css';
 
 const ImdfValidatePublishModal = lazy(() =>
@@ -46,7 +46,10 @@ const ImdfPublisherNode = memo(({ data, id }) => {
   const [publishProgress, setPublishProgress] = useState(0);
   const [publishMessage, setPublishMessage]   = useState('');
   const [publishError, setPublishError]       = useState('');
-  const pollingRef = useRef(null);
+
+  // Polling task Celery via hook condiviso: stopPolling auto-chiamato
+  // su unmount + prima di ogni nuova startPolling (no leak su retry).
+  const { startPolling } = useTaskPolling({ interval: 1000 });
 
   // Stato modal validazione
   const [validateOpen, setValidateOpen]       = useState(false);
@@ -122,10 +125,7 @@ const ImdfPublisherNode = memo(({ data, id }) => {
     return () => { cancelled = true; };
   }, [connectionId, isAccessDenied]);
 
-  // ── Cleanup polling on unmount ─────────────────────────────────
-  useEffect(() => () => {
-    if (pollingRef.current) clearInterval(pollingRef.current);
-  }, []);
+  // Cleanup polling on unmount: gestito da useTaskPolling.
 
   const isValid = !isAccessDenied && connectionId && (fsNameTemplate || '').trim().length > 0;
   const canPublish = isValid && !!bundleTaskId && !publishing;
@@ -155,16 +155,15 @@ const ImdfPublisherNode = memo(({ data, id }) => {
       const taskId = resp.task_id;
       setPublishMessage(resp.message || 'In coda...');
 
-      // Polling stato task ogni secondo
-      pollingRef.current = setInterval(async () => {
-        try {
-          const status = await getTaskStatus(taskId);
+      // Polling stato task: useTaskPolling garantisce single-flight
+      // (stopPolling auto-chiamato prima di ogni nuovo setInterval).
+      startPolling(
+        taskId,
+        (status) => {
           setPublishProgress(status.progress || 0);
           setPublishMessage(status.message || '');
 
           if (status.status === 'success' || status.status === 'SUCCESS') {
-            clearInterval(pollingRef.current);
-            pollingRef.current = null;
             setPublishing(false);
             setPublishProgress(100);
 
@@ -178,19 +177,23 @@ const ImdfPublisherNode = memo(({ data, id }) => {
                 imdf: { ...(prev.imdf || {}), publish: pubResult },
               });
             }
-          } else if (status.status === 'failure' || status.status === 'FAILURE') {
-            clearInterval(pollingRef.current);
-            pollingRef.current = null;
+            return true;
+          }
+          if (status.status === 'failure' || status.status === 'FAILURE') {
             setPublishing(false);
             setPublishError(status.error || status.message || 'Pubblicazione fallita');
+            return true;
           }
-        } catch (e) {
-          clearInterval(pollingRef.current);
-          pollingRef.current = null;
-          setPublishing(false);
-          setPublishError(`Errore polling: ${e.message || e}`);
-        }
-      }, 1000);
+          return false;
+        },
+        {
+          onError: (e) => {
+            setPublishing(false);
+            setPublishError(`Errore polling: ${e.message || e}`);
+            return true;
+          },
+        },
+      );
     } catch (e) {
       setPublishing(false);
       setPublishError(e?.response?.data?.detail || e.message || 'Errore pubblicazione');
