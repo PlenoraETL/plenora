@@ -6,6 +6,7 @@ For the shorter operational list of what is still open across FE, BE and
 tests, see [Residual Register](residual-register.md).
 
 > **Convenzione**:
+> - **PARTIAL** - avanzato in modo sostanziale, con residuo piu' stretto.
 > - **CLOSED** — chiuso, citato per tracciabilita'.
 > - **NEXT** — candidato Phase 2 (post-launch immediato).
 > - **LATER** — Phase 3-4+, quando emerge trigger business o tecnico.
@@ -57,8 +58,8 @@ tests, see [Residual Register](residual-register.md).
 | STRUCT-001 | `services/file_service.py` 1847 LOC | LATER Phase 5-7 | Multi-responsabilita' (CRUD + parsing + format detection). |
 | STRUCT-002 | `services/schema_inference.py` 1502 LOC | LATER | Tocca canvas types fallback. M-L effort. |
 | STRUCT-003 | `core/manipola/transforms/spatial.py` 1941 LOC | WATCH/LATER | Cohesive (single concern), refactor non urgente. |
-| STRUCT-004 | `core/scheduler/execution_manager.py` 1097 LOC | LATER | Toccato indirettamente da PR #36 LockHeartbeat. |
-| STRUCT-005 | `core/auth/auth.py` 1171 LOC | LATER | R-01 chiuso; eventuale split rate-limit ora isolato in `app/shared/login_rate_limiter.py`. Resta debito strutturale residuo dell'auth. |
+| STRUCT-004 | `core/scheduler/execution_manager.py` 1097 LOC | LATER | R-05 ha introdotto `app/shared/clock.py` e migrato i test heartbeat/lock-lost a `FakeClock`; il retry release-lock resta volutamente fuori scope e gia' mockabile. |
+| STRUCT-005 | `core/auth/auth.py` 856 LOC | PARTIAL | Auth seams A-D chiusi: rate limiter (`login_rate_limiter.py`), password hashing, models, ownership helpers e JWT token helpers estratti con re-export compatibili. Resta solo massa endpoint/router auth, da trattare se si toccano quelle route. |
 | STRUCT-006 | `db/sql_functions.py` 1717 LOC | WATCH | SQL builders, single-concern. |
 
 ---
@@ -73,7 +74,7 @@ tests, see [Residual Register](residual-register.md).
 | **TR-002** | Scheduler test infrastructure (Cat. 3 ADR-0020) | CLOSED | I 3 casi Cat. 3 ADR-0020 migrati a behavior-bound (PR TR-002): `ExecutionManager.__new__` + MagicMock pattern senza harness condiviso (riusa pattern di `test_execution_manager_contract.py`). Vedi nota Superseded in ADR-0020. |
 | TR-003 | `test_columns_metadata_save_retry_contract.py` lazy psycopg2 imports | DROP | Pattern intenzionale per optional dep. |
 | TR-004 | Datetime non frozen in admin_system_status tests | DROP | Pattern relative-age legitimate. |
-| **R-05** | `time.sleep` in scheduler heartbeat tests | NEXT Phase 3 | Non flake reale: testano thread reali. Fix richiede clock injection in prod. |
+| **R-05** | `time.sleep` in scheduler heartbeat tests | CLOSED | Commit `cf00387`: `Clock`/`WallClock`/`FakeClock` seam, `LockHeartbeat` clock-injectable, heartbeat/lock-lost tests migrati off wall-clock sleeps. Affected subset ~50s -> sub-second; scheduler/unit 290 passed. |
 
 ---
 
@@ -87,12 +88,12 @@ tests, see [Residual Register](residual-register.md).
 | FE-CLN-002 | Inline styles vs design tokens | LATER | M effort. Richiede design system review. |
 | FE-CLN-003 | Stray `local_*.log` working tree | DROP | Gitignored, non in repo. |
 | FE-SPLIT-001 | `pages/ApiConnectionManager.jsx` 1193 LOC, 6 concerns | LATER | L effort. Modal extraction + context split. |
-| FE-SPLIT-002 | `components/transforms/ParameterInput.jsx` 974 LOC | LATER | M-L. TemplateVarExpander + ParamPicker. |
-| FE-SPLIT-003 | `components/panels/ResponseConfigBuilder.jsx` 978 LOC + tight coupling con `ApiEnrichNode` | LATER | M effort. |
+| FE-SPLIT-002 | `components/transforms/ParameterInput.jsx` 974 LOC | LATER | M-L structural split. Contract coverage added for main input types plus `PivotMappingBuilder`; split remains maintainability work, not coverage gap. |
+| FE-SPLIT-003 | `components/panels/ResponseConfigBuilder.jsx` 978 LOC + tight coupling con `ApiEnrichNode` | LATER | M structural split. Contract coverage now covers structure, mappings, transforms, preview entrypoints and residual builder paths. |
 | FE-SPLIT-004 | `EditorCore` extraction (Estrai/Manipola/Arricchisci ~85% duplicazione) | LATER Phase 3-4 | L effort. Riduce skew tra editor. |
 | FE-SPLIT-005 | `components/nodes/result/ResultNodeStandardView.jsx` 880 LOC | LATER | M effort. |
 | FE-SPLIT-006 | `pages/FileManager.jsx` 887 LOC | LATER | STRUCTURAL DEBT classificato. |
-| FE-TEST-001 | Coverage top-5 hotspot (api connections, enrichment, result, editors) | NEXT | M distribuito. PR per area. |
+| FE-TEST-001 | Coverage hotspot pages/components | PARTIAL | Major batches completed for manager pages, ScheduleList, LogViewer, ProjectList, ResultNode gating, PublishEseguibileModal, RunsTab, ParameterInput, ResponseConfigBuilder, PivotMappingBuilder and editor guard/save-failure paths. Remaining work is selective: editor mock-harness branches, minor page branches, and future split targets. |
 | FE-TEST-002 | `useColumnPropagation` hardcoded transform_op | DROP | Verificato `applyTransformation` ha switch completo. |
 | FE-TEST-003 | `ApiEnrichNode` outputColumns loop | DROP | Mitigato lato code (normalize-then-compare guard). |
 | FE-A11Y-001 | Accessibility audit (ARIA, focus mgmt, contrast) | LATER | Tool axe-core + fix puntuali. M-L effort. |
@@ -152,7 +153,7 @@ Focus: **chiudere gap operativi e debiti security ad alta priorita'**.
 - ~~R-01 rate-limiter Redis-backed~~ → **CLOSED** (Redis-backed sliding-window + in-memory fallback)
 - R-30 DB snapshot pre-deploy
 - R-33 DR drill execution (manuale ops)
-- FE-TEST-001 (subset top-2: api connections + result node)
+- FE-TEST-001 follow-up only for concrete residual branches (covered groups should not be re-opened)
 - OBSERV-001 observability sink decision implementation
 - Setup checklist nuovo operatore ops
 
@@ -163,8 +164,8 @@ Focus: **compliance automation + test reliability completion**.
 - R-28 SBOM CI hook
 - R-29 SAST scanner
 - R-35 SBOM frontend
-- R-05 clock injection scheduler (sblocca de-flake test)
-- FE-TEST-001 (resto: enrichment + editors)
+- ~~R-05 clock injection scheduler~~ -> **CLOSED** (clock seam + heartbeat tests migrated)
+- FE-TEST-001 selective residuals (editor mock harness branches, minor branches in covered pages)
 - R-21/R-22/R-23 removal effettiva alias deprecated (target 2026-Q4)
 
 ### Phase 4 (Q4 2026)
