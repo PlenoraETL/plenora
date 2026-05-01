@@ -28,7 +28,8 @@ docs/
 │   └── code-map.md                 # mappa puntuale moduli (high-density)
 ├── ops/                            # runbook operativi
 ├── compliance/                     # SBOM + GDPR + ISO 27001 SoA + secrets
-├── audits/                         # audit reports (placeholder)
+├── audits/                         # audit reports (read-only snapshot)
+│   └── orchestrate/                # Phase 0-6 workspace snapshot
 └── support/                        # support / FAQ (placeholder)
 ```
 
@@ -86,8 +87,17 @@ Runbook recovery + incident response + deploy checklist:
 
 ### Audits
 
-Placeholder per future audit reports cross-stack. Phase 1 audit
-findings sono tracciati in [product/roadmap.md](product/roadmap.md).
+Audit reports e snapshot di triage storici, read-only.
+
+- [`audits/`](audits/) — indice con convenzioni e separation
+  audits/ vs ops/ vs ADR.
+- [`audits/orchestrate/`](audits/orchestrate/) — snapshot del
+  workspace Phase 0-6 dell'operatore originale (consolidation,
+  stabilization, hardening, audit, launch, structural quality,
+  product grade). Importato 2026-05-01.
+
+Phase 1 audit **findings** (residui ancora azionabili) sono tracciati
+in [`product/roadmap.md`](product/roadmap.md).
 
 ### Support
 

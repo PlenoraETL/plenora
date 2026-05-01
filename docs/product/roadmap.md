@@ -108,7 +108,8 @@ Residui audit aperti e direzioni future. Status as of **2026-05-01**.
 | **docs/product/roadmap.md** (questo file) | CLOSED | Wave 1.5 (#50) come `docs/ROADMAP.md`, migrato in Wave 1.6. |
 | **docs/development/contributing.md** | CLOSED | Wave 1.5 (#50) come `CONTRIBUTING.md`, migrato in Wave 1.6. |
 | **docs/development/changelog.md** | CLOSED | Wave 1.5 (#50) come `CHANGELOG.md`, migrato in Wave 1.6. |
-| **docs centralization → root `docs/`** | CLOSED | Wave 1.6 (questa PR). `git mv` di tutti i docs sostanziali sotto `docs/{product,architecture,development,ops,compliance}/`. |
+| **docs centralization → root `docs/`** | CLOSED | Wave 1.6 (#51). `git mv` di tutti i docs sostanziali sotto `docs/{product,architecture,development,ops,compliance}/`. |
+| **`orchestrate/` workspace import** | CLOSED | Wave 1.7 (questa PR). 58 file (55 md + 3 evidence non-md) importati in `docs/audits/orchestrate/` — Phase 0-6 snapshot read-only. Safety scan: zero credentials, IP/email/path già pubblici. |
 | Setup checklist nuovo operatore ops | NEXT | `handoff.md` esiste ma incompleto. Collegato a R-32. |
 | Demo dataset / quickstart end-to-end | LATER | M effort. Demo CSV + curl examples + screenshot. |
 | API reference navigabile | LATER | OpenAPI esposto via FastAPI ma non linkato in modo discoverable. S effort. |
