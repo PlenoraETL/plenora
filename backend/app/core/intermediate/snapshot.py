@@ -335,6 +335,7 @@ def _record_snapshot(
     error_msg: Optional[str],
     node_data: Optional[dict],
     transform_id: Optional[str],
+    mode_override: Optional[str] = None,
 ) -> SnapshotHandle:
     """Implementazione condivisa fra final/checkpoint.
 
@@ -348,6 +349,11 @@ def _record_snapshot(
          - preview_only  -> rows_to_persist = head(N) + _row_hash
          - full_pg       -> rows_to_persist = full to_dict + _row_hash
       5. write_node_snapshot_atomic(...) -> persiste meta + rows.
+
+    `mode_override` (R-25 PR-B2): kwarg per-call che sostituisce
+    `INTERMEDIATE_PERSISTENCE_MODE` globale. None = bit-compat default.
+    Override invalido propaga `IntermediateSettingsError` da
+    `resolve_intermediate_policy` -> `resolve_intermediate_mode`.
     """
     _t_total = time.monotonic()
     policy = _policy.resolve_intermediate_policy(
@@ -356,6 +362,7 @@ def _record_snapshot(
         node_type=node_type,
         node_data=node_data,
         transform_id=transform_id,
+        mode_override=mode_override,
     )
     if not policy.recorded:
         # [PERF] skip: deve restare estremamente economico.
@@ -518,11 +525,15 @@ def record_final_snapshot(
     status: str = "ok",
     error_msg: Optional[str] = None,
     node_data: Optional[dict] = None,
+    mode_override: Optional[str] = None,
 ) -> SnapshotHandle:
     """Registra lo snapshot finale di un modulo.
 
     Snapshot final = output che l'utente vede come "result" del modulo.
     Sempre registrato (la policy globale decide solo MODE).
+
+    `mode_override` (R-25 PR-B2): override per-call della
+    `INTERMEDIATE_PERSISTENCE_MODE` globale. Default None = bit-compat.
     """
     return _record_snapshot(
         run_id=run_id,
@@ -536,6 +547,7 @@ def record_final_snapshot(
         error_msg=error_msg,
         node_data=node_data,
         transform_id=None,
+        mode_override=mode_override,
     )
 
 
@@ -551,6 +563,7 @@ def record_checkpoint_snapshot(
     error_msg: Optional[str] = None,
     node_data: Optional[dict] = None,
     transform_id: Optional[str] = None,
+    mode_override: Optional[str] = None,
 ) -> SnapshotHandle:
     """Registra uno snapshot intermedio (per-nodo) di un modulo.
 
@@ -562,6 +575,14 @@ def record_checkpoint_snapshot(
     Quando la policy dice skip:
       - ritorna `SnapshotHandle(recorded=False, reason=...)` SUBITO,
         prima di toccare `df` (no `to_dict`, no hash, no DB).
+
+    `mode_override` (R-25 PR-B2): override per-call della
+    `INTERMEDIATE_PERSISTENCE_MODE` globale. Default None = bit-compat.
+    Nota: l'override agisce SOLO sulla mode di persistenza
+    (`metadata_only/preview_only/full_pg/full_artifact`), NON sulla
+    decisione di skip checkpoint per un nodo (governata da
+    `MANIPOLA_INTERMEDIATE_CHECKPOINTS`). Un nodo skipped resta skipped
+    anche con override.
     """
     return _record_snapshot(
         run_id=run_id,
@@ -575,6 +596,7 @@ def record_checkpoint_snapshot(
         error_msg=error_msg,
         node_data=node_data,
         transform_id=transform_id,
+        mode_override=mode_override,
     )
 
 

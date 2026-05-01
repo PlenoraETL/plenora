@@ -115,6 +115,7 @@ class LoggerProtocol(Protocol):
     def info(self, msg: str) -> None: ...
     def error(self, msg: str) -> None: ...
     def debug(self, msg: str) -> None: ...
+    def warning(self, msg: str) -> None: ...
 
 
 class SaveFunctionProtocol(Protocol):
@@ -133,6 +134,7 @@ class NullLogger:
     def info(self, msg: str) -> None: pass
     def error(self, msg: str) -> None: pass
     def debug(self, msg: str) -> None: pass
+    def warning(self, msg: str) -> None: pass
 
 
 # =============================================================================
@@ -780,6 +782,7 @@ class QueryExecutor:
         group_id: Optional[str] = None,
         run_id: Optional[str] = None,
         node_id: Optional[str] = None,
+        intermediate_mode_override: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Esegue una query SQL, salva i risultati su file e restituisce i metadata.
@@ -798,6 +801,15 @@ class QueryExecutor:
             output_format: Formato di output (csv, json, xlsx, geojson, gpkg, shp).
             params: Dizionario dei parametri per la query preparata.
             geom_column: Nome colonna geometria per export geospaziale.
+            intermediate_mode_override: R-25 PR-B2. Override per-call di
+                `INTERMEDIATE_PERSISTENCE_MODE` propagato a
+                `record_final_snapshot(mode_override=...)`. None =
+                bit-compat (legge il default globale dalle settings).
+                Override invalido propaga `IntermediateSettingsError`
+                fail-loud al chiamante. Kwarg esplicito per evitare
+                stato d'istanza fragile su QueryExecutor (un singolo
+                istanza puo' essere riusata da chiamanti con override
+                diversi nello stesso processo).
 
         Returns:
             Dizionario con: success, message, rows_count, columns, output_path, timings.
@@ -928,6 +940,7 @@ class QueryExecutor:
                             df=df,
                             exec_time=timings.get("total", 0),
                             status="ok",
+                            mode_override=intermediate_mode_override,
                         )
                     self._logger.info(f"Intermediate snapshot: run={run_id} node={node_id}")
                 except Exception as _iex:
