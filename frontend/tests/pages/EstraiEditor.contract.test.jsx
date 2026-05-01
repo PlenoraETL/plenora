@@ -275,4 +275,47 @@ describe('EstraiEditor', () => {
       expect(setEdgesMock).toHaveBeenCalledWith([builtEdge]);
     });
   });
+
+  // ── Loading / error / save-failure branches ─────────────────────────
+
+  it('renders the loading overlay while useEditorData reports loading', () => {
+    currentEditorData = { ...currentEditorData, loading: true };
+
+    render(<EstraiEditor />);
+
+    expect(screen.getByText('Caricamento progetto...')).toBeInTheDocument();
+    // Title NOT rendered (early return).
+    expect(screen.queryByText('Estrai Orders')).not.toBeInTheDocument();
+  });
+
+  it('renders the load-error UI with Riprova and Torna alla lista buttons', () => {
+    currentEditorData = { ...currentEditorData, error: 'database unreachable' };
+
+    render(<EstraiEditor />);
+
+    expect(
+      screen.getByText(/Errore caricamento:.*database unreachable/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Riprova/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Torna alla lista/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('toasts an error when handleSaveQuiet rejects on Save click', async () => {
+    globalThis.__frontendConsolePolicy.allowError = true;
+    handleSaveQuietMock.mockRejectedValueOnce(new Error('persistence boom'));
+
+    render(<EstraiEditor />);
+    await screen.findByText('Estrai Orders');
+    await userEvent.click(screen.getByRole('button', { name: /salva/i }));
+
+    await waitFor(() => {
+      expect(handleSaveQuietMock).toHaveBeenCalledTimes(1);
+      expect(toastMock.error).toHaveBeenCalledWith('Errore salvataggio progetto');
+    });
+    expect(toastMock.success).not.toHaveBeenCalled();
+  });
 });

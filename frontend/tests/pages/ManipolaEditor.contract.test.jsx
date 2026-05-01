@@ -263,4 +263,45 @@ describe('ManipolaEditor', () => {
       ]);
     });
   });
+
+  // ── Loading / error / save-failure branches ─────────────────────────
+
+  it('renders the loading overlay while useEditorData reports loading', () => {
+    currentEditorData = { ...currentEditorData, loading: true };
+
+    render(<ManipolaEditor />);
+
+    expect(screen.getByText('Caricamento progetto...')).toBeInTheDocument();
+    expect(screen.queryByText('Manipola Orders')).not.toBeInTheDocument();
+  });
+
+  it('renders the load-error UI with Riprova and Torna alla lista buttons', () => {
+    currentEditorData = { ...currentEditorData, error: 'manipola load failed' };
+
+    render(<ManipolaEditor />);
+
+    expect(
+      screen.getByText(/Errore caricamento:.*manipola load failed/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Riprova/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Torna alla lista/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('toasts "Errore durante il salvataggio" when handleSaveQuiet rejects', async () => {
+    globalThis.__frontendConsolePolicy.allowError = true;
+    handleSaveQuietMock.mockRejectedValueOnce(new Error('persistence boom'));
+
+    render(<ManipolaEditor />);
+    await screen.findByText('Manipola Orders');
+    await userEvent.click(screen.getByRole('button', { name: /salva/i }));
+
+    await waitFor(() => {
+      expect(handleSaveQuietMock).toHaveBeenCalledTimes(1);
+      expect(toastMock.error).toHaveBeenCalledWith('Errore durante il salvataggio');
+    });
+  });
 });

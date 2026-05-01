@@ -290,4 +290,45 @@ describe('ArricchisciEditor', () => {
       expect(handleSaveQuietMock).toHaveBeenCalledTimes(1);
     });
   });
+
+  // ── Loading / error / project-not-found branches ────────────────────
+
+  it('renders the loading overlay while useEditorData reports loading', () => {
+    currentEditorData = { ...currentEditorData, loading: true };
+
+    render(<ArricchisciEditor />);
+
+    expect(screen.getByText('Caricamento progetto...')).toBeInTheDocument();
+    expect(screen.queryByText('Arricchisci Orders')).not.toBeInTheDocument();
+  });
+
+  it('renders the load-error UI with Riprova and Torna alla lista buttons', () => {
+    currentEditorData = {
+      ...currentEditorData,
+      error: 'arricchisci load failed',
+    };
+
+    render(<ArricchisciEditor />);
+
+    expect(
+      screen.getByText(/Errore caricamento:.*arricchisci load failed/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Riprova/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Torna alla lista/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('renders the "Progetto non trovato" empty branch when project is null', () => {
+    currentEditorData = { ...currentEditorData, project: null };
+
+    render(<ArricchisciEditor />);
+
+    expect(screen.getByText('Progetto non trovato')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Torna alla lista/i }),
+    ).toBeInTheDocument();
+  });
 });
