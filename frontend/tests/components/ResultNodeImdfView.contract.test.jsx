@@ -46,6 +46,18 @@ vi.mock('../../src/store/useCanvasStore', () => ({
   default: useCanvasStoreMock,
 }));
 
+// useToast: useImdfBundles ora ne consuma uno per il path errore
+// handleDeleteBundle (alert -> toast). Stub no-op: questi test non
+// esercitano il path errore.
+vi.mock('../../src/hooks/useToast', () => ({
+  useToast: () => ({
+    error: vi.fn(),
+    success: vi.fn(),
+    warning: vi.fn(),
+    info: vi.fn(),
+  }),
+}));
+
 // Shim dei modali: emettono isOpen + props chiave come data-attrs ispezionabili
 vi.mock('../../src/components/modals/ImdfPreviewModal', () => ({
   default: ({ isOpen, imdfData }) => isOpen ? (

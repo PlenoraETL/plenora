@@ -38,6 +38,18 @@ vi.mock('../../src/store/useCanvasStore', () => ({
   default: useCanvasStoreMock,
 }));
 
+// useToast: useImdfBundles ora ne consuma uno per il path errore
+// handleDeleteBundle (alert -> toast). Stub no-op: questo test non
+// esercita il path errore.
+vi.mock('../../src/hooks/useToast', () => ({
+  useToast: () => ({
+    error: vi.fn(),
+    success: vi.fn(),
+    warning: vi.fn(),
+    info: vi.fn(),
+  }),
+}));
+
 vi.mock('../../src/utils/validateManipolaCanvas', () => ({
   validateManipolaCanvas: vi.fn(() => ({ isValid: true, issues: [] })),
 }));

@@ -200,7 +200,10 @@ const ArricchisciEditorContent = () => {
     // Reset dirty: setNodes/setEdges hanno marcato dirty perché inseriscono
     // nuovi ID, ma è un load programmatico, non una modifica utente.
     useCanvasStore.getState().markClean();
-  }, [project, loading]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // setNodes/setEdges/deserializeNodes omessi: load programmatico una sola
+    // volta per project, non ad ogni re-render dei setter store.
+  }, [project, loading]);
 
 
   // Aggiorna availableColumns in ResultNode e CaricanNode
@@ -237,7 +240,10 @@ const ArricchisciEditorContent = () => {
         return node;
       });
     });
-  }, [setNodes]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // 'nodes' volutamente assente: il calcolo avviene dentro la callback di
+    // setNodes (snapshot React aggiornato) per evitare il loop nodes->effect.
+  }, [setNodes]);
 
   // ===== NODE HANDLERS =====
 
@@ -325,7 +331,10 @@ const ArricchisciEditorContent = () => {
       onExecute:        handleShowConfirmModal,
       onCaricanExecute: (nodeId, cfg) => caricarica.handleExecute(nodeId, cfg),
     });
-  }, [preview.handlePreview, handleShowConfirmModal, caricarica.handleExecute]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // re-bind solo al cambio degli handler hook delle azioni canvas; setStore
+    // letto via getState() volutamente non in deps.
+  }, [preview.handlePreview, handleShowConfirmModal, caricarica.handleExecute]);
 
   // Sincronizza connections nello store
   useEffect(() => {

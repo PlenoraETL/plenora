@@ -133,7 +133,10 @@ function EstraiEditor() {
     // sempre al load). Resettiamo il flag così handleSaveQuiet non farà PUT
     // inutili finché l'utente non modifica davvero qualcosa nel canvas.
     useCanvasStore.getState().markClean();
-  }, [project, projectConnection, loading]); // eslint-disable-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // setNodes/setEdges/deserializeNodes/createEdgeFromData omessi: stabili dal
+    // ciclo di vita store. Includerli rifirerebbe il load a ogni re-render.
+  }, [project, projectConnection, loading]);
 
   useEffect(() => {
     if (validation.disconnectedNodeIds.length === 0) return;
@@ -204,7 +207,10 @@ function EstraiEditor() {
     };
     setNodes(nds => nds.concat(newNode));
     setEdges(eds => eds.concat(newEdge));
-  }, [setNodes, setEdges, handleUpdateFeatureWhere, handleFeatureSchemaLoaded]); // eslint-disable-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // useCallback intenzionalmente vincolato a setNodes/setEdges + handler
+    // schema; le altre identità non cambiano la semantica dell'add layer.
+  }, [setNodes, setEdges, handleUpdateFeatureWhere, handleFeatureSchemaLoaded]);
 
   // Registra azioni editor nello store
   useEffect(() => {
@@ -224,7 +230,10 @@ function EstraiEditor() {
       onCaricanExecute:   (nodeId, cfg) => caricarica.handleExecute(nodeId, cfg),
       onAddRelatedLayer:  handleAddRelatedLayer,
     });
-  }, [preview.handlePreview, execution.handleExecute, caricarica.handleExecute, handleAddRelatedLayer]); // eslint-disable-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // toast/nodesRef/describeAccessDeniedNodes letti via closure stabile;
+    // re-bind solo quando cambiano gli handler hook delle azioni canvas.
+  }, [preview.handlePreview, execution.handleExecute, caricarica.handleExecute, handleAddRelatedLayer]);
 
   useEffect(() => { useCanvasStore.getState().setConnections(connections); }, [connections]);
 

@@ -91,7 +91,10 @@ export function useEditorData(projectId, options = {}) {
   const sourceTypesRef = useRef(sourceTypes);
   useEffect(() => {
     sourceTypesRef.current = sourceTypes;
-  }, [sourceTypes?.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Joinata stringa intenzionale: stabilizza l'identità in deps, altrimenti
+    // un array literal nuovo ad ogni render rifirerebbe l'effect a vuoto.
+  }, [sourceTypes?.join(',')]);
 
   // ── Stato comune ─────────────────────────────────────────────────────────
   const [project,     setProject]     = useState(null);

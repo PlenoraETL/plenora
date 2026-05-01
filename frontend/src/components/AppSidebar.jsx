@@ -113,6 +113,9 @@ export default function AppSidebar({ counts = {} }) {
         if (!cancelled) setTicketsActiveCount(null);
         if (!warnedThisSession) {
           // eslint-disable-next-line no-console
+          // console.warn diagnostico volutamente non instradato a toast: il
+          // badge tickets è secondario, l'endpoint può essere temporaneamente
+          // assente (lab/canary) e non vogliamo notifica utente per ogni load.
           console.warn(
             '[AppSidebar] /tickets/counts non raggiungibile, badge nascosto:',
             e?.response?.status || e?.message,

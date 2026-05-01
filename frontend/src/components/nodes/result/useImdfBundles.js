@@ -44,6 +44,7 @@
  */
 import { useState, useEffect } from 'react';
 import useCanvasStore from '../../../store/useCanvasStore';
+import { useToast } from '../../../hooks/useToast';
 import {
   listImdfBundles,
   getImdfBundleMetadata,
@@ -54,6 +55,7 @@ export function useImdfBundles({ isImdfMode }) {
   const projectId = useCanvasStore(s => s.projectId);
   const lastTaskResult = useCanvasStore(s => s.lastTaskResult);
   const setLastTaskResult = useCanvasStore(s => s.setLastTaskResult);
+  const toast = useToast();
   const imdfData = lastTaskResult?.imdf || null;
 
   const [bundles, setBundles] = useState([]);
@@ -110,6 +112,9 @@ export function useImdfBundles({ isImdfMode }) {
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+    // selectedBundleId letto al solo scopo di evitare reset spurio (early return);
+    // includerlo rifirerebbe l'effetto a ogni cambio selezione, mentre vogliamo
+    // reagire solo all'arrivo di un nuovo liveBundleTaskId.
   }, [isImdfMode, liveBundleTaskId, projectId]);
 
   // Effect 3: hydration metadata se lo store non ha manifest per bundleTaskId
@@ -147,8 +152,7 @@ export function useImdfBundles({ isImdfMode }) {
       if (selectedBundleId === tid) setSelectedBundleId(null);
     } catch (e) {
       console.error('deleteImdfBundle:', e);
-      // eslint-disable-next-line no-alert
-      alert(`Errore cancellazione bundle: ${e?.response?.data?.detail || e.message}`);
+      toast.error(`Errore cancellazione bundle: ${e?.response?.data?.detail || e.message}`);
     }
   };
 
