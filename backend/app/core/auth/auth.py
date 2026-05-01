@@ -28,7 +28,6 @@ from typing import Optional
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel
 
 # Import esplicito di app.config per side effect: garantisce che backend/.env
 # sia stato caricato via python-dotenv PRIMA che leggiamo JWT_SECRET_KEY a
@@ -202,77 +201,26 @@ else:
 # ============================================================
 # MODELLI
 # ============================================================
+#
+# STRUCT-005 Seam C: i Pydantic DTO vivono in `app.core.auth.models`.
+# Qui restano i re-export per backward-compat con i test e i ~20 router
+# che fanno `from app.core.auth.auth import CurrentUser, ...`.
 
-class LoginRequest(BaseModel):
-    username: str
-    password: str
-    # MFA opt-in: None per utenti senza MFA (comportamento invariato).
-    # Per utenti con MFA attiva: richiesto, altrimenti 403 mfa_required.
-    mfa_code: Optional[str] = None
-
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    user_id: str
-    username: str
-    group_id: str
-    role: str
-    expires_in: int
-
-class CurrentUser(BaseModel):
-    user_id: str
-    username: str
-    group_id: str
-    role: str
-
-class UserCreate(BaseModel):
-    username: str
-    password: str
-    email: Optional[str] = None
-    group_id: str
-    role: str = "user"
-
-class ChangePasswordRequest(BaseModel):
-    old_password: str
-    new_password: str
-
-class UserResponse(BaseModel):
-    id: str
-    username: str
-    email: Optional[str]
-    group_id: str
-    role: str
-    is_active: bool
-    created_at: str
-
-class ResetPasswordRequest(BaseModel):
-    new_password: str
-
-class GroupCreate(BaseModel):
-    group_id: str
-    name: str
-    description: str = ""
-
-class MFAEnrollResponse(BaseModel):
-    secret: str
-    provisioning_uri: str
-    qr_code_png_base64: str
-
-class MFAVerifyRequest(BaseModel):
-    code: str
-
-class MFADisableRequest(BaseModel):
-    code: str
-
-class MFAStatusResponse(BaseModel):
-    enabled: bool
-    enrolled_at: Optional[str] = None
-    last_verified_at: Optional[str] = None
-
-class GroupResponse(BaseModel):
-    group_id: str
-    name: str
-    description: str = ""
+from app.core.auth.models import (  # noqa: F401  (re-export pubblico)
+    LoginRequest,
+    TokenResponse,
+    CurrentUser,
+    UserCreate,
+    ChangePasswordRequest,
+    UserResponse,
+    ResetPasswordRequest,
+    GroupCreate,
+    GroupResponse,
+    MFAEnrollResponse,
+    MFAVerifyRequest,
+    MFADisableRequest,
+    MFAStatusResponse,
+)
 
 # ============================================================
 # PASSWORD UTILS
@@ -422,223 +370,24 @@ def group_filter(current_user: CurrentUser) -> Optional[str]:
 # ============================================================
 # OWNERSHIP CHECKS
 # ============================================================
-# Per risorse "owned" (projects, schedules, files): solo l'utente che l'ha
-# creata, oppure un admin/superadmin del gruppo, può modificarla/eliminarla.
 #
-# Pattern: tre dependency dedicate (più esplicite di una parametrica) che
-# leggono il record dal config_db_service e applicano il check.
-# Records con created_by NULL non dovrebbero esistere dopo la migration
-# Phase 1, ma per safety li trattiamo come "owned by group" → solo admin+
-# del gruppo può toccarli.
+# STRUCT-005 Seam B': i 6 helper puri vivono in `app.core.auth.ownership`.
+# Qui restano i re-export per backward-compat con i 17 router che fanno
+# `from app.core.auth.auth import assert_group_access, …`.
+#
+# Le 3 dependency FastAPI `require_*_owner` restano invece in questo
+# modulo perche' usano `Depends(get_current_user)`: spostarle in
+# ownership.py creerebbe un cycle `auth.py ↔ ownership.py`. Sono thin
+# wrapper che chiamano `_check_ownership` (re-esportato qui sotto).
 
-def _extract_group_and_id(resource):
-    """Estrae (group_id, id) da un dict o un oggetto Pydantic."""
-    if isinstance(resource, dict):
-        return resource.get("group_id"), resource.get("id")
-    return getattr(resource, "group_id", None), getattr(resource, "id", None)
-
-
-def assert_group_access(
-    resource: dict | object | None,
-    current_user: CurrentUser,
-    label: str = "Risorsa",
-) -> None:
-    """
-    Helper centralizzato per il group ownership check (operazioni di SCRITTURA).
-
-    Sostituisce il pattern duplicato:
-        if current_user.role != "superadmin" and resource.group_id != current_user.group_id:
-            raise HTTPException(403, "Accesso negato")
-
-    - 404 se `resource` è None.
-    - 403 se l'utente non è superadmin e il gruppo della risorsa non combacia.
-    - Accetta sia dict che oggetti Pydantic.
-
-    NB: NON considera gli share (allowed_groups). Per le operazioni di SOLA LETTURA
-    su risorse shareable usa `assert_resource_visible` che invece include gli share.
-
-    NB: NON controlla l'ownership puntuale (`created_by`). Per quello le 3 dependency
-    `require_*_owner`.
-    """
-    if resource is None:
-        raise HTTPException(status_code=404, detail=f"{label} non trovata")
-
-    if current_user.role == "superadmin":
-        return  # superadmin bypassa
-
-    resource_group, _ = _extract_group_and_id(resource)
-    if resource_group != current_user.group_id:
-        raise HTTPException(status_code=403, detail="Accesso negato")
-
-
-def compute_can_edit(
-    resource: dict | object | None,
-    current_user: CurrentUser,
-) -> bool:
-    """
-    Calcola se l'utente corrente può modificare/eliminare la risorsa.
-    Pensato per le list/get response: il frontend usa il flag per nascondere
-    i bottoni edit/delete.
-
-    Regole (stesse di `assert_can_modify`):
-    - True per superadmin (sempre)
-    - True per admin del gruppo proprietario, MA solo se la risorsa NON è
-      stata creata da un superadmin (hierarchical ownership)
-    - False per user/viewer/altri gruppi/risorse create da super
-    """
-    if resource is None:
-        return False
-    if current_user.role == "superadmin":
-        return True
-    if current_user.role != "admin":
-        return False  # user/viewer non possono modificare le risorse condivise
-
-    resource_group, _ = _extract_group_and_id(resource)
-    if resource_group != current_user.group_id:
-        return False
-
-    # admin del gruppo: ok solo se NON creata da un superadmin
-    if isinstance(resource, dict):
-        created_by = resource.get("created_by")
-    else:
-        created_by = getattr(resource, "created_by", None)
-
-    if created_by and created_by != current_user.user_id:
-        creator = db.get_user(created_by)
-        if creator and creator.get("role") == "superadmin":
-            return False
-
-    return True
-
-
-def assert_can_modify(
-    resource: dict | object | None,
-    current_user: CurrentUser,
-    label: str = "Risorsa",
-) -> None:
-    """
-    Hierarchical ownership check (operazioni di SCRITTURA).
-
-    Regole:
-    - 404 se resource is None
-    - 403 se non sei superadmin e non sei del gruppo proprietario
-    - 403 se l'utente che ha creato la risorsa è SUPERADMIN e tu sei admin
-      (un admin di gruppo non può modificare risorse create da un superadmin)
-    - Altrimenti OK
-
-    Esempio:
-    - superadmin crea connessione X nel gruppo "milano"
-    - admin di "milano" prova update X -> 403 ("creata da superadmin")
-    - solo superadmin può modificare X
-    """
-    if resource is None:
-        raise HTTPException(status_code=404, detail=f"{label} non trovata")
-
-    if current_user.role == "superadmin":
-        return  # superadmin bypassa sempre
-
-    resource_group, _ = _extract_group_and_id(resource)
-    if resource_group != current_user.group_id:
-        raise HTTPException(status_code=403, detail="Accesso negato")
-
-    # Hierarchical check: chi l'ha creata?
-    if isinstance(resource, dict):
-        created_by = resource.get("created_by")
-    else:
-        created_by = getattr(resource, "created_by", None)
-
-    if created_by and created_by != current_user.user_id:
-        # Lookup live del ruolo del creator
-        creator = db.get_user(created_by)
-        if creator and creator.get("role") == "superadmin":
-            raise HTTPException(
-                status_code=403,
-                detail=f"{label} creata da un superadmin: solo un superadmin può modificarla",
-            )
-
-    # Owned dal proprio gruppo, NON creato da un superadmin → ok
-    return
-
-
-def assert_resource_visible(
-    resource: dict | object | None,
-    table_name: str,
-    current_user: CurrentUser,
-    label: str = "Risorsa",
-) -> None:
-    """
-    Variante "soft" di `assert_group_access` per le operazioni di SOLA LETTURA
-    su risorse shareable (connections, datasources, eseguibili, api_connections,
-    arcgis_connections).
-
-    Visibile = owned dal proprio gruppo OPPURE condiviso via *_shares (incluso
-    magic share '*'). Una risorsa condivisa può essere LETTA / TESTATA /
-    BROWSATA, ma non modificata né eliminata (per quello serve `assert_group_access`).
-
-    - 404 se `resource` è None
-    - bypassa per superadmin
-    - 403 altrimenti se non è né owned né shared
-    """
-    if resource is None:
-        raise HTTPException(status_code=404, detail=f"{label} non trovata")
-
-    if current_user.role == "superadmin":
-        return
-
-    resource_group, resource_id = _extract_group_and_id(resource)
-
-    # Owned dal proprio gruppo: ok subito (no DB query)
-    if resource_group == current_user.group_id:
-        return
-
-    # Shared via *_shares?
-    if resource_id:
-        from app.shared.sharing import is_resource_visible, is_shareable
-        if is_shareable(table_name) and is_resource_visible(
-            table_name,
-            resource_id,
-            current_user.group_id,
-            is_superadmin=False,
-            resource_owner_group_id=resource_group,
-        ):
-            return
-
-    raise HTTPException(status_code=403, detail="Accesso negato")
-
-
-def _check_ownership(
-    resource: dict | None,
-    resource_label: str,
-    current_user: CurrentUser,
-) -> None:
-    """
-    Logica condivisa per le 3 dependency `require_*_owner`.
-
-    - 404 se la risorsa non esiste.
-    - 403 se l'utente non è del gruppo (a meno che superadmin).
-    - 403 se l'utente non è owner E non è admin/superadmin.
-    """
-    if not resource:
-        raise HTTPException(status_code=404, detail=f"{resource_label} non trovato")
-
-    is_super = current_user.role == "superadmin"
-    is_admin_plus = current_user.role in ROLES_ADMIN_OR_ABOVE
-
-    # Filtro gruppo (superadmin bypassa)
-    if not is_super and resource.get("group_id") != current_user.group_id:
-        raise HTTPException(status_code=403, detail="Accesso negato")
-
-    # Owner check: created_by deve combaciare oppure admin/superadmin
-    created_by = resource.get("created_by")
-    if is_admin_plus:
-        return  # admin del gruppo (o superadmin) può sempre
-    if created_by and created_by == current_user.user_id:
-        return  # sei tu l'owner
-
-    raise HTTPException(
-        status_code=403,
-        detail=f"Permesso negato: solo l'owner del {resource_label.lower()} o un admin può eseguire questa operazione",
-    )
+from app.core.auth.ownership import (  # noqa: F401  (re-export pubblico)
+    _extract_group_and_id,
+    assert_group_access,
+    compute_can_edit,
+    assert_can_modify,
+    assert_resource_visible,
+    _check_ownership,
+)
 
 
 def require_project_owner(
