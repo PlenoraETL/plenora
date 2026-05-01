@@ -25,15 +25,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-import bcrypt
 import jwt
-from argon2 import PasswordHasher
-from argon2.exceptions import (
-    VerifyMismatchError,
-    VerificationError,
-    InvalidHashError,
-    HashingError,
-)
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
@@ -286,67 +278,20 @@ class GroupResponse(BaseModel):
 # PASSWORD UTILS
 # ============================================================
 #
-# Dual hashing: Argon2id (default per i nuovi hash) + bcrypt (verifica legacy).
-# Gli utenti con hash bcrypt vengono migrati in Argon2id best-effort al primo
-# login riuscito (rehash progressivo). hash_password ritorna SEMPRE Argon2id.
+# STRUCT-005 Seam A: la logica vive in `app.shared.password_hashing`.
+# Qui restano i re-export per backward-compat dei test e dei moduli
+# esterni che fanno `from app.core.auth.auth import hash_password, ...`.
+#
+# Nessun cambio comportamentale: i simboli importati sono gli stessi
+# oggetti del modulo nuovo (identita' preservata per monkeypatch).
 
-_ph = PasswordHasher()
-
-
-def hash_password(password: str) -> str:
-    return _ph.hash(password)
-
-
-def verify_password(password: str, hashed: str) -> bool:
-    if not isinstance(hashed, str) or not hashed:
-        return False
-    if hashed.startswith("$argon2"):
-        try:
-            return _ph.verify(hashed, password)
-        except (VerifyMismatchError, VerificationError, InvalidHashError):
-            return False
-        except Exception:
-            # Difensivo: argon2-cffi ha sollevato eccezioni non documentate
-            # su input corrotti in passato. Fail-closed, no leak.
-            return False
-    if hashed.startswith("$2"):
-        try:
-            return bcrypt.checkpw(password.encode(), hashed.encode())
-        except (ValueError, TypeError):
-            return False
-    return False
-
-
-def needs_rehash(hashed: str) -> bool:
-    """True se l'hash va rigenerato in Argon2id al prossimo login riuscito.
-
-    - bcrypt ($2*)            → True (migrazione)
-    - Argon2id valido         → delega a PasswordHasher.check_needs_rehash
-    - altro / corrotto        → False (niente rehash alla cieca, il verify
-                                 avrà già ritornato False a monte)
-    """
-    if not isinstance(hashed, str) or not hashed:
-        return False
-    if hashed.startswith("$2"):
-        return True
-    if hashed.startswith("$argon2"):
-        try:
-            return _ph.check_needs_rehash(hashed)
-        except InvalidHashError:
-            return False
-        except Exception:
-            return False
-    return False
-
-
-# C10: hash dummy reale di una password casuale, generato una volta all'import.
-# Usato nel login quando l'username non esiste, cosi' `verify_password` fa
-# comunque il lavoro di hashing e il tempo di risposta non rivela se un utente
-# esiste o no (timing attack / user enumeration). Dall'introduzione di
-# Argon2id il dummy e' in Argon2id: coerente con i nuovi utenti. Gli utenti
-# legacy bcrypt hanno un costo di verify leggermente diverso finche' non
-# vengono migrati dal rehash progressivo.
-_DUMMY_PASSWORD_HASH = _ph.hash("c10_dummy_password_for_timing_parity")
+from app.shared.password_hashing import (  # noqa: F401  (re-export pubblico)
+    _ph,
+    hash_password,
+    verify_password,
+    needs_rehash,
+    _DUMMY_PASSWORD_HASH,
+)
 
 # ============================================================
 # JWT UTILS
