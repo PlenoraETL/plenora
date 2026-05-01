@@ -1,0 +1,101 @@
+"""JWT access-token contract - emit/decode + env-loading policy.
+
+Estratto da `app.core.auth.auth` (STRUCT-005 Seam D) senza alcun cambio
+comportamentale. `auth.py` re-esporta i simboli per backward-compat con
+test (`auth_mod.SECRET_KEY`, `auth_mod.create_access_token`, ...) e con
+`auth_middleware.py` (`from app.core.auth.auth import decode_token`).
+
+Contratto del payload (claim names invariati, side per Go-portability):
+    sub       -> user_id (id utente)
+    username
+    group_id
+    role
+    exp       -> datetime UTC, ora + ACCESS_TOKEN_EXPIRE_HOURS
+    iat       -> datetime UTC, ora di emissione
+    jti       -> uuid4().hex (32 char esadecimali, ~128 bit)
+
+Algoritmo: HS256.
+
+Policy SECRET_KEY (`JWT_SECRET_KEY` env var):
+  - Produzione/staging:  RuntimeError all'import se non configurata.
+  - Sviluppo (default):  genera secret random per la sessione + warning.
+  - Nessun fallback hardcoded, mai.
+
+Side-effect import:
+  La prima riga sostantiva fa `import app.config` per garantire che
+  `backend/.env` sia caricato (via python-dotenv) PRIMA di leggere
+  `JWT_SECRET_KEY` qui sotto. Pattern gia' presente in auth.py.
+"""
+
+from __future__ import annotations
+
+# Side-effect: caricamento di backend/.env via python-dotenv. Importato
+# prima di leggere JWT_SECRET_KEY/JWT_EXPIRE_HOURS qui sotto.
+import app.config  # noqa: F401
+
+import os
+import uuid
+from datetime import datetime, timedelta, timezone
+from typing import Optional
+
+import jwt
+
+
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_HOURS = int(os.getenv("JWT_EXPIRE_HOURS", "8"))
+
+_jwt_env_value = os.getenv("JWT_SECRET_KEY", "").strip()
+
+if _jwt_env_value:
+    SECRET_KEY = _jwt_env_value
+else:
+    _env = os.getenv("ENVIRONMENT", os.getenv("ENV", "development")).lower()
+    if _env in ("production", "prod", "staging"):
+        # RuntimeError invece di SystemExit: catturabile dai test, gestibile
+        # dal framework FastAPI/uvicorn invece di kill brutale del processo.
+        raise RuntimeError(
+            "[PLENORA-ETL] JWT_SECRET_KEY non configurata in ambiente "
+            f"'{_env}'. Imposta la variabile d'ambiente JWT_SECRET_KEY "
+            "prima di avviare l'app.\n"
+            "  Per generare una chiave robusta:\n"
+            "    python -c \"import secrets; print(secrets.token_urlsafe(48))\"\n"
+            "  Poi mettila in backend/.env oppure nel secret manager del deploy."
+        )
+    else:
+        # In sviluppo: genera un secret random per sessione. Piu' sicuro di un
+        # default hardcoded perche' non e' committato e cambia ad ogni riavvio.
+        import secrets
+        SECRET_KEY = secrets.token_hex(32)
+        import warnings
+        warnings.warn(
+            "[PLENORA-ETL] JWT_SECRET_KEY non configurata: generato secret random per questa sessione. "
+            "I token emessi non saranno validi dopo il riavvio dell'app. "
+            "Imposta JWT_SECRET_KEY in backend/.env per avere persistenza.",
+            stacklevel=2,
+        )
+
+
+def create_access_token(user_id: str, username: str, group_id: str, role: str) -> str:
+    # jti: identificatore univoco del token, usato come chiave della
+    # blacklist Redis per supportare revoca via /auth/logout. uuid4.hex
+    # e' 32 char esadecimali -> 128 bit di entropia, collision-free.
+    expire = datetime.now(timezone.utc) + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
+    payload = {
+        "sub":      user_id,
+        "username": username,
+        "group_id": group_id,
+        "role":     role,
+        "exp":      expire,
+        "iat":      datetime.now(timezone.utc),
+        "jti":      uuid.uuid4().hex,
+    }
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def decode_token(token: str) -> Optional[dict]:
+    try:
+        return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except jwt.ExpiredSignatureError:
+        return None
+    except jwt.InvalidTokenError:
+        return None

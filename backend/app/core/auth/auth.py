@@ -22,10 +22,9 @@ Solo l'owner o un admin/superadmin può modificarle/eliminarle. Vedi
 
 import os
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Optional
 
-import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
@@ -150,53 +149,25 @@ def _clear_failed_logins(ip: str):
 
 
 # ============================================================
-# CONFIGURAZIONE JWT
+# CONFIGURAZIONE JWT + UTILS
 # ============================================================
 #
-# Il SECRET_KEY usato per firmare i token JWT viene letto da
-# JWT_SECRET_KEY nelle env var (caricate da backend/.env via app.config).
+# STRUCT-005 Seam D: la logica vive in `app.shared.jwt_token`.
+# Qui restano i re-export per backward-compat con i test
+# (`auth_mod.SECRET_KEY`, `auth_mod.create_access_token`, ...) e con
+# `auth_middleware.py` che fa `from app.core.auth.auth import decode_token`.
 #
-# Comportamento se la variabile manca:
-#   - in produzione/staging  → l'app si rifiuta di partire (RuntimeError)
-#   - in sviluppo            → viene generato un secret random per la sessione
-#                              (i token diventano invalidi dopo il riavvio)
-#
-# NON c'è fallback hardcoded. Se vedi un riferimento a una "default JWT key"
-# nelle vecchie versioni del codice, è stato rimosso intenzionalmente: una
-# chiave hardcoded committata su GitHub vanifica completamente l'auth.
+# Payload contract invariato: sub/username/group_id/role/exp/iat/jti.
+# Algoritmo: HS256. Policy SECRET_KEY invariata (RuntimeError prod/staging,
+# random dev). Nessun cambio comportamentale.
 
-ALGORITHM  = "HS256"
-ACCESS_TOKEN_EXPIRE_HOURS = int(os.getenv("JWT_EXPIRE_HOURS", "8"))
-
-_jwt_env_value = os.getenv("JWT_SECRET_KEY", "").strip()
-
-if _jwt_env_value:
-    SECRET_KEY = _jwt_env_value
-else:
-    _env = os.getenv("ENVIRONMENT", os.getenv("ENV", "development")).lower()
-    if _env in ("production", "prod", "staging"):
-        # RuntimeError invece di SystemExit: catturabile dai test, gestibile
-        # dal framework FastAPI/uvicorn invece di kill brutale del processo.
-        raise RuntimeError(
-            "[PLENORA-ETL] JWT_SECRET_KEY non configurata in ambiente "
-            f"'{_env}'. Imposta la variabile d'ambiente JWT_SECRET_KEY "
-            "prima di avviare l'app.\n"
-            "  Per generare una chiave robusta:\n"
-            "    python -c \"import secrets; print(secrets.token_urlsafe(48))\"\n"
-            "  Poi mettila in backend/.env oppure nel secret manager del deploy."
-        )
-    else:
-        # In sviluppo: genera un secret random per sessione. Più sicuro di un
-        # default hardcoded perché non è committato e cambia ad ogni riavvio.
-        import secrets
-        SECRET_KEY = secrets.token_hex(32)
-        import warnings
-        warnings.warn(
-            "[PLENORA-ETL] JWT_SECRET_KEY non configurata: generato secret random per questa sessione. "
-            "I token emessi non saranno validi dopo il riavvio dell'app. "
-            "Imposta JWT_SECRET_KEY in backend/.env per avere persistenza.",
-            stacklevel=2,
-        )
+from app.shared.jwt_token import (  # noqa: F401  (re-export pubblico)
+    ALGORITHM,
+    ACCESS_TOKEN_EXPIRE_HOURS,
+    SECRET_KEY,
+    create_access_token,
+    decode_token,
+)
 
 # ============================================================
 # MODELLI
@@ -240,34 +211,6 @@ from app.shared.password_hashing import (  # noqa: F401  (re-export pubblico)
     needs_rehash,
     _DUMMY_PASSWORD_HASH,
 )
-
-# ============================================================
-# JWT UTILS
-# ============================================================
-
-def create_access_token(user_id: str, username: str, group_id: str, role: str) -> str:
-    # jti: identificatore univoco del token, usato come chiave della
-    # blacklist Redis per supportare revoca via /auth/logout. uuid4.hex
-    # e' 32 char esadecimali → 128 bit di entropia, collision-free.
-    expire = datetime.now(timezone.utc) + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
-    payload = {
-        "sub":      user_id,
-        "username": username,
-        "group_id": group_id,
-        "role":     role,
-        "exp":      expire,
-        "iat":      datetime.now(timezone.utc),
-        "jti":      uuid.uuid4().hex,
-    }
-    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
-
-def decode_token(token: str) -> Optional[dict]:
-    try:
-        return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-    except jwt.ExpiredSignatureError:
-        return None
-    except jwt.InvalidTokenError:
-        return None
 
 # ============================================================
 # DEPENDENCIES FASTAPI
