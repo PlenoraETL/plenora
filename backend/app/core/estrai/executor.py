@@ -229,10 +229,18 @@ class EstraiExecutor:
     # ESECUZIONE COMPLETA
     # =========================================================================
 
-    def execute(self, project_id: str, canvas: CanvasState, run_id: str = None) -> Dict[str, Any]:
+    def execute(
+        self, project_id: str, canvas: CanvasState, run_id: str = None,
+        intermediate_mode_override: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Esegue la query del progetto e salva il file di output.
         Rileva automaticamente se usare percorso SQL o ArcGIS REST.
+
+        `intermediate_mode_override` (R-25 PR-B2.b): kwarg propagato a
+        `_execute_database` -> `QueryExecutor.execute_query`. None = bit-compat.
+        Path ArcGIS: l'override e' ignorato (no snapshot intermediate per
+        feature service).
         """
         logger.info(f"Esecuzione ESTRAI: {project_id}", op="execute", project_id=project_id)
         _step_start = _time.time()
@@ -262,7 +270,10 @@ class EstraiExecutor:
         if conn_type == 'arcgis':
             res = self._execute_feature_service(project_id, canvas, result_node, connection)
         else:
-            res = self._execute_database(project_id, canvas, result_node, connection, metadata, run_id=run_id)
+            res = self._execute_database(
+                project_id, canvas, result_node, connection, metadata, run_id=run_id,
+                intermediate_mode_override=intermediate_mode_override,
+            )
 
         # --- Step tracking ---
         duration_ms = int((_time.time() - _step_start) * 1000)
@@ -279,7 +290,11 @@ class EstraiExecutor:
 
 
 
-    def _execute_database(self, project_id: str, canvas: CanvasState, result_node, connection, metadata=None, run_id: str = None) -> Dict[str, Any]:
+    def _execute_database(
+        self, project_id: str, canvas: CanvasState, result_node, connection,
+        metadata=None, run_id: str = None,
+        intermediate_mode_override: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """Percorso esecuzione SQL classico."""
         try:
             query_info = self.generator.generate_sql(
@@ -306,6 +321,7 @@ class EstraiExecutor:
             group_id=getattr(metadata, 'group_id', None),
             run_id=run_id,
             node_id=result_node.id,
+            intermediate_mode_override=intermediate_mode_override,
         )
 
         if res.get("success"):

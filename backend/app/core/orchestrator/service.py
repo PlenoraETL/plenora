@@ -92,7 +92,7 @@ class OrchestratorService:
     # Metodi chiamati da main.py per eseguire o visualizzare in anteprima.
     # =========================================================================
 
-    def execute_pipeline(self, project_id: str, force_recalculate: bool = False, skip_carica: bool = False, run_id: str = None) -> PipelineArtifact:
+    def execute_pipeline(self, project_id: str, force_recalculate: bool = False, skip_carica: bool = False, run_id: str = None, intermediate_mode_override: Optional[str] = None) -> PipelineArtifact:
         """Punto di ingresso principale: decide se estrarre, manipolare o arricchire.
 
         Ritorna un `PipelineArtifact` (subclass di dict, dict-like
@@ -119,16 +119,27 @@ class OrchestratorService:
             )
 
 
-        # Esegui la pipeline in base al tipo
+        # Esegui la pipeline in base al tipo.
+        # `intermediate_mode_override` (R-25 PR-B2.b): kwarg passing-through
+        # a tutti e 3 gli executor (estrai/manipola/arricchisci). None = bit-compat.
         result = None
         if metadata.project_type == "estrai":
-            result = self.estrai_executor.execute(project_id, canvas, run_id=run_id)
+            result = self.estrai_executor.execute(
+                project_id, canvas, run_id=run_id,
+                intermediate_mode_override=intermediate_mode_override,
+            )
 
         elif metadata.project_type == "manipola":
-            result = self.manipola_executor.execute(project_id, canvas, force_recalculate, run_id=run_id)
+            result = self.manipola_executor.execute(
+                project_id, canvas, force_recalculate, run_id=run_id,
+                intermediate_mode_override=intermediate_mode_override,
+            )
 
         elif metadata.project_type == "arricchisci":
-            result = self.enrich_executor.execute(project_id, canvas, force_recalculate, run_id=run_id)
+            result = self.enrich_executor.execute(
+                project_id, canvas, force_recalculate, run_id=run_id,
+                intermediate_mode_override=intermediate_mode_override,
+            )
 
         else:
             return PipelineArtifact.failure(

@@ -214,7 +214,66 @@ queries — finché non eseguite, niente removal autorizzato.
 
 Quando si decide di eseguirle: vedi sezione dedicata in `phase_0_5x_final_synthesis.md §9.1`.
 
-## 4. Out-of-scope (rinvio a doc dedicati)
+## 4. Audit run con override `intermediate_mode`
+
+### 4.1 Cos'è
+
+R-25 (ADR-0019, 2026-05-01): override per-call della `INTERMEDIATE_PERSISTENCE_MODE` globale per audit / debug di una singola run, senza modificare env e restartare backend.
+
+### 4.2 Quando usarlo
+
+- Audit forte su una run specifica: serve confronto riga-per-riga col baseline → override `full_pg`.
+- Debug di una run: vedere le prime 500 righe nel modal preview senza materializzare l'intero result set → override `preview_only`.
+- Test del path `full_artifact` (Parquet + manifest su object storage) per una run pilota → override `full_artifact` (richiede `OBJECT_STORAGE_ENABLED=true` già configurato a startup).
+
+### 4.3 Come usarlo
+
+Solo `superadmin` (qualunque altro ruolo riceve `403`). Il param e' query-string `intermediate_mode`.
+
+```sh
+# Pipeline (estrai / manipola)
+TOKEN=$(curl -s -X POST https://lab.plenora.it/api/auth/login \
+    -d 'username=...&password=...&mfa_code=...' | jq -r .access_token)
+
+curl -X POST "https://lab.plenora.it/api/projects/{project_id}/execute?intermediate_mode=full_pg" \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"force_recalculate": false}'
+
+# Arricchimento async
+curl -X POST "https://lab.plenora.it/api/projects/{project_id}/enrich-async?intermediate_mode=preview_only" \
+    -H "Authorization: Bearer $TOKEN" \
+    -d '{"format": "csv"}'
+```
+
+Mode ammessi: `metadata_only` | `preview_only` | `full_pg` | `full_artifact`.
+
+### 4.4 Codici risposta
+
+| Status | Causa |
+|---|---|
+| 200 | Override applicato. `task_id` ritornato; il task riceve il kwarg. |
+| 403 | Ruolo non `superadmin` con override richiesto. Il base-flow `/execute` (senza param) resta aperto agli altri ruoli. |
+| 422 | Mode non in enum (Pydantic Literal). Body include la lista valori ammessi. |
+
+### 4.5 Cosa controllare dopo
+
+- `intermediate.runs` per il `run_id` della task: ultimo record deve avere `status='completed'`.
+- `intermediate.node_meta`:
+  - `persistence_mode` riflette l'override (es. `full_pg`).
+  - `full_artifact`: `artifact_uri`, `artifact_status='complete'`, `artifact_format='parquet'` valorizzati.
+- Logs backend: cercare `[PERF] op=record_final_snapshot ... persistence_mode=<override>`.
+
+### 4.6 Failure mode noti
+
+- **Override invalido al record-time** (es. il chain produce qualcosa di non in enum): `IntermediateSettingsError` propagata, catturata dal try/except non-bloccante in `query_executor` / `manipola_executor` / `enrichment_task`. La query stessa procede (snapshot best-effort), ma viene loggato `Intermediate write fallita (non bloccante): ...`. **Niente fallback al default.**
+- **`full_artifact` con object storage spento**: validazione startup-side dovrebbe averlo già intercettato. Se sfugge, lo writer fail-closed al record-time con `artifact_status='failed'`.
+
+### 4.7 Rollback
+
+L'override e' per-call: la run successiva senza param ritorna al default globale (`metadata_only`). Niente cleanup operativo richiesto.
+
+## 5. Out-of-scope (rinvio a doc dedicati)
 
 | Scenario | Doc dedicato |
 | --- | --- |

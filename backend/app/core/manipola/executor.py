@@ -167,8 +167,23 @@ class ManipolaExecutor:
         if strict and self._current_group_id is None:
             raise ValueError(f"group_id non determinabile per progetto {project_id}")
 
-    def execute(self, project_id: str, canvas: CanvasState, force_recalculate: bool = False, run_id: str = None) -> Dict[str, Any]:
-        """Esegue la pipeline completa: carica sorgenti, trasforma, salva."""
+    def execute(
+        self,
+        project_id: str,
+        canvas: CanvasState,
+        force_recalculate: bool = False,
+        run_id: str = None,
+        intermediate_mode_override: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Esegue la pipeline completa: carica sorgenti, trasforma, salva.
+
+        `intermediate_mode_override` (R-25 PR-B2.b): override per-call della
+        `INTERMEDIATE_PERSISTENCE_MODE` globale, propagato a
+        `record_final_snapshot` (nodo result) e a tutti i
+        `record_checkpoint_snapshot` chiamati dentro `_applica_trasformazioni`.
+        None = bit-compat default-path. Validazione enum a record-time.
+        Kwarg esplicito (no stato d'istanza per coerenza con QueryExecutor).
+        """
         logger.info(f"Esecuzione MANIPOLA: {project_id}", op="execute", project_id=project_id)
 
         self._init_security_context(project_id, strict=True)
@@ -218,7 +233,10 @@ class ManipolaExecutor:
 
         logger.info(f"Caricati {len(dataframes)} DataFrame", op="execute", project_id=project_id)
         try:
-            current_df = self._applica_trasformazioni(canvas, dataframes, run_id=run_id)
+            current_df = self._applica_trasformazioni(
+                canvas, dataframes, run_id=run_id,
+                intermediate_mode_override=intermediate_mode_override,
+            )
         except ValueError as e:
             append_step({
                 "module":      "manipola",
@@ -257,6 +275,7 @@ class ManipolaExecutor:
                     exec_time=0.0,
                     status="ok",
                     node_data=getattr(result_node, "data", None),
+                    mode_override=intermediate_mode_override,
                 )
             except Exception as _iex:
                 logger.warning(f"Intermediate write result node fallita (non bloccante): {_iex}")
@@ -672,7 +691,10 @@ class ManipolaExecutor:
     # TRASFORMAZIONI
     # =========================================================================
 
-    def _applica_trasformazioni(self, canvas, dataframes, run_id: str = None):
+    def _applica_trasformazioni(
+        self, canvas, dataframes, run_id: str = None,
+        intermediate_mode_override: Optional[str] = None,
+    ):
         """
         Applica le trasformazioni del canvas in ordine topologico.
         Supporta sia nodi 'transform' che 'multi_join'.
@@ -769,6 +791,7 @@ class ManipolaExecutor:
                         status="ok",
                         node_data=getattr(node, "data", None),
                         transform_id=transform_id,
+                        mode_override=intermediate_mode_override,
                     )
                 except Exception as _iex:
                     logger.warning(f"Intermediate write nodo {node.id} fallita (non bloccante): {_iex}")

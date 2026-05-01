@@ -111,6 +111,7 @@ class TaskService:
         cleanup_file_source_ids: Optional[List[str]] = None,
         is_eseguibile: bool = False,
         user_id: Optional[str] = None,
+        intermediate_mode_override: Optional[str] = None,
     ) -> TaskInfo:
         """
         Crea e avvia un task di enrichment.
@@ -143,6 +144,7 @@ class TaskService:
             cleanup_file_source_ids=cleanup_file_source_ids,
             is_eseguibile=is_eseguibile,
             user_id=user_id,
+            intermediate_mode_override=intermediate_mode_override,
         )
 
         logger.info(f"Creato task enrichment: {result.id} per progetto {project_id}")
@@ -222,12 +224,17 @@ class TaskService:
         force_recalculate: bool = False,
         triggered_by: str = "manual",
         user_id: Optional[str] = None,
+        intermediate_mode_override: Optional[str] = None,
     ) -> TaskInfo:
         """Crea e avvia un task di esecuzione pipeline (ESTRAI/MANIPOLA/ARRICCHISCI).
 
         N9: `user_id` viene propagato alla task Celery per re-check
         permessi al pickup del worker. Se None (tipico delle cron
         schedulate), il task skippa il re-check.
+
+        R-25 PR-B3: `intermediate_mode_override` viene propagato al task
+        Celery per audit run-specific. None = bit-compat. Auth gate
+        (superadmin-only) e' al boundary HTTP, non qui.
         """
         from workers.tasks.pipeline_task import execute_pipeline_task
         result = execute_pipeline_task.delay(
@@ -235,6 +242,7 @@ class TaskService:
             force_recalculate=force_recalculate,
             triggered_by=triggered_by,
             user_id=user_id,
+            intermediate_mode_override=intermediate_mode_override,
         )
         logger.info(f"Creato task execute: {result.id} per progetto {project_id}")
         self._task_project_cache[result.id] = project_id
