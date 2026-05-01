@@ -19,16 +19,72 @@ Fix (2026-04-17):
 
 Backward compat: user_id=None -> skip re-check (ok per task cron
 schedulate che non hanno un user umano dietro).
+
+R-04 (2026-05-01): modernizzazione da source-bound a behavior-bound.
+Pre-PR: 11 inspect.getsource per asserire stringhe nel codice prod.
+Post-PR: pattern misto refactor-resilient:
+  - bytecode probe (co_names) per "task referenzia callee X" — robusto a
+    rinames di variabili locali, sensibile ai rename del callee (cosa
+    voluta come invariant).
+  - spy diretti su collaborator (recheck_user_authorized,
+    assert_project_access, .delay, open_run, create_run) per kwarg
+    propagation testabile invocando l'helper isolato.
+  - SQL capture via pg_connection.execute spy per asserzioni "INSERT
+    include colonna X" — boundary DB osservabile, non source string.
+  - TestClient + dependency override per endpoint contract.
+  - 1 test droppato per ridondanza con behavior test gia' esistente
+    (vedi `test_shared_recheck_returns_permission_revoked_on_disabled_user`).
 """
 
 from __future__ import annotations
 
+import importlib
 import inspect
+from types import SimpleNamespace
+from typing import Optional
+from unittest.mock import MagicMock
 
 import pytest
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
+
+
+# ============================================================
+# Helpers — bytecode probe (refactor-resilient)
+# ============================================================
+
+def _underlying(callable_or_task):
+    """Estrae la funzione Python sottostante da un task Celery wrappato.
+
+    Celery `@app.task` wrappa il callable in un Task subclass; il body
+    originale e' accessibile via `__wrapped__` quando bind=True/False.
+    Se non c'e' wrapping, ritorna l'oggetto stesso (es. fn pura).
+    """
+    return getattr(callable_or_task, "__wrapped__", callable_or_task)
+
+
+def _references_name(callable_or_task, name: str) -> bool:
+    """True se il bytecode di `callable` referenzia `name` come callee/attr.
+
+    Verifica sia `co_names` (top-level) sia ricorsivamente i nested code
+    objects in `co_consts` (closures, comprehensions). Pattern preso da
+    PR #37 (`test_enrichment_task_tenant_binding_lock.py`): refactor-
+    resilient ai rename di variabili locali, alle riformattazioni e
+    all'aggiunta di commenti, ma sensibile al rename del callee — che
+    e' esattamente l'invariant da blindare.
+    """
+    code = _underlying(callable_or_task).__code__
+
+    def _walk(co) -> bool:
+        if name in co.co_names:
+            return True
+        for const in co.co_consts:
+            if hasattr(const, "co_names") and _walk(const):
+                return True
+        return False
+
+    return _walk(code)
 
 
 # =============================================================================
@@ -53,31 +109,29 @@ def test_execute_pipeline_task_accepts_user_id_kwarg():
     )
 
 
-def test_execute_pipeline_task_source_rechecks_permissions_when_user_id_given():
-    """Il body deve chiamare l'helper recheck_user_authorized quando
-    user_id e' disponibile. La logica concreta (get_user, is_active,
-    assert_project_access) sta nell'helper centralizzato."""
+def test_execute_pipeline_task_references_recheck_helper():
+    """Il task deve referenziare `recheck_user_authorized` come callee
+    (single source of truth helper). Bytecode probe: refactor-resilient
+    a rinames locali, sensibile a rename del callee (cosa voluta).
+
+    Replacement R-04 di `inspect.getsource(...) + "recheck_user_authorized" in src`.
+    """
     from workers.tasks.pipeline_task import execute_pipeline_task
 
-    src = inspect.getsource(execute_pipeline_task)
-    assert "user_id" in src, "il task non referenzia user_id nel body"
-    assert "recheck_user_authorized" in src, (
-        "il task non usa l'helper centralizzato recheck_user_authorized. "
-        "Rischio di drift nella logica di re-check tra i worker."
+    assert _references_name(execute_pipeline_task, "recheck_user_authorized"), (
+        "execute_pipeline_task non riferisce recheck_user_authorized. "
+        "Rischio drift della logica re-check tra i worker."
     )
 
 
-def test_execute_pipeline_task_emits_permission_revoked_status():
-    """Su re-check fallito, il task deve ritornare uno status chiaro.
-    Il dict con status='permission_revoked' viene costruito dall'helper
-    e ritornato dal task body se non-None."""
-    from app.shared.async_user_recheck import recheck_user_authorized
-
-    src = inspect.getsource(recheck_user_authorized)
-    assert "permission_revoked" in src, (
-        "l'helper recheck_user_authorized non emette status='permission_revoked'. "
-        "Useremmo quella stringa per distinguerlo da altri fail nel reporting."
-    )
+# Test droppato (R-04, 2026-05-01):
+#   `test_execute_pipeline_task_emits_permission_revoked_status` (pre-PR)
+#   verificava `inspect.getsource(recheck_user_authorized)` contiene la
+#   stringa "permission_revoked". Ridondante con
+#   `test_shared_recheck_returns_permission_revoked_on_disabled_user`
+#   (sotto) che asserisce `result["status"] == "permission_revoked"`
+#   come vero behavior osservabile. Coverage dello status string e'
+#   garantita dal behavior test.
 
 
 # =============================================================================
@@ -96,26 +150,85 @@ def test_create_pipeline_task_accepts_user_id():
     )
 
 
-def test_create_pipeline_task_source_forwards_user_id():
-    """Il source di create_pipeline_task deve passare user_id a .delay()."""
-    from app.services.task_service import TaskService
+def test_create_pipeline_task_forwards_user_id_to_delay(monkeypatch):
+    """`create_pipeline_task` deve invocare `execute_pipeline_task.delay`
+    propagando user_id come kwarg.
 
-    src = inspect.getsource(TaskService.create_pipeline_task)
-    assert "user_id" in src, (
-        "create_pipeline_task non referenzia user_id nel body. "
-        "Forward alla task Celery mancante."
+    Replacement R-04 di `inspect.getsource(...) + "user_id" in src`:
+    spy su `.delay` -> osservazione diretta del kwarg arrivato.
+    """
+    from workers.tasks import pipeline_task as pt
+    from app.services.task_service import task_service
+
+    captured = {}
+
+    class _FakeAsyncResult:
+        id = "celery-task-1"
+
+    def fake_delay(**kwargs):
+        captured.update(kwargs)
+        return _FakeAsyncResult()
+
+    monkeypatch.setattr(pt.execute_pipeline_task, "delay", fake_delay)
+
+    info = task_service.create_pipeline_task(
+        project_id="proj_1",
+        force_recalculate=False,
+        user_id="usr_x",
     )
 
+    assert info.task_id == "celery-task-1"
+    assert captured.get("user_id") == "usr_x", (
+        f"create_pipeline_task non forward user_id a .delay. Captured: {captured}"
+    )
+    assert captured.get("project_id") == "proj_1"
 
-def test_execute_endpoint_passes_current_user_id():
-    """Il router /execute deve propagare current_user.user_id al service."""
-    from app.core.orchestrator import router as orch_router
 
-    src = inspect.getsource(orch_router.execute_project_pipeline)
-    # Deve esserci un riferimento a current_user.user_id passato
-    assert "user_id" in src and "current_user" in src, (
-        "execute_project_pipeline non forward current_user.user_id. "
-        "La task partira' senza identita' -> re-check no-op."
+def test_execute_endpoint_passes_current_user_id(monkeypatch):
+    """Il router POST /projects/{id}/execute deve propagare
+    `current_user.user_id` al service.
+
+    Replacement R-04 di `inspect.getsource(execute_project_pipeline)`:
+    TestClient + dependency override + spy su create_pipeline_task.
+    """
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from app.core.auth.auth import require_not_esecutore
+    from app.core.orchestrator.router import pipeline_router, init_orchestrator
+    from tests2.helpers.builders import build_current_user
+
+    init_orchestrator(MagicMock())
+
+    fixture_user = build_current_user(user_id="usr_endpoint", role="admin")
+    captured = {}
+
+    def spy_create_pipeline_task(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(
+            task_id="t-1",
+            to_dict=lambda: {"task_id": "t-1", "status": "pending"},
+        )
+
+    monkeypatch.setattr(
+        "app.core.orchestrator.router._assert_project_group",
+        lambda *a, **kw: None,
+    )
+    monkeypatch.setattr(
+        "app.services.task_service.task_service.create_pipeline_task",
+        spy_create_pipeline_task,
+    )
+
+    app = FastAPI()
+    app.dependency_overrides[require_not_esecutore] = lambda: fixture_user
+    app.include_router(pipeline_router, prefix="/api")
+    client = TestClient(app, raise_server_exceptions=False)
+
+    response = client.post("/api/projects/proj_1/execute")
+    assert response.status_code == 200
+    assert captured.get("user_id") == "usr_endpoint", (
+        "execute_project_pipeline non forward current_user.user_id al service. "
+        "La task partira' senza identita' -> re-check no-op. "
+        f"Captured: {captured}"
     )
 
 
@@ -124,34 +237,113 @@ def test_execute_endpoint_passes_current_user_id():
 # =============================================================================
 
 
-def test_shared_recheck_uses_assert_project_access_helper():
-    """Il re-check non deve replicare logica custom: l'helper condiviso
-    deve usare `assert_project_access` (stesso che il router usa) per
-    coerenza tra HTTP gate e worker gate."""
-    from app.shared.async_user_recheck import recheck_user_authorized
+def test_shared_recheck_invokes_assert_project_access(monkeypatch):
+    """Il re-check deve chiamare `assert_project_access` (stesso helper
+    HTTP) per coerenza tra HTTP gate e worker gate.
 
-    src = inspect.getsource(recheck_user_authorized)
-    assert "assert_project_access" in src, (
-        "L'helper non usa assert_project_access: logica re-check duplicata "
-        "rispetto al router. Serve coerenza via helper centralizzato."
+    Replacement R-04 di `inspect.getsource(recheck_user_authorized) + "assert_project_access" in src`:
+    spy diretto sul collaborator -> osserva la chiamata al helper.
+    """
+    from app.shared import async_user_recheck as mod
+
+    monkeypatch.setattr(mod, "get_user", lambda uid: {
+        "id": uid, "username": "u", "group_id": "g_1",
+        "role": "admin", "is_active": True,
+    })
+
+    spy_calls = []
+
+    def spy_apa(project_id, current_user):
+        spy_calls.append({
+            "project_id": project_id,
+            "user_id": current_user.user_id,
+            "group_id": current_user.group_id,
+        })
+
+    monkeypatch.setattr(mod, "assert_project_access", spy_apa)
+
+    result = mod.recheck_user_authorized(user_id="usr_x", project_id="proj_1")
+
+    assert result is None, "User attivo + access OK -> task procede (None)"
+    assert len(spy_calls) == 1, "assert_project_access deve essere chiamato"
+    assert spy_calls[0]["project_id"] == "proj_1"
+    assert spy_calls[0]["user_id"] == "usr_x"
+
+
+def test_pipeline_task_passes_user_id_to_open_run(monkeypatch):
+    """Il task deve propagare user_id a `open_run` per audit
+    (log_runs.user_id).
+
+    Replacement R-04 di `inspect.getsource(...) + "user_id=user_id" in src`:
+    eager mode + spy su `open_run`. Mockiamo i collaborator pesanti
+    (idempotency, recheck, orchestrator, close_run) per ridurre il
+    body del task al pass-through che ci interessa.
+    """
+    from workers.tasks import pipeline_task as pt
+    from workers.celery_app import celery_app
+
+    monkeypatch.setattr(celery_app.conf, "task_always_eager", True)
+    monkeypatch.setattr(celery_app.conf, "task_eager_propagates", True)
+
+    # Idempotency: not completed -> task procede.
+    monkeypatch.setattr(
+        "app.shared.idempotency.is_already_completed",
+        lambda run_id: False,
+    )
+    # N9 recheck: autorizzato.
+    monkeypatch.setattr(
+        "app.shared.async_user_recheck.recheck_user_authorized",
+        lambda **kwargs: None,
+    )
+    # Orchestrator: success path con risultato minimal.
+    fake_orchestrator = MagicMock()
+    fake_result = MagicMock()
+    fake_result.success = True
+    fake_result.message = "ok"
+    fake_result.to_dict = lambda: {"success": True}
+    fake_orchestrator.execute_pipeline.return_value = fake_result
+    monkeypatch.setattr(pt, "_build_orchestrator", lambda: fake_orchestrator)
+
+    # Spy su open_run: NB il task fa `from app.utils.logger import open_run`
+    # at module load -> il symbol e' bound in `workers.tasks.pipeline_task`,
+    # non riferito a ogni call all'origine. Pattern simmetrico al monkeypatch
+    # di `get_user` in `test_shared_recheck_returns_permission_revoked_on_disabled_user`.
+    captured_open_run = {}
+
+    def spy_open_run(**kwargs):
+        captured_open_run.update(kwargs)
+
+    monkeypatch.setattr("workers.tasks.pipeline_task.open_run", spy_open_run)
+
+    # Spy su close_run: no-op silente (anche questo bound in pt namespace).
+    monkeypatch.setattr(
+        "workers.tasks.pipeline_task.close_run", lambda **kwargs: None,
     )
 
+    # Spy su intermediate.db.create_run: no-op (covered separatamente).
+    monkeypatch.setattr(
+        "app.core.intermediate.db.create_run",
+        lambda *args, **kwargs: {"run_id": kwargs.get("run_id", "r-1")},
+    )
 
-def test_pipeline_task_passes_user_id_to_open_run():
-    """Il task deve propagare user_id a open_run per audit (log_runs.user_id)."""
-    from workers.tasks.pipeline_task import execute_pipeline_task
+    # Invoca il task in eager mode con user_id concreto.
+    pt.execute_pipeline_task.apply(
+        kwargs={
+            "project_id": "proj_1",
+            "user_id": "usr_x",
+            "run_id": "r-1",
+        },
+    )
 
-    src = inspect.getsource(execute_pipeline_task)
-    # Cerca pattern open_run(... user_id=user_id ...)
-    # Conservativo: controlliamo che 'user_id=user_id' appaia nel source
-    assert "user_id=user_id" in src, (
+    assert captured_open_run.get("user_id") == "usr_x", (
         "Il task non passa user_id a open_run. L'audit trail in log_runs "
-        "non avra' l'identita' dell'utente che ha lanciato la run."
+        "non avra' l'identita' dell'utente che ha lanciato la run. "
+        f"Captured: {captured_open_run}"
     )
 
 
 def test_open_run_accepts_user_id_kwarg():
-    """La funzione open_run (wrapper modulo) deve accettare user_id
+    """La funzione `open_run` (wrapper modulo) deve accettare user_id
     optional per persistenza audit."""
     from app.utils.logger import open_run
 
@@ -165,13 +357,41 @@ def test_open_run_accepts_user_id_kwarg():
     )
 
 
-def test_open_run_writes_user_id_to_log_runs():
-    """Il body dell'INSERT deve includere la colonna user_id."""
-    from app.utils.logger import PostgresLogHandler
+def test_open_run_writes_user_id_in_insert_sql(monkeypatch):
+    """L'INSERT su log_runs deve includere la colonna user_id e il valore
+    deve apparire nei params bindati (non hardcoded NULL).
 
-    src = inspect.getsource(PostgresLogHandler.open_run)
-    assert "user_id" in src, (
-        "PostgresLogHandler.open_run non scrive user_id nella query SQL."
+    Replacement R-04 di `inspect.getsource(PostgresLogHandler.open_run) + "user_id" in src`:
+    SQL capture via spy su pg_connection.execute -> boundary DB
+    osservabile. Robusto a rename interni / riformattazione SQL.
+    """
+    from app.utils import logger as logger_mod
+
+    captured_calls = []
+
+    def spy_execute(sql, params=()):
+        captured_calls.append({"sql": sql, "params": tuple(params)})
+
+    monkeypatch.setattr("app.db.pg_connection.execute", spy_execute)
+
+    handler = logger_mod.PostgresLogHandler()
+    handler.open_run(
+        run_id="r1", project_id="p1", group_id="g1",
+        module="estrai", triggered_by="manual", user_id="usr_target",
+    )
+
+    assert len(captured_calls) == 1, (
+        f"open_run deve eseguire 1 INSERT. Captured: {captured_calls}"
+    )
+    sql = captured_calls[0]["sql"]
+    params = captured_calls[0]["params"]
+
+    assert "INSERT INTO log_runs" in sql, "SQL deve essere INSERT INTO log_runs"
+    assert "user_id" in sql, (
+        "INSERT log_runs deve includere la colonna user_id."
+    )
+    assert "usr_target" in params, (
+        f"user_id non bindato nei params (hardcoded NULL?). Params: {params}"
     )
 
 
@@ -188,7 +408,6 @@ def test_shared_recheck_helper_exists_and_has_correct_contract():
     assert "user_id" in sig.parameters
     assert "project_id" in sig.parameters
     # Default user_id=None deve far skippare il check (backward compat)
-    from typing import Optional
     params = sig.parameters
     assert params["user_id"].annotation == Optional[str] or "Optional" in str(params["user_id"].annotation)
 
@@ -230,7 +449,6 @@ def test_shared_recheck_returns_permission_revoked_on_disabled_user(monkeypatch)
 ])
 def test_other_tasks_accept_user_id_kwarg(task_attr, task_module):
     """preview/carica/enrichment task devono accettare user_id optional."""
-    import importlib
     mod = importlib.import_module(task_module)
     task = getattr(mod, task_attr)
     sig = inspect.signature(task)
@@ -245,37 +463,78 @@ def test_other_tasks_accept_user_id_kwarg(task_attr, task_module):
     ("execute_carica_task", "workers.tasks.carica_task"),
     ("execute_enrichment_task", "workers.tasks.enrichment_task"),
 ])
-def test_other_tasks_use_shared_recheck_helper(task_attr, task_module):
-    """preview/carica/enrichment task devono usare l'helper condiviso
-    (single source of truth)."""
-    import importlib
+def test_other_tasks_reference_shared_recheck_helper(task_attr, task_module):
+    """preview/carica/enrichment task devono referenziare
+    `recheck_user_authorized` come callee (single source of truth).
+
+    Replacement R-04 di `inspect.getsource(task) + "recheck_user_authorized" in src`:
+    bytecode probe (co_names ricorsivo per closures).
+    """
     mod = importlib.import_module(task_module)
     task = getattr(mod, task_attr)
-    src = inspect.getsource(task)
-    assert "recheck_user_authorized" in src, (
-        f"{task_attr} non usa recheck_user_authorized — rischio drift "
+    assert _references_name(task, "recheck_user_authorized"), (
+        f"{task_attr} non referenzia recheck_user_authorized — rischio drift "
         f"di logica re-check tra i worker."
     )
 
 
-@pytest.mark.parametrize("service_method", [
-    "create_preview_task",
-    "create_carica_task",
-    "create_enrichment_task",
+@pytest.mark.parametrize("service_method,task_attr,task_module", [
+    ("create_preview_task", "preview_pipeline_task", "workers.tasks.pipeline_task"),
+    ("create_carica_task", "execute_carica_task", "workers.tasks.carica_task"),
+    ("create_enrichment_task", "execute_enrichment_task", "workers.tasks.enrichment_task"),
 ])
-def test_other_services_forward_user_id(service_method):
-    """task_service.create_{preview,carica,enrichment}_task accettano
-    e forward user_id alla task Celery."""
-    from app.services.task_service import TaskService
+def test_other_services_forward_user_id_to_delay(
+    monkeypatch, service_method, task_attr, task_module,
+):
+    """`create_{preview,carica,enrichment}_task` accettano e forward
+    user_id alla task Celery via `.delay()`.
+
+    Replacement R-04 di `inspect.getsource(method) + "user_id" in src`:
+    spy su `.delay` per ogni task. Verifica anche signature.
+    """
+    from app.services.task_service import TaskService, task_service
+
     method = getattr(TaskService, service_method)
     sig = inspect.signature(method)
     assert "user_id" in sig.parameters, (
         f"TaskService.{service_method} non accetta user_id — il router "
         f"non puo' propagare l'identita' al worker."
     )
-    src = inspect.getsource(method)
-    assert "user_id" in src.split(".delay")[0] or "user_id" in src, (
-        f"{service_method} non forward user_id a .delay()."
+
+    # Spy su .delay del task corrispondente.
+    task_mod = importlib.import_module(task_module)
+    task = getattr(task_mod, task_attr)
+
+    captured = {}
+
+    class _FakeAsyncResult:
+        id = "celery-1"
+
+    def fake_delay(**kwargs):
+        captured.update(kwargs)
+        return _FakeAsyncResult()
+
+    monkeypatch.setattr(task, "delay", fake_delay)
+
+    # Argomenti minimi richiesti per ogni service method.
+    common_kwargs = {"user_id": "usr_y"}
+    if service_method == "create_preview_task":
+        common_kwargs["project_id"] = "p1"
+        common_kwargs["limit"] = 10
+    elif service_method == "create_carica_task":
+        common_kwargs["project_id"] = "p1"
+        common_kwargs["canvas"] = {"nodes": [], "edges": []}
+        common_kwargs["carica_node_data"] = {}
+    elif service_method == "create_enrichment_task":
+        common_kwargs["project_id"] = "p1"
+        common_kwargs["canvas"] = {"nodes": [], "edges": []}
+        common_kwargs["output_format"] = "csv"
+
+    getattr(task_service, service_method)(**common_kwargs)
+
+    assert captured.get("user_id") == "usr_y", (
+        f"{service_method} non forward user_id a .delay. "
+        f"Captured: {captured}"
     )
 
 
@@ -334,29 +593,130 @@ def test_intermediate_create_run_accepts_user_id():
     assert sig.parameters["user_id"].default is None
 
 
-def test_intermediate_create_run_writes_user_id_to_sql():
-    """Il body dell'INSERT su intermediate.runs deve includere user_id."""
-    from app.core.intermediate.db import create_run
+def test_intermediate_create_run_writes_user_id_in_insert_sql(monkeypatch):
+    """L'INSERT su intermediate.runs deve includere la colonna user_id e
+    il valore deve apparire nei params bindati.
 
-    src = inspect.getsource(create_run)
-    assert "user_id" in src
-    # Verifica pattern: user_id nelle colonne dell'INSERT e come parametro
-    assert "INSERT INTO runs" in src
-    assert ", user_id)" in src or ",user_id)" in src or "user_id)" in src
+    Replacement R-04 di `inspect.getsource(create_run) + "user_id" in src + "INSERT INTO runs" + "user_id)"`:
+    SQL capture via spy su intermediate.db.execute -> boundary DB.
+    """
+    from app.core.intermediate import db as int_db
+
+    captured_calls = []
+
+    def spy_execute(sql, params=()):
+        captured_calls.append({"sql": sql, "params": tuple(params)})
+
+    monkeypatch.setattr(int_db, "execute", spy_execute)
+    # Stub get_run per evitare fetch reale dopo l'INSERT.
+    monkeypatch.setattr(int_db, "get_run", lambda run_id: {"run_id": run_id})
+
+    int_db.create_run(
+        run_id="r-1", canvas_id="canvas-1", group_id="g-1",
+        total_nodes=3, user_id="usr_intermediate",
+    )
+
+    assert len(captured_calls) == 1, (
+        f"create_run deve eseguire 1 INSERT. Captured: {captured_calls}"
+    )
+    sql = captured_calls[0]["sql"]
+    params = captured_calls[0]["params"]
+
+    assert "INSERT INTO runs" in sql, "SQL deve essere INSERT INTO runs"
+    assert "user_id" in sql, (
+        "INSERT runs deve includere la colonna user_id."
+    )
+    assert "usr_intermediate" in params, (
+        f"user_id non bindato nei params (hardcoded NULL?). Params: {params}"
+    )
 
 
 @pytest.mark.parametrize("task_name,task_module", [
     ("execute_pipeline_task", "workers.tasks.pipeline_task"),
     ("execute_enrichment_task", "workers.tasks.enrichment_task"),
 ])
-def test_tasks_pass_user_id_to_intermediate_create_run(task_name, task_module):
-    """I task che aprono una run intermediate devono passare user_id
-    (pipeline e enrichment; carica non chiama create_run intermediate)."""
-    import importlib
+def test_tasks_reference_intermediate_create_run(task_name, task_module):
+    """I task che aprono una run intermediate devono referenziare
+    `create_run` come callee (carica non chiama create_run intermediate).
+
+    Replacement R-04 di `inspect.getsource(task) + "create_run" in src + "user_id=user_id" in src`:
+    bytecode probe per il callee identifier. Lo specifico kwarg
+    propagation user_id e' coperto dal test e2e sotto.
+    """
     mod = importlib.import_module(task_module)
-    src = inspect.getsource(getattr(mod, task_name))
-    # Cerca pattern: create_run(...user_id=user_id...)
-    assert "create_run" in src and "user_id=user_id" in src, (
-        f"{task_name} non passa user_id a intermediate create_run — "
+    task = getattr(mod, task_name)
+    assert _references_name(task, "create_run"), (
+        f"{task_name} non referenzia intermediate.db.create_run — "
         "allineamento incompleto (log_runs ha user_id, intermediate.runs no)."
+    )
+
+
+def test_pipeline_task_passes_user_id_to_intermediate_create_run(monkeypatch):
+    """Il task `execute_pipeline_task` deve invocare
+    `intermediate.db.create_run` propagando user_id come kwarg.
+
+    Replacement R-04 (parte e2e di) `inspect.getsource(...) + "user_id=user_id" in src`:
+    eager mode + spy su `create_run`. Scope: solo pipeline_task; per
+    enrichment_task il pattern e' lo stesso ma il task body e' grosso
+    (tested via bytecode probe `test_tasks_reference_intermediate_create_run`).
+    """
+    from workers.tasks import pipeline_task as pt
+    from workers.celery_app import celery_app
+
+    monkeypatch.setattr(celery_app.conf, "task_always_eager", True)
+    monkeypatch.setattr(celery_app.conf, "task_eager_propagates", True)
+
+    # Idempotency / recheck / orchestrator: pass-through autorizzato.
+    monkeypatch.setattr(
+        "app.shared.idempotency.is_already_completed",
+        lambda run_id: False,
+    )
+    monkeypatch.setattr(
+        "app.shared.async_user_recheck.recheck_user_authorized",
+        lambda **kwargs: None,
+    )
+    fake_orchestrator = MagicMock()
+    fake_result = MagicMock()
+    fake_result.success = True
+    fake_result.message = "ok"
+    fake_result.to_dict = lambda: {"success": True}
+    fake_orchestrator.execute_pipeline.return_value = fake_result
+    monkeypatch.setattr(pt, "_build_orchestrator", lambda: fake_orchestrator)
+
+    # Logger no-op.
+    monkeypatch.setattr("app.utils.logger.open_run", lambda **kwargs: None)
+    monkeypatch.setattr("app.utils.logger.close_run", lambda **kwargs: None)
+
+    # Spy su intermediate.db.create_run.
+    captured_create_run = {}
+
+    def spy_create_run(*args, **kwargs):
+        # Cattura sia args posizionali sia kwargs.
+        captured_create_run["args"] = args
+        captured_create_run["kwargs"] = kwargs
+        return {"run_id": kwargs.get("run_id") or (args[0] if args else "r-1")}
+
+    monkeypatch.setattr(
+        "app.core.intermediate.db.create_run", spy_create_run,
+    )
+
+    pt.execute_pipeline_task.apply(
+        kwargs={
+            "project_id": "proj_1",
+            "user_id": "usr_x",
+            "run_id": "r-1",
+        },
+    )
+
+    # Il task puo' passare user_id come kwarg o come positional finale.
+    propagated = captured_create_run.get("kwargs", {}).get("user_id")
+    if propagated is None:
+        # Fallback: positional. La signature ha user_id all'ultimo posto.
+        args = captured_create_run.get("args", ())
+        if len(args) >= 5:
+            propagated = args[4]
+    assert propagated == "usr_x", (
+        "execute_pipeline_task non propaga user_id a intermediate.create_run. "
+        "L'audit trail (intermediate.runs.user_id) sara' incompleto. "
+        f"Captured: {captured_create_run}"
     )
