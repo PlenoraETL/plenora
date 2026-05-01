@@ -118,6 +118,7 @@ def execute_enrichment_task(
     is_eseguibile: bool = False,
     run_id: Optional[str] = None,
     user_id: Optional[str] = None,
+    intermediate_mode_override: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Task asincrono per eseguire l'arricchimento dati.
@@ -645,6 +646,7 @@ def execute_enrichment_task(
                             df=_df,
                             exec_time=0.0,
                             status="ok",
+                            mode_override=intermediate_mode_override,
                         )
                 except Exception as _sne:
                     logger.warning(f"[Task {task_id}] Intermediate write nodo {node_id} fallita: {_sne}")
@@ -1117,6 +1119,7 @@ def execute_enrichment_task(
                     df=final_df,
                     exec_time=0.0,
                     status="ok",
+                    mode_override=intermediate_mode_override,
                 )
             except Exception as _sne:
                 logger.warning(f"[Task {task_id}] Intermediate write result node fallita: {_sne}")

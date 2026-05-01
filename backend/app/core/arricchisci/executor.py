@@ -21,7 +21,7 @@ Chiamato da: core/orchestrator/service.py quando il progetto è di tipo ARRICCHI
 """
 
 import time as _time
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from app.models import CanvasState
 from app.config import settings
@@ -40,14 +40,19 @@ class EnrichExecutor:
         self.results_base_dir = settings.RESULTS_DIR
 
     def execute(
-        self, 
-        project_id: str, 
-        canvas: CanvasState, 
+        self,
+        project_id: str,
+        canvas: CanvasState,
         force_recalculate: bool = False,
         format: str = 'csv',
         run_id: str = None,
+        intermediate_mode_override: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Esegue la pipeline di arricchimento tramite API esterne."""
+        """Esegue la pipeline di arricchimento tramite API esterne.
+
+        `intermediate_mode_override` (R-25 PR-B2.b): kwarg passing-through
+        a `api_connection_service.execute_enrichment`. None = bit-compat.
+        """
         logger.info(f"Esecuzione ARRICCHISCI: {project_id}", op="execute", project_id=project_id)
         _step_start = _time.time()
 
@@ -59,6 +64,7 @@ class EnrichExecutor:
             format=format,
             force_recalculate=force_recalculate,
             run_id=run_id,
+            intermediate_mode_override=intermediate_mode_override,
         )
 
         if result.get("success"):

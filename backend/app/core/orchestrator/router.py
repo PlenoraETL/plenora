@@ -17,7 +17,7 @@ from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Query
 from fastapi.responses import FileResponse
 from pathlib import Path
 from pydantic import BaseModel, field_validator
-from typing import Optional, Dict, Any, List
+from typing import Literal, Optional, Dict, Any, List
 
 from app.config import settings
 from app.utils.logger import get_logger
@@ -127,15 +127,44 @@ def init_orchestrator(orchestrator):
 # ==================== PIPELINE EXECUTION ====================
 
 @pipeline_router.post("/{project_id}/execute")
-def execute_project_pipeline(project_id: str, request: ExecuteRequest = None, current_user: CurrentUser = Depends(require_not_esecutore)):
+def execute_project_pipeline(
+    project_id: str,
+    request: ExecuteRequest = None,
+    intermediate_mode: Optional[
+        Literal["metadata_only", "preview_only", "full_pg", "full_artifact"]
+    ] = Query(
+        None,
+        description=(
+            "R-25 PR-B3: override per-call della INTERMEDIATE_PERSISTENCE_MODE "
+            "globale. Solo superadmin puo' usarlo (403 altrimenti). Mode "
+            "invalido restituisce 422 (Pydantic Literal). None = comportamento "
+            "compat (legge default globale dalle settings)."
+        ),
+    ),
+    current_user: CurrentUser = Depends(require_not_esecutore),
+):
     """Avvia la pipeline come task Celery asincrono.
 
     SECURITY: assert_group_access verifica che il progetto appartenga al
     gruppo dell'utente. Senza questo check, un utente di gruppoA potrebbe
     eseguire la pipeline di un progetto di gruppoB (cross-tenant execution).
+
+    R-25 PR-B3: il param `intermediate_mode` e' opt-in superadmin per
+    audit run-specific. Il dual-auth (require_not_esecutore PER il
+    base-flow + check superadmin SOLO se override richiesto) preserva
+    la backward-compat: caller esistenti senza param continuano a girare
+    con i loro ruoli abituali.
     """
     require_service(_orchestrator, "OrchestratorService")
     _assert_project_group(project_id, current_user)
+
+    # Auth gate addizionale solo se intermediate_mode e' valorizzato.
+    if intermediate_mode is not None and current_user.role != "superadmin":
+        raise HTTPException(
+            status_code=403,
+            detail="intermediate_mode override richiede ruolo superadmin",
+        )
+
     try:
         from app.services.task_service import task_service
         force_recalculate = request.force_recalculate if request else False
@@ -143,6 +172,7 @@ def execute_project_pipeline(project_id: str, request: ExecuteRequest = None, cu
             project_id=project_id,
             force_recalculate=force_recalculate,
             user_id=current_user.user_id,  # N9: re-check permessi al pickup
+            intermediate_mode_override=intermediate_mode,
         )
         result = task_info.to_dict()
         result["async"] = True  # segnala a useExecution di avviare il polling

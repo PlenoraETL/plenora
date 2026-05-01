@@ -371,9 +371,15 @@ class ApiConnectionService(
 
     def execute_enrichment(self, project_id: str, canvas: Dict, format: str = 'csv',
                           force_recalculate: bool = False, preview_limit: int = None,
-                          run_id: str = None) -> Dict:
+                          run_id: str = None,
+                          intermediate_mode_override: Optional[str] = None) -> Dict:
         """
         Esegue il progetto arricchisci dal canvas.
+
+        `intermediate_mode_override` (R-25 PR-B2.b): override per-call
+        propagato a `_write_intermediate_snapshot`. None = bit-compat.
+        Skip-decision arricchisci (`final_only` di default) NON e'
+        alterata: l'override agisce solo sulla mode di persistenza.
         
         Flusso:
         1. Carica tutte le API connections configurate
@@ -565,7 +571,8 @@ class ApiConnectionService(
                     if run_id:
                         for nid in step_node_ids:
                             self._write_intermediate_snapshot(
-                                run_id, nid, "api_enrich", node_results.get(nid)
+                                run_id, nid, "api_enrich", node_results.get(nid),
+                                mode_override=intermediate_mode_override,
                             )
             
             result_node = next((n for n in nodes if n.get('type') == 'result'), None)

@@ -458,7 +458,8 @@ class ApiConnectionSupportMixin:
         }
 
     def _write_intermediate_snapshot(
-        self, run_id: str, node_id: str, node_type: str, df: Any
+        self, run_id: str, node_id: str, node_type: str, df: Any,
+        mode_override: Optional[str] = None,
     ) -> None:
         """Best-effort snapshot del DataFrame del nodo arricchisci.
 
@@ -468,6 +469,13 @@ class ApiConnectionSupportMixin:
         esclude i nodi `api_enrich` dagli snapshot intermedi: il
         resolver ritorna `recorded=False` PRIMA di toccare il DataFrame
         (no `df.to_dict`, no fingerprint, no DB).
+
+        `mode_override` (R-25 PR-B2.b): override per-call della
+        `INTERMEDIATE_PERSISTENCE_MODE` globale. None = bit-compat.
+        Nota: se la policy decide skip (default `final_only` per
+        arricchisci), l'override e' ignorato — la skip-decision e'
+        governata da `ARRICCHISCI_INTERMEDIATE_CHECKPOINTS`,
+        indipendente dalla mode.
 
         No-op se `df` non e' un DataFrame non vuoto.
         """
@@ -483,6 +491,7 @@ class ApiConnectionSupportMixin:
                 df=df,
                 exec_time=0.0,
                 status="ok",
+                mode_override=mode_override,
             )
         except Exception as e:
             logger.warning(

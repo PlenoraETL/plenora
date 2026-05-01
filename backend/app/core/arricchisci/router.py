@@ -15,7 +15,7 @@ Sub-router:
 
 import json
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from app.core.auth.auth import (
     require_not_esecutore,
     require_admin,
@@ -26,7 +26,7 @@ from app.core.auth.auth import (
     CurrentUser,
 )
 from pydantic import BaseModel
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Literal, Optional
 
 from app.config import settings
 from app.utils.logger import get_logger
@@ -789,6 +789,16 @@ class EnrichAsyncRequest(BaseModel):
 def execute_enrichment_async(
     project_id: str,
     request: EnrichAsyncRequest = None,
+    intermediate_mode: Optional[
+        Literal["metadata_only", "preview_only", "full_pg", "full_artifact"]
+    ] = Query(
+        None,
+        description=(
+            "R-25 PR-B3: override per-call della INTERMEDIATE_PERSISTENCE_MODE "
+            "globale. Solo superadmin (403 altrimenti). Mode invalido = 422 "
+            "(Pydantic Literal). None = comportamento compat."
+        ),
+    ),
     current_user: CurrentUser = Depends(require_not_esecutore),
 ):
     """
@@ -797,11 +807,23 @@ def execute_enrichment_async(
     Parametri body (opzionali):
         format: formato output ('csv', 'xlsx', 'geojson', ...) — default 'csv'
         force_recalculate: ignora cache e ricalcola tutto — default False
+
+    R-25 PR-B3: il param `intermediate_mode` e' opt-in superadmin per
+    audit run-specific. Dual-auth: require_not_esecutore PER il base-flow
+    + check superadmin SOLO se override richiesto.
     """
     require_service(_project_service, "ProjectService")
     require_service(_api_connection_service, "ApiConnectionService")
     # Auth + ownership: stesso ragionamento di /enrich sincrono
     _check_project_ownership(project_id, current_user)
+
+    # Auth gate addizionale solo se intermediate_mode e' valorizzato.
+    if intermediate_mode is not None and current_user.role != "superadmin":
+        raise HTTPException(
+            status_code=403,
+            detail="intermediate_mode override richiede ruolo superadmin",
+        )
+
     from app.services.task_service import task_service
 
     # Valori di default se body non fornito
@@ -849,6 +871,7 @@ def execute_enrichment_async(
             output_format=output_format,
             force_recalculate=request.force_recalculate,
             user_id=current_user.user_id,  # N9
+            intermediate_mode_override=intermediate_mode,
         )
         
         return {

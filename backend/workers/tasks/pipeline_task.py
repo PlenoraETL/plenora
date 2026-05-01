@@ -77,6 +77,7 @@ def execute_pipeline_task(
     triggered_by: str = "manual",
     run_id: Optional[str] = None,
     user_id: Optional[str] = None,
+    intermediate_mode_override: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Task asincrono per eseguire la pipeline completa di un progetto.
 
@@ -180,6 +181,7 @@ def execute_pipeline_task(
             force_recalculate=force_recalculate,
             skip_carica=False,
             run_id=run_id,
+            intermediate_mode_override=intermediate_mode_override,
         )
 
         elapsed_ms = int((_time.time() - _run_start) * 1000)

@@ -76,6 +76,7 @@ Non cancellare mai un ADR: il registro e' append-only. Un errore in un ADR si re
 - [ADR-0014](0014-2026-04-21-log-archive-pipeline.md) — Log archive pipeline: writer isolato PG-agnostic + SELECT/DELETE callables (O-ARC Batch 1)
 - [ADR-0015](0015-2026-04-22-minio-object-storage-provider.md) — MinIO object storage provider via subclass `AwsS3ObjectStorage` (A1-B2, secondo provider P1 per contract parity)
 - [ADR-0016](0016-2026-04-23-imdf-boundaries.md) — IMDF boundaries refactor: loader autoritativo `site_id`, persist local materializer puro, router legge solo meta, hydrate multi-host uniforme (D3, 5 commit impl atomici)
+- [ADR-0019](0019-2026-05-01-intermediate-mode-per-call-override.md) — `INTERMEDIATE_PERSISTENCE_MODE` per-call override via kwarg propagation + endpoint dual-auth superadmin (R-25 completion)
 
 ## Workflow
 
