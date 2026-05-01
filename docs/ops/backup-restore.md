@@ -6,7 +6,7 @@ alle 3 del mattino: comandi concreti, decisioni chiare, zero teoria.
 
 Se stai cercando operazioni di routine (backup manuale, verifica timer,
 troubleshooting tipico), vai su
-[backup-runbook.md](../../deploy/backup-runbook.md).
+[backup-runbook.md](../../backend/deploy/backup-runbook.md).
 Questo documento si attiva quando **qualcosa e' andato storto**.
 
 ---
@@ -436,12 +436,12 @@ Dopo ogni intervento DR:
 
 ## Riferimenti
 
-- Operazioni normali: [backup-runbook.md](../../deploy/backup-runbook.md)
+- Operazioni normali: [backup-runbook.md](../../backend/deploy/backup-runbook.md)
 - DR drill ripetibile: [dr_drill_playbook.md](dr_drill_playbook.md)
 - DR drill log storico: [dr_drill_log.md](dr_drill_log.md)
 - Incident response generale: [incident_response.md](incident_response.md)
-- Unit systemd + install: [deploy/systemd/README.md](../../deploy/systemd/README.md)
-- IAM policies + SSM setup: [deploy/iam/README.md](../../deploy/iam/README.md)
-- Script di backup: [scripts/backup_db.py](../../scripts/backup_db.py)
-- Script di verifica restore: [scripts/test_restore.py](../../scripts/test_restore.py)
-- Astrazione cloud: [app/shared/cloud_backends.py](../../app/shared/cloud_backends.py)
+- Unit systemd + install: [deploy/systemd/README.md](../../backend/deploy/systemd/README.md)
+- IAM policies + SSM setup: [deploy/iam/README.md](../../backend/deploy/iam/README.md)
+- Script di backup: [scripts/backup_db.py](../../backend/scripts/backup_db.py)
+- Script di verifica restore: [scripts/test_restore.py](../../backend/scripts/test_restore.py)
+- Astrazione cloud: [app/shared/cloud_backends.py](../../backend/app/shared/cloud_backends.py)

@@ -197,11 +197,11 @@ Notifiche email: hook `TicketNotifier` predisposto, default no-op. Vedi `tickets
 
 ## Link
 
-- Backup runbook: [../../deploy/backup-runbook.md](../../deploy/backup-runbook.md)
+- Backup runbook: [../../backend/deploy/backup-runbook.md](../../backend/deploy/backup-runbook.md)
 - DR runbook: [backup-restore.md](backup-restore.md)
 - JWT incident response: [jwt-incident-response.md](jwt-incident-response.md)
 - Trusted proxies: [trusted-proxies.md](trusted-proxies.md)
 - Ticketing system: [tickets.md](tickets.md)
-- Systemd units: [../../deploy/systemd/](../../deploy/systemd/)
-- IAM setup: [../../deploy/iam/](../../deploy/iam/)
-- Cloud abstraction: [../../app/shared/cloud_backends.py](../../app/shared/cloud_backends.py)
+- Systemd units: [../../backend/deploy/systemd/](../../backend/deploy/systemd/)
+- IAM setup: [../../backend/deploy/iam/](../../backend/deploy/iam/)
+- Cloud abstraction: [../../backend/app/shared/cloud_backends.py](../../backend/app/shared/cloud_backends.py)

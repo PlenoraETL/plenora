@@ -281,8 +281,8 @@ Da copiare in `dr_drill_log.md` come nuova entry.
 ## §6 Riferimenti
 
 - [`backup-restore.md`](backup-restore.md) — DR runbook completo, scenari A/B/C
-- [`backup-runbook.md`](../../deploy/backup-runbook.md) — operazioni routine
-- [`scripts/test_restore.py`](../../scripts/test_restore.py) — verifica
+- [`backup-runbook.md`](../../backend/deploy/backup-runbook.md) — operazioni routine
+- [`scripts/test_restore.py`](../../backend/scripts/test_restore.py) — verifica
   restorability automatica weekly (subset di questo drill)
 - [`incident_response.md`](incident_response.md) — se durante il drill
   scopri gap che richiedono intervento prod, apri incidente per il

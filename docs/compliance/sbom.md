@@ -138,12 +138,12 @@ post-launch se l'audit cliente lo richiede esplicitamente.
 
 ## §5 Riferimenti
 
-- [`generate_sbom.py`](../../scripts/generate_sbom.py) — script di
+- [`generate_sbom.py`](../../backend/scripts/generate_sbom.py) — script di
   generazione
 - [`sbom.json`](sbom.json) — baseline corrente
-- [`requirements.txt`](../../requirements.txt) — runtime deps
-- [`requirements-dev.txt`](../../requirements-dev.txt) — dev/test deps
-- [`dependabot.yml`](../../.github/dependabot.yml) — update PR
+- [`requirements.txt`](../../backend/requirements.txt) — runtime deps
+- [`requirements-dev.txt`](../../backend/requirements-dev.txt) — dev/test deps
+- [`dependabot.yml`](../../backend/.github/dependabot.yml) — update PR
   weekly (tracking complementare allo SBOM)
 - [`soa-iso-27001.md`](soa-iso-27001.md) — Statement of Applicability
   ISO 27001 (controllo A.12.6.1 cita SBOM come prerequisito)
