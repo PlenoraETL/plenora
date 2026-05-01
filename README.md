@@ -1,246 +1,170 @@
-# 📋 TODO DataFlow Manager - Gennaio 2026
+# URBY-ETL
 
-Mappa rapida del codice: [CODE_MAP.md](CODE_MAP.md).
+ETL platform per pipeline di dati geo-spaziali e tabulari.
+Backend FastAPI + Celery + PostgreSQL + Redis. Frontend React + Vite +
+ReactFlow per la composizione visuale di pipeline.
 
-## 📊 STATO PROGETTO ATTUALE
+> **Status**: Phase 1 hardening completata. Production endpoint
+> `lab.plenora.it`. Code base in attivo refinement post-stabilization.
+> Vedi [docs/ROADMAP.md](docs/ROADMAP.md) per residui aperti e Phase 2+.
 
-| Modulo | Completamento | Note |
-|--------|---------------|------|
-| **Estrai** | 98% ✅ | 357/368 test passati (97%) |
-| **Manipola** | 95% ✅ | 24 trasformazioni, test da eseguire |
-| **Arricchisci** | 40% 🔄 | File esterni integrati, core da completare |
-| **File Esterni** | 100% ✅ | Upload, selezione colonne, SRID |
-| **Upload** | 0% ❌ | Da fare |
-| **Scheduler** | 0% ❌ | Da fare |
+> **Brand note**: il package storico era `PLENORA-ETL`, oggi `URBY-ETL`.
+> Riferimenti `PLENORA_*` env var, `plenora.*` schema PG sono attuali.
 
 ---
 
-## 🎯 PIANO DI LAVORO
+## Current capabilities
 
-### FASE 1: REFACTORING ✅ COMPLETATO
-Pulizia codice, rimuovi duplicati, centralizza logica comune.
+Tutti i moduli sotto sono **LIVE** in produzione.
 
-**File Backend - Completati:**
-- [x] `orchestrator_service.py` → Suddiviso in moduli (orchestrator/)
-  - `estrai_executor.py` - Logica ESTRAI + preview
-  - `manipola_executor.py` - Logica MANIPOLA + preview  
-  - `enrich_executor.py` - Logica ARRICCHISCI
-  - `transform_operations.py` - Operazioni base (12)
-  - `spatial_operations.py` - Operazioni spaziali (12)
-- [ ] `api_connection_service.py`
-- [ ] `file_source_service.py`
-- [ ] `query_executor.py`
+### Pipeline visuale (canvas-based)
 
-**File Frontend - Da analizzare:**
-- [ ] `ManipolaEditor.jsx`
-- [ ] `ArricchisciEditor.jsx`
-- [ ] `ProjectSourceNode.jsx`
-- [ ] `FileSourceNode.jsx`
-- [ ] `ResultNode.jsx`
+| Modulo | Cosa fa |
+|---|---|
+| **Estrai** | Query SQL multi-dialect (PostgreSQL, MySQL, Oracle, MSSQL, SQLite) + ArcGIS Feature Service. Output a file (csv/json/xlsx/geojson/gpkg/shp/parquet). |
+| **Manipola** | 33+ trasformazioni dati (filter, join, multi-join, pivot, aggregate, dedup, geo ops: clip / dissolve / overlay / sjoin / nearest, ecc.). |
+| **Arricchisci** | Pipeline arricchimento via REST API esterne (auth: token / OAuth2 / public / custom), REST File processor, executable command-based. Parametri statici, mapping risposta JSON, parallelizzazione nodi indipendenti. |
+| **Carica** | DB writer (replace atomic / append / upsert / Oracle redef) + ArcGIS Feature Service publish (replace / append / update / upsert). |
+| **IMDF** | Apple Indoor Mapping Data Format: bundle generation + ArcGIS publish con renderers configurabili. |
 
-**Obiettivi refactoring:**
-- [x] Centralizzare operazioni trasformazione (transform_operations.py)
-- [x] Centralizzare operazioni spaziali (spatial_operations.py)
-- [ ] Centralizzare logica caricamento dati (data_loader)
-- [ ] Centralizzare logica export (data_exporter)
-- [ ] Rimuovere codice duplicato tra Editor
-- [ ] Rimuovere codice duplicato tra Node components
+### Operatività
 
-### FASE 2: TEST COMPLETO (In corso)
-Eseguire tutti i test del Piano Test, fix bug trovati.
-
-**Aree da testare:**
-- [x] Connessioni Database (5/5 DB) ✅ 100%
-- [x] Modulo ESTRAI (357/368 test) ✅ 97%
-- [ ] Modulo MANIPOLA (0/159 test) ☐ 0% - **PROSSIMO**
-- [ ] Modulo FILE ESTERNI (15 test)
-- [ ] Modulo ARRICCHISCI (20 test)
-- [ ] Sicurezza (15 test)
-- [ ] UI/UX Generale (15 test)
-
-### FASE 3: INCREMENTO FUNZIONALITÀ (Dopo stabilizzazione)
-Nuove feature solo su base stabile.
-
-**Priorità Alta:**
-1. [ ] FileGDB (.gdb) come formato di OUTPUT
-2. [ ] **Completare ARRICCHISCI (40% → 90%)** - Vedi sezione dedicata sotto
-3. [ ] Upload su Database PostGIS
-4. [ ] Upload su Feature Service ArcGIS
-5. [ ] Scheduler automazione pipeline
-
-**Priorità Media - Nuove Capabilities:**
-6. [ ] **Stream dati in input** - Connessione a flussi real-time (Kafka, MQTT, WebSocket)
-7. [ ] **Linguaggio naturale** - Generazione pipeline via LLM (es. "unisci i POI con i comuni e calcola il buffer di 500m")
+| Componente | Cosa fa |
+|---|---|
+| **Scheduler** | Cron + Celery beat con leader election (Redis SETNX), heartbeat, catchup tracking, log archive. |
+| **Executor pubblicati** | "Eseguibili" = pipeline serializzate eseguibili da non-admin (`esecutore` role kiosk-only) con upload temporaneo. |
+| **Auth** | JWT HS256 (8h, no refresh), MFA TOTP opt-in, 5-role RBAC, group-based tenant isolation. |
+| **Audit & observability** | Run/log persistence in PG, intermediate snapshot mode (`metadata_only` / `preview_only` / `full_pg` / `full_artifact`) con per-call override superadmin. |
+| **Intermediate persistence** | Object storage backend (AWS S3 / MinIO) per Parquet artifact + manifest, opt-in via mode. |
 
 ---
 
-## 🔌 ARRICCHISCI - Architettura Definita
-
-### Macro Categorie
-
-| Categoria | Descrizione | Esempio |
-|-----------|-------------|---------|
-| **1. API REST** | Chiamate HTTP a servizi esterni | Geocoding, Routing, Catasto, API custom |
-| **2. Eseguibili** | Script/programmi in una cartella | Python scripts, exe RETURN, modelli ML |
-| **3. Data Sources** | Dati da repository remoti | SharePoint, FTP, S3, Azure Blob |
-
-### Specifiche Tecniche
-
-**API REST:**
-- Modalità: Riga per riga + Batch (dove supportato)
-- Connettori pluggabili (registry)
-- Configurazione: URL, auth, mapping parametri
-
-**Eseguibili:**
-- Input: `/temp/input_{id}.json` (DataFrame serializzato)
-- Output: `/temp/output_{id}.json` (DataFrame arricchito)
-- Supporto: Python (.py), Executable (.exe), R (.R)
-
-**Data Sources:**
-- SharePoint: Microsoft 365 (OAuth2) + On-premise (NTLM/Kerberos)
-- FTP/SFTP: Autenticazione standard
-- Futuro: S3, Azure Blob, Google Drive
-
-### Piano Implementazione (~21h / 3 giorni)
-
-| # | Componente | Tempo | Status |
-|---|------------|-------|--------|
-| 1 | Base registry connettori | 2h | ☐ |
-| 2 | API REST generico | 3h | ☐ |
-| 3 | Geocoding (Nominatim) | 2h | ☐ |
-| 4 | Eseguibili (JSON in/out) | 3h | ☐ |
-| 5 | SharePoint 365 | 3h | ☐ |
-| 6 | SharePoint on-premise | 2h | ☐ |
-| 7 | FTP/SFTP | 2h | ☐ |
-| 8 | UI configurazione | 4h | ☐ |
-
----
-
-### FASE 4: DOCUMENTAZIONE & MARKETING (Pre-ESRI Conference)
-Materiali per presentazione e promozione.
-
-**Video Demo:**
-- [ ] Script dettagliato (5-7 min)
-- [ ] Registrazione con OBS/Loom/Camtasia
-- [ ] Editing e sottotitoli
-
-**Brochure/Presentazione:**
-- [ ] Screenshot chiave da video
-- [ ] Brochure PDF (2-4 pagine)
-- [ ] Slide PowerPoint per conferenza
-- [ ] GIF animate per social/LinkedIn
-
----
-
-## ✅ COMPLETATI
-
-### 20 Gennaio 2026
-- ✅ Refactoring orchestrator_service.py in moduli separati
-- ✅ Piano test MANIPOLA aggiornato (159 test case)
-- ✅ Documentate tutte le 24 trasformazioni implementate
-
-### 19-20 Gennaio 2026 - TEST ESTRAI COMPLETATI ✅
-- ✅ **Matrice 1 - Connessioni**: 5/5 database (PostgreSQL, MySQL, MariaDB, SQL Server, Oracle)
-- ✅ **Matrice 2 - UI Canvas**: Drag&drop, preview, selezione colonne su tutti i DB
-- ✅ **Matrice 3 - Filtri WHERE**: Tutti i 10 operatori su tutti i 5 DB
-- ✅ **Matrice 4 - Colonne Calcolate**: 
-  - Geometriche: PostgreSQL 9/9, MySQL 2/9, MariaDB 3/9, SQL Server 8/9, Oracle 9/9
-  - Numeriche, Testo, Data, Math: 100% su tutti i DB
-- ✅ **Matrice 5 - Esecuzione/Output**: CSV, GeoJSON, GPKG, SHP su tutti i DB
-- ✅ **Matrice 6 - Tipi Dati**: INTEGER, VARCHAR, FLOAT, DATE, BOOLEAN, GEOMETRY su tutti i DB
-- ✅ **Matrice 7 - Join**: INNER, LEFT, RIGHT, FULL OUTER, Spatial Join su tutti i DB
-- ✅ **Copertura totale ESTRAI**: 357/368 test (97%)
-
-### 18 Gennaio 2026
-- ✅ FileManager con upload, selezione colonne, SRID manuale
-- ✅ FileSourceNode con scroll colonne, tipi geometry
-- ✅ Integrazione ManipolaEditor (sidebar + drag&drop)
-- ✅ Integrazione ArricchisciEditor (sidebar + drag&drop)
-- ✅ Backend orchestrator supporto file_source
-- ✅ Backend api_connection_service supporto file_source
-- ✅ Rilevamento automatico geometry type e SRID da GeoDataFrame
-- ✅ Rilevamento WKT da stringhe CSV
-- ✅ Fix Shapefile preview (.cpg vs .shp)
-
----
-
-## 🟠 BACKLOG - Transformers Top 20 FME
-
-| # | Transformer | Stato | Note |
-|---|-------------|-------|------|
-| 1 | AttributeCreator | ✅ | CalculatedColumn |
-| 2 | AttributeFilter | ✅ | FilterNode |
-| 3 | AttributeRenamer | ✅ | RenameNode |
-| 4 | Bufferer | ✅ | BufferNode |
-| 5 | Clipper | ✅ | ClipNode |
-| 6 | Counter | ✅ | In Aggregate |
-| 7 | FeatureMerger | ✅ | JoinNode |
-| 8 | Aggregator | ✅ | AggregateNode |
-| 9 | Tester | ❌ | IF/THEN multi-output |
-| 10 | Reprojector | ✅ | Riproietta (completo) |
-| 11 | StringReplacer | ✅ | Sostituisci Valori |
-| 12 | Dissolver | ✅ | Dissolve per attributo |
-| 13 | SpatialFilter | ❌ | Filtro spaziale |
-| 14 | DuplicateFilter | ✅ | Distinct (Univoci) |
-| 15 | Sorter | ✅ | Sort (Ordina) |
-| 16 | GeometryValidator | ❌ | Valida/ripara geometrie |
-| 17 | CoordinateExtractor | ❌ | Estrai X, Y, Z |
-| 18 | PointOnAreaOverlayer | ✅ | Spatial Join (intersects) |
-| 19 | NeighborFinder | ❌ | Trova più vicino |
-| 20 | Generalizer | ✅ | Semplifica (Douglas-Peucker) |
-
-**Stato: 15/20 completati (75%)** ⬆️ Era 40%
-
-### Trasformazioni aggiuntive implementate (non in Top 20 FME)
-- ✅ Elimina Colonne (Drop Columns)
-- ✅ Riempi Nulli (Fill NA)
-- ✅ Dividi Colonna (Split Column)
-- ✅ Centroide
-- ✅ Area (con conversione UTM automatica)
-- ✅ Intersezione geometrica
-- ✅ Unione geometrica
-- ✅ Differenza geometrica
-- ✅ Convex Hull
-
----
-
-## 🎯 TARGET ESRI CONFERENCE - Maggio 2026
-
-| Modulo | Attuale | Target |
-|--------|---------|--------|
-| Estrai | 98% | 98% |
-| Manipola | 95% | 95% |
-| Arricchisci | 40% | 90% |
-| File Esterni | 100% ✅ | 100% |
-| Upload | 0% | 100% |
-| Scheduler | 0% | 100% |
-| Transformers | 75% ⬆️ | 80% |
-| Stream Input | 0% | 50% |
-| Servizi Esterni | 0% | 70% |
-| Linguaggio Naturale | 0% | MVP |
-
-**Obiettivo globale: ~90%**
-
----
-
-## 📁 Struttura Backend (dopo refactoring)
+## Repo structure
 
 ```
-services/
-├── orchestrator_service.py      # Entry point (129 righe)
-├── orchestrator/
-│   ├── __init__.py
-│   ├── estrai_executor.py       # ESTRAI: execute + preview (357 righe)
-│   ├── manipola_executor.py     # MANIPOLA: execute + preview (519 righe)
-│   ├── enrich_executor.py       # ARRICCHISCI (58 righe)
-│   ├── transform_operations.py  # 12 operazioni base (350 righe)
-│   └── spatial_operations.py    # 12 operazioni spaziali (395 righe)
-├── api_connection_service.py
-├── file_source_service.py
-├── query_executor.py
-└── ...
+URBY-ETL/
+├── README.md                    # questo file
+├── CONTRIBUTING.md              # branch policy + PR rules
+├── CHANGELOG.md                 # changelog raggruppato per tema
+├── CODE_MAP.md                  # mappa puntuale dei moduli (high-density)
+├── docs/                        # docs di prodotto cross-stack
+│   ├── ONBOARDING.md            # setup nuovo dev
+│   ├── ARCHITECTURE.md          # core platform + boundaries
+│   └── ROADMAP.md               # residui aperti + Phase 2+
+├── backend/                     # FastAPI app + Celery workers
+│   ├── README.md                # setup BE + test policy + ADR refs
+│   ├── app/                     # core/<modulo>/{router, executor, service, models}
+│   ├── workers/                 # Celery tasks + beat scheduler
+│   ├── tests2/                  # contract test suite (pytest)
+│   ├── docs/
+│   │   ├── architecture/decisions/  # ADR formali (Nygard)
+│   │   ├── ops/                     # runbook + incident response
+│   │   └── compliance/              # SBOM + GDPR + ISO 27001 SoA
+│   ├── migrations/              # SQL migrations
+│   └── scripts/                 # backup, restore, SBOM, secrets migration
+├── frontend/                    # React 18 + Vite + ReactFlow
+│   ├── README.md                # setup FE + folder structure
+│   ├── src/                     # pages, components, hooks, store, api
+│   └── tests/                   # vitest + RTL contract tests
+├── deploy/                      # deploy profile (prod.conf)
+├── deploy.sh                    # deploy script con dry-run + health gate
+└── .github/workflows/           # CI: backend pytest + frontend vitest
 ```
 
 ---
 
-*Ultimo aggiornamento: 20 Gennaio 2026*
+## Quickstart dev
+
+Setup minimo per far girare backend + frontend in locale. Vedi
+[docs/ONBOARDING.md](docs/ONBOARDING.md) per la versione estesa con
+troubleshooting.
+
+### Prerequisiti
+
+- Python 3.12, Node 20+, PostgreSQL 14+, Redis 7+
+- Sistema: Linux/macOS/Windows (WSL2 raccomandato su Windows)
+
+### Backend
+
+```bash
+cd backend
+python -m venv venv
+source venv/bin/activate            # Windows: venv\Scripts\activate
+pip install -r requirements.txt -r requirements-dev.txt
+
+# Env vars minime
+export PLENORA_ENCRYPTION_KEY="$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
+export JWT_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
+export DATABASE_URL="postgresql://dataflow:dataflow@localhost:5432/dataflow_test"
+export REDIS_URL="redis://localhost:6379/0"
+
+# Server + worker + beat (3 shell separate)
+uvicorn app.main:app --reload --port 5004
+celery -A workers.celery_app worker --loglevel=info
+celery -A workers.celery_app beat --loglevel=info
+```
+
+Lista completa env vars: [`backend/docs/ops/runtime-prereqs.md`](backend/docs/ops/runtime-prereqs.md).
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev              # vite dev server (default :5173)
+npm run test             # vitest
+npm run build            # production bundle in frontend/dist/
+```
+
+Vedi [`frontend/README.md`](frontend/README.md) per dettagli.
+
+---
+
+## Test policy locale
+
+**Niente full suite locale per default.** GitHub CI fa la full
+regression. Budget locale target 2-5 min, max 10 min.
+
+| Tipo PR | Test locale richiesto |
+|---|---|
+| docs / compat / test-only | mirati sui file modificati |
+| prod runtime / security core | mirati + max 1 wider di dominio |
+| auth / scheduler / conftest globale | estendere con giudizio |
+
+Vedi [CONTRIBUTING.md](CONTRIBUTING.md) per dettagli + commit format +
+PR template.
+
+---
+
+## Documentazione
+
+### Docs cross-stack
+
+- [docs/ONBOARDING.md](docs/ONBOARDING.md) — setup nuovo dev (BE + FE + DB + Redis).
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — core platform, boundaries BE/FE, execution flow, persistence layer, auth model.
+- [docs/ROADMAP.md](docs/ROADMAP.md) — residui audit aperti, Phase 2/3/4+, productization gaps.
+
+### Backend specifici
+
+- [backend/README.md](backend/README.md) — setup dev BE + test policy + compatibility table + ADR/runbook refs.
+- [backend/docs/architecture/decisions/](backend/docs/architecture/decisions/) — ADR registry (formato Nygard, append-only).
+- [backend/docs/ops/](backend/docs/ops/) — runbook recovery + incident response + deploy checklist + DR drill + JWT incident playbook.
+- [backend/docs/compliance/](backend/docs/compliance/) — SBOM + GDPR registro + ISO 27001 SoA + secrets management.
+
+### Frontend specifici
+
+- [frontend/README.md](frontend/README.md) — setup FE + folder structure + API client conventions + test patterns.
+
+### Storia decisionale
+
+- [CHANGELOG.md](CHANGELOG.md) — PR raggruppate per tema (Phase 1 hardening, R-25 intermediate persistence, R-04 test reliability, ecc.).
+- [CODE_MAP.md](CODE_MAP.md) — mappa puntuale moduli (~71KB, riferimento high-density per chi naviga il codice).
+
+---
+
+## License & contatti
+
+Proprietary — Plenora Holding. Repo privato (non distribuito).
+
+Operations contact: vedi [`backend/docs/ops/handoff.md`](backend/docs/ops/handoff.md).
+Incident response: vedi [`backend/docs/ops/incident_response.md`](backend/docs/ops/incident_response.md).
