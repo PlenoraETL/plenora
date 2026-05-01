@@ -34,6 +34,7 @@ const {
   deleteConnectionMock,
   testConnectionMock,
   listFeatureConnectionsMock,
+  createFeatureConnectionMock,
   authState,
 } = vi.hoisted(() => ({
   navigateMock: vi.fn(),
@@ -49,6 +50,7 @@ const {
   deleteConnectionMock: vi.fn(),
   testConnectionMock: vi.fn(),
   listFeatureConnectionsMock: vi.fn(),
+  createFeatureConnectionMock: vi.fn(),
   authState: {
     user: { role: 'superadmin', username: 'sa' },
   },
@@ -73,7 +75,7 @@ vi.mock('../../src/api', () => ({
 
 vi.mock('../../src/api/features', () => ({
   listFeatureConnections: listFeatureConnectionsMock,
-  createFeatureConnection: vi.fn(),
+  createFeatureConnection: createFeatureConnectionMock,
   updateFeatureConnection: vi.fn(),
   deleteFeatureConnection: vi.fn(),
   testFeatureConnection: vi.fn(),
@@ -266,6 +268,106 @@ describe('ConnectionManager — batch 6', () => {
       db_schema: 'public',
     });
     // createConnection NON deve essere chiamata sul branch edit.
+    expect(createConnectionMock).not.toHaveBeenCalled();
+  });
+
+  // ── 7. Validation: DB richiede host + database ──────────────────────
+
+  it('warns when DB connection submit lacks host or database', async () => {
+    render(<ConnectionManager />);
+    await screen.findByText('Warehouse DB');
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /Nuova Connessione/i }),
+    );
+    // Compila SOLO il nome — host + database restano vuoti (default DB
+    // postgres). Tipo postgres rimane attivo: branch !isArcgis.
+    await userEvent.type(
+      await screen.findByPlaceholderText(/Archibus ICSC/i),
+      'Halfway DB',
+    );
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /Crea Connessione/i }),
+    );
+
+    expect(toastMock.warning).toHaveBeenCalledWith(
+      'Host e database obbligatori',
+    );
+    expect(createConnectionMock).not.toHaveBeenCalled();
+    expect(createFeatureConnectionMock).not.toHaveBeenCalled();
+  });
+
+  // ── 8. Validation: ArcGIS richiede server_url ───────────────────────
+
+  it('warns when ArcGIS connection submit lacks server_url', async () => {
+    render(<ConnectionManager />);
+    await screen.findByText('Warehouse DB');
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /Nuova Connessione/i }),
+    );
+
+    // Switch type a ArcGIS Server cliccando il bottone tipo.
+    await userEvent.click(
+      await screen.findByRole('button', { name: /ArcGIS Server/i }),
+    );
+    await userEvent.type(
+      screen.getByPlaceholderText(/Archibus ICSC/i),
+      'ArcGIS Test',
+    );
+    // server_url volutamente NON compilato.
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /Crea Connessione/i }),
+    );
+
+    expect(toastMock.warning).toHaveBeenCalledWith(
+      'URL server obbligatorio',
+    );
+    expect(createFeatureConnectionMock).not.toHaveBeenCalled();
+    expect(createConnectionMock).not.toHaveBeenCalled();
+  });
+
+  // ── 9. ArcGIS branch: createFeatureConnection invece di createConnection ─
+
+  it('routes ArcGIS submit to createFeatureConnection (not createConnection)', async () => {
+    createFeatureConnectionMock.mockResolvedValueOnce({ id: 'arc-1' });
+
+    render(<ConnectionManager />);
+    await screen.findByText('Warehouse DB');
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /Nuova Connessione/i }),
+    );
+    await userEvent.click(
+      await screen.findByRole('button', { name: /ArcGIS Server/i }),
+    );
+    await userEvent.type(
+      screen.getByPlaceholderText(/Archibus ICSC/i),
+      'ArcGIS Prod',
+    );
+    await userEvent.type(
+      screen.getByPlaceholderText(
+        /https:\/\/server\/arcgis\/rest\/services/i,
+      ),
+      'https://arcgis.example.test/rest/services',
+    );
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /Crea Connessione/i }),
+    );
+
+    await waitFor(() => {
+      expect(createFeatureConnectionMock).toHaveBeenCalledTimes(1);
+    });
+    const payload = createFeatureConnectionMock.mock.calls[0][0];
+    expect(payload).toMatchObject({
+      name: 'ArcGIS Prod',
+      server_url: 'https://arcgis.example.test/rest/services',
+      auth_type: 'public',
+    });
+    // Nessuna chiamata al branch DB.
     expect(createConnectionMock).not.toHaveBeenCalled();
   });
 });

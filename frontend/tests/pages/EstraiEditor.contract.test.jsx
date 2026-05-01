@@ -16,6 +16,7 @@ const {
   deleteNodeMock,
   toastMock,
   reactFlowStateRef,
+  validationStateRef,
 } = vi.hoisted(() => ({
   navigateMock: vi.fn(),
   handleSaveQuietMock: vi.fn().mockResolvedValue(undefined),
@@ -27,6 +28,16 @@ const {
   deleteNodeMock: vi.fn(),
   toastMock: globalThis.__frontendTestHelpers.createToastMock(vi),
   reactFlowStateRef: { current: { nodes: [], edges: [] } },
+  // Mutable ref usato solo da useCanvasValidation per permettere
+  // override per-test (validation-failure path).
+  validationStateRef: {
+    current: {
+      isValid: true,
+      errors: [],
+      disconnectedNodeIds: [],
+      getNodeStyle: () => ({}),
+    },
+  },
 }));
 
 let currentProjectId = 'proj-1';
@@ -97,12 +108,7 @@ vi.mock('../../src/hooks', () => ({
     handleExecute: vi.fn(),
     downloadTaskResult: vi.fn(),
   }),
-  useCanvasValidation: () => ({
-    isValid: true,
-    errors: [],
-    disconnectedNodeIds: [],
-    getNodeStyle: vi.fn(() => ({})),
-  }),
+  useCanvasValidation: () => validationStateRef.current,
   useEdgeHandlers: () => ({
     onConnect: vi.fn(),
     onEdgeClick: vi.fn(),
@@ -212,6 +218,13 @@ describe('EstraiEditor', () => {
       sourceType: 'database',
       reload: vi.fn(),
     };
+    // Reset default safe per validation (override per-test).
+    validationStateRef.current = {
+      isValid: true,
+      errors: [],
+      disconnectedNodeIds: [],
+      getNodeStyle: () => ({}),
+    };
   });
 
   it('redirects to home when the route projectId is invalid', async () => {
@@ -316,6 +329,25 @@ describe('EstraiEditor', () => {
       expect(handleSaveQuietMock).toHaveBeenCalledTimes(1);
       expect(toastMock.error).toHaveBeenCalledWith('Errore salvataggio progetto');
     });
+    expect(toastMock.success).not.toHaveBeenCalled();
+  });
+
+  it('blocks Save and toasts joined validation errors when canvas is invalid', async () => {
+    validationStateRef.current = {
+      isValid: false,
+      errors: ['Nodo orphan', 'Mapping mancante'],
+      disconnectedNodeIds: [],
+      getNodeStyle: () => ({}),
+    };
+
+    render(<EstraiEditor />);
+    await screen.findByText('Estrai Orders');
+    await userEvent.click(screen.getByRole('button', { name: /salva/i }));
+
+    expect(toastMock.error).toHaveBeenCalledWith(
+      'Impossibile salvare: Nodo orphan · Mapping mancante',
+    );
+    expect(handleSaveQuietMock).not.toHaveBeenCalled();
     expect(toastMock.success).not.toHaveBeenCalled();
   });
 });

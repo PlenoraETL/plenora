@@ -155,6 +155,20 @@ describe('RunsTab', () => {
 
   // ── 5. Load error: toast + empty table ──────────────────────────────
 
+  it('expands a failure row on click showing the error_message banner', async () => {
+    render(<RunsTab refreshTick={0} />);
+    await screen.findByText('cron');
+
+    // Riga "cron" e' run-2 (status='failure', error_message='API quota exceeded').
+    const row = screen.getByText('cron').closest('tr');
+    await userEvent.click(row);
+
+    // Banner inline visibile con il messaggio dell'errore.
+    expect(
+      await screen.findByText('API quota exceeded'),
+    ).toBeInTheDocument();
+  });
+
   it('toasts and shows the empty table state when getLogRuns rejects', async () => {
     getLogRunsMock.mockReset();
     getLogRunsMock.mockRejectedValueOnce(new Error('redis offline'));

@@ -226,4 +226,23 @@ describe('LogViewer — batch 4', () => {
       screen.queryByRole('button', { name: /Export CSV/i }),
     ).not.toBeInTheDocument();
   });
+
+  it('expands a log row with details and shows the inline error trace on click', async () => {
+    render(<LogViewer />);
+
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Log Tecnici/i }),
+    );
+    await screen.findByText('Connection refused');
+
+    // Riga 2 (ENTRIES_2[1]) ha entry.error -> hasDetails=true.
+    // Click sulla cella messaggio fa toggle dell'expandedRow.
+    const row = screen.getByText('Connection refused').closest('tr');
+    await userEvent.click(row);
+
+    // Detail row mostra l'error trace dal field `entry.error`.
+    expect(
+      await screen.findByText(/ConnectionError: refused/),
+    ).toBeInTheDocument();
+  });
 });

@@ -359,4 +359,50 @@ describe('ApiConnectionManager', () => {
     expect(toastMock.success).toHaveBeenCalledWith('✅ 2 endpoint importati');
   });
 
+  it('warns with the partial counter when one of the imports fails', async () => {
+    httpMock.get
+      .mockResolvedValueOnce({
+        data: {
+          api_connections: [
+            {
+              id: 'api-existing',
+              name: 'Existing API',
+              description: 'keeps add-card visible',
+              api_type: 'enricher',
+              category: 'custom',
+              endpoint: { url: 'https://example.test/existing', method: 'GET' },
+              usage: { calls_total: 0, calls_error: 0 },
+              can_edit: true,
+            },
+          ],
+        },
+      })
+      .mockResolvedValueOnce({ data: { api_connections: [] } });
+    // Primo import OK, secondo fail (BE rifiuta la connection): il loop
+    // di applyOpenAPIImport continua e finalizza con toast.warning.
+    httpMock.post
+      .mockResolvedValueOnce({ data: { id: 'api-import-1' } })
+      .mockRejectedValueOnce(new Error('schema mismatch'));
+
+    render(<ApiConnectionManager />);
+
+    await screen.findByText('Aggiungi Connettore');
+    await userEvent.click(screen.getByRole('button', { name: /openapi/i }));
+    await userEvent.click(
+      screen.getByRole('button', { name: /importa openapi test/i }),
+    );
+
+    await waitFor(() => {
+      expect(httpMock.post).toHaveBeenCalledTimes(2);
+    });
+
+    // 1 ok, 1 fail → toast.warning con conteggio.
+    expect(toastMock.warning).toHaveBeenCalledWith(
+      '⚠ 1 importati, 1 falliti',
+    );
+    expect(toastMock.success).not.toHaveBeenCalled();
+    // Reload comunque triggered.
+    expect(httpMock.get).toHaveBeenCalledTimes(2);
+  });
+
 });
