@@ -27,25 +27,21 @@ pytestmark = [pytest.mark.unit, pytest.mark.carica, pytest.mark.contract]
 def test_carica_task_is_configured_with_max_retries_zero():
     """carica_task decorator deve dichiarare max_retries=0 per evitare
     retry automatici che duplicherebbero write su DB cliente in
-    modalita' append + per_batch."""
-    # Il source del modulo contiene la dichiarazione del decorator.
-    # Cerchiamo il pattern "max_retries=0" nel body del file vicino
-    # alla dichiarazione del task.
-    source = inspect.getsource(carica_task)
-    lines = source.splitlines()
+    modalita' append + per_batch.
 
-    # Trova la linea con `@celery_app.task(` seguita da "carica.execute"
-    for i, line in enumerate(lines):
-        if "celery_app.task" in line:
-            # Controlla le 10 righe successive per max_retries
-            decorator_block = "\n".join(lines[i:i + 15])
-            if "carica.execute" in decorator_block:
-                assert "max_retries=0" in decorator_block, (
-                    f"carica_task ha max_retries != 0. Block trovato:\n"
-                    f"{decorator_block}"
-                )
-                return
-    pytest.fail("Non trovo il decorator di execute_carica_task")
+    Replacement R-04b di `inspect.getsource(carica_task)` + lines scan:
+    osservazione runtime dell'attributo Celery `Task.max_retries` esposto
+    dal task. Behavior-bound: cattura l'effective configuration usata
+    dal worker, non la stringa nel source.
+    """
+    task = carica_task.execute_carica_task
+    # Celery Task subclass espone max_retries come attribute di classe;
+    # se override non passato al decorator, e' l'app default (3).
+    assert task.max_retries == 0, (
+        f"execute_carica_task.max_retries={task.max_retries} (atteso 0). "
+        "Retry automatico duplicherebbe write su DB cliente in "
+        "append/per_batch mode."
+    )
 
 
 def test_carica_task_docstring_mentions_no_retry_rationale():

@@ -167,32 +167,56 @@ def test_update_columns_metadata_preserves_other_canvas_fields(monkeypatch):
 # assicura che i pattern noti continuino a esistere nel codebase.
 
 
+def _module_references_any(module, names):
+    """R-04b helper: True se almeno un callable top-level del modulo
+    referenzia uno dei `names` (nei co_names del bytecode, anche
+    ricorsivamente nei nested code objects). Refactor-resilient
+    sentinel per "il modulo usa il helper X o Y"."""
+    target_set = set(names)
+
+    def _walk(co):
+        if target_set & set(co.co_names):
+            return True
+        for const in co.co_consts:
+            if hasattr(const, "co_names") and _walk(const):
+                return True
+        return False
+
+    for attr_name in dir(module):
+        attr = getattr(module, attr_name, None)
+        if hasattr(attr, "__code__") and _walk(attr.__code__):
+            return True
+        if inspect.isclass(attr):
+            for m_name in dir(attr):
+                m = getattr(attr, m_name, None)
+                if hasattr(m, "__code__") and _walk(m.__code__):
+                    return True
+    return False
+
+
 def test_estrai_still_updates_columns_metadata_post_run():
-    """ESTRAI deve aggiornare columns_metadata dopo run. Post-refactor
-    la chiamata e' via `save_columns_metadata_with_retry` (helper
-    condiviso in `app.shared.columns_metadata`) che internamente chiama
-    `update_project_columns_metadata`. Sentinel: o si vede il nome del
-    helper, o si vede la chiamata diretta — entrambe valide."""
+    """ESTRAI deve aggiornare columns_metadata dopo run.
+
+    Replacement R-04b di `inspect.getsource(estrai_mod) + helper in src`:
+    bytecode probe sui callee identifier (refactor-resilient).
+    """
     from app.core.estrai import executor as estrai_mod
-    src = inspect.getsource(estrai_mod)
-    assert (
-        "save_columns_metadata_with_retry" in src
-        or "update_project_columns_metadata" in src
-    ), (
+    assert _module_references_any(estrai_mod, [
+        "save_columns_metadata_with_retry",
+        "update_project_columns_metadata",
+    ]), (
         "ESTRAI executor non aggiorna columns_metadata post-run. "
         "Senza, columns_metadata resta vuoto -> bridge N11 no-op."
     )
 
 
 def test_arricchisci_still_updates_columns_metadata_post_run():
-    """Analogo: ARRICCHISCI scrive columns_metadata post-run (via helper
-    o chiamata diretta — entrambi i pattern accettati)."""
+    """Analogo per ARRICCHISCI (refactor-resilient)."""
     from app.core.arricchisci import executor as enrich_mod
-    src = inspect.getsource(enrich_mod)
-    assert (
-        "save_columns_metadata_with_retry" in src
-        or "update_project_columns_metadata" in src
-    )
+    assert _module_references_any(enrich_mod, [
+        "save_columns_metadata_with_retry",
+        "update_project_columns_metadata",
+    ])
 
 
 def test_column_mapper_reads_canvas_types_from_node_data():
@@ -208,12 +232,17 @@ def test_column_mapper_reads_canvas_types_from_node_data():
 
 
 def test_enricher_bridge_reads_from_columns_metadata():
-    """N11 enricher legge columns_metadata come sorgente di verita' semantica."""
+    """N11 enricher legge columns_metadata come sorgente di verita' semantica.
+
+    Replacement R-04b di `inspect.getsource(enricher_mod) + str in src`:
+    bytecode probe sui callee identifier.
+    """
     from app.shared import canvas_types_enricher as enricher_mod
-    src = inspect.getsource(enricher_mod)
-    assert "get_project_columns_metadata" in src
-    # Verifica anche che il merge rispetti priority node_data > project
-    assert "project_canvas_types" in src or "project" in src.lower()
+    assert _module_references_any(enricher_mod, [
+        "get_project_columns_metadata",
+    ]), (
+        "Enricher bridge non legge columns_metadata - N11 contract rotto."
+    )
 
 
 # =============================================================================

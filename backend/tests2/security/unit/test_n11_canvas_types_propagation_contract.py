@@ -162,13 +162,40 @@ def test_enricher_handles_empty_metadata(monkeypatch):
 # =============================================================================
 
 
+def _module_references_name(module, name: str) -> bool:
+    """R-04b helper: True se almeno un callable top-level del modulo
+    referenzia `name` come callee/attr (anche in nested code objects)."""
+    def _walk(co):
+        if name in co.co_names:
+            return True
+        for const in co.co_consts:
+            if hasattr(const, "co_names") and _walk(const):
+                return True
+        return False
+
+    for attr_name in dir(module):
+        attr = getattr(module, attr_name, None)
+        if hasattr(attr, "__code__") and _walk(attr.__code__):
+            return True
+        if inspect.isclass(attr):
+            for m_name in dir(attr):
+                m = getattr(attr, m_name, None)
+                if hasattr(m, "__code__") and _walk(m.__code__):
+                    return True
+    return False
+
+
 def test_orchestrator_service_uses_enricher_before_create_carica_task():
-    """Il loop carica in orchestrator/service.py deve chiamare
-    enrich_canvas_types_from_metadata prima di task_service.create_carica_task."""
+    """Il loop carica in orchestrator/service.py deve referenziare
+    `enrich_canvas_types_from_metadata` prima di
+    `task_service.create_carica_task`.
+
+    Replacement R-04b di `inspect.getsource(orch_service) + str in src`:
+    bytecode probe sul callee identifier (refactor-resilient).
+    """
     from app.core.orchestrator import service as orch_service
 
-    src = inspect.getsource(orch_service)
-    assert "enrich_canvas_types_from_metadata" in src, (
+    assert _module_references_name(orch_service, "enrich_canvas_types_from_metadata"), (
         "orchestrator/service.py non chiama l'enricher -> pipeline CARICA "
         "riceve canvas_types vuoto, type inference loss aperto."
     )
@@ -178,8 +205,7 @@ def test_orchestrator_router_uses_enricher_in_direct_carica_endpoint():
     """Il router /create-task quando task_type=CARICA deve arricchire."""
     from app.core.orchestrator import router as orch_router
 
-    src = inspect.getsource(orch_router)
-    assert "enrich_canvas_types_from_metadata" in src, (
+    assert _module_references_name(orch_router, "enrich_canvas_types_from_metadata"), (
         "orchestrator/router.py non chiama l'enricher nel path CARICA "
         "diretto -> stesso gap della chain pipeline."
     )
