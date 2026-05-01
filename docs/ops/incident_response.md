@@ -263,8 +263,8 @@ tracking nel TRIAGE Phase 3+.>
 - [`docs/ops/jwt-incident-response.md`](jwt-incident-response.md) — JWT specifico
 - [`docs/ops/runtime-prereqs.md`](runtime-prereqs.md) — prerequisiti runtime
 - [`docs/ops/trusted-proxies.md`](trusted-proxies.md) — rate limit / X-Forwarded-For
-- [`backend/deploy/backup-runbook.md`](../../deploy/backup-runbook.md) — backup operativo routine
-- [`backend/scripts/test_restore.py`](../../scripts/test_restore.py) — verifica restore weekly
+- [`backend/deploy/backup-runbook.md`](../../backend/deploy/backup-runbook.md) — backup operativo routine
+- [`backend/scripts/test_restore.py`](../../backend/scripts/test_restore.py) — verifica restore weekly
 
 ## §7 Checklist post-incidente
 
