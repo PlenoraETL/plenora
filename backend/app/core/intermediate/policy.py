@@ -353,6 +353,71 @@ def reset_validation_cache() -> None:
 
 
 # ============================================================
+# Per-call mode override (R-25 PR-B1)
+# ============================================================
+
+def resolve_intermediate_mode(
+    default_mode: str,
+    override_mode: Optional[str] = None,
+) -> str:
+    """Risolve la mode di persistenza effettiva per un singolo snapshot.
+
+    Pure function: zero I/O, zero settings read, zero side-effect. Pensata
+    per essere chiamata DENTRO `resolve_intermediate_policy` quando arriva
+    un `mode_override` lungo la call-chain (introdotto in PR-B2 sul path
+    estrai-final). Caller passa `default_mode=cfg["mode"]`, eventuale
+    `override_mode` viene da kwarg propagato dall'alto.
+
+    Args:
+        default_mode: mode globale corrente (gia' validato a startup da
+            `validate_intermediate_settings`). Caller responsability.
+        override_mode: override per-call. None -> nessun override
+            (ritorno bit-compatible con il default-path pre-PR-B1).
+
+    Returns:
+        Mode effettiva da applicare allo snapshot.
+
+    Raises:
+        IntermediateSettingsError: override_mode non None e non valido.
+            Casi: tipo non-str, stringa vuota, valore non in
+            `SUPPORTED_PERSISTENCE_MODES`, valore in
+            `PLANNED_PERSISTENCE_MODES`. Fail-loud, mai fallback al
+            default: un override sbagliato deve essere visibile al chiamante.
+
+    Note:
+        Capability runtime (es. `full_artifact` richiede object storage)
+        NON e' verificata qui. Resta responsabilita' di
+        `validate_intermediate_settings` a startup oppure del consumer
+        (snapshot writer) che fail-closed se la capability manca al
+        momento della scrittura. Questa funzione valida solo l'ENUM.
+    """
+    if override_mode is None:
+        return default_mode
+
+    # Type check esplicito: bool e' sottoclasse di int in Python ma
+    # non vogliamo `True/False` accettati come override silenziosi.
+    if not isinstance(override_mode, str) or isinstance(override_mode, bool):
+        raise IntermediateSettingsError(
+            f"intermediate_mode_override deve essere str o None, "
+            f"ricevuto type={type(override_mode).__name__} value={override_mode!r}."
+        )
+
+    if override_mode in PLANNED_PERSISTENCE_MODES:
+        raise IntermediateSettingsError(
+            f"intermediate_mode_override={override_mode!r} non e' ancora "
+            f"implementato. Mode supportati: {sorted(SUPPORTED_PERSISTENCE_MODES)}."
+        )
+
+    if override_mode not in SUPPORTED_PERSISTENCE_MODES:
+        raise IntermediateSettingsError(
+            f"intermediate_mode_override={override_mode!r} non riconosciuto. "
+            f"Valori ammessi: {sorted(SUPPORTED_PERSISTENCE_MODES)}."
+        )
+
+    return override_mode
+
+
+# ============================================================
 # Resolver policy
 # ============================================================
 
