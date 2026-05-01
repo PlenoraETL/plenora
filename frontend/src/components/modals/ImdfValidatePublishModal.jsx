@@ -128,7 +128,6 @@ export default function ImdfValidatePublishModal({
                 animation: 'spin 0.8s linear infinite',
               }} />
               <div>Analisi in corso...</div>
-              <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
             </div>
           )}
 
