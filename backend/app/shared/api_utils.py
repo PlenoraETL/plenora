@@ -76,12 +76,24 @@ def _warn_urby_loopback_alias_once() -> None:
     sono cache hit silenti. Per i test, ``_warn_urby_loopback_alias_once.
     cache_clear()`` permette di re-osservare l'emit (vedi fixture in
     ``tests2/security/unit/test_validate_external_url_contract.py``).
+
+    R-21 (2026-05-01): emette anche un Python ``DeprecationWarning``
+    standard, oltre al ``logger.warning``. Il warning Python e'
+    intercettabile da ``pytest.deprecated_call`` (test contract) e dai
+    filterwarnings, mentre il logger e' per l'osservabilita' ops.
+
+    Removal target: 2026-Q4 (release post-stabilization). Removal block:
+    nessun riferimento a ``URBY_ALLOW_LOOPBACK_OUTBOUND`` nei deploy
+    profile / runbook / docs operative attivi.
     """
-    logger.warning(
+    import warnings as _warnings
+    msg = (
         "[DEPRECATED] URBY_ALLOW_LOOPBACK_OUTBOUND e' un alias retro-compat. "
         "Migrare a PLENORA_ALLOW_LOOPBACK_OUTBOUND. "
-        "L'alias verra' rimosso in una release futura."
+        "L'alias verra' rimosso entro 2026-Q4."
     )
+    logger.warning(msg)
+    _warnings.warn(msg, DeprecationWarning, stacklevel=2)
 
 
 def _check_outbound_address(
@@ -643,6 +655,25 @@ def _fetch_oauth2_client_credentials_token(auth: Dict) -> Optional[Dict]:
 # lifecycle tracking e del refresh on-demand. Backward compatible.
 # ──────────────────────────────────────────────────────────────────────
 
+@functools.lru_cache(maxsize=1)
+def _warn_get_oauth2_token_deprecated_once() -> None:
+    """Emit-once warning per ``get_oauth2_token`` (R-23, 2026-05-01).
+
+    Cache LRU per non spammare il logger ops in caller hot-path
+    (enrichment service usa il wrapper via alias). Per i test:
+    ``_warn_get_oauth2_token_deprecated_once.cache_clear()``.
+    """
+    import warnings as _warnings
+    msg = (
+        "[DEPRECATED] api_utils.get_oauth2_token e' un wrapper legacy. "
+        "Migrare a api_utils.get_cached_oauth2_token con "
+        "auth['type']='oauth2_password'. "
+        "Removal target: 2026-Q4 (post-migrazione caller interni)."
+    )
+    logger.warning(msg)
+    _warnings.warn(msg, DeprecationWarning, stacklevel=3)
+
+
 def get_oauth2_token(auth: Dict) -> Optional[str]:
     """Ottiene token OAuth2 password grant (via cache con expires_at).
 
@@ -654,12 +685,33 @@ def get_oauth2_token(auth: Dict) -> Optional[str]:
         passando ``auth["type"] = "oauth2_password"``. Mantenuto per
         backward-compat con caller interni (``api_utils.py`` stesso e
         ``arricchisci.enrichment_service`` via alias ``_shared_get_oauth2_token``).
-        Nessuna data di rimozione fissata: rimovibile quando i caller interni
-        saranno migrati a ``get_cached_oauth2_token`` (audit Phase 1+).
+
+        R-23 (2026-05-01): emette ``DeprecationWarning`` Python standard +
+        logger.warning una sola volta per processo. Removal target:
+        2026-Q4 (post-migrazione caller interni a
+        ``get_cached_oauth2_token``).
     """
+    _warn_get_oauth2_token_deprecated_once()
     auth_with_type = dict(auth)
     auth_with_type.setdefault("type", "oauth2_password")
     return get_cached_oauth2_token(auth_with_type)
+
+
+@functools.lru_cache(maxsize=1)
+def _warn_get_oauth2_cc_token_deprecated_once() -> None:
+    """Emit-once warning per ``get_oauth2_client_credentials_token``
+    (R-23, 2026-05-01). Cache LRU come simmetria di
+    ``_warn_get_oauth2_token_deprecated_once``.
+    """
+    import warnings as _warnings
+    msg = (
+        "[DEPRECATED] api_utils.get_oauth2_client_credentials_token e' un "
+        "wrapper legacy. Migrare a api_utils.get_cached_oauth2_token con "
+        "auth['type']='oauth2_client_credentials'. "
+        "Removal target: 2026-Q4 (post-migrazione caller interni)."
+    )
+    logger.warning(msg)
+    _warnings.warn(msg, DeprecationWarning, stacklevel=3)
 
 
 def get_oauth2_client_credentials_token(auth: Dict) -> Optional[str]:
@@ -674,7 +726,11 @@ def get_oauth2_client_credentials_token(auth: Dict) -> Optional[str]:
         ``arricchisci.enrichment_service`` via alias
         ``_shared_get_oauth2_cc_token``). Vedi ``get_oauth2_token`` per la
         nota generale sulla migrazione.
+
+        R-23 (2026-05-01): emette ``DeprecationWarning`` + logger.warning
+        emit-once. Removal target: 2026-Q4.
     """
+    _warn_get_oauth2_cc_token_deprecated_once()
     auth_with_type = dict(auth)
     auth_with_type.setdefault("type", "oauth2_client_credentials")
     return get_cached_oauth2_token(auth_with_type)

@@ -22,6 +22,7 @@ trascurabile (client AWS SDK ha la sua pool), semplicita' > micro-ott.
 
 from __future__ import annotations
 
+import functools
 import logging
 import os
 from datetime import datetime
@@ -624,6 +625,23 @@ def get_backup_object_storage() -> ObjectStorage:
     return _build_object_storage(bucket, region_default="eu-south-1")
 
 
+@functools.lru_cache(maxsize=1)
+def _warn_get_object_storage_deprecated_once() -> None:
+    """Emit-once warning per ``get_object_storage`` (R-22, 2026-05-01).
+
+    Cache LRU per non spammare il logger ops in caller hot-path. Per i
+    test: ``_warn_get_object_storage_deprecated_once.cache_clear()``.
+    """
+    import warnings as _warnings
+    msg = (
+        "[DEPRECATED] cloud_backends.get_object_storage e' un alias legacy. "
+        "Migrare a get_runtime_object_storage() o get_backup_object_storage() "
+        "esplicitamente. Removal target: 2026-Q4."
+    )
+    logger.warning(msg)
+    _warnings.warn(msg, DeprecationWarning, stacklevel=3)
+
+
 def get_object_storage() -> ObjectStorage:
     """[DEPRECATED] Alias di `get_runtime_object_storage`.
 
@@ -633,6 +651,9 @@ def get_object_storage() -> ObjectStorage:
     o `get_backup_object_storage()` esplicitamente. Behavior identico
     a `get_runtime_object_storage` (capability check + runtime bucket
     resolution con fallback BACKUP_BUCKET legacy).
+
+    R-22 (2026-05-01): emette ``DeprecationWarning`` + logger.warning
+    emit-once. Removal target: 2026-Q4 (post-migrazione caller interni).
 
     Config via env:
       CLOUD_PROVIDER=aws (default)
@@ -646,6 +667,7 @@ def get_object_storage() -> ObjectStorage:
         MINIO_SECRET_KEY       — required
         AWS_REGION             — default us-east-1 (MinIO ignora region)
     """
+    _warn_get_object_storage_deprecated_once()
     return get_runtime_object_storage()
 
 
