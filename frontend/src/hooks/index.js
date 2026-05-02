@@ -24,13 +24,10 @@ export { useExecution }                             from './useExecution';
 export { useCaricarica }                            from './useCaricarica';
 export { useCanvasCore }                            from './useCanvasCore';
 export { useCanvasValidation }                      from './useCanvasValidation';
-export {
-  useCanvasKeyboard,
-  useCanvasSaveShortcut,
-}                                                   from './useCanvasKeyboard';
+export { useCanvasKeyboard }                        from './useCanvasKeyboard';
 export { useEdgeHandlers }                          from './useEdgeHandlers';
 export { default as useColumnPropagation }          from './useColumnPropagation';
-export { useSchemaInference, useInputColumns }      from './useSchemaInference';
+export { useSchemaInference }                       from './useSchemaInference';
 export { useEnrichmentValidation }                  from './useEnrichmentValidation';
 export { useMultiModal }                            from './useMultiModal';
 export { useConfirmModal }                          from './useConfirmModal';

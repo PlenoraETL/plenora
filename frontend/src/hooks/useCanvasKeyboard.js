@@ -1,10 +1,9 @@
 /**
  * useCanvasKeyboard.js — Shortcuts tastiera per il canvas
  *
- * useCanvasKeyboard:    Delete/Backspace per eliminare nodi/edges selezionati
- * useCanvasSaveShortcut: Ctrl+S / Cmd+S per salvataggio canvas
+ * useCanvasKeyboard: Delete/Backspace per eliminare nodi/edges selezionati
  *
- * Tutti gli hook accettano { enabled, onDelete, onSave }.
+ * L'hook accetta { enabled, onDeleteNode, setEdges, nodes, edges }.
  */
 import { useEffect, useCallback } from 'react';
 
@@ -68,41 +67,6 @@ export function useCanvasKeyboard(options) {
       }
     }
   }, [nodes, edges, onDeleteNode, setEdges]);
-
-  useEffect(() => {
-    if (!enabled) return;
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [handleKeyDown, enabled]);
-}
-
-/**
- * Hook per gestire Ctrl+S per salvare il canvas
- * 
- * @param {Object} options - Opzioni di configurazione
- * @param {Function} options.onSave - Callback per salvare
- * @param {boolean} options.enabled - Se false, disabilita l'handler (default: true)
- * 
- * Uso:
- * ```jsx
- * useCanvasSaveShortcut({
- *   onSave: handleSaveCanvas
- * });
- * ```
- */
-export function useCanvasSaveShortcut(options) {
-  const { onSave, enabled = true } = options;
-
-  const handleKeyDown = useCallback((event) => {
-    // Ctrl+S o Cmd+S
-    if ((event.ctrlKey || event.metaKey) && event.key === 's') {
-      event.preventDefault();
-      if (onSave) {
-        onSave();
-      }
-    }
-  }, [onSave]);
 
   useEffect(() => {
     if (!enabled) return;

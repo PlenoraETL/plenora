@@ -4,8 +4,6 @@
  * Interroga il backend per ottenere lo schema (colonne + tipi) di ogni
  * nodo sorgente nel canvas. Usato per popolare i select di colonne
  * nelle configurazioni delle trasformazioni.
- *
- * useInputColumns(nodeId, edges, schemas): filtra lo schema per un nodo specifico.
  */
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { getProjectSchemas, getNodeSchema, validateProjectConnection, validateAllProjectSources } from '../api';
@@ -140,42 +138,6 @@ export function useSchemaInference(projectId) {
     validateConnection,
     validateAllConnections
   };
-}
-
-/**
- * Hook per ottenere le colonne di input di un nodo transform.
- * Combina gli schemi di tutti i nodi collegati in ingresso.
- */
-export function useInputColumns(nodeId, edges, schemas) {
-  return useCallback(() => {
-    if (!nodeId || !edges || !schemas) return [];
-    
-    // Trova tutti gli edge che entrano in questo nodo
-    const incomingEdges = edges.filter(e => e.target === nodeId);
-    
-    // Raccogli colonne da tutti i nodi sorgente
-    const allColumns = [];
-    const seenNames = new Set();
-    
-    incomingEdges.forEach((edge, edgeIndex) => {
-      const sourceSchema = schemas[edge.source] || [];
-      
-      sourceSchema.forEach(col => {
-        // Evita duplicati (per nome)
-        const uniqueKey = `${edge.source}_${col.name}`;
-        if (!seenNames.has(uniqueKey)) {
-          seenNames.add(uniqueKey);
-          allColumns.push({
-            ...col,
-            _sourceEdge: edge.id,
-            _sourceIndex: edgeIndex
-          });
-        }
-      });
-    });
-    
-    return allColumns;
-  }, [nodeId, edges, schemas])();
 }
 
 export default useSchemaInference;
