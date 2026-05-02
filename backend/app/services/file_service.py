@@ -413,61 +413,25 @@ class FileSourceService:
     # permettendo mock completi nei test unitari.
     
     # ==================== DB STORAGE HELPERS ====================
+    #
+    # STRUCT-001 Seam C: la logica policy-aware (db/object_storage/hybrid +
+    # threshold) vive in `app.services.file_storage_dispatch.dispatch_blob_storage`.
+    # Qui resta un thin wrapper che inietta `self._logger`. I 3 call site
+    # interni (`self._dispatch_blob_storage(...)` in upload methods) restano
+    # invariati. Behavior byte-per-byte preservato.
 
     def _dispatch_blob_storage(
         self, file_id: str, raw_data: bytes, filename: str,
     ) -> Dict[str, Any]:
-        """Dispatch policy-aware del blob (A1).
+        """Wrapper compat: delega a `file_storage_dispatch.dispatch_blob_storage`.
 
-        Legge `STORAGE_POLICY` e ramifica:
-          - `db`             -> sempre DB BYTEA (niente object storage)
-          - `object_storage` -> sempre object storage (niente BYTEA)
-          - `hybrid`         -> threshold-based su
-                                `FILE_SOURCE_S3_THRESHOLD_BYTES`
-                                (default 50 MB, comportamento attuale)
-
-        Ritorna kwargs per `db.save_file_source`: `data`, `storage_key`,
-        `size_bytes`. Se upload object storage fallisce, rilancia —
-        caller deve gestire (orphan guard: no row DB se upload fallisce).
+        Vedi `app.services.file_storage_dispatch.dispatch_blob_storage`
+        per la documentazione completa del policy dispatch.
         """
-        from app.config import settings
-
-        size = len(raw_data)
-        policy = (settings.get("STORAGE_POLICY", "hybrid") or "hybrid").strip().lower()
-
-        if policy == "db":
-            use_object_storage = False
-        elif policy == "object_storage":
-            use_object_storage = True
-        else:
-            # hybrid: soglia per-dominio file_source (separata da result)
-            threshold_default = 50 * 1024 * 1024
-            threshold = int(
-                os.getenv("FILE_SOURCE_S3_THRESHOLD_BYTES", threshold_default)
-            )
-            use_object_storage = size >= threshold
-
-        if not use_object_storage:
-            return {"data": raw_data, "storage_key": None, "size_bytes": size}
-
-        # Object storage path: upload in `file-sources/{file_id}/{filename}` —
-        # mirror di `eseguibili-outputs/` e `imdf-bundles/` nel naming bucket.
-        storage_key = f"file-sources/{file_id}/{filename}"
-        try:
-            from app.shared.cloud_backends import get_runtime_object_storage
-            storage = get_runtime_object_storage()
-            storage.upload_bytes(raw_data, storage_key)
-        except Exception as e:
-            self._logger.error(
-                f"[FS-B1-large] Upload object storage fallito per {file_id} "
-                f"(policy={policy}, {size // (1024 * 1024)} MB): {e}"
-            )
-            raise
-        self._logger.info(
-            f"[FS-B1-large] File source {file_id} su object storage "
-            f"(policy={policy}, {size // (1024 * 1024)} MB): {storage_key}"
+        from app.services.file_storage_dispatch import dispatch_blob_storage
+        return dispatch_blob_storage(
+            file_id, raw_data, filename, logger=self._logger,
         )
-        return {"data": None, "storage_key": storage_key, "size_bytes": size}
 
     def get_blob_bytes(
         self, file_id: str, expected_group_id: str = None,
