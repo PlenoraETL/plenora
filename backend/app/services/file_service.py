@@ -419,120 +419,52 @@ class FileSourceService:
     def _get_blob_from_db(
         self, file_id: str, expected_group_id: str = None,
     ) -> Optional[bytes]:
-        """Recupera blob file dal DB (BYTEA) o da S3 se `storage_key` set.
+        """Wrapper compat: delega a `file_blob_materialization.get_blob_from_db`.
 
-        Dispatch automatico FS-B1-large: la row DB contiene o `data` (BYTEA)
-        o `storage_key` (TEXT puntato a S3). Questo helper risolve
-        trasparente al caller ritornando bytes in-memory in entrambi i casi.
-
-        N1: `expected_group_id` obbligatorio per il fail-closed check.
-        Chi chiama senza passarlo riceve PermissionError.
+        STRUCT-001 Seam D-D: la logica vive in
+        `app.services.file_blob_materialization.get_blob_from_db` con
+        collaborator espliciti. Fail-closed N1 PRESERVATO: il check
+        `_assert_visible` resta nel service e viene passato come callback.
         """
-        self._assert_visible(file_id, expected_group_id or "")
-        try:
-            import app.db.db_service as db
-            row = db.get_file_source(file_id, include_data=True)
-            if not row:
-                return None
-            if row.get("data") is not None:
-                return row["data"]
-            storage_key = row.get("storage_key")
-            if storage_key:
-                from app.shared.cloud_backends import get_runtime_object_storage
-                storage = get_runtime_object_storage()
-                # download_bytes o download-in-memory: il Protocol espone
-                # `download(key, path)`, quindi passiamo per temp file.
-                import tempfile
-                from app.config import settings
-                tmp = tempfile.NamedTemporaryFile(
-                    delete=False, dir=settings.TEMP_DIR,
-                )
-                tmp.close()
-                tmp_path = Path(tmp.name)
-                try:
-                    storage.download(storage_key, tmp_path)
-                    return tmp_path.read_bytes()
-                finally:
-                    try:
-                        tmp_path.unlink()
-                    except Exception as e:
-                        self._logger.debug(
-                            f"cleanup tmp S3 blob fallito per {tmp_path}: {e}"
-                        )
-            return None
-        except Exception as e:
-            self._logger.error(f"[GESTITO] Errore lettura blob {file_id}: {e}")
-            return None
+        from app.services.file_blob_materialization import get_blob_from_db
+        from app.config import settings
+        from app.shared.cloud_backends import get_runtime_object_storage
+        import app.db.db_service as db
+        return get_blob_from_db(
+            file_id, expected_group_id,
+            assert_visible=self._assert_visible,
+            db_get_file_source=db.get_file_source,
+            get_object_storage=get_runtime_object_storage,
+            temp_dir=settings.TEMP_DIR,
+            logger=self._logger,
+        )
 
     def _temp_file_for(
         self, file_id: str, expected_group_id: str = None,
     ) -> Optional[Path]:
+        """Wrapper compat: delega a `file_blob_materialization.temp_file_for`.
+
+        Per SHP/GDB: estrae lo ZIP in temp dir e ritorna il path del
+        .shp/.gdb. Il chiamante deve eliminare la dir parent dopo l'uso.
+
+        N1: `expected_group_id` obbligatorio (fail-closed via assert_visible).
         """
-        Estrae il blob dal DB in un file temporaneo.
-        Per SHP: estrae lo ZIP in una temp dir e ritorna il path del .shp.
-        Il chiamante deve eliminare il file (o la dir intera per SHP) dopo l'uso.
-
-        N1: `expected_group_id` obbligatorio per il fail-closed check.
-        """
-        self._assert_visible(file_id, expected_group_id or "")
-        import tempfile
-        try:
-            import app.db.db_service as db
-            row_meta = db.get_file_source(file_id, include_data=False)
-            # Nota: passiamo il bypass qui perche' _assert_visible sopra ha
-            # gia' validato il caller. Se saltassimo `expected_group_id` si
-            # riattiverebbe il fail-closed.
-            blob = self._get_blob_from_db(file_id, expected_group_id)
-        except Exception as e:
-            # Errore DB lato metadata (get_file_source) o import db_service.
-            # _get_blob_from_db gia' logga [GESTITO] internamente e non raisa,
-            # quindi qui intercettiamo solo failure reali del lookup metadata.
-            self._logger.warning(
-                f"[GESTITO] _temp_file_for {file_id}: fetch metadata/blob fallito: {e}"
-            )
-            return None
-        if not blob or not row_meta:
-            return None
-
-        fmt = row_meta.get("format", "")
-        original_filename = row_meta.get("original_filename", f"{file_id}.bin")
-
-        # Per SHP e GDB: il blob è uno ZIP — estrai tutto in temp dir.
-        # NB: chi riceve il path ritornato (load_dataframe / get_layers_info)
-        # cleanup la tmp_dir parent dopo l'uso. Qui cleanuppiamo SOLO i due
-        # path errore (estrazione fallita o nessun .shp/.gdb trovato),
-        # altrimenti la tmp_dir resta per il caller.
-        if fmt in ("shp", "gdb"):
-            import zipfile, io
-            from app.config import settings
-            from app.utils.zip_safe import safe_extractall
-            tmp_dir = Path(tempfile.mkdtemp(dir=settings.TEMP_DIR))
-            try:
-                with zipfile.ZipFile(io.BytesIO(blob), 'r') as z:
-                    safe_extractall(z, tmp_dir)
-                if fmt == "shp":
-                    shp_files = list(tmp_dir.rglob("*.shp")) + list(tmp_dir.rglob("*.SHP"))
-                    if shp_files:
-                        return shp_files[0]
-                else:
-                    gdb_dirs = [f for f in tmp_dir.rglob("*") if f.is_dir() and f.suffix.lower() == ".gdb"]
-                    if gdb_dirs:
-                        return gdb_dirs[0]
-            except Exception as e:
-                self._logger.error(f"[GESTITO] Errore estrazione {fmt.upper()} zip {file_id}: {e}")
-            # Cleanup tmp_dir su entrambi i path errore (exception
-            # nell'estrazione, oppure zip valido ma senza .shp/.gdb
-            # dentro): senza, ogni file SHP malformato accumula una
-            # tmp dir nei worker.
-            _rmtree_safe(tmp_dir)
-            return None
-
-        suffix = Path(original_filename).suffix or ".bin"
+        from app.services.file_blob_materialization import temp_file_for
         from app.config import settings
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir=settings.TEMP_DIR)
-        tmp.write(blob)
-        tmp.close()
-        return Path(tmp.name)
+        from app.shared.cloud_backends import get_runtime_object_storage
+        from app.shared.file_cleanup import rmtree_safe
+        from app.utils.zip_safe import safe_extractall
+        import app.db.db_service as db
+        return temp_file_for(
+            file_id, expected_group_id,
+            assert_visible=self._assert_visible,
+            db_get_file_source=db.get_file_source,
+            get_object_storage=get_runtime_object_storage,
+            temp_dir=settings.TEMP_DIR,
+            safe_extractall=safe_extractall,
+            cleanup=rmtree_safe,
+            logger=self._logger,
+        )
 
     # ==================== CRUD (SQLite) ====================
 
