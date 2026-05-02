@@ -7,10 +7,11 @@
  *
  * Usato in: ArricchisciEditor (come alternativa ai nodi progetto/file)
  */
-import React, { useState, useEffect, useCallback, memo } from 'react';
+import React, { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { Handle, Position } from 'reactflow';
 import useCanvasStore from '../../store/useCanvasStore';
 import { listDataSources, listFiles, getFileSchema } from '../../api/datasources';
+import useDialogFocus from '../../hooks/useDialogFocus';
 import './DataSourceNode.css';
 
 /**
@@ -53,6 +54,8 @@ const DataSourceNode = memo(({ id, data }) => {
   const [browserFiles, setBrowserFiles]       = useState([]);
   const [browserPath, setBrowserPath]         = useState('');
   const [showBrowser, setShowBrowser]         = useState(false);
+  const browserDialogRef = useRef(null);
+  useDialogFocus(showBrowser, () => setShowBrowser(false), browserDialogRef);
   const [browserLoading, setBrowserLoading]   = useState(false);
   const [browserError, setBrowserError]       = useState(null);
   const [loadingSchema, setLoadingSchema]     = useState(false);
@@ -404,12 +407,19 @@ const DataSourceNode = memo(({ id, data }) => {
       {/* ── BROWSER FILE MODAL ── */}
       {showBrowser && (
         <div className="dsn__browser-overlay" onMouseDown={e => e.stopPropagation()}>
-          <div className="dsn__browser">
+          <div
+            ref={browserDialogRef}
+            className="dsn__browser"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="dsn-browser-title"
+            tabIndex={-1}
+          >
             <div className="dsn__browser-header">
-              <span>📂 Sfoglia file</span>
+              <span id="dsn-browser-title">📂 Sfoglia file</span>
               <div style={{ display: 'flex', gap: 6 }}>
-                <button type="button" className="dsn__browser-refresh" onClick={() => openBrowser(browserPath)}>🔄</button>
-                <button type="button" className="dsn__browser-close" onClick={() => setShowBrowser(false)}>✕</button>
+                <button type="button" className="dsn__browser-refresh" onClick={() => openBrowser(browserPath)} aria-label="Aggiorna elenco file">🔄</button>
+                <button type="button" className="dsn__browser-close" onClick={() => setShowBrowser(false)} aria-label="Chiudi">✕</button>
               </div>
             </div>
             {browserPath && <BreadCrumb />}

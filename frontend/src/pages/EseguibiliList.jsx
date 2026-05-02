@@ -6,7 +6,7 @@
  * - Tutti possono eseguire (apre il wizard)
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { listEseguibili, deleteEseguibile, listProjects } from '../api';
 import { useAuth } from '../context/AuthContext';
@@ -18,6 +18,7 @@ import { useToast } from '../hooks/useToast';
 import { role } from '../utils/permissions';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useConfirmModal } from '../hooks/useConfirmModal';
+import useDialogFocus from '../hooks/useDialogFocus';
 import './EseguibiliList.css';
 
 function EseguibiliList() {
@@ -39,6 +40,12 @@ function EseguibiliList() {
 
   const isAdmin      = role.isAdminOrAbove(user);
   const isSuperadmin = role.isSuperadmin(user);
+
+  // Focus management per i 2 dialog inline (a11y closure batch).
+  const selectorDialogRef = useRef(null);
+  const shareDialogRef    = useRef(null);
+  useDialogFocus(showSelector,        () => setShowSelector(false),       selectorDialogRef);
+  useDialogFocus(!!sharingEseguibile, () => setSharingEseguibile(null),   shareDialogRef);
 
   const loadItems = useCallback(async () => {
     setLoading(true);
@@ -174,10 +181,17 @@ function EseguibiliList() {
       {/* Selettore progetto sorgente */}
       {showSelector && (
         <div className="esl__overlay" onClick={(e) => e.target === e.currentTarget && setShowSelector(false)}>
-          <div className="esl__selector">
+          <div
+            ref={selectorDialogRef}
+            className="esl__selector"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="esl-selector-title"
+            tabIndex={-1}
+          >
             <div className="esl__selector-header">
-              <h2>Seleziona il progetto Arricchisci da pubblicare</h2>
-              <button type="button" className="esl__selector-close" onClick={() => setShowSelector(false)}>×</button>
+              <h2 id="esl-selector-title">Seleziona il progetto Arricchisci da pubblicare</h2>
+              <button type="button" className="esl__selector-close" onClick={() => setShowSelector(false)} aria-label="Chiudi">×</button>
             </div>
             <div className="esl__selector-body">
               <input
@@ -224,10 +238,18 @@ function EseguibiliList() {
       {/* Modal condivisione cross-gruppo */}
       {sharingEseguibile && (
         <div className="esl__overlay" onClick={(e) => e.target === e.currentTarget && setSharingEseguibile(null)}>
-          <div className="esl__selector" style={{ maxWidth: 560 }}>
+          <div
+            ref={shareDialogRef}
+            className="esl__selector"
+            style={{ maxWidth: 560 }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="esl-share-title"
+            tabIndex={-1}
+          >
             <div className="esl__selector-header">
-              <h2>Condivisione — {sharingEseguibile.name}</h2>
-              <button type="button" className="esl__selector-close" onClick={() => setSharingEseguibile(null)}>×</button>
+              <h2 id="esl-share-title">Condivisione — {sharingEseguibile.name}</h2>
+              <button type="button" className="esl__selector-close" onClick={() => setSharingEseguibile(null)} aria-label="Chiudi">×</button>
             </div>
             <div className="esl__selector-body">
               <AllowedGroupsSelector

@@ -23,6 +23,7 @@ import AllowedGroupsSelector from '../components/shared/AllowedGroupsSelector';
 import AppSidebar from '../components/AppSidebar';
 import ThemeToggle from '../components/common/ThemeToggle';
 import ModalWrapper, { ModalButton } from '../components/common/ModalWrapper';
+import useDialogFocus from '../hooks/useDialogFocus';
 import { can, role } from '../utils/permissions';
 import '../styles/FileManager.css';
 
@@ -632,10 +633,21 @@ function UploadModal({
   onToggleColumn, onSelectAll, onUserSridChange,
   onLayerCheck, onLayerTabChange, onToggleLayerCol, onToggleAllLayerCols,
 }) {
+  const dialogRef = useRef(null);
+  // Componente montato solo quando aperto (controlled dal caller).
+  useDialogFocus(true, onClose, dialogRef);
   return (
     <div className="fm__modal-overlay" onClick={onClose}>
-      <div className="fm__modal" onClick={e => e.stopPropagation()}>
-        <div className="fm__modal-title">↑ Carica File</div>
+      <div
+        ref={dialogRef}
+        className="fm__modal"
+        onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="fm-upload-title"
+        tabIndex={-1}
+      >
+        <div className="fm__modal-title" id="fm-upload-title">↑ Carica File</div>
         <div className="fm__modal-sub">CSV, Excel, GeoJSON, GeoPackage, Shapefile, FileGDB</div>
 
         {/* Steps */}
