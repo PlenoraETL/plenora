@@ -55,9 +55,9 @@ tests, see [Residual Register](residual-register.md).
 |---|---|---|---|
 | **R-19** | `core/features/arcgis_client.py` 2476 LOC monolith | LATER Phase 5-7 | XL refactor multi-PR. Seam: auth handler / pagination / write batch. |
 | **R-20** | `workers/tasks/enrichment_task.py` 1430 LOC | LATER Phase 5-7 | XL. `run_enrichment_task` 500+ LOC mix. |
-| STRUCT-001 | `services/file_service.py` facade extraction | CLOSED | Facade extraction chiusa: `file_service.py` ridotto da 1847 a ~750 LOC. Helper puri, Protocol/default impls, storage dispatch, preview temp, parser dispatch, cleanup, source read, blob/temp materialization, raw upload, parsed upload e multi-layer upload sono ora in moduli leaf go-ready con wrapper/re-export compatibili. I residui rimasti sono behavior/product semantics separati: `MULTI-ATOMIC-001` e `MULTI-BLOB-001`. |
-| MULTI-ATOMIC-001 | Multi-layer upload atomicity | NEXT | Oggi `create_multi_layer_from_upload` e' best-effort: se fallisce il layer N, i layer precedenti restano persistiti. Decidere se mantenere questo contratto o introdurre all-or-nothing con transazione/rollback e test dedicati. |
-| MULTI-BLOB-001 | Multi-layer blob dedup/storage model | LATER | Con object storage, N layer possono generare N upload dello stesso blob. Ottimizzazione architetturale go-ready: separare blob fisico da FileSource logico/layer metadata, previa verifica delete lifecycle e ownership. |
+| STRUCT-001 | `services/file_service.py` facade extraction | CLOSED | Facade extraction chiusa: `file_service.py` ridotto da 1847 a ~750 LOC. Helper puri, Protocol/default impls, storage dispatch, preview temp, parser dispatch, cleanup, source read, blob/temp materialization, raw upload, parsed upload e multi-layer upload sono ora in moduli leaf go-ready con wrapper/re-export compatibili. I behavior residui multi-layer (`MULTI-ATOMIC-001`, `MULTI-BLOB-001`) sono stati chiusi separatamente con BE-HARDEN-001C E1/E2/E3. |
+| MULTI-ATOMIC-001 | Multi-layer upload atomicity | CLOSED | `save_file_sources_batch(rows)` salva le N FileSource in una sola `pg_connection.transaction()` + `cur.executemany`: rollback atomico su qualsiasi exception (zero row persistite). Il multi-layer service fa staging in-memory + 1 batch save + cleanup compensativo best-effort del shared `storage_key` su rollback (`event=orphan_blob_cleanup_failed` su double-failure). Commit `20a4326`. |
+| MULTI-BLOB-001 | Multi-layer blob dedup/storage model | CLOSED | Multi-layer upload fa **1** `dispatch_blob_storage` per batch con `storage_key_id=batch_id`: le N row condividono lo stesso `storage_key` (object_storage) o lo stesso `data` (BYTEA). `delete_file_source` e' reference-aware: skip dello storage cleanup finche' altri sibling referenziano la stessa key, delete del blob solo all'ultimo ref. Commits `9ff38af` (E1 shared dispatch) + `4e01613` (E2 refcount delete). |
 | STRUCT-002 | `services/schema_inference.py` 1502 LOC | LATER | Tocca canvas types fallback. M-L effort. |
 | STRUCT-003 | `core/manipola/transforms/spatial.py` 1941 LOC | WATCH/LATER | Cohesive (single concern), refactor non urgente. |
 | STRUCT-004 | `core/scheduler/execution_manager.py` 1097 LOC | LATER | R-05 ha introdotto `app/shared/clock.py` e migrato i test heartbeat/lock-lost a `FakeClock`; il retry release-lock resta volutamente fuori scope e gia' mockabile. |
@@ -193,7 +193,7 @@ Focus: **structural refactor + capability services**.
 - R-19 arcgis_client.py split
 - R-20 enrichment_task.py split
 - ~~STRUCT-001 file_service.py facade extraction~~ -> **CLOSED** (~750 LOC facade over leaf modules)
-- MULTI-ATOMIC-001 / MULTI-BLOB-001 if product/storage semantics justify the change
+- ~~MULTI-ATOMIC-001 / MULTI-BLOB-001~~ -> **CLOSED** via BE-HARDEN-001C E1 (`9ff38af`) + E2 (`4e01613`) + E3 (`20a4326`): 1 shared blob dispatch + refcount-aware delete + atomic batch save
 - STRUCT-002/003/004/005/006 a seguire
 - Capability services al trigger business
 
