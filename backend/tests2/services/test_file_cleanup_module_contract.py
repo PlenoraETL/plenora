@@ -83,11 +83,7 @@ def test_rmtree_safe_silent_on_missing_path(tmp_path):
 # =============================================================================
 
 
-@pytest.mark.skipif(
-    sys.platform == "win32",
-    reason="Su Windows il bit ro su file singoli e' inconsistente; "
-           "il path onerror si esercita meglio su POSIX",
-)
+@pytest.mark.skipif(sys.platform == "win32", reason="Su Windows il bit ro su file singoli e' inconsistente; il path onerror si esercita meglio su POSIX")
 def test_rmtree_safe_handles_readonly_file_in_directory(tmp_path):
     from app.shared.file_cleanup import rmtree_safe
 
