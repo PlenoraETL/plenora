@@ -14,7 +14,7 @@ import { useEffect, useCallback } from 'react';
  * Disegna lo sfondo esagonale sul canvas fornito.
  * Funzione pura (no side-effect) — richiamabile direttamente per draw manuali.
  */
-export function drawHexBackground(canvas) {
+function drawHexBackground(canvas) {
   if (!canvas) return;
   const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
   const parent = canvas.parentElement;

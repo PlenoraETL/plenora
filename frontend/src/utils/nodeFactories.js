@@ -105,7 +105,7 @@ export function createEdgeFromData(edge, loadedNodes) {
  * @param {Object} connection - Connessione DB attiva del progetto (può essere null)
  * @returns {Object} Nodo ReactFlow type='tableNode'
  */
-export function createTableNode(node, connection = null) {
+function createTableNode(node, connection = null) {
   return {
     id:       node.id,
     type:     'tableNode',
@@ -130,7 +130,7 @@ export function createTableNode(node, connection = null) {
  * @param {Object} node - Dati nodo dal backend
  * @returns {Object} Nodo ReactFlow type='featureLayerNode'
  */
-export function createFeatureLayerNode(node) {
+function createFeatureLayerNode(node) {
 
   const columns = nd(node, 'columns', []).map(col => ({
     name:    col.name,
@@ -171,7 +171,7 @@ export function createFeatureLayerNode(node) {
  * @param {Object} options - { isManipulate, isArricchisci }
  * @returns {Object} Nodo ReactFlow type='resultNode'
  */
-export function createResultNode(node, options = {}) {
+function createResultNode(node, options = {}) {
   const { isManipulate = false, isArricchisci = false } = options;
   const nodeType = (isManipulate || isArricchisci) ? 'result' : 'resultNode';
 
@@ -213,7 +213,7 @@ export function createResultNode(node, options = {}) {
  * @param {Object} node - Dati nodo dal backend
  * @returns {Object} Nodo ReactFlow type='carica'
  */
-export function createCaricanNode(node) {
+function createCaricanNode(node) {
 
   return {
     id:       node.id,
@@ -241,7 +241,7 @@ export function createCaricanNode(node) {
  * @param {Object} node - Dati nodo dal backend
  * @returns {Object} Nodo ReactFlow type='caricaArcgis'
  */
-export function createCaricanArcGISNode(node) {
+function createCaricanArcGISNode(node) {
 
   return {
     id:       node.id,
@@ -280,7 +280,7 @@ export function createCaricanArcGISNode(node) {
  * @param {Object} node - Dati nodo dal backend
  * @returns {Object} Nodo ReactFlow type='imdf_publisher'
  */
-export function createImdfPublisherNode(node) {
+function createImdfPublisherNode(node) {
   return {
     id:       node.id,
     type:     'imdf_publisher',
@@ -306,7 +306,7 @@ export function createImdfPublisherNode(node) {
  * @param {Object} node - Dati nodo dal backend
  * @returns {Object} Nodo ReactFlow type='staticValues'
  */
-export function createStaticValuesNode(node) {
+function createStaticValuesNode(node) {
   return {
     id:       node.id,
     type:     'staticValues',
@@ -324,7 +324,7 @@ export function createStaticValuesNode(node) {
  * @param {Object} node - Dati nodo dal backend
  * @returns {Object} Nodo ReactFlow type='comment'
  */
-export function createCommentNode(node) {
+function createCommentNode(node) {
   return {
     id:       node.id,
     type:     'comment',
@@ -350,7 +350,7 @@ export function createCommentNode(node) {
  * @param {Object} node - Dati nodo dal backend
  * @returns {Object} Nodo ReactFlow type='datasourceNode'
  */
-export function createDataSourceNode(node) {
+function createDataSourceNode(node) {
   return {
     id:       node.id,
     type:     'datasourceNode',
@@ -384,7 +384,7 @@ export function createDataSourceNode(node) {
  * @param {Object} node - Dati nodo dal backend
  * @returns {Object} Nodo ReactFlow type='projectSource'
  */
-export function createProjectSourceNode(node) {
+function createProjectSourceNode(node) {
   return {
     ...node,
     data: {
@@ -401,7 +401,7 @@ export function createProjectSourceNode(node) {
  * @param {Object} node - Dati nodo dal backend
  * @returns {Object} Nodo ReactFlow type='fileSource'
  */
-export function createFileSourceNode(node) {
+function createFileSourceNode(node) {
   return {
     ...node,
     data: {
@@ -422,7 +422,7 @@ export function createFileSourceNode(node) {
  * @param {Object} node - Dati nodo dal backend
  * @returns {Object} Nodo ReactFlow type='transform'
  */
-export function createTransformNode(node) {
+function createTransformNode(node) {
   return {
     ...node,
     data: {
@@ -445,7 +445,7 @@ export function createTransformNode(node) {
  * @param {Object} node - Dati nodo dal backend
  * @returns {Object} Nodo ReactFlow type='api_enrich'
  */
-export function createApiEnrichNode(node) {
+function createApiEnrichNode(node) {
   return {
     ...node,
     data: {

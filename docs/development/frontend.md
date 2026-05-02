@@ -312,11 +312,13 @@ Highlights:
 - **FE-A11Y-001** — accessibility audit (CLOSED).
 - **FE-HYGIENE-001/002/003** — sweep dead code (`AppHeader`, `useNodeHandlers`, `useCanvasShortcuts`, `SearchInput`, `useCanvasSaveShortcut`, `useInputColumns`) e tiny residuals; -836 LOC totali (CLOSED).
 - **FE-PERF-001** — `ImdfPreviewModal` ora `React.lazy`; `maplibre`/`deckgl` escono dal grafo statico dei 3 editor (CLOSED).
-- **FE-KEEP-KIT** — `ConfirmInline`, `ModalFooter`, `Loading*` kit e `components/common/index.js` barrel restano come public-API surface anche senza consumer attuali (KEEP).
-- **FE-CLN-002** — inline styles vs design tokens (LATER, da affrontare opportunisticamente).
-- **FE-SPLIT-001/002/003,005,006** — split di componenti grandi (LATER, contract test verdi, riapertura solo su trigger concreta).
+- **FE-PHASE1-CLOSURE-1** — eliminato common-kit unused (`ConfirmInline`, `ModalFooter`, `LoadingDots/Skeleton/Inline/Wrapper`, `components/common/index.js` barrel); EditorShell error banner a11y (`role="alert"` + `aria-live` + initial focus); `slots.children`/`canvasConfig.edgeTypes` formalizzati con docstring + contract test; -182 LOC. Commit `d5c49e4` (CLOSED).
+- **FE-PHASE1-CLOSURE-2** — primo concrete batch `FE-CLN-002` su `AdminSystemStatusPage`: 9/20 inline `style` migrati a classi `sys__*`; -9 inline. Commit `62de996` (CLOSED).
+- **FE-PHASE1-CLOSURE-3** — split `FileManager.jsx` (881 → 553 LOC) con extraction behavior-preserving di `FileCard`, `UploadModal`, `LayerModal`, `PreviewModal` + helpers in `pages/FileManager/`. Chiude `FE-SPLIT-006`. Commit `cf5c47d` (CLOSED).
+- **FE-CLN-002** — inline styles vs design tokens (TRUE LATER, riaprire dopo design-system token decision o su trigger).
+- **FE-SPLIT-001/002/003/005** — split di componenti grandi (TRUE LATER con motivazione product/architectural/dependency/ROI documentata; riapertura solo su trigger concreta).
 
-FE in standby: riaprire solo su bug, esigenza prodotto o nuovo editor variant.
+FE in standby: Phase 1 closed across `FE-CLN-001`, `FE-TEST-001`, `FE-A11Y-001`, `FE-SPLIT-004/006`, `FE-HYGIENE-001/002/003`, `FE-PERF-001` e `FE-PHASE1-CLOSURE-1/2/3`. Riaprire solo su bug concreto, product trigger o nuovo editor variant.
 
 ---
 

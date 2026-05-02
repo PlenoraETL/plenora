@@ -85,7 +85,7 @@ function esriSymbolToLeaflet(symbol) {
  *                               oppure direttamente l'oggetto `renderer`.
  * @returns {function} (feature) => leafletStyle
  */
-export function makeLeafletStyle(drawingInfo) {
+function makeLeafletStyle(drawingInfo) {
   if (!drawingInfo) {
     return () => ({ color: '#3388ff', weight: 2, opacity: 1, fillOpacity: 0.2, fillColor: '#3388ff' });
   }
@@ -125,7 +125,7 @@ export function makeLeafletStyle(drawingInfo) {
  *   venue  → Localita
  *   (Details non e' un geojson IMDF, e' nel GDB)
  */
-export const IMDF_LAYER_TO_RENDERER = {
+const IMDF_LAYER_TO_RENDERER = {
   unit:     'Locale',
   level:    'Livello',
   building: 'OperaPrincipale',
@@ -137,7 +137,7 @@ export const IMDF_LAYER_TO_RENDERER = {
  * Helper: dato un nome layer IMDF (es. 'unit') e l'oggetto renderers.json
  * completo, ritorna la funzione style Leaflet appropriata.
  */
-export function getLeafletStyleForImdfLayer(layerName, renderersJson) {
+function getLeafletStyleForImdfLayer(layerName, renderersJson) {
   if (!renderersJson) return makeLeafletStyle(null);
   const rendererKey = IMDF_LAYER_TO_RENDERER[layerName];
   if (!rendererKey) return makeLeafletStyle(null);
@@ -192,7 +192,7 @@ export function makeDeckColorFn(drawingInfo, opts = {}) {
 /**
  * Helper per layer IMDF → funzione color per deck.gl.
  */
-export function getDeckColorForImdfLayer(layerName, renderersJson, opts) {
+function getDeckColorForImdfLayer(layerName, renderersJson, opts) {
   if (!renderersJson) return makeDeckColorFn(null, opts);
   const key = IMDF_LAYER_TO_RENDERER[layerName];
   if (!key) return makeDeckColorFn(null, opts);

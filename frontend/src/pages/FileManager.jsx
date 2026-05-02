@@ -22,8 +22,7 @@ import { useHexCanvas } from '../utils/hexCanvas';
 import AllowedGroupsSelector from '../components/shared/AllowedGroupsSelector';
 import AppSidebar from '../components/AppSidebar';
 import ThemeToggle from '../components/common/ThemeToggle';
-import ModalWrapper, { ModalButton } from '../components/common/ModalWrapper';
-import useDialogFocus from '../hooks/useDialogFocus';
+import ModalWrapper from '../components/common/ModalWrapper';
 import { can, role } from '../utils/permissions';
 import '../styles/FileManager.css';
 import {
