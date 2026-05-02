@@ -1,6 +1,6 @@
 # Residual Register
 
-Status as of **2026-05-01**.
+Status as of **2026-05-02**.
 
 This file is the operational residual register for the project. It is shorter
 than the roadmap and answers one question: what remains open before Plenora can
@@ -20,7 +20,7 @@ be considered product-grade.
 |---|---|---|---|---|
 | R-01 | Auth rate limiter in-memory | CLOSED | Redis-backed sliding-window limiter (`app/shared/login_rate_limiter.py`) with in-memory fallback when Redis is unavailable; single-node behaviour preserved byte-per-byte. Covered by 19 passing security tests (unit + contract). | Done. |
 | R-05 | Scheduler heartbeat wall-clock tests | CLOSED | `app/shared/clock.py` adds `Clock`/`WallClock`/`FakeClock`; scheduler heartbeat tests were migrated off real `time.sleep`, reducing the heartbeat subset from ~50s to sub-second while preserving production `Event.wait` behaviour. | Commit `cf00387`. |
-| STRUCT-001 | File service pure helpers | PARTIAL | `file_service.py` was reduced from 1847 to 1609 LOC by extracting pure helpers (`FormatDetector`, `TypeInferrer`, `FileIdGenerator`, `ColumnInfoBuilder`) to `app/shared/file_helpers.py` with compatibility re-exports. Remaining upload/storage/preview orchestration is still structural debt. | Next file-service work should extract one I/O seam at a time; do not do a broad rewrite. |
+| STRUCT-001 | File service seams | PARTIAL | `file_service.py` was reduced from 1847 to 1368 LOC across three go-ready seams: pure helpers (`app/shared/file_helpers.py`), dependency protocols/defaults (`app/services/file_service_deps.py`) and storage dispatch (`app/services/file_storage_dispatch.py`). Compatibility wrappers/re-exports preserve existing callers. Remaining upload/preview/temp-file orchestration is still structural debt. | Next file-service work should extract one I/O seam at a time; preview/temp needs a dedicated design, not a broad rewrite. |
 | STRUCT-005 | Auth module seams | PARTIAL | `auth.py` was reduced from ~1219 LOC to ~856 LOC by extracting rate limiting, password hashing, models, ownership helpers and JWT token helpers into focused modules with compatibility re-exports. Remaining auth endpoint mass is lower priority and should be handled only when touching auth routes. | Keep new auth work go-ready: thin router, explicit service/helper seams, contract tests. |
 | R-30 | DB snapshot pre-deploy | NEXT | A deploy just before the daily backup can leave a long recovery window. | Add pre-deploy snapshot after staging rehearsal. |
 | R-33 | DR drill not executed | NEXT manual | Recovery playbook exists but has not been proven end-to-end. | Run one documented SSH drill. |
@@ -36,7 +36,7 @@ be considered product-grade.
 |---|---|---|---|---|
 | FE-CLN-001 | ThemeToggle / useTheme dedup | CLOSED | Shared `useTheme` hook + `ThemeToggle` component extracted across pages/editors. | Commit `d309e0d`. |
 | FE-TEST-001 | Remaining hotspot coverage | CLOSED | Major hotspot batches now cover manager pages, flow modals, runs, result gating, transform/builders, editor guards/save-failure and high-ROI residual branches. Remaining items are low-ROI, fragile, or structural split work tracked separately. | Done. |
-| FE-A11Y-001 | Accessibility audit | LATER | Focus, ARIA, keyboard and contrast have not had a full pass. | Run an axe/manual audit batch. |
+| FE-A11Y-001 | Accessibility audit | PARTIAL | Initial A11Y batches closed the highest-leverage mechanical fixes: accessible names for icon/search/toggle controls, custom modal dialog semantics, and a global keyboard-only `:focus-visible` policy with theme tokens. Remaining work is narrower: dialog focus management, clickable row/card keyboard UX, and any contrast issues from a future visual audit. | Continue with keyboard interaction/focus management only; do not reopen broad FE coverage work under this item. |
 | FE-CLN-002 | Inline styles and design tokens | LATER | UI works, but design-system consistency is incomplete. | Move repeated inline patterns into CSS tokens. |
 | FE-SPLIT-001..006 | Large component splits | LATER | Maintainability issue, not a safe pre-launch rush. | Split after product stabilization. |
 | FE-PERF-001 | Bundle analysis | LATER | Geo chunks are large but already split. | Analyze only if startup performance becomes a complaint. |

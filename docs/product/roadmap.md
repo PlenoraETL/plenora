@@ -1,6 +1,6 @@
 # Roadmap — URBY-ETL
 
-Residui audit aperti e direzioni future. Status as of **2026-05-01**.
+Residui audit aperti e direzioni future. Status as of **2026-05-02**.
 
 For the shorter operational list of what is still open across FE, BE and
 tests, see [Residual Register](residual-register.md).
@@ -55,7 +55,7 @@ tests, see [Residual Register](residual-register.md).
 |---|---|---|---|
 | **R-19** | `core/features/arcgis_client.py` 2476 LOC monolith | LATER Phase 5-7 | XL refactor multi-PR. Seam: auth handler / pagination / write batch. |
 | **R-20** | `workers/tasks/enrichment_task.py` 1430 LOC | LATER Phase 5-7 | XL. `run_enrichment_task` 500+ LOC mix. |
-| STRUCT-001 | `services/file_service.py` 1609 LOC | PARTIAL | Seam A chiuso (`fe2ab49`): helper puri `FormatDetector`, `TypeInferrer`, `FileIdGenerator`, `ColumnInfoBuilder` estratti in `app/shared/file_helpers.py` con re-export compatibili. Restano upload/storage/preview orchestration come debito strutturale. |
+| STRUCT-001 | `services/file_service.py` 1368 LOC | PARTIAL | Seam A/B/C chiusi: helper puri (`file_helpers.py`), Protocols/default impls (`file_service_deps.py`) e storage dispatch (`file_storage_dispatch.py`) estratti con wrapper/re-export compatibili. Riduzione 1847 -> 1368 LOC. Restano upload/preview/temp-file orchestration come debito strutturale da affrontare un seam alla volta. |
 | STRUCT-002 | `services/schema_inference.py` 1502 LOC | LATER | Tocca canvas types fallback. M-L effort. |
 | STRUCT-003 | `core/manipola/transforms/spatial.py` 1941 LOC | WATCH/LATER | Cohesive (single concern), refactor non urgente. |
 | STRUCT-004 | `core/scheduler/execution_manager.py` 1097 LOC | LATER | R-05 ha introdotto `app/shared/clock.py` e migrato i test heartbeat/lock-lost a `FakeClock`; il retry release-lock resta volutamente fuori scope e gia' mockabile. |
@@ -96,7 +96,7 @@ tests, see [Residual Register](residual-register.md).
 | FE-TEST-001 | Coverage hotspot pages/components | CLOSED | Major batches completed for manager pages, ScheduleList, LogViewer, ProjectList, ResultNode gating, PublishEseguibileModal, RunsTab, ParameterInput, ResponseConfigBuilder, PivotMappingBuilder, editor guards/save-failure and high-ROI residual branches (`19cc007`). Remaining items are low-ROI, fragile, or covered by FE-SPLIT/A11Y/design-token tracks. |
 | FE-TEST-002 | `useColumnPropagation` hardcoded transform_op | DROP | Verificato `applyTransformation` ha switch completo. |
 | FE-TEST-003 | `ApiEnrichNode` outputColumns loop | DROP | Mitigato lato code (normalize-then-compare guard). |
-| FE-A11Y-001 | Accessibility audit (ARIA, focus mgmt, contrast) | LATER | Tool axe-core + fix puntuali. M-L effort. |
+| FE-A11Y-001 | Accessibility audit (ARIA, focus mgmt, contrast) | PARTIAL | Batch iniziali chiusi: accessible names su controlli icon/search/toggle, semantica `role=dialog`/`aria-modal`/`aria-labelledby` per modali custom, policy globale `:focus-visible` con token light/dark. Restano focus trap/restore, clickable rows/cards keyboard UX e audit contrasto visuale. |
 | FE-PERF-001 | Bundle size analysis + code splitting | LATER | vite-bundle-visualizer setup. M effort. |
 
 ---
