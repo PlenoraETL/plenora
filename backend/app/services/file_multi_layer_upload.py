@@ -26,22 +26,24 @@ Invarianti preservate (test-blindabili):
      successivi.
   5. dispatch_blob_storage: chiamato 1 volta PRIMA del loop con
      `storage_key_id=batch_id` (BE-HARDEN-001C E1 - shared blob).
-     db_save_file_source: chiamato N volte (uno per layer) con i
-     `shared_blob_kwargs` propagati. Atomicita' batch NON garantita -
-     se db_save fallisce al layer K, i K-1 precedenti restano
-     persistiti (E3 affrontera' la transazione batch).
+     db_save_file_sources_batch: chiamato 1 volta DOPO il loop con la
+     lista delle N row, in UNA SOLA transazione DB (BE-HARDEN-001C E3 -
+     all-or-nothing). Se la transazione fallisce, 0 row persistite e
+     cleanup compensativo del shared storage_key (best-effort).
   6. Cleanup asimmetrico (preservato verbatim):
        - tmp file: cleanup_file (in produzione = os.unlink)
        - zip_tmp_dir: cleanup_dir (in produzione = rmtree_safe)
   7. group_id or default_group propagato coerente su DTO + DB save.
-  8. blob_kwargs propagato 1:1 a db_save_file_source via **kwargs.
+  8. shared_blob_kwargs propagato a tutte le N row del batch (data o
+     storage_key, size_bytes condivisi).
   9. is_sheet_based dispatch: XLSX -> layer arg = None, sheet = valore;
      GPKG/GDB -> layer arg = valore, sheet = None. DTO field analogo.
 
 Side effect confinati (tutti via callback iniettata):
   - generate_file_id, time_now, detect_format
   - load_by_format, column_builder_from_df
-  - dispatch_blob_storage, db_save_file_source
+  - dispatch_blob_storage, db_save_file_sources_batch
+  - delete_blob (cleanup compensativo storage su DB rollback)
   - build_file_source (DTO factory)
   - cleanup_dir (rmtree_safe), cleanup_file (os.unlink)
   - safe_extractall, zip_slip_error type
@@ -55,31 +57,6 @@ import uuid
 import zipfile
 from pathlib import Path
 from typing import Any, BinaryIO, Callable, Dict, List, Optional, Tuple
-
-
-def _emit_partial_batch_failure_log(
-    logger,
-    created: List[Any],
-    expected_count: int,
-    failed_layer: Optional[str],
-    failed_phase: Optional[str],
-) -> None:
-    """BE-HARDEN-001A: emette `partial_batch_failure` log strutturato
-    SOLO se il loop si e' interrotto DOPO almeno un save riuscito (e
-    PRIMA del completamento del batch). Pre-loop failure (MIME block /
-    BadZipFile / ZipSlipError) e first-layer failure NON triggerano il
-    log perche' `created_count == 0`. Full success NON triggera (mai
-    chiamata: il loop completa senza except).
-    """
-    created_count = len(created)
-    if 0 < created_count < expected_count:
-        logger.warning(
-            f"event=partial_batch_failure "
-            f"expected_count={expected_count} "
-            f"created_count={created_count} "
-            f"failed_layer={failed_layer!r} "
-            f"failed_phase={failed_phase}"
-        )
 
 
 def create_multi_layer_from_upload(
@@ -97,7 +74,8 @@ def create_multi_layer_from_upload(
     load_by_format: Callable[..., Tuple[Any, Optional[Any]]],
     column_builder_from_df: Callable[..., List[Any]],
     dispatch_blob_storage: Callable[..., dict],
-    db_save_file_source: Callable[..., None],
+    db_save_file_sources_batch: Callable[[List[Dict[str, Any]]], None],
+    delete_blob: Callable[[str], None],
     build_file_source: Callable[..., Any],
     cleanup_dir: Callable[[Any], None],
     cleanup_file: Callable[[Any], None],
@@ -201,36 +179,26 @@ def create_multi_layer_from_upload(
         # Determina se stiamo lavorando con layer (gpkg/gdb) o sheet (xlsx)
         is_sheet_based = format_type in ['xlsx', 'xls']
 
-        created: List[Any] = []
         now = time_now()
-
-        # BE-HARDEN-001A: tracking osservabilita' per partial batch failure.
-        # NON cambia behavior (exception propaga come prima); solo emette
-        # log strutturato `partial_batch_failure` se il loop si interrompe
-        # DOPO almeno un save riuscito.
-        #
-        # Post BE-HARDEN-001C E1: dispatch e' UNA volta pre-loop, quindi
-        # un dispatch fail produce sempre `created=0` -> log NON emesso
-        # (condizione 0 < created < expected non soddisfatta). Il
-        # `failed_phase` resta solo "db_save".
-        expected_count = len(layers_config)
-        last_failed_layer: Optional[str] = None
-        last_failed_phase: Optional[str] = None  # "db_save"
 
         # BE-HARDEN-001C E1 - shared blob dispatch:
         # 1 chiamata a dispatch_blob_storage PRIMA del loop con
         # `storage_key_id=batch_id`. Le N row in object_storage path
-        # condividono lo stesso storage_key (delete safe grazie a E2
-        # reference-aware delete in `db.delete_file_source`).
-        # In BYTEA path, le N row hanno lo stesso `data` bytes
-        # (5a, comportamento BYTEA invariato).
-        # Failure pre-loop -> 0 db_save chiamati (orphan guard).
+        # condividono lo stesso storage_key. In BYTEA path le N row
+        # hanno gli stessi `data` bytes.
+        # Failure pre-loop -> nessuna row, nessun cleanup necessario
+        # (orphan guard interno al dispatch).
         batch_id = f"batch_{uuid.uuid4().hex}"
         shared_blob_kwargs = dispatch_blob_storage(
             batch_id, raw_data, filename,
             storage_key_id=batch_id,
         )
 
+        # Loop di staging: parse + DTO build per ogni layer, ZERO side
+        # effect DB. La persistenza avviene UNA volta sola dopo il loop
+        # via db_save_file_sources_batch (E3 atomic transaction).
+        created: List[Any] = []
+        rows: List[Dict[str, Any]] = []
         for layer_cfg in layers_config:
             # Supporta sia {"layer": "nome"} che {"sheet": "nome"}
             layer = layer_cfg.get("layer") or layer_cfg.get("sheet")
@@ -242,7 +210,8 @@ def create_multi_layer_from_upload(
 
             # Inferenza colonne / row_count / CRS - BEST EFFORT PER-LAYER.
             # Se fallisce, logger.warning + columns=[] / row_count=0 / crs=None,
-            # il loop CONTINUA sui successivi layer (preservato verbatim).
+            # il loop CONTINUA sui successivi layer (soft-preserve, E3
+            # decision documentata nello scope).
             columns: List[Any] = []
             row_count = 0
             crs: Optional[str] = None
@@ -298,42 +267,48 @@ def create_multi_layer_from_upload(
                 else {}
             )
 
-            # BE-HARDEN-001C E1: dispatch fatto UNA volta pre-loop. Qui
-            # ogni layer chiama solo db_save_file_source con i kwargs
-            # condivisi (`shared_blob_kwargs`). In object_storage path
-            # tutte le N row puntano allo stesso storage_key (delete
-            # safe via E2 reference-aware delete). In BYTEA path tutte
-            # le N row hanno gli stessi `data` bytes (5a, invariato).
-            #
-            # Atomicita' batch resta NON garantita: se db_save fallisce
-            # al layer K, i K-1 precedenti restano persistiti -> E3 lo
-            # affrontera' in transaction. BE-HARDEN-001A: tracciamo
-            # `last_failed_layer`/`last_failed_phase` PRIMA di rilanciare,
-            # cosi' il log `partial_batch_failure` viene emesso se
-            # created > 0.
-            try:
-                db_save_file_source(
-                    file_id=file_id,
-                    group_id=group_id or default_group,
-                    name=file_source_name,
-                    original_filename=filename,
-                    fmt=format_type,
-                    metadata=metadata,
-                    **shared_blob_kwargs,
-                )
-            except Exception:
-                last_failed_layer = layer
-                last_failed_phase = "db_save"
-                _emit_partial_batch_failure_log(
-                    logger, created, expected_count,
-                    last_failed_layer, last_failed_phase,
-                )
-                raise
-
-            logger.info(
-                f"FileSource multi-layer creato: {file_id} layer='{layer}'"
-            )
+            rows.append({
+                "file_id": file_id,
+                "group_id": group_id or default_group,
+                "name": file_source_name,
+                "original_filename": filename,
+                "fmt": format_type,
+                "metadata": metadata,
+                **shared_blob_kwargs,
+            })
             created.append(file_source)
+
+        # BE-HARDEN-001C E3 - all-or-nothing batch save.
+        # Una sola transazione DB attorno alle N INSERT (via
+        # save_file_sources_batch). Se solleva, cleanup compensativo
+        # del shared storage_key (best-effort) prima che la eccezione
+        # DB propaghi. Un eventuale fail del cleanup -> log strutturato
+        # `event=orphan_blob_cleanup_failed` SENZA mascherare la cause
+        # root.
+        committed = False
+        try:
+            db_save_file_sources_batch(rows)
+            committed = True
+        finally:
+            if not committed:
+                shared_key = shared_blob_kwargs.get("storage_key")
+                if shared_key:
+                    try:
+                        delete_blob(shared_key)
+                    except Exception as cleanup_err:
+                        logger.error(
+                            f"event=orphan_blob_cleanup_failed "
+                            f"batch_id={batch_id} "
+                            f"storage_key={shared_key!r} "
+                            f"error={cleanup_err!r}"
+                        )
+
+        for fs in created:
+            logger.info(
+                f"FileSource multi-layer creato: {fs.id} "
+                f"layer={getattr(fs, 'layer', None)!r} "
+                f"sheet={getattr(fs, 'sheet', None)!r}"
+            )
 
         return created
 

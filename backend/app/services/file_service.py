@@ -648,6 +648,15 @@ class FileSourceService:
         from app.utils.zip_safe import safe_extractall, ZipSlipError
         import os as _os
         import app.db.db_service as db
+
+        # BE-HARDEN-001C E3: callback `delete_blob` per cleanup compensativo
+        # del shared storage_key se la transazione batch fallisce. Lazy
+        # binding sul cloud backend: in BYTEA mode il caller non chiamera'
+        # mai questa fn (storage_key is None).
+        def _delete_blob(storage_key: str) -> None:
+            from app.shared.cloud_backends import get_runtime_object_storage
+            get_runtime_object_storage().delete(storage_key)
+
         return _impl(
             file_content, filename, name, description,
             layers_config, srid, group_id,
@@ -657,7 +666,8 @@ class FileSourceService:
             load_by_format=self._load_by_format,
             column_builder_from_df=self._column_builder.from_dataframe,
             dispatch_blob_storage=self._dispatch_blob_storage,
-            db_save_file_source=db.save_file_source,
+            db_save_file_sources_batch=db.save_file_sources_batch,
+            delete_blob=_delete_blob,
             build_file_source=lambda **kw: FileSource(**kw),
             cleanup_dir=rmtree_safe,
             cleanup_file=_os.unlink,    # NON rmtree_safe - preserva asimmetria

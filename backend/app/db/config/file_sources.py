@@ -16,7 +16,7 @@ Observable non-breaking (0 test verificano il name).
 import json
 from typing import Dict, List, Optional
 
-from app.db.pg_connection import fetchone, fetchall, execute
+from app.db.pg_connection import fetchone, fetchall, execute, transaction
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -88,6 +88,83 @@ def save_file_source(file_id: str, group_id: str, name: str, original_filename: 
          effective_size, json.dumps(metadata or {}), now, now, created_by)
     )
     return get_file_source(file_id)
+
+
+def save_file_sources_batch(rows: List[Dict]) -> None:
+    """Salva N file_sources in UNA SOLA transazione (BE-HARDEN-001C E3).
+
+    All-or-nothing: se l'INSERT fallisce per qualsiasi row, la transazione
+    fa rollback e zero row vengono persistite. Closes MULTI-ATOMIC-001
+    per il path multi-layer upload.
+
+    Args:
+        rows: lista di dict con shape esplicita per ogni file_source da
+              creare. Chiavi richieste:
+                - file_id (str)
+                - group_id (str)
+                - name (str)
+                - original_filename (str)
+                - fmt (str)
+                - data (Optional[bytes])         shared blob in BYTEA path
+                - storage_key (Optional[str])    shared key in S3 path
+                - size_bytes (int)
+                - metadata (dict)                serialized to JSON dentro
+                - created_by (Optional[str])
+
+    Pre-transaction validation (fail-fast, zero side effect DB):
+        Per ogni row almeno uno tra `data` e `storage_key` deve essere
+        non-None (mirror del check di save_file_source single-row).
+        ValueError -> nessuna connessione DB acquisita.
+
+    Returns:
+        None. Il caller possiede gia' i DTO costruiti client-side; nessuna
+        SELECT post-insert (risparmio N round-trip rispetto a save_file_source
+        legacy).
+
+    Go-ready boundary:
+        FileSourceRepository.SaveBatch(ctx, []FileSourceRow) error
+        - input shape esplicita (no kwargs);
+        - errori espliciti via raise;
+        - transaction boundary visibile (un solo `with transaction()`).
+    """
+    from datetime import datetime, timezone
+    if not rows:
+        return
+
+    for r in rows:
+        if r.get("data") is None and not r.get("storage_key"):
+            raise ValueError(
+                f"save_file_sources_batch: row file_id={r.get('file_id')!r} "
+                f"senza data ne storage_key (almeno uno richiesto)"
+            )
+
+    now = datetime.now(timezone.utc).isoformat()
+    sql = (
+        "INSERT INTO file_sources "
+        "(id, group_id, name, original_filename, format, data, storage_key, "
+        "size_bytes, metadata, created_at, updated_at, created_by) "
+        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+        "ON CONFLICT (id) DO UPDATE SET "
+        "name=EXCLUDED.name, original_filename=EXCLUDED.original_filename, "
+        "format=EXCLUDED.format, data=EXCLUDED.data, "
+        "storage_key=EXCLUDED.storage_key, size_bytes=EXCLUDED.size_bytes, "
+        "metadata=EXCLUDED.metadata, updated_at=EXCLUDED.updated_at"
+    )
+    params_list = [
+        (
+            r["file_id"], r["group_id"], r["name"], r["original_filename"],
+            r["fmt"], r.get("data"), r.get("storage_key"),
+            r.get("size_bytes") if r.get("size_bytes") is not None
+            else (len(r["data"]) if r.get("data") else 0),
+            json.dumps(r.get("metadata") or {}),
+            now, now, r.get("created_by"),
+        )
+        for r in rows
+    ]
+
+    with transaction() as conn:
+        with conn.cursor() as cur:
+            cur.executemany(sql, params_list)
 
 
 def update_file_source_metadata(file_id: str, metadata: dict) -> None:

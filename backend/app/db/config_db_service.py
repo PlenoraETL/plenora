@@ -377,6 +377,7 @@ from app.db.config.file_sources import (  # noqa: F401,E402
     get_file_source,
     list_file_sources,
     save_file_source,
+    save_file_sources_batch,
     update_file_source_metadata,
     delete_file_source,
 )

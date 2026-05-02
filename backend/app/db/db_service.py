@@ -19,6 +19,7 @@ from app.db.config_db_service import (
     get_connection_config, list_connections, create_connection,
     update_connection, delete_connection,
     get_file_source, list_file_sources, save_file_source,
+    save_file_sources_batch,
     update_file_source_metadata, delete_file_source,
     get_datasource, list_datasources, save_datasource,
     update_datasource, delete_datasource,
