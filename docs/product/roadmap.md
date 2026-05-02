@@ -55,7 +55,9 @@ tests, see [Residual Register](residual-register.md).
 |---|---|---|---|
 | **R-19** | `core/features/arcgis_client.py` 2476 LOC monolith | LATER Phase 5-7 | XL refactor multi-PR. Seam: auth handler / pagination / write batch. |
 | **R-20** | `workers/tasks/enrichment_task.py` 1430 LOC | LATER Phase 5-7 | XL. `run_enrichment_task` 500+ LOC mix. |
-| STRUCT-001 | `services/file_service.py` 1050 LOC | PARTIAL | Seam A/B/C/D chiusi: helper puri (`file_helpers.py`), Protocols/default impls (`file_service_deps.py`), storage dispatch (`file_storage_dispatch.py`), `preview_file_temp` standalone (`file_preview_temp.py`), parser dispatch condiviso (`file_load_dispatch.py`), cleanup condiviso (`file_cleanup.py`), read orchestration DB/security-bound (`file_source_read.py`), blob/temp materialization (`file_blob_materialization.py`) e raw upload (`file_raw_upload.py`) estratti con wrapper/re-export compatibili. Riduzione 1847 -> 1050 LOC. Restano `create_from_upload` e `create_multi_layer_from_upload` da affrontare un seam alla volta. |
+| STRUCT-001 | `services/file_service.py` facade extraction | CLOSED | Facade extraction chiusa: `file_service.py` ridotto da 1847 a ~750 LOC. Helper puri, Protocol/default impls, storage dispatch, preview temp, parser dispatch, cleanup, source read, blob/temp materialization, raw upload, parsed upload e multi-layer upload sono ora in moduli leaf go-ready con wrapper/re-export compatibili. I residui rimasti sono behavior/product semantics separati: `MULTI-ATOMIC-001` e `MULTI-BLOB-001`. |
+| MULTI-ATOMIC-001 | Multi-layer upload atomicity | NEXT | Oggi `create_multi_layer_from_upload` e' best-effort: se fallisce il layer N, i layer precedenti restano persistiti. Decidere se mantenere questo contratto o introdurre all-or-nothing con transazione/rollback e test dedicati. |
+| MULTI-BLOB-001 | Multi-layer blob dedup/storage model | LATER | Con object storage, N layer possono generare N upload dello stesso blob. Ottimizzazione architetturale go-ready: separare blob fisico da FileSource logico/layer metadata, previa verifica delete lifecycle e ownership. |
 | STRUCT-002 | `services/schema_inference.py` 1502 LOC | LATER | Tocca canvas types fallback. M-L effort. |
 | STRUCT-003 | `core/manipola/transforms/spatial.py` 1941 LOC | WATCH/LATER | Cohesive (single concern), refactor non urgente. |
 | STRUCT-004 | `core/scheduler/execution_manager.py` 1097 LOC | LATER | R-05 ha introdotto `app/shared/clock.py` e migrato i test heartbeat/lock-lost a `FakeClock`; il retry release-lock resta volutamente fuori scope e gia' mockabile. |
@@ -90,7 +92,7 @@ tests, see [Residual Register](residual-register.md).
 | FE-SPLIT-001 | `pages/ApiConnectionManager.jsx` 1193 LOC, 6 concerns | LATER | L effort. Modal extraction + context split. |
 | FE-SPLIT-002 | `components/transforms/ParameterInput.jsx` 974 LOC | LATER | M-L structural split. Contract coverage added for main input types plus `PivotMappingBuilder`; split remains maintainability work, not coverage gap. |
 | FE-SPLIT-003 | `components/panels/ResponseConfigBuilder.jsx` 978 LOC + tight coupling con `ApiEnrichNode` | LATER | M structural split. Contract coverage now covers structure, mappings, transforms, preview entrypoints and residual builder paths. |
-| FE-SPLIT-004 | `EditorCore` extraction (Estrai/Manipola/Arricchisci ~85% duplicazione) | LATER Phase 3-4 | L effort. Riduce skew tra editor. |
+| FE-SPLIT-004 | `EditorShell` scaffold per Estrai/Manipola/Arricchisci | CLOSED | `EditorShell` centralizza guard/loading/error/project-null branches e ReactFlow canvas wrapper con API `canvasConfig`/`canvasHandlers`/`slots`; `AccessDeniedBanner` deduplica il banner shared. Hook orchestration resta nei page editor. FE in standby salvo bug o nuovo editor variant. |
 | FE-SPLIT-005 | `components/nodes/result/ResultNodeStandardView.jsx` 880 LOC | LATER | M effort. |
 | FE-SPLIT-006 | `pages/FileManager.jsx` 887 LOC | LATER | STRUCTURAL DEBT classificato. |
 | FE-TEST-001 | Coverage hotspot pages/components | CLOSED | Major batches completed for manager pages, ScheduleList, LogViewer, ProjectList, ResultNode gating, PublishEseguibileModal, RunsTab, ParameterInput, ResponseConfigBuilder, PivotMappingBuilder, editor guards/save-failure and high-ROI residual branches (`19cc007`). Remaining items are low-ROI, fragile, or covered by FE-SPLIT/A11Y/design-token tracks. |
@@ -165,16 +167,16 @@ Focus: **compliance automation + test reliability completion**.
 - R-29 SAST scanner
 - R-35 SBOM frontend
 - ~~R-05 clock injection scheduler~~ -> **CLOSED** (clock seam + heartbeat tests migrated)
-- FE-SPLIT/A11Y/design-token work only when it is structural or product-driven, not as FE-TEST-001 residue
+- FE standby by default; reopen only for concrete bugs, product-driven UX work or a new editor variant
 - R-21/R-22/R-23 removal effettiva alias deprecated (target 2026-Q4)
 
 ### Phase 4 (Q4 2026)
 
 Focus: **frontend split + productization avanzata**.
 
-- FE-SPLIT-004 EditorCore extraction
+- ~~FE-SPLIT-004 EditorShell scaffold~~ -> **CLOSED** (Estrai/Manipola/Arricchisci migrated)
 - FE-CLN-002 design tokens migration
-- FE-A11Y-001 accessibility audit
+- ~~FE-A11Y-001 accessibility audit~~ -> **CLOSED** (dialog semantics/focus, focus-visible, contrast/accessibility mechanical gaps)
 - FE-PERF-001 bundle size + code splitting
 - API reference navigabile + demo dataset
 - R-31 rollback scriptato
@@ -185,7 +187,8 @@ Focus: **structural refactor + capability services**.
 
 - R-19 arcgis_client.py split
 - R-20 enrichment_task.py split
-- STRUCT-001 file_service.py remaining I/O seams (upload/storage/preview) after pure helper extraction
+- ~~STRUCT-001 file_service.py facade extraction~~ -> **CLOSED** (~750 LOC facade over leaf modules)
+- MULTI-ATOMIC-001 / MULTI-BLOB-001 if product/storage semantics justify the change
 - STRUCT-002/003/004/005/006 a seguire
 - Capability services al trigger business
 
