@@ -23,9 +23,12 @@
  *   nodeVariant   string    — estrai | manipola | arricchisci (classi CSS)
  *   executeLabel  string    — label del bottone Esegui
  */
-import React, { useState, memo } from 'react';
+import React, { useState, memo, lazy, Suspense } from 'react';
 import BundleSlotCard from '../../imdf/BundleSlotCard';
-import ImdfPreviewModal from '../../modals/ImdfPreviewModal';
+// Lazy: ImdfPreviewModal pulls maplibre-gl + deck.gl (~1.27 MB raw).
+// Caricato on-demand al click "Visualizza IMDF" — evita di pesare sul
+// path eager dei 3 editor.
+const ImdfPreviewModal = lazy(() => import('../../modals/ImdfPreviewModal'));
 import ImdfManifestModal from '../../modals/ImdfManifestModal';
 import ImdfValidationModal from '../../modals/ImdfValidationModal';
 import ImdfBundlesManagerModal from '../../modals/ImdfBundlesManagerModal';
@@ -139,11 +142,15 @@ const ResultNodeImdfView = memo(({
       </div>
 
       {/* Modali IMDF: leggono dati dal bundle corrente (imdfData dallo store via hook) */}
-      <ImdfPreviewModal
-        isOpen={openImdfModal === 'preview'}
-        onClose={() => setOpenImdfModal(null)}
-        imdfData={imdfData}
-      />
+      <Suspense fallback={null}>
+        {openImdfModal === 'preview' && (
+          <ImdfPreviewModal
+            isOpen={true}
+            onClose={() => setOpenImdfModal(null)}
+            imdfData={imdfData}
+          />
+        )}
+      </Suspense>
       <ImdfManifestModal
         isOpen={openImdfModal === 'manifest'}
         onClose={() => setOpenImdfModal(null)}
