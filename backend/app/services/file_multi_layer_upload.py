@@ -58,6 +58,9 @@ import zipfile
 from pathlib import Path
 from typing import Any, BinaryIO, Callable, Dict, List, Optional, Tuple
 
+from app.db.config.file_sources import FileSourceRow
+from app.services.file_storage_dispatch import BlobDispatchResult
+
 
 def create_multi_layer_from_upload(
     file_content: BinaryIO,
@@ -73,8 +76,8 @@ def create_multi_layer_from_upload(
     detect_format: Callable[[str], str],
     load_by_format: Callable[..., Tuple[Any, Optional[Any]]],
     column_builder_from_df: Callable[..., List[Any]],
-    dispatch_blob_storage: Callable[..., dict],
-    db_save_file_sources_batch: Callable[[List[Dict[str, Any]]], None],
+    dispatch_blob_storage: Callable[..., BlobDispatchResult],
+    db_save_file_sources_batch: Callable[[List[FileSourceRow]], None],
     delete_blob: Callable[[str], None],
     build_file_source: Callable[..., Any],
     cleanup_dir: Callable[[Any], None],
@@ -105,8 +108,10 @@ def create_multi_layer_from_upload(
     Raises:
         ValueError: layers_config vuoto/None, MIME block, ZIP malformato
                     o path traversal.
-        Exception:  dispatch_blob_storage / db_save_file_source propagano
-                    la loro eccezione (atomicita' batch non garantita).
+        Exception:  dispatch_blob_storage / db_save_file_sources_batch
+                    propagano la loro eccezione. Batch save e' atomico
+                    (E3): rollback DB + cleanup compensativo del shared
+                    storage_key best-effort.
     """
     # MIME validator default: lazy import per preservare "sempre attivo"
     # del comportamento originale (NON opzionale come create_from_upload).
@@ -198,7 +203,7 @@ def create_multi_layer_from_upload(
         # effect DB. La persistenza avviene UNA volta sola dopo il loop
         # via db_save_file_sources_batch (E3 atomic transaction).
         created: List[Any] = []
-        rows: List[Dict[str, Any]] = []
+        rows: List[FileSourceRow] = []
         for layer_cfg in layers_config:
             # Supporta sia {"layer": "nome"} che {"sheet": "nome"}
             layer = layer_cfg.get("layer") or layer_cfg.get("sheet")

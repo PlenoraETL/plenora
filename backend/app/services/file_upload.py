@@ -49,6 +49,8 @@ import zipfile
 from pathlib import Path
 from typing import Any, BinaryIO, Callable, List, Optional, Tuple
 
+from app.services.file_storage_dispatch import BlobDispatchResult
+
 
 def create_from_upload(
     file_content: BinaryIO,
@@ -68,7 +70,7 @@ def create_from_upload(
     list_sheets: Callable[[Path], List[str]],
     load_by_format: Callable[..., Tuple[Any, Optional[Any]]],
     column_builder_from_df: Callable[..., List[Any]],
-    dispatch_blob_storage: Callable[[str, bytes, str], dict],
+    dispatch_blob_storage: Callable[[str, bytes, str], BlobDispatchResult],
     db_save_file_source: Callable[..., None],
     build_file_source: Callable[..., Any],
     cleanup: Callable[[Any], None],

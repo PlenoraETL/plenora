@@ -40,6 +40,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, BinaryIO, Callable, Optional
 
+from app.services.file_storage_dispatch import BlobDispatchResult
+
 
 def create_raw_from_upload(
     file_content: BinaryIO,
@@ -50,7 +52,7 @@ def create_raw_from_upload(
     *,
     generate_file_id: Callable[[str], str],
     time_now: Callable[[], Any],
-    dispatch_blob_storage: Callable[[str, bytes, str], dict],
+    dispatch_blob_storage: Callable[[str, bytes, str], BlobDispatchResult],
     db_save_file_source: Callable[..., None],
     default_group: str,
     build_file_source: Callable[..., Any],

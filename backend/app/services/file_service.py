@@ -38,7 +38,10 @@ import re
 import warnings
 from pathlib import Path
 from datetime import datetime
-from typing import List, Optional, Tuple, BinaryIO, Dict, Any, Callable
+from typing import List, Optional, Tuple, BinaryIO, Dict, Any, Callable, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.services.file_storage_dispatch import BlobDispatchResult
 from dataclasses import dataclass, field
 import pandas as pd
 
@@ -394,13 +397,17 @@ class FileSourceService:
 
     def _dispatch_blob_storage(
         self, file_id: str, raw_data: bytes, filename: str, **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> "BlobDispatchResult":
         """Wrapper compat: delega a `file_storage_dispatch.dispatch_blob_storage`.
 
         BE-HARDEN-001C E1: `**kwargs` pass-through propaga eventuali
         parametri opzionali (es. `storage_key_id` per shared blob in
         multi-layer upload). Single-file caller chiamano con 3 positional
         args -> backward-compat 100%.
+
+        BE-SHAPE-002: ritorna `BlobDispatchResult` TypedDict (data,
+        storage_key, size_bytes). Compat 100% con i caller che usano
+        `**blob_kwargs`: a runtime e' un dict.
 
         Vedi `app.services.file_storage_dispatch.dispatch_blob_storage`
         per la documentazione completa del policy dispatch.

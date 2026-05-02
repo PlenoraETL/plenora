@@ -14,12 +14,77 @@ Observable non-breaking (0 test verificano il name).
 """
 
 import json
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, TypedDict
 
 from app.db.pg_connection import fetchone, fetchall, execute, transaction
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+class FileSourceRow(TypedDict, total=False):
+    """Riga tipizzata per la persistenza di un FileSource (BE-SHAPE-001).
+
+    Shape unica usata sia da `save_file_source` (single-row) che da
+    `save_file_sources_batch` (batch atomic). Tutte le chiavi sono
+    dichiarate `total=False` per consentire ai caller di omettere i
+    campi opzionali; la presenza degli obbligatori e' verificata da
+    `_validate_row` prima di qualunque side effect DB.
+
+    Chiavi obbligatorie:
+        file_id, group_id, name, original_filename, fmt
+    Chiavi opzionali (con default):
+        data         (Optional[bytes])    blob in BYTEA path
+        storage_key  (Optional[str])      key in object_storage path
+        size_bytes   (int)                derivato da len(data) se assente
+        metadata     (dict)               serializzato a JSON dentro la fn
+        created_by   (Optional[str])
+
+    Invariante app-level: ALMENO uno tra `data` e `storage_key` deve
+    essere non-None (il DB non lo enforce).
+
+    Go-ready mapping:
+        type FileSourceRow struct {
+            FileID, GroupID, Name, OriginalFilename, Format string
+            Data       []byte
+            StorageKey *string
+            SizeBytes  int64
+            Metadata   map[string]any
+            CreatedBy  *string
+        }
+        Repository.Save(ctx, FileSourceRow)         error
+        Repository.SaveBatch(ctx, []FileSourceRow)  error
+    """
+
+    file_id: str
+    group_id: str
+    name: str
+    original_filename: str
+    fmt: str
+    data: Optional[bytes]
+    storage_key: Optional[str]
+    size_bytes: int
+    metadata: Dict[str, Any]
+    created_by: Optional[str]
+
+
+def _validate_row(row: Dict[str, Any], *, context: str) -> None:
+    """Valida l'invariante "data o storage_key non-None" su una row.
+
+    Usato da `save_file_source` e `save_file_sources_batch` per
+    centralizzare il check. Solleva `ValueError` con context-tagged
+    message; nessun side effect.
+
+    Args:
+        row:     dict-shape FileSourceRow.
+        context: tag prefix per il messaggio di errore (nome funzione
+                 caller, es. "save_file_source" o "save_file_sources_batch").
+    """
+    if row.get("data") is None and not row.get("storage_key"):
+        raise ValueError(
+            f"{context}: row file_id={row.get('file_id')!r} "
+            f"senza data ne storage_key (almeno uno richiesto)"
+        )
 
 
 def get_file_source(file_id: str, include_data: bool = False, group_id: str = None) -> Optional[Dict]:
@@ -71,11 +136,10 @@ def save_file_source(file_id: str, group_id: str, name: str, original_filename: 
     su data).
     """
     from datetime import datetime, timezone
-    if data is None and not storage_key:
-        raise ValueError(
-            "save_file_source: serve almeno 'data' o 'storage_key' "
-            "(non entrambi None)"
-        )
+    _validate_row(
+        {"file_id": file_id, "data": data, "storage_key": storage_key},
+        context="save_file_source",
+    )
     now = datetime.now(timezone.utc).isoformat()
     effective_size = size_bytes if size_bytes is not None else (len(data) if data else 0)
     execute(
@@ -90,7 +154,7 @@ def save_file_source(file_id: str, group_id: str, name: str, original_filename: 
     return get_file_source(file_id)
 
 
-def save_file_sources_batch(rows: List[Dict]) -> None:
+def save_file_sources_batch(rows: List[FileSourceRow]) -> None:
     """Salva N file_sources in UNA SOLA transazione (BE-HARDEN-001C E3).
 
     All-or-nothing: se l'INSERT fallisce per qualsiasi row, la transazione
@@ -132,11 +196,7 @@ def save_file_sources_batch(rows: List[Dict]) -> None:
         return
 
     for r in rows:
-        if r.get("data") is None and not r.get("storage_key"):
-            raise ValueError(
-                f"save_file_sources_batch: row file_id={r.get('file_id')!r} "
-                f"senza data ne storage_key (almeno uno richiesto)"
-            )
+        _validate_row(r, context="save_file_sources_batch")
 
     now = datetime.now(timezone.utc).isoformat()
     sql = (

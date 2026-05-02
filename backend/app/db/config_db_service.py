@@ -374,6 +374,7 @@ from app.db.config.connections import (  # noqa: F401,E402
 # [attributo via facade, no edit] + shared/authz_helpers.py + core/auth/auth.py +
 # workers/tasks/enrichment_task.py + 10 test file patch target).
 from app.db.config.file_sources import (  # noqa: F401,E402
+    FileSourceRow,
     get_file_source,
     list_file_sources,
     save_file_source,

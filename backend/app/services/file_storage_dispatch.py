@@ -37,11 +37,36 @@ da `app.services.*`.
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Optional, TypedDict
 
 
 _DEFAULT_THRESHOLD_BYTES = 50 * 1024 * 1024  # 50 MB
 _OBJECT_STORAGE_PREFIX = "file-sources"
+
+
+class BlobDispatchResult(TypedDict):
+    """Risultato tipizzato di `dispatch_blob_storage` (BE-SHAPE-002).
+
+    Shape compatibile 1:1 con i kwargs accettati da `db.save_file_source`
+    e da `db.save_file_sources_batch` (chiavi `data`, `storage_key`,
+    `size_bytes`). Ritorna sempre tutti e tre i campi.
+
+    Path BYTEA  -> data=raw_bytes,  storage_key=None,  size_bytes=N
+    Path object -> data=None,       storage_key="..", size_bytes=N
+
+    Go-ready mapping:
+        type BlobDispatchResult struct {
+            Data       []byte
+            StorageKey *string
+            SizeBytes  int64
+        }
+    Caller pattern attuale (`**blob_kwargs`) resta invariato a runtime:
+    TypedDict e' un `dict` regolare.
+    """
+
+    data: Optional[bytes]
+    storage_key: Optional[str]
+    size_bytes: int
 
 
 def dispatch_blob_storage(
@@ -51,7 +76,7 @@ def dispatch_blob_storage(
     *,
     logger: Any,
     storage_key_id: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> BlobDispatchResult:
     """Dispatch policy-aware del blob (A1).
 
     Legge `STORAGE_POLICY` e ramifica:

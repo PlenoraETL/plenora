@@ -18,6 +18,7 @@ from app.db.config_db_service import (
     get_project, list_projects, create_project, update_project, delete_project,
     get_connection_config, list_connections, create_connection,
     update_connection, delete_connection,
+    FileSourceRow,
     get_file_source, list_file_sources, save_file_source,
     save_file_sources_batch,
     update_file_source_metadata, delete_file_source,
