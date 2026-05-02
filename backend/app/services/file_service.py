@@ -1005,45 +1005,23 @@ class FileSourceService:
         self, file_id: str, layer: str = None, sheet: str = None,
         expected_group_id: str = None,
     ) -> Tuple[pd.DataFrame, Optional[Any]]:
-        """Carica dati da file source — estrae blob in temp file.
+        """Wrapper compat: delega a `file_source_read.load_dataframe`.
 
-        N1: `expected_group_id` obbligatorio per fail-closed cross-tenant
-        check. Superadmin puo' passare `FileSourceService.SUPERADMIN_BYPASS`.
+        N1 resta fail-closed: il modulo estratto riceve `_assert_visible`
+        come collaborator esplicito.
         """
-        self._assert_visible(file_id, expected_group_id or "")
-        file_source = self.get_file_source(file_id)
-        if not file_source:
-            raise ValueError(f"File source '{file_id}' non trovato")
-        tmp_path = self._temp_file_for(file_id, expected_group_id)
-        if not tmp_path:
-            raise ValueError(f"Nessun dato trovato per '{file_id}'")
-        try:
-            use_layer = layer or file_source.layer
-            use_sheet = sheet or file_source.sheet
-            df, gdf = self._load_by_format(tmp_path, file_source.format, use_layer, use_sheet)
-            return df, gdf
-        finally:
-            import gc
-            try:
-                del df, gdf
-            except NameError:
-                pass
-            gc.collect()
-            # Per SHP/GDB tmp_path è dentro una tmp_dir — cancella la dir parent
-            if file_source.format in ('shp', 'gdb'):
-                try:
-                    _rmtree_safe(tmp_path.parent)
-                except Exception as e:
-                    self._logger.debug(
-                        f"cleanup load_dataframe tmp_dir fallito ({tmp_path.parent}): {e}"
-                    )
-            else:
-                try:
-                    _rmtree_safe(tmp_path)
-                except Exception as e:
-                    self._logger.debug(
-                        f"cleanup load_dataframe tmp fallito ({tmp_path}): {e}"
-                    )
+        from app.services.file_source_read import load_dataframe
+        return load_dataframe(
+            file_id,
+            layer=layer,
+            sheet=sheet,
+            expected_group_id=expected_group_id,
+            assert_visible=self._assert_visible,
+            get_file_source=self.get_file_source,
+            temp_file_for=self._temp_file_for,
+            load_by_format=self._load_by_format,
+            logger=self._logger,
+        )
 
     def update_file_source(self, file_id: str, data: Any) -> Optional[FileSource]:
         """Aggiorna file source nel DB."""
@@ -1095,78 +1073,42 @@ class FileSourceService:
     def get_layers_info(
         self, file_id: str, expected_group_id: str = None,
     ) -> Dict[str, Any]:
-        """Ottieni info su layers/sheets — estrae blob in temp.
+        """Wrapper compat: delega a `file_source_read.get_layers_info`.
 
         N1: `expected_group_id` obbligatorio per fail-closed check.
         """
-        self._assert_visible(file_id, expected_group_id or "")
-        file_source = self.get_file_source(file_id)
-        if not file_source:
-            raise ValueError(f"File source '{file_id}' non trovato")
-        layers = []
-        sheets = []
-        if file_source.format in ['gdb', 'gpkg', 'xlsx']:
-            tmp_path = self._temp_file_for(file_id, expected_group_id)
-            if tmp_path:
-                try:
-                    if file_source.format in ['gdb', 'gpkg']:
-                        layers = self.list_layers(tmp_path)
-                    elif file_source.format == 'xlsx':
-                        sheets = self.list_sheets(tmp_path)
-                finally:
-                    if file_source.format in ('gdb',):
-                        try:
-                            _rmtree_safe(tmp_path.parent)
-                        except Exception as e:
-                            self._logger.debug(
-                                f"cleanup get_layers_info tmp_dir fallito ({tmp_path.parent}): {e}"
-                            )
-                    else:
-                        try:
-                            _rmtree_safe(tmp_path)
-                        except Exception as e:
-                            self._logger.debug(
-                                f"cleanup get_layers_info tmp fallito ({tmp_path}): {e}"
-                            )
-        if _USE_APP_MODELS:
-            try:
-                from app.models import FileSourceLayersResponse
-                return FileSourceLayersResponse(file_id=file_id, format=file_source.format, layers=layers, sheets=sheets)
-            except ImportError:
-                pass
-        return {"file_id": file_id, "format": file_source.format, "layers": layers, "sheets": sheets}
+        from app.services.file_source_read import get_layers_info
+        return get_layers_info(
+            file_id,
+            expected_group_id=expected_group_id,
+            assert_visible=self._assert_visible,
+            get_file_source=self.get_file_source,
+            temp_file_for=self._temp_file_for,
+            list_layers=self.list_layers,
+            list_sheets=self.list_sheets,
+            logger=self._logger,
+        )
 
     def get_preview(
         self, file_id: str, limit: int = 100, expected_group_id: str = None,
     ) -> Dict[str, Any]:
-        """Restituisce anteprima dati (prime N righe).
+        """Wrapper compat: delega a `file_source_read.get_preview`.
 
         N1: `expected_group_id` obbligatorio per fail-closed check.
         """
-        self._assert_visible(file_id, expected_group_id or "")
-        file_source = self.get_file_source(file_id)
-        if not file_source:
-            raise ValueError(f"File source '{file_id}' non trovato")
-        df, gdf = self.load_dataframe(file_id, expected_group_id=expected_group_id)
-        total_count = len(df)
-        preview_df = df.head(limit)
-        rows = preview_df.to_dict(orient='records')
-        import numpy as np
-        for row in rows:
-            for key, value in row.items():
-                if pd.isna(value):
-                    row[key] = None
-                elif isinstance(value, (np.integer, np.floating)):
-                    row[key] = value.item()
-                elif isinstance(value, np.bool_):
-                    row[key] = bool(value)
-        if _USE_APP_MODELS:
-            try:
-                from app.models import FileSourcePreview
-                return FileSourcePreview(file_id=file_id, columns=file_source.columns, rows=rows, total_count=total_count, preview_count=len(rows))
-            except ImportError:
-                pass
-        return {"file_id": file_id, "columns": [{"name": c.name, "type": c.type} for c in file_source.columns], "rows": rows, "total_count": total_count, "preview_count": len(rows)}
+        from app.services.file_source_read import get_preview
+        return get_preview(
+            file_id,
+            limit=limit,
+            expected_group_id=expected_group_id,
+            assert_visible=self._assert_visible,
+            get_file_source=self.get_file_source,
+            load_dataframe_for_preview=(
+                lambda fid, group_id: self.load_dataframe(
+                    fid, expected_group_id=group_id,
+                )
+            ),
+        )
 
     def preview_file_temp(self, file_content: BinaryIO, filename: str, layer: str = None, sheet: str = None) -> dict:
         """Wrapper compat: delega a `file_preview_temp.preview_file_temp`.
