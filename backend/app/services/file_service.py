@@ -393,16 +393,21 @@ class FileSourceService:
     # invariati. Behavior byte-per-byte preservato.
 
     def _dispatch_blob_storage(
-        self, file_id: str, raw_data: bytes, filename: str,
+        self, file_id: str, raw_data: bytes, filename: str, **kwargs,
     ) -> Dict[str, Any]:
         """Wrapper compat: delega a `file_storage_dispatch.dispatch_blob_storage`.
+
+        BE-HARDEN-001C E1: `**kwargs` pass-through propaga eventuali
+        parametri opzionali (es. `storage_key_id` per shared blob in
+        multi-layer upload). Single-file caller chiamano con 3 positional
+        args -> backward-compat 100%.
 
         Vedi `app.services.file_storage_dispatch.dispatch_blob_storage`
         per la documentazione completa del policy dispatch.
         """
         from app.services.file_storage_dispatch import dispatch_blob_storage
         return dispatch_blob_storage(
-            file_id, raw_data, filename, logger=self._logger,
+            file_id, raw_data, filename, logger=self._logger, **kwargs,
         )
 
     def get_blob_bytes(

@@ -24,9 +24,12 @@ Invarianti preservate (test-blindabili):
   4. Loop per-layer: se parse fallisce per UN layer, logger.warning +
      columns=[]/row_count=0 PER QUEL layer, il loop CONTINUA sui
      successivi.
-  5. dispatch_blob_storage / db_save_file_source: chiamati N volte.
-     Atomicita' batch NON garantita - se fallisce al layer K, i K-1
-     precedenti restano persistiti (preservato verbatim).
+  5. dispatch_blob_storage: chiamato 1 volta PRIMA del loop con
+     `storage_key_id=batch_id` (BE-HARDEN-001C E1 - shared blob).
+     db_save_file_source: chiamato N volte (uno per layer) con i
+     `shared_blob_kwargs` propagati. Atomicita' batch NON garantita -
+     se db_save fallisce al layer K, i K-1 precedenti restano
+     persistiti (E3 affrontera' la transazione batch).
   6. Cleanup asimmetrico (preservato verbatim):
        - tmp file: cleanup_file (in produzione = os.unlink)
        - zip_tmp_dir: cleanup_dir (in produzione = rmtree_safe)
@@ -48,6 +51,7 @@ Side effect confinati (tutti via callback iniettata):
 from __future__ import annotations
 
 import tempfile
+import uuid
 import zipfile
 from pathlib import Path
 from typing import Any, BinaryIO, Callable, Dict, List, Optional, Tuple
@@ -92,7 +96,7 @@ def create_multi_layer_from_upload(
     detect_format: Callable[[str], str],
     load_by_format: Callable[..., Tuple[Any, Optional[Any]]],
     column_builder_from_df: Callable[..., List[Any]],
-    dispatch_blob_storage: Callable[[str, bytes, str], dict],
+    dispatch_blob_storage: Callable[..., dict],
     db_save_file_source: Callable[..., None],
     build_file_source: Callable[..., Any],
     cleanup_dir: Callable[[Any], None],
@@ -203,11 +207,29 @@ def create_multi_layer_from_upload(
         # BE-HARDEN-001A: tracking osservabilita' per partial batch failure.
         # NON cambia behavior (exception propaga come prima); solo emette
         # log strutturato `partial_batch_failure` se il loop si interrompe
-        # DOPO almeno un save riuscito. MULTI-ATOMIC-001 resta aperto:
-        # questa e' instrumentation, non atomicita'.
+        # DOPO almeno un save riuscito.
+        #
+        # Post BE-HARDEN-001C E1: dispatch e' UNA volta pre-loop, quindi
+        # un dispatch fail produce sempre `created=0` -> log NON emesso
+        # (condizione 0 < created < expected non soddisfatta). Il
+        # `failed_phase` resta solo "db_save".
         expected_count = len(layers_config)
         last_failed_layer: Optional[str] = None
-        last_failed_phase: Optional[str] = None  # "dispatch" | "db_save"
+        last_failed_phase: Optional[str] = None  # "db_save"
+
+        # BE-HARDEN-001C E1 - shared blob dispatch:
+        # 1 chiamata a dispatch_blob_storage PRIMA del loop con
+        # `storage_key_id=batch_id`. Le N row in object_storage path
+        # condividono lo stesso storage_key (delete safe grazie a E2
+        # reference-aware delete in `db.delete_file_source`).
+        # In BYTEA path, le N row hanno lo stesso `data` bytes
+        # (5a, comportamento BYTEA invariato).
+        # Failure pre-loop -> 0 db_save chiamati (orphan guard).
+        batch_id = f"batch_{uuid.uuid4().hex}"
+        shared_blob_kwargs = dispatch_blob_storage(
+            batch_id, raw_data, filename,
+            storage_key_id=batch_id,
+        )
 
         for layer_cfg in layers_config:
             # Supporta sia {"layer": "nome"} che {"sheet": "nome"}
@@ -276,24 +298,19 @@ def create_multi_layer_from_upload(
                 else {}
             )
 
-            # dispatch + db_save chiamati N volte (orphan guard PER-LAYER:
-            # se dispatch fallisce, db_save non chiamato per QUESTO layer,
-            # ma i layer precedenti restano persistiti -> atomicita' batch
-            # NON garantita, preservato verbatim).
+            # BE-HARDEN-001C E1: dispatch fatto UNA volta pre-loop. Qui
+            # ogni layer chiama solo db_save_file_source con i kwargs
+            # condivisi (`shared_blob_kwargs`). In object_storage path
+            # tutte le N row puntano allo stesso storage_key (delete
+            # safe via E2 reference-aware delete). In BYTEA path tutte
+            # le N row hanno gli stessi `data` bytes (5a, invariato).
             #
-            # BE-HARDEN-001A: tracciamo `last_failed_layer`/`last_failed_phase`
-            # PRIMA di rilanciare, cosi' il blocco osservabilita' a fondo loop
-            # puo' emettere il log `partial_batch_failure` se created > 0.
-            try:
-                blob_kwargs = dispatch_blob_storage(file_id, raw_data, filename)
-            except Exception:
-                last_failed_layer = layer
-                last_failed_phase = "dispatch"
-                _emit_partial_batch_failure_log(
-                    logger, created, expected_count,
-                    last_failed_layer, last_failed_phase,
-                )
-                raise
+            # Atomicita' batch resta NON garantita: se db_save fallisce
+            # al layer K, i K-1 precedenti restano persistiti -> E3 lo
+            # affrontera' in transaction. BE-HARDEN-001A: tracciamo
+            # `last_failed_layer`/`last_failed_phase` PRIMA di rilanciare,
+            # cosi' il log `partial_batch_failure` viene emesso se
+            # created > 0.
             try:
                 db_save_file_source(
                     file_id=file_id,
@@ -302,7 +319,7 @@ def create_multi_layer_from_upload(
                     original_filename=filename,
                     fmt=format_type,
                     metadata=metadata,
-                    **blob_kwargs,
+                    **shared_blob_kwargs,
                 )
             except Exception:
                 last_failed_layer = layer

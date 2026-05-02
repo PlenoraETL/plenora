@@ -165,8 +165,9 @@ def test_xlsx_multi_sheet_creates_n_file_sources_with_sheet_field(collaborators)
 
     # 2 FileSource creati
     assert len(out) == 2
-    # dispatch + db_save chiamati 2 volte (1 per sheet)
-    assert collaborators["dispatch_blob_storage"].call_count == 2
+    # BE-HARDEN-001C E1: dispatch UNA volta pre-loop (shared blob);
+    # db_save N volte (uno per sheet).
+    assert collaborators["dispatch_blob_storage"].call_count == 1
     assert collaborators["db_save_file_source"].call_count == 2
     # build_file_source: per XLSX -> sheet valorizzato, layer None
     builds = [c.kwargs for c in collaborators["build_file_source"].call_args_list]
@@ -375,24 +376,26 @@ def test_parse_failure_per_layer_continues_with_empty_columns(collaborators):
 
 
 # =============================================================================
-# 9. Dispatch failure: propaga, atomicita' parziale documentata
+# 9. db_save failure: propaga, atomicita' parziale residua (post-E1)
 # =============================================================================
 
 
-def test_dispatch_failure_propagates_with_partial_atomicity(collaborators):
-    """Dispatch fallisce al 2# layer -> propaga; il 1# gia' persistito,
-    il 2# NO, il 3# NON viene processato. Atomicita' batch NON garantita
-    (preservato verbatim - questo test la blinda)."""
+def test_db_save_failure_propagates_with_partial_atomicity(collaborators):
+    """Post BE-HARDEN-001C E1: dispatch e' UNA volta pre-loop (atomico).
+    L'unica fonte residua di partial-batch e' db_save fail. Se db_save
+    fallisce al 2# layer -> propaga; il 1# gia' persistito, il 2# NO,
+    il 3# NON viene processato. Atomicita' batch resta NON garantita per
+    db_save (E3 affrontera' la transazione)."""
     from app.services.file_multi_layer_upload import create_multi_layer_from_upload
 
     collaborators["detect_format"].return_value = "gpkg"
-    # 1# dispatch OK, 2# solleva
-    collaborators["dispatch_blob_storage"].side_effect = [
-        {"data": b"r1", "storage_key": None, "size_bytes": 2},
-        RuntimeError("S3 down on layer 2"),
+    # 1# db_save OK, 2# solleva
+    collaborators["db_save_file_source"].side_effect = [
+        None,
+        RuntimeError("DB lock timeout on layer 2"),
     ]
 
-    with pytest.raises(RuntimeError, match="S3 down on layer 2"):
+    with pytest.raises(RuntimeError, match="DB lock timeout on layer 2"):
         create_multi_layer_from_upload(
             io.BytesIO(b"fake gpkg"), "data.gpkg", "Multi",
             layers_config=[
@@ -404,10 +407,12 @@ def test_dispatch_failure_propagates_with_partial_atomicity(collaborators):
             **collaborators,
         )
 
-    # ATOMICITA' PARZIALE: solo il 1# layer ha db_save chiamato
-    assert collaborators["db_save_file_source"].call_count == 1
-    # 1# dispatch chiamato, 2# chiamato (e fallito), 3# NON chiamato
-    assert collaborators["dispatch_blob_storage"].call_count == 2
+    # ATOMICITA' PARZIALE residua: 1# db_save persistito, 2# fallito,
+    # 3# NON tentato.
+    assert collaborators["db_save_file_source"].call_count == 2
+    # E1: dispatch chiamato 1 volta (pre-loop), invariato anche su fail
+    # del db_save.
+    assert collaborators["dispatch_blob_storage"].call_count == 1
     # Cleanup eseguito comunque (finally)
     collaborators["cleanup_file"].assert_called()
 
@@ -632,37 +637,6 @@ def _has_partial_batch_failure_log(logger_mock) -> bool:
     )
 
 
-def test_partial_batch_failure_log_on_dispatch_failure_at_layer_two_of_three(
-    collaborators,
-):
-    """Layer 1 OK, Layer 2 dispatch fail (created_count=1, expected=3) ->
-    log partial_batch_failure emesso, exception propaga."""
-    from app.services.file_multi_layer_upload import create_multi_layer_from_upload
-
-    collaborators["detect_format"].return_value = "gpkg"
-    collaborators["dispatch_blob_storage"].side_effect = [
-        {"data": b"r1", "storage_key": None, "size_bytes": 2},
-        RuntimeError("S3 down on layer 2"),
-    ]
-
-    with pytest.raises(RuntimeError, match="S3 down on layer 2"):
-        create_multi_layer_from_upload(
-            io.BytesIO(b"x"), "data.gpkg", "Multi",
-            layers_config=[{"layer": "L1"}, {"layer": "L2"}, {"layer": "L3"}],
-            group_id="g1",
-            **collaborators,
-        )
-
-    # Log partial_batch_failure emesso
-    assert _has_partial_batch_failure_log(collaborators["logger"])
-    msgs = _warning_messages(collaborators["logger"])
-    pbf = next(m for m in msgs if "event=partial_batch_failure" in m)
-    assert "expected_count=3" in pbf
-    assert "created_count=1" in pbf
-    assert "failed_layer='L2'" in pbf
-    assert "failed_phase=dispatch" in pbf
-
-
 def test_partial_batch_failure_log_on_db_save_failure_at_layer_two_of_three(
     collaborators,
 ):
@@ -728,19 +702,23 @@ def test_no_partial_batch_failure_log_on_mime_block(collaborators):
     assert not _has_partial_batch_failure_log(collaborators["logger"])
 
 
-def test_no_partial_batch_failure_log_on_first_layer_failure(collaborators):
-    """Failure al PRIMO layer prima di created.append (created_count=0):
-    NO log partial_batch_failure (la condizione `created_count > 0` non
-    e' soddisfatta)."""
+def test_no_partial_batch_failure_log_on_first_db_save_failure(collaborators):
+    """Failure al PRIMO db_save prima di created.append (created_count=0):
+    NO log partial_batch_failure (la condizione `0 < created_count < expected`
+    non e' soddisfatta).
+
+    Post BE-HARDEN-001C E1: la sola fonte residua di in-loop fail e'
+    db_save (dispatch e' pre-loop atomico, vedi test
+    `test_dispatch_failure_before_loop_no_db_save_no_partial_log`)."""
     from app.services.file_multi_layer_upload import create_multi_layer_from_upload
 
     collaborators["detect_format"].return_value = "gpkg"
-    # Dispatch fail SUBITO sul primo layer
-    collaborators["dispatch_blob_storage"].side_effect = RuntimeError(
-        "S3 down on layer 1"
+    # db_save fail SUBITO sul primo layer
+    collaborators["db_save_file_source"].side_effect = RuntimeError(
+        "DB lock on layer 1"
     )
 
-    with pytest.raises(RuntimeError, match="S3 down on layer 1"):
+    with pytest.raises(RuntimeError, match="DB lock on layer 1"):
         create_multi_layer_from_upload(
             io.BytesIO(b"x"), "data.gpkg", "Multi",
             layers_config=[{"layer": "L1"}, {"layer": "L2"}, {"layer": "L3"}],
@@ -767,3 +745,124 @@ def test_no_partial_batch_failure_log_on_bad_zip_file(collaborators):
         )
 
     assert not _has_partial_batch_failure_log(collaborators["logger"])
+
+
+# =============================================================================
+# 15. BE-HARDEN-001C E1: shared blob dispatch (1 dispatch, N db_save)
+# =============================================================================
+#
+# Verifica che multi-layer upload faccia 1 sola chiamata a
+# dispatch_blob_storage (PRE-LOOP) con `storage_key_id=batch_id`, e che
+# le N db_save_file_source ricevano gli stessi `shared_blob_kwargs`
+# (storage_key condiviso in object_storage path; data condiviso in BYTEA
+# path). MULTI-BLOB-001 si chiude con questi contratti.
+
+
+def test_multi_layer_uses_single_dispatch_with_batch_id_storage_key(collaborators):
+    """3 layer -> dispatch_blob_storage chiamato 1 volta PRIMA del loop.
+    Argomenti: file_id e storage_key_id sono entrambi un `batch_*`
+    opaque id (non legati ad alcun file_id specifico del layer)."""
+    from app.services.file_multi_layer_upload import create_multi_layer_from_upload
+
+    collaborators["detect_format"].return_value = "gpkg"
+
+    create_multi_layer_from_upload(
+        io.BytesIO(b"shared blob"), "data.gpkg", "Multi",
+        layers_config=[
+            {"layer": "L1"}, {"layer": "L2"}, {"layer": "L3"},
+        ],
+        group_id="g1",
+        **collaborators,
+    )
+
+    # 1 sola chiamata a dispatch
+    assert collaborators["dispatch_blob_storage"].call_count == 1
+    # db_save chiamato N volte (1 per layer)
+    assert collaborators["db_save_file_source"].call_count == 3
+
+    # Argomenti: file_id e storage_key_id == lo stesso batch_id opaque
+    call = collaborators["dispatch_blob_storage"].call_args
+    file_id_arg = call.args[0]
+    storage_key_id_kwarg = call.kwargs.get("storage_key_id")
+    assert file_id_arg.startswith("batch_"), (
+        f"E1 expected opaque batch_id, got {file_id_arg!r}"
+    )
+    assert storage_key_id_kwarg == file_id_arg, (
+        "E1: storage_key_id must equal the batch_id used as positional file_id"
+    )
+    # batch_id NON deve coincidere con i file_id dei layer (sono `file_<name>`
+    # via fixture generate_file_id, mentre batch_id e' `batch_<hex>`)
+    assert not file_id_arg.startswith("file_")
+
+
+def test_n_db_save_calls_share_same_storage_key(collaborators):
+    """In object_storage path, le N db_save ricevono lo STESSO storage_key.
+    Verifica MULTI-BLOB-001 fix: 1 blob fisico, N row che lo referenziano."""
+    from app.services.file_multi_layer_upload import create_multi_layer_from_upload
+
+    collaborators["detect_format"].return_value = "gpkg"
+    # Simula object_storage mode: dispatch ritorna data=None + storage_key
+    shared_kwargs = {
+        "data": None,
+        "storage_key": "file-sources/batch_xyz/data.gpkg",
+        "size_bytes": 1024,
+    }
+    collaborators["dispatch_blob_storage"].return_value = shared_kwargs
+
+    create_multi_layer_from_upload(
+        io.BytesIO(b"big blob"), "data.gpkg", "Multi",
+        layers_config=[
+            {"layer": "L1"}, {"layer": "L2"}, {"layer": "L3"},
+        ],
+        group_id="g1",
+        **collaborators,
+    )
+
+    # Tutte le 3 db_save ricevono lo stesso storage_key, data, size_bytes
+    db_calls = [c.kwargs for c in collaborators["db_save_file_source"].call_args_list]
+    assert len(db_calls) == 3
+    storage_keys = {c["storage_key"] for c in db_calls}
+    assert storage_keys == {"file-sources/batch_xyz/data.gpkg"}, (
+        f"E1: tutte le N row devono condividere lo storage_key, got {storage_keys}"
+    )
+    datas = {c["data"] for c in db_calls}
+    assert datas == {None}
+    sizes = {c["size_bytes"] for c in db_calls}
+    assert sizes == {1024}
+    # file_id PER-LAYER resta distinto (le N row sono entita' DB distinte
+    # con shared blob)
+    file_ids = [c["file_id"] for c in db_calls]
+    assert len(set(file_ids)) == 3, (
+        f"E1: file_id deve restare PER-LAYER (DB row distinte), got {file_ids}"
+    )
+
+
+def test_dispatch_failure_before_loop_no_db_save_no_partial_log(collaborators):
+    """E1: se dispatch fallisce PRE-LOOP, 0 db_save chiamati e nessun
+    log partial_batch_failure (created_count=0 -> condizione 0 < N <
+    expected non soddisfatta). La eccezione propaga al caller."""
+    from app.services.file_multi_layer_upload import create_multi_layer_from_upload
+
+    collaborators["detect_format"].return_value = "gpkg"
+    collaborators["dispatch_blob_storage"].side_effect = RuntimeError(
+        "S3 dispatch down"
+    )
+
+    with pytest.raises(RuntimeError, match="S3 dispatch down"):
+        create_multi_layer_from_upload(
+            io.BytesIO(b"x"), "data.gpkg", "Multi",
+            layers_config=[
+                {"layer": "L1"}, {"layer": "L2"}, {"layer": "L3"},
+            ],
+            group_id="g1",
+            **collaborators,
+        )
+
+    # 1 dispatch (tentato e fallito), 0 db_save, 0 build_file_source
+    assert collaborators["dispatch_blob_storage"].call_count == 1
+    collaborators["db_save_file_source"].assert_not_called()
+    collaborators["build_file_source"].assert_not_called()
+    # Nessun log partial (created_count=0)
+    assert not _has_partial_batch_failure_log(collaborators["logger"])
+    # Cleanup eseguito (finally branch)
+    collaborators["cleanup_file"].assert_called()

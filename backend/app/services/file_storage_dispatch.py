@@ -37,7 +37,7 @@ da `app.services.*`.
 from __future__ import annotations
 
 import os
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 
 _DEFAULT_THRESHOLD_BYTES = 50 * 1024 * 1024  # 50 MB
@@ -50,6 +50,7 @@ def dispatch_blob_storage(
     filename: str,
     *,
     logger: Any,
+    storage_key_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Dispatch policy-aware del blob (A1).
 
@@ -65,12 +66,22 @@ def dispatch_blob_storage(
     caller deve gestire (orphan guard: no row DB se upload fallisce).
 
     Args:
-        file_id:    identifier del file source (usato per la storage_key).
-        raw_data:   bytes del blob da persistere.
-        filename:   nome file originale (usato per la storage_key).
-        logger:     LoggerProtocol-like; usato per warning/error/info
-                    sul path object_storage. Passato dal caller per
-                    evitare coupling con FileSourceService.
+        file_id:        identifier del file source. Usato per la storage_key
+                        SE `storage_key_id` non e' fornito (backward-compat
+                        single-file). Sempre usato nei log per audit trail.
+        raw_data:       bytes del blob da persistere.
+        filename:       nome file originale (usato per la storage_key).
+        logger:         LoggerProtocol-like; warning/error/info sul path
+                        object_storage. Passato dal caller per evitare
+                        coupling con FileSourceService.
+        storage_key_id: opzionale (BE-HARDEN-001C E1). Se valorizzato,
+                        sostituisce `file_id` come segmento path nello
+                        storage_key. Usato dal multi-layer upload per
+                        condividere 1 blob fisico tra N FileSource logici
+                        (storage_key=`file-sources/{storage_key_id}/{filename}`,
+                        identico per tutte le N row del batch).
+                        Default None -> naming basato su file_id
+                        (comportamento single-file invariato).
 
     Returns:
         dict con chiavi `data` (bytes|None), `storage_key` (str|None),
@@ -100,9 +111,12 @@ def dispatch_blob_storage(
     if not use_object_storage:
         return {"data": raw_data, "storage_key": None, "size_bytes": size}
 
-    # Object storage path: upload in `file-sources/{file_id}/{filename}` -
-    # mirror di `eseguibili-outputs/` e `imdf-bundles/` nel naming bucket.
-    storage_key = f"{_OBJECT_STORAGE_PREFIX}/{file_id}/{filename}"
+    # Object storage path. BE-HARDEN-001C E1: il segmento path puo' essere
+    # `file_id` (default, single-file) oppure `storage_key_id` (multi-layer
+    # con shared blob). Pattern speculare a `eseguibili-outputs/` e
+    # `imdf-bundles/` nel naming bucket.
+    key_id = storage_key_id if storage_key_id is not None else file_id
+    storage_key = f"{_OBJECT_STORAGE_PREFIX}/{key_id}/{filename}"
     try:
         from app.shared.cloud_backends import get_runtime_object_storage
         storage = get_runtime_object_storage()

@@ -271,3 +271,51 @@ def test_file_service_wrapper_delegates_to_module_function(fake_logger, fake_sto
     assert out["data"] == raw
     assert out["storage_key"] is None
     assert out["size_bytes"] == len(raw)
+
+
+# =============================================================================
+# 6. BE-HARDEN-001C E1: storage_key_id opzionale per shared blob multi-layer
+# =============================================================================
+
+
+def test_dispatch_uses_storage_key_id_when_provided(fake_logger, fake_storage):
+    """Object storage path: se `storage_key_id` e' fornito, sostituisce
+    `file_id` come segmento path. Permette al multi-layer upload di
+    condividere 1 blob fisico tra N FileSource logici."""
+    from app.services.file_storage_dispatch import dispatch_blob_storage
+
+    raw = b"shared blob bytes" * 10
+    with _patched_settings("object_storage"), \
+         patch("app.shared.cloud_backends.get_runtime_object_storage",
+               return_value=fake_storage):
+        out = dispatch_blob_storage(
+            "batch_abc", raw, "multi.gpkg",
+            logger=fake_logger,
+            storage_key_id="batch_abc",
+        )
+
+    expected_key = "file-sources/batch_abc/multi.gpkg"
+    assert out == {"data": None, "storage_key": expected_key, "size_bytes": len(raw)}
+    fake_storage.upload_bytes.assert_called_once_with(raw, expected_key)
+
+
+def test_dispatch_storage_key_id_none_falls_back_to_file_id(
+    fake_logger, fake_storage,
+):
+    """Backward-compat single-file: storage_key_id=None (default) -> il path
+    resta `file-sources/{file_id}/{filename}` come pre-E1."""
+    from app.services.file_storage_dispatch import dispatch_blob_storage
+
+    raw = b"single file bytes"
+    with _patched_settings("object_storage"), \
+         patch("app.shared.cloud_backends.get_runtime_object_storage",
+               return_value=fake_storage):
+        out = dispatch_blob_storage(
+            "file_legacy", raw, "single.csv",
+            logger=fake_logger,
+            storage_key_id=None,
+        )
+
+    expected_key = "file-sources/file_legacy/single.csv"
+    assert out["storage_key"] == expected_key
+    fake_storage.upload_bytes.assert_called_once_with(raw, expected_key)
