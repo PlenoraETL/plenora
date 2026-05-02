@@ -95,6 +95,14 @@ CREATE TABLE IF NOT EXISTS file_sources (
 
 CREATE INDEX IF NOT EXISTS idx_file_sources_group ON file_sources(group_id);
 
+-- BE-HARDEN-001C E4 (BE-DELETE-002): partial index su storage_key per
+-- accelerare la sibling refcount lookup e SELECT FOR UPDATE durante
+-- delete_file_source quando il blob e' shared (multi-layer upload).
+-- Partial perche' BYTEA rows hanno storage_key=NULL e non vengono mai
+-- interrogate by key.
+CREATE INDEX IF NOT EXISTS idx_file_sources_storage_key
+    ON file_sources(storage_key) WHERE storage_key IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS datasources (
     id         TEXT PRIMARY KEY,
     group_id   TEXT NOT NULL REFERENCES groups(id),
