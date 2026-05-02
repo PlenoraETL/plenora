@@ -9,10 +9,11 @@
  *
  * Si aspetta un edge in ingresso da ResultNode (handle "output").
  */
-import React, { useState, useEffect, memo } from 'react';
+import React, { useState, useEffect, useRef, memo } from 'react';
 import { createPortal } from 'react-dom';
 import { Handle, Position } from 'reactflow';
 import useCanvasStore from '../../store/useCanvasStore';
+import useDialogFocus from '../../hooks/useDialogFocus';
 import './CaricanNode.css';
 import { getCaricaSchemas, getCaricaTables, getCaricaColumns, postCaricaAutoMapping, postCaricaCheckConflicts } from '../../api/carica';
 const CaricanNode = memo(({ data, id }) => {
@@ -39,6 +40,12 @@ const CaricanNode = memo(({ data, id }) => {
 
   // State conflict checker
   const [showConflictModal, setShowConflictModal] = useState(false);
+  const conflictDialogRef = useRef(null);
+  useDialogFocus(
+    showConflictModal,
+    () => setShowConflictModal(false),
+    conflictDialogRef,
+  );
   const [conflictReport, setConflictReport] = useState(null);
   const [isCheckingConflicts, setIsCheckingConflicts] = useState(false);
   const [conflictError, setConflictError] = useState('');
@@ -731,10 +738,18 @@ const CaricanNode = memo(({ data, id }) => {
       {/* ============ MODAL CONFLICT CHECKER (Portal) ============ */}
       {showConflictModal && createPortal(
         <div className="carica-conflict-modal__overlay" onClick={() => setShowConflictModal(false)}>
-          <div className="carica-conflict-modal" onClick={e => e.stopPropagation()}>
+          <div
+            ref={conflictDialogRef}
+            className="carica-conflict-modal"
+            onClick={e => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ccm-title"
+            tabIndex={-1}
+          >
             <div className="carica-conflict-modal__header">
-              <span>🔍 Report Conflitti — {schemaName}.{tableName}</span>
-              <button className="carica-conflict-modal__close" onClick={() => setShowConflictModal(false)}>✕</button>
+              <span id="ccm-title">🔍 Report Conflitti — {schemaName}.{tableName}</span>
+              <button className="carica-conflict-modal__close" onClick={() => setShowConflictModal(false)} aria-label="Chiudi">✕</button>
             </div>
             <div className="carica-conflict-modal__body">
               {conflictError ? (

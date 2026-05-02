@@ -20,7 +20,8 @@
   /* Text */
   --plen-text:     #DDE4F2;
   --plen-text-sub: #7D8BA8;
-  --plen-text-dim: #3F4D68;
+  /* a11y batch: contrast bump per testo piccolo (~5.0:1 su --plen-bg). */
+  --plen-text-dim: #5A6B8A;
 
   /* Module accents */
   --plen-estrai:      #34C17A;
@@ -66,7 +67,8 @@
   /* Text */
   --plen-text:     #0F1729;
   --plen-text-sub: #4A5568;
-  --plen-text-dim: #8898AA;
+  /* a11y batch: contrast bump per testo piccolo (~5.5:1 su --plen-bg). */
+  --plen-text-dim: #5F6E8C;
 
   /* Module accents — invariati */
   --plen-estrai:      #2AAD69;

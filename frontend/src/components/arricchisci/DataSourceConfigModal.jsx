@@ -3,7 +3,8 @@
  * Wizard 4 step: Tipo → Credenziali → Percorso → Test
  * Redesign Plenora design system
  */
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import useDialogFocus from '../../hooks/useDialogFocus';
 import './DataSourceConfigModal.css';
 
 const DATASOURCE_TYPES = [
@@ -42,6 +43,9 @@ const STEPS = ['Tipo', 'Credenziali', 'Percorso', 'Test'];
 const FILE_EXTS = ['.csv','.xlsx','.xls','.json','.xml','.txt'];
 
 function DataSourceConfigModal({ onClose, onSave }) {
+  const dialogRef = useRef(null);
+  // Componente montato solo quando aperto (controlled dal caller).
+  useDialogFocus(true, onClose, dialogRef);
   const [step, setStep] = useState(0);
   const [formData, setFormData] = useState({
     name: '', description: '', source_type: '',
@@ -78,18 +82,26 @@ function DataSourceConfigModal({ onClose, onSave }) {
 
   return (
     <div className="dsm__overlay" onClick={onClose}>
-      <div className="dsm__modal" onClick={e => e.stopPropagation()}>
+      <div
+        ref={dialogRef}
+        className="dsm__modal"
+        onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="dscm-title"
+        tabIndex={-1}
+      >
 
         {/* Header */}
         <div className="dsm__header">
           <div className="dsm__header-left">
             <span className="dsm__header-icon">📁</span>
             <div>
-              <div className="dsm__title">Configura Data Source</div>
+              <div className="dsm__title" id="dscm-title">Configura Data Source</div>
               <div className="dsm__subtitle">Collega sorgente file remota — SharePoint · FTP · SFTP · S3</div>
             </div>
           </div>
-          <button type="button" className="dsm__close" onClick={onClose}>✕</button>
+          <button type="button" className="dsm__close" onClick={onClose} aria-label="Chiudi">✕</button>
         </div>
 
         {/* Step bar */}
