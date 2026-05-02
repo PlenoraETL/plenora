@@ -549,135 +549,38 @@ class FileSourceService:
         srid: int = None,
         group_id: str = None,
     ) -> FileSource:
-        """Crea file source da upload multipart. Salva blob nel DB SQLite."""
-        import tempfile, os, zipfile as _zipfile
+        """Wrapper compat: delega a `file_upload.create_from_upload`.
+
+        STRUCT-001 Seam D-F: la logica vive in
+        `app.services.file_upload.create_from_upload` con collaborator
+        espliciti. Behavior byte-per-byte preservato (parse best-effort,
+        orphan guard su dispatch, cleanup garantito in finally).
+        """
+        from app.services.file_upload import create_from_upload as _impl
+        from app.config import settings
+        from app.shared.file_cleanup import rmtree_safe
+        from app.utils.zip_safe import safe_extractall, ZipSlipError
         import app.db.db_service as db
-        from app.config import settings
-
-        file_id = self._generate_file_id(name)
-        format_type = self._detect_format(filename)
-
-        suffix = Path(filename).suffix or ".bin"
-        from app.config import settings
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir=settings.TEMP_DIR)
-        file_content.seek(0)
-        raw_data = file_content.read()
-        tmp.write(raw_data)
-        tmp.close()
-        tmp_path = Path(tmp.name)
-
-        zip_raw_data = raw_data  # conserva ZIP originale per SHP
-        zip_tmp_dir = None
-
-        try:
-            if format_type == 'zip':
-                from app.config import settings
-                from app.utils.zip_safe import safe_extractall, ZipSlipError
-                zip_tmp_dir = Path(tempfile.mkdtemp(dir=settings.TEMP_DIR))
-                try:
-                    with _zipfile.ZipFile(tmp_path, 'r') as z:
-                        safe_extractall(z, zip_tmp_dir)
-                except _zipfile.BadZipFile as e:
-                    raise ValueError(f"File ZIP non valido o corrotto: {e}") from e
-                except ZipSlipError as e:
-                    raise ValueError(f"File ZIP rifiutato (path traversal): {e}") from e
-                extracted_files = [f for f in zip_tmp_dir.rglob("*") if f.is_file() or (f.is_dir() and f.suffix.lower() == ".gdb")]
-                for ext in ['.shp', '.gpkg', '.gdb', '.geojson', '.csv', '.xlsx']:
-                    match = next((f for f in extracted_files if f.suffix.lower() == ext), None)
-                    if match:
-                        tmp_path = match
-                        format_type = self._detect_format(match.name)
-                        filename = match.name
-                        # Per SHP teniamo il ZIP (ha bisogno di .shx, .dbf, ecc.)
-                        if format_type in ('shp', 'gdb'):
-                            raw_data = zip_raw_data  # salva ZIP nel blob (GDB è cartella, non leggibile come bytes)
-                        else:
-                            raw_data = tmp_path.read_bytes()
-                        break
-
-            if format_type in ['gdb', 'gpkg']:
-                layers = self.list_layers(tmp_path)
-                if not layer and len(layers) == 1:
-                    layer = layers[0]
-            elif format_type == 'xlsx':
-                sheets = self.list_sheets(tmp_path)
-                if not sheet and len(sheets) == 1:
-                    sheet = sheets[0]
-
-            columns = []
-            row_count = 0
-            crs = None
-            try:
-                df, gdf = self._load_by_format(tmp_path, format_type, layer, sheet)
-                if selected_columns:
-                    df = self._filter_columns(df, selected_columns)
-                columns = self._column_builder.from_dataframe(df, gdf, srid)
-                row_count = len(df)
-                if gdf is not None and hasattr(gdf, 'crs') and gdf.crs:
-                    # Preferisce il codice EPSG numerico al WKT grezzo
-                    epsg = gdf.crs.to_epsg()
-                    if epsg:
-                        crs = f"EPSG:{epsg}"
-                    else:
-                        # Fallback: prova to_authority (es. ESRI:xxxxx)
-                        auth = gdf.crs.to_authority()
-                        crs = f"{auth[0]}:{auth[1]}" if auth else str(gdf.crs)
-                elif srid:
-                    crs = f"EPSG:{srid}"
-            except Exception as e:
-                self._logger.warning(f"Errore inferenza colonne: {e}")
-
-            now = self._time.now()
-            # Converti ColumnInfo locali in dict per compatibilità con app.models.FileSource
-            columns_dicts = [
-                {"name": c.name, "type": c.type} if not isinstance(c, dict) else c
-                for c in columns
-            ]
-            file_source = FileSource(
-                id=file_id,
-                name=name,
-                description=description,
-                original_filename=filename,
-                format=format_type,
-                layer=layer,
-                sheet=sheet,
-                columns=columns_dicts,
-                row_count=row_count,
-                file_size=len(raw_data),
-                crs=crs,
-                group_id=group_id or settings.DEFAULT_GROUP,
-                created_at=now,
-                updated_at=now
-            )
-
-            metadata = file_source.model_dump(mode='json') if _USE_APP_MODELS else {}
-            blob_kwargs = self._dispatch_blob_storage(file_id, raw_data, filename)
-            db.save_file_source(
-                file_id=file_id,
-                group_id=group_id or settings.DEFAULT_GROUP,
-                name=name,
-                original_filename=filename,
-                fmt=format_type,
-                metadata=metadata,
-                **blob_kwargs,
-            )
-
-            self._logger.info(f"FileSource creato: {file_id} ({len(raw_data)} bytes)")
-            return file_source
-
-        finally:
-            # Pulisci zip_tmp_dir per prima (contiene tmp_path per ZIP)
-            if zip_tmp_dir:
-                try:
-                    _rmtree_safe(zip_tmp_dir)
-                except Exception as e:
-                    self._logger.debug(
-                        f"cleanup zip_tmp_dir fallito ({zip_tmp_dir}): {e}"
-                    )
-            try:
-                _rmtree_safe(tmp.name)
-            except Exception as e:
-                self._logger.debug(f"cleanup tmp upload fallito ({tmp.name}): {e}")
+        return _impl(
+            file_content, filename, name, description,
+            layer, sheet, selected_columns, srid, group_id,
+            generate_file_id=self._generate_file_id,
+            time_now=self._time.now,
+            detect_format=self._detect_format,
+            list_layers=self.list_layers,
+            list_sheets=self.list_sheets,
+            load_by_format=self._load_by_format,
+            column_builder_from_df=self._column_builder.from_dataframe,
+            dispatch_blob_storage=self._dispatch_blob_storage,
+            db_save_file_source=db.save_file_source,
+            build_file_source=lambda **kw: FileSource(**kw),
+            cleanup=rmtree_safe,
+            safe_extractall=safe_extractall,
+            zip_slip_error=ZipSlipError,
+            temp_dir=settings.TEMP_DIR,
+            default_group=settings.DEFAULT_GROUP,
+            logger=self._logger,
+        )
 
     def create_raw_from_upload(
         self,
