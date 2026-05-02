@@ -45,11 +45,8 @@ import { useToast } from '../hooks/useToast';
 import { useTheme } from '../hooks/useTheme';
 import useColumnPropagation from '../hooks/useColumnPropagation';
 import { deserializeNodes, createEdgeFromData } from '../utils/nodeFactories';
-import {
-  hasAccessDeniedNodes,
-  describeAccessDeniedNodes,
-  getAccessDeniedNodes,
-} from '../utils/canvasAccessControl';
+import { describeAccessDeniedNodes } from '../utils/canvasAccessControl';
+import AccessDeniedBanner from '../components/editor/AccessDeniedBanner';
 import '../styles/ManipolaEditor.css';
 import '../components/nodes/StaticValuesNode.css';
 import '../components/nodes/AnnotationNode.css';
@@ -435,22 +432,7 @@ const ManipolaEditorContent = () => {
   // Guard branches gestiti da EditorShell (FE-SPLIT-004).
 
   // beforeCanvas slot: banner accessibilita' nodi cross-tenant.
-  const accessDeniedBanner = hasAccessDeniedNodes(nodes) ? (
-    <div
-      role="alert"
-      style={{
-        background: '#fff4e5',
-        border: '1px solid #d97706',
-        borderRadius: 4,
-        color: '#92400e',
-        padding: '10px 14px',
-        margin: '8px 16px 0',
-        fontSize: '0.92em',
-      }}
-    >
-      🔒 Il canvas contiene {getAccessDeniedNodes(nodes).length} nodo/i con risorse non accessibili al tuo gruppo. Rimuovili o sostituiscili prima di eseguire.
-    </div>
-  ) : null;
+  const accessDeniedBanner = <AccessDeniedBanner nodes={nodes} />;
 
   // topbar slot
   const topbar = (
