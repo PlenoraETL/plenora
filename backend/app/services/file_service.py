@@ -644,8 +644,10 @@ class FileSourceService:
         `app.services.file_multi_layer_upload.create_multi_layer_from_upload`
         con collaborator espliciti. Behavior byte-per-byte preservato:
         MIME defense-in-depth sempre attiva, ZIP unwrap solo `.gpkg`/`.gdb`,
-        loop per-layer best-effort, atomicita' batch NON garantita,
-        cleanup asimmetrico (os.unlink per file + rmtree_safe per dir).
+        loop per-layer best-effort, batch save atomico (E3 transactional
+        all-or-nothing) con cleanup compensativo del shared storage_key
+        su rollback, cleanup asimmetrico (os.unlink per file + rmtree_safe
+        per dir).
         """
         from app.services.file_multi_layer_upload import (
             create_multi_layer_from_upload as _impl,
@@ -660,8 +662,28 @@ class FileSourceService:
         # del shared storage_key se la transazione batch fallisce. Lazy
         # binding sul cloud backend: in BYTEA mode il caller non chiamera'
         # mai questa fn (storage_key is None).
+        #
+        # BE-DELETE-001: short-circuit esplicito su `object_storage_enabled()`
+        # speculare al pattern in `app/db/config/file_sources.py::delete_file_source`.
+        # Reachability nominale: chiamato solo quando dispatch ha prodotto
+        # uno storage_key (capability era ON al dispatch). Edge case
+        # patologico: capability disabilitata tra dispatch e cleanup ->
+        # `get_runtime_object_storage()` solleverebbe `ObjectStorageDisabledError`
+        # che il caller catturerebbe come `event=orphan_blob_cleanup_failed`,
+        # log semanticamente fuorviante (non e' un orfano, e' capability off).
+        # Lo short-circuit emette invece `delete_blob: skip ...` debug.
+        # Behavior preservato: nominale identico, edge case logga meglio.
         def _delete_blob(storage_key: str) -> None:
-            from app.shared.cloud_backends import get_runtime_object_storage
+            from app.shared.cloud_backends import (
+                get_runtime_object_storage,
+                object_storage_enabled,
+            )
+            if not object_storage_enabled():
+                self._logger.debug(
+                    f"delete_blob: skip cleanup compensativo per "
+                    f"{storage_key!r} (object storage disabilitato)"
+                )
+                return
             get_runtime_object_storage().delete(storage_key)
 
         return _impl(

@@ -473,6 +473,84 @@ def test_file_service_wrapper_delegates_with_save_batch_and_delete_blob():
 
 
 # =============================================================================
+# 11b. BE-DELETE-001: _delete_blob short-circuit on object_storage_enabled()
+# =============================================================================
+
+
+def _capture_delete_blob_callback():
+    """Helper: costruisce il service, intercetta `_impl` e ritorna il
+    callback `delete_blob` realmente passato dal wrapper. Permette di
+    testare la closure in isolamento senza eseguire il batch reale."""
+    from app.services.file_service import FileSourceService
+
+    svc = FileSourceService.__new__(FileSourceService)
+    svc._generate_file_id = MagicMock(return_value="file_x")
+    svc._detect_format = MagicMock(return_value="gpkg")
+    svc._time = MagicMock()
+    svc._time.now = MagicMock(return_value=datetime.now(timezone.utc))
+    svc._load_by_format = MagicMock(return_value=(pd.DataFrame({"a": [1]}), None))
+    svc._column_builder = MagicMock()
+    svc._column_builder.from_dataframe = MagicMock(return_value=[])
+    svc._dispatch_blob_storage = MagicMock(
+        return_value={"data": b"x", "storage_key": None, "size_bytes": 1}
+    )
+    svc._logger = MagicMock()
+
+    captured = {}
+    with patch(
+        "app.services.file_multi_layer_upload.create_multi_layer_from_upload",
+        return_value=[MagicMock()],
+    ) as mock_impl:
+        svc.create_multi_layer_from_upload(
+            io.BytesIO(b"x"), "data.gpkg", "Doc",
+            layers_config=[{"layer": "L1"}],
+        )
+        captured["delete_blob"] = mock_impl.call_args.kwargs["delete_blob"]
+    return svc, captured["delete_blob"]
+
+
+def test_delete_blob_short_circuits_when_object_storage_disabled():
+    """BE-DELETE-001: se object_storage_enabled() ritorna False, il
+    callback _delete_blob NON chiama get_runtime_object_storage e
+    logga un debug message (non error). Edge case patologico
+    (capability disabilitata tra dispatch e cleanup) reso esplicito."""
+    svc, delete_blob = _capture_delete_blob_callback()
+
+    with patch(
+        "app.shared.cloud_backends.object_storage_enabled", return_value=False,
+    ), patch(
+        "app.shared.cloud_backends.get_runtime_object_storage",
+    ) as mock_get_storage:
+        delete_blob("file-sources/batch_x/data.gpkg")
+
+    mock_get_storage.assert_not_called()
+    svc._logger.debug.assert_called_once()
+    msg = svc._logger.debug.call_args[0][0]
+    assert "delete_blob" in msg
+    assert "object storage disabilitato" in msg
+    assert "file-sources/batch_x/data.gpkg" in msg
+    # NON deve emettere error (no falso orfano)
+    svc._logger.error.assert_not_called()
+
+
+def test_delete_blob_calls_storage_when_object_storage_enabled():
+    """BE-DELETE-001: caso nominale (capability ON) -> chiama
+    get_runtime_object_storage().delete(key) come prima del fix."""
+    svc, delete_blob = _capture_delete_blob_callback()
+
+    fake_storage = MagicMock()
+    with patch(
+        "app.shared.cloud_backends.object_storage_enabled", return_value=True,
+    ), patch(
+        "app.shared.cloud_backends.get_runtime_object_storage",
+        return_value=fake_storage,
+    ):
+        delete_blob("file-sources/batch_y/data.gpkg")
+
+    fake_storage.delete.assert_called_once_with("file-sources/batch_y/data.gpkg")
+
+
+# =============================================================================
 # 12. MULTI-GDB-001 fix: GDB directory in ZIP -> raw_data resta lo ZIP
 # =============================================================================
 
