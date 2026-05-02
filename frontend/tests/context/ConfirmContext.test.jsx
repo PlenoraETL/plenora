@@ -42,14 +42,22 @@ function ConsumerOk({ onResolved }) {
 
 describe('ConfirmContext', () => {
   it('useConfirm() fuori Provider lancia errore helpful', () => {
-    // Sopprimo console.error nominale di React per error boundary noise
+    // Sopprimo console.error di React per error boundary noise.
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // jsdom dispatcha l'errore di render anche via window 'error' event
+    // (canale separato da console.error). Lo intercetto col listener.
+    const swallow = (e) => e.preventDefault();
+    window.addEventListener('error', swallow);
     function BareConsumer() {
       useConfirm();
       return null;
     }
-    expect(() => render(<BareConsumer />)).toThrow(/ConfirmProvider/);
-    errSpy.mockRestore();
+    try {
+      expect(() => render(<BareConsumer />)).toThrow(/ConfirmProvider/);
+    } finally {
+      window.removeEventListener('error', swallow);
+      errSpy.mockRestore();
+    }
   });
 
   it('Provider rende children senza errore', () => {

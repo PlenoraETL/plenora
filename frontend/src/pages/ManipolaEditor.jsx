@@ -8,9 +8,9 @@
  *  - Nodo Output
  *  - Nodo Carica DB
  *
- * Hooks usati: useEditorData, useCanvasCore, useNodeHandlers,
- *              useEdgeHandlers, useColumnPropagation, useExecution,
- *              usePreview, useCaricarica, useToast
+ * Hooks usati: useEditorData, useCanvasCore, useEdgeHandlers,
+ *              useColumnPropagation, useExecution, usePreview,
+ *              useCaricarica, useToast
  *
  * Route: /editor/manipola/:id
  */
@@ -86,8 +86,6 @@ const ManipolaEditorContent = () => {
   useHexCanvas(hexCanvasRef);
 
   // ===== CANVAS CORE =====
-  // Sostituisce: useNodesState, useEdgesState, useNodeHandlers, nodesRef, edgesRef,
-  //             handleSaveQuiet, useCanvasKeyboard, getViewportCenter
   const {
     nodes, edges, setNodes, setEdges, onNodesChange, onEdgesChange,
     nodesRef, edgesRef, updateNodeData, deleteNode,

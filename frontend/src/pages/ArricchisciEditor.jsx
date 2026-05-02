@@ -7,9 +7,9 @@
  *  - Nodo valori statici con template variabili ({{NOW}}, {{TODAY}}, ...)
  *  - Nodo Output con mapping risposta JSON
  *
- * Hooks usati: useEditorData, useCanvasCore, useNodeHandlers,
- *              useEdgeHandlers, useEnrichmentValidation, useExecution,
- *              usePreview, useMultiModal, useToast
+ * Hooks usati: useEditorData, useCanvasCore, useEdgeHandlers,
+ *              useEnrichmentValidation, useExecution, usePreview,
+ *              useMultiModal, useToast
  *
  * Route: /arricchisci/:projectId
  */
@@ -111,8 +111,6 @@ const ArricchisciEditorContent = () => {
   const toast = useToast();
 
   // ===== CANVAS CORE =====
-  // Sostituisce: useNodesState, useEdgesState, useNodeHandlers, nodesRef, edgesRef,
-  //             handleSaveQuiet, useCanvasKeyboard, getViewportCenter
   const {
     nodes, edges, setNodes, setEdges, onNodesChange, onEdgesChange,
     nodesRef, edgesRef, updateNodeData, deleteNode,
