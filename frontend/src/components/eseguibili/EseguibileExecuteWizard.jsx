@@ -6,7 +6,7 @@
  * Step 3: Output format + nome + Esegui + progress + download
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   getEseguibile,
   analyzeEseguibileUpload,
@@ -15,6 +15,7 @@ import {
 } from '../../api';
 import { useToast } from '../../hooks/useToast';
 import { useTaskPolling } from '../../hooks/useTaskPolling';
+import useDialogFocus from '../../hooks/useDialogFocus';
 import PermissionRevokedBanner from '../common/PermissionRevokedBanner';
 import './EseguibileExecuteWizard.css';
 
@@ -29,6 +30,7 @@ const OUTPUT_FORMATS = [
 
 function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null }) {
   const toast = useToast();
+  const dialogRef = useRef(null);
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(true);
   const [eseguibile, setEseguibile] = useState(null);
@@ -55,6 +57,7 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
 
   // Polling task Celery: il hook gestisce single-flight + cleanup unmount.
   const { startPolling } = useTaskPolling({ interval: 1500 });
+  useDialogFocus(true, onClose, dialogRef, { closeOnEsc: !executing });
 
   // Load eseguibile details
   useEffect(() => {
@@ -204,15 +207,22 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
 
   return (
     <div className="esw-overlay" onClick={(e) => e.target === e.currentTarget && !executing && onClose()}>
-      <div className="esw-modal">
+      <div
+        className="esw-modal"
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="esw-title"
+        tabIndex={-1}
+      >
         <div className="esw-header">
           <div>
-            <h2 className="esw-title">▶ {loading ? 'Caricamento...' : eseguibile?.name}</h2>
+            <h2 className="esw-title" id="esw-title">▶ {loading ? 'Caricamento...' : eseguibile?.name}</h2>
             {eseguibile?.description && (
               <p className="esw-subtitle">{eseguibile.description}</p>
             )}
           </div>
-          <button type="button" className="esw-close" onClick={onClose} disabled={executing}>×</button>
+          <button type="button" className="esw-close" onClick={onClose} disabled={executing} aria-label="Chiudi">×</button>
         </div>
 
         {/* Stepper */}

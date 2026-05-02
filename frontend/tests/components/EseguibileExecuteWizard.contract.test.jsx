@@ -179,6 +179,59 @@ describe('EseguibileExecuteWizard contract', () => {
     expect(screen.queryByText(/caricamento eseguibile/i)).not.toBeInTheDocument();
   });
 
+  it('exposes dialog semantics and closes with Escape while idle', async () => {
+    const onClose = vi.fn();
+
+    render(
+      <EseguibileExecuteWizard
+        eseguibileId="exe-1"
+        onClose={onClose}
+      />,
+    );
+
+    const dialog = await screen.findByRole('dialog', { name: /enrich addresses/i });
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    expect(screen.getByRole('button', { name: /chiudi/i })).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not close with Escape while execution is in progress', async () => {
+    executeEseguibileMock.mockReturnValueOnce(new Promise(() => {}));
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <EseguibileExecuteWizard
+        eseguibileId="exe-1"
+        onClose={onClose}
+      />,
+    );
+
+    expect(await screen.findByText(/Enrich Addresses/i)).toBeInTheDocument();
+
+    const file = new File(['city_name,zip_code\nRome,00100'], 'addresses.csv', { type: 'text/csv' });
+    const input = document.getElementById('esw-file-input');
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await user.click(screen.getByRole('button', { name: /avanti/i }));
+    expect(await screen.findByText(/mappa le colonne/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /^avanti/i }));
+    expect(await screen.findByText(/configura l'output ed esegui/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /esegui/i }));
+
+    await waitFor(() => {
+      expect(executeEseguibileMock).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole('button', { name: /chiudi/i })).toBeDisabled();
+    });
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it('stays on upload step and surfaces the analyze error when file analysis fails', async () => {
     analyzeEseguibileUploadMock.mockRejectedValueOnce(new Error('unsupported xlsx schema'));
     const user = userEvent.setup();
