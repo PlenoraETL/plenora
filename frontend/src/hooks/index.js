@@ -11,7 +11,6 @@
  *   useCanvasValidation   → validazione canvas in tempo reale
  *   useCanvasKeyboard     → shortcut tastiera (Delete, Ctrl+S, ...)
  *   useEdgeHandlers       → gestione connessioni tra nodi e modal join
- *   useNodeHandlers       → operazioni CRUD sui nodi (update, delete, get)
  *   useColumnPropagation  → calcolo colonne lungo il grafo
  *   useSchemaInference    → inferenza schema colonne via backend
  *   useEnrichmentValidation → validazione/stima prima di arricchire
@@ -28,10 +27,8 @@ export { useCanvasValidation }                      from './useCanvasValidation'
 export {
   useCanvasKeyboard,
   useCanvasSaveShortcut,
-  useCanvasShortcuts,
 }                                                   from './useCanvasKeyboard';
 export { useEdgeHandlers }                          from './useEdgeHandlers';
-export { useNodeHandlers }                          from './useNodeHandlers';
 export { default as useColumnPropagation }          from './useColumnPropagation';
 export { useSchemaInference, useInputColumns }      from './useSchemaInference';
 export { useEnrichmentValidation }                  from './useEnrichmentValidation';

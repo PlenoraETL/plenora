@@ -3,7 +3,6 @@
  *
  * useCanvasKeyboard:    Delete/Backspace per eliminare nodi/edges selezionati
  * useCanvasSaveShortcut: Ctrl+S / Cmd+S per salvataggio canvas
- * useCanvasShortcuts:   Combina entrambi
  *
  * Tutti gli hook accettano { enabled, onDelete, onSave }.
  */
@@ -111,52 +110,6 @@ export function useCanvasSaveShortcut(options) {
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown, enabled]);
-}
-
-/**
- * Hook combinato per tutti gli shortcut del canvas
- * 
- * @param {Object} options - Opzioni di configurazione
- * @param {Array} options.nodes - Array dei nodi
- * @param {Array} options.edges - Array degli edges
- * @param {Function} options.onDeleteNode - Callback per eliminare nodo
- * @param {Function} options.setEdges - Setter edges
- * @param {Function} options.onSave - Callback per salvare
- * @param {boolean} options.enabled - Se false, disabilita tutto
- * 
- * Uso:
- * ```jsx
- * useCanvasShortcuts({
- *   nodes,
- *   edges,
- *   onDeleteNode: handleDeleteNode,
- *   setEdges,
- *   onSave: handleSaveCanvas
- * });
- * ```
- */
-export function useCanvasShortcuts(options) {
-  const { 
-    nodes, 
-    edges, 
-    onDeleteNode, 
-    setEdges, 
-    onSave,
-    enabled = true 
-  } = options;
-
-  useCanvasKeyboard({ 
-    nodes, 
-    edges, 
-    onDeleteNode, 
-    setEdges, 
-    enabled 
-  });
-
-  useCanvasSaveShortcut({ 
-    onSave, 
-    enabled 
-  });
 }
 
 export default useCanvasKeyboard;
