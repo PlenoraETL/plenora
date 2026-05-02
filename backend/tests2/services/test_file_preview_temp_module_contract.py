@@ -237,17 +237,21 @@ def test_file_service_wrapper_delegates_with_service_collaborators(
 
 
 # =============================================================================
-# 6. _load_by_format dispatcher (helper interno)
+# 6. parser dispatch (Seam D-B: load_by_format e' ora condivisa)
 # =============================================================================
 
 
-def test_internal_load_by_format_unsupported_raises(fake_logger, tmp_path):
-    """_load_by_format con format non supportato -> ValueError esplicito."""
-    from app.services.file_preview_temp import _load_by_format
+def test_load_by_format_unsupported_raises(fake_logger, tmp_path):
+    """load_by_format con format non riconosciuto -> ValueError esplicito.
+
+    Post Seam D-B: la funzione vive in `app.services.file_load_dispatch`
+    (modulo condiviso tra FileSourceService e file_preview_temp).
+    """
+    from app.services.file_load_dispatch import load_by_format
 
     loader = MagicMock()
     with pytest.raises(ValueError, match="Formato 'foo' non supportato"):
-        _load_by_format(loader, tmp_path / "x", "foo", None, None, logger=fake_logger)
+        load_by_format(loader, tmp_path / "x", "foo", None, None, logger=fake_logger)
 
 
 # =============================================================================

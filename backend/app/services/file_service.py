@@ -380,31 +380,25 @@ class FileSourceService:
     # della temp dir parent, non solo unlink del file).
 
     def _load_by_format(
-        self, 
-        file_path: Path, 
-        format_type: str, 
-        layer: str = None, 
+        self,
+        file_path: Path,
+        format_type: str,
+        layer: str = None,
         sheet: str = None
     ) -> Tuple[pd.DataFrame, Optional[Any]]:
-        """Carica dati in base al formato"""
-        gdf = None
-        
-        if format_type == 'csv':
-            df = self._loader.load_csv(file_path)
-        elif format_type == 'xlsx':
-            df = self._loader.load_excel(file_path, sheet)
-        elif format_type == 'json':
-            df = self._loader.load_json(file_path)
-        elif format_type in ['geojson', 'gpkg', 'shp', 'gdb']:
-            gdf = self._loader.load_geospatial(file_path, layer)
-            df = pd.DataFrame(gdf)
-            if 'geometry' in df.columns:
-                df['geometry'] = gdf.geometry.apply(lambda g: g.wkt if g else None)
-        else:
-            raise ValueError(f"Formato '{format_type}' non supportato")
-        
-        self._logger.info(f"Caricato: {len(df)} righe, {len(df.columns)} colonne")
-        return df, gdf
+        """Wrapper compat: delega a `file_load_dispatch.load_by_format`.
+
+        STRUCT-001 Seam D-B: la logica vive in
+        `app.services.file_load_dispatch.load_by_format` come funzione
+        standalone con collaborator espliciti. I 3 call site interni
+        (`self._load_by_format(...)` in upload methods + load_dataframe)
+        restano invariati. Behavior byte-per-byte preservato.
+        """
+        from app.services.file_load_dispatch import load_by_format
+        return load_by_format(
+            self._loader, file_path, format_type, layer, sheet,
+            logger=self._logger,
+        )
     
     # ==================== OPERAZIONI CRUD ====================
     # Upload, lista, preview, aggiornamento, eliminazione file source.

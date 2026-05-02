@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, BinaryIO, Optional
+from typing import BinaryIO, Optional
 
 
 _logger_module = logging.getLogger(__name__)
@@ -203,7 +203,8 @@ def preview_file_temp(
 
         # Carica con layer o sheet
         is_sheet = format_type in ['xlsx', 'xls']
-        df, gdf = _load_by_format(
+        from app.services.file_load_dispatch import load_by_format
+        df, gdf = load_by_format(
             loader, tmp_path, format_type,
             None if is_sheet else layer,
             sheet if is_sheet else None,
@@ -247,38 +248,3 @@ def preview_file_temp(
                 )
 
 
-def _load_by_format(
-    loader,
-    file_path: Path,
-    format_type: str,
-    layer: Optional[str],
-    sheet: Optional[str],
-    *,
-    logger,
-):
-    """Dispatch parser per format. Estratto inline da
-    `FileSourceService._load_by_format` per evitare import da
-    `file_service` (che creerebbe cycle).
-
-    Comportamento identico al metodo del service.
-    """
-    import pandas as pd
-
-    gdf = None
-
-    if format_type == 'csv':
-        df = loader.load_csv(file_path)
-    elif format_type == 'xlsx':
-        df = loader.load_excel(file_path, sheet)
-    elif format_type == 'json':
-        df = loader.load_json(file_path)
-    elif format_type in ['geojson', 'gpkg', 'shp', 'gdb']:
-        gdf = loader.load_geospatial(file_path, layer)
-        df = pd.DataFrame(gdf)
-        if 'geometry' in df.columns:
-            df['geometry'] = gdf.geometry.apply(lambda g: g.wkt if g else None)
-    else:
-        raise ValueError(f"Formato '{format_type}' non supportato")
-
-    logger.info(f"Caricato: {len(df)} righe, {len(df.columns)} colonne")
-    return df, gdf
