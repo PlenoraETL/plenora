@@ -626,168 +626,42 @@ class FileSourceService:
         srid: int = None,
         group_id: str = None,
     ) -> List["FileSource"]:
+        """Wrapper compat: delega a `file_multi_layer_upload.create_multi_layer_from_upload`.
+
+        STRUCT-001 Seam D-G: la logica vive in
+        `app.services.file_multi_layer_upload.create_multi_layer_from_upload`
+        con collaborator espliciti. Behavior byte-per-byte preservato:
+        MIME defense-in-depth sempre attiva, ZIP unwrap solo `.gpkg`/`.gdb`,
+        loop per-layer best-effort, atomicita' batch NON garantita,
+        cleanup asimmetrico (os.unlink per file + rmtree_safe per dir).
         """
-        Crea N FileSource da un file multi-layer (GPKG, GDB).
-
-        layers_config: lista di dict con:
-            - layer: nome layer
-            - selected_columns: lista colonne da importare (opzionale)
-
-        Il nome di ogni FileSource sara: name_layername
-        Tutti i FileSource condividono lo stesso blob binario.
-
-        Returns: lista di FileSource creati (uno per layer)
-
-        Defense-in-depth: stesso ragionamento di create_raw_from_upload,
-        ri-validiamo block-only sui magic bytes per caller diretti.
-        """
-        import tempfile, os, zipfile as _zipfile
-        import app.db.db_service as db
-        from app.config import settings
-        from app.utils.mime_validator import (
-            MimeMismatchError, validate_no_executable,
+        from app.services.file_multi_layer_upload import (
+            create_multi_layer_from_upload as _impl,
         )
-
-        if not layers_config:
-            raise ValueError("layers_config non puo essere vuota")
-
-        file_content.seek(0)
-        raw_data = file_content.read()
-
-        try:
-            validate_no_executable(content=raw_data, filename=filename or name)
-        except MimeMismatchError as e:
-            self._logger.warning(
-                f"create_multi_layer_from_upload bloccato (MIME): "
-                f"name={name!r} filename={filename!r}: {e}"
-            )
-            raise ValueError(str(e)) from e
-
-        suffix = Path(filename).suffix or ".bin"
         from app.config import settings
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir=settings.TEMP_DIR)
-        tmp.write(raw_data)
-        tmp.close()
-        tmp_path = Path(tmp.name)
-
-        zip_tmp_dir = None
-        format_type = self._detect_format(filename)
-
-        try:
-            if format_type == 'zip':
-                from app.config import settings
-                from app.utils.zip_safe import safe_extractall, ZipSlipError
-                zip_tmp_dir = Path(tempfile.mkdtemp(dir=settings.TEMP_DIR))
-                try:
-                    with _zipfile.ZipFile(tmp_path, 'r') as z:
-                        safe_extractall(z, zip_tmp_dir)
-                except _zipfile.BadZipFile as e:
-                    raise ValueError(f"File ZIP non valido o corrotto: {e}") from e
-                except ZipSlipError as e:
-                    raise ValueError(f"File ZIP rifiutato (path traversal): {e}") from e
-                extracted_files = [f for f in zip_tmp_dir.rglob("*") if f.is_file() or (f.is_dir() and f.suffix.lower() == ".gdb")]
-                for ext in ['.gpkg', '.gdb']:
-                    match = next((f for f in extracted_files if f.suffix.lower() == ext), None)
-                    if match:
-                        tmp_path = match
-                        format_type = self._detect_format(match.name)
-                        filename = match.name
-                        raw_data = tmp_path.read_bytes()
-                        break
-
-            # Determina se stiamo lavorando con layer (gpkg/gdb) o sheet (xlsx)
-            is_sheet_based = format_type in ['xlsx', 'xls']
-
-            created = []
-            now = self._time.now()
-
-            for layer_cfg in layers_config:
-                # Supporta sia {"layer": "nome"} che {"sheet": "nome"}
-                layer = layer_cfg.get("layer") or layer_cfg.get("sheet")
-                selected_columns = layer_cfg.get("selected_columns")
-
-                safe_layer = layer.replace(" ", "_").replace("-", "_") if layer else "default"
-                file_source_name = f"{name}_{safe_layer}"
-                file_id = self._generate_file_id(file_source_name)
-
-                columns = []
-                row_count = 0
-                crs = None
-                try:
-                    if is_sheet_based:
-                        df, gdf = self._load_by_format(tmp_path, format_type, None, layer)
-                    else:
-                        df, gdf = self._load_by_format(tmp_path, format_type, layer, None)
-                    if selected_columns:
-                        df = self._filter_columns(df, selected_columns)
-                    columns = self._column_builder.from_dataframe(df, gdf, srid)
-                    row_count = len(df)
-                    if gdf is not None and hasattr(gdf, 'crs') and gdf.crs:
-                        epsg = gdf.crs.to_epsg()
-                        if epsg:
-                            crs = f"EPSG:{epsg}"
-                        else:
-                            auth = gdf.crs.to_authority()
-                            crs = f"{auth[0]}:{auth[1]}" if auth else str(gdf.crs)
-                    elif srid:
-                        crs = f"EPSG:{srid}"
-                except Exception as e:
-                    self._logger.warning(f"Errore inferenza colonne layer '{layer}': {e}")
-
-                columns_dicts = [
-                    {"name": c.name, "type": c.type} if not isinstance(c, dict) else c
-                    for c in columns
-                ]
-
-                file_source = FileSource(
-                    id=file_id,
-                    name=file_source_name,
-                    description=description,
-                    original_filename=filename,
-                    format=format_type,
-                    layer=None if is_sheet_based else layer,
-                    sheet=layer if is_sheet_based else None,
-                    columns=columns_dicts,
-                    row_count=row_count,
-                    file_size=len(raw_data),
-                    crs=crs,
-                    group_id=group_id or settings.DEFAULT_GROUP,
-                    created_at=now,
-                    updated_at=now
-                )
-
-                metadata = file_source.model_dump(mode='json') if _USE_APP_MODELS else {}
-                blob_kwargs = self._dispatch_blob_storage(file_id, raw_data, filename)
-                db.save_file_source(
-                    file_id=file_id,
-                    group_id=group_id or settings.DEFAULT_GROUP,
-                    name=file_source_name,
-                    original_filename=filename,
-                    fmt=format_type,
-                    metadata=metadata,
-                    **blob_kwargs,
-                )
-
-                self._logger.info(f"FileSource multi-layer creato: {file_id} layer='{layer}'")
-                created.append(file_source)
-
-            return created
-
-        finally:
-            try:
-                os.unlink(tmp.name)
-            except Exception as e:
-                self._logger.debug(
-                    f"cleanup tmp multi-layer fallito ({tmp.name}): {e}"
-                )
-            if zip_tmp_dir:
-                import shutil
-                try:
-                    _rmtree_safe(zip_tmp_dir)
-                except Exception as e:
-                    self._logger.debug(
-                        f"cleanup zip_tmp_dir multi-layer fallito ({zip_tmp_dir}): {e}"
-                    )
+        from app.shared.file_cleanup import rmtree_safe
+        from app.utils.zip_safe import safe_extractall, ZipSlipError
+        import os as _os
+        import app.db.db_service as db
+        return _impl(
+            file_content, filename, name, description,
+            layers_config, srid, group_id,
+            generate_file_id=self._generate_file_id,
+            time_now=self._time.now,
+            detect_format=self._detect_format,
+            load_by_format=self._load_by_format,
+            column_builder_from_df=self._column_builder.from_dataframe,
+            dispatch_blob_storage=self._dispatch_blob_storage,
+            db_save_file_source=db.save_file_source,
+            build_file_source=lambda **kw: FileSource(**kw),
+            cleanup_dir=rmtree_safe,
+            cleanup_file=_os.unlink,    # NON rmtree_safe - preserva asimmetria
+            safe_extractall=safe_extractall,
+            zip_slip_error=ZipSlipError,
+            temp_dir=settings.TEMP_DIR,
+            default_group=settings.DEFAULT_GROUP,
+            logger=self._logger,
+        )
 
     def load_dataframe(
         self, file_id: str, layer: str = None, sheet: str = None,
