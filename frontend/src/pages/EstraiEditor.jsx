@@ -4,9 +4,8 @@
  */
 import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { isValidProjectId } from '../utils/validateRouteParam';
-import ReactFlow, { Background, Controls, MiniMap } from 'reactflow';
 import 'reactflow/dist/style.css';
+import EditorShell from '../components/editor/EditorShell';
 import TableNode from '../components/nodes/TableNode';
 import FeatureLayerNode from '../components/nodes/FeatureLayerNode';
 import FeatureServicePanel from '../components/panels/FeatureServicePanel';
@@ -45,8 +44,7 @@ import '../components/nodes/AnnotationNode.css';
 import '../components/nodes/FeatureLayerNode.css';
 import '../components/panels/FeatureServicePanel.css';
 import { useAuth } from '../context/AuthContext';
-import { CanvasErrorBoundary, ModalErrorBoundary } from '../components/common/ErrorBoundary';
-import { LoadingOverlay } from '../components/common/LoadingOverlay';
+import { ModalErrorBoundary } from '../components/common/ErrorBoundary';
 import { useHexCanvas } from '../utils/hexCanvas';
 
 const nodeTypes = {
@@ -60,7 +58,6 @@ function EstraiEditor() {
   const { projectId } = useParams();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const reactFlowWrapper = useRef(null);
   const hexCanvasRef = useRef(null);
   const [reactFlowInstance, setReactFlowInstance] = useState(null);
   const canvasLoadedForRef = useRef(null);
@@ -374,51 +371,31 @@ function EstraiEditor() {
   const featureNodes            = nodes.filter(n => n.type === 'featureLayerNode');
   const featureLayersInCanvas   = new Set(featureNodes.map(n => n.data.layer_url).filter(Boolean));
 
-  // ===== SECURITY GUARD =====
-  useEffect(() => {
-    if (!isValidProjectId(projectId)) {
-      console.error('[Security] projectId non valido, redirect a home:', projectId);
-      navigate('/', { replace: true });
-    }
-  }, [projectId, navigate]);
+  // Guard branches (isValidProjectId redirect, loading, loadError, !project)
+  // gestiti da EditorShell via le props guards. Il page conserva
+  // solo l'orchestration degli hook e il JSX dei singoli slot.
 
-  if (!isValidProjectId(projectId)) return null;
-  if (loading) return <LoadingOverlay message="Caricamento progetto..." />;
-  if (loadError) return (
-    <div className="estrai-error">
-      <p className="estrai-error__message">Errore caricamento: {loadError}</p>
-      <button type="button" className="estrai-error__btn" onClick={reloadData}>Riprova</button>
-      <button type="button" className="estrai-error__btn" onClick={handleBack}>Torna alla lista</button>
+  // beforeCanvas slot: banner accessibilita' nodi cross-tenant.
+  const accessDeniedBanner = hasAccessDeniedNodes(nodes) ? (
+    <div
+      role="alert"
+      style={{
+        background: '#fff4e5',
+        border: '1px solid #d97706',
+        borderRadius: 4,
+        color: '#92400e',
+        padding: '10px 14px',
+        margin: '8px 16px 0',
+        fontSize: '0.92em',
+      }}
+    >
+      🔒 Il canvas contiene {getAccessDeniedNodes(nodes).length} nodo/i con risorse non accessibili al tuo gruppo. Rimuovili o sostituiscili prima di eseguire.
     </div>
-  );
-  if (!project) return (
-    <div className="estrai-error">
-      <p className="estrai-error__message">Progetto non trovato</p>
-      <button type="button" className="estrai-error__btn" onClick={handleBack}>Torna alla lista</button>
-    </div>
-  );
+  ) : null;
 
-  return (
-    <ConfirmProvider>
-    <div className="estrai-editor">
-
-      {hasAccessDeniedNodes(nodes) && (
-        <div
-          role="alert"
-          style={{
-            background: '#fff4e5',
-            border: '1px solid #d97706',
-            borderRadius: 4,
-            color: '#92400e',
-            padding: '10px 14px',
-            margin: '8px 16px 0',
-            fontSize: '0.92em',
-          }}
-        >
-          🔒 Il canvas contiene {getAccessDeniedNodes(nodes).length} nodo/i con risorse non accessibili al tuo gruppo. Rimuovili o sostituiscili prima di eseguire.
-        </div>
-      )}
-
+  // topbar slot
+  const topbar = (
+    <>
       {/* ── Topbar ── */}
       <div className="estrai-toolbar">
 
@@ -530,12 +507,11 @@ function EstraiEditor() {
           )}
         </div>
       </div>
+    </>
+  );
 
-      {/* ── Main ── */}
-      <div className="estrai-main">
-
-        {/* ── Sidebar (nascosta per viewer: niente drag&drop di tabelle) ── */}
-        {!isReadOnly && (
+  // sidebar slot (nascosta per viewer: niente drag&drop di tabelle)
+  const sidebar = !isReadOnly ? (
         <div className="estrai-sidebar">
 
           {/* Search */}
@@ -692,31 +668,16 @@ function EstraiEditor() {
             </button>
           </div>
         </div>
-        )}
+  ) : null;
 
-        {/* ── Canvas ── */}
-        <CanvasErrorBoundary>
-          <div className={`estrai-canvas${isReadOnly ? ' canvas-readonly' : ''}`} ref={reactFlowWrapper}>
-            <canvas ref={hexCanvasRef} className="estrai-canvas__hex" />
-            <ReactFlow
-              nodes={nodes} edges={edges}
-              onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
-              onConnect={edgeHandlers.onConnect} onEdgeClick={edgeHandlers.onEdgeClick}
-              onInit={setReactFlowInstance} onDrop={onDrop} onDragOver={onDragOver}
-              nodeTypes={nodeTypes} fitView={false}
-              {...readOnlyProps}
-            >
-              <Background color="transparent" gap={16} />
-              <Controls />
-              <MiniMap zoomable pannable />
-            </ReactFlow>
-            <QueryPreview nodes={dataNodes} edges={edges} validationErrors={validation.errors} />
-          </div>
-        </CanvasErrorBoundary>
-      </div>
+  // afterCanvas slot: QueryPreview overlay sul canvas.
+  const afterCanvas = (
+    <QueryPreview nodes={dataNodes} edges={edges} validationErrors={validation.errors} />
+  );
 
-      {/* ── Modals (lazy-loaded) ── */}
-      <ModalErrorBoundary>
+  // modals slot: lazy-loaded modal stack.
+  const modals = (
+    <ModalErrorBoundary>
       <Suspense fallback={null}>
         {edgeHandlers.showJoinModal && (
           <JoinModal
@@ -775,8 +736,44 @@ function EstraiEditor() {
         title="Anteprima Query SQL" projectType="estrai"
       />
       </Suspense>
-      </ModalErrorBoundary>
-    </div>
+    </ModalErrorBoundary>
+  );
+
+  return (
+    <ConfirmProvider>
+      <EditorShell
+        projectId={projectId}
+        prefix="estrai"
+        loading={loading}
+        loadError={loadError}
+        project={project}
+        reload={reloadData}
+        onBack={handleBack}
+        nodes={nodes}
+        edges={edges}
+        hexCanvasRef={hexCanvasRef}
+        canvasConfig={{
+          nodeTypes,
+          isReadOnly,
+          readOnlyProps,
+        }}
+        canvasHandlers={{
+          onNodesChange,
+          onEdgesChange,
+          onConnect: edgeHandlers.onConnect,
+          onEdgeClick: edgeHandlers.onEdgeClick,
+          onInit: setReactFlowInstance,
+          onDrop,
+          onDragOver,
+        }}
+        slots={{
+          topbar,
+          sidebar,
+          beforeCanvas: accessDeniedBanner,
+          afterCanvas,
+          modals,
+        }}
+      />
     </ConfirmProvider>
   );
 }

@@ -15,10 +15,10 @@
  * Route: /editor/manipola/:id
  */
 import React, { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react';
-import ReactFlow, { Background, Controls, addEdge, useReactFlow, ReactFlowProvider, MarkerType } from 'reactflow';
+import { addEdge, useReactFlow, ReactFlowProvider, MarkerType } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { useParams, useNavigate } from 'react-router-dom';
-import { isValidProjectId } from '../utils/validateRouteParam';
+import EditorShell from '../components/editor/EditorShell';
 import { ConfirmProvider } from '../context/ConfirmContext';
 import { getDownloadUrl, createTask } from '../api';
 import { getFiles } from '../api/files';
@@ -55,8 +55,7 @@ import '../components/nodes/StaticValuesNode.css';
 import '../components/nodes/AnnotationNode.css';
 import '../components/nodes/DataSourceNode.css';
 import { useAuth } from '../context/AuthContext';
-import { CanvasErrorBoundary, ModalErrorBoundary } from '../components/common/ErrorBoundary';
-import { LoadingOverlay } from '../components/common/LoadingOverlay';
+import { ModalErrorBoundary } from '../components/common/ErrorBoundary';
 import { useHexCanvas } from '../utils/hexCanvas';
 
 // Costante stabile — evita array literal nelle deps di useEditorData
@@ -433,46 +432,29 @@ const ManipolaEditorContent = () => {
   const hasResultNode  = nodes.some(n => n.type === 'result');
   const hasCaricanNode = nodes.some(n => n.type === 'carica');
 
-  // ── Security guard: projectId da URL ──────────────────────────────────────
-  // useEffect gestisce il redirect (non viola Rules of Hooks essendo dopo tutti
-  // gli altri hook). Il render guard impedisce di mostrare contenuto con ID non valido.
-  useEffect(() => {
-    if (!isValidProjectId(projectId)) {
-      console.error('[Security] projectId non valido, redirect a home:', projectId);
-      navigate('/', { replace: true });
-    }
-  }, [projectId, navigate]);
+  // Guard branches gestiti da EditorShell (FE-SPLIT-004).
 
-  if (!isValidProjectId(projectId)) return null;
-  if (loading) return <LoadingOverlay message="Caricamento progetto..." />;
-  if (loadError) return (
-    <div className="manipola-error">
-      <p>Errore caricamento: {loadError}</p>
-      <button type="button" onClick={reloadData}>Riprova</button>
-      <button type="button" onClick={handleBack}>Torna alla lista</button>
+  // beforeCanvas slot: banner accessibilita' nodi cross-tenant.
+  const accessDeniedBanner = hasAccessDeniedNodes(nodes) ? (
+    <div
+      role="alert"
+      style={{
+        background: '#fff4e5',
+        border: '1px solid #d97706',
+        borderRadius: 4,
+        color: '#92400e',
+        padding: '10px 14px',
+        margin: '8px 16px 0',
+        fontSize: '0.92em',
+      }}
+    >
+      🔒 Il canvas contiene {getAccessDeniedNodes(nodes).length} nodo/i con risorse non accessibili al tuo gruppo. Rimuovili o sostituiscili prima di eseguire.
     </div>
-  );
-  if (!project) return <div className="manipola-error"><p>Progetto non trovato</p><button type="button" onClick={handleBack}>Torna alla lista</button></div>;
+  ) : null;
 
-  return (
-    <div className="manipola-editor">
-      {hasAccessDeniedNodes(nodes) && (
-        <div
-          role="alert"
-          style={{
-            background: '#fff4e5',
-            border: '1px solid #d97706',
-            borderRadius: 4,
-            color: '#92400e',
-            padding: '10px 14px',
-            margin: '8px 16px 0',
-            fontSize: '0.92em',
-          }}
-        >
-          🔒 Il canvas contiene {getAccessDeniedNodes(nodes).length} nodo/i con risorse non accessibili al tuo gruppo. Rimuovili o sostituiscili prima di eseguire.
-        </div>
-      )}
-      <div className="manipola-toolbar">
+  // topbar slot
+  const topbar = (
+    <div className="manipola-toolbar">
         <div className="manipola-toolbar__left">
           <div className="manipola-toolbar__logo">
             <svg width="90" height="28" viewBox="0 0 350 90" xmlns="http://www.w3.org/2000/svg">
@@ -488,7 +470,7 @@ const ManipolaEditorContent = () => {
           <button type="button" className="manipola-toolbar__btn manipola-toolbar__btn--back" onClick={handleBack}>← Indietro</button>
         </div>
         <div className="manipola-toolbar__center">
-          <h2 className="manipola-toolbar__title">{project.metadata?.name}</h2>
+          <h2 className="manipola-toolbar__title">{project?.metadata?.name}</h2>
           <span className="manipola-toolbar__badge">MANIPOLA</span>
           {schemasLoading && <span className="manipola-toolbar__badge" style={{background: '#FF9800'}}>⏳ Aggiornamento schemi...</span>}
         </div>
@@ -515,37 +497,23 @@ const ManipolaEditorContent = () => {
           )}
         </div>
       </div>
+  );
 
-      <div className="manipola-main">
-        {!isReadOnly && (
-          <EditorSidebar
-            variant="manipola" projects={availableSources} files={availableFiles} onDragStart={onDragStart}
-            projectsConfig={{ title: '📊 Sorgenti Progetto', subtitle: 'Trascina un progetto SQL nel canvas',
-              emptyMessage: 'Nessun progetto SQL disponibile.', emptyHint: 'Crea prima un progetto di tipo Estrai.',
-              filterTypes: ['estrai', 'manipola', 'arricchisci'], showSearch: true }}
-            filesConfig={{ title: '📁 File Esterni', subtitle: 'Trascina un file nel canvas',
-              emptyMessage: 'Nessun file disponibile.', uploadLink: '/files', uploadLinkText: 'Carica file esterni' }}
-          />
-        )}
-        <CanvasErrorBoundary>
-        <div className={`manipola-canvas${isReadOnly ? ' canvas-readonly' : ''}`} onDrop={onDrop} onDragOver={onDragOver}>
-          <canvas ref={hexCanvasRef} className="manipola-hex-canvas" />
-          <ReactFlow
-            nodes={nodes} edges={edges}
-            onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
-            onConnect={onConnect} onEdgeContextMenu={onEdgeContextMenu}
-            nodeTypes={nodeTypes} defaultEdgeOptions={defaultEdgeOptions}
-            fitView fitViewOptions={{ padding: 0.2 }} minZoom={0.5} maxZoom={2}
-            {...readOnlyProps}
-          >
-            <Background color="#aaa" gap={20} />
-            <Controls />
-          </ReactFlow>
-        </div>
-        </CanvasErrorBoundary>
-      </div>
+  // sidebar slot
+  const sidebar = !isReadOnly ? (
+    <EditorSidebar
+      variant="manipola" projects={availableSources} files={availableFiles} onDragStart={onDragStart}
+      projectsConfig={{ title: '📊 Sorgenti Progetto', subtitle: 'Trascina un progetto SQL nel canvas',
+        emptyMessage: 'Nessun progetto SQL disponibile.', emptyHint: 'Crea prima un progetto di tipo Estrai.',
+        filterTypes: ['estrai', 'manipola', 'arricchisci'], showSearch: true }}
+      filesConfig={{ title: '📁 File Esterni', subtitle: 'Trascina un file nel canvas',
+        emptyMessage: 'Nessun file disponibile.', uploadLink: '/files', uploadLinkText: 'Carica file esterni' }}
+    />
+  ) : null;
 
-      <ModalErrorBoundary>
+  // modals slot
+  const modals = (
+    <ModalErrorBoundary>
       <Suspense fallback={null}>
         <ExecutionModal isOpen={execution.showModal} onClose={() => execution.closeModal()} isExecuting={execution.isExecuting} result={execution.result} onDownload={execution.downloadTaskResult} title="🔄 Esecuzione Pipeline Manipola" projectType="manipola" caricaTasks={execution.caricaTasks} caricaPolling={execution.caricaPolling} awaitingLaunch={execution.awaitingLaunch} onLaunch={execution.launch} user={user} />
         <ExecutionModal isOpen={caricaExecution.showModal} onClose={() => caricaExecution.closeModal()} isExecuting={caricaExecution.isExecuting} result={caricaExecution.result} title="📤 Caricamento Dati" projectType="arricchisci" progress={caricaExecution.progress} progressMessage={caricaExecution.progressMessage} taskStatus={caricaExecution.taskStatus} onCancel={caricaExecution.cancelTask} />
@@ -554,8 +522,48 @@ const ManipolaEditorContent = () => {
           permissionRevoked={preview.permissionRevoked}
           title="Anteprima Pipeline Manipola" projectType="manipola" disableGrouping />
       </Suspense>
-      </ModalErrorBoundary>
-    </div>
+    </ModalErrorBoundary>
+  );
+
+  return (
+    <EditorShell
+      projectId={projectId}
+      prefix="manipola"
+      loading={loading}
+      loadError={loadError}
+      project={project}
+      reload={reloadData}
+      onBack={handleBack}
+      nodes={nodes}
+      edges={edges}
+      hexCanvasRef={hexCanvasRef}
+      canvasConfig={{
+        nodeTypes,
+        defaultEdgeOptions,
+        fitView: true,
+        fitViewOptions: { padding: 0.2 },
+        minZoom: 0.5,
+        maxZoom: 2,
+        backgroundProps: { color: '#aaa', gap: 20 },
+        showMiniMap: false,
+        isReadOnly,
+        readOnlyProps,
+      }}
+      canvasHandlers={{
+        onNodesChange,
+        onEdgesChange,
+        onConnect,
+        onEdgeContextMenu,
+        onDrop,
+        onDragOver,
+      }}
+      slots={{
+        topbar,
+        sidebar,
+        beforeCanvas: accessDeniedBanner,
+        modals,
+      }}
+    />
   );
 };
 

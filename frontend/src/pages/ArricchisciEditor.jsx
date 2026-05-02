@@ -14,10 +14,10 @@
  * Route: /arricchisci/:projectId
  */
 import React, { useState, useCallback, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
-import ReactFlow, { Background, Controls, MiniMap, addEdge, useReactFlow, ReactFlowProvider, MarkerType } from 'reactflow';
+import { addEdge, useReactFlow, ReactFlowProvider, MarkerType } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { useParams, useNavigate } from 'react-router-dom';
-import { isValidProjectId } from '../utils/validateRouteParam';
+import EditorShell from '../components/editor/EditorShell';
 import { ConfirmProvider } from '../context/ConfirmContext';
 import { executeEnrichmentAsync } from '../api';
 import { getFiles } from '../api/files';
@@ -40,7 +40,6 @@ import CaricanArcGISNode from '../components/nodes/CaricanArcGISNode';
 import '../components/nodes/CaricanArcGISNode.css';
 import ImdfPublisherNode from '../components/nodes/ImdfPublisherNode';
 import StaticValuesNode from '../components/nodes/StaticValuesNode';
-import { LoadingOverlay } from '../components/common';
 
 // Modali lazy-loaded
 const CaricaricaModal = lazy(() => import('../components/modals/CaricaricaModal'));
@@ -55,7 +54,7 @@ import '../styles/ArricchisciEditor.css';
 import '../components/arricchisci/ConnectionSelectorModal.css';
 import '../components/nodes/StaticValuesNode.css';
 import '../components/modals/EnrichmentConfirmModal.css';
-import { CanvasErrorBoundary, ModalErrorBoundary } from '../components/common/ErrorBoundary';
+import { ModalErrorBoundary } from '../components/common/ErrorBoundary';
 import { useHexCanvas } from '../utils/hexCanvas';
 
 /**
@@ -488,46 +487,29 @@ const ArricchisciEditorContent = () => {
   const hasImdfEnrich        = nodes.some(n => n.type === 'api_enrich' && n.data?.output_kind === 'imdf');
   const hasImdfPublisherNode = nodes.some(n => n.type === 'imdf_publisher');
 
-  // ── Security guard: projectId da URL ──────────────────────────────────────
-  // useEffect gestisce il redirect (non viola Rules of Hooks essendo dopo tutti
-  // gli altri hook). Il render guard impedisce di mostrare contenuto con ID non valido.
-  useEffect(() => {
-    if (!isValidProjectId(projectId)) {
-      console.error('[Security] projectId non valido, redirect a home:', projectId);
-      navigate('/', { replace: true });
-    }
-  }, [projectId, navigate]);
+  // Guard branches gestiti da EditorShell (FE-SPLIT-004).
 
-  if (!isValidProjectId(projectId)) return null;
-  if (loading) return <LoadingOverlay message="Caricamento progetto..." />;
-  if (loadError) return (
-    <div className="arricchisci-error">
-      <p>Errore caricamento: {loadError}</p>
-      <button type="button" onClick={reloadData}>Riprova</button>
-      <button type="button" onClick={handleBack}>Torna alla lista</button>
+  // beforeCanvas slot
+  const accessDeniedBanner = hasAccessDeniedNodes(nodes) ? (
+    <div
+      role="alert"
+      style={{
+        background: '#fff4e5',
+        border: '1px solid #d97706',
+        borderRadius: 4,
+        color: '#92400e',
+        padding: '10px 14px',
+        margin: '8px 16px 0',
+        fontSize: '0.92em',
+      }}
+    >
+      🔒 Il canvas contiene {getAccessDeniedNodes(nodes).length} nodo/i con risorse non accessibili al tuo gruppo. Rimuovili o sostituiscili prima di eseguire.
     </div>
-  );
-  if (!project) return <div className="arricchisci-error"><p>Progetto non trovato</p><button type="button" onClick={handleBack}>Torna alla lista</button></div>;
+  ) : null;
 
-  return (
-    <div className="arricchisci-editor">
-      {hasAccessDeniedNodes(nodes) && (
-        <div
-          role="alert"
-          style={{
-            background: '#fff4e5',
-            border: '1px solid #d97706',
-            borderRadius: 4,
-            color: '#92400e',
-            padding: '10px 14px',
-            margin: '8px 16px 0',
-            fontSize: '0.92em',
-          }}
-        >
-          🔒 Il canvas contiene {getAccessDeniedNodes(nodes).length} nodo/i con risorse non accessibili al tuo gruppo. Rimuovili o sostituiscili prima di eseguire.
-        </div>
-      )}
-      <div className="arricchisci-toolbar">
+  // topbar slot
+  const topbar = (
+    <div className="arricchisci-toolbar">
         <div className="arricchisci-toolbar__left">
           <div className="arricchisci-toolbar__logo">
             <svg width="90" height="28" viewBox="0 0 350 90" xmlns="http://www.w3.org/2000/svg">
@@ -543,7 +525,7 @@ const ArricchisciEditorContent = () => {
           <button type="button" className="arricchisci-toolbar__btn arricchisci-toolbar__btn--back" onClick={handleBack}>← Indietro</button>
         </div>
         <div className="arricchisci-toolbar__center">
-          <h2 className="arricchisci-toolbar__title">{project.metadata?.name}</h2>
+          <h2 className="arricchisci-toolbar__title">{project?.metadata?.name}</h2>
           <span className="arricchisci-toolbar__badge">ARRICCHISCI</span>
         </div>
         <div className="arricchisci-toolbar__right">
@@ -577,41 +559,24 @@ const ArricchisciEditorContent = () => {
           )}
         </div>
       </div>
+  );
 
-      <div className="arricchisci-main">
-        {!isReadOnly && (
-          <EditorSidebar
-            variant="arricchisci" projects={availableSources} files={availableFiles} onDragStart={onDragStart}
-            projectsConfig={{ title: '📊 Sorgenti Progetto', subtitle: 'Trascina un progetto nel canvas',
-              emptyMessage: 'Nessun progetto disponibile.', emptyHint: 'Crea prima un progetto Estrai, Manipola o Arricchisci.',
-              filterTypes: ['estrai', 'manipola', 'arricchisci'], showSearch: true }}
-            filesConfig={{ title: '📁 File Esterni', subtitle: 'Trascina un file nel canvas',
-              emptyMessage: 'Nessun file disponibile.', uploadLink: '/files', uploadLinkText: 'Carica file esterni' }}
-          />
-        )}
-        <CanvasErrorBoundary>
-        <div className={`arricchisci-canvas${isReadOnly ? ' canvas-readonly' : ''}`} onDrop={onDrop} onDragOver={onDragOver}>
-          <canvas ref={hexCanvasRef} className="arricchisci-hex-canvas" />
-          <ReactFlow
-            nodes={nodes} edges={edges}
-            onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
-            onConnect={onConnect} onEdgeContextMenu={onEdgeContextMenu}
-            nodeTypes={nodeTypes} defaultEdgeOptions={defaultEdgeOptions}
-            fitView fitViewOptions={FIT_VIEW_OPTIONS} minZoom={0.5} maxZoom={2}
-            {...readOnlyProps}
-          >
-            <Background color="#ddd" gap={20} />
-            <Controls />
-            <MiniMap className="arricchisci-minimap"
-              nodeColor={nodeColorFn}
-              zoomable pannable />
-          </ReactFlow>
-        </div>
-        </CanvasErrorBoundary>
-      </div>
+  // sidebar slot
+  const sidebar = !isReadOnly ? (
+    <EditorSidebar
+      variant="arricchisci" projects={availableSources} files={availableFiles} onDragStart={onDragStart}
+      projectsConfig={{ title: '📊 Sorgenti Progetto', subtitle: 'Trascina un progetto nel canvas',
+        emptyMessage: 'Nessun progetto disponibile.', emptyHint: 'Crea prima un progetto Estrai, Manipola o Arricchisci.',
+        filterTypes: ['estrai', 'manipola', 'arricchisci'], showSearch: true }}
+      filesConfig={{ title: '📁 File Esterni', subtitle: 'Trascina un file nel canvas',
+        emptyMessage: 'Nessun file disponibile.', uploadLink: '/files', uploadLinkText: 'Carica file esterni' }}
+    />
+  ) : null;
 
-      {/* Modals (lazy-loaded) */}
-      <ModalErrorBoundary>
+  // modals slot — `modals` (var name) e' gia' occupato da useMultiModal:
+  // usiamo `modalsSlot` per evitare collisione col chiamante .isOpen/.close.
+  const modalsSlot = (
+    <ModalErrorBoundary>
       <Suspense fallback={null}>
       <ExecutionModal isOpen={execution.showModal} onClose={() => execution.closeModal()} isExecuting={execution.isExecuting} result={execution.result} onDownload={execution.downloadTaskResult} title="🔗 Esegui Arricchimento" projectType="arricchisci" progress={execution.progress} progressMessage={execution.progressMessage} taskStatus={execution.taskStatus} onCancel={execution.cancelTask} caricaTasks={execution.caricaTasks} caricaPolling={execution.caricaPolling} awaitingLaunch={execution.awaitingLaunch} onLaunch={execution.launch} user={user} />
       <CaricaricaModal isOpen={caricarica.showModal} onClose={() => caricarica.closeModal()} isExecuting={caricarica.isExecuting} result={caricarica.result} progress={caricarica.progress} progressMessage={caricarica.progressMessage} taskStatus={caricarica.taskStatus} caricaricaInfo={caricarica.caricaricaInfo} onCancel={caricarica.cancelTask} />
@@ -655,8 +620,48 @@ const ArricchisciEditorContent = () => {
       <ConnectionSelectorModal isOpen={modals.isOpen('datasource')} onClose={() => modals.close('datasource')} onSelect={conn => handleSelectConnection(conn, 'datasource')} category="datasource" title="Seleziona Data Source" icon="📁" emptyMessage="Nessun Data Source configurato" emptyHint="Configura una connessione dati in Gestione API" createLink="/api-connections" />
       <EnrichmentConfirmModal isOpen={showConfirmModal} onClose={handleCloseConfirmModal} onConfirm={handleConfirmExecution} validation={enrichmentValidation.validation} estimation={enrichmentValidation.estimation} isValidating={enrichmentValidation.isValidating} isEstimating={enrichmentValidation.isEstimating} formatTime={enrichmentValidation.formatTime} />
       </Suspense>
-      </ModalErrorBoundary>
-    </div>
+    </ModalErrorBoundary>
+  );
+
+  return (
+    <EditorShell
+      projectId={projectId}
+      prefix="arricchisci"
+      loading={loading}
+      loadError={loadError}
+      project={project}
+      reload={reloadData}
+      onBack={handleBack}
+      nodes={nodes}
+      edges={edges}
+      hexCanvasRef={hexCanvasRef}
+      canvasConfig={{
+        nodeTypes,
+        defaultEdgeOptions,
+        fitView: true,
+        fitViewOptions: FIT_VIEW_OPTIONS,
+        minZoom: 0.5,
+        maxZoom: 2,
+        backgroundProps: { color: '#ddd', gap: 20 },
+        miniMapProps: { className: 'arricchisci-minimap', nodeColor: nodeColorFn, zoomable: true, pannable: true },
+        isReadOnly,
+        readOnlyProps,
+      }}
+      canvasHandlers={{
+        onNodesChange,
+        onEdgesChange,
+        onConnect,
+        onEdgeContextMenu,
+        onDrop,
+        onDragOver,
+      }}
+      slots={{
+        topbar,
+        sidebar,
+        beforeCanvas: accessDeniedBanner,
+        modals: modalsSlot,
+      }}
+    />
   );
 };
 

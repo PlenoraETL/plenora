@@ -301,7 +301,8 @@
 }
 
 /* ── Hex background canvas ────────────────────────────────────── */
-.manipola-hex-canvas {
+.manipola-hex-canvas,
+.manipola-canvas__hex {
   position: absolute;
   inset: 0;
   width: 100%;

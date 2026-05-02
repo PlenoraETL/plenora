@@ -337,7 +337,8 @@
 [data-theme='light'] .arricchisci-theme-opt--on { background: #FFFFFF; color: #0F1729; }
 
 /* ── Hex canvas ───────────────────────────────────────────────── */
-.arricchisci-hex-canvas {
+.arricchisci-hex-canvas,
+.arricchisci-canvas__hex {
   position: absolute;
   inset: 0;
   width: 100%;
