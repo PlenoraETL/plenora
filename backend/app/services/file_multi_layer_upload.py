@@ -53,6 +53,31 @@ from pathlib import Path
 from typing import Any, BinaryIO, Callable, Dict, List, Optional, Tuple
 
 
+def _emit_partial_batch_failure_log(
+    logger,
+    created: List[Any],
+    expected_count: int,
+    failed_layer: Optional[str],
+    failed_phase: Optional[str],
+) -> None:
+    """BE-HARDEN-001A: emette `partial_batch_failure` log strutturato
+    SOLO se il loop si e' interrotto DOPO almeno un save riuscito (e
+    PRIMA del completamento del batch). Pre-loop failure (MIME block /
+    BadZipFile / ZipSlipError) e first-layer failure NON triggerano il
+    log perche' `created_count == 0`. Full success NON triggera (mai
+    chiamata: il loop completa senza except).
+    """
+    created_count = len(created)
+    if 0 < created_count < expected_count:
+        logger.warning(
+            f"event=partial_batch_failure "
+            f"expected_count={expected_count} "
+            f"created_count={created_count} "
+            f"failed_layer={failed_layer!r} "
+            f"failed_phase={failed_phase}"
+        )
+
+
 def create_multi_layer_from_upload(
     file_content: BinaryIO,
     filename: str,
@@ -175,6 +200,15 @@ def create_multi_layer_from_upload(
         created: List[Any] = []
         now = time_now()
 
+        # BE-HARDEN-001A: tracking osservabilita' per partial batch failure.
+        # NON cambia behavior (exception propaga come prima); solo emette
+        # log strutturato `partial_batch_failure` se il loop si interrompe
+        # DOPO almeno un save riuscito. MULTI-ATOMIC-001 resta aperto:
+        # questa e' instrumentation, non atomicita'.
+        expected_count = len(layers_config)
+        last_failed_layer: Optional[str] = None
+        last_failed_phase: Optional[str] = None  # "dispatch" | "db_save"
+
         for layer_cfg in layers_config:
             # Supporta sia {"layer": "nome"} che {"sheet": "nome"}
             layer = layer_cfg.get("layer") or layer_cfg.get("sheet")
@@ -246,16 +280,38 @@ def create_multi_layer_from_upload(
             # se dispatch fallisce, db_save non chiamato per QUESTO layer,
             # ma i layer precedenti restano persistiti -> atomicita' batch
             # NON garantita, preservato verbatim).
-            blob_kwargs = dispatch_blob_storage(file_id, raw_data, filename)
-            db_save_file_source(
-                file_id=file_id,
-                group_id=group_id or default_group,
-                name=file_source_name,
-                original_filename=filename,
-                fmt=format_type,
-                metadata=metadata,
-                **blob_kwargs,
-            )
+            #
+            # BE-HARDEN-001A: tracciamo `last_failed_layer`/`last_failed_phase`
+            # PRIMA di rilanciare, cosi' il blocco osservabilita' a fondo loop
+            # puo' emettere il log `partial_batch_failure` se created > 0.
+            try:
+                blob_kwargs = dispatch_blob_storage(file_id, raw_data, filename)
+            except Exception:
+                last_failed_layer = layer
+                last_failed_phase = "dispatch"
+                _emit_partial_batch_failure_log(
+                    logger, created, expected_count,
+                    last_failed_layer, last_failed_phase,
+                )
+                raise
+            try:
+                db_save_file_source(
+                    file_id=file_id,
+                    group_id=group_id or default_group,
+                    name=file_source_name,
+                    original_filename=filename,
+                    fmt=format_type,
+                    metadata=metadata,
+                    **blob_kwargs,
+                )
+            except Exception:
+                last_failed_layer = layer
+                last_failed_phase = "db_save"
+                _emit_partial_batch_failure_log(
+                    logger, created, expected_count,
+                    last_failed_layer, last_failed_phase,
+                )
+                raise
 
             logger.info(
                 f"FileSource multi-layer creato: {file_id} layer='{layer}'"

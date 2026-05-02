@@ -605,3 +605,165 @@ def test_zip_unwrap_gdb_directory_uses_original_zip_blob(
     assert build_kwargs["original_filename"] == "geodatabase.gdb"
     # file_size = lunghezza dello ZIP originale (non del file interno)
     assert build_kwargs["file_size"] == len(zip_bytes)
+
+
+# =============================================================================
+# 14. BE-HARDEN-001A: partial_batch_failure observability
+# =============================================================================
+#
+# Solo log strutturato. NESSUN cambio semantico (atomicita' batch resta
+# best-effort: MULTI-ATOMIC-001 resta aperto). Verifichiamo i 5 contratti
+# richiesti dallo scope:
+#   - dispatch fail al layer 2/3 -> log emesso
+#   - db_save fail al layer 2/3 -> log emesso
+#   - full success -> nessun log
+#   - pre-loop failure (MIME) -> nessun log
+#   - failure al primo layer (created_count=0) -> nessun log
+
+
+def _warning_messages(logger_mock) -> List[str]:
+    """Helper: estrae stringhe dei warning emessi (solo arg posizionale 0)."""
+    return [c.args[0] for c in logger_mock.warning.call_args_list]
+
+
+def _has_partial_batch_failure_log(logger_mock) -> bool:
+    return any(
+        "event=partial_batch_failure" in m for m in _warning_messages(logger_mock)
+    )
+
+
+def test_partial_batch_failure_log_on_dispatch_failure_at_layer_two_of_three(
+    collaborators,
+):
+    """Layer 1 OK, Layer 2 dispatch fail (created_count=1, expected=3) ->
+    log partial_batch_failure emesso, exception propaga."""
+    from app.services.file_multi_layer_upload import create_multi_layer_from_upload
+
+    collaborators["detect_format"].return_value = "gpkg"
+    collaborators["dispatch_blob_storage"].side_effect = [
+        {"data": b"r1", "storage_key": None, "size_bytes": 2},
+        RuntimeError("S3 down on layer 2"),
+    ]
+
+    with pytest.raises(RuntimeError, match="S3 down on layer 2"):
+        create_multi_layer_from_upload(
+            io.BytesIO(b"x"), "data.gpkg", "Multi",
+            layers_config=[{"layer": "L1"}, {"layer": "L2"}, {"layer": "L3"}],
+            group_id="g1",
+            **collaborators,
+        )
+
+    # Log partial_batch_failure emesso
+    assert _has_partial_batch_failure_log(collaborators["logger"])
+    msgs = _warning_messages(collaborators["logger"])
+    pbf = next(m for m in msgs if "event=partial_batch_failure" in m)
+    assert "expected_count=3" in pbf
+    assert "created_count=1" in pbf
+    assert "failed_layer='L2'" in pbf
+    assert "failed_phase=dispatch" in pbf
+
+
+def test_partial_batch_failure_log_on_db_save_failure_at_layer_two_of_three(
+    collaborators,
+):
+    """Layer 1 OK, Layer 2 db_save fail (created_count=1, expected=3) ->
+    log partial_batch_failure emesso con failed_phase=db_save."""
+    from app.services.file_multi_layer_upload import create_multi_layer_from_upload
+
+    collaborators["detect_format"].return_value = "gpkg"
+    collaborators["db_save_file_source"].side_effect = [
+        None,  # layer 1 OK
+        RuntimeError("DB lock timeout"),
+    ]
+
+    with pytest.raises(RuntimeError, match="DB lock timeout"):
+        create_multi_layer_from_upload(
+            io.BytesIO(b"x"), "data.gpkg", "Multi",
+            layers_config=[{"layer": "L1"}, {"layer": "L2"}, {"layer": "L3"}],
+            group_id="g1",
+            **collaborators,
+        )
+
+    msgs = _warning_messages(collaborators["logger"])
+    pbf = next(m for m in msgs if "event=partial_batch_failure" in m)
+    assert "expected_count=3" in pbf
+    assert "created_count=1" in pbf
+    assert "failed_layer='L2'" in pbf
+    assert "failed_phase=db_save" in pbf
+
+
+def test_no_partial_batch_failure_log_on_full_success(collaborators):
+    """Tutti i N layer OK -> nessun log partial_batch_failure."""
+    from app.services.file_multi_layer_upload import create_multi_layer_from_upload
+
+    collaborators["detect_format"].return_value = "gpkg"
+
+    out = create_multi_layer_from_upload(
+        io.BytesIO(b"x"), "data.gpkg", "Multi",
+        layers_config=[{"layer": "L1"}, {"layer": "L2"}],
+        group_id="g1",
+        **collaborators,
+    )
+
+    assert len(out) == 2
+    assert not _has_partial_batch_failure_log(collaborators["logger"])
+
+
+def test_no_partial_batch_failure_log_on_mime_block(collaborators):
+    """MIME block pre-loop -> created_count=0, NO log partial_batch_failure
+    (e' failure pre-batch, non parziale)."""
+    from app.services.file_multi_layer_upload import create_multi_layer_from_upload
+    from app.utils.mime_validator import MimeMismatchError
+
+    collaborators["mime_validate"].side_effect = MimeMismatchError("executable")
+
+    with pytest.raises(ValueError, match="executable"):
+        create_multi_layer_from_upload(
+            io.BytesIO(b"MZ exe"), "trojan.gpkg", "Trojan",
+            layers_config=[{"layer": "L1"}, {"layer": "L2"}],
+            **collaborators,
+        )
+
+    # MIME warning loggato MA NON il partial_batch_failure
+    assert not _has_partial_batch_failure_log(collaborators["logger"])
+
+
+def test_no_partial_batch_failure_log_on_first_layer_failure(collaborators):
+    """Failure al PRIMO layer prima di created.append (created_count=0):
+    NO log partial_batch_failure (la condizione `created_count > 0` non
+    e' soddisfatta)."""
+    from app.services.file_multi_layer_upload import create_multi_layer_from_upload
+
+    collaborators["detect_format"].return_value = "gpkg"
+    # Dispatch fail SUBITO sul primo layer
+    collaborators["dispatch_blob_storage"].side_effect = RuntimeError(
+        "S3 down on layer 1"
+    )
+
+    with pytest.raises(RuntimeError, match="S3 down on layer 1"):
+        create_multi_layer_from_upload(
+            io.BytesIO(b"x"), "data.gpkg", "Multi",
+            layers_config=[{"layer": "L1"}, {"layer": "L2"}, {"layer": "L3"}],
+            group_id="g1",
+            **collaborators,
+        )
+
+    # Nessun layer persistito -> NO log partial (failure pre-first-save).
+    assert not _has_partial_batch_failure_log(collaborators["logger"])
+
+
+def test_no_partial_batch_failure_log_on_bad_zip_file(collaborators):
+    """BadZipFile pre-loop -> NO log partial_batch_failure."""
+    from app.services.file_multi_layer_upload import create_multi_layer_from_upload
+
+    collaborators["detect_format"].return_value = "zip"
+    bad_bytes = b"this is not a zip"
+
+    with pytest.raises(ValueError, match="ZIP non valido"):
+        create_multi_layer_from_upload(
+            io.BytesIO(bad_bytes), "fake.zip", "Bad",
+            layers_config=[{"layer": "L1"}, {"layer": "L2"}],
+            **collaborators,
+        )
+
+    assert not _has_partial_batch_failure_log(collaborators["logger"])
