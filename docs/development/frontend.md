@@ -306,12 +306,17 @@ lista completa.
 
 Highlights:
 
-- **FE-CLN-001** — `useTheme` hook dedup (NEXT).
-- **FE-SPLIT-004** — EditorCore extraction (~85% duplicazione 3 editor) (LATER).
-- **FE-SPLIT-001/002/003** — split di pages > 900 LOC (ApiConnectionManager, ParameterInput, ResponseConfigBuilder) (LATER).
-- **FE-TEST-001** — coverage top-5 hotspot (NEXT, distribuito).
-- **FE-A11Y-001** — accessibility audit (LATER).
-- **FE-PERF-001** — bundle size + code splitting (LATER).
+- **FE-CLN-001** — `useTheme` hook dedup (CLOSED).
+- **FE-SPLIT-004** — `EditorShell` scaffold per Estrai/Manipola/Arricchisci con API `canvasConfig`/`canvasHandlers`/`slots` (CLOSED).
+- **FE-TEST-001** — coverage top-5 hotspot (CLOSED).
+- **FE-A11Y-001** — accessibility audit (CLOSED).
+- **FE-HYGIENE-001/002/003** — sweep dead code (`AppHeader`, `useNodeHandlers`, `useCanvasShortcuts`, `SearchInput`, `useCanvasSaveShortcut`, `useInputColumns`) e tiny residuals; -836 LOC totali (CLOSED).
+- **FE-PERF-001** — `ImdfPreviewModal` ora `React.lazy`; `maplibre`/`deckgl` escono dal grafo statico dei 3 editor (CLOSED).
+- **FE-KEEP-KIT** — `ConfirmInline`, `ModalFooter`, `Loading*` kit e `components/common/index.js` barrel restano come public-API surface anche senza consumer attuali (KEEP).
+- **FE-CLN-002** — inline styles vs design tokens (LATER, da affrontare opportunisticamente).
+- **FE-SPLIT-001/002/003,005,006** — split di componenti grandi (LATER, contract test verdi, riapertura solo su trigger concreta).
+
+FE in standby: riaprire solo su bug, esigenza prodotto o nuovo editor variant.
 
 ---
 

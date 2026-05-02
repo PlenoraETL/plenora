@@ -87,19 +87,23 @@ tests, see [Residual Register](residual-register.md).
 | **FE-22** | Polling single-flight | CLOSED | #42 (`useTaskPolling`) + #43 (-353 righe orphan + dedup keyframe) + #45 (12 CSS classi missing). |
 | **R-25-B5** | UI ExecutionModal toggle staff-only | CLOSED | #47. R-25 al 100%. |
 | **FE-CLN-001** | `ThemeToggle` dedup | CLOSED | Commit `d309e0d`. Estratti `useTheme` hook + `ThemeToggle` componente shared, applicati a sidebar + 7 page/editor; coperto da test hook (`useTheme`). |
-| FE-CLN-002 | Inline styles vs design tokens | LATER | M effort. Richiede design system review. |
+| FE-CLN-002 | Inline styles vs design tokens | LATER | Audit count: 430 inline-style instances across 55 files; most dynamic (IMDF/map/data-driven) or one-off; no high-ROI duplicated pattern remaining after `AccessDeniedBanner` extraction. Address opportunistically when touching `FE-SPLIT-001/006`. |
 | FE-CLN-003 | Stray `local_*.log` working tree | DROP | Gitignored, non in repo. |
-| FE-SPLIT-001 | `pages/ApiConnectionManager.jsx` 1193 LOC, 6 concerns | LATER | L effort. Modal extraction + context split. |
-| FE-SPLIT-002 | `components/transforms/ParameterInput.jsx` 974 LOC | LATER | M-L structural split. Contract coverage added for main input types plus `PivotMappingBuilder`; split remains maintainability work, not coverage gap. |
-| FE-SPLIT-003 | `components/panels/ResponseConfigBuilder.jsx` 978 LOC + tight coupling con `ApiEnrichNode` | LATER | M structural split. Contract coverage now covers structure, mappings, transforms, preview entrypoints and residual builder paths. |
+| FE-SPLIT-001 | `pages/ApiConnectionManager.jsx` 1238 LOC, 6 concerns | LATER | Contract tests green; no bug or product trigger justifies the split for LOC alone. Reopen on a concrete feature/bug touching the file. |
+| FE-SPLIT-002 | `components/transforms/ParameterInput.jsx` 974 LOC | LATER | Contract tests green for main input types and `PivotMappingBuilder`; split remains maintainability work, not a coverage gap. Reopen on a concrete trigger. |
+| FE-SPLIT-003 | `components/panels/ResponseConfigBuilder.jsx` 978 LOC + tight coupling con `ApiEnrichNode` | LATER | Contract tests cover structure, mappings, transforms, preview entrypoints and residual builder paths. Reopen on a concrete trigger. |
 | FE-SPLIT-004 | `EditorShell` scaffold per Estrai/Manipola/Arricchisci | CLOSED | `EditorShell` centralizza guard/loading/error/project-null branches e ReactFlow canvas wrapper con API `canvasConfig`/`canvasHandlers`/`slots`; `AccessDeniedBanner` deduplica il banner shared. Hook orchestration resta nei page editor. FE in standby salvo bug o nuovo editor variant. |
-| FE-SPLIT-005 | `components/nodes/result/ResultNodeStandardView.jsx` 880 LOC | LATER | M effort. |
-| FE-SPLIT-006 | `pages/FileManager.jsx` 887 LOC | LATER | STRUCTURAL DEBT classificato. |
+| FE-SPLIT-005 | `components/nodes/result/ResultNodeStandardView.jsx` 880 LOC | LATER | Contract test green. Reopen on a concrete trigger. |
+| FE-SPLIT-006 | `pages/FileManager.jsx` 881 LOC | LATER | Contract tests green; structural debt classified. Reopen on a concrete trigger. |
 | FE-TEST-001 | Coverage hotspot pages/components | CLOSED | Major batches completed for manager pages, ScheduleList, LogViewer, ProjectList, ResultNode gating, PublishEseguibileModal, RunsTab, ParameterInput, ResponseConfigBuilder, PivotMappingBuilder, editor guards/save-failure and high-ROI residual branches (`19cc007`). Remaining items are low-ROI, fragile, or covered by FE-SPLIT/A11Y/design-token tracks. |
 | FE-TEST-002 | `useColumnPropagation` hardcoded transform_op | DROP | Verificato `applyTransformation` ha switch completo. |
 | FE-TEST-003 | `ApiEnrichNode` outputColumns loop | DROP | Mitigato lato code (normalize-then-compare guard). |
 | FE-A11Y-001 | Accessibility audit (ARIA, focus mgmt, contrast) | CLOSED | Batch chiusi: accessible names su controlli icon/search/toggle, semantica/focus management per tutti i dialog identificati, policy globale `:focus-visible`, disclosure keyboard per LogViewer/RunsTab rows e contrast token bump. ProjectList cards restano mouse convenience safe perche' hanno bottoni interni keyboard-accessible. Edge cases contrast low-ROI accettati; riaprire solo su regressione concreta o nuovo custom modal. |
-| FE-PERF-001 | Bundle size analysis + code splitting | LATER | vite-bundle-visualizer setup. M effort. |
+| FE-HYGIENE-001 | Dead code: AppHeader + orphan canvas hooks | CLOSED | `AppHeader.{jsx,css}`, `useNodeHandlers` and `useCanvasShortcuts` removed (commit `4e8aaaf`). Net -450 LOC dead code. |
+| FE-HYGIENE-002 | Dead code: SearchInput + orphan hooks | CLOSED | `SearchInput.{jsx,css}` plus `SearchInputWithFilter`, `useCanvasSaveShortcut` and `useInputColumns` removed (commit `3f65ccb`). Net -386 LOC. |
+| FE-HYGIENE-003 | Tiny editor/test residuals | CLOSED | Stale `useNodeHandlers` references in editor headers cleaned; ConfirmContext negative test now intercepts the jsdom `error` event (commit `bb21a26`). `slots.children` kept because the contract test exercises it. |
+| FE-PERF-001 | Bundle size analysis + code splitting | CLOSED | `ImdfPreviewModal` is now `React.lazy` inside a `Suspense` boundary in `ResultNodeImdfView`; build emits a dedicated `ImdfPreviewModal-XXX.js` chunk so `vendor-maplibre` and `vendor-deckgl` (~1.27 MB raw / ~366 kB gzip) leave the static graph of the three editor pages and are parsed only when the user opens an IMDF preview. Vite still emits `<link rel="modulepreload">` for dynamic chunks; that warm prefetch is accepted (no `vite.config` change in this batch). Commit `641b9bf`. Reopen only on startup performance complaint or to revisit modulepreload. |
+| FE-KEEP-KIT | Public-API kit kept without current consumers | KEEP | `ConfirmInline`, `ModalFooter`, the `Loading*` kit (`LoadingSpinner`/`Dots`/`Skeleton`/`Inline`/`Wrapper`) and the `components/common/index.js` barrel have no live consumers but are part of the design-system surface; tree-shaking drops anything unused at build time. Reopen only on an explicit retire-kit decision. |
 
 ---
 
@@ -175,9 +179,10 @@ Focus: **compliance automation + test reliability completion**.
 Focus: **frontend split + productization avanzata**.
 
 - ~~FE-SPLIT-004 EditorShell scaffold~~ -> **CLOSED** (Estrai/Manipola/Arricchisci migrated)
-- FE-CLN-002 design tokens migration
 - ~~FE-A11Y-001 accessibility audit~~ -> **CLOSED** (dialog semantics/focus, focus-visible, contrast/accessibility mechanical gaps)
-- FE-PERF-001 bundle size + code splitting
+- ~~FE-HYGIENE-001/002/003 dead-code sweep~~ -> **CLOSED** (-836 LOC across two batches plus tiny residuals)
+- ~~FE-PERF-001 bundle size + code splitting~~ -> **CLOSED** (`ImdfPreviewModal` lazy; maplibre/deckgl leave the static graph of the three editors)
+- FE-CLN-002 design tokens migration (LATER; address opportunistically when touching FE-SPLIT files)
 - API reference navigabile + demo dataset
 - R-31 rollback scriptato
 
