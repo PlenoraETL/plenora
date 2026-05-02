@@ -687,74 +687,27 @@ class FileSourceService:
         description: str = "",
         group_id: str = None,
     ) -> FileSource:
-        """Crea file source "raw" (senza parsing) da upload.
+        """Wrapper compat: delega a `file_raw_upload.create_raw_from_upload`.
 
-        Usato come fallback per formati che il parser non sa gestire (es.
-        DXF, ZIP con contenuto non standard). Il blob viene salvato nel
-        DB identico al caso happy; solo le colonne/layer restano vuoti.
-        Downstream (es. eseguibili workflow) legge il blob dal DB quando
-        serve materializzare il file.
-
-        Defense-in-depth: anche se i router upload validano gia' il MIME
-        prima di chiamare il service, qui ri-validiamo "block-only" sui
-        magic bytes per proteggere caller futuri (task Celery, batch
-        import, ecc.) che bypassino il router. Il check e' O(16 bytes)
-        + un eventuale `filetype.guess()` — overhead trascurabile.
+        STRUCT-001 Seam D-E: la logica vive in
+        `app.services.file_raw_upload.create_raw_from_upload` con
+        collaborator espliciti. Behavior byte-per-byte preservato:
+        MIME validation defense-in-depth + DTO build + dispatch policy +
+        DB save + logger info. Orphan guard rispettato.
         """
-        import app.db.db_service as db
+        from app.services.file_raw_upload import create_raw_from_upload as _impl
         from app.config import settings
-        from app.utils.mime_validator import (
-            MimeMismatchError, validate_no_executable,
+        import app.db.db_service as db
+        return _impl(
+            file_content, filename, name, description, group_id,
+            generate_file_id=self._generate_file_id,
+            time_now=self._time.now,
+            dispatch_blob_storage=self._dispatch_blob_storage,
+            db_save_file_source=db.save_file_source,
+            default_group=settings.DEFAULT_GROUP,
+            build_file_source=lambda **kw: FileSource(**kw),
+            logger=self._logger,
         )
-
-        file_id = self._generate_file_id(name)
-        file_content.seek(0)
-        raw_data = file_content.read()
-
-        try:
-            validate_no_executable(content=raw_data, filename=filename or name)
-        except MimeMismatchError as e:
-            self._logger.warning(
-                f"create_raw_from_upload bloccato (MIME): "
-                f"name={name!r} filename={filename!r}: {e}"
-            )
-            raise ValueError(str(e)) from e
-
-        file_ext = Path(filename).suffix.lstrip(".").lower() or "bin"
-        now = self._time.now()
-
-        file_source = FileSource(
-            id=file_id,
-            name=name,
-            description=description,
-            original_filename=filename,
-            format=file_ext,
-            layer=None,
-            sheet=None,
-            columns=[],
-            row_count=0,
-            file_size=len(raw_data),
-            crs=None,
-            group_id=group_id or settings.DEFAULT_GROUP,
-            created_at=now,
-            updated_at=now,
-        )
-        metadata = file_source.model_dump(mode="json") if _USE_APP_MODELS else {}
-        blob_kwargs = self._dispatch_blob_storage(file_id, raw_data, filename)
-        db.save_file_source(
-            file_id=file_id,
-            group_id=group_id or settings.DEFAULT_GROUP,
-            name=name,
-            original_filename=filename,
-            fmt=file_ext,
-            metadata=metadata,
-            **blob_kwargs,
-        )
-        self._logger.info(
-            f"FileSource raw creato: {file_id} format={file_ext} "
-            f"({len(raw_data)} bytes)"
-        )
-        return file_source
 
     def _filter_columns(self, df: pd.DataFrame, selected_columns: List[str]) -> pd.DataFrame:
         valid_cols = [c for c in selected_columns if c in df.columns]
