@@ -1,0 +1,49 @@
+/*
+   focus-visible.css - Policy globale per focus ring keyboard-only.
+
+   Scopo:
+   - Assicurare che ogni elemento focusabile via tastiera mostri un
+     indicatore visibile, anche nelle pagine dove classi locali usano
+     `outline: none`.
+   - Non mostrare ring sul click mouse/pointer: `:focus-visible` esclude
+     gia' il focus generato dal mouse, lasciando intatta l'UX abituale.
+
+   Specificita' / cascade:
+   - Le rule locali con `outline: none` su classi possono vincere su una
+     regola globale element-only. Per garantire che il ring appaia quando
+     serve, questa policy usa `!important` su outline e outline-offset.
+   - L'uso di `!important` e' limitato al caso accessibility-critical
+     WCAG 2.4.7 Focus Visible.
+
+   Residui intenzionali:
+   - Le dichiarazioni locali `outline: none` restano dove servono a
+     sopprimere il ring UA generico o i wrapper ReactFlow non interattivi.
+   - Gli elementi keyboard-focusable sono comunque coperti da questa policy
+     globale via `:focus-visible` + `!important`.
+   - Focus trap dei dialog e redesign di clickable rows/cards restano batch
+     separati: non sono parte della policy CSS globale.
+*/
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+a[href]:focus-visible,
+[tabindex]:focus-visible,
+[role="button"]:focus-visible,
+[role="dialog"]:focus-visible,
+[role="link"]:focus-visible,
+[role="menuitem"]:focus-visible,
+[role="tab"]:focus-visible,
+summary:focus-visible {
+  outline:
+    var(--plen-focus-ring-width, 2px)
+    solid
+    var(--plen-focus-ring, #4B8BFF) !important;
+  outline-offset: var(--plen-focus-ring-offset, 2px) !important;
+}
+
+/* Pointer/click focus: keep the usual mouse UX without affecting keyboard. */
+:focus:not(:focus-visible) {
+  outline: 0;
+}

@@ -11,6 +11,7 @@
 @import './base/editor-toolbar.css';
 @import './base/buttons.css';
 @import './base/canvas-readonly.css';
+@import './base/focus-visible.css';
 
 /* ── Reset globale ───────────────────────────────────────────────────────── */
 * {

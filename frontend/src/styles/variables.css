@@ -42,6 +42,12 @@
   --plen-font-display: 'Syne', sans-serif;
   --plen-font-body:    'Inter', sans-serif;
   --plen-font-mono:    'DM Mono', monospace;
+
+  /* Focus ring (a11y) - usato dalla policy globale :focus-visible.
+     Contrasto alto su sfondo dark; il valore cambia in tema light. */
+  --plen-focus-ring:        #4B8BFF;
+  --plen-focus-ring-width:  2px;
+  --plen-focus-ring-offset: 2px;
 }
 
 /* ── Light theme ──────────────────────────────────────────────── */
@@ -73,6 +79,9 @@
   --plen-ok:   #059669;
   --plen-warn: #D97706;
   --plen-err:  #DC2626;
+
+  /* Focus ring tema light: piu' scuro per contrasto su sfondo chiaro. */
+  --plen-focus-ring: #1D4ED8;
 }
 
 /* ── Anti-FOUC: applica bg immediatamente ─────────────────────── */
