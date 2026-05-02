@@ -19,14 +19,24 @@ import EditorShell from '../../../src/components/editor/EditorShell';
  *      isReadOnly=true aggiunge la classe `canvas-readonly`.
  */
 
-const { navigateMock, reactFlowStateRef } = vi.hoisted(() => ({
+const { navigateMock, reactFlowStateRef, reactFlowPropsRef } = vi.hoisted(() => ({
   navigateMock: vi.fn(),
   reactFlowStateRef: { current: { nodes: [], edges: [] } },
+  reactFlowPropsRef: { current: null },
 }));
 
-vi.mock('reactflow', () =>
-  globalThis.__frontendTestHelpers.createReactFlowMock({ canvasStateRef: reactFlowStateRef }),
-);
+vi.mock('reactflow', () => {
+  const React = require('react');
+  const base = globalThis.__frontendTestHelpers.createReactFlowMock({ canvasStateRef: reactFlowStateRef });
+  // Wrappiamo il default mock per catturare le props passate (test edgeTypes).
+  return {
+    ...base,
+    default: (props) => {
+      reactFlowPropsRef.current = props;
+      return base.default(props);
+    },
+  };
+});
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
@@ -93,7 +103,7 @@ describe('EditorShell — contract', () => {
     expect(screen.queryByTestId('canvas-error-boundary')).not.toBeInTheDocument();
   });
 
-  it('renders the load-error banner with Riprova and Torna alla lista buttons', async () => {
+  it('renders the load-error banner with role="alert", aria-live, and initial focus on first action', async () => {
     const reload = vi.fn();
     const onBack = vi.fn();
     render(
@@ -106,19 +116,31 @@ describe('EditorShell — contract', () => {
     );
     expect(screen.getByText(/Errore caricamento:.*DB unreachable/)).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: /Riprova/i }));
+    // a11y: role="alert" + aria-live="assertive" sul banner
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveAttribute('aria-live', 'assertive');
+    // Focus iniziale sul primo bottone (Riprova)
+    const retryBtn = screen.getByRole('button', { name: /Riprova/i });
+    expect(retryBtn).toHaveFocus();
+
+    await userEvent.click(retryBtn);
     expect(reload).toHaveBeenCalledTimes(1);
 
     await userEvent.click(screen.getByRole('button', { name: /Torna alla lista/i }));
     expect(onBack).toHaveBeenCalledTimes(1);
   });
 
-  it('renders the "Progetto non trovato" branch when project is null', async () => {
+  it('renders the "Progetto non trovato" branch with role="alert", aria-live, and initial focus', async () => {
     const onBack = vi.fn();
     render(<EditorShell {...baseProps} project={null} onBack={onBack} />);
     expect(screen.getByText('Progetto non trovato')).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: /Torna alla lista/i }));
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveAttribute('aria-live', 'assertive');
+    const backBtn = screen.getByRole('button', { name: /Torna alla lista/i });
+    expect(backBtn).toHaveFocus();
+
+    await userEvent.click(backBtn);
     expect(onBack).toHaveBeenCalledTimes(1);
   });
 
@@ -162,6 +184,19 @@ describe('EditorShell — contract', () => {
     const canvasDiv = container.querySelector('.estrai-canvas');
     expect(canvasDiv).toBeTruthy();
     expect(canvasDiv.className).toContain('canvas-readonly');
+  });
+
+  it('forwards canvasConfig.edgeTypes to ReactFlow', () => {
+    reactFlowPropsRef.current = null;
+    const customEdgeTypes = { custom: () => null };
+    render(
+      <EditorShell
+        {...baseProps}
+        canvasConfig={{ ...baseProps.canvasConfig, edgeTypes: customEdgeTypes }}
+      />,
+    );
+    expect(reactFlowPropsRef.current).not.toBeNull();
+    expect(reactFlowPropsRef.current.edgeTypes).toBe(customEdgeTypes);
   });
 
   it('uses the prefix prop to namespace root and error CSS classes', () => {

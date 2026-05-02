@@ -191,29 +191,6 @@
   border-top-color: var(--color-arricchisci);
 }
 
-/* ===== FOOTER HELPER ===== */
-.modal-footer {
-  display: flex;
-  gap: 10px;
-  width: 100%;
-}
-
-.modal-footer--left {
-  justify-content: flex-start;
-}
-
-.modal-footer--center {
-  justify-content: center;
-}
-
-.modal-footer--right {
-  justify-content: flex-end;
-}
-
-.modal-footer--between {
-  justify-content: space-between;
-}
-
 /* ===== BUTTONS ===== */
 .modal-btn {
   padding: 10px 20px;

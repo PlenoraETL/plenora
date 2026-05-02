@@ -77,36 +77,4 @@ function ConfirmDialog({
   );
 }
 
-/**
- * Versione inline senza modal (per uso in altri contesti)
- */
-export function ConfirmInline({
-  message,
-  onConfirm,
-  onCancel,
-  confirmText = 'Sì',
-  cancelText = 'No',
-  variant = 'default'
-}) {
-  return (
-    <div className="confirm-inline">
-      <span className="confirm-inline__message">{message}</span>
-      <div className="confirm-inline__actions">
-        <button type="button" 
-          className="confirm-inline__btn confirm-inline__btn--cancel"
-          onClick={onCancel}
-        >
-          {cancelText}
-        </button>
-        <button type="button" 
-          className={`confirm-inline__btn confirm-inline__btn--${variant}`}
-          onClick={onConfirm}
-        >
-          {confirmText}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 export default ConfirmDialog;

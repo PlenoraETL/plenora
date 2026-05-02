@@ -137,17 +137,9 @@ function ModalWrapper({
 }
 
 /**
- * Componenti helper per footer standardizzati
+ * Bottone standard per footer modali (live API used by ~20 modal files).
  */
-export function ModalFooter({ children, align = 'right' }) {
-  return (
-    <div className={`modal-footer modal-footer--${align}`}>
-      {children}
-    </div>
-  );
-}
-
-export function ModalButton({ 
+export function ModalButton({
   children, 
   onClick, 
   variant = 'secondary',  // 'primary' | 'secondary' | 'danger'

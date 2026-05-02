@@ -36,10 +36,26 @@
  *   `slots` (oggetto) — render slots posizionali. Contiene: topbar,
  *   sidebar, beforeCanvas, afterCanvas, modals, children.
  *
+ *   Note su `slots.children`: e' un punto di estensione esplicito,
+ *   renderizzato DENTRO il `CanvasErrorBoundary` e nel canvas div
+ *   subito dopo `afterCanvas`. Serve per overlay che devono vivere
+ *   nel layer canvas (es. tooltip globali, layer geo overlay) e non
+ *   sono esprimibili tramite gli altri slot. Coperto da contract
+ *   test (`renders all slots ...inside the canvas error boundary`).
+ *
+ *   Note su `canvasConfig.edgeTypes`: e' forwarded direttamente al
+ *   componente `<ReactFlow edgeTypes={...}>`. Estensione standard
+ *   ReactFlow per renderer custom di edge; coperto da contract test
+ *   (`forwards canvasConfig.edgeTypes to ReactFlow`).
+ *
+ *   Banner di errore (loadError, !project): `role="alert"` +
+ *   `aria-live="assertive"` + focus iniziale sul primo bottone
+ *   azione. Vedi `ErrorBanner` interno.
+ *
  * Behavior preservato byte-per-byte rispetto al pattern legacy.
  */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ReactFlow, { Background, Controls, MiniMap } from 'reactflow';
 
@@ -48,6 +64,35 @@ import { CanvasErrorBoundary } from '../common/ErrorBoundary';
 import { LoadingOverlay } from '../common/LoadingOverlay';
 
 const EMPTY_OBJ = {};
+
+/**
+ * Banner errore con semantica accessibile: `role="alert"` + `aria-live`
+ * "assertive" cosi' gli screen reader annunciano subito il messaggio,
+ * e focus iniziale sul primo bottone azione per dare un punto di
+ * tastiera immediato.
+ */
+function ErrorBanner({ prefix, message, children }) {
+  const firstBtnRef = useRef(null);
+  useEffect(() => {
+    firstBtnRef.current?.focus();
+  }, []);
+  // Cloniamo solo il primo bottone per agganciare la ref senza imporre
+  // a chi consuma di passare ref dall'esterno.
+  let attachedFirst = false;
+  const enhanced = React.Children.map(children, (child) => {
+    if (!attachedFirst && React.isValidElement(child) && child.type === 'button') {
+      attachedFirst = true;
+      return React.cloneElement(child, { ref: firstBtnRef });
+    }
+    return child;
+  });
+  return (
+    <div className={`${prefix}-error`} role="alert" aria-live="assertive">
+      <p className={`${prefix}-error__message`}>{message}</p>
+      {enhanced}
+    </div>
+  );
+}
 
 function EditorShell({
   // ── Guards ─────────────────────────────────────────────────────────
@@ -122,8 +167,7 @@ function EditorShell({
 
   if (loadError) {
     return (
-      <div className={`${prefix}-error`}>
-        <p className={`${prefix}-error__message`}>Errore caricamento: {loadError}</p>
+      <ErrorBanner prefix={prefix} message={`Errore caricamento: ${loadError}`}>
         {reload && (
           <button type="button" className={`${prefix}-error__btn`} onClick={reload}>
             Riprova
@@ -134,20 +178,19 @@ function EditorShell({
             Torna alla lista
           </button>
         )}
-      </div>
+      </ErrorBanner>
     );
   }
 
   if (!project) {
     return (
-      <div className={`${prefix}-error`}>
-        <p className={`${prefix}-error__message`}>Progetto non trovato</p>
+      <ErrorBanner prefix={prefix} message="Progetto non trovato">
         {onBack && (
           <button type="button" className={`${prefix}-error__btn`} onClick={onBack}>
             Torna alla lista
           </button>
         )}
-      </div>
+      </ErrorBanner>
     );
   }
 
