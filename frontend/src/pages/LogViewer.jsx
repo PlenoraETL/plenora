@@ -216,14 +216,18 @@ function LogViewer() {
                 { key: 'WARNING', label: 'Warning', mod: 'warn',  val: stats.by_level?.WARNING || 0 },
                 { key: 'ERROR',   label: 'Errori',  mod: 'error', val: stats.by_level?.ERROR   || 0 },
               ].map(s => (
-                <div key={s.key}
+                <button
+                  type="button"
+                  key={s.key}
                   className={`lv__stat lv__stat--${s.mod}${filterLevel === s.key ? ' lv__stat--active' : ''}`}
                   onClick={() => setFilterLevel(filterLevel === s.key ? '' : s.key)}
-                  style={{ cursor: 'pointer' }}>
-                  <div className="lv__stat-label">{s.label}</div>
-                  <div className="lv__stat-val">{s.val}</div>
-                  <div className="lv__stat-sub">clicca per filtrare</div>
-                </div>
+                  aria-pressed={filterLevel === s.key}
+                  aria-label={`Filtra log per livello ${s.label}`}
+                  style={{ cursor: 'pointer', textAlign: 'inherit', font: 'inherit', color: 'inherit', appearance: 'none', WebkitAppearance: 'none' }}>
+                  <span className="lv__stat-label">{s.label}</span>
+                  <span className="lv__stat-val">{s.val}</span>
+                  <span className="lv__stat-sub">clicca per filtrare</span>
+                </button>
               ))}
             </div>
           )}
@@ -245,6 +249,7 @@ function LogViewer() {
               <form className="lv__search" onSubmit={handleSearch}>
                 <input type="text" className="lv__search-input"
                   placeholder="Cerca nel messaggio..."
+                  aria-label="Cerca nel messaggio"
                   value={searchInput} onChange={e => setSearchInput(e.target.value)} />
                 <button type="submit" className="lv__search-btn">🔍</button>
               </form>

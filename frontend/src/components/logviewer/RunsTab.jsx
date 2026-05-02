@@ -82,22 +82,28 @@ export default function RunsTab({ refreshTick = 0 }) {
           <div className="lv__stat-val">{total}</div>
           <div className="lv__stat-sub">questa pagina</div>
         </div>
-        <div
+        <button
+          type="button"
           className={`lv__stat lv__stat--info${filterStatus === 'success' ? ' lv__stat--active' : ''}`}
-          style={{ cursor: 'pointer' }}
-          onClick={() => setFilterStatus(filterStatus === 'success' ? '' : 'success')}>
-          <div className="lv__stat-label">Completate</div>
-          <div className="lv__stat-val" style={{ color: 'var(--lv-ok)' }}>{countOk}</div>
-          <div className="lv__stat-sub">clicca per filtrare</div>
-        </div>
-        <div
+          style={{ cursor: 'pointer', textAlign: 'inherit', font: 'inherit', color: 'inherit', appearance: 'none', WebkitAppearance: 'none' }}
+          onClick={() => setFilterStatus(filterStatus === 'success' ? '' : 'success')}
+          aria-pressed={filterStatus === 'success'}
+          aria-label="Filtra esecuzioni completate">
+          <span className="lv__stat-label">Completate</span>
+          <span className="lv__stat-val" style={{ color: 'var(--lv-ok)' }}>{countOk}</span>
+          <span className="lv__stat-sub">clicca per filtrare</span>
+        </button>
+        <button
+          type="button"
           className={`lv__stat lv__stat--error${filterStatus === 'failure' ? ' lv__stat--active' : ''}`}
-          style={{ cursor: 'pointer' }}
-          onClick={() => setFilterStatus(filterStatus === 'failure' ? '' : 'failure')}>
-          <div className="lv__stat-label">Fallite</div>
-          <div className="lv__stat-val" style={{ color: 'var(--lv-err)' }}>{countErr}</div>
-          <div className="lv__stat-sub">clicca per filtrare</div>
-        </div>
+          style={{ cursor: 'pointer', textAlign: 'inherit', font: 'inherit', color: 'inherit', appearance: 'none', WebkitAppearance: 'none' }}
+          onClick={() => setFilterStatus(filterStatus === 'failure' ? '' : 'failure')}
+          aria-pressed={filterStatus === 'failure'}
+          aria-label="Filtra esecuzioni fallite">
+          <span className="lv__stat-label">Fallite</span>
+          <span className="lv__stat-val" style={{ color: 'var(--lv-err)' }}>{countErr}</span>
+          <span className="lv__stat-sub">clicca per filtrare</span>
+        </button>
       </div>
 
       {/* Filtri */}

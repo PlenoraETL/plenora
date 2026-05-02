@@ -113,9 +113,9 @@
 .lv__stat--warn.lv__stat--active  { border-color:rgba(251,191,36,0.4);  background:rgba(251,191,36,0.06); }
 .lv__stat--error.lv__stat--active { border-color:rgba(248,113,113,0.4); background:rgba(248,113,113,0.06); }
 .lv__stat:hover { border-color:var(--lv-border-hi); }
-.lv__stat-label { font-size:9px; letter-spacing:.1em; text-transform:uppercase; color:var(--lv-text-dim); font-family:var(--lv-font-m); margin-bottom:6px; }
-.lv__stat-val   { font-family:var(--lv-font-d); font-size:26px; font-weight:800; color:var(--lv-text); line-height:1; }
-.lv__stat-sub   { font-size:10px; color:var(--lv-text-dim); margin-top:4px; font-family:var(--lv-font-m); }
+.lv__stat-label { display:block; font-size:9px; letter-spacing:.1em; text-transform:uppercase; color:var(--lv-text-dim); font-family:var(--lv-font-m); margin-bottom:6px; }
+.lv__stat-val   { display:block; font-family:var(--lv-font-d); font-size:26px; font-weight:800; color:var(--lv-text); line-height:1; }
+.lv__stat-sub   { display:block; font-size:10px; color:var(--lv-text-dim); margin-top:4px; font-family:var(--lv-font-m); }
 
 /* Filters */
 .lv__filters       { background:var(--lv-surface); border:1px solid var(--lv-border); border-radius:10px; padding:14px 18px; }

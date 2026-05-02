@@ -106,7 +106,7 @@ describe('ScheduleList — batch 3', () => {
     render(<ScheduleList />);
     await screen.findByText('Nightly Import');
 
-    await userEvent.click(screen.getByRole('button', { name: '🗑' }));
+    await userEvent.click(screen.getByRole('button', { name: /Elimina schedule/i }));
     // ConfirmDialog button has text "Elimina" (confirmText nel componente).
     await userEvent.click(
       await screen.findByRole('button', { name: 'Elimina' }),
@@ -135,7 +135,7 @@ describe('ScheduleList — batch 3', () => {
     render(<ScheduleList />);
     await screen.findByText('Nightly Import');
 
-    await userEvent.click(screen.getByRole('button', { name: '🗑' }));
+    await userEvent.click(screen.getByRole('button', { name: /Elimina schedule/i }));
     await userEvent.click(
       await screen.findByRole('button', { name: 'Elimina' }),
     );
@@ -246,7 +246,9 @@ describe('ScheduleList — batch 3', () => {
     // Click sul bottone download del run specifico (l'unico "📥" rimasto
     // dopo che il toggle ha cambiato testo in "📥 Chiudi" — il run entry
     // ha solo l'icona).
-    const runDownloadBtn = screen.getByRole('button', { name: '📥' });
+    const runDownloadBtn = screen.getByRole('button', {
+      name: /Scarica output di questa esecuzione/i,
+    });
     await userEvent.click(runDownloadBtn);
 
     expect(schedulesMock.downloadScheduleOutput).toHaveBeenCalledWith(

@@ -120,7 +120,7 @@ describe('ConnectionManager — batch 6', () => {
     render(<ConnectionManager />);
     await screen.findByText('Warehouse DB');
 
-    await userEvent.click(screen.getByRole('button', { name: '🗑' }));
+    await userEvent.click(screen.getByRole('button', { name: /Elimina connessione/i }));
     await userEvent.click(
       await screen.findByRole('button', { name: 'Elimina' }),
     );
@@ -153,7 +153,7 @@ describe('ConnectionManager — batch 6', () => {
     render(<ConnectionManager />);
     await screen.findByText('Warehouse DB');
 
-    await userEvent.click(screen.getByRole('button', { name: '🗑' }));
+    await userEvent.click(screen.getByRole('button', { name: /Elimina connessione/i }));
     await userEvent.click(
       await screen.findByRole('button', { name: 'Elimina' }),
     );

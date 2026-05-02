@@ -1,0 +1,25 @@
+/**
+ * ThemeToggle.css - UA reset minimo per le option theme.
+ *
+ * Le option sono ora <button>, ma le classi BEM scoped per pagina
+ * (.acm__theme-opt, .cm__theme-opt, .estrai-toolbar__theme-opt,
+ *  .arricchisci-theme-opt, ...) gia' settano padding/color/font/cursor
+ * pensando a un <div>. Aggiungiamo un reset selettivo via attribute
+ * selector (tutte le varianti contengono il token "theme-opt") cosi'
+ * il button non porta border/background/font default UA che
+ * romperebbero il visual originale.
+ *
+ * Le classi --on continuano a dominare via cascade (specificita' di
+ * classe > selettore di attributo), quindi il background attivo viene
+ * rispettato.
+ */
+button[class*="theme-opt"] {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  margin: 0;
+  /* Le classi page-specific gestiscono padding/cursor/altri visual. */
+}

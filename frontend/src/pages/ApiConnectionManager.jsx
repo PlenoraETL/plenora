@@ -390,8 +390,8 @@ function ApiConnectionManager() {
           <div className="acm__toolbar" style={{position:'relative',zIndex:1}}>
             <div className="acm__search">
               <span className="acm__search-icon">🔍</span>
-              <input type="text" className="acm__search-input" placeholder="Cerca connettore…" value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} />
-              {searchQuery && <button type="button" className="acm__search-clear" onClick={()=>setSearchQuery('')}>×</button>}
+              <input type="text" className="acm__search-input" placeholder="Cerca connettore…" aria-label="Cerca connettore" value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} />
+              {searchQuery && <button type="button" className="acm__search-clear" onClick={()=>setSearchQuery('')} aria-label="Pulisci ricerca">×</button>}
             </div>
             <div className="acm__cats">
               {CATEGORIES.map(cat=>(
@@ -473,13 +473,13 @@ function ApiConnectionManager() {
                           <button type="button" className="acm__btn acm__btn--ghost acm__btn--sm" onClick={()=>handleQuickTest(api)}>🧪 Test</button>
                           <div style={{marginLeft:'auto',display:'flex',gap:4}}>
                             {canEdit && (
-                              <button type="button" className="acm__icon-btn" title="Modifica" onClick={()=>openWizard(api)}>⚙️</button>
+                              <button type="button" className="acm__icon-btn" title="Modifica" aria-label="Modifica connettore" onClick={()=>openWizard(api)}>⚙️</button>
                             )}
                             {isSuperadmin && (
-                              <button type="button" className="acm__icon-btn" title="Gestisci condivisione cross-gruppo" onClick={()=>setSharingApi(api)}>🔗</button>
+                              <button type="button" className="acm__icon-btn" title="Gestisci condivisione cross-gruppo" aria-label="Gestisci condivisione cross-gruppo" onClick={()=>setSharingApi(api)}>🔗</button>
                             )}
                             {canEdit && (
-                              <button type="button" className="acm__icon-btn acm__icon-btn--danger" title="Elimina" onClick={()=>handleDelete(api.id,api.name)}>🗑</button>
+                              <button type="button" className="acm__icon-btn acm__icon-btn--danger" title="Elimina" aria-label="Elimina connettore" onClick={()=>handleDelete(api.id,api.name)}>🗑</button>
                             )}
                           </div>
                         </div>
@@ -524,7 +524,7 @@ function ApiConnectionManager() {
           <div className="acm__wizard" onClick={e=>e.stopPropagation()}>
             <div className="acm__wizard-header">
               <div className="acm__wizard-title">{editingApi?`Modifica — ${editingApi.name}`:'Nuovo Connettore'}</div>
-              <button type="button" className="acm__modal-close" onClick={closeWizard}>✕</button>
+              <button type="button" className="acm__modal-close" onClick={closeWizard} aria-label="Chiudi">✕</button>
             </div>
 
             {/* Step bar */}
@@ -749,7 +749,7 @@ function ApiConnectionManager() {
                         {(p.mode==='fixed'||formData.api_type==='generator') && (
                           <input className="acm__input" value={formData.static_parameters[p.name]||''} onChange={e=>setFormData({...formData,static_parameters:{...formData.static_parameters,[p.name]:e.target.value}})} placeholder="Valore fisso"/>
                         )}
-                        <button type="button" className="acm__del-btn" onClick={()=>removeParameter(i)}>🗑</button>
+                        <button type="button" className="acm__del-btn" onClick={()=>removeParameter(i)} aria-label="Rimuovi parametro">🗑</button>
                       </div>
                     ))}
                     <button type="button" className="acm__add-param-btn" onClick={addParameter}>＋ Aggiungi parametro</button>
@@ -925,7 +925,7 @@ function ApiConnectionManager() {
                       <div key={i} className="acm__param-row">
                         <input className="acm__input" value={h.key} onChange={e=>updateCustomHeader(i,'key',e.target.value)} placeholder="Nome header"/>
                         <input className="acm__input" value={h.value} onChange={e=>updateCustomHeader(i,'value',e.target.value)} placeholder="Valore"/>
-                        <button type="button" className="acm__del-btn" onClick={()=>removeCustomHeader(i)}>🗑</button>
+                        <button type="button" className="acm__del-btn" onClick={()=>removeCustomHeader(i)} aria-label="Rimuovi header">🗑</button>
                       </div>
                     ))}
                     <button type="button" className="acm__add-param-btn" onClick={addCustomHeader}>＋ Aggiungi header</button>
@@ -1101,7 +1101,7 @@ function ApiConnectionManager() {
           <div className="acm__modal acm__modal--sm" onClick={e=>e.stopPropagation()}>
             <div className="acm__wizard-header">
               <div className="acm__wizard-title">🚀 Test — {quickTestInput.api.name}</div>
-              <button type="button" className="acm__modal-close" onClick={()=>setQuickTestInput(null)}>✕</button>
+              <button type="button" className="acm__modal-close" onClick={()=>setQuickTestInput(null)} aria-label="Chiudi">✕</button>
             </div>
             <div className="acm__wizard-body">
               <div style={{fontSize:12,color:'var(--acm-text-sub)',marginBottom:16}}>Inserisci valori di test per i parametri mappabili:</div>
@@ -1126,7 +1126,7 @@ function ApiConnectionManager() {
           <div className="acm__modal" onClick={e=>e.stopPropagation()}>
             <div className="acm__wizard-header">
               <div className="acm__wizard-title">{quickTestResult.result.success?'✅':'❌'} Test — {quickTestResult.api.name}</div>
-              <button type="button" className="acm__modal-close" onClick={()=>setQuickTestResult(null)}>✕</button>
+              <button type="button" className="acm__modal-close" onClick={()=>setQuickTestResult(null)} aria-label="Chiudi">✕</button>
             </div>
             <div className="acm__wizard-body">
               {quickTestResult.result.success ? (<>
@@ -1167,7 +1167,7 @@ function ApiConnectionManager() {
           <div className="acm__wizard" onClick={e=>e.stopPropagation()} style={{ maxWidth: 540 }}>
             <div className="acm__wizard-header">
               <div className="acm__wizard-title">🔗 Condividi Connettore — {sharingApi.name}</div>
-              <button type="button" className="acm__modal-close" onClick={()=>setSharingApi(null)}>✕</button>
+              <button type="button" className="acm__modal-close" onClick={()=>setSharingApi(null)} aria-label="Chiudi">✕</button>
             </div>
             <div className="acm__wizard-body" style={{ padding: '18px 20px' }}>
               <AllowedGroupsSelector

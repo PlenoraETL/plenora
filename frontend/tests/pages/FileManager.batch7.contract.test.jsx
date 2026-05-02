@@ -124,7 +124,7 @@ describe('FileManager — batch 7', () => {
     await screen.findByText('Cities');
 
     // Trash icon su FileCard.
-    await userEvent.click(screen.getByRole('button', { name: '🗑' }));
+    await userEvent.click(screen.getByRole('button', { name: /Elimina file/i }));
 
     await waitFor(() =>
       expect(deleteFileMock).toHaveBeenCalledWith('file-1'),

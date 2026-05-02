@@ -292,6 +292,7 @@ function ProjectList() {
               <span className="pl__search-icon">⌕</span>
               <input
                 placeholder="Cerca progetti..."
+                aria-label="Cerca progetti"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
               />

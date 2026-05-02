@@ -193,15 +193,15 @@ export default function DataSourceManager() {
                           {ti.icon} {ti.label}
                         </div>
                         <div className="dsm__card-actions">
-                          <button type="button" className="dsm__action-btn" onClick={() => openBrowser(ds)} title="Sfoglia">📂</button>
+                          <button type="button" className="dsm__action-btn" onClick={() => openBrowser(ds)} title="Sfoglia" aria-label="Sfoglia file del data source">📂</button>
                           {canEdit && (
-                            <button type="button" className="dsm__action-btn" onClick={() => openEdit(ds)} title="Modifica">✏️</button>
+                            <button type="button" className="dsm__action-btn" onClick={() => openEdit(ds)} title="Modifica" aria-label="Modifica data source">✏️</button>
                           )}
                           {isSuperadmin && (
-                            <button type="button" className="dsm__action-btn" onClick={() => setSharingDatasource(ds)} title="Gestisci condivisione cross-gruppo">🔗</button>
+                            <button type="button" className="dsm__action-btn" onClick={() => setSharingDatasource(ds)} title="Gestisci condivisione cross-gruppo" aria-label="Gestisci condivisione cross-gruppo">🔗</button>
                           )}
                           {canEdit && (
-                            <button type="button" className="dsm__action-btn dsm__action-btn--danger" onClick={() => setConfirmDelete(ds)} title="Elimina">🗑</button>
+                            <button type="button" className="dsm__action-btn dsm__action-btn--danger" onClick={() => setConfirmDelete(ds)} title="Elimina" aria-label="Elimina data source">🗑</button>
                           )}
                           {!canEdit && (
                             <span
@@ -249,7 +249,7 @@ export default function DataSourceManager() {
           <div className="dsm__modal">
             <div className="dsm__modal-header">
               <div className="dsm__modal-title">{editing ? `Modifica — ${editing.name}` : 'Nuovo Data Source'}</div>
-              <button type="button" className="dsm__modal-close" onClick={closeModal}>✕</button>
+              <button type="button" className="dsm__modal-close" onClick={closeModal} aria-label="Chiudi">✕</button>
             </div>
             <div className="dsm__modal-body">
 
@@ -386,8 +386,8 @@ export default function DataSourceManager() {
                 {browserPath && <span className="dsm__browser-path"> / {browserPath}</span>}
               </div>
               <div style={{display:'flex',gap:6}}>
-                <button type="button" className="dsm__btn dsm__btn--ghost dsm__btn--sm" onClick={() => browseFiles(browserDs.id, browserPath)} disabled={browserLoading}>🔄</button>
-                <button type="button" className="dsm__modal-close" onClick={closeBrowser}>✕</button>
+                <button type="button" className="dsm__btn dsm__btn--ghost dsm__btn--sm" onClick={() => browseFiles(browserDs.id, browserPath)} disabled={browserLoading} aria-label="Aggiorna elenco file">🔄</button>
+                <button type="button" className="dsm__modal-close" onClick={closeBrowser} aria-label="Chiudi">✕</button>
               </div>
             </div>
             <div className="dsm__modal-body">
@@ -462,7 +462,7 @@ export default function DataSourceManager() {
           <div className="dsm__modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 540 }}>
             <div className="dsm__modal-header">
               <div className="dsm__modal-title">🔗 Condividi Data Source — {sharingDatasource.name}</div>
-              <button type="button" className="dsm__modal-close" onClick={() => setSharingDatasource(null)}>✕</button>
+              <button type="button" className="dsm__modal-close" onClick={() => setSharingDatasource(null)} aria-label="Chiudi">✕</button>
             </div>
             <div className="dsm__modal-body">
               <AllowedGroupsSelector

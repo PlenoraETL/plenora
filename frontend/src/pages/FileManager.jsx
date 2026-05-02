@@ -382,10 +382,11 @@ const FileManager = () => {
               <input
                 className="fm__search-input"
                 placeholder="Cerca file..."
+                aria-label="Cerca file"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
               />
-              {search && <button type="button" className="fm__search-clear" onClick={() => setSearch('')}>✕</button>}
+              {search && <button type="button" className="fm__search-clear" onClick={() => setSearch('')} aria-label="Pulisci ricerca">✕</button>}
             </div>
             <div className="fm__filter-tabs">
               {FILTER_TABS.map(t => {
@@ -611,7 +612,7 @@ function FileCard({ file, onPreview, onDelete, onShare, isSuperadmin }) {
               >🔗</button>
             )}
             {canEdit && (
-              <button type="button" className="fm__btn fm__btn--danger fm__btn--sm" onClick={onDelete}>🗑</button>
+              <button type="button" className="fm__btn fm__btn--danger fm__btn--sm" onClick={onDelete} aria-label="Elimina file">🗑</button>
             )}
           </div>
         </div>

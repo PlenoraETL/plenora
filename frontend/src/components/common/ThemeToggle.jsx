@@ -12,6 +12,7 @@
  */
 import React from 'react';
 import { useTheme } from '../../hooks/useTheme';
+import './ThemeToggle.css';
 
 export default function ThemeToggle({ classPrefix, classes }) {
   const { theme, setTheme } = useTheme();
@@ -21,15 +22,19 @@ export default function ThemeToggle({ classPrefix, classes }) {
   const optOn = classes?.optOn ?? `${classPrefix}__theme-opt--on`;
 
   return (
-    <div className={wrap}>
-      <div
+    <div className={wrap} role="group" aria-label="Tema interfaccia">
+      <button
+        type="button"
         className={`${opt}${theme === 'dark' ? ` ${optOn}` : ''}`}
         onClick={() => setTheme('dark')}
-      >🌙 Scuro</div>
-      <div
+        aria-pressed={theme === 'dark'}
+      >🌙 Scuro</button>
+      <button
+        type="button"
         className={`${opt}${theme === 'light' ? ` ${optOn}` : ''}`}
         onClick={() => setTheme('light')}
-      >☀️ Chiaro</div>
+        aria-pressed={theme === 'light'}
+      >☀️ Chiaro</button>
     </div>
   );
 }

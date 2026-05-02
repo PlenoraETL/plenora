@@ -520,11 +520,12 @@ function ConnTable({ title, subtitle, connections, testResults, testingId, onTes
                           type="button"
                           className="cm__btn cm__btn--ghost cm__btn--sm"
                           title="Gestisci condivisione cross-gruppo"
+                          aria-label="Gestisci condivisione cross-gruppo"
                           onClick={() => onShare(conn)}
                         >🔗</button>
                       )}
                       {canEdit && (
-                        <button type="button" className="cm__btn cm__btn--danger cm__btn--sm" onClick={() => onDelete(conn)}>🗑</button>
+                        <button type="button" className="cm__btn cm__btn--danger cm__btn--sm" onClick={() => onDelete(conn)} aria-label="Elimina connessione">🗑</button>
                       )}
                     </div>
                   </td>

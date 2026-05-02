@@ -374,7 +374,13 @@ function ScheduleCard({ schedule, isRunning, runStartTime, logs, runs, runningMa
           <div className="sl__card-header-right">
             <span className={`sl__badge ${statusCfg.cls}`}>{statusCfg.label}</span>
             <label className="sl__toggle" title={isEnabled ? 'Disabilita' : 'Abilita'}>
-              <input type="checkbox" checked={!!isEnabled} onChange={onToggle} disabled={isOrphan} />
+              <input
+                type="checkbox"
+                checked={!!isEnabled}
+                onChange={onToggle}
+                disabled={isOrphan}
+                aria-label={isEnabled ? 'Disabilita schedule' : 'Abilita schedule'}
+              />
               <span className="sl__toggle-slider" />
             </label>
           </div>
@@ -419,8 +425,8 @@ function ScheduleCard({ schedule, isRunning, runStartTime, logs, runs, runningMa
             )}
           </div>
           <div className="sl__card-actions-right">
-            <button type="button" className="sl__btn sl__btn--sm sl__btn--ghost" onClick={onEdit}>✏️</button>
-            <button type="button" className="sl__btn sl__btn--sm sl__btn--danger" onClick={onDelete}>🗑</button>
+            <button type="button" className="sl__btn sl__btn--sm sl__btn--ghost" onClick={onEdit} aria-label="Modifica schedule">✏️</button>
+            <button type="button" className="sl__btn sl__btn--sm sl__btn--danger" onClick={onDelete} aria-label="Elimina schedule">🗑</button>
           </div>
         </div>
 
@@ -463,7 +469,7 @@ function ScheduleCard({ schedule, isRunning, runStartTime, logs, runs, runningMa
                     <span className="sl__run-ts">{formatRunTimestamp(run.timestamp)}</span>
                     <span className="sl__run-files">{run.files.map(f => f.name).join(', ')}</span>
                     <span className="sl__run-size">{formatSize(run.files.reduce((s,f) => s+f.size_bytes, 0))}</span>
-                    <button type="button" className="sl__btn sl__btn--sm sl__btn--ghost" onClick={() => onDownloadRun(run.timestamp)}>📥</button>
+                    <button type="button" className="sl__btn sl__btn--sm sl__btn--ghost" onClick={() => onDownloadRun(run.timestamp)} aria-label="Scarica output di questa esecuzione">📥</button>
                   </div>
                 ))}
               </div>
