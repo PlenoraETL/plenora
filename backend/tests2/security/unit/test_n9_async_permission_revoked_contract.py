@@ -284,6 +284,7 @@ def test_pipeline_task_passes_user_id_to_open_run(monkeypatch):
 
     monkeypatch.setattr(celery_app.conf, "task_always_eager", True)
     monkeypatch.setattr(celery_app.conf, "task_eager_propagates", True)
+    monkeypatch.setattr(pt.execute_pipeline_task, "update_state", lambda *a, **kw: None)
 
     # Idempotency: not completed -> task procede.
     monkeypatch.setattr(
@@ -665,6 +666,7 @@ def test_pipeline_task_passes_user_id_to_intermediate_create_run(monkeypatch):
 
     monkeypatch.setattr(celery_app.conf, "task_always_eager", True)
     monkeypatch.setattr(celery_app.conf, "task_eager_propagates", True)
+    monkeypatch.setattr(pt.execute_pipeline_task, "update_state", lambda *a, **kw: None)
 
     # Idempotency / recheck / orchestrator: pass-through autorizzato.
     monkeypatch.setattr(

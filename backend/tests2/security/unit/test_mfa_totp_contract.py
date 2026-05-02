@@ -51,6 +51,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
 _BACKEND = Path(__file__).resolve().parents[3]
 _MIGRATION = _BACKEND / "migrations" / "2026-04-21_add_user_mfa.sql"
 _AUTH_PY = _BACKEND / "app" / "core" / "auth" / "auth.py"
+_AUTH_MODELS_PY = _BACKEND / "app" / "core" / "auth" / "models.py"
 _MFA_PY = _BACKEND / "app" / "core" / "auth" / "mfa.py"
 
 
@@ -63,6 +64,11 @@ def migration_sql() -> str:
 @pytest.fixture(scope="module")
 def auth_module_ast() -> ast.Module:
     return ast.parse(_AUTH_PY.read_text(encoding="utf-8"))
+
+
+@pytest.fixture(scope="module")
+def auth_models_module_ast() -> ast.Module:
+    return ast.parse(_AUTH_MODELS_PY.read_text(encoding="utf-8"))
 
 
 @pytest.fixture(scope="module")
@@ -97,16 +103,16 @@ def test_migration_declares_required_columns(migration_sql: str) -> None:
         assert col in migration_sql, f"Colonna mancante: {col}"
 
 
-def test_login_request_has_mfa_code_field(auth_module_ast: ast.Module) -> None:
+def test_login_request_has_mfa_code_field(auth_models_module_ast: ast.Module) -> None:
     """LoginRequest DEVE avere il campo mfa_code opzionale per supportare MFA
     senza rompere il contratto per utenti non-MFA.
     """
     login_request = None
-    for node in ast.walk(auth_module_ast):
+    for node in ast.walk(auth_models_module_ast):
         if isinstance(node, ast.ClassDef) and node.name == "LoginRequest":
             login_request = node
             break
-    assert login_request is not None, "LoginRequest non trovato in auth.py"
+    assert login_request is not None, "LoginRequest non trovato in auth/models.py"
 
     fields = {
         n.target.id
