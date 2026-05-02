@@ -167,6 +167,23 @@
 
 .lv__msg-text     { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-right:20px; color:var(--lv-text-sub); }
 .lv__expand-icon  { position:absolute; right:14px; top:50%; transform:translateY(-50%); color:var(--lv-text-dim); font-size:11px; }
+
+/* Toggle button per espansione riga (LogViewer + RunsTab).
+   Reset UA + classi BEM esistenti non lo coprono. */
+.lv__expand-toggle {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  border: 0;
+  padding: 0 4px;
+  margin: 0 6px 0 0;
+  color: var(--lv-text-dim);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  vertical-align: middle;
+}
+.lv__expand-toggle:hover { color: var(--lv-text); }
 .lv__project-link { color:var(--lv-blue); font-size:11.5px; font-weight:500; cursor:pointer; font-family:var(--lv-font-m); }
 .lv__project-link:hover { text-decoration:underline; }
 

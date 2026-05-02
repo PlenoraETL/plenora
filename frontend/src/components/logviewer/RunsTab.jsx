@@ -160,13 +160,26 @@ export default function RunsTab({ refreshTick = 0 }) {
               const modClr = MODULE_COLORS[run.module] || '#6B7280';
               const isExp  = expandedRun === run.run_id;
               const isFail = run.status === 'failure';
+              const detailRowId = `lv-run-detail-${run.run_id}`;
               return (
                 <React.Fragment key={run.run_id}>
                   <tr
                     className={`lv__row${isFail ? ' lv__row--error' : ''}${isExp ? ' lv__row--expanded' : ''}`}
                     style={{ cursor: 'pointer' }}
                     onClick={() => setExpandedRun(isExp ? null : run.run_id)}>
-                    <td className="lv__td lv__td--time">{formatTime(run.ts_start)}</td>
+                    <td className="lv__td lv__td--time">
+                      <button
+                        type="button"
+                        className="lv__expand-toggle"
+                        onClick={e => { e.stopPropagation(); setExpandedRun(isExp ? null : run.run_id); }}
+                        aria-expanded={isExp}
+                        aria-controls={detailRowId}
+                        aria-label={isExp ? 'Comprimi dettagli esecuzione' : 'Espandi dettagli esecuzione'}
+                      >
+                        {isExp ? '▾' : '▸'}
+                      </button>
+                      {' '}{formatTime(run.ts_start)}
+                    </td>
                     <td className="lv__td">
                       <span className={`lv__run-status ${st.cls}`}>
                         <span className="lv__run-status-icon">{st.icon}</span>
@@ -193,7 +206,7 @@ export default function RunsTab({ refreshTick = 0 }) {
                   </tr>
 
                   {isExp && (
-                    <tr className="lv__detail-row">
+                    <tr className="lv__detail-row" id={detailRowId}>
                       <td colSpan="7" className="lv__detail-cell">
                         {isFail && run.error_message && (
                           <div className="lv__run-error-banner">

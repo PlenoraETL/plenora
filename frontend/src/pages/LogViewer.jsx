@@ -291,13 +291,28 @@ function LogViewer() {
                   const modColor = MODULE_COLORS[entry.module] || '#6B7280';
                   const isExpanded = expandedRow === idx;
                   const hasDetails = entry.details || entry.error || entry.project_id;
+                  const detailRowId = `lv-detail-row-${idx}`;
                   return (
                     <React.Fragment key={idx}>
                       <tr
                         className={`lv__row lv__row--${(entry.level||'').toLowerCase()}${isExpanded ? ' lv__row--expanded' : ''}`}
                         onClick={() => hasDetails && setExpandedRow(isExpanded ? null : idx)}
                         style={{ cursor: hasDetails ? 'pointer' : 'default' }}>
-                        <td className="lv__td lv__td--time">{formatTime(entry.ts)}</td>
+                        <td className="lv__td lv__td--time">
+                          {hasDetails && (
+                            <button
+                              type="button"
+                              className="lv__expand-toggle"
+                              onClick={e => { e.stopPropagation(); setExpandedRow(isExpanded ? null : idx); }}
+                              aria-expanded={isExpanded}
+                              aria-controls={detailRowId}
+                              aria-label={isExpanded ? 'Comprimi dettagli log' : 'Espandi dettagli log'}
+                            >
+                              {isExpanded ? '▾' : '▸'}
+                            </button>
+                          )}
+                          {' '}{formatTime(entry.ts)}
+                        </td>
                         <td className="lv__td lv__td--level">
                           <span className={`lv__badge ${levelCfg.cls || ''}`}>{entry.level}</span>
                         </td>
@@ -311,7 +326,6 @@ function LogViewer() {
                         </td>
                         <td className="lv__td lv__td--msg">
                           <span className="lv__msg-text">{entry.msg}</span>
-                          {hasDetails && <span className="lv__expand-icon">{isExpanded ? '▾' : '▸'}</span>}
                         </td>
                         <td className="lv__td lv__td--project">
                           {entry.project_id ? (
@@ -324,7 +338,7 @@ function LogViewer() {
                         </td>
                       </tr>
                       {isExpanded && hasDetails && (
-                        <tr className="lv__detail-row">
+                        <tr className="lv__detail-row" id={detailRowId}>
                           <td colSpan="6" className="lv__detail-cell">
                             <div className="lv__detail">
                               {entry.project_id && (
