@@ -32,48 +32,15 @@ from typing import BinaryIO, Optional
 _logger_module = logging.getLogger(__name__)
 
 
+# STRUCT-001 Seam D-C: la logica vive in `app.shared.file_cleanup.rmtree_safe`.
+# Alias locale per minimizzare il diff al body di preview_file_temp che chiama
+# _rmtree_safe(path). Stessa firma originale; logger=_logger_module passato
+# esplicito cosi' i debug log restano nel namespace del modulo preview.
+
 def _rmtree_safe(path, _retries: int = 3) -> None:
-    """Rimuove file o directory con retry per handle locked (es. fiona/GDAL).
-
-    Inlined da `app.services.file_service._rmtree_safe` per mantenere
-    questo modulo leaf (zero import da `app.services.file_service`).
-    Behavior byte-per-byte identico al sorgente originale.
-    """
-    import stat
-    import time
-    import gc
-    import shutil
-    import os
-
-    p = Path(path)
-    last_exc: Optional[BaseException] = None
-    for _attempt in range(_retries):
-        try:
-            if p.is_file():
-                p.unlink()
-                return
-            elif p.is_dir():
-                def _on_error(func, fpath, exc_info):
-                    try:
-                        os.chmod(fpath, stat.S_IWRITE)
-                        func(fpath)
-                    except Exception as e:
-                        # Callback onerror di shutil.rmtree: non deve raisare
-                        # (contratto API). Debug log per visibilita' su permessi.
-                        _logger_module.debug(
-                            f"_rmtree_safe onerror chmod fallito per {fpath}: {e}"
-                        )
-                shutil.rmtree(p, onerror=_on_error)
-                if not p.exists():
-                    return
-        except Exception as e:
-            last_exc = e
-        gc.collect()
-        time.sleep(0.3)
-    if last_exc is not None and p.exists():
-        _logger_module.debug(
-            f"_rmtree_safe: cleanup fallito per {p} dopo {_retries} tentativi: {last_exc}"
-        )
+    """Wrapper compat: delega a `app.shared.file_cleanup.rmtree_safe`."""
+    from app.shared.file_cleanup import rmtree_safe
+    rmtree_safe(path, retries=_retries, logger=_logger_module)
 
 
 def preview_file_temp(

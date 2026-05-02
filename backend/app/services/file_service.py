@@ -183,38 +183,16 @@ from app.shared.file_helpers import (  # noqa: F401  (re-export pubblico)
 # data loader, logger, time) è iniettabile con un mock nei test.
 
 
+# STRUCT-001 Seam D-C: la logica vive in `app.shared.file_cleanup.rmtree_safe`.
+# Wrapper compat per i call site interni che usano `_rmtree_safe(path)` senza
+# passare logger esplicito. La funzione condivisa accetta `logger=None` e usa
+# il logger del modulo come fallback (best-effort silenzioso); qui passiamo
+# `_logger` del modulo file_service per preservare il naming dei log.
+
 def _rmtree_safe(path, _retries: int = 3) -> None:
-    """Rimuove file o directory con retry per handle locked (es. fiona)."""
-    import stat, time, gc, shutil, os
-    p = Path(path)
-    last_exc: Optional[BaseException] = None
-    for attempt in range(_retries):
-        try:
-            if p.is_file():
-                p.unlink()
-                return
-            elif p.is_dir():
-                def _on_error(func, fpath, exc_info):
-                    try:
-                        os.chmod(fpath, stat.S_IWRITE)
-                        func(fpath)
-                    except Exception as e:
-                        # Callback onerror di shutil.rmtree: non deve raisare
-                        # (contratto API). Debug log per visibilita' su permessi.
-                        _logger.debug(
-                            f"_rmtree_safe onerror chmod fallito per {fpath}: {e}"
-                        )
-                shutil.rmtree(p, onerror=_on_error)
-                if not p.exists():
-                    return
-        except Exception as e:
-            last_exc = e
-        gc.collect()
-        time.sleep(0.3)
-    if last_exc is not None and p.exists():
-        _logger.debug(
-            f"_rmtree_safe: cleanup fallito per {p} dopo {_retries} tentativi: {last_exc}"
-        )
+    """Wrapper compat: delega a `app.shared.file_cleanup.rmtree_safe`."""
+    from app.shared.file_cleanup import rmtree_safe
+    rmtree_safe(path, retries=_retries, logger=_logger)
 
 class FileSourceService:
     """
