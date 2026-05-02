@@ -73,9 +73,10 @@ Pattern applicato: metodo `_dispatch_store(raw_data, file_id, filename)` in `app
 
 ## References
 
-- Source: `backend/app/services/file_service.py:815-861` — `_dispatch_store` (policy branch + upload + orphan guard)
-- Source: `backend/app/services/file_service.py:863-872` — `get_blob_bytes` API pubblica
-- Source: `backend/app/shared/cloud_backends.py:139+` — `AwsS3ObjectStorage.upload_bytes`
-- Related: ADR-0007 (Protocol storage backends — contract che questo dispatcher consuma)
-- Memory: `project_security_audit` — pattern FS-4 (symmetry cross-domini)
-- Invariants: `docs/architecture/invariants.md` §storage — threshold per-dominio configurabile, orphan guard
+- Source: `backend/app/services/file_storage_dispatch.py::dispatch_blob_storage` -- policy branch + upload + orphan guard (estratto in STRUCT-001 da `file_service._dispatch_store`; thin wrapper in `file_service._dispatch_blob_storage`).
+- Source: `backend/app/services/file_service.py::get_blob_bytes` -- API pubblica per ottenere il blob (BYTEA o object storage download).
+- Source: `backend/app/shared/cloud_backends.py::AwsS3ObjectStorage.upload_bytes` -- writer object storage.
+- Source: `backend/app/db/config/file_sources.py::delete_file_source` -- post BE-HARDEN-001C E2 + E4: reference-aware (skip cleanup se sibling rows referenziano lo stesso `storage_key`) + race-safe (`pg_connection.transaction()` + `SELECT ... FOR UPDATE`, storage delete dopo commit). L'orphan guard di questo ADR resta il contratto: storage failure post-commit -> warning + accepted orphan.
+- Related: ADR-0007 (Protocol storage backends -- contract che questo dispatcher consuma).
+- Memory: `project_security_audit` -- pattern FS-4 (symmetry cross-domini).
+- Invariants: `docs/architecture/invariants.md` (sezione storage) -- threshold per-dominio configurabile, orphan guard.

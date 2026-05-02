@@ -19,3 +19,4 @@ PR raggruppate per tema:
 - R-04 / R-04b test reliability
 - FE-22 polling reliability
 - Compat / productization
+- Phase 1 structural closure (FE/BE zero-residuals, go-ready backend seams)

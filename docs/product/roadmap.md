@@ -106,7 +106,8 @@ tests, see [Residual Register](residual-register.md).
 | FE-PHASE1-CLOSURE-1 | Common kit deletion + EditorShell formalization | CLOSED | Deleted unused public-API kit (`ConfirmInline`, `ModalFooter`, `LoadingDots/Skeleton/Inline/Wrapper`, `components/common/index.js` barrel); added `role="alert"` + `aria-live="assertive"` + initial focus to the EditorShell error banners; formalized `slots.children` and `canvasConfig.edgeTypes` via docstring + contract tests. Net -182 LOC. Commit `d5c49e4`. |
 | FE-PHASE1-CLOSURE-2 | AdminSystemStatusPage static inline-style sweep | CLOSED | First concrete `FE-CLN-002` batch: 9 of 20 inline `style={{}}` attributes replaced with `sys__*` class names; dynamic colors and widths kept inline. Net -9 inline instances on the page. Commit `62de996`. |
 | FE-PHASE1-CLOSURE-3 | FileManager page orchestrator + subcomponents | CLOSED | Behavior-preserving extraction of `FileCard`, `UploadModal`, `LayerModal`, `PreviewModal` and shared helpers into `pages/FileManager/`. `FileManager.jsx` reduced from 881 to 553 LOC; FileManager contract tests stay green. Closes `FE-SPLIT-006` via the structural-split branch. Commit `cf5c47d`. |
-| FE-KEEP-KIT | Public-API kit kept without current consumers | KEEP | `ConfirmInline`, `ModalFooter`, the `Loading*` kit (`LoadingSpinner`/`Dots`/`Skeleton`/`Inline`/`Wrapper`) and the `components/common/index.js` barrel have been deleted by `FE-PHASE1-CLOSURE-1`; only `LoadingSpinner` survives as an internal dependency of `LoadingOverlay` (no public surface). | Marker entry; do not reopen unless a new public design-system surface is introduced. |
+| FE-FINAL-AUDIT | Final FE dead-export/import sweep + docs freeze | CLOSED | Removed remaining dead public exports from `nodeFactories`, `esriToLeafletStyle` and `hexCanvas`; removed stale `FileManager` imports; docs frozen with TRUE LATER decision gates. Test/build stayed green (`291/291`, build OK). Commit `03455b7`. |
+| FE-KEEP-KIT | Public-API kit retirement marker | CLOSED | `ConfirmInline`, `ModalFooter`, the `Loading*` kit (`LoadingSpinner`/`Dots`/`Skeleton`/`Inline`/`Wrapper`) and the `components/common/index.js` barrel have been deleted by `FE-PHASE1-CLOSURE-1`; only `LoadingSpinner` survives as an internal dependency of `LoadingOverlay` (no public surface). | Marker entry; do not reopen unless a new public design-system surface is intentionally introduced. |
 
 ---
 
@@ -166,6 +167,14 @@ Focus: **chiudere gap operativi e debiti security ad alta priorita'**.
 - OBSERV-001 observability sink decision implementation
 - Setup checklist nuovo operatore ops
 
+Frontend kickoff decisions (not Phase 1 residue; decide before implementation):
+
+- FE-CLN-002: define the minimum design-token system before any broad inline-style sweep (spacing scale, semantic status colors, text-muted, borders/surfaces).
+- FE-SPLIT-001: if API connections are touched, choose the product model first (tabs vs nested routes vs separated modal workflows).
+- FE-SPLIT-002: if parameter types are added or changed, decide whether to introduce a typed renderer registry.
+- FE-SPLIT-003: if enrichment mapping is touched, decouple `ApiEnrichNode` from `ResponseConfigBuilder` before splitting.
+- FE-SPLIT-005: if result-view work starts, decide extraction based on the concrete `ResultNodeStandardView` change.
+
 ### Phase 3 (Q3 2026)
 
 Focus: **compliance automation + test reliability completion**.
@@ -186,8 +195,9 @@ Focus: **frontend split + productization avanzata**.
 - ~~FE-HYGIENE-001/002/003 dead-code sweep~~ -> **CLOSED** (-836 LOC across two batches plus tiny residuals)
 - ~~FE-PERF-001 bundle size + code splitting~~ -> **CLOSED** (`ImdfPreviewModal` lazy; maplibre/deckgl leave the static graph of the three editors)
 - ~~FE-PHASE1-CLOSURE-1/2/3~~ -> **CLOSED** (common-kit cleanup + EditorShell a11y, AdminSystemStatusPage inline-style sweep, FileManager page-orchestrator extraction; closes `FE-SPLIT-006`)
-- FE-CLN-002 design tokens migration (TRUE LATER; reopen after design-system token decision)
-- FE-SPLIT-001/002/003/005 (TRUE LATER with documented product/architecture/dependency/ROI rationale)
+- ~~FE-FINAL-AUDIT~~ -> **CLOSED** (dead utils exports + stale FileManager imports removed; docs frozen)
+- FE-CLN-002 design tokens migration (TRUE LATER; decision gate moved to Phase 2 kickoff, implementation only after token decision)
+- FE-SPLIT-001/002/003/005 (TRUE LATER; Phase 2 decision gates, implementation only when the documented trigger fires)
 - API reference navigabile + demo dataset
 - R-31 rollback scriptato
 

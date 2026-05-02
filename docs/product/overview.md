@@ -4,9 +4,10 @@ ETL platform per pipeline di dati geo-spaziali e tabulari. Canvas-based
 no-code/low-code: l'utente compone pipeline collegando nodi tipizzati
 (source → transform → sink) in un editor ReactFlow.
 
-> **Status**: Phase 1 hardening completata 2026-04-30. Production
-> endpoint `lab.plenora.it` (15.160.219.93:5004). Code base in attivo
-> refinement post-stabilization.
+> **Status**: Phase 1 hardening + structural closure completata
+> 2026-05-02. Production endpoint `lab.plenora.it`
+> (15.160.219.93:5004). FE e BE sono in zero-residuals operativo;
+> i rimanenti FE item sono decision gate Phase 2 documentati.
 
 ---
 

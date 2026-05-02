@@ -146,6 +146,43 @@ Polling unificato + cleanup CSS/orphan files.
 
 ---
 
+## Phase 1 structural closure — chiuso 2026-05-02
+
+Closeout strutturale FE/BE post-hardening. Focus: riduzione file grandi,
+confini go-ready, cleanup dead code/export e documentazione zero-residuals.
+
+### Backend
+
+- `STRUCT-001`: `file_service.py` ridotto a facade leggera; upload
+  single/multi-layer, raw upload, read/preview/storage dispatch estratti
+  in moduli leaf con collaborator espliciti.
+- `MULTI-GDB-001`: upload multi-layer GDB-in-ZIP corretto preservando il
+  blob ZIP originale per storage.
+- `BE-HARDEN-001C`: multi-layer upload go-ready: shared blob dispatch,
+  reference-aware delete, batch transaction `save_file_sources_batch`,
+  typed contracts `FileSourceRow`/`BlobDispatchResult`.
+- `BE-DELETE-001/002`: delete object-storage esplicito e race-safe:
+  `FOR UPDATE` su row/sibling, cleanup storage post-commit, indice
+  parziale `idx_file_sources_storage_key`.
+
+### Frontend
+
+- `FE-SPLIT-004`: `EditorShell` centralizza guard/loading/error/canvas
+  wrapper per Estrai/Manipola/Arricchisci; `AccessDeniedBanner`
+  condiviso.
+- `FE-HYGIENE-001/002/003`: dead code sweep su componenti/hook orfani,
+  cleanup test noise e riferimenti stale.
+- `FE-PERF-001`: `ImdfPreviewModal` lazy, maplibre/deckgl fuori dal
+  grafo statico degli editor.
+- `FE-PHASE1-CLOSURE-1/2/3`: common-kit unused eliminato, EditorShell
+  a11y formalizzata, primo sweep inline styles, `FileManager` estratto
+  in page orchestrator + subcomponents.
+- `FE-FINAL-AUDIT`: export utils morti rimossi e docs aggiornati.
+  FE Phase 1 e' zero-residuals operativo; `FE-CLN-002` e
+  `FE-SPLIT-001/002/003/005` sono decision gate Phase 2.
+
+---
+
 ## Pre-#26 (storia precedente, sintesi)
 
 - **#22-#25** — fix arricchisci api_enrich single-step branch +

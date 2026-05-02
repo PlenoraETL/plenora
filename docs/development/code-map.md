@@ -656,13 +656,13 @@ File principali:
   - `EstraiEditor.jsx` -> componente `EstraiEditor`, registra `nodeTypes` ReactFlow (`tableNode: TableNode`, `resultNode: ResultNode`, `staticValues: StaticValuesNode`, `carica: CaricanNode`, `carica_arcgis: CaricanArcGISNode`, `featureLayerNode: FeatureLayerNode`, `comment: AnnotationNode`, `datasourceNode: DataSourceNode`); apre `JoinModal`/`PreviewModal`/`ExecutionModal`/`CaricaricaModal` lazy
   - `ManipolaEditor.jsx` -> componente `ManipolaEditor`, canvas trasformazioni (consuma `transforms_registry` da backend manipola)
   - `ArricchisciEditor.jsx` -> componente `ArricchisciEditor`, canvas enrichment con nodi API
-- gestione risorse: `ProjectList.jsx`, `ConnectionManager.jsx`, `ApiConnectionManager.jsx`, `DataSourceManager.jsx`, `FileManager.jsx`
+- gestione risorse: `ProjectList.jsx`, `ConnectionManager.jsx`, `ApiConnectionManager.jsx`, `DataSourceManager.jsx`, `FileManager.jsx` + subcomponents in `pages/FileManager/` (`FileCard`, `UploadModal`, `LayerModal`, `PreviewModal`, helpers)
 - scheduling/log/ticket: `ScheduleList.jsx`, `LogViewer.jsx`, `TicketsList.jsx`, `TicketDetail.jsx`
 - esecuzione/admin: `EseguibiliList.jsx`, `EsecutoreHome.jsx`, `LoginPage.jsx`, `UserManager.jsx`, `AdminBackupsPage.jsx`, `AdminSystemStatusPage.jsx`
 
 Keywords: `EstraiEditor`, `ManipolaEditor`, `ArricchisciEditor`, `nodeTypes`, `ProjectList`, `ScheduleList`, `LoginPage`, `AdminSystemStatusPage`
 
-Intervento/confini: ogni pagina e' il route-handler di una schermata. Chiamate backend solo via `frontend/src/api/`; stato condiviso solo via `frontend/src/store/`. Niente fetch diretto, niente logica HTTP nelle pagine. La registry `nodeTypes` ReactFlow vive nel singolo editor, non in store.
+Intervento/confini: ogni pagina e' il route-handler di una schermata. Chiamate backend solo via `frontend/src/api/`; stato condiviso solo via `frontend/src/store/`. Niente fetch diretto, niente logica HTTP nelle pagine. La registry `nodeTypes` ReactFlow vive nel singolo editor, non in store. I tre editor condividono `components/editor/EditorShell.jsx` per guard/loading/error/canvas wrapper e `AccessDeniedBanner.jsx` per il banner permission; gli hook applicativi restano nei page editor.
 
 ---
 
@@ -714,10 +714,11 @@ Sotto-cartelle e file principali:
 - `nodes/` - nodi ReactFlow per il canvas. File reali: `TableNode.jsx`, `ResultNode.jsx` (+ `ResultNodeConfig.js`), `StaticValuesNode.jsx`, `DataSourceNode.jsx`, `FileSourceNode.jsx`, `ProjectSourceNode.jsx`, `CaricanNode.jsx`, `CaricanArcGISNode.jsx`, `FeatureLayerNode.jsx`, `ImdfPublisherNode.jsx`, `AnnotationNode.jsx`. Registrazione: ciascun editor (`EstraiEditor.jsx`, `ManipolaEditor.jsx`, `ArricchisciEditor.jsx`) dichiara la propria mappa `nodeTypes` ReactFlow scegliendo quali nodi esporre. Consumo dello stato: i nodi leggono/scrivono `nodes`/`edges` via hook `useCanvasStore`.
 - `panels/` - pannelli laterali (`EditorSidebar.jsx`, `FilesSidebar.jsx`, `ProjectsSidebar.jsx`, `FeatureServicePanel.jsx`, `QueryPreview.jsx`, `QuickActions.jsx`, `ApiEnrichNode.jsx`)
 - `modals/` - modali editor (`CaricaricaModal.jsx`, `ColumnBuilderModal.jsx`, `EnrichmentConfirmModal.jsx`, `ExecutionModal.jsx`, `FilterModal.jsx`, `JoinModal.jsx`, `PreviewModal.jsx`)
+- `editor/` - shell editor shared (`EditorShell.jsx`, `AccessDeniedBanner.jsx`)
 - `transforms/`, `arricchisci/`, `imdf/`, `eseguibili/`, `logviewer/`, `shared/`, `common/` - blocchi specifici di flusso
-- root: `AppHeader.jsx`, `AppSidebar.jsx`, `ChangePasswordModal.jsx`, `TicketCreateModal.jsx`
+- root: `AppSidebar.jsx`, `ChangePasswordModal.jsx`, `TicketCreateModal.jsx`
 
-Keywords: `TableNode`, `ResultNode`, `DataSourceNode`, `CaricanNode`, `CaricanArcGISNode`, `FeatureLayerNode`, `ImdfPublisherNode`, `EditorSidebar`, `ExecutionModal`, `nodeTypes`, `AppHeader`
+Keywords: `TableNode`, `ResultNode`, `DataSourceNode`, `CaricanNode`, `CaricanArcGISNode`, `FeatureLayerNode`, `ImdfPublisherNode`, `EditorSidebar`, `EditorShell`, `AccessDeniedBanner`, `ExecutionModal`, `nodeTypes`
 
 Intervento/confini: leggere stato da `store/` (`useCanvasStore`); nessun fetch diretto - passare per `api/`. Nuovi nodi ReactFlow: aggiungere `<Nome>Node.jsx` in `components/nodes/` e registrarlo nella mappa `nodeTypes` dell'editor che lo usa (mai globalmente). Mantenere disaccoppiamento dai modelli backend (i nodi non importano modelli Python).
 

@@ -40,7 +40,7 @@ docs/
 ### Product
 
 - [overview](product/overview.md) — capabilities live + posizionamento prodotto.
-- [roadmap](product/roadmap.md) — residui audit, Phase 2/3/4+, capability services come direzione futura.
+- [roadmap](product/roadmap.md) — residui audit, Phase 2/3/4+, FE Phase 2 kickoff decision gates, capability services come direzione futura.
 
 ### Architecture
 
@@ -96,8 +96,9 @@ Audit reports e snapshot di triage storici, read-only.
   stabilization, hardening, audit, launch, structural quality,
   product grade). Importato 2026-05-01.
 
-Phase 1 audit **findings** (residui ancora azionabili) sono tracciati
-in [`product/roadmap.md`](product/roadmap.md).
+Phase 1 audit **findings** (residui ancora azionabili) e decision gate
+Phase 2 sono tracciati in [`product/roadmap.md`](product/roadmap.md) e
+[`product/residual-register.md`](product/residual-register.md).
 
 ### Support
 

@@ -4,9 +4,10 @@ ETL platform per pipeline di dati geo-spaziali e tabulari.
 Backend FastAPI + Celery + PostgreSQL + Redis. Frontend React + Vite +
 ReactFlow per la composizione visuale di pipeline.
 
-> **Status**: Phase 1 hardening completata. Production endpoint
-> `lab.plenora.it`. Code base in attivo refinement post-stabilization.
-> Vedi [docs/product/roadmap.md](docs/product/roadmap.md) per residui aperti e Phase 2+.
+> **Status**: Phase 1 hardening + structural closure completata
+> 2026-05-02. Production endpoint `lab.plenora.it`. FE e BE sono in
+> zero-residuals operativo; i rimanenti FE item sono decision gate
+> Phase 2 documentati. Vedi [docs/product/roadmap.md](docs/product/roadmap.md).
 
 > **Brand note**: il package storico era `PLENORA-ETL`, oggi `URBY-ETL`.
 > Riferimenti `PLENORA_*` env var, `plenora.*` schema PG sono attuali.
