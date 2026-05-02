@@ -524,3 +524,84 @@ def test_file_service_wrapper_delegates_with_cleanup_file_os_unlink():
     assert isinstance(kwargs["temp_dir"], (str, Path))
     assert isinstance(kwargs["default_group"], str)
     assert kwargs["logger"] is svc._logger
+
+
+# =============================================================================
+# 13. MULTI-GDB-001 fix: GDB directory in ZIP -> raw_data resta lo ZIP
+# =============================================================================
+
+
+def test_zip_unwrap_gdb_directory_uses_original_zip_blob(
+    collaborators, tmp_path,
+):
+    """MULTI-GDB-001 fix: per GDB-in-ZIP il path estratto e' una directory
+    `.gdb` (non un file). Pre-fix: `tmp_path.read_bytes()` su directory
+    sollevava IsADirectoryError. Post-fix: per format='gdb' conserviamo
+    il ZIP originale come blob (analogo a create_from_upload Seam D-F).
+
+    Verifica:
+      - dispatch_blob_storage riceve i bytes dello ZIP originale, NON quelli
+        di un singolo file dentro la dir;
+      - nessun IsADirectoryError viene propagato;
+      - load_by_format chiamato col path della directory .gdb (per geopandas);
+      - format='gdb' propagato al DTO.
+    """
+    from app.services.file_multi_layer_upload import create_multi_layer_from_upload
+
+    # detect_format: prima 'zip' (originale), poi 'gdb' (post unwrap)
+    collaborators["detect_format"].side_effect = ["zip", "gdb"]
+
+    # Simula safe_extractall che crea una directory .gdb dentro zip_tmp_dir.
+    # safe_extractall callback: scrive UNA dir .gdb (non un file).
+    def fake_extract(z, dest):
+        gdb_dir = Path(dest) / "geodatabase.gdb"
+        gdb_dir.mkdir()
+        # Aggiungi un file dummy dentro (simula contenuto FileGDB reale)
+        (gdb_dir / "a00000001.gdbtable").write_bytes(b"gdb internal")
+
+    collaborators["safe_extractall"].side_effect = fake_extract
+
+    # Costruiamo un mini-ZIP valido (placeholder: il contenuto reale viene
+    # scritto da safe_extractall sopra; il ZIP serve solo a non triggerare
+    # BadZipFile durante l'open).
+    buf = io.BytesIO()
+    with _zipfile.ZipFile(buf, "w") as z:
+        z.writestr("placeholder.txt", b"placeholder content")
+    zip_bytes = buf.getvalue()
+
+    # NB: NON deve sollevare IsADirectoryError.
+    out = create_multi_layer_from_upload(
+        io.BytesIO(zip_bytes), "geodatabase.zip", "Geo",
+        layers_config=[{"layer": "feature_class_1"}],
+        group_id="g1",
+        **collaborators,
+    )
+
+    # 1 FileSource creato (no exception)
+    assert len(out) == 1
+
+    # MULTI-GDB-001: dispatch_blob_storage riceve gli STESSI bytes del ZIP
+    # originale, NON i bytes di un file dentro la dir .gdb.
+    dispatch_args = collaborators["dispatch_blob_storage"].call_args.args
+    # signature: (file_id, raw_data, filename)
+    assert dispatch_args[1] == zip_bytes, (
+        "MULTI-GDB-001 fix: per GDB il blob salvato deve essere il ZIP "
+        "originale, non un file dentro la directory .gdb"
+    )
+
+    # load_by_format chiamato col path della directory .gdb (geopandas
+    # legge la GDB tramite path della directory, non bytes).
+    load_args = collaborators["load_by_format"].call_args.args
+    assert load_args[0].name == "geodatabase.gdb"
+    assert load_args[0].is_dir(), "Path passato a load_by_format deve essere la dir .gdb"
+
+    # format='gdb' propagato al DTO
+    build_kwargs = collaborators["build_file_source"].call_args.kwargs
+    assert build_kwargs["format"] == "gdb"
+    # Per GDB: layer valorizzato, sheet None
+    assert build_kwargs["layer"] == "feature_class_1"
+    assert build_kwargs["sheet"] is None
+    # filename aggiornato a "geodatabase.gdb" post-unwrap
+    assert build_kwargs["original_filename"] == "geodatabase.gdb"
+    # file_size = lunghezza dello ZIP originale (non del file interno)
+    assert build_kwargs["file_size"] == len(zip_bytes)

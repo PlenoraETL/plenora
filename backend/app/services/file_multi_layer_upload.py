@@ -133,6 +133,7 @@ def create_multi_layer_from_upload(
     tmp_path = Path(tmp.name)
 
     zip_tmp_dir: Optional[Path] = None
+    zip_raw_data = raw_data  # MULTI-GDB-001: conserva ZIP originale per GDB
     format_type = detect_format(filename)
 
     try:
@@ -158,10 +159,14 @@ def create_multi_layer_from_upload(
                     tmp_path = match
                     format_type = detect_format(match.name)
                     filename = match.name
-                    # Bug pre-esistente NON fixato qui: per .gdb (directory)
-                    # questo solleva IsADirectoryError. Comportamento
-                    # preservato verbatim. Da affrontare in PR dedicata.
-                    raw_data = tmp_path.read_bytes()
+                    # MULTI-GDB-001 fix: per .gdb (directory) `read_bytes()`
+                    # solleverebbe IsADirectoryError. Conserviamo il ZIP
+                    # originale come blob (analogo a create_from_upload).
+                    # Per .gpkg (file), leggiamo i bytes del path estratto.
+                    if format_type == 'gdb':
+                        raw_data = zip_raw_data
+                    else:
+                        raw_data = tmp_path.read_bytes()
                     break
 
         # Determina se stiamo lavorando con layer (gpkg/gdb) o sheet (xlsx)
