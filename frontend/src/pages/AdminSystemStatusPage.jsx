@@ -148,7 +148,7 @@ function SchedulesCard({ data, onLink }) {
             <div style={{ color: '#F87171' }}>Failing: <b>{data.failing_count}</b></div>
           )}
           {data.failing && data.failing.length > 0 && (
-            <ul className="sys__list" style={{ marginTop: 6 }}>
+            <ul className="sys__list sys__mt-sm">
               {data.failing.slice(0, 3).map((s) => (
                 <li key={s.id} className="sys__list-item">{s.name || s.id}</li>
               ))}
@@ -215,13 +215,13 @@ function HostResourcesCard({ data }) {
       {data && (
         <>
           {data.disk && (
-            <div style={{ marginBottom: 8 }}>
+            <div className="sys__mb-sm">
               <div>Disco <b>{data.disk.percent}%</b> · {data.disk.free_gb} GB liberi / {data.disk.total_gb} GB</div>
               <ProgressBar percent={data.disk.percent} warnAt={80} errorAt={92} />
             </div>
           )}
           {data.memory && (
-            <div style={{ marginBottom: 8 }}>
+            <div className="sys__mb-sm">
               <div>RAM <b>{data.memory.percent}%</b> · {data.memory.available_gb} GB liberi / {data.memory.total_gb} GB</div>
               <ProgressBar percent={data.memory.percent} warnAt={85} errorAt={95} />
             </div>
@@ -249,7 +249,7 @@ function DbPoolCard({ data }) {
         <>
           <div><b>{data.total}</b>/{data.max_connections} conn ({data.percent}%)</div>
           <ProgressBar percent={data.percent} warnAt={80} errorAt={95} />
-          <div style={{ marginTop: 6 }}>
+          <div className="sys__mt-sm">
             Attive: <b>{data.active}</b> · Idle: <b>{data.idle}</b>
             {data.idle_in_transaction > 0 && (
               <span style={{ color: '#FBBF24' }}> · Idle-TX: {data.idle_in_transaction}</span>
@@ -276,7 +276,7 @@ function RedisCard({ data }) {
           {data.percent != null && (
             <ProgressBar percent={data.percent} warnAt={75} errorAt={90} />
           )}
-          <div style={{ marginTop: 6 }}>
+          <div className="sys__mt-sm">
             Client: <b>{data.connected_clients}</b>
             {data.uptime_seconds != null && <> · Uptime: <b>{fmtUptime(data.uptime_seconds)}</b></>}
           </div>
@@ -293,11 +293,11 @@ function TicketsCard({ data, onLink }) {
       {data && data.total_active != null && (
         <>
           <div>Attivi: <b>{data.total_active}</b></div>
-          <ul className="sys__list" style={{ marginTop: 6 }}>
+          <ul className="sys__list sys__mt-sm">
             {['critical', 'high', 'medium', 'low'].map((s) => (
               (sev[s] || 0) > 0 && (
                 <li key={s} className="sys__kv">
-                  <span className="sys__kv-key" style={{ textTransform: 'capitalize' }}>{s}</span>
+                  <span className="sys__kv-key sys__kv-key--cap">{s}</span>
                   <span className="sys__kv-val"><b>{sev[s]}</b></span>
                 </li>
               )
@@ -324,11 +324,11 @@ function JwtBlacklistCard({ data }) {
         <>
           <div>Ultimo OK: <b>{lastOk}</b></div>
           {data.status === 'warn' && (
-            <div style={{ marginTop: 6, color: 'var(--sys-warn, #b45309)' }}>
+            <div className="sys__mt-sm" style={{ color: 'var(--sys-warn, #b45309)' }}>
               ⚠️ Operazioni inoperanti da troppo tempo
             </div>
           )}
-          <ul className="sys__list" style={{ marginTop: 6 }}>
+          <ul className="sys__list sys__mt-sm">
             <li className="sys__kv">
               <span className="sys__kv-key">Write OK / Fail</span>
               <span className="sys__kv-val">
@@ -367,7 +367,7 @@ function DbSchemaCard({ data }) {
         <>
           <div>Size totale: <b>{data.size_pretty}</b></div>
           {data.tables && data.tables.length > 0 && (
-            <ul className="sys__list" style={{ marginTop: 6 }}>
+            <ul className="sys__list sys__mt-sm">
               {data.tables.slice(0, 5).map((t) => (
                 <li key={t.name} className="sys__kv">
                   <span className="sys__kv-key">{t.name}</span>

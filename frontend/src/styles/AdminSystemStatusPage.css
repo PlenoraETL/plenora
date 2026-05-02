@@ -225,6 +225,11 @@
   color: #7D8BA8;
 }
 
+/* Layout utilities riusate ≥2 volte nella pagina (FE-PHASE1-CLOSURE-2). */
+.sys__mt-sm { margin-top: 6px; }
+.sys__mb-sm { margin-bottom: 8px; }
+.sys__kv-key--cap { text-transform: capitalize; }
+
 /* ── Footer / errore ──────────────────────────────────────────────────── */
 .sys__error-box {
   background: rgba(248,113,113,0.08);
