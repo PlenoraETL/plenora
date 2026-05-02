@@ -521,9 +521,15 @@ function ApiConnectionManager() {
       {/* ── Wizard ─────────────────────────────────────────────────────── */}
       {showWizard && (
         <div className="acm__overlay" onClick={closeWizard}>
-          <div className="acm__wizard" onClick={e=>e.stopPropagation()}>
+          <div
+            className="acm__wizard"
+            onClick={e=>e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="acm-wizard-title"
+          >
             <div className="acm__wizard-header">
-              <div className="acm__wizard-title">{editingApi?`Modifica — ${editingApi.name}`:'Nuovo Connettore'}</div>
+              <div className="acm__wizard-title" id="acm-wizard-title">{editingApi?`Modifica — ${editingApi.name}`:'Nuovo Connettore'}</div>
               <button type="button" className="acm__modal-close" onClick={closeWizard} aria-label="Chiudi">✕</button>
             </div>
 
@@ -1098,9 +1104,15 @@ function ApiConnectionManager() {
       {/* ── Quick Test Input ───────────────────────────────────────────── */}
       {quickTestInput && (
         <div className="acm__overlay" onClick={()=>setQuickTestInput(null)}>
-          <div className="acm__modal acm__modal--sm" onClick={e=>e.stopPropagation()}>
+          <div
+            className="acm__modal acm__modal--sm"
+            onClick={e=>e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="acm-quicktest-input-title"
+          >
             <div className="acm__wizard-header">
-              <div className="acm__wizard-title">🚀 Test — {quickTestInput.api.name}</div>
+              <div className="acm__wizard-title" id="acm-quicktest-input-title">🚀 Test — {quickTestInput.api.name}</div>
               <button type="button" className="acm__modal-close" onClick={()=>setQuickTestInput(null)} aria-label="Chiudi">✕</button>
             </div>
             <div className="acm__wizard-body">
@@ -1123,9 +1135,15 @@ function ApiConnectionManager() {
       {/* ── Quick Test Result ──────────────────────────────────────────── */}
       {quickTestResult && (
         <div className="acm__overlay" onClick={()=>setQuickTestResult(null)}>
-          <div className="acm__modal" onClick={e=>e.stopPropagation()}>
+          <div
+            className="acm__modal"
+            onClick={e=>e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="acm-quicktest-result-title"
+          >
             <div className="acm__wizard-header">
-              <div className="acm__wizard-title">{quickTestResult.result.success?'✅':'❌'} Test — {quickTestResult.api.name}</div>
+              <div className="acm__wizard-title" id="acm-quicktest-result-title">{quickTestResult.result.success?'✅':'❌'} Test — {quickTestResult.api.name}</div>
               <button type="button" className="acm__modal-close" onClick={()=>setQuickTestResult(null)} aria-label="Chiudi">✕</button>
             </div>
             <div className="acm__wizard-body">
@@ -1164,9 +1182,16 @@ function ApiConnectionManager() {
       {/* ── SHARE MODAL (solo superadmin) ── */}
       {sharingApi && (
         <div className="acm__overlay" onClick={()=>setSharingApi(null)}>
-          <div className="acm__wizard" onClick={e=>e.stopPropagation()} style={{ maxWidth: 540 }}>
+          <div
+            className="acm__wizard"
+            onClick={e=>e.stopPropagation()}
+            style={{ maxWidth: 540 }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="acm-share-title"
+          >
             <div className="acm__wizard-header">
-              <div className="acm__wizard-title">🔗 Condividi Connettore — {sharingApi.name}</div>
+              <div className="acm__wizard-title" id="acm-share-title">🔗 Condividi Connettore — {sharingApi.name}</div>
               <button type="button" className="acm__modal-close" onClick={()=>setSharingApi(null)} aria-label="Chiudi">✕</button>
             </div>
             <div className="acm__wizard-body" style={{ padding: '18px 20px' }}>

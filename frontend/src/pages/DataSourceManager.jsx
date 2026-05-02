@@ -246,9 +246,14 @@ export default function DataSourceManager() {
       {/* MODAL CREA/MODIFICA */}
       {showModal && (
         <div className="dsm__overlay" onClick={e => e.target === e.currentTarget && closeModal()}>
-          <div className="dsm__modal">
+          <div
+            className="dsm__modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="dsm-edit-title"
+          >
             <div className="dsm__modal-header">
-              <div className="dsm__modal-title">{editing ? `Modifica — ${editing.name}` : 'Nuovo Data Source'}</div>
+              <div className="dsm__modal-title" id="dsm-edit-title">{editing ? `Modifica — ${editing.name}` : 'Nuovo Data Source'}</div>
               <button type="button" className="dsm__modal-close" onClick={closeModal} aria-label="Chiudi">✕</button>
             </div>
             <div className="dsm__modal-body">
@@ -379,9 +384,14 @@ export default function DataSourceManager() {
       {/* MODAL BROWSER */}
       {browserDs && (
         <div className="dsm__overlay" onClick={e => e.target === e.currentTarget && closeBrowser()}>
-          <div className="dsm__modal dsm__modal--browser">
+          <div
+            className="dsm__modal dsm__modal--browser"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="dsm-browser-title"
+          >
             <div className="dsm__modal-header">
-              <div className="dsm__modal-title">
+              <div className="dsm__modal-title" id="dsm-browser-title">
                 📂 {browserDs.name}
                 {browserPath && <span className="dsm__browser-path"> / {browserPath}</span>}
               </div>
@@ -444,8 +454,13 @@ export default function DataSourceManager() {
       {/* CONFIRM DELETE */}
       {confirmDelete && (
         <div className="dsm__overlay">
-          <div className="dsm__confirm">
-            <div className="dsm__confirm-title">Elimina Data Source</div>
+          <div
+            className="dsm__confirm"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="dsm-confirm-title"
+          >
+            <div className="dsm__confirm-title" id="dsm-confirm-title">Elimina Data Source</div>
             <div className="dsm__confirm-text">Sei sicuro di voler eliminare <strong>{confirmDelete.name}</strong>?</div>
             <div className="dsm__confirm-warn">⚠️ Verranno eliminati anche i dati di scan state associati.</div>
             <div className="dsm__confirm-actions">
@@ -459,9 +474,16 @@ export default function DataSourceManager() {
       {/* SHARE MODAL (solo superadmin) */}
       {sharingDatasource && (
         <div className="dsm__overlay" onClick={() => setSharingDatasource(null)}>
-          <div className="dsm__modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 540 }}>
+          <div
+            className="dsm__modal"
+            onClick={e => e.stopPropagation()}
+            style={{ maxWidth: 540 }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="dsm-share-title"
+          >
             <div className="dsm__modal-header">
-              <div className="dsm__modal-title">🔗 Condividi Data Source — {sharingDatasource.name}</div>
+              <div className="dsm__modal-title" id="dsm-share-title">🔗 Condividi Data Source — {sharingDatasource.name}</div>
               <button type="button" className="dsm__modal-close" onClick={() => setSharingDatasource(null)} aria-label="Chiudi">✕</button>
             </div>
             <div className="dsm__modal-body">
