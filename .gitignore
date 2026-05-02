@@ -85,3 +85,5 @@ dmypy.json
 # Node.js / Frontend
 node_modules/
 .npm/
+# Agent coordination scratchpad
+.agent-temp/
