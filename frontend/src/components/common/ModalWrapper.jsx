@@ -28,6 +28,7 @@
 
 import React, { useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import useDialogFocus from '../../hooks/useDialogFocus';
 import './ModalWrapper.css';
 
 function ModalWrapper({
@@ -49,19 +50,10 @@ function ModalWrapper({
 }) {
   const modalRef = useRef(null);
 
-  // Gestione ESC
-  useEffect(() => {
-    if (!isOpen || !closeOnEsc) return;
-
-    const handleEsc = (e) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-
-    document.addEventListener('keydown', handleEsc);
-    return () => document.removeEventListener('keydown', handleEsc);
-  }, [isOpen, onClose, closeOnEsc]);
+  // Focus management (initial focus, Tab trap, Escape close, restore)
+  // gestito dall'hook condiviso. Sostituisce la doppia gestione ESC +
+  // initial focus che era inline qui.
+  useDialogFocus(isOpen, onClose, modalRef, { closeOnEsc });
 
   // Blocca scroll body quando modale aperta
   useEffect(() => {
@@ -73,13 +65,6 @@ function ModalWrapper({
     return () => {
       document.body.style.overflow = '';
     };
-  }, [isOpen]);
-
-  // Focus trap - focus sul modal quando si apre
-  useEffect(() => {
-    if (isOpen && modalRef.current) {
-      modalRef.current.focus();
-    }
   }, [isOpen]);
 
   const handleOverlayClick = useCallback((e) => {

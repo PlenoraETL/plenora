@@ -239,7 +239,8 @@ describe('TicketCreateModal', () => {
       />,
     );
 
-    await user.click(screen.getByRole('button', { name: /×/i }));
+    // Il bottone X ha aria-label="Chiudi" (a11y batch 5).
+    await user.click(screen.getByRole('button', { name: /Chiudi/i }));
     expect(onClose).toHaveBeenCalled();
   });
 

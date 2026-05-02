@@ -16,6 +16,7 @@ import AllowedGroupsSelector from '../components/shared/AllowedGroupsSelector';
 import AppSidebar from '../components/AppSidebar';
 import ThemeToggle from '../components/common/ThemeToggle';
 import { handleCascade409, formatCascadeDependencies } from '../api/errors';
+import useDialogFocus from '../hooks/useDialogFocus';
 import { can, role } from '../utils/permissions';
 import '../styles/DataSourceManager.css';
 
@@ -72,6 +73,24 @@ export default function DataSourceManager() {
   const [browserError,  setBrowserError]  = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [sharingDatasource, setSharingDatasource] = useState(null);  // ds in sharing modal (solo super)
+
+  // Focus management per i 4 dialog inline (a11y batch 5).
+  const editDialogRef    = React.useRef(null);
+  const browserDialogRef = React.useRef(null);
+  const confirmDialogRef = React.useRef(null);
+  const shareDialogRef   = React.useRef(null);
+  useDialogFocus(
+    showModal,
+    () => { setShowModal(false); setEditing(null); setFormError(null); },
+    editDialogRef,
+  );
+  useDialogFocus(
+    !!browserDs,
+    () => { setBrowserDs(null); setBrowserFiles([]); setBrowserPath(''); },
+    browserDialogRef,
+  );
+  useDialogFocus(!!confirmDelete,    () => setConfirmDelete(null),    confirmDialogRef);
+  useDialogFocus(!!sharingDatasource, () => setSharingDatasource(null), shareDialogRef);
 
   const isSuperadmin   = role.isSuperadmin(user);
   const canCreateDs    = can.createDataSource(user);
@@ -247,10 +266,12 @@ export default function DataSourceManager() {
       {showModal && (
         <div className="dsm__overlay" onClick={e => e.target === e.currentTarget && closeModal()}>
           <div
+            ref={editDialogRef}
             className="dsm__modal"
             role="dialog"
             aria-modal="true"
             aria-labelledby="dsm-edit-title"
+            tabIndex={-1}
           >
             <div className="dsm__modal-header">
               <div className="dsm__modal-title" id="dsm-edit-title">{editing ? `Modifica — ${editing.name}` : 'Nuovo Data Source'}</div>
@@ -385,10 +406,12 @@ export default function DataSourceManager() {
       {browserDs && (
         <div className="dsm__overlay" onClick={e => e.target === e.currentTarget && closeBrowser()}>
           <div
+            ref={browserDialogRef}
             className="dsm__modal dsm__modal--browser"
             role="dialog"
             aria-modal="true"
             aria-labelledby="dsm-browser-title"
+            tabIndex={-1}
           >
             <div className="dsm__modal-header">
               <div className="dsm__modal-title" id="dsm-browser-title">
@@ -455,10 +478,12 @@ export default function DataSourceManager() {
       {confirmDelete && (
         <div className="dsm__overlay">
           <div
+            ref={confirmDialogRef}
             className="dsm__confirm"
             role="dialog"
             aria-modal="true"
             aria-labelledby="dsm-confirm-title"
+            tabIndex={-1}
           >
             <div className="dsm__confirm-title" id="dsm-confirm-title">Elimina Data Source</div>
             <div className="dsm__confirm-text">Sei sicuro di voler eliminare <strong>{confirmDelete.name}</strong>?</div>
@@ -475,12 +500,14 @@ export default function DataSourceManager() {
       {sharingDatasource && (
         <div className="dsm__overlay" onClick={() => setSharingDatasource(null)}>
           <div
+            ref={shareDialogRef}
             className="dsm__modal"
             onClick={e => e.stopPropagation()}
             style={{ maxWidth: 540 }}
             role="dialog"
             aria-modal="true"
             aria-labelledby="dsm-share-title"
+            tabIndex={-1}
           >
             <div className="dsm__modal-header">
               <div className="dsm__modal-title" id="dsm-share-title">🔗 Condividi Data Source — {sharingDatasource.name}</div>

@@ -3,7 +3,7 @@
  * Redesign Plenora design system
  * Route: /external-connectors
  */
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useToast } from '../hooks/useToast';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -15,6 +15,7 @@ import { useHexCanvas } from '../utils/hexCanvas';
 import AllowedGroupsSelector from '../components/shared/AllowedGroupsSelector';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useConfirmModal } from '../hooks/useConfirmModal';
+import useDialogFocus from '../hooks/useDialogFocus';
 import AppSidebar from '../components/AppSidebar';
 import ThemeToggle from '../components/common/ThemeToggle';
 import { handleCascade409, formatCascadeDependencies } from '../api/errors';
@@ -145,6 +146,22 @@ function ApiConnectionManager() {
   const [sharingApi, setSharingApi] = useState(null);
   const isSuperadmin    = role.isSuperadmin(user);
   const canCreateApi    = can.createApiConnection(user);
+
+  // Focus management per i 4 dialog inline (a11y batch 5).
+  // Le close-callback usano inline arrow per evitare TDZ con
+  // `closeWizard` definito piu' avanti nel componente.
+  const wizardDialogRef          = useRef(null);
+  const quickTestInputDialogRef  = useRef(null);
+  const quickTestResultDialogRef = useRef(null);
+  const shareDialogRef           = useRef(null);
+  useDialogFocus(
+    showWizard,
+    () => { setShowWizard(false); setEditingApi(null); setWizardStep(0); setTestResult(null); setCustomHeadersList([]); },
+    wizardDialogRef,
+  );
+  useDialogFocus(!!quickTestInput,  () => setQuickTestInput(null),  quickTestInputDialogRef);
+  useDialogFocus(!!quickTestResult, () => setQuickTestResult(null), quickTestResultDialogRef);
+  useDialogFocus(!!sharingApi,      () => setSharingApi(null),      shareDialogRef);
 
   useEffect(() => { loadApiConnections(); }, []);
   useEffect(() => {
@@ -522,11 +539,13 @@ function ApiConnectionManager() {
       {showWizard && (
         <div className="acm__overlay" onClick={closeWizard}>
           <div
+            ref={wizardDialogRef}
             className="acm__wizard"
             onClick={e=>e.stopPropagation()}
             role="dialog"
             aria-modal="true"
             aria-labelledby="acm-wizard-title"
+            tabIndex={-1}
           >
             <div className="acm__wizard-header">
               <div className="acm__wizard-title" id="acm-wizard-title">{editingApi?`Modifica — ${editingApi.name}`:'Nuovo Connettore'}</div>
@@ -1105,11 +1124,13 @@ function ApiConnectionManager() {
       {quickTestInput && (
         <div className="acm__overlay" onClick={()=>setQuickTestInput(null)}>
           <div
+            ref={quickTestInputDialogRef}
             className="acm__modal acm__modal--sm"
             onClick={e=>e.stopPropagation()}
             role="dialog"
             aria-modal="true"
             aria-labelledby="acm-quicktest-input-title"
+            tabIndex={-1}
           >
             <div className="acm__wizard-header">
               <div className="acm__wizard-title" id="acm-quicktest-input-title">🚀 Test — {quickTestInput.api.name}</div>
@@ -1136,11 +1157,13 @@ function ApiConnectionManager() {
       {quickTestResult && (
         <div className="acm__overlay" onClick={()=>setQuickTestResult(null)}>
           <div
+            ref={quickTestResultDialogRef}
             className="acm__modal"
             onClick={e=>e.stopPropagation()}
             role="dialog"
             aria-modal="true"
             aria-labelledby="acm-quicktest-result-title"
+            tabIndex={-1}
           >
             <div className="acm__wizard-header">
               <div className="acm__wizard-title" id="acm-quicktest-result-title">{quickTestResult.result.success?'✅':'❌'} Test — {quickTestResult.api.name}</div>
@@ -1183,12 +1206,14 @@ function ApiConnectionManager() {
       {sharingApi && (
         <div className="acm__overlay" onClick={()=>setSharingApi(null)}>
           <div
+            ref={shareDialogRef}
             className="acm__wizard"
             onClick={e=>e.stopPropagation()}
             style={{ maxWidth: 540 }}
             role="dialog"
             aria-modal="true"
             aria-labelledby="acm-share-title"
+            tabIndex={-1}
           >
             <div className="acm__wizard-header">
               <div className="acm__wizard-title" id="acm-share-title">🔗 Condividi Connettore — {sharingApi.name}</div>
