@@ -31,7 +31,7 @@
 [data-theme='light'] .join-modal__node-label { color: #0F1729; }
 
 .join-modal__node-count {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 10.5px;
   color: var(--plen-text-dim, #3F4D68);
 }
@@ -56,7 +56,7 @@
   background: transparent;
   color: var(--plen-text-dim, #3F4D68);
   font-size: 12px;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--plen-font-body);
   font-weight: 500;
   cursor: pointer;
   transition: all 0.12s;
@@ -76,7 +76,7 @@
 
 .join-modal__section-label {
   display: block;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
@@ -93,7 +93,7 @@
   margin-top: 2px;
   text-transform: none;
   letter-spacing: 0;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--plen-font-body);
   font-style: italic;
 }
 
@@ -138,7 +138,7 @@
 .join-modal__join-type-label {
   font-size: 12px;
   font-weight: 700;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   color: var(--plen-text, #DDE4F2);
 }
 [data-theme='light'] .join-modal__join-type-name,
@@ -147,7 +147,7 @@
 .join-modal__join-type-desc {
   font-size: 11px;
   color: var(--plen-text-dim, #3F4D68);
-  font-family: 'Inter', sans-serif;
+  font-family: var(--plen-font-body);
   line-height: 1.3;
 }
 
@@ -163,7 +163,7 @@
 .join-modal__column-select { display: flex; flex-direction: column; gap: 5px; }
 
 .join-modal__column-select label {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 9.5px;
   font-weight: 700;
   text-transform: uppercase;
@@ -175,7 +175,7 @@
   width: 100%;
   padding: 6px 9px;
   font-size: 12px;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--plen-font-body);
   border: 1px solid var(--plen-border-hi, rgba(255,255,255,0.11));
   border-radius: 6px;
   background: var(--plen-surface-2, #111525);
@@ -208,7 +208,7 @@
   width: 100%;
   padding: 5px 7px;
   font-size: 11px;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   border: 1px solid var(--plen-border, rgba(255,255,255,0.06));
   border-radius: 5px;
   background: var(--plen-surface-3, #171C2E);
@@ -228,7 +228,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 10px;
   font-weight: 700;
   color: #4B8BFF;
@@ -283,7 +283,7 @@
   color: #4B8BFF;
   font-size: 12px;
   font-weight: 600;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--plen-font-body);
   cursor: pointer;
   transition: all 0.12s;
 }
@@ -333,14 +333,14 @@
 .join-modal__spatial-predicate-label {
   font-size: 11.5px;
   font-weight: 700;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   color: #34C17A;
 }
 
 .join-modal__spatial-predicate-desc {
   font-size: 10px;
   color: var(--plen-text-dim, #3F4D68);
-  font-family: 'Inter', sans-serif;
+  font-family: var(--plen-font-body);
   line-height: 1.3;
 }
 
@@ -350,7 +350,7 @@
   width: 100%;
   padding: 7px 10px;
   font-size: 12.5px;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--plen-font-body);
   border: 1px solid var(--plen-border-hi, rgba(255,255,255,0.11));
   border-radius: 6px;
   background: var(--plen-surface-2, #111525);
@@ -382,7 +382,7 @@
   width: 100%;
   padding: 6px 8px;
   font-size: 11.5px;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--plen-font-body);
   border: 1px solid var(--plen-border-hi, rgba(255,255,255,0.11));
   border-radius: 5px;
   background: var(--plen-surface-2, #111525);
@@ -410,7 +410,7 @@
   color: #34C17A;
   font-size: 12px;
   font-weight: 600;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--plen-font-body);
   cursor: pointer;
   transition: all 0.12s;
 }
@@ -430,7 +430,7 @@
 [data-theme='light'] .join-modal__preview { background: #F4F7FD; border-color: rgba(0,0,0,0.08); }
 
 .join-modal__preview-label {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 9.5px;
   font-weight: 700;
   text-transform: uppercase;
@@ -440,7 +440,7 @@
 }
 
 .join-modal__preview-sql {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 12px;
   line-height: 1.7;
   word-break: break-word;
@@ -463,7 +463,7 @@
 .join-modal .form-group { margin-bottom: 14px; }
 .join-modal .form-group label {
   display: block;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;

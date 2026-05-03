@@ -35,7 +35,7 @@
   border: none;
   background: transparent;
   color: var(--plen-text-dim, #3F4D68);
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 10.5px;
   font-weight: 700;
   text-transform: uppercase;
@@ -67,7 +67,7 @@
 .pm-tabs-spacer { flex: 1; }
 
 .pm-rows-count {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 10px;
   color: var(--plen-text-dim, #3F4D68);
   padding-right: 4px;
@@ -115,7 +115,7 @@
   border-radius: 6px;
   color: var(--plen-text, #DDE4F2);
   font-size: 12px;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--plen-font-body);
   outline: none;
   transition: border-color 0.15s;
 }
@@ -158,7 +158,7 @@
 }
 
 .preview-modal__limit-selector label {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
@@ -173,7 +173,7 @@
   background: var(--plen-surface-3, #171C2E);
   color: var(--plen-text, #DDE4F2);
   font-size: 11.5px;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--plen-font-body);
   outline: none;
   cursor: pointer;
 }
@@ -197,7 +197,7 @@
 .preview-modal__refresh-btn:hover { background: rgba(52,193,122,0.18); }
 
 .preview-modal__filter-info {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 10.5px;
   color: var(--plen-warn, #FBBF24);
   padding: 3px 8px;
@@ -258,7 +258,7 @@
 .preview-modal__th-icon { font-size: 12px; }
 
 .preview-modal__th-name {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 10.5px;
   font-weight: 700;
   text-transform: uppercase;
@@ -274,7 +274,7 @@
 }
 
 .preview-modal__th-type {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 9px;
   color: var(--plen-text-dim, #3F4D68);
   margin-top: 2px;
@@ -287,7 +287,7 @@
   cursor: default !important;
 }
 .preview-modal__row-num td {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 10px;
   color: var(--plen-text-dim, #3F4D68);
 }
@@ -320,7 +320,7 @@
 }
 
 .preview-modal__geom-pill {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 10.5px;
   color: var(--plen-estrai, #34C17A);
   padding: 2px 6px;
@@ -332,13 +332,13 @@
 
 .preview-modal__date {
   color: #7AB4FF;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 11.5px;
 }
 
 .preview-modal__number {
   color: #7AB4FF;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
 }
 [data-theme='light'] .preview-modal__number { color: #2563EB; }
 [data-theme='light'] .preview-modal__date   { color: #2563EB; }
@@ -368,7 +368,7 @@
   font-size: 12px;
   cursor: pointer;
   transition: all 0.12s;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
 }
 [data-theme='light'] .preview-modal__page-btn {
   background: #FFFFFF;
@@ -383,7 +383,7 @@
 .preview-modal__page-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
 .preview-modal__page-info {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 11px;
   color: var(--plen-text-dim, #3F4D68);
   padding: 0 8px;
@@ -405,7 +405,7 @@
 .preview-modal__empty-icon { font-size: 40px; margin-bottom: 14px; }
 
 .preview-modal__error-title {
-  font-family: 'Syne', sans-serif;
+  font-family: var(--plen-font-display);
   font-size: 16px;
   font-weight: 700;
   color: var(--plen-err, #F87171);
@@ -432,7 +432,7 @@
 
 /* ── Footer warning ─────────────────────────────────────────────── */
 .preview-modal__truncated-warning {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 10.5px;
   color: var(--plen-warn, #FBBF24);
   padding: 4px 10px;
@@ -467,7 +467,7 @@
 /* Tooltip */
 .pm-tooltip-wrap { background: transparent !important; border: none !important; box-shadow: none !important; }
 .pm-tooltip {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 11px;
   line-height: 1.6;
   color: var(--plen-text, #DDE4F2);
@@ -505,7 +505,7 @@
   backdrop-filter: blur(8px);
   border: 1px solid rgba(255,255,255,0.1);
   border-radius: 7px;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 10.5px;
   color: var(--plen-text-sub, #7D8BA8);
   pointer-events: all;
@@ -530,7 +530,7 @@
   border: none;
   outline: none;
   color: var(--plen-estrai, #34C17A);
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 10.5px;
   cursor: pointer;
 }
@@ -554,7 +554,7 @@
   border: 1px solid rgba(255,255,255,0.1);
   border-radius: 6px;
   color: var(--plen-text-dim, #3F4D68);
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 10px;
   font-weight: 700;
   cursor: pointer;
@@ -596,7 +596,7 @@
   border-radius: 6px;
   color: var(--plen-text-sub, #7D8BA8);
   font-size: 14px;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-weight: 700;
   cursor: pointer;
   display: flex; align-items: center; justify-content: center;
@@ -641,7 +641,7 @@
 }
 
 .pm-stat-name {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 11px;
   font-weight: 700;
   color: var(--plen-text, #DDE4F2);
@@ -652,7 +652,7 @@
 [data-theme='light'] .pm-stat-name { color: #0F1729; }
 
 .pm-stat-type {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 9px;
   font-weight: 700;
   padding: 2px 5px;
@@ -675,7 +675,7 @@
 [data-theme='light'] .pm-stat-k { color: #7D8BA8; }
 
 .pm-stat-v {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   color: var(--plen-text-sub, #7D8BA8);
   text-align: right;
   overflow: hidden;
@@ -704,7 +704,7 @@
 
 /* ── Legacy compat ──────────────────────────────────────────────── */
 .preview-modal__geom {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 10.5px;
   color: var(--plen-estrai, #34C17A);
   padding: 2px 5px;
@@ -767,7 +767,7 @@
 }
 
 .pm-group-label {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -775,7 +775,7 @@
 }
 
 .pm-group-meta {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 9px;
   color: var(--plen-text-dim, #3F4D68);
   margin-left: 2px;

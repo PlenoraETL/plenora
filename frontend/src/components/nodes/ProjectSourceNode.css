@@ -13,7 +13,7 @@
   max-width: 260px;
   box-shadow: 0 4px 20px rgba(0,0,0,0.35);
   font-size: 12px;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--plen-font-body);
   overflow: hidden;
 }
 [data-theme='light'] .project-source-node {
@@ -72,7 +72,7 @@
 }
 
 .project-source-node__title {
-  font-family: 'Syne', sans-serif;
+  font-family: var(--plen-font-display);
   font-size: 12.5px;
   font-weight: 700;
   color: var(--plen-text, #DDE4F2);
@@ -89,7 +89,7 @@
 
 /* Type badge */
 .project-source-node__type-badge {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 9px;
   font-weight: 700;
   padding: 2px 5px;
@@ -145,7 +145,7 @@
   color: var(--plen-text-dim, #3F4D68);
   font-size: 11px;
   font-style: italic;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
 }
 
 .project-source-node__error {
@@ -156,7 +156,7 @@
   border-radius: 5px;
   color: var(--plen-err, #F87171);
   margin-bottom: 6px;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
 }
 
 .project-source-node__no-columns {
@@ -179,7 +179,7 @@
   color: var(--plen-text-dim, #3F4D68);
   margin-bottom: 5px;
   padding: 0 2px;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
 }
 .project-source-node__columns-hint {
   font-size: 9px;
@@ -228,7 +228,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 11px;
   color: var(--plen-text-sub, #7D8BA8);
 }
@@ -240,7 +240,7 @@
   background: rgba(155,109,255,0.15);
   border: 1px solid rgba(155,109,255,0.3);
   color: #9B6DFF;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 8px;
   font-weight: 700;
   padding: 1px 4px;
@@ -251,7 +251,7 @@
 
 /* ── Type badges ──────────────────────────────────────────────── */
 .project-source-node__column-badge {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 9px;
   font-weight: 700;
   padding: 1px 5px;
@@ -294,7 +294,7 @@
   border-radius: 5px;
   cursor: pointer;
   font-size: 10.5px;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   color: var(--plen-text-dim, #3F4D68);
   transition: all 0.12s;
 }
@@ -312,7 +312,7 @@
 }
 [data-theme='light'] .project-source-node__info { border-top-color: rgba(0,0,0,0.07); }
 .project-source-node__info-file {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 10px;
   color: var(--plen-text-dim, #3F4D68);
 }

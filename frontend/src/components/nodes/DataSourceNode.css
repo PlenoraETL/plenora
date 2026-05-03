@@ -36,7 +36,7 @@
   overflow: hidden;
   box-shadow: 0 4px 20px rgba(0,0,0,0.35);
   font-size: 12px;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--plen-font-body);
   position: relative;
 }
 
@@ -87,7 +87,7 @@
 .dsn__icon { font-size: 15px; flex-shrink: 0; }
 
 .dsn__title {
-  font-family: 'Syne', sans-serif;
+  font-family: var(--plen-font-display);
   font-size: 13px;
   font-weight: 700;
   color: var(--plen-text, #DDE4F2);
@@ -99,7 +99,7 @@
   background: var(--plen-surface-2, #111525);
   border: 1px solid var(--plen-border-hi, rgba(255,255,255,0.11));
   border-radius: 10px;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 10px;
   font-weight: 600;
   color: var(--dsn-accent);
@@ -134,7 +134,7 @@
   padding: 4px 11px;
   background: var(--dsn-accent-tint);
   color: var(--dsn-accent);
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 10.5px;
   font-weight: 500;
   border-bottom: 1px solid var(--dsn-accent-border);
@@ -155,7 +155,7 @@
 .dsn__field { display: flex; flex-direction: column; gap: 4px; }
 
 .dsn__label {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 9.5px;
   font-weight: 700;
   text-transform: uppercase;
@@ -169,7 +169,7 @@
   border: 1px solid var(--plen-border-hi, rgba(255,255,255,0.11));
   border-radius: 6px;
   font-size: 12px;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--plen-font-body);
   background: var(--plen-surface-2, #111525);
   color: var(--plen-text, #DDE4F2);
   outline: none;
@@ -207,7 +207,7 @@
   background: var(--plen-surface-2, #111525);
   cursor: pointer;
   font-size: 11px;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--plen-font-body);
   color: var(--plen-text-sub, #7D8BA8);
   transition: all 0.12s;
 }
@@ -240,7 +240,7 @@
   background: var(--plen-surface-2, #111525);
   border: 1px solid var(--plen-border-hi, rgba(255,255,255,0.11));
   border-radius: 6px;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 11px;
   color: var(--plen-text-sub, #7D8BA8);
   overflow: hidden;
@@ -263,7 +263,7 @@
   cursor: pointer;
   font-size: 11px;
   font-weight: 700;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--plen-font-body);
   white-space: nowrap;
   flex-shrink: 0;
   transition: opacity 0.12s;
@@ -284,7 +284,7 @@
   padding: 4px 9px;
   background: var(--dsn-accent-tint);
   color: var(--dsn-accent);
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 10px;
   font-weight: 600;
 }
@@ -316,7 +316,7 @@
   align-items: center;
   padding: 3px 6px;
   border-radius: 4px;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 11px;
   color: var(--plen-text-sub, #7D8BA8);
 }
@@ -366,7 +366,7 @@
   color: var(--plen-text-dim, #3F4D68);
   text-align: center;
   padding: 4px 0;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
 }
 .dsn__warning {
   font-size: 11px;
@@ -402,7 +402,7 @@
   padding: 8px 11px;
   background: var(--dsn-accent-tint);
   border-bottom: 1px solid var(--dsn-accent-border);
-  font-family: 'Syne', sans-serif;
+  font-family: var(--plen-font-display);
   font-size: 12px;
   font-weight: 700;
   color: var(--dsn-accent);
@@ -442,7 +442,7 @@
   color: var(--dsn-accent);
   cursor: pointer;
   font-size: 11px;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--plen-font-body);
   padding: 1px 3px;
   border-radius: 3px;
 }
@@ -465,7 +465,7 @@
   text-align: center;
   font-size: 11.5px;
   color: var(--plen-text-dim, #3F4D68);
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
 }
 .dsn__browser-status--err { color: #F87171; }
 
@@ -477,7 +477,7 @@
   border-radius: 6px;
   cursor: pointer;
   font-size: 12px;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--plen-font-body);
   color: var(--plen-text-sub, #7D8BA8);
   transition: background 0.12s;
 }
@@ -491,7 +491,7 @@
 .dsn__browser-icon { font-size: 14px; flex-shrink: 0; }
 .dsn__browser-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dsn__browser-type {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 9px;
   font-weight: 600;
   background: var(--plen-surface-3, #171C2E);

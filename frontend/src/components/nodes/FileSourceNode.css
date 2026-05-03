@@ -13,7 +13,7 @@
   max-width: 260px;
   box-shadow: 0 4px 20px rgba(0,0,0,0.35);
   font-size: 12px;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--plen-font-body);
   overflow: hidden;
 }
 [data-theme='light'] .file-source-node {
@@ -61,7 +61,7 @@
 }
 
 .file-source-node__title {
-  font-family: 'Syne', sans-serif;
+  font-family: var(--plen-font-display);
   font-size: 12.5px;
   font-weight: 700;
   color: var(--plen-text, #DDE4F2);
@@ -98,7 +98,7 @@
   border-bottom: 1px solid var(--plen-border, rgba(255,255,255,0.06));
   font-size: 12px;
   font-weight: 600;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   color: var(--plen-text, #DDE4F2);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -123,7 +123,7 @@
 [data-theme='light'] .file-source-node__format-info { border-bottom-color: rgba(0,0,0,0.06); }
 
 .file-source-node__format-badge {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 9px;
   font-weight: 700;
   padding: 2px 6px;
@@ -133,7 +133,7 @@
 }
 
 .file-source-node__row-count {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 10px;
   color: var(--plen-text-dim, #3F4D68);
 }
@@ -145,7 +145,7 @@
   color: var(--plen-text-dim, #3F4D68);
   font-size: 11px;
   font-style: italic;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
 }
 
 .file-source-node__error {
@@ -155,7 +155,7 @@
   border: 1px solid rgba(248,113,113,0.2);
   border-radius: 5px;
   font-size: 11px;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   color: var(--plen-err, #F87171);
 }
 
@@ -180,7 +180,7 @@
   justify-content: space-between;
   align-items: center;
   font-size: 10.5px;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   color: var(--plen-text-dim, #3F4D68);
   margin-bottom: 5px;
 }
@@ -231,7 +231,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   color: var(--plen-text-sub, #7D8BA8);
 }
 [data-theme='light'] .file-source-node__column-name { color: #4A5568; }
@@ -240,7 +240,7 @@
 
 /* ── Type badge ───────────────────────────────────────────────── */
 .file-source-node__column-type {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 9px;
   font-weight: 700;
   padding: 1px 5px;
@@ -281,7 +281,7 @@
   border-top: 1px solid var(--plen-border, rgba(255,255,255,0.06));
   display: flex;
   gap: 10px;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 10px;
   color: var(--plen-text-dim, #3F4D68);
 }

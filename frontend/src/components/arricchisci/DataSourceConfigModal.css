@@ -18,7 +18,7 @@
   width: 100%; max-width: 680px; max-height: 90vh;
   display: flex; flex-direction: column;
   box-shadow: 0 24px 80px rgba(0,0,0,.55);
-  font-family: 'Inter', sans-serif;
+  font-family: var(--plen-font-body);
   color: var(--acm-text, #DDE4F2);
   font-size: 13px;
 }
@@ -32,8 +32,8 @@
 }
 .dsm__header-left { display: flex; align-items: center; gap: 12px; }
 .dsm__header-icon { font-size: 22px; }
-.dsm__title    { font-family: 'Syne', sans-serif; font-size: 16px; font-weight: 700; color: var(--acm-text, #DDE4F2); }
-.dsm__subtitle { font-size: 11px; color: var(--acm-text-dim, #3F4D68); margin-top: 2px; font-family: 'DM Mono', monospace; }
+.dsm__title    { font-family: var(--plen-font-display); font-size: 16px; font-weight: 700; color: var(--acm-text, #DDE4F2); }
+.dsm__subtitle { font-size: 11px; color: var(--acm-text-dim, #3F4D68); margin-top: 2px; font-family: var(--plen-font-mono); }
 .dsm__close {
   width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
   background: transparent; border: 1px solid var(--acm-border-hi, rgba(255,255,255,0.11));
@@ -52,7 +52,7 @@
   flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px;
   padding: 11px 8px; cursor: pointer;
   font-size: 11.5px; color: var(--acm-text-dim, #3F4D68);
-  font-family: 'DM Mono', monospace; position: relative;
+  font-family: var(--plen-font-mono); position: relative;
   transition: color .12s; user-select: none;
 }
 .dsm__step::after {
@@ -86,7 +86,7 @@
 .dsm__field-group { display: flex; flex-direction: column; gap: 5px; }
 .dsm__label {
   font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
-  color: var(--acm-text-dim, #3F4D68); font-family: 'DM Mono', monospace;
+  color: var(--acm-text-dim, #3F4D68); font-family: var(--plen-font-mono);
 }
 .dsm__input, .dsm__textarea {
   width: 100%; padding: 8px 11px;
@@ -94,16 +94,16 @@
   border: 1px solid var(--acm-border-hi, rgba(255,255,255,0.11));
   border-radius: 7px; font-size: 12.5px;
   color: var(--acm-text, #DDE4F2);
-  font-family: 'Inter', sans-serif; outline: none;
+  font-family: var(--plen-font-body); outline: none;
   transition: border-color .15s;
 }
 .dsm__input:focus, .dsm__textarea:focus { border-color: var(--acm-arricchisci, #F5A623); }
 .dsm__input::placeholder, .dsm__textarea::placeholder { color: var(--acm-text-dim, #3F4D68); }
-.dsm__input--mono    { font-family: 'DM Mono', monospace; font-size: 12px; }
+.dsm__input--mono    { font-family: var(--plen-font-mono); font-size: 12px; }
 .dsm__input--pw      { letter-spacing: 3px; }
 .dsm__textarea       { resize: vertical; }
-.dsm__textarea--mono { font-family: 'DM Mono', monospace; font-size: 11.5px; }
-.dsm__hint { font-size: 11px; color: var(--acm-text-dim, #3F4D68); font-family: 'DM Mono', monospace; }
+.dsm__textarea--mono { font-family: var(--plen-font-mono); font-size: 11.5px; }
+.dsm__hint { font-size: 11px; color: var(--acm-text-dim, #3F4D68); font-family: var(--plen-font-mono); }
 
 /* ══ Type grid ════════════════════════════════════════════════════════════ */
 .dsm__types-grid {
@@ -126,7 +126,7 @@
 .dsm__type-icon  { font-size: 26px; }
 .dsm__type-label { font-size: 11.5px; font-weight: 600; color: var(--acm-text, #DDE4F2); }
 .dsm__type-auth  {
-  font-size: 9.5px; font-family: 'DM Mono', monospace;
+  font-size: 9.5px; font-family: var(--plen-font-mono);
   color: var(--acm-text-dim, #3F4D68); letter-spacing: .06em; text-transform: uppercase;
 }
 .dsm__type-soon {
@@ -144,8 +144,8 @@
   border-radius: 10px; margin-bottom: 2px;
 }
 .dsm__cred-icon  { font-size: 24px; }
-.dsm__cred-title { font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 700; color: var(--acm-text, #DDE4F2); }
-.dsm__cred-auth  { font-size: 11px; color: var(--acm-text-dim, #3F4D68); font-family: 'DM Mono', monospace; margin-top: 2px; }
+.dsm__cred-title { font-family: var(--plen-font-display); font-size: 14px; font-weight: 700; color: var(--acm-text, #DDE4F2); }
+.dsm__cred-auth  { font-size: 11px; color: var(--acm-text-dim, #3F4D68); font-family: var(--plen-font-mono); margin-top: 2px; }
 .dsm__cred-auth span { color: var(--acm-arricchisci, #F5A623); font-weight: 700; }
 
 /* ══ Path step ════════════════════════════════════════════════════════════ */
@@ -156,7 +156,7 @@
   background: var(--acm-surface-3, #171C2E);
   border: 1px solid var(--acm-border-hi, rgba(255,255,255,0.11));
   border-radius: 8px; cursor: pointer; user-select: none;
-  font-size: 11.5px; font-family: 'DM Mono', monospace;
+  font-size: 11.5px; font-family: var(--plen-font-mono);
   color: var(--acm-text-sub, #7D8BA8); transition: all .12s;
 }
 .dsm__ext-pill input[type='checkbox'] { display: none; }
@@ -183,7 +183,7 @@
 .dsm__summary-row { display: flex; padding: 9px 14px; border-bottom: 1px solid var(--acm-border, rgba(255,255,255,0.06)); }
 .dsm__summary-row:last-child { border-bottom: none; }
 .dsm__summary-key {
-  font-family: 'DM Mono', monospace; font-size: 11px;
+  font-family: var(--plen-font-mono); font-size: 11px;
   color: var(--acm-text-dim, #3F4D68); width: 90px; flex-shrink: 0;
   text-transform: uppercase; letter-spacing: .06em;
 }
@@ -194,7 +194,7 @@
   width: 100%; padding: 10px;
   background: rgba(245,166,35,.12); color: var(--acm-arricchisci, #F5A623);
   border: 1px solid rgba(245,166,35,.3); border-radius: 8px;
-  cursor: pointer; font-size: 13px; font-weight: 600; font-family: 'Inter', sans-serif;
+  cursor: pointer; font-size: 13px; font-weight: 600; font-family: var(--plen-font-body);
   transition: all .15s;
 }
 .dsm__test-btn:hover { background: rgba(245,166,35,.22); }
@@ -215,7 +215,7 @@
   padding: 14px 22px; border-top: 1px solid var(--acm-border, rgba(255,255,255,0.06));
   display: flex; justify-content: space-between; gap: 8px; flex-shrink: 0;
 }
-.dsm__btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 16px; border-radius: 8px; font-size: 12.5px; font-weight: 600; cursor: pointer; border: none; font-family: 'Inter', sans-serif; }
+.dsm__btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 16px; border-radius: 8px; font-size: 12.5px; font-weight: 600; cursor: pointer; border: none; font-family: var(--plen-font-body); }
 .dsm__btn--ghost   { background: transparent; border: 1px solid var(--acm-border-hi, rgba(255,255,255,0.11)); color: var(--acm-text-sub, #7D8BA8); }
 .dsm__btn--ghost:hover { background: var(--acm-surface-2, #111525); color: var(--acm-text, #DDE4F2); }
 .dsm__btn--primary { background: var(--acm-arricchisci, #F5A623); color: #07090F; }

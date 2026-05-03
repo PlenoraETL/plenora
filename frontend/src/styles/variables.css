@@ -39,7 +39,14 @@
   --plen-topbar:  52px;
   --plen-sidebar: 260px;
 
-  /* Typography */
+  /* Typography
+     Target finale (post `FE-PHASE2-FONTS-001A`): tutti i contesti
+     sans usano `--plen-font-sans` (Inter self-hosted), il mono usa
+     lo stack di sistema. In questo batch i valori restano quelli
+     attuali (Syne / Inter / DM Mono via Google Fonts) per non
+     cambiare runtime: si svuotera' il `<link>` di Syne e DM Mono e
+     si self-hostera' Inter quando arrivera' l'approval di rete. */
+  --plen-font-sans:    'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --plen-font-display: 'Syne', sans-serif;
   --plen-font-body:    'Inter', sans-serif;
   --plen-font-mono:    'DM Mono', monospace;

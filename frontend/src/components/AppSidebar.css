@@ -11,7 +11,7 @@
   height: 100vh;
   position: sticky;
   top: 0;
-  font-family: var(--plen-font-body, 'Inter', sans-serif);
+  font-family: var(--plen-font-body);
   color: var(--plen-text, #DDE4F2);
   z-index: 10;
 }

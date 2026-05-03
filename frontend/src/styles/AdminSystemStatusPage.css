@@ -10,7 +10,7 @@
   overflow: hidden;
   background: #07090F;
   color: #DDE4F2;
-  font-family: 'Inter', 'Segoe UI', sans-serif;
+  font-family: var(--plen-font-body);
   font-size: 13px;
 }
 [data-theme='light'] .sys {
@@ -40,7 +40,7 @@
 }
 .sys__title {
   margin: 0 0 4px 0;
-  font-family: 'Syne', 'Trebuchet MS', sans-serif;
+  font-family: var(--plen-font-display);
   font-size: 26px;
   font-weight: 700;
   color: #DDE4F2;
@@ -130,7 +130,7 @@
 }
 .sys__card-title {
   margin: 0;
-  font-family: 'Syne', 'Trebuchet MS', sans-serif;
+  font-family: var(--plen-font-display);
   font-size: 15px;
   font-weight: 700;
   display: flex;
@@ -215,7 +215,7 @@
   font-size: 12px;
 }
 .sys__kv-key { color: #7D8BA8; }
-.sys__kv-val { color: #DDE4F2; font-family: 'DM Mono', 'Consolas', monospace; font-size: 11px; }
+.sys__kv-val { color: #DDE4F2; font-family: var(--plen-font-mono); font-size: 11px; }
 [data-theme='light'] .sys__kv-val { color: #0B1120; }
 
 .sys__hint {

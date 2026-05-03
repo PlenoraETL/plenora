@@ -11,7 +11,7 @@
   flex-direction: column;
   background: var(--plen-bg, #07090F);
   color: var(--plen-text, #DDE4F2);
-  font-family: 'Inter', sans-serif;
+  font-family: var(--plen-font-body);
 }
 
 /* ── Toolbar ──────────────────────────────────────────────────── */
@@ -61,7 +61,7 @@
 }
 
 .manipola-toolbar__title {
-  font-family: 'Syne', sans-serif;
+  font-family: var(--plen-font-display);
   font-size: 14px;
   font-weight: 800;
   color: var(--plen-text, #DDE4F2);
@@ -75,7 +75,7 @@
 [data-theme='light'] .manipola-toolbar__title { color: #0F1729; }
 
 .manipola-toolbar__badge {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 9.5px;
   font-weight: 700;
   text-transform: uppercase;
@@ -97,7 +97,7 @@
   border-radius: 6px;
   font-size: 11.5px;
   font-weight: 600;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--plen-font-body);
   cursor: pointer;
   border: 1px solid transparent;
   transition: all 0.12s;
@@ -329,7 +329,7 @@
   padding: 4px 11px;
   border-radius: 16px;
   font-size: 11px;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   color: var(--plen-text-dim, #3F4D68);
   cursor: pointer;
   user-select: none;

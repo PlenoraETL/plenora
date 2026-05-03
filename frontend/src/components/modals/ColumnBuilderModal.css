@@ -10,7 +10,7 @@
   padding: 40px;
   color: var(--plen-text-dim, #3F4D68);
   font-size: 13px;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--plen-font-body);
 }
 .column-builder-error { color: #F87171; }
 
@@ -24,7 +24,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
@@ -47,7 +47,7 @@
   font-weight: 600;
   color: var(--plen-text-sub, #7D8BA8);
   margin-bottom: 6px;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--plen-font-body);
 }
 [data-theme='light'] .column-builder-label { color: #4A5568; }
 
@@ -57,7 +57,7 @@
   border: 1px solid var(--plen-border-hi, rgba(255,255,255,0.11));
   border-radius: 6px;
   font-size: 13px;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--plen-font-body);
   background: var(--plen-surface-2, #111525);
   color: var(--plen-text, #DDE4F2);
   outline: none;
@@ -84,7 +84,7 @@
   border: 1px solid var(--plen-border-hi, rgba(255,255,255,0.11));
   border-radius: 6px;
   font-size: 13px;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--plen-font-body);
   background: var(--plen-surface-2, #111525);
   color: var(--plen-text, #DDE4F2);
   cursor: pointer;
@@ -116,7 +116,7 @@
   border-radius: 20px;
   background: var(--plen-surface-2, #111525);
   font-size: 12px;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--plen-font-body);
   font-weight: 500;
   cursor: pointer;
   color: var(--plen-text-sub, #7D8BA8);
@@ -154,7 +154,7 @@
   font-size: 11.5px;
   color: var(--plen-text-dim, #3F4D68);
   font-style: italic;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--plen-font-body);
   line-height: 1.4;
 }
 
@@ -177,7 +177,7 @@
 .column-builder-param label,
 .column-builder-param-label {
   display: block;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
@@ -197,7 +197,7 @@
   color: var(--plen-text-dim, #3F4D68);
   margin-top: 4px;
   font-style: italic;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--plen-font-body);
 }
 
 /* ── Manual toggle ──────────────────────────────────────────────── */
@@ -206,7 +206,7 @@
   align-items: center;
   gap: 6px;
   font-size: 11.5px;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--plen-font-body);
   font-weight: 500;
   color: var(--plen-text-sub, #7D8BA8);
   cursor: pointer;
@@ -230,7 +230,7 @@
   padding: 9px 11px;
   border: 1px solid var(--plen-border-hi, rgba(255,255,255,0.11));
   border-radius: 7px;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 12.5px;
   resize: vertical;
   min-height: 80px;
@@ -267,7 +267,7 @@
 }
 
 .column-builder-preview-code {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 12.5px;
   color: #9B6DFF;
   word-break: break-all;
@@ -284,7 +284,7 @@
 .column-builder-result-type {
   margin-top: 10px;
   font-size: 11.5px;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--plen-font-body);
   color: var(--plen-text-dim, #3F4D68);
   display: flex;
   align-items: center;
@@ -316,7 +316,7 @@
   border-radius: 4px;
   cursor: pointer;
   font-size: 12.5px;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--plen-font-body);
   color: var(--plen-text-sub, #7D8BA8);
   transition: background 0.1s, color 0.1s;
   user-select: none;
@@ -355,7 +355,7 @@
   padding: 4px 8px;
   background: var(--plen-surface-3, #171C2E);
   border-radius: 4px;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--plen-font-mono);
   font-size: 11px;
   color: #9B6DFF;
   word-break: break-all;

@@ -5,7 +5,7 @@
   min-height: 100vh;
   background: var(--plen-bg, #07090F);
   color: var(--plen-text, #DDE4F2);
-  font-family: var(--plen-font-body, 'Inter', sans-serif);
+  font-family: var(--plen-font-body);
   display: flex;
   flex-direction: column;
   position: relative;
@@ -98,7 +98,7 @@
 }
 
 .esh__hero-title {
-  font-family: var(--plen-font-display, 'Syne', sans-serif);
+  font-family: var(--plen-font-display);
   font-size: 32px;
   font-weight: 800;
   color: var(--plen-text, #DDE4F2);
