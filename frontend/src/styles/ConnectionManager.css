@@ -282,3 +282,13 @@
 .cm__theme-toggle { display: flex; background: var(--cm-surface-2); border: 1px solid var(--cm-border-hi); border-radius: 20px; padding: 3px; }
 .cm__theme-opt { padding: 4px 11px; border-radius: 16px; font-size: 11px; font-family: var(--cm-font-m); color: var(--cm-text-dim); cursor: pointer; user-select: none; }
 .cm__theme-opt--on { background: var(--cm-surface); color: var(--cm-text); box-shadow: 0 1px 4px rgba(0,0,0,0.2); }
+
+/* ── Inline-style migration (FE-PHASE2-INLINE-STYLES-002) ──────────────
+   `--inline` form-field e form-row collassano il margin verticale per
+   layout dense (auth fields, ssh fields, modale credenziali). `--mt-md`
+   aggiunge solo lo spacing top tra blocchi quando il modal-field non
+   sta in un form-row che lo gestisce gia'. */
+.cm__modal-field--inline   { margin: 0; }
+.cm__form-row--mt-md       { margin-top: 14px; }
+.cm__btn--mt-md            { margin-top: 16px; }
+.cm__field-help-icon       { margin-left: 6px; opacity: 0.7; cursor: help; }

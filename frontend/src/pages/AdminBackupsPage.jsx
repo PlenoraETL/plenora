@@ -254,28 +254,15 @@ export default function AdminBackupsPage() {
       <AppSidebar />
       <main className="ab__main">
         {awsCredentialsError && (
-          <div
-            role="alert"
-            style={{
-              background: '#fff4e5',
-              border: '1px solid #d97706',
-              borderRadius: 6,
-              color: '#92400e',
-              padding: '12px 14px',
-              marginBottom: 16,
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: 12,
-            }}
-          >
-            <div style={{ flex: 1 }}>
+          <div role="alert" className="ab__aws-banner">
+            <div className="ab__aws-banner-body">
               <strong>Credenziali AWS scadute o non disponibili.</strong>
-              <div style={{ marginTop: 4, fontSize: '0.92em', lineHeight: 1.4 }}>
+              <div className="ab__aws-banner-detail">
                 {awsCredentialsError}
               </div>
-              <div style={{ marginTop: 6, fontSize: '0.85em', opacity: 0.85 }}>
+              <div className="ab__aws-banner-hint">
                 L'auto-refresh e' sospeso finche' non riprovi. Esegui
-                <code style={{ margin: '0 4px' }}>aws sso login</code>
+                <code className="ab__aws-banner-cmd">aws sso login</code>
                 sul server, poi clicca "Riprova".
               </div>
             </div>
@@ -283,16 +270,7 @@ export default function AdminBackupsPage() {
               type="button"
               onClick={handleRetryAws}
               disabled={loading}
-              style={{
-                background: '#d97706',
-                border: 'none',
-                borderRadius: 4,
-                color: '#fff',
-                cursor: loading ? 'wait' : 'pointer',
-                fontWeight: 600,
-                padding: '6px 14px',
-                whiteSpace: 'nowrap',
-              }}
+              className="ab__aws-banner-btn"
             >
               {loading ? 'Verifica...' : '↻ Riprova'}
             </button>

@@ -193,7 +193,7 @@ export default function DataSourceManager() {
               <div className="dsm__empty-title">Nessun Data Source configurato</div>
               <div className="dsm__empty-text">Aggiungi un Data Source per collegare Plenora a SharePoint, FTP, SFTP o cartelle di rete.</div>
               {canCreateDs && (
-                <button type="button" className="dsm__btn dsm__btn--primary" style={{marginTop:20}} onClick={openNew}>＋ Nuovo Data Source</button>
+                <button type="button" className="dsm__btn dsm__btn--primary dsm__btn--mt-lg" onClick={openNew}>＋ Nuovo Data Source</button>
               )}
             </div>
           ) : (
@@ -224,9 +224,8 @@ export default function DataSourceManager() {
                           )}
                           {!canEdit && (
                             <span
-                              className="dsm__lock-badge"
+                              className="dsm__lock-badge dsm__field-help-icon"
                               title="Solo un superadmin può modificare questa risorsa"
-                              style={{ fontSize: 14, opacity: 0.7, cursor: 'help', padding: '0 4px' }}
                             >
                               🔒
                             </span>
@@ -418,7 +417,7 @@ export default function DataSourceManager() {
                 📂 {browserDs.name}
                 {browserPath && <span className="dsm__browser-path"> / {browserPath}</span>}
               </div>
-              <div style={{display:'flex',gap:6}}>
+              <div className="dsm__inline-row">
                 <button type="button" className="dsm__btn dsm__btn--ghost dsm__btn--sm" onClick={() => browseFiles(browserDs.id, browserPath)} disabled={browserLoading} aria-label="Aggiorna elenco file">🔄</button>
                 <button type="button" className="dsm__modal-close" onClick={closeBrowser} aria-label="Chiudi">✕</button>
               </div>
@@ -501,9 +500,8 @@ export default function DataSourceManager() {
         <div className="dsm__overlay" onClick={() => setSharingDatasource(null)}>
           <div
             ref={shareDialogRef}
-            className="dsm__modal"
+            className="dsm__modal dsm__type-info"
             onClick={e => e.stopPropagation()}
-            style={{ maxWidth: 540 }}
             role="dialog"
             aria-modal="true"
             aria-labelledby="dsm-share-title"

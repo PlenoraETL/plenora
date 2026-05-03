@@ -321,31 +321,31 @@ function ConnectionManager() {
             {!isArcgis && (
               <>
                 <div className="cm__form-row cm__form-row--2-1">
-                  <div className="cm__modal-field" style={{margin:0}}>
+                  <div className="cm__modal-field cm__modal-field--inline">
                     <label className="cm__modal-label">Host *</label>
                     <input type="text" className="cm__modal-input" value={formData.host} onChange={e => setFormData({ ...formData, host: e.target.value })} placeholder="localhost" />
                   </div>
-                  <div className="cm__modal-field" style={{margin:0}}>
+                  <div className="cm__modal-field cm__modal-field--inline">
                     <label className="cm__modal-label">Porta</label>
                     <input type="number" className="cm__modal-input" value={formData.port} onChange={e => setFormData({ ...formData, port: parseInt(e.target.value)||0 })} />
                   </div>
                 </div>
-                <div className="cm__form-row cm__form-row--2-1" style={{marginTop:14}}>
-                  <div className="cm__modal-field" style={{margin:0}}>
+                <div className="cm__form-row cm__form-row--2-1 cm__form-row--mt-md">
+                  <div className="cm__modal-field cm__modal-field--inline">
                     <label className="cm__modal-label">Database *</label>
                     <input type="text" className="cm__modal-input" value={formData.database} onChange={e => setFormData({ ...formData, database: e.target.value })} placeholder="nome_database" />
                   </div>
-                  <div className="cm__modal-field" style={{margin:0}}>
+                  <div className="cm__modal-field cm__modal-field--inline">
                     <label className="cm__modal-label">Schema</label>
                     <input type="text" className="cm__modal-input" value={formData.db_schema} onChange={e => setFormData({ ...formData, db_schema: e.target.value })} placeholder={formData.type === 'mssql' ? 'dbo' : 'public'} />
                   </div>
                 </div>
-                <div className="cm__form-row cm__form-row--1-1" style={{marginTop:14}}>
-                  <div className="cm__modal-field" style={{margin:0}}>
+                <div className="cm__form-row cm__form-row--1-1 cm__form-row--mt-md">
+                  <div className="cm__modal-field cm__modal-field--inline">
                     <label className="cm__modal-label">Username</label>
                     <input type="text" className="cm__modal-input" value={formData.username} onChange={e => setFormData({ ...formData, username: e.target.value })} />
                   </div>
-                  <div className="cm__modal-field" style={{margin:0}}>
+                  <div className="cm__modal-field cm__modal-field--inline">
                     <label className="cm__modal-label">Password</label>
                     <input type="password" className="cm__modal-input" value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} placeholder="••••••••" />
                   </div>
@@ -379,14 +379,14 @@ function ConnectionManager() {
                 </div>
                 {formData.auth_type === 'token' && (
                   <div className="cm__form-row cm__form-row--1-1">
-                    <div className="cm__modal-field" style={{margin:0}}><label className="cm__modal-label">Username</label><input type="text" className="cm__modal-input" value={formData.username} onChange={e => setFormData({ ...formData, username: e.target.value })} /></div>
-                    <div className="cm__modal-field" style={{margin:0}}><label className="cm__modal-label">Password</label><input type="password" className="cm__modal-input" value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} placeholder="••••••••" /></div>
+                    <div className="cm__modal-field cm__modal-field--inline"><label className="cm__modal-label">Username</label><input type="text" className="cm__modal-input" value={formData.username} onChange={e => setFormData({ ...formData, username: e.target.value })} /></div>
+                    <div className="cm__modal-field cm__modal-field--inline"><label className="cm__modal-label">Password</label><input type="password" className="cm__modal-input" value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} placeholder="••••••••" /></div>
                   </div>
                 )}
                 {formData.auth_type === 'oauth2' && (
                   <div className="cm__form-row cm__form-row--1-1">
-                    <div className="cm__modal-field" style={{margin:0}}><label className="cm__modal-label">Client ID</label><input type="text" className="cm__modal-input" value={formData.client_id} onChange={e => setFormData({ ...formData, client_id: e.target.value })} placeholder="Es. PrKizU4tc3X..." /></div>
-                    <div className="cm__modal-field" style={{margin:0}}><label className="cm__modal-label">Client Secret</label><input type="password" className="cm__modal-input" value={formData.client_secret} onChange={e => setFormData({ ...formData, client_secret: e.target.value })} placeholder="••••••••" /></div>
+                    <div className="cm__modal-field cm__modal-field--inline"><label className="cm__modal-label">Client ID</label><input type="text" className="cm__modal-input" value={formData.client_id} onChange={e => setFormData({ ...formData, client_id: e.target.value })} placeholder="Es. PrKizU4tc3X..." /></div>
+                    <div className="cm__modal-field cm__modal-field--inline"><label className="cm__modal-label">Client Secret</label><input type="password" className="cm__modal-input" value={formData.client_secret} onChange={e => setFormData({ ...formData, client_secret: e.target.value })} placeholder="••••••••" /></div>
                   </div>
                 )}
               </>
@@ -430,7 +430,7 @@ function EmptyState({ onNew, canCreate = true }) {
           : 'Nessuna connessione disponibile. Contatta un amministratore.'}
       </div>
       {canCreate && (
-        <button type="button" className="cm__btn cm__btn--primary" onClick={onNew} style={{marginTop:16}}>＋ Crea connessione</button>
+        <button type="button" className="cm__btn cm__btn--primary cm__btn--mt-md" onClick={onNew}>＋ Crea connessione</button>
       )}
     </div>
   );
@@ -470,7 +470,7 @@ function ConnTable({ title, subtitle, connections, testResults, testingId, onTes
                       {!canEdit && (
                         <span
                           title="Solo un superadmin può modificare questa risorsa"
-                          style={{ marginLeft: 6, opacity: 0.7, cursor: 'help' }}
+                          className="cm__field-help-icon"
                         >
                           🔒
                         </span>

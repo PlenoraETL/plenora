@@ -231,3 +231,26 @@
 .um__content::-webkit-scrollbar { width: 5px; }
 .um__content::-webkit-scrollbar-track { background: transparent; }
 .um__content::-webkit-scrollbar-thumb { background: var(--um-border-hi); border-radius: 10px; }
+
+/* ── Inline-style migration (FE-PHASE2-INLINE-STYLES-002) ───────────── */
+.um__field-hint--padded   { padding: 6px 0; }
+.um__loading-icon         { font-size: 32px; margin-bottom: 12px; opacity: 0.3; }
+.um__th-actions           { text-align: right; }
+.um__cell-group           { font-family: var(--um-font-m); font-size: 12px; color: var(--um-text-sub); }
+.um__row-self             { font-size: 11px; color: var(--um-text-dim); padding: 0 8px; }
+.um__empty--full          { grid-column: 1/-1; }
+.um__group-default-hint   { font-size: 11px; color: var(--um-text-dim); }
+
+/* Confirm-delete-group modal (cluster locale) */
+.um__cdg-message          { color: var(--plen-text-sub); font-size: 13px; line-height: 1.5; margin: 0; }
+.um__cdg-warn             { background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.25); border-radius: 8px; padding: 10px 14px; color: var(--plen-err); font-size: 12.5px; line-height: 1.5; }
+.um__cdg-loading          { text-align: center; color: var(--plen-text-dim); padding: 16px 0; font-size: 12px; }
+.um__cdg-section-label    { margin-top: 12px; font-size: 12px; color: var(--plen-text-sub); font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; font-family: var(--plen-font-mono); }
+.um__cdg-list             { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.um__cdg-item             { display: flex; justify-content: space-between; align-items: center; padding: 7px 12px; background: var(--plen-surface-2); border-radius: 7px; border: 1px solid var(--plen-border); }
+.um__cdg-item-label       { font-size: 13px; color: var(--plen-text-sub); }
+.um__cdg-empty-note       { font-size: 12px; color: var(--plen-text-dim); text-align: center; margin-top: 8px; }
+.um__cdg-extra-note       { margin-top: 8px; font-size: 11px; color: var(--plen-text-dim); font-family: var(--plen-font-mono); }
+.um__cdg-confirm-line     { margin-top: 12px; font-size: 12.5px; color: var(--plen-text-sub); line-height: 1.5; }
+.um__cdg-confirm-strong   { color: var(--plen-text); }
+.um__cdg-input-wrap       { display: flex; flex-direction: column; gap: 6px; }

@@ -121,7 +121,7 @@ function UserModal({ user, groups, currentUser, onClose, onSave }) {
           {isEdit && (
             <div className="um__field">
               <label>Password</label>
-              <div className="um__field-hint" style={{ padding: '6px 0' }}>
+              <div className="um__field-hint um__field-hint--padded">
                 Per cambiare la password usa il pulsante <strong>🔑 Reimposta password</strong> nella lista utenti.
               </div>
             </div>
@@ -296,7 +296,7 @@ function ConfirmDeleteModal({ title, message, onClose, onConfirm }) {
         </>
       }
     >
-      <p style={{ color: 'var(--plen-text-sub)', fontSize: 13, lineHeight: 1.5, margin: 0 }}>{message}</p>
+      <p className="um__cdg-message">{message}</p>
     </ModalWrapper>
   );
 }
@@ -348,28 +348,28 @@ function ConfirmDeleteGroupModal({ group, onClose, onConfirm }) {
       }
     >
       {error && <div className="um__error">{error}</div>}
-      <div style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.25)', borderRadius: 8, padding: '10px 14px', color: 'var(--plen-err)', fontSize: 12.5, lineHeight: 1.5 }}>
+      <div className="um__cdg-warn">
         ⚠️ Questa operazione è <strong>irreversibile</strong>. Tutti i dati del gruppo saranno eliminati permanentemente.
       </div>
       {loading ? (
-        <div style={{ textAlign: 'center', color: 'var(--plen-text-dim)', padding: '16px 0', fontSize: 12 }}>Caricamento riepilogo...</div>
+        <div className="um__cdg-loading">Caricamento riepilogo...</div>
       ) : summary && (
         <>
-          <div style={{ marginTop: 12, fontSize: 12, color: 'var(--plen-text-sub)', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', fontFamily: 'var(--plen-font-mono)' }}>Verrà eliminato</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+          <div className="um__cdg-section-label">Verrà eliminato</div>
+          <div className="um__cdg-list">
             {summaryItems.map(({ icon, label, value }) => (
-              <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 12px', background: 'var(--plen-surface-2)', borderRadius: 7, border: '1px solid var(--plen-border)' }}>
-                <span style={{ fontSize: 13, color: 'var(--plen-text-sub)' }}>{icon} {label}</span>
+              <div key={label} className="um__cdg-item">
+                <span className="um__cdg-item-label">{icon} {label}</span>
                 <span style={{ fontFamily: 'var(--plen-font-mono)', fontSize: 12, fontWeight: 700, color: value > 0 ? 'var(--plen-err)' : 'var(--plen-text-dim)', background: value > 0 ? 'rgba(248,113,113,0.1)' : 'var(--plen-surface-3)', border: `1px solid ${value > 0 ? 'rgba(248,113,113,0.25)' : 'var(--plen-border)'}`, borderRadius: 4, padding: '1px 8px' }}>{value}</span>
               </div>
             ))}
           </div>
-          {totalItems === 0 && <div style={{ fontSize: 12, color: 'var(--plen-text-dim)', textAlign: 'center', marginTop: 8 }}>Il gruppo è vuoto.</div>}
-          <div style={{ marginTop: 8, fontSize: 11, color: 'var(--plen-text-dim)', fontFamily: 'var(--plen-font-mono)' }}>+ log di esecuzione, dati intermedi e risultati delle pipeline</div>
+          {totalItems === 0 && <div className="um__cdg-empty-note">Il gruppo è vuoto.</div>}
+          <div className="um__cdg-extra-note">+ log di esecuzione, dati intermedi e risultati delle pipeline</div>
         </>
       )}
-      <div style={{ marginTop: 12, fontSize: 12.5, color: 'var(--plen-text-sub)', lineHeight: 1.5 }}>
-        Stai eliminando il gruppo <strong style={{ color: 'var(--plen-text)' }}>{group.group_id}</strong>. Scrivi il nome del gruppo per confermare.
+      <div className="um__cdg-confirm-line">
+        Stai eliminando il gruppo <strong className="um__cdg-confirm-strong">{group.group_id}</strong>. Scrivi il nome del gruppo per confermare.
       </div>
       <ConfirmGroupNameInput groupId={group.group_id} onValid={handleConfirm} deleting={deleting} />
     </ModalWrapper>
@@ -380,7 +380,7 @@ function ConfirmGroupNameInput({ groupId, onValid, deleting }) {
   const [value, setValue] = useState('');
   const matches = value.trim() === groupId;
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+    <div className="um__cdg-input-wrap">
       <input
         value={value} onChange={e => setValue(e.target.value)} placeholder={groupId} autoFocus
         style={{ background: 'var(--um-surface-2)', border: `1px solid ${matches ? 'var(--um-err)' : 'var(--um-border)'}`, borderRadius: 7, padding: '8px 11px', color: 'var(--um-text)', fontSize: 13, fontFamily: 'var(--um-font-m)', outline: 'none', width: '100%' }}
@@ -453,7 +453,7 @@ export default function UserManager() {
   if (loading) return (
     <div className="um um--loading">
       <div className="um__loading-inner">
-        <div style={{ fontSize: 32, marginBottom: 12, opacity: 0.3 }}>👥</div>
+        <div className="um__loading-icon">👥</div>
         <div>Caricamento...</div>
       </div>
     </div>
@@ -514,7 +514,7 @@ export default function UserManager() {
                     <th>Ruolo</th>
                     {isSuperadmin && <th>Gruppo</th>}
                     <th>Stato</th>
-                    <th style={{ textAlign: 'right' }}>Azioni</th>
+                    <th className="um__th-actions">Azioni</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -529,7 +529,7 @@ export default function UserManager() {
                         </div>
                       </td>
                       <td><RoleBadge role={u.role} /></td>
-                      {isSuperadmin && <td><span style={{ fontFamily: 'var(--um-font-m)', fontSize: 12, color: 'var(--um-text-sub)' }}>{u.group_id}</span></td>}
+                      {isSuperadmin && <td><span className="um__cell-group">{u.group_id}</span></td>}
                       <td><StatusBadge active={u.is_active} /></td>
                       <td>
                         <div className="um__row-actions">
@@ -540,7 +540,7 @@ export default function UserManager() {
                               <button className="um__action-btn um__action-btn--danger" title="Elimina" onClick={() => setDeleteTarget({ type: 'user', item: u })}>🗑️</button>
                             </>
                           )}
-                          {u.id === currentUser?.user_id && <span style={{ fontSize: 11, color: 'var(--um-text-dim)', padding: '0 8px' }}>tu</span>}
+                          {u.id === currentUser?.user_id && <span className="um__row-self">tu</span>}
                         </div>
                       </td>
                     </tr>
@@ -554,7 +554,7 @@ export default function UserManager() {
           {tab === 'groups' && (
             <div className="um__groups-grid">
               {groups.length === 0 ? (
-                <div className="um__empty" style={{ gridColumn: '1/-1' }}><div className="um__empty-icon">🏢</div><div className="um__empty-text">Nessun gruppo trovato</div></div>
+                <div className="um__empty um__empty--full"><div className="um__empty-icon">🏢</div><div className="um__empty-text">Nessun gruppo trovato</div></div>
               ) : groups.map(g => {
                 const groupUsers = users.filter(u => u.group_id === g.group_id);
                 return (
@@ -572,7 +572,7 @@ export default function UserManager() {
                       {g.group_id !== 'default' && (
                         <button className="um__btn um__btn--danger um__btn--sm" onClick={() => setDeleteTarget({ type: 'group', item: g })}>🗑️ Elimina</button>
                       )}
-                      {g.group_id === 'default' && <span style={{ fontSize: 11, color: 'var(--um-text-dim)' }}>Gruppo di default — non eliminabile</span>}
+                      {g.group_id === 'default' && <span className="um__group-default-hint">Gruppo di default — non eliminabile</span>}
                     </div>
                   </div>
                 );
