@@ -50,26 +50,22 @@ def _count_features_where_via_post(client, conn, layer_url: str, where: str) -> 
 # Mapping dei tipi Esri verso una rappresentazione "coarse" per il
 # confronto schema. Esri usa nomi come esriFieldTypeString/Integer/Double.
 # Il GeoDataFrame ha dtype numpy. Normalizziamo entrambi a un set ridotto.
+#
+# BE-IMDF-003: implementazione consolidata in
+# `app.core.features.arcgis_client.EsriTypeMapper.map_field_type_coarse`
+# / `map_pandas_dtype_coarse`. Questi due simboli modulo-level
+# restano come thin wrapper per preservare il path di monkeypatch dei
+# test (es. `tests2/imdf/unit/test_validate_publish_*` che possono
+# patchare `validator._coarse_type_*`) e per non cambiare il call site
+# di `validate_publish`.
 def _coarse_type_from_esri(esri_type: str) -> str:
-    t = (esri_type or "").lower()
-    if "string" in t or "guid" in t or "xml" in t: return "string"
-    if "integer" in t or "oid" in t:               return "int"
-    if "double" in t or "single" in t or "float" in t: return "float"
-    if "date" in t:                                return "date"
-    if "geometry" in t or "shape" in t:            return "geometry"
-    return "other"
+    from app.core.features.arcgis_client import EsriTypeMapper
+    return EsriTypeMapper.map_field_type_coarse(esri_type)
 
 
 def _coarse_type_from_dtype(dtype) -> str:
-    s = str(dtype).lower()
-    # pandas 2.x usa 'str' (StringDtype), 1.x usa 'object'
-    if s in ("str", "string", "object"): return "string"
-    if "object" in s or "string" in s: return "string"
-    if "int" in s:                     return "int"
-    if "float" in s or "double" in s:  return "float"
-    if "datetime" in s or "date" in s: return "date"
-    if "geometry" in s:                return "geometry"
-    return "other"
+    from app.core.features.arcgis_client import EsriTypeMapper
+    return EsriTypeMapper.map_pandas_dtype_coarse(dtype)
 
 
 def validate_publish(

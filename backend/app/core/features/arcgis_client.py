@@ -174,13 +174,96 @@ class EsriTypeMapper:
     
     @classmethod
     def map_field_type(cls, esri_type: str) -> str:
-        """Converte un tipo di campo Esri in tipo PLENORA."""
+        """Converte un tipo di campo Esri in tipo PLENORA.
+
+        Schema bucket: `int`/`real`/`str`/`date`/`geometry`. Default
+        fallback `str`. **Diverso** dallo schema "coarse" usato dal
+        validator schema-compat (vedi `map_field_type_coarse`).
+        """
         return cls.ESRI_TO_PLENORA.get(esri_type, "str")
-    
+
     @classmethod
     def map_geometry_type(cls, esri_geom_type: str) -> str:
         """Converte un tipo di geometria Esri in tipo PLENORA con sottotipo."""
         return cls.ESRI_GEOM_TO_PLENORA.get(esri_geom_type, "geometry")
+
+    @classmethod
+    def map_field_type_coarse(cls, esri_type: str) -> str:
+        """Coarse mapping di un tipo di campo Esri per il check di
+        schema compatibilita' (validator IMDF).
+
+        Bucket: `string`/`int`/`float`/`date`/`geometry`/`other`.
+        Match substring case-insensitive (preserva la semantica
+        pre-IMDF-003 di `validator._coarse_type_from_esri`):
+
+        - `string`, `guid`, `xml`         -> "string"
+        - `integer`, `oid`                -> "int"
+        - `double`, `single`, `float`     -> "float"
+        - `date`                          -> "date"
+        - `geometry`, `shape`             -> "geometry"
+        - altro / vuoto / None            -> "other"
+
+        BE-IMDF-003: questo bucket scheme e' **distinto** da
+        `map_field_type` (Plenora-internal `int`/`real`/`str`/...) e
+        serve a confrontare apple-to-apple un campo Esri con un
+        DataFrame pandas tramite `map_pandas_dtype_coarse`. Le due
+        convenzioni convivono per design.
+        """
+        t = (esri_type or "").lower()
+        if "string" in t or "guid" in t or "xml" in t:
+            return "string"
+        if "integer" in t or "oid" in t:
+            return "int"
+        if "double" in t or "single" in t or "float" in t:
+            return "float"
+        if "date" in t:
+            return "date"
+        if "geometry" in t or "shape" in t:
+            return "geometry"
+        return "other"
+
+    @classmethod
+    def map_pandas_dtype_coarse(cls, dtype: object) -> str:
+        """Coarse mapping di un dtype pandas/numpy per il check di
+        schema compatibilita' (validator IMDF).
+
+        Bucket: `string`/`int`/`float`/`date`/`geometry`/`other`,
+        identico a `map_field_type_coarse` cosi' bundle (pandas) e FS
+        (Esri) si confrontano con la stessa convenzione.
+
+        Match substring case-insensitive sul `str(dtype).lower()`:
+
+        - `str`, `string`, `object` (esatti)            -> "string"
+        - contiene `object` o `string`                  -> "string"
+        - contiene `int`                                -> "int"
+        - contiene `float` o `double`                   -> "float"
+        - contiene `datetime` o `date`                  -> "date"
+        - contiene `geometry`                           -> "geometry"
+        - altro                                         -> "other"
+
+        Nota: pandas 2.x usa `'str'` (StringDtype), pandas 1.x usa
+        `'object'`; entrambi mappano a `"string"`.
+
+        Args:
+            dtype: tipicamente un `numpy.dtype` o una `pandas.Series.dtype`,
+                ma accetta qualunque oggetto convertibile in stringa
+                (per resilienza, signature `object` → eviteremmo
+                `Any` per l'ADR-0021 `BE_RULES §1`).
+        """
+        s = str(dtype).lower()
+        if s in ("str", "string", "object"):
+            return "string"
+        if "object" in s or "string" in s:
+            return "string"
+        if "int" in s:
+            return "int"
+        if "float" in s or "double" in s:
+            return "float"
+        if "datetime" in s or "date" in s:
+            return "date"
+        if "geometry" in s:
+            return "geometry"
+        return "other"
 
 
 # =============================================================================
