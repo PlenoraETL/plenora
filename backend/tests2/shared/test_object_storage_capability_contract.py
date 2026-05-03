@@ -15,6 +15,7 @@ Verifica:
 from __future__ import annotations
 
 import sys
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -211,18 +212,32 @@ def test_results_db_service_s3_delete_silent_when_disabled():
 
 def test_file_sources_delete_skips_s3_cleanup_when_disabled(monkeypatch):
     """delete_file_source con storage_key + capability off: nessun
-    tentativo di eliminare su S3, DELETE DB procede."""
+    tentativo di eliminare su S3, DELETE DB procede.
+
+    `delete_file_source` oggi usa una transaction race-safe (FOR UPDATE +
+    cleanup post-commit). Il test deve quindi mockare il transaction
+    boundary, non i vecchi helper autocommit `fetchone/execute`.
+    """
     from app.db.config import file_sources
 
-    fake_row = {"storage_key": "file-sources/abc/xxx"}
-    monkeypatch.setattr(
-        file_sources, "fetchone", lambda *a, **kw: fake_row,
-    )
-
     fake_cur = MagicMock()
+    fake_cur.fetchone.return_value = {"storage_key": "file-sources/abc/xxx"}
+    fake_cur.fetchall.return_value = []
     fake_cur.rowcount = 1
+
+    @contextmanager
+    def cursor_cm():
+        yield fake_cur
+
+    fake_conn = MagicMock()
+    fake_conn.cursor.return_value = cursor_cm()
+
+    @contextmanager
+    def transaction_cm():
+        yield fake_conn
+
     monkeypatch.setattr(
-        file_sources, "execute", lambda *a, **kw: fake_cur,
+        file_sources, "transaction", lambda: transaction_cm(),
     )
 
     runtime_called = {"n": 0}
@@ -239,6 +254,7 @@ def test_file_sources_delete_skips_s3_cleanup_when_disabled(monkeypatch):
 
     assert ok is True
     assert runtime_called["n"] == 0
+    assert fake_cur.execute.call_count == 3
 
 
 def test_imdf_storage_list_task_ids_returns_empty_when_disabled():
