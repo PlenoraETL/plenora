@@ -561,3 +561,10 @@
   .wiz-queue-opts, .wiz-write-modes { flex-wrap: wrap; }
   .wiz-project-grid { grid-template-columns: 1fr; }
 }
+
+/* ── Inline-style migration (FE-PHASE2-INLINE-STYLES-005) ────────────── */
+.wiz-field--check-aligned {
+  display: flex;
+  align-items: center;
+  padding-top: 24px;
+}

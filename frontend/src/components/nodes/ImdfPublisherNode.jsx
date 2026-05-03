@@ -280,20 +280,13 @@ const ImdfPublisherNode = memo(({ data, id }) => {
               Banner visibile, no rimozione automatica del nodo. */}
           {isAccessDenied && (
             <div
+              className="imdf-pub-node__error"
               role="alert"
               title={accessDeniedReason || 'Connessione ArcGIS non accessibile'}
-              style={{
-                background: '#fff4e5',
-                border: '1px solid #d97706',
-                borderRadius: 4,
-                color: '#92400e',
-                padding: '8px 10px',
-                marginBottom: 8,
-              }}
             >
               🔒 Connessione ArcGIS non accessibile al tuo gruppo.
               {accessDeniedReason ? (
-                <div style={{ fontSize: '0.85em', marginTop: 4, opacity: 0.85 }}>
+                <div className="imdf-pub-node__error-detail">
                   {accessDeniedReason}
                 </div>
               ) : null}
@@ -305,7 +298,7 @@ const ImdfPublisherNode = memo(({ data, id }) => {
             {bundleTaskId ? (
               <>
                 📦 Bundle: <strong>{bundleSiteId || bundleTaskId.slice(0, 8)}</strong>
-                <span style={{ fontSize: 9, opacity: 0.6, marginLeft: 8 }}>
+                <span className="imdf-pub-node__bundle-hint">
                   (gestito dall'Output node)
                 </span>
               </>
@@ -445,7 +438,7 @@ const ImdfPublisherNode = memo(({ data, id }) => {
           {/* Errore publish */}
           {publishError && (
             <div className="imdf-pub-node__result imdf-pub-node__result--error">
-              <div style={{ fontWeight: 600 }}>✗ Pubblicazione fallita</div>
+              <div className="imdf-pub-node__result-title">✗ Pubblicazione fallita</div>
               <div className="imdf-pub-node__result-err">{publishError}</div>
             </div>
           )}
@@ -453,7 +446,7 @@ const ImdfPublisherNode = memo(({ data, id }) => {
           {/* Risultato ultima pubblicazione */}
           {!publishing && !publishError && lastResult && (
             <div className={`imdf-pub-node__result ${lastResult.success ? 'imdf-pub-node__result--success' : 'imdf-pub-node__result--error'}`}>
-              <div style={{ fontWeight: 600 }}>
+              <div className="imdf-pub-node__result-title">
                 {lastResult.success ? '✓ Pubblicato su ArcGIS' : '✗ Errore pubblicazione'}
                 {lastResult.mode ? ` (${lastResult.mode})` : ''}
               </div>

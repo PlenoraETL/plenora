@@ -417,7 +417,7 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
                       <input type="number" className="wiz-input" value={form.batch_size}
                         onChange={e => updateForm('batch_size', parseInt(e.target.value) || 1000)} min={100} max={50000} />
                     </div>
-                    <div className="wiz-field" style={{ display:'flex', alignItems:'center', paddingTop:24 }}>
+                    <div className="wiz-field wiz-field--check-aligned">
                       <label className="wiz-check-label">
                         <input type="checkbox" checked={form.verify_destination_connection}
                           onChange={e => updateForm('verify_destination_connection', e.target.checked)} />

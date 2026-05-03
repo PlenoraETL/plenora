@@ -60,14 +60,11 @@ const ResultNodeImdfView = memo(({
 
   return (
     <>
-      <div
-        className="result-node__section result-node__section--imdf"
-        style={{ background: 'rgba(124,58,237,0.08)', borderLeft: '3px solid #7C3AED', padding: '14px 14px', borderRadius: 6 }}
-      >
-        <div className="result-node__label" style={{ fontWeight: 700, color: '#7C3AED', marginBottom: 10 }}>
+      <div className="result-node__section result-node__section--imdf">
+        <div className="result-node__label result-node__label--imdf">
           📦 Bundle IMDF
           {!imdfData && (
-            <span style={{ marginLeft: 8, fontSize: 11, opacity: 0.6, fontWeight: 400 }}>
+            <span className="result-node__label-hint">
               (esegui per generare i dati)
             </span>
           )}
@@ -93,14 +90,13 @@ const ResultNodeImdfView = memo(({
           }}
         />
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div className="result-node__imdf-actions">
           <button
             type="button"
             disabled={!imdfData}
             onClick={(e) => { e.stopPropagation(); setOpenImdfModal('preview'); }}
             onMouseDown={(e) => e.stopPropagation()}
-            className="result-node__filename-input"
-            style={{ width: '100%', cursor: imdfData ? 'pointer' : 'not-allowed', textAlign: 'left', padding: '10px 14px', fontSize: 14, opacity: imdfData ? 1 : 0.5 }}
+            className="result-node__filename-input result-node__imdf-btn"
           >
             🗺️ Visualizza IMDF
           </button>
@@ -109,8 +105,7 @@ const ResultNodeImdfView = memo(({
             disabled={!imdfData?.manifest}
             onClick={(e) => { e.stopPropagation(); setOpenImdfModal('manifest'); }}
             onMouseDown={(e) => e.stopPropagation()}
-            className="result-node__filename-input"
-            style={{ width: '100%', cursor: imdfData?.manifest ? 'pointer' : 'not-allowed', textAlign: 'left', padding: '10px 14px', fontSize: 14, opacity: imdfData?.manifest ? 1 : 0.5 }}
+            className="result-node__filename-input result-node__imdf-btn"
           >
             📋 Visualizza Manifest
           </button>
@@ -119,8 +114,7 @@ const ResultNodeImdfView = memo(({
             disabled={!imdfData?.validation}
             onClick={(e) => { e.stopPropagation(); setOpenImdfModal('validation'); }}
             onMouseDown={(e) => e.stopPropagation()}
-            className="result-node__filename-input"
-            style={{ width: '100%', cursor: imdfData?.validation ? 'pointer' : 'not-allowed', textAlign: 'left', padding: '10px 14px', fontSize: 14, opacity: imdfData?.validation ? 1 : 0.5 }}
+            className="result-node__filename-input result-node__imdf-btn"
           >
             ⚠️ Visualizza Validation
           </button>
@@ -131,8 +125,7 @@ const ResultNodeImdfView = memo(({
               type="button"
               onClick={(e) => { e.stopPropagation(); onExecute(); }}
               onMouseDown={(e) => e.stopPropagation()}
-              className={`result-node__execute-btn result-node__execute-btn--${nodeVariant}`}
-              style={{ marginTop: 6, width: '100%' }}
+              className={`result-node__execute-btn result-node__execute-btn--${nodeVariant} result-node__execute-btn--full`}
             >
               <span className="result-node__execute-icon">▶️</span>
               <span>{executeLabel}</span>

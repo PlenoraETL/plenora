@@ -229,3 +229,8 @@
 [data-theme='light'] .oai__spec-card { background: #F0F4FF; }
 [data-theme='light'] .oai__tabs { background: #F0F4FF; }
 [data-theme='light'] .oai__field-item { background: #EEF2FF; }
+
+/* ── Inline-style migration (FE-PHASE2-INLINE-STYLES-005) ────────────── */
+.oai__footer-count        { margin-right: auto; font-size: 13px; color: var(--plen-text-sub); }
+.oai__file-input--hidden  { display: none; }
+.oai__field-group--mt-md  { margin-top: 10px; }

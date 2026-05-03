@@ -169,7 +169,7 @@ function OpenAPIImportModal({ onClose, onImport }) {
       footer={
         <>
           {parsedSpec && (
-            <span style={{ marginRight: 'auto', fontSize: 13, color: 'var(--plen-text-sub)' }}>
+            <span className="oai__footer-count">
               {selectedEndpoints.length} endpoint selezionati
             </span>
           )}
@@ -206,7 +206,7 @@ function OpenAPIImportModal({ onClose, onImport }) {
                 <div className="oai__field-group">
                   <div className="oai__label">Carica file OpenAPI (JSON/YAML)</div>
                   <label className="oai__file-drop">
-                    <input type="file" accept=".json,.yaml,.yml" onChange={handleFileUpload} style={{display:'none'}}/>
+                    <input type="file" accept=".json,.yaml,.yml" onChange={handleFileUpload} className="oai__file-input--hidden"/>
                     <span className="oai__file-icon">📂</span>
                     <span>Clicca per selezionare o trascina il file</span>
                     <span className="oai__file-hint">.json / .yaml / .yml</span>
@@ -241,7 +241,7 @@ function OpenAPIImportModal({ onClose, onImport }) {
                 {parsedSpec.baseUrl ? (
                   <div className="oai__spec-url"><span className="oai__spec-url-label">Base URL</span><code>{parsedSpec.baseUrl}</code></div>
                 ) : (
-                  <div className="oai__field-group" style={{marginTop:10}}>
+                  <div className="oai__field-group oai__field-group--mt-md">
                     <div className="oai__label">⚠ Base URL non rilevata — inserisci manualmente</div>
                     <input className="oai__input oai__input--mono" value={manualBaseUrl} onChange={e=>setManualBaseUrl(e.target.value)} placeholder="https://api.example.com"/>
                   </div>

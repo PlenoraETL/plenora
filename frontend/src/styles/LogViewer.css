@@ -99,7 +99,7 @@
 .lv__content::-webkit-scrollbar { width:4px; }
 .lv__content::-webkit-scrollbar-thumb { background:var(--lv-surface-3); border-radius:9px; }
 .lv__hex-bg { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:0; }
-.lv__stats, .lv__filters, .lv__table-wrap, .lv__pagination { position:relative; z-index:1; }
+.lv__stats, .lv__filters, .lv__table-wrap, .lv__pagination, .lv__main-tabs { position:relative; z-index:1; }
 
 /* Stats */
 .lv__stats { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
@@ -351,6 +351,14 @@
 
 /* Riga tabella cliccabile (toggle dettaglio run). */
 .lv__row--clickable { cursor: pointer; }
+
+/* Riga "expandable" su technical log: cursore varia in base a hasDetails;
+   l'`--inert` resta col cursore default (computed runtime, vedi LogViewer.jsx). */
+.lv__row--expandable { cursor: pointer; }
+.lv__row--inert      { cursor: default; }
+
+/* Helper margin per button residual (es. "Reset filtri" empty state). */
+.lv__btn--mt-md { margin-top: 12px; }
 
 /* Cella mono (DM Mono) per project_id/durata/righe out. Variante size
    11px ha colore sub; size 12px ha colore default cell. */

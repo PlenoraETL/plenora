@@ -332,3 +332,29 @@
   font-family: var(--plen-font-mono, 'JetBrains Mono'), monospace;
   word-break: break-word;
 }
+
+/* ── Inline-style migration (FE-PHASE2-INLINE-STYLES-005) ──────────────
+   Pattern centralizzato come `carica-arcgis-node__error` (vedi
+   FE-PHASE2-INLINE-STYLES-004) — entrambi sono PATTERN_CANDIDATE per
+   un futuro warning-banner shared. */
+.imdf-pub-node__error {
+  background: #fff4e5;
+  border: 1px solid #d97706;
+  border-radius: 4px;
+  color: #92400e;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+}
+.imdf-pub-node__error-detail {
+  font-size: 0.85em;
+  margin-top: 4px;
+  opacity: 0.85;
+}
+.imdf-pub-node__bundle-hint {
+  font-size: 9px;
+  opacity: 0.6;
+  margin-left: 8px;
+}
+.imdf-pub-node__result-title {
+  font-weight: 600;
+}

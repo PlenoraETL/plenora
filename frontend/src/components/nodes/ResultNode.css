@@ -757,3 +757,46 @@
 }
 
 [data-theme='light'] .result-node__history-btn { color: #3B6FD4; }
+
+/* ── Inline-style migration (FE-PHASE2-INLINE-STYLES-005) ──────────────
+   Variant IMDF (brand viola #7C3AED). Sostituisce inline ricorrenti
+   in `result/ResultNodeImdfView.jsx`. */
+.result-node__section--imdf {
+  background: rgba(124,58,237,0.08);
+  border-left: 3px solid #7C3AED;
+  padding: 14px 14px;
+  border-radius: 6px;
+}
+.result-node__label--imdf {
+  font-weight: 700;
+  color: #7C3AED;
+  margin-bottom: 10px;
+}
+.result-node__label-hint {
+  margin-left: 8px;
+  font-size: 11px;
+  opacity: 0.6;
+  font-weight: 400;
+}
+.result-node__imdf-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+/* Bottoni IMDF lazy-modal: stesso layout, opacita' guidata da
+   `disabled` (default browser style) invece di inline opacity. */
+.result-node__imdf-btn {
+  width: 100%;
+  text-align: left;
+  padding: 10px 14px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.result-node__imdf-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.result-node__execute-btn--full {
+  margin-top: 6px;
+  width: 100%;
+}

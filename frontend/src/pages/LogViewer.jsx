@@ -173,7 +173,7 @@ function LogViewer() {
               disponibile. Per i non-admin esiste solo "Esecuzioni" → niente
               tab bar, va direttamente al contenuto. */}
           {canSeeTechnicalLog && (
-            <div className="lv__main-tabs" style={{ position: 'relative', zIndex: 1 }}>
+            <div className="lv__main-tabs">
               <button
                 className={`lv__main-tab${mainTab === 'runs' ? ' lv__main-tab--on' : ''}`}
                 onClick={() => setMainTab('runs')}>
@@ -208,11 +208,10 @@ function LogViewer() {
                 <button
                   type="button"
                   key={s.key}
-                  className={`lv__stat lv__stat--${s.mod}${filterLevel === s.key ? ' lv__stat--active' : ''}`}
+                  className={`lv__stat lv__stat--${s.mod} lv__btn-reset${filterLevel === s.key ? ' lv__stat--active' : ''}`}
                   onClick={() => setFilterLevel(filterLevel === s.key ? '' : s.key)}
                   aria-pressed={filterLevel === s.key}
-                  aria-label={`Filtra log per livello ${s.label}`}
-                  style={{ cursor: 'pointer', textAlign: 'inherit', font: 'inherit', color: 'inherit', appearance: 'none', WebkitAppearance: 'none' }}>
+                  aria-label={`Filtra log per livello ${s.label}`}>
                   <span className="lv__stat-label">{s.label}</span>
                   <span className="lv__stat-val">{s.val}</span>
                   <span className="lv__stat-sub">clicca per filtrare</span>
@@ -272,7 +271,7 @@ function LogViewer() {
                     <td colSpan="6" className="lv__empty">
                       <div className="lv__empty-icon">📋</div>
                       <div>Nessun log trovato</div>
-                      {hasFilters && <button type="button" className="lv__btn lv__btn--ghost lv__btn--sm" style={{ marginTop: 12 }} onClick={resetFilters}>Reset filtri</button>}
+                      {hasFilters && <button type="button" className="lv__btn lv__btn--ghost lv__btn--sm lv__btn--mt-md" onClick={resetFilters}>Reset filtri</button>}
                     </td>
                   </tr>
                 ) : logs.map((entry, idx) => {
@@ -284,9 +283,8 @@ function LogViewer() {
                   return (
                     <React.Fragment key={idx}>
                       <tr
-                        className={`lv__row lv__row--${(entry.level||'').toLowerCase()}${isExpanded ? ' lv__row--expanded' : ''}`}
-                        onClick={() => hasDetails && setExpandedRow(isExpanded ? null : idx)}
-                        style={{ cursor: hasDetails ? 'pointer' : 'default' }}>
+                        className={`lv__row lv__row--${(entry.level||'').toLowerCase()} ${hasDetails ? 'lv__row--expandable' : 'lv__row--inert'}${isExpanded ? ' lv__row--expanded' : ''}`}
+                        onClick={() => hasDetails && setExpandedRow(isExpanded ? null : idx)}>
                         <td className="lv__td lv__td--time">
                           {hasDetails && (
                             <button
