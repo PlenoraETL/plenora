@@ -13,9 +13,8 @@
  *     al panel per preservare l'ordine visivo;
  *   - dispatch a `GroupOrderHavingPanel` (GROUP BY + aggregazioni + ORDER BY + HAVING)
  *     dopo l'estrazione `FE-SPLIT-005B`;
- *   - modalita' esecuzione cache|recalculate (MANIPOLA/ARRICCHISCI);
- *   - bottoni Valida / Preview / Esegui / Cronologia;
- *   - RunHistoryModal (trigger + stato open/close);
+ *   - dispatch a `ExecuteActionsPanel` (execution mode + bottoni Valida/Preview/
+ *     Esegui + footer cronologia + RunHistoryModal) dopo l'estrazione `FE-SPLIT-005C`;
  *   - deriva localmente nodeVariant/executeLabel da data.isManipulate/isArricchisci.
  *
  * NON owna:
@@ -26,6 +25,9 @@
  *     estratti in `GroupOrderHavingPanel` (FE-SPLIT-005B); il parent
  *     passa `availableColumns`, `manipolaColumns`, `isEstrai`, `isManipulate`
  *     come props;
+ *   - executionMode + isRunHistoryOpen useState + RunHistoryModal: estratti in
+ *     `ExecuteActionsPanel` (FE-SPLIT-005C); il parent passa `nodeVariant`,
+ *     `executeLabel`, `hasExecutionOptions`, `isArricchisci` + le 3 callback;
  *   - ValidationModal: stato del parent, triggerata sia da qui sia da IMDF view;
  *   - logica runValidation/onExecute/onPreview: ricevute come callback;
  *   - upstreamColumns: computata dal parent (serve useReactFlow).
@@ -50,9 +52,9 @@ import {
   getColumnSRID,
   isGeometryType,
 } from '../../../utils/columnUtils';
-import RunHistoryModal from '../../modals/RunHistoryModal';
 import OutputSettingsPanel from './standard/OutputSettingsPanel';
 import GroupOrderHavingPanel from './standard/GroupOrderHavingPanel';
+import ExecuteActionsPanel from './standard/ExecuteActionsPanel';
 
 const COLUMNS_PREVIEW = 5;
 
@@ -68,8 +70,6 @@ const ResultNodeStandardView = memo(({
 }) => {
   const updateNodeData = useCanvasStore(s => s.updateNodeData);
 
-  const [isRunHistoryOpen, setIsRunHistoryOpen] = useState(false);
-  const [executionMode, setExecutionMode] = useState('cache');
   const [columnsExpanded, setColumnsExpanded] = useState(false);
 
   // Tipi progetto (derivati da data)
@@ -229,109 +229,18 @@ const ResultNodeStandardView = memo(({
         manipolaColumns={manipolaColumns}
       />
 
-      {/* Modalita' Esecuzione (Manipola/Arricchisci) */}
-      {hasExecutionOptions && (
-        <div className="result-node__execution-options">
-          <div className="result-node__label">Esecuzione:</div>
-
-          <label className={`result-node__execution-option ${
-            executionMode === 'cache' ? 'result-node__execution-option--selected' : ''
-          }`}>
-            <input
-              type="radio"
-              name={`executionMode-${id}`}
-              value="cache"
-              checked={executionMode === 'cache'}
-              onChange={(e) => setExecutionMode(e.target.value)}
-              className="result-node__execution-radio"
-            />
-            <div className="result-node__execution-content">
-              <div className="result-node__execution-title">
-                ⚡ Usa cache esistente
-              </div>
-              <div className="result-node__execution-desc">
-                Veloce - carica dati già elaborati (se disponibili)
-              </div>
-            </div>
-          </label>
-
-          <label className={`result-node__execution-option ${
-            executionMode === 'recalculate' ? 'result-node__execution-option--selected' : ''
-          }`}>
-            <input
-              type="radio"
-              name={`executionMode-${id}`}
-              value="recalculate"
-              checked={executionMode === 'recalculate'}
-              onChange={(e) => setExecutionMode(e.target.value)}
-              className="result-node__execution-radio"
-            />
-            <div className="result-node__execution-content">
-              <div className="result-node__execution-title">
-                🔄 Ricalcola tutto
-              </div>
-              <div className="result-node__execution-desc">
-                {isArricchisci
-                  ? 'Aggiornato - riesegue tutte le chiamate API'
-                  : 'Aggiornato - riesegue tutte le query SQL'}
-              </div>
-            </div>
-          </label>
-        </div>
-      )}
-
-      {/* Bottoni azione */}
-      <div className="result-node__actions">
-        <button type="button"
-          onClick={onValidate}
-          className="result-node__validate-btn"
-          title="Valida il canvas prima di eseguire"
-        >
-          <span>🔍</span>
-          <span>Valida</span>
-        </button>
-
-        {hasOnPreview && (
-          <button type="button"
-            onClick={onPreview}
-            className={`result-node__preview-btn result-node__preview-btn--${nodeVariant}`}
-          >
-            <span className="result-node__preview-icon">👁️</span>
-            <span>Preview</span>
-          </button>
-        )}
-
-        {hasOnExecute && (
-          <button type="button"
-            onClick={() => onExecute({ force_recalculate: executionMode === 'recalculate' })}
-            className={`result-node__execute-btn result-node__execute-btn--${nodeVariant}`}
-          >
-            <span className="result-node__execute-icon">▶️</span>
-            <span>{executeLabel}</span>
-          </button>
-        )}
-      </div>
-
-      {/* Footer cronologia run */}
-      <div className="result-node__footer">
-        <button type="button"
-          onClick={(e) => { e.stopPropagation(); setIsRunHistoryOpen(true); }}
-          onMouseDown={(e) => e.stopPropagation()}
-          className="result-node__history-btn"
-          title="Cronologia esecuzioni"
-        >
-          <span>🕐</span>
-          <span>Cronologia run</span>
-        </button>
-      </div>
-
-      {/* Modal cronologia run */}
-      <RunHistoryModal
-        isOpen={isRunHistoryOpen}
-        onClose={() => setIsRunHistoryOpen(false)}
-        canvasId={data.project_id || data.canvas_id}
-        nodeId={id}
-        nodeLabel="Output"
+      <ExecuteActionsPanel
+        data={data}
+        id={id}
+        nodeVariant={nodeVariant}
+        executeLabel={executeLabel}
+        hasExecutionOptions={hasExecutionOptions}
+        isArricchisci={isArricchisci}
+        hasOnPreview={hasOnPreview}
+        hasOnExecute={hasOnExecute}
+        onValidate={onValidate}
+        onPreview={onPreview}
+        onExecute={onExecute}
       />
     </>
   );
