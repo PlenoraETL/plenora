@@ -5,32 +5,27 @@
  * lastTaskResult.imdf.manifest) + `publish` (risultato dell'upload ArcGIS
  * eventualmente prodotto da un nodo imdf_publisher nel canvas).
  *
- * Tema scuro cyan coerente con ImdfPreviewModal (JetBrains Mono,
- * #0c0e14 / #7c3aed).
+ * Tema scuro cyan: usa lo shell condiviso `imdf-modal.css`
+ * (FE-PHASE2-IMDF-MODAL-SHELL-001) per overlay/panel/header/body/footer.
+ * Le palette dinamiche (per-stato pub, per-severity validation) restano
+ * inline runtime via le CSS vars `--imdf-modal-*`.
  */
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 
-// Tokens → var(--plen-*) del design system Plenora. Seguono data-theme
-// automaticamente. Il cyan resta costante come brand IMDF.
-// Mapping visivo:
-//   bg      = modale esterno        → var(--plen-surface)  (white in light)
-//   surface = header + card interne → var(--plen-surface-2)
-//   inset   = pre/JSON              → var(--plen-bg)       (background pagina)
-const TOKENS = {
-  bg:       'var(--plen-surface, #0C0F18)',
-  surface:  'var(--plen-surface-2, #111525)',
-  inset:    'var(--plen-bg, #07090F)',
-  border:   'var(--plen-border, rgba(255,255,255,0.08))',
-  accent:   '#7C3AED',                          // IMDF brand (violet Plenora)
-  accent2:  'var(--plen-manipola, #7c3aed)',
-  text:     'var(--plen-text, #DDE4F2)',
-  muted:    'var(--plen-text-sub, #7D8BA8)',
-  dim:      'var(--plen-text-dim, #3F4D68)',
-  danger:   'var(--plen-err, #F87171)',
-  warn:     'var(--plen-warn, #FBBF24)',
-  success:  'var(--plen-ok, #34D399)',
-  font:     "var(--plen-font-mono, 'JetBrains Mono'), ui-monospace, Menlo, monospace",
+// Palette dinamica esposta via CSS vars (var(--imdf-modal-*)). Usata solo
+// per gli style inline che dipendono da valori runtime (color/danger/
+// success per Row).
+const VARS = {
+  accent:  'var(--imdf-modal-accent)',
+  accent2: 'var(--imdf-modal-accent2)',
+  text:    'var(--imdf-modal-text)',
+  muted:   'var(--imdf-modal-muted)',
+  border:  'var(--imdf-modal-border)',
+  surface: 'var(--imdf-modal-surface)',
+  font:    'var(--imdf-modal-font)',
+  danger:  'var(--imdf-modal-danger)',
+  success: 'var(--imdf-modal-success)',
 };
 
 export default function ImdfManifestModal({ isOpen, onClose, manifest, siteId, publish }) {
@@ -44,64 +39,29 @@ export default function ImdfManifestModal({ isOpen, onClose, manifest, siteId, p
   const pub        = publish || null;
 
   return createPortal((
-    <div
-      onClick={onClose}
-      style={{
-        position: 'fixed', inset: 0,
-        background: 'rgba(0,0,0,0.72)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        zIndex: 'var(--z-modal-priority, 10000)',
-        fontFamily: TOKENS.font,
-      }}
-    >
+    <div onClick={onClose} className="imdf-modal__overlay">
       <div
         onClick={(e) => e.stopPropagation()}
-        style={{
-          background: TOKENS.bg,
-          color: TOKENS.text,
-          border: `1px solid ${TOKENS.border}`,
-          borderRadius: 10,
-          width: 'min(780px, 94vw)',
-          maxHeight: '90vh',
-          boxShadow: '0 24px 80px rgba(0,0,0,0.7)',
-          display: 'flex', flexDirection: 'column',
-          overflow: 'hidden',
-        }}
+        className="imdf-modal__panel imdf-modal__panel--md"
       >
         {/* Header */}
-        <div style={{
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          padding: '16px 20px',
-          background: TOKENS.surface,
-          borderBottom: `1px solid ${TOKENS.border}`,
-        }}>
+        <div className="imdf-modal__header">
           <div>
-            <h2 style={{
-              margin: 0, fontSize: 15, fontWeight: 800,
-              color: TOKENS.accent, letterSpacing: 0.3,
-            }}>
-              📋 Manifest IMDF
-            </h2>
-            <div style={{
-              fontSize: 9, color: TOKENS.muted, textTransform: 'uppercase',
-              letterSpacing: 0.5, marginTop: 2,
-            }}>
+            <h2 className="imdf-modal__title">📋 Manifest IMDF</h2>
+            <div className="imdf-modal__subtitle">
               {siteId ? `Site · ${siteId}` : 'Processing metadata'}
             </div>
           </div>
-          <button type="button" onClick={onClose} style={{
-            background: 'none', border: 'none', color: TOKENS.muted,
-            fontSize: 18, cursor: 'pointer', padding: 4,
-          }}>✕</button>
+          <button type="button" onClick={onClose} className="imdf-modal__close">✕</button>
         </div>
 
         {/* Body */}
         {!manifest ? (
-          <div style={{ padding: '30px 20px', color: TOKENS.muted, fontSize: 12, textAlign: 'center' }}>
+          <div className="imdf-modal__empty">
             Nessun manifest disponibile. Esegui il canvas per generare i dati IMDF.
           </div>
         ) : (
-          <div style={{ overflow: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <div className="imdf-modal__body imdf-modal__body--col">
 
             {/* Processing */}
             <Section title="Processing">
@@ -114,18 +74,8 @@ export default function ImdfManifestModal({ isOpen, onClose, manifest, siteId, p
             {Object.keys(sites).length > 0 && (
               <Section title="Siti">
                 {Object.entries(sites).map(([sid, info]) => (
-                  <div key={sid} style={{
-                    background: TOKENS.surface,
-                    border: `1px solid ${TOKENS.border}`,
-                    borderLeft: `3px solid ${TOKENS.accent2}`,
-                    borderRadius: 6,
-                    padding: '10px 12px',
-                    marginBottom: 8,
-                  }}>
-                    <div style={{
-                      fontSize: 12, fontWeight: 700, color: TOKENS.accent,
-                      marginBottom: 6, letterSpacing: 0.3,
-                    }}>{sid}</div>
+                  <div key={sid} className="imdf-modal__card">
+                    <div className="imdf-modal__card-title">{sid}</div>
                     <Row k="Livelli"   v={info.levels} />
                     <Row k="Locali"    v={info.units} />
                     <Row k="Aperture"  v={info.openings} />
@@ -139,7 +89,7 @@ export default function ImdfManifestModal({ isOpen, onClose, manifest, siteId, p
             {validation && Object.keys(validation).length > 0 && (
               <Section title="Validazione">
                 <Row k="Esito"          v={validation.passed ? '✓ OK' : '✗ Errori'}
-                                        color={validation.passed ? TOKENS.success : TOKENS.danger} />
+                                        color={validation.passed ? VARS.success : VARS.danger} />
                 <Row k="Errori totali"  v={validation.total_errors} />
                 <Row k="Warning totali" v={validation.total_warnings} />
               </Section>
@@ -150,33 +100,33 @@ export default function ImdfManifestModal({ isOpen, onClose, manifest, siteId, p
               <Section title="Pubblicazione ArcGIS">
                 <Row k="Esito"
                      v={pub.success ? '✓ Pubblicato' : '✗ Errore'}
-                     color={pub.success ? TOKENS.success : TOKENS.danger} />
+                     color={pub.success ? VARS.success : VARS.danger} />
                 {pub.folder_id         && <Row k="Folder"  v={pub.folder_id} mono />}
                 {pub.service_item_id   && <Row k="Item ID" v={pub.service_item_id} mono />}
 
                 {Array.isArray(pub.layers) && pub.layers.length > 0 && (
                   <div style={{
                     marginTop: 8,
-                    background: TOKENS.surface,
-                    border: `1px solid ${TOKENS.border}`,
+                    background: VARS.surface,
+                    border: `1px solid ${VARS.border}`,
                     borderRadius: 6,
                     padding: '8px 12px',
                   }}>
                     <div style={{
-                      fontSize: 9, color: TOKENS.muted, textTransform: 'uppercase',
+                      fontSize: 9, color: VARS.muted, textTransform: 'uppercase',
                       letterSpacing: 1, marginBottom: 6,
                     }}>Layer caricati</div>
                     {pub.layers.map((l) => (
                       <div key={l.id ?? l.name} style={{
                         display: 'flex', justifyContent: 'space-between',
                         fontSize: 11, padding: '4px 0',
-                        borderBottom: `1px dashed ${TOKENS.border}`,
+                        borderBottom: `1px dashed ${VARS.border}`,
                       }}>
                         <span>
-                          <span style={{ color: TOKENS.muted, marginRight: 6 }}>#{l.id}</span>
-                          <span style={{ color: TOKENS.text }}>{l.name}</span>
+                          <span style={{ color: VARS.muted, marginRight: 6 }}>#{l.id}</span>
+                          <span style={{ color: VARS.text }}>{l.name}</span>
                         </span>
-                        <span style={{ color: TOKENS.accent }}>{l.feature_count ?? 0} feat.</span>
+                        <span style={{ color: VARS.accent }}>{l.feature_count ?? 0} feat.</span>
                       </div>
                     ))}
                   </div>
@@ -196,9 +146,9 @@ export default function ImdfManifestModal({ isOpen, onClose, manifest, siteId, p
                          display: 'inline-flex', alignItems: 'center', gap: 6,
                          padding: '7px 14px',
                          background: 'rgba(124,58,237,0.12)',
-                         border: `1px solid ${TOKENS.accent}55`,
+                         border: `1px solid ${VARS.accent}55`,
                          borderRadius: 5,
-                         color: TOKENS.accent,
+                         color: VARS.accent,
                          fontSize: 11,
                          fontWeight: 600,
                          textDecoration: 'none',
@@ -213,13 +163,13 @@ export default function ImdfManifestModal({ isOpen, onClose, manifest, siteId, p
                 {pub.error && (
                   <div style={{
                     marginTop: 8,
-                    color: TOKENS.danger,
+                    color: VARS.danger,
                     fontSize: 11,
                     background: 'rgba(239,68,68,0.08)',
-                    border: `1px solid ${TOKENS.danger}40`,
+                    border: `1px solid ${VARS.danger}40`,
                     borderRadius: 5,
                     padding: '8px 10px',
-                    fontFamily: TOKENS.font,
+                    fontFamily: VARS.font,
                   }}>
                     {pub.error}
                   </div>
@@ -231,36 +181,13 @@ export default function ImdfManifestModal({ isOpen, onClose, manifest, siteId, p
             <button
               type="button"
               onClick={() => setShowRaw(v => !v)}
-              style={{
-                alignSelf: 'flex-start',
-                background: TOKENS.surface,
-                border: `1px solid ${TOKENS.border}`,
-                color: TOKENS.text,
-                padding: '6px 12px',
-                borderRadius: 5,
-                cursor: 'pointer',
-                fontSize: 10,
-                fontWeight: 600,
-                textTransform: 'uppercase',
-                letterSpacing: 0.5,
-                fontFamily: TOKENS.font,
-              }}
+              className="imdf-modal__toggle"
             >
               {showRaw ? '▲ Nascondi JSON' : '▼ Mostra JSON completo'}
             </button>
 
             {showRaw && (
-              <pre style={{
-                background: TOKENS.inset,
-                border: `1px solid ${TOKENS.border}`,
-                padding: 12,
-                borderRadius: 6,
-                fontSize: 10,
-                maxHeight: 340,
-                overflow: 'auto',
-                margin: 0,
-                color: TOKENS.muted,
-              }}>{JSON.stringify(m, null, 2)}</pre>
+              <pre className="imdf-modal__pre">{JSON.stringify(m, null, 2)}</pre>
             )}
           </div>
         )}
@@ -273,11 +200,7 @@ export default function ImdfManifestModal({ isOpen, onClose, manifest, siteId, p
 function Section({ title, children }) {
   return (
     <div>
-      <div style={{
-        fontSize: 9, color: TOKENS.muted, textTransform: 'uppercase',
-        letterSpacing: 1, marginBottom: 8,
-        paddingBottom: 4, borderBottom: `1px solid ${TOKENS.border}`,
-      }}>{title}</div>
+      <div className="imdf-modal__section-title">{title}</div>
       <div>{children}</div>
     </div>
   );
@@ -286,17 +209,12 @@ function Section({ title, children }) {
 function Row({ k, v, color, mono }) {
   if (v === undefined || v === null || v === '') return null;
   return (
-    <div style={{
-      display: 'flex', gap: 12, fontSize: 11,
-      padding: '4px 0',
-    }}>
-      <div style={{ minWidth: 140, color: TOKENS.muted }}>{k}</div>
-      <div style={{
-        flex: 1,
-        color: color || TOKENS.text,
-        fontFamily: mono ? TOKENS.font : 'inherit',
-        wordBreak: 'break-word',
-      }}>
+    <div className="imdf-modal__kv">
+      <div className="imdf-modal__kv-label">{k}</div>
+      <div
+        className={`imdf-modal__kv-value${mono ? ' imdf-modal__kv-value--mono' : ''}`}
+        style={color ? { color } : undefined}
+      >
         {typeof v === 'object' ? JSON.stringify(v) : String(v)}
       </div>
     </div>

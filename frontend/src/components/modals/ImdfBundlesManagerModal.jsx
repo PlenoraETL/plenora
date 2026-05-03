@@ -5,22 +5,22 @@
  * azioni per-bundle: usa come input publisher, elimina.
  * Non fa fetch autonomo: riceve `bundles` dal parent e invoca callback
  * `onSelect` / `onDelete` / `onClose`.
+ *
+ * Tema scuro cyan: usa lo shell condiviso `imdf-modal.css`
+ * (FE-PHASE2-IMDF-MODAL-SHELL-001).
  */
 import React, { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 
-const TOKENS = {
-  bg:       'var(--plen-surface, #0C0F18)',
-  surface:  'var(--plen-surface-2, #111525)',
-  inset:    'var(--plen-bg, #07090F)',
-  border:   'var(--plen-border, rgba(255,255,255,0.08))',
-  accent:   '#7C3AED',
-  text:     'var(--plen-text, #DDE4F2)',
-  muted:    'var(--plen-text-sub, #7D8BA8)',
-  danger:   'var(--plen-err, #F87171)',
-  warn:     'var(--plen-warn, #FBBF24)',
-  success:  'var(--plen-ok, #34D399)',
-  font:     "var(--plen-font-mono, 'JetBrains Mono'), ui-monospace, Menlo, monospace",
+const VARS = {
+  accent:  'var(--imdf-modal-accent)',
+  text:    'var(--imdf-modal-text)',
+  muted:   'var(--imdf-modal-muted)',
+  border:  'var(--imdf-modal-border)',
+  surface: 'var(--imdf-modal-surface)',
+  font:    'var(--imdf-modal-font)',
+  danger:  'var(--imdf-modal-danger)',
+  success: 'var(--imdf-modal-success)',
 };
 
 function _ageLabel(h) {
@@ -31,9 +31,9 @@ function _ageLabel(h) {
 }
 
 function _validationLabel(vs) {
-  if (!vs) return { label: '—', color: TOKENS.muted };
-  if (vs.passed) return { label: '✓ valido', color: TOKENS.success };
-  return { label: `✗ ${vs.total_errors || 0} err`, color: TOKENS.danger };
+  if (!vs) return { label: '—', color: VARS.muted };
+  if (vs.passed) return { label: '✓ valido', color: VARS.success };
+  return { label: `✗ ${vs.total_errors || 0} err`, color: VARS.danger };
 }
 
 export default function ImdfBundlesManagerModal({
@@ -80,81 +80,35 @@ export default function ImdfBundlesManagerModal({
   };
 
   return createPortal((
-    <div
-      onClick={onClose}
-      style={{
-        position: 'fixed', inset: 0,
-        background: 'rgba(0,0,0,0.72)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        zIndex: 'var(--z-modal-priority, 10000)',
-        fontFamily: TOKENS.font,
-      }}
-    >
+    <div onClick={onClose} className="imdf-modal__overlay">
       <div
         onClick={(e) => e.stopPropagation()}
-        style={{
-          background: TOKENS.bg,
-          color: TOKENS.text,
-          border: `1px solid ${TOKENS.border}`,
-          borderRadius: 10,
-          width: 'min(1100px, 96vw)',
-          height: 'min(760px, 90vh)',
-          boxShadow: '0 24px 80px rgba(0,0,0,0.7)',
-          display: 'flex', flexDirection: 'column', overflow: 'hidden',
-        }}
+        className="imdf-modal__panel imdf-modal__panel--xxl"
       >
         {/* Header */}
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '16px 20px', background: TOKENS.surface,
-          borderBottom: `1px solid ${TOKENS.border}`,
-        }}>
+        <div className="imdf-modal__header">
           <div>
-            <h2 style={{
-              margin: 0, fontSize: 15, fontWeight: 800,
-              color: TOKENS.accent, letterSpacing: 0.3,
-            }}>
-              📚 Cronologia bundle IMDF
-            </h2>
-            <div style={{
-              fontSize: 9, color: TOKENS.muted, marginTop: 2,
-              textTransform: 'uppercase', letterSpacing: 0.5,
-            }}>
+            <h2 className="imdf-modal__title">📚 Cronologia bundle IMDF</h2>
+            <div className="imdf-modal__subtitle">
               {bundles.length} bundle · {filtered.length} visibili
             </div>
           </div>
-          <button type="button" onClick={onClose} style={{
-            background: 'none', border: 'none', color: TOKENS.muted,
-            fontSize: 18, cursor: 'pointer', padding: 4,
-          }}>✕</button>
+          <button type="button" onClick={onClose} className="imdf-modal__close">✕</button>
         </div>
 
         {/* Filtri */}
-        <div style={{
-          display: 'flex', gap: 10, alignItems: 'center',
-          padding: '12px 20px', borderBottom: `1px solid ${TOKENS.border}`,
-        }}>
+        <div className="imdf-modal__filters imdf-modal__filters--gap-md">
           <input
             type="text"
             placeholder="Filtra per site_id..."
             value={filterSite}
             onChange={e => setFilterSite(e.target.value)}
-            style={{
-              flex: 1, background: TOKENS.surface,
-              border: `1px solid ${TOKENS.border}`,
-              color: TOKENS.text, padding: '6px 10px',
-              borderRadius: 4, fontSize: 11, fontFamily: TOKENS.font,
-            }}
+            className="imdf-modal__field"
           />
           <select
             value={filterStatus}
             onChange={e => setFilterStatus(e.target.value)}
-            style={{
-              background: TOKENS.surface,
-              border: `1px solid ${TOKENS.border}`,
-              color: TOKENS.text, padding: '6px 10px',
-              borderRadius: 4, fontSize: 11, fontFamily: TOKENS.font,
-            }}
+            className="imdf-modal__select"
           >
             <option value="all">Tutti</option>
             <option value="valid">Solo validi</option>
@@ -163,29 +117,24 @@ export default function ImdfBundlesManagerModal({
         </div>
 
         {/* Tabella */}
-        <div style={{ flex: 1, overflow: 'auto' }}>
+        <div className="imdf-modal__body--flex">
           {filtered.length === 0 ? (
-            <div style={{
-              padding: '40px 20px', color: TOKENS.muted, fontSize: 12,
-              textAlign: 'center',
-            }}>
+            <div className="imdf-modal__empty imdf-modal__empty--lg">
               Nessun bundle trovato coi filtri selezionati.
             </div>
           ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+            <table className="imdf-modal__table">
               <thead>
-                <tr style={{
-                  background: TOKENS.surface, position: 'sticky', top: 0, zIndex: 1,
-                }}>
-                  <th style={thStyle}></th>
-                  <th style={thStyle}>Site</th>
-                  <th style={thStyle}>Età</th>
-                  <th style={thStyle}>Dimensioni</th>
-                  <th style={thStyle}>Edifici</th>
-                  <th style={thStyle}>Livelli</th>
-                  <th style={thStyle}>Locali</th>
-                  <th style={thStyle}>Validazione</th>
-                  <th style={thStyle}>Azioni</th>
+                <tr className="imdf-modal__thead-row">
+                  <th className="imdf-modal__th"></th>
+                  <th className="imdf-modal__th">Site</th>
+                  <th className="imdf-modal__th">Età</th>
+                  <th className="imdf-modal__th">Dimensioni</th>
+                  <th className="imdf-modal__th">Edifici</th>
+                  <th className="imdf-modal__th">Livelli</th>
+                  <th className="imdf-modal__th">Locali</th>
+                  <th className="imdf-modal__th">Validazione</th>
+                  <th className="imdf-modal__th">Azioni</th>
                 </tr>
               </thead>
               <tbody>
@@ -196,26 +145,26 @@ export default function ImdfBundlesManagerModal({
                   const isBusy = busyId === b.task_id;
                   return (
                     <tr key={b.task_id} style={{
-                      borderTop: `1px solid ${TOKENS.border}`,
+                      borderTop: `1px solid ${VARS.border}`,
                       background: isActive ? 'rgba(124,58,237,0.08)' : 'transparent',
                     }}>
-                      <td style={{ ...tdStyle, width: 24 }}>
-                        {isActive ? <span style={{ color: TOKENS.accent }}>●</span>
-                                  : <span style={{ color: TOKENS.muted }}>○</span>}
+                      <td className="imdf-modal__td" style={{ width: 24 }}>
+                        {isActive ? <span style={{ color: VARS.accent }}>●</span>
+                                  : <span style={{ color: VARS.muted }}>○</span>}
                       </td>
-                      <td style={{ ...tdStyle, fontWeight: 700, color: TOKENS.accent }}>
+                      <td className="imdf-modal__td" style={{ fontWeight: 700, color: VARS.accent }}>
                         {b.site_id || b.task_id.slice(0, 8)}
                       </td>
-                      <td style={{ ...tdStyle, color: TOKENS.muted }}>
+                      <td className="imdf-modal__td" style={{ color: VARS.muted }}>
                         {_ageLabel(b.age_hours)}
                       </td>
-                      <td style={{ ...tdStyle, color: TOKENS.muted }}>
+                      <td className="imdf-modal__td" style={{ color: VARS.muted }}>
                         {b.size_mb != null ? `${b.size_mb} MB` : '—'}
                       </td>
-                      <td style={tdStyle}>{b.building_count ?? '—'}</td>
-                      <td style={tdStyle}>{b.level_count ?? '—'}</td>
-                      <td style={tdStyle}>{b.unit_count ?? '—'}</td>
-                      <td style={tdStyle}>
+                      <td className="imdf-modal__td">{b.building_count ?? '—'}</td>
+                      <td className="imdf-modal__td">{b.level_count ?? '—'}</td>
+                      <td className="imdf-modal__td">{b.unit_count ?? '—'}</td>
+                      <td className="imdf-modal__td">
                         <span style={{
                           padding: '2px 7px', borderRadius: 3,
                           color: v.color, background: v.color + '14',
@@ -224,12 +173,12 @@ export default function ImdfBundlesManagerModal({
                           textTransform: 'uppercase', letterSpacing: 0.3,
                         }}>{v.label}</span>
                       </td>
-                      <td style={{ ...tdStyle, display: 'flex', gap: 6 }}>
+                      <td className="imdf-modal__td" style={{ display: 'flex', gap: 6 }}>
                         {!isActive && (
                           <button
                             type="button"
                             onClick={() => onSelect(b.task_id)}
-                            style={actionBtn(TOKENS.accent)}
+                            style={actionBtn(VARS.accent)}
                             title="Usa questo bundle nel publisher"
                           >Usa</button>
                         )}
@@ -237,7 +186,7 @@ export default function ImdfBundlesManagerModal({
                           type="button"
                           onClick={() => handleDelete(b.task_id)}
                           disabled={isBusy}
-                          style={actionBtn(isConfirming ? TOKENS.danger : TOKENS.muted, isConfirming)}
+                          style={actionBtn(isConfirming ? VARS.danger : VARS.muted, isConfirming)}
                           title={isConfirming ? 'Click di nuovo per confermare' : 'Elimina bundle'}
                         >
                           {isBusy ? '⏳' : isConfirming ? '✗ Conferma' : '🗑'}
@@ -252,24 +201,13 @@ export default function ImdfBundlesManagerModal({
         </div>
 
         {/* Footer */}
-        <div style={{
-          padding: '12px 20px', borderTop: `1px solid ${TOKENS.border}`,
-          background: TOKENS.surface, fontSize: 9, color: TOKENS.muted,
-          textAlign: 'center',
-        }}>
+        <div className="imdf-modal__footer">
           La cancellazione è definitiva: il bundle viene rimosso dal disco del server.
         </div>
       </div>
     </div>
   ), document.body);
 }
-
-const thStyle = {
-  padding: '10px 12px', fontSize: 9, color: TOKENS.muted,
-  fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1,
-  textAlign: 'left', borderBottom: `1px solid ${TOKENS.border}`,
-};
-const tdStyle = { padding: '8px 12px', verticalAlign: 'middle' };
 
 function actionBtn(color, filled = false) {
   return {
@@ -280,6 +218,6 @@ function actionBtn(color, filled = false) {
     background: filled ? color + '22' : 'transparent',
     color: color,
     cursor: 'pointer',
-    fontFamily: TOKENS.font,
+    fontFamily: VARS.font,
   };
 }

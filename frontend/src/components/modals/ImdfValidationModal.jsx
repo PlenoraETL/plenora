@@ -5,28 +5,25 @@
  * lastTaskResult.imdf.validation dal task celery). Mostra summary + tabella
  * errori/warning per livello.
  *
- * Tema scuro cyan coerente con ImdfPreviewModal / ImdfManifestModal.
+ * Tema scuro cyan: usa lo shell condiviso `imdf-modal.css`
+ * (FE-PHASE2-IMDF-MODAL-SHELL-001).
  * Nota Rules of Hooks: useState/useMemo devono stare PRIMA del return early
  * (React error #310 se spostati sotto).
  */
 import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 
-// Tokens → var(--plen-*) del design system Plenora. Seguono data-theme
-// automaticamente. Il cyan resta costante come brand IMDF.
-const TOKENS = {
-  bg:       'var(--plen-surface, #0C0F18)',    // modale esterno
-  surface:  'var(--plen-surface-2, #111525)',  // header + thead
-  inset:    'var(--plen-bg, #07090F)',
-  border:   'var(--plen-border, rgba(255,255,255,0.08))',
-  accent:   '#7C3AED',                          // IMDF brand (violet Plenora)
-  accent2:  'var(--plen-manipola, #7c3aed)',
-  text:     'var(--plen-text, #DDE4F2)',
-  muted:    'var(--plen-text-sub, #7D8BA8)',
-  danger:   'var(--plen-err, #F87171)',
-  warn:     'var(--plen-warn, #FBBF24)',
-  success:  'var(--plen-ok, #34D399)',
-  font:     "var(--plen-font-mono, 'JetBrains Mono'), ui-monospace, Menlo, monospace",
+const VARS = {
+  accent:  'var(--imdf-modal-accent)',
+  accent2: 'var(--imdf-modal-accent2)',
+  text:    'var(--imdf-modal-text)',
+  muted:   'var(--imdf-modal-muted)',
+  border:  'var(--imdf-modal-border)',
+  surface: 'var(--imdf-modal-surface)',
+  font:    'var(--imdf-modal-font)',
+  danger:  'var(--imdf-modal-danger)',
+  warn:    'var(--imdf-modal-warn)',
+  success: 'var(--imdf-modal-success)',
 };
 
 export default function ImdfValidationModal({ isOpen, onClose, validation }) {
@@ -52,55 +49,23 @@ export default function ImdfValidationModal({ isOpen, onClose, validation }) {
   if (!isOpen) return null;
 
   const passBadge = passed === true
-    ? { label: '✓ Passed', color: TOKENS.success }
+    ? { label: '✓ Passed', color: VARS.success }
     : passed === false
-      ? { label: '✗ Failed', color: TOKENS.danger }
-      : { label: '— unknown', color: TOKENS.muted };
+      ? { label: '✗ Failed', color: VARS.danger }
+      : { label: '— unknown', color: VARS.muted };
 
   return createPortal((
-    <div
-      onClick={onClose}
-      style={{
-        position: 'fixed', inset: 0,
-        background: 'rgba(0,0,0,0.72)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        zIndex: 'var(--z-modal-priority, 10000)',
-        fontFamily: TOKENS.font,
-      }}
-    >
+    <div onClick={onClose} className="imdf-modal__overlay">
       <div
         onClick={(e) => e.stopPropagation()}
-        style={{
-          background: TOKENS.bg,
-          color: TOKENS.text,
-          border: `1px solid ${TOKENS.border}`,
-          borderRadius: 10,
-          width: 'min(900px, 96vw)',
-          height: 'min(720px, 90vh)',
-          boxShadow: '0 24px 80px rgba(0,0,0,0.7)',
-          display: 'flex', flexDirection: 'column',
-          overflow: 'hidden',
-        }}
+        className="imdf-modal__panel imdf-modal__panel--lg"
       >
         {/* Header */}
-        <div style={{
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          padding: '16px 20px',
-          background: TOKENS.surface,
-          borderBottom: `1px solid ${TOKENS.border}`,
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div className="imdf-modal__header">
+          <div className="imdf-modal__header-info">
             <div>
-              <h2 style={{
-                margin: 0, fontSize: 15, fontWeight: 800,
-                color: TOKENS.accent, letterSpacing: 0.3,
-              }}>
-                ⚠ Validazione IMDF
-              </h2>
-              <div style={{
-                fontSize: 9, color: TOKENS.muted, textTransform: 'uppercase',
-                letterSpacing: 0.5, marginTop: 2,
-              }}>
+              <h2 className="imdf-modal__title">⚠ Validazione IMDF</h2>
+              <div className="imdf-modal__subtitle">
                 Errori e warning per livello
               </div>
             </div>
@@ -114,62 +79,50 @@ export default function ImdfValidationModal({ isOpen, onClose, validation }) {
               textTransform: 'uppercase', letterSpacing: 0.5,
             }}>{passBadge.label}</div>
           </div>
-          <button type="button" onClick={onClose} style={{
-            background: 'none', border: 'none', color: TOKENS.muted,
-            fontSize: 18, cursor: 'pointer', padding: 4,
-          }}>✕</button>
+          <button type="button" onClick={onClose} className="imdf-modal__close">✕</button>
         </div>
 
         {!validation ? (
-          <div style={{ padding: '30px 20px', color: TOKENS.muted, fontSize: 12, textAlign: 'center' }}>
+          <div className="imdf-modal__empty">
             Nessuna validazione disponibile. Esegui il canvas per generare i dati IMDF.
           </div>
         ) : (
           <>
             {/* Summary + filtri */}
-            <div style={{
-              display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap',
-              padding: '12px 20px',
-              borderBottom: `1px solid ${TOKENS.border}`,
-            }}>
-              <Badge color={TOKENS.danger} count={totalErrors} label="errori"  />
-              <Badge color={TOKENS.warn}   count={totalWarnings} label="warning" />
-              <Badge color={TOKENS.accent2} count={Object.keys(byLevel).length} label="livelli" />
-              <div style={{ flex: 1 }} />
+            <div className="imdf-modal__filters">
+              <Badge color={VARS.danger}  count={totalErrors} label="errori"  />
+              <Badge color={VARS.warn}    count={totalWarnings} label="warning" />
+              <Badge color={VARS.accent2} count={Object.keys(byLevel).length} label="livelli" />
+              <div className="imdf-modal__filters-spacer" />
               <FilterBtn active={filter === 'all'}      onClick={() => setFilter('all')}>Tutti</FilterBtn>
               <FilterBtn active={filter === 'errors'}   onClick={() => setFilter('errors')}>Solo errori</FilterBtn>
               <FilterBtn active={filter === 'warnings'} onClick={() => setFilter('warnings')}>Solo warning</FilterBtn>
             </div>
 
             {/* Tabella issues */}
-            <div style={{ flex: 1, overflow: 'auto' }}>
+            <div className="imdf-modal__body--flex">
               {issues.length === 0 ? (
-                <div style={{
-                  padding: '40px 20px', color: TOKENS.muted, fontSize: 12, textAlign: 'center',
-                }}>
+                <div className="imdf-modal__empty imdf-modal__empty--lg">
                   Nessuna issue per i filtri selezionati.
                 </div>
               ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+                <table className="imdf-modal__table">
                   <thead>
-                    <tr style={{
-                      background: TOKENS.surface,
-                      position: 'sticky', top: 0, zIndex: 1,
-                    }}>
-                      <th style={thStyle}>Sev</th>
-                      <th style={thStyle}>Livello</th>
-                      <th style={thStyle}>Codice</th>
-                      <th style={thStyle}>Unit ID</th>
-                      <th style={thStyle}>Messaggio</th>
+                    <tr className="imdf-modal__thead-row">
+                      <th className="imdf-modal__th">Sev</th>
+                      <th className="imdf-modal__th">Livello</th>
+                      <th className="imdf-modal__th">Codice</th>
+                      <th className="imdf-modal__th">Unit ID</th>
+                      <th className="imdf-modal__th">Messaggio</th>
                     </tr>
                   </thead>
                   <tbody>
                     {issues.map((i, idx) => {
                       const isError = i.severity === 'error';
-                      const severityColor = isError ? TOKENS.danger : TOKENS.warn;
+                      const severityColor = isError ? VARS.danger : VARS.warn;
                       return (
-                        <tr key={idx} style={{ borderTop: `1px solid ${TOKENS.border}` }}>
-                          <td style={tdStyle}>
+                        <tr key={idx} style={{ borderTop: `1px solid ${VARS.border}` }}>
+                          <td className="imdf-modal__td imdf-modal__td--top">
                             <span style={{
                               display: 'inline-block',
                               width: 18, textAlign: 'center',
@@ -177,18 +130,18 @@ export default function ImdfValidationModal({ isOpen, onClose, validation }) {
                               fontSize: 13,
                             }}>{isError ? '●' : '▲'}</span>
                           </td>
-                          <td style={{ ...tdStyle, color: TOKENS.accent2 }}>
-                            <code style={codeStyle}>{i.levelId}</code>
+                          <td className="imdf-modal__td imdf-modal__td--top" style={{ color: VARS.accent2 }}>
+                            <code className="imdf-modal__code">{i.levelId}</code>
                           </td>
-                          <td style={tdStyle}>
-                            <code style={codeStyle}>{i.code || '-'}</code>
+                          <td className="imdf-modal__td imdf-modal__td--top">
+                            <code className="imdf-modal__code">{i.code || '-'}</code>
                           </td>
-                          <td style={tdStyle}>
-                            <code style={{ ...codeStyle, color: TOKENS.muted }}>
+                          <td className="imdf-modal__td imdf-modal__td--top">
+                            <code className="imdf-modal__code" style={{ color: VARS.muted }}>
                               {i.unit_id || '-'}
                             </code>
                           </td>
-                          <td style={{ ...tdStyle, color: TOKENS.text }}>{i.message}</td>
+                          <td className="imdf-modal__td imdf-modal__td--top" style={{ color: VARS.text }}>{i.message}</td>
                         </tr>
                       );
                     })}
@@ -202,29 +155,6 @@ export default function ImdfValidationModal({ isOpen, onClose, validation }) {
     </div>
   ), document.body);
 }
-
-// ── Styling helpers ─────────────────────────────────────────────────────
-const thStyle = {
-  padding: '10px 12px',
-  fontWeight: 700, fontSize: 9, color: TOKENS.muted,
-  textTransform: 'uppercase', letterSpacing: 1,
-  textAlign: 'left',
-  borderBottom: `1px solid ${TOKENS.border}`,
-};
-
-const tdStyle = {
-  padding: '8px 12px',
-  verticalAlign: 'top',
-};
-
-const codeStyle = {
-  fontFamily: TOKENS.font,
-  fontSize: 10,
-  background: TOKENS.surface,
-  padding: '2px 6px',
-  borderRadius: 3,
-  border: `1px solid ${TOKENS.border}`,
-};
 
 // ── Sub-components ──────────────────────────────────────────────────────
 function Badge({ color, count, label }) {
@@ -253,9 +183,9 @@ function FilterBtn({ active, onClick, children }) {
       type="button"
       onClick={onClick}
       style={{
-        background: active ? 'rgba(124,58,237,0.12)' : TOKENS.surface,
-        border: `1px solid ${active ? TOKENS.accent : TOKENS.border}`,
-        color: active ? TOKENS.accent : TOKENS.muted,
+        background: active ? 'rgba(124,58,237,0.12)' : VARS.surface,
+        border: `1px solid ${active ? VARS.accent : VARS.border}`,
+        color: active ? VARS.accent : VARS.muted,
         padding: '5px 11px',
         borderRadius: 4,
         cursor: 'pointer',
@@ -263,7 +193,7 @@ function FilterBtn({ active, onClick, children }) {
         fontWeight: 600,
         textTransform: 'uppercase',
         letterSpacing: 0.5,
-        fontFamily: TOKENS.font,
+        fontFamily: VARS.font,
       }}
     >{children}</button>
   );
