@@ -334,3 +334,117 @@
 /* Responsive */
 @media (max-width: 900px)  { .acm__type-cards { grid-template-columns: 1fr; } }
 @media (max-width: 600px)  { .acm__sidebar { display: none; } .acm__grid { grid-template-columns: 1fr; } .acm__content { padding: 14px; } .acm__form-row { flex-direction: column; } }
+
+/* ── Inline-style migration (FE-SPLIT-001D) ────────────────────────────
+   Helper locali per il modulo `api-conn` (page + wizard + step + card).
+   Tutti static. Le palette runtime e le width/height calcolate
+   restano inline (DYNAMIC_KEEP). */
+
+/* Layer hex-canvas: stats/toolbar/grid stanno sopra il bg hex (z-index:1
+   relative) per non essere coperti dal canvas absoluto. */
+.acm__layer-1 { position: relative; z-index: 1; }
+
+/* Margin helper per blocchi del wizard. */
+.acm__wlabel--mt-md         { margin-top: 16px; }
+.acm__wlabel--mt-lg         { margin-top: 20px; }
+.acm__field-group--mt-lg    { margin-top: 18px; }
+.acm__field-row--mt-sm      { margin-top: 8px; }
+.acm__form-row--gap-md      { margin-top: 12px; gap: 12px; }
+.acm__field-hint--mb-sm     { margin-bottom: 8px; }
+.acm__info-box--mb-md       { margin-bottom: 12px; }
+.acm__toggle-label--mb-md   { margin-bottom: 16px; }
+
+/* Step1 BasicInfo: URL endpoint flex 3, Method flex 1. */
+.acm__field-group--flex-3   { flex: 3; }
+.acm__field-group--flex-1   { flex: 1; }
+
+/* Step2 Params (rest_file): card statica con bordo per file/static field. */
+.acm__field-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--acm-border);
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+/* Param-row in dense layout (file_fields/static_fields editor). */
+.acm__param-row--inline { margin: 0; }
+
+/* Width helpers per input/select dentro le field card. */
+.acm__input--w-160 { max-width: 160px; }
+.acm__input--w-180 { max-width: 180px; }
+.acm__input--w-200 { max-width: 200px; }
+
+/* Checkbox label inline (es. "Obbligatorio" nel file_fields). */
+.acm__check-label-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+/* Validation error banner (Step2 wizardStepError). */
+.acm__validation-error {
+  background: #fff0f0;
+  border: 1px solid #f5a0a0;
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+  color: #c0392b;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Step2 paginazione section marker (margin-top stacca dalla list). */
+.acm__pagination-section { margin-top: 20px; }
+
+/* Card lock icon (canEdit === false). Pattern duplicato in
+   ConnectionManager / DataSourceManager / EseguibiliList:
+   localizzato qui come `acm__lock-hint` per non introdurre utility
+   globale (vedi closure CSS-INVENTORY-001 LOW_ROI). */
+.acm__lock-hint {
+  margin-left: 6px;
+  opacity: 0.7;
+  cursor: help;
+}
+
+/* Card actions row (right-aligned action buttons cluster). */
+.acm__card-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+}
+
+/* Hint metadati piccoli inline (description del param test, hint
+   "richieste simultanée"). Due varianti per `opacity` lievemente
+   diversa che corrisponde al UI originale. */
+.acm__hint-meta {
+  font-weight: 400;
+  margin-left: 6px;
+  opacity: 0.6;
+  font-size: 12px;
+}
+.acm__hint-meta--strong { opacity: 0.65; }
+
+/* Step5 + page quick-test: testo introduttivo "Inserisci/Seleziona". */
+.acm__qt-help {
+  font-size: 12px;
+  color: var(--acm-text-sub);
+  margin-bottom: 16px;
+}
+.acm__qt-help--sm { margin-bottom: 8px; }
+
+/* Quick test result: HTTP code dettaglio sotto error info-box. */
+.acm__http-code {
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+/* Share modal (superadmin) — variante size + body padding override. */
+.acm__share-modal       { max-width: 540px; }
+.acm__share-modal-body  { padding: 18px 20px; }

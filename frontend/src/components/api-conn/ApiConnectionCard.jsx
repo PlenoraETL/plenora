@@ -90,7 +90,7 @@ export default function ApiConnectionCard({
               {!canEdit && (
                 <span
                   title="Solo un superadmin può modificare questa risorsa"
-                  style={{ marginLeft: 6, opacity: 0.7, cursor: 'help' }}
+                  className="acm__lock-hint"
                 >
                   🔒
                 </span>
@@ -123,7 +123,7 @@ export default function ApiConnectionCard({
         )}
         <div className="acm__card-footer">
           <button type="button" className="acm__btn acm__btn--ghost acm__btn--sm" onClick={()=>onQuickTest?.(api)}>🧪 Test</button>
-          <div style={{marginLeft:'auto',display:'flex',gap:4}}>
+          <div className="acm__card-actions">
             {canEdit && (
               <button type="button" className="acm__icon-btn" title="Modifica" aria-label="Modifica connettore" onClick={()=>onEdit?.(api)}>⚙️</button>
             )}

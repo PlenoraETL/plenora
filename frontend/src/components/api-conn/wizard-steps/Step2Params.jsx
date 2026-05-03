@@ -22,7 +22,7 @@ export default function Step2Params({
   return (
     <div className="acm__wstep-content">
       {wizardStepError && (
-        <div className="acm__validation-error" style={{background:'#fff0f0',border:'1px solid #f5a0a0',borderRadius:6,padding:'10px 14px',marginBottom:10,color:'#c0392b',fontSize:13,display:'flex',alignItems:'center',gap:8}}>
+        <div className="acm__validation-error">
           <span>⚠️</span><span>{wizardStepError}</span>
         </div>
       )}
@@ -34,33 +34,33 @@ export default function Step2Params({
 
           <div className="acm__field-group">
             <div className="acm__label">Estensione file di output *</div>
-            <input className="acm__input acm__input--mono" style={{maxWidth:160}}
+            <input className="acm__input acm__input--mono acm__input--w-160"
               value={formData.response?.output_extension||'.zip'}
               onChange={e=>setFormData({...formData,response:{...(formData.response||{format:'binary_file'}),output_extension:e.target.value}})}
               placeholder=".zip"/>
             <div className="acm__field-hint">Estensione del file restituito dal servizio (es. .zip, .json, .pdf)</div>
           </div>
 
-          <div className="acm__field-group" style={{marginTop:18}}>
+          <div className="acm__field-group acm__field-group--mt-lg">
             <div className="acm__label">📎 File da inviare (multipart)</div>
-            <div className="acm__field-hint" style={{marginBottom:8}}>
+            <div className="acm__field-hint acm__field-hint--mb-sm">
               <strong>Sorgente nodo</strong>: il file arriva dal file_source collegato via edge (il "file principale", uno solo per nodo).
               <br/><strong>Extra (upload inline)</strong>: l'utente carica il file direttamente nel nodo canvas (es. Excel opzionale per il servizio IMDF).
             </div>
             <div className="acm__params-list">
               {(formData.request?.file_fields||[]).map((ff,i)=>(
-                <div key={i} style={{display:'flex',flexDirection:'column',gap:6,padding:'10px 12px',border:'1px solid var(--acm-border)',borderRadius:8,marginBottom:8}}>
-                  <div className="acm__param-row" style={{margin:0}}>
+                <div key={i} className="acm__field-card">
+                  <div className="acm__param-row acm__param-row--inline">
                     <input className="acm__input" value={ff.name||''}
                       onChange={e=>{const arr=[...(formData.request?.file_fields||[])]; arr[i]={...arr[i],name:e.target.value}; setFormData({...formData,request:{...(formData.request||{}),file_fields:arr}});}}
                       placeholder="Nome campo (es: file, excel)"/>
-                    <select className="acm__select" style={{maxWidth:180}}
+                    <select className="acm__select acm__input--w-180"
                       value={ff.source||'node_input'}
                       onChange={e=>{const arr=[...(formData.request?.file_fields||[])]; arr[i]={...arr[i],source:e.target.value}; setFormData({...formData,request:{...(formData.request||{}),file_fields:arr}});}}>
                       <option value="node_input">Sorgente nodo (edge)</option>
                       <option value="extra_input">Extra (upload inline)</option>
                     </select>
-                    <label style={{display:'flex',alignItems:'center',gap:6,fontSize:13,whiteSpace:'nowrap'}}>
+                    <label className="acm__check-label-inline">
                       <input type="checkbox" checked={!!ff.required}
                         onChange={e=>{const arr=[...(formData.request?.file_fields||[])]; arr[i]={...arr[i],required:e.target.checked}; setFormData({...formData,request:{...(formData.request||{}),file_fields:arr}});}}/>
                       Obbligatorio
@@ -69,7 +69,7 @@ export default function Step2Params({
                       onClick={()=>{const arr=[...(formData.request?.file_fields||[])]; arr.splice(i,1); setFormData({...formData,request:{...(formData.request||{}),file_fields:arr}});}}>🗑</button>
                   </div>
                   {ff.source === 'extra_input' && (
-                    <div className="acm__param-row" style={{margin:0}}>
+                    <div className="acm__param-row acm__param-row--inline">
                       <input className="acm__input acm__input--mono"
                         value={ff.accept||''}
                         onChange={e=>{const arr=[...(formData.request?.file_fields||[])]; arr[i]={...arr[i],accept:e.target.value}; setFormData({...formData,request:{...(formData.request||{}),file_fields:arr}});}}
@@ -87,17 +87,17 @@ export default function Step2Params({
             </div>
           </div>
 
-          <div className="acm__field-group" style={{marginTop:18}}>
+          <div className="acm__field-group acm__field-group--mt-lg">
             <div className="acm__label">📝 Campi statici (multipart)</div>
-            <div className="acm__field-hint" style={{marginBottom:8}}>Valori fissi inviati a ogni chiamata. Se imposti un Content-Type il valore viene inviato come file in-memory (utile per JSON inline tipo <code>styles</code> e <code>mapping</code>).</div>
+            <div className="acm__field-hint acm__field-hint--mb-sm">Valori fissi inviati a ogni chiamata. Se imposti un Content-Type il valore viene inviato come file in-memory (utile per JSON inline tipo <code>styles</code> e <code>mapping</code>).</div>
             <div className="acm__params-list">
               {(formData.request?.static_fields||[]).map((sf,i)=>(
-                <div key={i} style={{display:'flex',flexDirection:'column',gap:6,padding:'10px 12px',border:'1px solid var(--acm-border)',borderRadius:8,marginBottom:8}}>
-                  <div className="acm__param-row" style={{margin:0}}>
+                <div key={i} className="acm__field-card">
+                  <div className="acm__param-row acm__param-row--inline">
                     <input className="acm__input" value={sf.name||''}
                       onChange={e=>{const arr=[...(formData.request?.static_fields||[])]; arr[i]={...arr[i],name:e.target.value}; setFormData({...formData,request:{...(formData.request||{}),static_fields:arr}});}}
                       placeholder="Nome campo (es: styles)"/>
-                    <input className="acm__input acm__input--mono" style={{maxWidth:200}} value={sf.content_type||''}
+                    <input className="acm__input acm__input--mono acm__input--w-200" value={sf.content_type||''}
                       onChange={e=>{const arr=[...(formData.request?.static_fields||[])]; arr[i]={...arr[i],content_type:e.target.value}; setFormData({...formData,request:{...(formData.request||{}),static_fields:arr}});}}
                       placeholder="Content-Type (opz.)"/>
                     <button type="button" className="acm__del-btn"
@@ -114,9 +114,9 @@ export default function Step2Params({
             </div>
           </div>
 
-          <div className="acm__field-group" style={{marginTop:18}}>
+          <div className="acm__field-group acm__field-group--mt-lg">
             <div className="acm__label">⏱ Timeout (secondi)</div>
-            <input type="number" className="acm__input" style={{maxWidth:160}} min={10} max={3600}
+            <input type="number" className="acm__input acm__input--w-160" min={10} max={3600}
               value={formData.request?.timeout||600}
               onChange={e=>setFormData({...formData,request:{...(formData.request||{}),timeout:Math.max(10,Math.min(3600,parseInt(e.target.value)||600))}})}/>
             <div className="acm__field-hint">Tempo massimo di attesa della risposta. Default 600s (10 min).</div>
@@ -147,7 +147,7 @@ export default function Step2Params({
       </div>
 
       {formData.api_type==='generator' && (
-        <div style={{marginTop:20}}>
+        <div className="acm__pagination-section">
           <div className="acm__wlabel">📄 Paginazione</div>
           <div className="acm__param-row">
             <span className="acm__param-label">Tipo</span>

@@ -65,7 +65,7 @@ export default function Step3Auth({
       )}
       {formData.auth.type==='arcgis_token' && (
         <div className="acm__auth-config">
-          <div className="acm__info-box" style={{marginBottom:12}}>
+          <div className="acm__info-box acm__info-box--mb-md">
             ℹ️ ArcGIS Token Service (ESRI). Il token viene generato chiamando <code>generateToken</code>,
             cachato in memoria, e iniettato come query param <code>?token=...</code> nelle chiamate API.
             Auto-renewal alla scadenza.
@@ -132,7 +132,7 @@ export default function Step3Auth({
         </div>
       )}
 
-      <div className="acm__wlabel" style={{marginTop:20}}>📋 Headers personalizzati</div>
+      <div className="acm__wlabel acm__wlabel--mt-lg">📋 Headers personalizzati</div>
       <div className="acm__params-list">
         {customHeadersList.map((h,i)=>(
           <div key={i} className="acm__param-row">

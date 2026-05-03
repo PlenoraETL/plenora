@@ -43,7 +43,7 @@ export default function Step0ChooseType({ formData, setFormData }) {
           </div>
         ))}
       </div>
-      <div className="acm__wlabel" style={{marginTop:16}}>Categoria</div>
+      <div className="acm__wlabel acm__wlabel--mt-md">Categoria</div>
       <div className="acm__pill-group">
         {CATEGORIES_NEW.map(c=>(
           <button type="button" key={c.id}
@@ -53,7 +53,7 @@ export default function Step0ChooseType({ formData, setFormData }) {
           </button>
         ))}
       </div>
-      <div className="acm__wlabel" style={{marginTop:16}}>Tipo connessione</div>
+      <div className="acm__wlabel acm__wlabel--mt-md">Tipo connessione</div>
       <div className="acm__conn-type-list">
         {CONNECTION_TYPES.map(ct=>(
           <div key={ct.id} className={`acm__conn-type${formData.connection_type===ct.id?' acm__conn-type--on':''}`} onClick={()=>setFormData({...formData,connection_type:ct.id})}>

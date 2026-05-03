@@ -226,7 +226,7 @@ function ApiConnectionManager() {
           <canvas ref={canvasRef} className="acm__hex-bg"/>
 
           {/* Stats */}
-          <div className="acm__stats" style={{position:'relative',zIndex:1}}>
+          <div className="acm__stats acm__layer-1">
             <div className="acm__stat acm__stat--total">
               <div className="acm__stat-val">{globalStats.total}</div>
               <div className="acm__stat-label">Connettori</div>
@@ -248,7 +248,7 @@ function ApiConnectionManager() {
           </div>
 
           {/* Toolbar */}
-          <div className="acm__toolbar" style={{position:'relative',zIndex:1}}>
+          <div className="acm__toolbar acm__layer-1">
             <div className="acm__search">
               <span className="acm__search-icon">🔍</span>
               <input type="text" className="acm__search-input" placeholder="Cerca connettore…" aria-label="Cerca connettore" value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} />
@@ -266,7 +266,7 @@ function ApiConnectionManager() {
           </div>
 
           {/* Grid */}
-          <div className="acm__grid" style={{position:'relative',zIndex:1}}>
+          <div className="acm__grid acm__layer-1">
             {loading ? (
               <div className="acm__loading">⬡ Caricamento connettori…</div>
             ) : filteredApis.length === 0 ? (
@@ -351,10 +351,10 @@ function ApiConnectionManager() {
               <button type="button" className="acm__modal-close" onClick={()=>setQuickTestInput(null)} aria-label="Chiudi">✕</button>
             </div>
             <div className="acm__wizard-body">
-              <div style={{fontSize:12,color:'var(--acm-text-sub)',marginBottom:16}}>Inserisci valori di test per i parametri mappabili:</div>
+              <div className="acm__qt-help">Inserisci valori di test per i parametri mappabili:</div>
               {(quickTestInput.api.parameters||[]).filter(p=>p.mode!=='fixed').map(p=>(
                 <div key={p.name} className="acm__field-group">
-                  <div className="acm__label">{p.name}{p.required?' *':''}{p.description&&<span style={{fontWeight:400,marginLeft:6,opacity:.6}}>— {p.description}</span>}</div>
+                  <div className="acm__label">{p.name}{p.required?' *':''}{p.description&&<span className="acm__hint-meta">— {p.description}</span>}</div>
                   <input className="acm__input" autoComplete="off" value={quickTestInput.params[p.name]||''} onChange={e=>setQuickTestInput(prev=>({...prev,params:{...prev.params,[p.name]:e.target.value}}))} placeholder={p.example||`Valore per ${p.name}`}/>
                 </div>
               ))}
@@ -387,7 +387,7 @@ function ApiConnectionManager() {
               {quickTestResult.result.success ? (<>
                 <div className="acm__info-box acm__info-box--ok">✅ API raggiungibile — HTTP {quickTestResult.result.status_code}</div>
                 {quickTestResult.result.available_fields?.length > 0 && (<>
-                  <div className="acm__wlabel" style={{marginTop:16}}>Campi estratti ({quickTestResult.result.available_fields.length})</div>
+                  <div className="acm__wlabel acm__wlabel--mt-md">Campi estratti ({quickTestResult.result.available_fields.length})</div>
                   <div className="acm__fields-grid">
                     {quickTestResult.result.available_fields.map((f,i)=>(
                       <div key={i} className="acm__field-item">
@@ -401,11 +401,11 @@ function ApiConnectionManager() {
                   </div>
                 </>)}
                 {quickTestResult.result.response_preview && (<>
-                  <div className="acm__wlabel" style={{marginTop:16}}>Anteprima risposta</div>
+                  <div className="acm__wlabel acm__wlabel--mt-md">Anteprima risposta</div>
                   <pre className="acm__json-preview">{typeof quickTestResult.result.raw_response==='object'?JSON.stringify(quickTestResult.result.raw_response,null,2).substring(0,1500):quickTestResult.result.response_preview}</pre>
                 </>)}
               </>) : (
-                <div className="acm__info-box acm__info-box--err">❌ {quickTestResult.result.error||'Test fallito'}{quickTestResult.result.status_code&&<div style={{marginTop:8,fontSize:12}}>HTTP {quickTestResult.result.status_code}</div>}</div>
+                <div className="acm__info-box acm__info-box--err">❌ {quickTestResult.result.error||'Test fallito'}{quickTestResult.result.status_code&&<div className="acm__http-code">HTTP {quickTestResult.result.status_code}</div>}</div>
               )}
             </div>
             <div className="acm__wizard-footer">
@@ -421,9 +421,8 @@ function ApiConnectionManager() {
         <div className="acm__overlay" onClick={()=>setSharingApi(null)}>
           <div
             ref={shareDialogRef}
-            className="acm__wizard"
+            className="acm__wizard acm__share-modal"
             onClick={e=>e.stopPropagation()}
-            style={{ maxWidth: 540 }}
             role="dialog"
             aria-modal="true"
             aria-labelledby="acm-share-title"
@@ -433,7 +432,7 @@ function ApiConnectionManager() {
               <div className="acm__wizard-title" id="acm-share-title">🔗 Condividi Connettore — {sharingApi.name}</div>
               <button type="button" className="acm__modal-close" onClick={()=>setSharingApi(null)} aria-label="Chiudi">✕</button>
             </div>
-            <div className="acm__wizard-body" style={{ padding: '18px 20px' }}>
+            <div className="acm__wizard-body acm__share-modal-body">
               <AllowedGroupsSelector
                 embedded
                 resourceType="api_connections"

@@ -12,11 +12,11 @@ export default function Step4Batch({ formData, setFormData }) {
   return (
     <div className="acm__wstep-content">
       <div className="acm__wlabel">⚡ Configurazione Batch</div>
-      <div className="acm__info-box" style={{marginBottom:12}}>
+      <div className="acm__info-box acm__info-box--mb-md">
         ℹ️ Abilita solo se l'API accetta un array di input in una singola chiamata (es. <code>{`{"items":[...]}`}</code>).
         Per API standard (una chiamata per riga) lascia disabilitato.
       </div>
-      <label className="acm__toggle-label" style={{marginBottom:16}}>
+      <label className="acm__toggle-label acm__toggle-label--mb-md">
         <input type="checkbox" checked={formData.batch?.enabled||false}
           onChange={e=>setFormData(f=>({...f, batch:{...f.batch, enabled:e.target.checked}}))}/>
         <span>Batch mode abilitato</span>

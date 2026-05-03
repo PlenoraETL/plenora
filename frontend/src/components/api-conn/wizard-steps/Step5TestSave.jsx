@@ -60,7 +60,7 @@ export default function Step5TestSave({
               </div>
             )}
             {!showAdvancedConfig && testResult.available_fields?.length > 0 && (<>
-              <div style={{fontSize:12,color:'var(--acm-text-sub)',marginBottom:8}}>Seleziona i campi da importare:</div>
+              <div className="acm__qt-help acm__qt-help--sm">Seleziona i campi da importare:</div>
               <div className="acm__fields-grid">
                 {testResult.available_fields.map((f,i)=>{
                   const sel = formData.output_mapping.find(m=>m.path===f.path);
