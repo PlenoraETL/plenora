@@ -107,12 +107,21 @@ def _result_db_hard_cap() -> int:
 
 def _should_use_object_storage(size: int, policy: str) -> bool:
     """Dispatch policy-aware: `db` -> mai, `object_storage` -> sempre,
-    `hybrid` -> sopra RESULT_S3_THRESHOLD_BYTES."""
-    if policy == "db":
-        return False
-    if policy == "object_storage":
-        return True
-    return size >= _result_s3_threshold()
+    `hybrid` -> sopra RESULT_S3_THRESHOLD_BYTES.
+
+    BE-DATA-PLANE-001B: la decisione e' delegata alla pure function
+    `app.shared.storage_dispatch.resolve_payload_target`. Questo wrapper
+    legge la threshold env-bound (`_result_s3_threshold()`) e tiene
+    invariata la signature legacy `(size, policy) -> bool` per i test
+    esistenti che fanno `monkeypatch.setattr(result_store,
+    "_should_use_object_storage", ...)`.
+    """
+    from app.shared.storage_dispatch import resolve_payload_target
+    return resolve_payload_target(
+        policy=policy,
+        size_bytes=size,
+        threshold_bytes=_result_s3_threshold(),
+    ) == "object_storage"
 
 
 def _enforce_db_hard_cap(size: int, ctx: str) -> None:

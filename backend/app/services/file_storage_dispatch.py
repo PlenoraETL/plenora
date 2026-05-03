@@ -124,20 +124,27 @@ def dispatch_blob_storage(
         per permettere l'orphan guard nel caller).
     """
     from app.config import settings
+    from app.shared.storage_dispatch import resolve_payload_target
 
     size = len(raw_data)
     policy = (settings.get("STORAGE_POLICY", "hybrid") or "hybrid").strip().lower()
 
-    if policy == "db":
-        use_object_storage = False
-    elif policy == "object_storage":
-        use_object_storage = True
-    else:
-        # hybrid: soglia per-dominio file_source (separata da result)
-        threshold = int(
-            os.getenv("FILE_SOURCE_S3_THRESHOLD_BYTES", _DEFAULT_THRESHOLD_BYTES)
-        )
-        use_object_storage = size >= threshold
+    # Soglia per-dominio file_source (separata dal threshold result; ops
+    # puo' tunarle in modo indipendente). Letta sempre, ma la decisione
+    # la usa solo nel branch hybrid (la pure function ignora la threshold
+    # quando policy=db/object_storage).
+    threshold = int(
+        os.getenv("FILE_SOURCE_S3_THRESHOLD_BYTES", _DEFAULT_THRESHOLD_BYTES)
+    )
+
+    # BE-DATA-PLANE-001B: decisione db vs object_storage delegata a
+    # `app.shared.storage_dispatch.resolve_payload_target` (pure
+    # function). Comportamento bit-per-bit identico al pre-001B.
+    use_object_storage = resolve_payload_target(
+        policy=policy,
+        size_bytes=size,
+        threshold_bytes=threshold,
+    ) == "object_storage"
 
     if not use_object_storage:
         return {"data": raw_data, "storage_key": None, "size_bytes": size}
