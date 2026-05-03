@@ -76,9 +76,11 @@ export default defineConfig(({ mode }) => {
             if (/[\\/]node_modules[\\/](maplibre-gl|global|long|pbf)[\\/]/.test(id)) {
               return 'vendor-maplibre';
             }
-            // Nota: PreviewModal carica Leaflet via CDN (cdnjs) a runtime,
-            // quindi nessun source importa `leaflet` da node_modules. Non
-            // c'e' un chunk vendor-leaflet da emettere.
+            // Nota: Leaflet e' importato da `PreviewModal` via npm
+            // (`import L from 'leaflet'`) ma il modal e' lazy-loaded dai 3
+            // editor; lo lasciamo nel chunk del consumer (PreviewModal-*.js)
+            // invece di splittare un `vendor-leaflet` dedicato — coerente
+            // col pattern di `ImdfPreviewModal` per maplibre/deckgl.
             return undefined; // default: rollup decide
           },
         },
