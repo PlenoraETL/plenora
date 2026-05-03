@@ -32,6 +32,9 @@ function readSrc(rel) {
 
 const FILES = {
   apiConnectionManager: readSrc('pages/ApiConnectionManager.jsx'),
+  apiConnectionWizard: readSrc(
+    'components/api-conn/ApiConnectionWizard.jsx',
+  ),
   connectionSelectorModal: readSrc(
     'components/arricchisci/ConnectionSelectorModal.jsx',
   ),
@@ -43,7 +46,11 @@ const FILES = {
 
 describe('connections boundary contract (C3.2)', () => {
   describe('ApiConnectionManager.jsx', () => {
-    const src = FILES.apiConnectionManager;
+    // FE-SPLIT-001A/B moved the create/edit draft-test boundary into
+    // ApiConnectionWizard. The page remains responsible for list/by-id
+    // operations. This contract covers the combined ApiConnection feature
+    // boundary, not only the shell page file.
+    const src = `${FILES.apiConnectionManager}\n${FILES.apiConnectionWizard}`;
 
     it('does NOT import http directly from api/http', () => {
       // C3.2: nessuna chiamata http.* residua, niente import del client http.
@@ -56,11 +63,11 @@ describe('connections boundary contract (C3.2)', () => {
     });
 
     it('imports CRUD + test functions from api/apiConnections', () => {
-      const importBlock = src.match(
-        /import\s*\{[^}]*\}\s*from\s*['"][^'"]*\/api\/apiConnections['"]/,
+      const importBlocks = src.match(
+        /import\s*\{[^}]*\}\s*from\s*['"][^'"]*\/api\/apiConnections['"]/g,
       );
-      expect(importBlock).not.toBeNull();
-      const named = importBlock[0];
+      expect(importBlocks).not.toBeNull();
+      const named = importBlocks.join('\n');
       for (const name of [
         'listApiConnections',
         'createApiConnection',

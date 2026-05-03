@@ -782,7 +782,16 @@ class PlenoraBeatScheduler(Scheduler):
             # BE-CONFIG-001B: TTL temp orfani migrato a Settings (default
             # tipato 24h in `Settings.DEFAULTS["TEMP_ORPHAN_CLEANUP_HOURS"]`).
             # Override env continua a funzionare via type coercion `int`.
-            ttl_hours = int(settings.get("TEMP_ORPHAN_CLEANUP_HOURS"))
+            get_setting = getattr(settings, "get", None)
+            if callable(get_setting):
+                raw_ttl_hours = get_setting("TEMP_ORPHAN_CLEANUP_HOURS")
+            else:
+                # Tests patch app.config.settings with lightweight stubs that
+                # only expose DATA_DIR. Preserve the historical env override
+                # path for those stubs without weakening the real Settings
+                # boundary used in production.
+                raw_ttl_hours = _os.getenv("TEMP_ORPHAN_CLEANUP_HOURS", 24)
+            ttl_hours = int(raw_ttl_hours)
             ttl_seconds = ttl_hours * 3600
             removed = 0
 
