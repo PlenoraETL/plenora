@@ -762,6 +762,7 @@ class FileSourceService:
         except Exception:
             # Fallback: riscrivi il record completo.
             # Recupera il group_id originale dal DB invece di usare "default".
+            from app.config import settings
             existing_row = db.get_file_source(file_id, include_data=False) or {}
             db.save_file_source(
                 file_id=file_id,

@@ -163,6 +163,102 @@ def test_get_file_source_reads_from_db(monkeypatch):
     assert out.original_filename == "t.csv"
 
 
+def test_update_file_source_fallback_uses_settings_default_group(monkeypatch):
+    """BE-FIX-001: se l'update metadata incrementale fallisce, il
+    fallback riscrive la row completa e deve importare `settings` nel
+    branch locale prima di usare `settings.DEFAULT_GROUP`.
+
+    Il test forza `update_file_source_metadata` a sollevare e rimuove
+    `group_id` dalla row letta per il fallback, cosi' il codice deve
+    usare il default group configurato invece di sollevare NameError.
+    """
+    from app.services.file_service import FileSourceService
+    from app.config import settings
+
+    store = _install_fake_db(monkeypatch)
+    monkeypatch.setattr(settings, "DEFAULT_GROUP", "default_test")
+
+    store["file_update"] = {
+        "id": "file_update",
+        "group_id": "G1",
+        "name": "old",
+        "original_filename": "t.csv",
+        "format": "csv",
+        "data": b"hello",
+        "storage_key": None,
+        "size_bytes": 5,
+        "metadata": {
+            "id": "file_update",
+            "name": "old",
+            "description": "",
+            "original_filename": "t.csv",
+            "format": "csv",
+            "group_id": "G1",
+            "columns": [],
+            "row_count": 0,
+            "file_size": 5,
+            "crs": None,
+            "created_at": "2026-04-18T00:00:00+00:00",
+            "updated_at": "2026-04-18T00:00:00+00:00",
+        },
+        "created_by": None,
+    }
+
+    import app.db.db_service as real_db
+
+    saved_calls: list[dict] = []
+
+    def failing_update_file_source_metadata(file_id, metadata):
+        raise RuntimeError("metadata write failed")
+
+    def get_file_source_for_fallback(file_id, include_data=False):
+        row = store.get(file_id)
+        if not row:
+            return None
+        out = dict(row)
+        if not include_data:
+            out.pop("data", None)
+            # Simula una legacy/partial row senza group_id per esercitare
+            # il fallback a settings.DEFAULT_GROUP.
+            out.pop("group_id", None)
+        return out
+
+    def spy_save_file_source(**kwargs):
+        saved_calls.append(kwargs)
+        store[kwargs["file_id"]] = {
+            "id": kwargs["file_id"],
+            "group_id": kwargs["group_id"],
+            "name": kwargs["name"],
+            "original_filename": kwargs["original_filename"],
+            "format": kwargs["fmt"],
+            "data": kwargs.get("data"),
+            "storage_key": kwargs.get("storage_key"),
+            "size_bytes": kwargs.get("size_bytes"),
+            "metadata": kwargs.get("metadata"),
+            "created_by": kwargs.get("created_by"),
+        }
+
+    monkeypatch.setattr(
+        real_db, "update_file_source_metadata",
+        failing_update_file_source_metadata,
+    )
+    monkeypatch.setattr(real_db, "get_file_source", get_file_source_for_fallback)
+    monkeypatch.setattr(real_db, "save_file_source", spy_save_file_source)
+
+    svc = FileSourceService()
+    monkeypatch.setattr(
+        svc, "_get_blob_from_db",
+        lambda file_id, expected_group_id=None: b"hello",
+    )
+    out = svc.update_file_source("file_update", {"name": "new"})
+
+    assert out is not None
+    assert out.name == "new"
+    assert saved_calls
+    assert saved_calls[0]["group_id"] == "default_test"
+    assert saved_calls[0]["data"] == b"hello"
+
+
 # =============================================================================
 # 2. Zero FS leak: tempfile.mkdtemp calls are cleaned up
 # =============================================================================
