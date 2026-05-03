@@ -1,6 +1,23 @@
 # Code Map
 
-Bibbia operativa del repo. Una sezione per modulo: dove entrare, file principali con funzioni/classi reali, keywords per `rg`, dove intervenire e quali confini non rompere.
+Bibbia operativa del repo. Una sezione per modulo: dove entrare,
+responsabilita', file principali con funzioni/classi reali, keywords per
+`rg`, punti di intervento e confini da non rompere.
+
+Questo file descrive **lo stato corrente del codice** e i confini
+operativi dei moduli. Cronologia e decisioni temporali vivono in
+`docs/development/changelog.md`, `docs/product/roadmap.md`,
+`docs/product/residual-register.md` e negli ADR.
+
+Formato per sezione:
+- `Entry-point`: dove entra il flusso runtime o API.
+- `Responsabilita`: ownership funzionale del modulo.
+- tabella `file`: funzioni/classi da cercare prima di modificare.
+- `Keywords`: token stabili per `rg`.
+- `Punti di intervento tipici`: dove cambiare il codice per una nuova
+  variante, policy o integrazione.
+- `Intervento/confini`: contratti da preservare e dipendenze da non
+  bypassare.
 
 Indice rapido:
 - Backend core: [admin_backups](#admin_backups), [admin_system_status](#admin_system_status), [arricchisci](#arricchisci), [artifacts](#artifacts), [auth](#auth), [carica](#carica), [connections](#connections), [datasources](#datasources), [eseguibili](#eseguibili), [estrai](#estrai), [features](#features), [files](#files), [imdf](#imdf), [intermediate](#intermediate), [logs](#logs), [manipola](#manipola), [orchestrator](#orchestrator), [projects](#projects), [scheduler](#scheduler), [tickets](#tickets)
@@ -54,24 +71,24 @@ Responsabilita: governa l'enrichment di dataset via API esterne, con parallelism
 | file | funzioni/classi chiave | cosa guardare |
 |---|---|---|
 | `router.py` | `init_arricchisci`, `_check_api_connection_ownership`, `_check_project_ownership`, `fetch_openapi_schema`, `FetchSchemaRequest`, `ValidateRequest` | contratto API arricchisci, ownership |
-| `enrichment_service.py` | (orchestrator-class, 502 righe post-Phase-5-B3-A, -75% vs baseline 2019) — `EnrichmentExecutor(7 mixin)` shell + `__init__` (orchestrator constructor) + `execute` (entry point dispatcher) + `_update_progress` (utility cross-mixin singleton) + 3 auth helper stub di delega a `app.shared.api_utils` (`_prepare_headers`, `_get_oauth2_token`, `_get_oauth2_client_credentials_token`) + module-level `generate_error_report` (back-compat con worker + test). RateLimiter re-exported per back-compat | entry point + dispatch + utility cross-mixin |
-| `_rate_limiter.py` | `RateLimiter` (token bucket thread-safe in-memory, B3-A.1) | rate limiting standalone class |
-| `enrichment_template_params.py` | `EnrichmentTemplateParamsMixin` (6 metodi: `_is_template`, `_template_columns`, `_interpolate_template`, `_build_params`, `_has_null_params`, `_make_cache_key`) | template parsing + params building + cache keying (B3-A.2) |
-| `enrichment_response_processing.py` | `EnrichmentResponseProcessingMixin` (9 metodi: `_extract_output`, `_explode_rows`, `_auto_flatten`, `_detect_geometry_type`, `_infer_scalar_type`, `_flatten_dict`, `_apply_result`, `_resolve_nested_list`, `_extract_json_value`) | response → DataFrame rows transformation (B3-A.3) |
-| `enrichment_batch_mode.py` | `EnrichmentBatchModeMixin` (4 metodi: `_execute_batch_native`, `_call_batch_api`, `_build_batch_payload`, `_extract_batch_output`) | batch native API path + 429+Retry-After + payload format dispatcher (B3-A.4) |
-| `enrichment_validation_preview.py` | `EnrichmentValidationPreviewMixin` (2 metodi: `validate_input`, `preview`) | preflight validation + preview campione (B3-A.5) |
-| `enrichment_retry_http.py` | `EnrichmentRetryHttpMixin` (1 metodo: `_call_api_with_retry`) | HTTP per-row retry chain + 429+Retry-After + ArcGIS token injection (B3-A.6) |
-| `enrichment_execution_engines.py` | `EnrichmentExecutionEnginesMixin` (3 metodi: `_execute_parallel`, `_execute_parallel_async`, `_execute_internal`) | runtime engines (sync ThreadPoolExecutor / async asyncio.Semaphore / sequential per-row) (B3-A.7) |
-| `enrichment_grouping.py` | `EnrichmentGroupingMixin` (2 metodi: `_group_by_params`, `_count_unique_combinations`) | raggruppamento parametri unici per cache_key MD5 (B3-A.8) |
+| `enrichment_service.py` | `EnrichmentExecutor` shell + `__init__`, `execute`, `_update_progress`, auth delegate (`_prepare_headers`, `_get_oauth2_token`, `_get_oauth2_client_credentials_token`), `generate_error_report` | entry point enrichment + dispatch runtime |
+| `_rate_limiter.py` | `RateLimiter` | token bucket thread-safe in-memory |
+| `enrichment_template_params.py` | `EnrichmentTemplateParamsMixin`: `_is_template`, `_template_columns`, `_interpolate_template`, `_build_params`, `_has_null_params`, `_make_cache_key` | template parsing + params building + cache keying |
+| `enrichment_response_processing.py` | `EnrichmentResponseProcessingMixin`: `_extract_output`, `_explode_rows`, `_auto_flatten`, `_detect_geometry_type`, `_infer_scalar_type`, `_flatten_dict`, `_apply_result`, `_resolve_nested_list`, `_extract_json_value` | response -> DataFrame rows transformation |
+| `enrichment_batch_mode.py` | `EnrichmentBatchModeMixin`: `_execute_batch_native`, `_call_batch_api`, `_build_batch_payload`, `_extract_batch_output` | batch-native API path + payload dispatch |
+| `enrichment_validation_preview.py` | `EnrichmentValidationPreviewMixin`: `validate_input`, `preview` | preflight validation + sample preview |
+| `enrichment_retry_http.py` | `EnrichmentRetryHttpMixin`: `_call_api_with_retry` | HTTP retry chain + 429/Retry-After handling + ArcGIS token injection |
+| `enrichment_execution_engines.py` | `EnrichmentExecutionEnginesMixin`: `_execute_parallel`, `_execute_parallel_async`, `_execute_internal` | sync/async/sequential execution engines |
+| `enrichment_grouping.py` | `EnrichmentGroupingMixin`: `_group_by_params`, `_count_unique_combinations` | grouping unique params for cache keys |
 | `executor.py` | `EnrichExecutor` | wrapper di livello pipeline |
 | `parallel.py` | `compute_parallel_groups`, `should_execute_node`, `get_execute_mask`, `_extract_consumed_columns`, `_extract_produced_columns`, `execute_parallel_enrichers` | parallelizzazione + execute_if |
-| `api_connector.py` | (orchestrator/core, 669 righe post-Phase-5-B3-B, -77.6% vs baseline 2992) — `ApiConnectionService(5 mixin)` shell + `__init__` + `execute_enrichment` (entry point orchestrator) + `_init_execution_context` (tenant binding) + `_get_execution_order` (Kahn topological sort) + `_run_single_enricher` (generator vs enricher dispatch) + `_is_file_source_for_file_processor` (passthrough branch logic) + `_prepare_headers` (3-line shim, source-bound test patch) + B3-B.1 helper re-export + back-compat `save_dataframe`/`save_result_blob`/`get_temp_output_path` imports | entry point + orchestrator + tenant context |
-| `_api_connection_helpers.py` | `_AUTH_SENSITIVE_FIELDS`, `_encrypt_auth_in_config`, `_decrypt_auth_in_config`, `_nd` (module-level helpers, B3-B.1) | crypto auth utilities + node-data accessor standalone |
-| `api_connection_management.py` | `ApiConnectionManagementMixin` (11 metodi: CRUD `_mask_credentials`, `list_api_connections`, `list_api_connections_decrypted`, `get_api_connection`, `create_api_connection`, `update_api_connection`, `delete_api_connection` + TEST_CONNECTION `_build_test_call_params`, `_inject_auth_query_params`, `_parse_test_response_json`, `test_api_connection`) | CRUD lifecycle + interactive test (B3-B.2b) |
-| `api_connection_support.py` | `ApiConnectionSupportMixin` (9 metodi: FIELD_INTROSPECTION 5 `_extract_available_fields`, `_extract_geojson_fields`, `_is_geometry`, `_get_field_type`, `_get_sample_value` + RESULT_BUILDING 4 `_find_final_result`, `_build_file_result_response`, `_save_and_build_dataframe_response`, `_write_intermediate_snapshot`) | JSON response field analysis + execute_enrichment helpers (B3-B.3) |
-| `api_connection_source_loading.py` | `ApiConnectionSourceLoadingMixin` (7 metodi: SOURCE_LOADING 6 `_assert_source_project_in_tenant`, `_recompute_upstream_project`, `_filesystem_fallback_load_project`, `_load_source_project`, `_load_file_source`, `_load_static_values` + SSRF 1 `_validate_outbound_url` `@staticmethod`) | tenant-fail-closed source loading + outbound URL guard (B3-B.4b) |
-| `api_connection_rest_file.py` | `ApiConnectionRestFileMixin` (10 metodi: REST_FILE PIPELINE 6 `_parse_http_error_body`, `_download_binary_response`, `_build_rest_file_multipart`, `_parse_rest_file_config`, `_rest_file_error`, `_execute_rest_file` + FILE_SOURCE RESOLUTION 4 `_assert_file_source_group_access`, `_resolve_file_source_id_path`, `_resolve_file_source_path`, `_resolve_input_path_for_file_processor`) | file-to-file HTTP multipart + file_source materialization (B3-B.5b) |
-| `api_connection_generator_enricher.py` | `ApiConnectionGeneratorEnricherMixin` (9 metodi: API GENERATOR 5 `_paginate_generator_results`, `_substitute_url_path_params` `@staticmethod`, `_call_generator_endpoint`, `_build_generator_base_params`, `_execute_api_generator` + API ENRICHER 3 `_extract_rows_from_response`, `_enrich_one_row`, `_execute_api_enricher` + JSON UTIL 1 `_extract_json_value`) | DataFrame from JSON + row-by-row enrichment + JSON path delegate (B3-B.6) |
+| `api_connector.py` | `ApiConnectionService` shell + `__init__`, `execute_enrichment`, `_init_execution_context`, `_get_execution_order`, `_run_single_enricher`, `_is_file_source_for_file_processor`, `_prepare_headers` | entry point API connections + tenant-bound orchestration |
+| `_api_connection_helpers.py` | `_AUTH_SENSITIVE_FIELDS`, `_encrypt_auth_in_config`, `_decrypt_auth_in_config`, `_nd` | crypto auth utilities + node-data accessor |
+| `api_connection_management.py` | `ApiConnectionManagementMixin`: CRUD, credential masking, list/get/create/update/delete, test connection helpers | API connection lifecycle |
+| `api_connection_support.py` | `ApiConnectionSupportMixin`: field introspection, response sample typing, final result building, intermediate snapshot writer | JSON response field analysis + result building |
+| `api_connection_source_loading.py` | `ApiConnectionSourceLoadingMixin`: tenant assertions, upstream project recompute, source/file/static-values loading, `_validate_outbound_url` | tenant-fail-closed source loading + outbound URL guard |
+| `api_connection_rest_file.py` | `ApiConnectionRestFileMixin`: REST file request parsing, multipart build, binary response download, file_source materialization | file-to-file HTTP pipeline |
+| `api_connection_generator_enricher.py` | `ApiConnectionGeneratorEnricherMixin`: generator pagination, URL path substitution, generator/enricher execution, JSON path extraction | DataFrame-from-JSON + row-by-row enrichment |
 | `models.py` | `RowStatus`, `BatchInputFormat`, `BatchConfig`, `RowError`, `EnrichmentStats`, `EnrichmentOptions`, `EnrichmentResult`, `PreviewResult`, `EnrichmentValidationResult` | shape stato/configurazione enrichment |
 
 Keywords: `EnrichmentExecutor`, `ApiConnectionService`, `RateLimiter`, `compute_parallel_groups`, `should_execute_node`, `_encrypt_auth_in_config`, `EnrichmentResult`, `EnrichmentTemplateParamsMixin`, `EnrichmentResponseProcessingMixin`, `EnrichmentBatchModeMixin`, `EnrichmentValidationPreviewMixin`, `EnrichmentRetryHttpMixin`, `EnrichmentExecutionEnginesMixin`, `EnrichmentGroupingMixin`, `ApiConnectionManagementMixin`, `ApiConnectionSupportMixin`, `ApiConnectionSourceLoadingMixin`, `ApiConnectionRestFileMixin`, `ApiConnectionGeneratorEnricherMixin`
@@ -96,88 +113,65 @@ Punti di intervento tipici:
 
 Intervento/confini: I/O dataset solo via `intermediate`. Auth API solo cifrata via `shared/crypto.py`. Nuove regole di parallelizzazione/`execute_if` vanno in `parallel.py`, non duplicarle nel router.
 
-**MRO post-Phase-5-B3-A** (decisione architetturale ratificata B3-A.8):
-```
+**Mixin layout - enrichment runtime**:
+```text
 EnrichmentExecutor
-  → EnrichmentTemplateParamsMixin
-  → EnrichmentResponseProcessingMixin
-  → EnrichmentBatchModeMixin
-  → EnrichmentValidationPreviewMixin
-  → EnrichmentRetryHttpMixin
-  → EnrichmentExecutionEnginesMixin
-  → EnrichmentGroupingMixin
-  → object
+  -> EnrichmentTemplateParamsMixin
+  -> EnrichmentResponseProcessingMixin
+  -> EnrichmentBatchModeMixin
+  -> EnrichmentValidationPreviewMixin
+  -> EnrichmentRetryHttpMixin
+  -> EnrichmentExecutionEnginesMixin
+  -> EnrichmentGroupingMixin
+  -> object
 ```
-27 metodi distribuiti su 7 mixin specializzati per dominio + 1 standalone class (`RateLimiter`). `inspect.getsource(EnrichmentExecutor.<method>)` legge il source dal mixin tramite `__code__.co_filename` + line numbers. Le call-site `self.<method>(...)` interne (cross-mixin) risolvono via MRO senza modifiche.
+I mixin sono separati per responsabilita' funzionale: template params,
+response processing, batch API, validation/preview, retry HTTP,
+execution engine e grouping. Le call-site interne usano `self.<method>`
+e risolvono via MRO; non importare direttamente mixin/helper da altri
+domini quando l'orchestrator deve coordinare.
 
-**Logger naming contract** (uniforme per tutti i mixin che loggano + core class): tutti i moduli che emettono log usano esplicitamente `get_logger("app.core.arricchisci.enrichment_service")` (canonical pattern, parita' B2 carica/writer). I 2 mixin che NON loggano (`EnrichmentValidationPreviewMixin`, `EnrichmentGroupingMixin`) NON definiscono `logger` — documentato esplicitamente nei docstring. `StructuredLogger` wrapper di `app/utils/logger.py` delega a `_logger.log(...)` sul logger stdlib omonimo (singleton per nome) → handler/caplog agganciati nei test catturano emit indistintamente da quale modulo li produce.
+**Logger naming contract**: i moduli enrichment che emettono log usano il
+logger canonico `app.core.arricchisci.enrichment_service`. Questo evita
+di cambiare il nome dei record quando un metodo vive in un mixin diverso.
 
-**Residui intenzionali in `enrichment_service.py` core (post-B3-A.8)**:
-- `__init__` (~80 body) — orchestrator constructor (instance attrs `api_config`, `param_mapping`, `auth`, `options`, `_rate_limiter`, `_cache`, ecc.)
-- `execute` (~112 body) — entry point pubblico dispatcher (sync/async/parallel/sequential branch)
-- `_update_progress` (~15 body) — utility cross-mixin singleton (pattern `_oracle_setup` di B2 carica/writer)
-- 3 auth helper stub (`_prepare_headers`, `_get_oauth2_token`, `_get_oauth2_client_credentials_token`, ~17 totali) — 3-line di delega a `app.shared.api_utils`, infra-class
-- `generate_error_report` (~52 body, module-level) — utility back-compat per `workers/tasks/enrichment_task.py` + `tests2/arricchisci/unit/test_generate_error_report_secret_redaction.py`
-- `RateLimiter` re-exported via `from app.core.arricchisci._rate_limiter import RateLimiter` (back-compat)
+**Core class ownership**:
+- `__init__`: costruzione contesto runtime (`api_config`, `param_mapping`,
+  `auth`, `options`, rate limiter, cache).
+- `execute`: entry point pubblico e dispatcher sync/async/parallel/sequential.
+- `_update_progress`: utility cross-mixin condivisa.
+- auth delegate: wrapper sottili verso `app.shared.api_utils`.
+- `generate_error_report`: utility module-level consumata dai worker.
 
-**Cleanup B3-A.8**: rimosso module-level wrapper `_geojson_to_wkt` di `enrichment_service.py` (5 righe). Era dead code post-B3-A.3: `EnrichmentResponseProcessingMixin` ha sua copia locale per evitare circular import; nessun consumer esterno verificato.
-
-**MRO post-Phase-5-B3-B** (decisione architetturale ratificata B3-B.7):
-```
+**Mixin layout - API connection service**:
+```text
 ApiConnectionService
-  → ApiConnectionManagementMixin       (B3-B.2b)
-  → ApiConnectionSupportMixin          (B3-B.3)
-  → ApiConnectionSourceLoadingMixin    (B3-B.4b)
-  → ApiConnectionRestFileMixin         (B3-B.5b)
-  → ApiConnectionGeneratorEnricherMixin (B3-B.6)
-  → object
+  -> ApiConnectionManagementMixin
+  -> ApiConnectionSupportMixin
+  -> ApiConnectionSourceLoadingMixin
+  -> ApiConnectionRestFileMixin
+  -> ApiConnectionGeneratorEnricherMixin
+  -> object
 ```
-46 metodi distribuiti su 5 mixin specializzati per dominio + 1 standalone helpers module (`_api_connection_helpers.py` con `_AUTH_SENSITIVE_FIELDS` constant + `_encrypt_auth_in_config` + `_decrypt_auth_in_config` + `_nd`). `inspect.getsource(ApiConnectionService.<method>)` legge il source dal mixin tramite `__code__.co_filename`. Le call-site `self.<method>(...)` interne (cross-mixin) risolvono via MRO senza modifiche. Cross-mixin INVERSO documentato: `test_api_connection` (mgmt) → `_substitute_url_path_params` (gen_enr); `_execute_rest_file` (rest_file) → `_validate_outbound_url` (source_loading); `_execute_api_generator/enricher` (gen_enr) + `_execute_rest_file` (rest_file) + `test_api_connection` (mgmt) → `_prepare_headers` (core).
+La classe coordina CRUD/test connection, supporto introspection/result,
+source loading tenant-bound, REST file processor e generator/enricher.
+Cross-call accettate:
+- management -> generator/enricher per path params in test connection;
+- REST file -> source loading per outbound URL guard;
+- generator/enricher e REST file -> core `_prepare_headers`.
 
-**Logger naming contract** (uniforme per tutti i mixin che loggano + core class): tutti i moduli che emettono log usano esplicitamente `get_logger("app.core.arricchisci.api_connector")` (canonical pattern, parita' B2/B3-A). `StructuredLogger` wrapper di `app/utils/logger.py` delega a `_logger.log(...)` sul logger stdlib omonimo (singleton per nome) → handler/caplog agganciati nei test catturano emit indistintamente da quale mixin module li produce. `_assert_source_project_in_tenant` usa kwarg `op="load_source_project"` (StructuredLogger interface).
+**Logger naming contract**: i moduli API connection che emettono log usano
+il logger canonico `app.core.arricchisci.api_connector`.
 
-**Residui intenzionali in `api_connector.py` core (post-B3-B.9, 669 linee finali)**:
-- `__init__` (~3 body) — orchestrator constructor (instance attrs `data_dir`, `results_dir` da `settings`)
-- `execute_enrichment` (~194 body) — entry point pubblico orchestrator (boundary safety-net per ValueError/Exception domain-safe → response user_error)
-- `_init_execution_context` (~37 body) — tenant binding + preview_limit setup (fail-closed via `ExecutionContextError`)
-- `_get_execution_order` (~32 body) — topological sort algoritmo Kahn
-- `_run_single_enricher` (~16 body) — dispatch generator vs enricher
-- `_is_file_source_for_file_processor` (~25 body) — branch logic file_source passthrough vs `_load_file_source`
-- `_prepare_headers` (~3 body) — 3-line stub di delega a `_shared_prepare_headers` (`app.shared.api_utils`); RESTA in core perche' `tests2/security/unit/test_temp_lifecycle_core.py:325` patch `app.core.arricchisci.api_connector._shared_prepare_headers` source-bound. Estrazione richiede test modernization in initiative dedicata (carry-over Run 0/5).
-- B3-B.1 helper re-export: `_AUTH_SENSITIVE_FIELDS`, `_encrypt_auth_in_config`, `_decrypt_auth_in_config`, `_nd` per back-compat con direct imports `from app.core.arricchisci.api_connector import _decrypt_auth_in_config` (test_api_connection_decrypt_policy) e `_nd` (test_api_connector_contract).
-- Singleton `api_connection_service = ApiConnectionService()` (linea finale) — usato da `app/main.py`, `executor.py`, `router.py`, `eseguibili/scanner.py`.
-
-**Cleanup B3-B.7** (post-cluster extraction):
-- 9 stdlib imports orphan rimossi: `io`, `os`, `re`, `json`, `uuid`, `datetime`, `timezone`, `Path`, `requests` (tutti con body migrato in mixin).
-- 9 app imports orphan rimossi: `_shared_extract_json_value`, `_shared_get_oauth2_token`, `_shared_get_oauth2_cc_token`, `sanitize_for_log`, `load_dataframe_from_file`, `filter_visible_columns`, `find_latest_output_file`, `process_static_fields`, `ResponseParser`/`get_preset_config`, `FileSourceResolutionError`.
-- 2 dead-code stub OAuth rimossi (prova forte: 0 self-call sites, 0 external refs, 0 test patches, 0 direct imports): `_get_oauth2_client_credentials_token` + `_get_oauth2_token` (3 linee ognuno; EnrichmentService class ha le sue copie separate in `enrichment_service.py:424,428`).
-
-**Bugfix security B3-B.8** (`app/shared/api_utils.py:validate_external_url`, commit `be987d1`):
-- DNS resolution via `socket.getaddrinfo(host, None)` invece di `gethostbyname_ex` per coprire ANCHE record AAAA (IPv6). Pre-fix: hostname che risolveva esclusivamente a IPv6 privato/loopback/link-local (`fc00::/7`, `::1`, `fe80::/10`) bypassava silenziosamente il check (fail-OPEN).
-- Aggiunto blocco `ip.is_unspecified` per `0.0.0.0` / `::` (edge case minor).
-- Interfaccia preservata: `raise ValueError`, loopback opt-in `PLENORA_ALLOW_LOOPBACK_OUTBOUND` + alias retro-compat `URBY_ALLOW_LOOPBACK_OUTBOUND`, hardened guard `ENVIRONMENT in {production/prod/staging/stage}`.
-- 19 nuovi test cases B3-B.8 in `tests2/security/unit/test_validate_external_url_contract.py`: IPv6 loopback/private/link-local/multicast/ULA + `0.0.0.0` + `::` + dedup + opt-in IPv6 loopback + opt-in non sblocca IPv6 ULA.
-- NON modificato `_validate_outbound_url` (B3-B.4b mixin, return-string interface). Carry-over Run 0/5: consolidamento architetturale single-source con wrapper raise-mode.
-
-**Cleanup B3-B.9 dead patches** (commit `cac2d20`):
-- Rimosse 3 patches dead in `tests2/arricchisci/unit/test_api_connector_execute_enrichment_lock.py`: `save_dataframe` (0 usages), `save_result_blob` (3 usages dead by indirection — sum `call_count + save_blob_bytes.call_count` con `save_blob.call_count` sempre 0 + 2 `return_value =` su mock mai chiamato), `get_temp_output_path` (0 usages).
-- Conseguentemente rimossi 3 import back-compat fragili da `api_connector.py` (`save_dataframe`, `save_result_blob`, `get_temp_output_path` con `# noqa: F401`).
-- Test modernizzati: `env.save_blob_bytes.call_count == 1` (rinforzato da somma generica), 2 `return_value = ` ridotti al solo canonical path (`save_blob_bytes`).
-- Per scenari path-based futuri (gpkg/shp): patchare canonical `app.utils.result_store.save_result_blob`, NON l'alias api_connector ormai rimosso.
-
-**Test modernizations B3-B** (necessarie pre-extraction per evitare source-bound patch breakage):
-- **B3-B.2a**: `tests2/arricchisci/unit/test_api_connector_test_api_connection_lock.py` modernizzato da `patch("app.core.arricchisci.api_connector.logger")` source-bound a handler stdlib agganciato al logger canonico per nome. Pattern behavior-bound (singleton stdlib per nome → record indistinguibili dai consumer).
-- **B3-B.4a**: `tests2/security/unit/test_api_connector_source_loading_core.py` modernizzato da `patch("app.core.arricchisci.api_connector.filter_visible_columns", ...)` (alias re-export) a `patch("app.utils.dataframe.filter_visible_columns", ...)` (source canonico). Identita' simbolica preservata; patch ora resiliente all'extraction.
-- **B3-B.5a**: `tests2/arricchisci/unit/test_api_connector_rest_file_error_taxonomy.py` (×2) + `tests2/security/unit/test_temp_lifecycle_core.py` (×1) modernizzati da `patch("app.core.arricchisci.api_connector.requests.post", ...)` a `patch("requests.post", ...)` (source canonico — `requests.post is requests.api.post`, intercept funziona via module binding).
-
-**Behavior-equivalent rewrite dichiarato B3-B.5b**: 8 forward-ref `ApiConnectionService._rest_file_error(...)` riscritti come `self._rest_file_error(...)` in `_build_rest_file_multipart` (×4) e `_parse_rest_file_config` (×4). Necessario per evitare import circolare nel mixin module (api_connector importa il mixin a module-load, prima che `ApiConnectionService` sia definita). Runtime-identico per staticmethod via descriptor protocol. Documentato esplicitamente nel docstring di `ApiConnectionRestFileMixin`.
-
-**Carry-over fuori scope Phase 5** (futura nuova Phase 0/5):
-- Redis-distributed rate limiter: il `RateLimiter` corrente e' in-memory thread-safe. Sostituzione con Redis-based per distributed scenarios e' miglioramento architetturale, non refactor behavior-preserving.
-- Retry per-row vs batch retry consolidation: `_call_api_with_retry` (`EnrichmentRetryHttpMixin`) e `_call_batch_api` (`EnrichmentBatchModeMixin`) condividono retry chain pattern (max_retries + 429 + retry_on_status + exponential backoff) ma con body distinto (per-row index vs batch_indices[0], path params URL substitution vs payload builder). Consolidamento candidato in helper standalone `_retry_http_machinery`.
-
----
-
+**Core class ownership**:
+- `__init__`: carica path/config runtime da settings.
+- `execute_enrichment`: entry point pubblico e boundary di errore
+  domain-safe.
+- `_init_execution_context`: tenant binding + preview limit.
+- `_get_execution_order`: topological sort dei nodi enrichment.
+- `_run_single_enricher`: dispatch generator vs enricher.
+- `_is_file_source_for_file_processor`: branch file_source passthrough.
+- `api_connection_service`: singleton consumato da main/router/executor.
 ## `backend/app/core/artifacts/` <a id="artifacts"></a>
 
 Entry-point: `backend/app/core/artifacts/resolver.py`
@@ -226,14 +220,14 @@ Responsabilita: governa scrittura DataFrame su DB target con DDL automatica, bul
 |---|---|---|
 | `router.py` | `init_carica_service`, `AutoMappingRequest` | contratto API carica |
 | `executor.py` | `CaricaExecutor`, `_resolve_aliases_in_mappings`, `_dict_to_conn_obj`, `_short_err` | orchestrazione di una scrittura |
-| `database_writer.py` | (orchestrator-class, 460 righe post-Phase-5-B2, -81% vs baseline 2443) — `DatabaseWriter(DataPrepMixin, SchemaIntrospectionMixin, TransactionExecutionMixin, ReplaceStrategiesMixin, WriterPreflightLifecycleMixin, BatchDispatchMixin, DestinationWriter)`. Resta nel ruolo orchestrator: `__init__` + `write` (entry point) + `_dispatch_write_mode` (orchestrator interno) + `_oracle_setup` (utility cross-mixin chiamata da TransactionExecutionMixin + ReplaceStrategiesMixin via `self._oracle_setup` MRO; cross-mixin → resta in core class) | entry point + dispatch |
+| `database_writer.py` | `DatabaseWriter(DataPrepMixin, SchemaIntrospectionMixin, TransactionExecutionMixin, ReplaceStrategiesMixin, WriterPreflightLifecycleMixin, BatchDispatchMixin, DestinationWriter)`; key methods `__init__`, `write`, `_dispatch_write_mode`, `_oracle_setup` | entry point writer + dispatch |
 | `writer_base.py` | `DestinationWriter` (base) | interfaccia writer |
-| `writer_data_prep.py` | `DataPrepMixin` (4 metodi: `_prepare_dataframe`, `_fix_mixed_type_columns`, `_geometry_to_wkt`, `_build_params`) | data transformation pre-write (B2.1) |
-| `writer_introspection.py` | `SchemaIntrospectionMixin` (6 metodi: `table_exists`, `get_existing_columns`, `get_schemas`, `get_tables`, `_table_exists_for`, `_compute_schema_hints`) | schema introspection DB-side + DataFrame-side (B2.2) |
-| `writer_transaction_exec.py` | `TransactionExecutionMixin` (4 metodi: `_execute_in_batches`, `_execute_all_or_nothing`, `_execute_per_batch`, `_execute_batch`) | batch execution con strategia transazionale (B2.3) |
-| `writer_replace_strategies.py` | `ReplaceStrategiesMixin` (6 metodi: `_truncate_insert_atomic`, `_truncate_insert_stage_swap`, `_truncate_insert_oracle_redef`, `_replace_atomic`, `_mssql_replicate_schema_to_shadow`, `_generate_single_rename`) | replace/truncate strategies + helper SQL (B2.4b) |
-| `writer_preflight_lifecycle.py` | `WriterPreflightLifecycleMixin` (8 metodi: `validate`, `_check_create_permission`, `_assert_safe_write_config`, `_build_initial_result`, `check_conflicts`, `create_table`, `drop_table`, `truncate_table`) | preflight validation + DDL lifecycle (B2.5b) |
-| `writer_batch_dispatch.py` | `BatchDispatchMixin` (3 metodi: `_batch_insert`, `_batch_update`, `_batch_upsert`) | dispatch per write mode + delegate a `_execute_in_batches` (B2.6) |
+| `writer_data_prep.py` | `DataPrepMixin` (4 metodi: `_prepare_dataframe`, `_fix_mixed_type_columns`, `_geometry_to_wkt`, `_build_params`) | data transformation pre-write |
+| `writer_introspection.py` | `SchemaIntrospectionMixin` (6 metodi: `table_exists`, `get_existing_columns`, `get_schemas`, `get_tables`, `_table_exists_for`, `_compute_schema_hints`) | schema introspection DB-side + DataFrame-side |
+| `writer_transaction_exec.py` | `TransactionExecutionMixin` (4 metodi: `_execute_in_batches`, `_execute_all_or_nothing`, `_execute_per_batch`, `_execute_batch`) | batch execution con strategia transazionale |
+| `writer_replace_strategies.py` | `ReplaceStrategiesMixin` (6 metodi: `_truncate_insert_atomic`, `_truncate_insert_stage_swap`, `_truncate_insert_oracle_redef`, `_replace_atomic`, `_mssql_replicate_schema_to_shadow`, `_generate_single_rename`) | replace/truncate strategies + helper SQL |
+| `writer_preflight_lifecycle.py` | `WriterPreflightLifecycleMixin` (8 metodi: `validate`, `_check_create_permission`, `_assert_safe_write_config`, `_build_initial_result`, `check_conflicts`, `create_table`, `drop_table`, `truncate_table`) | preflight validation + DDL lifecycle |
+| `writer_batch_dispatch.py` | `BatchDispatchMixin` (3 metodi: `_batch_insert`, `_batch_update`, `_batch_upsert`) | dispatch per write mode + delegate a `_execute_in_batches` |
 | `bulk_writers.py` | `bulk_insert`, `is_bulk_enabled`, `BulkInsertNotSupportedError` | path bulk + telemetry |
 | `ddl_generator.py` | `DDLGenerator` | DDL automatico da DataFrame |
 | `column_mapper.py` | `ColumnMapper` | mapping colonne sorgente->destinazione |
@@ -258,30 +252,26 @@ Punti di intervento tipici:
 
 Intervento/confini: leggere dataset solo da `intermediate`. Credenziali via `connections`+`shared/crypto`. Preservare `ConflictPolicy` e idempotency keys; nuovi writer estendono `writer_base.DestinationWriter`. Non bypassare `ConflictChecker` quando policy != overwrite.
 
-**MRO post-Phase-5-B2** (decisione architetturale ratificata B2.6):
-```
+**Mixin layout - writer**:
+```text
 DatabaseWriter
-  → DataPrepMixin
-  → SchemaIntrospectionMixin
-  → TransactionExecutionMixin
-  → ReplaceStrategiesMixin
-  → WriterPreflightLifecycleMixin
-  → BatchDispatchMixin
-  → DestinationWriter (ABC)
-  → object
+  -> DataPrepMixin
+  -> SchemaIntrospectionMixin
+  -> TransactionExecutionMixin
+  -> ReplaceStrategiesMixin
+  -> WriterPreflightLifecycleMixin
+  -> BatchDispatchMixin
+  -> DestinationWriter (ABC)
+  -> object
 ```
-31 metodi distribuiti su 6 mixin specializzati per dominio. `inspect.getsource(DatabaseWriter.<method>)` legge il source dal mixin tramite `__code__.co_filename` + line numbers. Le call-site `self.<method>(...)` interne (sia da `_dispatch_write_mode` sia inter-mixin) risolvono via MRO senza modifiche.
+I mixin separano data preparation, introspection, transaction execution,
+replace strategies, preflight/DDL lifecycle e batch dispatch. Il core
+`DatabaseWriter` resta responsabile di `write`, `_dispatch_write_mode`
+e dell'orchestrazione cross-mixin.
 
-**Logger naming contract** (uniforme per tutti i 6 mixin + core class): tutti i moduli usano esplicitamente `get_logger("app.core.carica.writer")` (NOT `__name__`). `StructuredLogger` wrapper di `app/utils/logger.py` delega a `_logger.log(...)` sul logger stdlib omonimo (singleton per nome) → handler/caplog agganciati nei test catturano emit indistintamente da quale modulo li produce.
-
-**Test contract modernization** (3 commit B2):
-- **B2.0** (`test_database_writer_log_consistency_contract.py`): `monkeypatch.setattr(dw_module, "logger", ...)` → handler stdlib agganciato al logger canonico per nome (cattura emit dei mixin); `inspect.getsource(dw_module)` (cleanup guards) → `inspect.getsource(DatabaseWriter._method)` per ciascuno dei 3 metodi caller.
-- **B2.4a** (`test_database_writer_bulk_integration_contract.py:test_stage_swap_callsite_propagates_stg_table_to_bulk`): `ast.parse(database_writer.py)` → `ast.parse("class _S:\n" + inspect.getsource(method))` per ciascuno dei 3 metodi (dedent via class scaffold per i body con SQL multiline).
-- **B2.5a** (`test_unsafe_append_gate_contract.py:test_unsafe_append_combo_with_flag_proceeds`): `monkeypatch.setattr(dw_mod, "logger", ...)` → handler stdlib agganciato al logger canonico per nome (stesso pattern B2.0).
-
-Tutti i 3 test contract ora behavior-bound (non source-location-bound): indipendenti dalla posizione fisica dei metodi. Anti-fragili rispetto a future estrazioni / refactor.
-
----
+**Logger naming contract**: tutti i moduli writer usano il logger
+canonico `app.core.carica.writer`, cosi' le estrazioni in mixin non
+cambiano la sorgente osservabile dei log.
 
 ## `backend/app/core/connections/` <a id="connections"></a>
 
@@ -411,12 +401,12 @@ Responsabilita: governa pipeline IMDF (DXF -> IMDF/IFC/GDB) e pubblicazione su A
 | `router.py` | `_safe_bundle_dir`, `_hydrate_local_cache`, `_assert_bundle_group_access`, `ImdfPublishRequest`, `ImdfValidateRequest`, `ImdfPublishResponse`, `ImdfBundleSummary`, `publish_imdf`, `validate_publish_endpoint`, `get_bundle_metadata`, `list_bundles`, `delete_bundle` | contratto API IMDF + ownership bundle |
 | `loader.py` | `ImdfBundle`, `extract_imdf_zip`, `_build_bundle_index`, `load_imdf_layers` | parsing bundle ZIP IMDF |
 | `validator.py` | `validate_publish`, `_count_features_where_via_post`, `_coarse_type_from_esri`, `_coarse_type_from_dtype` | validazione pre-publish (lazy-import simboli da `arcgis_uploader` via facade) |
-| `arcgis_uploader.py` | (orchestrator + facade, 573 righe post-Phase-5-B4, -56% vs baseline 1315) — `upload_imdf_layers` (orchestrator end-to-end) + costanti `LAYER_ORDER` / `DEFAULT_MATCH_COLUMNS` / `PUBLISH_MODES` + facade re-export di tutti gli helper privati distribuiti nel package `arcgis/` | entry point semantico publish ArcGIS |
-| `arcgis/__init__.py` | (package marker vuoto, no auto-import per evitare cicli) | sub-package cluster split B4 |
-| `arcgis/sql_helpers.py` | `_quote_sql_value`, `_chunked`, `_query_oid_by_key` | quoting SQL ArcGIS-safe + chunking + batch OBJECTID resolution (B4.1) |
-| `arcgis/service_discovery.py` | `_list_user_folders`, `_ensure_folder`, `_is_service_name_available`, `_enumerate_all_user_items`, `_search_user_items`, `_find_existing_service` | folder + Feature Service discovery/lookup (B4.2) |
-| `arcgis/service_lifecycle.py` | `_try_cleanup_zombie_service`, `_delete_existing_service` | rimozione/cleanup FS (B4.3, include bugfix `UnboundLocalError` contatori) |
-| `arcgis/publish_ops.py` | `_add_layer_to_service`, `_publish_mode_existing` | scrittura layer-level su FS: replace + append/upsert/update (B4.4) |
+| `arcgis_uploader.py` | `upload_imdf_layers`, `LAYER_ORDER`, `DEFAULT_MATCH_COLUMNS`, `PUBLISH_MODES`; facade re-export dei helper privati in `arcgis/` | entry point semantico publish ArcGIS |
+| `arcgis/__init__.py` | package marker vuoto; no auto-import per evitare cicli | sub-package `arcgis/` |
+| `arcgis/sql_helpers.py` | `_quote_sql_value`, `_chunked`, `_query_oid_by_key` | quoting SQL ArcGIS-safe + chunking + batch OBJECTID resolution |
+| `arcgis/service_discovery.py` | `_list_user_folders`, `_ensure_folder`, `_is_service_name_available`, `_enumerate_all_user_items`, `_search_user_items`, `_find_existing_service` | folder + Feature Service discovery/lookup |
+| `arcgis/service_lifecycle.py` | `_try_cleanup_zombie_service`, `_delete_existing_service` | rimozione/cleanup FS |
+| `arcgis/publish_ops.py` | `_add_layer_to_service`, `_publish_mode_existing` | scrittura layer-level su FS: replace + append/upsert/update |
 | `persist.py` | `persist_imdf_bundle_to_disk`, `_count_features` | persistenza bundle su disco |
 | `storage.py` | `_storage`, `_zip_key`, `_meta_key`, `_local_dir` | storage isolato per task |
 
@@ -431,12 +421,19 @@ Punti di intervento tipici:
 - check pre-publish (count/types) -> `validator.py` (`validate_publish`)
 - gestione bundle su disco/cleanup -> `persist.py` + `storage.py`
 
-Intervento/confini: pubblicazione ArcGIS solo via `features` (HTTP client) — non chiamare ArcGIS REST direttamente da qui se non tramite il client. Preservare contratto bundle/validation. Bundle access via `_assert_bundle_group_access`. **`arcgis_uploader.py` resta entry point semantico (orchestrator + facade, decisione B4.5 NO-OP)**: nuovi helper privati vanno nel cluster `arcgis/<dominio>.py` appropriato, MAI direttamente nel facade. Logger naming: tutti i moduli figli di `arcgis/` usano esplicitamente `get_logger("app.core.imdf.arcgis_uploader")` (NOT `__name__`) per non spostare il name dei record.
+Intervento/confini: pubblicazione ArcGIS solo via `features` (HTTP client), non chiamare ArcGIS REST direttamente da qui se non tramite il client. Preservare contratto bundle/validation. Bundle access via `_assert_bundle_group_access`. `arcgis_uploader.py` resta entry point semantico: nuovi helper privati vanno nel cluster `arcgis/<dominio>.py` appropriato, non nel facade. Logger naming: tutti i moduli figli di `arcgis/` usano esplicitamente `get_logger("app.core.imdf.arcgis_uploader")` per non spostare il name dei record.
 
-Monkeypatch semantics (test contract `tests2/security/unit/test_imdf_validate_publish_*.py`):
-- **Path A** (validator lazy import): `validator.py:130` lazy-importa `_find_existing_service` / `_is_service_name_available` / `_list_user_folders` da `arcgis_uploader` al call time. Patch via `monkeypatch.setattr(uploader_mod, "<helper>", fake)` rebinda l'attributo del facade prima del lazy import → fake visto. ✓
-- **Path B** (`upload_imdf_layers` interno): chiama i 7 helper privati per name lookup nello scope del facade `arcgis_uploader`, che li re-exporta come attributi. Rebind del facade visto dal chiamante locale. ✓ Preservato dalla decisione B4.5 NO-OP che mantiene l'orchestrator nel facade.
-- **Path C** (chiamate intra-cluster nei moduli figli `arcgis/*.py`): name lookup nello scope del modulo figlio. Esempi veri post-B4: `_find_existing_service → _search_user_items → _enumerate_all_user_items` (tutte in `service_discovery.py`); `_delete_existing_service → _search_user_items` via `from .service_discovery import _search_user_items` in `service_lifecycle.py`; `_publish_mode_existing → _query_oid_by_key` / `_chunked` / `_quote_sql_value` via `from .sql_helpers import ...` in `publish_ops.py`. Patch su `uploader_mod.<helper>` NON visto su questi path. Trade-off documentato in ogni docstring figlio: nessun test contract attuale dipende da Path C.
+**Facade contract - ArcGIS publish**:
+```text
+arcgis_uploader.upload_imdf_layers
+  -> arcgis.service_discovery     folder/service lookup
+  -> arcgis.service_lifecycle     delete/cleanup service
+  -> arcgis.publish_ops           add/replace/append/upsert/update layers
+  -> arcgis.sql_helpers           quoting, chunking, OBJECTID lookup
+```
+Il facade conserva gli attributi privati re-exportati per compatibilita dei test e dei monkeypatch esistenti. I moduli figli possono chiamarsi tra loro solo quando il dominio lo richiede; nuove dipendenze cross-cluster vanno motivate in docstring.
+
+**Monkeypatch contract**: i test che patchano `arcgis_uploader.<helper>` vedono i lookup lazy fatti dal validator e i lookup nello scope del facade. Le chiamate interne tra moduli figli risolvono invece il nome nel modulo figlio; non assumere che una patch sul facade intercetti quei path.
 
 ---
 
@@ -491,7 +488,7 @@ Responsabilita: governa trasformazioni tabellari e spaziali via registry plugin,
 | `executor.py` | `ManipolaExecutor`, `_get_execution_chain`, `_assert_no_lineage_cycle_on_chain`, `_applica_crs_da_colonne` | esecutore principale + lineage |
 | `plugin_executor.py` | `PluginExecutor`, `PluginExecutorCompatibility`, `get_executor`, `reload_executor` | dispatch plugin trasformazioni |
 | `transforms_registry.json` | (registry JSON delle trasformazioni esposte) | catalogo nomi/parametri esposto al frontend |
-| `transforms/base.py` | (facade re-export, 358 righe post-B1, -89.4% vs baseline 3385) — nessun body, solo `from .<cluster> import op_*` per preservare i path `from .base import op_X` e la risoluzione `getattr(base, "op_X")` del registry | facade modulo |
+| `transforms/base.py` | facade re-export degli `op_*` dai cluster transforms; preserva `from .base import op_X` e `getattr(base, "op_X")` usati dal registry | facade modulo |
 | `transforms/joins.py` | `op_join`, `op_union`, `op_cross_join` | join e unione tabelle |
 | `transforms/strings.py` | `op_string_pad`, `op_string_length`, `op_string_extract`, `op_text_normalize` | manipolazione stringhe |
 | `transforms/utility.py` | `op_add_row_number`, `op_date_extract`, `op_uuid_generator` | utility riga (numerazione, date, UUID) |
