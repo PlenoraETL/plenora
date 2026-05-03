@@ -764,9 +764,13 @@ def get_blacklist_status() -> Dict[str, Any]:
             "error": str(e)[:200],
         }
 
+    # BE-CONFIG-001C: default tipato in `Settings.DEFAULTS`
+    # (`JWT_BLACKLIST_STALE_THRESHOLD_SEC=1800`). Guard `ValueError` resta
+    # safety per env malformata propagata dal type coercion.
     try:
-        threshold = int(os.getenv("JWT_BLACKLIST_STALE_THRESHOLD_SEC", "1800"))
-    except ValueError:
+        from app.config import settings as _settings
+        threshold = int(_settings.get("JWT_BLACKLIST_STALE_THRESHOLD_SEC"))
+    except (TypeError, ValueError):
         threshold = 1800
 
     try:

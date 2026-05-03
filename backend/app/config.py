@@ -125,6 +125,26 @@ class Settings:
         # (era direct `os.getenv` in `app.shared.jwt_token`). Override env
         # `JWT_EXPIRE_HOURS` continua a funzionare via type coercion `int`.
         "JWT_EXPIRE_HOURS": 8,
+        # Login rate limit (R-01 + ADR-0021). Migrati a Settings da
+        # `BE-CONFIG-001C` (erano direct `os.getenv` import-time in
+        # `app/core/auth/auth.py`). Default identici al pre-001C: 10
+        # tentativi falliti in 60s -> lockout 300s. I test esistenti
+        # `tests2/security/unit/test_login_rate_limit_per_ip.py`
+        # monkeypatch-ano i moduli `LOGIN_*` symbol; preservato.
+        "LOGIN_MAX_ATTEMPTS": 10,
+        "LOGIN_WINDOW_SECONDS": 60,
+        "LOGIN_LOCKOUT_SECONDS": 300,
+        # Timeout Redis per i lookup di rate limit / blacklist. Default 1s
+        # (single-host) — ops puo' alzarlo per Redis remoto/latente. Su
+        # timeout: fallback in-memory (login RL) o fail-open (blacklist
+        # read, ADR-0009). Migrati a Settings da `BE-CONFIG-001C`.
+        "LOGIN_RL_REDIS_TIMEOUT_SEC": 1,
+        "JWT_BLACKLIST_REDIS_TIMEOUT_SEC": 1,
+        # Soglia "stale" per la blacklist JWT mostrata nella dashboard
+        # admin (`admin_system_status/service.py`). Sopra questa soglia
+        # l'ultima sync e' considerata stantia e segnalata come warning.
+        # Default 1800s (30 min). Migrato a Settings da `BE-CONFIG-001C`.
+        "JWT_BLACKLIST_STALE_THRESHOLD_SEC": 1800,
 
         # ==================== API ESTERNE ====================
         "API_TIMEOUT": 30,

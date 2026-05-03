@@ -34,6 +34,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 # app.config, la lettura di os.getenv("JWT_SECRET_KEY") sotto sarebbe fatta
 # su un environment in cui il .env non è ancora stato applicato.
 import app.config  # noqa: F401
+from app.config import settings as _settings
 import app.db.db_service as db
 import app.db.config_db_service as cfg_db
 from app.shared.audit_action import audit_action
@@ -79,9 +80,14 @@ from collections import defaultdict
 _rate_lock = threading.Lock()
 _failed_attempts: dict = defaultdict(list)
 
-LOGIN_MAX_ATTEMPTS    = int(os.getenv("LOGIN_MAX_ATTEMPTS", "10"))
-LOGIN_WINDOW_SECONDS  = int(os.getenv("LOGIN_WINDOW_SECONDS", "60"))
-LOGIN_LOCKOUT_SECONDS = int(os.getenv("LOGIN_LOCKOUT_SECONDS", "300"))
+# BE-CONFIG-001C: default tipati in `Settings.DEFAULTS` (10 / 60 / 300).
+# Override env continua a funzionare via `Settings._converti_tipo_env`
+# (coercion `int`). Le costanti restano modulo-level perche' i test
+# `tests2/security/unit/test_login_rate_limit_per_ip.py` le
+# monkeypatch-ano direttamente.
+LOGIN_MAX_ATTEMPTS    = int(_settings.get("LOGIN_MAX_ATTEMPTS"))
+LOGIN_WINDOW_SECONDS  = int(_settings.get("LOGIN_WINDOW_SECONDS"))
+LOGIN_LOCKOUT_SECONDS = int(_settings.get("LOGIN_LOCKOUT_SECONDS"))
 
 
 def _check_rate_limit_in_memory(ip: str):

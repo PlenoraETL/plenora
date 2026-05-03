@@ -130,11 +130,14 @@ def _get_client() -> Optional[Any]:
             # con Redis remoto / network latente; mantenerlo basso in
             # single-host per non bloccare il request handler se Redis
             # va giu' (fail-open kicks in dopo il timeout).
+            # BE-CONFIG-001C: default tipato in `Settings.DEFAULTS`
+            # (`JWT_BLACKLIST_REDIS_TIMEOUT_SEC=1`). Guard `<= 0` resta
+            # safety per valori legali ma non sensati.
             try:
-                timeout = int(os.getenv("JWT_BLACKLIST_REDIS_TIMEOUT_SEC", "1"))
+                timeout = int(settings.get("JWT_BLACKLIST_REDIS_TIMEOUT_SEC"))
                 if timeout <= 0:
                     timeout = 1
-            except ValueError:
+            except (TypeError, ValueError):
                 timeout = 1
             _client = redis.from_url(
                 settings.CELERY_BROKER_URL,

@@ -78,11 +78,16 @@ def _get_client() -> Optional[Any]:
         try:
             # Import locale per evitare import circolare con app.shared.
             from app.config import settings
+            # BE-CONFIG-001C: default tipato in `Settings.DEFAULTS`
+            # (`LOGIN_RL_REDIS_TIMEOUT_SEC=1`). `_converti_tipo_env`
+            # rifiuta env non numeriche tornando il default; il guard
+            # `<= 0` resta come safety per valori legali ma non sensati
+            # (`0`, negativi).
             try:
-                timeout = int(os.getenv("LOGIN_RL_REDIS_TIMEOUT_SEC", "1"))
+                timeout = int(settings.get("LOGIN_RL_REDIS_TIMEOUT_SEC"))
                 if timeout <= 0:
                     timeout = 1
-            except ValueError:
+            except (TypeError, ValueError):
                 timeout = 1
             _client = redis.from_url(
                 settings.CELERY_BROKER_URL,
