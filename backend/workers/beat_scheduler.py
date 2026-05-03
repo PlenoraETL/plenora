@@ -784,13 +784,13 @@ class PlenoraBeatScheduler(Scheduler):
             # Override env continua a funzionare via type coercion `int`.
             get_setting = getattr(settings, "get", None)
             if callable(get_setting):
-                raw_ttl_hours = get_setting("TEMP_ORPHAN_CLEANUP_HOURS")
+                raw_ttl_hours = settings.get("TEMP_ORPHAN_CLEANUP_HOURS")
             else:
                 # Tests patch app.config.settings with lightweight stubs that
                 # only expose DATA_DIR. Preserve the historical env override
                 # path for those stubs without weakening the real Settings
                 # boundary used in production.
-                raw_ttl_hours = _os.getenv("TEMP_ORPHAN_CLEANUP_HOURS", 24)
+                raw_ttl_hours = _os.environ.get("TEMP_ORPHAN_CLEANUP_HOURS", 24)
             ttl_hours = int(raw_ttl_hours)
             ttl_seconds = ttl_hours * 3600
             removed = 0
