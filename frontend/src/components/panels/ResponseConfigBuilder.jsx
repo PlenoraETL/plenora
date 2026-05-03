@@ -10,6 +10,9 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import './ResponseConfigBuilder.css';
 import JsonTreeNode from './response-config/JsonTreeNode';
+import MappingsPanel from './response-config/MappingsPanel';
+import TransformsPanel from './response-config/TransformsPanel';
+import PreviewPanel from './response-config/PreviewPanel';
 import {
   analyzeJsonStructure,
   collectPaths,
@@ -30,20 +33,10 @@ import {
  */
 
 // Operazioni di trasformazione disponibili
-const TRANSFORM_OPERATIONS = [
-  { id: 'none', label: 'Nessuna', icon: '−' },
-  { id: 'kelvin_to_celsius', label: 'Kelvin → Celsius', icon: '🌡️' },
-  { id: 'celsius_to_kelvin', label: 'Celsius → Kelvin', icon: '🌡️' },
-  { id: 'round', label: 'Arrotonda', icon: '🔢', hasValue: true, valueLabel: 'Decimali' },
-  { id: 'multiply', label: 'Moltiplica', icon: '✖️', hasValue: true, valueLabel: 'Fattore' },
-  { id: 'divide', label: 'Dividi', icon: '➗', hasValue: true, valueLabel: 'Divisore' },
-  { id: 'add', label: 'Aggiungi', icon: '➕', hasValue: true, valueLabel: 'Valore' },
-  { id: 'subtract', label: 'Sottrai', icon: '➖', hasValue: true, valueLabel: 'Valore' },
-  { id: 'uppercase', label: 'MAIUSCOLO', icon: 'Aa' },
-  { id: 'lowercase', label: 'minuscolo', icon: 'aa' },
-  { id: 'prefix', label: 'Prefisso', icon: '←', hasValue: true, valueLabel: 'Prefisso' },
-  { id: 'suffix', label: 'Suffisso', icon: '→', hasValue: true, valueLabel: 'Suffisso' },
-];
+// `TRANSFORM_OPERATIONS` (lista UI delle 12 operazioni di transform)
+// vive co-locata in `response-config/TransformsPanel.jsx`
+// (`FE-SPLIT-003C`). Il dispatch effettivo dei case e' in
+// `responseConfigEngine.applyTransforms`.
 
 // Preset predefiniti
 const PRESETS = [
@@ -372,248 +365,35 @@ function ResponseConfigBuilder({
 
           {/* Tab: Mappings */}
           {activeTab === 'mappings' && (
-            <div className="response-config-builder__panel">
-              <div className="response-config-builder__section-header">
-                <h4>📋 Campi da estrarre</h4>
-                <p>Rinomina le colonne di output se necessario</p>
-              </div>
-
-              {/* Iterate On */}
-              {iterateOn.length > 0 && (
-                <div className="response-config-builder__iterate-section">
-                  <h5>🔄 Array da esplodere (iterate_on):</h5>
-                  <div className="response-config-builder__iterate-list">
-                    {iterateOn.map((item, idx) => (
-                      <div key={idx} className="response-config-builder__iterate-item">
-                        <span className="response-config-builder__iterate-level">Livello {idx + 1}:</span>
-                        <code className="response-config-builder__iterate-path">{item.path || '(root)'}</code>
-                        <span className="response-config-builder__iterate-arrow">→</span>
-                        <input 
-                          type="text"
-                          value={item.as}
-                          onChange={e => updateIterateAlias(idx, e.target.value)}
-                          className="response-config-builder__input response-config-builder__input--small"
-                          placeholder="alias"
-                        />
-                        <button type="button" 
-                          onClick={() => toggleIterate(item.path)}
-                          className="response-config-builder__btn response-config-builder__btn--danger response-config-builder__btn--icon"
-                        >
-                          🗑️
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Mappings */}
-              {mappings.length === 0 ? (
-                <div className="response-config-builder__empty-section">
-                  <p>Nessun campo selezionato. Vai alla tab "Struttura" per selezionare i campi.</p>
-                </div>
-              ) : (
-                <div className="response-config-builder__mappings-list">
-                  <div className="response-config-builder__mapping-header">
-                    <span>Path sorgente</span>
-                    <span></span>
-                    <span>Nome colonna</span>
-                    <span>Tipo</span>
-                    <span></span>
-                  </div>
-                  {mappings.map((m, idx) => (
-                    <div key={idx} className="response-config-builder__mapping-item">
-                      <code className="response-config-builder__mapping-path">{m.path}</code>
-                      <span className="response-config-builder__mapping-arrow">→</span>
-                      <input 
-                        type="text"
-                        value={m.column}
-                        onChange={e => updateMappingColumn(idx, e.target.value)}
-                        className="response-config-builder__input"
-                      />
-                      <span className={`response-config-builder__type-badge response-config-builder__type-badge--${m.type}`}>
-                        {m.type}
-                      </span>
-                      <button type="button" 
-                        onClick={() => toggleMapping(m.path, m.column, m.type)}
-                        className="response-config-builder__btn response-config-builder__btn--danger response-config-builder__btn--icon"
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            <MappingsPanel
+              iterateOn={iterateOn}
+              mappings={mappings}
+              updateIterateAlias={updateIterateAlias}
+              toggleIterate={toggleIterate}
+              updateMappingColumn={updateMappingColumn}
+              toggleMapping={toggleMapping}
+            />
           )}
 
           {/* Tab: Trasformazioni */}
           {activeTab === 'transforms' && (
-            <div className="response-config-builder__panel">
-              <div className="response-config-builder__section-header">
-                <h4>⚙️ Trasformazioni</h4>
-                <p>Crea nuove colonne con valori calcolati</p>
-              </div>
-
-              {/* Lista trasformazioni */}
-              {transforms.length === 0 ? (
-                <div className="response-config-builder__empty-section">
-                  <p>Nessuna trasformazione definita.</p>
-                </div>
-              ) : (
-                <div className="response-config-builder__transforms-list">
-                  {transforms.map((t, idx) => {
-                    const op = TRANSFORM_OPERATIONS.find(o => o.id === t.operation);
-                    return (
-                      <div key={idx} className="response-config-builder__transform-item">
-                        <div className="response-config-builder__transform-row">
-                          <label>Colonna output:</label>
-                          <input 
-                            type="text"
-                            value={t.column}
-                            onChange={e => updateTransform(idx, 'column', e.target.value)}
-                            className="response-config-builder__input"
-                          />
-                        </div>
-                        <div className="response-config-builder__transform-row">
-                          <label>Colonna sorgente:</label>
-                          <select 
-                            value={t.source}
-                            onChange={e => updateTransform(idx, 'source', e.target.value)}
-                            className="response-config-builder__select"
-                          >
-                            <option value="">-- seleziona --</option>
-                            {mappings.map(m => (
-                              <option key={m.column} value={m.column}>{m.column}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div className="response-config-builder__transform-row">
-                          <label>Operazione:</label>
-                          <select 
-                            value={t.operation}
-                            onChange={e => updateTransform(idx, 'operation', e.target.value)}
-                            className="response-config-builder__select"
-                          >
-                            {TRANSFORM_OPERATIONS.map(o => (
-                              <option key={o.id} value={o.id}>{o.icon} {o.label}</option>
-                            ))}
-                          </select>
-                        </div>
-                        {op?.hasValue && (
-                          <div className="response-config-builder__transform-row">
-                            <label>{op.valueLabel}:</label>
-                            <input 
-                              type="text"
-                              value={t.value || ''}
-                              onChange={e => updateTransform(idx, 'value', e.target.value)}
-                              className="response-config-builder__input response-config-builder__input--small"
-                            />
-                          </div>
-                        )}
-                        <button type="button" 
-                          onClick={() => removeTransform(idx)}
-                          className="response-config-builder__btn response-config-builder__btn--danger"
-                        >
-                          🗑️ Rimuovi
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Aggiungi trasformazione */}
-              {mappings.length > 0 && (
-                <div className="response-config-builder__add-transform">
-                  <select 
-                    id="add-transform-source"
-                    className="response-config-builder__select"
-                    defaultValue=""
-                  >
-                    <option value="">-- Scegli colonna sorgente --</option>
-                    {mappings.map(m => (
-                      <option key={m.column} value={m.column}>{m.column}</option>
-                    ))}
-                  </select>
-                  <button type="button" 
-                    onClick={() => {
-                      const select = document.getElementById('add-transform-source');
-                      if (select.value) {
-                        addTransform(select.value);
-                        select.value = '';
-                      }
-                    }}
-                    className="response-config-builder__btn response-config-builder__btn--primary"
-                  >
-                    + Aggiungi trasformazione
-                  </button>
-                </div>
-              )}
-            </div>
+            <TransformsPanel
+              transforms={transforms}
+              mappings={mappings}
+              updateTransform={updateTransform}
+              removeTransform={removeTransform}
+              addTransform={addTransform}
+            />
           )}
 
           {/* Tab: Preview */}
           {activeTab === 'preview' && (
-            <div className="response-config-builder__panel">
-              <div className="response-config-builder__section-header">
-                <h4>👁️ Preview risultato</h4>
-                <button type="button" 
-                  onClick={generatePreview}
-                  className="response-config-builder__btn response-config-builder__btn--primary"
-                >
-                  🔄 Aggiorna preview
-                </button>
-              </div>
-
-              {previewError && (
-                <div className="response-config-builder__error">
-                  ❌ {previewError}
-                </div>
-              )}
-
-              {previewData && previewData.length > 0 ? (
-                <div className="response-config-builder__preview-table-wrapper">
-                  <table className="response-config-builder__preview-table">
-                    <thead>
-                      <tr>
-                        {Object.keys(previewData[0]).map(col => (
-                          <th key={col}>{col}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {previewData.map((row, idx) => (
-                        <tr key={idx}>
-                          {Object.values(row).map((val, vIdx) => (
-                            <td key={vIdx}>
-                              {val === null ? <span className="response-config-builder__null">null</span> : String(val).substring(0, 50)}
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {previewData.length >= 10 && (
-                    <p className="response-config-builder__preview-note">
-                      Mostrando le prime 10 righe...
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <div className="response-config-builder__empty-section">
-                  <p>Nessun dato da mostrare. Configura i mappings e clicca "Aggiorna preview".</p>
-                </div>
-              )}
-
-              {/* Config JSON */}
-              <div className="response-config-builder__config-preview">
-                <h5>📝 Configurazione generata:</h5>
-                <pre className="response-config-builder__config-json">
-                  {JSON.stringify(generatedConfig, null, 2)}
-                </pre>
-              </div>
-            </div>
+            <PreviewPanel
+              previewData={previewData}
+              previewError={previewError}
+              generatedConfig={generatedConfig}
+              generatePreview={generatePreview}
+            />
           )}
         </>
       )}
