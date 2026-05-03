@@ -1440,7 +1440,13 @@ class ArcGISClient:
         layer_url: str,
         token: str = None  # C12: non piu' usato ma mantenuto per compat caller
     ) -> Optional[int]:
-        """Query count delle features di un layer."""
+        """Query count delle features di un layer.
+
+        Display-only fail-soft GET con WHERE hardcoded `1=1`. Per il
+        path fail-loud con WHERE arbitrario (usato da
+        `validate_publish` per duplicate/match check) usare
+        `count_features_where` (POST, RuntimeError).
+        """
         params = {
             "where": "1=1",
             "returnCountOnly": "true",
@@ -1455,6 +1461,77 @@ class ArcGISClient:
             return data.get("count")
         except Exception:
             return None
+
+    def count_features_where(
+        self,
+        conn: ArcGISConnectionInfo,
+        layer_url: str,
+        where: str,
+        *,
+        timeout: float = 60.0,
+    ) -> int:
+        """Conta le feature di un layer con WHERE arbitrario via POST
+        `/query?returnCountOnly=true`.
+
+        Differenze rispetto a `_get_feature_count`:
+        - **POST** invece di GET: bypassa il limite di lunghezza URL su
+          WHERE clause grandi (es. `IN (val1, val2, ...)` con N>~50);
+        - **WHERE arbitrario** invece di hardcoded `1=1`;
+        - **fail-loud**: solleva `RuntimeError` su HTTP non-200,
+          content-type non JSON, JSON decode fallito o payload con
+          chiave `error`. Il caller decide il fallback.
+
+        BE-IMDF-002: questo metodo consolida il pattern POST-WHERE
+        usato da `validate_publish` (duplicate check, match key
+        verification). Il vecchio simbolo
+        `validator._count_features_where_via_post` resta come thin
+        wrapper che delega qui per backward-compat dei test che lo
+        monkeypatchano.
+
+        Args:
+            conn: connessione ArcGIS con `server_url` per Referer header.
+            layer_url: URL completo del layer (`{service_url}/0`).
+            where: clausola SQL WHERE arbitraria.
+            timeout: timeout HTTP in secondi (default 60s).
+
+        Returns:
+            Numero di feature che matchano la WHERE.
+
+        Raises:
+            RuntimeError: su HTTP non-200, content-type non JSON,
+                JSON decode fail, o payload ArcGIS con `error`.
+        """
+        token = self.authenticate(conn)
+        referer = {"Referer": conn.server_url}
+        data = {
+            "where": where,
+            "returnCountOnly": "true",
+            "f": "json",
+        }
+        if token:
+            data["token"] = token
+        r = self._http.post(
+            f"{layer_url}/query",
+            data=data,
+            headers=referer,
+            timeout=timeout,
+        )
+        ct = (r.headers.get("content-type") or "").lower()
+        if r.status_code != 200:
+            raise RuntimeError(
+                f"HTTP {r.status_code} su /query ({ct}): {r.text[:300]}"
+            )
+        if "json" not in ct:
+            raise RuntimeError(
+                f"Risposta non-JSON ({ct}) su /query: {r.text[:300]}"
+            )
+        try:
+            payload = r.json()
+        except Exception as je:
+            raise RuntimeError(f"JSON decode fallito: {je}; body: {r.text[:300]}")
+        if "error" in payload:
+            raise RuntimeError(f"Errore ArcGIS: {payload['error']}")
+        return int(payload.get("count", 0))
     
     # =========================================================================
     # QUERY FEATURES

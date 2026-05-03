@@ -33,42 +33,18 @@ def _count_features_where_via_post(client, conn, layer_url: str, where: str) -> 
     standard di `client.query_features` che fa GET (sensibile a URL length,
     content-type negotiation proxy, ecc.) e al JSON decode.
 
-    Ritorna il count. Solleva su errore — il chiamante gestisce il fallback.
+    Ritorna il count. Solleva `RuntimeError` su errore — il chiamante
+    gestisce il fallback.
+
+    BE-IMDF-002: implementazione consolidata in
+    `app.core.features.arcgis_client.ArcGISClient.count_features_where`.
+    Questo modulo-level symbol resta come thin wrapper per:
+    1. preservare il path di monkeypatch usato dai test
+       (`tests2/imdf/unit/test_validate_publish_issue_categories.py`
+       patcha `validator_mod._count_features_where_via_post`);
+    2. mantenere invariato il call site in `validate_publish`.
     """
-    from urllib.parse import urlparse
-    token = client.authenticate(conn)
-    parsed = urlparse(conn.server_url)
-    referer = {"Referer": conn.server_url}
-    data = {
-        "where": where,
-        "returnCountOnly": "true",
-        "f": "json",
-    }
-    if token:
-        data["token"] = token
-    r = client._http.post(
-        f"{layer_url}/query",
-        data=data,
-        headers=referer,
-        timeout=60,
-    )
-    # Diagnosi esplicita: status + content-type + body preview
-    ct = (r.headers.get("content-type") or "").lower()
-    if r.status_code != 200:
-        raise RuntimeError(
-            f"HTTP {r.status_code} su /query ({ct}): {r.text[:300]}"
-        )
-    if "json" not in ct:
-        raise RuntimeError(
-            f"Risposta non-JSON ({ct}) su /query: {r.text[:300]}"
-        )
-    try:
-        payload = r.json()
-    except Exception as je:
-        raise RuntimeError(f"JSON decode fallito: {je}; body: {r.text[:300]}")
-    if "error" in payload:
-        raise RuntimeError(f"Errore ArcGIS: {payload['error']}")
-    return int(payload.get("count", 0))
+    return client.count_features_where(conn, layer_url, where)
 
 
 # Mapping dei tipi Esri verso una rappresentazione "coarse" per il
