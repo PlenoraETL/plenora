@@ -1,11 +1,11 @@
-"""Contract test BE-IMDF-003 — coarse type mappers di `EsriTypeMapper`.
+"""Contract test BE-IMDF-003 — schema-bucket type mappers di `EsriTypeMapper`.
 
-Verifica i due nuovi helper consolidati:
+Verifica i due helper consolidati:
 
-- `EsriTypeMapper.map_field_type_coarse(esri_type) -> str`
-- `EsriTypeMapper.map_pandas_dtype_coarse(dtype) -> str`
+- `EsriTypeMapper.map_esri_field_to_schema_bucket(esri_type) -> str`
+- `EsriTypeMapper.map_pandas_dtype_to_schema_bucket(dtype) -> str`
 
-Output bucket: `string | int | float | date | geometry | other`.
+Schema bucket: `string | int | float | date | geometry | other`.
 Schema **distinto** da `EsriTypeMapper.map_field_type` (Plenora-internal
 `int/real/str/date/geometry`).
 
@@ -32,7 +32,7 @@ _BACKEND_APP = Path(__file__).resolve().parent.parent.parent.parent / "app"
 
 
 # ---------------------------------------------------------------------------
-# 1. map_field_type_coarse: esri-type → coarse bucket
+# 1. map_esri_field_to_schema_bucket: esri-type → schema bucket
 # ---------------------------------------------------------------------------
 
 
@@ -68,13 +68,13 @@ _BACKEND_APP = Path(__file__).resolve().parent.parent.parent.parent / "app"
         ("", "other"),
     ],
 )
-def test_map_field_type_coarse_known(esri_type, expected):
-    assert EsriTypeMapper.map_field_type_coarse(esri_type) == expected
+def test_map_esri_field_to_schema_bucket_known(esri_type, expected):
+    assert EsriTypeMapper.map_esri_field_to_schema_bucket(esri_type) == expected
 
 
-def test_map_field_type_coarse_none_returns_other():
+def test_map_esri_field_to_schema_bucket_none_returns_other():
     """`(name or "").lower()` rende None → "" → "other"."""
-    assert EsriTypeMapper.map_field_type_coarse(None) == "other"  # type: ignore[arg-type]
+    assert EsriTypeMapper.map_esri_field_to_schema_bucket(None) == "other"  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize(
@@ -88,12 +88,12 @@ def test_map_field_type_coarse_none_returns_other():
         ("Custom_Date_Field", "date"),
     ],
 )
-def test_map_field_type_coarse_case_insensitive_substring(esri_type, expected):
-    assert EsriTypeMapper.map_field_type_coarse(esri_type) == expected
+def test_map_esri_field_to_schema_bucket_case_insensitive_substring(esri_type, expected):
+    assert EsriTypeMapper.map_esri_field_to_schema_bucket(esri_type) == expected
 
 
 # ---------------------------------------------------------------------------
-# 2. map_pandas_dtype_coarse: pandas/numpy dtype → coarse bucket
+# 2. map_pandas_dtype_to_schema_bucket: pandas/numpy dtype → schema bucket
 # ---------------------------------------------------------------------------
 
 
@@ -131,11 +131,11 @@ def test_map_field_type_coarse_case_insensitive_substring(esri_type, expected):
         ("", "other"),
     ],
 )
-def test_map_pandas_dtype_coarse_string_inputs(dtype_str, expected):
-    assert EsriTypeMapper.map_pandas_dtype_coarse(dtype_str) == expected
+def test_map_pandas_dtype_to_schema_bucket_string_inputs(dtype_str, expected):
+    assert EsriTypeMapper.map_pandas_dtype_to_schema_bucket(dtype_str) == expected
 
 
-def test_map_pandas_dtype_coarse_real_pandas_dtypes():
+def test_map_pandas_dtype_to_schema_bucket_real_pandas_dtypes():
     import pandas as pd
 
     # Series concrete con vari dtype
@@ -146,24 +146,24 @@ def test_map_pandas_dtype_coarse_real_pandas_dtypes():
         (pd.Series(pd.date_range("2024-01-01", periods=2)).dtype, "date"),
     ]
     for dtype, expected in cases:
-        assert EsriTypeMapper.map_pandas_dtype_coarse(dtype) == expected, (
+        assert EsriTypeMapper.map_pandas_dtype_to_schema_bucket(dtype) == expected, (
             f"dtype={dtype!r} -> atteso {expected}"
         )
 
 
-def test_map_pandas_dtype_coarse_geopandas_geometry():
+def test_map_pandas_dtype_to_schema_bucket_geopandas_geometry():
     """Geometry dtype (str representation) deve mappare a "geometry"."""
     # Qualunque dtype che contiene "geometry" → bucket geometry
-    assert EsriTypeMapper.map_pandas_dtype_coarse("geometry") == "geometry"
+    assert EsriTypeMapper.map_pandas_dtype_to_schema_bucket("geometry") == "geometry"
 
 
-def test_map_pandas_dtype_coarse_none_returns_other():
+def test_map_pandas_dtype_to_schema_bucket_none_returns_other():
     """`str(None).lower()` = `"none"`, non in alcun bucket → "other"."""
-    assert EsriTypeMapper.map_pandas_dtype_coarse(None) == "other"  # type: ignore[arg-type]
+    assert EsriTypeMapper.map_pandas_dtype_to_schema_bucket(None) == "other"  # type: ignore[arg-type]
 
 
 # ---------------------------------------------------------------------------
-# 3. Schema separation: map_field_type (Plenora) vs map_field_type_coarse
+# 3. Schema separation: map_field_type (Plenora) vs schema bucket
 # ---------------------------------------------------------------------------
 
 
@@ -181,10 +181,10 @@ def test_map_pandas_dtype_coarse_none_returns_other():
 )
 def test_two_schemes_distinct(esri_type, plenora_internal, coarse):
     """`map_field_type` (Plenora-internal `str`/`real`) e
-    `map_field_type_coarse` (coarse `string`/`float`) sono **due
+    `map_esri_field_to_schema_bucket` (`string`/`float`) sono **due
     convenzioni distinte**, entrambe per design."""
     assert EsriTypeMapper.map_field_type(esri_type) == plenora_internal
-    assert EsriTypeMapper.map_field_type_coarse(esri_type) == coarse
+    assert EsriTypeMapper.map_esri_field_to_schema_bucket(esri_type) == coarse
 
 
 # ---------------------------------------------------------------------------
@@ -198,20 +198,20 @@ def test_coarse_buckets_match_for_compat_check():
     import pandas as pd
     # pandas int → "int", esri Integer → "int"
     assert (
-        EsriTypeMapper.map_pandas_dtype_coarse(pd.Series([1]).dtype)
-        == EsriTypeMapper.map_field_type_coarse("esriFieldTypeInteger")
+        EsriTypeMapper.map_pandas_dtype_to_schema_bucket(pd.Series([1]).dtype)
+        == EsriTypeMapper.map_esri_field_to_schema_bucket("esriFieldTypeInteger")
         == "int"
     )
     # pandas float → "float", esri Double → "float"
     assert (
-        EsriTypeMapper.map_pandas_dtype_coarse(pd.Series([1.0]).dtype)
-        == EsriTypeMapper.map_field_type_coarse("esriFieldTypeDouble")
+        EsriTypeMapper.map_pandas_dtype_to_schema_bucket(pd.Series([1.0]).dtype)
+        == EsriTypeMapper.map_esri_field_to_schema_bucket("esriFieldTypeDouble")
         == "float"
     )
     # pandas object → "string", esri String → "string"
     assert (
-        EsriTypeMapper.map_pandas_dtype_coarse(pd.Series(["a"]).dtype)
-        == EsriTypeMapper.map_field_type_coarse("esriFieldTypeString")
+        EsriTypeMapper.map_pandas_dtype_to_schema_bucket(pd.Series(["a"]).dtype)
+        == EsriTypeMapper.map_esri_field_to_schema_bucket("esriFieldTypeString")
         == "string"
     )
 
@@ -219,8 +219,8 @@ def test_coarse_buckets_match_for_compat_check():
 def test_coarse_buckets_diverge_for_real_mismatches():
     """Bundle pandas int + FS Esri String → bucket diverso → mismatch."""
     import pandas as pd
-    bundle_bucket = EsriTypeMapper.map_pandas_dtype_coarse(pd.Series([1]).dtype)
-    fs_bucket = EsriTypeMapper.map_field_type_coarse("esriFieldTypeString")
+    bundle_bucket = EsriTypeMapper.map_pandas_dtype_to_schema_bucket(pd.Series([1]).dtype)
+    fs_bucket = EsriTypeMapper.map_esri_field_to_schema_bucket("esriFieldTypeString")
     assert bundle_bucket != fs_bucket
     assert bundle_bucket == "int"
     assert fs_bucket == "string"
@@ -272,8 +272,8 @@ def _read(path: Path) -> str:
 
 def test_validator_uses_shared_mapper():
     src = _read(_BACKEND_APP / "core" / "imdf" / "validator.py")
-    assert "EsriTypeMapper.map_field_type_coarse" in src
-    assert "EsriTypeMapper.map_pandas_dtype_coarse" in src
+    assert "EsriTypeMapper.map_esri_field_to_schema_bucket" in src
+    assert "EsriTypeMapper.map_pandas_dtype_to_schema_bucket" in src
     # Niente piu' implementazione inline con i match substring
     assert '"string" in t or "guid" in t or "xml" in t' not in src
     assert '"datetime" in s or "date" in s' not in src

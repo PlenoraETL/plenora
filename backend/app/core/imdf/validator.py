@@ -52,20 +52,20 @@ def _count_features_where_via_post(client, conn, layer_url: str, where: str) -> 
 # Il GeoDataFrame ha dtype numpy. Normalizziamo entrambi a un set ridotto.
 #
 # BE-IMDF-003: implementazione consolidata in
-# `app.core.features.arcgis_client.EsriTypeMapper.map_field_type_coarse`
-# / `map_pandas_dtype_coarse`. Questi due simboli modulo-level
+# `app.core.features.arcgis_client.EsriTypeMapper.map_esri_field_to_schema_bucket`
+# / `map_pandas_dtype_to_schema_bucket`. Questi due simboli modulo-level
 # restano come thin wrapper per preservare il path di monkeypatch dei
 # test (es. `tests2/imdf/unit/test_validate_publish_*` che possono
 # patchare `validator._coarse_type_*`) e per non cambiare il call site
 # di `validate_publish`.
 def _coarse_type_from_esri(esri_type: str) -> str:
     from app.core.features.arcgis_client import EsriTypeMapper
-    return EsriTypeMapper.map_field_type_coarse(esri_type)
+    return EsriTypeMapper.map_esri_field_to_schema_bucket(esri_type)
 
 
 def _coarse_type_from_dtype(dtype) -> str:
     from app.core.features.arcgis_client import EsriTypeMapper
-    return EsriTypeMapper.map_pandas_dtype_coarse(dtype)
+    return EsriTypeMapper.map_pandas_dtype_to_schema_bucket(dtype)
 
 
 def validate_publish(

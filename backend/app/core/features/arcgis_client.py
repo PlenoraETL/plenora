@@ -177,8 +177,9 @@ class EsriTypeMapper:
         """Converte un tipo di campo Esri in tipo PLENORA.
 
         Schema bucket: `int`/`real`/`str`/`date`/`geometry`. Default
-        fallback `str`. **Diverso** dallo schema "coarse" usato dal
-        validator schema-compat (vedi `map_field_type_coarse`).
+        fallback `str`. **Diverso** dallo schema "schema bucket" usato
+        dal validator schema-compat (vedi
+        `map_esri_field_to_schema_bucket`).
         """
         return cls.ESRI_TO_PLENORA.get(esri_type, "str")
 
@@ -188,9 +189,9 @@ class EsriTypeMapper:
         return cls.ESRI_GEOM_TO_PLENORA.get(esri_geom_type, "geometry")
 
     @classmethod
-    def map_field_type_coarse(cls, esri_type: str) -> str:
-        """Coarse mapping di un tipo di campo Esri per il check di
-        schema compatibilita' (validator IMDF).
+    def map_esri_field_to_schema_bucket(cls, esri_type: str) -> str:
+        """Mapping di un tipo di campo Esri verso uno schema bucket
+        per il check di compatibilita' (validator IMDF).
 
         Bucket: `string`/`int`/`float`/`date`/`geometry`/`other`.
         Match substring case-insensitive (preserva la semantica
@@ -206,8 +207,8 @@ class EsriTypeMapper:
         BE-IMDF-003: questo bucket scheme e' **distinto** da
         `map_field_type` (Plenora-internal `int`/`real`/`str`/...) e
         serve a confrontare apple-to-apple un campo Esri con un
-        DataFrame pandas tramite `map_pandas_dtype_coarse`. Le due
-        convenzioni convivono per design.
+        DataFrame pandas tramite `map_pandas_dtype_to_schema_bucket`.
+        Le due convenzioni convivono per design.
         """
         t = (esri_type or "").lower()
         if "string" in t or "guid" in t or "xml" in t:
@@ -223,13 +224,13 @@ class EsriTypeMapper:
         return "other"
 
     @classmethod
-    def map_pandas_dtype_coarse(cls, dtype: object) -> str:
-        """Coarse mapping di un dtype pandas/numpy per il check di
-        schema compatibilita' (validator IMDF).
+    def map_pandas_dtype_to_schema_bucket(cls, dtype: object) -> str:
+        """Mapping di un dtype pandas/numpy verso uno schema bucket
+        per il check di compatibilita' (validator IMDF).
 
         Bucket: `string`/`int`/`float`/`date`/`geometry`/`other`,
-        identico a `map_field_type_coarse` cosi' bundle (pandas) e FS
-        (Esri) si confrontano con la stessa convenzione.
+        identico a `map_esri_field_to_schema_bucket` cosi' bundle
+        (pandas) e FS (Esri) si confrontano con la stessa convenzione.
 
         Match substring case-insensitive sul `str(dtype).lower()`:
 
