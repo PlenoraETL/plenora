@@ -111,10 +111,10 @@ export default function ImdfValidatePublishModal({
           )}
 
           {!loading && !error && report && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+            <div className="imdf-modal__body--col-lg">
 
               {/* Summary row */}
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <div className="imdf-modal__summary-row">
                 <Badge color={VARS.danger}  count={report.summary?.errors ?? 0}   label="errori" />
                 <Badge color={VARS.warn}    count={report.summary?.warnings ?? 0} label="warning" />
                 <Badge color={VARS.accent}  count={report.summary?.layers_count ?? 0} label="layer" />
@@ -173,9 +173,9 @@ export default function ImdfValidatePublishModal({
                                 cursor: totalIssues > 0 ? 'pointer' : 'default',
                               }}
                               onClick={() => totalIssues > 0 && setExpandedLayer(isExpanded ? null : i)}>
-                                <td className="imdf-modal__td imdf-modal__td--pad-lg" style={{ color: VARS.accent, fontWeight: 700 }}>
+                                <td className="imdf-modal__td imdf-modal__td--pad-lg imdf-modal__td--accent">
                                   {totalIssues > 0 && (
-                                    <span style={{ color: VARS.muted, marginRight: 4 }}>
+                                    <span className="imdf-modal__expand-mark">
                                       {isExpanded ? '▼' : '▶'}
                                     </span>
                                   )}
@@ -190,11 +190,11 @@ export default function ImdfValidatePublishModal({
                                     fontWeight: 700,
                                   }}>{actLabel}</span>
                                 </td>
-                                <td className="imdf-modal__td imdf-modal__td--pad-lg" style={{ color: VARS.text }}>{l.bundle_count ?? 0}</td>
-                                <td className="imdf-modal__td imdf-modal__td--pad-lg" style={{ color: VARS.muted }}>
+                                <td className="imdf-modal__td imdf-modal__td--pad-lg imdf-modal__td--text">{l.bundle_count ?? 0}</td>
+                                <td className="imdf-modal__td imdf-modal__td--pad-lg imdf-modal__td--muted">
                                   {l.fs_count != null ? l.fs_count : '—'}
                                 </td>
-                                <td className="imdf-modal__td imdf-modal__td--pad-lg" style={{ fontFamily: VARS.font, fontSize: 10 }}>
+                                <td className="imdf-modal__td imdf-modal__td--pad-lg imdf-modal__td--mono">
                                   {l.delta || '—'}
                                 </td>
                                 <td className="imdf-modal__td imdf-modal__td--pad-lg">
@@ -210,24 +210,16 @@ export default function ImdfValidatePublishModal({
                                       border: `1px solid ${(hasIssueError(l) ? VARS.danger : VARS.warn)}55`,
                                     }}>{totalIssues}</span>
                                   ) : (
-                                    <span style={{ color: VARS.success, fontSize: 11 }}>✓</span>
+                                    <span className="imdf-modal__cell-ok">✓</span>
                                   )}
                                 </td>
                               </tr>
                               {isExpanded && (
                                 <tr>
-                                  <td colSpan={7} style={{
-                                    padding: '10px 14px',
-                                    background: VARS.inset,
-                                    borderTop: `1px solid ${VARS.border}`,
-                                  }}>
+                                  <td colSpan={7} className="imdf-modal__expanded-cell">
                                     {(l.schema_issues || []).length > 0 && (
-                                      <div style={{ marginBottom: 8 }}>
-                                        <div style={{
-                                          fontSize: 9, color: VARS.muted,
-                                          textTransform: 'uppercase', letterSpacing: 1,
-                                          marginBottom: 5,
-                                        }}>Schema issues</div>
+                                      <div className="imdf-modal__nested-block">
+                                        <div className="imdf-modal__nested-label">Schema issues</div>
                                         {l.schema_issues.map((it, k) => (
                                           <IssueRow key={k} issue={it} compact />
                                         ))}
@@ -235,20 +227,14 @@ export default function ImdfValidatePublishModal({
                                     )}
                                     {(l.data_issues || []).length > 0 && (
                                       <div>
-                                        <div style={{
-                                          fontSize: 9, color: VARS.muted,
-                                          textTransform: 'uppercase', letterSpacing: 1,
-                                          marginBottom: 5,
-                                        }}>Data issues</div>
+                                        <div className="imdf-modal__nested-label">Data issues</div>
                                         {l.data_issues.map((it, k) => (
                                           <IssueRow key={k} issue={it} compact />
                                         ))}
                                       </div>
                                     )}
                                     {l.match_column && (
-                                      <div style={{
-                                        fontSize: 9, color: VARS.muted, marginTop: 8,
-                                      }}>
+                                      <div className="imdf-modal__nested-meta">
                                         match column: <code className="imdf-modal__code imdf-modal__code--xs">{l.match_column}</code>
                                         {l.will_delete != null && ` · will_delete: ${l.will_delete}`}
                                         {l.will_add != null && ` · will_add: ${l.will_add}`}

@@ -8,8 +8,13 @@
  * Componente puramente presentazionale: riceve bundles + callback, non fa
  * fetch né scrive nello store. Il caller (ResultNode oggi, Publisher prima)
  * gestisce lo stato.
+ *
+ * Stili statici in `BundleSlotCard.css` co-locato
+ * (FE-PHASE2-INLINE-STYLES-006). Le palette runtime (validation summary
+ * passed/failed, isActive selection) restano inline via CSS vars locali.
  */
 import React from 'react';
+import './BundleSlotCard.css';
 
 export function fmtAge(h) {
   if (h == null) return '';
@@ -17,38 +22,6 @@ export function fmtAge(h) {
   if (h < 24) return `${h.toFixed(1)}h fa`;
   return `${Math.round(h / 24)}g fa`;
 }
-
-const slotBtnStyle = {
-  padding: '4px 10px', borderRadius: 4,
-  background: 'transparent',
-  border: '1px solid rgba(124,58,237,0.35)',
-  color: '#7C3AED',
-  fontSize: 9, fontWeight: 700,
-  textTransform: 'uppercase', letterSpacing: 0.5,
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-};
-
-const missingStyle = {
-  padding: '10px 12px',
-  borderRadius: 6,
-  fontSize: 11,
-  color: 'var(--plen-text-sub, #7D8BA8)',
-  background: 'rgba(255,180,60,0.08)',
-  border: '1px solid rgba(255,180,60,0.25)',
-  marginBottom: 10,
-};
-
-const okStyle = {
-  padding: '10px 12px',
-  borderRadius: 6,
-  fontSize: 11,
-  color: 'var(--plen-text, #DDE4F2)',
-  background: 'rgba(124,58,237,0.08)',
-  border: '1px solid rgba(124,58,237,0.30)',
-  marginBottom: 10,
-  display: 'flex', flexDirection: 'column', gap: 8,
-};
 
 export default function BundleSlotCard({
   loading,
@@ -63,10 +36,10 @@ export default function BundleSlotCard({
   disabled,
 }) {
   if (loading && !bundleTaskId) {
-    return <div style={missingStyle}>⏳ Ricerca bundle...</div>;
+    return <div className="bsc--missing">⏳ Ricerca bundle...</div>;
   }
   if (!bundleTaskId) {
-    return <div style={missingStyle}>⚠ Nessun bundle — esegui prima l'arricchimento</div>;
+    return <div className="bsc--missing">⚠ Nessun bundle — esegui prima l'arricchimento</div>;
   }
   const age = fmtAge(bundle?.age_hours);
   const v = bundle?.validation_summary;
@@ -80,27 +53,29 @@ export default function BundleSlotCard({
   const showSwitcher = (bundles || []).length > 1;
 
   return (
-    <div style={okStyle}>
+    <div className="bsc">
       {/* Riga principale */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 14 }}>{isFallback ? '📦' : '🆕'}</span>
-        <strong style={{ color: '#7C3AED' }}>
+      <div className="bsc__row">
+        <span className="bsc__icon">{isFallback ? '📦' : '🆕'}</span>
+        <strong className="bsc__site">
           {bundle?.site_id || bundleTaskId.slice(0, 8)}
         </strong>
-        <span style={{ fontSize: 10, opacity: 0.7 }}>{age}</span>
+        <span className="bsc__age">{age}</span>
         {vLabel && (
-          <span style={{
-            fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 3,
-            color: vColor, background: vColor + '22',
-            border: `1px solid ${vColor}55`,
-            textTransform: 'uppercase', letterSpacing: 0.3,
-          }}>{vLabel}</span>
+          <span
+            className="bsc__vbadge"
+            style={{
+              '--bsc-vcolor':  vColor,
+              '--bsc-vbg':     vColor + '22',
+              '--bsc-vborder': vColor + '55',
+            }}
+          >{vLabel}</span>
         )}
       </div>
 
       {/* Riga secondaria: conteggi */}
       {bundle && (bundle.building_count != null || bundle.level_count != null || bundle.unit_count != null) && (
-        <div style={{ fontSize: 10, opacity: 0.65 }}>
+        <div className="bsc__counts">
           {bundle.building_count ?? '—'} edifici · {bundle.level_count ?? '—'} livelli · {bundle.unit_count ?? '—'} locali
           {bundle.size_mb != null && <> · {bundle.size_mb} MB</>}
         </div>
@@ -108,24 +83,16 @@ export default function BundleSlotCard({
 
       {/* Azioni */}
       {showSwitcher && (
-        <div style={{ display: 'flex', gap: 6, marginTop: 4, position: 'relative' }}>
-          <button type="button" onClick={onToggleSwitcher} disabled={disabled} style={slotBtnStyle}>
+        <div className="bsc__actions">
+          <button type="button" onClick={onToggleSwitcher} disabled={disabled} className="bsc__btn">
             {switcherOpen ? '▲ Chiudi' : '▾ Cambia bundle'}
           </button>
-          <button type="button" onClick={onOpenManager} disabled={disabled} style={slotBtnStyle}>
+          <button type="button" onClick={onOpenManager} disabled={disabled} className="bsc__btn">
             📚 Gestisci tutti
           </button>
 
           {switcherOpen && (
-            <div style={{
-              position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4,
-              background: 'var(--plen-surface-2, #111525)',
-              border: '1px solid rgba(124,58,237,0.35)',
-              borderRadius: 5,
-              boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
-              maxHeight: 220, overflowY: 'auto',
-              zIndex: 20,
-            }}>
+            <div className="bsc__dropdown">
               {recent.map((b) => {
                 const isActive = b.task_id === bundleTaskId;
                 const bv = b.validation_summary;
@@ -136,25 +103,19 @@ export default function BundleSlotCard({
                     key={b.task_id}
                     type="button"
                     onClick={() => onSelectBundle(b.task_id)}
+                    className="bsc__dropdown-item"
                     style={{
-                      display: 'flex', alignItems: 'center', gap: 8, width: '100%',
                       background: isActive ? 'rgba(124,58,237,0.15)' : 'transparent',
-                      border: 'none',
-                      borderBottom: '1px solid rgba(255,255,255,0.05)',
-                      padding: '7px 10px',
-                      color: 'var(--plen-text, #DDE4F2)',
-                      fontFamily: 'inherit', fontSize: 10,
-                      textAlign: 'left', cursor: 'pointer',
                     }}
                   >
                     <span style={{ color: isActive ? '#7C3AED' : '#7D8BA8' }}>
                       {isActive ? '●' : '○'}
                     </span>
-                    <strong style={{ color: '#7C3AED' }}>
+                    <strong className="bsc__dropdown-item-site">
                       {b.site_id || b.task_id.slice(0, 8)}
                     </strong>
-                    <span style={{ opacity: 0.6 }}>{fmtAge(b.age_hours)}</span>
-                    <span style={{ marginLeft: 'auto', color: bvColor, fontWeight: 700 }}>
+                    <span className="bsc__dropdown-item-age">{fmtAge(b.age_hours)}</span>
+                    <span className="bsc__dropdown-item-summary" style={{ color: bvColor }}>
                       {bvLabel}
                     </span>
                   </button>
@@ -164,14 +125,7 @@ export default function BundleSlotCard({
                 <button
                   type="button"
                   onClick={onOpenManager}
-                  style={{
-                    width: '100%', padding: '7px 10px',
-                    background: 'transparent', border: 'none',
-                    borderTop: '1px solid rgba(255,255,255,0.05)',
-                    color: '#7D8BA8', fontSize: 9, cursor: 'pointer',
-                    textTransform: 'uppercase', letterSpacing: 0.5,
-                    fontFamily: 'inherit',
-                  }}
+                  className="bsc__dropdown-more"
                 >
                   📚 Vedi tutti i {bundles.length} bundle...
                 </button>

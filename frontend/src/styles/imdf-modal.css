@@ -367,3 +367,58 @@
   color: var(--imdf-modal-muted);
   margin-top: 6px;
 }
+
+/* ── Body extra modifiers (FE-PHASE2-INLINE-STYLES-006) ──────────────── */
+/* Variant col-lg: piu' largo gap (per ValidatePublish report layout). */
+.imdf-modal__body--col-lg {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+/* Summary row con badges in linea (ValidatePublish header). */
+.imdf-modal__summary-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Td color modifiers per palette tokenizzata (sostituisce inline
+   color: VARS.* nei cell). */
+.imdf-modal__td--accent { color: var(--imdf-modal-accent); font-weight: 700; }
+.imdf-modal__td--text   { color: var(--imdf-modal-text); }
+.imdf-modal__td--muted  { color: var(--imdf-modal-muted); }
+.imdf-modal__td--mono   { font-family: var(--imdf-modal-font); font-size: 10px; }
+
+/* Expand toggle marker (▶/▼ prefix dentro un td--accent). */
+.imdf-modal__expand-mark {
+  color: var(--imdf-modal-muted);
+  margin-right: 4px;
+}
+
+/* Cella issues senza issues (✓ verde piccolo). */
+.imdf-modal__cell-ok {
+  color: var(--imdf-modal-success);
+  font-size: 11px;
+}
+
+/* Riga espansa: bg inset + border-top, contiene schema/data issues. */
+.imdf-modal__expanded-cell {
+  padding: 10px 14px;
+  background: var(--imdf-modal-inset);
+  border-top: 1px solid var(--imdf-modal-border);
+}
+
+/* Mini section label nelle expanded rows (Schema/Data issues). */
+.imdf-modal__nested-label {
+  font-size: 9px;
+  color: var(--imdf-modal-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 5px;
+}
+.imdf-modal__nested-block { margin-bottom: 8px; }
+.imdf-modal__nested-meta  {
+  font-size: 9px;
+  color: var(--imdf-modal-muted);
+  margin-top: 8px;
+}
