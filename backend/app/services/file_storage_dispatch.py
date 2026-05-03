@@ -39,9 +39,15 @@ from __future__ import annotations
 import os
 from typing import Any, Optional, TypedDict
 
+from app.shared.storage_layout import FILE_SOURCES_PREFIX
+
 
 _DEFAULT_THRESHOLD_BYTES = 50 * 1024 * 1024  # 50 MB
-_OBJECT_STORAGE_PREFIX = "file-sources"
+# Alias modulare verso `app.shared.storage_layout.FILE_SOURCES_PREFIX`
+# (BE-DATA-PLANE-001A): single source-of-truth per i prefix object
+# storage. Mantenuto come name privato per backward-compat dei test
+# che leggono `_OBJECT_STORAGE_PREFIX`.
+_OBJECT_STORAGE_PREFIX = FILE_SOURCES_PREFIX
 
 
 class BlobDispatchResult(TypedDict):

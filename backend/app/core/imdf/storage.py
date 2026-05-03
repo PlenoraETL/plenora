@@ -33,14 +33,19 @@ import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from app.shared.storage_layout import IMDF_BUNDLES_PREFIX
 from app.utils.logger import get_logger
 
 
 logger = get_logger(__name__)
 
 
-# Prefix S3 condiviso (distinto da urby_*.dump dei backup + eseguibili-outputs/).
-PREFIX = "imdf-bundles"
+# Prefix S3 condiviso (distinto da urby_*.dump dei backup +
+# eseguibili-outputs/). Alias modulare verso
+# `app.shared.storage_layout.IMDF_BUNDLES_PREFIX` (BE-DATA-PLANE-001A):
+# single source-of-truth per i prefix object storage. Esposto come
+# `PREFIX` per backward-compat dei call site interni e dei test.
+PREFIX = IMDF_BUNDLES_PREFIX
 META_SUFFIX = ".meta.json"
 ZIP_SUFFIX = ".zip"
 

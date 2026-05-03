@@ -36,6 +36,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+from app.shared.storage_layout import INTERMEDIATE_PREFIX
+
 logger = logging.getLogger(__name__)
 
 
@@ -98,7 +100,7 @@ def build_artifact_key_prefix(
     (entrambi vivono sotto `<prefix>/.../kind=.../`). Il caller
     appende il filename specifico.
     """
-    p_clean = (prefix or "intermediate").strip().strip("/")
+    p_clean = (prefix or INTERMEDIATE_PREFIX).strip().strip("/")
     return (
         f"{p_clean}/"
         f"group={_slug(group_id)}/"
@@ -241,8 +243,9 @@ def persist_full_artifact(
             error=f"object storage non risolvibile: {e}",
         )
 
-    # Layout key
-    prefix_env = os.getenv("INTERMEDIATE_ARTIFACT_PREFIX") or "intermediate"
+    # Layout key. `INTERMEDIATE_ARTIFACT_PREFIX` env override resta per
+    # ops flexibility; il default e' la constant centralizzata.
+    prefix_env = os.getenv("INTERMEDIATE_ARTIFACT_PREFIX") or INTERMEDIATE_PREFIX
     try:
         key_prefix = build_artifact_key_prefix(
             prefix=prefix_env,

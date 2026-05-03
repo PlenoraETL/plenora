@@ -9,6 +9,7 @@ import uuid
 from pathlib import Path
 from typing import Dict, Optional
 
+from app.shared.storage_layout import RESULTS_PREFIX
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -200,7 +201,7 @@ def save_result_blob(project_id: str, path: Path, fmt: str,
         else:
             # Object storage path: upload streaming dal disk (no RAM load).
             # Ordine: upload prima (no row DB orfana se upload fallisce).
-            storage_key = f"results/{project_id}/{result_id}.bin"
+            storage_key = f"{RESULTS_PREFIX}/{project_id}/{result_id}.bin"
             try:
                 from app.shared.cloud_backends import (
                     aws_credentials_error_message,
@@ -344,7 +345,7 @@ def save_result_blob_from_bytes(
         else:
             # Object storage path — upload prima, poi row con storage_key
             # (ordine importante: no row DB orfana su upload failure).
-            storage_key = f"results/{project_id}/{result_id}.bin"
+            storage_key = f"{RESULTS_PREFIX}/{project_id}/{result_id}.bin"
             try:
                 from app.shared.cloud_backends import (
                     aws_credentials_error_message,

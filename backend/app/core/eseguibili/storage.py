@@ -28,6 +28,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List
 
+from app.shared.storage_layout import ESEGUIBILI_OUTPUTS_PREFIX
 from app.utils.logger import get_logger
 
 
@@ -35,8 +36,11 @@ logger = get_logger(__name__)
 
 
 # Prefix condiviso con la convenzione: separato dal backup bucket pattern
-# (urby_*.dump) cosi' le lifecycle rule possono essere distinte.
-PREFIX = "eseguibili-outputs"
+# (urby_*.dump) cosi' le lifecycle rule possono essere distinte. Alias
+# modulare verso `app.shared.storage_layout.ESEGUIBILI_OUTPUTS_PREFIX`
+# (BE-DATA-PLANE-001A): single source-of-truth per i prefix object
+# storage.
+PREFIX = ESEGUIBILI_OUTPUTS_PREFIX
 
 
 def _storage():
