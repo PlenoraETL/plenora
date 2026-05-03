@@ -1,0 +1,283 @@
+"""Contract test BE-IMDF-006B — `ArcGISClient.add_layer_to_service` typed boundary.
+
+Lock the public method shape post-promote:
+
+- `AddLayerResult` dataclass(frozen=True) con `success/feature_count/errors`;
+- `errors` e' tuple immutabile;
+- `to_compat_dict()` ritorna il legacy dict shape `{success,
+  feature_count, errors: list}` (KEEP_COMPAT per IMDF wrapper
+  `_add_layer_to_service`);
+- `ArcGISClient.add_layer_to_service` e' metodo pubblico, signature
+  tipata, ritorna `AddLayerResult`;
+- delegate path: `_add_layer_to_service(client, ...)` chiama
+  `client.add_layer_to_service(...).to_compat_dict()`.
+
+I test di request shape (URL/body/headers/timeout/fields/extent/...)
+sono in `tests2/imdf/unit/test_add_layer_to_service_contract.py`
+(BE-IMDF-006A) e continuano a testare la stessa logica via il wrapper
+IMDF (che ora delega al metodo pubblico). Qui copriamo solo lo shape
+post-promote.
+"""
+
+from __future__ import annotations
+
+from dataclasses import FrozenInstanceError
+from types import SimpleNamespace
+from unittest.mock import MagicMock
+
+import pytest
+
+from app.core.features.arcgis_client import (
+    ArcGISClient,
+    AddLayerResult,
+)
+
+
+pytestmark = [pytest.mark.unit, pytest.mark.contract]
+
+
+# ---------------------------------------------------------------------------
+# AddLayerResult — typed dataclass shape
+# ---------------------------------------------------------------------------
+
+
+def test_add_layer_result_fields():
+    r = AddLayerResult(success=True, feature_count=5, errors=("e1", "e2"))
+    assert r.success is True
+    assert r.feature_count == 5
+    assert r.errors == ("e1", "e2")
+    assert isinstance(r.errors, tuple)
+
+
+def test_add_layer_result_default_errors_empty_tuple():
+    r = AddLayerResult(success=True, feature_count=1)
+    assert r.errors == ()
+    assert isinstance(r.errors, tuple)
+
+
+def test_add_layer_result_is_frozen():
+    """`AddLayerResult` e' immutabile: assignment post-init solleva
+    `FrozenInstanceError`."""
+    r = AddLayerResult(success=True, feature_count=1)
+    with pytest.raises(FrozenInstanceError):
+        r.success = False  # type: ignore[misc]
+    with pytest.raises(FrozenInstanceError):
+        r.feature_count = 99  # type: ignore[misc]
+    with pytest.raises(FrozenInstanceError):
+        r.errors = ("x",)  # type: ignore[misc]
+
+
+def test_add_layer_result_equality_by_value():
+    """Dataclass(frozen=True) ha equality by value e hash."""
+    a = AddLayerResult(success=True, feature_count=1, errors=("e",))
+    b = AddLayerResult(success=True, feature_count=1, errors=("e",))
+    assert a == b
+    assert hash(a) == hash(b)
+
+
+# ---------------------------------------------------------------------------
+# to_compat_dict — KEEP_COMPAT bridge
+# ---------------------------------------------------------------------------
+
+
+def test_to_compat_dict_returns_legacy_shape():
+    """Conversione al dict legacy preserva shape `{success,
+    feature_count, errors: list}`. KEEP_COMPAT per IMDF wrapper."""
+    r = AddLayerResult(success=True, feature_count=3, errors=("e1",))
+    d = r.to_compat_dict()
+    assert d == {"success": True, "feature_count": 3, "errors": ["e1"]}
+    assert isinstance(d["errors"], list)  # legacy list, not tuple
+
+
+def test_to_compat_dict_empty_errors_returns_empty_list():
+    r = AddLayerResult(success=True, feature_count=1)
+    d = r.to_compat_dict()
+    assert d == {"success": True, "feature_count": 1, "errors": []}
+
+
+def test_to_compat_dict_failure_shape():
+    r = AddLayerResult(success=False, feature_count=0, errors=("addToDefinition fallito",))
+    d = r.to_compat_dict()
+    assert d["success"] is False
+    assert d["feature_count"] == 0
+    assert d["errors"] == ["addToDefinition fallito"]
+
+
+# ---------------------------------------------------------------------------
+# ArcGISClient.add_layer_to_service — public method exists + signature
+# ---------------------------------------------------------------------------
+
+
+def test_add_layer_to_service_is_public_method():
+    """Promoted as instance method on ArcGISClient (BE-IMDF-006B)."""
+    assert hasattr(ArcGISClient, "add_layer_to_service")
+    assert callable(ArcGISClient.add_layer_to_service)
+
+
+def test_add_layer_to_service_signature_has_typed_kwargs():
+    import inspect
+    sig = inspect.signature(ArcGISClient.add_layer_to_service)
+    params = sig.parameters
+    assert "self" in params
+    assert "conn" in params
+    assert "service_url" in params
+    assert "gdf" in params
+    assert "layer_name" in params
+    assert "layer_id" in params
+    assert "srid" in params
+    assert params["srid"].default == 4326
+    # Return type annotated
+    assert sig.return_annotation is AddLayerResult
+
+
+# ---------------------------------------------------------------------------
+# Public method end-to-end: returns AddLayerResult
+# ---------------------------------------------------------------------------
+
+
+def _make_response(payload: dict) -> MagicMock:
+    resp = MagicMock(name="Response")
+    resp.json = MagicMock(return_value=payload)
+    return resp
+
+
+def _make_polygon_gdf(rows: int = 2):
+    import geopandas as gpd
+    from shapely.geometry import Polygon
+
+    geoms = [Polygon([(i, 0), (i + 1, 0), (i + 1, 1)]) for i in range(rows)]
+    return gpd.GeoDataFrame(
+        {"NAME": [f"f-{i}" for i in range(rows)]},
+        geometry=geoms,
+        crs="EPSG:4326",
+    )
+
+
+@pytest.fixture
+def real_client():
+    client = ArcGISClient.__new__(ArcGISClient)
+    client._token_cache = {}
+    client._http = MagicMock()
+    client._http.post = MagicMock(return_value=_make_response({"success": True}))
+    client.authenticate = MagicMock(return_value="tok")
+    client._esri_geometry_type = MagicMock(return_value="esriGeometryPolygon")
+    client._python_type_to_esri_field = MagicMock(
+        side_effect=lambda col, dtype: {"name": col, "type": "esriFieldTypeString"}
+    )
+    client._default_drawing_info = MagicMock(return_value={"renderer": {}})
+    client.dataframe_to_esri_features = MagicMock(return_value=[])
+    client.add_features = MagicMock(return_value={"added_count": 4, "errors": []})
+    return client
+
+
+def test_add_layer_to_service_returns_AddLayerResult(real_client):
+    conn = SimpleNamespace(server_url="https://arc.test", username="u")
+    gdf = _make_polygon_gdf()
+
+    result = real_client.add_layer_to_service(
+        conn,
+        "https://arc.test/server/rest/services/X/FeatureServer",
+        gdf,
+        "L",
+        layer_id=1,
+    )
+
+    assert isinstance(result, AddLayerResult)
+    assert result.success is True
+    assert result.feature_count == 4
+    assert result.errors == ()
+
+
+def test_add_layer_to_service_failure_returns_typed_result(real_client):
+    real_client._http.post.return_value = _make_response({
+        "success": False, "error": {"code": 400, "message": "bad"},
+    })
+    conn = SimpleNamespace(server_url="https://arc.test", username="u")
+    gdf = _make_polygon_gdf()
+
+    result = real_client.add_layer_to_service(
+        conn,
+        "https://arc.test/server/rest/services/X/FeatureServer",
+        gdf,
+        "L",
+        layer_id=0,
+    )
+    assert isinstance(result, AddLayerResult)
+    assert result.success is False
+    assert result.feature_count == 0
+    assert len(result.errors) == 1
+    assert "addToDefinition fallito" in result.errors[0]
+    real_client.add_features.assert_not_called()
+
+
+def test_add_layer_to_service_errors_is_tuple_not_list(real_client):
+    """Errors propagati da `add_features` (lista legacy) sono
+    convertiti a `tuple` immutabile in `AddLayerResult`."""
+    real_client.add_features.return_value = {
+        "added_count": 0, "errors": ["a", "b"],
+    }
+    conn = SimpleNamespace(server_url="https://arc.test", username="u")
+    gdf = _make_polygon_gdf()
+
+    result = real_client.add_layer_to_service(
+        conn,
+        "https://arc.test/server/rest/services/X/FeatureServer",
+        gdf,
+        "L",
+        layer_id=0,
+    )
+    assert isinstance(result.errors, tuple)
+    assert result.errors == ("a", "b")
+
+
+# ---------------------------------------------------------------------------
+# IMDF wrapper delegate — BE-IMDF-006B compat path
+# ---------------------------------------------------------------------------
+
+
+def test_imdf_wrapper_delegates_to_client_method(real_client):
+    """`publish_ops._add_layer_to_service` deve delegare al metodo
+    pubblico del client e ritornare il dict legacy via
+    `to_compat_dict()`."""
+    from app.core.imdf.arcgis.publish_ops import _add_layer_to_service
+
+    conn = SimpleNamespace(server_url="https://arc.test", username="u")
+    gdf = _make_polygon_gdf()
+
+    result_dict = _add_layer_to_service(
+        real_client, conn,
+        "https://arc.test/server/rest/services/X/FeatureServer",
+        gdf, "L", layer_id=2,
+    )
+
+    # Legacy dict shape preservato
+    assert set(result_dict.keys()) == {"success", "feature_count", "errors"}
+    assert result_dict["success"] is True
+    assert result_dict["feature_count"] == 4
+    assert isinstance(result_dict["errors"], list)
+
+
+def test_imdf_wrapper_passes_arguments_through(real_client):
+    """Verifica che il wrapper passi conn/service_url/gdf/layer_name/
+    layer_id/srid invariati al metodo pubblico."""
+    from app.core.imdf.arcgis.publish_ops import _add_layer_to_service
+
+    real_client.add_layer_to_service = MagicMock(
+        return_value=AddLayerResult(success=True, feature_count=7, errors=())
+    )
+
+    conn = SimpleNamespace(server_url="https://arc.test", username="u")
+    gdf = _make_polygon_gdf()
+
+    result_dict = _add_layer_to_service(
+        real_client, conn,
+        "https://arc.test/server/rest/services/X/FeatureServer",
+        gdf, "MyLayer", layer_id=3, srid=3857,
+    )
+    assert result_dict["feature_count"] == 7
+
+    real_client.add_layer_to_service.assert_called_once_with(
+        conn,
+        "https://arc.test/server/rest/services/X/FeatureServer",
+        gdf, "MyLayer", 3, 3857,
+    )

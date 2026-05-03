@@ -57,6 +57,7 @@ import pytest
 # Pre-import per evitare side-effect import-time durante i test
 import app.core.imdf.arcgis.publish_ops as publish_ops_mod
 from app.core.imdf.arcgis.publish_ops import _add_layer_to_service
+from app.core.features.arcgis_client import ArcGISClient
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
@@ -75,11 +76,27 @@ def _make_response(payload: dict) -> MagicMock:
 
 @pytest.fixture
 def fake_client():
-    """ArcGISClient stub: tutti i metodi collaboratori sono MagicMock."""
-    client = MagicMock(name="ArcGISClient")
-    client.authenticate = MagicMock(return_value="tok-abc")
+    """Real `ArcGISClient` instance con metodi collaboratori mockati a
+    livello instance (instance attr shadowa class attr/staticmethod).
+
+    BE-IMDF-006B: post-promote di `_add_layer_to_service` a metodo
+    pubblico `ArcGISClient.add_layer_to_service`. Il wrapper IMDF
+    `_add_layer_to_service(client, ...)` delega a
+    `client.add_layer_to_service(...).to_compat_dict()`. Per testare
+    il body bit-per-bit (request shape, fields schema, extent,
+    failure paths) serve un client reale (non MagicMock) cosi' il
+    metodo `add_layer_to_service` esegue il body.
+
+    Tutti i collaboratori (`_http.post`, `authenticate`, helper
+    staticmethods, `dataframe_to_esri_features`, `add_features`)
+    restano stubati per-instance via `MagicMock`. Le assertion sul
+    `client._http.post.call_args` continuano a funzionare invariate.
+    """
+    client = ArcGISClient.__new__(ArcGISClient)
+    client._token_cache = {}
     client._http = MagicMock()
     client._http.post = MagicMock(return_value=_make_response({"success": True}))
+    client.authenticate = MagicMock(return_value="tok-abc")
     client._esri_geometry_type = MagicMock(return_value="esriGeometryPolygon")
     client._python_type_to_esri_field = MagicMock(
         side_effect=lambda col, dtype: {
@@ -393,7 +410,8 @@ def test_extent_defaults_to_world_when_no_geometry():
     import pandas as pd
     plain_df = pd.DataFrame({"NAME": ["a"], "VALUE": [1]})
 
-    fake_client = MagicMock(name="ArcGISClient")
+    fake_client = ArcGISClient.__new__(ArcGISClient)
+    fake_client._token_cache = {}
     fake_client.authenticate = MagicMock(return_value="t")
     fake_client._http = MagicMock()
     fake_client._http.post = MagicMock(return_value=_make_response({"success": True}))

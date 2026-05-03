@@ -85,7 +85,7 @@ def _mask_secret(value: str, visible: int = 4) -> str:
 class ArcGISConnectionInfo:
     """
     Configurazione minima per una connessione ArcGIS.
-    
+
     Versione leggera usata dal client (senza metadati come nome, date).
     Analogo a DatabaseConnection nel query_executor.py.
     """
@@ -97,6 +97,41 @@ class ArcGISConnectionInfo:
     client_id: str = ""
     client_secret: str = ""
     token_url: str = ""     # URL custom per generazione token
+
+
+@dataclass(frozen=True)
+class AddLayerResult:
+    """Esito di `ArcGISClient.add_layer_to_service`.
+
+    BE-IMDF-006B: tipa il return shape che pre-006B era un dict opaco
+    `{success, feature_count, errors}` (vivente nel wrapper IMDF
+    `_add_layer_to_service`). Il wrapper IMDF resta come thin
+    delegate `KEEP_COMPAT` per i caller `upload_imdf_layers` che
+    consumano ancora il dict legacy.
+
+    Campi:
+        success: True se la sequenza addToDefinition+addFeatures ha
+            prodotto almeno una feature aggiunta. False se
+            `addToDefinition` fallisce o `add_features` ritorna
+            `added_count=0`.
+        feature_count: feature aggiunte (= `added_count` di
+            `client.add_features`).
+        errors: tuple immutabile di error message string. Vuota su
+            happy path.
+    """
+    success: bool
+    feature_count: int
+    errors: Tuple[str, ...] = ()
+
+    def to_compat_dict(self) -> dict:
+        """Conversione al dict shape pre-IMDF-006B
+        `{success, feature_count, errors}` (KEEP_COMPAT per
+        `_add_layer_to_service` wrapper IMDF e i suoi consumer)."""
+        return {
+            "success": self.success,
+            "feature_count": self.feature_count,
+            "errors": list(self.errors),
+        }
 
 
 class HttpClientProtocol(Protocol):
@@ -2511,7 +2546,153 @@ class ArcGISClient:
             "feature_count": write_result.get("added_count", 0),
             "errors": write_result.get("errors", []),
         }
-    
+
+    # =========================================================================
+    # ADD LAYER TO EXISTING SERVICE (BE-IMDF-006B)
+    # =========================================================================
+
+    def add_layer_to_service(
+        self,
+        conn: ArcGISConnectionInfo,
+        service_url: str,
+        gdf,
+        layer_name: str,
+        layer_id: int,
+        srid: int = 4326,
+    ) -> AddLayerResult:
+        """Aggiunge un layer a un Feature Service esistente.
+
+        BE-IMDF-006B: promote del helper privato IMDF
+        `app.core.imdf.arcgis.publish_ops._add_layer_to_service` come
+        metodo pubblico di `ArcGISClient`. Body bit-per-bit identico
+        al pre-006B (request shape, fail-loud, fields schema, geom
+        type detection, extent calc), ritorna `AddLayerResult` tipato
+        invece di `dict`.
+
+        Sibling naturale di `create_service`: stessa pattern
+        `addToDefinition + addFeatures` ma su FS gia' creato e con
+        `layer_id` arbitrario (1, 2, 3, ...).
+
+        Args:
+            conn: connessione ArcGIS.
+            service_url: URL del Feature Service esistente.
+            gdf: GeoDataFrame con feature da aggiungere.
+            layer_name: nome del nuovo layer.
+            layer_id: id del nuovo layer.
+            srid: SRID di default. Sovrascritto da `gdf.crs.to_epsg()`
+                se il GeoDataFrame ha CRS.
+
+        Returns:
+            `AddLayerResult` tipato. Il wrapper IMDF
+            `_add_layer_to_service(client, ...)` continua a ritornare
+            il dict legacy via `result.to_compat_dict()`.
+        """
+        import geopandas as gpd
+
+        token = self.authenticate(conn)
+        referer = {"Referer": conn.server_url}
+        admin_url = service_url.replace("/rest/services/", "/rest/admin/services/")
+
+        # ── Determina geom_type dal GeoDataFrame (tipo maggioritario) ─────
+        # Uso value_counts invece della prima feature: feature stray di tipo
+        # diverso (es. 1 Point in mezzo a Polygon per errore di caricamento)
+        # non deve determinare il tipo del layer — tutte le altre fallirebbero.
+        geom_type = "esriGeometryPolygon"
+        if isinstance(gdf, gpd.GeoDataFrame) and len(gdf) > 0 and gdf.geometry is not None:
+            geom_types = gdf.geometry.dropna().geom_type
+            if len(geom_types) > 0:
+                majority_type = geom_types.value_counts().idxmax()
+                geom_type = self._esri_geometry_type(majority_type)
+                unique_types = set(geom_types)
+                if len(unique_types) > 1:
+                    logger.warning(
+                        f"add_layer_to_service('{layer_name}'): DataFrame ha "
+                        f"{len(unique_types)} tipi di geometria ({unique_types}); "
+                        f"usato '{majority_type}', le altre potrebbero fallire."
+                    )
+            if gdf.crs:
+                srid = gdf.crs.to_epsg() or srid
+
+        # ── Costruisci fields a partire dalle colonne (no geometry) ───────
+        fields = [
+            {"name": "OBJECTID", "type": "esriFieldTypeOID", "alias": "OBJECTID", "editable": False},
+        ]
+        for col in gdf.columns:
+            if col in ("geometry", "OBJECTID", "objectid"):
+                continue
+            fields.append(self._python_type_to_esri_field(col, gdf[col].dtype))
+
+        # ── Calcola extent dai dati ───────────────────────────────────────
+        extent = {
+            "xmin": -180, "ymin": -90, "xmax": 180, "ymax": 90,
+            "spatialReference": {"wkid": srid},
+        }
+        try:
+            if isinstance(gdf, gpd.GeoDataFrame) and gdf.geometry is not None and len(gdf) > 0:
+                bounds = gdf.geometry.dropna().total_bounds
+                if len(bounds) == 4 and all(abs(b) < 1e15 for b in bounds):
+                    extent = {
+                        "xmin": float(bounds[0]),
+                        "ymin": float(bounds[1]),
+                        "xmax": float(bounds[2]),
+                        "ymax": float(bounds[3]),
+                        "spatialReference": {"wkid": srid},
+                    }
+        except Exception as e:
+            logger.warning(f"Impossibile calcolare extent per {layer_name}: {e}")
+
+        drawing_info = self._default_drawing_info(geom_type)
+
+        layer_def = {
+            "layers": [{
+                "id": layer_id,
+                "name": layer_name,
+                "type": "Feature Layer",
+                "geometryType": geom_type,
+                "objectIdField": "OBJECTID",
+                "fields": fields,
+                "extent": extent,
+                "drawingInfo": drawing_info,
+                "hasAttachments": False,
+                "capabilities": "Create,Delete,Query,Update,Editing",
+            }]
+        }
+
+        # ── addToDefinition ────────────────────────────────────────────────
+        add_def_data = {
+            "addToDefinition": json.dumps(layer_def),
+            "f": "json",
+        }
+        if token:
+            add_def_data["token"] = token
+
+        response = self._http.post(
+            f"{admin_url}/addToDefinition",
+            data=add_def_data,
+            timeout=60,
+            headers=referer,
+        )
+        add_result = response.json()
+        if not add_result.get("success"):
+            return AddLayerResult(
+                success=False,
+                feature_count=0,
+                errors=(f"addToDefinition fallito: {add_result}",),
+            )
+
+        # ── addFeatures ────────────────────────────────────────────────────
+        layer_url = f"{service_url}/{layer_id}"
+        features = self.dataframe_to_esri_features(
+            gdf, "geometry", srid, operation="create_service"
+        )
+        write_result = self.add_features(conn, layer_url, features)
+
+        return AddLayerResult(
+            success=write_result.get("added_count", 0) > 0,
+            feature_count=write_result.get("added_count", 0),
+            errors=tuple(write_result.get("errors", [])),
+        )
+
     # =========================================================================
     # TEST CONNESSIONE
     # =========================================================================

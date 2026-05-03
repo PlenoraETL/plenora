@@ -105,7 +105,6 @@ WHERE IN da 200, real_activity computation finale, `import json` e
 `import pandas as _pd` lazy preservati.
 """
 
-import json
 from typing import Dict, List
 
 from app.utils.logger import get_logger
@@ -129,114 +128,22 @@ def _add_layer_to_service(
 ) -> Dict:
     """Aggiunge un layer a un Feature Service esistente.
 
-    Stesso pattern di `ArcGISClient.create_service` (addToDefinition + addFeatures)
-    ma su un FS gia' creato e con id layer arbitrario (1, 2, 3, ...).
+    BE-IMDF-006B: implementazione promossa a
+    `ArcGISClient.add_layer_to_service` (returna `AddLayerResult`
+    tipato). Questo modulo-level symbol resta come thin wrapper
+    `KEEP_COMPAT` per:
+
+    1. preservare il dict shape `{success, feature_count, errors}`
+       atteso dai caller IMDF (`upload_imdf_layers`);
+    2. preservare il facade re-export
+       `from app.core.imdf.arcgis_uploader import _add_layer_to_service`;
+    3. mantenere il path di monkeypatch usato dai test contract
+       (`tests2/imdf/unit/test_add_layer_to_service_contract.py`
+       chiama questa funzione e mocka i collaboratori del client).
     """
-    import geopandas as gpd
-
-    token = client.authenticate(conn)
-    referer = {"Referer": conn.server_url}
-    admin_url = service_url.replace("/rest/services/", "/rest/admin/services/")
-
-    # ── Determina geom_type dal GeoDataFrame (tipo maggioritario) ─────
-    # Uso value_counts invece della prima feature: feature stray di tipo
-    # diverso (es. 1 Point in mezzo a Polygon per errore di caricamento)
-    # non deve determinare il tipo del layer — tutte le altre fallirebbero.
-    geom_type = "esriGeometryPolygon"
-    if isinstance(gdf, gpd.GeoDataFrame) and len(gdf) > 0 and gdf.geometry is not None:
-        geom_types = gdf.geometry.dropna().geom_type
-        if len(geom_types) > 0:
-            majority_type = geom_types.value_counts().idxmax()
-            geom_type = client._esri_geometry_type(majority_type)
-            unique_types = set(geom_types)
-            if len(unique_types) > 1:
-                logger.warning(
-                    f"_add_layer_to_service('{layer_name}'): DataFrame ha "
-                    f"{len(unique_types)} tipi di geometria ({unique_types}); "
-                    f"usato '{majority_type}', le altre potrebbero fallire."
-                )
-        if gdf.crs:
-            srid = gdf.crs.to_epsg() or srid
-
-    # ── Costruisci fields a partire dalle colonne (no geometry) ───────
-    fields = [
-        {"name": "OBJECTID", "type": "esriFieldTypeOID", "alias": "OBJECTID", "editable": False},
-    ]
-    for col in gdf.columns:
-        if col in ("geometry", "OBJECTID", "objectid"):
-            continue
-        fields.append(client._python_type_to_esri_field(col, gdf[col].dtype))
-
-    # ── Calcola extent dai dati ───────────────────────────────────────
-    extent = {
-        "xmin": -180, "ymin": -90, "xmax": 180, "ymax": 90,
-        "spatialReference": {"wkid": srid},
-    }
-    try:
-        if isinstance(gdf, gpd.GeoDataFrame) and gdf.geometry is not None and len(gdf) > 0:
-            bounds = gdf.geometry.dropna().total_bounds
-            if len(bounds) == 4 and all(abs(b) < 1e15 for b in bounds):
-                extent = {
-                    "xmin": float(bounds[0]),
-                    "ymin": float(bounds[1]),
-                    "xmax": float(bounds[2]),
-                    "ymax": float(bounds[3]),
-                    "spatialReference": {"wkid": srid},
-                }
-    except Exception as e:
-        logger.warning(f"Impossibile calcolare extent per {layer_name}: {e}")
-
-    drawing_info = client._default_drawing_info(geom_type)
-
-    layer_def = {
-        "layers": [{
-            "id": layer_id,
-            "name": layer_name,
-            "type": "Feature Layer",
-            "geometryType": geom_type,
-            "objectIdField": "OBJECTID",
-            "fields": fields,
-            "extent": extent,
-            "drawingInfo": drawing_info,
-            "hasAttachments": False,
-            "capabilities": "Create,Delete,Query,Update,Editing",
-        }]
-    }
-
-    # ── addToDefinition ────────────────────────────────────────────────
-    add_def_data = {
-        "addToDefinition": json.dumps(layer_def),
-        "f": "json",
-    }
-    if token:
-        add_def_data["token"] = token
-
-    response = client._http.post(
-        f"{admin_url}/addToDefinition",
-        data=add_def_data,
-        timeout=60,
-        headers=referer,
-    )
-    add_result = response.json()
-    if not add_result.get("success"):
-        return {
-            "success": False,
-            "feature_count": 0,
-            "errors": [f"addToDefinition fallito: {add_result}"],
-        }
-
-    # ── addFeatures ────────────────────────────────────────────────────
-    layer_url = f"{service_url}/{layer_id}"
-    features = client.dataframe_to_esri_features(
-        gdf, "geometry", srid, operation="create_service"
-    )
-    write_result = client.add_features(conn, layer_url, features)
-
-    return {
-        "success": write_result.get("added_count", 0) > 0,
-        "feature_count": write_result.get("added_count", 0),
-        "errors": write_result.get("errors", []),
-    }
+    return client.add_layer_to_service(
+        conn, service_url, gdf, layer_name, layer_id, srid,
+    ).to_compat_dict()
 
 
 # =============================================================================
