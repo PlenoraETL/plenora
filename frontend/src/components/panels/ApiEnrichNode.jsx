@@ -640,13 +640,7 @@ function ApiEnrichNode({ id, data, selected }) {
               );
             })}
 
-            <div style={{
-              fontSize: 10.5,
-              color: 'var(--pl-text-sub, #888)',
-              marginTop: 6,
-              lineHeight: 1.45,
-              fontStyle: 'italic',
-            }}>
+            <div className="api-enrich-node__params-hint">
               💡 Per parametri composti puoi usare un template come <code>{'{X},{Y}'}</code> o <code>{'{via} {civico}, {comune}'}</code>.
               I placeholder verranno sostituiti coi valori della riga.
             </div>
@@ -661,8 +655,7 @@ function ApiEnrichNode({ id, data, selected }) {
             </label>
             <input
               type="text"
-              className="api-enrich-node__mapping-select"
-              style={{ width: '100%' }}
+              className="api-enrich-node__mapping-select api-enrich-node__exec-if-input"
               value={data.execute_if || ''}
               onChange={(e) => useCanvasStore.getState().updateNodeData(id, { execute_if: e.target.value, _lastUpdate: Date.now() })}
               placeholder="es. georef_mode=CATASTO"
@@ -743,7 +736,7 @@ function ApiEnrichNode({ id, data, selected }) {
               <div className="api-enrich-node__advanced-body">
                 {/* Batch info (read-only, configurato nella connessione) */}
                 {data.batch?.enabled && (
-                  <div className="api-enrich-node__adv-row" style={{marginBottom:6}}>
+                  <div className="api-enrich-node__adv-row api-enrich-node__adv-row--mb-sm">
                     <span className="api-enrich-node__adv-key">⚡ Batch mode</span>
                     <span className="api-enrich-node__adv-badge">attivo — {data.batch?.max_size||100} righe/chiamata</span>
                   </div>
@@ -879,64 +872,45 @@ function ExtraFileSlot({ field, label, current, onUploaded, onRemoved }) {
   };
 
   return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', gap: 4,
-      padding: '8px 10px',
-      border: '1px dashed rgba(255,255,255,0.12)',
-      borderRadius: 5,
-      marginTop: 6,
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11 }}>
-        <span style={{ fontWeight: 600, opacity: 0.85 }}>
+    <div className="api-enrich-node__file-field">
+      <div className="api-enrich-node__file-field-header">
+        <span className="api-enrich-node__file-field-label">
           {label}
-          {field.required && <span style={{ color: '#f87171', marginLeft: 4 }}>*</span>}
+          {field.required && <span className="api-enrich-node__file-field-required">*</span>}
         </span>
         {current && (
           <button
             type="button"
             onClick={onRemoved}
-            style={{
-              background: 'none', border: 'none', color: '#94a3b8',
-              cursor: 'pointer', fontSize: 14, padding: '0 4px',
-            }}
+            className="api-enrich-node__file-field-remove"
             title="Rimuovi file"
           >×</button>
         )}
       </div>
 
       {current ? (
-        <div style={{ fontSize: 10, color: '#4ade80', fontFamily: 'monospace' }}>
+        <div className="api-enrich-node__file-field-success">
           ✓ {current.original_filename}
           {current.size ? ` (${Math.round(current.size / 1024)} KB)` : ''}
         </div>
       ) : (
-        <label style={{
-          display: 'inline-block',
-          padding: '5px 9px',
-          background: 'rgba(255,255,255,0.05)',
-          border: '1px solid rgba(255,255,255,0.12)',
-          borderRadius: 4,
-          fontSize: 10,
-          cursor: uploading ? 'wait' : 'pointer',
-          textAlign: 'center',
-          opacity: uploading ? 0.6 : 1,
-        }}>
+        <label className={`api-enrich-node__file-field-box${uploading ? ' api-enrich-node__file-field-box--uploading' : ''}`}>
           <input
             ref={inputRef}
             type="file"
             accept={field.accept || undefined}
             disabled={uploading}
             onChange={handleFileSelected}
-            style={{ display: 'none' }}
+            className="api-enrich-node__file-field-input--hidden"
           />
           {uploading ? 'Caricamento...' : '📁 Scegli file'}
         </label>
       )}
       {field.accept && !current && (
-        <div style={{ fontSize: 9, color: '#64748b' }}>Formati: {field.accept}</div>
+        <div className="api-enrich-node__file-field-format-hint">Formati: {field.accept}</div>
       )}
       {error && (
-        <div style={{ fontSize: 9, color: '#f87171' }}>{error}</div>
+        <div className="api-enrich-node__file-field-error">{error}</div>
       )}
     </div>
   );

@@ -637,3 +637,87 @@
   background: rgba(155,109,255,0.09);
   border-color: rgba(155,109,255,0.5);
 }
+
+/* ── Inline-style migration (FE-PHASE2-API-ENRICH-NODE-CLEANUP) ──────
+   Helper locali per ApiEnrichNode + sub-component FileField (estra
+   inline staticamente nei file-fields del Processor File rest_file). */
+
+/* Hint italico sotto i mapping params (template syntax). */
+.api-enrich-node__params-hint {
+  font-size: 10.5px;
+  color: var(--pl-text-sub, #888);
+  margin-top: 6px;
+  line-height: 1.45;
+  font-style: italic;
+}
+
+/* Input execute_if a width 100% (semplice utility locale). */
+.api-enrich-node__exec-if-input { width: 100%; }
+
+/* Modifier per riga adv batch info con margin bottom dedicato. */
+.api-enrich-node__adv-row--mb-sm { margin-bottom: 6px; }
+
+/* ── FileField sub-component (rest_file file_fields uploader) ────────
+   Cluster layout statico: wrapper, header, label-text, required `*`,
+   remove button, success line, hint format, error text. La label-box
+   (drop area) usa __label-box statico + modifier dinamico --uploading
+   per cursor/opacity. */
+.api-enrich-node__file-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px dashed rgba(255,255,255,0.12);
+  border-radius: 5px;
+  margin-top: 6px;
+}
+.api-enrich-node__file-field-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+}
+.api-enrich-node__file-field-label {
+  font-weight: 600;
+  opacity: 0.85;
+}
+.api-enrich-node__file-field-required {
+  color: #f87171;
+  margin-left: 4px;
+}
+.api-enrich-node__file-field-remove {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 4px;
+}
+.api-enrich-node__file-field-success {
+  font-size: 10px;
+  color: #4ade80;
+  font-family: monospace;
+}
+.api-enrich-node__file-field-box {
+  display: inline-block;
+  padding: 5px 9px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 4px;
+  font-size: 10px;
+  cursor: pointer;
+  text-align: center;
+}
+.api-enrich-node__file-field-box--uploading {
+  cursor: wait;
+  opacity: 0.6;
+}
+.api-enrich-node__file-field-input--hidden { display: none; }
+.api-enrich-node__file-field-format-hint {
+  font-size: 9px;
+  color: #64748b;
+}
+.api-enrich-node__file-field-error {
+  font-size: 9px;
+  color: #f87171;
+}
