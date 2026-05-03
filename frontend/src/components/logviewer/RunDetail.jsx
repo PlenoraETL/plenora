@@ -66,7 +66,7 @@ export default function RunDetail({ runId }) {
             const color = MODULE_COLORS[s.module] || '#6B7280';
             return (
               <div key={i} className={`lv__run-step${!isOk ? ' lv__run-step--err' : ''}`}>
-                <div className="lv__run-step-icon" style={{ color: isOk ? '#34D399' : '#F87171' }}>
+                <div className={`lv__run-step-icon ${isOk ? 'lv__run-step-icon--ok' : 'lv__run-step-icon--err'}`}>
                   {isOk ? '✓' : '✕'}
                 </div>
                 <div className="lv__run-step-module" style={{ color, background: `${color}18`, borderColor: `${color}30` }}>
@@ -89,9 +89,9 @@ export default function RunDetail({ runId }) {
             <table className="lv__table lv__run-logs-table">
               <thead>
                 <tr>
-                  <th className="lv__th" style={{ width: 90 }}>Ora</th>
-                  <th className="lv__th" style={{ width: 70 }}>Livello</th>
-                  <th className="lv__th" style={{ width: 90 }}>Modulo</th>
+                  <th className="lv__th lv__th--w-90">Ora</th>
+                  <th className="lv__th lv__th--w-70">Livello</th>
+                  <th className="lv__th lv__th--w-90">Modulo</th>
                   <th className="lv__th">Messaggio</th>
                 </tr>
               </thead>
@@ -101,19 +101,18 @@ export default function RunDetail({ runId }) {
                   const modClr = MODULE_COLORS[l.module] || '#6B7280';
                   return (
                     <tr key={i} className={`lv__row lv__row--${(l.level || '').toLowerCase()}`}>
-                      <td className="lv__td lv__td--time" style={{ fontSize: 11 }}>{(l.ts || '').slice(11, 19)}</td>
+                      <td className="lv__td lv__td--time lv__td--time-sm">{(l.ts || '').slice(11, 19)}</td>
                       <td className="lv__td">
-                        <span className={`lv__badge ${lvCfg.cls || ''}`} style={{ fontSize: 10 }}>{l.level}</span>
+                        <span className={`lv__badge lv__badge--sm ${lvCfg.cls || ''}`}>{l.level}</span>
                       </td>
                       <td className="lv__td">
-                        <span className="lv__module-tag" style={{
+                        <span className="lv__module-tag lv__module-tag--sm" style={{
                           color: modClr,
                           background: `${modClr}18`,
                           borderColor: `${modClr}30`,
-                          fontSize: 10,
                         }}>{l.module}</span>
                       </td>
-                      <td className="lv__td" style={{ fontFamily: 'var(--lv-font-m)', fontSize: 11, color: 'var(--lv-text-sub)' }}>{l.msg}</td>
+                      <td className="lv__td lv__td--mono-11">{l.msg}</td>
                     </tr>
                   );
                 })}
@@ -121,7 +120,7 @@ export default function RunDetail({ runId }) {
             </table>
           )}
           {detail.logs_truncated && (
-            <div className="lv__run-steps-empty" style={{ fontSize: 11 }}>
+            <div className="lv__run-steps-empty lv__run-steps-empty--sm">
               Mostrati i primi 300 log. Usa i filtri Log Tecnici per vedere tutto.
             </div>
           )}

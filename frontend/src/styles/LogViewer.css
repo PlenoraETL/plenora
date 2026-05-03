@@ -317,3 +317,74 @@
 .lv__run-logs { overflow-x: auto; }
 .lv__run-logs-table { font-size: 11.5px; }
 
+/* ── Inline-style migration (FE-PHASE2-INLINE-STYLES-003) ──────────────
+   Helper locali per RunsTab + RunDetail. */
+
+/* Layout outer del tab Esecuzioni (RunsTab root). */
+.lv__page-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: relative;
+  z-index: 1;
+}
+
+/* Variante 3-colonne per la mini-stats di RunsTab (sostituisce
+   l'override inline `gridTemplateColumns: repeat(3,1fr)`). */
+.lv__stats--3col { grid-template-columns: repeat(3,1fr); }
+
+/* Stat-card resa cliccabile come <button>: azzera lo styling default
+   del browser senza alterare il rendering visuale (.lv__stat fornisce
+   tutto il look). */
+.lv__btn-reset {
+  cursor: pointer;
+  text-align: inherit;
+  font: inherit;
+  color: inherit;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+/* Colore semantico per il valore della stat (success/failure). */
+.lv__stat-val--ok  { color: var(--lv-ok); }
+.lv__stat-val--err { color: var(--lv-err); }
+
+/* Riga tabella cliccabile (toggle dettaglio run). */
+.lv__row--clickable { cursor: pointer; }
+
+/* Cella mono (DM Mono) per project_id/durata/righe out. Variante size
+   11px ha colore sub; size 12px ha colore default cell. */
+.lv__td--mono-11 {
+  font-family: var(--lv-font-m);
+  font-size: 11px;
+  color: var(--lv-text-sub);
+}
+.lv__td--mono-12 {
+  font-family: var(--lv-font-m);
+  font-size: 12px;
+}
+
+/* Time td piccolo (RunDetail logs view, override del default 11px sub). */
+.lv__td--time-sm { font-size: 11px; }
+
+/* Badge level piu' piccolo nei log tecnici nested. */
+.lv__badge--sm { font-size: 10px; }
+
+/* Module-tag piu' piccolo nei log tecnici nested. */
+.lv__module-tag--sm { font-size: 10px; }
+
+/* Step icon ok/err (RunDetail steps tab). I valori sono volutamente
+   hex hardcoded per allineamento con i token --lv-ok/--lv-err. */
+.lv__run-step-icon--ok  { color: var(--lv-ok); }
+.lv__run-step-icon--err { color: var(--lv-err); }
+
+/* Variante size per la nota empty/truncated (300 log). */
+.lv__run-steps-empty--sm { font-size: 11px; }
+
+/* Width-utility per <th> (numerici, scope locale alla pagina). */
+.lv__th--w-70  { width: 70px;  }
+.lv__th--w-80  { width: 80px;  }
+.lv__th--w-90  { width: 90px;  }
+.lv__th--w-100 { width: 100px; }
+.lv__th--w-130 { width: 130px; }
+

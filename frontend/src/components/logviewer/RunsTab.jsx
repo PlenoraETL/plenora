@@ -73,10 +73,10 @@ export default function RunsTab({ refreshTick = 0 }) {
   const countErr = runs.filter(r => r.status === 'failure').length;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, position: 'relative', zIndex: 1 }}>
+    <div className="lv__page-col">
 
       {/* Mini stats */}
-      <div className="lv__stats" style={{ gridTemplateColumns: 'repeat(3,1fr)' }}>
+      <div className="lv__stats lv__stats--3col">
         <div className="lv__stat lv__stat--total">
           <div className="lv__stat-label">Run Totali</div>
           <div className="lv__stat-val">{total}</div>
@@ -84,24 +84,22 @@ export default function RunsTab({ refreshTick = 0 }) {
         </div>
         <button
           type="button"
-          className={`lv__stat lv__stat--info${filterStatus === 'success' ? ' lv__stat--active' : ''}`}
-          style={{ cursor: 'pointer', textAlign: 'inherit', font: 'inherit', color: 'inherit', appearance: 'none', WebkitAppearance: 'none' }}
+          className={`lv__stat lv__stat--info lv__btn-reset${filterStatus === 'success' ? ' lv__stat--active' : ''}`}
           onClick={() => setFilterStatus(filterStatus === 'success' ? '' : 'success')}
           aria-pressed={filterStatus === 'success'}
           aria-label="Filtra esecuzioni completate">
           <span className="lv__stat-label">Completate</span>
-          <span className="lv__stat-val" style={{ color: 'var(--lv-ok)' }}>{countOk}</span>
+          <span className="lv__stat-val lv__stat-val--ok">{countOk}</span>
           <span className="lv__stat-sub">clicca per filtrare</span>
         </button>
         <button
           type="button"
-          className={`lv__stat lv__stat--error${filterStatus === 'failure' ? ' lv__stat--active' : ''}`}
-          style={{ cursor: 'pointer', textAlign: 'inherit', font: 'inherit', color: 'inherit', appearance: 'none', WebkitAppearance: 'none' }}
+          className={`lv__stat lv__stat--error lv__btn-reset${filterStatus === 'failure' ? ' lv__stat--active' : ''}`}
           onClick={() => setFilterStatus(filterStatus === 'failure' ? '' : 'failure')}
           aria-pressed={filterStatus === 'failure'}
           aria-label="Filtra esecuzioni fallite">
           <span className="lv__stat-label">Fallite</span>
-          <span className="lv__stat-val" style={{ color: 'var(--lv-err)' }}>{countErr}</span>
+          <span className="lv__stat-val lv__stat-val--err">{countErr}</span>
           <span className="lv__stat-sub">clicca per filtrare</span>
         </button>
       </div>
@@ -138,13 +136,13 @@ export default function RunsTab({ refreshTick = 0 }) {
         <table className="lv__table">
           <thead>
             <tr>
-              <th className="lv__th" style={{ width: 130 }}>Avvio</th>
-              <th className="lv__th" style={{ width: 90 }}>Stato</th>
-              <th className="lv__th" style={{ width: 100 }}>Modulo</th>
+              <th className="lv__th lv__th--w-130">Avvio</th>
+              <th className="lv__th lv__th--w-90">Stato</th>
+              <th className="lv__th lv__th--w-100">Modulo</th>
               <th className="lv__th">Progetto</th>
-              <th className="lv__th" style={{ width: 80 }}>Durata</th>
-              <th className="lv__th" style={{ width: 90 }}>Righe out</th>
-              <th className="lv__th" style={{ width: 90 }}>Trigger</th>
+              <th className="lv__th lv__th--w-80">Durata</th>
+              <th className="lv__th lv__th--w-90">Righe out</th>
+              <th className="lv__th lv__th--w-90">Trigger</th>
             </tr>
           </thead>
           <tbody>
@@ -164,8 +162,7 @@ export default function RunsTab({ refreshTick = 0 }) {
               return (
                 <React.Fragment key={run.run_id}>
                   <tr
-                    className={`lv__row${isFail ? ' lv__row--error' : ''}${isExp ? ' lv__row--expanded' : ''}`}
-                    style={{ cursor: 'pointer' }}
+                    className={`lv__row lv__row--clickable${isFail ? ' lv__row--error' : ''}${isExp ? ' lv__row--expanded' : ''}`}
                     onClick={() => setExpandedRun(isExp ? null : run.run_id)}>
                     <td className="lv__td lv__td--time">
                       <button
@@ -191,13 +188,13 @@ export default function RunsTab({ refreshTick = 0 }) {
                         color: modClr, background: `${modClr}18`, borderColor: `${modClr}30`
                       }}>{run.module || '—'}</span>
                     </td>
-                    <td className="lv__td" style={{ fontFamily: 'var(--lv-font-m)', fontSize: 11, color: 'var(--lv-text-sub)' }}>
+                    <td className="lv__td lv__td--mono-11">
                       {truncateProjectId(run.project_id)}
                     </td>
-                    <td className="lv__td" style={{ fontFamily: 'var(--lv-font-m)', fontSize: 12 }}>
+                    <td className="lv__td lv__td--mono-12">
                       {fmtDuration(run.duration_ms)}
                     </td>
-                    <td className="lv__td" style={{ fontFamily: 'var(--lv-font-m)', fontSize: 12 }}>
+                    <td className="lv__td lv__td--mono-12">
                       {fmtRows(run.rows_out)}
                     </td>
                     <td className="lv__td">
