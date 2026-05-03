@@ -42,7 +42,15 @@ import jwt
 
 
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_HOURS = int(os.getenv("JWT_EXPIRE_HOURS", "8"))
+# BE-CONFIG-001B: TTL token migrato a `Settings.DEFAULTS` (default 8h).
+# Override env `JWT_EXPIRE_HOURS` continua a funzionare via type coercion
+# `int` in `Settings._converti_tipo_env`. Lettura a import-time: la
+# costante e' parte del contratto modulo (consumata da `auth.auth` e
+# da test-contract `test_jwt_token_module_contract`). `app.config` e'
+# gia' importato sopra dalla catena `app/main.py` -> `app/config.py`
+# (dotenv loaded), quindi `settings.get` qui legge gli override env.
+from app.config import settings as _settings
+ACCESS_TOKEN_EXPIRE_HOURS = int(_settings.get("JWT_EXPIRE_HOURS"))
 
 _jwt_env_value = os.getenv("JWT_SECRET_KEY", "").strip()
 

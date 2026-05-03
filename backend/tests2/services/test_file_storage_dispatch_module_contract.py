@@ -46,11 +46,25 @@ def fake_logger():
 
 
 def _patched_settings(policy_value):
-    """Patcher per `app.config.settings.get('STORAGE_POLICY', ...)`."""
+    """Patcher per `app.config.settings.get(...)` controllabile dal test.
+
+    BE-CONFIG-001B: il dispatch ora legge anche
+    `FILE_SOURCE_S3_THRESHOLD_BYTES` via Settings. Per altre chiavi
+    (incluso il threshold) il fake delega al `Settings` reale, cosi' i
+    test che usano `monkeypatch.setenv(...)` continuano a vedere
+    l'override env tramite `_converti_tipo_env`. Solo `STORAGE_POLICY`
+    e' forzato al valore del test.
+    """
+    from app.config import settings as _real_settings
+
     fake_settings = MagicMock()
-    fake_settings.get = MagicMock(side_effect=lambda key, default=None: (
-        policy_value if key == "STORAGE_POLICY" else default
-    ))
+
+    def _fake_get(key, default=None):
+        if key == "STORAGE_POLICY":
+            return policy_value
+        return _real_settings.get(key, default)
+
+    fake_settings.get = MagicMock(side_effect=_fake_get)
     return patch("app.config.settings", fake_settings)
 
 

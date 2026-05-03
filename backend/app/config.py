@@ -120,6 +120,12 @@ class Settings:
         "TASK_PROGRESS_POLL_INTERVAL":  1,
         "CELERY_RESULT_EXPIRES":        86400,
 
+        # ==================== AUTH ====================
+        # Durata del token JWT in ore. Migrato a Settings da `BE-CONFIG-001B`
+        # (era direct `os.getenv` in `app.shared.jwt_token`). Override env
+        # `JWT_EXPIRE_HOURS` continua a funzionare via type coercion `int`.
+        "JWT_EXPIRE_HOURS": 8,
+
         # ==================== API ESTERNE ====================
         "API_TIMEOUT": 30,
         "API_DEFAULT_RATE_LIMIT": 5,
@@ -138,6 +144,13 @@ class Settings:
         ],
         "MAX_FILE_SIZE": 100 * 1024 * 1024,  # 100 MB
 
+        # ==================== TEMP CLEANUP ====================
+        # TTL in ore per i file temp orfani sotto `DATA_DIR/temp/`.
+        # Beat scheduler (`workers/beat_scheduler:_cleanup_temp_orphans`)
+        # rimuove le directory piu' vecchie di N ore. Default 24h.
+        # Migrato a Settings da `BE-CONFIG-001B`.
+        "TEMP_ORPHAN_CLEANUP_HOURS": 24,
+
         # ==================== STORAGE POLICY (A1) ====================
         # Policy unica top-level per persistenza di result pipeline e
         # file_source utente. Vedi orchestrate/phase_1_stabilization/a1_storage_policy.md.
@@ -150,6 +163,14 @@ class Settings:
         # Default 500 MB: limite pratico di un BYTEA PG senza toast tuning.
         # Sopra cap: ResultSaveError al save (caller deve failare).
         "RESULT_DB_HARD_CAP_BYTES": 500 * 1024 * 1024,
+        # Soglie dispatch DB-vs-object-storage in policy=hybrid (ADR-0011 + 0015).
+        # Per-dominio (intenzionalmente separate, vedi ADR-0011 + ADR-0021):
+        # ops puo' tunare result e file_source in modo indipendente perche'
+        # la distribuzione di size differisce. Default 50 MB per entrambi
+        # = break-even empirico DB BYTEA vs roundtrip object storage.
+        # Migrato a Settings da `BE-CONFIG-001B` (era direct `os.getenv`).
+        "RESULT_S3_THRESHOLD_BYTES": 50 * 1024 * 1024,
+        "FILE_SOURCE_S3_THRESHOLD_BYTES": 50 * 1024 * 1024,
         # MinIO provider (A1-B2, ADR-0015). Required-if CLOUD_PROVIDER=minio,
         # pattern analogo a LOG_ARCHIVE_BUCKET: validazione fail-fast a boot
         # in app/shared/cloud_backends.validate_storage_config.

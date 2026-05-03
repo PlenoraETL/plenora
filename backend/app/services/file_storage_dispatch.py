@@ -22,7 +22,8 @@ resta facilmente unit-testabile con un MagicMock logger.
 
 Side-effect:
   - Legge `app.config.settings` (env-aware via `settings.get`).
-  - Legge `os.getenv("FILE_SOURCE_S3_THRESHOLD_BYTES", default)`.
+  - Legge `settings.get("FILE_SOURCE_S3_THRESHOLD_BYTES")` (default
+    tipato in `Settings.DEFAULTS`).
   - Per object_storage path: chiama
     `app.shared.cloud_backends.get_runtime_object_storage().upload_bytes(...)`.
     Eccezioni dell'upload vengono LOGGATE e RILANCIATE - il caller
@@ -36,13 +37,11 @@ da `app.services.*`.
 
 from __future__ import annotations
 
-import os
 from typing import Any, Optional, TypedDict
 
 from app.shared.storage_layout import FILE_SOURCES_PREFIX
 
 
-_DEFAULT_THRESHOLD_BYTES = 50 * 1024 * 1024  # 50 MB
 # Alias modulare verso `app.shared.storage_layout.FILE_SOURCES_PREFIX`
 # (BE-DATA-PLANE-001A): single source-of-truth per i prefix object
 # storage. Mantenuto come name privato per backward-compat dei test
@@ -132,10 +131,11 @@ def dispatch_blob_storage(
     # Soglia per-dominio file_source (separata dal threshold result; ops
     # puo' tunarle in modo indipendente). Letta sempre, ma la decisione
     # la usa solo nel branch hybrid (la pure function ignora la threshold
-    # quando policy=db/object_storage).
-    threshold = int(
-        os.getenv("FILE_SOURCE_S3_THRESHOLD_BYTES", _DEFAULT_THRESHOLD_BYTES)
-    )
+    # quando policy=db/object_storage). BE-CONFIG-001B: default tipato in
+    # `Settings.DEFAULTS["FILE_SOURCE_S3_THRESHOLD_BYTES"]`; override env
+    # continua a funzionare via `Settings._converti_tipo_env` (coercion
+    # `int`).
+    threshold = int(settings.get("FILE_SOURCE_S3_THRESHOLD_BYTES"))
 
     # BE-DATA-PLANE-001B: decisione db vs object_storage delegata a
     # `app.shared.storage_dispatch.resolve_payload_target` (pure

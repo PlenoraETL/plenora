@@ -779,7 +779,10 @@ class PlenoraBeatScheduler(Scheduler):
             temp_dir = _Path(settings.DATA_DIR) / "temp"
             if not temp_dir.exists():
                 return
-            ttl_hours = int(_os.getenv("TEMP_ORPHAN_CLEANUP_HOURS", "24"))
+            # BE-CONFIG-001B: TTL temp orfani migrato a Settings (default
+            # tipato 24h in `Settings.DEFAULTS["TEMP_ORPHAN_CLEANUP_HOURS"]`).
+            # Override env continua a funzionare via type coercion `int`.
+            ttl_hours = int(settings.get("TEMP_ORPHAN_CLEANUP_HOURS"))
             ttl_seconds = ttl_hours * 3600
             removed = 0
 

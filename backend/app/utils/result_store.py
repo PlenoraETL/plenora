@@ -96,8 +96,15 @@ def _storage_policy() -> str:
 
 
 def _result_s3_threshold() -> int:
+    """Soglia hybrid policy per i result. Default tipato in
+    `Settings.DEFAULTS["RESULT_S3_THRESHOLD_BYTES"]` (50 MB).
+
+    BE-CONFIG-001B: il default vive in Settings, non piu' inline qui.
+    Override env `RESULT_S3_THRESHOLD_BYTES` continua a funzionare via
+    `Settings._converti_tipo_env` (type coercion `int`).
+    """
     from app.config import settings
-    return int(settings.get("RESULT_S3_THRESHOLD_BYTES", 50 * 1024 * 1024))
+    return int(settings.get("RESULT_S3_THRESHOLD_BYTES"))
 
 
 def _result_db_hard_cap() -> int:
