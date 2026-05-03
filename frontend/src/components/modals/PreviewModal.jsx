@@ -2,12 +2,14 @@
  * PreviewModal.jsx — Anteprima dati tabulari + mappa (se geometrico)
  *
  * Tab Tabella : tabella paginata con sort + ricerca globale
- * Tab Mappa   : Leaflet lazy-loaded, visibile solo se colonne geometry
+ * Tab Mappa   : Leaflet (npm `leaflet`), visibile solo se colonne geometry
  * Tab Statistiche : card per colonna con min/max/null
  *
  * Usato da EstraiEditor, ManipolaEditor, ArricchisciEditor.
  */
 import React, { useState, useEffect, useRef, memo, useMemo } from 'react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import PreviewTable from './PreviewTable';
 import PermissionRevokedBanner from '../common/PermissionRevokedBanner';
@@ -241,7 +243,7 @@ const MapTab = memo(({ rows, columns, active }) => {
 
   // Inizializza mappa quando il tab diventa attivo
   useEffect(() => {
-    if (!active || !mapRef.current || !window.L) return;
+    if (!active || !mapRef.current) return;
 
     if (leafletMap.current) {
       // Mappa già init: forza ridimensionamento (container era hidden)
@@ -257,7 +259,6 @@ const MapTab = memo(({ rows, columns, active }) => {
       return;
     }
 
-    const L = window.L;
     // Aspetta che il container abbia dimensioni reali prima di init
     setTimeout(() => {
       if (!mapRef.current) return;
@@ -275,38 +276,8 @@ const MapTab = memo(({ rows, columns, active }) => {
   // del tab. Il restyle al cambio colorBy avviene nell'effect dedicato sotto.
   }, [active]);
 
-  // Lazy-load Leaflet CSS+JS se non già caricato
-  useEffect(() => {
-    if (window.L) return;
-    const css = document.createElement('link');
-    css.rel = 'stylesheet';
-    css.href = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css';
-    document.head.appendChild(css);
-
-    const script = document.createElement('script');
-    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
-    script.onload = () => {
-      if (active && mapRef.current && !leafletMap.current) {
-        setTimeout(() => {
-          if (!mapRef.current) return;
-          const L = window.L;
-          const map = L.map(mapRef.current, { zoomControl: false, attributionControl: false });
-          map.setView([44.5, 11.3], 6);
-          leafletMap.current = map;
-          tileLayer.current = L.tileLayer(TILE_URLS.dark, { maxZoom: 19 }).addTo(map);
-          setTimeout(() => { map.invalidateSize(); buildGeoLayer(map, colorBy); }, 50);
-        }, 80);
-      }
-    };
-    document.head.appendChild(script);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  // Lazy-load Leaflet asset una sola volta per ciclo di vita modal: deps statici
-  // intenzionali, evita ricaricamenti CDN se active/colorBy cambiano.
-  }, []);
-
   const buildGeoLayer = (map, currentColorBy) => {
-    const L = window.L;
-    if (!L || !geomCol) return;
+    if (!geomCol) return;
 
     if (geoLayer.current) { map.removeLayer(geoLayer.current); geoLayer.current = null; }
 
@@ -390,10 +361,10 @@ const MapTab = memo(({ rows, columns, active }) => {
 
   // Cambia basemap
   const handleBasemap = (name) => {
-    if (!leafletMap.current || !window.L) return;
+    if (!leafletMap.current) return;
     setBasemap(name);
     if (tileLayer.current) leafletMap.current.removeLayer(tileLayer.current);
-    tileLayer.current = window.L.tileLayer(TILE_URLS[name], { maxZoom: 19 }).addTo(leafletMap.current);
+    tileLayer.current = L.tileLayer(TILE_URLS[name], { maxZoom: 19 }).addTo(leafletMap.current);
   };
 
   const fitBounds = () => {
