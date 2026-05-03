@@ -52,15 +52,3 @@ export function isValidProjectId(id) {
 
   return RE_INTEGER.test(id) || RE_UUID.test(id) || RE_SLUG.test(id);
 }
-
-/**
- * Converte l'ID a intero se è un numero, altrimenti lo lascia stringa.
- * Utile per normalizzare prima di passare all'API.
- *
- * @param {string} id
- * @returns {number|string}
- */
-export function normalizeProjectId(id) {
-  if (RE_INTEGER.test(id)) return parseInt(id, 10);
-  return id;
-}

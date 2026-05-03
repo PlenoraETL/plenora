@@ -338,13 +338,13 @@ const CaricanArcGISNode = memo(({ data, id }) => {
               Banner visibile, no rimozione automatica del nodo. */}
           {isAccessDenied && (
             <div
-              className="carica-arcgis-node__error"
+              className="plen-banner-warn"
               role="alert"
               title={accessDeniedReason || 'Connessione ArcGIS non accessibile'}
             >
               🔒 Connessione ArcGIS non accessibile al tuo gruppo.
               {accessDeniedReason ? (
-                <div className="carica-arcgis-node__error-detail">
+                <div className="plen-banner-warn__detail">
                   {accessDeniedReason}
                 </div>
               ) : null}

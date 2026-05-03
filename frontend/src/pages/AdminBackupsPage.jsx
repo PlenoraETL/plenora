@@ -254,13 +254,13 @@ export default function AdminBackupsPage() {
       <AppSidebar />
       <main className="ab__main">
         {awsCredentialsError && (
-          <div role="alert" className="ab__aws-banner">
+          <div role="alert" className="plen-banner-warn plen-banner-warn--lg ab__aws-banner-row">
             <div className="ab__aws-banner-body">
               <strong>Credenziali AWS scadute o non disponibili.</strong>
-              <div className="ab__aws-banner-detail">
+              <div className="plen-banner-warn__detail plen-banner-warn__detail--md">
                 {awsCredentialsError}
               </div>
-              <div className="ab__aws-banner-hint">
+              <div className="plen-banner-warn__detail">
                 L'auto-refresh e' sospeso finche' non riprovi. Esegui
                 <code className="ab__aws-banner-cmd">aws sso login</code>
                 sul server, poi clicca "Riprova".

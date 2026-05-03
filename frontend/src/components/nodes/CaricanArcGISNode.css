@@ -348,22 +348,9 @@
   border-top: 1px solid var(--cn-accent-dim);
 }
 
-/* ── Inline-style migration (FE-PHASE2-INLINE-STYLES-004) ──────────────
-   Banner RB.7.C "ArcGIS connection access denied". Pattern di banner
-   warn inline duplicato in altri nodi/pagine (es. AdminBackupsPage
-   `ab__aws-banner`, ImdfPublisherNode errori, PermissionRevokedBanner):
-   centralizzazione globale rinviata, pattern segnalato. */
-.carica-arcgis-node__error {
-  background: #fff4e5;
-  border: 1px solid #d97706;
-  border-radius: 4px;
-  color: #92400e;
-  padding: 8px 10px;
-  margin-bottom: 8px;
-}
-.carica-arcgis-node__error-detail {
-  font-size: 0.85em;
-  margin-top: 4px;
-  opacity: 0.85;
-}
+/* ── Inline-style migration (FE-PHASE2-INLINE-STYLES-004 +
+   FE-PHASE2-STRUCTURAL-CLEANUP-001) ────────────────────────────────────
+   Banner RB.7.C "ArcGIS connection access denied" usa il pattern
+   shared `.plen-banner-warn` (vedi `styles/base/banners.css`); le
+   classi locali specifiche restano qui per altri stati. */
 .carica-arcgis-node__warning--err { color: #f87171; }

@@ -1,0 +1,50 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   banners.css — pattern shared per banner inline
+   (FE-PHASE2-STRUCTURAL-CLEANUP-001)
+
+   Estrae il pattern warning-banner duplicato in 3+ file:
+     - styles/AdminBackupsPage.css `.ab__aws-banner` (AWS credentials)
+     - components/nodes/CaricanArcGISNode.css `.carica-arcgis-node__error`
+     - components/nodes/ImdfPublisherNode.css `.imdf-pub-node__error`
+   Tutti usavano gli stessi 3 colori warm hardcoded:
+     bg     #fff4e5
+     border #d97706
+     color  #92400e
+   Adesso vivono in `.plen-banner-warn`. Ogni consumer mantiene le
+   classi `__btn`/`__cmd`/`__detail`/`__hint` locali per le aggiunte
+   specifiche (es. il pulsante "Riprova" in AdminBackupsPage).
+
+   Note di scope: e' un componente shared di base, non un design-system
+   token. I 3 valori sono volutamente literal: il pattern e' "warning
+   warm sandbox" e cambia colore solo se cambia la palette product.
+───────────────────────────────────────────────────────────────────────── */
+
+.plen-banner-warn {
+  background: #fff4e5;
+  border: 1px solid #d97706;
+  color: #92400e;
+  border-radius: 4px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+}
+
+/* Variante con padding/margin piu' generosi (uso AdminBackupsPage). */
+.plen-banner-warn--lg {
+  border-radius: 6px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+
+/* Riga di dettaglio sotto il titolo (smaller, opacity ridotta). */
+.plen-banner-warn__detail {
+  font-size: 0.85em;
+  margin-top: 4px;
+  opacity: 0.85;
+  line-height: 1.4;
+}
+
+/* Detail piu' "denso" (es. AdminBackupsPage detail vs hint). */
+.plen-banner-warn__detail--md {
+  font-size: 0.92em;
+  opacity: 1;
+}

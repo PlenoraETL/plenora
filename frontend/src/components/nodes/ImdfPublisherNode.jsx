@@ -280,13 +280,13 @@ const ImdfPublisherNode = memo(({ data, id }) => {
               Banner visibile, no rimozione automatica del nodo. */}
           {isAccessDenied && (
             <div
-              className="imdf-pub-node__error"
+              className="plen-banner-warn"
               role="alert"
               title={accessDeniedReason || 'Connessione ArcGIS non accessibile'}
             >
               🔒 Connessione ArcGIS non accessibile al tuo gruppo.
               {accessDeniedReason ? (
-                <div className="imdf-pub-node__error-detail">
+                <div className="plen-banner-warn__detail">
                   {accessDeniedReason}
                 </div>
               ) : null}

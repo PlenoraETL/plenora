@@ -26,7 +26,11 @@
  */
 
 // ── Ruoli supportati ─────────────────────────────────────────────────────
-export const ROLES = {
+// `ROLES` e' interno al modulo + esposto via default export `{ can, role,
+// ROLES }`. Il named `export const ROLES` precedente non aveva consumer
+// (audit FE-PHASE2-STRUCTURAL-CLEANUP-001). L'enum resta semantico nel
+// default export per chi vorra' leggerlo come tabella di ruoli.
+const ROLES = {
   ESECUTORE:  'esecutore',  // ruolo "kiosk": vede SOLO eseguibili, niente altro
   VIEWER:     'viewer',
   USER:       'user',

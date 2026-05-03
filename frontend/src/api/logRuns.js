@@ -38,12 +38,3 @@ export const getLogRun = async (runId, includeLogs = true, logLimit = 200) => {
   return response.data;
 };
 
-/**
- * Payload di debug per una run (solo run fallite).
- * @param {string} runId
- */
-export const getRunPayload = async (runId) => {
-  const response = await http.get(`/pipeline-runs/${runId}/payload`);
-  return response.data;
-};
-
