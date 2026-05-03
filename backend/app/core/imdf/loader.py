@@ -47,21 +47,11 @@ EXPECTED_LAYERS: List[str] = [
 # calcolati da Esri (Shape_Length, Shape_Area). Vanno esclusi prima di creare
 # uno schema custom o di inviare features in addFeatures, altrimenti l'API
 # ArcGIS lancia errori.
-ESRI_SYSTEM_FIELDS = {
-    "OBJECTID",
-    "objectid",
-    "GLOBALID",
-    "globalid",
-    "GlobalID",
-    "Shape_Length",
-    "Shape_Area",
-    "SHAPE_Length",
-    "SHAPE_Area",
-    "CREATED_USER",
-    "CREATED_DATE",
-    "LAST_EDITED_USER",
-    "LAST_EDITED_DATE",
-}
+# BE-IMDF-001: definizione canonica in `app.shared.esri_system_fields`.
+# `ESRI_SYSTEM_FIELDS` resta come alias modulo-level per i caller interni
+# che importano `from app.core.imdf.loader import ESRI_SYSTEM_FIELDS` e
+# per i test che lo monkeypatchano.
+from app.shared.esri_system_fields import ESRI_SYSTEM_FIELDS_LITERAL as ESRI_SYSTEM_FIELDS
 
 
 @dataclass

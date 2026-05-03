@@ -636,17 +636,11 @@ def validate_publish(
             # nome in uppercase e togliamo separatori per matchare sia le
             # varianti Esri classiche (Shape_Area) sia quelle del nuovo
             # hosted FS (Shape__Area con doppio underscore).
-            SYS_NORMALIZED = {
-                "OBJECTID", "GLOBALID", "SHAPE",
-                "SHAPEAREA", "SHAPELENGTH",
-                "CREATEDUSER", "CREATEDDATE",
-                "LASTEDITEDUSER", "LASTEDITEDDATE",
-                "GDBARCHIVEOID",
-            }
-
-            def _is_system_field(name: str) -> bool:
-                norm = (name or "").upper().replace("_", "")
-                return norm in SYS_NORMALIZED
+            # BE-IMDF-001: helper canonico in
+            # `app.shared.esri_system_fields.is_esri_system_field`.
+            # Pattern di normalizzazione bit-per-bit invariato
+            # (`name.upper().replace("_", "")`).
+            from app.shared.esri_system_fields import is_esri_system_field as _is_system_field
 
             fs_fields_info = {k: v for k, v in fs_schema.items() if not _is_system_field(k)}
             # Alias: i check "presenza" devono essere case-insensitive
