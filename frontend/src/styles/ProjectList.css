@@ -658,3 +658,63 @@
   .pl__content { padding: 16px; }
 }
 
+/* ── Inline-style migration (FE-PHASE2-INLINE-STYLES-004) ──────────────
+   Variant "eseguibili" del chip/card-accent/card-mod. Stessi viola che
+   prima erano hardcoded inline (rgba(124,58,237,*) + #a78bfa). */
+.pl__chip--eseg {
+  color: #a78bfa;
+  background: rgba(124,58,237,0.15);
+  border-color: rgba(124,58,237,0.4);
+}
+.pl__card-accent--eseg {
+  background: linear-gradient(180deg,#a78bfa,#7c3aed);
+}
+.pl__card-mod--eseg {
+  background: rgba(124,58,237,0.15);
+  color: #a78bfa;
+}
+
+/* Modal "seleziona progetto Arricchisci": lista scrollable + row card
+   con hover unificato in CSS (rimuove i due onMouseEnter/Leave inline
+   che scrivevano direttamente in element.style). */
+.pl__modal-list {
+  max-height: 360px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pl__modal-empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--pl-text-sub);
+  font-size: 13px;
+}
+.pl__modal-empty-hint   { font-size: 11.5px; }
+.pl__modal-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1px solid var(--pl-border);
+  background: var(--pl-surface-2);
+  transition: background-color 0.15s, border-color 0.15s;
+}
+.pl__modal-row:hover {
+  border-color: rgba(124,58,237,0.5);
+  background: rgba(124,58,237,0.06);
+}
+.pl__modal-row-icon  { font-size: 18px; color: #a78bfa; }
+.pl__modal-row-body  { flex-grow: 1; min-width: 0; }
+.pl__modal-row-name  { font-size: 13.5px; font-weight: 500; color: var(--pl-text); }
+.pl__modal-row-desc  {
+  font-size: 11.5px;
+  color: var(--pl-text-sub);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pl__modal-row-arrow { color: var(--pl-text-sub); font-size: 16px; }
+

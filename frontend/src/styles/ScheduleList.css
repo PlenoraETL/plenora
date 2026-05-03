@@ -255,3 +255,6 @@
   .sl__content { padding:16px; }
   .sl__stats   { grid-template-columns:1fr 1fr; }
 }
+
+/* ── Inline-style migration (FE-PHASE2-INLINE-STYLES-004) ────────────── */
+.sl__btn--mt-md { margin-top: 16px; }

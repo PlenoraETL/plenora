@@ -298,8 +298,8 @@ function ScheduleList() {
               <div className="sl__empty-title">{activeFilter === 'all' ? (projectFilter ? 'Nessuno schedule per questo progetto' : 'Nessuno schedule configurato') : `Nessuno schedule ${filterConfigs[activeFilter]?.label?.toLowerCase()}`}</div>
               <div className="sl__empty-text">{activeFilter === 'all' ? 'Crea uno schedule per eseguire le pipeline automaticamente' : 'Cambia filtro o crea un nuovo schedule'}</div>
               {activeFilter === 'all'
-                ? (can.createSchedule(user) && <button type="button" className="sl__btn sl__btn--primary" style={{marginTop:16}} onClick={() => { setEditingId(null); setShowWizard(true); }}>＋ Crea il primo schedule</button>)
-                : <button type="button" className="sl__btn sl__btn--ghost"   style={{marginTop:16}} onClick={() => setActiveFilter('all')}>Mostra tutti</button>
+                ? (can.createSchedule(user) && <button type="button" className="sl__btn sl__btn--primary sl__btn--mt-md" onClick={() => { setEditingId(null); setShowWizard(true); }}>＋ Crea il primo schedule</button>)
+                : <button type="button" className="sl__btn sl__btn--ghost sl__btn--mt-md" onClick={() => setActiveFilter('all')}>Mostra tutti</button>
               }
             </div>
           ) : (

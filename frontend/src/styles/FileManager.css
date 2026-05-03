@@ -308,3 +308,15 @@
   .fm__topbar, .fm__content { padding-left: 16px; padding-right: 16px; }
   .fm__filter-tabs { display: none; }
 }
+
+/* ── Inline-style migration (FE-PHASE2-INLINE-STYLES-004) ────────────── */
+.fm__drop-title--ok    { color: var(--fm-ok); }
+.fm__btn--mt-md        { margin-top: 16px; }
+.fm__meta-val--filename {
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fm__file-input--hidden { display: none; }
+.fm__col-list--mt-sm    { margin-top: 8px; }

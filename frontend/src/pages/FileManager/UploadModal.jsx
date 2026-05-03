@@ -65,7 +65,7 @@ function UploadModal({
               onDragEnter={onDrag} onDragOver={onDrag} onDragLeave={onDrag} onDrop={onDrop}
               onClick={() => fileInputRef.current?.click()}
             >
-              <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={onFileInput}
+              <input ref={fileInputRef} type="file" className="fm__file-input--hidden" onChange={onFileInput}
                 accept=".csv,.xlsx,.xls,.json,.geojson,.gpkg,.zip,.gdb,.tar.gz" />
               {uploadFile ? (
                 <>
@@ -152,7 +152,7 @@ function UploadModal({
                 {loadingLayerCols ? (
                   <div className="fm__modal-loading">⏳ Lettura colonne...</div>
                 ) : (
-                  <div className="fm__col-list" style={{ marginTop: 8 }}>
+                  <div className="fm__col-list fm__col-list--mt-sm">
                     {(layerColumns[activeLayerTab] || []).map(col => (
                       <div key={col.name} className="fm__col-item" onClick={() => onToggleLayerCol(activeLayerTab, col.name)}>
                         <div className={`fm__col-check${layerSelectedCols[activeLayerTab]?.includes(col.name) ? ' fm__col-check--on' : ''}`}>

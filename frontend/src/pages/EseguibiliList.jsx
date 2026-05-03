@@ -93,9 +93,9 @@ function EseguibiliList() {
   };
 
   return (
-    <div className="esl" style={{ display: 'flex' }}>
+    <div className="esl esl--row">
       <AppSidebar counts={{ eseguibili: items.length }} />
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div className="esl__main">
       <div className="esl__header">
         <div>
           <button type="button" className="esl__back" onClick={() => navigate('/')}>← Dashboard</button>
@@ -135,7 +135,7 @@ function EseguibiliList() {
                     {!canEdit && (
                       <span
                         title="Solo un superadmin può modificare questa risorsa"
-                        style={{ marginLeft: 6, opacity: 0.7, cursor: 'help', fontSize: '0.85em' }}
+                        className="esl__lock-icon"
                       >
                         🔒
                       </span>
@@ -240,8 +240,7 @@ function EseguibiliList() {
         <div className="esl__overlay" onClick={(e) => e.target === e.currentTarget && setSharingEseguibile(null)}>
           <div
             ref={shareDialogRef}
-            className="esl__selector"
-            style={{ maxWidth: 560 }}
+            className="esl__selector esl__sharing-modal"
             role="dialog"
             aria-modal="true"
             aria-labelledby="esl-share-title"

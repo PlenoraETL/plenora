@@ -32,7 +32,7 @@ function FileCard({ file, onPreview, onDelete, onShare, isSuperadmin }) {
           {file.crs ? (
             <div><div className="fm__meta-key">CRS</div><div className="fm__meta-val">{file.crs}</div></div>
           ) : (
-            <div><div className="fm__meta-key">File</div><div className="fm__meta-val" style={{ fontSize: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.original_filename}</div></div>
+            <div><div className="fm__meta-key">File</div><div className="fm__meta-val fm__meta-val--filename">{file.original_filename}</div></div>
           )}
         </div>
         {file.columns?.length > 0 && (

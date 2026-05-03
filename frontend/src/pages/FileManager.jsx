@@ -405,7 +405,7 @@ const FileManager = () => {
             {uploadFile_ && !showUploadModal ? (
               <>
                 <div className="fm__drop-icon">✓</div>
-                <div className="fm__drop-title" style={{ color: 'var(--fm-ok)' }}>{uploadFile_.name}</div>
+                <div className="fm__drop-title fm__drop-title--ok">{uploadFile_.name}</div>
                 <div className="fm__drop-sub">{formatFileSize(uploadFile_.size)} · Clicca per configurare</div>
               </>
             ) : (
@@ -432,7 +432,7 @@ const FileManager = () => {
               <div className="fm__empty-title">{search ? 'Nessun file trovato' : 'Nessun file caricato'}</div>
               <div className="fm__empty-text">{search ? `Nessun risultato per "${search}"` : 'Carica file CSV, Excel, GeoJSON o altri formati per usarli nei tuoi progetti'}</div>
               {!search && can.uploadFile(user) && (
-                <button type="button" className="fm__btn fm__btn--primary" onClick={() => setShowUploadModal(true)} style={{ marginTop: 16 }}>
+                <button type="button" className="fm__btn fm__btn--primary fm__btn--mt-md" onClick={() => setShowUploadModal(true)}>
                   ↑ Carica il primo file
                 </button>
               )}

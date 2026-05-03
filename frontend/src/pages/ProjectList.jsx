@@ -441,10 +441,7 @@ function ProjectList() {
           <section id="pl-section-eseguibili" className="pl__section">
             <div className="pl__section-header">
               <div className="pl__section-title-wrap">
-                <span className="pl__chip" style={{
-                  background: 'rgba(124,58,237,0.15)', color: '#a78bfa',
-                  borderColor: 'rgba(124,58,237,0.4)'
-                }}>🚀 Eseguibili</span>
+                <span className="pl__chip pl__chip--eseg">🚀 Eseguibili</span>
                 <span className="pl__section-sub">Catene on-demand — l'utente carica un file e ottiene il risultato</span>
               </div>
               {isAdmin && (
@@ -635,11 +632,11 @@ function ProjectList() {
               />
             </div>
 
-            <div style={{ maxHeight: 360, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div className="pl__modal-list">
               {arricchisciProjects.length === 0 ? (
-                <div style={{ padding: 24, textAlign: 'center', color: 'var(--pl-text-sub)', fontSize: 13 }}>
+                <div className="pl__modal-empty">
                   Nessun progetto Arricchisci disponibile.<br />
-                  <span style={{ fontSize: 11.5 }}>Crea prima un progetto Arricchisci.</span>
+                  <span className="pl__modal-empty-hint">Crea prima un progetto Arricchisci.</span>
                 </div>
               ) : (
                 arricchisciProjects
@@ -647,36 +644,22 @@ function ProjectList() {
                   .map(p => (
                     <div
                       key={p.id}
+                      className="pl__modal-row"
                       onClick={() => {
                         setShowEsegSelector(false);
                         setPublishProject(p);
                       }}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 12,
-                        padding: '10px 14px', borderRadius: 8, cursor: 'pointer',
-                        border: '1px solid var(--pl-border)',
-                        background: 'var(--pl-surface-2)',
-                        transition: 'all 0.15s',
-                      }}
-                      onMouseEnter={e => {
-                        e.currentTarget.style.borderColor = 'rgba(124,58,237,0.5)';
-                        e.currentTarget.style.background = 'rgba(124,58,237,0.06)';
-                      }}
-                      onMouseLeave={e => {
-                        e.currentTarget.style.borderColor = 'var(--pl-border)';
-                        e.currentTarget.style.background = 'var(--pl-surface-2)';
-                      }}
                     >
-                      <span style={{ fontSize: 18, color: '#a78bfa' }}>◈</span>
-                      <div style={{ flexGrow: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--pl-text)' }}>{p.name}</div>
+                      <span className="pl__modal-row-icon">◈</span>
+                      <div className="pl__modal-row-body">
+                        <div className="pl__modal-row-name">{p.name}</div>
                         {p.description && (
-                          <div style={{ fontSize: 11.5, color: 'var(--pl-text-sub)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          <div className="pl__modal-row-desc">
                             {p.description}
                           </div>
                         )}
                       </div>
-                      <span style={{ color: 'var(--pl-text-sub)', fontSize: 16 }}>→</span>
+                      <span className="pl__modal-row-arrow">→</span>
                     </div>
                   ))
               )}
@@ -777,11 +760,11 @@ function EseguibileCard({ item, isAdmin, onExecute, onDelete }) {
   const fmt = (item.default_output_format || 'xlsx').toUpperCase();
   return (
     <div className="pl__card" onClick={onExecute}>
-      <div className="pl__card-accent" style={{ background: 'linear-gradient(180deg,#a78bfa,#7c3aed)' }} />
+      <div className="pl__card-accent pl__card-accent--eseg" />
       <div className="pl__card-body">
         <div className="pl__card-header-row">
           <div className="pl__card-name">{item.name}</div>
-          <span className="pl__card-mod" style={{ background: 'rgba(124,58,237,0.15)', color: '#a78bfa' }}>🚀 {fmt}</span>
+          <span className="pl__card-mod pl__card-mod--eseg">🚀 {fmt}</span>
         </div>
         <div className="pl__card-desc">{item.description || 'Nessuna descrizione'}</div>
         <div className="pl__card-meta">

@@ -341,18 +341,10 @@ const CaricanArcGISNode = memo(({ data, id }) => {
               className="carica-arcgis-node__error"
               role="alert"
               title={accessDeniedReason || 'Connessione ArcGIS non accessibile'}
-              style={{
-                background: '#fff4e5',
-                border: '1px solid #d97706',
-                borderRadius: 4,
-                color: '#92400e',
-                padding: '8px 10px',
-                marginBottom: 8,
-              }}
             >
               🔒 Connessione ArcGIS non accessibile al tuo gruppo.
               {accessDeniedReason ? (
-                <div style={{ fontSize: '0.85em', marginTop: 4, opacity: 0.85 }}>
+                <div className="carica-arcgis-node__error-detail">
                   {accessDeniedReason}
                 </div>
               ) : null}
@@ -516,7 +508,7 @@ const CaricanArcGISNode = memo(({ data, id }) => {
 
           {/* Errori ArcGIS */}
           {arcgisError && (
-            <div className="carica-arcgis-node__warning" style={{ color: '#f87171' }}>
+            <div className="carica-arcgis-node__warning carica-arcgis-node__warning--err">
               {arcgisError}
             </div>
           )}
