@@ -16,8 +16,8 @@ Componenti:
 - database_writer.py: implementazione DatabaseWriter (SQLAlchemy)
 - executor.py: entry point (parsing canvas, orchestrazione, audit)
 
-Task asincrono: workers/tasks/carica_task.py
-Router API: app/api/carica.py
+Task asincrono: backend/workers/tasks/carica_task.py
+Router API: app/core/carica/router.py
 """
 
 # Models

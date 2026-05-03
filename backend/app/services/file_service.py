@@ -61,7 +61,6 @@ except ImportError:
 
 # ==================== IMPORT CONDIZIONALI ====================
 # Usa modelli da app.models in produzione, fallback a dataclass per test standalone
-# Usa modelli da app.models in produzione, fallback a dataclass per test standalone
 
 try:
     from app.models import (
