@@ -31,7 +31,6 @@ from __future__ import annotations
 import io
 import json
 import logging
-import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -244,8 +243,16 @@ def persist_full_artifact(
         )
 
     # Layout key. `INTERMEDIATE_ARTIFACT_PREFIX` env override resta per
-    # ops flexibility; il default e' la constant centralizzata.
-    prefix_env = os.getenv("INTERMEDIATE_ARTIFACT_PREFIX") or INTERMEDIATE_PREFIX
+    # ops flexibility; il default e' la constant centralizzata. BE-CONFIG-001E
+    # (DEDUP): la chiave era letta sia via `Settings.DEFAULTS` (default
+    # `"intermediate"`) sia direttamente da `os.getenv` qui. Migrato a
+    # `settings.get(...)` per single source-of-default. La lettura tramite
+    # Settings include eventuali override env via `_converti_tipo_env`
+    # (str pass-through). `or INTERMEDIATE_PREFIX` resta come safety net
+    # se Settings ritornasse None per qualche motivo (e.g. test che
+    # rimuove la default key); il default reale ora vive in Settings.DEFAULTS.
+    from app.config import settings as _settings
+    prefix_env = _settings.get("INTERMEDIATE_ARTIFACT_PREFIX") or INTERMEDIATE_PREFIX
     try:
         key_prefix = build_artifact_key_prefix(
             prefix=prefix_env,

@@ -758,6 +758,16 @@ def validate_storage_config() -> None:
         raise StorageConfigError(msg)
 
     def _check_positive_int(name: str) -> None:
+        # NOTA (BE-CONFIG-001E + ADR-0021 allowlist): `os.getenv` diretto
+        # per design — questo helper e' un boot-time fail-fast validator
+        # che deve distinguere "user ha settato l'env" da "user non l'ha
+        # settato". Settings.get() applicherebbe `_converti_tipo_env` che
+        # silently swallowa valori malformati e ritorna il default,
+        # rompendo il fail-fast su typo (es. `LOG_ARCHIVE_BATCH_ROWS=abc`
+        # passerebbe il boot, e in produzione l'archive userebbe 10000
+        # invece di crashare loud al boot). Il runtime path consuma il
+        # valore via `settings.LOG_ARCHIVE_BATCH_ROWS` property come da
+        # ADR-0021.
         raw = os.getenv(name)
         if raw is None:
             return
@@ -911,6 +921,9 @@ def validate_storage_config() -> None:
             )
         # 5. Formato key prefix (se settata): vuoto o endswith "/".
         #    Coerente con log_archive._build_object_key:206-209.
+        # NOTA (BE-CONFIG-001E + ADR-0021): `os.getenv` diretto per design
+        # boot-time fail-fast (vedi `_check_positive_int`). Runtime via
+        # `settings.LOG_ARCHIVE_KEY_PREFIX` property.
         log_archive_prefix = os.getenv("LOG_ARCHIVE_KEY_PREFIX")
         if log_archive_prefix and not log_archive_prefix.endswith("/"):
             _fail(
@@ -922,6 +935,9 @@ def validate_storage_config() -> None:
         # 7. AUDIT_RETENTION_DAYS >= 0 (inline parse: _check_positive_int
         #    rigetta 0, ma qui 0 = retention disabilitata e' legittimo,
         #    simmetrico a SCHEDULE_LOGS_RETENTION_DAYS).
+        # NOTA (BE-CONFIG-001E + ADR-0021): `os.getenv` diretto per design
+        # boot-time fail-fast (vedi `_check_positive_int`). Runtime via
+        # `settings.AUDIT_RETENTION_DAYS` property.
         audit_retention_raw = os.getenv("AUDIT_RETENTION_DAYS")
         if audit_retention_raw is not None:
             try:
