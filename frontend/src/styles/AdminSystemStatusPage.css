@@ -225,10 +225,24 @@
   color: #7D8BA8;
 }
 
-/* Layout utilities riusate ≥2 volte nella pagina (FE-PHASE1-CLOSURE-2). */
+/* Layout utilities riusate ≥2 volte nella pagina (FE-PHASE1-CLOSURE-2 +
+   FE-PHASE2-INLINE-STYLES-001). */
 .sys__mt-sm { margin-top: 6px; }
+.sys__mt-xs { margin-top: 4px; }
+.sys__mt-2  { margin-top: 2px; }
+.sys__ml-sm { margin-left: 6px; }
+.sys__ml-xs { margin-left: 8px; }
 .sys__mb-sm { margin-bottom: 8px; }
 .sys__kv-key--cap { text-transform: capitalize; }
+
+/* Semantic colour helpers per stati inline nei card (token derivati
+   dalla palette `sys__badge--*` / `sys__progress-fill--*`). */
+.sys__txt-warn  { color: #FBBF24; }
+.sys__txt-error { color: #F87171; }
+.sys__txt-meta  { color: #7D8BA8; font-size: 11px; }
+
+/* Variante compact + colorata per il badge inline "in coda" worker. */
+.sys__txt-warn-bold { color: #FBBF24; font-weight: 600; }
 
 /* ── Footer / errore ──────────────────────────────────────────────────── */
 .sys__error-box {

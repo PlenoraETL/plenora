@@ -145,7 +145,7 @@ function SchedulesCard({ data, onLink }) {
         <>
           {data.total_active != null && <div>Attivi: <b>{data.total_active}</b></div>}
           {data.failing_count > 0 && (
-            <div style={{ color: '#F87171' }}>Failing: <b>{data.failing_count}</b></div>
+            <div className="sys__txt-error">Failing: <b>{data.failing_count}</b></div>
           )}
           {data.failing && data.failing.length > 0 && (
             <ul className="sys__list sys__mt-sm">
@@ -166,27 +166,27 @@ function WorkersCard({ data }) {
       {data && (
         <>
           {data.queue_depth != null && data.queue_depth > 0 && (
-            <div style={{ color: '#FBBF24', fontWeight: 600 }}>
+            <div className="sys__txt-warn-bold">
               ⏳ {data.queue_depth} in coda
             </div>
           )}
           {data.details && data.details.length > 0 ? (
-            <ul className="sys__list" style={{ marginTop: 4 }}>
+            <ul className="sys__list sys__mt-xs">
               {data.details.map((n) => (
                 <li key={n.name} className="sys__list-item">
                   <div><b>🖥️ {n.hostname}</b>
                     {n.pid != null && (
-                      <span style={{ marginLeft: 6, color: '#7D8BA8', fontSize: 11 }}>
+                      <span className="sys__txt-meta sys__ml-sm">
                         PID {n.pid}
                       </span>
                     )}
                   </div>
-                  <div style={{ fontSize: 11, color: '#7D8BA8', marginTop: 2 }}>
+                  <div className="sys__txt-meta sys__mt-2">
                     Pool {n.pool_size ?? '?'} · attivi {n.active_tasks ?? 0}
                     {n.total_tasks_processed != null && <> · lifetime {n.total_tasks_processed}</>}
                   </div>
                   {n.queues && n.queues.length > 0 && (
-                    <div style={{ fontSize: 11, color: '#7D8BA8' }}>
+                    <div className="sys__txt-meta">
                       Code: {n.queues.join(', ')}
                     </div>
                   )}
@@ -252,10 +252,10 @@ function DbPoolCard({ data }) {
           <div className="sys__mt-sm">
             Attive: <b>{data.active}</b> · Idle: <b>{data.idle}</b>
             {data.idle_in_transaction > 0 && (
-              <span style={{ color: '#FBBF24' }}> · Idle-TX: {data.idle_in_transaction}</span>
+              <span className="sys__txt-warn"> · Idle-TX: {data.idle_in_transaction}</span>
             )}
             {data.waiting > 0 && (
-              <span style={{ color: '#F87171' }}> · Waiting: {data.waiting}</span>
+              <span className="sys__txt-error"> · Waiting: {data.waiting}</span>
             )}
           </div>
         </>
@@ -444,7 +444,7 @@ export default function AdminSystemStatusPage() {
               {refreshedAt
                 ? `Ultimo aggiornamento: ${refreshedAt.toLocaleTimeString('it-IT')}`
                 : 'Caricamento…'}
-              {loading && <span style={{ marginLeft: 8 }}>↻</span>}
+              {loading && <span className="sys__ml-xs">↻</span>}
             </div>
           </div>
           <div className="sys__header-actions">
