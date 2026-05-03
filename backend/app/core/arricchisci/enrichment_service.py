@@ -320,8 +320,13 @@ class EnrichmentExecutor(
                     completed_at=datetime.now(timezone.utc).isoformat()
                 )
 
-        # Feature flag: routing tra sync legacy e async nuovo path
-        _async_enabled = os.environ.get("ENABLE_ASYNC_ENRICHMENT", "false").lower() in ("1", "true", "yes")
+        # Feature flag: routing tra sync legacy e async nuovo path.
+        # BE-CONFIG-001D: default tipato `bool` in
+        # `Settings.DEFAULTS["ENABLE_ASYNC_ENRICHMENT"]=False`. Override
+        # env via `Settings._converti_tipo_env` (coercion bool su
+        # `1/true/yes`).
+        from app.config import settings as _settings
+        _async_enabled = bool(_settings.get("ENABLE_ASYNC_ENRICHMENT"))
         _can_use_async = (
             _async_enabled
             and not self.batch_config.enabled  # batch native usa path dedicato

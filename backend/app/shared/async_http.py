@@ -35,9 +35,15 @@ logger = get_logger(__name__)
 # ──────────────────────────────────────────────────────────────────────
 
 def _get_pool_size() -> int:
-    """Legge pool size da env var, con fallback e clamping di sicurezza."""
+    """Legge pool size da Settings, con fallback e clamping di sicurezza.
+
+    BE-CONFIG-001D: default tipato in
+    `Settings.DEFAULTS["ENRICHMENT_POOL_SIZE"]=50`. Override env
+    continua a funzionare via Settings (`int` coercion).
+    """
+    from app.config import settings as _settings
     try:
-        val = int(os.environ.get("ENRICHMENT_POOL_SIZE", "50"))
+        val = int(_settings.get("ENRICHMENT_POOL_SIZE"))
         return max(5, min(val, 200))  # clamp [5, 200] per safety
     except (ValueError, TypeError):
         return 50

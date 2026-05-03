@@ -55,9 +55,12 @@ _ALLOWED_EXTENSIONS = {
 # - throughput rete (upload sincrono nel request handler)
 # - dimensione del blob in DB se sotto soglia FILE_SOURCE_S3_THRESHOLD_BYTES
 # Calcolato a import-time: per cambiare serve riavvio del processo.
-_MAX_ATTACHMENT_SIZE_BYTES = int(
-    os.getenv("TICKET_ATTACHMENT_MAX_BYTES", 10 * 1024 * 1024),
-)
+# BE-CONFIG-001D: default tipato in
+# `Settings.DEFAULTS["TICKET_ATTACHMENT_MAX_BYTES"]=10 * 1024 * 1024`.
+# Calcolato a import-time: per cambiare serve riavvio del processo
+# (comportamento invariato pre-001D).
+from app.config import settings as _settings_cfg
+_MAX_ATTACHMENT_SIZE_BYTES = int(_settings_cfg.get("TICKET_ATTACHMENT_MAX_BYTES"))
 
 
 def _require_not_esecutore(current_user: CurrentUser = Depends(get_current_user)) -> CurrentUser:

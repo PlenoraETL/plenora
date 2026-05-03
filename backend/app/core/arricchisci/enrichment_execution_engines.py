@@ -405,8 +405,12 @@ class EnrichmentExecutionEnginesMixin:
         else:
             unique_groups = {str(idx): [idx] for idx in df.index}
 
-        # Semaforo per limitare la concorrenza
-        pool_size = int(os.environ.get("ENRICHMENT_POOL_SIZE", "50"))
+        # Semaforo per limitare la concorrenza.
+        # BE-CONFIG-001D: default tipato in
+        # `Settings.DEFAULTS["ENRICHMENT_POOL_SIZE"]=50`. Stesso clamp
+        # [5, 200] usato da `app.shared.async_http._get_pool_size`.
+        from app.config import settings as _settings
+        pool_size = int(_settings.get("ENRICHMENT_POOL_SIZE"))
         pool_size = max(5, min(pool_size, 200))
         semaphore = asyncio.Semaphore(pool_size)
         logger.info(f"[ASYNC] Semaforo concorrenza = {pool_size}")

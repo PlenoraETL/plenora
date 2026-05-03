@@ -923,8 +923,12 @@ def get_db_schema_size() -> Dict[str, Any]:
 
     # Soglie: dumping cresciute molto potrebbe indicare bytea bloat.
     # Error a 5 GB, warn a 1 GB. Tweakable via env.
-    warn_gb = float(os.getenv("DB_SCHEMA_WARN_GB", "1"))
-    error_gb = float(os.getenv("DB_SCHEMA_ERROR_GB", "5"))
+    # BE-CONFIG-001D: default tipati `float` in `Settings.DEFAULTS`
+    # (`DB_SCHEMA_WARN_GB=1.0`, `DB_SCHEMA_ERROR_GB=5.0`). Override env
+    # via `Settings._converti_tipo_env` (coercion `float`).
+    from app.config import settings as _settings_cfg
+    warn_gb = float(_settings_cfg.get("DB_SCHEMA_WARN_GB"))
+    error_gb = float(_settings_cfg.get("DB_SCHEMA_ERROR_GB"))
     size_gb = size_bytes / (1024 ** 3)
     if size_gb >= error_gb:
         status = "error"

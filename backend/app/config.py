@@ -146,6 +146,36 @@ class Settings:
         # Default 1800s (30 min). Migrato a Settings da `BE-CONFIG-001C`.
         "JWT_BLACKLIST_STALE_THRESHOLD_SEC": 1800,
 
+        # ==================== FEATURE FLAG + TUNING (001D) ====================
+        # Migrati da direct `os.getenv` in `BE-CONFIG-001D`. Default
+        # tipati identici al pre-001D. Override env funziona via
+        # `Settings._converti_tipo_env`.
+        # FEATURE_FLAG (invariants.md §3): kill-switch / dialect-tuning.
+        # `MSSQL_FAST_EXECUTEMANY` accetta on|off|true|false|0|1|...; il
+        # caller fa il match insensitive. Default `"on"` = abilita
+        # `fast_executemany` per pyodbc/MSSQL.
+        "MSSQL_FAST_EXECUTEMANY": "on",
+        # `CARICA_BULK_INSERT` accetta on|off|auto|true|false|...
+        # Post 2026-04-23 e' funzionalmente no-op (entrambi i rami
+        # producono executemany), preservato come scaffolding op.
+        "CARICA_BULK_INSERT": "auto",
+        # `ENABLE_ASYNC_ENRICHMENT` kill-switch routing async/sync
+        # enrichment. Default `False` (sync legacy); ops abilita in
+        # prod con `true`/`1`/`yes`.
+        "ENABLE_ASYNC_ENRICHMENT": False,
+        # OPERATIONAL_TUNING:
+        # `ENRICHMENT_POOL_SIZE` semaforo concorrenza async + httpx
+        # pool size. Default 50, clamp [5, 200] applicato dai consumer.
+        "ENRICHMENT_POOL_SIZE": 50,
+        # `TICKET_ATTACHMENT_MAX_BYTES` cap upload attachments tickets.
+        # Default 10 MB. Sotto questa soglia il blob va in DB BYTEA;
+        # sopra dovrebbe andare object storage (separate path).
+        "TICKET_ATTACHMENT_MAX_BYTES": 10 * 1024 * 1024,
+        # Soglie display dashboard admin per la dimensione dello schema
+        # PG. Float in GB. Puro display, non influenza retention.
+        "DB_SCHEMA_WARN_GB": 1.0,
+        "DB_SCHEMA_ERROR_GB": 5.0,
+
         # ==================== API ESTERNE ====================
         "API_TIMEOUT": 30,
         "API_DEFAULT_RATE_LIMIT": 5,

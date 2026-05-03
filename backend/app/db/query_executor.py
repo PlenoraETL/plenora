@@ -283,8 +283,10 @@ class DefaultEngineFactory:
         Returns:
             Engine SQLAlchemy funzionante.
         """
-        import os as _os
-        fast_em = (_os.getenv("MSSQL_FAST_EXECUTEMANY") or "on").lower()
+        # BE-CONFIG-001D: default tipato in `Settings.DEFAULTS["MSSQL_FAST_EXECUTEMANY"]="on"`.
+        # Override env continua a funzionare via Settings.
+        from app.config import settings as _settings
+        fast_em = (_settings.get("MSSQL_FAST_EXECUTEMANY") or "on").lower()
         engine_kwargs = {}
         if fast_em not in ("off", "false", "0", "no", "disabled"):
             engine_kwargs["fast_executemany"] = True

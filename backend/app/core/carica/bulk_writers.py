@@ -122,5 +122,9 @@ def is_bulk_enabled() -> bool:
     executemany). Preservato come scaffolding per retro-compat operativa
     e per evitare scope-creep sulla rimozione dell'env var.
     """
-    raw = (os.getenv("CARICA_BULK_INSERT") or "auto").strip().lower()
+    # BE-CONFIG-001D: default tipato in
+    # `Settings.DEFAULTS["CARICA_BULK_INSERT"]="auto"`. Override env
+    # continua a funzionare via Settings.
+    from app.config import settings as _settings
+    raw = (_settings.get("CARICA_BULK_INSERT") or "auto").strip().lower()
     return raw not in ("off", "false", "0", "no", "disabled")
