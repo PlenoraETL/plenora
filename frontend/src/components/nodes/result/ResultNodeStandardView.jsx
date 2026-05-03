@@ -7,20 +7,23 @@
  * una prop isImdfMode perche' la sua presenza nel tree lo implica.
  *
  * Owna:
- *   - editor nome file (isEditingFileName + tempFileName)
- *   - scelta formato standard/geo + selezione colonna geometria
- *   - preview colonne output con expand (columnsExpanded)
- *   - opzioni query SQL (DISTINCT, LIMIT) — solo ESTRAI
- *   - GROUP BY / ORDER BY / HAVING: tutti gli handler su updateNodeData
- *   - modalita' esecuzione cache|recalculate (MANIPOLA/ARRICCHISCI)
- *   - bottoni Valida / Preview / Esegui / Cronologia
- *   - RunHistoryModal (trigger + stato open/close)
- *   - deriva localmente nodeVariant/executeLabel da data.isManipulate/isArricchisci
+ *   - dispatch a `OutputSettingsPanel` (filename + format + geo + distinct + limit)
+ *     dopo l'estrazione `FE-SPLIT-005A`;
+ *   - preview colonne output con expand (columnsExpanded), passata come children
+ *     al panel per preservare l'ordine visivo;
+ *   - GROUP BY / ORDER BY / HAVING: tutti gli handler su updateNodeData;
+ *   - modalita' esecuzione cache|recalculate (MANIPOLA/ARRICCHISCI);
+ *   - bottoni Valida / Preview / Esegui / Cronologia;
+ *   - RunHistoryModal (trigger + stato open/close);
+ *   - deriva localmente nodeVariant/executeLabel da data.isManipulate/isArricchisci.
  *
  * NON owna:
- *   - ValidationModal: stata del parent, triggerata sia da qui sia da IMDF view
- *   - logica runValidation/onExecute/onPreview: ricevute come callback
- *   - upstreamColumns: computata dal parent (serve useReactFlow)
+ *   - editor filename + scelta formato + DISTINCT + LIMIT: estratti in
+ *     `OutputSettingsPanel` (FE-SPLIT-005A); il parent passa i flag derivati
+ *     `isGeoFormat`, `availableGeomColumns`, `hasGeometryColumns` come props;
+ *   - ValidationModal: stato del parent, triggerata sia da qui sia da IMDF view;
+ *   - logica runValidation/onExecute/onPreview: ricevute come callback;
+ *   - upstreamColumns: computata dal parent (serve useReactFlow).
  *
  * Props (8):
  *   data                         — bag dati del nodo (fileName, format, columns, ...)
@@ -43,6 +46,7 @@ import {
   isGeometryType,
 } from '../../../utils/columnUtils';
 import RunHistoryModal from '../../modals/RunHistoryModal';
+import OutputSettingsPanel from './standard/OutputSettingsPanel';
 
 const COLUMNS_PREVIEW = 5;
 
@@ -58,9 +62,7 @@ const ResultNodeStandardView = memo(({
 }) => {
   const updateNodeData = useCanvasStore(s => s.updateNodeData);
 
-  const [isEditingFileName, setIsEditingFileName] = useState(false);
   const [isRunHistoryOpen, setIsRunHistoryOpen] = useState(false);
-  const [tempFileName, setTempFileName] = useState(data.fileName || 'output');
   const [executionMode, setExecutionMode] = useState('cache');
   const [showGroupBySection, setShowGroupBySection] = useState(false);
   const [showOrderBySection, setShowOrderBySection] = useState(false);
@@ -72,11 +74,10 @@ const ResultNodeStandardView = memo(({
   const isEstrai = !isManipulate && !isArricchisci;
   const hasExecutionOptions = isManipulate || isArricchisci;
 
-  const fileName = data.fileName || 'output';
+  // `format` resta nel parent perche' serve a derivare `isGeoFormat`
+  // sia per il useEffect di auto-reset (CSV se non ci sono piu' colonne
+  // geometriche) sia come prop al panel.
   const format = data.format || 'csv';
-  const limit = data.limit || null;
-  const distinct = data.distinct || false;
-  const selectedGeomColumn = data.geomColumn || null;
 
   // GROUP BY state (data-driven)
   const groupByEnabled = data.group_by_enabled || false;
@@ -152,17 +153,6 @@ const ResultNodeStandardView = memo(({
   };
   const { executeLabel } = config[nodeVariant];
 
-  const formats = [
-    { value: 'csv', label: 'CSV', icon: '📊', category: 'standard' },
-    { value: 'json', label: 'JSON', icon: '📄', category: 'standard' },
-    { value: 'xlsx', label: 'XLSX', icon: '📗', category: 'standard' },
-    { value: 'geojson', label: 'GeoJSON', icon: '🌐', category: 'geo' },
-    { value: 'gpkg', label: 'GeoPackage', icon: '📦', category: 'geo' },
-    { value: 'shp', label: 'Shapefile', icon: '🗺️', category: 'geo' },
-  ];
-  const standardFormats = formats.filter(f => f.category === 'standard');
-  const geoFormats = formats.filter(f => f.category === 'geo');
-
   const aggregateFunctions = [
     { value: 'COUNT', label: 'COUNT', desc: 'Conta' },
     { value: 'SUM', label: 'SUM', desc: 'Somma' },
@@ -172,18 +162,9 @@ const ResultNodeStandardView = memo(({
   ];
 
   // ── Handlers ─────────────────────────────────────────────────────────
-  const handleSaveFileName = () => {
-    updateNodeData(id, { fileName: tempFileName.trim() || 'output' });
-    setIsEditingFileName(false);
-  };
-  const handleChangeFormat = (newFormat) => updateNodeData(id, { format: newFormat });
-  const handleChangeGeomColumn = (columnName) => updateNodeData(id, { geomColumn: columnName });
-  const handleToggleDistinct = () => updateNodeData(id, { distinct: !distinct });
-  const handleUpdateLimit = (newLimit) => {
-    const limitValue = newLimit === '' ? null : parseInt(newLimit) || null;
-    updateNodeData(id, { limit: limitValue });
-  };
-
+  // I 5 handler output-settings (handleSaveFileName / handleChangeFormat /
+  // handleChangeGeomColumn / handleToggleDistinct / handleUpdateLimit)
+  // sono migrati dentro `OutputSettingsPanel` con `FE-SPLIT-005A`.
   const handleToggleGroupBy = () => {
     updateNodeData(id, {
       group_by_enabled: !groupByEnabled,
@@ -294,177 +275,66 @@ const ResultNodeStandardView = memo(({
 
   return (
     <>
-      {/* Nome file */}
-      <div className="result-node__section">
-        <div className="result-node__label">Nome file:</div>
-        {isEditingFileName ? (
-          <input
-            type="text"
-            value={tempFileName}
-            onChange={(e) => setTempFileName(e.target.value)}
-            onBlur={handleSaveFileName}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleSaveFileName();
-              if (e.key === 'Escape') {
-                setIsEditingFileName(false);
-                setTempFileName(fileName);
-              }
-            }}
-            autoFocus
-            placeholder="nome file..."
-            className="result-node__filename-input"
-          />
-        ) : (
-          <div
-            onClick={() => {
-              setIsEditingFileName(true);
-              setTempFileName(fileName);
-            }}
-            className="result-node__filename-display"
-            title="Click per modificare"
-          >
-            {fileName}.{format}
-          </div>
-        )}
-      </div>
-
-      {/* Formato */}
-      <div className="result-node__section">
-        <div className="result-node__label">Formato:</div>
-        <div className="result-node__format-group">
-          {standardFormats.map(fmt => (
-            <button type="button"
-              key={fmt.value}
-              onClick={() => handleChangeFormat(fmt.value)}
-              className={`result-node__format-btn result-node__format-btn--${fmt.value} ${
-                format === fmt.value ? 'result-node__format-btn--active' : ''
-              }`}
-            >
-              <span className="result-node__format-icon">{fmt.icon}</span>
-              <span>{fmt.label}</span>
-            </button>
-          ))}
-        </div>
-        {hasGeometryColumns && (
-          <>
-            <div className="result-node__label result-node__label--geo">🌐 Formati geospaziali:</div>
-            <div className="result-node__format-group">
-              {geoFormats.map(fmt => (
-                <button type="button"
-                  key={fmt.value}
-                  onClick={() => handleChangeFormat(fmt.value)}
-                  className={`result-node__format-btn result-node__format-btn--${fmt.value} result-node__format-btn--geo ${
-                    format === fmt.value ? 'result-node__format-btn--active' : ''
-                  }`}
-                >
-                  <span className="result-node__format-icon">{fmt.icon}</span>
-                  <span>{fmt.label}</span>
-                </button>
-              ))}
-            </div>
-
-            {isGeoFormat && availableGeomColumns.length > 0 && (
-              <div className="result-node__geom-select">
-                <div className="result-node__label">📍 Colonna geometria:</div>
-                <select
-                  value={selectedGeomColumn || availableGeomColumns[0] || ''}
-                  onChange={(e) => handleChangeGeomColumn(e.target.value)}
-                  className="result-node__geom-dropdown"
-                >
-                  {availableGeomColumns.map(col => (
-                    <option key={col} value={col}>{col}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {isGeoFormat && availableGeomColumns.length === 0 && (
-              <div className="result-node__geom-warning">
-                ⚠️ Nessuna colonna geometrica trovata
-              </div>
-            )}
-          </>
-        )}
-      </div>
-
-      {/* Colonne Output (solo SQL/Estrai, senza GROUP BY attivo) */}
-      {isEstrai && data.columns && data.columns.length > 0 && !groupByEnabled && (
-        <div className="result-node__section result-node__section--bordered">
-          <div className="result-node__label result-node__label--with-badge"
-            style={{ cursor: 'pointer' }}
-            onClick={() => setColumnsExpanded(v => !v)}
-          >
-            <span>📋 Colonne output:</span>
-            <span className="result-node__columns-badge">{data.columns.length}</span>
-            <span style={{ marginLeft: 'auto', fontSize: '9px', color: 'var(--plen-text-dim)' }}>
-              {columnsExpanded ? '▲' : '▼'}
-            </span>
-          </div>
-          <div className="result-node__columns-list">
-            {(columnsExpanded ? data.columns : data.columns.slice(0, COLUMNS_PREVIEW)).map((col, idx) => (
-              <div key={idx} className="result-node__column-item">
-                <span
-                  className={`result-node__column-type-icon ${isGeometryType(col.type) ? 'result-node__column-type-icon--geo' : ''}`}
-                  title={getColumnTypeLabel(col.type)}
-                >
-                  {getColumnTypeIcon(col.type)}
-                </span>
-                <span className="result-node__column-table">{col.source_table}</span>
-                <span className="result-node__column-separator">.</span>
-                <span className="result-node__column-name">{col.alias || col.name}</span>
-                {isGeometryType(col.type) && getColumnSRID(col.type) && (
-                  <span className="result-node__column-srid-badge" title={`EPSG:${getColumnSRID(col.type)}`}>
-                    {getColumnSRID(col.type)}
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-          {data.columns.length > COLUMNS_PREVIEW && (
-            <button
-              type="button"
-              className="result-node__columns-expand-btn"
+      <OutputSettingsPanel
+        data={data}
+        id={id}
+        updateNodeData={updateNodeData}
+        isEstrai={isEstrai}
+        groupByEnabled={groupByEnabled}
+        availableGeomColumns={availableGeomColumns}
+        hasGeometryColumns={hasGeometryColumns}
+        isGeoFormat={isGeoFormat}
+      >
+        {/* Colonne Output (solo SQL/Estrai, senza GROUP BY attivo) — preview
+            non output-setting; renderizzata come children del panel per
+            preservare l'ordine visivo originale (filename → format →
+            colonne preview → DISTINCT/LIMIT). */}
+        {isEstrai && data.columns && data.columns.length > 0 && !groupByEnabled && (
+          <div className="result-node__section result-node__section--bordered">
+            <div className="result-node__label result-node__label--with-badge"
+              style={{ cursor: 'pointer' }}
               onClick={() => setColumnsExpanded(v => !v)}
             >
-              {columnsExpanded
-                ? '▲ Comprimi'
-                : `▼ Mostra tutte (${data.columns.length - COLUMNS_PREVIEW} nascoste)`}
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Opzioni Query SQL (DISTINCT + LIMIT) — solo ESTRAI */}
-      {isEstrai && (
-        <div className="result-node__section result-node__section--bordered">
-          <div className="result-node__label">⚙️ Opzioni query:</div>
-
-          <label className={`result-node__checkbox-label ${groupByEnabled ? 'result-node__checkbox-label--disabled' : ''}`}>
-            <input
-              type="checkbox"
-              checked={distinct}
-              onChange={handleToggleDistinct}
-              disabled={groupByEnabled}
-              className="result-node__checkbox"
-            />
-            <span>DISTINCT (rimuovi duplicati)</span>
-          </label>
-
-          <div>
-            <label className="result-node__limit-label">
-              Limita risultati:
-            </label>
-            <input
-              type="number"
-              value={limit || ''}
-              onChange={(e) => handleUpdateLimit(e.target.value)}
-              placeholder="Nessun limite"
-              min="1"
-              className="result-node__limit-input"
-            />
+              <span>📋 Colonne output:</span>
+              <span className="result-node__columns-badge">{data.columns.length}</span>
+              <span style={{ marginLeft: 'auto', fontSize: '9px', color: 'var(--plen-text-dim)' }}>
+                {columnsExpanded ? '▲' : '▼'}
+              </span>
+            </div>
+            <div className="result-node__columns-list">
+              {(columnsExpanded ? data.columns : data.columns.slice(0, COLUMNS_PREVIEW)).map((col, idx) => (
+                <div key={idx} className="result-node__column-item">
+                  <span
+                    className={`result-node__column-type-icon ${isGeometryType(col.type) ? 'result-node__column-type-icon--geo' : ''}`}
+                    title={getColumnTypeLabel(col.type)}
+                  >
+                    {getColumnTypeIcon(col.type)}
+                  </span>
+                  <span className="result-node__column-table">{col.source_table}</span>
+                  <span className="result-node__column-separator">.</span>
+                  <span className="result-node__column-name">{col.alias || col.name}</span>
+                  {isGeometryType(col.type) && getColumnSRID(col.type) && (
+                    <span className="result-node__column-srid-badge" title={`EPSG:${getColumnSRID(col.type)}`}>
+                      {getColumnSRID(col.type)}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+            {data.columns.length > COLUMNS_PREVIEW && (
+              <button
+                type="button"
+                className="result-node__columns-expand-btn"
+                onClick={() => setColumnsExpanded(v => !v)}
+              >
+                {columnsExpanded
+                  ? '▲ Comprimi'
+                  : `▼ Mostra tutte (${data.columns.length - COLUMNS_PREVIEW} nascoste)`}
+              </button>
+            )}
           </div>
-        </div>
-      )}
+        )}
+      </OutputSettingsPanel>
 
       {/* GROUP BY — ESTRAI e MANIPOLA */}
       {(isEstrai || isManipulate) && (availableColumns.length > 0 || manipolaColumns.length > 0) && (
