@@ -76,10 +76,9 @@ export default defineConfig(({ mode }) => {
             if (/[\\/]node_modules[\\/](maplibre-gl|global|long|pbf)[\\/]/.test(id)) {
               return 'vendor-maplibre';
             }
-            // Leaflet (usato in PreviewModal vecchio, prima del deck.gl)
-            if (/[\\/]node_modules[\\/]leaflet[\\/]/.test(id)) {
-              return 'vendor-leaflet';
-            }
+            // Nota: PreviewModal carica Leaflet via CDN (cdnjs) a runtime,
+            // quindi nessun source importa `leaflet` da node_modules. Non
+            // c'e' un chunk vendor-leaflet da emettere.
             return undefined; // default: rollup decide
           },
         },

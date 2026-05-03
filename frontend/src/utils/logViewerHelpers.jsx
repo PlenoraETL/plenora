@@ -1,14 +1,12 @@
 /**
- * logViewerHelpers.js — Helper puri estratti da LogViewer.jsx
+ * logViewerHelpers.js — Helper puri di formattazione per la log view.
  *
- * Funzioni di formattazione e rendering markdown precedentemente
- * definite inline nel componente. Estrarle qui le rende testabili
- * in isolamento senza montare il componente.
+ * Funzioni pure estratte per essere testabili in isolamento senza
+ * montare il componente.
  *
- * Importato da: pages/LogViewer.jsx
+ * Importato da: pages/LogViewer.jsx, components/logviewer/RunsTab.jsx,
+ * components/logviewer/RunDetail.jsx.
  */
-
-import React from 'react';
 
 // ── Formattazione ─────────────────────────────────────────────────────────
 
@@ -54,6 +52,4 @@ export function truncateProjectId(id) {
   if (!id || id.length <= 20) return id;
   return id.slice(0, 18) + '…';
 }
-
-// ── Markdown renderer minimale ────────────────────────────────────────────
 

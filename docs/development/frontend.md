@@ -275,7 +275,8 @@ Output: `frontend/dist/`. Ottimizzazioni vite:
 - esbuild minify, console.log/debug strippati (esbuild `drop`).
 - Source maps disabilitate in prod.
 - Code splitting: `vendor-react`, `vendor-reactflow`, `vendor-deckgl`,
-  `vendor-maplibre`, `vendor-leaflet` chunks.
+  `vendor-maplibre` chunks. Leaflet e' caricato via CDN a runtime in
+  `PreviewModal`, quindi non c'e' un chunk dedicato.
 - Asset hashing per cache invalidation.
 
 Deploy: vedi `deploy.sh:deploy_frontend` (npm install + build + scp/rsync).

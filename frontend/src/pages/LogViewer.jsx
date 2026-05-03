@@ -10,6 +10,7 @@ import { getLogs, getLogsStats } from '../api/logs';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../hooks/useToast';
 import RunsTab from '../components/logviewer/RunsTab';
+import { formatTime, truncateProjectId } from '../utils/logViewerHelpers.jsx';
 
 import { useHexCanvas } from '../utils/hexCanvas';
 import AppSidebar from '../components/AppSidebar';
@@ -33,18 +34,6 @@ const MODULE_COLORS = {
   orchestrator: '#60A5FA', scheduler: '#34D399', connections: '#FBBF24', projects: '#818CF8',
   files: '#A78BFA', services: '#94A3B8', db: '#F87171', utils: '#6B7280', workers: '#F472B6',
 };
-
-// ── Helpers ───────────────────────────────────────────────────────────────
-function formatTime(ts) {
-  if (!ts) return '—';
-  const parts = ts.split('T');
-  if (parts.length !== 2) return ts;
-  return `${parts[0].slice(5)} ${parts[1].slice(0, 8)}`;
-}
-function truncateProjectId(id) {
-  if (!id || id.length <= 20) return id;
-  return id.slice(0, 18) + '…';
-}
 
 // ── Main component ────────────────────────────────────────────────────────
 function LogViewer() {
