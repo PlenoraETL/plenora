@@ -124,6 +124,50 @@ def _should_use_object_storage(size: int, policy: str) -> bool:
     ) == "object_storage"
 
 
+def _cleanup_uploaded_result_blob(
+    storage,
+    storage_key: str,
+    *,
+    reason: str,
+    project_id: str,
+    result_id: str,
+) -> None:
+    """Best-effort delete del blob orfano post-upload.
+
+    BE-DATA-PLANE-004: chiamato quando l'upload object storage e' gia'
+    riuscito ma la `db.save_result(...)` successiva fallisce (l'ordine
+    upload-prima-poi-DB e' deliberato per evitare row DB orfana lato
+    opposto). Senza questo cleanup, il blob resta su object storage
+    senza piu' alcuna row che lo punti -> orphan.
+
+    Side effect:
+      - Tenta `storage.delete(storage_key)`.
+      - Su errore log strutturato `event=result_blob_orphan_cleanup_failed`
+        con `storage_key` + `reason` + tipo eccezione. Il caller continua
+        a propagare l'errore originale (DB save) senza che il fallimento
+        del cleanup sostituisca la root cause.
+      - Su successo log info `event=result_blob_orphan_cleanup_ok`.
+
+    NB: best-effort. Mai sollevare: il caller sta gia' propagando un
+    altro errore (DB save) e non deve essere mascherato.
+    """
+    try:
+        storage.delete(storage_key)
+        logger.info(
+            "event=result_blob_orphan_cleanup_ok "
+            "storage_key=%s project_id=%s result_id=%s reason=%s",
+            storage_key, project_id, result_id, reason,
+        )
+    except Exception as _ce:
+        logger.error(
+            "event=result_blob_orphan_cleanup_failed "
+            "storage_key=%s project_id=%s result_id=%s reason=%s "
+            "cleanup_error=%s: %s",
+            storage_key, project_id, result_id, reason,
+            type(_ce).__name__, _ce,
+        )
+
+
 def _enforce_db_hard_cap(size: int, ctx: str) -> None:
     """Fail-fast se `size` supera il hard cap DB. Applicato in policy=db
     (sempre) e come guard del ramo DB di `hybrid` (protegge da configurazioni
@@ -233,17 +277,32 @@ def save_result_blob(project_id: str, path: Path, fmt: str,
                     f"({path.name}): {_se}"
                 ) from _se
 
-            db.save_result(
-                result_id=result_id,
-                project_id=project_id,
-                group_id=resolved_group_id,
-                filename=path.name,
-                fmt=fmt,
-                data=None,
-                rows_count=rows_count,
-                storage_key=storage_key,
-                size_bytes=file_size,
-            )
+            # BE-DATA-PLANE-004: il blob e' gia' su object storage. Se
+            # la save DB fallisce, il blob resta orfano. Triggera
+            # compensating delete best-effort prima di propagare l'errore
+            # cosi' il caller riceve sempre la root cause (DB save) e
+            # l'object storage non accumula orfani.
+            try:
+                db.save_result(
+                    result_id=result_id,
+                    project_id=project_id,
+                    group_id=resolved_group_id,
+                    filename=path.name,
+                    fmt=fmt,
+                    data=None,
+                    rows_count=rows_count,
+                    storage_key=storage_key,
+                    size_bytes=file_size,
+                )
+            except Exception as _db_err:
+                _cleanup_uploaded_result_blob(
+                    storage,
+                    storage_key,
+                    reason="db_save_failed_after_object_upload",
+                    project_id=project_id,
+                    result_id=result_id,
+                )
+                raise
             logger.info(
                 f"[FS-4] Result {result_id} su object storage (file-based, "
                 f"policy={policy}, {file_size // (1024*1024)} MB): {storage_key}"
@@ -376,17 +435,30 @@ def save_result_blob_from_bytes(
                     f"Upload object storage fallito per result {result_id}: {_se}"
                 ) from _se
 
-            db.save_result(
-                result_id=result_id,
-                project_id=project_id,
-                group_id=resolved_group_id,
-                filename=filename,
-                fmt=fmt,
-                data=None,
-                rows_count=rows_count,
-                storage_key=storage_key,
-                size_bytes=size,
-            )
+            # BE-DATA-PLANE-004: vedi save_result_blob (path-based) per
+            # rationale: compensating delete best-effort se la DB save
+            # fallisce dopo upload riuscito.
+            try:
+                db.save_result(
+                    result_id=result_id,
+                    project_id=project_id,
+                    group_id=resolved_group_id,
+                    filename=filename,
+                    fmt=fmt,
+                    data=None,
+                    rows_count=rows_count,
+                    storage_key=storage_key,
+                    size_bytes=size,
+                )
+            except Exception as _db_err:
+                _cleanup_uploaded_result_blob(
+                    storage,
+                    storage_key,
+                    reason="db_save_failed_after_object_upload",
+                    project_id=project_id,
+                    result_id=result_id,
+                )
+                raise
             logger.info(
                 f"[FS-4] Result {result_id} su object storage "
                 f"(policy={policy}, {size // (1024*1024)} MB): {storage_key}"
