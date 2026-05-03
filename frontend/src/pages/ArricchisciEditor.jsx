@@ -24,6 +24,7 @@ import { getFiles } from '../api/files';
 import { useAuth } from '../context/AuthContext';
 import { useEditorData } from '../hooks/useEditorData';
 import { describeAccessDeniedNodes } from '../utils/canvasAccessControl';
+import { isCanvasEmpty } from '../utils/canvasValidationContract';
 import AccessDeniedBanner from '../components/editor/AccessDeniedBanner';
 import useCanvasStore from '../store/useCanvasStore';
 import { deserializeNodes, createEdgeFromData } from '../utils/nodeFactories';
@@ -144,7 +145,7 @@ const ArricchisciEditorContent = () => {
     executeFunction: executeEnrichmentAsync,
     onBeforeExecute: async () => {
       const currentNodes = nodesRef.current;
-      if (currentNodes.length === 0)          throw new Error('Canvas vuoto. Aggiungi nodi prima di eseguire.');
+      if (isCanvasEmpty(currentNodes))        throw new Error('Canvas vuoto. Aggiungi nodi prima di eseguire.');
       const enrichers = currentNodes.filter(n => n.type === 'api_enrich');
       const anyNeedsSource = enrichers.some(n => {
         if (n.data?.api_type === 'generator') return false;

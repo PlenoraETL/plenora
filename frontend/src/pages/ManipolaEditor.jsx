@@ -46,6 +46,7 @@ import { useTheme } from '../hooks/useTheme';
 import useColumnPropagation from '../hooks/useColumnPropagation';
 import { deserializeNodes, createEdgeFromData } from '../utils/nodeFactories';
 import { describeAccessDeniedNodes } from '../utils/canvasAccessControl';
+import { isCanvasEmpty } from '../utils/canvasValidationContract';
 import AccessDeniedBanner from '../components/editor/AccessDeniedBanner';
 import '../styles/ManipolaEditor.css';
 import '../components/nodes/StaticValuesNode.css';
@@ -117,7 +118,7 @@ const ManipolaEditorContent = () => {
   const execution = useExecution(projectId, {
     onBeforeExecute: async () => {
       const currentNodes = nodesRef.current;
-      if (currentNodes.length === 0) throw new Error('Canvas vuoto. Aggiungi nodi prima di eseguire.');
+      if (isCanvasEmpty(currentNodes)) throw new Error('Canvas vuoto. Aggiungi nodi prima di eseguire.');
       if (!currentNodes.find(n => n.type === 'result')) throw new Error('Aggiungi un nodo Output prima di eseguire.');
       if (!currentNodes.find(n => n.type === 'project_source' || n.type === 'file_source' || n.type === 'staticValues' || (n.type === 'datasource_node' && n.data?.mode === 'source')))
         throw new Error('Aggiungi almeno una sorgente dati (progetto, file, valori statici o DataSource).');
