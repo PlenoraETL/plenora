@@ -78,6 +78,7 @@ Non cancellare mai un ADR: il registro e' append-only. Un errore in un ADR si re
 - [ADR-0016](0016-2026-04-23-imdf-boundaries.md) — IMDF boundaries refactor: loader autoritativo `site_id`, persist local materializer puro, router legge solo meta, hydrate multi-host uniforme (D3, 5 commit impl atomici)
 - [ADR-0019](0019-2026-05-01-intermediate-mode-per-call-override.md) — `INTERMEDIATE_PERSISTENCE_MODE` per-call override via kwarg propagation + endpoint dual-auth superadmin (R-25 completion)
 - [ADR-0020](0020-2026-05-01-source-bound-test-keep-list.md) — Source-bound test KEEP list post R-04/R-04b: 7 `inspect.getsource` residui classificati in 3 categorie legittime (policy enforcement / AST sentinel / scheduler integration deferred)
+- [ADR-0021](0021-2026-05-03-env-config-boundary.md) — Env / Settings / `runtime_policy.yaml` config boundary: classificazione 7-bucket (SECRET_INFRA / DEPLOY_INFRA / APP_POLICY / OPERATIONAL_TUNING / FEATURE_FLAG / TEST_ONLY / LEGACY_COMPAT) + regole di routing + removal criteria per LEGACY_COMPAT
 
 ## Workflow
 
