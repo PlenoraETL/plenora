@@ -68,20 +68,38 @@ logger = get_logger(__name__)
 #
 # R-01: backend Redis-backed cluster-safe con fallback in-memory.
 # La logica Redis vive in `app.shared.login_rate_limiter`; qui restano
-# i wrapper che il login() chiama e lo store in-memory di fallback,
-# mantenuto compatibile con i test esistenti che resettano
-# `_failed_attempts` / `_rate_lock` direttamente.
+# i wrapper che il login() chiama. Lo store + algoritmo del fallback
+# in-memory vivono in `app.core.auth.rate_limit_fallback`
+# (BE-GO-READY-AUTH-ENGINE-002-RATE-LIMIT-FALLBACK-EXTRACTION).
 #
 # Le costanti LOGIN_MAX_ATTEMPTS / LOGIN_WINDOW_SECONDS / LOGIN_LOCKOUT_SECONDS
 # restano modulo-level e vengono lette al volo dai wrapper, cosi' i test
 # possono ancora monkeypatcharle (vedi tests2/security/unit/test_login_rate_limit_per_ip.py).
+#
+# KEEP_COMPAT: gli alias `_rate_lock`, `_failed_attempts`,
+# `_check_rate_limit_in_memory`, `_record_failed_login_in_memory`,
+# `_clear_failed_logins_in_memory` restano qui come thin pointer al
+# modulo estratto. Test esistenti che fanno
+# `auth_mod._failed_attempts.clear()` / `with auth_mod._rate_lock:` /
+# `monkeypatch.setattr(auth_mod, "_check_rate_limit_in_memory", ...)`
+# continuano a funzionare invariati.
 
-import threading
-import time
-from collections import defaultdict
+from app.core.auth.rate_limit_fallback import (
+    InMemoryRateLimitFallback,  # noqa: F401  (re-export pubblico tipato)
+    RateLimitFallbackTriggered,
+    _STORE as _rate_limit_fallback_store,
+    record_failed_login_in_memory as _record_failed_login_in_memory,
+    clear_failed_logins_in_memory as _clear_failed_logins_in_memory,
+)
 
-_rate_lock = threading.Lock()
-_failed_attempts: dict = defaultdict(list)
+# KEEP_COMPAT: alias dei membri dello store estratto. Identita' Python
+# preservata (`auth_mod._rate_lock is rate_limit_fallback._STORE.lock`)
+# cosi' un `with auth_mod._rate_lock:` nel test e un `self.lock` nel
+# nuovo modulo serializzano sulla stessa primitiva di sincronia. Idem
+# per `_failed_attempts`: l'oggetto `defaultdict(list)` e' lo stesso,
+# quindi `auth_mod._failed_attempts.clear()` svuota lo store reale.
+_rate_lock = _rate_limit_fallback_store.lock
+_failed_attempts = _rate_limit_fallback_store.failed_attempts
 
 # BE-CONFIG-001C: default tipati in `Settings.DEFAULTS` (10 / 60 / 300).
 # Override env continua a funzionare via `Settings._converti_tipo_env`
@@ -94,32 +112,24 @@ LOGIN_LOCKOUT_SECONDS = int(_settings.get("LOGIN_LOCKOUT_SECONDS"))
 
 
 def _check_rate_limit_in_memory(ip: str):
-    """Implementazione in-memory (fallback se Redis non disponibile).
-
-    Identica al pre-R-01: sliding window su `_failed_attempts[ip]`,
-    Retry-After = lockout - (now - oldest_in_window), clamp >=1.
+    """KEEP_COMPAT wrapper: legge le tre costanti monkeypatch-ate a
+    livello di `auth.py` e delega al fallback estratto. Cattura
+    `RateLimitFallbackTriggered` e converte in disclosure
+    (`disclosure.rate_limit_exceeded(retry_after)`) preservando byte
+    per byte il comportamento legacy (incl. clamp >=1 al
+    Retry-After, che vive in `disclosure.rate_limit_exceeded`).
     """
-    now = time.monotonic()
-    with _rate_lock:
-        _failed_attempts[ip] = [
-            t for t in _failed_attempts[ip] if now - t < LOGIN_WINDOW_SECONDS
-        ]
-        if len(_failed_attempts[ip]) >= LOGIN_MAX_ATTEMPTS:
-            oldest = _failed_attempts[ip][0]
-            retry_after = int(LOGIN_LOCKOUT_SECONDS - (now - oldest))
-            _disclosure.raise_disclosure(
-                _disclosure.rate_limit_exceeded(retry_after)
-            )
-
-
-def _record_failed_login_in_memory(ip: str):
-    with _rate_lock:
-        _failed_attempts[ip].append(time.monotonic())
-
-
-def _clear_failed_logins_in_memory(ip: str):
-    with _rate_lock:
-        _failed_attempts.pop(ip, None)
+    try:
+        _rate_limit_fallback_store.check(
+            ip,
+            max_attempts=LOGIN_MAX_ATTEMPTS,
+            window_seconds=LOGIN_WINDOW_SECONDS,
+            lockout_seconds=LOGIN_LOCKOUT_SECONDS,
+        )
+    except RateLimitFallbackTriggered as triggered:
+        _disclosure.raise_disclosure(
+            _disclosure.rate_limit_exceeded(triggered.retry_after)
+        )
 
 
 def _check_rate_limit(ip: str):

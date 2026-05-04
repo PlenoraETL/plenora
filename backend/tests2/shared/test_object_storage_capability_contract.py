@@ -240,6 +240,28 @@ def test_file_sources_delete_skips_s3_cleanup_when_disabled(monkeypatch):
         file_sources, "transaction", lambda: transaction_cm(),
     )
 
+    # BE-GO-READY-STORAGE-ENGINE-005: no-op the reconciliation
+    # boundary so the new INSERT inside delete_file_source does
+    # NOT issue an extra cur.execute (which would change
+    # fake_cur.execute.call_count from 3 to 4) and does NOT call
+    # cur.fetchone for RETURNING id (which fake_cur has not been
+    # shaped to supply). Capability-disabled S3 behavior — the
+    # subject of this test — is orthogonal to reconciliation.
+    from app.shared import storage_reconciliation as _recon
+    fake_ref = _recon.ReconciliationEntryRef(
+        id="capability-disabled-noop",
+        domain="file_source",
+        storage_key="autouse",
+        operation="delete",
+    )
+    monkeypatch.setattr(
+        _recon, "record_pending", lambda cursor, **_kw: fake_ref,
+    )
+    monkeypatch.setattr(_recon, "mark_done", lambda *_a, **_kw: None)
+    monkeypatch.setattr(
+        _recon, "mark_failed_attempt", lambda *_a, **_kw: None,
+    )
+
     runtime_called = {"n": 0}
 
     def _fake_runtime():

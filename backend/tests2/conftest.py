@@ -60,6 +60,7 @@ if os.getenv("URBY_TEST_REAL_DB_INIT") != "1":
         import app.db.pg_connection as _pg_conn
         import app.core.intermediate.db as _idb
         import app.db.migrations_runner as _mig_runner
+        import app.bootstrap as _bootstrap
 
         # Stash gli originali per chi voglia reinstallarli (test integration
         # opt-in via `_db_service._original_init_all_dbs()`).
@@ -69,6 +70,7 @@ if os.getenv("URBY_TEST_REAL_DB_INIT") != "1":
         _mig_runner._original_apply_pending_migrations = (
             _mig_runner.apply_pending_migrations
         )
+        _bootstrap._original_bootstrap = _bootstrap.bootstrap
 
         def _noop_init_all_dbs():
             return None
@@ -79,10 +81,21 @@ if os.getenv("URBY_TEST_REAL_DB_INIT") != "1":
         def _noop_apply_pending_migrations():
             return []
 
+        def _noop_bootstrap():
+            return None
+
         _db_service.init_all_dbs = _noop_init_all_dbs
         _pg_conn.init_db = _noop_init_db
         _idb.init_db = _noop_init_db
         _mig_runner.apply_pending_migrations = _noop_apply_pending_migrations
+        # BE-GO-READY-BOOTSTRAP-ENGINE-002: stub aggiuntivo del nuovo
+        # boundary. `app.main` ora chiama `app.bootstrap.bootstrap()` al
+        # top-level invece dei 4 step inline. Lo stub a livello del
+        # boundary copre il caso in cui un test importi `app.main` senza
+        # PG/Redis raggiungibili. Gli stub piu' granulari sopra restano
+        # in place per i test che importano direttamente i 4 helper
+        # (idempotente con questa no-op aggiuntiva).
+        _bootstrap.bootstrap = _noop_bootstrap
     except Exception:
         # Se l'import fallisce a session start, lasciamo che siano i
         # singoli test a fallire col loro errore naturale. Il bootstrap

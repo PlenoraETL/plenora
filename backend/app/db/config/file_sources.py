@@ -277,6 +277,12 @@ def delete_file_source(file_id: str) -> bool:
     """
     storage_key_to_clean = None
     deleted = False
+    # BE-GO-READY-STORAGE-ENGINE-005: reconciliation entry handle.
+    # Set only when we are about to commit a "last reference" delete
+    # that triggers post-commit storage cleanup. Stays None on the
+    # shared-blob path (siblings exist) and on the BYTEA path
+    # (storage_key None) — neither needs reconciliation.
+    reconciliation_ref = None
 
     with transaction() as conn:
         with conn.cursor() as cur:
@@ -304,6 +310,23 @@ def delete_file_source(file_id: str) -> bool:
                     )
                 else:
                     storage_key_to_clean = storage_key
+                    # BE-GO-READY-STORAGE-ENGINE-005: record cleanup
+                    # intent inside the same transaction as the
+                    # DELETE. Commit advances both atomically; if a
+                    # process death follows the commit before the
+                    # post-commit storage call, the pending row is
+                    # the only application-side trace of the orphan.
+                    from app.shared.storage_reconciliation import (
+                        record_pending,
+                    )
+                    reconciliation_ref = record_pending(
+                        cur,
+                        domain="file_source",
+                        storage_key=storage_key,
+                        operation="delete",
+                        reason="row_delete_post_commit",
+                        extras={"file_id": file_id},
+                    )
 
             cur.execute(
                 "DELETE FROM file_sources WHERE id = %s", (file_id,)
@@ -313,14 +336,30 @@ def delete_file_source(file_id: str) -> bool:
     # Storage cleanup AFTER DB commit (ADR-0011 contract: orphan accepted
     # on storage failure, DB row stays deleted).
     # BE-GO-READY-STORAGE-ENGINE-002: delegato all'helper unificato.
+    # BE-GO-READY-STORAGE-ENGINE-005: outcome -> reconciliation transition.
     if storage_key_to_clean:
         from app.shared.storage_compensation import compensating_delete
-        compensating_delete(
+        outcome = compensating_delete(
             storage_key_to_clean,
             domain="file_source",
             reason="row_delete_post_commit",
             extras={"file_id": file_id},
             logger=logger,
         )
+        if reconciliation_ref is not None:
+            from app.shared.storage_reconciliation import (
+                mark_done,
+                mark_failed_attempt,
+            )
+            if outcome in ("ok", "skipped"):
+                mark_done(reconciliation_ref.id)
+            else:
+                # outcome == "failed": ADR-0011 posture preserved
+                # (orphan accepted), but now persisted for the future
+                # reconciler beat hook (batch 006).
+                mark_failed_attempt(
+                    reconciliation_ref.id,
+                    error=f"compensating_delete_outcome={outcome}",
+                )
 
     return deleted

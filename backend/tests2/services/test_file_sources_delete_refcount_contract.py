@@ -39,6 +39,37 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 # =============================================================================
 
 
+@pytest.fixture(autouse=True)
+def _no_op_reconciliation_boundary(monkeypatch):
+    """BE-GO-READY-STORAGE-ENGINE-005: no-op `record_pending` /
+    `mark_done` / `mark_failed_attempt` so the reconciliation log
+    INSERT (added inside `delete_file_source` post-005) does NOT
+    issue an extra `cur.execute` + `cur.fetchone` that this suite's
+    cursor mocks aren't shaped to handle.
+
+    Reconciliation behavior is verified separately in
+    `tests2/services/test_file_sources_reconciliation_integration.py`.
+    Here we only verify the refcount/transactional contract, which
+    is orthogonal."""
+    from app.shared import storage_reconciliation as _recon
+
+    fake_ref = _recon.ReconciliationEntryRef(
+        id="autouse-noop",
+        domain="file_source",
+        storage_key="autouse",
+        operation="delete",
+    )
+    monkeypatch.setattr(
+        _recon, "record_pending", lambda cursor, **_kw: fake_ref,
+    )
+    monkeypatch.setattr(
+        _recon, "mark_done", lambda *_a, **_kw: None,
+    )
+    monkeypatch.setattr(
+        _recon, "mark_failed_attempt", lambda *_a, **_kw: None,
+    )
+
+
 @pytest.fixture
 def fake_storage():
     """Mock object storage con .delete(key) registrato."""

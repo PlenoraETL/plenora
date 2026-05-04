@@ -33,33 +33,23 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.shared.cloud_backends import validate_storage_config
 from app.utils.logger import get_logger
 from app.utils.dataframe import save_dataframe
 
-# Verifica prerequisiti di sistema (DATA_DIR scrivibile, ecc.)
-# Interrompe l'avvio con messaggio chiaro se la configurazione è incompleta.
-settings.validate_startup()
-
-# A1: coerenza STORAGE_POLICY + provider + bucket + soglie. Fail-fast qui
-# evita che un task Celery scopra al primo upload oltre soglia che il bucket
-# non esiste o che il provider non e' implementato.
-validate_storage_config()
-
-# Inizializza database PostgreSQL (pool + tabelle)
-from app.db.db_service import init_all_dbs
-init_all_dbs()
+# Bootstrap esplicito: una sola boundary tipata che esegue, in ordine:
+#   1. settings.validate_startup()
+#   2. validate_storage_config()
+#   3. init_all_dbs()
+#   4. _repair_psycopg2_ssl_env()  (pop dei 3 SSL env var dopo init PG)
+# Vedi `app/bootstrap.py` per il contratto.
+from app.bootstrap import bootstrap as _bootstrap
+_bootstrap()
 
 # Auth JWT
 from app.core.auth.auth import router as auth_router, groups_router, get_current_user
 from app.core.auth.auth_middleware import JWTMiddleware
 from app.core.auth.request_id_middleware import RequestIdMiddleware
 from app.db.cleanup_middleware import DBConnectionCleanupMiddleware
-
-# Fix SSL certificate issue caused by PostgreSQL
-os.environ.pop('REQUESTS_CA_BUNDLE', None)
-os.environ.pop('SSL_CERT_FILE', None)
-os.environ.pop('CURL_CA_BUNDLE', None)
 
 logger = get_logger(__name__)
 
