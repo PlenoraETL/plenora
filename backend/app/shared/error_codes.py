@@ -102,6 +102,47 @@ SCHEDULE_EXECUTION_FATAL = "schedule_execution_fatal"
 
 
 # ============================================================
+# Domain-specific — Not-Found family
+# (BE-GO-READY-ERROR-CODES-009-NOT-FOUND-PROMOTION)
+# ============================================================
+# Promozione mirata di 10 famiglie 404 da `http_404` generico a
+# codici domain. FE puo' branchare differente UX (redirect,
+# toast, retry, refresh-list) per tipo di risorsa.
+# Status code resta sempre 404. Messaggi italiani user-facing
+# invariati.
+
+PROJECT_NOT_FOUND = "project_not_found"
+"""404: progetto non trovato (projects/orchestrator/scheduler/imdf/arricchisci)."""
+
+TASK_NOT_FOUND = "task_not_found"
+"""404: task non trovato (orchestrator)."""
+
+SCHEDULE_NOT_FOUND = "schedule_not_found"
+"""404: schedule non trovato (scheduler)."""
+
+RUN_NOT_FOUND = "run_not_found"
+"""404: run pipeline non trovata (intermediate/logs/scheduler)."""
+
+BUNDLE_NOT_FOUND = "bundle_not_found"
+"""404: bundle IMDF non trovato/scaduto (imdf)."""
+
+CONNECTION_NOT_FOUND = "connection_not_found"
+"""404: connessione DB non trovata (carica/connections/features)."""
+
+API_CONNECTION_NOT_FOUND = "api_connection_not_found"
+"""404: API connection non trovata (arricchisci)."""
+
+FILE_SOURCE_NOT_FOUND = "file_source_not_found"
+"""404: file source non trovato (files)."""
+
+DATASOURCE_NOT_FOUND = "datasource_not_found"
+"""404: data source non trovato (datasources)."""
+
+TICKET_NOT_FOUND = "ticket_not_found"
+"""404: ticket o allegato ticket non trovato (tickets)."""
+
+
+# ============================================================
 # Catalog set — drift detection
 # ============================================================
 # `KNOWN_DOMAIN_CODES` espone l'intero catalog domain-specific
@@ -127,6 +168,17 @@ KNOWN_DOMAIN_CODES: frozenset[str] = frozenset({
     CARICA_LAUNCH_FAILED,
     CARICA_SCHEDULER_FAILED,
     SCHEDULE_EXECUTION_FATAL,
+    # Not-Found family (BE-GO-READY-ERROR-CODES-009)
+    PROJECT_NOT_FOUND,
+    TASK_NOT_FOUND,
+    SCHEDULE_NOT_FOUND,
+    RUN_NOT_FOUND,
+    BUNDLE_NOT_FOUND,
+    CONNECTION_NOT_FOUND,
+    API_CONNECTION_NOT_FOUND,
+    FILE_SOURCE_NOT_FOUND,
+    DATASOURCE_NOT_FOUND,
+    TICKET_NOT_FOUND,
 })
 
 # Codici globali (envelope-level): NON domain-specific.
@@ -136,4 +188,44 @@ KNOWN_GLOBAL_CODES: frozenset[str] = frozenset({
     INTERNAL_ERROR,
     CANVAS_CORRUPTED,
     VALIDATION_ERROR,
+})
+
+
+# ============================================================
+# Pattern accettati come `http_<status>` fallback intenzionale
+# (BE-GO-READY-ERROR-CODES-009-NOT-FOUND-PROMOTION)
+# ============================================================
+# Questi pattern di `raise HTTPException(<n>, "<msg>")` NON sono
+# residui da promuovere a codici domain. Sono stringhe locali
+# stabili gia' coperte semanticamente da:
+#   - `internal_error` (500 catch-all globale);
+#   - `http_<status>` per i casi senza valore di branching FE.
+#
+# Documentati esplicitamente per evitare che il drift detection
+# li riconti come residui.
+#
+# Riferimento: classification audit
+# `BE-GO-READY-ERROR-CODES-008-STRING-DETAIL-CLASSIFICATION`,
+# sezione "B. ACCEPT_HTTP_STATUS_FALLBACK".
+ACCEPTED_HTTP_FALLBACK_PATTERNS: frozenset[str] = frozenset({
+    # raise HTTPException(500, "Errore interno del server")
+    # ~50 occorrenze nei catch-all `try/except Exception` dei
+    # router non-auth. Equivalente al global handler che emette
+    # `internal_error`; codice domain dedicato non aggiungerebbe
+    # branching FE.
+    "internal_error_generic",
+    # raise HTTPException(400|422, str(e))
+    # ~20 occorrenze di translation da ValueError/TypeError
+    # locali. Il messaggio e' dinamico, lo status code basta
+    # per il branching FE; promotion non e' actionable
+    # (un codice diverso per ogni ValueError = noise).
+    "value_error_str_e",
+    # raise HTTPException(500|503, "<X> non inizializzato")
+    # 5 occ. (carica/datasources/projects). Failure di startup,
+    # mai in prod operational. Codice domain non aggiunge valore.
+    "service_init_guard",
+    # raise HTTPException(403, "Accesso negato")
+    # ~5 occ. generic ACL. Codici granulari saranno valutati nel
+    # batch dedicato auth-aligned.
+    "generic_access_denied",
 })

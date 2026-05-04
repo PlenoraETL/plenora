@@ -530,7 +530,13 @@ def update_api_connection(api_id: str, data: dict, current_user: CurrentUser = D
         data.pop("created_by", None)
         result = _api_connection_service.update_api_connection(api_id, data)
         if not result:
-            raise HTTPException(404, f"API connection '{api_id}' non trovata")
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": error_codes.API_CONNECTION_NOT_FOUND,
+                    "message": f"API connection '{api_id}' non trovata",
+                },
+            )
         if result is not None:
             result["can_edit"] = compute_can_edit(result, current_user)
         return result
@@ -670,7 +676,13 @@ def delete_api_connection(api_id: str, current_user: CurrentUser = Depends(requi
         )
 
     if not _api_connection_service.delete_api_connection(api_id):
-        raise HTTPException(404, f"API connection '{api_id}' non trovata")
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": error_codes.API_CONNECTION_NOT_FOUND,
+                "message": f"API connection '{api_id}' non trovata",
+            },
+        )
     # F2-B1 (2026-04-24): DELETE risponde 204 No Content, body vuoto.
 
 
@@ -834,7 +846,13 @@ def execute_enrichment_async(
     try:
         metadata = _project_service.get_project_metadata(project_id)
         if not metadata:
-            raise HTTPException(404, f"Progetto '{project_id}' non trovato")
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": error_codes.PROJECT_NOT_FOUND,
+                    "message": f"Progetto '{project_id}' non trovato",
+                },
+            )
         if metadata.project_type != "arricchisci":
             raise HTTPException(400, f"Progetto '{project_id}' non è di tipo 'arricchisci'")
 

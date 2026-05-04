@@ -216,7 +216,13 @@ def delete_datasource(ds_id: str, current_user: CurrentUser = Depends(require_ad
         )
 
     if not _svc().delete_datasource(ds_id):
-        raise HTTPException(404, f"Data Source '{ds_id}' non trovato")
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": error_codes.DATASOURCE_NOT_FOUND,
+                "message": f"Data Source '{ds_id}' non trovato",
+            },
+        )
 
 
 def _find_projects_using_datasource(ds_id: str) -> List[Dict[str, str]]:

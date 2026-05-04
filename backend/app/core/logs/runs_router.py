@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from app.config import settings
 from app.core.auth.auth import get_current_user, require_not_esecutore, CurrentUser
 from app.db.pg_connection import fetchone as _fetchone, fetchall as _fetchall
+from app.shared import error_codes
 
 router = APIRouter(prefix="/pipeline-runs", tags=["runs"])
 
@@ -116,7 +117,13 @@ def get_run(
     """
     row = _fetchone("SELECT * FROM log_runs WHERE run_id = ?", (run_id,))
     if not row:
-        raise HTTPException(status_code=404, detail="Run non trovata")
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": error_codes.RUN_NOT_FOUND,
+                "message": "Run non trovata",
+            },
+        )
 
     run = _run_to_dict(row)
 
@@ -155,7 +162,13 @@ def get_run_payload(
     )
 
     if not row:
-        raise HTTPException(status_code=404, detail="Run non trovata")
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": error_codes.RUN_NOT_FOUND,
+                "message": "Run non trovata",
+            },
+        )
 
     d = dict(row)
 

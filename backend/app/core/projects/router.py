@@ -674,7 +674,13 @@ def update_project_canvas(
 
     try:
         if not _project_service.update_canvas(project_id, canvas):
-            raise HTTPException(404, f"Progetto '{project_id}' non trovato")
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": error_codes.PROJECT_NOT_FOUND,
+                    "message": f"Progetto '{project_id}' non trovato",
+                },
+            )
     except HTTPException:
         raise
     except ProjectLineageCycleError as e:

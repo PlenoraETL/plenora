@@ -39,6 +39,7 @@ from app.core.auth.auth import (
     group_filter,
 )
 import app.db.db_service as db
+from app.shared import error_codes
 from app.shared.audit_action import audit_action
 
 logger = get_logger(__name__)
@@ -160,7 +161,10 @@ async def create_schedule(data: ScheduleCreate, current_user: CurrentUser = Depe
         if not metadata:
             raise HTTPException(
                 status_code=404,
-                detail=f"Progetto '{data.project_id}' non trovato"
+                detail={
+                    "error": error_codes.PROJECT_NOT_FOUND,
+                    "message": f"Progetto '{data.project_id}' non trovato",
+                },
             )
         
         # Valida cron expression prima di creare
@@ -202,11 +206,23 @@ async def get_schedule(schedule_id: str, current_user: CurrentUser = Depends(req
         service = ScheduleService()
         row = db.get_schedule(schedule_id)
         if not row:
-            raise HTTPException(status_code=404, detail=f"Schedule '{schedule_id}' non trovato")
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": error_codes.SCHEDULE_NOT_FOUND,
+                    "message": f"Schedule '{schedule_id}' non trovato",
+                },
+            )
         assert_group_access(row, current_user, f"Schedule '{schedule_id}'")
         schedule = service.get_schedule(schedule_id)
         if not schedule:
-            raise HTTPException(status_code=404, detail=f"Schedule '{schedule_id}' non trovato")
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": error_codes.SCHEDULE_NOT_FOUND,
+                    "message": f"Schedule '{schedule_id}' non trovato",
+                },
+            )
         return schedule
     except HTTPException:
         raise
@@ -238,7 +254,13 @@ async def update_schedule(schedule_id: str, data: ScheduleUpdate, current_user: 
         schedule = service.update_schedule(schedule_id, data)
         
         if not schedule:
-            raise HTTPException(status_code=404, detail=f"Schedule '{schedule_id}' non trovato")
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": error_codes.SCHEDULE_NOT_FOUND,
+                    "message": f"Schedule '{schedule_id}' non trovato",
+                },
+            )
         
         return schedule
         
@@ -279,7 +301,10 @@ async def toggle_schedule(schedule_id: str, data: ScheduleToggle, current_user: 
         if not existing:
             raise HTTPException(
                 status_code=404,
-                detail=f"Schedule '{schedule_id}' non trovato"
+                detail={
+                    "error": error_codes.SCHEDULE_NOT_FOUND,
+                    "message": f"Schedule '{schedule_id}' non trovato",
+                },
             )
         schedule = service.toggle_schedule(schedule_id, data.enabled)
         if not schedule:
@@ -313,7 +338,10 @@ async def update_schedule_catchup(
         if result is None:
             raise HTTPException(
                 status_code=404,
-                detail=f"Schedule '{schedule_id}' non trovato",
+                detail={
+                    "error": error_codes.SCHEDULE_NOT_FOUND,
+                    "message": f"Schedule '{schedule_id}' non trovato",
+                },
             )
         return result
     except HTTPException:
@@ -339,7 +367,13 @@ async def run_schedule_now(schedule_id: str, current_user: CurrentUser = Depends
     schedule = service.get_schedule(schedule_id)
     
     if not schedule:
-        raise HTTPException(status_code=404, detail=f"Schedule '{schedule_id}' non trovato")
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": error_codes.SCHEDULE_NOT_FOUND,
+                "message": f"Schedule '{schedule_id}' non trovato",
+            },
+        )
     
     try:
         # Setta subito "queued" — metodo leggero, non incrementa contatori
@@ -396,7 +430,13 @@ async def download_schedule_output(
         service = ScheduleService()
         schedule = service.get_schedule(schedule_id)
         if not schedule:
-            raise HTTPException(status_code=404, detail=f"Schedule '{schedule_id}' non trovato")
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": error_codes.SCHEDULE_NOT_FOUND,
+                    "message": f"Schedule '{schedule_id}' non trovato",
+                },
+            )
 
         # SECURITY: verifica che lo schedule appartenga al gruppo dell'utente
         import app.db.db_service as _db
@@ -480,7 +520,13 @@ async def list_schedule_runs(schedule_id: str, current_user: CurrentUser = Depen
         service = ScheduleService()
         schedule = service.get_schedule(schedule_id)
         if not schedule:
-            raise HTTPException(status_code=404, detail=f"Schedule '{schedule_id}' non trovato")
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": error_codes.SCHEDULE_NOT_FOUND,
+                    "message": f"Schedule '{schedule_id}' non trovato",
+                },
+            )
 
         # SECURITY: group isolation check
         import app.db.db_service as _db
@@ -547,7 +593,13 @@ async def get_schedule_logs(
     # Verifica schedule esiste
     schedule_service = ScheduleService()
     if not schedule_service.schedule_exists(schedule_id):
-        raise HTTPException(status_code=404, detail=f"Schedule '{schedule_id}' non trovato")
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": error_codes.SCHEDULE_NOT_FOUND,
+                "message": f"Schedule '{schedule_id}' non trovato",
+            },
+        )
     
     try:
         log_service = ScheduleLogService()

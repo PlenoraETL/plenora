@@ -40,6 +40,7 @@ from app.core.carica.database_writer import DatabaseWriter
 from app.core.carica.column_mapper import ColumnMapper
 from app.core.carica.ddl_generator import DDLGenerator
 from app.core.carica.models import WriteConfig
+from app.shared import error_codes
 
 
 logger = get_logger("app.core.carica.router")
@@ -454,7 +455,10 @@ def _get_connection(connection_id: str) -> Dict[str, Any]:
             return conn.model_dump()
         raise HTTPException(
             status_code=404,
-            detail=f"Connessione '{connection_id}' non trovata"
+            detail={
+                "error": error_codes.CONNECTION_NOT_FOUND,
+                "message": f"Connessione '{connection_id}' non trovata",
+            },
         )
     raise HTTPException(
         status_code=503,

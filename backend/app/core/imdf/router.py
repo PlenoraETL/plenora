@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 
 from app.config import settings
 from app.core.auth.auth import get_current_user, CurrentUser
+from app.shared import error_codes
 from app.shared.audit_action import audit_action
 from app.shared.path_policy import validate_imdf_task_id
 from app.utils.logger import get_logger
@@ -138,7 +139,10 @@ def _assert_bundle_group_access(bundle_dir: Path, current_user: CurrentUser) -> 
         if not project:
             raise HTTPException(
                 status_code=404,
-                detail=f"Progetto '{bundle_project_id}' del bundle non trovato"
+                detail={
+                    "error": error_codes.PROJECT_NOT_FOUND,
+                    "message": f"Progetto '{bundle_project_id}' del bundle non trovato",
+                },
             )
         assert_resource_visible(project, "projects", current_user, "Progetto")
     except HTTPException:
@@ -245,11 +249,14 @@ def publish_imdf(
     if not bundle_dir.exists() or not bundle_dir.is_dir():
         raise HTTPException(
             status_code=404,
-            detail=(
-                f"Bundle IMDF '{request.bundle_task_id}' non trovato "
-                f"(potrebbe essere scaduto: TTL {settings.IMDF_BUNDLE_TTL_HOURS}h). "
-                f"Riavvia l'arricchimento per rigenerarlo."
-            ),
+            detail={
+                "error": error_codes.BUNDLE_NOT_FOUND,
+                "message": (
+                    f"Bundle IMDF '{request.bundle_task_id}' non trovato "
+                    f"(potrebbe essere scaduto: TTL {settings.IMDF_BUNDLE_TTL_HOURS}h). "
+                    f"Riavvia l'arricchimento per rigenerarlo."
+                ),
+            },
         )
     # Verifica group ownership: l'utente deve avere accesso al progetto
     # che ha generato questo bundle.
@@ -351,7 +358,10 @@ def get_bundle_metadata(
     if not bundle_dir.exists() or not bundle_dir.is_dir():
         raise HTTPException(
             status_code=404,
-            detail=f"Bundle '{bundle_task_id}' non trovato (forse scaduto)",
+            detail={
+                "error": error_codes.BUNDLE_NOT_FOUND,
+                "message": f"Bundle '{bundle_task_id}' non trovato (forse scaduto)",
+            },
         )
     # Group ownership check
     _assert_bundle_group_access(bundle_dir, current_user)
@@ -652,7 +662,10 @@ def delete_bundle(
     if not bundle_dir.exists() or not bundle_dir.is_dir():
         raise HTTPException(
             status_code=404,
-            detail=f"Bundle '{bundle_task_id}' non trovato",
+            detail={
+                "error": error_codes.BUNDLE_NOT_FOUND,
+                "message": f"Bundle '{bundle_task_id}' non trovato",
+            },
         )
     _assert_bundle_group_access(bundle_dir, current_user)
     try:

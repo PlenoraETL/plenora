@@ -57,6 +57,7 @@ _CORE_ROOT = _BACKEND_ROOT / "app" / "core"
 # aggiornare la lista; drift in meno = costante rimossa
 # accidentalmente.
 EXPECTED_DOMAIN_CODES: Set[str] = {
+    # batch 006
     "connection_in_use",
     "api_connection_in_use",
     "project_has_dependencies",
@@ -68,6 +69,28 @@ EXPECTED_DOMAIN_CODES: Set[str] = {
     "carica_launch_failed",
     "carica_scheduler_failed",
     "schedule_execution_fatal",
+    # batch 009 — Not-Found family
+    "project_not_found",
+    "task_not_found",
+    "schedule_not_found",
+    "run_not_found",
+    "bundle_not_found",
+    "connection_not_found",
+    "api_connection_not_found",
+    "file_source_not_found",
+    "datasource_not_found",
+    "ticket_not_found",
+}
+
+# Pattern accettati come `http_<status>` fallback intenzionale
+# (BE-GO-READY-ERROR-CODES-009-NOT-FOUND-PROMOTION).
+# Lockati per evitare che il drift detection li riconti come
+# residui da promuovere.
+EXPECTED_FALLBACK_PATTERNS: Set[str] = {
+    "internal_error_generic",
+    "value_error_str_e",
+    "service_init_guard",
+    "generic_access_denied",
 }
 
 EXPECTED_GLOBAL_CODES: Set[str] = {
@@ -87,9 +110,10 @@ def test_known_global_codes_matches_expected_lock():
     assert error_codes.KNOWN_GLOBAL_CODES == EXPECTED_GLOBAL_CODES
 
 
-def test_catalog_count_domain_eleven():
-    """11 codici domain (5 pre-existing + 6 added in batch 006)."""
-    assert len(error_codes.KNOWN_DOMAIN_CODES) == 11
+def test_catalog_count_domain_twentyone():
+    """21 codici domain (5 pre-existing + 6 batch 006 + 10 batch 009
+    not-found family)."""
+    assert len(error_codes.KNOWN_DOMAIN_CODES) == 21
 
 
 def test_catalog_domain_and_global_disjoint():
@@ -104,6 +128,7 @@ def test_catalog_constants_match_set_values():
     valore equivalente nel `frozenset` (no drift fra dichiarazione
     e set)."""
     domain_constants = {
+        # batch 006
         error_codes.CONNECTION_IN_USE,
         error_codes.API_CONNECTION_IN_USE,
         error_codes.PROJECT_HAS_DEPENDENCIES,
@@ -115,8 +140,58 @@ def test_catalog_constants_match_set_values():
         error_codes.CARICA_LAUNCH_FAILED,
         error_codes.CARICA_SCHEDULER_FAILED,
         error_codes.SCHEDULE_EXECUTION_FATAL,
+        # batch 009 — Not-Found family
+        error_codes.PROJECT_NOT_FOUND,
+        error_codes.TASK_NOT_FOUND,
+        error_codes.SCHEDULE_NOT_FOUND,
+        error_codes.RUN_NOT_FOUND,
+        error_codes.BUNDLE_NOT_FOUND,
+        error_codes.CONNECTION_NOT_FOUND,
+        error_codes.API_CONNECTION_NOT_FOUND,
+        error_codes.FILE_SOURCE_NOT_FOUND,
+        error_codes.DATASOURCE_NOT_FOUND,
+        error_codes.TICKET_NOT_FOUND,
     }
     assert domain_constants == set(error_codes.KNOWN_DOMAIN_CODES)
+
+
+def test_accepted_http_fallback_patterns_lock():
+    """Lock i pattern accettati come fallback intenzionale
+    (BE-GO-READY-ERROR-CODES-009). Riduce il drift detection
+    paranoico sui ~165 string-detail intenzionalmente lasciati
+    come `http_<status>` (vedi audit 008)."""
+    assert error_codes.ACCEPTED_HTTP_FALLBACK_PATTERNS == EXPECTED_FALLBACK_PATTERNS
+
+
+def test_accepted_http_fallback_patterns_disjoint_from_codes():
+    """I pattern fallback NON sono codici emettibili: vivono in un
+    set separato. Drift fail = qualcuno ha confuso un pattern con
+    un codice domain."""
+    overlap = (
+        error_codes.ACCEPTED_HTTP_FALLBACK_PATTERNS
+        & (error_codes.KNOWN_DOMAIN_CODES | error_codes.KNOWN_GLOBAL_CODES)
+    )
+    assert overlap == set(), f"Overlap pattern/codici: {overlap}"
+
+
+def test_not_found_family_uses_consistent_suffix():
+    """Tutti i 10 codici not-found family hanno suffisso `_not_found`."""
+    not_found_codes = {
+        error_codes.PROJECT_NOT_FOUND,
+        error_codes.TASK_NOT_FOUND,
+        error_codes.SCHEDULE_NOT_FOUND,
+        error_codes.RUN_NOT_FOUND,
+        error_codes.BUNDLE_NOT_FOUND,
+        error_codes.CONNECTION_NOT_FOUND,
+        error_codes.API_CONNECTION_NOT_FOUND,
+        error_codes.FILE_SOURCE_NOT_FOUND,
+        error_codes.DATASOURCE_NOT_FOUND,
+        error_codes.TICKET_NOT_FOUND,
+    }
+    for code in not_found_codes:
+        assert code.endswith("_not_found"), (
+            f"Codice not-found `{code}` non rispetta convenzione suffisso."
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -377,6 +452,7 @@ def test_router_constant_refs_find_baseline():
     """
     found = _scan_router_constant_refs()
     baseline_constants_must_appear = {
+        # batch 007 (in-use family)
         "CONNECTION_IN_USE",
         "API_CONNECTION_IN_USE",
         "DATASOURCE_IN_USE",
@@ -388,6 +464,17 @@ def test_router_constant_refs_find_baseline():
         "CARICA_LAUNCH_FAILED",
         "CARICA_SCHEDULER_FAILED",
         "SCHEDULE_EXECUTION_FATAL",
+        # batch 009 (not-found family)
+        "PROJECT_NOT_FOUND",
+        "TASK_NOT_FOUND",
+        "SCHEDULE_NOT_FOUND",
+        "RUN_NOT_FOUND",
+        "BUNDLE_NOT_FOUND",
+        "CONNECTION_NOT_FOUND",
+        "API_CONNECTION_NOT_FOUND",
+        "FILE_SOURCE_NOT_FOUND",
+        "DATASOURCE_NOT_FOUND",
+        "TICKET_NOT_FOUND",
     }
     missing = baseline_constants_must_appear - found
     assert missing == set(), (

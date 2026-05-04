@@ -21,6 +21,7 @@ from typing import Literal, Optional, Dict, Any, List
 
 from app.config import settings
 from app.utils.logger import get_logger
+from app.shared import error_codes
 from app.shared.models import ExecuteRequest
 from app.services.task_service import TaskType
 from app.utils.router_utils import require_service
@@ -59,7 +60,13 @@ def _assert_project_group(project_id: str, current_user) -> None:
     from app.services.project_service import ProjectService
     meta = ProjectService().get_project_metadata(project_id)
     if not meta:
-        raise HTTPException(404, f"Progetto '{project_id}' non trovato")
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": error_codes.PROJECT_NOT_FOUND,
+                "message": f"Progetto '{project_id}' non trovato",
+            },
+        )
     assert_group_access(meta, current_user, f"Progetto '{project_id}'")
 
 
@@ -80,7 +87,13 @@ def _assert_task_group(task_id: str, current_user) -> None:
             f"[GESTITO] _assert_task_group: lookup task_id={task_id} fallito: {e}",
             exc_info=True,
         )
-        raise HTTPException(404, f"Task '{task_id}' non trovato")
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": error_codes.TASK_NOT_FOUND,
+                "message": f"Task '{task_id}' non trovato",
+            },
+        )
 
     project_id = getattr(task_info, "project_id", None)
     if not project_id and task_info.result:
@@ -89,7 +102,13 @@ def _assert_task_group(task_id: str, current_user) -> None:
     if not project_id:
         # Task senza project_id: accessibile solo ad admin+
         if current_user.role not in ("admin", "superadmin"):
-            raise HTTPException(404, "Task non trovato")
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": error_codes.TASK_NOT_FOUND,
+                    "message": "Task non trovato",
+                },
+            )
         return
 
     from app.services.project_service import ProjectService
@@ -105,9 +124,21 @@ def _assert_task_group(task_id: str, current_user) -> None:
         if record:
             _check_visible(record, current_user)
         elif current_user.role not in ("admin", "superadmin"):
-            raise HTTPException(404, "Task non trovato")
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": error_codes.TASK_NOT_FOUND,
+                    "message": "Task non trovato",
+                },
+            )
     elif current_user.role not in ("admin", "superadmin"):
-        raise HTTPException(404, "Task non trovato")
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": error_codes.TASK_NOT_FOUND,
+                "message": "Task non trovato",
+            },
+        )
 
 
 # Due router: uno per pipeline (prefix projects) e uno per tasks
@@ -438,7 +469,13 @@ def get_task_status(task_id: str, current_user: CurrentUser = Depends(get_curren
         result["progress"] = int(result.get("progress") or 0)
 
         if result.get("status") == "pending" and not result.get("created_at"):
-            raise HTTPException(status_code=404, detail=f"Task {task_id} non trovato")
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": error_codes.TASK_NOT_FOUND,
+                    "message": f"Task {task_id} non trovato",
+                },
+            )
 
         return JSONResponse(content=_sanitize(result))
 
@@ -448,7 +485,13 @@ def get_task_status(task_id: str, current_user: CurrentUser = Depends(get_curren
     # detail fisso: task_id e' input utente, niente interpolazione in response
     except Exception as e:
         logger.error(f"[CRASH] Errore lettura stato task {task_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=404, detail="Task non trovato")
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": error_codes.TASK_NOT_FOUND,
+                "message": "Task non trovato",
+            },
+        )
 
 
 @tasks_router.delete("/{task_id}")

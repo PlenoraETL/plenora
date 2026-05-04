@@ -46,6 +46,7 @@ from fastapi import HTTPException
 
 from app.core.auth.auth import CurrentUser
 from app.db import tickets_db_service as tdb
+from app.shared import error_codes
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -208,9 +209,24 @@ def _can_edit_privileged_fields(ticket: Dict[str, Any], actor: CurrentUser) -> b
 def check_access(ticket: Optional[Dict[str, Any]], actor: CurrentUser) -> Dict[str, Any]:
     """Raise 404 se ticket inesistente, 403 se non autorizzato, else ritorna ticket."""
     if not ticket:
-        raise HTTPException(404, "Ticket non trovato")
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": error_codes.TICKET_NOT_FOUND,
+                "message": "Ticket non trovato",
+            },
+        )
     if not _can_view(ticket, actor):
-        raise HTTPException(404, "Ticket non trovato")  # 404 per non leakare esistenza
+        # 404 per non leakare esistenza: stesso codice/message del
+        # ticket realmente assente, l'access-denied resta indistinguibile
+        # dal not-found dal punto di vista del client.
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": error_codes.TICKET_NOT_FOUND,
+                "message": "Ticket non trovato",
+            },
+        )
     return ticket
 
 
@@ -447,14 +463,26 @@ def delete_ticket(
         file_source_ids = [a["file_source_id"] for a in attachments]
         ok = tdb.delete_ticket(ticket_id)
         if not ok:
-            raise HTTPException(404, "Ticket non trovato")
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": error_codes.TICKET_NOT_FOUND,
+                    "message": "Ticket non trovato",
+                },
+            )
         return {"ok": True, "hard": True, "orphaned_file_source_ids": file_source_ids}
 
     # Soft delete (default): nessun cleanup blob (gli allegati restano
     # accessibili per recovery/audit, file_source non orfanato).
     ok = tdb.soft_delete_ticket(ticket_id)
     if not ok:
-        raise HTTPException(404, "Ticket non trovato")
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": error_codes.TICKET_NOT_FOUND,
+                "message": "Ticket non trovato",
+            },
+        )
     return {"ok": True, "hard": False, "orphaned_file_source_ids": []}
 
 

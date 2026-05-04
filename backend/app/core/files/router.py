@@ -106,6 +106,7 @@ def _assert_path_within(child: Path, parent: Path, label: str = "Percorso") -> P
 from app.services.file_service import file_source_service
 from app.config import settings
 from app.utils.logger import get_logger
+from app.shared import error_codes
 from app.shared.audit_action import audit_action
 from app.core.auth.auth import (
     get_current_user,
@@ -139,7 +140,13 @@ def _check_file_ownership(file_id: str, group_id: str, is_superadmin: bool = Fal
         return
     row = _db_files.get_file_source(file_id, include_data=False)
     if not row:
-        raise HTTPException(status_code=404, detail=f"File source '{file_id}' non trovato")
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": error_codes.FILE_SOURCE_NOT_FOUND,
+                "message": f"File source '{file_id}' non trovato",
+            },
+        )
     if row.get("group_id") != group_id:
         raise HTTPException(status_code=403, detail="Accesso negato")
 
@@ -504,7 +511,13 @@ def delete_file(file_id: str, current_user: CurrentUser = Depends(require_file_o
     """Elimina un file source e tutti i suoi file. Solo owner o admin."""
     success = file_source_service.delete_file_source(file_id)
     if not success:
-        raise HTTPException(status_code=404, detail=f"File source '{file_id}' non trovato")
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": error_codes.FILE_SOURCE_NOT_FOUND,
+                "message": f"File source '{file_id}' non trovato",
+            },
+        )
     # F2-B3 (2026-04-24): DELETE risponde 204 No Content, body vuoto.
 
 

@@ -21,6 +21,7 @@ from app.core.auth.auth import (
     group_filter,
 )
 from app.core.intermediate import db as idb
+from app.shared import error_codes
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -627,7 +628,13 @@ def pin_run(
         effective_group = (run or {}).get("group_id") or current_user.group_id
         ok = idb.pin_run(run_id, effective_group, pinned=body.pinned)
         if not ok:
-            raise HTTPException(status_code=404, detail=f"Run {run_id} non trovata")
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": error_codes.RUN_NOT_FOUND,
+                    "message": f"Run {run_id} non trovata",
+                },
+            )
         return {"run_id": run_id, "pinned": body.pinned}
     except HTTPException:
         raise
