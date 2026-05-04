@@ -413,6 +413,21 @@ class Settings:
         # nodo api_enrich). Solo "final_only" ammesso in Batch 1.
         "ARRICCHISCI_INTERMEDIATE_CHECKPOINTS": "final_only",
 
+        # ==================== ADMIN BACKUPS POLICY (BE-GO-READY-CONFIG-BOUNDARY-001) ====================
+        # Backup amministrativi: cron schedule + descrizione UI-readable.
+        # Classificate APP_POLICY/OPERATIONAL_TUNING in ADR-0021 §"Config
+        # boundary": stringhe consumate da `get_schedule_info()` per
+        # l'endpoint admin di metadata. La schedule reale e' gestita a
+        # livello deployment (systemd timer / Celery beat / K8s CronJob);
+        # questi default sono i valori esposti al FE quando l'env e'
+        # unset, e devono essere overridabili via env per allineare il
+        # display alla schedule effettivamente configurata sul deployment.
+        # NOTA: `BACKUP_BUCKET`, `BACKUP_S3_BUCKET`, `AWS_REGION` restano
+        # DEPLOY_INFRA env-only (gia' centralizzati in
+        # `cloud_backends._resolve_backup_bucket()` / `_build_object_storage`).
+        "BACKUP_SCHEDULE_CRON": "0 2 * * *",
+        "BACKUP_SCHEDULE_DESCRIPTION": "Daily 02:00 UTC (+ jitter fino a 5 min)",
+
         # ==================== ARTIFACT STORE ====================
         # Bucket dedicato runtime artifact intermedi (full_artifact).
         # Separato da BACKUP_BUCKET (IAM boundary distinto) e dal

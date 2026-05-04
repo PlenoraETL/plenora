@@ -32,9 +32,8 @@ from __future__ import annotations
 from fastapi import HTTPException
 
 import app.db.db_service as db
+from app.core.auth import disclosure as _disclosure
 from app.core.auth.models import CurrentUser
-from app.shared import error_codes
-from app.shared.error_envelope import raise_typed_http
 
 
 def _extract_group_and_id(resource):
@@ -54,7 +53,7 @@ def assert_group_access(
 
     Sostituisce il pattern duplicato:
         if current_user.role != "superadmin" and resource.group_id != current_user.group_id:
-            raise_typed_http(error_codes.ACCESS_DENIED, 403, "Accesso negato")
+            disclosure.raise_disclosure(disclosure.access_denied())
 
     - 404 se `resource` è None.
     - 403 se l'utente non è superadmin e il gruppo della risorsa non combacia.
@@ -74,11 +73,7 @@ def assert_group_access(
 
     resource_group, _ = _extract_group_and_id(resource)
     if resource_group != current_user.group_id:
-        raise_typed_http(
-            code=error_codes.ACCESS_DENIED,
-            status_code=403,
-            message="Accesso negato",
-        )
+        _disclosure.raise_disclosure(_disclosure.access_denied())
 
 
 def compute_can_edit(
@@ -149,11 +144,7 @@ def assert_can_modify(
 
     resource_group, _ = _extract_group_and_id(resource)
     if resource_group != current_user.group_id:
-        raise_typed_http(
-            code=error_codes.ACCESS_DENIED,
-            status_code=403,
-            message="Accesso negato",
-        )
+        _disclosure.raise_disclosure(_disclosure.access_denied())
 
     # Hierarchical check: chi l'ha creata?
     if isinstance(resource, dict):
@@ -165,10 +156,8 @@ def assert_can_modify(
         # Lookup live del ruolo del creator
         creator = db.get_user(created_by)
         if creator and creator.get("role") == "superadmin":
-            raise_typed_http(
-                code=error_codes.AUTH_HIERARCHICAL_OWNER_REQUIRED,
-                status_code=403,
-                message=f"{label} creata da un superadmin: solo un superadmin può modificarla",
+            _disclosure.raise_disclosure(
+                _disclosure.hierarchical_owner_required(label)
             )
 
     # Owned dal proprio gruppo, NON creato da un superadmin → ok
@@ -218,11 +207,7 @@ def assert_resource_visible(
         ):
             return
 
-    raise_typed_http(
-        code=error_codes.ACCESS_DENIED,
-        status_code=403,
-        message="Accesso negato",
-    )
+    _disclosure.raise_disclosure(_disclosure.access_denied())
 
 
 def _check_ownership(
@@ -250,11 +235,7 @@ def _check_ownership(
 
     # Filtro gruppo (superadmin bypassa)
     if not is_super and resource.get("group_id") != current_user.group_id:
-        raise_typed_http(
-            code=error_codes.ACCESS_DENIED,
-            status_code=403,
-            message="Accesso negato",
-        )
+        _disclosure.raise_disclosure(_disclosure.access_denied())
 
     # Owner check: created_by deve combaciare oppure admin/superadmin
     created_by = resource.get("created_by")
@@ -263,8 +244,4 @@ def _check_ownership(
     if created_by and created_by == current_user.user_id:
         return  # sei tu l'owner
 
-    raise_typed_http(
-        code=error_codes.AUTH_OWNER_ONLY,
-        status_code=403,
-        message=f"Permesso negato: solo l'owner del {resource_label.lower()} o un admin può eseguire questa operazione",
-    )
+    _disclosure.raise_disclosure(_disclosure.owner_only_required(resource_label))

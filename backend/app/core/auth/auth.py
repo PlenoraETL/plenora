@@ -37,6 +37,7 @@ import app.config  # noqa: F401
 from app.config import settings as _settings
 import app.db.db_service as db
 import app.db.config_db_service as cfg_db
+from app.core.auth import disclosure as _disclosure
 from app.shared import error_codes
 from app.shared.audit_action import audit_action
 from app.shared.error_envelope import raise_typed_http
@@ -106,14 +107,8 @@ def _check_rate_limit_in_memory(ip: str):
         if len(_failed_attempts[ip]) >= LOGIN_MAX_ATTEMPTS:
             oldest = _failed_attempts[ip][0]
             retry_after = int(LOGIN_LOCKOUT_SECONDS - (now - oldest))
-            raise_typed_http(
-                code=error_codes.AUTH_RATE_LIMIT_EXCEEDED,
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                message=(
-                    f"Troppi tentativi. Riprova tra "
-                    f"{max(retry_after, 1)} secondi."
-                ),
-                headers={"Retry-After": str(max(retry_after, 1))},
+            _disclosure.raise_disclosure(
+                _disclosure.rate_limit_exceeded(retry_after)
             )
 
 
@@ -235,20 +230,10 @@ def get_current_user(
 ) -> CurrentUser:
     """Inietta l'utente autenticato. 401 se token mancante o invalido."""
     if credentials is None:
-        raise_typed_http(
-            code=error_codes.AUTH_TOKEN_MISSING,
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            message="Token mancante",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        _disclosure.raise_disclosure(_disclosure.token_missing())
     payload = decode_token(credentials.credentials)
     if payload is None:
-        raise_typed_http(
-            code=error_codes.AUTH_TOKEN_INVALID,
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            message="Token invalido o scaduto",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        _disclosure.raise_disclosure(_disclosure.token_invalid())
     # Blacklist check: se il jti e' stato revocato via /auth/logout,
     # rifiuta anche se la signature+exp sarebbero valide. Precede la
     # query DB (piu' economico di un SELECT users).
@@ -256,19 +241,10 @@ def get_current_user(
     # → `is_jti_blacklisted(None)` False → passa, come prima.
     from app.shared.token_blacklist import is_jti_blacklisted
     if is_jti_blacklisted(payload.get("jti")):
-        raise_typed_http(
-            code=error_codes.AUTH_TOKEN_REVOKED,
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            message="Token revocato",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        _disclosure.raise_disclosure(_disclosure.token_revoked())
     user = db.get_user(payload["sub"])
     if not user or not user.get("is_active"):
-        raise_typed_http(
-            code=error_codes.AUTH_USER_NOT_FOUND_OR_DISABLED,
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            message="Utente non trovato o disabilitato",
-        )
+        _disclosure.raise_disclosure(_disclosure.user_not_found_or_disabled())
     return CurrentUser(
         user_id=payload["sub"],
         username=payload["username"],
@@ -283,11 +259,7 @@ def require_user_or_above(current_user: CurrentUser = Depends(get_current_user))
     esecutore non vede nemmeno la UI di gestione risorse.
     """
     if current_user.role not in ROLES_ABOVE_VIEWER:
-        raise_typed_http(
-            code=error_codes.AUTH_ROLE_INSUFFICIENT_FOR_WRITE,
-            status_code=403,
-            message="Permesso negato: i viewer/esecutori non possono creare/modificare risorse",
-        )
+        _disclosure.raise_disclosure(_disclosure.role_insufficient_for_write())
     return current_user
 
 def require_not_esecutore(current_user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
@@ -298,31 +270,19 @@ def require_not_esecutore(current_user: CurrentUser = Depends(get_current_user))
     ruolo kiosk esecutore (che vede SOLO gli eseguibili del proprio gruppo).
     """
     if current_user.role in ROLES_KIOSK_ONLY:
-        raise_typed_http(
-            code=error_codes.AUTH_ROLE_KIOSK_ONLY,
-            status_code=403,
-            message="Permesso negato: questo endpoint non è accessibile al ruolo esecutore",
-        )
+        _disclosure.raise_disclosure(_disclosure.role_kiosk_only())
     return current_user
 
 def require_admin(current_user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
     """Richiede ruolo admin o superadmin."""
     if current_user.role not in ROLES_ADMIN_OR_ABOVE:
-        raise_typed_http(
-            code=error_codes.AUTH_ROLE_ADMIN_REQUIRED,
-            status_code=403,
-            message="Permesso negato: richiesto ruolo admin",
-        )
+        _disclosure.raise_disclosure(_disclosure.role_admin_required())
     return current_user
 
 def require_superadmin(current_user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
     """Richiede ruolo superadmin."""
     if current_user.role != "superadmin":
-        raise_typed_http(
-            code=error_codes.AUTH_ROLE_SUPERADMIN_REQUIRED,
-            status_code=403,
-            message="Permesso negato: richiesto ruolo superadmin",
-        )
+        _disclosure.raise_disclosure(_disclosure.role_superadmin_required())
     return current_user
 
 def group_filter(current_user: CurrentUser) -> Optional[str]:
@@ -414,17 +374,9 @@ def login(data: LoginRequest, request: Request):
     password_ok = verify_password(data.password, password_hash)
     if not user or not password_ok:
         _record_failed_login(client_ip)
-        raise_typed_http(
-            code=error_codes.AUTH_INVALID_CREDENTIALS,
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            message="Username o password errati",
-        )
+        _disclosure.raise_disclosure(_disclosure.invalid_credentials())
     if not user.get("is_active"):
-        raise_typed_http(
-            code=error_codes.AUTH_ACCOUNT_DISABLED,
-            status_code=403,
-            message="Account disabilitato",
-        )
+        _disclosure.raise_disclosure(_disclosure.account_disabled())
 
     # MFA opt-in: se l'utente ha MFA attiva, il codice TOTP e' richiesto.
     # Se MFA non e' attiva, il comportamento e' invariato (nessun impatto).
@@ -434,18 +386,10 @@ def login(data: LoginRequest, request: Request):
     from app.core.auth import mfa as _mfa
     if _mfa.is_enabled(user["id"]):
         if not data.mfa_code:
-            raise_typed_http(
-                code=error_codes.AUTH_MFA_REQUIRED,
-                status_code=status.HTTP_403_FORBIDDEN,
-                message="mfa_required",
-            )
+            _disclosure.raise_disclosure(_disclosure.mfa_required())
         if not _mfa.verify_code(user["id"], data.mfa_code):
             _record_failed_login(client_ip)
-            raise_typed_http(
-                code=error_codes.AUTH_MFA_INVALID,
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                message="mfa_invalid",
-            )
+            _disclosure.raise_disclosure(_disclosure.mfa_invalid())
 
     _clear_failed_logins(client_ip)
 
@@ -491,20 +435,10 @@ def logout(
       e' effettiva per non cambiare security posture inconsapevolmente.
     """
     if credentials is None:
-        raise_typed_http(
-            code=error_codes.AUTH_TOKEN_MISSING,
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            message="Token mancante",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        _disclosure.raise_disclosure(_disclosure.token_missing())
     payload = decode_token(credentials.credentials)
     if payload is None:
-        raise_typed_http(
-            code=error_codes.AUTH_TOKEN_INVALID,
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            message="Token invalido o scaduto",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        _disclosure.raise_disclosure(_disclosure.token_invalid())
     jti = payload.get("jti")
     exp = payload.get("exp")
     if not jti or not exp:
@@ -520,11 +454,7 @@ def logout(
 
     from app.shared.token_blacklist import blacklist_jti
     if not blacklist_jti(jti, ttl):
-        raise_typed_http(
-            code=error_codes.AUTH_REVOCATION_UNAVAILABLE,
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            message="Servizio di revoca token non disponibile, riprova",
-        )
+        _disclosure.raise_disclosure(_disclosure.revocation_unavailable())
     logger.info(f"Logout: jti blacklistato, ttl={ttl}s", op="logout")
     return {"ok": True, "blacklisted": True, "ttl": ttl}
 
@@ -536,11 +466,7 @@ def get_me(current_user: CurrentUser = Depends(get_current_user)):
     """Profilo dell'utente corrente. Qualsiasi autenticato."""
     user = db.get_user(current_user.user_id)
     if not user:
-        raise_typed_http(
-            code=error_codes.USER_NOT_FOUND,
-            status_code=404,
-            message="Utente non trovato",
-        )
+        _disclosure.raise_disclosure(_disclosure.user_not_found())
     return UserResponse(**{k: user[k] for k in UserResponse.model_fields if k in user})
 
 
@@ -556,11 +482,7 @@ def change_password(
     """
     user = db.get_user(current_user.user_id)
     if not user:
-        raise_typed_http(
-            code=error_codes.USER_NOT_FOUND,
-            status_code=404,
-            message="Utente non trovato",
-        )
+        _disclosure.raise_disclosure(_disclosure.user_not_found())
 
     if not verify_password(data.old_password, user["password_hash"]):
         raise HTTPException(status_code=400, detail="Password attuale errata")
@@ -609,11 +531,7 @@ def mfa_verify(
     """
     from app.core.auth import mfa as _mfa
     if not _mfa.verify_enrollment(current_user.user_id, data.code):
-        raise_typed_http(
-            code=error_codes.AUTH_MFA_CODE_INVALID,
-            status_code=400,
-            message="Codice MFA non valido",
-        )
+        _disclosure.raise_disclosure(_disclosure.mfa_code_invalid())
     return {"ok": True, "enabled": True}
 
 
@@ -630,11 +548,7 @@ def mfa_disable(
     """
     from app.core.auth import mfa as _mfa
     if not _mfa.disable(current_user.user_id, data.code):
-        raise_typed_http(
-            code=error_codes.AUTH_MFA_CODE_INVALID,
-            status_code=400,
-            message="Codice MFA non valido",
-        )
+        _disclosure.raise_disclosure(_disclosure.mfa_code_invalid())
     return {"ok": True, "enabled": False}
 
 
@@ -673,10 +587,8 @@ def create_user(data: UserCreate, current_user: CurrentUser = Depends(require_ad
         # admin: forza il proprio gruppo e impedisce di creare admin/superadmin
         data.group_id = current_user.group_id
         if data.role in ROLES_ADMIN_OR_ABOVE:
-            raise_typed_http(
-                code=error_codes.AUTH_ROLE_CREATE_PRIVILEGE_REQUIRED,
-                status_code=403,
-                message="Solo un superadmin può creare utenti admin o superadmin",
+            _disclosure.raise_disclosure(
+                _disclosure.role_create_privilege_required()
             )
 
     if len(data.password) < 12:
@@ -684,11 +596,7 @@ def create_user(data: UserCreate, current_user: CurrentUser = Depends(require_ad
 
     existing = db.get_user_by_username(data.username)
     if existing:
-        raise_typed_http(
-            code=error_codes.USERNAME_ALREADY_EXISTS,
-            status_code=409,
-            message="Username già esistente",
-        )
+        _disclosure.raise_disclosure(_disclosure.username_already_exists())
 
     user_id = f"usr_{uuid.uuid4().hex[:12]}"
     user = db.create_user(
@@ -717,17 +625,9 @@ def update_user(user_id: str, data: dict,
     """
     target = db.get_user(user_id)
     if not target:
-        raise_typed_http(
-            code=error_codes.USER_NOT_FOUND,
-            status_code=404,
-            message="Utente non trovato",
-        )
+        _disclosure.raise_disclosure(_disclosure.user_not_found())
     if current_user.role != "superadmin" and target.get("group_id") != current_user.group_id:
-        raise_typed_http(
-            code=error_codes.ACCESS_DENIED,
-            status_code=403,
-            message="Accesso negato",
-        )
+        _disclosure.raise_disclosure(_disclosure.access_denied())
 
     # Fail-fast sui campi sensibili non gestiti qui: meglio errore esplicito
     # del drop silenzioso. Storicamente il frontend mandava `password` nel
@@ -741,11 +641,7 @@ def update_user(user_id: str, data: dict,
     # group_id non e' aggiornabile qui: spostare un utente tra gruppi
     # e' operazione separata (nessun endpoint implementato oggi).
     if "group_id" in data and current_user.role != "superadmin":
-        raise_typed_http(
-            code=error_codes.AUTH_FIELD_ROLE_RESTRICTED,
-            status_code=403,
-            message="Solo superadmin puo' modificare group_id",
-        )
+        _disclosure.raise_disclosure(_disclosure.field_role_restricted_group_id())
 
     allowed = ["email", "is_active"]
     if current_user.role == "superadmin":
@@ -783,25 +679,13 @@ def update_user(user_id: str, data: dict,
     # Self-demotion guard: un utente non può abbassarsi i privilegi né disabilitarsi
     if user_id == current_user.user_id:
         if "role" in fields and fields["role"] != current_user.role:
-            raise_typed_http(
-                code=error_codes.AUTH_SELF_MODIFY_DENIED,
-                status_code=403,
-                message="Non puoi modificare il tuo stesso ruolo",
-            )
+            _disclosure.raise_disclosure(_disclosure.self_modify_denied())
         if "is_active" in fields and fields["is_active"] is False:
-            raise_typed_http(
-                code=error_codes.AUTH_SELF_DISABLE_DENIED,
-                status_code=403,
-                message="Non puoi disabilitare il tuo stesso account",
-            )
+            _disclosure.raise_disclosure(_disclosure.self_disable_denied())
 
     updated = db.update_user(user_id, **fields)
     if not updated:
-        raise_typed_http(
-            code=error_codes.USER_NOT_FOUND,
-            status_code=404,
-            message="Utente non trovato",
-        )
+        _disclosure.raise_disclosure(_disclosure.user_not_found())
     return UserResponse(**{k: updated[k] for k in UserResponse.model_fields if k in updated})
 
 @router.post("/users/{user_id}/reset-password")
@@ -824,16 +708,12 @@ def reset_password(user_id: str, data: ResetPasswordRequest,
         current_user.role != "superadmin"
         and target.get("group_id") != current_user.group_id
     ):
-        if current_user.role == "superadmin":
-            raise_typed_http(
-                code=error_codes.USER_NOT_FOUND,
-                status_code=404,
-                message="Utente non trovato",
+        # Anti-enum #3 — invariante encoded in disclosure.admin_target_not_visible:
+        # superadmin sees 404 USER_NOT_FOUND, admin sees uniform 403 ACCESS_DENIED.
+        _disclosure.raise_disclosure(
+            _disclosure.admin_target_not_visible(
+                is_superadmin=(current_user.role == "superadmin")
             )
-        raise_typed_http(
-            code=error_codes.ACCESS_DENIED,
-            status_code=403,
-            message="Accesso negato",
         )
 
     if len(data.new_password) < 12:
@@ -851,37 +731,22 @@ def delete_user(user_id: str, current_user: CurrentUser = Depends(require_admin)
     admin      → solo nel proprio gruppo, non se stesso
     """
     if user_id == current_user.user_id:
-        raise_typed_http(
-            code=error_codes.AUTH_SELF_DELETE_DENIED,
-            status_code=400,
-            message="Non puoi eliminare te stesso",
-        )
+        _disclosure.raise_disclosure(_disclosure.self_delete_denied())
 
     target = db.get_user(user_id)
-    # C10: stesso pattern di reset-password — 403 uniforme per admin
-    # non-superadmin, evita enumeration.
+    # C10: stesso pattern di reset-password — anti-enum #3 invariant.
     if not target or (
         current_user.role != "superadmin"
         and target.get("group_id") != current_user.group_id
     ):
-        if current_user.role == "superadmin":
-            raise_typed_http(
-                code=error_codes.USER_NOT_FOUND,
-                status_code=404,
-                message="Utente non trovato",
+        _disclosure.raise_disclosure(
+            _disclosure.admin_target_not_visible(
+                is_superadmin=(current_user.role == "superadmin")
             )
-        raise_typed_http(
-            code=error_codes.ACCESS_DENIED,
-            status_code=403,
-            message="Accesso negato",
         )
 
     if not db.delete_user(user_id):
-        raise_typed_http(
-            code=error_codes.USER_NOT_FOUND,
-            status_code=404,
-            message="Utente non trovato",
-        )
+        _disclosure.raise_disclosure(_disclosure.user_not_found())
 
 # ============================================================
 # ROUTER GRUPPI
@@ -917,11 +782,7 @@ def create_group(data: GroupCreate,
                  current_user: CurrentUser = Depends(require_superadmin)):
     """Crea nuovo gruppo (solo superadmin)."""
     if db.get_group(data.group_id):
-        raise_typed_http(
-            code=error_codes.GROUP_ID_ALREADY_EXISTS,
-            status_code=409,
-            message="group_id già esistente",
-        )
+        _disclosure.raise_disclosure(_disclosure.group_id_already_exists())
     group = db.create_group(data.group_id, data.name, data.description)
     return GroupResponse(group_id=group["id"], name=group["name"], description=group.get("description", ""))
 
@@ -934,11 +795,7 @@ def get_group_summary(group_id: str,
     """
     import app.db.config_db_service as cfg_db
     if not cfg_db.get_group(group_id):
-        raise_typed_http(
-            code=error_codes.GROUP_NOT_FOUND,
-            status_code=404,
-            message="Gruppo non trovato",
-        )
+        _disclosure.raise_disclosure(_disclosure.group_not_found())
     return cfg_db.get_group_summary(group_id)
 
 
@@ -954,17 +811,9 @@ def delete_group(group_id: str,
     """
     import app.db.config_db_service as cfg_db
     if group_id == "default":
-        raise_typed_http(
-            code=error_codes.GROUP_DEFAULT_NOT_DELETABLE,
-            status_code=400,
-            message="Il gruppo 'default' non può essere eliminato",
-        )
+        _disclosure.raise_disclosure(_disclosure.group_default_not_deletable())
     if not cfg_db.get_group(group_id):
-        raise_typed_http(
-            code=error_codes.GROUP_NOT_FOUND,
-            status_code=404,
-            message="Gruppo non trovato",
-        )
+        _disclosure.raise_disclosure(_disclosure.group_not_found())
 
     try:
         report = cfg_db.delete_group_cascade(group_id)

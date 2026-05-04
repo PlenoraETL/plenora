@@ -123,9 +123,15 @@ def test_value_error_str_e_lock_exists_in_catalog_test():
 #   read, lru_cache su raw value).
 # - `app/utils/zip_safe.py`: zip uncompressed-bytes cap env reads
 #   (operator-tunable).
-# - `app/core/admin_backups/service.py`: legacy backup env reads.
-#   FLAGGED come residuo da migrare a Settings.DEFAULTS in batch
-#   dedicato (vedi BE_RULES "next bounded task").
+# - `app/core/admin_backups/service.py`: 1 env read residua per
+#   `AWS_REGION` (DEPLOY_INFRA). I 4 reads `BACKUP_BUCKET` /
+#   `BACKUP_S3_BUCKET` / `BACKUP_SCHEDULE_CRON` /
+#   `BACKUP_SCHEDULE_DESCRIPTION` sono stati chiusi in
+#   BE-GO-READY-CONFIG-BOUNDARY-001 (BACKUP_BUCKET delega a
+#   `cloud_backends._resolve_backup_bucket`; le 2 schedule string
+#   sono migrate a `Settings.DEFAULTS`). Il legacy `BACKUP_S3_REGION`
+#   era un dead alias e viene retirato. `AWS_REGION` resta DEPLOY_INFRA
+#   env-only per coerenza con il pattern in `cloud_backends._build_object_storage`.
 ALLOWLIST_GETENV_COUNTS: Dict[str, int] = {
     "app/config.py": 5,
     "app/main.py": 2,
@@ -136,7 +142,7 @@ ALLOWLIST_GETENV_COUNTS: Dict[str, int] = {
     "app/shared/jwt_token.py": 3,
     "app/shared/request_utils.py": 1,
     "app/utils/zip_safe.py": 1,
-    "app/core/admin_backups/service.py": 6,
+    "app/core/admin_backups/service.py": 1,
 }
 
 

@@ -71,17 +71,21 @@ def _to_datetime(value: Any) -> datetime:
 
 
 # ── Config — nomi canonical allineati a cloud_backends.py ─────────────────
+#
+# BE-GO-READY-CONFIG-BOUNDARY-001 (ADR-0021):
+# - `BUCKET` -> delega a `cloud_backends._resolve_backup_bucket()`
+#   (DEPLOY_INFRA, env-only) che gia' centralizza la chain
+#   `BACKUP_BUCKET` -> legacy `BACKUP_S3_BUCKET`. Fallback hardcoded
+#   preservato come prima per deployment legacy senza env.
+# - `REGION` -> single env read `AWS_REGION` (DEPLOY_INFRA). Il
+#   legacy alias `BACKUP_S3_REGION` era un dead alias (zero altri
+#   consumer in repo) e viene retirato qui.
+# - schedule cron / description -> `Settings.DEFAULTS` (APP_POLICY).
 
-BUCKET = (
-    os.getenv("BACKUP_BUCKET")
-    or os.getenv("BACKUP_S3_BUCKET")
-    or "plenora-backup-112011134642-eu-south-1-an"
-)
-REGION = (
-    os.getenv("AWS_REGION")
-    or os.getenv("BACKUP_S3_REGION")
-    or "eu-south-1"
-)
+from app.shared.cloud_backends import _resolve_backup_bucket as _resolve_backup_bucket_env
+
+BUCKET = _resolve_backup_bucket_env() or "plenora-backup-112011134642-eu-south-1-an"
+REGION = os.getenv("AWS_REGION", "eu-south-1")
 
 # Lock file per evitare trigger concorrenti via API
 MANUAL_LOCK_FILE = Path("/tmp/plenora-backup-manual.lock")
@@ -282,8 +286,13 @@ def get_schedule_info() -> Dict[str, Any]:
         timer_active (bool), next_run (ISO), last_run (ISO), schedule_cron,
         description, timezone.
     """
-    schedule_cron = os.getenv("BACKUP_SCHEDULE_CRON", "0 2 * * *")
-    description = os.getenv(
+    # BE-GO-READY-CONFIG-BOUNDARY-001: schedule cron + descrizione
+    # leggibili dalla UI. APP_POLICY/OPERATIONAL_TUNING (ADR-0021):
+    # passano per `Settings.DEFAULTS` + `settings.get(...)`. Override
+    # env preservato dalla `Settings.get` chain.
+    from app.config import settings
+    schedule_cron = settings.get("BACKUP_SCHEDULE_CRON", "0 2 * * *")
+    description = settings.get(
         "BACKUP_SCHEDULE_DESCRIPTION",
         "Daily 02:00 UTC (+ jitter fino a 5 min)",
     )
