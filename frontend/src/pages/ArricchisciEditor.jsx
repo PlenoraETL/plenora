@@ -26,6 +26,7 @@ import { useEditorData } from '../hooks/useEditorData';
 import { describeAccessDeniedNodes } from '../utils/canvasAccessControl';
 import AccessDeniedBanner from '../components/editor/AccessDeniedBanner';
 import useCanvasStore from '../store/useCanvasStore';
+import ValidationStatusBadge from '../components/editor/ValidationStatusBadge';
 import { deserializeNodes, createEdgeFromData } from '../utils/nodeFactories';
 import EditorSidebar from '../components/panels/EditorSidebar';
 import ProjectSourceNode from '../components/nodes/ProjectSourceNode';
@@ -536,6 +537,7 @@ const ArricchisciEditorContent = () => {
               <button type="button" className="arricchisci-toolbar__btn arricchisci-toolbar__btn--carica" onClick={handleAddImdfPublisherNode} disabled={!hasImdfEnrich || hasImdfPublisherNode} title="Pubblica il bundle IMDF su un Feature Service ArcGIS (richiede upstream IMDF)" style={{ borderColor: 'rgba(124,58,237,0.4)', color: '#7C3AED' }}>🗺️ Pubblica IMDF</button>
             </>
           )}
+          <ValidationStatusBadge />
           <div className="arricchisci-theme-toggle">
             <div className={`arricchisci-theme-opt${theme==='dark'?' arricchisci-theme-opt--on':''}`} onClick={() => setTheme('dark')}>🌙 Scuro</div>
             <div className={`arricchisci-theme-opt${theme==='light'?' arricchisci-theme-opt--on':''}`} onClick={() => setTheme('light')}>☀️ Chiaro</div>

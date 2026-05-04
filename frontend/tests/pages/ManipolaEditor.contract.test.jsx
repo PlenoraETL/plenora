@@ -139,6 +139,7 @@ vi.mock('../../src/store/useCanvasStore', () => {
     setEditorActions: vi.fn(),
     setConnections: vi.fn(),
     validationHighlights: [],
+    lastValidationSummary: null,
   };
   const hook = (selector) => selector ? selector(storeState) : storeState;
   hook.getState = () => storeState;

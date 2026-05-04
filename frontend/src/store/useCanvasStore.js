@@ -27,9 +27,10 @@ const useCanvasStore = create(
       // di validazione post-validation (amber borders). Evita churn
       // su subscriber se gli highlight sono gia' vuoti.
       const dirtyAndClearHighlights = () => {
-        const { validationHighlights } = get();
-        return validationHighlights.length > 0
-          ? { isDirty: true, validationHighlights: [] }
+        const { validationHighlights, lastValidationSummary } = get();
+        const hasHighlights = validationHighlights.length > 0 || lastValidationSummary;
+        return hasHighlights
+          ? { isDirty: true, validationHighlights: [], lastValidationSummary: null }
           : { isDirty: true };
       };
 
@@ -98,6 +99,14 @@ const useCanvasStore = create(
       validationHighlights: [],
 
       /**
+       * Sommario dell'ultima validazione. Popolato da ResultNode dopo ogni
+       * `runValidation()`. Consumato dal `ValidationStatusBadge` nella toolbar.
+       * Shape: `{ errorCount, warningCount, infoCount } | null`.
+       * Si svuota su user edit (via `dirtyAndClearHighlights`) e `reset()`.
+       */
+      lastValidationSummary: null,
+
+      /**
        * Lista connessioni DB disponibili nell'editor corrente.
        * Popolato via setConnections() — evita di passarla come prop
        * a ogni CaricanNode causando re-render inutili.
@@ -128,7 +137,7 @@ const useCanvasStore = create(
         get().editorActionsRef.current = {};
         // NOTA: non resettiamo isReadOnly perché viene impostato subito dopo da
         // useCanvasCore (dipende dal ruolo utente, non dal progetto).
-        set({ nodes: [], edges: [], projectId: null, mode: null, connections: [], isDirty: false, validationHighlights: [] }, false, 'reset');
+        set({ nodes: [], edges: [], projectId: null, mode: null, connections: [], isDirty: false, validationHighlights: [], lastValidationSummary: null }, false, 'reset');
       },
 
       /** Imposta le connessioni DB disponibili nell'editor. */
@@ -138,6 +147,10 @@ const useCanvasStore = create(
       /** Aggiorna la lista di nodi con issue post-validazione. */
       setValidationHighlights: (ids) =>
         set({ validationHighlights: ids }, false, 'setValidationHighlights'),
+
+      /** Aggiorna il sommario dell'ultima validazione (badge toolbar). */
+      setLastValidationSummary: (summary) =>
+        set({ lastValidationSummary: summary }, false, 'setLastValidationSummary'),
 
       /**
        * Registra le azioni dell'editor (preview, execute...).

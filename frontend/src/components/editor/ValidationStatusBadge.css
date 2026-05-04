@@ -1,0 +1,78 @@
+/*
+   ValidationStatusBadge.css - Plenora design system
+   Prefix: .validation-badge
+*/
+
+.validation-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--plen-border-hi, rgba(255,255,255,0.11));
+  background: var(--plen-surface-2, #111525);
+  font-family: var(--plen-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.12s, border-color 0.12s;
+  white-space: nowrap;
+}
+
+.validation-badge:hover {
+  filter: brightness(1.2);
+}
+
+/* OK state */
+.validation-badge--ok {
+  color: var(--plen-ok, #34D399);
+  border-color: rgba(52,211,153,0.2);
+  background: rgba(52,211,153,0.06);
+}
+
+.validation-badge--ok:hover {
+  border-color: rgba(52,211,153,0.4);
+}
+
+/* Error state */
+.validation-badge--error {
+  color: var(--plen-err, #F87171);
+  border-color: rgba(248,113,113,0.25);
+  background: rgba(248,113,113,0.08);
+}
+
+.validation-badge--error:hover {
+  border-color: rgba(248,113,113,0.45);
+}
+
+/* Warning state */
+.validation-badge--warning {
+  color: var(--plen-warn, #FBBF24);
+  border-color: rgba(251,191,36,0.25);
+  background: rgba(251,191,36,0.08);
+}
+
+.validation-badge--warning:hover {
+  border-color: rgba(251,191,36,0.45);
+}
+
+/* Light theme */
+[data-theme='light'] .validation-badge {
+  background: #F4F7FD;
+  border-color: rgba(0,0,0,0.10);
+}
+
+[data-theme='light'] .validation-badge--ok {
+  background: #ECFDF5;
+  color: #059669;
+}
+
+[data-theme='light'] .validation-badge--error {
+  background: #FFF5F5;
+  color: #DC2626;
+}
+
+[data-theme='light'] .validation-badge--warning {
+  background: #FFFDF0;
+  color: #D97706;
+}

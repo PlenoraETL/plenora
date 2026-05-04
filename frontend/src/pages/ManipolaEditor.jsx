@@ -41,6 +41,7 @@ import DataSourceNode from '../components/nodes/DataSourceNode';
 import { useSchemaInference, usePreview, useExecution, useCanvasCore } from '../hooks';
 import { useEditorData } from '../hooks/useEditorData';
 import useCanvasStore from '../store/useCanvasStore';
+import ValidationStatusBadge from '../components/editor/ValidationStatusBadge';
 import { useToast } from '../hooks/useToast';
 import { useTheme } from '../hooks/useTheme';
 import useColumnPropagation from '../hooks/useColumnPropagation';
@@ -491,6 +492,7 @@ const ManipolaEditorContent = () => {
               <button type="button" className="manipola-toolbar__btn manipola-toolbar__btn--datasource" onClick={() => handleAddDataSourceNode('source')} title="Aggiungi sorgente DataSource (SharePoint/FTP/Local)">🗄️ Data Source</button>
             </>
           )}
+          <ValidationStatusBadge />
           <div className="manipola-theme-toggle">
             <div className={`manipola-theme-opt${theme==='dark'?' manipola-theme-opt--on':''}`} onClick={() => setTheme('dark')}>🌙 Scuro</div>
             <div className={`manipola-theme-opt${theme==='light'?' manipola-theme-opt--on':''}`} onClick={() => setTheme('light')}>☀️ Chiaro</div>

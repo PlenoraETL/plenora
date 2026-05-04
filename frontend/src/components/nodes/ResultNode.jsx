@@ -16,7 +16,7 @@
  *   - ResultNodeImdfView: view quando isImdfMode=true (Batch 2 step 2)
  *   - ResultNodeStandardView: view altrimenti (Batch 2 step 3)
  */
-import React, { useState, useCallback, memo, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useRef, memo, useMemo } from 'react';
 import { Handle, Position, useReactFlow, useStore } from 'reactflow';
 import ValidationModal from '../modals/ValidationModal';
 import { validateManipolaCanvas } from '../../utils/validateManipolaCanvas';
@@ -142,13 +142,20 @@ const ResultNode = memo(({ data, id }) => {
     return validateEstraiCanvas(allNodes, allEdges);
   };
 
-  // Broadcast post-validation: aggiorna lo store con i nodeId delle issue.
-  // Gli editor (Manipola/Arricchisci) reagiscono applicando un outline amber.
+  // Broadcast post-validation: aggiorna lo store con i nodeId delle issue
+  // (highlight amber) e il sommario severity (badge toolbar).
   const broadcastHighlights = (result) => {
+    const store = useCanvasStore.getState();
     const nodeIds = result.issues
       .filter(i => i.nodeId)
       .map(i => i.nodeId);
-    useCanvasStore.getState().setValidationHighlights(nodeIds);
+    store.setValidationHighlights(nodeIds);
+    const issues = result.issues || [];
+    store.setLastValidationSummary({
+      errorCount: result.bySeverity?.error?.length ?? issues.filter(i => i.severity === 'error').length,
+      warningCount: result.bySeverity?.warning?.length ?? issues.filter(i => i.severity === 'warning').length,
+      infoCount: result.bySeverity?.info?.length ?? issues.filter(i => i.severity === 'info').length,
+    });
   };
 
   const handleValidate = async () => {
@@ -213,6 +220,16 @@ const ResultNode = memo(({ data, id }) => {
       { zoom: 1.2, duration: 400 },
     );
   }, [getNodes, setCenter]);
+
+  // Registra onValidate nello store per il badge toolbar.
+  // Usa ref stabile per evitare re-register churn (handleValidate cambia ogni render).
+  const handleValidateRef = useRef(handleValidate);
+  handleValidateRef.current = handleValidate;
+  useEffect(() => {
+    useCanvasStore.getState().setEditorActions({
+      onValidate: (...args) => handleValidateRef.current(...args),
+    });
+  }, []);
 
   return (
     <div className={`result-node result-node--${nodeVariant}`}>

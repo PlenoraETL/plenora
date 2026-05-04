@@ -45,6 +45,7 @@ const {
   deleteImdfBundleMock,
   listApiConnectionsMock,
   setValidationHighlightsMock,
+  setLastValidationSummaryMock,
 } = vi.hoisted(() => ({
   onPreviewMock: vi.fn(),
   onExecuteMock: vi.fn(),
@@ -62,6 +63,7 @@ const {
   deleteImdfBundleMock: vi.fn(),
   listApiConnectionsMock: vi.fn(),
   setValidationHighlightsMock: vi.fn(),
+  setLastValidationSummaryMock: vi.fn(),
 }));
 
 vi.mock('reactflow', () =>
@@ -155,6 +157,8 @@ const buildCanvasState = (overrides = {}) => ({
   lastTaskResult: null,
   setLastTaskResult: setLastTaskResultMock,
   setValidationHighlights: setValidationHighlightsMock,
+  setLastValidationSummary: setLastValidationSummaryMock,
+  setEditorActions: vi.fn(),
   projectId: 'proj-1',
   editorActionsRef: {
     current: {
@@ -397,6 +401,30 @@ describe('ResultNode (parent) — branch & gating contract', () => {
 
     await waitFor(() => {
       expect(setValidationHighlightsMock).toHaveBeenCalledWith([]);
+    });
+  });
+
+  it('Validazione FALLITA: setLastValidationSummary chiamato con conteggi severity', async () => {
+    validateEstraiCanvasMock.mockReturnValue({
+      isValid: false,
+      issues: [
+        { id: 'SOURCE_ISOLATED', severity: 'error', message: 'Nodo isolato', nodeId: 'src-1' },
+        { id: 'CANVAS_EMPTY', severity: 'error', message: 'Canvas vuoto' },
+        { id: 'WARN_1', severity: 'warning', message: 'Avviso' },
+      ],
+    });
+
+    const user = userEvent.setup();
+    renderResultNode();
+
+    await user.click(screen.getByRole('button', { name: /esegui query/i }));
+
+    await waitFor(() => {
+      expect(setLastValidationSummaryMock).toHaveBeenCalledWith({
+        errorCount: 2,
+        warningCount: 1,
+        infoCount: 0,
+      });
     });
   });
 });

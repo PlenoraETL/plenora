@@ -128,6 +128,8 @@ describe('ResultNode contract', () => {
       lastTaskResult: null,
       setLastTaskResult: setLastTaskResultMock,
       setValidationHighlights: vi.fn(),
+      setLastValidationSummary: vi.fn(),
+      setEditorActions: vi.fn(),
       projectId: 'proj-1',
       editorActionsRef: {
         current: {
