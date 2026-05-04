@@ -2225,6 +2225,14 @@
           "default": 1,
           "min": 1,
           "max": 5
+        },
+        {
+          "id": "output_columns",
+          "type": "string_list",
+          "label": "Colonne output dichiarate",
+          "description": "Usate per inferenza schema canvas-time. Lista di nomi delle chiavi JSON che verranno estratte (str). Se vuota, lo schema canvas resta uguale all'input (passthrough). I valori runtime non sono influenzati: il transform continua a espandere tutte le chiavi presenti nei dati.",
+          "schema_contract": true,
+          "default": []
         }
       ],
       "output": {
@@ -2502,6 +2510,14 @@
           "type": "column",
           "label": "Colonna intestazioni",
           "description": "I valori di questa colonna diventano i nomi delle nuove colonne"
+        },
+        {
+          "id": "output_columns",
+          "type": "string_list",
+          "label": "Colonne output dichiarate",
+          "description": "Usate per inferenza schema canvas-time. Lista dei nomi delle nuove colonne attese dopo la trasposizione (str; corrispondono ai valori di id_column). Se vuota, lo schema canvas resta uguale all'input (passthrough). I valori runtime non sono influenzati: il transform continua a trasporre i dati effettivi.",
+          "schema_contract": true,
+          "default": []
         }
       ],
       "output": {
