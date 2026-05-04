@@ -76,6 +76,14 @@ const useCanvasStore = create(
       isDirty: false,
 
       /**
+       * ID dei nodi con issue di validazione. Popolato da ResultNode dopo
+       * ogni `runValidation()` (manuale, execute, preview). Consumato dagli
+       * editor (Manipola/Arricchisci) per applicare un outline amber sui
+       * nodi problematici. Si svuota al prossimo validation pass riuscito.
+       */
+      validationHighlights: [],
+
+      /**
        * Lista connessioni DB disponibili nell'editor corrente.
        * Popolato via setConnections() — evita di passarla come prop
        * a ogni CaricanNode causando re-render inutili.
@@ -106,12 +114,16 @@ const useCanvasStore = create(
         get().editorActionsRef.current = {};
         // NOTA: non resettiamo isReadOnly perché viene impostato subito dopo da
         // useCanvasCore (dipende dal ruolo utente, non dal progetto).
-        set({ nodes: [], edges: [], projectId: null, mode: null, connections: [], isDirty: false }, false, 'reset');
+        set({ nodes: [], edges: [], projectId: null, mode: null, connections: [], isDirty: false, validationHighlights: [] }, false, 'reset');
       },
 
       /** Imposta le connessioni DB disponibili nell'editor. */
       setConnections: (connections) =>
         set({ connections }, false, 'setConnections'),
+
+      /** Aggiorna la lista di nodi con issue post-validazione. */
+      setValidationHighlights: (ids) =>
+        set({ validationHighlights: ids }, false, 'setValidationHighlights'),
 
       /**
        * Registra le azioni dell'editor (preview, execute...).

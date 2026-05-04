@@ -134,16 +134,18 @@ vi.mock('../../src/hooks/useToast', () => ({
   useToast: () => toastMock,
 }));
 
-vi.mock('../../src/store/useCanvasStore', () => ({
-  default: {
-    getState: () => ({
-      markClean: vi.fn(),
-      setEditorActions: vi.fn(),
-      setConnections: vi.fn(),
-      updateNodeData: vi.fn(),
-    }),
-  },
-}));
+vi.mock('../../src/store/useCanvasStore', () => {
+  const storeState = {
+    markClean: vi.fn(),
+    setEditorActions: vi.fn(),
+    setConnections: vi.fn(),
+    updateNodeData: vi.fn(),
+    validationHighlights: [],
+  };
+  const hook = (selector) => selector ? selector(storeState) : storeState;
+  hook.getState = () => storeState;
+  return { default: hook };
+});
 
 vi.mock('../../src/utils/nodeFactories', () => ({
   deserializeNodes: deserializeNodesMock,

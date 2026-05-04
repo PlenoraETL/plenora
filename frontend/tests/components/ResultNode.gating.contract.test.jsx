@@ -44,6 +44,7 @@ const {
   getImdfBundleMetadataMock,
   deleteImdfBundleMock,
   listApiConnectionsMock,
+  setValidationHighlightsMock,
 } = vi.hoisted(() => ({
   onPreviewMock: vi.fn(),
   onExecuteMock: vi.fn(),
@@ -60,6 +61,7 @@ const {
   getImdfBundleMetadataMock: vi.fn(),
   deleteImdfBundleMock: vi.fn(),
   listApiConnectionsMock: vi.fn(),
+  setValidationHighlightsMock: vi.fn(),
 }));
 
 vi.mock('reactflow', () =>
@@ -152,6 +154,7 @@ const buildCanvasState = (overrides = {}) => ({
   deleteNode: deleteNodeMock,
   lastTaskResult: null,
   setLastTaskResult: setLastTaskResultMock,
+  setValidationHighlights: setValidationHighlightsMock,
   projectId: 'proj-1',
   editorActionsRef: {
     current: {
@@ -360,5 +363,40 @@ describe('ResultNode (parent) — branch & gating contract', () => {
     // Click sulla row: il modal resta aperto (nessun onFocusNode invocato)
     await user.click(issueRow);
     expect(screen.getByTestId('validation-modal')).toBeInTheDocument();
+  });
+
+  it('Validazione FALLITA: setValidationHighlights chiamato con i nodeId delle issue', async () => {
+    validateEstraiCanvasMock.mockReturnValue({
+      isValid: false,
+      issues: [
+        { id: 'SOURCE_ISOLATED', severity: 'error', message: 'Nodo isolato', nodeId: 'src-1' },
+        { id: 'CANVAS_EMPTY', severity: 'error', message: 'Canvas vuoto' },
+      ],
+    });
+
+    const user = userEvent.setup();
+    renderResultNode();
+
+    await user.click(screen.getByRole('button', { name: /esegui query/i }));
+
+    await waitFor(() => {
+      expect(setValidationHighlightsMock).toHaveBeenCalledWith(['src-1']);
+    });
+  });
+
+  it('Validazione OK: setValidationHighlights chiamato con array vuoto', async () => {
+    validateEstraiCanvasMock.mockReturnValue({
+      isValid: true,
+      issues: [],
+    });
+
+    const user = userEvent.setup();
+    renderResultNode();
+
+    await user.click(screen.getByRole('button', { name: /esegui query/i }));
+
+    await waitFor(() => {
+      expect(setValidationHighlightsMock).toHaveBeenCalledWith([]);
+    });
   });
 });

@@ -127,6 +127,7 @@ describe('ResultNode contract', () => {
       deleteNode: deleteNodeMock,
       lastTaskResult: null,
       setLastTaskResult: setLastTaskResultMock,
+      setValidationHighlights: vi.fn(),
       projectId: 'proj-1',
       editorActionsRef: {
         current: {

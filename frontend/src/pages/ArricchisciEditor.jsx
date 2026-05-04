@@ -309,6 +309,29 @@ const ArricchisciEditorContent = () => {
     useCanvasStore.getState().setConnections(connections);
   }, [connections]);
 
+  // ===== POST-VALIDATION NODE HIGHLIGHTS (FE-PHASE3-VALIDATION-UX-002) =====
+  // Dopo che ResultNode esegue validation (manuale, execute, preview), lo store
+  // contiene i nodeId con issue. Applichiamo un outline amber ai nodi coinvolti.
+  const validationHighlights = useCanvasStore(s => s.validationHighlights);
+
+  useEffect(() => {
+    if (!validationHighlights || validationHighlights.length === 0) {
+      setNodes(nds => nds.map(n => {
+        if (!n.style?.border?.includes('#FBBF24')) return n;
+        const { border, boxShadow, ...restStyle } = n.style || {};
+        return { ...n, style: Object.keys(restStyle).length ? restStyle : undefined };
+      }));
+      return;
+    }
+    const highlightSet = new Set(validationHighlights);
+    setNodes(nds => nds.map(n => ({
+      ...n,
+      style: highlightSet.has(n.id)
+        ? { ...n.style, border: '2px solid #FBBF24', boxShadow: '0 0 8px rgba(251,191,36,0.25)' }
+        : n.style,
+    })));
+  }, [validationHighlights, setNodes]);
+
   // ===== SAVE =====
 
   const handleSaveCanvas = useCallback(async () => {

@@ -142,6 +142,15 @@ const ResultNode = memo(({ data, id }) => {
     return validateEstraiCanvas(allNodes, allEdges);
   };
 
+  // Broadcast post-validation: aggiorna lo store con i nodeId delle issue.
+  // Gli editor (Manipola/Arricchisci) reagiscono applicando un outline amber.
+  const broadcastHighlights = (result) => {
+    const nodeIds = result.issues
+      .filter(i => i.nodeId)
+      .map(i => i.nodeId);
+    useCanvasStore.getState().setValidationHighlights(nodeIds);
+  };
+
   const handleValidate = async () => {
     let availableConnectionIds = null;
     if (isArricchisci) {
@@ -154,6 +163,7 @@ const ResultNode = memo(({ data, id }) => {
       }
     }
     const result = runValidation(availableConnectionIds);
+    broadcastHighlights(result);
     setValidationResult(result);
     setShowValidation(true);
   };
@@ -171,6 +181,7 @@ const ResultNode = memo(({ data, id }) => {
       } catch (e) { /* fallback senza check */ }
     }
     const result = runValidation(availableConnectionIds);
+    broadcastHighlights(result);
     if (!result.isValid) {
       setValidationResult(result);
       setShowValidation(true);
@@ -182,6 +193,7 @@ const ResultNode = memo(({ data, id }) => {
 
   const handlePreviewWithValidation = () => {
     const result = runValidation();
+    broadcastHighlights(result);
     if (!result.isValid) {
       setValidationResult(result);
       setShowValidation(true);
