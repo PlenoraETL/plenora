@@ -46,7 +46,6 @@ import { useTheme } from '../hooks/useTheme';
 import useColumnPropagation from '../hooks/useColumnPropagation';
 import { deserializeNodes, createEdgeFromData } from '../utils/nodeFactories';
 import { describeAccessDeniedNodes } from '../utils/canvasAccessControl';
-import { isCanvasEmpty } from '../utils/canvasValidationContract';
 import AccessDeniedBanner from '../components/editor/AccessDeniedBanner';
 import '../styles/ManipolaEditor.css';
 import '../components/nodes/StaticValuesNode.css';
@@ -115,15 +114,17 @@ const ManipolaEditorContent = () => {
 
   // ===== HOOKS COMUNI =====
   const preview   = usePreview(projectId, handleSaveQuiet);
+  // I 3 throws fail-fast (canvas vuoto / Output mancante / sorgente mancante)
+  // erano duplicati delle regole CANVAS_EMPTY / RESULT_NODE_MISSING /
+  // RESULT_NO_SOURCE in `validateManipolaCanvas`. Il flow `ResultNode.handleExecute
+  // WithValidation` esegue `runValidation()` PRIMA di chiamare `onExecute`:
+  // se la validazione fallisce apre il modal e ritorna; quindi questo
+  // `onBeforeExecute` viene raggiunto solo a validation-passed e i throws
+  // erano dead code (FE-PHASE2-VALIDATION-002).
   const execution = useExecution(projectId, {
-    onBeforeExecute: async () => {
-      const currentNodes = nodesRef.current;
-      if (isCanvasEmpty(currentNodes)) throw new Error('Canvas vuoto. Aggiungi nodi prima di eseguire.');
-      if (!currentNodes.find(n => n.type === 'result')) throw new Error('Aggiungi un nodo Output prima di eseguire.');
-      if (!currentNodes.find(n => n.type === 'project_source' || n.type === 'file_source' || n.type === 'staticValues' || (n.type === 'datasource_node' && n.data?.mode === 'source')))
-        throw new Error('Aggiungi almeno una sorgente dati (progetto, file, valori statici o DataSource).');
-      await handleSaveCanvas();
-    }
+    // Arrow wrapper per evitare TDZ: `handleSaveCanvas` e' definito piu' in
+    // basso e questa config viene letta sincrono al call site di useExecution.
+    onBeforeExecute: () => handleSaveCanvas(),
   });
 
   // CARICA asincrono via Celery

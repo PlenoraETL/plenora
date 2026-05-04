@@ -1,10 +1,14 @@
 /**
  * useCanvasValidation.js — Validazione canvas in tempo reale.
  *
- * Osserva nodes/edges e valida continuamente il canvas tramite
- * `validateEstraiCanvas`, debounced. Espone il nuovo contratto
- * `CanvasValidationResult` (vedi `utils/canvasValidationContract.js`)
- * + adapter legacy.
+ * Osserva nodes/edges e valida continuamente il canvas, debounced.
+ * Espone il contratto `CanvasValidationResult`
+ * (vedi `utils/canvasValidationContract.js`) + adapter legacy.
+ *
+ * Editor-aware: accetta una `validator` function opzionale; il default
+ * e' `validateEstraiCanvas` per backward compat con il call site
+ * EstraiEditor preesistente. Manipola/Arricchisci possono opt-in
+ * passando `validateManipolaCanvas` / `validateArricchisciCanvas`.
  *
  * Ritorna:
  *   - `result`: `CanvasValidationResult` (nuovo contratto, raccomandato)
@@ -29,12 +33,15 @@ const EMPTY_RESULT = buildResult([]);
  * @param {boolean} [options.validateOnChange=true]
  * @param {number} [options.debounceMs=300]
  * @param {Function} [options.onValidationChange]
+ * @param {(nodes: Array, edges: Array) => import('../utils/canvasValidationContract').CanvasValidationResult} [options.validator=validateEstraiCanvas]
+ *   Validator function. Default `validateEstraiCanvas` (KEEP_COMPAT).
  */
 export function useCanvasValidation(nodes, edges, options = {}) {
   const {
     validateOnChange = true,
     debounceMs = 300,
     onValidationChange,
+    validator = validateEstraiCanvas,
   } = options;
 
   // State: il `result` e' la fonte di verita'; `disconnectedNodeIds` e' un
@@ -57,7 +64,7 @@ export function useCanvasValidation(nodes, edges, options = {}) {
     const currentNodes = nodesRef.current;
     const currentEdges = edgesRef.current;
 
-    const result = validateEstraiCanvas(currentNodes, currentEdges);
+    const result = validator(currentNodes, currentEdges);
     const disconnectedNodeIds = result.issues
       .filter(i => i.nodeId)
       .map(i => i.nodeId);
@@ -68,7 +75,7 @@ export function useCanvasValidation(nodes, edges, options = {}) {
     }
 
     return result;
-  }, [onValidationChange]);
+  }, [onValidationChange, validator]);
 
   const clearErrors = useCallback(() => {
     setState({ result: EMPTY_RESULT, disconnectedNodeIds: [] });

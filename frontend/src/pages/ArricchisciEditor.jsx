@@ -24,7 +24,6 @@ import { getFiles } from '../api/files';
 import { useAuth } from '../context/AuthContext';
 import { useEditorData } from '../hooks/useEditorData';
 import { describeAccessDeniedNodes } from '../utils/canvasAccessControl';
-import { isCanvasEmpty } from '../utils/canvasValidationContract';
 import AccessDeniedBanner from '../components/editor/AccessDeniedBanner';
 import useCanvasStore from '../store/useCanvasStore';
 import { deserializeNodes, createEdgeFromData } from '../utils/nodeFactories';
@@ -143,17 +142,17 @@ const ArricchisciEditorContent = () => {
   const preview   = usePreview(projectId, handleSaveQuiet);
   const execution = useExecution(projectId, {
     executeFunction: executeEnrichmentAsync,
+    // CANVAS_EMPTY e ARRICCHISCI_NO_SOURCES sono coperti da
+    // `validateArricchisciCanvas` (chiamato da `ResultNode.handleExecute
+    // WithValidation` prima di `onExecute`); quei due throws erano dead code
+    // post-validation (FE-PHASE2-VALIDATION-002).
+    //
+    // MIGRATE_NEXT: il throw "Aggiungi almeno un nodo API Enrich" non e'
+    // coperto da una rule del validator. Aggiungere `ARRICCHISCI_NO_ENRICHER`
+    // alla validation cambierebbe la UX (il modal bloccherebbe quando ora
+    // si vede un confirm modal con config vuota); fuori scope structural.
     onBeforeExecute: async () => {
       const currentNodes = nodesRef.current;
-      if (isCanvasEmpty(currentNodes))        throw new Error('Canvas vuoto. Aggiungi nodi prima di eseguire.');
-      const enrichers = currentNodes.filter(n => n.type === 'api_enrich');
-      const anyNeedsSource = enrichers.some(n => {
-        if (n.data?.api_type === 'generator') return false;
-        const staticParameters = n.data?.static_parameters || {};
-        return (n.data?.parameters || []).some(p => p.required && p.mode !== 'fixed' && !(p.name in staticParameters));
-      });
-      if (anyNeedsSource && !currentNodes.find(n => n.type === 'project_source' || n.type === 'file_source' || n.type === 'staticValues'))
-                                              throw new Error('Aggiungi almeno una sorgente dati (progetto, file o valori statici).');
       if (!currentNodes.find(n => n.type === 'api_enrich')) throw new Error('Aggiungi almeno un nodo API Enrich.');
       await handleSaveQuiet();
     }

@@ -246,8 +246,7 @@ const ResultNode = memo(({ data, id }) => {
         <ValidationModal
           isOpen={showValidation}
           onClose={() => setShowValidation(false)}
-          issues={validationResult.issues}
-          isValid={validationResult.isValid}
+          result={validationResult}
         />
       </div>
     </div>

@@ -1,5 +1,15 @@
 /**
- * ValidationModal.jsx — Modal per mostrare risultati validazione canvas MANIPOLA
+ * ValidationModal.jsx — Modal per i risultati `CanvasValidationResult`.
+ *
+ * Consuma direttamente `CanvasValidationResult` (vedi
+ * `utils/canvasValidationContract.js`) tramite la prop `result`. Renderizza
+ * sezioni separate per `bySeverity.error` / `.warning` / `.info`.
+ *
+ * KEEP_COMPAT:
+ *   - se `result` non e' passato, accetta ancora `issues` + `isValid`
+ *     (shape pre-`FE-PHASE2-VALIDATION-002`); il modal costruisce internamente
+ *     le tre sezioni con un filter inline equivalente.
+ *   - i call site nuovi devono preferire `result`.
  */
 import React from 'react';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
@@ -11,37 +21,36 @@ const SEVERITY_ICON = {
   info: 'ℹ️',
 };
 
-const SEVERITY_LABEL = {
-  error: 'Errore',
-  warning: 'Avviso',
-  info: 'Info',
-};
-
 /**
  * @param {Object} props
  * @param {boolean} props.isOpen
  * @param {Function} props.onClose
- * @param {Array} props.issues - Array di { severity, message, nodeId?, nodeName? }
- * @param {boolean} props.isValid
+ * @param {import('../../utils/canvasValidationContract').CanvasValidationResult} [props.result]
+ *   Nuovo contratto. Se presente, ha precedenza su `issues`/`isValid`.
+ * @param {Array} [props.issues] — KEEP_COMPAT: ignorato se `result` e' definito.
+ * @param {boolean} [props.isValid] — KEEP_COMPAT: ignorato se `result` e' definito.
  */
-export default function ValidationModal({ isOpen, onClose, issues = [], isValid }) {
+export default function ValidationModal({ isOpen, onClose, result, issues, isValid }) {
   if (!isOpen) return null;
 
-  const errors   = issues.filter(i => i.severity === 'error');
-  const warnings = issues.filter(i => i.severity === 'warning');
-  const infos    = issues.filter(i => i.severity === 'info');
+  // Resolve shape: nuovo `result` ha priorita'; legacy fallback altrimenti.
+  const ok = result ? result.ok : !!isValid;
+  const errors   = result ? result.bySeverity.error   : (issues || []).filter(i => i.severity === 'error');
+  const warnings = result ? result.bySeverity.warning : (issues || []).filter(i => i.severity === 'warning');
+  const infos    = result ? result.bySeverity.info    : (issues || []).filter(i => i.severity === 'info');
+  const totalIssues = errors.length + warnings.length + infos.length;
 
   return (
     <ModalWrapper
       isOpen={true}
       onClose={onClose}
-      title={isValid ? 'Canvas valido' : 'Problemi rilevati nel canvas'}
-      icon={isValid ? '✅' : '🔍'}
+      title={ok ? 'Canvas valido' : 'Problemi rilevati nel canvas'}
+      icon={ok ? '✅' : '🔍'}
       size="md"
       footer={<ModalButton variant="primary" onClick={onClose}>Chiudi</ModalButton>}
     >
         <div className="validation-modal__body">
-          {isValid && issues.length === 0 && (
+          {ok && totalIssues === 0 && (
             <div className="validation-modal__ok">
               <span className="validation-modal__ok-icon">✅</span>
               <p>Nessun problema trovato. La pipeline è pronta per l'esecuzione.</p>
@@ -54,7 +63,7 @@ export default function ValidationModal({ isOpen, onClose, issues = [], isValid 
                 ❌ Errori ({errors.length}) — bloccano l'esecuzione
               </div>
               {errors.map((issue, i) => (
-                <IssueRow key={i} issue={issue} />
+                <IssueRow key={issue.id ? `${issue.id}-${i}` : i} issue={issue} />
               ))}
             </div>
           )}
@@ -65,7 +74,7 @@ export default function ValidationModal({ isOpen, onClose, issues = [], isValid 
                 ⚠️ Avvisi ({warnings.length})
               </div>
               {warnings.map((issue, i) => (
-                <IssueRow key={i} issue={issue} />
+                <IssueRow key={issue.id ? `${issue.id}-${i}` : i} issue={issue} />
               ))}
             </div>
           )}
@@ -76,7 +85,7 @@ export default function ValidationModal({ isOpen, onClose, issues = [], isValid 
                 ℹ️ Note ({infos.length})
               </div>
               {infos.map((issue, i) => (
-                <IssueRow key={i} issue={issue} />
+                <IssueRow key={issue.id ? `${issue.id}-${i}` : i} issue={issue} />
               ))}
             </div>
           )}
