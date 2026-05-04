@@ -476,6 +476,11 @@ class SchemaInferenceService:
             return self._schema_geo_point_on_surface(input_schemas, config, node.id)
         elif transform_op == "geo_boundary":
             return self._schema_geo_boundary(input_schemas, config, node.id)
+        # Reorder + voronoi (BE-PHASE2-SCHEMA-INFER-005 batch 4)
+        elif transform_op == "reorder_columns":
+            return self._schema_reorder_columns(input_schemas, config, node.id)
+        elif transform_op == "geo_voronoi":
+            return self._schema_geo_voronoi(input_schemas, config, node.id)
         else:
             logger.warning(f"Operazione {transform_op} non gestita - passthrough")
             return self._schema_passthrough(input_schemas, node.id)
@@ -2154,6 +2159,94 @@ class SchemaInferenceService:
                         is_calculated=True,
                     )
                     break
+        return result
+
+    # =========================================================================
+    # BATCH 4 — BE-PHASE2-SCHEMA-INFER-005
+    # =========================================================================
+    # Handler dedicati per il riordino colonne (`reorder_columns`) e per
+    # `geo_voronoi`. Le altre 4 candidati (dedup_advanced,
+    # geo_clean_topology, geo_make_valid, geo_explode) sono rows-only:
+    # rimangono in fallback passthrough e vengono riclassificate come
+    # PASSTHROUGH_OK_GAP nel test di parity (non richiedono codice).
+
+    def _schema_reorder_columns(
+        self,
+        input_schemas: List[List[ColumnSchema]],
+        config: dict,
+        node_id: str,
+    ) -> List[ColumnSchema]:
+        """reorder_columns: stesso column-set, ordine ricalcolato.
+
+        Runtime: `op_reorder_columns` (columns.py).
+        - Se `columns` valorizzata (lista non vuota): le colonne valide
+          vengono messe in testa nell'ordine specificato; le rimanenti
+          seguono nell'ordine input originale.
+        - Se `columns` vuota e `sort_alphabetical=True`: ordine
+          alfabetico.
+        - Default (entrambe vuote/false): passthrough.
+
+        Le colonne in `columns` ma non presenti nell'input vengono
+        ignorate (allineato al filtro runtime
+        `[c for c in columns if c in result.columns]`).
+        """
+        if not input_schemas:
+            return []
+        input_schema = input_schemas[0]
+        by_name = {c.name: c for c in input_schema}
+
+        cols_cfg = config.get("columns") or []
+        sort_alpha = bool(config.get("sort_alphabetical", False))
+
+        if cols_cfg:
+            valid = [name for name in cols_cfg if name in by_name]
+            remaining = [c.name for c in input_schema if c.name not in valid]
+            ordered = valid + remaining
+        elif sort_alpha:
+            ordered = sorted(by_name.keys())
+        else:
+            ordered = [c.name for c in input_schema]
+
+        return [ColumnSchema(
+            name=by_name[name].name,
+            type=by_name[name].type,
+            source_node=node_id,
+            is_calculated=by_name[name].is_calculated,
+        ) for name in ordered if name in by_name]
+
+    def _schema_geo_voronoi(
+        self,
+        input_schemas: List[List[ColumnSchema]],
+        config: dict,
+        node_id: str,
+    ) -> List[ColumnSchema]:
+        """geo_voronoi: input + sostituzione del tipo della colonna
+        geometria a `geometry:polygon`.
+
+        Runtime: `op_geo_voronoi` (spatial.py) preserva tutte le colonne
+        di input (`result = gdf.copy()`) e sovrascrive `result['geometry']`
+        con poligoni di Voronoi. Il numero di righe non cambia (1
+        polygon per punto input).
+
+        Schema delta: cambia il tipo della colonna `geom_column`
+        (default `"geometry"`) a `geometry:polygon` e marca la colonna
+        come `is_calculated=True`. Se la colonna `geom_column` non
+        esiste nello schema input, ritorna passthrough invariato
+        (caso degenere, non si tenta di indovinare).
+        """
+        if not input_schemas:
+            return []
+        geom_col = config.get("geom_column") or "geometry"
+        result = self._copy_schema(input_schemas[0], node_id)
+        for i, col in enumerate(result):
+            if col.name == geom_col:
+                result[i] = ColumnSchema(
+                    name=col.name,
+                    type="geometry:polygon",
+                    source_node=node_id,
+                    is_calculated=True,
+                )
+                break
         return result
 
     def _copy_schema(

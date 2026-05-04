@@ -105,6 +105,8 @@ EXPECTED_DISPATCHER_BRANCHES: Set[str] = {
     "geo_bounds_extractor", "geo_count_points_in_polygons",
     "geo_line_builder", "geo_polygon_builder",
     "geo_point_on_surface", "geo_boundary",
+    # BE-PHASE2-SCHEMA-INFER-005 batch 4
+    "reorder_columns", "geo_voronoi",
 }
 
 # Transform IDs nel registry che ALTERANO lo schema (aggiungono/rimuovono
@@ -122,30 +124,42 @@ PASSTHROUGH_WRONG_GAP: Set[str] = {
     #   geo_bounds_extractor, geo_count_points_in_polygons,
     #   geo_line_builder, geo_polygon_builder, geo_point_on_surface,
     #   geo_boundary
+    # BE-PHASE2-SCHEMA-INFER-005 batch 4 ha promosso a dispatcher
+    # (rimossi): reorder_columns, geo_voronoi.
+    # BE-PHASE2-SCHEMA-INFER-005 batch 4 ha riclassificato a
+    # PASSTHROUGH_OK_GAP (rimossi): dedup_advanced, geo_clean_topology,
+    # geo_make_valid, geo_explode.
     "cross_join",           # combina colonne L+R
     "flatten_json",         # esplode chiavi JSON in colonne
-    "geo_explode",          # multiplica righe (no schema delta) — boundary
     "geo_nearest",          # aggiunge colonne neighbour
     "geo_overlay",          # aggiunge colonne combinate L+R + tipo overlay
     "geo_symmetric_difference",  # combina schemi L+R
-    "geo_voronoi",          # produce geometry:polygon
     "geo_within",           # filter-like + flag column
     "lookup",               # aggiunge colonne dal lookup table
     "melt",                 # ristruttura wide→long
-    "reorder_columns",      # cambia ordine (non rilevante per FE), ma vedi nota
     "statistics",           # aggiunge colonne statistiche
     "table_diff",           # aggiunge colonne diff
     "transpose",            # ristruttura schema
     "window_function",      # aggiunge colonna funzione finestra
-    "dedup_advanced",       # passthrough rows-only — vedi nota
-    "geo_clean_topology",   # passthrough rows-only — vedi nota
-    "geo_make_valid",       # passthrough — vedi nota
 }
 
-# Transform IDs che operano solo su righe (filter-like) — il
-# passthrough fallback e' funzionalmente corretto per il FE.
+# Transform IDs che operano solo su righe / valori senza alterare
+# il column-set — il passthrough fallback e' funzionalmente corretto
+# per il FE. Verifica runtime BE-PHASE2-SCHEMA-INFER-005:
+# - `dedup_advanced`: drop_duplicates (rows-only).
+# - `geo_clean_topology`: make_valid + buffer + drop empty (rows/values).
+# - `geo_make_valid`: shapely.make_valid sui valori della colonna
+#   geometria (column-set invariato).
+# - `geo_explode`: explode(index_parts=False).reset_index(drop=True)
+#   moltiplica le righe ma preserva il column-set.
+# Tutti e 4 transitano in `_schema_passthrough` via fallback (nessun
+# branch dispatcher dedicato necessario).
 PASSTHROUGH_OK_GAP: Set[str] = {
     "sample",  # filter-like su righe
+    "dedup_advanced",        # drop_duplicates rows-only
+    "geo_clean_topology",    # make_valid + buffer + drop empty
+    "geo_make_valid",        # shapely.make_valid sui valori
+    "geo_explode",           # explode multi-geometrie, schema invariato
 }
 
 
@@ -241,7 +255,7 @@ def test_passthrough_wrong_gap_size_lock():
     # Lock attuale al BE-SCHEMA-INFER-001A baseline. Quando una
     # transform passa a dispatcher dedicato, sposta l'entry e
     # decrementa il limite (`assert actual <= N`).
-    assert actual == 18, (
+    assert actual == 12, (
         f"Gap passthrough-WRONG cambiato: {actual}. "
         f"Aggiorna l'assert e il piano BE-SCHEMA-INFER-002+."
     )
@@ -1069,3 +1083,158 @@ def test_geo_boundary_custom_output_column():
         "poly_id", "name", "geometry", "outline",
     ]
     assert out[-1].type == "geometry"
+
+
+# ---------------------------------------------------------------------------
+# 8. Behavioral tests — BE-PHASE2-SCHEMA-INFER-005 batch 4
+# ---------------------------------------------------------------------------
+#
+# 4 transform riclassificati come PASSTHROUGH_OK_GAP via verifica
+# runtime (nessun handler dedicato richiesto, restano in fallback):
+#   - dedup_advanced
+#   - geo_clean_topology
+#   - geo_make_valid
+#   - geo_explode
+#
+# 2 transform promossi a dispatcher branch dedicato:
+#   - reorder_columns
+#   - geo_voronoi
+
+
+def _input3() -> list:
+    return [
+        ColumnSchema(name="a", type="int", source_node="s", is_calculated=False),
+        ColumnSchema(name="b", type="str", source_node="s", is_calculated=False),
+        ColumnSchema(name="c", type="real", source_node="s", is_calculated=False),
+    ]
+
+
+# reorder_columns ----------------------------------------------------------
+
+
+def test_reorder_columns_explicit_order():
+    service = SchemaInferenceService(project_service=None)
+    node = _node("reorder_columns", {"columns": ["c", "a"]})
+    out = service._infer_transform_schema(node, [_input3()], edges_by_target={})
+    # `c` e `a` davanti, `b` (non specificata) in coda.
+    assert [c.name for c in out] == ["c", "a", "b"]
+    # Tipi preservati.
+    types = {c.name: c.type for c in out}
+    assert types == {"a": "int", "b": "str", "c": "real"}
+
+
+def test_reorder_columns_ignores_unknown_names():
+    service = SchemaInferenceService(project_service=None)
+    node = _node("reorder_columns", {"columns": ["zzz", "c", "missing", "a"]})
+    out = service._infer_transform_schema(node, [_input3()], edges_by_target={})
+    # I nomi inesistenti vengono filtrati (allineato al runtime).
+    assert [c.name for c in out] == ["c", "a", "b"]
+
+
+def test_reorder_columns_alphabetical():
+    service = SchemaInferenceService(project_service=None)
+    node = _node("reorder_columns", {"sort_alphabetical": True})
+    out = service._infer_transform_schema(node, [_input3()], edges_by_target={})
+    assert [c.name for c in out] == ["a", "b", "c"]
+
+
+def test_reorder_columns_alphabetical_ignored_when_columns_given():
+    """`columns` ha priorita' su `sort_alphabetical` (allineato al
+    runtime: l'ordinamento alfabetico scatta solo nel ramo `elif`)."""
+    service = SchemaInferenceService(project_service=None)
+    node = _node("reorder_columns", {
+        "columns": ["c", "a"],
+        "sort_alphabetical": True,
+    })
+    out = service._infer_transform_schema(node, [_input3()], edges_by_target={})
+    assert [c.name for c in out] == ["c", "a", "b"]
+
+
+def test_reorder_columns_default_no_change():
+    """Senza `columns` ne' `sort_alphabetical=True` lo schema resta
+    invariato."""
+    service = SchemaInferenceService(project_service=None)
+    node = _node("reorder_columns", {})
+    out = service._infer_transform_schema(node, [_input3()], edges_by_target={})
+    assert [c.name for c in out] == ["a", "b", "c"]
+
+
+# geo_voronoi --------------------------------------------------------------
+
+
+def test_geo_voronoi_default_replaces_geometry_type_to_polygon():
+    """Voronoi sostituisce il tipo della colonna geometria a
+    `geometry:polygon`. Tutte le altre colonne restano invariate."""
+    service = SchemaInferenceService(project_service=None)
+    input_schema = [
+        ColumnSchema(name="poi_id", type="int", source_node="s", is_calculated=False),
+        ColumnSchema(name="name", type="str", source_node="s", is_calculated=False),
+        ColumnSchema(name="geometry", type="geometry:point", source_node="s", is_calculated=False),
+    ]
+    node = _node("geo_voronoi", {"geom_column": "geometry"})
+    out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
+    assert [c.name for c in out] == ["poi_id", "name", "geometry"]
+    geom = next(c for c in out if c.name == "geometry")
+    assert geom.type == "geometry:polygon"
+    assert geom.is_calculated is True
+    # le altre colonne restano non calcolate.
+    poi_id = next(c for c in out if c.name == "poi_id")
+    assert poi_id.is_calculated is False
+
+
+def test_geo_voronoi_default_geom_column_when_unset():
+    """Se `geom_column` non e' nella config, default a `"geometry"`."""
+    service = SchemaInferenceService(project_service=None)
+    input_schema = [
+        ColumnSchema(name="geometry", type="geometry:point", source_node="s", is_calculated=False),
+    ]
+    node = _node("geo_voronoi", {})
+    out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
+    assert out[0].type == "geometry:polygon"
+
+
+def test_geo_voronoi_geom_column_missing_passthrough():
+    """Se `geom_column` non esiste nello schema input, passthrough
+    invariato (caso degenere)."""
+    service = SchemaInferenceService(project_service=None)
+    input_schema = [
+        ColumnSchema(name="x", type="real", source_node="s", is_calculated=False),
+    ]
+    node = _node("geo_voronoi", {"geom_column": "missing_geom"})
+    out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
+    assert [(c.name, c.type) for c in out] == [("x", "real")]
+
+
+# Rows-only reclassification — passthrough behavioral checks ---------------
+
+
+@pytest.mark.parametrize("op", [
+    "dedup_advanced",
+    "geo_clean_topology",
+    "geo_make_valid",
+    "geo_explode",
+])
+def test_rows_only_ops_preserve_schema_via_passthrough(op):
+    """I 4 transform rows-only sono in PASSTHROUGH_OK_GAP: cadono nel
+    fallback `_schema_passthrough` con warning e producono lo stesso
+    column-set dell'input. Verifica end-to-end."""
+    service, input_schema = _service_and_input()
+    node = _node(op, {"geom_column": "geometry"})
+    out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
+    assert [(c.name, c.type) for c in out] == [
+        (c.name, c.type) for c in input_schema
+    ]
+
+
+def test_rows_only_passthrough_ok_membership_is_locked():
+    """Lock esplicito: i 4 transform rows-only DEVONO essere in
+    PASSTHROUGH_OK_GAP (non in PASSTHROUGH_WRONG_GAP) dopo
+    BE-PHASE2-SCHEMA-INFER-005. Drift in meno = riclassificazione
+    persa nel refactor; drift in piu' su PASSTHROUGH_WRONG_GAP =
+    qualcuno li ha rimessi nel set sbagliato."""
+    expected_in_ok = {
+        "dedup_advanced", "geo_clean_topology",
+        "geo_make_valid", "geo_explode",
+    }
+    assert expected_in_ok.issubset(PASSTHROUGH_OK_GAP)
+    assert expected_in_ok.isdisjoint(PASSTHROUGH_WRONG_GAP)
