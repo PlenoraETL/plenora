@@ -199,6 +199,40 @@ contattare l'admin se persiste."""
 
 
 # ============================================================
+# Domain-specific — Access Denied family
+# (BE-GO-READY-ERROR-CODES-014-GENERIC-ACCESS-DENIED-PROMOTION)
+# ============================================================
+# Promozione del pattern `generic_access_denied`: i 12 call site
+# che sollevavano `HTTPException(403, "Accesso negato")` (auth/
+# ownership helpers, auth user-management endpoints, logs runs
+# router, files router, orchestrator download) ora usano
+# `raise_typed_http(ACCESS_DENIED, ...)`. Status code 403 e
+# messaggio italiano "Accesso negato" preservati invariati per
+# tutte le 12 call site: nessuna nuova disclosure.
+#
+# Disclosure rationale:
+# - I due call site anti-enumeration in `auth.py` (reset_password,
+#   delete_user, lines 757/785) restavano deliberatamente 403 con
+#   stesso messaggio sia per target inesistente che per target
+#   fuori gruppo, per impedire user enumeration agli admin di
+#   gruppo. Promozione preserva l'uniformita': stesso codice
+#   `access_denied` per entrambi i rami → enumeration non
+#   ricostruibile dal codice.
+# - Path-traversal denial in `orchestrator/router.py:274` usa
+#   intenzionalmente lo stesso messaggio generico ("Accesso
+#   negato") di una denial di gruppo per non rivelare dettagli
+#   filesystem; promozione preserva il messaggio.
+
+ACCESS_DENIED = "access_denied"
+"""403: l'utente non ha i permessi per accedere alla risorsa
+richiesta. Coperti: group-ACL (ownership/share/admin-cross-group),
+anti-enumeration uniform-403 (reset password / delete user fuori
+gruppo o inesistenti per admin), path-traversal denial generico.
+FE branching: redirect a list view, toast generico "non
+autorizzato"; NON usare per autenticazione mancante (401)."""
+
+
+# ============================================================
 # Catalog set — drift detection
 # ============================================================
 # `KNOWN_DOMAIN_CODES` espone l'intero catalog domain-specific
@@ -241,6 +275,8 @@ KNOWN_DOMAIN_CODES: frozenset[str] = frozenset({
     MEMORY_LIMIT_EXCEEDED,
     # Service initialization family (BE-GO-READY-ERROR-CODES-013)
     SERVICE_NOT_INITIALIZED,
+    # Access Denied family (BE-GO-READY-ERROR-CODES-014)
+    ACCESS_DENIED,
 })
 
 # Codici globali (envelope-level): NON domain-specific.
@@ -281,9 +317,6 @@ ACCEPTED_HTTP_FALLBACK_PATTERNS: frozenset[str] = frozenset({
     "value_error_str_e",
     # "service_init_guard" promoted to raise_typed_http(SERVICE_NOT_INITIALIZED)
     # in BE-GO-READY-ERROR-CODES-013. Zero residuals remain.
-    #
-    # raise HTTPException(403, "Accesso negato")
-    # ~5 occ. generic ACL. Codici granulari saranno valutati nel
-    # batch dedicato auth-aligned.
-    "generic_access_denied",
+    # "generic_access_denied" promoted to raise_typed_http(ACCESS_DENIED)
+    # in BE-GO-READY-ERROR-CODES-014. Zero residuals remain.
 })

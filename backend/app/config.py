@@ -659,32 +659,79 @@ class Settings:
     # ==================== REDIS AUTO-START ====================
 
     def _ensure_redis(self, errors: list, warnings: list) -> None:
-        """Verifica che Redis sia raggiungibile; se no, lo avvia via WSL."""
-        import subprocess, time, socket
+        """Verifica che Redis sia raggiungibile sul broker URL configurato.
+
+        Su dev Windows: fallback opportunistico con avvio via WSL
+        (convenienza dev locale). Su Linux/server/container o su
+        ambienti hardened (`production`/`prod`/`staging`/`stage`):
+        fail-fast con messaggio operativo che cita il broker URL
+        configurato. Nessun riferimento a WSL nel path server: WSL
+        e' un dettaglio del dev locale e non deve apparire nel log
+        di un servizio che gira sotto systemd o container.
+        """
+        import socket
+        from urllib.parse import urlparse
+
+        broker_url = self.get("CELERY_BROKER_URL", "redis://localhost:6379/0")
+        parsed = urlparse(broker_url)
+        host = parsed.hostname or "localhost"
+        port = parsed.port or 6379
 
         def _redis_ping() -> bool:
             try:
-                with socket.create_connection(("localhost", 6379), timeout=2):
+                with socket.create_connection((host, port), timeout=2):
                     return True
             except OSError:
                 return False
 
         if _redis_ping():
-            logger.info("Redis già attivo su localhost:6379")
+            logger.info("Redis già attivo su %s:%s", host, port)
             return
 
-        # Tenta avvio via WSL
-        logger.info("Redis non raggiungibile — avvio via WSL...")
+        if self._wsl_redis_fallback_allowed():
+            self._ensure_redis_wsl_fallback(_redis_ping, errors, warnings)
+            return
+
+        errors.append(
+            f"Redis non raggiungibile su {broker_url}. "
+            "Avvia il servizio Redis configurato in CELERY_BROKER_URL "
+            "prima di avviare l'app."
+        )
+
+    @staticmethod
+    def _wsl_redis_fallback_allowed() -> bool:
+        """True solo su dev Windows. Gating del fallback WSL.
+
+        Dev = `ENVIRONMENT` (fallback `ENV`) non in
+        `_DOTENV_DISABLED_ENVS` (production/prod/staging/stage).
+        Windows = `sys.platform` inizia con `win`.
+        """
+        import sys
+
+        env_name = os.getenv(
+            "ENVIRONMENT", os.getenv("ENV", "development")
+        ).lower()
+        is_dev = env_name not in _DOTENV_DISABLED_ENVS
+        is_windows = sys.platform.startswith("win")
+        return is_dev and is_windows
+
+    def _ensure_redis_wsl_fallback(
+        self, redis_ping, errors: list, warnings: list
+    ) -> None:
+        """Avvio opportunistico di Redis via WSL — solo dev Windows."""
+        import subprocess
+        import time
+
+        logger.info("Redis non raggiungibile — avvio via WSL (dev Windows)...")
         try:
             subprocess.Popen(
                 ["wsl", "redis-server", "--daemonize", "yes"],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
-            # Attendi che Redis sia pronto (max 5s)
             for _ in range(10):
                 time.sleep(0.5)
-                if _redis_ping():
+                if redis_ping():
                     logger.info("Redis avviato con successo via WSL")
                     return
             warnings.append("Redis avviato via WSL ma non risponde dopo 5s")
@@ -742,7 +789,8 @@ class Settings:
         except Exception as e:
             logger.debug("Rimozione cartelle legacy fallita (non critico): %s", e)
 
-        # ── Redis: verifica che sia attivo, altrimenti avvialo via WSL ──
+        # ── Redis: verifica che sia attivo. Su dev Windows fallback WSL,
+        # altrove fail-fast operativo con messaggio sul broker URL. ──
         self._ensure_redis(errors, warnings)
 
         for w in warnings:

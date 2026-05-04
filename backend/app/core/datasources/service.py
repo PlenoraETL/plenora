@@ -1,6 +1,6 @@
 """
 PLENORA-ETL — Data Source Service
-CRUD configurazioni Data Source → SQLite (db_service).
+CRUD configurazioni Data Source → PostgreSQL via app.db.db_service.
 Scan state → filesystem (dati di runtime effimeri).
 """
 
@@ -38,7 +38,7 @@ _SENSITIVE_FIELDS = ["password", "private_key", "private_key_passphrase", "clien
 class DataSourceService:
     """
     CRUD + operazioni file per i Data Source.
-    Configurazioni in SQLite, scan_state su filesystem (runtime).
+    Configurazioni nel DB (PostgreSQL), scan_state su filesystem (runtime).
     """
 
     def __init__(self):

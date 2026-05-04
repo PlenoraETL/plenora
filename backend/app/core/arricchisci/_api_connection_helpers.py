@@ -115,7 +115,7 @@ from app.shared.crypto import (
 
 # Campi sensibili nel blocco auth di una API connection — vengono cifrati
 # at-rest. Restano in chiaro in memoria durante l'uso e vengono re-cifrati
-# prima del save su SQLite.
+# prima del save nel DB.
 _AUTH_SENSITIVE_FIELDS = (
     "password",
     "client_secret",

@@ -271,7 +271,11 @@ def download_project_result(project_id: str, file: Optional[str] = None, current
                     results_dir / safe_name, [results_dir]
                 )
             except ValueError:
-                raise HTTPException(403, "Accesso negato")
+                raise_typed_http(
+                    code=error_codes.ACCESS_DENIED,
+                    status_code=403,
+                    message="Accesso negato",
+                )
             if not target.exists():
                 raise HTTPException(404, f"File '{safe_name}' non trovato per progetto '{project_id}'")
             return FileResponse(

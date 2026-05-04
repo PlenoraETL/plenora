@@ -10,6 +10,7 @@ from app.config import settings
 from app.core.auth.auth import get_current_user, require_not_esecutore, CurrentUser
 from app.db.pg_connection import fetchone as _fetchone, fetchall as _fetchall
 from app.shared import error_codes
+from app.shared.error_envelope import raise_typed_http
 
 router = APIRouter(prefix="/pipeline-runs", tags=["runs"])
 
@@ -130,7 +131,11 @@ def get_run(
     if current_user.role != "superadmin":
         run_group = row.get("group_id", "")
         if run_group and run_group != current_user.group_id:
-            raise HTTPException(status_code=403, detail="Accesso negato")
+            raise_typed_http(
+                code=error_codes.ACCESS_DENIED,
+                status_code=403,
+                message="Accesso negato",
+            )
 
     if include_logs:
         log_rows = _fetchall(
@@ -176,7 +181,11 @@ def get_run_payload(
     if current_user.role != "superadmin":
         run_group = d.get("group_id", "")
         if run_group and run_group != current_user.group_id:
-            raise HTTPException(status_code=403, detail="Accesso negato")
+            raise_typed_http(
+                code=error_codes.ACCESS_DENIED,
+                status_code=403,
+                message="Accesso negato",
+            )
 
     if d.get("status") != "failure":
         raise HTTPException(status_code=400, detail="Il debug_payload è disponibile solo per run fallite")

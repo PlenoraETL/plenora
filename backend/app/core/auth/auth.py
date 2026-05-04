@@ -668,7 +668,11 @@ def update_user(user_id: str, data: dict,
     if not target:
         raise HTTPException(status_code=404, detail="Utente non trovato")
     if current_user.role != "superadmin" and target.get("group_id") != current_user.group_id:
-        raise HTTPException(status_code=403, detail="Accesso negato")
+        raise_typed_http(
+            code=error_codes.ACCESS_DENIED,
+            status_code=403,
+            message="Accesso negato",
+        )
 
     # Fail-fast sui campi sensibili non gestiti qui: meglio errore esplicito
     # del drop silenzioso. Storicamente il frontend mandava `password` nel
@@ -754,7 +758,11 @@ def reset_password(user_id: str, data: ResetPasswordRequest,
     ):
         if current_user.role == "superadmin":
             raise HTTPException(status_code=404, detail="Utente non trovato")
-        raise HTTPException(status_code=403, detail="Accesso negato")
+        raise_typed_http(
+            code=error_codes.ACCESS_DENIED,
+            status_code=403,
+            message="Accesso negato",
+        )
 
     if len(data.new_password) < 12:
         raise HTTPException(status_code=400, detail="La password deve essere lunga almeno 12 caratteri")
@@ -782,7 +790,11 @@ def delete_user(user_id: str, current_user: CurrentUser = Depends(require_admin)
     ):
         if current_user.role == "superadmin":
             raise HTTPException(status_code=404, detail="Utente non trovato")
-        raise HTTPException(status_code=403, detail="Accesso negato")
+        raise_typed_http(
+            code=error_codes.ACCESS_DENIED,
+            status_code=403,
+            message="Accesso negato",
+        )
 
     if not db.delete_user(user_id):
         raise HTTPException(status_code=404, detail="Utente non trovato")

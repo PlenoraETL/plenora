@@ -86,6 +86,8 @@ EXPECTED_DOMAIN_CODES: Set[str] = {
     "memory_limit_exceeded",
     # BE-GO-READY-ERROR-CODES-013 — Service initialization family
     "service_not_initialized",
+    # BE-GO-READY-ERROR-CODES-014 — Access Denied family
+    "access_denied",
 }
 
 # Pattern accettati come `http_<status>` fallback intenzionale
@@ -97,8 +99,9 @@ EXPECTED_FALLBACK_PATTERNS: Set[str] = {
     # in BE-GO-READY-ERROR-CODES-011.
     # "service_init_guard" promoted to raise_typed_http(SERVICE_NOT_INITIALIZED)
     # in BE-GO-READY-ERROR-CODES-013.
+    # "generic_access_denied" promoted to raise_typed_http(ACCESS_DENIED)
+    # in BE-GO-READY-ERROR-CODES-014.
     "value_error_str_e",
-    "generic_access_denied",
 }
 
 EXPECTED_GLOBAL_CODES: Set[str] = {
@@ -118,12 +121,13 @@ def test_known_global_codes_matches_expected_lock():
     assert error_codes.KNOWN_GLOBAL_CODES == EXPECTED_GLOBAL_CODES
 
 
-def test_catalog_count_domain_twentyfour():
-    """24 codici domain (5 pre-existing + 6 batch 006 + 10 batch 009
+def test_catalog_count_domain_twentyfive():
+    """25 codici domain (5 pre-existing + 6 batch 006 + 10 batch 009
     not-found family + 1 batch 010 external-service +
     1 BE-GO-READY-MEMORY-OOM-001 memory_limit_exceeded +
-    1 BE-GO-READY-ERROR-CODES-013 service_not_initialized)."""
-    assert len(error_codes.KNOWN_DOMAIN_CODES) == 24
+    1 BE-GO-READY-ERROR-CODES-013 service_not_initialized +
+    1 BE-GO-READY-ERROR-CODES-014 access_denied)."""
+    assert len(error_codes.KNOWN_DOMAIN_CODES) == 25
 
 
 def test_catalog_domain_and_global_disjoint():
@@ -167,6 +171,8 @@ def test_catalog_constants_match_set_values():
         error_codes.MEMORY_LIMIT_EXCEEDED,
         # BE-GO-READY-ERROR-CODES-013 — Service initialization family
         error_codes.SERVICE_NOT_INITIALIZED,
+        # BE-GO-READY-ERROR-CODES-014 — Access Denied family
+        error_codes.ACCESS_DENIED,
     }
     assert domain_constants == set(error_codes.KNOWN_DOMAIN_CODES)
 
@@ -497,6 +503,8 @@ def test_router_constant_refs_find_baseline():
         "INTERNAL_ERROR",
         # batch 013 (service init guard promotion)
         "SERVICE_NOT_INITIALIZED",
+        # batch 014 (generic access denied promotion)
+        "ACCESS_DENIED",
     }
     missing = baseline_constants_must_appear - found
     assert missing == set(), (
@@ -556,6 +564,53 @@ def test_no_generic_500_string_detail_in_auth_routers():
     assert violations == [], (
         f"Old generic-500 pattern found in auth (should use raise_typed_http): {violations}"
     )
+
+
+def test_no_generic_access_denied_string_detail_in_app():
+    """Source-bound: nessun file sotto `app/` deve contenere old-pattern
+    `raise HTTPException(403, "Accesso negato")` con `detail` stringa.
+    Tutti i 12 call site (auth/ownership helpers, auth user-management,
+    logs runs router, files router, orchestrator download) sono stati
+    promossi a `raise_typed_http(error_codes.ACCESS_DENIED, ...)` in
+    BE-GO-READY-ERROR-CODES-014."""
+    app_root = _BACKEND_ROOT / "app"
+    old_pattern = re.compile(
+        r'raise\s+HTTPException\('
+        r'(?=[^)]*(?:status_code\s*=\s*)?403)'
+        r'(?=[^)]*["\']Accesso negato["\'])',
+        re.DOTALL,
+    )
+    violations = []
+    for py_file in app_root.rglob("*.py"):
+        try:
+            text = py_file.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        for match in old_pattern.finditer(text):
+            violations.append(
+                f"{py_file.relative_to(_BACKEND_ROOT)}:"
+                f"{text[:match.start()].count(chr(10)) + 1}"
+            )
+    assert violations == [], (
+        f"Old generic_access_denied pattern found (should use raise_typed_http "
+        f"with ACCESS_DENIED): {violations}"
+    )
+
+
+def test_generic_access_denied_not_in_accepted_fallback():
+    """Lock di chiusura: `generic_access_denied` NON deve piu' figurare
+    fra i pattern accettati in `ACCEPTED_HTTP_FALLBACK_PATTERNS`. La
+    promozione a `ACCESS_DENIED` (BE-GO-READY-ERROR-CODES-014) ha
+    chiuso tutti i 12 call site; il pattern non e' piu' un fallback
+    legittimo ma un residuo da prevenire."""
+    assert "generic_access_denied" not in error_codes.ACCEPTED_HTTP_FALLBACK_PATTERNS
+
+
+def test_access_denied_constant_value_lock():
+    """Lock del valore stringa: il codice `access_denied` (snake_case)
+    e' parte dell'API contract verso il FE. Modifiche del valore
+    rompono i consumer; questo test impedisce drift accidentale."""
+    assert error_codes.ACCESS_DENIED == "access_denied"
 
 
 def test_no_service_init_guard_string_detail_in_app():

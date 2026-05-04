@@ -2,9 +2,9 @@
 DebugPayloadBuilder — assembla il debug_payload per il Debug Agent.
 
 Viene invocato alla chiusura di una run in failure.
-Legge il canvas da config.db e combina tutto il contesto
-in un oggetto JSON strutturato, pronto per essere mandato
-all'agente AI.
+Legge il canvas dal DB config (PostgreSQL via app.db.config_db_service)
+e combina tutto il contesto in un oggetto JSON strutturato, pronto per
+essere mandato all'agente AI.
 
 Struttura output:
     {
@@ -94,7 +94,7 @@ class DebugPayloadBuilder:
 
     def _build_pipeline_context(self, project_id: str, steps: list) -> dict:
         """
-        Legge metadata e canvas da config.db e costruisce il contesto pipeline.
+        Legge metadata e canvas dal DB config (PG) e costruisce il contesto pipeline.
         """
         try:
             import app.db.config_db_service as cfg_db

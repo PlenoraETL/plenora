@@ -33,6 +33,8 @@ from fastapi import HTTPException
 
 import app.db.db_service as db
 from app.core.auth.models import CurrentUser
+from app.shared import error_codes
+from app.shared.error_envelope import raise_typed_http
 
 
 def _extract_group_and_id(resource):
@@ -52,7 +54,7 @@ def assert_group_access(
 
     Sostituisce il pattern duplicato:
         if current_user.role != "superadmin" and resource.group_id != current_user.group_id:
-            raise HTTPException(403, "Accesso negato")
+            raise_typed_http(error_codes.ACCESS_DENIED, 403, "Accesso negato")
 
     - 404 se `resource` è None.
     - 403 se l'utente non è superadmin e il gruppo della risorsa non combacia.
@@ -72,7 +74,11 @@ def assert_group_access(
 
     resource_group, _ = _extract_group_and_id(resource)
     if resource_group != current_user.group_id:
-        raise HTTPException(status_code=403, detail="Accesso negato")
+        raise_typed_http(
+            code=error_codes.ACCESS_DENIED,
+            status_code=403,
+            message="Accesso negato",
+        )
 
 
 def compute_can_edit(
@@ -143,7 +149,11 @@ def assert_can_modify(
 
     resource_group, _ = _extract_group_and_id(resource)
     if resource_group != current_user.group_id:
-        raise HTTPException(status_code=403, detail="Accesso negato")
+        raise_typed_http(
+            code=error_codes.ACCESS_DENIED,
+            status_code=403,
+            message="Accesso negato",
+        )
 
     # Hierarchical check: chi l'ha creata?
     if isinstance(resource, dict):
@@ -207,7 +217,11 @@ def assert_resource_visible(
         ):
             return
 
-    raise HTTPException(status_code=403, detail="Accesso negato")
+    raise_typed_http(
+        code=error_codes.ACCESS_DENIED,
+        status_code=403,
+        message="Accesso negato",
+    )
 
 
 def _check_ownership(
@@ -235,7 +249,11 @@ def _check_ownership(
 
     # Filtro gruppo (superadmin bypassa)
     if not is_super and resource.get("group_id") != current_user.group_id:
-        raise HTTPException(status_code=403, detail="Accesso negato")
+        raise_typed_http(
+            code=error_codes.ACCESS_DENIED,
+            status_code=403,
+            message="Accesso negato",
+        )
 
     # Owner check: created_by deve combaciare oppure admin/superadmin
     created_by = resource.get("created_by")

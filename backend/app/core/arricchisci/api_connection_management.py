@@ -345,7 +345,7 @@ class ApiConnectionManagementMixin:
             config["request"] = data["request"]
         if data.get("response") is not None:
             config["response"] = data["response"]
-        # Cifra i campi auth sensibili at-rest prima di salvare in SQLite
+        # Cifra i campi auth sensibili at-rest prima di salvare nel DB
         _encrypt_auth_in_config(config)
         db_svc.save_api_connection(
             api_id=api_id,

@@ -1,5 +1,7 @@
 """
-Intermediate Writer — logica di scrittura per SQLite #3.
+Intermediate Writer — logica di scrittura nello storage intermediate
+(PostgreSQL via `app.core.intermediate.db`; ex SQLite #3 prima della
+migrazione a PG).
 
 Responsabilità:
 - Calcolo hash aggregato per run (input_hash / output_hash)
@@ -168,7 +170,7 @@ def write_node(run_id: str, node_id: str, node_type: str,
                exec_time: float, status: str,
                error_msg: str = None) -> str:
     """
-    Scrive un nodo completo in SQLite #3:
+    Scrive un nodo completo nello storage intermediate (PostgreSQL):
     1. Crea tabella dinamica
     2. Calcola _row_hash per ogni riga
     3. Bulk insert

@@ -149,7 +149,11 @@ def _check_file_ownership(file_id: str, group_id: str, is_superadmin: bool = Fal
             },
         )
     if row.get("group_id") != group_id:
-        raise HTTPException(status_code=403, detail="Accesso negato")
+        raise_typed_http(
+            code=error_codes.ACCESS_DENIED,
+            status_code=403,
+            message="Accesso negato",
+        )
 
 router = APIRouter(prefix="/files", tags=["File Sources"])
 

@@ -477,7 +477,7 @@ class FileSourceService:
             logger=self._logger,
         )
 
-    # ==================== CRUD (SQLite) ====================
+    # ==================== CRUD ====================
 
     def get_file_source(self, file_id: str) -> Optional[FileSource]:
         """Ottieni file source specifico dal DB."""

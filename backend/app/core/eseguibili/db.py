@@ -1,8 +1,9 @@
 """
-CRUD SQLite per la tabella `eseguibili` in config.db.
+CRUD per la tabella `eseguibili` (storage: PostgreSQL via app.db.db_service).
 
-La tabella è definita in app/db/config_schema.sql e viene creata automaticamente
-all'avvio da init_all_dbs(). Questo modulo contiene solo le funzioni di accesso.
+Lo schema PG e' creato dalle migrazioni in `backend/migrations/`. Il file
+storico `app/db/config_schema.sql` e' mantenuto come reference legacy
+(vedi header del file). Questo modulo contiene solo le funzioni di accesso.
 """
 
 import json
@@ -18,7 +19,7 @@ def _now() -> str:
 
 
 def _parse_row(row) -> Optional[Dict[str, Any]]:
-    """Converte una row SQLite in dict Python con JSON deserializzato."""
+    """Converte una row DB in dict Python con JSON deserializzato."""
     if row is None:
         return None
     d = dict(row)

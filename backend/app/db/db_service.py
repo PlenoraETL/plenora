@@ -45,7 +45,7 @@ def init_all_dbs():
     import app.core.intermediate.db as idb
     idb.init_db()
     # C8-nit: runner migration — applica i file in migrations/ non ancora
-    # registrati in plenora.schema_migrations. I file esistenti usano
+    # registrati in <DB_SCHEMA>.schema_migrations. I file esistenti usano
     # IF NOT EXISTS (idempotenti) quindi il primo run post-C8 li registra
     # semplicemente come applicate senza side-effect.
     from app.db.migrations_runner import apply_pending_migrations

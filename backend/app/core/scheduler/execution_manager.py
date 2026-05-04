@@ -711,10 +711,12 @@ class ExecutionManager:
                     f"non-transient: {release_err}. Scadra' per TTL.",
                     exc_info=True,
                 )
-            # Chiudi le connessioni SQLite thread-local del worker Celery:
+            # Chiudi le connessioni PG thread-local del worker Celery:
             # senza questa pulizia ogni esecuzione lascia conn aperte nel
-            # thread.local del worker e dopo molte run il file descriptor
-            # si esaurisce o il DB resta locked (SQLITE_BUSY).
+            # thread.local del worker e dopo molte run le connessioni PG
+            # restano aperte saturando il pool del server. Pattern ereditato
+            # dalla migrazione SQLite -> PostgreSQL (in SQLite il rischio era
+            # SQLITE_BUSY / file descriptor exhaustion).
             try:
                 from app.core.intermediate.db import close_connection as _close_idb
                 _close_idb()
