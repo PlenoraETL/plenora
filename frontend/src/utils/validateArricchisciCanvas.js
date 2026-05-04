@@ -16,6 +16,7 @@ import {
  *  - Canvas vuoto (CANVAS_EMPTY)
  *  - Nodo result presente (RESULT_NODE_MISSING)
  *  - Almeno una sorgente se qualche enricher la richiede (ARRICCHISCI_NO_SOURCES)
+ *  - Almeno un nodo api_enrich presente (ARRICCHISCI_NO_ENRICHER)
  *  - Ogni nodo api_enrich ha api_id (ARRICCHISCI_API_NOT_SELECTED)
  *  - Connessione API non eliminata (ARRICCHISCI_API_CONNECTION_STALE)
  *  - Mapping parametri richiesti (ARRICCHISCI_PARAM_MAPPING_MISSING)
@@ -127,6 +128,14 @@ export function validateArricchisciCanvas(nodes, edges, availableConnectionIds =
       id: RULE_IDS.ARRICCHISCI_NO_SOURCES,
       severity: SEVERITY.ERROR,
       message: 'Nessuna sorgente dati. Aggiungi un nodo "Progetto", "File" o "Valori Statici".',
+    }));
+  }
+
+  if (enrichNodes.length === 0) {
+    issues.push(createIssue({
+      id: RULE_IDS.ARRICCHISCI_NO_ENRICHER,
+      severity: SEVERITY.ERROR,
+      message: 'Aggiungi almeno un nodo API Enrich.',
     }));
   }
 

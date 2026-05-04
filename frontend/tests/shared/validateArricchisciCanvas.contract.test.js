@@ -52,6 +52,28 @@ describe('validateArricchisciCanvas', () => {
     });
   });
 
+  describe('nessun enricher presente', () => {
+    it('canvas con source + result ma ZERO enricher -> errore ARRICCHISCI_NO_ENRICHER', () => {
+      const r = validateArricchisciCanvas(
+        [projectSource('s1'), resultA('r1')],
+        [edge('s1','r1')],
+      );
+      expect(r.isValid).toBe(false);
+      expect(findIssue(errors(r), /almeno un nodo api enrich/i)).toBeDefined();
+    });
+
+    it('canvas con almeno un enricher -> no ARRICCHISCI_NO_ENRICHER', () => {
+      const e = apiEnrichNode('e1', {
+        parameters: [{ name: 'city', required: true, mode: 'fixed' }],
+      });
+      const r = validateArricchisciCanvas(
+        [projectSource('s1'), e, resultA('r1')],
+        [edge('s1','e1'), edge('e1','r1')],
+      );
+      expect(findIssue(errors(r), /almeno un nodo api enrich/i)).toBeUndefined();
+    });
+  });
+
   describe('necessita di source vs enricher autonomo', () => {
     it('enricher con required+mappabile, NO source -> errore', () => {
       const enricher = apiEnrichNode('e1', {
@@ -258,10 +280,14 @@ describe('validateArricchisciCanvas', () => {
       expect(errors(r)).toHaveLength(0);
     });
 
-    it('canvas con solo file_source autonomo + result -> ok', () => {
+    it('canvas con file_source + enricher autonomo + result -> ok', () => {
+      const e = apiEnrichNode('e1', {
+        api_id: 'api-1',
+        parameters: [{ name: 'city', required: true, mode: 'fixed' }],
+      });
       const r = validateArricchisciCanvas(
-        [fileSource('f1'), resultA('r1')],
-        [edge('f1','r1')],
+        [fileSource('f1'), e, resultA('r1')],
+        [edge('f1','e1'), edge('e1','r1')],
       );
       expect(r.isValid).toBe(true);
     });

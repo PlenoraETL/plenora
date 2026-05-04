@@ -142,20 +142,11 @@ const ArricchisciEditorContent = () => {
   const preview   = usePreview(projectId, handleSaveQuiet);
   const execution = useExecution(projectId, {
     executeFunction: executeEnrichmentAsync,
-    // CANVAS_EMPTY e ARRICCHISCI_NO_SOURCES sono coperti da
-    // `validateArricchisciCanvas` (chiamato da `ResultNode.handleExecute
-    // WithValidation` prima di `onExecute`); quei due throws erano dead code
-    // post-validation (FE-PHASE2-VALIDATION-002).
-    //
-    // MIGRATE_NEXT: il throw "Aggiungi almeno un nodo API Enrich" non e'
-    // coperto da una rule del validator. Aggiungere `ARRICCHISCI_NO_ENRICHER`
-    // alla validation cambierebbe la UX (il modal bloccherebbe quando ora
-    // si vede un confirm modal con config vuota); fuori scope structural.
-    onBeforeExecute: async () => {
-      const currentNodes = nodesRef.current;
-      if (!currentNodes.find(n => n.type === 'api_enrich')) throw new Error('Aggiungi almeno un nodo API Enrich.');
-      await handleSaveQuiet();
-    }
+    // Tutti i guard (CANVAS_EMPTY, ARRICCHISCI_NO_SOURCES, ARRICCHISCI_NO_ENRICHER)
+    // sono coperti da `validateArricchisciCanvas` (chiamato da `ResultNode.
+    // handleExecuteWithValidation` prima di `onExecute`). onBeforeExecute
+    // raggiunto solo a validation-passed (FE-PHASE2-VALIDATION-003).
+    onBeforeExecute: () => handleSaveQuiet(),
   });
   const caricarica = useCaricarica(projectId, {
     onBeforeExecute: handleSaveQuiet,
@@ -279,7 +270,6 @@ const ArricchisciEditorContent = () => {
       return (n.data?.parameters || []).some(p => p.required && p.mode !== 'fixed' && !(p.name in staticParameters));
     });
     if (anyNeedsSource && !currentNodes.find(n => n.type === 'project_source' || n.type === 'file_source' || n.type === 'staticValues')) { toast.warning('Aggiungi almeno una sorgente dati.'); return; }
-    if (!currentNodes.find(n => n.type === 'api_enrich')) { toast.warning('Aggiungi almeno un nodo API Enrich.'); return; }
     await handleSaveQuiet();
     // I nodi file-processor (rest_file) lavorano
     // file->file, non riga-per-riga su un DataFrame. Il validate/estimate
