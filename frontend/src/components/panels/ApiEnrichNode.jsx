@@ -850,9 +850,8 @@ function ExtraFileSlot({ field, label, current, onUploaded, onRemoved }) {
       // C3.1 Phase 4: passa per il boundary api/files.uploadFile per
       // ereditare il guard B3 (size pre-flight + 413 propagation come
       // UploadTooLargeError) e niente Content-Type manuale.
-      // L'errore catchato qui copre sia UploadTooLargeError (err.message
-      // contiene il detail user-friendly) sia gli AxiosError preservati
-      // (err?.response?.data?.detail intatto).
+      // L'errore catchato qui copre sia UploadTooLargeError sia AxiosError;
+      // in entrambi i casi err.message e' normalizzato dall'interceptor.
       const fs = await uploadFile(
         file,
         `extra_${field.name}_${file.name}`,

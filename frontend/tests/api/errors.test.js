@@ -104,6 +104,47 @@ describe('handleCascade409', () => {
     expect(result).not.toBeNull();
     expect(result.message).toBe('');
   });
+
+  it('preferisce il nuovo envelope details con error/message top-level', () => {
+    const err = fakeError(409, {
+      error: 'project_has_dependencies',
+      message: 'Progetto ha 1 dipendenza',
+      details: {
+        dependencies: [
+          { kind: 'project', id: 'proj-1', name: 'Progetto A' },
+        ],
+        hidden_count: 1,
+      },
+    });
+
+    const result = handleCascade409(err);
+
+    expect(result).not.toBeNull();
+    expect(result.error).toBe('project_has_dependencies');
+    expect(result.message).toBe('Progetto ha 1 dipendenza');
+    expect(result.dependencies).toHaveLength(1);
+    expect(result.hiddenCount).toBe(1);
+  });
+
+  it('usa detail fallback se details esiste ma non contiene dependencies', () => {
+    const err = fakeError(409, {
+      error: 'connection_in_use',
+      message: 'Connessione usata',
+      details: { note: 'new envelope without cascade list' },
+      detail: {
+        error: 'connection_in_use',
+        message: 'Connessione usata legacy',
+        dependencies: [{ kind: 'project', id: 'p-1', name: 'P1' }],
+      },
+    });
+
+    const result = handleCascade409(err);
+
+    expect(result).not.toBeNull();
+    expect(result.error).toBe('connection_in_use');
+    expect(result.message).toBe('Connessione usata');
+    expect(result.dependencies).toHaveLength(1);
+  });
 });
 
 describe('formatCascadeDependencies', () => {

@@ -31,19 +31,27 @@
  */
 export function handleCascade409(err) {
   if (!err || err.response?.status !== 409) return null;
-  const detail = err.response?.data?.detail;
-  if (!detail || typeof detail !== 'object') return null;
-  if (typeof detail.error !== 'string' || !detail.error) return null;
-  if (!Array.isArray(detail.dependencies)) return null;
+  // Preferisce new envelope `details` con fallback a legacy `detail`.
+  const data = err.response?.data;
+  const details = data?.details;
+  const detail = data?.detail;
+  const source = (
+    details && typeof details === 'object' && Array.isArray(details.dependencies)
+  ) ? details
+    : (detail && typeof detail === 'object' && Array.isArray(detail.dependencies)) ? detail
+    : null;
+  if (!source) return null;
+  const errorCode = err.code || data?.error || source.error;
+  if (typeof errorCode !== 'string' || !errorCode) return null;
   const hiddenCount = (
-    typeof detail.hidden_count === 'number' && detail.hidden_count > 0
-      ? detail.hidden_count
+    typeof source.hidden_count === 'number' && source.hidden_count > 0
+      ? source.hidden_count
       : 0
   );
   return {
-    error: detail.error,
-    message: typeof detail.message === 'string' ? detail.message : '',
-    dependencies: detail.dependencies,
+    error: errorCode,
+    message: err.message || data?.message || (typeof source.message === 'string' ? source.message : ''),
+    dependencies: source.dependencies,
     hiddenCount,
   };
 }

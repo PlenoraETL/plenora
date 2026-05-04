@@ -172,10 +172,12 @@ export default function RunHistoryModal({ isOpen, onClose, canvasId, nodeId, nod
       })
       .catch((err) => {
         // PR-A UX Tier 1: backend (intermediate/router.py) ritorna 422
-        // con detail.reason per i casi noti di diff non disponibile.
-        // Mostriamo il messaggio specifico invece dell'errore generico.
+        // con details.reason (new envelope) o detail.reason (legacy).
+        const details = err?.response?.data?.details;
         const detail = err?.response?.data?.detail;
-        setCompareError(mapCompareErrorReason(detail?.reason, detail?.message));
+        const reason = details?.reason || detail?.reason;
+        const msg = details?.message || detail?.message || err?.message;
+        setCompareError(mapCompareErrorReason(reason, msg));
       })
       .finally(() => setCompareLoading(false));
   }, [compareMode, selectedA, selectedB, nodeId]);
