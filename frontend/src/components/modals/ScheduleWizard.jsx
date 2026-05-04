@@ -173,7 +173,7 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
       toast.success(editId ? 'Schedule aggiornato' : 'Schedule creato');
       onCreated();
     } catch (e) {
-      toast.error('Errore: ' + (e.response?.data?.detail || e.message));
+      toast.error('Errore: ' + (e.message || 'errore sconosciuto'));
     } finally {
       setSaving(false);
     }

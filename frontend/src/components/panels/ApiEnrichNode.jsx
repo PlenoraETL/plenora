@@ -864,7 +864,7 @@ function ExtraFileSlot({ field, label, current, onUploaded, onRemoved }) {
         size:             fs.size_bytes || file.size,
       });
     } catch (err) {
-      setError(err?.response?.data?.detail || err.message || 'Upload fallito');
+      setError(err?.message || 'Upload fallito');
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = '';

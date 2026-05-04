@@ -44,7 +44,7 @@ function PublishEseguibileModal({ project, onClose, onSuccess }) {
       onSuccess && onSuccess(result);
       onClose();
     } catch (e) {
-      setError(e?.response?.data?.detail || e.message);
+      setError(e?.message || 'Errore pubblicazione');
     } finally {
       setSubmitting(false);
     }

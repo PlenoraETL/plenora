@@ -202,6 +202,7 @@ describe('TicketCreateModal', () => {
 
   it('errore API → toast errore + niente onCreated', async () => {
     createTicketMock.mockRejectedValue({
+      message: 'Permesso negato',
       response: { data: { detail: 'Permesso negato' } },
     });
     const onCreated = vi.fn();

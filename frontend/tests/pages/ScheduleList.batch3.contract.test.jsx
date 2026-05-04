@@ -129,7 +129,7 @@ describe('ScheduleList — batch 3', () => {
     });
     schedulesMock.deleteSchedule.mockRejectedValueOnce({
       response: { data: { detail: 'lock owned by other worker' } },
-      message: 'Request failed',
+      message: 'lock owned by other worker',
     });
 
     render(<ScheduleList />);
@@ -190,7 +190,7 @@ describe('ScheduleList — batch 3', () => {
     });
     schedulesMock.runScheduleNow.mockRejectedValueOnce({
       response: { data: { detail: 'queue full' } },
-      message: 'Request failed',
+      message: 'queue full',
     });
 
     render(<ScheduleList />);

@@ -52,7 +52,7 @@ export default function TicketCreateModal({ meta, userRole, onClose, onCreated }
       });
       onCreated?.(created);
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Errore creazione ticket');
+      toast.error(err.message || 'Errore creazione ticket');
     } finally {
       setSubmitting(false);
     }

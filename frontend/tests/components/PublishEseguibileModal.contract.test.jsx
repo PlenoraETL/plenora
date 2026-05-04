@@ -129,7 +129,7 @@ describe('PublishEseguibileModal', () => {
   it('shows the backend detail inline on publish error and skips success callbacks', async () => {
     createEseguibileMock.mockRejectedValueOnce({
       response: { data: { detail: 'project_already_published' } },
-      message: 'Conflict',
+      message: 'project_already_published',
     });
     const onClose = vi.fn();
     const onSuccess = vi.fn();

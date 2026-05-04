@@ -196,7 +196,7 @@ const ImdfPublisherNode = memo(({ data, id }) => {
       );
     } catch (e) {
       setPublishing(false);
-      setPublishError(e?.response?.data?.detail || e.message || 'Errore pubblicazione');
+      setPublishError(e?.message || 'Errore pubblicazione');
     }
   };
 
@@ -230,7 +230,7 @@ const ImdfPublisherNode = memo(({ data, id }) => {
       });
       setValidateReport(report);
     } catch (e) {
-      setValidateError(e?.response?.data?.detail || e.message || 'Errore validazione');
+      setValidateError(e?.message || 'Errore validazione');
     } finally {
       setValidateLoading(false);
     }

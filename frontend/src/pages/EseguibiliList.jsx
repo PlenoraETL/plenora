@@ -53,7 +53,7 @@ function EseguibiliList() {
       const data = await listEseguibili();
       setItems(data);
     } catch (e) {
-      toast.error('Errore caricamento eseguibili: ' + (e?.response?.data?.detail || e.message));
+      toast.error('Errore caricamento eseguibili: ' + (e?.message || 'errore sconosciuto'));
     } finally {
       setLoading(false);
     }
@@ -69,7 +69,7 @@ function EseguibiliList() {
       const all = await listProjects();
       setArricchisciProjects(all.filter(p => p.project_type === 'arricchisci'));
     } catch (e) {
-      toast.error('Errore caricamento progetti: ' + (e?.response?.data?.detail || e.message));
+      toast.error('Errore caricamento progetti: ' + (e?.message || 'errore sconosciuto'));
     } finally {
       setLoadingProjects(false);
     }
@@ -88,7 +88,7 @@ function EseguibiliList() {
       toast.success('Eseguibile eliminato');
       loadItems();
     } catch (e) {
-      toast.error('Errore eliminazione: ' + (e?.response?.data?.detail || e.message));
+      toast.error('Errore eliminazione: ' + (e?.message || 'errore sconosciuto'));
     }
   };
 

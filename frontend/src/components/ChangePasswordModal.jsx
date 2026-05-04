@@ -40,7 +40,7 @@ export default function ChangePasswordModal({ onClose }) {
       setSuccess(true);
       setTimeout(() => onClose(), 1500);
     } catch (e) {
-      const msg = e?.response?.data?.detail || e?.message || 'Errore durante il cambio password';
+      const msg = e?.message || 'Errore durante il cambio password';
       setError(msg);
     } finally {
       setLoading(false);

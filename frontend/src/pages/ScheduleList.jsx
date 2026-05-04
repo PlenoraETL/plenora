@@ -158,7 +158,7 @@ function ScheduleList() {
 
   const handleToggle = async (id, current) => {
     try { await toggleSchedule(id, !current); loadData(); }
-    catch (e) { toast.error('Errore toggle: ' + (e.response?.data?.detail || e.message)); }
+    catch (e) { toast.error('Errore toggle: ' + (e.message || 'errore sconosciuto')); }
   };
   const handleDelete = async (id, desc) => {
     const ok = await confirmModal.confirm({
@@ -169,7 +169,7 @@ function ScheduleList() {
     });
     if (!ok) return;
     try { await deleteSchedule(id); loadData(); }
-    catch (e) { toast.error('Errore eliminazione: ' + (e.response?.data?.detail || e.message)); }
+    catch (e) { toast.error('Errore eliminazione: ' + (e.message || 'errore sconosciuto')); }
   };
   const handleRunNow = async (id) => {
     if (runningManual[id]) return;
@@ -179,7 +179,7 @@ function ScheduleList() {
       await runScheduleNow(id);
       await refreshData();
     } catch (e) {
-      toast.error('Errore: ' + (e.response?.data?.detail || e.message));
+      toast.error('Errore: ' + (e.message || 'errore sconosciuto'));
       setRunningManual(prev => { const n={...prev}; delete n[id]; return n; });
       setRunStartTimes(prev => { const n={...prev}; delete n[id]; return n; });
     }

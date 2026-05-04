@@ -72,7 +72,7 @@ export default function TicketDetail() {
       const result = await getTicket(id);
       setData(result);
     } catch (e) {
-      toast.error(e.response?.data?.detail || 'Errore caricamento ticket');
+      toast.error(e.message || 'Errore caricamento ticket');
       if (e.response?.status === 404) navigate('/tickets');
     } finally {
       setLoading(false);
@@ -91,7 +91,7 @@ export default function TicketDetail() {
       toast.success(`Status aggiornato a "${newStatus}"`);
       load();
     } catch (e) {
-      toast.error(e.response?.data?.detail || 'Errore aggiornamento');
+      toast.error(e.message || 'Errore aggiornamento');
     } finally {
       setSaving(false);
     }
@@ -103,7 +103,7 @@ export default function TicketDetail() {
       await updateTicket(id, { [field]: value });
       load();
     } catch (e) {
-      toast.error(e.response?.data?.detail || `Errore aggiornamento ${field}`);
+      toast.error(e.message || `Errore aggiornamento ${field}`);
     } finally {
       setSaving(false);
     }
@@ -117,7 +117,7 @@ export default function TicketDetail() {
       setCommentBody('');
       load();
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Errore invio commento');
+      toast.error(err.message || 'Errore invio commento');
     }
   };
 
@@ -130,7 +130,7 @@ export default function TicketDetail() {
         toast.success(`Allegato "${file.name}" caricato`);
       } catch (err) {
         toast.error(
-          err.response?.data?.detail || `Errore upload ${file.name}`,
+          err.message || `Errore upload ${file.name}`,
         );
       }
     }
@@ -158,7 +158,7 @@ export default function TicketDetail() {
       toast.success('Ticket eliminato');
       navigate('/tickets');
     } catch (e) {
-      toast.error(e.response?.data?.detail || 'Errore eliminazione ticket');
+      toast.error(e.message || 'Errore eliminazione ticket');
     }
   };
 
@@ -166,7 +166,7 @@ export default function TicketDetail() {
     try {
       await openAttachment(id, attachmentId, filename);
     } catch (e) {
-      toast.error(e.response?.data?.detail || 'Errore apertura allegato');
+      toast.error(e.message || 'Errore apertura allegato');
     }
   };
 
@@ -182,7 +182,7 @@ export default function TicketDetail() {
       await deleteAttachment(id, attachmentId);
       load();
     } catch (e) {
-      toast.error(e.response?.data?.detail || 'Errore rimozione allegato');
+      toast.error(e.message || 'Errore rimozione allegato');
     }
   };
 

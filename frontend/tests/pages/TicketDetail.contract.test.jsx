@@ -322,6 +322,7 @@ describe('TicketDetail', () => {
 
   it('errore su openAttachment mostra toast', async () => {
     openAttachmentMock.mockRejectedValue({
+      message: 'Blob non disponibile',
       response: { data: { detail: 'Blob non disponibile' } },
     });
     getTicketMock.mockResolvedValue({
@@ -471,6 +472,7 @@ describe('TicketDetail', () => {
 
   it('errore su deleteTicket mostra toast e NON naviga', async () => {
     deleteTicketMock.mockRejectedValue({
+      message: 'Permesso negato',
       response: { data: { detail: 'Permesso negato' } },
     });
     const user = userEvent.setup();

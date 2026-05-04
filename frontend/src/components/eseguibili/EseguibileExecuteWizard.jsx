@@ -79,7 +79,7 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
         setOutputName(data.default_output_name || '');
       } catch (e) {
         if (!mounted) return;
-        setError(e?.response?.data?.detail || e.message);
+        setError(e?.message || 'Errore caricamento');
       } finally {
         if (mounted) setLoading(false);
       }
@@ -101,7 +101,7 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
       setMapping({ ...result.auto_mapping });
       setStep(2);
     } catch (e) {
-      setError(e?.response?.data?.detail || e.message);
+      setError(e?.message || 'Errore upload');
     } finally {
       setUploading(false);
     }
@@ -128,7 +128,7 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
       setTaskMessage('Task in coda...');
       startTaskPolling(resp.task_id);
     } catch (e) {
-      setError(e?.response?.data?.detail || e.message);
+      setError(e?.message || 'Errore esecuzione');
       setExecuting(false);
     }
   };
@@ -192,7 +192,7 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
       // il trasferimento.
       if (onClose) onClose();
     } catch (e) {
-      toast.error('Errore download: ' + (e?.response?.data?.detail || e.message));
+      toast.error('Errore download: ' + (e?.message || 'errore sconosciuto'));
     }
   };
 

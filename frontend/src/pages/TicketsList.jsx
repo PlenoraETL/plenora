@@ -92,7 +92,7 @@ export default function TicketsList() {
       });
       setTickets(result);
     } catch (e) {
-      toast.error(e.response?.data?.detail || 'Errore caricamento ticket');
+      toast.error(e.message || 'Errore caricamento ticket');
     } finally {
       setLoading(false);
     }

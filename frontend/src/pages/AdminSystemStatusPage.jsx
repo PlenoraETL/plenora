@@ -409,7 +409,7 @@ export default function AdminSystemStatusPage() {
       setRefreshedAt(new Date());
       setLastError(null);
     } catch (e) {
-      setLastError(e.response?.data?.detail || e.message || 'Errore caricamento');
+      setLastError(e.message || 'Errore caricamento');
     } finally {
       setLoading(false);
     }

@@ -139,7 +139,7 @@ function ProjectList() {
       setNewProjectName(''); setNewProjectDesc(''); setNewProjectConnId('');
       loadData();
     } catch (err) {
-      toast.error('Errore creazione: ' + (err.response?.data?.detail || err.message));
+      toast.error('Errore creazione: ' + (err.message || 'errore sconosciuto'));
     } finally { setCreating(false); }
   };
 
@@ -202,7 +202,7 @@ function ProjectList() {
       toast.success('Eseguibile eliminato');
       loadData();
     } catch (err) {
-      toast.error('Errore eliminazione: ' + (err?.response?.data?.detail || err.message));
+      toast.error('Errore eliminazione: ' + (err?.message || 'errore sconosciuto'));
     }
   };
 

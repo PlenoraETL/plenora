@@ -217,7 +217,7 @@ export function useExecution(projectId, options = {}) {
       setIsExecuting(false);
       setProgress(0);
       setTaskStatus('failure');
-      setResult({ success: false, message: error.response?.data?.detail || error.message || 'Errore' });
+      setResult({ success: false, message: error.message || 'Errore' });
     }
   }, [projectId, onBeforeExecute, executeFunction, startMainPolling, startCaricaTasksPolling, stopAllCaricaPolling, mountedRef]);
 

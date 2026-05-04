@@ -152,7 +152,7 @@ export function useImdfBundles({ isImdfMode }) {
       if (selectedBundleId === tid) setSelectedBundleId(null);
     } catch (e) {
       console.error('deleteImdfBundle:', e);
-      toast.error(`Errore cancellazione bundle: ${e?.response?.data?.detail || e.message}`);
+      toast.error(`Errore cancellazione bundle: ${e?.message || 'errore sconosciuto'}`);
     }
   };
 

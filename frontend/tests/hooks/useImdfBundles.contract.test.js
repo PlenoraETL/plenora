@@ -194,7 +194,7 @@ describe('useImdfBundles — contract', () => {
       { task_id: 'a' },
       { task_id: 'b' },
     ]);
-    const apiErr = Object.assign(new Error('Boom'), {
+    const apiErr = Object.assign(new Error('bundle in uso'), {
       response: { data: { detail: 'bundle in uso' } },
     });
     deleteImdfBundleMock.mockRejectedValue(apiErr);
