@@ -49,6 +49,16 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Least-privilege: il workflow legge il repo (checkout) e non scrive
+# nulla. Niente issue/PR comment, niente release, niente push. Default
+# GITHUB_TOKEN sarebbe read/write a seconda delle settings del repo;
+# lo stringe esplicitamente a sola lettura per ridurre il blast radius
+# se una dep installata via `pip install` venisse compromessa
+# (supply-chain). Allineato alle best practice di GitHub Actions
+# hardening.
+permissions:
+  contents: read
+
 jobs:
   cleanroom:
     name: Backend boots from empty stack

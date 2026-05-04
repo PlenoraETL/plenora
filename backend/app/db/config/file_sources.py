@@ -312,32 +312,15 @@ def delete_file_source(file_id: str) -> bool:
 
     # Storage cleanup AFTER DB commit (ADR-0011 contract: orphan accepted
     # on storage failure, DB row stays deleted).
+    # BE-GO-READY-STORAGE-ENGINE-002: delegato all'helper unificato.
     if storage_key_to_clean:
-        try:
-            from app.shared.cloud_backends import (
-                ObjectStorageDisabledError,
-                object_storage_enabled,
-                get_runtime_object_storage,
-            )
-            if not object_storage_enabled():
-                # Capability off -> niente da pulire. File era marcato come
-                # S3-backed ma il deployment non ha piu' object storage
-                # attivo. Log debug, non warning.
-                logger.debug(
-                    f"delete_file_source: skip cleanup S3 per {file_id} "
-                    f"(object storage disabilitato)"
-                )
-            else:
-                storage = get_runtime_object_storage()
-                storage.delete(storage_key_to_clean)
-        except ObjectStorageDisabledError as e:
-            logger.debug(
-                f"delete_file_source: cleanup S3 skip per {file_id}: {e}"
-            )
-        except Exception as e:
-            logger.warning(
-                f"delete_file_source: cleanup S3 fallito per "
-                f"{file_id} key={storage_key_to_clean}: {e}"
-            )
+        from app.shared.storage_compensation import compensating_delete
+        compensating_delete(
+            storage_key_to_clean,
+            domain="file_source",
+            reason="row_delete_post_commit",
+            extras={"file_id": file_id},
+            logger=logger,
+        )
 
     return deleted

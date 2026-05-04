@@ -194,23 +194,20 @@ def list_results(project_id: str) -> List[Dict]:
 def _s3_delete_best_effort(storage_key: str) -> None:
     """Cleanup S3 object post-DELETE. Best-effort: errori loggati ma non
     sollevati (il record DB e' gia' andato, orfano S3 e' meno grave di
-    fallire un delete che l'utente ha richiesto)."""
-    try:
-        from app.shared.cloud_backends import (
-            ObjectStorageDisabledError,
-            object_storage_enabled,
-            get_runtime_object_storage,
-        )
-        if not object_storage_enabled():
-            # Capability off: non c'e' nulla da cancellare lato storage.
-            # Best-effort, niente warning rumoroso.
-            return
-        storage = get_runtime_object_storage()
-        storage.delete(storage_key)
-    except ObjectStorageDisabledError as e:
-        logger.debug(f"[FS-4] S3 delete skip (storage disabilitato): {e}")
-    except Exception as e:
-        logger.warning(f"[FS-4] S3 delete {storage_key} fallito (non-fatal): {e}")
+    fallire un delete che l'utente ha richiesto).
+
+    BE-GO-READY-STORAGE-ENGINE-002: delegato a
+    `app.shared.storage_compensation.compensating_delete`. Log
+    strutturato unificato (`event=storage_compensating_delete_*`)
+    sostituisce il vecchio prefisso `[FS-4] S3 delete ...`.
+    """
+    from app.shared.storage_compensation import compensating_delete
+    compensating_delete(
+        storage_key,
+        domain="result_blob",
+        reason="row_delete_post_commit",
+        logger=logger,
+    )
 
 
 def delete_result(result_id: str) -> bool:

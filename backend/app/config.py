@@ -278,6 +278,20 @@ class Settings:
         # Cap <= 0 disabilita il guard (escape hatch).
         # Override via env `WORKER_RSS_MAX_BYTES`.
         "WORKER_RSS_MAX_BYTES": 1_500_000_000,
+        # BE-GO-READY-TRANSFORMATION-ENGINE-001-CROSS-JOIN-GUARD: cap
+        # massimo per il numero di righe di output di un cross-join
+        # (`op_cross_join` in `app.core.manipola.transforms.joins`).
+        # Il preflight stima `len(left) * len(right)` PRIMA di
+        # `pd.merge(how="cross")`. Sopra il cap solleva
+        # `MemoryLimitExceededError` (stage `manipola_cross_join`)
+        # mappata a 413 envelope dual-shape `memory_limit_exceeded`
+        # (Payload Too Large: input troppo grandi per il cross). Default
+        # 50_000_000 righe: copre la routine multi-tabella tipica
+        # (1k x 10k = 10M, 10k x 1k = 10M) ma blocca esplosioni 100M+
+        # che certamente fanno SIGKILL del worker. Cap <= 0 disabilita
+        # il guard (escape hatch testing/admin).
+        # Override via env `CROSS_JOIN_MAX_OUTPUT_ROWS`.
+        "CROSS_JOIN_MAX_OUTPUT_ROWS": 50_000_000,
 
         # ==================== TASK ARRICCHIMENTO ====================
         "ENRICHMENT_BATCH_SIZE": 100,

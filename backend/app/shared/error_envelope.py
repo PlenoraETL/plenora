@@ -188,6 +188,7 @@ def raise_typed_http(
     status_code: int,
     message: str,
     details: Optional[Mapping[str, Any]] = None,
+    headers: Optional[Mapping[str, str]] = None,
 ) -> NoReturn:
     """Helper opzionale per sollevare `HTTPException` con shape
     structured-detail compatibile con il central handler envelope.
@@ -217,11 +218,17 @@ def raise_typed_http(
         message: testo italiano user-facing per UI.
         details: dict opzionale di dati strutturati (es.
             `{"dependencies": [...]}`). Se `None`, diventa `{}`.
+        headers: dict opzionale di header da preservare nella
+            response. Necessario per i call site auth-domain che
+            emettono `WWW-Authenticate: Bearer` (401 token-related)
+            o `Retry-After` (429 rate-limit). Se `None`, la response
+            non riceve header custom.
 
     Raises:
         `HTTPException` con `detail = {"error": code, "message":
         message, "details": details or {}}`; il central handler lo
-        normalizza nell'envelope canonico. Status code preservato.
+        normalizza nell'envelope canonico. Status code e headers
+        preservati.
 
     Note:
         Il return type e' `NoReturn` perche' la funzione solleva
@@ -242,4 +249,8 @@ def raise_typed_http(
         "message": message,
         "details": safe_details,
     }
+    if headers is not None:
+        raise HTTPException(
+            status_code=status_code, detail=detail, headers=dict(headers)
+        )
     raise HTTPException(status_code=status_code, detail=detail)

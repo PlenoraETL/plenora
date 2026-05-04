@@ -233,6 +233,146 @@ autorizzato"; NON usare per autenticazione mancante (401)."""
 
 
 # ============================================================
+# Domain-specific — Auth family
+# (BE-GO-READY-AUTH-DOMAIN-PROMOTION-001, ADR-0022)
+# ============================================================
+# Promozione dei call site auth-domain (auth.py + ownership.py) da
+# literal HTTPException a raise_typed_http preservando status code,
+# messaggio italiano user-facing e headers (`WWW-Authenticate`,
+# `Retry-After`). Nessun cambiamento comportamentale, nessuna nuova
+# disclosure.
+#
+# Disclosure policy: vedi ADR-0022 (auth disclosure policy).
+# Anti-enumeration invariants: ADR-0018 + ADR-0022 §"Anti-enumeration
+# invariants". I 4 invariants storici (login uniform-401, post-token
+# uniform-401, admin reset/delete uniform-403, path-traversal
+# uniform-403) restano source-bound nei test esistenti.
+
+# --- 401 (autenticazione) ---
+AUTH_TOKEN_MISSING = "auth_token_missing"
+"""401 + WWW-Authenticate: Bearer. Token Bearer assente nella
+request. Status/message preservati."""
+
+AUTH_TOKEN_INVALID = "auth_token_invalid"
+"""401 + WWW-Authenticate: Bearer. Token presente ma decoda fallita
+(invalid/expired/firma errata). NON distinguibile expired vs invalid:
+disclosure unica per non leakare TTL osservabile."""
+
+AUTH_TOKEN_REVOKED = "auth_token_revoked"
+"""401 + WWW-Authenticate: Bearer. Token decoda OK ma jti in
+blacklist (logout esplicito). Distinto da `auth_token_invalid` per
+UX post-logout (LEAKY_BY_DESIGN: l'utente sa che la revoca ha
+funzionato)."""
+
+AUTH_USER_NOT_FOUND_OR_DISABLED = "auth_user_not_found_or_disabled"
+"""401 (no WWW-Authenticate). Token valido, ma `db.get_user(sub)`
+ritorna None o `is_active=False`. Codice UNICO per i due rami:
+anti-enumeration non rivela se l'utente e' stato disabilitato vs
+eliminato. NON splittare."""
+
+AUTH_INVALID_CREDENTIALS = "auth_invalid_credentials"
+"""401. Username/password sbagliati al login. Constant-time bcrypt
+verify applicato anche su user inesistente (auth.py:395
+_DUMMY_PASSWORD_HASH). Codice UNICO per "user inesistente" e
+"password errata": anti-enumeration."""
+
+AUTH_MFA_INVALID = "auth_mfa_invalid"
+"""401. Codice TOTP fornito ma errato al login. Conta su rate-limit
+IP (auth.py:417)."""
+
+# --- 403 (autorizzazione) ---
+AUTH_ACCOUNT_DISABLED = "auth_account_disabled"
+"""403. Utente esiste, password ok, ma `is_active=False`. Disclosure
+post-password-ok intenzionale (UX-required: amministrazione utenti).
+LEAKY_BY_DESIGN."""
+
+AUTH_MFA_REQUIRED = "auth_mfa_required"
+"""403. Login post-password-ok ma `mfa_code` mancante. Disclosure
+intenzionale (LEAKY_BY_DESIGN): ADR-0018 trade-off MFA-aware client
+UX. Message preservato come `mfa_required` literal italiano."""
+
+AUTH_ROLE_INSUFFICIENT_FOR_WRITE = "auth_role_insufficient_for_write"
+"""403. Viewer/esecutore tentano operazione di scrittura/modifica.
+LEAKY_BY_DESIGN (UI-friendly)."""
+
+AUTH_ROLE_KIOSK_ONLY = "auth_role_kiosk_only"
+"""403. Esecutore tenta endpoint diverso da `eseguibili list/run`.
+LEAKY_BY_DESIGN (UI-friendly)."""
+
+AUTH_ROLE_ADMIN_REQUIRED = "auth_role_admin_required"
+"""403. Endpoint richiede ruolo admin o superadmin.
+LEAKY_BY_DESIGN (UI-friendly)."""
+
+AUTH_ROLE_SUPERADMIN_REQUIRED = "auth_role_superadmin_required"
+"""403. Endpoint richiede ruolo superadmin. LEAKY_BY_DESIGN."""
+
+AUTH_ROLE_CREATE_PRIVILEGE_REQUIRED = "auth_role_create_privilege_required"
+"""403. Admin tenta di creare un altro admin/superadmin (privilege
+escalation block: solo superadmin). LEAKY_BY_DESIGN."""
+
+AUTH_FIELD_ROLE_RESTRICTED = "auth_field_role_restricted"
+"""403. Tentativo di modifica di un campo riservato a ruoli
+superiori (es. `group_id` modificabile solo da superadmin).
+LEAKY_BY_DESIGN."""
+
+AUTH_SELF_MODIFY_DENIED = "auth_self_modify_denied"
+"""403. Self-demotion guard: un utente non puo' modificare il
+proprio ruolo. UNIFORM (no info leak)."""
+
+AUTH_SELF_DISABLE_DENIED = "auth_self_disable_denied"
+"""403. Self-disable guard: un utente non puo' disabilitare il
+proprio account. UNIFORM."""
+
+AUTH_HIERARCHICAL_OWNER_REQUIRED = "auth_hierarchical_owner_required"
+"""403. Risorsa creata da superadmin: solo superadmin puo'
+modificarla. LEAKY_BY_DESIGN (UI-friendly: spiega *perche'* l'admin
+di gruppo non puo' agire)."""
+
+AUTH_OWNER_ONLY = "auth_owner_only"
+"""403. La risorsa richiede l'owner originale (created_by) oppure
+un admin/superadmin. LEAKY_BY_DESIGN (UI-friendly)."""
+
+# --- 404 (after-auth resource not found) ---
+USER_NOT_FOUND = "user_not_found"
+"""404. Utente target non trovato. NB: per admin non-superadmin, le
+operazioni `reset-password`/`delete` su target fuori-gruppo o
+inesistente ritornano `access_denied` (403) per anti-enumeration.
+Solo superadmin vede 404 distinto."""
+
+GROUP_NOT_FOUND = "group_not_found"
+"""404. Gruppo target non trovato. Endpoint admin-only."""
+
+# --- 409 (conflict) ---
+USERNAME_ALREADY_EXISTS = "username_already_exists"
+"""409. Username gia' presente. Disclosure intenzionale (admin DEVE
+saperlo per gestione utenti). LEAKY_BY_DESIGN."""
+
+GROUP_ID_ALREADY_EXISTS = "group_id_already_exists"
+"""409. group_id gia' presente. LEAKY_BY_DESIGN."""
+
+# --- 400 (validation auth-related) ---
+GROUP_DEFAULT_NOT_DELETABLE = "group_default_not_deletable"
+"""400. Tentativo di eliminare il gruppo `default`. UNIFORM."""
+
+AUTH_MFA_CODE_INVALID = "auth_mfa_code_invalid"
+"""400. Codice TOTP non valido durante enroll/disable MFA. Distinto
+da `auth_mfa_invalid` (401, login)."""
+
+AUTH_SELF_DELETE_DENIED = "auth_self_delete_denied"
+"""400. Un utente non puo' eliminare il proprio account. UNIFORM."""
+
+# --- 429 (rate-limit) ---
+AUTH_RATE_LIMIT_EXCEEDED = "auth_rate_limit_exceeded"
+"""429 + Retry-After. Lockout login per IP
+(LOGIN_LOCKOUT_SECONDS). UNIFORM."""
+
+# --- 503 (infra fail-loud) ---
+AUTH_REVOCATION_UNAVAILABLE = "auth_revocation_unavailable"
+"""503. Redis blacklist non disponibile durante logout. Fail-loud
+(ADR-0009): il client deve sapere se la revoca e' effettiva."""
+
+
+# ============================================================
 # Catalog set — drift detection
 # ============================================================
 # `KNOWN_DOMAIN_CODES` espone l'intero catalog domain-specific
@@ -277,6 +417,41 @@ KNOWN_DOMAIN_CODES: frozenset[str] = frozenset({
     SERVICE_NOT_INITIALIZED,
     # Access Denied family (BE-GO-READY-ERROR-CODES-014)
     ACCESS_DENIED,
+    # Auth family (BE-GO-READY-AUTH-DOMAIN-PROMOTION-001)
+    # 401 — autenticazione
+    AUTH_TOKEN_MISSING,
+    AUTH_TOKEN_INVALID,
+    AUTH_TOKEN_REVOKED,
+    AUTH_USER_NOT_FOUND_OR_DISABLED,
+    AUTH_INVALID_CREDENTIALS,
+    AUTH_MFA_INVALID,
+    # 403 — autorizzazione
+    AUTH_ACCOUNT_DISABLED,
+    AUTH_MFA_REQUIRED,
+    AUTH_ROLE_INSUFFICIENT_FOR_WRITE,
+    AUTH_ROLE_KIOSK_ONLY,
+    AUTH_ROLE_ADMIN_REQUIRED,
+    AUTH_ROLE_SUPERADMIN_REQUIRED,
+    AUTH_ROLE_CREATE_PRIVILEGE_REQUIRED,
+    AUTH_FIELD_ROLE_RESTRICTED,
+    AUTH_SELF_MODIFY_DENIED,
+    AUTH_SELF_DISABLE_DENIED,
+    AUTH_HIERARCHICAL_OWNER_REQUIRED,
+    AUTH_OWNER_ONLY,
+    # 404 — after-auth resource not found
+    USER_NOT_FOUND,
+    GROUP_NOT_FOUND,
+    # 409 — conflict
+    USERNAME_ALREADY_EXISTS,
+    GROUP_ID_ALREADY_EXISTS,
+    # 400 — validation auth-related
+    GROUP_DEFAULT_NOT_DELETABLE,
+    AUTH_MFA_CODE_INVALID,
+    AUTH_SELF_DELETE_DENIED,
+    # 429 — rate-limit
+    AUTH_RATE_LIMIT_EXCEEDED,
+    # 503 — infra fail-loud
+    AUTH_REVOCATION_UNAVAILABLE,
 })
 
 # Codici globali (envelope-level): NON domain-specific.

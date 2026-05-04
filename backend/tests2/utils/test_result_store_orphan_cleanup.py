@@ -4,7 +4,10 @@ Coperti:
 - (a) upload OK + DB save OK             -> no delete
 - (b) upload OK + DB save fails (object) -> delete chiamato + ResultSaveError
 - (c) upload OK + DB save fails + delete fails -> log strutturato
-                                                  event=result_blob_orphan_cleanup_failed,
+                                                  event=storage_compensating_delete_failed
+                                                  (BE-GO-READY-STORAGE-ENGINE-002,
+                                                  log shape unificato; pre-batch:
+                                                  event=storage_compensating_delete_failed),
                                                   ResultSaveError originale propagato
 - (d) policy=db, DB save fails           -> nessun touch a object storage
 - (e) variante bytes-based: stesso comportamento di (b)
@@ -241,7 +244,7 @@ def test_db_save_failure_with_cleanup_failure_logs_orphan_event(
     stub_storage_factory, mock_db_save_fails, caplog_app, monkeypatch, tmp_path
 ):
     """Quando anche il cleanup delete fallisce, deve emettere log
-    `event=result_blob_orphan_cleanup_failed` e propagare l'errore DB
+    `event=storage_compensating_delete_failed` e propagare l'errore DB
     originale (non quello del cleanup) come ResultSaveError."""
     monkeypatch.setenv("STORAGE_POLICY", "object_storage")
     storage = stub_storage_factory(delete_should_fail=True)
@@ -257,8 +260,9 @@ def test_db_save_failure_with_cleanup_failure_logs_orphan_event(
     # Structured log strutturato presente
     messages = [r.getMessage() for r in caplog_app.records]
     assert any(
-        "event=result_blob_orphan_cleanup_failed" in m
-        and "results/p1/res-orph.bin" in m
+        "event=storage_compensating_delete_failed" in m
+        and "storage_key=results/p1/res-orph.bin" in m
+        and "domain=result" in m
         for m in messages
     ), f"missing structured log; got: {messages}"
 
@@ -279,7 +283,7 @@ def test_db_save_failure_with_cleanup_failure_bytes_path(
 
     messages = [r.getMessage() for r in caplog_app.records]
     assert any(
-        "event=result_blob_orphan_cleanup_failed" in m for m in messages
+        "event=storage_compensating_delete_failed" in m for m in messages
     ), f"missing structured log; got: {messages}"
 
 
@@ -302,7 +306,7 @@ def test_successful_cleanup_emits_ok_event(
 
     messages = [r.getMessage() for r in caplog_app.records]
     assert any(
-        "event=result_blob_orphan_cleanup_ok" in m for m in messages
+        "event=storage_compensating_delete_ok" in m for m in messages
     ), f"missing ok event; got: {messages}"
 
 

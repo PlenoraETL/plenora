@@ -165,9 +165,10 @@ def assert_can_modify(
         # Lookup live del ruolo del creator
         creator = db.get_user(created_by)
         if creator and creator.get("role") == "superadmin":
-            raise HTTPException(
+            raise_typed_http(
+                code=error_codes.AUTH_HIERARCHICAL_OWNER_REQUIRED,
                 status_code=403,
-                detail=f"{label} creata da un superadmin: solo un superadmin può modificarla",
+                message=f"{label} creata da un superadmin: solo un superadmin può modificarla",
             )
 
     # Owned dal proprio gruppo, NON creato da un superadmin → ok
@@ -262,7 +263,8 @@ def _check_ownership(
     if created_by and created_by == current_user.user_id:
         return  # sei tu l'owner
 
-    raise HTTPException(
+    raise_typed_http(
+        code=error_codes.AUTH_OWNER_ONLY,
         status_code=403,
-        detail=f"Permesso negato: solo l'owner del {resource_label.lower()} o un admin può eseguire questa operazione",
+        message=f"Permesso negato: solo l'owner del {resource_label.lower()} o un admin può eseguire questa operazione",
     )

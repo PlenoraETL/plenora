@@ -360,6 +360,9 @@ def op_union(
 # Genera tutte le combinazioni possibili di righe tra due tabelle.
 # =============================================================================
 
+CROSS_JOIN_STAGE = "manipola_cross_join"
+
+
 def op_cross_join(
     dfs: List[DataFrame],
     **kwargs
@@ -379,10 +382,50 @@ def op_cross_join(
         logger.warning("CrossJoin richiede 2 input, ricevuto meno")
         return dfs[0]
 
-    try:
-        left_df = dfs[0]
-        right_df = dfs[1]
+    left_df = dfs[0]
+    right_df = dfs[1]
 
+    # === BE-GO-READY-TRANSFORMATION-ENGINE-001 — Preflight OOM guard ===
+    # Cross-join produce |left| * |right| righe. Inputs anche modesti
+    # (10k x 10k = 100M righe) generano un DataFrame che certamente
+    # sfora la memoria del worker (1.5 GB cap RSS, vedi
+    # WORKER_RSS_MAX_BYTES). Stimiamo l'output PRIMA di
+    # materializzare via pd.merge: lookup costante O(1) (gia'
+    # disponibile via len()), zero costo IO/memoria aggiuntivo.
+    #
+    # Reuse del contratto Memory/OOM (BE-GO-READY-MEMORY-OOM-001/002):
+    # - eccezione PURA condivisa `MemoryLimitExceededError`;
+    # - codice envelope `memory_limit_exceeded`;
+    # - status 413 (Payload Too Large: gli input sono troppo grandi
+    #   per un cross-join sostenibile);
+    # - stage `manipola_cross_join` distingue il caller dal file-
+    #   preflight e dal worker RSS sampling.
+    # Cap configurabile via `CROSS_JOIN_MAX_OUTPUT_ROWS` (settings).
+    # Cap <= 0 disabilita il guard (escape hatch testing/admin).
+    try:
+        from app.config import settings as _settings
+        _cap_rows = int(_settings.get("CROSS_JOIN_MAX_OUTPUT_ROWS", 50_000_000))
+    except Exception:
+        # Contesto pure-test senza Settings inizializzato: guard off.
+        _cap_rows = 0
+
+    if _cap_rows > 0:
+        _output_rows = len(left_df) * len(right_df)
+        if _output_rows > _cap_rows:
+            from app.shared.exceptions import MemoryLimitExceededError
+            logger.warning(
+                f"CrossJoin preflight: output stimato {_output_rows} righe "
+                f"({len(left_df)} x {len(right_df)}) supera il cap configurato "
+                f"di {_cap_rows} righe — guard attivato."
+            )
+            raise MemoryLimitExceededError(
+                observed_bytes=_output_rows,
+                limit_bytes=_cap_rows,
+                path_basename="cross_join_output",
+                stage=CROSS_JOIN_STAGE,
+            )
+
+    try:
         result = pd.merge(left_df, right_df, how="cross")
 
         logger.info(

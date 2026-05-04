@@ -164,10 +164,15 @@ def test_logout_blacklists_jti_and_next_request_401(auth_client, fake_redis):
     # Chiave presente in fakeredis
     assert fake_redis.exists(f"plenora:jwt_blacklist:{jti}") == 1
 
-    # Dopo il logout → 401 su endpoint protetto
+    # Dopo il logout → 401 su endpoint protetto.
+    # Post BE-GO-READY-AUTH-DOMAIN-PROMOTION-001: HTTPException emette
+    # detail come dict structured `{error, message, details}`. Il
+    # messaggio italiano "Token revocato" resta preservato in `message`.
     r_after = tc.get("/api/auth/me", headers={"Authorization": f"Bearer {tok}"})
     assert r_after.status_code == 401
-    assert "revocato" in r_after.json()["detail"].lower()
+    detail_after = r_after.json()["detail"]
+    assert detail_after["error"] == "auth_token_revoked"
+    assert "revocato" in detail_after["message"].lower()
 
 
 # =============================================================================
@@ -273,7 +278,11 @@ def test_logout_redis_down_returns_503(auth_client):
     tok = _issue_token(auth_mod)
     r = tc.post("/api/auth/logout", headers={"Authorization": f"Bearer {tok}"})
     assert r.status_code == 503
-    assert "revoca" in r.json()["detail"].lower()
+    # Post BE-GO-READY-AUTH-DOMAIN-PROMOTION-001: detail e' dict structured
+    # con error=auth_revocation_unavailable.
+    detail = r.json()["detail"]
+    assert detail["error"] == "auth_revocation_unavailable"
+    assert "revoca" in detail["message"].lower()
 
 
 # =============================================================================

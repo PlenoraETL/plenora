@@ -89,6 +89,41 @@ EXPECTED_DOMAIN_CODES: Set[str] = {
     "service_not_initialized",
     # BE-GO-READY-ERROR-CODES-014 — Access Denied family
     "access_denied",
+    # BE-GO-READY-AUTH-DOMAIN-PROMOTION-001 — Auth family
+    # 401 — autenticazione
+    "auth_token_missing",
+    "auth_token_invalid",
+    "auth_token_revoked",
+    "auth_user_not_found_or_disabled",
+    "auth_invalid_credentials",
+    "auth_mfa_invalid",
+    # 403 — autorizzazione
+    "auth_account_disabled",
+    "auth_mfa_required",
+    "auth_role_insufficient_for_write",
+    "auth_role_kiosk_only",
+    "auth_role_admin_required",
+    "auth_role_superadmin_required",
+    "auth_role_create_privilege_required",
+    "auth_field_role_restricted",
+    "auth_self_modify_denied",
+    "auth_self_disable_denied",
+    "auth_hierarchical_owner_required",
+    "auth_owner_only",
+    # 404 — after-auth resource not found
+    "user_not_found",
+    "group_not_found",
+    # 409 — conflict
+    "username_already_exists",
+    "group_id_already_exists",
+    # 400 — validation auth-related
+    "group_default_not_deletable",
+    "auth_mfa_code_invalid",
+    "auth_self_delete_denied",
+    # 429 — rate-limit
+    "auth_rate_limit_exceeded",
+    # 503 — infra fail-loud
+    "auth_revocation_unavailable",
 }
 
 # Pattern accettati come `http_<status>` fallback intenzionale
@@ -122,13 +157,14 @@ def test_known_global_codes_matches_expected_lock():
     assert error_codes.KNOWN_GLOBAL_CODES == EXPECTED_GLOBAL_CODES
 
 
-def test_catalog_count_domain_twentyfive():
-    """25 codici domain (5 pre-existing + 6 batch 006 + 10 batch 009
+def test_catalog_count_domain_fiftytwo():
+    """52 codici domain (5 pre-existing + 6 batch 006 + 10 batch 009
     not-found family + 1 batch 010 external-service +
     1 BE-GO-READY-MEMORY-OOM-001 memory_limit_exceeded +
     1 BE-GO-READY-ERROR-CODES-013 service_not_initialized +
-    1 BE-GO-READY-ERROR-CODES-014 access_denied)."""
-    assert len(error_codes.KNOWN_DOMAIN_CODES) == 25
+    1 BE-GO-READY-ERROR-CODES-014 access_denied +
+    27 BE-GO-READY-AUTH-DOMAIN-PROMOTION-001 auth family)."""
+    assert len(error_codes.KNOWN_DOMAIN_CODES) == 52
 
 
 def test_catalog_domain_and_global_disjoint():
@@ -174,6 +210,34 @@ def test_catalog_constants_match_set_values():
         error_codes.SERVICE_NOT_INITIALIZED,
         # BE-GO-READY-ERROR-CODES-014 — Access Denied family
         error_codes.ACCESS_DENIED,
+        # BE-GO-READY-AUTH-DOMAIN-PROMOTION-001 — Auth family
+        error_codes.AUTH_TOKEN_MISSING,
+        error_codes.AUTH_TOKEN_INVALID,
+        error_codes.AUTH_TOKEN_REVOKED,
+        error_codes.AUTH_USER_NOT_FOUND_OR_DISABLED,
+        error_codes.AUTH_INVALID_CREDENTIALS,
+        error_codes.AUTH_MFA_INVALID,
+        error_codes.AUTH_ACCOUNT_DISABLED,
+        error_codes.AUTH_MFA_REQUIRED,
+        error_codes.AUTH_ROLE_INSUFFICIENT_FOR_WRITE,
+        error_codes.AUTH_ROLE_KIOSK_ONLY,
+        error_codes.AUTH_ROLE_ADMIN_REQUIRED,
+        error_codes.AUTH_ROLE_SUPERADMIN_REQUIRED,
+        error_codes.AUTH_ROLE_CREATE_PRIVILEGE_REQUIRED,
+        error_codes.AUTH_FIELD_ROLE_RESTRICTED,
+        error_codes.AUTH_SELF_MODIFY_DENIED,
+        error_codes.AUTH_SELF_DISABLE_DENIED,
+        error_codes.AUTH_HIERARCHICAL_OWNER_REQUIRED,
+        error_codes.AUTH_OWNER_ONLY,
+        error_codes.USER_NOT_FOUND,
+        error_codes.GROUP_NOT_FOUND,
+        error_codes.USERNAME_ALREADY_EXISTS,
+        error_codes.GROUP_ID_ALREADY_EXISTS,
+        error_codes.GROUP_DEFAULT_NOT_DELETABLE,
+        error_codes.AUTH_MFA_CODE_INVALID,
+        error_codes.AUTH_SELF_DELETE_DENIED,
+        error_codes.AUTH_RATE_LIMIT_EXCEEDED,
+        error_codes.AUTH_REVOCATION_UNAVAILABLE,
     }
     assert domain_constants == set(error_codes.KNOWN_DOMAIN_CODES)
 
@@ -506,6 +570,38 @@ def test_router_constant_refs_find_baseline():
         "SERVICE_NOT_INITIALIZED",
         # batch 014 (generic access denied promotion)
         "ACCESS_DENIED",
+        # BE-GO-READY-AUTH-DOMAIN-PROMOTION-001 (auth family promotion)
+        # Tutte queste costanti devono apparire come `error_codes.<CONST>`
+        # nei file `app/core/auth/auth.py` o `app/core/auth/ownership.py`
+        # post-migrazione. Se manca, vuol dire che un call site e' stato
+        # rolled-back o non migrato.
+        "AUTH_TOKEN_MISSING",
+        "AUTH_TOKEN_INVALID",
+        "AUTH_TOKEN_REVOKED",
+        "AUTH_USER_NOT_FOUND_OR_DISABLED",
+        "AUTH_INVALID_CREDENTIALS",
+        "AUTH_MFA_INVALID",
+        "AUTH_ACCOUNT_DISABLED",
+        "AUTH_MFA_REQUIRED",
+        "AUTH_ROLE_INSUFFICIENT_FOR_WRITE",
+        "AUTH_ROLE_KIOSK_ONLY",
+        "AUTH_ROLE_ADMIN_REQUIRED",
+        "AUTH_ROLE_SUPERADMIN_REQUIRED",
+        "AUTH_ROLE_CREATE_PRIVILEGE_REQUIRED",
+        "AUTH_FIELD_ROLE_RESTRICTED",
+        "AUTH_SELF_MODIFY_DENIED",
+        "AUTH_SELF_DISABLE_DENIED",
+        "AUTH_HIERARCHICAL_OWNER_REQUIRED",
+        "AUTH_OWNER_ONLY",
+        "USER_NOT_FOUND",
+        "GROUP_NOT_FOUND",
+        "USERNAME_ALREADY_EXISTS",
+        "GROUP_ID_ALREADY_EXISTS",
+        "GROUP_DEFAULT_NOT_DELETABLE",
+        "AUTH_MFA_CODE_INVALID",
+        "AUTH_SELF_DELETE_DENIED",
+        "AUTH_RATE_LIMIT_EXCEEDED",
+        "AUTH_REVOCATION_UNAVAILABLE",
     }
     missing = baseline_constants_must_appear - found
     assert missing == set(), (

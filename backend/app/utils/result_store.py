@@ -141,38 +141,31 @@ def _cleanup_uploaded_result_blob(
 ) -> None:
     """Best-effort delete del blob orfano post-upload.
 
-    BE-DATA-PLANE-004: chiamato quando l'upload object storage e' gia'
-    riuscito ma la `db.save_result(...)` successiva fallisce (l'ordine
-    upload-prima-poi-DB e' deliberato per evitare row DB orfana lato
-    opposto). Senza questo cleanup, il blob resta su object storage
-    senza piu' alcuna row che lo punti -> orphan.
+    BE-DATA-PLANE-004 (rationale): chiamato quando l'upload object
+    storage e' gia' riuscito ma la `db.save_result(...)` successiva
+    fallisce (l'ordine upload-prima-poi-DB e' deliberato per evitare
+    row DB orfana lato opposto). Senza questo cleanup, il blob resta
+    su object storage senza piu' alcuna row che lo punti -> orphan.
 
-    Side effect:
-      - Tenta `storage.delete(storage_key)`.
-      - Su errore log strutturato `event=result_blob_orphan_cleanup_failed`
-        con `storage_key` + `reason` + tipo eccezione. Il caller continua
-        a propagare l'errore originale (DB save) senza che il fallimento
-        del cleanup sostituisca la root cause.
-      - Su successo log info `event=result_blob_orphan_cleanup_ok`.
+    BE-GO-READY-STORAGE-ENGINE-002: delegato a
+    `app.shared.storage_compensation.compensating_delete` per
+    unificare log shape + capability handling con gli altri 3
+    callsite. Mantiene la signature legacy (caller gia' ha
+    `storage`); l'helper riusa l'istanza fornita ed evita un
+    secondo `get_runtime_object_storage()`.
 
-    NB: best-effort. Mai sollevare: il caller sta gia' propagando un
-    altro errore (DB save) e non deve essere mascherato.
+    Mai solleva: il caller sta gia' propagando un altro errore (DB
+    save) e non deve essere mascherato.
     """
-    try:
-        storage.delete(storage_key)
-        logger.info(
-            "event=result_blob_orphan_cleanup_ok "
-            "storage_key=%s project_id=%s result_id=%s reason=%s",
-            storage_key, project_id, result_id, reason,
-        )
-    except Exception as _ce:
-        logger.error(
-            "event=result_blob_orphan_cleanup_failed "
-            "storage_key=%s project_id=%s result_id=%s reason=%s "
-            "cleanup_error=%s: %s",
-            storage_key, project_id, result_id, reason,
-            type(_ce).__name__, _ce,
-        )
+    from app.shared.storage_compensation import compensating_delete
+    compensating_delete(
+        storage_key,
+        domain="result",
+        reason=reason,
+        storage=storage,
+        extras={"project_id": project_id, "result_id": result_id},
+        logger=logger,
+    )
 
 
 def _enforce_db_hard_cap(size: int, ctx: str) -> None:

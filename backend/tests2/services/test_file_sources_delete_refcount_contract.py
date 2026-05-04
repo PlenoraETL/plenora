@@ -423,12 +423,18 @@ def test_storage_delete_failure_after_commit_does_not_undo_db_delete(
 
     # Row gia' cancellata pre-storage-call -> True (no rollback DB)
     assert out is True
-    # Warning emesso
+    # Warning emesso (BE-GO-READY-STORAGE-ENGINE-002: log shape
+    # unificato `event=storage_compensating_delete_failed`).
     fake_logger.warning.assert_called_once()
-    msg = fake_logger.warning.call_args[0][0]
-    assert "cleanup S3 fallito" in msg
-    assert "file_q" in msg
-    assert "S3 5xx" in msg
+    msg = fake_logger.warning.call_args[0]
+    # log.warning("template", *fmt_args) — il template e' il primo arg
+    # e i format args seguono. Ricostruiamo per assertion.
+    template = msg[0]
+    rendered = template % msg[1:]
+    assert "event=storage_compensating_delete_failed" in rendered
+    assert "domain=file_source" in rendered
+    assert "file_q" in rendered
+    assert "S3 5xx" in rendered
 
 
 # =============================================================================
@@ -461,6 +467,11 @@ def test_storage_delete_skipped_when_capability_disabled_post_commit(
     mock_get_storage.assert_not_called()
     fake_storage.delete.assert_not_called()
     fake_logger.debug.assert_called_once()
-    msg = fake_logger.debug.call_args[0][0]
-    assert "skip cleanup S3 per file_s" in msg
-    assert "object storage disabilitato" in msg
+    # BE-GO-READY-STORAGE-ENGINE-002: log shape unificato
+    # `event=storage_compensating_delete_skipped`.
+    args = fake_logger.debug.call_args[0]
+    rendered = args[0] % args[1:]
+    assert "event=storage_compensating_delete_skipped" in rendered
+    assert "domain=file_source" in rendered
+    assert "skip_reason=capability_disabled" in rendered
+    assert "file_s" in rendered

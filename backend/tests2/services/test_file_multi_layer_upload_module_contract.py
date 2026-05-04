@@ -510,10 +510,12 @@ def _capture_delete_blob_callback():
 
 
 def test_delete_blob_short_circuits_when_object_storage_disabled():
-    """BE-DELETE-001: se object_storage_enabled() ritorna False, il
-    callback _delete_blob NON chiama get_runtime_object_storage e
-    logga un debug message (non error). Edge case patologico
-    (capability disabilitata tra dispatch e cleanup) reso esplicito."""
+    """BE-DELETE-001 + BE-GO-READY-STORAGE-ENGINE-002: se
+    object_storage_enabled() ritorna False, il callback _delete_blob
+    NON chiama get_runtime_object_storage e logga un debug strutturato
+    `event=storage_compensating_delete_skipped` (non error). Edge case
+    patologico (capability disabilitata tra dispatch e cleanup) reso
+    esplicito."""
     svc, delete_blob = _capture_delete_blob_callback()
 
     with patch(
@@ -525,11 +527,14 @@ def test_delete_blob_short_circuits_when_object_storage_disabled():
 
     mock_get_storage.assert_not_called()
     svc._logger.debug.assert_called_once()
-    msg = svc._logger.debug.call_args[0][0]
-    assert "delete_blob" in msg
-    assert "object storage disabilitato" in msg
-    assert "file-sources/batch_x/data.gpkg" in msg
-    # NON deve emettere error (no falso orfano)
+    args = svc._logger.debug.call_args[0]
+    rendered = args[0] % args[1:]
+    assert "event=storage_compensating_delete_skipped" in rendered
+    assert "domain=file_source_multi_layer" in rendered
+    assert "skip_reason=capability_disabled" in rendered
+    assert "file-sources/batch_x/data.gpkg" in rendered
+    # NON deve emettere warning/error (no falso orfano)
+    svc._logger.warning.assert_not_called()
     svc._logger.error.assert_not_called()
 
 

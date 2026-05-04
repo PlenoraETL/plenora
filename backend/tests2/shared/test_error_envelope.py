@@ -37,6 +37,7 @@ from app.shared.error_envelope import (
     build_error_envelope_body,
     build_error_response,
     normalize_http_exception_detail,
+    raise_typed_http,
 )
 
 
@@ -113,6 +114,25 @@ def test_build_error_response_attaches_headers():
         headers={"X-Custom": "yes"},
     )
     assert resp.headers["X-Custom"] == "yes"
+
+
+def test_raise_typed_http_preserves_headers():
+    with pytest.raises(HTTPException) as exc_info:
+        raise_typed_http(
+            code=error_codes.AUTH_TOKEN_MISSING,
+            status_code=401,
+            message="Token mancante",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    exc = exc_info.value
+    assert exc.status_code == 401
+    assert exc.headers == {"WWW-Authenticate": "Bearer"}
+    assert exc.detail == {
+        "error": error_codes.AUTH_TOKEN_MISSING,
+        "message": "Token mancante",
+        "details": {},
+    }
 
 
 # ---------------------------------------------------------------------------

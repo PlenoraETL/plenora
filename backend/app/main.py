@@ -281,7 +281,14 @@ async def canvas_corrupted_handler(request: Request, exc: CanvasCorruptedError):
 # Stable details shape: stage / limit_bytes / observed_bytes /
 # limit_mb / observed_mb / suggested_action / resource. Permette
 # al FE di mostrare un messaggio uniforme. NESSUN absolute path.
+#
+# BE-GO-READY-TRANSFORMATION-ENGINE-001-CROSS-JOIN-GUARD: lo stage
+# `manipola_cross_join` riusa lo stesso contratto ma carries row
+# counts (non bytes) in observed/limit_bytes. Il messaggio e'
+# row-count-aware; details aggiunge `limit_rows`/`observed_rows`
+# per FE convenience (le 7 chiavi base restano stabili).
 _RSS_STAGES = frozenset({"pipeline_execute", "worker_rss"})
+_ROW_COUNT_STAGES = frozenset({"manipola_cross_join"})
 
 @app.exception_handler(MemoryLimitExceededError)
 async def memory_limit_exceeded_handler(
@@ -290,34 +297,55 @@ async def memory_limit_exceeded_handler(
     is_rss = exc.stage in _RSS_STAGES or exc.path_basename == "worker_process"
     status_code = 503 if is_rss else 413
     suggested_action = "retry_later_or_contact_admin" if is_rss else "split_file_or_contact_admin"
+    is_row_count = exc.stage in _ROW_COUNT_STAGES
+    if is_row_count:
+        # Row-count stages (cross-join): observed/limit_bytes carry
+        # row counts. Override action label to reflect the user
+        # remediation (split/filter inputs, not "split file").
+        suggested_action = "reduce_inputs_or_raise_cap"
     logger.warning(
         "Memory limit exceeded in stage=%s resource=%s observed=%d limit=%d status=%d",
         exc.stage, exc.path_basename, exc.observed_bytes, exc.limit_bytes, status_code,
     )
     limit_mb = round(exc.limit_bytes / (1024 * 1024), 2)
     observed_mb = round(exc.observed_bytes / (1024 * 1024), 2)
-    message = (
-        f"Il worker ha superato il limite di memoria ({observed_mb} MB / "
-        f"{limit_mb} MB). Riprova piu' tardi o contatta l'amministratore."
-    ) if is_rss else (
-        f"L'input richiesto ({observed_mb} MB) supera il limite di "
-        f"memoria configurato ({limit_mb} MB) per lo stage "
-        f"'{exc.stage}'. Contatta l'amministratore o riduci la "
-        f"dimensione del file."
-    )
+    if is_rss:
+        message = (
+            f"Il worker ha superato il limite di memoria ({observed_mb} MB / "
+            f"{limit_mb} MB). Riprova piu' tardi o contatta l'amministratore."
+        )
+    elif is_row_count:
+        message = (
+            f"Il cross-join genererebbe {exc.observed_bytes} righe, oltre il "
+            f"limite configurato di {exc.limit_bytes} righe per lo stage "
+            f"'{exc.stage}'. Riduci la dimensione degli input "
+            f"(filtri/aggregazioni a monte) o alza il cap."
+        )
+    else:
+        message = (
+            f"L'input richiesto ({observed_mb} MB) supera il limite di "
+            f"memoria configurato ({limit_mb} MB) per lo stage "
+            f"'{exc.stage}'. Contatta l'amministratore o riduci la "
+            f"dimensione del file."
+        )
+    details = {
+        "stage": exc.stage,
+        "limit_bytes": exc.limit_bytes,
+        "observed_bytes": exc.observed_bytes,
+        "limit_mb": limit_mb,
+        "observed_mb": observed_mb,
+        "suggested_action": suggested_action,
+        "resource": exc.path_basename,
+    }
+    if is_row_count:
+        # Additive keys, the 7 base keys above remain stable.
+        details["limit_rows"] = exc.limit_bytes
+        details["observed_rows"] = exc.observed_bytes
     return build_error_response(
         status_code=status_code,
         error=error_codes.MEMORY_LIMIT_EXCEEDED,
         message=message,
-        details={
-            "stage": exc.stage,
-            "limit_bytes": exc.limit_bytes,
-            "observed_bytes": exc.observed_bytes,
-            "limit_mb": limit_mb,
-            "observed_mb": observed_mb,
-            "suggested_action": suggested_action,
-            "resource": exc.path_basename,
-        },
+        details=details,
         headers=_cors_headers_for(request),
     )
 
