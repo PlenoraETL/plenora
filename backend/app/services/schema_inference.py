@@ -36,7 +36,7 @@ Uso:
 import json
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Callable, Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass
 from app.utils.logger import get_logger
 
@@ -357,158 +357,138 @@ class SchemaInferenceService:
         """
         config = node.config or (node.data.get("config", {}) if node.data else {})
         transform_op = node.transform_op or (node.data.get("transform_op") if node.data else None)
-        
+
         if not transform_op:
             logger.warning(f"Transform {node.id} senza transform_op")
             return input_schemas[0] if input_schemas else []
-        
-        
-        # Dispatcher per tipo operazione
-        if transform_op == "join":
-            return self._schema_join(input_schemas, config, node.id, edges_by_target)
-        elif transform_op == "sjoin":
-            return self._schema_sjoin(input_schemas, config, node.id)
-        elif transform_op == "aggregate":
-            return self._schema_aggregate(input_schemas, config, node.id)
-        elif transform_op == "formula":
-            return self._schema_formula(input_schemas, config, node.id)
-        elif transform_op == "filter":
-            return self._schema_filter(input_schemas, node.id)
-        elif transform_op == "concat":
-            return self._schema_concat(input_schemas, config, node.id)
-        elif transform_op == "sort":
-            return self._schema_sort(input_schemas, node.id)
-        elif transform_op == "distinct":
-            return self._schema_distinct(input_schemas, config, node.id)
-        elif transform_op == "rename":
-            return self._schema_rename(input_schemas, config, node.id)
-        elif transform_op == "drop" or transform_op == "drop_columns":
-            return self._schema_drop(input_schemas, config, node.id)
-        elif transform_op == "fill_na":
-            return self._schema_passthrough(input_schemas, node.id)
-        elif transform_op == "replace":
-            return self._schema_passthrough(input_schemas, node.id)
-        elif transform_op == "split_column":
-            return self._schema_split_column(input_schemas, config, node.id)
-        # Operazioni geometriche
-        elif transform_op == "geo_buffer":
-            return self._schema_geo_buffer(input_schemas, config, node.id)
-        elif transform_op == "geo_centroid":
-            return self._schema_geo_centroid(input_schemas, config, node.id)
-        elif transform_op == "geo_area":
-            return self._schema_geo_area(input_schemas, config, node.id)
-        elif transform_op == "geo_clip":
-            return self._schema_geo_clip(input_schemas, config, node.id)
-        elif transform_op == "geo_dissolve":
-            return self._schema_geo_dissolve(input_schemas, config, node.id)
-        elif transform_op == "geo_simplify":
-            return self._schema_passthrough(input_schemas, node.id)
-        elif transform_op == "geo_convex_hull":
-            return self._schema_geo_convex_hull(input_schemas, config, node.id)
-        elif transform_op == "geo_reproject":
-            return self._schema_passthrough(input_schemas, node.id)
-        elif transform_op == "geo_intersection":
-            return self._schema_geo_overlay(input_schemas, config, node.id, "intersection")
-        elif transform_op == "geo_union":
-            return self._schema_geo_overlay(input_schemas, config, node.id, "union")
-        elif transform_op == "geo_difference":
-            return self._schema_geo_overlay(input_schemas, config, node.id, "difference")
-        elif transform_op == "geo_to_crs":
-            return self._schema_passthrough(input_schemas, node.id)
-        # Privacy
-        elif transform_op == "md5_hash":
-            return self._schema_md5_hash(input_schemas, config, node.id)
-        elif transform_op == "mask_data":
-            return self._schema_mask_data(input_schemas, config, node.id)
-        # Nuove trasformazioni base
-        elif transform_op == "type_cast":
-            return self._schema_type_cast(input_schemas, config, node.id)
-        elif transform_op == "conditional":
-            return self._schema_conditional(input_schemas, config, node.id)
-        elif transform_op == "text_normalize":
-            return self._schema_text_normalize(input_schemas, config, node.id)
-        # Concat columns, pivot, geo_envelope — passthrough schema
-        elif transform_op == "concat_columns":
-            return self._schema_passthrough(input_schemas, node.id)
-        elif transform_op == "pivot":
-            return self._schema_passthrough(input_schemas, node.id)
-        elif transform_op == "geo_envelope":
-            return self._schema_passthrough(input_schemas, node.id)
-        # Spatial
-        elif transform_op == "geo_from_coords":
-            return self._schema_geo_from_coords(input_schemas, config, node.id)
-        # Utility / strings (BE-PHASE2-SCHEMA-INFER-002 batch 1)
-        elif transform_op == "add_row_number":
-            return self._schema_add_row_number(input_schemas, config, node.id)
-        elif transform_op == "uuid_generator":
-            return self._schema_uuid_generator(input_schemas, config, node.id)
-        elif transform_op == "string_length":
-            return self._schema_string_length(input_schemas, config, node.id)
-        elif transform_op == "date_extract":
-            return self._schema_date_extract(input_schemas, config, node.id)
-        elif transform_op == "geo_distance":
-            return self._schema_geo_distance(input_schemas, config, node.id)
-        elif transform_op == "geo_to_wkt":
-            return self._schema_geo_to_wkt(input_schemas, config, node.id)
-        # Geo metrics + base strings/binning (BE-PHASE2-SCHEMA-INFER-003 batch 2)
-        elif transform_op == "geo_length":
-            return self._schema_geo_length(input_schemas, config, node.id)
-        elif transform_op == "geo_perimeter":
-            return self._schema_geo_perimeter(input_schemas, config, node.id)
-        elif transform_op == "geo_vertex_count":
-            return self._schema_geo_vertex_count(input_schemas, config, node.id)
-        elif transform_op == "string_extract":
-            return self._schema_string_extract(input_schemas, config, node.id)
-        elif transform_op == "bin":
-            return self._schema_bin(input_schemas, config, node.id)
-        elif transform_op == "string_pad":
-            return self._schema_string_pad(input_schemas, config, node.id)
-        # Generative geo (BE-PHASE2-SCHEMA-INFER-004 batch 3)
-        elif transform_op == "geo_bounds_extractor":
-            return self._schema_geo_bounds_extractor(input_schemas, config, node.id)
-        elif transform_op == "geo_count_points_in_polygons":
-            return self._schema_geo_count_points_in_polygons(input_schemas, config, node.id)
-        elif transform_op == "geo_line_builder":
-            return self._schema_geo_line_builder(input_schemas, config, node.id)
-        elif transform_op == "geo_polygon_builder":
-            return self._schema_geo_polygon_builder(input_schemas, config, node.id)
-        elif transform_op == "geo_point_on_surface":
-            return self._schema_geo_point_on_surface(input_schemas, config, node.id)
-        elif transform_op == "geo_boundary":
-            return self._schema_geo_boundary(input_schemas, config, node.id)
-        # Reorder + voronoi (BE-PHASE2-SCHEMA-INFER-005 batch 4)
-        elif transform_op == "reorder_columns":
-            return self._schema_reorder_columns(input_schemas, config, node.id)
-        elif transform_op == "geo_voronoi":
-            return self._schema_geo_voronoi(input_schemas, config, node.id)
-        # Multi-input + lookup (BE-PHASE2-SCHEMA-INFER-006 batch 5)
-        elif transform_op == "cross_join":
-            return self._schema_cross_join(input_schemas, node.id)
-        elif transform_op == "geo_within":
-            return self._schema_geo_within(input_schemas, node.id)
-        elif transform_op == "geo_overlay":
-            how = config.get("how", "intersection")
-            return self._schema_geo_overlay(input_schemas, config, node.id, how)
-        elif transform_op == "geo_symmetric_difference":
-            return self._schema_geo_overlay(
-                input_schemas, config, node.id, "symmetric_difference",
-            )
-        elif transform_op == "geo_nearest":
-            return self._schema_geo_nearest(input_schemas, config, node.id)
-        elif transform_op == "lookup":
-            return self._schema_lookup(input_schemas, config, node.id)
-        # Reshape + analytics deterministici (BE-PHASE2-SCHEMA-INFER-007 batch 6)
-        elif transform_op == "table_diff":
-            return self._schema_table_diff(input_schemas, config, node.id)
-        elif transform_op == "melt":
-            return self._schema_melt(input_schemas, config, node.id)
-        elif transform_op == "statistics":
-            return self._schema_statistics(input_schemas, config, node.id)
-        elif transform_op == "window_function":
-            return self._schema_window_function(input_schemas, config, node.id)
-        else:
+
+        # Dispatch via registry (BE-PHASE2-SCHEMA-INFER-008-FINAL):
+        # sostituisce l'if/elif chain di 65 branch con un map lookup.
+        # Comportamento invariato: gli adapter lambda nel registry
+        # adattano gli handler con signature non-standard
+        # (`_schema_join` richiede `edges_by_target`, `_schema_geo_overlay`
+        # richiede `overlay_type`, alcuni handler ignorano `config`).
+        handlers = self._build_transform_handlers(edges_by_target)
+        handler = handlers.get(transform_op)
+        if handler is None:
             logger.warning(f"Operazione {transform_op} non gestita - passthrough")
             return self._schema_passthrough(input_schemas, node.id)
+        return handler(input_schemas, config, node.id)
+
+    def _build_transform_handlers(
+        self,
+        edges_by_target: dict,
+    ) -> Dict[str, Callable[[List[List[ColumnSchema]], dict, str], List[ColumnSchema]]]:
+        """Registry transform_op -> schema handler.
+
+        Tutti gli handler esposti dal registry condividono la firma
+        canonica `(input_schemas, config, node_id) -> List[ColumnSchema]`.
+        Gli handler con signature non standard sono adattati via lambda:
+
+        - `_schema_join` richiede `edges_by_target` (closure su param);
+        - `_schema_geo_overlay` richiede `overlay_type` (lambda fissa
+          `intersection`/`union`/`difference`/`symmetric_difference`,
+          o legge `config["how"]` per `geo_overlay`);
+        - `_schema_filter`, `_schema_sort`, `_schema_passthrough`,
+          `_schema_cross_join`, `_schema_geo_within` ignorano `config`
+          (lambda passa solo `(i, n)`).
+
+        Aliases preservati (presenti nel dispatcher ma non nel
+        `transforms_registry.json` — lock parity test):
+        - `drop` -> `_schema_drop` (alias storico per `drop_columns`)
+        - `geo_to_crs` -> `_schema_passthrough` (alias legacy per
+          `geo_reproject`)
+
+        Coverage: i parser source-bound del parity test estraggono
+        i transform_op tra i marker `# DISPATCH-REGISTRY:start` e
+        `# DISPATCH-REGISTRY:end` qui sotto.
+        """
+        pt = lambda i, c, n: self._schema_passthrough(i, n)
+        return {
+            # DISPATCH-REGISTRY:start
+            # base
+            "join": lambda i, c, n: self._schema_join(i, c, n, edges_by_target),
+            "sjoin": lambda i, c, n: self._schema_sjoin(i, c, n),
+            "aggregate": lambda i, c, n: self._schema_aggregate(i, c, n),
+            "formula": lambda i, c, n: self._schema_formula(i, c, n),
+            "filter": lambda i, c, n: self._schema_filter(i, n),
+            "concat": lambda i, c, n: self._schema_concat(i, c, n),
+            "sort": lambda i, c, n: self._schema_sort(i, n),
+            "distinct": lambda i, c, n: self._schema_distinct(i, c, n),
+            "rename": lambda i, c, n: self._schema_rename(i, c, n),
+            "drop": lambda i, c, n: self._schema_drop(i, c, n),
+            "drop_columns": lambda i, c, n: self._schema_drop(i, c, n),
+            "fill_na": pt,
+            "replace": pt,
+            "split_column": lambda i, c, n: self._schema_split_column(i, c, n),
+            # geo
+            "geo_buffer": lambda i, c, n: self._schema_geo_buffer(i, c, n),
+            "geo_centroid": lambda i, c, n: self._schema_geo_centroid(i, c, n),
+            "geo_area": lambda i, c, n: self._schema_geo_area(i, c, n),
+            "geo_clip": lambda i, c, n: self._schema_geo_clip(i, c, n),
+            "geo_dissolve": lambda i, c, n: self._schema_geo_dissolve(i, c, n),
+            "geo_simplify": pt,
+            "geo_convex_hull": lambda i, c, n: self._schema_geo_convex_hull(i, c, n),
+            "geo_reproject": pt,
+            "geo_intersection": lambda i, c, n: self._schema_geo_overlay(i, c, n, "intersection"),
+            "geo_union": lambda i, c, n: self._schema_geo_overlay(i, c, n, "union"),
+            "geo_difference": lambda i, c, n: self._schema_geo_overlay(i, c, n, "difference"),
+            "geo_to_crs": pt,
+            # privacy
+            "md5_hash": lambda i, c, n: self._schema_md5_hash(i, c, n),
+            "mask_data": lambda i, c, n: self._schema_mask_data(i, c, n),
+            # base aggiuntive
+            "type_cast": lambda i, c, n: self._schema_type_cast(i, c, n),
+            "conditional": lambda i, c, n: self._schema_conditional(i, c, n),
+            "text_normalize": lambda i, c, n: self._schema_text_normalize(i, c, n),
+            # passthrough espliciti
+            "concat_columns": pt,
+            "pivot": pt,
+            "geo_envelope": pt,
+            # spatial
+            "geo_from_coords": lambda i, c, n: self._schema_geo_from_coords(i, c, n),
+            # batch 1 (utility/strings/spatial)
+            "add_row_number": lambda i, c, n: self._schema_add_row_number(i, c, n),
+            "uuid_generator": lambda i, c, n: self._schema_uuid_generator(i, c, n),
+            "string_length": lambda i, c, n: self._schema_string_length(i, c, n),
+            "date_extract": lambda i, c, n: self._schema_date_extract(i, c, n),
+            "geo_distance": lambda i, c, n: self._schema_geo_distance(i, c, n),
+            "geo_to_wkt": lambda i, c, n: self._schema_geo_to_wkt(i, c, n),
+            # batch 2 (geo metrics + base strings/binning)
+            "geo_length": lambda i, c, n: self._schema_geo_length(i, c, n),
+            "geo_perimeter": lambda i, c, n: self._schema_geo_perimeter(i, c, n),
+            "geo_vertex_count": lambda i, c, n: self._schema_geo_vertex_count(i, c, n),
+            "string_extract": lambda i, c, n: self._schema_string_extract(i, c, n),
+            "bin": lambda i, c, n: self._schema_bin(i, c, n),
+            "string_pad": lambda i, c, n: self._schema_string_pad(i, c, n),
+            # batch 3 (generative geo)
+            "geo_bounds_extractor": lambda i, c, n: self._schema_geo_bounds_extractor(i, c, n),
+            "geo_count_points_in_polygons": lambda i, c, n: self._schema_geo_count_points_in_polygons(i, c, n),
+            "geo_line_builder": lambda i, c, n: self._schema_geo_line_builder(i, c, n),
+            "geo_polygon_builder": lambda i, c, n: self._schema_geo_polygon_builder(i, c, n),
+            "geo_point_on_surface": lambda i, c, n: self._schema_geo_point_on_surface(i, c, n),
+            "geo_boundary": lambda i, c, n: self._schema_geo_boundary(i, c, n),
+            # batch 4 (reorder + voronoi)
+            "reorder_columns": lambda i, c, n: self._schema_reorder_columns(i, c, n),
+            "geo_voronoi": lambda i, c, n: self._schema_geo_voronoi(i, c, n),
+            # batch 5 (multi-input + lookup)
+            "cross_join": lambda i, c, n: self._schema_cross_join(i, n),
+            "geo_within": lambda i, c, n: self._schema_geo_within(i, n),
+            "geo_overlay": lambda i, c, n: self._schema_geo_overlay(
+                i, c, n, c.get("how", "intersection"),
+            ),
+            "geo_symmetric_difference": lambda i, c, n: self._schema_geo_overlay(
+                i, c, n, "symmetric_difference",
+            ),
+            "geo_nearest": lambda i, c, n: self._schema_geo_nearest(i, c, n),
+            "lookup": lambda i, c, n: self._schema_lookup(i, c, n),
+            # batch 6 (reshape + analytics deterministici)
+            "table_diff": lambda i, c, n: self._schema_table_diff(i, c, n),
+            "melt": lambda i, c, n: self._schema_melt(i, c, n),
+            "statistics": lambda i, c, n: self._schema_statistics(i, c, n),
+            "window_function": lambda i, c, n: self._schema_window_function(i, c, n),
+            # DISPATCH-REGISTRY:end
+        }
     
     def _infer_api_enrich_schema(
         self,

@@ -4,9 +4,10 @@ parity vs `transforms_registry.json`.
 Audit-only batch (lane D di BE-PHASE2-PARALLEL-PACK-001).
 
 Verifica la parita' fra:
-- l'if/elif chain in `SchemaInferenceService._infer_transform_schema`
-  (oggi `app/services/schema_inference.py`, righe ~366-441), che
-  mappa esplicitamente i `transform_op` ai metodi `_schema_xxx`;
+- il registry dispatch in
+  `SchemaInferenceService._build_transform_handlers` (mappa
+  `transform_op` -> handler callable; pre-008-FINAL era un'if/elif
+  chain in `_infer_transform_schema`);
 - i transform IDs definiti in `app/core/manipola/transforms_registry.json`,
   fonte di verita' per le trasformazioni eseguibili (PluginExecutor).
 
@@ -54,16 +55,38 @@ _REGISTRY_JSON = _BACKEND_ROOT / "app" / "core" / "manipola" / "transforms_regis
 # Source-bound parsing
 # ---------------------------------------------------------------------------
 
-_DISPATCH_OP_RE = re.compile(r'transform_op\s*==\s*"([a-zA-Z0-9_]+)"')
+# Post BE-PHASE2-SCHEMA-INFER-008-FINAL: il dispatcher e' un map
+# lookup (`_build_transform_handlers`), non piu' un'if/elif chain.
+# Le entry sono delimitate dai marker sentinel
+# `# DISPATCH-REGISTRY:start` / `# DISPATCH-REGISTRY:end` nel sorgente.
+# Source-bound: parsing del file, non del modulo importato — un
+# futuro refactor del registry (es. decorator-based registration)
+# fa fallire il test e forza la review.
+_REGISTRY_BLOCK_RE = re.compile(
+    r"#\s*DISPATCH-REGISTRY:start\s*\n(.*?)#\s*DISPATCH-REGISTRY:end",
+    re.DOTALL,
+)
+_REGISTRY_KEY_RE = re.compile(r'^\s*"([a-zA-Z0-9_]+)"\s*:', re.MULTILINE)
 
 
 def _parse_dispatcher_branches() -> Set[str]:
-    """Estrae le branch attive dal dispatcher in
-    `_infer_transform_schema`. Source-bound: parsing del file sorgente,
-    non del modulo importato — cosi' un futuro refactor (es. table
-    dispatch) fa fallire il test e forza la review."""
+    """Estrae i transform_op registrati nel registry dispatch.
+
+    Cerca il blocco delimitato da `# DISPATCH-REGISTRY:start` /
+    `# DISPATCH-REGISTRY:end` in `schema_inference.py` ed estrae le
+    chiavi quotate (forma `"<id>": ...`). Lo scope ristretto al blocco
+    sentinel evita falsi positivi su altri dict literali nel file.
+    """
     src = _SCHEMA_INFER_PY.read_text(encoding="utf-8")
-    return set(_DISPATCH_OP_RE.findall(src))
+    block_match = _REGISTRY_BLOCK_RE.search(src)
+    if not block_match:
+        raise AssertionError(
+            "DISPATCH-REGISTRY sentinel non trovato in "
+            f"{_SCHEMA_INFER_PY}. Verifica i marker "
+            "`# DISPATCH-REGISTRY:start` / `# DISPATCH-REGISTRY:end` "
+            "in `_build_transform_handlers`."
+        )
+    return set(_REGISTRY_KEY_RE.findall(block_match.group(1)))
 
 
 def _load_registry_ids() -> Set[str]:
@@ -1976,3 +1999,107 @@ def test_migrate_next_ops_fall_through_to_passthrough(op):
     assert [(c.name, c.type) for c in out] == [
         (c.name, c.type) for c in input_schema
     ]
+
+
+# ---------------------------------------------------------------------------
+# 12. Registry dispatch — runtime introspection (BE-PHASE2-SCHEMA-INFER-008)
+# ---------------------------------------------------------------------------
+#
+# Lock complementare al parser source-bound: il dict restituito da
+# `_build_transform_handlers` deve combaciare esattamente con
+# `EXPECTED_DISPATCHER_BRANCHES` e ogni entry deve essere callable.
+# Il source-bound parsing `_parse_dispatcher_branches` cattura le
+# chiavi DICHIARATE; questo test cattura le chiavi REALMENTE BINDED
+# in runtime (catch silently-broken lambda/typo).
+
+
+def test_registry_runtime_keys_match_expected():
+    service = SchemaInferenceService(project_service=None)
+    handlers = service._build_transform_handlers(edges_by_target={})
+    assert set(handlers.keys()) == EXPECTED_DISPATCHER_BRANCHES
+
+
+def test_registry_runtime_values_are_callable():
+    service = SchemaInferenceService(project_service=None)
+    handlers = service._build_transform_handlers(edges_by_target={})
+    for op, handler in handlers.items():
+        assert callable(handler), f"Handler per `{op}` non e' callable"
+
+
+def test_registry_aliases_bind_to_expected_handlers():
+    """Lock comportamento alias post-refactor: `drop` deve produrre lo
+    stesso schema di `drop_columns`; `geo_to_crs` deve produrre lo
+    stesso schema di `geo_reproject` (passthrough)."""
+    service, input_schema = _service_and_input()
+
+    out_drop = service._infer_transform_schema(
+        _node("drop", {"columns": ["a"]}), [input_schema], edges_by_target={},
+    )
+    out_drop_columns = service._infer_transform_schema(
+        _node("drop_columns", {"columns": ["a"]}), [input_schema],
+        edges_by_target={},
+    )
+    assert [c.name for c in out_drop] == [c.name for c in out_drop_columns]
+
+    out_to_crs = service._infer_transform_schema(
+        _node("geo_to_crs", {}), [input_schema], edges_by_target={},
+    )
+    out_reproject = service._infer_transform_schema(
+        _node("geo_reproject", {}), [input_schema], edges_by_target={},
+    )
+    assert [c.name for c in out_to_crs] == [c.name for c in out_reproject]
+
+
+def test_registry_unknown_op_falls_back_to_passthrough():
+    """Comportamento fallback invariato post-refactor: op sconosciuta
+    → `_schema_passthrough` con warning."""
+    service, input_schema = _service_and_input()
+    out = service._infer_transform_schema(
+        _node("op_che_non_esiste", {}), [input_schema], edges_by_target={},
+    )
+    assert [(c.name, c.type) for c in out] == [
+        (c.name, c.type) for c in input_schema
+    ]
+
+
+def test_registry_join_handler_receives_edges_by_target():
+    """Adapter lambda chiude su `edges_by_target` correttamente.
+    Lock di non-regressione del bridging signature `_schema_join`."""
+    service = SchemaInferenceService(project_service=None)
+    left = [ColumnSchema(name="id", type="int", source_node="L", is_calculated=False)]
+    right = [ColumnSchema(name="id", type="int", source_node="R", is_calculated=False)]
+    out = service._infer_transform_schema(
+        _node("join", {"left_on": "id", "right_on": "id"}),
+        [left, right],
+        edges_by_target={},
+    )
+    # Con left_on == right_on, la join key del RIGHT e' duplicata
+    # → output ha solo `id` (legacy `_schema_join` behavior).
+    assert "id" in {c.name for c in out}
+
+
+def test_registry_geo_overlay_dispatch_reads_how_from_config():
+    """`geo_overlay` lambda legge `config["how"]` e lo passa a
+    `_schema_geo_overlay`. Verifica che il refactor mantenga il
+    bridging.
+
+    Senza data shape sensibile a `how`, basta che la chiamata non
+    fallisca e produca lo stesso column-set di `geo_intersection`
+    (default `how="intersection"`).
+    """
+    service = SchemaInferenceService(project_service=None)
+    left = [
+        ColumnSchema(name="a", type="int", source_node="L", is_calculated=False),
+        ColumnSchema(name="g", type="geometry:polygon", source_node="L", is_calculated=False),
+    ]
+    right = [
+        ColumnSchema(name="b", type="str", source_node="R", is_calculated=False),
+        ColumnSchema(name="g", type="geometry:polygon", source_node="R", is_calculated=False),
+    ]
+    out_overlay = service._infer_transform_schema(
+        _node("geo_overlay", {}), [left, right], edges_by_target={},
+    )
+    out_intersection = service._infer_transform_schema(
+        _node("geo_intersection", {}), [left, right], edges_by_target={},
+    )
+    assert [c.name for c in out_overlay] == [c.name for c in out_intersection]
