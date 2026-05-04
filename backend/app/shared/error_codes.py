@@ -309,11 +309,52 @@ ACCEPTED_HTTP_FALLBACK_PATTERNS: frozenset[str] = frozenset({
     # "internal_error_generic" promoted to raise_typed_http(INTERNAL_ERROR)
     # in BE-GO-READY-ERROR-CODES-011. Zero residuals remain.
     #
-    # raise HTTPException(400|422, str(e))
-    # ~20 occorrenze di translation da ValueError/TypeError
-    # locali. Il messaggio e' dinamico, lo status code basta
-    # per il branching FE; promotion non e' actionable
-    # (un codice diverso per ogni ValueError = noise).
+    # `value_error_str_e` — translation di eccezioni dynamic-validation
+    # in `HTTPException(detail=str(e))` o
+    # `detail=sanitize_http_detail(str(e))` (eseguibili).
+    #
+    # AUDIT BE-GO-READY-ERROR-CODES-015 (closure):
+    # ~40 call site in `app/core/<domain>/router*.py` (eseguibili,
+    # connections, datasources, tickets, features, projects, carica,
+    # arricchisci, files, estrai). Pattern unico: catturare un
+    # `ValueError`/sub-classe (`MimeMismatchError`,
+    # `SourceLoadingError`, `ProjectLineageCycleError`, builtin
+    # `PermissionError`, `FileNotFoundError`, `JSONDecodeError`) e
+    # rilanciare 400/422/404/403 con il messaggio originale dinamico.
+    # Decisione: KEEP_DYNAMIC_VALIDATION_COMPAT.
+    #
+    # Razionale di chiusura:
+    # 1. Messaggio user-facing intrinsecamente dinamico (carica il
+    #    dettaglio della validazione: nome colonna mancante, formato
+    #    file non supportato, MIME mismatch, ciclo di lineage, path
+    #    fuori sandbox, ecc.). Un codice domain `validation_error_*`
+    #    per ogni variante non aggiunge branching FE: il FE mostra
+    #    sempre il messaggio italiano grezzo all'utente.
+    # 2. Status code (400, 422) e' gia' sufficiente come hint di
+    #    famiglia per il FE (input non valido / payload non
+    #    processabile).
+    # 3. Codici granulari (es. `mime_mismatch`, `source_loading_failed`)
+    #    sarebbero ~10 codici aggiuntivi al catalog senza un caso
+    #    d'uso FE concreto: noise, non valore.
+    # 4. Stable-error candidates esplicitamente tracciati (NOT in
+    #    questo batch — vedi follow-up):
+    #       a. `CredentialUnavailableError` -> 422 (8 sites: 5
+    #          connections, 1 datasources/test, 2 arricchisci/test).
+    #          Candidato a `credential_unavailable` se il FE deve
+    #          guidare l'admin a reinserire la password decrypt-fail.
+    #       b. `_ds_error_to_http` translator (3 sites: datasources
+    #          file ops). 404/403/502 con dynamic msg da
+    #          `DataSourceFileNotFoundError`/`DataSourcePermissionError`/
+    #          `DataSourceConnectionError`. Da valutare in batch
+    #          dedicato CONNECTION_ENGINE.
+    #       c. `SourceLoadingError` -> 403 in carica/router.py:394
+    #          (defense-in-depth cross-tenant). Possibile promotion a
+    #          `ACCESS_DENIED` in batch AUTH_DOMAIN_ADR-001.
+    # 5. Source-bound coverage:
+    #    `tests2/shared/test_error_codes_catalog.py::test_value_error_str_e_callsite_lock`
+    #    blocca il count per file per evitare drift silente. Aggiunte
+    #    o rimozioni richiedono aggiornamento esplicito del lock e
+    #    classificazione del nuovo sito.
     "value_error_str_e",
     # "service_init_guard" promoted to raise_typed_http(SERVICE_NOT_INITIALIZED)
     # in BE-GO-READY-ERROR-CODES-013. Zero residuals remain.

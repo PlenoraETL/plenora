@@ -26,9 +26,10 @@ zero DB/I/O).
 
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path
-from typing import Set
+from typing import Dict, Set
 
 import pytest
 from fastapi import HTTPException
@@ -641,6 +642,131 @@ def test_no_service_init_guard_string_detail_in_app():
         f"Old service_init_guard pattern found (should use raise_typed_http "
         f"with SERVICE_NOT_INITIALIZED): {violations}"
     )
+
+
+def _is_str_call_or_sanitized(node: ast.AST) -> bool:
+    """Match `str(<ident>)` or `sanitize_http_detail(str(<ident>))`."""
+    if not isinstance(node, ast.Call):
+        return False
+    if isinstance(node.func, ast.Name) and node.func.id == "str" and node.args:
+        return True
+    if (
+        isinstance(node.func, ast.Name)
+        and node.func.id == "sanitize_http_detail"
+        and node.args
+        and _is_str_call_or_sanitized(node.args[0])
+    ):
+        return True
+    return False
+
+
+def _http_exception_detail(node: ast.Call) -> ast.AST | None:
+    """Extract the `detail` arg from an HTTPException(...) call (positional
+    or keyword), or `None` if absent."""
+    if len(node.args) >= 2:
+        return node.args[1]
+    for kw in node.keywords:
+        if kw.arg == "detail":
+            return kw.value
+    return None
+
+
+def _scan_value_error_str_e_callsites() -> Dict[str, int]:
+    """Source-bound AST scan: count `HTTPException(detail=str(<ident>))`
+    or `HTTPException(detail=sanitize_http_detail(str(<ident>)))` per
+    file under `app/`. Skips files with `SyntaxError` (none expected).
+
+    Excludes calls where `detail` is a dict literal (i.e. structured-
+    detail with explicit `error` code — those are NOT `value_error_str_e`
+    pattern even when they include `str(e)` as the message field).
+    """
+    app_root = _BACKEND_ROOT / "app"
+    counts: Dict[str, int] = {}
+    for py_file in app_root.rglob("*.py"):
+        try:
+            tree = ast.parse(py_file.read_text(encoding="utf-8"))
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            f = node.func
+            if not (isinstance(f, ast.Name) and f.id == "HTTPException"):
+                continue
+            d = _http_exception_detail(node)
+            if d is None:
+                continue
+            if _is_str_call_or_sanitized(d):
+                rel = str(py_file.relative_to(_BACKEND_ROOT)).replace("\\", "/")
+                counts[rel] = counts.get(rel, 0) + 1
+    return counts
+
+
+# Lock per-file (BE-GO-READY-ERROR-CODES-015 closure).
+# 41 call site totali in 10 file, classificati `KEEP_DYNAMIC_VALIDATION_COMPAT`
+# (vedi rationale in `error_codes.py::ACCEPTED_HTTP_FALLBACK_PATTERNS`).
+# Aggiunte/rimozioni richiedono aggiornamento esplicito del lock e
+# classificazione del nuovo sito (KEEP_DYNAMIC_VALIDATION_COMPAT,
+# PROMOTE_DOMAIN_CODE, NEEDS_CONTEXT). Drift detection per-file evita
+# espansione silente del pattern fra release.
+EXPECTED_VALUE_ERROR_STR_E_COUNTS: Dict[str, int] = {
+    "backend/app/core/arricchisci/router.py": 4,
+    "backend/app/core/carica/router.py": 1,
+    "backend/app/core/connections/router.py": 5,
+    "backend/app/core/datasources/router.py": 5,
+    "backend/app/core/eseguibili/router.py": 4,
+    "backend/app/core/estrai/router.py": 1,
+    "backend/app/core/features/routes.py": 9,
+    "backend/app/core/files/router.py": 10,
+    "backend/app/core/projects/router.py": 1,
+    "backend/app/core/tickets/router.py": 1,
+}
+
+
+def test_value_error_str_e_callsite_lock():
+    """Lock per-file dei `HTTPException(detail=str(e))` /
+    `HTTPException(detail=sanitize_http_detail(str(e)))` residui.
+
+    Pattern accettato come `value_error_str_e` in
+    `ACCEPTED_HTTP_FALLBACK_PATTERNS` (closure
+    BE-GO-READY-ERROR-CODES-015). Il lock per-file blocca:
+    - drift in piu' (qualcuno aggiunge un nuovo `str(e)` fallback
+      senza classificarlo) → forza classificazione esplicita;
+    - drift in meno (qualcuno migra un site a domain code senza
+      aggiornare il lock) → forza aggiornamento di
+      `EXPECTED_VALUE_ERROR_STR_E_COUNTS` per riflettere la nuova
+      baseline.
+
+    Non lockiamo line numbers (brittle al refactor); lockiamo
+    file -> count.
+    """
+    found = _scan_value_error_str_e_callsites()
+    # Normalize to backend-relative form for comparison.
+    normalized = {f"backend/{k}": v for k, v in found.items()}
+    assert normalized == EXPECTED_VALUE_ERROR_STR_E_COUNTS, (
+        f"Drift `value_error_str_e` rilevato.\n"
+        f"Atteso: {EXPECTED_VALUE_ERROR_STR_E_COUNTS}\n"
+        f"Trovato: {normalized}\n"
+        f"Aggiungi/migra il sito e aggiorna il lock con la nuova "
+        f"classificazione (KEEP_DYNAMIC_VALIDATION_COMPAT, "
+        f"PROMOTE_DOMAIN_CODE, NEEDS_CONTEXT)."
+    )
+
+
+def test_value_error_str_e_total_count_lock():
+    """Sanity check: somma per-file == 41. Lock indipendente che
+    cattura desync fra `EXPECTED_VALUE_ERROR_STR_E_COUNTS` e somma
+    intesa nel commit message."""
+    assert sum(EXPECTED_VALUE_ERROR_STR_E_COUNTS.values()) == 41
+
+
+def test_value_error_str_e_pattern_in_accepted_fallback():
+    """Lock di chiusura: `value_error_str_e` deve restare in
+    `ACCEPTED_HTTP_FALLBACK_PATTERNS` finche' la classificazione
+    BE-GO-READY-ERROR-CODES-015 e' attiva. Rimozione richiede una
+    closure batch successiva (es. promotion mirata di un sottoinsieme
+    a `CREDENTIAL_UNAVAILABLE` / `DATA_SOURCE_*`)."""
+    assert "value_error_str_e" in error_codes.ACCEPTED_HTTP_FALLBACK_PATTERNS
 
 
 def test_drift_scan_ignores_http_status_dynamic_codes():
