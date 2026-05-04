@@ -119,27 +119,76 @@ app.add_middleware(DBConnectionCleanupMiddleware)
 app.add_middleware(RequestIdMiddleware)
 
 
-# Global exception handler — garantisce header CORS anche su eccezioni non gestite.
+# Global exception handlers — garantiscono shape envelope go-ready
+# (BE-GO-READY-ERROR-CONTRACT-002) e header CORS anche su eccezioni
+# non gestite.
 from fastapi import Request
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+from app.shared import error_codes
+from app.shared.error_envelope import (
+    build_error_response,
+    normalize_http_exception_detail,
+)
 
 _CORS_ORIGINS = set(settings.CORS_ORIGINS_LIST)
 
+
+def _cors_headers_for(request: Request) -> dict:
+    """Costruisce gli header CORS per la response di errore se
+    l'origin matcha la whitelist. Replica esatta della logica
+    pre-pilot.
+    """
+    origin = request.headers.get("origin", "")
+    if origin in _CORS_ORIGINS:
+        return {
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "false",
+        }
+    return {}
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    origin = request.headers.get("origin", "")
-    headers = {}
-    if origin in _CORS_ORIGINS:
-        headers["Access-Control-Allow-Origin"] = origin
-        headers["Access-Control-Allow-Credentials"] = "false"
+    """Catch-all: eccezioni non gestite → envelope `internal_error`.
+
+    Body dual-shape (`error/message/details` + `detail` mirror) per
+    backward compat con i test che lockano `detail.error`.
+    """
     logger.error(
         f"Eccezione non gestita: {request.method} {request.url.path} -> {exc}",
-        exc_info=True
+        exc_info=True,
     )
-    return JSONResponse(
+    return build_error_response(
         status_code=500,
-        content={"detail": "Errore interno del server"},
-        headers=headers,
+        error=error_codes.INTERNAL_ERROR,
+        message="Errore interno del server",
+        details=None,
+        headers=_cors_headers_for(request),
+    )
+
+
+# Handler per HTTPException (sia FastAPI che Starlette): normalizza
+# il `detail` legacy nelle 3 chiavi canoniche `error`/`message`/
+# `details` e wrap-pa in dual-shape envelope. Lascia intatto il
+# comportamento status code esistente. NESSUN router viene migrato:
+# l'envelope viene applicato centralmente.
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(
+    request: Request, exc: StarletteHTTPException,
+):
+    norm = normalize_http_exception_detail(exc.status_code, exc.detail)
+    # Header passati dall'eccezione (es. WWW-Authenticate) preservati.
+    base_headers = _cors_headers_for(request)
+    if exc.headers:
+        base_headers.update(exc.headers)
+    return build_error_response(
+        status_code=exc.status_code,
+        error=norm["error"],
+        message=norm["message"],
+        details=norm["details"],
+        headers=base_headers,
     )
 
 
@@ -152,26 +201,24 @@ from app.shared.exceptions import CanvasCorruptedError
 
 @app.exception_handler(CanvasCorruptedError)
 async def canvas_corrupted_handler(request: Request, exc: CanvasCorruptedError):
-    origin = request.headers.get("origin", "")
-    headers = {}
-    if origin in _CORS_ORIGINS:
-        headers["Access-Control-Allow-Origin"] = origin
-        headers["Access-Control-Allow-Credentials"] = "false"
     logger.error(
         f"Canvas corrotto servito su {request.method} {request.url.path} "
         f"per progetto {exc.project_id}: {exc.reason}",
         exc_info=exc.original_error,
     )
-    return JSONResponse(
+    return build_error_response(
         status_code=500,
-        content={
-            "detail": (
-                f"Canvas del progetto '{exc.project_id}' corrotto "
-                f"({exc.reason}). Contattare l'amministratore per il "
-                f"ripristino da backup."
-            ),
+        error=error_codes.CANVAS_CORRUPTED,
+        message=(
+            f"Canvas del progetto '{exc.project_id}' corrotto "
+            f"({exc.reason}). Contattare l'amministratore per il "
+            f"ripristino da backup."
+        ),
+        details={
+            "project_id": exc.project_id,
+            "reason": exc.reason,
         },
-        headers=headers,
+        headers=_cors_headers_for(request),
     )
 
 

@@ -39,11 +39,20 @@ http.interceptors.request.use((config) => {
 http.interceptors.response.use(
   (response) => response,
   (error) => {
+    // Precedenza: new envelope `message` → legacy FastAPI `detail` → JS Error.
+    // Il BE dual-shape mantiene `detail` come mirror durante la transizione.
+    const data = error.response?.data;
     const message =
-      error.response?.data?.detail  ||
-      error.response?.data?.message ||
+      data?.message                 ||
+      data?.detail                  ||
       error.message                 ||
       'Errore di comunicazione con il server';
+
+    // Attach structured error code from new envelope (e.g. "VALIDATION_ERROR").
+    // I consumer possono branchare su err.code invece di parsare stringhe.
+    if (data?.error && typeof data.error === 'string') {
+      try { error.code = data.error; } catch { /* non scrivibile, ignora */ }
+    }
 
     // Silenzia i 404 sui task — sono normali durante il polling.
     // Pattern strict: matcha solo GET su /tasks/{uuid-like} (il polling).
