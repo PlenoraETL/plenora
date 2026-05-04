@@ -182,7 +182,13 @@ async def fetch_openapi_schema(body: FetchSchemaRequest, user: CurrentUser = Dep
         raise HTTPException(status_code=e.response.status_code, detail=f"HTTP {e.response.status_code}")
     except Exception as e:
         logger.error(f"[GESTITO] Errore fetch OpenAPI schema: {e}", exc_info=True)
-        raise HTTPException(status_code=502, detail="Errore nel recupero dello schema OpenAPI")
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "error": error_codes.EXTERNAL_SERVICE_UNREACHABLE,
+                "message": "Errore nel recupero dello schema OpenAPI",
+            },
+        )
 
 
 # =============================================================================

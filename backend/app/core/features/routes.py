@@ -55,6 +55,7 @@ from app.core.features.models import (
     BrowseLayersResponse,
 )
 from app.core.features.features_service import FeaturesService
+from app.shared import error_codes
 from app.shared.audit_action import audit_action
 from app.shared.path_policy import assert_path_within
 from app.shared.error_sanitizer import sanitize_http_detail
@@ -222,7 +223,13 @@ async def browse_services(connection_id: str, current_user: CurrentUser = Depend
     except ValueError as e:
         raise HTTPException(status_code=404, detail=sanitize_http_detail(str(e)))
     except ConnectionError as e:
-        raise HTTPException(status_code=502, detail="Servizio esterno non raggiungibile")
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "error": error_codes.EXTERNAL_SERVICE_UNREACHABLE,
+                "message": "Servizio esterno non raggiungibile",
+            },
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail="Errore interno del server")
 
@@ -237,7 +244,13 @@ async def list_folders(connection_id: str, current_user: CurrentUser = Depends(r
     except ValueError as e:
         raise HTTPException(status_code=404, detail=sanitize_http_detail(str(e)))
     except ConnectionError as e:
-        raise HTTPException(status_code=502, detail="Servizio esterno non raggiungibile")
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "error": error_codes.EXTERNAL_SERVICE_UNREACHABLE,
+                "message": "Servizio esterno non raggiungibile",
+            },
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail="Errore interno del server")
 
@@ -256,7 +269,13 @@ async def browse_layers(
     except ValueError as e:
         raise HTTPException(status_code=404, detail=sanitize_http_detail(str(e)))
     except ConnectionError as e:
-        raise HTTPException(status_code=502, detail="Servizio esterno non raggiungibile")
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "error": error_codes.EXTERNAL_SERVICE_UNREACHABLE,
+                "message": "Servizio esterno non raggiungibile",
+            },
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail="Errore interno del server")
 
@@ -275,7 +294,13 @@ async def get_layer_schema(
     except ValueError as e:
         raise HTTPException(status_code=404, detail=sanitize_http_detail(str(e)))
     except ConnectionError as e:
-        raise HTTPException(status_code=502, detail="Servizio esterno non raggiungibile")
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "error": error_codes.EXTERNAL_SERVICE_UNREACHABLE,
+                "message": "Servizio esterno non raggiungibile",
+            },
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail="Errore interno del server")
 
@@ -481,7 +506,13 @@ async def write_features(request: WriteRequest, current_user: CurrentUser = Depe
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=sanitize_http_detail(str(e)))
     except ConnectionError as e:
-        raise HTTPException(status_code=502, detail="Servizio esterno non raggiungibile")
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "error": error_codes.EXTERNAL_SERVICE_UNREACHABLE,
+                "message": "Servizio esterno non raggiungibile",
+            },
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail="Errore interno del server")
 
@@ -529,6 +560,12 @@ async def create_service(request: CreateServiceRequest, current_user: CurrentUse
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=sanitize_http_detail(str(e)))
     except ConnectionError as e:
-        raise HTTPException(status_code=502, detail="Servizio esterno non raggiungibile")
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "error": error_codes.EXTERNAL_SERVICE_UNREACHABLE,
+                "message": "Servizio esterno non raggiungibile",
+            },
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail="Errore interno del server")

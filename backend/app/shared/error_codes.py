@@ -143,6 +143,23 @@ TICKET_NOT_FOUND = "ticket_not_found"
 
 
 # ============================================================
+# Domain-specific — External-Service family
+# (BE-GO-READY-ERROR-CODES-010-EXTERNAL-SERVICE)
+# ============================================================
+# Promozione mirata della famiglia 502 "upstream/external service
+# unreachable" da `http_502` generico a codice domain. Permette al
+# FE di distinguere "errore di rete su servizio esterno" (retry
+# suggestion, contact admin) da "errore interno BE".
+# Status code resta 502. Nessuna esposizione di dettagli upstream
+# sensibili (URL, token, response body) — solo il flag semantico.
+
+EXTERNAL_SERVICE_UNREACHABLE = "external_service_unreachable"
+"""502: servizio esterno non raggiungibile (features/ArcGIS,
+arricchisci/OpenAPI). FE branching: retry, fallback offline, o
+notifica admin."""
+
+
+# ============================================================
 # Catalog set — drift detection
 # ============================================================
 # `KNOWN_DOMAIN_CODES` espone l'intero catalog domain-specific
@@ -179,6 +196,8 @@ KNOWN_DOMAIN_CODES: frozenset[str] = frozenset({
     FILE_SOURCE_NOT_FOUND,
     DATASOURCE_NOT_FOUND,
     TICKET_NOT_FOUND,
+    # External-Service family (BE-GO-READY-ERROR-CODES-010)
+    EXTERNAL_SERVICE_UNREACHABLE,
 })
 
 # Codici globali (envelope-level): NON domain-specific.

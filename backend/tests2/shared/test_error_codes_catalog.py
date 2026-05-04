@@ -80,6 +80,8 @@ EXPECTED_DOMAIN_CODES: Set[str] = {
     "file_source_not_found",
     "datasource_not_found",
     "ticket_not_found",
+    # batch 010 — External-Service family
+    "external_service_unreachable",
 }
 
 # Pattern accettati come `http_<status>` fallback intenzionale
@@ -110,10 +112,10 @@ def test_known_global_codes_matches_expected_lock():
     assert error_codes.KNOWN_GLOBAL_CODES == EXPECTED_GLOBAL_CODES
 
 
-def test_catalog_count_domain_twentyone():
-    """21 codici domain (5 pre-existing + 6 batch 006 + 10 batch 009
-    not-found family)."""
-    assert len(error_codes.KNOWN_DOMAIN_CODES) == 21
+def test_catalog_count_domain_twentytwo():
+    """22 codici domain (5 pre-existing + 6 batch 006 + 10 batch 009
+    not-found family + 1 batch 010 external-service)."""
+    assert len(error_codes.KNOWN_DOMAIN_CODES) == 22
 
 
 def test_catalog_domain_and_global_disjoint():
@@ -151,6 +153,8 @@ def test_catalog_constants_match_set_values():
         error_codes.FILE_SOURCE_NOT_FOUND,
         error_codes.DATASOURCE_NOT_FOUND,
         error_codes.TICKET_NOT_FOUND,
+        # batch 010 — External-Service family
+        error_codes.EXTERNAL_SERVICE_UNREACHABLE,
     }
     assert domain_constants == set(error_codes.KNOWN_DOMAIN_CODES)
 
@@ -475,6 +479,8 @@ def test_router_constant_refs_find_baseline():
         "FILE_SOURCE_NOT_FOUND",
         "DATASOURCE_NOT_FOUND",
         "TICKET_NOT_FOUND",
+        # batch 010 (external-service family)
+        "EXTERNAL_SERVICE_UNREACHABLE",
     }
     missing = baseline_constants_must_appear - found
     assert missing == set(), (
