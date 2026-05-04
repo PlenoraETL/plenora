@@ -9,6 +9,8 @@ Endpoints:
 """
 
 from fastapi import APIRouter, HTTPException, Depends
+from app.shared import error_codes
+from app.shared.error_envelope import raise_typed_http
 from pydantic import BaseModel
 from typing import Dict, Any, Optional
 
@@ -100,4 +102,4 @@ async def translate_expression(request: TranslateRequest, current_user: CurrentU
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")

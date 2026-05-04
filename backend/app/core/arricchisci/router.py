@@ -32,6 +32,7 @@ from app.config import settings
 from app.utils.logger import get_logger
 from app.utils.router_utils import require_service
 from app.shared import error_codes
+from app.shared.error_envelope import raise_typed_http
 from app.shared.audit_action import audit_action
 from app.shared.exceptions import CanvasCorruptedError
 from app.shared.path_policy import assert_path_within
@@ -366,7 +367,7 @@ async def validate_enrichment(
         raise
     except Exception as e:
         logger.error(f"[CRASH] Errore validazione: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 @enrichment_router.post("/estimate", response_model=EstimateResponse)
@@ -432,7 +433,7 @@ async def estimate_enrichment(
         raise
     except Exception as e:
         logger.error(f"[CRASH] Errore stima: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 # =============================================================================
@@ -465,7 +466,7 @@ def list_api_connections(category: str = None, connection_type: str = None, curr
         return {"api_connections": all_conns}
     except Exception as e:
         logger.error(f"[CRASH] Errore lista API connections: {e}", exc_info=True)
-        raise HTTPException(500, "Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 @api_connections_router.get("/api-connections/{api_id}")
@@ -480,7 +481,7 @@ def get_api_connection(api_id: str, current_user: CurrentUser = Depends(require_
         raise
     except Exception as e:
         logger.error(f"[CRASH] Errore lettura API connection {api_id}: {e}", exc_info=True)
-        raise HTTPException(500, "Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 @api_connections_router.post("/api-connections", status_code=201)
@@ -507,7 +508,7 @@ def create_api_connection(data: dict, current_user: CurrentUser = Depends(requir
         return connection
     except Exception as e:
         logger.error(f"[CRASH] Errore creazione API connection: {e}", exc_info=True)
-        raise HTTPException(500, "Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 @api_connections_router.put("/api-connections/{api_id}")
@@ -550,7 +551,7 @@ def update_api_connection(api_id: str, data: dict, current_user: CurrentUser = D
         raise
     except Exception as e:
         logger.error(f"[CRASH] Errore aggiornamento API connection {api_id}: {e}", exc_info=True)
-        raise HTTPException(500, "Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 @api_connections_router.delete("/api-connections/{api_id}", status_code=204)
@@ -724,7 +725,7 @@ def test_api_config(
         if isinstance(e, CredentialUnavailableError):
             raise HTTPException(status_code=422, detail=str(e))
         logger.error(f"[CRASH] Errore test API config: {e}", exc_info=True)
-        raise HTTPException(500, "Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 @api_connections_router.post("/api-connections/{api_id}/test")
@@ -752,7 +753,7 @@ def test_api_connection(
         if isinstance(e, CredentialUnavailableError):
             raise HTTPException(status_code=422, detail=str(e))
         logger.error(f"[CRASH] Errore test API connection {api_id}: {e}", exc_info=True)
-        raise HTTPException(500, "Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 # =============================================================================
@@ -788,7 +789,7 @@ def get_templates(current_user: CurrentUser = Depends(require_not_esecutore)):
         return {"success": True, "count": len(templates), "templates": templates}
     except Exception as e:
         logger.error(f"[CRASH] Errore lista template: {e}", exc_info=True)
-        raise HTTPException(500, "Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 # =============================================================================
@@ -910,7 +911,7 @@ def execute_enrichment_async(
         raise
     except Exception as e:
         logger.error(f"[CRASH] Errore execute_enrichment_async: {e}", exc_info=True)
-        raise HTTPException(500, "Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 # =============================================================================

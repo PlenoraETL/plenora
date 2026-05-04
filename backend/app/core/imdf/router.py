@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 from app.config import settings
 from app.core.auth.auth import get_current_user, CurrentUser
 from app.shared import error_codes
+from app.shared.error_envelope import raise_typed_http
 from app.shared.audit_action import audit_action
 from app.shared.path_policy import validate_imdf_task_id
 from app.utils.logger import get_logger
@@ -337,7 +338,7 @@ def validate_publish_endpoint(
         raise
     except Exception as e:
         logger.error(f"validate_publish error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 @router.get("/bundles/{bundle_task_id}")
@@ -675,10 +676,7 @@ def delete_bundle(
             f"delete_bundle: rimozione '{bundle_task_id}' fallita: {e}",
             exc_info=True,
         )
-        raise HTTPException(
-            status_code=500,
-            detail="Errore interno del server",
-        )
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
     # R2 multi-host: cancella anche da S3 (best-effort, separato dal delete
     # locale). Se fallisce (config mancante in test / network error in prod),

@@ -107,6 +107,7 @@ from app.services.file_service import file_source_service
 from app.config import settings
 from app.utils.logger import get_logger
 from app.shared import error_codes
+from app.shared.error_envelope import raise_typed_http
 from app.shared.audit_action import audit_action
 from app.core.auth.auth import (
     get_current_user,
@@ -545,7 +546,7 @@ def get_file_layers(file_id: str, current_user: CurrentUser = Depends(require_no
         raise HTTPException(status_code=403, detail=str(e))
     except Exception as e:
         logger.error(f"[CRASH] Errore listing layers: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 @router.get("/{file_id}/preview", response_model=FileSourcePreview)
@@ -563,4 +564,4 @@ def preview_file(file_id: str, limit: int = Query(100, ge=1, le=1000), current_u
         raise HTTPException(status_code=403, detail=str(e))
     except Exception as e:
         logger.error(f"[CRASH] Errore preview file: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")

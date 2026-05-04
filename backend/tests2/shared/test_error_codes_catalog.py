@@ -89,7 +89,8 @@ EXPECTED_DOMAIN_CODES: Set[str] = {
 # Lockati per evitare che il drift detection li riconti come
 # residui da promuovere.
 EXPECTED_FALLBACK_PATTERNS: Set[str] = {
-    "internal_error_generic",
+    # "internal_error_generic" promoted to raise_typed_http(INTERNAL_ERROR)
+    # in BE-GO-READY-ERROR-CODES-011.
     "value_error_str_e",
     "service_init_guard",
     "generic_access_denied",
@@ -481,12 +482,41 @@ def test_router_constant_refs_find_baseline():
         "TICKET_NOT_FOUND",
         # batch 010 (external-service family)
         "EXTERNAL_SERVICE_UNREACHABLE",
+        # batch 011 (global fallback promotion)
+        "INTERNAL_ERROR",
     }
     missing = baseline_constants_must_appear - found
     assert missing == set(), (
         f"Baseline costanti `error_codes.<CONST>` non referenziate "
         f"nei router: {sorted(missing)}. Probabile call site "
         f"rimosso/rolled-back o regex parser rotto."
+    )
+
+
+def test_no_generic_500_string_detail_in_non_auth_routers():
+    """Source-bound: nessun file non-auth sotto `app/core/` deve
+    contenere old-pattern generic-500 con messaggio
+    `"Errore interno del server"`. Tutti promossi a
+    `raise_typed_http(error_codes.INTERNAL_ERROR, ...)` in
+    BE-GO-READY-ERROR-CODES-011."""
+    old_pattern = re.compile(
+        r'raise\s+HTTPException\('
+        r'(?=[^)]*(?:status_code\s*=\s*)?500)'
+        r'(?=[^)]*["\']Errore interno del server["\'])',
+        re.DOTALL,
+    )
+    violations = []
+    for py_file in _CORE_ROOT.rglob("*.py"):
+        if "auth" in py_file.parts:
+            continue
+        try:
+            text = py_file.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        for match in old_pattern.finditer(text):
+            violations.append(f"{py_file.relative_to(_BACKEND_ROOT)}:{text[:match.start()].count(chr(10))+1}")
+    assert violations == [], (
+        f"Old generic-500 pattern found (should use raise_typed_http): {violations}"
     )
 
 

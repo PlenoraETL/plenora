@@ -40,6 +40,7 @@ from app.core.auth.auth import (
 )
 import app.db.db_service as db
 from app.shared import error_codes
+from app.shared.error_envelope import raise_typed_http
 from app.shared.audit_action import audit_action
 
 logger = get_logger(__name__)
@@ -138,7 +139,7 @@ async def list_schedules(project_id: Optional[str] = Query(None, description="Fi
         
     except Exception as e:
         logger.error(f"[GESTITO] Errore lista schedule: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 @router.post("", response_model=ScheduleConfig, status_code=201)
@@ -193,7 +194,7 @@ async def create_schedule(data: ScheduleCreate, current_user: CurrentUser = Depe
         raise
     except Exception as e:
         logger.error(f"[GESTITO] Errore creazione schedule: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 # ==================== SINGOLO SCHEDULE ====================
@@ -228,7 +229,7 @@ async def get_schedule(schedule_id: str, current_user: CurrentUser = Depends(req
         raise
     except Exception as e:
         logger.error(f"[GESTITO] Errore lettura schedule {schedule_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 @router.put("/{schedule_id}", response_model=ScheduleConfig)
@@ -268,7 +269,7 @@ async def update_schedule(schedule_id: str, data: ScheduleUpdate, current_user: 
         raise
     except Exception as e:
         logger.error(f"[GESTITO] Errore modifica schedule {schedule_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 @router.delete("/{schedule_id}", status_code=204)
@@ -284,7 +285,7 @@ async def delete_schedule(schedule_id: str, current_user: CurrentUser = Depends(
         raise
     except Exception as e:
         logger.error(f"[GESTITO] Errore eliminazione schedule {schedule_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 # ==================== TOGGLE + RUN MANUALE ====================
@@ -317,7 +318,7 @@ async def toggle_schedule(schedule_id: str, data: ScheduleToggle, current_user: 
         raise
     except Exception as e:
         logger.error(f"[GESTITO] Errore toggle schedule {schedule_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 @router.patch("/{schedule_id}/catchup", response_model=ScheduleConfig)
@@ -348,7 +349,7 @@ async def update_schedule_catchup(
         raise
     except Exception as e:
         logger.error(f"[GESTITO] Errore update catchup {schedule_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 @router.post("/{schedule_id}/run")
@@ -399,10 +400,7 @@ async def run_schedule_now(schedule_id: str, current_user: CurrentUser = Depends
     except Exception as e:
         service.set_runtime_status(schedule_id, status="idle")
         logger.error(f"[GESTITO] Errore invio task manuale {schedule_id}: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail="Errore interno del server"
-        )
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 # ==================== DOWNLOAD OUTPUT ====================
@@ -503,7 +501,7 @@ async def download_schedule_output(
         raise
     except Exception as e:
         logger.error(f"[GESTITO] Errore download output schedule {schedule_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 @router.get("/{schedule_id}/runs")
@@ -564,7 +562,7 @@ async def list_schedule_runs(schedule_id: str, current_user: CurrentUser = Depen
         raise
     except Exception as e:
         logger.error(f"[GESTITO] Errore lista runs schedule {schedule_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 def _format_size(size_bytes: int) -> str:
@@ -612,4 +610,4 @@ async def get_schedule_logs(
         
     except Exception as e:
         logger.error(f"[GESTITO] Errore lettura log {schedule_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")

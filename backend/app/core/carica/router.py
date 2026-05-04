@@ -41,6 +41,7 @@ from app.core.carica.column_mapper import ColumnMapper
 from app.core.carica.ddl_generator import DDLGenerator
 from app.core.carica.models import WriteConfig
 from app.shared import error_codes
+from app.shared.error_envelope import raise_typed_http
 
 
 logger = get_logger("app.core.carica.router")
@@ -149,7 +150,7 @@ async def get_schemas(connection_id: str, current_user: CurrentUser = Depends(re
 
     except Exception as e:
         logger.error(f"[CRASH] Errore recupero schema: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 # ============================================================================
@@ -178,7 +179,7 @@ async def get_tables(connection_id: str, schema_name: str, current_user: Current
 
     except Exception as e:
         logger.error(f"[CRASH] Errore recupero tabelle: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 # ============================================================================
@@ -216,7 +217,7 @@ async def get_columns(connection_id: str, schema_name: str, table_name: str, cur
 
     except Exception as e:
         logger.error(f"[CRASH] Errore recupero colonne: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 # ============================================================================
@@ -309,7 +310,7 @@ async def auto_mapping(request: AutoMappingRequest, current_user: CurrentUser = 
 
     except Exception as e:
         logger.error(f"[CRASH] Errore auto-mapping: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 # ============================================================================
@@ -439,7 +440,7 @@ async def check_conflicts(request: ConflictCheckRequest, current_user: CurrentUs
 
     except Exception as e:
         logger.error(f"[CRASH] Errore check conflitti: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 # ============================================================================

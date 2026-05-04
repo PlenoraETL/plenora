@@ -22,6 +22,7 @@ from typing import Literal, Optional, Dict, Any, List
 from app.config import settings
 from app.utils.logger import get_logger
 from app.shared import error_codes
+from app.shared.error_envelope import raise_typed_http
 from app.shared.models import ExecuteRequest
 from app.services.task_service import TaskType
 from app.utils.router_utils import require_service
@@ -210,7 +211,7 @@ def execute_project_pipeline(
         return result
     except Exception as e:
         logger.error(f"[CRASH] Errore avvio task execute: {e}", op="execute", project_id=project_id, exc_info=True)
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 @pipeline_router.get("/{project_id}/preview")
@@ -240,7 +241,7 @@ def preview_project(
         return result
     except Exception as e:
         logger.error(f"[CRASH] Errore avvio task preview: {e}", op="preview", project_id=project_id, exc_info=True)
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 @pipeline_router.get("/{project_id}/download")
@@ -319,7 +320,7 @@ def download_project_result(project_id: str, file: Optional[str] = None, current
         raise
     except Exception as e:
         logger.error(f"[CRASH] Errore download progetto {project_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 
@@ -418,7 +419,7 @@ def create_task(request: CreateTaskRequest, current_user: CurrentUser = Depends(
         raise
     except Exception as e:
         logger.error(f"[CRASH] Errore creazione task: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 @tasks_router.get("/{task_id}")
@@ -514,7 +515,7 @@ def cancel_task(task_id: str, current_user: CurrentUser = Depends(get_current_us
         raise
     except Exception as e:
         logger.error(f"[CRASH] Errore annullamento task {task_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 @tasks_router.delete(
@@ -864,6 +865,6 @@ def download_task_result(
         raise
     except Exception as e:
         logger.error(f"[CRASH] Errore download risultato task {task_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 

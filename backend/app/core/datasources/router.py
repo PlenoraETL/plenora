@@ -23,6 +23,7 @@ from typing import Optional, List, Dict
 
 from app.utils.logger import get_logger
 from app.shared import error_codes
+from app.shared.error_envelope import raise_typed_http
 from app.shared.audit_action import audit_action
 from app.core.auth.auth import (
     get_current_user,
@@ -81,7 +82,14 @@ def _ds_error_to_http(e: DataSourceError) -> HTTPException:
         return HTTPException(403, str(e))
     if isinstance(e, DataSourceConnectionError):
         return HTTPException(502, str(e))
-    return HTTPException(500, "Errore interno del server")
+    return HTTPException(
+        status_code=500,
+        detail={
+            "error": error_codes.INTERNAL_ERROR,
+            "message": "Errore interno del server",
+            "details": {},
+        },
+    )
 
 
 # =============================================================================
@@ -103,7 +111,7 @@ def create_datasource(data: DataSourceCreate, current_user: CurrentUser = Depend
         return ds
     except Exception as e:
         logger.error(f"[CRASH] Errore creazione Data Source: {e}", exc_info=True)
-        raise HTTPException(500, "Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 @router.get("", response_model=DataSourceList)
@@ -330,7 +338,7 @@ def list_files(
         raise _ds_error_to_http(e)
     except Exception as e:
         logger.error(f"[CRASH] Errore list_files {ds_id}: {e}", exc_info=True)
-        raise HTTPException(500, "Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 @router.get("/{ds_id}/files/download")
@@ -368,7 +376,7 @@ def download_file(
         raise _ds_error_to_http(e)
     except Exception as e:
         logger.error(f"[CRASH] Errore download {ds_id}/{path}: {e}", exc_info=True)
-        raise HTTPException(500, "Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 @router.post("/{ds_id}/files/upload", status_code=201)
@@ -409,6 +417,6 @@ def upload_file(
         raise _ds_error_to_http(e)
     except Exception as e:
         logger.error(f"[CRASH] Errore upload {ds_id}/{path}: {e}", exc_info=True)
-        raise HTTPException(500, "Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 

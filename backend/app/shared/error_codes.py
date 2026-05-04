@@ -227,12 +227,9 @@ KNOWN_GLOBAL_CODES: frozenset[str] = frozenset({
 # `BE-GO-READY-ERROR-CODES-008-STRING-DETAIL-CLASSIFICATION`,
 # sezione "B. ACCEPT_HTTP_STATUS_FALLBACK".
 ACCEPTED_HTTP_FALLBACK_PATTERNS: frozenset[str] = frozenset({
-    # raise HTTPException(500, "Errore interno del server")
-    # ~50 occorrenze nei catch-all `try/except Exception` dei
-    # router non-auth. Equivalente al global handler che emette
-    # `internal_error`; codice domain dedicato non aggiungerebbe
-    # branching FE.
-    "internal_error_generic",
+    # "internal_error_generic" promoted to raise_typed_http(INTERNAL_ERROR)
+    # in BE-GO-READY-ERROR-CODES-011. Zero residuals remain.
+    #
     # raise HTTPException(400|422, str(e))
     # ~20 occorrenze di translation da ValueError/TypeError
     # locali. Il messaggio e' dinamico, lo status code basta

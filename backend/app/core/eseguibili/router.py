@@ -34,6 +34,8 @@ from app.shared.audit_action import audit_action
 from app.shared.sharing import visible_resource_ids
 from app.shared.error_sanitizer import sanitize_http_detail
 from app.shared.upload_guards import enforce_upload_size_limit
+from app.shared import error_codes
+from app.shared.error_envelope import raise_typed_http
 
 from . import db as eseguibili_db
 from . import service as eseguibili_service
@@ -122,7 +124,7 @@ def create_eseguibile(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"[CRASH] Errore creazione eseguibile: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
     _inject_can_edit(record, current_user)
     return _to_details(record)
@@ -399,7 +401,7 @@ async def analyze_upload(
         raise
     except Exception as e:
         logger.error(f"[CRASH] Errore analyze upload: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 # ──────────────────────────────────────────────────────────────
@@ -464,7 +466,7 @@ def execute_eseguibile(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"[CRASH] Errore execute eseguibile: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
     finally:
         # Cleanup: elimina file temp + metadata
         try:

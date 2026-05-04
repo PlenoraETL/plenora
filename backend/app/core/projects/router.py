@@ -23,6 +23,7 @@ from typing import Any, List, Optional
 
 from app.utils.logger import get_logger
 from app.shared import error_codes
+from app.shared.error_envelope import raise_typed_http
 from app.shared.audit_action import audit_action
 from app.shared.models import CanvasState, Node, Edge
 from app.shared.exceptions import (
@@ -776,7 +777,7 @@ def get_all_schemas(project_id: str, current_user: CurrentUser = Depends(require
         schemas = _schema_service.infer_all_schemas(project_id)
         return {"schemas": schemas}
     except Exception as e:
-        raise HTTPException(500, "Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 @router.get("/{project_id}/schemas/{node_id}")
@@ -790,7 +791,7 @@ def get_node_schema(project_id: str, node_id: str, current_user: CurrentUser = D
         columns = _schema_service.infer_node_schema(project_id, node_id)
         return {"node_id": node_id, "columns": columns}
     except Exception as e:
-        raise HTTPException(500, "Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 @router.post("/{project_id}/validate-connection")
@@ -809,7 +810,7 @@ def validate_connection(project_id: str, request: ValidationRequest, current_use
         )
         return {"valid": is_valid, "error": error}
     except Exception as e:
-        raise HTTPException(500, "Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 @router.get("/{project_id}/validate-all")
@@ -823,7 +824,7 @@ def validate_all_connections(project_id: str, current_user: CurrentUser = Depend
         errors = _validator.validate_all_connections(project_id)
         return {"valid": len(errors) == 0, "errors": errors}
     except Exception as e:
-        raise HTTPException(500, "Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 # ==================== ADMIN: ORPHAN CLEANUP ====================

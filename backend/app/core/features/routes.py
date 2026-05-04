@@ -56,6 +56,7 @@ from app.core.features.models import (
 )
 from app.core.features.features_service import FeaturesService
 from app.shared import error_codes
+from app.shared.error_envelope import raise_typed_http
 from app.shared.audit_action import audit_action
 from app.shared.path_policy import assert_path_within
 from app.shared.error_sanitizer import sanitize_http_detail
@@ -142,7 +143,7 @@ async def create_connection(data: ArcGISCreate, current_user: CurrentUser = Depe
         raise
     except Exception as e:
         logger.error(f"[CRASH] Errore creazione connessione ArcGIS: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 @router.get("/connections", response_model=ArcGISList)
@@ -169,7 +170,7 @@ async def list_connections(current_user: CurrentUser = Depends(require_not_esecu
 
         return {"connections": [_mask_secrets(c) for c in result.connections]}
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 @router.put("/connections/{connection_id}", response_model=ArcGISConnection)
@@ -206,7 +207,7 @@ async def test_connection(connection_id: str, current_user: CurrentUser = Depend
         result = get_service().test_connection(connection_id)
         return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 # =============================================================================
@@ -231,7 +232,7 @@ async def browse_services(connection_id: str, current_user: CurrentUser = Depend
             },
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 @router.get("/connections/{connection_id}/folders", response_model=ListFoldersResponse)
@@ -252,7 +253,7 @@ async def list_folders(connection_id: str, current_user: CurrentUser = Depends(r
             },
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 @router.get("/connections/{connection_id}/layers", response_model=BrowseLayersResponse)
@@ -277,7 +278,7 @@ async def browse_layers(
             },
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 @router.get("/connections/{connection_id}/schema")
@@ -302,7 +303,7 @@ async def get_layer_schema(
             },
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 # =============================================================================
@@ -339,7 +340,7 @@ async def query_preview(
     except ValueError as e:
         raise HTTPException(status_code=404, detail=sanitize_http_detail(str(e)))
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 # =============================================================================
@@ -514,7 +515,7 @@ async def write_features(request: WriteRequest, current_user: CurrentUser = Depe
             },
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
 @router.post("/create-service", response_model=CreateServiceResponse)
@@ -568,4 +569,4 @@ async def create_service(request: CreateServiceRequest, current_user: CurrentUse
             },
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")

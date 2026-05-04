@@ -32,6 +32,7 @@ from app.core.auth.auth import (
 )
 from app.utils.router_utils import require_service
 from app.shared import error_codes
+from app.shared.error_envelope import raise_typed_http
 from app.shared.audit_action import audit_action
 from app.shared.sharing import visible_resource_ids
 from .models import (
@@ -256,4 +257,4 @@ def get_connection_tables(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(500, "Errore interno del server")
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
