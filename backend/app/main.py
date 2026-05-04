@@ -42,11 +42,12 @@ from app.utils.dataframe import save_dataframe
 #   3. init_all_dbs()
 #   4. _repair_psycopg2_ssl_env()  (pop dei 3 SSL env var dopo init PG)
 # Vedi `app/bootstrap.py` per il contratto.
-from app.bootstrap import bootstrap as _bootstrap
+from app.bootstrap import bootstrap as _bootstrap, teardown as _teardown
 _bootstrap()
 
 # Auth JWT
 from app.core.auth.auth import router as auth_router, groups_router, get_current_user
+from app.core.auth.users_router import users_router
 from app.core.auth.auth_middleware import JWTMiddleware
 from app.core.auth.request_id_middleware import RequestIdMiddleware
 from app.db.cleanup_middleware import DBConnectionCleanupMiddleware
@@ -64,9 +65,8 @@ from contextlib import asynccontextmanager
 @asynccontextmanager
 async def lifespan(app):
     yield
-    # Shutdown: chiudi il pool PostgreSQL
-    from app.db.pg_connection import close_pool
-    close_pool()
+    # Shutdown: delega alla boundary simmetrica del bootstrap.
+    _teardown()
     logger.info("PG connection pool chiuso")
 
 app = FastAPI(
@@ -428,6 +428,9 @@ init_orchestrator(orchestrator)
 
 # Auth (auth in signature di ogni endpoint)
 app.include_router(auth_router, prefix="/api")
+# BE-GO-READY-AUTH-ENGINE-003: users CRUD admin endpoints estratti
+# in modulo dedicato. URL pattern preservati: /api/auth/users*.
+app.include_router(users_router, prefix="/api")
 app.include_router(groups_router, prefix="/api")
 app.include_router(shares_router, prefix="/api")
 

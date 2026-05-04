@@ -1,8 +1,10 @@
 """Contract test BE-GO-READY-BOOTSTRAP-ENGINE-002-EXPLICIT-BOOTSTRAP-FUNCTION.
 
-Source-bound + behavioural test for `app.bootstrap.bootstrap()`. The
-function replaces the 4 implicit top-level side effects in
-`app.main` with a single named boundary. This test locks:
+Source-bound + behavioural test for `app.bootstrap.bootstrap()` and
+`app.bootstrap.teardown()`. The bootstrap function replaces the 4
+implicit top-level startup side effects in `app.main` with a single
+named boundary; teardown owns the symmetric shutdown pool close.
+This test locks:
 
 1. **Call order**: `validate_startup → validate_storage_config →
    init_all_dbs → _repair_psycopg2_ssl_env`. Reordering would
@@ -15,9 +17,10 @@ function replaces the 4 implicit top-level side effects in
    `validate_startup` / `init_all_dbs` idempotence).
 4. **Exception propagation**: each step's exception type is
    preserved (no wrapping, no logging, no remapping by `bootstrap`).
-5. **`main.py` delegates to bootstrap**: source-bound check that
+5. **`main.py` delegates to bootstrap/teardown**: source-bound check that
    the top-level block is replaced by a single `_bootstrap()` call
-   and the 4 inline statements are gone.
+   and the 4 inline statements are gone, and that lifespan delegates
+   shutdown to `_teardown()`.
 """
 
 from __future__ import annotations
@@ -67,6 +70,12 @@ def _real_bootstrap():
     """
     return getattr(
         bootstrap_module, "_original_bootstrap", bootstrap_module.bootstrap
+    )
+
+
+def _real_teardown():
+    return getattr(
+        bootstrap_module, "_original_teardown", bootstrap_module.teardown
     )
 
 
@@ -402,6 +411,45 @@ def test_main_py_imports_bootstrap_and_calls_it_at_module_load():
     assert bootstrap_call is not None, (
         "main.py must call `_bootstrap()` at module level."
     )
+
+
+def test_teardown_calls_close_pool(monkeypatch):
+    calls: list[str] = []
+
+    monkeypatch.setattr(
+        "app.db.pg_connection.close_pool",
+        lambda: calls.append("close_pool"),
+    )
+
+    _real_teardown()()
+
+    assert calls == ["close_pool"]
+
+
+def test_teardown_is_idempotent_under_current_close_contract(monkeypatch):
+    calls: list[str] = []
+
+    monkeypatch.setattr(
+        "app.db.pg_connection.close_pool",
+        lambda: calls.append("close_pool"),
+    )
+
+    _real_teardown()()
+    _real_teardown()()
+
+    # `close_pool` is itself guarded/idempotent; teardown preserves the
+    # existing behavior and does not add stateful skip logic.
+    assert calls == ["close_pool", "close_pool"]
+
+
+def test_main_lifespan_delegates_to_teardown_source_bound():
+    text = _read(_MAIN_PY)
+
+    assert "teardown as _teardown" in text
+    assert "_teardown()" in text
+    code_only = _strip_line_comments(text)
+    assert "close_pool()" not in code_only
+    assert "from app.db.pg_connection import close_pool" not in code_only
 
 
 def _strip_line_comments(text: str) -> str:

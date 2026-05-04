@@ -24,7 +24,7 @@ zero-call-site-touched sugli altri cluster che lo condividono (users/schedules
 """
 
 import json
-from typing import Dict, List, Optional
+from typing import Dict, Iterable, List, Optional, Set
 
 from app.db.pg_connection import fetchone, fetchall, execute
 from app.utils.logger import get_logger
@@ -116,3 +116,90 @@ def get_project_retention_n(project_id: str) -> Optional[int]:
     """Ritorna retention_n del canvas (None = usa default globale)."""
     row = fetchone("SELECT retention_n FROM projects WHERE id = ?", (project_id,))
     return row["retention_n"] if row else None
+
+
+# ---------------------------------------------------------------------------
+# Project-id lookups (BE-GO-READY-CONNECTION-ENGINE-003)
+# ---------------------------------------------------------------------------
+#
+# Two read-only helpers extracted from `app/core/projects/router.py` and
+# `app/core/imdf/router.py` so those routers can stop importing
+# `app.db.pg_connection` directly. Both return `set[str]` because the
+# only consumer-side need is membership testing / set algebra. Returning
+# `set` (not `list`) also expresses the contract that order is not
+# meaningful and that the result is deduplicated.
+#
+# Tabella `projects` non e' shareable (no `project_shares`): la
+# visibilita' coincide col gruppo proprietario. Vedi RB.4.A.16. Questi
+# helper NON conoscono il concetto di share / `is_superadmin`: il caller
+# decide se applicare la lista `project_ids` (last-mile filter) oppure
+# lasciar passare tutto via early-return prima di chiamare il DB.
+
+
+def list_owned_project_ids(
+    project_ids: Iterable[str],
+    *,
+    owner_group_id: str,
+) -> Set[str]:
+    """Subset di `project_ids` realmente posseduti da `owner_group_id`.
+
+    Sostituisce l'inline `SELECT id FROM projects WHERE id IN (...) AND
+    group_id = ?` in `projects/router._visible_project_ids_strict`.
+
+    Contract:
+      - input vuoto → `set()`;
+      - `owner_group_id` falsy → `set()` (caller deve pre-filtrare i
+        casi `is_superadmin` / no group);
+      - batch single-query (1 `WHERE id IN (...)`), N-safe;
+      - return SEMPRE `set[str]` (deduplicato, ordine non garantito).
+
+    Args:
+        project_ids: candidati da validare. Iterable; vuoto ammesso.
+        owner_group_id: gruppo proprietario richiesto (kw-only per
+            evitare ambiguita' di posizione con eventuali signatures
+            future).
+
+    Returns:
+        Sottoinsieme di `project_ids` con `group_id == owner_group_id`.
+    """
+    ids = {pid for pid in (project_ids or ()) if pid}
+    if not ids or not owner_group_id:
+        return set()
+    placeholders = ",".join(["?"] * len(ids))
+    rows = fetchall(
+        f"SELECT id FROM projects WHERE id IN ({placeholders}) "
+        f"AND group_id = ?",
+        tuple(ids) + (owner_group_id,),
+    )
+    return {r["id"] for r in rows}
+
+
+def list_project_ids_for_group(group_id: str) -> Set[str]:
+    """Tutti i `project.id` posseduti da `group_id`.
+
+    Sostituisce l'inline `SELECT id FROM projects WHERE group_id = ?`
+    in `imdf/router.list_bundles` per il calcolo
+    `visible_project_ids`.
+
+    Contract:
+      - `group_id` falsy → `set()` (caller deve gestire il caso
+        anonymous / superadmin separatamente — superadmin in
+        particolare deve saltare questo lookup, non passargli
+        `None`);
+      - return SEMPRE `set[str]`.
+
+    Args:
+        group_id: identificatore del gruppo proprietario.
+
+    Returns:
+        Set di `project.id` con `group_id == group_id`. Vuoto ammesso
+        (gruppo senza progetti) e indistinguibile dal `group_id` vuoto:
+        il caller deve pre-validare l'input se la differenza conta.
+    """
+    if not group_id:
+        return set()
+    rows = fetchall(
+        "SELECT id FROM projects WHERE group_id = ?",
+        (group_id,),
+    )
+    return {r["id"] for r in rows}

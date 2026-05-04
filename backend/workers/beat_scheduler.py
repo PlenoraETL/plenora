@@ -247,6 +247,7 @@ class PlenoraBeatScheduler(Scheduler):
     _last_schedule_logs_retention: float = 0.0
     _last_imdf_bundles_cleanup: float = 0.0
     _last_temp_orphan_cleanup: float = 0.0
+    _last_storage_reconcile: float = 0.0
 
     def tick(self, event_t=None, **kwargs):
         """Override tick:
@@ -273,6 +274,7 @@ class PlenoraBeatScheduler(Scheduler):
         self._cleanup_old_schedule_logs()
         self._archive_old_audit_actions()
         self._cleanup_orphan_temp_files()
+        self._reconcile_storage()
         if event_t is not None:
             return super().tick(event_t=event_t, **kwargs)
         return super().tick(**kwargs)
@@ -1186,6 +1188,152 @@ class PlenoraBeatScheduler(Scheduler):
                 )
         except Exception as e:
             logger.warning(f"Errore archive audit_actions: {e}", exc_info=True)
+
+    # ------------------------------------------------------------------
+    # Storage reconciliation — BE-GO-READY-STORAGE-ENGINE-006
+    # ------------------------------------------------------------------
+
+    def _reconcile_storage(self):
+        """Beat-driven reconciler per `plenora.storage_reconciliation_log`.
+
+        Cadence-gated da `RECONCILIATION_BEAT_INTERVAL_MIN` (default 15
+        minuti). Supporta solo `operation="delete"` in questa fase
+        (BE-GO-READY-STORAGE-ENGINE-006). Upload-intent (W2 race),
+        storage-side scan e intermediate artifact pair restano fuori
+        scope.
+
+        Per ciascuna riga `pending` due:
+          - chiama `compensating_delete(storage_key, domain=domain,
+            reason="reconciler_retry")`;
+          - outcome `ok` o `skipped` -> `mark_orphan_deleted`;
+          - outcome `failed`:
+              - se attempts dopo l'incremento >= max_attempts -> `mark_lost`;
+              - altrimenti `mark_failed_attempt` + `next_retry_at`
+                via backoff esponenziale.
+
+        Best-effort: tutte le exception sono catturate e loggate; il
+        tick beat continua. Il time-gate slot
+        `_last_storage_reconcile` viene aggiornato SEMPRE (anche su
+        errore) per evitare di re-eseguire un fetch fallito a ogni
+        tick.
+
+        Cap <= 0 sull'interval o batch_size disabilita il hook (escape
+        hatch ops).
+        """
+        import time as _t
+        now_ts = _t.time()
+
+        try:
+            from app.config import settings
+        except Exception:
+            return  # config non disponibile: skip silente
+
+        # Tutti i tunables via Settings.get (ADR-0021); fallback a
+        # default difensivi se i test usano un SimpleNamespace stub.
+        get_setting = getattr(settings, "get", None)
+
+        def _read_int(key: str, default: int) -> int:
+            try:
+                if callable(get_setting):
+                    raw = get_setting(key, default)
+                else:
+                    raw = getattr(settings, key, default)
+                return int(raw) if raw is not None else default
+            except (TypeError, ValueError):
+                return default
+
+        interval_s = _read_int("STORAGE_RECONCILE_INTERVAL_SECONDS", 900)
+        if interval_s <= 0:
+            return  # disabled
+
+        if now_ts - self._last_storage_reconcile < interval_s:
+            return
+        self._last_storage_reconcile = now_ts
+
+        batch_size = _read_int("STORAGE_RECONCILE_BATCH_SIZE", 50)
+        if batch_size <= 0:
+            return  # disabled
+
+        max_attempts = _read_int("STORAGE_RECONCILE_MAX_ATTEMPTS", 5)
+        if max_attempts < 1:
+            max_attempts = 1
+
+        backoff_base = _read_int("STORAGE_RECONCILE_BACKOFF_BASE_SECONDS", 60)
+        if backoff_base <= 0:
+            backoff_base = 60
+
+        try:
+            from app.shared import storage_reconciliation as _recon
+            from app.shared.storage_compensation import compensating_delete
+        except Exception as e:
+            logger.warning(
+                f"Reconcile storage: import fallito: {e}", exc_info=True
+            )
+            return
+
+        try:
+            rows = _recon.fetch_due_pending_deletes(limit=batch_size)
+        except Exception as e:
+            logger.warning(
+                f"Reconcile storage: fetch fallito: {e}", exc_info=True
+            )
+            return
+
+        if not rows:
+            return
+
+        ok_count = 0
+        failed_count = 0
+        lost_count = 0
+        for row in rows:
+            try:
+                # Stream supporta solo "delete". `fetch_due_pending_deletes`
+                # gia' filtra a SQL-level; questa e' una belt-and-suspenders.
+                if row.operation != "delete":
+                    continue
+
+                outcome = compensating_delete(
+                    row.storage_key,
+                    domain=row.domain,
+                    reason="reconciler_retry",
+                    extras={"reconciliation_id": row.id},
+                )
+
+                if outcome == "ok" or outcome == "skipped":
+                    _recon.mark_orphan_deleted(row.id)
+                    ok_count += 1
+                else:
+                    # outcome == "failed"
+                    new_attempts = row.attempts + 1
+                    if new_attempts >= max_attempts:
+                        _recon.mark_lost(
+                            row.id,
+                            error=f"max_attempts_exceeded ({new_attempts})",
+                        )
+                        lost_count += 1
+                    else:
+                        next_retry = _recon.compute_next_retry_at(
+                            new_attempts,
+                            base_seconds=backoff_base,
+                        )
+                        _recon.mark_failed_attempt(
+                            row.id,
+                            error="compensating_delete_failed",
+                            next_retry_at=next_retry,
+                        )
+                        failed_count += 1
+            except Exception as e:
+                logger.warning(
+                    f"Reconcile storage: errore su row id={row.id}: {e}",
+                    exc_info=True,
+                )
+
+        if ok_count or failed_count or lost_count:
+            logger.info(
+                "event=storage_reconciliation_beat_tick "
+                "ok=%d failed=%d lost=%d batch=%d",
+                ok_count, failed_count, lost_count, len(rows),
+            )
 
     # ------------------------------------------------------------------
     # Persistenza — non usiamo file shelve, tutto su DB

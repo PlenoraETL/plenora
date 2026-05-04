@@ -311,6 +311,30 @@ class Settings:
         # Override via env `MULTI_JOIN_MAX_OUTPUT_ROWS`.
         "MULTI_JOIN_MAX_OUTPUT_ROWS": 50_000_000,
 
+        # BE-GO-READY-STORAGE-ENGINE-006-RECONCILIATION-BEAT-HOOK:
+        # Tunables del reconciler beat hook che processa le entry
+        # pending in `plenora.storage_reconciliation_log`. Tutti
+        # operational tuning (ADR-0021), override env consentito.
+        # - STORAGE_RECONCILE_INTERVAL_SECONDS: cadence gate del hook
+        #   nel `PlenoraBeatScheduler.tick()`. Default 900s (15 min)
+        #   (tradeoff tra latenza orphan-recovery e load sul DB /
+        #   object storage). Cap <= 0 -> hook disabilitato (escape
+        #   hatch ops).
+        # - STORAGE_RECONCILE_BATCH_SIZE: max righe pending lette per
+        #   ciascun tick. Default 50: bound al numero di
+        #   `compensating_delete` per tick.
+        # - STORAGE_RECONCILE_MAX_ATTEMPTS: oltre questo numero di
+        #   tentativi falliti l'entry transitiona a `lost` (review
+        #   ops). Default 5.
+        # - STORAGE_RECONCILE_BACKOFF_BASE_SECONDS: base in secondi
+        #   per il backoff esponenziale
+        #   `next_retry_at = now + base * 2**(attempts-1)`, exponent
+        #   capped a 8 (~4.3h max con base 60s). Default 60s.
+        "STORAGE_RECONCILE_INTERVAL_SECONDS": 900,
+        "STORAGE_RECONCILE_BATCH_SIZE": 50,
+        "STORAGE_RECONCILE_MAX_ATTEMPTS": 5,
+        "STORAGE_RECONCILE_BACKOFF_BASE_SECONDS": 60,
+
         # ==================== TASK ARRICCHIMENTO ====================
         "ENRICHMENT_BATCH_SIZE": 100,
         "ENRICHMENT_MAX_WORKERS": 5,

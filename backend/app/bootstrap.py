@@ -38,8 +38,8 @@ Out of scope (per task brief)
 - No router registry, no `register_routers(app)` helper.
 - No exception-handler extraction.
 - No health-endpoint relocation.
-- No teardown symmetry (R10 in audit, future stream
-  `BE-GO-READY-BOOTSTRAP-ENGINE-006-LIFESPAN-SYMMETRY`).
+- Teardown symmetry is intentionally narrow: `teardown()` owns the
+  existing PostgreSQL pool close side effect and nothing else.
 """
 
 from __future__ import annotations
@@ -99,3 +99,16 @@ def bootstrap() -> None:
     # Deve girare DOPO `init_all_dbs()` perche' la pollution dell'env
     # avviene quando psycopg2 apre la prima connessione.
     _repair_psycopg2_ssl_env()
+
+
+def teardown() -> None:
+    """Run shutdown side effects in their canonical order.
+
+    BE-GO-READY-BOOTSTRAP-ENGINE-006 keeps this deliberately narrow:
+    it preserves the current `main.lifespan()` behavior by closing only
+    the PostgreSQL pool. Do not add new shutdown side effects here
+    without a dedicated audit/contract update.
+    """
+    from app.db.pg_connection import close_pool
+
+    close_pool()

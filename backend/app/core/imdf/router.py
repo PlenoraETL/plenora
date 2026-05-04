@@ -472,12 +472,14 @@ def list_bundles(
             # table). visible_resource_ids("projects",...) solleverebbe
             # ValueError -> 500 verso l'utente con detail opaco. Qui la
             # visibilita' coincide col gruppo proprietario.
-            from app.db.pg_connection import fetchall
-            rows = fetchall(
-                "SELECT id FROM projects WHERE group_id = ?",
-                (current_user.group_id,),
+            # BE-GO-READY-CONNECTION-ENGINE-003: query inline migrata
+            # in `app.db.config.projects.list_project_ids_for_group`.
+            # Stesso behavior; il fail-CLOSED del blocco except sotto
+            # resta invariato.
+            from app.db.config.projects import list_project_ids_for_group
+            visible_project_ids = list_project_ids_for_group(
+                current_user.group_id,
             )
-            visible_project_ids = {r["id"] for r in rows}
         except Exception as e:
             logger.error(
                 f"list_bundles: calcolo visible_project_ids fallito: {e}",

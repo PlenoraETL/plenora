@@ -197,26 +197,28 @@ def test_os_getenv_only_at_boundary_modules():
 
 # Allowlist: router legacy che importano `app.db.pg_connection`
 # direttamente. Razionale per file:
-# - `app/core/imdf/router.py`: query read-only di task_id su tabelle
-#   IMDF; service layer non incapsula questa lookup oggi.
 # - `app/core/intermediate/router.py`: endpoint admin di
 #   intermediate runs/nodes; query read-only su `runs`/`node_meta`.
 # - `app/core/logs/router.py` + `runs_router.py`: log query
 #   read-only paginate.
 # - `app/core/orchestrator/router.py`: 1 `execute()` per
 #   set-tenant-scoped admin operation.
-# - `app/core/projects/router.py`: 1 `fetchall` per project listing
-#   con filtri custom non incapsulati.
+#
+# Migrazioni gia' chiuse (la baseline scende man mano):
+# - `app/core/projects/router.py` (BE-GO-READY-CONNECTION-ENGINE-003):
+#   project-id lookup migrato a
+#   `app.db.config.projects.list_owned_project_ids`.
+# - `app/core/imdf/router.py` (BE-GO-READY-CONNECTION-ENGINE-003):
+#   project-id-by-group lookup migrato a
+#   `app.db.config.projects.list_project_ids_for_group`.
 #
 # Lock: SET di file allowlistati. Nuovi router NON possono importare
 # pg_connection senza esplicita aggiunta + razionale.
 ALLOWLIST_PG_CONNECTION_ROUTER_FILES: Set[str] = {
-    "app/core/imdf/router.py",
     "app/core/intermediate/router.py",
     "app/core/logs/router.py",
     "app/core/logs/runs_router.py",
     "app/core/orchestrator/router.py",
-    "app/core/projects/router.py",
 }
 
 

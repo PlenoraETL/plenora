@@ -200,14 +200,11 @@ def _visible_project_ids_strict(
         return ids
     if not owner_group_id:
         return set()
-    from app.db.pg_connection import fetchall
-    placeholders = ",".join(["?"] * len(ids))
-    rows = fetchall(
-        f"SELECT id FROM projects WHERE id IN ({placeholders}) "
-        f"AND group_id = ?",
-        tuple(ids) + (owner_group_id,),
-    )
-    return {r["id"] for r in rows}
+    # BE-GO-READY-CONNECTION-ENGINE-003: la query inline e' migrata
+    # in `app.db.config.projects.list_owned_project_ids`. Stesso
+    # behavior (single query, batch-safe, ritorna set[str]).
+    from app.db.config.projects import list_owned_project_ids
+    return list_owned_project_ids(ids, owner_group_id=owner_group_id)
 
 
 def _annotate_inaccessible_canvas_refs(

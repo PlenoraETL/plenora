@@ -60,6 +60,11 @@ _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 _AUTH_PY = _BACKEND_ROOT / "app" / "core" / "auth" / "auth.py"
 _OWNERSHIP_PY = _BACKEND_ROOT / "app" / "core" / "auth" / "ownership.py"
 _DISCLOSURE_PY = _BACKEND_ROOT / "app" / "core" / "auth" / "disclosure.py"
+# BE-GO-READY-AUTH-ENGINE-003: i 5 endpoint admin CRUD su /auth/users
+# sono stati estratti da `auth.py` in `users_router.py`. La superficie
+# auth da scansionare per le anti-enum invariants comprende ora
+# entrambi i file.
+_USERS_ROUTER_PY = _BACKEND_ROOT / "app" / "core" / "auth" / "users_router.py"
 
 
 def _read(p: Path) -> str:
@@ -279,13 +284,21 @@ def test_invariant_admin_reset_delete_uniform_403_access_denied() -> None:
     `access_denied` (403). Solo superadmin riceve un 404 distinto.
 
     The dispatch is encoded in `disclosure.admin_target_not_visible`.
-    auth.py must call it (not inline split between USER_NOT_FOUND
-    and ACCESS_DENIED)."""
+    Il caller (auth.py pre-batch 020, ora `users_router.py` post
+    BE-GO-READY-AUTH-ENGINE-003) deve invocare il dispatcher in
+    ENTRAMBI reset_password e delete_user — non puo' inline-splittare
+    fra USER_NOT_FOUND e ACCESS_DENIED."""
+    # Lo scope auth-domain comprende auth.py + users_router.py
+    # post-extraction. Le 2 occorrenze del dispatcher si trovano
+    # in users_router.py.
     auth_text = _read(_AUTH_PY)
-    n = auth_text.count("admin_target_not_visible")
+    users_text = _read(_USERS_ROUTER_PY)
+    combined = auth_text + "\n" + users_text
+    n = combined.count("admin_target_not_visible")
     assert n >= 2, (
-        f"auth.py deve chiamare `_disclosure.admin_target_not_visible(...)` "
-        f"in ENTRAMBI reset_password e delete_user (anti-enum #3); "
+        f"auth-domain (auth.py + users_router.py) deve chiamare "
+        f"`_disclosure.admin_target_not_visible(...)` in ENTRAMBI "
+        f"reset_password e delete_user (anti-enum #3); "
         f"trovate {n} occorrenze."
     )
     # The dispatcher must exist and own both branches.
