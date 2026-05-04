@@ -22,6 +22,7 @@ from pydantic import BaseModel
 from typing import Any, List, Optional
 
 from app.utils.logger import get_logger
+from app.shared import error_codes
 from app.shared.audit_action import audit_action
 from app.shared.models import CanvasState, Node, Edge
 from app.shared.exceptions import (
@@ -412,7 +413,7 @@ def delete_project(project_id: str, current_user: CurrentUser = Depends(require_
         raise HTTPException(
             status_code=409,
             detail={
-                "error": "project_has_dependencies",
+                "error": error_codes.PROJECT_HAS_DEPENDENCIES,
                 "message": str(e),
                 "dependencies": deps,
             },
@@ -428,7 +429,7 @@ def delete_project(project_id: str, current_user: CurrentUser = Depends(require_
         raise HTTPException(
             status_code=500,
             detail={
-                "error": "project_cleanup_partial",
+                "error": error_codes.PROJECT_CLEANUP_PARTIAL,
                 "message": str(e),
                 "project_id": e.project_id,
                 "failed_steps": {

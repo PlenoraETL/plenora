@@ -22,6 +22,7 @@ from fastapi.responses import Response
 from typing import Optional, List, Dict
 
 from app.utils.logger import get_logger
+from app.shared import error_codes
 from app.shared.audit_action import audit_action
 from app.core.auth.auth import (
     get_current_user,
@@ -196,7 +197,7 @@ def delete_datasource(ds_id: str, current_user: CurrentUser = Depends(require_ad
         raise HTTPException(
             status_code=409,
             detail={
-                "error": "datasource_in_use",
+                "error": error_codes.DATASOURCE_IN_USE,
                 "message": (
                     f"Data Source usato in {len(using_projects)} progetto/i. "
                     f"Rimuoverlo dai canvas prima di cancellarlo."

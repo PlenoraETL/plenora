@@ -20,6 +20,7 @@ from app.core.admin_backups.service import (
     AdminBackupDependencyError,
     AdminBackupDisabledError,
 )
+from app.shared import error_codes
 from app.shared.audit_action import audit_action
 
 router = APIRouter(prefix="/admin/backups", tags=["admin-backups"])
@@ -43,7 +44,7 @@ def list_backups_endpoint(
         raise HTTPException(
             status_code=503,
             detail={
-                "error": "object_storage_disabled",
+                "error": error_codes.OBJECT_STORAGE_DISABLED,
                 "message": str(e),
             },
         )
@@ -51,7 +52,7 @@ def list_backups_endpoint(
         raise HTTPException(
             status_code=503,
             detail={
-                "error": "aws_crt_missing",
+                "error": error_codes.AWS_CRT_MISSING,
                 "message": (
                     "Dipendenza runtime AWS mancante (botocore[crt] / awscrt). "
                     "Installa la dipendenza sul server per abilitare questa pagina."
@@ -63,7 +64,7 @@ def list_backups_endpoint(
         raise HTTPException(
             status_code=503,
             detail={
-                "error": "aws_credentials_expired",
+                "error": error_codes.AWS_CREDENTIALS_EXPIRED,
                 "message": str(e),
             },
         )

@@ -31,6 +31,7 @@ from typing import Dict, Any, List, Literal, Optional
 from app.config import settings
 from app.utils.logger import get_logger
 from app.utils.router_utils import require_service
+from app.shared import error_codes
 from app.shared.audit_action import audit_action
 from app.shared.exceptions import CanvasCorruptedError
 from app.shared.path_policy import assert_path_within
@@ -648,7 +649,7 @@ def delete_api_connection(api_id: str, current_user: CurrentUser = Depends(requi
         raise HTTPException(
             status_code=409,
             detail={
-                "error": "api_connection_in_use",
+                "error": error_codes.API_CONNECTION_IN_USE,
                 "message": (
                     f"La connessione è usata in {len(in_use_by)} progetto/i. "
                     f"Rimuoverla dal canvas prima di eliminarla."

@@ -34,6 +34,7 @@ from typing import Dict, Any, Optional
 import psycopg2
 import psycopg2.errors
 from app.config import settings
+from app.shared import error_codes
 from app.utils.logger import get_logger, open_run, close_run, set_run_context, append_step
 
 logger = get_logger(__name__)
@@ -921,7 +922,7 @@ class ExecutionManager:
             # intent: boundary CARICA scheduler / outcome: fail-closed sanitizzato
             return {
                 "success": False,
-                "error": "carica_scheduler_failed",
+                "error": error_codes.CARICA_SCHEDULER_FAILED,
                 "message": "Errore esecuzione CARICA scheduler (consulta log)",
             }
     
@@ -1084,7 +1085,7 @@ class ExecutionManager:
             return {
                 "success": False,
                 "status": "failed",
-                "error": "schedule_execution_fatal",
+                "error": error_codes.SCHEDULE_EXECUTION_FATAL,
                 "message": error_message,
                 "log_file": log_path
             }

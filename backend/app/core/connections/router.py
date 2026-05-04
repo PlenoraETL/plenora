@@ -31,6 +31,7 @@ from app.core.auth.auth import (
     group_filter,
 )
 from app.utils.router_utils import require_service
+from app.shared import error_codes
 from app.shared.audit_action import audit_action
 from app.shared.sharing import visible_resource_ids
 from .models import (
@@ -174,7 +175,7 @@ def delete_connection(
         raise HTTPException(
             status_code=409,
             detail={
-                "error": "connection_in_use",
+                "error": error_codes.CONNECTION_IN_USE,
                 "message": (
                     f"Connessione usata in {len(using_projects)} progetto/i. "
                     f"Rimuoverla dai progetti prima di cancellarla."

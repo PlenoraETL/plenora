@@ -337,30 +337,63 @@ def test_router_error_literals_are_in_catalog():
     )
 
 
-def test_router_drift_scan_finds_known_baseline():
-    """Sanity check: il source-bound scan trova almeno i codici
-    baseline noti dell'audit BE-GO-READY-ERROR-CODES-005. Se
-    questo test fallisce, il regex parser e' rotto o i call
-    site sono stati rimossi senza aggiornare il catalog."""
-    found = _scan_router_error_literals()
-    baseline_must_appear = {
-        "connection_in_use",
-        "api_connection_in_use",
-        "datasource_in_use",
-        "project_has_dependencies",
-        "project_cleanup_partial",
-        "object_storage_disabled",
-        "aws_crt_missing",
-        "aws_credentials_expired",
-        "carica_launch_failed",
-        "carica_scheduler_failed",
-        "schedule_execution_fatal",
+_CONSTANT_REF_RE = re.compile(
+    r"\berror_codes\.([A-Z][A-Z0-9_]*)\b"
+)
+
+
+def _scan_router_constant_refs() -> Set[str]:
+    """Source-bound: parsa `app/core/**/*.py` cercando referenze
+    `error_codes.<CONST>` (post-migration BE-GO-READY-ERROR-CODES-007).
+
+    Speculare a `_scan_router_error_literals` ma cattura il pattern
+    a costante invece di literal. NESSUN import dei moduli
+    applicativi.
+    """
+    found: Set[str] = set()
+    for py_file in _CORE_ROOT.rglob("*.py"):
+        try:
+            text = py_file.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        for match in _CONSTANT_REF_RE.finditer(text):
+            found.add(match.group(1))
+    return found
+
+
+def test_router_constant_refs_find_baseline():
+    """Sanity check post-migration BE-GO-READY-ERROR-CODES-007:
+    i 11 call site domain referenziano il catalog via
+    `error_codes.<CONST>` invece di literal stringa.
+
+    Pre-migrazione (audit 005) questa stessa sanity scansionava
+    i `"error": "<x>"` literal; post-migrazione i literal sono
+    spariti dai router (sostituiti dalle costanti) e il sanity
+    check si sposta sulle referenze costanti per garantire che
+    la migrazione sia completa.
+
+    Fail = qualcuno ha rimosso una costante senza spostare il
+    call site, o il regex parser e' rotto.
+    """
+    found = _scan_router_constant_refs()
+    baseline_constants_must_appear = {
+        "CONNECTION_IN_USE",
+        "API_CONNECTION_IN_USE",
+        "DATASOURCE_IN_USE",
+        "PROJECT_HAS_DEPENDENCIES",
+        "PROJECT_CLEANUP_PARTIAL",
+        "OBJECT_STORAGE_DISABLED",
+        "AWS_CRT_MISSING",
+        "AWS_CREDENTIALS_EXPIRED",
+        "CARICA_LAUNCH_FAILED",
+        "CARICA_SCHEDULER_FAILED",
+        "SCHEDULE_EXECUTION_FATAL",
     }
-    missing = baseline_must_appear - found
+    missing = baseline_constants_must_appear - found
     assert missing == set(), (
-        f"Baseline codici literal non trovati nei router: "
-        f"{sorted(missing)}. Probabile call site rimosso o regex "
-        f"parser rotto."
+        f"Baseline costanti `error_codes.<CONST>` non referenziate "
+        f"nei router: {sorted(missing)}. Probabile call site "
+        f"rimosso/rolled-back o regex parser rotto."
     )
 
 

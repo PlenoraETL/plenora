@@ -36,6 +36,7 @@ from app.db.query_executor import QueryExecutor
 from app.core.estrai.query_generator import QueryGenerator
 from app.services.connection_service import ConnectionService
 from app.config import settings
+from app.shared import error_codes
 from app.utils.logger import get_logger
 
 # Import dai moduli separati
@@ -258,7 +259,7 @@ class OrchestratorService:
         except Exception as e:
             logger.error(f"[CRASH] Errore avvio task CARICA: {e}", op="carica", project_id=project_id, exc_info=True)
             return {
-                "error": "carica_launch_failed",
+                "error": error_codes.CARICA_LAUNCH_FAILED,
                 "message": "Errore nell'avvio del caricamento (consulta log)"
             }
 
