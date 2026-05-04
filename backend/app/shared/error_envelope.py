@@ -42,8 +42,9 @@ nella risposta finale se forniti.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Dict, Mapping, NoReturn, Optional
 
+from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 
 
@@ -180,3 +181,65 @@ def normalize_http_exception_detail(
         "message": f"HTTP {status_code}",
         "details": None,
     }
+
+
+def raise_typed_http(
+    code: str,
+    status_code: int,
+    message: str,
+    details: Optional[Mapping[str, Any]] = None,
+) -> NoReturn:
+    """Helper opzionale per sollevare `HTTPException` con shape
+    structured-detail compatibile con il central handler envelope.
+
+    Solleva `HTTPException(status_code=<status_code>, detail={...})`
+    dove `detail` e' la dict-shape `{error, message, details}`
+    che il central `StarletteHTTPException` handler in `app/main.py`
+    sa normalizzare via `normalize_http_exception_detail()` nello
+    stesso envelope dual-shape dei call site dict-detail manuali.
+
+    Adoption strategy:
+    - Helper opzionale: i call site esistenti restano invariati.
+    - Nuovi `raise` POSSONO usare questo helper per beneficiare
+      del catalog (`error_codes.<CONST>`) + del round-trip
+      envelope.
+    - La migrazione dei call site esistenti e' debito separato
+      (vedi BE-GO-READY-ERROR-CODES-007-DOMAIN-MIGRATION).
+
+    Args:
+        code: codice machine-readable. Convenzione snake_case.
+            Idealmente da `app.shared.error_codes` (`CONNECTION_IN_USE`,
+            ecc.). Stringa libera ammessa per estendibilita',
+            ma il drift test
+            `test_error_codes_catalog::test_catalog_covers_all_router_emitted_codes`
+            controllera' che i nuovi literal siano nel catalog.
+        status_code: HTTP status (es. 409, 500, 503).
+        message: testo italiano user-facing per UI.
+        details: dict opzionale di dati strutturati (es.
+            `{"dependencies": [...]}`). Se `None`, diventa `{}`.
+
+    Raises:
+        `HTTPException` con `detail = {"error": code, "message":
+        message, "details": details or {}}`; il central handler lo
+        normalizza nell'envelope canonico. Status code preservato.
+
+    Note:
+        Il return type e' `NoReturn` perche' la funzione solleva
+        sempre. Tipato esplicitamente per IDE / type-checker.
+    """
+    if not message:
+        raise ValueError("message must be non-empty")
+
+    safe_details: Dict[str, Any] = {}
+    if details:
+        safe_details = {
+            k: v for k, v in details.items()
+            if k not in ("error", "message")
+        }
+
+    detail: Dict[str, Any] = {
+        "error": code,
+        "message": message,
+        "details": safe_details,
+    }
+    raise HTTPException(status_code=status_code, detail=detail)
