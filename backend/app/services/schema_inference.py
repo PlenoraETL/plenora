@@ -481,6 +481,22 @@ class SchemaInferenceService:
             return self._schema_reorder_columns(input_schemas, config, node.id)
         elif transform_op == "geo_voronoi":
             return self._schema_geo_voronoi(input_schemas, config, node.id)
+        # Multi-input + lookup (BE-PHASE2-SCHEMA-INFER-006 batch 5)
+        elif transform_op == "cross_join":
+            return self._schema_cross_join(input_schemas, node.id)
+        elif transform_op == "geo_within":
+            return self._schema_geo_within(input_schemas, node.id)
+        elif transform_op == "geo_overlay":
+            how = config.get("how", "intersection")
+            return self._schema_geo_overlay(input_schemas, config, node.id, how)
+        elif transform_op == "geo_symmetric_difference":
+            return self._schema_geo_overlay(
+                input_schemas, config, node.id, "symmetric_difference",
+            )
+        elif transform_op == "geo_nearest":
+            return self._schema_geo_nearest(input_schemas, config, node.id)
+        elif transform_op == "lookup":
+            return self._schema_lookup(input_schemas, config, node.id)
         else:
             logger.warning(f"Operazione {transform_op} non gestita - passthrough")
             return self._schema_passthrough(input_schemas, node.id)
@@ -2247,6 +2263,176 @@ class SchemaInferenceService:
                     is_calculated=True,
                 )
                 break
+        return result
+
+    # =========================================================================
+    # BATCH 5 — BE-PHASE2-SCHEMA-INFER-006
+    # =========================================================================
+    # Handler dedicati per multi-input/spatial join + lookup.
+    # `geo_overlay` e `geo_symmetric_difference` riusano direttamente
+    # `_schema_geo_overlay` legacy (stessa shape: LEFT + RIGHT non-geom
+    # con suffisso `_2` su collisione + geometria combinata).
+
+    def _schema_cross_join(
+        self,
+        input_schemas: List[List[ColumnSchema]],
+        node_id: str,
+    ) -> List[ColumnSchema]:
+        """cross_join: prodotto cartesiano LEFT × RIGHT.
+
+        Runtime: `op_cross_join` (joins.py) usa `pd.merge(how="cross")`.
+        Pandas applica i suffissi default `('_x', '_y')` in caso di
+        collisione: ENTRAMBE le colonne in collisione vengono
+        suffissate (LEFT → `_x`, RIGHT → `_y`); le colonne non in
+        collisione restano col nome originale.
+        """
+        if len(input_schemas) < 2:
+            return input_schemas[0] if input_schemas else []
+
+        left_schema = input_schemas[0]
+        right_schema = input_schemas[1]
+        left_names = {c.name for c in left_schema}
+        right_names = {c.name for c in right_schema}
+        collisions = left_names & right_names
+
+        result: List[ColumnSchema] = []
+        for col in left_schema:
+            new_name = f"{col.name}_x" if col.name in collisions else col.name
+            result.append(ColumnSchema(
+                name=new_name,
+                type=col.type,
+                source_node=node_id,
+                is_calculated=col.is_calculated,
+            ))
+        for col in right_schema:
+            new_name = f"{col.name}_y" if col.name in collisions else col.name
+            result.append(ColumnSchema(
+                name=new_name,
+                type=col.type,
+                source_node=node_id,
+                is_calculated=col.is_calculated,
+            ))
+        return result
+
+    def _schema_geo_within(
+        self,
+        input_schemas: List[List[ColumnSchema]],
+        node_id: str,
+    ) -> List[ColumnSchema]:
+        """geo_within: filter-like su LEFT.
+
+        Runtime: `op_geo_within` (spatial.py) esegue uno spatial join
+        `predicate="within"` poi proietta SOLO le colonne LEFT
+        (`result = joined[keep_cols]`) e fa drop_duplicates. Schema
+        delta nullo: output = LEFT.
+        """
+        if not input_schemas:
+            return []
+        return self._copy_schema(input_schemas[0], node_id)
+
+    def _schema_geo_nearest(
+        self,
+        input_schemas: List[List[ColumnSchema]],
+        config: dict,
+        node_id: str,
+    ) -> List[ColumnSchema]:
+        """geo_nearest: LEFT + RIGHT non-geom + colonna distanza.
+
+        Runtime: `op_geo_nearest` (spatial.py) usa
+        `gpd.sjoin_nearest(left, right, how="left", distance_col=...)`.
+        - Output preserva tutte le colonne di LEFT.
+        - Aggiunge le colonne non-geometriche di RIGHT (geopandas
+          rimuove la geometria del RIGHT in sjoin/sjoin_nearest), con
+          suffisso `_right` sulle collisioni con LEFT (allineato al
+          pattern del legacy `_schema_sjoin`).
+        - Aggiunge `output_column` (default `"distance_m"`, real).
+        - Il runtime droppa esplicitamente `index_right`, quindi NON
+          viene aggiunto allo schema (differisce da `_schema_sjoin`).
+        """
+        if len(input_schemas) < 2:
+            return input_schemas[0] if input_schemas else []
+
+        left_schema = input_schemas[0]
+        right_schema = input_schemas[1]
+        result = self._copy_schema(left_schema, node_id)
+        left_names = {c.name for c in result}
+
+        for col in right_schema:
+            if col.type.startswith("geometry"):
+                continue
+            new_name = (
+                f"{col.name}_right" if col.name in left_names else col.name
+            )
+            result.append(ColumnSchema(
+                name=new_name,
+                type=col.type,
+                source_node=node_id,
+                is_calculated=col.is_calculated,
+            ))
+
+        output_col = config.get("output_column") or "distance_m"
+        if output_col and output_col not in {c.name for c in result}:
+            result.append(ColumnSchema(
+                name=output_col,
+                type="real",
+                source_node=node_id,
+                is_calculated=True,
+            ))
+        return result
+
+    def _schema_lookup(
+        self,
+        input_schemas: List[List[ColumnSchema]],
+        config: dict,
+        node_id: str,
+    ) -> List[ColumnSchema]:
+        """lookup: single-input value-mapping.
+
+        Runtime: `op_lookup` (analysis.py). NB: dispetto la guidance
+        nel prompt outgoing, il registry classifica `inputs: single`
+        e il runtime e' un value-map (non un join multi-input).
+
+        Schema delta:
+        - `column` o `mapping` mancante / `column` non in input →
+          schema invariato (mirror runtime no-op + warning).
+        - `output_column` vuoto o uguale a `column`: in-place
+          overwrite. Schema-set invariato. Tipo della sorgente
+          preservato (i `fillna(default|original)` mantengono il
+          tipo dominante; un eventuale shift e' approssimazione
+          accettabile).
+        - `output_column` valorizzata e diversa da `column`: aggiunge
+          una nuova colonna con tipo = tipo della sorgente
+          (approssimazione: i valori del `mapping` ereditano la
+          tipologia che il runtime `pd.Series.map` produce sul
+          dtype originale).
+        - `output_column` collide con un'altra colonna esistente
+          (non `column`): nessuna nuova colonna, schema invariato.
+        """
+        if not input_schemas:
+            return []
+        result = self._copy_schema(input_schemas[0], node_id)
+        column = config.get("column") or ""
+        mapping = config.get("mapping")
+        if not column or not mapping:
+            return result
+        existing = {c.name for c in result}
+        if column not in existing:
+            return result
+
+        out_col_cfg = config.get("output_column")
+        target = out_col_cfg if out_col_cfg else column
+        if target == column:
+            return result
+        if target in existing:
+            return result
+
+        src_col = next(c for c in result if c.name == column)
+        result.append(ColumnSchema(
+            name=target,
+            type=src_col.type,
+            source_node=node_id,
+            is_calculated=True,
+        ))
         return result
 
     def _copy_schema(

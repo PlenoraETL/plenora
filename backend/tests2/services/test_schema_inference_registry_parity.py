@@ -107,6 +107,9 @@ EXPECTED_DISPATCHER_BRANCHES: Set[str] = {
     "geo_point_on_surface", "geo_boundary",
     # BE-PHASE2-SCHEMA-INFER-005 batch 4
     "reorder_columns", "geo_voronoi",
+    # BE-PHASE2-SCHEMA-INFER-006 batch 5
+    "cross_join", "geo_within", "geo_overlay",
+    "geo_symmetric_difference", "geo_nearest", "lookup",
 }
 
 # Transform IDs nel registry che ALTERANO lo schema (aggiungono/rimuovono
@@ -129,13 +132,10 @@ PASSTHROUGH_WRONG_GAP: Set[str] = {
     # BE-PHASE2-SCHEMA-INFER-005 batch 4 ha riclassificato a
     # PASSTHROUGH_OK_GAP (rimossi): dedup_advanced, geo_clean_topology,
     # geo_make_valid, geo_explode.
-    "cross_join",           # combina colonne L+R
+    # BE-PHASE2-SCHEMA-INFER-006 batch 5 ha promosso a dispatcher
+    # (rimossi): cross_join, geo_within, geo_overlay,
+    # geo_symmetric_difference, geo_nearest, lookup.
     "flatten_json",         # esplode chiavi JSON in colonne
-    "geo_nearest",          # aggiunge colonne neighbour
-    "geo_overlay",          # aggiunge colonne combinate L+R + tipo overlay
-    "geo_symmetric_difference",  # combina schemi L+R
-    "geo_within",           # filter-like + flag column
-    "lookup",               # aggiunge colonne dal lookup table
     "melt",                 # ristruttura wide→long
     "statistics",           # aggiunge colonne statistiche
     "table_diff",           # aggiunge colonne diff
@@ -255,7 +255,7 @@ def test_passthrough_wrong_gap_size_lock():
     # Lock attuale al BE-SCHEMA-INFER-001A baseline. Quando una
     # transform passa a dispatcher dedicato, sposta l'entry e
     # decrementa il limite (`assert actual <= N`).
-    assert actual == 12, (
+    assert actual == 6, (
         f"Gap passthrough-WRONG cambiato: {actual}. "
         f"Aggiorna l'assert e il piano BE-SCHEMA-INFER-002+."
     )
@@ -285,7 +285,7 @@ def test_dispatcher_falls_back_to_passthrough_for_unknown_ops():
     node = SimpleNamespace(
         id="n1",
         config={},
-        transform_op="cross_join",  # passthrough-WRONG entry residua
+        transform_op="melt",  # passthrough-WRONG entry residua
         data=None,
     )
     out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
@@ -1238,3 +1238,268 @@ def test_rows_only_passthrough_ok_membership_is_locked():
     }
     assert expected_in_ok.issubset(PASSTHROUGH_OK_GAP)
     assert expected_in_ok.isdisjoint(PASSTHROUGH_WRONG_GAP)
+
+
+# ---------------------------------------------------------------------------
+# 9. Behavioral tests — BE-PHASE2-SCHEMA-INFER-006 batch 5
+# ---------------------------------------------------------------------------
+#
+# 6 transform multi-input/lookup promossi a dispatcher dedicato:
+#   - cross_join, geo_within, geo_overlay, geo_symmetric_difference,
+#     geo_nearest, lookup.
+# `table_diff` saltato in questo batch (output schema deterministico
+# ma elaborato — deferito al prossimo batch).
+
+
+def _left_attr_input() -> list:
+    return [
+        ColumnSchema(name="id", type="int", source_node="L", is_calculated=False),
+        ColumnSchema(name="name", type="str", source_node="L", is_calculated=False),
+        ColumnSchema(name="geometry", type="geometry:point", source_node="L", is_calculated=False),
+    ]
+
+
+def _right_attr_input() -> list:
+    return [
+        ColumnSchema(name="id", type="int", source_node="R", is_calculated=False),
+        ColumnSchema(name="category", type="str", source_node="R", is_calculated=False),
+        ColumnSchema(name="geometry", type="geometry:polygon", source_node="R", is_calculated=False),
+    ]
+
+
+# cross_join ---------------------------------------------------------------
+
+
+def test_cross_join_no_collisions_preserves_names():
+    service = SchemaInferenceService(project_service=None)
+    left = [
+        ColumnSchema(name="a", type="int", source_node="L", is_calculated=False),
+    ]
+    right = [
+        ColumnSchema(name="b", type="str", source_node="R", is_calculated=False),
+    ]
+    node = _node("cross_join", {})
+    out = service._infer_transform_schema(node, [left, right], edges_by_target={})
+    assert [c.name for c in out] == ["a", "b"]
+
+
+def test_cross_join_collisions_apply_x_y_suffixes():
+    """Pandas pd.merge how='cross' applica suffissi default
+    `('_x', '_y')` ad ENTRAMBE le colonne in collisione."""
+    service = SchemaInferenceService(project_service=None)
+    out = service._infer_transform_schema(
+        _node("cross_join", {}),
+        [_left_attr_input(), _right_attr_input()],
+        edges_by_target={},
+    )
+    names = [c.name for c in out]
+    # `id` e `geometry` sono in collisione → entrambe suffissate
+    # `name` (LEFT-only) e `category` (RIGHT-only) restano.
+    assert names == [
+        "id_x", "name", "geometry_x",
+        "id_y", "category", "geometry_y",
+    ]
+
+
+def test_cross_join_with_single_input_passthrough():
+    service = SchemaInferenceService(project_service=None)
+    out = service._infer_transform_schema(
+        _node("cross_join", {}),
+        [_left_attr_input()],
+        edges_by_target={},
+    )
+    assert [c.name for c in out] == ["id", "name", "geometry"]
+
+
+# geo_within ---------------------------------------------------------------
+
+
+def test_geo_within_outputs_left_only():
+    """`geo_within` proietta solo le colonne LEFT. RIGHT non
+    contribuisce."""
+    service = SchemaInferenceService(project_service=None)
+    out = service._infer_transform_schema(
+        _node("geo_within", {
+            "left_geom_column": "geometry",
+            "right_geom_column": "geometry",
+        }),
+        [_left_attr_input(), _right_attr_input()],
+        edges_by_target={},
+    )
+    assert [(c.name, c.type) for c in out] == [
+        ("id", "int"), ("name", "str"), ("geometry", "geometry:point"),
+    ]
+
+
+# geo_overlay --------------------------------------------------------------
+
+
+def test_geo_overlay_dispatch_uses_existing_overlay_helper():
+    """`geo_overlay` riusa `_schema_geo_overlay`: LEFT cols + RIGHT
+    non-geom (con suffisso `_2` su collisione). La geometria del
+    RIGHT NON e' inclusa."""
+    service = SchemaInferenceService(project_service=None)
+    out = service._infer_transform_schema(
+        _node("geo_overlay", {
+            "left_geom_column": "geometry",
+            "right_geom_column": "geometry",
+            "how": "intersection",
+        }),
+        [_left_attr_input(), _right_attr_input()],
+        edges_by_target={},
+    )
+    names = [c.name for c in out]
+    # LEFT preservato; RIGHT.id collide → `id_2`, RIGHT.category aggiunta
+    # senza collisione, RIGHT.geometry skip (geometry-typed).
+    assert names == ["id", "name", "geometry", "id_2", "category"]
+
+
+def test_geo_overlay_default_how_is_intersection():
+    service = SchemaInferenceService(project_service=None)
+    # Senza `how` esplicito, il dispatcher usa "intersection" come default.
+    out = service._infer_transform_schema(
+        _node("geo_overlay", {}),
+        [_left_attr_input(), _right_attr_input()],
+        edges_by_target={},
+    )
+    names = [c.name for c in out]
+    assert names == ["id", "name", "geometry", "id_2", "category"]
+
+
+# geo_symmetric_difference -------------------------------------------------
+
+
+def test_geo_symmetric_difference_uses_overlay_helper():
+    """Riuso dello stesso helper `_schema_geo_overlay` con
+    `how="symmetric_difference"` hardcoded."""
+    service = SchemaInferenceService(project_service=None)
+    out = service._infer_transform_schema(
+        _node("geo_symmetric_difference", {
+            "left_geom_column": "geometry",
+            "right_geom_column": "geometry",
+        }),
+        [_left_attr_input(), _right_attr_input()],
+        edges_by_target={},
+    )
+    assert [c.name for c in out] == [
+        "id", "name", "geometry", "id_2", "category",
+    ]
+
+
+# geo_nearest --------------------------------------------------------------
+
+
+def test_geo_nearest_combines_left_with_right_non_geom_plus_distance():
+    """`geo_nearest`: LEFT + RIGHT (no geom, suffisso `_right` su
+    collisione) + distance column. NON deve contenere `index_right`
+    (droppata dal runtime)."""
+    service = SchemaInferenceService(project_service=None)
+    out = service._infer_transform_schema(
+        _node("geo_nearest", {
+            "left_geom_column": "geometry",
+            "right_geom_column": "geometry",
+        }),
+        [_left_attr_input(), _right_attr_input()],
+        edges_by_target={},
+    )
+    names = [c.name for c in out]
+    # LEFT preservato; RIGHT.id collide → `id_right`, RIGHT.category
+    # senza collisione, RIGHT.geometry skip.
+    assert names == ["id", "name", "geometry", "id_right", "category", "distance_m"]
+    assert "index_right" not in names
+    assert out[-1].type == "real"
+    assert out[-1].is_calculated is True
+
+
+def test_geo_nearest_custom_distance_column():
+    service = SchemaInferenceService(project_service=None)
+    out = service._infer_transform_schema(
+        _node("geo_nearest", {
+            "left_geom_column": "geometry",
+            "right_geom_column": "geometry",
+            "output_column": "dist_km",
+        }),
+        [_left_attr_input(), _right_attr_input()],
+        edges_by_target={},
+    )
+    assert [c.name for c in out][-1] == "dist_km"
+
+
+def test_geo_nearest_single_input_passthrough():
+    service = SchemaInferenceService(project_service=None)
+    out = service._infer_transform_schema(
+        _node("geo_nearest", {}),
+        [_left_attr_input()],
+        edges_by_target={},
+    )
+    assert [c.name for c in out] == ["id", "name", "geometry"]
+
+
+# lookup -------------------------------------------------------------------
+
+
+def test_lookup_overwrite_preserves_schema():
+    """Senza `output_column`: in-place overwrite. Schema-set invariato
+    (tipo originale preservato come approssimazione)."""
+    service, input_schema = _service_and_input()
+    out = service._infer_transform_schema(
+        _node("lookup", {"column": "b", "mapping": {"x": "y"}}),
+        [input_schema],
+        edges_by_target={},
+    )
+    assert [(c.name, c.type) for c in out] == [("a", "int"), ("b", "str")]
+
+
+def test_lookup_explicit_output_column_adds_column_with_source_type():
+    """Con `output_column != column`: aggiunge una nuova colonna con
+    tipo = tipo della sorgente (approssimazione documentata)."""
+    service, input_schema = _service_and_input()
+    out = service._infer_transform_schema(
+        _node("lookup", {
+            "column": "b",
+            "mapping": {"x": "y"},
+            "output_column": "b_mapped",
+        }),
+        [input_schema],
+        edges_by_target={},
+    )
+    assert [c.name for c in out] == ["a", "b", "b_mapped"]
+    new_col = next(c for c in out if c.name == "b_mapped")
+    assert new_col.type == "str"
+    assert new_col.is_calculated is True
+
+
+def test_lookup_collision_with_existing_skips_add():
+    """Se `output_column` collide con una colonna esistente diversa
+    da `column`, schema invariato (skip add)."""
+    service, input_schema = _service_and_input()
+    out = service._infer_transform_schema(
+        _node("lookup", {
+            "column": "b",
+            "mapping": {"x": "y"},
+            "output_column": "a",
+        }),
+        [input_schema],
+        edges_by_target={},
+    )
+    assert [c.name for c in out] == ["a", "b"]
+
+
+def test_lookup_missing_column_passthrough():
+    service, input_schema = _service_and_input()
+    out = service._infer_transform_schema(
+        _node("lookup", {"column": "missing", "mapping": {"x": "y"}}),
+        [input_schema],
+        edges_by_target={},
+    )
+    assert [c.name for c in out] == ["a", "b"]
+
+
+def test_lookup_empty_mapping_passthrough():
+    service, input_schema = _service_and_input()
+    out = service._infer_transform_schema(
+        _node("lookup", {"column": "b", "mapping": {}}),
+        [input_schema],
+        edges_by_target={},
+    )
+    assert [c.name for c in out] == ["a", "b"]
