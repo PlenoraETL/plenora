@@ -28,6 +28,20 @@
   opacity: 0.7;
 }
 
+.parameter-input__schema-badge {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(75,139,255,0.12);
+  color: var(--plen-blue, #4B8BFF);
+  border: 1px solid rgba(75,139,255,0.2);
+  cursor: help;
+  white-space: nowrap;
+}
+
 .parameter-input__control {
   width: 100%;
 }

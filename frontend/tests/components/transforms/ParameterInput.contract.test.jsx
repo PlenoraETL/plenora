@@ -56,6 +56,28 @@ describe('ParameterInput — contract', () => {
     expect(onChange).toHaveBeenLastCalledWith('fooX');
   });
 
+  it('schema_contract param: renders compact Schema badge with explanatory tooltip', () => {
+    render(
+      <ParameterInput
+        param={{
+          id: 'output_columns',
+          type: 'string_list',
+          label: 'Colonne output dichiarate',
+          schema_contract: true,
+        }}
+        value={[]}
+        onChange={vi.fn()}
+      />,
+    );
+
+    const badge = screen.getByText('Schema');
+    expect(badge).toHaveClass('parameter-input__schema-badge');
+    expect(badge).toHaveAttribute(
+      'title',
+      'Contratto schema canvas-time; non modifica direttamente il runtime.',
+    );
+  });
+
   // ── 2. number ──────────────────────────────────────────────────────
 
   it('number type: applies min/max/step and emits parseFloat or null on empty', async () => {
