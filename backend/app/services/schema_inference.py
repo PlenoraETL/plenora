@@ -463,6 +463,19 @@ class SchemaInferenceService:
             return self._schema_bin(input_schemas, config, node.id)
         elif transform_op == "string_pad":
             return self._schema_string_pad(input_schemas, config, node.id)
+        # Generative geo (BE-PHASE2-SCHEMA-INFER-004 batch 3)
+        elif transform_op == "geo_bounds_extractor":
+            return self._schema_geo_bounds_extractor(input_schemas, config, node.id)
+        elif transform_op == "geo_count_points_in_polygons":
+            return self._schema_geo_count_points_in_polygons(input_schemas, config, node.id)
+        elif transform_op == "geo_line_builder":
+            return self._schema_geo_line_builder(input_schemas, config, node.id)
+        elif transform_op == "geo_polygon_builder":
+            return self._schema_geo_polygon_builder(input_schemas, config, node.id)
+        elif transform_op == "geo_point_on_surface":
+            return self._schema_geo_point_on_surface(input_schemas, config, node.id)
+        elif transform_op == "geo_boundary":
+            return self._schema_geo_boundary(input_schemas, config, node.id)
         else:
             logger.warning(f"Operazione {transform_op} non gestita - passthrough")
             return self._schema_passthrough(input_schemas, node.id)
@@ -1877,6 +1890,270 @@ class SchemaInferenceService:
                 source_node=node_id,
                 is_calculated=True,
             ))
+        return result
+
+    # =========================================================================
+    # BATCH 3 — BE-PHASE2-SCHEMA-INFER-004
+    # =========================================================================
+    # Handler dedicati per geometrie generative deterministiche
+    # (bounds_extractor, count_points_in_polygons, line_builder,
+    # polygon_builder, point_on_surface, boundary).
+    # Stessa convenzione dei batch 1+2: pure handler input -> output,
+    # niente I/O, niente env reads, type-hinted, riuso di
+    # `_copy_schema` per l'identita' di base.
+
+    def _schema_geo_bounds_extractor(
+        self,
+        input_schemas: List[List[ColumnSchema]],
+        config: dict,
+        node_id: str,
+    ) -> List[ColumnSchema]:
+        """geo_bounds_extractor: input + 4 colonne bounding box (real).
+
+        Runtime: `op_geo_bounds_extractor` (spatial.py) aggiunge
+        `f"{prefix}min_x"`, `f"{prefix}min_y"`, `f"{prefix}max_x"`,
+        `f"{prefix}max_y"` (notazione `min_x`, NON `minx` — il prefisso
+        e' applicato al nome canonico con underscore). `prefix` default
+        `""`.
+        """
+        if not input_schemas:
+            return []
+        result = self._copy_schema(input_schemas[0], node_id)
+        prefix = config.get("prefix") or ""
+        existing = {c.name for c in result}
+        for suffix in ("min_x", "min_y", "max_x", "max_y"):
+            col_name = f"{prefix}{suffix}"
+            if col_name and col_name not in existing:
+                result.append(ColumnSchema(
+                    name=col_name,
+                    type="real",
+                    source_node=node_id,
+                    is_calculated=True,
+                ))
+                existing.add(col_name)
+        return result
+
+    def _schema_geo_count_points_in_polygons(
+        self,
+        input_schemas: List[List[ColumnSchema]],
+        config: dict,
+        node_id: str,
+    ) -> List[ColumnSchema]:
+        """geo_count_points_in_polygons: LEFT (poligoni) + colonna
+        conteggio (int) + colonna aggregata opzionale (real).
+
+        Runtime: `op_geo_count_points_in_polygons` (spatial.py) e'
+        multi-input (dfs[0]=poligoni LEFT, dfs[1]=punti RIGHT). Output:
+        - tutte le colonne del LEFT (poligoni)
+        - `count_column` (default `"point_count"`, int)
+        - se `aggregate_column` non vuoto: `f"{aggregate_column}_{func}"`
+          dove `func` e' uno tra `sum/mean/min/max` (default `"sum"`,
+          fallback su valori unknown). Tipo: `real`.
+
+        Il RIGHT non contribuisce colonne. La colonna temporanea
+        `__poly_idx__` viene droppata dal runtime, quindi non appare
+        nello schema dichiarato.
+        """
+        if not input_schemas:
+            return []
+        result = self._copy_schema(input_schemas[0], node_id)
+        existing = {c.name for c in result}
+
+        count_col = config.get("count_column") or "point_count"
+        if count_col and count_col not in existing:
+            result.append(ColumnSchema(
+                name=count_col,
+                type="int",
+                source_node=node_id,
+                is_calculated=True,
+            ))
+            existing.add(count_col)
+
+        agg_col = config.get("aggregate_column") or ""
+        if agg_col:
+            raw_func = config.get("aggregate_func") or "sum"
+            func = raw_func if raw_func in ("sum", "mean", "min", "max") else "sum"
+            agg_name = f"{agg_col}_{func}"
+            if agg_name not in existing:
+                result.append(ColumnSchema(
+                    name=agg_name,
+                    type="real",
+                    source_node=node_id,
+                    is_calculated=True,
+                ))
+                existing.add(agg_name)
+        return result
+
+    def _schema_geo_line_builder(
+        self,
+        input_schemas: List[List[ColumnSchema]],
+        config: dict,
+        node_id: str,
+    ) -> List[ColumnSchema]:
+        """geo_line_builder: ristrutturazione completa.
+
+        Runtime: `op_geo_line_builder` (spatial.py) raggruppa per
+        `group_column` e produce un GeoDataFrame con SOLO le colonne
+        `[group_column, output_column]`. Tutte le altre colonne
+        dell'input vengono scartate.
+
+        Output:
+        - `group_column` con tipo dell'input (preservato se trovato).
+        - `output_column` (default `"geometry"`) di tipo
+          `geometry:line`.
+
+        Se `group_column` manca dalla config: schema invariato
+        (passthrough). Senza `group_column` il runtime crash a
+        groupby; non guess su nuovo schema.
+        """
+        return self._schema_geo_builder(
+            input_schemas, config, node_id, geom_subtype="line",
+        )
+
+    def _schema_geo_polygon_builder(
+        self,
+        input_schemas: List[List[ColumnSchema]],
+        config: dict,
+        node_id: str,
+    ) -> List[ColumnSchema]:
+        """geo_polygon_builder: ristrutturazione completa.
+
+        Runtime: `op_geo_polygon_builder` (spatial.py) raggruppa per
+        `group_column` e produce un GeoDataFrame con SOLO le colonne
+        `[group_column, output_column]`. output_column di tipo
+        `geometry:polygon` (Polygon chiuso automaticamente).
+        """
+        return self._schema_geo_builder(
+            input_schemas, config, node_id, geom_subtype="polygon",
+        )
+
+    def _schema_geo_builder(
+        self,
+        input_schemas: List[List[ColumnSchema]],
+        config: dict,
+        node_id: str,
+        geom_subtype: str,
+    ) -> List[ColumnSchema]:
+        """Helper condiviso per `geo_line_builder` / `geo_polygon_builder`.
+
+        I due transform hanno la stessa shape (rebuild a 2 colonne)
+        ma un sottotipo geometrico diverso.
+        """
+        if not input_schemas:
+            return []
+        group_col = config.get("group_column") or ""
+        output_col = config.get("output_column") or "geometry"
+        if not group_col:
+            return self._copy_schema(input_schemas[0], node_id)
+
+        # Preserva il tipo originale di group_column se presente.
+        input_by_name = {c.name: c for c in input_schemas[0]}
+        group_type = input_by_name[group_col].type if group_col in input_by_name else "str"
+
+        result: List[ColumnSchema] = [
+            ColumnSchema(
+                name=group_col,
+                type=group_type,
+                source_node=node_id,
+                is_calculated=False,
+            ),
+        ]
+        if output_col and output_col != group_col:
+            result.append(ColumnSchema(
+                name=output_col,
+                type=f"geometry:{geom_subtype}",
+                source_node=node_id,
+                is_calculated=True,
+            ))
+        return result
+
+    def _schema_geo_point_on_surface(
+        self,
+        input_schemas: List[List[ColumnSchema]],
+        config: dict,
+        node_id: str,
+    ) -> List[ColumnSchema]:
+        """geo_point_on_surface: input + colonna `output_column`
+        (geometry:point), oppure sostituisce la geometria sorgente.
+
+        Runtime: `op_geo_point_on_surface` (spatial.py) chiama
+        `representative_point()` e lo scrive in `output_column`
+        (default `"point_on_surface"`). Se `output_column` coincide
+        con `geom_column` la sorgente viene sovrascritta a
+        `geometry:point`. Stesso pattern del `_schema_geo_centroid`
+        legacy.
+        """
+        if not input_schemas:
+            return []
+        geom_col = config.get("geom_column", "geometry")
+        output_col = config.get("output_column") or "point_on_surface"
+        result = self._copy_schema(input_schemas[0], node_id)
+
+        if output_col and output_col != geom_col:
+            existing = {c.name for c in result}
+            if output_col not in existing:
+                result.append(ColumnSchema(
+                    name=output_col,
+                    type="geometry:point",
+                    source_node=node_id,
+                    is_calculated=True,
+                ))
+        else:
+            for i, col in enumerate(result):
+                if col.name == geom_col:
+                    result[i] = ColumnSchema(
+                        name=col.name,
+                        type="geometry:point",
+                        source_node=node_id,
+                        is_calculated=True,
+                    )
+                    break
+        return result
+
+    def _schema_geo_boundary(
+        self,
+        input_schemas: List[List[ColumnSchema]],
+        config: dict,
+        node_id: str,
+    ) -> List[ColumnSchema]:
+        """geo_boundary: input + colonna `output_column` (geometry).
+
+        Runtime: `op_geo_boundary` (spatial.py) calcola
+        `gdf.geometry.boundary` e lo scrive in `output_column`
+        (default `"boundary"`). Il sottotipo dipende dall'input
+        (poligono → line, line → multipoint), quindi il tipo
+        dichiarato e' `"geometry"` generico — non vincoliamo a
+        sottotipo per non escludere downstream legittimi.
+
+        Se `output_column == geom_column`, sovrascrive la geometria
+        sorgente a `"geometry"` (perde subtype precedente, allineato
+        al runtime che cambia il tipo geometrico).
+        """
+        if not input_schemas:
+            return []
+        geom_col = config.get("geom_column", "geometry")
+        output_col = config.get("output_column") or "boundary"
+        result = self._copy_schema(input_schemas[0], node_id)
+
+        if output_col and output_col != geom_col:
+            existing = {c.name for c in result}
+            if output_col not in existing:
+                result.append(ColumnSchema(
+                    name=output_col,
+                    type="geometry",
+                    source_node=node_id,
+                    is_calculated=True,
+                ))
+        else:
+            for i, col in enumerate(result):
+                if col.name == geom_col:
+                    result[i] = ColumnSchema(
+                        name=col.name,
+                        type="geometry",
+                        source_node=node_id,
+                        is_calculated=True,
+                    )
+                    break
         return result
 
     def _copy_schema(
