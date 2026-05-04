@@ -497,6 +497,15 @@ class SchemaInferenceService:
             return self._schema_geo_nearest(input_schemas, config, node.id)
         elif transform_op == "lookup":
             return self._schema_lookup(input_schemas, config, node.id)
+        # Reshape + analytics deterministici (BE-PHASE2-SCHEMA-INFER-007 batch 6)
+        elif transform_op == "table_diff":
+            return self._schema_table_diff(input_schemas, config, node.id)
+        elif transform_op == "melt":
+            return self._schema_melt(input_schemas, config, node.id)
+        elif transform_op == "statistics":
+            return self._schema_statistics(input_schemas, config, node.id)
+        elif transform_op == "window_function":
+            return self._schema_window_function(input_schemas, config, node.id)
         else:
             logger.warning(f"Operazione {transform_op} non gestita - passthrough")
             return self._schema_passthrough(input_schemas, node.id)
@@ -2434,6 +2443,354 @@ class SchemaInferenceService:
             is_calculated=True,
         ))
         return result
+
+    # =========================================================================
+    # BATCH 6 — BE-PHASE2-SCHEMA-INFER-007
+    # =========================================================================
+    # Handler dedicati per i 4 transform reshape/analytics deterministici
+    # residui: `table_diff`, `melt`, `statistics`, `window_function`.
+    # `flatten_json` e `transpose` restano in PASSTHROUGH_WRONG_GAP come
+    # `MIGRATE_NEXT_NEEDS_RUNTIME_CONTRACT` (output dipende dai dati a
+    # runtime, non inferibile staticamente).
+
+    def _schema_table_diff(
+        self,
+        input_schemas: List[List[ColumnSchema]],
+        config: dict,
+        node_id: str,
+    ) -> List[ColumnSchema]:
+        """table_diff: confronto LEFT vs RIGHT con metadati diff.
+
+        Runtime: `op_table_diff` (reshape.py) e' multi-input. Output:
+        - `key_cols` (= `left_keys`, types da LEFT)
+        - `common_value_cols` (intersezione di non-key cols
+          dopo key-rename RIGHT→LEFT; types da LEFT; filtrate
+          opzionalmente da `compare_columns`)
+        - `only_old_cols` (LEFT non-key not in RIGHT post-rename;
+          types da LEFT)
+        - `only_new_cols` (RIGHT non-key post-rename not in LEFT;
+          types da RIGHT)
+        - `_diff_status` (str), `_diff_columns` (str),
+          `_diff_old_values` (str)
+
+        Fallback runtime → passthrough di LEFT:
+        - `left_keys`/`right_keys` mancanti o lunghezze diverse;
+        - una key non esiste in LEFT/RIGHT.
+        """
+        if not input_schemas:
+            return []
+        if len(input_schemas) < 2:
+            return self._copy_schema(input_schemas[0], node_id)
+
+        left_schema = input_schemas[0]
+        right_schema = input_schemas[1]
+
+        left_keys = self._normalize_str_list(config.get("left_keys"))
+        right_keys = self._normalize_str_list(config.get("right_keys"))
+
+        if (
+            not left_keys
+            or not right_keys
+            or len(left_keys) != len(right_keys)
+        ):
+            return self._copy_schema(left_schema, node_id)
+
+        left_by_name = {c.name: c for c in left_schema}
+        right_by_name = {c.name: c for c in right_schema}
+        if not all(k in left_by_name for k in left_keys):
+            return self._copy_schema(left_schema, node_id)
+        if not all(k in right_by_name for k in right_keys):
+            return self._copy_schema(left_schema, node_id)
+
+        # Apply key-rename to RIGHT (rk → lk where lk != rk).
+        key_rename = {
+            rk: lk for lk, rk in zip(left_keys, right_keys) if lk != rk
+        }
+        right_post: List[ColumnSchema] = []
+        for col in right_schema:
+            new_name = key_rename.get(col.name, col.name)
+            right_post.append(ColumnSchema(
+                name=new_name,
+                type=col.type,
+                source_node=col.source_node,
+                is_calculated=col.is_calculated,
+            ))
+        right_post_by_name = {c.name: c for c in right_post}
+
+        key_cols = list(left_keys)
+        key_set = set(key_cols)
+        left_non_key = [c.name for c in left_schema if c.name not in key_set]
+        right_non_key = [c.name for c in right_post if c.name not in key_set]
+
+        common_value_cols = [c for c in left_non_key if c in right_non_key]
+        compare_cols = self._normalize_str_list(config.get("compare_columns"))
+        if compare_cols:
+            common_value_cols = [
+                c for c in compare_cols if c in common_value_cols
+            ]
+
+        only_old_cols = [c for c in left_non_key if c not in right_non_key]
+        only_new_cols = [c for c in right_non_key if c not in left_non_key]
+
+        result: List[ColumnSchema] = []
+        for k in key_cols:
+            col = left_by_name[k]
+            result.append(ColumnSchema(
+                name=k,
+                type=col.type,
+                source_node=node_id,
+                is_calculated=False,
+            ))
+        for c in common_value_cols:
+            col = left_by_name[c]
+            result.append(ColumnSchema(
+                name=c,
+                type=col.type,
+                source_node=node_id,
+                is_calculated=False,
+            ))
+        for c in only_old_cols:
+            col = left_by_name[c]
+            result.append(ColumnSchema(
+                name=c,
+                type=col.type,
+                source_node=node_id,
+                is_calculated=False,
+            ))
+        for c in only_new_cols:
+            col = right_post_by_name[c]
+            result.append(ColumnSchema(
+                name=c,
+                type=col.type,
+                source_node=node_id,
+                is_calculated=False,
+            ))
+        for fixed in ("_diff_status", "_diff_columns", "_diff_old_values"):
+            result.append(ColumnSchema(
+                name=fixed,
+                type="str",
+                source_node=node_id,
+                is_calculated=True,
+            ))
+        return result
+
+    def _schema_melt(
+        self,
+        input_schemas: List[List[ColumnSchema]],
+        config: dict,
+        node_id: str,
+    ) -> List[ColumnSchema]:
+        """melt: wide → long.
+
+        Runtime: `op_melt` (reshape.py) usa `pd.melt`. Output:
+        - `id_columns` (preservate, types da input)
+        - `var_name` (str, default `"variable"`) — sempre str
+        - `value_name` (default `"value"`) — tipo:
+          - se i `value_columns` (o tutti i non-id cols se vuoto)
+            sono omogenei in tipo, usa quel tipo;
+          - altrimenti `str` (mirror del comportamento pandas che
+            promuove a `object` su tipi misti).
+
+        `id_columns`/`value_columns` accettati come list[str] o str
+        comma-separated (il runtime fa il filtro su `df.columns`, qui
+        replichiamo).
+        """
+        if not input_schemas:
+            return []
+        input_schema = input_schemas[0]
+        by_name = {c.name: c for c in input_schema}
+
+        id_cols = [
+            c for c in self._normalize_str_list(config.get("id_columns"))
+            if c in by_name
+        ]
+        raw_value = config.get("value_columns")
+        if raw_value is None or raw_value == "" or raw_value == []:
+            value_cols_names = [
+                c.name for c in input_schema if c.name not in set(id_cols)
+            ]
+        else:
+            normalized = [
+                c for c in self._normalize_str_list(raw_value)
+                if c in by_name
+            ]
+            value_cols_names = normalized or [
+                c.name for c in input_schema if c.name not in set(id_cols)
+            ]
+
+        var_name = config.get("var_name") or "variable"
+        value_name = config.get("value_name") or "value"
+
+        types = {by_name[c].type for c in value_cols_names if c in by_name}
+        if len(types) == 1:
+            val_type = next(iter(types))
+        else:
+            val_type = "str"
+
+        result: List[ColumnSchema] = []
+        for c in id_cols:
+            col = by_name[c]
+            result.append(ColumnSchema(
+                name=c,
+                type=col.type,
+                source_node=node_id,
+                is_calculated=False,
+            ))
+        result.append(ColumnSchema(
+            name=var_name,
+            type="str",
+            source_node=node_id,
+            is_calculated=True,
+        ))
+        result.append(ColumnSchema(
+            name=value_name,
+            type=val_type,
+            source_node=node_id,
+            is_calculated=True,
+        ))
+        return result
+
+    def _schema_statistics(
+        self,
+        input_schemas: List[List[ColumnSchema]],
+        config: dict,
+        node_id: str,
+    ) -> List[ColumnSchema]:
+        """statistics: input + 1 colonna per ogni stat valida.
+
+        Runtime: `op_statistics` (analysis.py).
+        - prefix default = `f"{column}_"` (se `output_prefix` vuoto)
+        - col name = `f"{prefix}{stat}"`
+        - Tipo:
+          - `count` → `int` (count() pandas)
+          - tutti gli altri (`min`, `max`, `sum`, `mean`, `median`,
+            `std`, `var`, `q25`, `q75`) → `real` (numerici).
+        - Stats unknown ignorate (allineato al `if stat_name in
+          stat_funcs` runtime).
+        - `column` mancante / non in input → schema invariato (no-op
+          + warning runtime).
+        - Default `stats = ["count","min","max","mean","median","std"]`.
+        """
+        if not input_schemas:
+            return []
+        result = self._copy_schema(input_schemas[0], node_id)
+        column = config.get("column") or ""
+        if not column:
+            return result
+        existing = {c.name for c in result}
+        if column not in existing:
+            return result
+
+        raw_stats = config.get("stats")
+        if raw_stats is None:
+            stats = ["count", "min", "max", "mean", "median", "std"]
+        elif isinstance(raw_stats, str):
+            stats = [s.strip() for s in raw_stats.split(",") if s.strip()]
+        elif isinstance(raw_stats, list):
+            stats = [str(s).strip() for s in raw_stats if str(s).strip()]
+        else:
+            stats = ["count", "min", "max", "mean", "median", "std"]
+
+        valid_stats = {
+            "count", "min", "max", "sum", "mean", "median",
+            "std", "var", "q25", "q75",
+        }
+        prefix = config.get("output_prefix") or f"{column}_"
+
+        for stat in stats:
+            if stat not in valid_stats:
+                continue
+            col_name = f"{prefix}{stat}"
+            if col_name in existing:
+                continue
+            stat_type = "int" if stat == "count" else "real"
+            result.append(ColumnSchema(
+                name=col_name,
+                type=stat_type,
+                source_node=node_id,
+                is_calculated=True,
+            ))
+            existing.add(col_name)
+        return result
+
+    def _schema_window_function(
+        self,
+        input_schemas: List[List[ColumnSchema]],
+        config: dict,
+        node_id: str,
+    ) -> List[ColumnSchema]:
+        """window_function: input + 1 colonna `output_column`.
+
+        Runtime: `op_window_function` (aggregation.py).
+        - `output_column` default = `f"{column}_{function}"`.
+        - Funzioni valide: rank, dense_rank, cumsum, cumcount, lag,
+          lead, pct_change, running_mean. Funzione unknown → no-op
+          (passthrough).
+        - Tipo output by function:
+          - `rank`, `dense_rank`, `pct_change`, `running_mean`
+            → `real` (pandas float64);
+          - `cumcount` → `int`;
+          - `cumsum`, `lag`, `lead` → preserva il tipo della colonna
+            sorgente (approssimazione: lag/lead di int possono
+            promuovere a float per NaN ma mantengono la semantica
+            del dtype originale).
+        - `column` mancante / non in input → schema invariato.
+        """
+        if not input_schemas:
+            return []
+        result = self._copy_schema(input_schemas[0], node_id)
+        column = config.get("column") or ""
+        if not column:
+            return result
+        by_name = {c.name: c for c in result}
+        if column not in by_name:
+            return result
+
+        function = config.get("function") or "rank"
+        valid_functions = {
+            "rank", "dense_rank", "cumsum", "cumcount",
+            "lag", "lead", "pct_change", "running_mean",
+        }
+        if function not in valid_functions:
+            return result  # mirror runtime warning + return df
+
+        output_col = config.get("output_column") or f"{column}_{function}"
+        if output_col in by_name:
+            return result
+
+        if function in ("rank", "dense_rank", "pct_change", "running_mean"):
+            out_type = "real"
+        elif function == "cumcount":
+            out_type = "int"
+        else:  # cumsum, lag, lead
+            out_type = by_name[column].type
+
+        result.append(ColumnSchema(
+            name=output_col,
+            type=out_type,
+            source_node=node_id,
+            is_calculated=True,
+        ))
+        return result
+
+    def _normalize_str_list(self, raw) -> List[str]:
+        """Helper: normalizza un valore di config in lista di stringhe.
+
+        - `str` → split per virgola;
+        - `list` → ogni elemento stringificato e strippato;
+        - `None`/altro → lista vuota.
+
+        Vuoti/whitespace-only filtrati. Usato per `id_columns`,
+        `value_columns`, `left_keys`, `right_keys`, `compare_columns`,
+        `stats` ecc. dove il FE puo' inviare entrambe le shape.
+        """
+        if raw is None:
+            return []
+        if isinstance(raw, str):
+            return [c.strip() for c in raw.split(",") if c.strip()]
+        if isinstance(raw, list):
+            return [str(c).strip() for c in raw if str(c).strip()]
+        return []
 
     def _copy_schema(
         self,

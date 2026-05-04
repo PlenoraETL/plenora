@@ -110,6 +110,8 @@ EXPECTED_DISPATCHER_BRANCHES: Set[str] = {
     # BE-PHASE2-SCHEMA-INFER-006 batch 5
     "cross_join", "geo_within", "geo_overlay",
     "geo_symmetric_difference", "geo_nearest", "lookup",
+    # BE-PHASE2-SCHEMA-INFER-007 batch 6
+    "table_diff", "melt", "statistics", "window_function",
 }
 
 # Transform IDs nel registry che ALTERANO lo schema (aggiungono/rimuovono
@@ -135,12 +137,31 @@ PASSTHROUGH_WRONG_GAP: Set[str] = {
     # BE-PHASE2-SCHEMA-INFER-006 batch 5 ha promosso a dispatcher
     # (rimossi): cross_join, geo_within, geo_overlay,
     # geo_symmetric_difference, geo_nearest, lookup.
-    "flatten_json",         # esplode chiavi JSON in colonne
-    "melt",                 # ristruttura wide→long
-    "statistics",           # aggiunge colonne statistiche
-    "table_diff",           # aggiunge colonne diff
-    "transpose",            # ristruttura schema
-    "window_function",      # aggiunge colonna funzione finestra
+    # BE-PHASE2-SCHEMA-INFER-007 batch 6 ha promosso a dispatcher
+    # (rimossi): table_diff, melt, statistics, window_function.
+    # I 2 residui sono `MIGRATE_NEXT_NEEDS_RUNTIME_CONTRACT`: lo
+    # schema output dipende dai dati a runtime e non e' inferibile
+    # staticamente da input schema + config. Restano in fallback
+    # passthrough (schema announcement approssimato dal FE che vede
+    # le sole colonne LEFT — il warning runtime documenta il caso).
+    "flatten_json",         # MIGRATE_NEXT: keys derivate dai dati JSON parsati
+    "transpose",            # MIGRATE_NEXT: cols derivate dai valori delle righe
+}
+
+# Transform IDs `MIGRATE_NEXT_NEEDS_RUNTIME_CONTRACT`: lo schema
+# output dipende dai dati (non solo dalla config), quindi non puo'
+# essere inferito al canvas-time. Annotati per drift-tracking.
+MIGRATE_NEXT_NEEDS_RUNTIME_CONTRACT: Set[str] = {
+    # `flatten_json`: pd.json_normalize sui valori parsati JSON. Le
+    # chiavi del dict (e quindi i nomi colonna output) vengono dai
+    # dati, non dalla config. Schema canvas-time impossibile.
+    "flatten_json",
+    # `transpose`: con `id_column` valorizzata, i valori della
+    # colonna diventano i nomi delle nuove colonne. Senza
+    # `id_column`, le colonne diventano `col_0`...`col_N` dove N
+    # dipende dal row count. Entrambi i percorsi sono
+    # data-dependent.
+    "transpose",
 }
 
 # Transform IDs che operano solo su righe / valori senza alterare
@@ -255,7 +276,7 @@ def test_passthrough_wrong_gap_size_lock():
     # Lock attuale al BE-SCHEMA-INFER-001A baseline. Quando una
     # transform passa a dispatcher dedicato, sposta l'entry e
     # decrementa il limite (`assert actual <= N`).
-    assert actual == 6, (
+    assert actual == 2, (
         f"Gap passthrough-WRONG cambiato: {actual}. "
         f"Aggiorna l'assert e il piano BE-SCHEMA-INFER-002+."
     )
@@ -285,7 +306,7 @@ def test_dispatcher_falls_back_to_passthrough_for_unknown_ops():
     node = SimpleNamespace(
         id="n1",
         config={},
-        transform_op="melt",  # passthrough-WRONG entry residua
+        transform_op="flatten_json",  # MIGRATE_NEXT residual entry
         data=None,
     )
     out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
@@ -1503,3 +1524,455 @@ def test_lookup_empty_mapping_passthrough():
         edges_by_target={},
     )
     assert [c.name for c in out] == ["a", "b"]
+
+
+# ---------------------------------------------------------------------------
+# 10. Behavioral tests — BE-PHASE2-SCHEMA-INFER-007 batch 6
+# ---------------------------------------------------------------------------
+#
+# 4 transform deterministici promossi a dispatcher dedicato:
+#   - table_diff, melt, statistics, window_function
+# 2 transform `MIGRATE_NEXT_NEEDS_RUNTIME_CONTRACT` (output
+# data-dependent, non inferibili staticamente):
+#   - flatten_json, transpose
+
+
+# table_diff ---------------------------------------------------------------
+
+
+def _diff_left() -> list:
+    return [
+        ColumnSchema(name="id", type="int", source_node="L", is_calculated=False),
+        ColumnSchema(name="name", type="str", source_node="L", is_calculated=False),
+        ColumnSchema(name="price", type="real", source_node="L", is_calculated=False),
+        ColumnSchema(name="legacy_only", type="str", source_node="L", is_calculated=False),
+    ]
+
+
+def _diff_right(right_key_name: str = "id") -> list:
+    return [
+        ColumnSchema(name=right_key_name, type="int", source_node="R", is_calculated=False),
+        ColumnSchema(name="name", type="str", source_node="R", is_calculated=False),
+        ColumnSchema(name="price", type="real", source_node="R", is_calculated=False),
+        ColumnSchema(name="new_only", type="bool", source_node="R", is_calculated=False),
+    ]
+
+
+def test_table_diff_full_schema_with_matching_keys():
+    """key + common (LEFT types) + left_only + right_only + 3 fixed
+    diff columns."""
+    service = SchemaInferenceService(project_service=None)
+    out = service._infer_transform_schema(
+        _node("table_diff", {
+            "left_keys": ["id"],
+            "right_keys": ["id"],
+        }),
+        [_diff_left(), _diff_right()],
+        edges_by_target={},
+    )
+    names = [c.name for c in out]
+    assert names == [
+        "id",            # key
+        "name", "price", # common (LEFT types)
+        "legacy_only",   # only_old
+        "new_only",      # only_new (RIGHT type)
+        "_diff_status", "_diff_columns", "_diff_old_values",
+    ]
+    types = {c.name: c.type for c in out}
+    assert types["id"] == "int"
+    assert types["price"] == "real"
+    assert types["new_only"] == "bool"
+    assert types["_diff_status"] == "str"
+    assert types["_diff_columns"] == "str"
+    assert types["_diff_old_values"] == "str"
+
+
+def test_table_diff_compare_columns_filters_common_only():
+    """`compare_columns` filtra solo `common_value_cols`. Le
+    only_old/only_new restano intatte."""
+    service = SchemaInferenceService(project_service=None)
+    out = service._infer_transform_schema(
+        _node("table_diff", {
+            "left_keys": ["id"],
+            "right_keys": ["id"],
+            "compare_columns": ["price"],
+        }),
+        [_diff_left(), _diff_right()],
+        edges_by_target={},
+    )
+    names = [c.name for c in out]
+    # `name` (common ma non in compare_columns) viene escluso;
+    # legacy_only e new_only restano.
+    assert names == [
+        "id", "price", "legacy_only", "new_only",
+        "_diff_status", "_diff_columns", "_diff_old_values",
+    ]
+
+
+def test_table_diff_renames_right_keys_to_left_names():
+    """Quando `right_keys != left_keys`, il runtime rinomina la
+    chiave RIGHT al nome LEFT. La chiave finale appare solo una
+    volta, col nome LEFT."""
+    service = SchemaInferenceService(project_service=None)
+    right = _diff_right(right_key_name="record_id")
+    out = service._infer_transform_schema(
+        _node("table_diff", {
+            "left_keys": ["id"],
+            "right_keys": ["record_id"],
+        }),
+        [_diff_left(), right],
+        edges_by_target={},
+    )
+    names = [c.name for c in out]
+    assert "record_id" not in names
+    assert names[0] == "id"
+
+
+def test_table_diff_missing_keys_passthrough():
+    """`left_keys`/`right_keys` mancanti → passthrough di LEFT."""
+    service = SchemaInferenceService(project_service=None)
+    out = service._infer_transform_schema(
+        _node("table_diff", {}),
+        [_diff_left(), _diff_right()],
+        edges_by_target={},
+    )
+    assert [c.name for c in out] == [
+        "id", "name", "price", "legacy_only",
+    ]
+
+
+def test_table_diff_keys_length_mismatch_passthrough():
+    service = SchemaInferenceService(project_service=None)
+    out = service._infer_transform_schema(
+        _node("table_diff", {
+            "left_keys": ["id", "name"],
+            "right_keys": ["id"],
+        }),
+        [_diff_left(), _diff_right()],
+        edges_by_target={},
+    )
+    assert [c.name for c in out] == [
+        "id", "name", "price", "legacy_only",
+    ]
+
+
+def test_table_diff_accepts_string_keys_csv():
+    """Il FE puo' inviare `left_keys`/`right_keys` come stringa
+    comma-separated. Devono essere normalizzate a lista."""
+    service = SchemaInferenceService(project_service=None)
+    out = service._infer_transform_schema(
+        _node("table_diff", {
+            "left_keys": "id",
+            "right_keys": "id",
+        }),
+        [_diff_left(), _diff_right()],
+        edges_by_target={},
+    )
+    names = [c.name for c in out]
+    assert "_diff_status" in names
+
+
+# melt ---------------------------------------------------------------------
+
+
+def _wide_input() -> list:
+    return [
+        ColumnSchema(name="region", type="str", source_node="s", is_calculated=False),
+        ColumnSchema(name="q1", type="real", source_node="s", is_calculated=False),
+        ColumnSchema(name="q2", type="real", source_node="s", is_calculated=False),
+        ColumnSchema(name="q3", type="real", source_node="s", is_calculated=False),
+    ]
+
+
+def test_melt_homogeneous_value_types_preserved():
+    """Quando tutti i value_columns hanno lo stesso tipo, value_name
+    eredita quel tipo."""
+    service = SchemaInferenceService(project_service=None)
+    out = service._infer_transform_schema(
+        _node("melt", {
+            "id_columns": ["region"],
+            "value_columns": ["q1", "q2", "q3"],
+        }),
+        [_wide_input()],
+        edges_by_target={},
+    )
+    assert [c.name for c in out] == ["region", "variable", "value"]
+    types = {c.name: c.type for c in out}
+    assert types["region"] == "str"
+    assert types["variable"] == "str"
+    assert types["value"] == "real"  # tutti i quarter sono real
+
+
+def test_melt_heterogeneous_value_types_falls_back_to_str():
+    """Tipi misti tra value_columns → value_name e' `str` (mirror
+    della promozione pandas a object dtype)."""
+    service = SchemaInferenceService(project_service=None)
+    mixed = [
+        ColumnSchema(name="id", type="int", source_node="s", is_calculated=False),
+        ColumnSchema(name="a", type="int", source_node="s", is_calculated=False),
+        ColumnSchema(name="b", type="str", source_node="s", is_calculated=False),
+    ]
+    out = service._infer_transform_schema(
+        _node("melt", {
+            "id_columns": ["id"],
+            "value_columns": ["a", "b"],
+        }),
+        [mixed],
+        edges_by_target={},
+    )
+    types = {c.name: c.type for c in out}
+    assert types["value"] == "str"
+
+
+def test_melt_default_value_columns_uses_all_non_id():
+    """Senza `value_columns`, tutti i non-id_columns diventano
+    value_columns."""
+    service = SchemaInferenceService(project_service=None)
+    out = service._infer_transform_schema(
+        _node("melt", {"id_columns": ["region"]}),
+        [_wide_input()],
+        edges_by_target={},
+    )
+    assert [c.name for c in out] == ["region", "variable", "value"]
+    # q1/q2/q3 sono tutti real → value e' real
+    assert next(c for c in out if c.name == "value").type == "real"
+
+
+def test_melt_custom_var_value_names():
+    service = SchemaInferenceService(project_service=None)
+    out = service._infer_transform_schema(
+        _node("melt", {
+            "id_columns": ["region"],
+            "var_name": "quarter",
+            "value_name": "amount",
+        }),
+        [_wide_input()],
+        edges_by_target={},
+    )
+    assert [c.name for c in out] == ["region", "quarter", "amount"]
+
+
+def test_melt_string_id_columns_csv():
+    service = SchemaInferenceService(project_service=None)
+    out = service._infer_transform_schema(
+        _node("melt", {"id_columns": "region"}),
+        [_wide_input()],
+        edges_by_target={},
+    )
+    assert [c.name for c in out][0] == "region"
+
+
+# statistics ---------------------------------------------------------------
+
+
+def test_statistics_default_stats_six_columns():
+    """Default stats: count (int) + min/max/mean/median/std (real),
+    prefix derivato da `column`."""
+    service, input_schema = _service_and_input()
+    # `a` e' int — e' la colonna numerica typical
+    out = service._infer_transform_schema(
+        _node("statistics", {"column": "a"}),
+        [input_schema],
+        edges_by_target={},
+    )
+    names = [c.name for c in out]
+    assert names == [
+        "a", "b",
+        "a_count", "a_min", "a_max", "a_mean", "a_median", "a_std",
+    ]
+    types = {c.name: c.type for c in out}
+    assert types["a_count"] == "int"
+    for stat in ("a_min", "a_max", "a_mean", "a_median", "a_std"):
+        assert types[stat] == "real"
+
+
+def test_statistics_custom_stats_subset():
+    service, input_schema = _service_and_input()
+    out = service._infer_transform_schema(
+        _node("statistics", {
+            "column": "a",
+            "stats": ["sum", "var", "q25", "q75"],
+        }),
+        [input_schema],
+        edges_by_target={},
+    )
+    new_cols = [c for c in out if c.name not in ("a", "b")]
+    assert [c.name for c in new_cols] == [
+        "a_sum", "a_var", "a_q25", "a_q75",
+    ]
+    assert all(c.type == "real" for c in new_cols)
+
+
+def test_statistics_unknown_stats_ignored():
+    service, input_schema = _service_and_input()
+    out = service._infer_transform_schema(
+        _node("statistics", {
+            "column": "a",
+            "stats": ["count", "weird_unknown", "min"],
+        }),
+        [input_schema],
+        edges_by_target={},
+    )
+    names = [c.name for c in out]
+    assert names == ["a", "b", "a_count", "a_min"]
+
+
+def test_statistics_custom_prefix():
+    service, input_schema = _service_and_input()
+    out = service._infer_transform_schema(
+        _node("statistics", {
+            "column": "a",
+            "stats": ["count"],
+            "output_prefix": "stat_",
+        }),
+        [input_schema],
+        edges_by_target={},
+    )
+    assert [c.name for c in out] == ["a", "b", "stat_count"]
+
+
+def test_statistics_missing_column_passthrough():
+    service, input_schema = _service_and_input()
+    out = service._infer_transform_schema(
+        _node("statistics", {"column": "missing"}),
+        [input_schema],
+        edges_by_target={},
+    )
+    assert [c.name for c in out] == ["a", "b"]
+
+
+# window_function ----------------------------------------------------------
+
+
+def test_window_function_rank_default_real_column():
+    service, input_schema = _service_and_input()
+    out = service._infer_transform_schema(
+        _node("window_function", {"column": "a", "function": "rank"}),
+        [input_schema],
+        edges_by_target={},
+    )
+    assert [c.name for c in out] == ["a", "b", "a_rank"]
+    assert out[-1].type == "real"
+
+
+def test_window_function_cumcount_returns_int():
+    service, input_schema = _service_and_input()
+    out = service._infer_transform_schema(
+        _node("window_function", {"column": "a", "function": "cumcount"}),
+        [input_schema],
+        edges_by_target={},
+    )
+    assert out[-1].name == "a_cumcount"
+    assert out[-1].type == "int"
+
+
+def test_window_function_cumsum_preserves_source_type():
+    """cumsum preserva il tipo della sorgente (int → int)."""
+    service, input_schema = _service_and_input()
+    out = service._infer_transform_schema(
+        _node("window_function", {"column": "a", "function": "cumsum"}),
+        [input_schema],
+        edges_by_target={},
+    )
+    assert out[-1].name == "a_cumsum"
+    assert out[-1].type == "int"  # `a` e' int nell'input
+
+
+def test_window_function_lag_preserves_source_type_for_str():
+    service = SchemaInferenceService(project_service=None)
+    input_schema = [
+        ColumnSchema(name="city", type="str", source_node="s", is_calculated=False),
+    ]
+    out = service._infer_transform_schema(
+        _node("window_function", {"column": "city", "function": "lag"}),
+        [input_schema],
+        edges_by_target={},
+    )
+    assert out[-1].type == "str"
+
+
+def test_window_function_pct_change_returns_real():
+    service, input_schema = _service_and_input()
+    out = service._infer_transform_schema(
+        _node("window_function", {"column": "a", "function": "pct_change"}),
+        [input_schema],
+        edges_by_target={},
+    )
+    assert out[-1].type == "real"
+
+
+def test_window_function_explicit_output_column():
+    service, input_schema = _service_and_input()
+    out = service._infer_transform_schema(
+        _node("window_function", {
+            "column": "a",
+            "function": "rank",
+            "output_column": "ranking",
+        }),
+        [input_schema],
+        edges_by_target={},
+    )
+    assert out[-1].name == "ranking"
+    assert out[-1].type == "real"
+
+
+def test_window_function_unknown_function_passthrough():
+    """Funzione invalida → no-op (mirror runtime warning + return df)."""
+    service, input_schema = _service_and_input()
+    out = service._infer_transform_schema(
+        _node("window_function", {
+            "column": "a",
+            "function": "weird_unknown",
+        }),
+        [input_schema],
+        edges_by_target={},
+    )
+    assert [c.name for c in out] == ["a", "b"]
+
+
+def test_window_function_missing_column_passthrough():
+    service, input_schema = _service_and_input()
+    out = service._infer_transform_schema(
+        _node("window_function", {
+            "column": "missing",
+            "function": "rank",
+        }),
+        [input_schema],
+        edges_by_target={},
+    )
+    assert [c.name for c in out] == ["a", "b"]
+
+
+# ---------------------------------------------------------------------------
+# 11. Classification lock — MIGRATE_NEXT_NEEDS_RUNTIME_CONTRACT
+# ---------------------------------------------------------------------------
+
+
+def test_migrate_next_set_matches_residual_passthrough_wrong():
+    """Lock: tutto cio' che resta in PASSTHROUGH_WRONG_GAP DEVE
+    essere classificato come MIGRATE_NEXT_NEEDS_RUNTIME_CONTRACT
+    dopo BE-PHASE2-SCHEMA-INFER-007. Drift → un nuovo deterministico
+    e' stato dimenticato fuori dal dispatcher, oppure il refactor ha
+    riaperto un gap chiuso."""
+    assert MIGRATE_NEXT_NEEDS_RUNTIME_CONTRACT == PASSTHROUGH_WRONG_GAP, (
+        f"PASSTHROUGH_WRONG_GAP residuo non e' interamente "
+        f"MIGRATE_NEXT. Diff: "
+        f"in WRONG ma non in MIGRATE_NEXT: "
+        f"{PASSTHROUGH_WRONG_GAP - MIGRATE_NEXT_NEEDS_RUNTIME_CONTRACT}; "
+        f"in MIGRATE_NEXT ma non in WRONG: "
+        f"{MIGRATE_NEXT_NEEDS_RUNTIME_CONTRACT - PASSTHROUGH_WRONG_GAP}."
+    )
+
+
+@pytest.mark.parametrize("op", sorted(MIGRATE_NEXT_NEEDS_RUNTIME_CONTRACT))
+def test_migrate_next_ops_fall_through_to_passthrough(op):
+    """I 2 transform `MIGRATE_NEXT` cadono nel fallback
+    `_schema_passthrough` (warning logger). Lo schema dichiarato e'
+    quello di LEFT — un'approssimazione esplicita, non una verita'.
+    Documentato nei commenti del set + nel report di batch."""
+    service, input_schema = _service_and_input()
+    node = _node(op, {"column": "b"})
+    out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
+    assert [(c.name, c.type) for c in out] == [
+        (c.name, c.type) for c in input_schema
+    ]
