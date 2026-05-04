@@ -662,9 +662,13 @@ def cleanup_task_completely(task_id: str, current_user: CurrentUser = Depends(ge
         failed_steps.append("unlink_output_file")
 
     # 5. log_runs: cleanup esplicito per non lasciare orfani.
+    # BE-GO-READY-CONNECTION-ENGINE-006: query inline migrata a
+    # `app.db.log_runs_db_service.delete_log_run_by_run_id`. Lo step
+    # resta best-effort (try/except → failed_steps); la DAL propaga
+    # l'eccezione cosi' che la decisione log+continue stia qui.
     try:
-        from app.db.pg_connection import execute as _pg_exec
-        _pg_exec("DELETE FROM log_runs WHERE run_id = ?", (task_id,))
+        from app.db.log_runs_db_service import delete_log_run_by_run_id
+        delete_log_run_by_run_id(task_id)
     except Exception as e:
         logger.warning(f"cleanup: errore delete log_runs: {e}", exc_info=True)
         failed_steps.append("delete_log_runs")

@@ -588,79 +588,24 @@ from app.core.auth.users_router import (  # noqa: F401
 # ============================================================
 # ROUTER GRUPPI
 # ============================================================
+# BE-GO-READY-AUTH-ENGINE-004-GROUPS-ROUTER-EXTRACTION:
+# i 4 endpoint admin CRUD `/auth/groups*` sono stati spostati in
+# `app.core.auth.groups_router`. `groups_router` viene re-esportato
+# qui (KEEP_COMPAT) per non rompere `from app.core.auth.auth import
+# groups_router` nei caller esistenti (incluso `main.py` storico).
+# `main.py` ora lo importa direttamente dal modulo nuovo. Behavior
+# user-facing invariato: stessi error code / messaggi / status /
+# headers / cascade-delete behavior gestiti dal layer `disclosure`.
 
-groups_router = APIRouter(prefix="/auth/groups", tags=["groups"])
-
-@groups_router.get("", response_model=list[GroupResponse])
-def list_groups(current_user: CurrentUser = Depends(require_admin)):
-    """
-    Lista gruppi.
-    superadmin → tutti i gruppi (cross-tenant)
-    admin      → solo il proprio gruppo (l'admin non può fare sharing
-                  cross-gruppo, quindi non ha bisogno di vedere gli altri)
-    """
-    if current_user.role == "superadmin":
-        groups = db.list_groups()
-    else:
-        g = db.get_group(current_user.group_id)
-        groups = [g] if g else []
-    # Bug #3 (2026-04-23): description=NULL nel DB ritorna None da dict.get,
-    # non la stringa default; GroupResponse.description: str alza ValidationError.
-    # Stesso pattern null-safe applicato su name per robustezza.
-    return [GroupResponse(
-                group_id=g["id"],
-                name=g.get("name") or "",
-                description=g.get("description") or "")
-            for g in groups if g]
-
-@groups_router.post("", response_model=GroupResponse, status_code=201)
-@audit_action(action="group.create")
-def create_group(data: GroupCreate,
-                 current_user: CurrentUser = Depends(require_superadmin)):
-    """Crea nuovo gruppo (solo superadmin)."""
-    if db.get_group(data.group_id):
-        _disclosure.raise_disclosure(_disclosure.group_id_already_exists())
-    group = db.create_group(data.group_id, data.name, data.description)
-    return GroupResponse(group_id=group["id"], name=group["name"], description=group.get("description", ""))
-
-@groups_router.get("/{group_id}/summary")
-def get_group_summary(group_id: str,
-                      current_user: CurrentUser = Depends(require_superadmin)):
-    """
-    Ritorna il conteggio di tutte le entità del gruppo.
-    Usato dal frontend per mostrare il modale di conferma prima del cascade delete.
-    """
-    import app.db.config_db_service as cfg_db
-    if not cfg_db.get_group(group_id):
-        _disclosure.raise_disclosure(_disclosure.group_not_found())
-    return cfg_db.get_group_summary(group_id)
-
-
-@groups_router.delete("/{group_id}", status_code=200)
-@audit_action(action="group.delete", target_param="group_id")
-def delete_group(group_id: str,
-                 current_user: CurrentUser = Depends(require_superadmin)):
-    """
-    Cascade delete gruppo (solo superadmin).
-    Elimina in ordine: schedules, api_connections, datasources, file_sources,
-    connections, projects (+ results.db + intermediate.db), users, log.db, gruppo.
-    Blocca solo se il gruppo è 'default'.
-    """
-    import app.db.config_db_service as cfg_db
-    if group_id == "default":
-        _disclosure.raise_disclosure(_disclosure.group_default_not_deletable())
-    if not cfg_db.get_group(group_id):
-        _disclosure.raise_disclosure(_disclosure.group_not_found())
-
-    try:
-        report = cfg_db.delete_group_cascade(group_id)
-    except Exception as e:
-        logger.error(f"[CRASH] delete_group_cascade fallito per group_id={group_id}: {e}", exc_info=True)
-        raise_typed_http(
-            error_codes.INTERNAL_ERROR,
-            status_code=500,
-            message="Errore interno del server",
-        )
-
-    return {"deleted": True, "group_id": group_id, "report": report}
+from app.core.auth.groups_router import (  # noqa: F401
+    groups_router,
+    # KEEP_COMPAT: i 4 handler vengono ri-esportati qui perche' i
+    # test esistenti li chiamano via `auth_mod.<name>(...)`:
+    #  - tests2/security/unit/test_auth_delete_group_logging_contract.py
+    #    (`auth_mod.delete_group(...)`).
+    list_groups,
+    create_group,
+    get_group_summary,
+    delete_group,
+)
 

@@ -46,8 +46,9 @@ from app.bootstrap import bootstrap as _bootstrap, teardown as _teardown
 _bootstrap()
 
 # Auth JWT
-from app.core.auth.auth import router as auth_router, groups_router, get_current_user
+from app.core.auth.auth import router as auth_router, get_current_user
 from app.core.auth.users_router import users_router
+from app.core.auth.groups_router import groups_router
 from app.core.auth.auth_middleware import JWTMiddleware
 from app.core.auth.request_id_middleware import RequestIdMiddleware
 from app.db.cleanup_middleware import DBConnectionCleanupMiddleware

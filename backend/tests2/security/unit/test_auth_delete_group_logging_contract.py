@@ -39,7 +39,11 @@ class _ListHandler(logging.Handler):
         self.records.append(record)
 
 
-_AUTH_LOGGER = "app.core.auth.auth"
+# BE-GO-READY-AUTH-ENGINE-004: la logica di `delete_group` (incluso
+# `logger.error("[CRASH] delete_group_cascade ...")`) e' stata
+# spostata da `app/core/auth/auth.py` a `app/core/auth/groups_router.py`.
+# Il record ERROR e' ora emesso dal logger del modulo nuovo.
+_AUTH_LOGGER = "app.core.auth.groups_router"
 
 
 def _superadmin_user():

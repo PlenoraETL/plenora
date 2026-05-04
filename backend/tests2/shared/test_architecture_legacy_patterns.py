@@ -201,8 +201,6 @@ def test_os_getenv_only_at_boundary_modules():
 #   intermediate runs/nodes; query read-only su `runs`/`node_meta`.
 # - `app/core/logs/router.py` + `runs_router.py`: log query
 #   read-only paginate.
-# - `app/core/orchestrator/router.py`: 1 `execute()` per
-#   set-tenant-scoped admin operation.
 #
 # Migrazioni gia' chiuse (la baseline scende man mano):
 # - `app/core/projects/router.py` (BE-GO-READY-CONNECTION-ENGINE-003):
@@ -211,6 +209,9 @@ def test_os_getenv_only_at_boundary_modules():
 # - `app/core/imdf/router.py` (BE-GO-READY-CONNECTION-ENGINE-003):
 #   project-id-by-group lookup migrato a
 #   `app.db.config.projects.list_project_ids_for_group`.
+# - `app/core/orchestrator/router.py` (BE-GO-READY-CONNECTION-ENGINE-006):
+#   single `DELETE log_runs` migrato a
+#   `app.db.log_runs_db_service.delete_log_run_by_run_id`.
 #
 # Lock: SET di file allowlistati. Nuovi router NON possono importare
 # pg_connection senza esplicita aggiunta + razionale.
@@ -218,7 +219,6 @@ ALLOWLIST_PG_CONNECTION_ROUTER_FILES: Set[str] = {
     "app/core/intermediate/router.py",
     "app/core/logs/router.py",
     "app/core/logs/runs_router.py",
-    "app/core/orchestrator/router.py",
 }
 
 

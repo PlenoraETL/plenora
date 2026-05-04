@@ -258,23 +258,82 @@ def test_get_result_data_s3_download_failure_returns_none(monkeypatch):
 # =============================================================================
 
 
+def _fake_transaction_factory(*, select_row, delete_rowcount=1):
+    """Build a `transaction()` context-manager replacement that
+    yields a fake conn whose cursor records `execute` calls and
+    serves `fetchone` results.
+
+    Used by the post-007 tests that exercise `delete_result` /
+    `delete_results_for_project` (W1 reconciliation pattern: SELECT
+    + record_pending + DELETE all in one transaction).
+    """
+    from contextlib import contextmanager
+
+    class _Cur:
+        def __init__(self):
+            self.executed = []
+            self.rowcount = 0
+            # SELECT yields the configured row, INSERT (record_pending)
+            # yields a synthetic id row.
+            self._fetchone_queue = [select_row, {"id": "recon-fake"}]
+
+        def execute(self, sql, params=()):
+            self.executed.append(sql)
+            if "DELETE FROM results" in sql:
+                self.rowcount = delete_rowcount
+
+        def fetchone(self):
+            return self._fetchone_queue.pop(0) if self._fetchone_queue else None
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    class _Conn:
+        def __init__(self):
+            self._cur = _Cur()
+
+        def cursor(self):
+            return self._cur
+
+    @contextmanager
+    def _cm():
+        yield _Conn()
+
+    return _cm
+
+
 def test_delete_result_s3_backed_triggers_s3_delete(monkeypatch, stub_storage):
-    """delete_result su row S3-backed -> storage.delete eager."""
+    """delete_result su row S3-backed -> compensating_delete invoked.
+
+    Post BE-GO-READY-STORAGE-ENGINE-007: il path passa per
+    `transaction()` + `record_pending` invece di `execute()` +
+    `_s3_delete_best_effort`. Lo stub si sposta sulla nuova
+    boundary (`compensating_delete` + `mark_done`).
+    """
     import app.db.results_db_service as rds
 
-    # row con storage_key
     monkeypatch.setattr(
-        rds, "fetchone",
-        lambda sql, args: {"storage_key": "results/p1/res-to-del.bin"},
+        rds, "transaction",
+        _fake_transaction_factory(
+            select_row={"storage_key": "results/p1/res-to-del.bin"}
+        ),
     )
-    monkeypatch.setattr(rds, "execute",
-                        lambda sql, args: MagicMock(rowcount=1))
 
-    # Il monkeypatch qui deve essere su rds._s3_delete_best_effort
     calls = []
-    def _fake_s3_delete(key):
-        calls.append(key)
-    monkeypatch.setattr(rds, "_s3_delete_best_effort", _fake_s3_delete)
+    monkeypatch.setattr(
+        "app.shared.storage_compensation.compensating_delete",
+        lambda key, **_: calls.append(key) or "ok",
+    )
+    monkeypatch.setattr(
+        "app.shared.storage_reconciliation.mark_done", lambda rid: None
+    )
+    monkeypatch.setattr(
+        "app.shared.storage_reconciliation.mark_failed_attempt",
+        lambda rid, **_: None,
+    )
 
     result = rds.delete_result("res-to-del")
     assert result is True
@@ -282,17 +341,23 @@ def test_delete_result_s3_backed_triggers_s3_delete(monkeypatch, stub_storage):
 
 
 def test_delete_result_db_backed_does_not_touch_s3(monkeypatch):
-    """delete_result su row DB blob (no storage_key) -> no S3 call."""
+    """delete_result su row DB blob (no storage_key) -> no S3 call.
+
+    Post BE-GO-READY-STORAGE-ENGINE-007: stub spostato a
+    `transaction()` + boundary `compensating_delete`.
+    """
     import app.db.results_db_service as rds
 
-    monkeypatch.setattr(rds, "fetchone",
-                        lambda sql, args: {"storage_key": None})
-    monkeypatch.setattr(rds, "execute",
-                        lambda sql, args: MagicMock(rowcount=1))
+    monkeypatch.setattr(
+        rds, "transaction",
+        _fake_transaction_factory(select_row={"storage_key": None}),
+    )
 
     s3_calls = []
-    monkeypatch.setattr(rds, "_s3_delete_best_effort",
-                        lambda key: s3_calls.append(key))
+    monkeypatch.setattr(
+        "app.shared.storage_compensation.compensating_delete",
+        lambda key, **_: s3_calls.append(key),
+    )
 
     rds.delete_result("res-small")
     assert s3_calls == []
@@ -398,23 +463,66 @@ def test_save_result_blob_path_s3_upload_failure_no_db_row(mock_db, stub_storage
 
 
 def test_delete_results_for_project_cleans_all_s3_keys(monkeypatch):
-    """delete_results_for_project pulisce tutti gli S3 keys del progetto."""
-    import app.db.results_db_service as rds
+    """delete_results_for_project pulisce tutti gli S3 keys del progetto.
 
-    # fetchall ritorna 2 row con storage_key
+    Post BE-GO-READY-STORAGE-ENGINE-007: il path bulk passa per
+    `transaction()` + `record_pending` per ogni S3-backed row, poi
+    chiama `compensating_delete` + `mark_done` per outcome.
+    """
+    import app.db.results_db_service as rds
+    from contextlib import contextmanager
+
+    # fetchall ritorna 2 row con (id, storage_key) — il bulk path
+    # ora pre-fetcha anche `id` per l'extras del record_pending.
     monkeypatch.setattr(
         rds, "fetchall",
         lambda sql, args: [
-            {"storage_key": "results/p1/a.bin"},
-            {"storage_key": "results/p1/b.bin"},
+            {"id": "rA", "storage_key": "results/p1/a.bin"},
+            {"id": "rB", "storage_key": "results/p1/b.bin"},
         ],
     )
-    monkeypatch.setattr(rds, "execute",
-                        lambda sql, args: MagicMock(rowcount=2))
+
+    class _Cur:
+        def __init__(self):
+            self.rowcount = 0
+            # 2 record_pending RETURNING id rows.
+            self._fetchone_queue = [
+                {"id": "recon-rA"}, {"id": "recon-rB"},
+            ]
+        def execute(self, sql, params=()):
+            if "DELETE FROM results" in sql:
+                self.rowcount = 2
+        def fetchone(self):
+            return self._fetchone_queue.pop(0) if self._fetchone_queue else None
+        def __enter__(self):
+            return self
+        def __exit__(self, *exc):
+            return False
+
+    class _Conn:
+        def __init__(self):
+            self._cur = _Cur()
+        def cursor(self):
+            return self._cur
+
+    @contextmanager
+    def _fake_tx():
+        yield _Conn()
+
+    monkeypatch.setattr(rds, "transaction", _fake_tx)
 
     calls = []
-    monkeypatch.setattr(rds, "_s3_delete_best_effort",
-                        lambda key: calls.append(key))
+    monkeypatch.setattr(
+        "app.shared.storage_compensation.compensating_delete",
+        lambda key, **_: calls.append(key) or "ok",
+    )
+    monkeypatch.setattr(
+        "app.shared.storage_reconciliation.mark_done", lambda rid: None
+    )
+    monkeypatch.setattr(
+        "app.shared.storage_reconciliation.mark_failed_attempt",
+        lambda rid, **_: None,
+    )
 
     deleted = rds.delete_results_for_project("p1")
     assert deleted == 2

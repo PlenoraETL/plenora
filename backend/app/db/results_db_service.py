@@ -211,39 +211,181 @@ def _s3_delete_best_effort(storage_key: str) -> None:
 
 
 def delete_result(result_id: str) -> bool:
-    """Elimina result. Se S3-backed, pulisce anche l'oggetto S3 (best-effort)."""
-    # Prima leggo il record per sapere se e' S3-backed.
-    row = fetchone(
-        "SELECT storage_key FROM results WHERE id = ?",
-        (result_id,),
-    )
-    cur = execute("DELETE FROM results WHERE id = ?", (result_id,))
-    deleted = cur.rowcount > 0
-    if deleted and row and row.get("storage_key"):
-        _s3_delete_best_effort(row["storage_key"])
+    """Elimina result. Se S3-backed, pulisce anche l'oggetto S3 (best-effort).
+
+    Flow (BE-GO-READY-STORAGE-ENGINE-007 — W1 race coverage):
+
+      1. `transaction()`: SELECT storage_key + DELETE row + (se
+         S3-backed) `record_pending` ⇒ tutto atomico.
+      2. Commit (uscita CM): row DB sparita + entry pending nel
+         reconciliation log.
+      3. `compensating_delete` (best-effort, fuori transazione).
+      4. Outcome:
+         - `ok`/`skipped` ⇒ `mark_done(reconciliation_ref.id)`;
+         - `failed` ⇒ `mark_failed_attempt(...)` ⇒ il reconciler
+           beat hook (BE-GO-READY-STORAGE-ENGINE-006) re-tenterà
+           secondo backoff esponenziale, fino a `mark_lost`.
+
+    ADR-0011 contract preservato: storage failure NON propaga; la
+    row DB resta cancellata. La differenza vs pre-batch 007 e' che
+    l'orphan e' ora **tracked** + retry-able.
+
+    Backward-compat: row con `storage_key=None` (BYTEA legacy) salta
+    `record_pending` e il post-commit cleanup — comportamento
+    invariato.
+    """
+    storage_key_to_clean = None
+    deleted = False
+    reconciliation_ref = None
+
+    with transaction() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT storage_key FROM results WHERE id = %s FOR UPDATE",
+                (result_id,),
+            )
+            row = cur.fetchone()
+            storage_key = row["storage_key"] if row else None
+
+            if storage_key:
+                storage_key_to_clean = storage_key
+                # BE-GO-READY-STORAGE-ENGINE-007: record cleanup intent
+                # inside the same transaction as the DELETE. Commit
+                # advances both atomically; if a process death follows
+                # the commit before the post-commit storage call, the
+                # pending row is the only application-side trace of
+                # the orphan. Order canonical W1 (allineato a
+                # `delete_file_source`): record_pending PRECEDE DELETE.
+                from app.shared.storage_reconciliation import (
+                    record_pending,
+                )
+                reconciliation_ref = record_pending(
+                    cur,
+                    domain="result_blob",
+                    storage_key=storage_key,
+                    operation="delete",
+                    reason="row_delete_post_commit",
+                    extras={"result_id": result_id},
+                )
+
+            cur.execute("DELETE FROM results WHERE id = %s", (result_id,))
+            deleted = cur.rowcount > 0
+
+    if deleted and storage_key_to_clean:
+        from app.shared.storage_compensation import compensating_delete
+        outcome = compensating_delete(
+            storage_key_to_clean,
+            domain="result_blob",
+            reason="row_delete_post_commit",
+            extras={"result_id": result_id},
+            logger=logger,
+        )
+        if reconciliation_ref is not None:
+            from app.shared.storage_reconciliation import (
+                mark_done,
+                mark_failed_attempt,
+            )
+            if outcome in ("ok", "skipped"):
+                mark_done(reconciliation_ref.id)
+            else:
+                # outcome == "failed": ADR-0011 posture preserved
+                # (orphan accepted, DB row stays deleted), but now
+                # persisted for the reconciler beat hook (batch 006).
+                mark_failed_attempt(
+                    reconciliation_ref.id,
+                    error=f"compensating_delete_outcome={outcome}",
+                )
+
     return deleted
 
 
 def delete_results_for_project(project_id: str) -> int:
-    """Elimina tutti i risultati di un progetto. Ritorna il numero di righe eliminate.
+    """Elimina tutti i risultati di un progetto. Ritorna il numero di
+    righe eliminate.
 
-    FS-4: pulisce anche gli oggetti S3 dei record S3-backed (best-effort).
+    Flow (BE-GO-READY-STORAGE-ENGINE-007): pattern bulk W1.
+      1. Pre-fetch `(id, storage_key)` di tutti gli S3-backed.
+      2. `transaction()`: per ognuno `record_pending` + DELETE row.
+      3. Post-commit: per ogni reconciliation_ref, `compensating_delete`
+         + `mark_done`/`mark_failed_attempt` per outcome.
+
+    L'INSERT N pending + DELETE all WHERE project_id=? e' atomico: o
+    si committano TUTTE le pending entries con la cancellazione, o
+    nessuna (rollback). Cosi' il reconciler beat hook puo' coprire
+    la finestra "DB committed → process death → S3 orphan" anche
+    sulla bulk path.
+
+    ADR-0011 preservato: storage failure NON propaga. Il caller
+    riceve sempre il `rowcount` finale.
     """
-    # Pre-fetch storage_keys prima del DELETE cascata.
-    s3_keys = [
-        r["storage_key"]
-        for r in fetchall(
-            "SELECT storage_key FROM results "
+    # Pre-fetch storage_keys + result_id prima del DELETE cascata.
+    rows = [
+        r for r in fetchall(
+            "SELECT id, storage_key FROM results "
             "WHERE project_id = ? AND storage_key IS NOT NULL",
             (project_id,),
         )
         if r.get("storage_key")
     ]
-    cur = execute("DELETE FROM results WHERE project_id = ?", (project_id,))
-    # Cleanup S3 dopo DELETE ok (anche se uno fallisce, altri provano)
-    for key in s3_keys:
-        _s3_delete_best_effort(key)
-    return cur.rowcount
+
+    deleted_count = 0
+    # (storage_key, result_id, reconciliation_id) per il post-commit.
+    pending_cleanups: List[tuple] = []
+
+    with transaction() as conn:
+        with conn.cursor() as cur:
+            if rows:
+                from app.shared.storage_reconciliation import (
+                    record_pending,
+                )
+                for r in rows:
+                    ref = record_pending(
+                        cur,
+                        domain="result_blob",
+                        storage_key=r["storage_key"],
+                        operation="delete",
+                        reason="row_delete_post_commit",
+                        extras={
+                            "result_id": r["id"],
+                            "project_id": project_id,
+                        },
+                    )
+                    pending_cleanups.append(
+                        (r["storage_key"], r["id"], ref.id)
+                    )
+
+            cur.execute(
+                "DELETE FROM results WHERE project_id = %s", (project_id,)
+            )
+            deleted_count = cur.rowcount
+
+    # Cleanup S3 dopo DELETE ok (anche se uno fallisce, altri provano).
+    if pending_cleanups:
+        from app.shared.storage_compensation import compensating_delete
+        from app.shared.storage_reconciliation import (
+            mark_done,
+            mark_failed_attempt,
+        )
+        for storage_key, result_id, reconciliation_id in pending_cleanups:
+            outcome = compensating_delete(
+                storage_key,
+                domain="result_blob",
+                reason="row_delete_post_commit",
+                extras={
+                    "result_id": result_id,
+                    "project_id": project_id,
+                },
+                logger=logger,
+            )
+            if outcome in ("ok", "skipped"):
+                mark_done(reconciliation_id)
+            else:
+                mark_failed_attempt(
+                    reconciliation_id,
+                    error=f"compensating_delete_outcome={outcome}",
+                )
+
+    return deleted_count
 
 
 # ============================================================
