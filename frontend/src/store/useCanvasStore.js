@@ -21,7 +21,19 @@ import { serializeCanvas } from '../utils/canvasSerializer';
 
 const useCanvasStore = create(
   devtools(
-    (set, get) => ({
+    (set, get) => {
+
+      // Helper privato: user-edit marca dirty E svuota gli highlight
+      // di validazione post-validation (amber borders). Evita churn
+      // su subscriber se gli highlight sono gia' vuoti.
+      const dirtyAndClearHighlights = () => {
+        const { validationHighlights } = get();
+        return validationHighlights.length > 0
+          ? { isDirty: true, validationHighlights: [] }
+          : { isDirty: true };
+      };
+
+      return {
 
       // ─────────────────────────────────────────────
       // STATE
@@ -79,7 +91,9 @@ const useCanvasStore = create(
        * ID dei nodi con issue di validazione. Popolato da ResultNode dopo
        * ogni `runValidation()` (manuale, execute, preview). Consumato dagli
        * editor (Manipola/Arricchisci) per applicare un outline amber sui
-       * nodi problematici. Si svuota al prossimo validation pass riuscito.
+       * nodi problematici. Si svuota:
+       *  - al prossimo validation pass riuscito (ResultNode);
+       *  - automaticamente su user edit (via `dirtyAndClearHighlights`).
        */
       validationHighlights: [],
 
@@ -165,7 +179,7 @@ const useCanvasStore = create(
         set(
           state => ({
             nodes: applyNodeChanges(changes, state.nodes),
-            ...(relevant ? { isDirty: true } : {})
+            ...(relevant ? dirtyAndClearHighlights() : {})
           }),
           false,
           'onNodesChange'
@@ -189,7 +203,7 @@ const useCanvasStore = create(
         set(
           state => ({
             edges: applyEdgeChanges(changes, state.edges),
-            ...(relevant ? { isDirty: true } : {})
+            ...(relevant ? dirtyAndClearHighlights() : {})
           }),
           false,
           'onEdgesChange'
@@ -226,7 +240,7 @@ const useCanvasStore = create(
               || newNodes.some(n => !oldIds.has(n.id));
             return {
               nodes: newNodes,
-              ...(structural && !state.isReadOnly ? { isDirty: true } : {})
+              ...(structural && !state.isReadOnly ? dirtyAndClearHighlights() : {})
             };
           },
           false,
@@ -242,7 +256,7 @@ const useCanvasStore = create(
               || newEdges.some(e => !oldIds.has(e.id));
             return {
               edges: newEdges,
-              ...(structural && !state.isReadOnly ? { isDirty: true } : {})
+              ...(structural && !state.isReadOnly ? dirtyAndClearHighlights() : {})
             };
           },
           false,
@@ -262,7 +276,7 @@ const useCanvasStore = create(
             nodes: state.nodes.map(n =>
               n.id === nodeId ? { ...n, data: { ...n.data, ...updates } } : n
             ),
-            isDirty: true
+            ...dirtyAndClearHighlights()
           }),
           false,
           'updateNodeData'
@@ -279,7 +293,7 @@ const useCanvasStore = create(
           state => ({
             nodes: state.nodes.filter(n => n.id !== nodeId),
             edges: state.edges.filter(e => e.source !== nodeId && e.target !== nodeId),
-            isDirty: true
+            ...dirtyAndClearHighlights()
           }),
           false,
           'deleteNode'
@@ -297,7 +311,7 @@ const useCanvasStore = create(
               cols[columnIndex] = { ...cols[columnIndex], visible: !cols[columnIndex].visible };
               return { ...n, data: { ...n.data, columns: cols } };
             }),
-            isDirty: true
+            ...dirtyAndClearHighlights()
           }),
           false,
           'toggleColumn'
@@ -319,7 +333,7 @@ const useCanvasStore = create(
                 }
               };
             }),
-            isDirty: true
+            ...dirtyAndClearHighlights()
           }),
           false,
           'toggleAllColumns'
@@ -341,7 +355,7 @@ const useCanvasStore = create(
                 }
               };
             }),
-            isDirty: true
+            ...dirtyAndClearHighlights()
           }),
           false,
           'addCalculatedColumn'
@@ -363,7 +377,7 @@ const useCanvasStore = create(
                 }
               };
             }),
-            isDirty: true
+            ...dirtyAndClearHighlights()
           }),
           false,
           'removeCalculatedColumn'
@@ -381,7 +395,7 @@ const useCanvasStore = create(
               cols[columnIndex] = { ...cols[columnIndex], alias: newAlias };
               return { ...n, data: { ...n.data, columns: cols } };
             }),
-            isDirty: true
+            ...dirtyAndClearHighlights()
           }),
           false,
           'updateColumnAlias'
@@ -434,7 +448,8 @@ const useCanvasStore = create(
       /** Snapshot nodes/edges correnti (utile per evitare stale closure) */
       getCanvas: () => ({ nodes: get().nodes, edges: get().edges }),
 
-    }),
+    };
+    },
     { name: 'UrbyETL-Canvas' }
   )
 );
