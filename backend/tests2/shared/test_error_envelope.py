@@ -390,7 +390,158 @@ def test_main_py_registers_envelope_handlers():
     src = main_py.read_text(encoding="utf-8")
     assert "@app.exception_handler(Exception)" in src
     assert "@app.exception_handler(StarletteHTTPException)" in src
+    assert "@app.exception_handler(RequestValidationError)" in src
     assert "@app.exception_handler(CanvasCorruptedError)" in src
     # Helper imports
     assert "from app.shared.error_envelope import" in src
     assert "from app.shared import error_codes" in src
+    # RequestValidationError import from FastAPI for the new 422 handler
+    assert "from fastapi.exceptions import RequestValidationError" in src
+
+
+# ---------------------------------------------------------------------------
+# 5. RequestValidationError (422) — BE-GO-READY-ERROR-CONTRACT-004
+# ---------------------------------------------------------------------------
+#
+# Lock i requirement del batch 004:
+# 1. invalid body → status 422
+# 2. top-level error == "validation_error"
+# 3. top-level message == "Dati richiesta non validi"
+# 4. details.errors lista non vuota con loc/msg/type
+# 5. detail mirror presente con error/message/details
+# 6. detail.errors espone la lista direttamente (compat FE)
+# 7. request_id NOT duplicated in body
+# 8. (vedi test_main_py_registers_envelope_handlers per la
+#    source-bound check del registration)
+
+
+@pytest.fixture
+def validation_app() -> FastAPI:
+    """Mini-app FastAPI con il NUOVO `RequestValidationError`
+    handler wired (BE-GO-READY-ERROR-CONTRACT-004). Replica la
+    logica di `app/main.py` senza dipendere dall'app produttiva.
+    """
+    from fastapi.exceptions import RequestValidationError
+    from pydantic import BaseModel
+
+    app = FastAPI()
+
+    @app.exception_handler(RequestValidationError)
+    async def _validation(request, exc):
+        errors_list = [
+            {
+                "loc": list(err.get("loc", [])),
+                "msg": str(err.get("msg", "")),
+                "type": str(err.get("type", "")),
+            }
+            for err in exc.errors()
+        ]
+        body = build_error_envelope_body(
+            error=error_codes.VALIDATION_ERROR,
+            message="Dati richiesta non validi",
+            details={"errors": errors_list},
+        )
+        body["detail"]["errors"] = errors_list
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=422, content=body)
+
+    class Item(BaseModel):
+        name: str
+        qty: int
+
+    @app.post("/items")
+    def create_item(item: Item):
+        return {"ok": True, "item": item.model_dump()}
+
+    @app.get("/search")
+    def search(q: str):  # noqa: ARG001
+        return {"ok": True}
+
+    return app
+
+
+def _vclient(validation_app):
+    return TestClient(validation_app, raise_server_exceptions=False)
+
+
+def test_validation_invalid_body_returns_422(validation_app):
+    r = _vclient(validation_app).post("/items", json={"name": "x"})
+    assert r.status_code == 422
+
+
+def test_validation_envelope_top_level_error_code(validation_app):
+    r = _vclient(validation_app).post("/items", json={"name": "x"})
+    body = r.json()
+    assert body["error"] == "validation_error"
+
+
+def test_validation_envelope_top_level_message_italian(validation_app):
+    r = _vclient(validation_app).post("/items", json={"name": "x"})
+    assert r.json()["message"] == "Dati richiesta non validi"
+
+
+def test_validation_envelope_details_errors_is_non_empty_list(validation_app):
+    r = _vclient(validation_app).post("/items", json={"name": "x"})
+    errors = r.json()["details"]["errors"]
+    assert isinstance(errors, list)
+    assert len(errors) >= 1
+    first = errors[0]
+    assert set(first.keys()) == {"loc", "msg", "type"}
+    assert isinstance(first["loc"], list)
+    assert isinstance(first["msg"], str)
+    assert isinstance(first["type"], str)
+
+
+def test_validation_envelope_dual_shape_detail_mirror_present(validation_app):
+    r = _vclient(validation_app).post("/items", json={"name": "x"})
+    body = r.json()
+    detail = body["detail"]
+    assert detail["error"] == "validation_error"
+    assert detail["message"] == "Dati richiesta non validi"
+    assert "details" in detail and "errors" in detail["details"]
+
+
+def test_validation_envelope_detail_errors_legacy_compat_list(validation_app):
+    """Compat FE: `detail.errors` espone la stessa lista di
+    `details.errors` come scorciatoia per consumer non migrati al
+    top-level `details.errors`."""
+    r = _vclient(validation_app).post("/items", json={"name": "x"})
+    body = r.json()
+    assert body["detail"]["errors"] == body["details"]["errors"]
+    # E' iterabile come lista (mirror della FastAPI default 422)
+    assert isinstance(body["detail"]["errors"], list)
+
+
+def test_validation_envelope_does_not_contain_request_id(validation_app):
+    r = _vclient(validation_app).post("/items", json={"name": "x"})
+    body = r.json()
+    flat = str(body)
+    assert "request_id" not in body
+    assert "X-Request-ID" not in flat
+
+
+def test_validation_query_param_missing_yields_envelope(validation_app):
+    """422 anche per query params mancanti — non solo body."""
+    r = _vclient(validation_app).get("/search")
+    assert r.status_code == 422
+    body = r.json()
+    assert body["error"] == "validation_error"
+    locs = [tuple(e["loc"]) for e in body["details"]["errors"]]
+    assert any("q" in loc for loc in locs)
+
+
+def test_validation_strips_input_field_from_errors(validation_app):
+    """L'handler sanifica le entry: solo `loc`/`msg`/`type` in
+    output. `input` (potenzialmente PII / secret) viene scartato.
+    """
+    r = _vclient(validation_app).post(
+        "/items",
+        json={"name": "x", "qty": "non-int-secret-value"},
+    )
+    body = r.json()
+    for err in body["details"]["errors"]:
+        assert "input" not in err
+        assert "ctx" not in err
+    for err in body["detail"]["errors"]:
+        assert "input" not in err
+        assert "ctx" not in err

@@ -168,14 +168,13 @@ function ProjectList() {
       // 500 project_cleanup_partial (Batch 9 C6): cascade cleanup cross-DB
       // fallita su step critici. Invariante: `project_preserved:true` → il
       // progetto e' ancora presente, l'utente puo' ritentare.
+      // Preferisce err.code (new envelope) con fallback a detail.error (legacy).
       const detail = err?.response?.data?.detail;
-      if (
-        err?.response?.status === 500 &&
-        detail && typeof detail === 'object' &&
-        detail.error === 'project_cleanup_partial'
-      ) {
+      const errorCode = err?.code || (detail && typeof detail === 'object' ? detail.error : null);
+      if (err?.response?.status === 500 && errorCode === 'project_cleanup_partial') {
+        const cleanupMsg = (detail && typeof detail === 'object' ? detail.message : null) || err.message || 'cleanup parziale';
         toast.error(
-          `Impossibile eliminare "${name}": ${detail.message || 'cleanup parziale'}. Ritenta o contatta admin.`,
+          `Impossibile eliminare "${name}": ${cleanupMsg}. Ritenta o contatta admin.`,
           10000
         );
         return;

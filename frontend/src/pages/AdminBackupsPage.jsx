@@ -37,18 +37,21 @@ import '../styles/AdminBackupsPage.css';
 //         un toast effimero che scompare e lascia l'utente nel buio.
 
 function extractErrorMessage(err) {
-  // axios error -> response.data.detail (string | object)
+  // Preferisce err.message (gia' normalizzato dall'interceptor http.js).
+  // Fallback a detail per shape legacy non ancora migrata.
+  if (typeof err?.message === 'string' && err.message.trim()) return err.message;
   const detail = err?.response?.data?.detail;
   if (typeof detail === 'string' && detail.trim()) return detail;
   if (detail && typeof detail === 'object') {
     if (typeof detail.message === 'string' && detail.message.trim()) return detail.message;
-    if (typeof detail.error === 'string' && detail.error.trim()) return detail.error;
   }
-  if (typeof err?.message === 'string' && err.message.trim()) return err.message;
   return 'Errore generico';
 }
 
 function extractErrorCode(err) {
+  // Preferisce err.code (attaccato dall'interceptor da data.error).
+  // Fallback a detail.error per shape legacy.
+  if (typeof err?.code === 'string') return err.code;
   const detail = err?.response?.data?.detail;
   if (detail && typeof detail === 'object' && typeof detail.error === 'string') {
     return detail.error;

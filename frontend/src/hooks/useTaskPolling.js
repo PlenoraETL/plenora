@@ -68,7 +68,7 @@ export function useTaskPolling({ interval = 1000 } = {}) {
         if (done) stopPolling();
       } catch (e) {
         // 404 = task non ancora registrato, aspetta il prossimo poll
-        if (e.message && e.message.includes('non trovato')) return;
+        if (e.response?.status === 404) return;
         if (onError) {
           const stop = onError(e);
           if (stop) stopPolling();

@@ -40,6 +40,10 @@ INTERNAL_ERROR = "internal_error"
 CANVAS_CORRUPTED = "canvas_corrupted"
 """Canvas DB-side corrotto/non parsabile (status 500)."""
 
+VALIDATION_ERROR = "validation_error"
+"""Errore di validazione richiesta (status 422). Mappato su
+`RequestValidationError` di FastAPI/Pydantic."""
+
 
 def http_status_code(status_code: int) -> str:
     """Genera il codice generico `http_<status>` per

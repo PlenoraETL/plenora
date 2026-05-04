@@ -106,7 +106,7 @@ export function useExecution(projectId, options = {}) {
         }
       } catch (e) {
         // 404 = task non ancora registrato, aspetta il prossimo poll
-        if (e.message && e.message.includes('non trovato')) return;
+        if (e.response?.status === 404) return;
         console.error('[useExecution] Errore polling CARICA:', e);
       }
     };

@@ -163,7 +163,7 @@ describe('useTaskPolling', () => {
 
   it('errore 404 ("non trovato"): silenzioso, continua a pollare', async () => {
     getTaskStatusMock
-      .mockRejectedValueOnce(new Error('Task non trovato'))
+      .mockRejectedValueOnce(Object.assign(new Error('Task non trovato'), { response: { status: 404 } }))
       .mockResolvedValueOnce({ status: 'success' });
 
     const onStatus = vi.fn((d) => d.status === 'success');

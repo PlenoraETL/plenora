@@ -123,11 +123,13 @@ app.add_middleware(RequestIdMiddleware)
 # (BE-GO-READY-ERROR-CONTRACT-002) e header CORS anche su eccezioni
 # non gestite.
 from fastapi import Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.shared import error_codes
 from app.shared.error_envelope import (
+    build_error_envelope_body,
     build_error_response,
     normalize_http_exception_detail,
 )
@@ -189,6 +191,52 @@ async def http_exception_handler(
         message=norm["message"],
         details=norm["details"],
         headers=base_headers,
+    )
+
+
+# Handler per RequestValidationError (Pydantic 422):
+# trasforma la shape FastAPI default `{"detail": [{loc, msg, type}, ...]}`
+# in envelope dual-shape go-ready preservando la lista validation
+# errors. Compat FE: `detail.errors` espone direttamente la lista
+# per consumer non migrati al top-level `details.errors`.
+#
+# Logging: 422 e' un client error. NESSUN `logger.error`/`warning`:
+# evitiamo rumore sui dashboard di metric server-side. La FastAPI
+# default non logga; manteniamo lo stesso silenzio.
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(
+    request: Request, exc: RequestValidationError,
+):
+    # Sanifica le entry: tieni solo `loc`, `msg`, `type` (campi
+    # gia' presenti nella shape FastAPI default). Scarta `ctx` e
+    # `input` per evitare di echo-are valori potenzialmente
+    # sensibili (PII, secrets, payload utente) nella response.
+    errors_list = [
+        {
+            "loc": list(err.get("loc", [])),
+            "msg": str(err.get("msg", "")),
+            "type": str(err.get("type", "")),
+        }
+        for err in exc.errors()
+    ]
+
+    # Costruisci l'envelope canonico dual-shape e poi aggiungi
+    # `errors` come campo top-level del mirror `detail` per
+    # backward compat con FE non migrato al top-level
+    # `response.json().details.errors`.
+    # Il helper resta puro e canonico; la patch `detail.errors`
+    # vive qui perche' e' un compat-shim 422-specifico.
+    body = build_error_envelope_body(
+        error=error_codes.VALIDATION_ERROR,
+        message="Dati richiesta non validi",
+        details={"errors": errors_list},
+    )
+    body["detail"]["errors"] = errors_list
+
+    return JSONResponse(
+        status_code=422,
+        content=body,
+        headers=_cors_headers_for(request),
     )
 
 
