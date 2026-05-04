@@ -487,6 +487,11 @@ class SchemaInferenceService:
             "melt": lambda i, c, n: self._schema_melt(i, c, n),
             "statistics": lambda i, c, n: self._schema_statistics(i, c, n),
             "window_function": lambda i, c, n: self._schema_window_function(i, c, n),
+            # batch 7 (BE-PHASE2-SCHEMA-INFER-009-ZERO-RESIDUALS) —
+            # config-explicit schema contracts; safe deterministic
+            # fallback (passthrough) when `output_columns` is absent.
+            "flatten_json": lambda i, c, n: self._schema_flatten_json(i, c, n),
+            "transpose": lambda i, c, n: self._schema_transpose(i, c, n),
             # DISPATCH-REGISTRY:end
         }
     
@@ -2752,6 +2757,171 @@ class SchemaInferenceService:
             is_calculated=True,
         ))
         return result
+
+    # =========================================================================
+    # BATCH 7 — BE-PHASE2-SCHEMA-INFER-009-ZERO-RESIDUALS
+    # =========================================================================
+    # Handler dedicati per i 2 transform precedentemente classificati
+    # `MIGRATE_NEXT_NEEDS_RUNTIME_CONTRACT` (output dipendente dai dati).
+    # La direzione e' config-explicit: l'utente dichiara lo schema atteso
+    # via `output_columns`. Quando il contratto e' assente, fallback
+    # deterministico a passthrough (NON sampling, NON I/O).
+    #
+    # Forma del contratto `output_columns` (accettata in entrambe le
+    # forme, mixed allowed):
+    # - `List[str]`     : ogni stringa diventa una colonna `str`;
+    # - `List[{name, type}]`: tipo letto da `type`, default `str` se
+    #   vuoto/missing.
+    # Entry malformate (None, dict senza `name`, non-str/non-dict)
+    # vengono saltate (mirror della no-throw policy degli altri handler).
+
+    def _schema_flatten_json(
+        self,
+        input_schemas: List[List[ColumnSchema]],
+        config: dict,
+        node_id: str,
+    ) -> List[ColumnSchema]:
+        """flatten_json: input + N colonne dichiarate via `output_columns`.
+
+        Runtime: `op_flatten_json` (analysis.py) espande le chiavi del
+        dict parsato (data-dependent). Il contratto schema-inference
+        e' invece **config-explicit** (BE-PHASE2-SCHEMA-INFER-009):
+        l'utente dichiara le chiavi attese tramite
+        `config["output_columns"]`. Le chiavi dichiarate vengono
+        prefissate da `prefix` o, se assente, da `f"{column}_"`
+        (allineato al runtime `col_prefix = prefix or f"{column}_"`).
+
+        Fallback deterministico: se `output_columns` e' assente o
+        vuota, lo schema dichiarato e' il passthrough dell'input
+        (mirror del runtime no-op + warning, e mirror del fallback
+        pre-009 che restava in `_schema_passthrough`).
+
+        Collisioni con colonne esistenti: skip (no duplicate),
+        allineato al pattern di tutti gli handler additivi.
+        """
+        if not input_schemas:
+            return []
+        result = self._copy_schema(input_schemas[0], node_id)
+        output_cols = self._normalize_output_columns(config.get("output_columns"))
+        if not output_cols:
+            return result
+
+        existing = {c.name for c in result}
+        column = config.get("column") or ""
+        prefix = config.get("prefix") or (f"{column}_" if column else "")
+        for entry in output_cols:
+            name = entry["name"]
+            full_name = f"{prefix}{name}" if prefix else name
+            if not full_name or full_name in existing:
+                continue
+            result.append(ColumnSchema(
+                name=full_name,
+                type=entry["type"],
+                source_node=node_id,
+                is_calculated=True,
+            ))
+            existing.add(full_name)
+        return result
+
+    def _schema_transpose(
+        self,
+        input_schemas: List[List[ColumnSchema]],
+        config: dict,
+        node_id: str,
+    ) -> List[ColumnSchema]:
+        """transpose: schema dichiarato via `output_columns`.
+
+        Runtime: `op_transpose` (reshape.py) traspone le righe in
+        colonne; i nomi delle nuove colonne dipendono dai valori
+        della colonna `id_column` (data-dependent) o sono
+        `f"col_{i}"` con N runtime-dependent. Il contratto
+        schema-inference e' **config-explicit**: l'utente dichiara
+        le colonne output attese tramite `config["output_columns"]`.
+
+        Output:
+        - se `id_column` e' specificata e presente nell'input, e'
+          preservata in testa col tipo originale (mirror del runtime
+          `result.rename(columns={"index": id_column})`);
+        - tutte le entry di `output_columns` vengono aggiunte come
+          colonne dichiarate.
+
+        Fallback deterministico: se `output_columns` e' assente o
+        vuota, lo schema dichiarato e' il passthrough dell'input.
+        """
+        if not input_schemas:
+            return []
+        output_cols = self._normalize_output_columns(config.get("output_columns"))
+        if not output_cols:
+            return self._copy_schema(input_schemas[0], node_id)
+
+        input_by_name = {c.name: c for c in input_schemas[0]}
+        result: List[ColumnSchema] = []
+        seen: set = set()
+
+        id_column = config.get("id_column") or ""
+        if id_column and id_column in input_by_name:
+            col = input_by_name[id_column]
+            result.append(ColumnSchema(
+                name=id_column,
+                type=col.type,
+                source_node=node_id,
+                is_calculated=False,
+            ))
+            seen.add(id_column)
+
+        for entry in output_cols:
+            name = entry["name"]
+            if not name or name in seen:
+                continue
+            result.append(ColumnSchema(
+                name=name,
+                type=entry["type"],
+                source_node=node_id,
+                is_calculated=True,
+            ))
+            seen.add(name)
+        return result
+
+    def _normalize_output_columns(
+        self,
+        raw,
+    ) -> List[Dict[str, str]]:
+        """Helper: normalizza `output_columns` in `List[{name, type}]`.
+
+        Accetta:
+        - `None` / non-list/non-str → `[]`;
+        - `str` singolo non vuoto → `[{name: <s>, type: 'str'}]`;
+        - `list` mista di:
+          - `str` non vuoti → `{name, type: 'str'}`;
+          - `dict` con `name` non vuoto → `{name, type: dict.type or 'str'}`;
+          - altri valori (None, dict senza name, non-str/non-dict) → skip.
+
+        Tipi non validati: il FE puo' inviare qualunque stringa per
+        `type`. Default `'str'` per entry vuote/missing — coerente
+        col pattern del registry per i nuovi field di nominazione.
+        """
+        if raw is None:
+            return []
+        if isinstance(raw, str):
+            s = raw.strip()
+            return [{"name": s, "type": "str"}] if s else []
+        if not isinstance(raw, list):
+            return []
+
+        out: List[Dict[str, str]] = []
+        for entry in raw:
+            if isinstance(entry, str):
+                s = entry.strip()
+                if s:
+                    out.append({"name": s, "type": "str"})
+            elif isinstance(entry, dict):
+                name = str(entry.get("name") or "").strip()
+                if not name:
+                    continue
+                type_ = str(entry.get("type") or "").strip() or "str"
+                out.append({"name": name, "type": type_})
+            # else: skip non-str/non-dict entries
+        return out
 
     def _normalize_str_list(self, raw) -> List[str]:
         """Helper: normalizza un valore di config in lista di stringhe.

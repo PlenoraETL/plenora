@@ -135,57 +135,49 @@ EXPECTED_DISPATCHER_BRANCHES: Set[str] = {
     "geo_symmetric_difference", "geo_nearest", "lookup",
     # BE-PHASE2-SCHEMA-INFER-007 batch 6
     "table_diff", "melt", "statistics", "window_function",
+    # BE-PHASE2-SCHEMA-INFER-009-ZERO-RESIDUALS batch 7
+    "flatten_json", "transpose",
 }
 
 # Transform IDs nel registry che ALTERANO lo schema (aggiungono/rimuovono
 # colonne, cambiano tipi). Il passthrough produce schema FE sbagliato.
-# Drift target: ogni voce qui serve di un metodo `_schema_xxx` dedicato
-# in `_infer_transform_schema`.
-PASSTHROUGH_WRONG_GAP: Set[str] = {
-    # BE-PHASE2-SCHEMA-INFER-002 batch 1 ha promosso (rimossi):
-    #   add_row_number, uuid_generator, string_length, date_extract,
-    #   geo_distance, geo_to_wkt
-    # BE-PHASE2-SCHEMA-INFER-003 batch 2 ha promosso (rimossi):
-    #   geo_length, geo_perimeter, geo_vertex_count, string_extract,
-    #   bin, string_pad
-    # BE-PHASE2-SCHEMA-INFER-004 batch 3 ha promosso (rimossi):
-    #   geo_bounds_extractor, geo_count_points_in_polygons,
-    #   geo_line_builder, geo_polygon_builder, geo_point_on_surface,
-    #   geo_boundary
-    # BE-PHASE2-SCHEMA-INFER-005 batch 4 ha promosso a dispatcher
-    # (rimossi): reorder_columns, geo_voronoi.
-    # BE-PHASE2-SCHEMA-INFER-005 batch 4 ha riclassificato a
-    # PASSTHROUGH_OK_GAP (rimossi): dedup_advanced, geo_clean_topology,
-    # geo_make_valid, geo_explode.
-    # BE-PHASE2-SCHEMA-INFER-006 batch 5 ha promosso a dispatcher
-    # (rimossi): cross_join, geo_within, geo_overlay,
-    # geo_symmetric_difference, geo_nearest, lookup.
-    # BE-PHASE2-SCHEMA-INFER-007 batch 6 ha promosso a dispatcher
-    # (rimossi): table_diff, melt, statistics, window_function.
-    # I 2 residui sono `MIGRATE_NEXT_NEEDS_RUNTIME_CONTRACT`: lo
-    # schema output dipende dai dati a runtime e non e' inferibile
-    # staticamente da input schema + config. Restano in fallback
-    # passthrough (schema announcement approssimato dal FE che vede
-    # le sole colonne LEFT — il warning runtime documenta il caso).
-    "flatten_json",         # MIGRATE_NEXT: keys derivate dai dati JSON parsati
-    "transpose",            # MIGRATE_NEXT: cols derivate dai valori delle righe
-}
+# Drift target storico: ogni voce qui serviva un metodo `_schema_xxx`
+# dedicato in `_infer_transform_schema`.
+#
+# Storia delle promozioni (tutte completate):
+# - batch 1 (BE-PHASE2-SCHEMA-INFER-002): add_row_number, uuid_generator,
+#   string_length, date_extract, geo_distance, geo_to_wkt
+# - batch 2 (BE-PHASE2-SCHEMA-INFER-003): geo_length, geo_perimeter,
+#   geo_vertex_count, string_extract, bin, string_pad
+# - batch 3 (BE-PHASE2-SCHEMA-INFER-004): geo_bounds_extractor,
+#   geo_count_points_in_polygons, geo_line_builder, geo_polygon_builder,
+#   geo_point_on_surface, geo_boundary
+# - batch 4 (BE-PHASE2-SCHEMA-INFER-005): reorder_columns, geo_voronoi
+#   (dispatcher) + dedup_advanced, geo_clean_topology, geo_make_valid,
+#   geo_explode (riclassificati a PASSTHROUGH_OK_GAP)
+# - batch 5 (BE-PHASE2-SCHEMA-INFER-006): cross_join, geo_within,
+#   geo_overlay, geo_symmetric_difference, geo_nearest, lookup
+# - batch 6 (BE-PHASE2-SCHEMA-INFER-007): table_diff, melt, statistics,
+#   window_function
+# - batch 7 (BE-PHASE2-SCHEMA-INFER-009-ZERO-RESIDUALS): flatten_json,
+#   transpose (config-explicit `output_columns` + safe passthrough
+#   fallback).
+#
+# Phase 2 chiusa: PASSTHROUGH_WRONG_GAP == set(). Lockato dai test
+# `test_phase_2_closed_with_zero_wrong_residuals` e
+# `test_passthrough_wrong_gap_size_lock` (lock count == 0).
+PASSTHROUGH_WRONG_GAP: Set[str] = set()
 
 # Transform IDs `MIGRATE_NEXT_NEEDS_RUNTIME_CONTRACT`: lo schema
-# output dipende dai dati (non solo dalla config), quindi non puo'
-# essere inferito al canvas-time. Annotati per drift-tracking.
-MIGRATE_NEXT_NEEDS_RUNTIME_CONTRACT: Set[str] = {
-    # `flatten_json`: pd.json_normalize sui valori parsati JSON. Le
-    # chiavi del dict (e quindi i nomi colonna output) vengono dai
-    # dati, non dalla config. Schema canvas-time impossibile.
-    "flatten_json",
-    # `transpose`: con `id_column` valorizzata, i valori della
-    # colonna diventano i nomi delle nuove colonne. Senza
-    # `id_column`, le colonne diventano `col_0`...`col_N` dove N
-    # dipende dal row count. Entrambi i percorsi sono
-    # data-dependent.
-    "transpose",
-}
+# output dipende dai dati (non solo dalla config) e quindi NON
+# puo' essere inferito al canvas-time.
+#
+# Phase 2 (BE-PHASE2-SCHEMA-INFER-009-ZERO-RESIDUALS) ha sostituito
+# il classifier "data-dependent" con il contratto **config-explicit**
+# `output_columns` per i 2 ex-residui (`flatten_json`, `transpose`).
+# Il set e' ora vuoto. Lockato da
+# `test_migrate_next_set_matches_residual_passthrough_wrong`.
+MIGRATE_NEXT_NEEDS_RUNTIME_CONTRACT: Set[str] = set()
 
 # Transform IDs che operano solo su righe / valori senza alterare
 # il column-set — il passthrough fallback e' funzionalmente corretto
@@ -299,9 +291,13 @@ def test_passthrough_wrong_gap_size_lock():
     # Lock attuale al BE-SCHEMA-INFER-001A baseline. Quando una
     # transform passa a dispatcher dedicato, sposta l'entry e
     # decrementa il limite (`assert actual <= N`).
-    assert actual == 2, (
+    assert actual == 0, (
         f"Gap passthrough-WRONG cambiato: {actual}. "
-        f"Aggiorna l'assert e il piano BE-SCHEMA-INFER-002+."
+        f"Phase 2 e' chiusa a zero residui dal batch "
+        f"BE-PHASE2-SCHEMA-INFER-009-ZERO-RESIDUALS. "
+        f"Se hai aggiunto un nuovo transform al registry, classificalo "
+        f"in `EXPECTED_DISPATCHER_BRANCHES` (handler dedicato) o "
+        f"`PASSTHROUGH_OK_GAP` (rows-only). NON riaprire il gap."
     )
 
 
@@ -311,10 +307,14 @@ def test_passthrough_wrong_gap_size_lock():
 
 
 def test_dispatcher_falls_back_to_passthrough_for_unknown_ops():
-    """Verifica end-to-end che un `transform_op` ancora non promosso
-    (qui un'entry reale dal gap residuo) ricada nel passthrough con
-    warning. Niente import pesanti — usiamo `SimpleNamespace` per il
-    nodo."""
+    """Verifica end-to-end che un `transform_op` non registrato
+    ricada nel passthrough con warning.
+
+    Nota post-009-ZERO-RESIDUALS: non esistono piu' `transform_op`
+    residui dal registry → questo test usa un id phantom diverso da
+    `test_dispatcher_falls_back_for_unknown_phantom_op` per mantenere
+    una doppia copertura (warning logger + schema preservato) senza
+    dipendere da entry registry."""
     from types import SimpleNamespace
     from app.services.schema_inference import (
         ColumnSchema,
@@ -329,7 +329,7 @@ def test_dispatcher_falls_back_to_passthrough_for_unknown_ops():
     node = SimpleNamespace(
         id="n1",
         config={},
-        transform_op="flatten_json",  # MIGRATE_NEXT residual entry
+        transform_op="op_residual_phantom_post_009",  # not in registry
         data=None,
     )
     out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
@@ -1987,12 +1987,26 @@ def test_migrate_next_set_matches_residual_passthrough_wrong():
     )
 
 
-@pytest.mark.parametrize("op", sorted(MIGRATE_NEXT_NEEDS_RUNTIME_CONTRACT))
+_MIGRATE_NEXT_PARAMS = (
+    sorted(MIGRATE_NEXT_NEEDS_RUNTIME_CONTRACT)
+    if MIGRATE_NEXT_NEEDS_RUNTIME_CONTRACT
+    else [pytest.param(
+        "__migrate_next_empty__",
+        marks=pytest.mark.skip(
+            reason="MIGRATE_NEXT_NEEDS_RUNTIME_CONTRACT vuoto post "
+                   "BE-PHASE2-SCHEMA-INFER-009-ZERO-RESIDUALS — Phase 2 chiusa."
+        ),
+    )]
+)
+
+
+@pytest.mark.parametrize("op", _MIGRATE_NEXT_PARAMS)
 def test_migrate_next_ops_fall_through_to_passthrough(op):
-    """I 2 transform `MIGRATE_NEXT` cadono nel fallback
-    `_schema_passthrough` (warning logger). Lo schema dichiarato e'
-    quello di LEFT — un'approssimazione esplicita, non una verita'.
-    Documentato nei commenti del set + nel report di batch."""
+    """Storico (Phase 2 pre-009): i transform `MIGRATE_NEXT`
+    ricadevano in `_schema_passthrough`. Post-009 il set e' vuoto e
+    il test e' auto-skip; la struttura resta come trap di
+    drift-detection (se qualcuno aggiunge un nuovo MIGRATE_NEXT, il
+    test torna ad eseguire e verifica il fallback)."""
     service, input_schema = _service_and_input()
     node = _node(op, {"column": "b"})
     out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
@@ -2103,3 +2117,303 @@ def test_registry_geo_overlay_dispatch_reads_how_from_config():
         _node("geo_intersection", {}), [left, right], edges_by_target={},
     )
     assert [c.name for c in out_overlay] == [c.name for c in out_intersection]
+
+
+# ---------------------------------------------------------------------------
+# 13. Behavioral tests — BE-PHASE2-SCHEMA-INFER-009-ZERO-RESIDUALS batch 7
+# ---------------------------------------------------------------------------
+#
+# 2 transform precedentemente classificati MIGRATE_NEXT
+# (data-dependent) sono ora chiusi via contratto config-explicit
+# `output_columns`:
+#   - flatten_json
+#   - transpose
+#
+# Fallback deterministico = passthrough quando il contratto e'
+# assente. Coverage: happy path (list[str], list[dict]),
+# fallback (config vuota), entry malformate skipped, prefix
+# mirroring per flatten_json, id_column-first per transpose.
+
+
+# flatten_json -------------------------------------------------------------
+
+
+def test_flatten_json_empty_config_is_passthrough():
+    """Backward compat: senza `output_columns` lo schema dichiarato
+    resta identico all'input (deterministic safe fallback)."""
+    service, input_schema = _service_and_input()
+    out = service._infer_transform_schema(
+        _node("flatten_json", {"column": "b"}),
+        [input_schema],
+        edges_by_target={},
+    )
+    assert [(c.name, c.type) for c in out] == [
+        (c.name, c.type) for c in input_schema
+    ]
+
+
+def test_flatten_json_explicit_output_columns_list_of_strings():
+    """`output_columns` come list[str] → tutte colonne `str`."""
+    service, input_schema = _service_and_input()
+    out = service._infer_transform_schema(
+        _node("flatten_json", {
+            "column": "b",
+            "output_columns": ["city", "country"],
+        }),
+        [input_schema],
+        edges_by_target={},
+    )
+    assert [c.name for c in out] == ["a", "b", "b_city", "b_country"]
+    assert all(c.type == "str" for c in out[2:])
+    assert all(c.is_calculated is True for c in out[2:])
+
+
+def test_flatten_json_explicit_output_columns_list_of_dicts():
+    """`output_columns` come list[{name, type}] → tipi tipati."""
+    service, input_schema = _service_and_input()
+    out = service._infer_transform_schema(
+        _node("flatten_json", {
+            "column": "b",
+            "output_columns": [
+                {"name": "score", "type": "real"},
+                {"name": "tier", "type": "str"},
+                {"name": "active", "type": "bool"},
+            ],
+        }),
+        [input_schema],
+        edges_by_target={},
+    )
+    assert [c.name for c in out] == ["a", "b", "b_score", "b_tier", "b_active"]
+    types = {c.name: c.type for c in out}
+    assert types["b_score"] == "real"
+    assert types["b_tier"] == "str"
+    assert types["b_active"] == "bool"
+
+
+def test_flatten_json_default_type_str_when_missing():
+    """Entry dict senza `type` o con `type` vuoto → default `str`."""
+    service, input_schema = _service_and_input()
+    out = service._infer_transform_schema(
+        _node("flatten_json", {
+            "column": "b",
+            "output_columns": [
+                {"name": "x"},
+                {"name": "y", "type": ""},
+            ],
+        }),
+        [input_schema],
+        edges_by_target={},
+    )
+    assert [c.name for c in out] == ["a", "b", "b_x", "b_y"]
+    assert all(c.type == "str" for c in out[2:])
+
+
+def test_flatten_json_malformed_entries_skipped():
+    """Entry None/non-dict-non-str/dict-senza-name vengono saltate."""
+    service, input_schema = _service_and_input()
+    out = service._infer_transform_schema(
+        _node("flatten_json", {
+            "column": "b",
+            "output_columns": [
+                "valid_one",
+                None,
+                {"name": ""},
+                {"type": "int"},  # senza name → skip
+                42,                # non-str/non-dict → skip
+                {"name": "valid_two", "type": "int"},
+            ],
+        }),
+        [input_schema],
+        edges_by_target={},
+    )
+    assert [c.name for c in out] == ["a", "b", "b_valid_one", "b_valid_two"]
+    types = {c.name: c.type for c in out}
+    assert types["b_valid_one"] == "str"
+    assert types["b_valid_two"] == "int"
+
+
+def test_flatten_json_prefix_applied_to_declared_columns():
+    """`prefix` viene anteposto ai nomi dichiarati (mirror del
+    runtime `col_prefix = prefix or f"{column}_"`)."""
+    service, input_schema = _service_and_input()
+    out = service._infer_transform_schema(
+        _node("flatten_json", {
+            "column": "b",
+            "prefix": "json_",
+            "output_columns": ["k1", "k2"],
+        }),
+        [input_schema],
+        edges_by_target={},
+    )
+    assert [c.name for c in out] == ["a", "b", "json_k1", "json_k2"]
+
+
+def test_flatten_json_default_prefix_uses_source_column_name():
+    """Se `prefix` e' vuoto, il runtime usa `f"{column}_"`;
+    lo schema deve annunciare gli stessi nomi."""
+    service, input_schema = _service_and_input()
+    out = service._infer_transform_schema(
+        _node("flatten_json", {
+            "column": "b",
+            "output_columns": ["city"],
+        }),
+        [input_schema],
+        edges_by_target={},
+    )
+    assert [c.name for c in out] == ["a", "b", "b_city"]
+
+
+def test_flatten_json_collision_skips_duplicate():
+    """Se una colonna dichiarata collide con una colonna esistente,
+    skip add (allineato al pattern di tutti gli handler additivi)."""
+    service, input_schema = _service_and_input()
+    out = service._infer_transform_schema(
+        _node("flatten_json", {
+            "column": "b",
+            "output_columns": ["a", "new_col"],  # `a` collide
+        }),
+        [input_schema],
+        edges_by_target={},
+    )
+    assert [c.name for c in out] == ["a", "b", "b_a", "b_new_col"]
+
+
+# transpose ----------------------------------------------------------------
+
+
+def test_transpose_empty_config_is_passthrough():
+    """Backward compat: senza `output_columns` lo schema dichiarato
+    resta identico all'input."""
+    service, input_schema = _service_and_input()
+    out = service._infer_transform_schema(
+        _node("transpose", {}),
+        [input_schema],
+        edges_by_target={},
+    )
+    assert [(c.name, c.type) for c in out] == [
+        (c.name, c.type) for c in input_schema
+    ]
+
+
+def test_transpose_explicit_output_columns_list_of_strings():
+    service, input_schema = _service_and_input()
+    out = service._infer_transform_schema(
+        _node("transpose", {
+            "output_columns": ["row_1", "row_2", "row_3"],
+        }),
+        [input_schema],
+        edges_by_target={},
+    )
+    assert [c.name for c in out] == ["row_1", "row_2", "row_3"]
+    assert all(c.type == "str" for c in out)
+    assert all(c.is_calculated is True for c in out)
+
+
+def test_transpose_explicit_output_columns_list_of_dicts():
+    service, input_schema = _service_and_input()
+    out = service._infer_transform_schema(
+        _node("transpose", {
+            "output_columns": [
+                {"name": "rev_2024", "type": "real"},
+                {"name": "rev_2025", "type": "real"},
+            ],
+        }),
+        [input_schema],
+        edges_by_target={},
+    )
+    assert [c.name for c in out] == ["rev_2024", "rev_2025"]
+    assert all(c.type == "real" for c in out)
+
+
+def test_transpose_id_column_preserved_first_when_present():
+    """`id_column` valida + presente nell'input → preservata come
+    prima colonna, col tipo originale (mirror runtime
+    `result.rename(columns={"index": id_column})`)."""
+    service = SchemaInferenceService(project_service=None)
+    input_schema = [
+        ColumnSchema(name="metric", type="str", source_node="s", is_calculated=False),
+        ColumnSchema(name="q1", type="real", source_node="s", is_calculated=False),
+        ColumnSchema(name="q2", type="real", source_node="s", is_calculated=False),
+    ]
+    out = service._infer_transform_schema(
+        _node("transpose", {
+            "id_column": "metric",
+            "output_columns": ["revenue", "cost"],
+        }),
+        [input_schema],
+        edges_by_target={},
+    )
+    assert [c.name for c in out] == ["metric", "revenue", "cost"]
+    metric = next(c for c in out if c.name == "metric")
+    assert metric.type == "str"
+    assert metric.is_calculated is False
+    # le altre sono dichiarate (str default), is_calculated=True
+    assert all(c.is_calculated is True for c in out[1:])
+
+
+def test_transpose_id_column_missing_from_input_is_ignored():
+    """`id_column` non presente nell'input → ignorata, output =
+    solo `output_columns` dichiarate."""
+    service, input_schema = _service_and_input()
+    out = service._infer_transform_schema(
+        _node("transpose", {
+            "id_column": "not_in_input",
+            "output_columns": ["x", "y"],
+        }),
+        [input_schema],
+        edges_by_target={},
+    )
+    assert [c.name for c in out] == ["x", "y"]
+
+
+def test_transpose_id_column_collision_with_output_dedupes():
+    """Se `id_column` e una entry di `output_columns` hanno lo
+    stesso nome, l'`id_column` (in testa) vince e l'output_columns
+    duplicata viene saltata."""
+    service = SchemaInferenceService(project_service=None)
+    input_schema = [
+        ColumnSchema(name="metric", type="str", source_node="s", is_calculated=False),
+    ]
+    out = service._infer_transform_schema(
+        _node("transpose", {
+            "id_column": "metric",
+            "output_columns": ["metric", "x"],
+        }),
+        [input_schema],
+        edges_by_target={},
+    )
+    assert [c.name for c in out] == ["metric", "x"]
+
+
+# ---------------------------------------------------------------------------
+# 14. Phase 2 closure invariants (post BE-PHASE2-SCHEMA-INFER-009)
+# ---------------------------------------------------------------------------
+
+
+def test_phase_2_closed_with_zero_wrong_residuals():
+    """Lock invariante post-009: PASSTHROUGH_WRONG_GAP e'
+    completamente vuoto. Phase 2 e' chiusa a zero residui."""
+    assert PASSTHROUGH_WRONG_GAP == set()
+
+
+def test_phase_2_closed_with_zero_migrate_next():
+    """Lock invariante post-009: MIGRATE_NEXT_NEEDS_RUNTIME_CONTRACT
+    e' vuoto. Nessun transform e' classificato come data-dependent
+    senza contratto."""
+    assert MIGRATE_NEXT_NEEDS_RUNTIME_CONTRACT == set()
+
+
+def test_registry_full_coverage_dispatcher_plus_passthrough_ok():
+    """Lock invariante: ogni transform_op del registry e' o nel
+    dispatcher (handler dedicato) o in PASSTHROUGH_OK_GAP (rows-only
+    handled by fallback). Nessuna entry registry resta non
+    classificata."""
+    registry = _load_registry_ids()
+    classified = (
+        (EXPECTED_DISPATCHER_BRANCHES & registry)
+        | PASSTHROUGH_OK_GAP
+    )
+    assert registry == classified, (
+        f"Registry coverage incompleto. "
+        f"Non classificati: {registry - classified}."
+    )
