@@ -293,7 +293,7 @@ class FeaturesService:
     
     def create_connection(self, data: ArcGISCreate, group_id: str = "default",
                           created_by: str = None) -> ArcGISConnection:
-        """Crea nuova connessione ArcGIS su SQLite (assegnata al group_id dato)."""
+        """Crea nuova connessione ArcGIS nel DB (assegnata al group_id dato)."""
         return create_connection_db(data, group_id=group_id, created_by=created_by)
 
     def list_connections(self, group_id: Optional[str] = None) -> ArcGISList:
@@ -301,15 +301,15 @@ class FeaturesService:
         return list_connections_db(group_id=group_id)
     
     def get_connection(self, connection_id: str) -> Optional[ArcGISConnection]:
-        """Ottieni connessione per ID da SQLite."""
+        """Ottieni connessione per ID dal DB."""
         return get_connection_db(connection_id)
     
     def update_connection(self, connection_id: str, data: ArcGISUpdate) -> Optional[ArcGISConnection]:
-        """Aggiorna connessione esistente su SQLite."""
+        """Aggiorna connessione esistente nel DB."""
         return update_connection_db(connection_id, data)
     
     def delete_connection(self, connection_id: str) -> bool:
-        """Elimina connessione da SQLite."""
+        """Elimina connessione dal DB."""
         return delete_connection_db(connection_id)
     
     def test_connection(self, connection_id: str) -> ArcGISTestResult:

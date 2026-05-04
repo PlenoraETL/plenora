@@ -260,6 +260,17 @@ class Settings:
         "MAX_PROJECT_NAME_LENGTH": 100,
         "MAX_CONNECTION_NAME_LENGTH": 100,
         "MAX_PREVIEW_ROWS": 1000,
+        # ==================== MEMORY / OOM PREVENTION ====================
+        # BE-GO-READY-MEMORY-OOM-001-LOAD-FILE-PREFLIGHT-GUARD: cap massimo
+        # in byte per il file caricato sincrono via
+        # `load_dataframe_from_file`. Sopra il cap il guard solleva
+        # `MemoryLimitExceededError` mappata a 413 envelope dual-shape
+        # `memory_limit_exceeded`. Default conservativo 200 MB: bilancia
+        # uso routine (CSV/JSON < 50 MB) e protezione worker contro file
+        # multi-GB che rieducherebbero il process al SIGKILL del kernel.
+        # Override via env `LOAD_FILE_MAX_BYTES` per ambienti con worker
+        # piu' grossi.
+        "LOAD_FILE_MAX_BYTES": 200 * 1024 * 1024,
 
         # ==================== TASK ARRICCHIMENTO ====================
         "ENRICHMENT_BATCH_SIZE": 100,

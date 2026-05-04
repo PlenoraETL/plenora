@@ -3,17 +3,17 @@ Servizio di cleanup degli orfani cross-DB di PLENORA-ETL.
 
 Contesto
 ========
-PLENORA-ETL ha 3 SQLite separati:
-  - config.db       (progetti, utenti, ecc.)
-  - results.db      (output finali pipeline)
-  - intermediate.db (run intermedie + tabelle dinamiche)
+PLENORA-ETL usa PostgreSQL (ex 3 SQLite separati — vedi config_db_service
+per la storia di migrazione). Le tabelle principali:
+  - config tables   (progetti, utenti, ecc.)
+  - results tables  (output finali pipeline)
+  - intermediate tables (run intermedie + tabelle dinamiche)
 
-`results.results.project_id` e `intermediate.runs.canvas_id` referenziano
-logicamente `config.projects.id` ma non è una FK enforced (SQLite non
-supporta FK cross-database). Questo significa che se un progetto viene
-cancellato senza usare `ProjectService.delete_project` (es. cancellazione
-diretta dal DB, crash a metà del cleanup, restore parziale, ecc.), restano
-orfani in results.db e intermediate.db.
+`results.project_id` e `runs.canvas_id` referenziano logicamente
+`projects.id`. Se un progetto viene cancellato senza usare
+`ProjectService.delete_project` (es. cancellazione diretta dal DB,
+crash a metà del cleanup, restore parziale, ecc.), restano orfani
+nelle tabelle results e intermediate.
 
 Questo servizio:
   - Trova orfani (project_id che non esistono più in config.projects)
@@ -91,7 +91,7 @@ def find_orphan_run_canvas_ids() -> List[str]:
 
 
 def cleanup_orphans(dry_run: bool = False) -> Dict[str, Any]:
-    """Cleanup completo degli orfani in results.db e intermediate.db.
+    """Cleanup completo degli orfani in results/intermediate tables.
 
     Args:
         dry_run: Se True, solo audit (non cancella nulla). Default False.
@@ -127,7 +127,7 @@ def cleanup_orphans(dry_run: bool = False) -> Dict[str, Any]:
         "errors": [],
     }
 
-    # 1. Orphan results in results.db
+    # 1. Orphan results in results tables
     try:
         orphan_result_ids = find_orphan_result_project_ids()
         report["orphan_results"]["project_ids"] = orphan_result_ids
@@ -145,7 +145,7 @@ def cleanup_orphans(dry_run: bool = False) -> Dict[str, Any]:
         logger.error(f"orphan_cleanup: {err}", exc_info=True)
         report["errors"].append(err)
 
-    # 2. Orphan runs in intermediate.db
+    # 2. Orphan runs in intermediate tables
     try:
         from app.core.intermediate.db import delete_all_runs_for_canvas
         orphan_canvas_ids = find_orphan_run_canvas_ids()

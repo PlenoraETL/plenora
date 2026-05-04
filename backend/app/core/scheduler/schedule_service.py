@@ -3,15 +3,15 @@ Servizio CRUD per gli schedule PLENORA-ETL.
 
 Architettura
 ============
-Storage: SQLite tramite app.db.db_service (niente filesystem, niente RedBeat).
-Il beat scheduler custom legge direttamente da SQLite per decidere cosa eseguire.
+Storage: PostgreSQL via app.db.db_service (niente filesystem, niente RedBeat).
+Il beat scheduler custom legge direttamente dal DB per decidere cosa eseguire.
 
 Relazione con i progetti:
     - Uno schedule punta a un project_id
     - Un progetto può avere più schedule
     - Se il progetto viene eliminato, gli schedule diventano "orphan"
 
-Storage: tabella `schedules` in urbyetorbit.db
+Storage: tabella `schedules` nel database PostgreSQL.
 """
 
 import json
@@ -103,8 +103,8 @@ logger = get_logger(__name__)
 class ScheduleService:
     """
     Servizio CRUD per schedule PLENORA-ETL.
-    Storage su SQLite tramite db_service.
-    RedBeat rimosso — il beat scheduler custom legge da SQLite.
+    Storage su PostgreSQL tramite db_service.
+    RedBeat rimosso — il beat scheduler custom legge dal DB.
     """
 
     DEFAULT_GROUP = settings.DEFAULT_GROUP
@@ -526,7 +526,7 @@ class ScheduleService:
     # =========================================================================
 
     def _save_to_db(self, config: ScheduleConfig, group_id: str, created_by: str = None) -> None:
-        """Salva config schedule nel DB SQLite."""
+        """Salva config schedule nel DB."""
         db.save_schedule(
             schedule_id=config.id,
             group_id=group_id,

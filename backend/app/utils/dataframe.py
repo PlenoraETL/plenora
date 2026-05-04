@@ -85,6 +85,31 @@ def load_dataframe_from_file(
     if not file_path.exists():
         raise FileNotFoundError(f"File non trovato: {file_path}")
 
+    # BE-GO-READY-MEMORY-OOM-001-LOAD-FILE-PREFLIGHT-GUARD: preflight
+    # check sul file size per evitare di materializzare in memoria
+    # file che eccedono `settings.LOAD_FILE_MAX_BYTES` (default 200 MB).
+    # Lazy import di `settings` e `MemoryLimitExceededError` per:
+    #   - evitare cicli di import al bootstrap del modulo dataframe;
+    #   - mantenere `dataframe.py` pure (nessuna dep FastAPI / web).
+    # Eccezione tipata pura: il caller HTTP la mappa a 413 envelope
+    # nel boundary handler `app/main.py`. Caller worker / CLI la
+    # cattura allo stesso modo.
+    try:
+        _preflight_size = file_path.stat().st_size
+    except OSError:
+        _preflight_size = -1
+    if _preflight_size >= 0:
+        from app.config import settings as _settings
+        from app.shared.exceptions import MemoryLimitExceededError
+        _cap = int(_settings.get("LOAD_FILE_MAX_BYTES", 200 * 1024 * 1024))
+        if _cap > 0 and _preflight_size > _cap:
+            raise MemoryLimitExceededError(
+                observed_bytes=_preflight_size,
+                limit_bytes=_cap,
+                path_basename=file_path.name,
+                stage="load_dataframe_from_file",
+            )
+
     estensione = file_path.suffix.lower()
 
     # RB.#19 Step A: timing log per quantificare il parse pandas/geopandas.

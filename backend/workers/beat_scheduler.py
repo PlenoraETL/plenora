@@ -47,7 +47,7 @@ _LEADER_METRICS_LAST_TRANSITION_AT = "scheduler:beat:leader:last_transition_at"
 
 class PlenoraBeatScheduler(Scheduler):
     """
-    Beat Scheduler custom che legge gli schedule da SQLite.
+    Beat Scheduler custom che legge gli schedule da PostgreSQL.
     
     Ogni max_interval secondi:
     1. Carica tutti gli schedule attivi dal DB
@@ -493,7 +493,7 @@ class PlenoraBeatScheduler(Scheduler):
     # ------------------------------------------------------------------
 
     def _sync_from_db(self):
-        """Carica/aggiorna gli schedule attivi dal DB SQLite."""
+        """Carica/aggiorna gli schedule attivi dal DB."""
         try:
             import app.db.db_service as db
             rows = db.fetchall(
@@ -589,7 +589,7 @@ class PlenoraBeatScheduler(Scheduler):
             return None
 
     # ------------------------------------------------------------------
-    # Heartbeat su SQLite
+    # Heartbeat su DB
     # ------------------------------------------------------------------
 
     def _write_heartbeat(self):

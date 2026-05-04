@@ -1,6 +1,6 @@
 """
 PLENORA-ETL — Result Store
-Helper per salvare i risultati pipeline nel DB SQLite.
+Helper per salvare i risultati pipeline nel DB.
 I file vengono scritti in tempdir, salvati nel DB, poi eliminati.
 """
 
@@ -15,7 +15,7 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 # Numero default di risultati da conservare per progetto.
-# Sovrascrivibile per singolo progetto tramite projects.retention_n in config.db.
+# Sovrascrivibile per singolo progetto tramite projects.retention_n nelle config tables.
 DEFAULT_RESULTS_RETENTION = 10
 
 
@@ -31,18 +31,18 @@ def _apply_results_retention(project_id: str) -> None:
     """
     Applica la retention policy sui risultati del progetto.
     Conserva gli N risultati più recenti, elimina i più vecchi.
-    N viene letto da projects.retention_n (config.db), default DEFAULT_RESULTS_RETENTION.
+    N viene letto da projects.retention_n nelle config tables, default DEFAULT_RESULTS_RETENTION.
     """
     try:
         import app.db.config_db_service as cfg_db
         import app.db.results_db_service as res_db
 
-        # Legge retention_n dal progetto (SQLite #1)
+        # Legge retention_n dal progetto (config tables)
         retention_n = cfg_db.get_project_retention_n(project_id)
         if retention_n is None:
             retention_n = DEFAULT_RESULTS_RETENTION
 
-        # Lista risultati ordinati dal più recente (SQLite #2)
+        # Lista risultati ordinati dal più recente (results tables)
         all_results = res_db.list_results(project_id)
 
         if len(all_results) <= retention_n:

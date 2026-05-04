@@ -65,7 +65,7 @@ router = APIRouter(prefix="/schedules", tags=["schedules"])
 async def beat_healthcheck(current_user: CurrentUser = Depends(require_not_esecutore)):
     """
     Verifica se Celery Beat (PlenoraBeatScheduler) è attivo.
-    Legge il heartbeat dalla tabella beat_heartbeat in SQLite.
+    Legge il heartbeat dalla tabella beat_heartbeat nel DB.
     """
     try:
         from datetime import datetime, timezone

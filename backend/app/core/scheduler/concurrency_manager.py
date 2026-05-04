@@ -1,7 +1,7 @@
 """
-Gestione concorrenza per lo Scheduler PLENORA-ETL — su SQLite, no Redis.
+Gestione concorrenza per lo Scheduler PLENORA-ETL — su PostgreSQL, no Redis.
 
-Lock e coda memorizzati nella tabella `scheduler_locks` in urbyetorbit.db.
+Lock e coda memorizzati nella tabella `scheduler_locks` nel database PostgreSQL.
 
 Chiavi:
     - scheduler:lock:{schedule_id}   → 'running' con expiry timestamp
@@ -43,7 +43,7 @@ LOCK_HEARTBEAT_INTERVAL_SECONDS = settings.SCHEDULE_LOCK_HEARTBEAT_INTERVAL_SECO
 
 class ConcurrencyManager:
     """
-    Gestisce lock e coda per le esecuzioni schedule su SQLite.
+    Gestisce lock e coda per le esecuzioni schedule su PostgreSQL.
     """
 
     def __init__(self):
@@ -126,9 +126,8 @@ class ConcurrencyManager:
         """Incrementa contatore atomicamente, crea se non esiste.
 
         Implementazione atomic-safe basata su `UPDATE ... RETURNING`
-        (SQLite >= 3.35). Bypassa `db.execute` perché quel helper committa
-        prima che il cursor del RETURNING possa essere consumato (errore
-        "cannot commit transaction - SQL statements in progress").
+        (PostgreSQL). Bypassa `db.execute` perché quel helper committa
+        prima che il cursor del RETURNING possa essere consumato.
 
         Algoritmo:
           1. INSERT OR IGNORE crea la riga a '0' se non esiste (idempotente).

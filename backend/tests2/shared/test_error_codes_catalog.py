@@ -82,6 +82,8 @@ EXPECTED_DOMAIN_CODES: Set[str] = {
     "ticket_not_found",
     # batch 010 — External-Service family
     "external_service_unreachable",
+    # BE-GO-READY-MEMORY-OOM-001 — Memory/OOM family
+    "memory_limit_exceeded",
 }
 
 # Pattern accettati come `http_<status>` fallback intenzionale
@@ -113,10 +115,11 @@ def test_known_global_codes_matches_expected_lock():
     assert error_codes.KNOWN_GLOBAL_CODES == EXPECTED_GLOBAL_CODES
 
 
-def test_catalog_count_domain_twentytwo():
-    """22 codici domain (5 pre-existing + 6 batch 006 + 10 batch 009
-    not-found family + 1 batch 010 external-service)."""
-    assert len(error_codes.KNOWN_DOMAIN_CODES) == 22
+def test_catalog_count_domain_twentythree():
+    """23 codici domain (5 pre-existing + 6 batch 006 + 10 batch 009
+    not-found family + 1 batch 010 external-service +
+    1 BE-GO-READY-MEMORY-OOM-001 memory_limit_exceeded)."""
+    assert len(error_codes.KNOWN_DOMAIN_CODES) == 23
 
 
 def test_catalog_domain_and_global_disjoint():
@@ -156,6 +159,8 @@ def test_catalog_constants_match_set_values():
         error_codes.TICKET_NOT_FOUND,
         # batch 010 — External-Service family
         error_codes.EXTERNAL_SERVICE_UNREACHABLE,
+        # BE-GO-READY-MEMORY-OOM-001 — Memory/OOM family
+        error_codes.MEMORY_LIMIT_EXCEEDED,
     }
     assert domain_constants == set(error_codes.KNOWN_DOMAIN_CODES)
 
@@ -517,6 +522,31 @@ def test_no_generic_500_string_detail_in_non_auth_routers():
             violations.append(f"{py_file.relative_to(_BACKEND_ROOT)}:{text[:match.start()].count(chr(10))+1}")
     assert violations == [], (
         f"Old generic-500 pattern found (should use raise_typed_http): {violations}"
+    )
+
+
+def test_no_generic_500_string_detail_in_auth_routers():
+    """Source-bound: nessun file sotto `app/core/auth/` deve contenere
+    old-pattern generic-500 con messaggio `"Errore interno del server"`.
+    Promosso a `raise_typed_http(error_codes.INTERNAL_ERROR, ...)` in
+    BE-GO-READY-AUTH-ERROR-CODES-001."""
+    old_pattern = re.compile(
+        r'raise\s+HTTPException\('
+        r'(?=[^)]*(?:status_code\s*=\s*)?500)'
+        r'(?=[^)]*["\']Errore interno del server["\'])',
+        re.DOTALL,
+    )
+    auth_root = _CORE_ROOT / "auth"
+    violations = []
+    for py_file in auth_root.rglob("*.py"):
+        try:
+            text = py_file.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        for match in old_pattern.finditer(text):
+            violations.append(f"{py_file.relative_to(_BACKEND_ROOT)}:{text[:match.start()].count(chr(10))+1}")
+    assert violations == [], (
+        f"Old generic-500 pattern found in auth (should use raise_typed_http): {violations}"
     )
 
 

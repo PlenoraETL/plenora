@@ -395,3 +395,53 @@ class FileSourceResolutionError(Exception):
             f"Errore risoluzione file_source '{file_source_id}' "
             f"({cause}): {reason}"
         )
+
+
+class MemoryLimitExceededError(Exception):
+    """Sollevata quando un input supera il limite di memoria
+    configurato per uno stage di processing prima di
+    materializzare il risultato.
+
+    BE-GO-READY-MEMORY-OOM-001-LOAD-FILE-PREFLIGHT-GUARD:
+        Prima di caricare un file via `load_dataframe_from_file`,
+        un preflight guard confronta `file_path.stat().st_size`
+        con `settings.LOAD_FILE_MAX_BYTES` (default 200 MB). Se il
+        file supera il cap, il guard solleva questa eccezione
+        invece di tentare un parse Pandas/GeoPandas che potrebbe
+        portare il worker a OOM kernel SIGKILL.
+
+    Convenzioni:
+    - L'eccezione e' PURA (zero dipendenze FastAPI / starlette).
+      Non importa moduli web — un caller in worker Celery o
+      script CLI puo' catturarla allo stesso modo del caller HTTP.
+    - Il mapping HTTP 413 vive nel boundary handler in
+      `app/main.py`.
+    - `path_basename` (NON path assoluto) per evitare leak di
+      filesystem layout nella response al client.
+
+    Attributi:
+        observed_bytes: dimensione effettiva osservata del file (>=0).
+        limit_bytes: cap configurato (`settings.LOAD_FILE_MAX_BYTES`).
+        path_basename: basename del file (no path) per logging/UX
+            senza leak filesystem.
+        stage: identificatore dello stage di processing
+            (es. `"load_dataframe_from_file"`). Permette di
+            estendere il guard ad altri stage senza nuovi codici.
+    """
+
+    def __init__(
+        self,
+        observed_bytes: int,
+        limit_bytes: int,
+        path_basename: str,
+        stage: str,
+    ) -> None:
+        self.observed_bytes = int(observed_bytes)
+        self.limit_bytes = int(limit_bytes)
+        self.path_basename = str(path_basename or "")
+        self.stage = str(stage or "")
+        super().__init__(
+            f"Memory limit exceeded in stage '{self.stage}' for "
+            f"'{self.path_basename}': observed={self.observed_bytes} "
+            f"bytes, limit={self.limit_bytes} bytes."
+        )

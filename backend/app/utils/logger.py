@@ -153,9 +153,9 @@ def _sanitize_log_text(text: str) -> str:
 class SanitizingFilter(logging.Filter):
     """Filter che sanifica msg + traceback del LogRecord prima degli handler.
 
-    Si applica a TUTTI gli handler (console + SQLite + future destinazioni),
+    Si applica a TUTTI gli handler (console + DB + future destinazioni),
     quindi è il punto unico di difesa contro leak via log. Idempotente con
-    la sanificazione esplicita in SQLiteLogHandler.emit().
+    la sanificazione esplicita in PostgresLogHandler.emit().
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
@@ -218,8 +218,8 @@ class ColoredFormatter(logging.Formatter):
     - WARNING -> giallo
     - ERROR [GESTITO] -> giallo/arancione (errore gestito, sistema stabile)
     - ERROR [CRASH]   -> rosso bold (bug imprevisto, da investigare)
-    - log.db NON è impattato: il SQLiteLogHandler riceve il LogRecord grezzo
-      prima che questo formatter entri in gioco.
+    - Il DB log NON è impattato: il PostgresLogHandler riceve il LogRecord
+      grezzo prima che questo formatter entri in gioco.
     """
 
     def format(self, record: logging.LogRecord) -> str:
@@ -269,7 +269,7 @@ MODULE_MAP = {
 }
 
 _configured_loggers: set[str] = set()
-_db_handler: Optional["SQLiteLogHandler"] = None
+_db_handler: Optional["PostgresLogHandler"] = None
 
 # Batch 3.10 — Aggregator pre-condizione §9.2/§9.3.
 # Insieme chiuso di logger che emettono telemetria strutturata bulk
@@ -307,7 +307,7 @@ _db_lock = Lock()
 
 
 # =============================================================================
-# SQLITE HANDLER
+# POSTGRES LOG HANDLER
 # =============================================================================
 
 def _resolve_level(name: str, default: int) -> int:

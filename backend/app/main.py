@@ -244,7 +244,7 @@ async def validation_exception_handler(
 # essere esplicito (non "errore interno") cosi' l'utente capisce che
 # serve un ripristino da backup, non un retry. Precede il catch-all
 # sopra perche' FastAPI matcha il piu' specifico.
-from app.shared.exceptions import CanvasCorruptedError
+from app.shared.exceptions import CanvasCorruptedError, MemoryLimitExceededError
 
 
 @app.exception_handler(CanvasCorruptedError)
@@ -265,6 +265,50 @@ async def canvas_corrupted_handler(request: Request, exc: CanvasCorruptedError):
         details={
             "project_id": exc.project_id,
             "reason": exc.reason,
+        },
+        headers=_cors_headers_for(request),
+    )
+
+
+# Handler per MemoryLimitExceededError (413):
+# Mappa l'eccezione pura sollevata dal preflight guard di
+# `load_dataframe_from_file` (BE-GO-READY-MEMORY-OOM-001) nel
+# dual-shape envelope. Status 413 (Payload Too Large) e' la
+# semantica HTTP corretta: il client ha inviato un input che
+# supera la capacita' di processing del server in memoria.
+#
+# Stable details shape: stage / limit_bytes / observed_bytes /
+# limit_mb / observed_mb / suggested_action / resource. Permette
+# al FE di mostrare un messaggio uniforme ed eventualmente
+# suggerire un'azione (split file, contact admin). NESSUN
+# absolute path nel payload — solo `path_basename` come `resource`.
+@app.exception_handler(MemoryLimitExceededError)
+async def memory_limit_exceeded_handler(
+    request: Request, exc: MemoryLimitExceededError,
+):
+    logger.warning(
+        "Memory limit exceeded in stage=%s resource=%s observed=%d limit=%d",
+        exc.stage, exc.path_basename, exc.observed_bytes, exc.limit_bytes,
+    )
+    limit_mb = round(exc.limit_bytes / (1024 * 1024), 2)
+    observed_mb = round(exc.observed_bytes / (1024 * 1024), 2)
+    return build_error_response(
+        status_code=413,
+        error=error_codes.MEMORY_LIMIT_EXCEEDED,
+        message=(
+            f"L'input richiesto ({observed_mb} MB) supera il limite di "
+            f"memoria configurato ({limit_mb} MB) per lo stage "
+            f"'{exc.stage}'. Contatta l'amministratore o riduci la "
+            f"dimensione del file."
+        ),
+        details={
+            "stage": exc.stage,
+            "limit_bytes": exc.limit_bytes,
+            "observed_bytes": exc.observed_bytes,
+            "limit_mb": limit_mb,
+            "observed_mb": observed_mb,
+            "suggested_action": "split_file_or_contact_admin",
+            "resource": exc.path_basename,
         },
         headers=_cors_headers_for(request),
     )

@@ -4,7 +4,7 @@ Servizio CRUD per progetti PLENORA-ETL.
 Architettura
 ============
 Questo servizio gestisce il ciclo di vita dei progetti.
-Storage: SQLite tramite app.db.db_service (niente filesystem per i metadati).
+Storage: PostgreSQL via app.db.db_service (niente filesystem per i metadati).
 
 I file risultato (CSV, XLSX, GeoPackage) vengono salvati come blob
 nella tabella `results` del DB.
@@ -43,7 +43,7 @@ class ProjectService:
     """
     Servizio CRUD per progetti PLENORA-ETL.
 
-    Usa SQLite come storage tramite db_service.
+    Usa PostgreSQL come storage tramite db_service.
     group_id viene passato esplicitamente — in futuro verrà dal JWT.
     """
 
@@ -400,7 +400,7 @@ class ProjectService:
             )
             derived_failures.append("schedules_orphan")
 
-        # intent: cascade step CRITICAL — intermediate.db runs + tabelle
+        # intent: cascade step CRITICAL — intermediate tables + tabelle
         # dinamiche contengono dati utente (volume potenzialmente grande).
         # outcome: fail-closed via aggregazione (vedi gate sotto).
         try:
@@ -419,7 +419,7 @@ class ProjectService:
             )
             critical_failures.append("intermediate_runs")
 
-        # intent: cascade step CRITICAL — results.db blob contengono output
+        # intent: cascade step CRITICAL — results tables/blob contengono output
         # utente esportati (GDPR-sensitive).
         # outcome: fail-closed via aggregazione.
         try:
@@ -441,7 +441,7 @@ class ProjectService:
         # intent: cascade step derived — comparison_keys e' config derivata,
         # volume minimo e nessun dato utente sensibile. Orfano innocuo.
         # outcome: fail-open con breadcrumb.
-        # Cleanup comparison_keys (config.db) — chiavi di confronto associate
+        # Cleanup comparison_keys (config tables) — chiavi di confronto associate
         # ai nodi del canvas, identificate da canvas_id == project_id.
         try:
             from app.db.config_db_service import delete_comparison_keys

@@ -37,7 +37,9 @@ import app.config  # noqa: F401
 from app.config import settings as _settings
 import app.db.db_service as db
 import app.db.config_db_service as cfg_db
+from app.shared import error_codes
 from app.shared.audit_action import audit_action
+from app.shared.error_envelope import raise_typed_http
 from app.utils.logger import get_logger
 
 
@@ -856,7 +858,11 @@ def delete_group(group_id: str,
         report = cfg_db.delete_group_cascade(group_id)
     except Exception as e:
         logger.error(f"[CRASH] delete_group_cascade fallito per group_id={group_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Errore interno del server")
+        raise_typed_http(
+            error_codes.INTERNAL_ERROR,
+            status_code=500,
+            message="Errore interno del server",
+        )
 
     return {"deleted": True, "group_id": group_id, "report": report}
 

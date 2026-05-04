@@ -160,6 +160,25 @@ notifica admin."""
 
 
 # ============================================================
+# Domain-specific — Memory/OOM family
+# (BE-GO-READY-MEMORY-OOM-001-LOAD-FILE-PREFLIGHT-GUARD)
+# ============================================================
+# Promozione mirata della famiglia 413 "memory limit exceeded"
+# emessa dai preflight guard di OOM-prevention. Permette al FE di
+# distinguere "input troppo grande" (suggerire chunking, formato
+# alternativo, contact admin) da generic 4xx. Status code 413
+# (Payload Too Large): semantico HTTP corretto perche' il client
+# inviato una richiesta che e' troppo grande per essere
+# materializzata in memoria.
+
+MEMORY_LIMIT_EXCEEDED = "memory_limit_exceeded"
+"""413: input/payload supera il limite di memoria configurato per
+lo stage di processing (es. `load_dataframe_from_file`). FE
+branching: messaggio "file troppo grande per il caricamento
+immediato; contatta l'admin" + suggerimento chunking/streaming."""
+
+
+# ============================================================
 # Catalog set — drift detection
 # ============================================================
 # `KNOWN_DOMAIN_CODES` espone l'intero catalog domain-specific
@@ -198,6 +217,8 @@ KNOWN_DOMAIN_CODES: frozenset[str] = frozenset({
     TICKET_NOT_FOUND,
     # External-Service family (BE-GO-READY-ERROR-CODES-010)
     EXTERNAL_SERVICE_UNREACHABLE,
+    # Memory/OOM family (BE-GO-READY-MEMORY-OOM-001)
+    MEMORY_LIMIT_EXCEEDED,
 })
 
 # Codici globali (envelope-level): NON domain-specific.
