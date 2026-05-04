@@ -23,7 +23,7 @@ import { downloadBlob } from '../utils/downloadBlob';
  *
  * @param {string} taskId
  * @returns {Promise<Object>} { task_id, status, progress, message, result?, error? }
- *   status: 'PENDING' | 'STARTED' | 'PROGRESS' | 'SUCCESS' | 'FAILURE'
+ *   status: 'pending' | 'started' | 'progress' | 'success' | 'failure'
  */
 export const getTaskStatus = async (taskId) => {
   const response = await http.get(`/tasks/${taskId}`);

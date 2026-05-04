@@ -52,7 +52,7 @@ export const getCaricaColumns = async (connId, schema, table) => {
  * @param {string}   payload.target_conn_id   - ID connessione destinazione
  * @param {string}   payload.target_schema    - Schema destinazione
  * @param {string}   payload.target_table     - Tabella destinazione
- * @returns {Promise<Object>} Mapping suggerito { source_col: target_col }
+ * @returns {Promise<Object>} { mappings: Array<{source_column, dest_column, dest_type, is_geometry, srid, is_primary_key, skip}>, suggested_match_columns, existing_columns }
  */
 export const postCaricaAutoMapping = async (payload) => {
   const response = await http.post('/carica/auto-mapping', payload);
