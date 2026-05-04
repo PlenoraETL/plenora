@@ -34,6 +34,7 @@ Uso:
 """
 
 import json
+import re
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass
@@ -449,6 +450,19 @@ class SchemaInferenceService:
             return self._schema_geo_distance(input_schemas, config, node.id)
         elif transform_op == "geo_to_wkt":
             return self._schema_geo_to_wkt(input_schemas, config, node.id)
+        # Geo metrics + base strings/binning (BE-PHASE2-SCHEMA-INFER-003 batch 2)
+        elif transform_op == "geo_length":
+            return self._schema_geo_length(input_schemas, config, node.id)
+        elif transform_op == "geo_perimeter":
+            return self._schema_geo_perimeter(input_schemas, config, node.id)
+        elif transform_op == "geo_vertex_count":
+            return self._schema_geo_vertex_count(input_schemas, config, node.id)
+        elif transform_op == "string_extract":
+            return self._schema_string_extract(input_schemas, config, node.id)
+        elif transform_op == "bin":
+            return self._schema_bin(input_schemas, config, node.id)
+        elif transform_op == "string_pad":
+            return self._schema_string_pad(input_schemas, config, node.id)
         else:
             logger.warning(f"Operazione {transform_op} non gestita - passthrough")
             return self._schema_passthrough(input_schemas, node.id)
@@ -1617,6 +1631,252 @@ class SchemaInferenceService:
                 ))
                 existing.add(lon_col)
 
+        return result
+
+    # =========================================================================
+    # BATCH 2 — BE-PHASE2-SCHEMA-INFER-003
+    # =========================================================================
+    # Handler dedicati per transform geo metrici (length/perimeter/vertex_count)
+    # e base strings/binning (string_extract, bin, string_pad).
+    # Stessa convenzione del batch 1: pure handler input -> output, niente I/O.
+
+    def _schema_geo_length(
+        self,
+        input_schemas: List[List[ColumnSchema]],
+        config: dict,
+        node_id: str,
+    ) -> List[ColumnSchema]:
+        """geo_length: input + colonna `output_column` (real).
+
+        Runtime: `op_geo_length` (spatial.py) aggiunge `output_column`
+        (default `"length_m"`) come float in metri (auto-UTM se il CRS
+        e' geografico). `geom_column` e `metric_crs` non influenzano
+        lo schema FE.
+        """
+        if not input_schemas:
+            return []
+        result = self._copy_schema(input_schemas[0], node_id)
+        output_col = config.get("output_column") or "length_m"
+        if output_col and output_col not in {c.name for c in result}:
+            result.append(ColumnSchema(
+                name=output_col,
+                type="real",
+                source_node=node_id,
+                is_calculated=True,
+            ))
+        return result
+
+    def _schema_geo_perimeter(
+        self,
+        input_schemas: List[List[ColumnSchema]],
+        config: dict,
+        node_id: str,
+    ) -> List[ColumnSchema]:
+        """geo_perimeter: input + colonna `output_column` (real).
+
+        Runtime: `op_geo_perimeter` (spatial.py) aggiunge `output_column`
+        (default `"perimeter_m"`) come float in metri. `metric_crs` non
+        impatta lo schema.
+        """
+        if not input_schemas:
+            return []
+        result = self._copy_schema(input_schemas[0], node_id)
+        output_col = config.get("output_column") or "perimeter_m"
+        if output_col and output_col not in {c.name for c in result}:
+            result.append(ColumnSchema(
+                name=output_col,
+                type="real",
+                source_node=node_id,
+                is_calculated=True,
+            ))
+        return result
+
+    def _schema_geo_vertex_count(
+        self,
+        input_schemas: List[List[ColumnSchema]],
+        config: dict,
+        node_id: str,
+    ) -> List[ColumnSchema]:
+        """geo_vertex_count: input + colonna `output_column` (int).
+
+        Runtime: `op_geo_vertex_count` (spatial.py) aggiunge il numero
+        di vertici per ogni geometria (default colonna `"vertex_count"`).
+        """
+        if not input_schemas:
+            return []
+        result = self._copy_schema(input_schemas[0], node_id)
+        output_col = config.get("output_column") or "vertex_count"
+        if output_col and output_col not in {c.name for c in result}:
+            result.append(ColumnSchema(
+                name=output_col,
+                type="int",
+                source_node=node_id,
+                is_calculated=True,
+            ))
+        return result
+
+    def _schema_string_extract(
+        self,
+        input_schemas: List[List[ColumnSchema]],
+        config: dict,
+        node_id: str,
+    ) -> List[ColumnSchema]:
+        """string_extract: input + colonne estratte da regex (str).
+
+        Runtime: `op_string_extract` (strings.py).
+        - Pattern con gruppi nominati `(?P<name>...)`: una colonna str
+          per ogni gruppo nominato (nomi e ordine derivati da
+          `re.compile(pattern).groupindex`).
+        - Pattern senza gruppi nominati: una sola colonna str
+          `output_column or f"{column}_extracted"` (vale anche per
+          `extract_all=True`, che cambia solo i valori di runtime).
+
+        No-op (schema invariato) se `column`/`pattern` mancanti, se
+        `column` non esiste in input, o se il pattern e' regex non
+        valida (allineato al runtime: warning + return df).
+
+        Caveat: pattern con misto named/unnamed groups → schema
+        annunciato copre solo i named groups (allineato al subset
+        deterministico). Casi rari nei flussi FE.
+        """
+        if not input_schemas:
+            return []
+        result = self._copy_schema(input_schemas[0], node_id)
+        column = config.get("column") or ""
+        pattern = config.get("pattern") or ""
+        if not column or not pattern:
+            return result
+        existing = {c.name for c in result}
+        if column not in existing:
+            return result
+        try:
+            compiled = re.compile(pattern)
+        except re.error:
+            return result
+
+        named_groups = compiled.groupindex
+        if named_groups:
+            # Ordine pattern: ordina per indice di gruppo (1-based).
+            ordered_names = sorted(named_groups, key=named_groups.get)
+            for name in ordered_names:
+                if name and name not in existing:
+                    result.append(ColumnSchema(
+                        name=name,
+                        type="str",
+                        source_node=node_id,
+                        is_calculated=True,
+                    ))
+                    existing.add(name)
+        else:
+            out_col = config.get("output_column") or f"{column}_extracted"
+            if out_col and out_col not in existing:
+                result.append(ColumnSchema(
+                    name=out_col,
+                    type="str",
+                    source_node=node_id,
+                    is_calculated=True,
+                ))
+        return result
+
+    def _schema_bin(
+        self,
+        input_schemas: List[List[ColumnSchema]],
+        config: dict,
+        node_id: str,
+    ) -> List[ColumnSchema]:
+        """bin: input + colonna discretizzata (str).
+
+        Runtime: `op_bin` (analysis.py) usa `pd.cut` e produce una
+        colonna categorica/string (le label sono str). Default
+        `output_column = f"{column}_bin"`. No-op se `column` mancante
+        o non in input (allineato al runtime warning path).
+
+        Tipo registrato come `"str"` (le label categorical vengono
+        consumate dal FE come stringhe).
+        """
+        if not input_schemas:
+            return []
+        result = self._copy_schema(input_schemas[0], node_id)
+        column = config.get("column") or ""
+        if not column:
+            return result
+        existing = {c.name for c in result}
+        if column not in existing:
+            return result
+        out_col = config.get("output_column") or f"{column}_bin"
+        if out_col and out_col not in existing:
+            result.append(ColumnSchema(
+                name=out_col,
+                type="str",
+                source_node=node_id,
+                is_calculated=True,
+            ))
+        return result
+
+    def _schema_string_pad(
+        self,
+        input_schemas: List[List[ColumnSchema]],
+        config: dict,
+        node_id: str,
+    ) -> List[ColumnSchema]:
+        """string_pad: pad la colonna a larghezza fissa.
+
+        Runtime: `op_string_pad` (strings.py) forza `astype(str)` e
+        scrive nel target. Schema delta:
+        - `output_column` vuoto (o uguale a `column`): la colonna
+          sorgente viene sovrascritta come `str`.
+        - `output_column` diversa da `column`: la sorgente resta
+          invariata (preservato il suo tipo) e viene aggiunta una
+          nuova colonna `str`. Se collide con un altro nome esistente,
+          quella colonna viene sovrascritta a `str`.
+
+        No-op (schema invariato) se `column` mancante o non in input.
+        Registry classifica `output: same`, ma il runtime introduce
+        comunque un type-shift verso str → schema parity dedicata
+        invece di passthrough generico.
+        """
+        if not input_schemas:
+            return []
+        result = self._copy_schema(input_schemas[0], node_id)
+        column = config.get("column") or ""
+        if not column:
+            return result
+        existing_names = {c.name for c in result}
+        if column not in existing_names:
+            return result
+
+        out_col_cfg = config.get("output_column")
+        target = out_col_cfg if out_col_cfg else column
+
+        if target == column:
+            for i, col in enumerate(result):
+                if col.name == column:
+                    result[i] = ColumnSchema(
+                        name=col.name,
+                        type="str",
+                        source_node=node_id,
+                        is_calculated=True,
+                    )
+                    break
+            return result
+
+        if target in existing_names:
+            for i, col in enumerate(result):
+                if col.name == target:
+                    result[i] = ColumnSchema(
+                        name=col.name,
+                        type="str",
+                        source_node=node_id,
+                        is_calculated=True,
+                    )
+                    break
+        else:
+            result.append(ColumnSchema(
+                name=target,
+                type="str",
+                source_node=node_id,
+                is_calculated=True,
+            ))
         return result
 
     def _copy_schema(

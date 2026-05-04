@@ -98,6 +98,9 @@ EXPECTED_DISPATCHER_BRANCHES: Set[str] = {
     # BE-PHASE2-SCHEMA-INFER-002 batch 1
     "add_row_number", "uuid_generator", "string_length", "date_extract",
     "geo_distance", "geo_to_wkt",
+    # BE-PHASE2-SCHEMA-INFER-003 batch 2
+    "geo_length", "geo_perimeter", "geo_vertex_count",
+    "string_extract", "bin", "string_pad",
 }
 
 # Transform IDs nel registry che ALTERANO lo schema (aggiungono/rimuovono
@@ -108,29 +111,26 @@ PASSTHROUGH_WRONG_GAP: Set[str] = {
     # BE-PHASE2-SCHEMA-INFER-002 batch 1 ha promosso (rimossi):
     #   add_row_number, uuid_generator, string_length, date_extract,
     #   geo_distance, geo_to_wkt
-    "bin",                  # aggiunge colonna bin output
+    # BE-PHASE2-SCHEMA-INFER-003 batch 2 ha promosso (rimossi):
+    #   geo_length, geo_perimeter, geo_vertex_count, string_extract,
+    #   bin, string_pad
     "cross_join",           # combina colonne L+R
     "flatten_json",         # esplode chiavi JSON in colonne
     "geo_bounds_extractor", # aggiunge minx/miny/maxx/maxy
     "geo_count_points_in_polygons",  # aggiunge counts column
     "geo_explode",          # multiplica righe (no schema delta) — boundary
-    "geo_length",           # aggiunge length column
     "geo_line_builder",     # produce geometry:line
     "geo_nearest",          # aggiunge colonne neighbour
     "geo_overlay",          # aggiunge colonne combinate L+R + tipo overlay
-    "geo_perimeter",        # aggiunge perimeter column
     "geo_point_on_surface", # produce geometry:point
     "geo_polygon_builder",  # produce geometry:polygon
     "geo_symmetric_difference",  # combina schemi L+R
-    "geo_vertex_count",     # aggiunge colonna count int
     "geo_voronoi",          # produce geometry:polygon
     "geo_within",           # filter-like + flag column
     "lookup",               # aggiunge colonne dal lookup table
     "melt",                 # ristruttura wide→long
     "reorder_columns",      # cambia ordine (non rilevante per FE), ma vedi nota
     "statistics",           # aggiunge colonne statistiche
-    "string_extract",       # aggiunge colonna match
-    "string_pad",           # passthrough? — verificare con team
     "table_diff",           # aggiunge colonne diff
     "transpose",            # ristruttura schema
     "window_function",      # aggiunge colonna funzione finestra
@@ -239,7 +239,7 @@ def test_passthrough_wrong_gap_size_lock():
     # Lock attuale al BE-SCHEMA-INFER-001A baseline. Quando una
     # transform passa a dispatcher dedicato, sposta l'entry e
     # decrementa il limite (`assert actual <= N`).
-    assert actual == 30, (
+    assert actual == 24, (
         f"Gap passthrough-WRONG cambiato: {actual}. "
         f"Aggiorna l'assert e il piano BE-SCHEMA-INFER-002+."
     )
@@ -269,7 +269,7 @@ def test_dispatcher_falls_back_to_passthrough_for_unknown_ops():
     node = SimpleNamespace(
         id="n1",
         config={},
-        transform_op="bin",  # passthrough-WRONG entry residua
+        transform_op="cross_join",  # passthrough-WRONG entry residua
         data=None,
     )
     out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
@@ -538,3 +538,238 @@ def test_geo_to_wkt_unknown_mode_falls_back_to_wkt():
     node = _node("geo_to_wkt", {"geom_column": "g", "mode": "weird_unknown"})
     out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
     assert [c.name for c in out] == ["id", "geometry_wkt"]
+
+
+# ---------------------------------------------------------------------------
+# 6. Behavioral tests — BE-PHASE2-SCHEMA-INFER-003 batch 2
+# ---------------------------------------------------------------------------
+
+
+def _geo_input():
+    return [
+        ColumnSchema(name="id", type="int", source_node="s", is_calculated=False),
+        ColumnSchema(name="geometry", type="geometry", source_node="s", is_calculated=False),
+    ]
+
+
+# geo_length ---------------------------------------------------------------
+
+
+def test_geo_length_default_output_column():
+    service = SchemaInferenceService(project_service=None)
+    node = _node("geo_length", {"geom_column": "geometry"})
+    out = service._infer_transform_schema(node, [_geo_input()], edges_by_target={})
+    assert [c.name for c in out] == ["id", "geometry", "length_m"]
+    assert out[-1].type == "real"
+    assert out[-1].is_calculated is True
+
+
+def test_geo_length_custom_output_column():
+    service = SchemaInferenceService(project_service=None)
+    node = _node("geo_length", {"geom_column": "geometry", "output_column": "lung"})
+    out = service._infer_transform_schema(node, [_geo_input()], edges_by_target={})
+    assert [c.name for c in out] == ["id", "geometry", "lung"]
+
+
+def test_geo_length_collision_does_not_duplicate():
+    service = SchemaInferenceService(project_service=None)
+    node = _node("geo_length", {"output_column": "id"})
+    out = service._infer_transform_schema(node, [_geo_input()], edges_by_target={})
+    assert [c.name for c in out] == ["id", "geometry"]
+
+
+# geo_perimeter ------------------------------------------------------------
+
+
+def test_geo_perimeter_default_output_column():
+    service = SchemaInferenceService(project_service=None)
+    node = _node("geo_perimeter", {"geom_column": "geometry"})
+    out = service._infer_transform_schema(node, [_geo_input()], edges_by_target={})
+    assert [c.name for c in out] == ["id", "geometry", "perimeter_m"]
+    assert out[-1].type == "real"
+
+
+def test_geo_perimeter_custom_output_column():
+    service = SchemaInferenceService(project_service=None)
+    node = _node("geo_perimeter", {"output_column": "perim"})
+    out = service._infer_transform_schema(node, [_geo_input()], edges_by_target={})
+    assert [c.name for c in out] == ["id", "geometry", "perim"]
+
+
+# geo_vertex_count ---------------------------------------------------------
+
+
+def test_geo_vertex_count_default():
+    service = SchemaInferenceService(project_service=None)
+    node = _node("geo_vertex_count", {"geom_column": "geometry"})
+    out = service._infer_transform_schema(node, [_geo_input()], edges_by_target={})
+    assert [c.name for c in out] == ["id", "geometry", "vertex_count"]
+    assert out[-1].type == "int"
+
+
+def test_geo_vertex_count_custom_output_column():
+    service = SchemaInferenceService(project_service=None)
+    node = _node("geo_vertex_count", {"output_column": "n_pts"})
+    out = service._infer_transform_schema(node, [_geo_input()], edges_by_target={})
+    assert [c.name for c in out] == ["id", "geometry", "n_pts"]
+
+
+# string_extract -----------------------------------------------------------
+
+
+def test_string_extract_simple_pattern_default_output():
+    service, input_schema = _service_and_input()
+    node = _node("string_extract", {"column": "b", "pattern": r"(\d+)"})
+    out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
+    assert [c.name for c in out] == ["a", "b", "b_extracted"]
+    assert out[-1].type == "str"
+
+
+def test_string_extract_simple_pattern_explicit_output():
+    service, input_schema = _service_and_input()
+    node = _node("string_extract", {
+        "column": "b",
+        "pattern": r"(\d+)",
+        "output_column": "digits",
+    })
+    out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
+    assert [c.name for c in out] == ["a", "b", "digits"]
+
+
+def test_string_extract_named_groups_yields_one_column_per_group():
+    """Pattern con gruppi nominati → schema dichiara una colonna str
+    per ciascun gruppo (in ordine di pattern). `output_column` ignorata
+    quando ci sono named groups (allineato al runtime)."""
+    service, input_schema = _service_and_input()
+    node = _node("string_extract", {
+        "column": "b",
+        "pattern": r"(?P<via>.+),\s*(?P<civico>\d+)",
+        "output_column": "ignored_when_named",
+    })
+    out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
+    assert [c.name for c in out] == ["a", "b", "via", "civico"]
+    assert all(c.type == "str" for c in out[2:])
+
+
+def test_string_extract_invalid_regex_passthrough():
+    """Pattern regex invalido → runtime ritorna df invariato. Schema
+    mirror: nessuna colonna aggiunta."""
+    service, input_schema = _service_and_input()
+    node = _node("string_extract", {"column": "b", "pattern": "(unclosed["})
+    out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
+    assert [c.name for c in out] == ["a", "b"]
+
+
+def test_string_extract_missing_column_passthrough():
+    service, input_schema = _service_and_input()
+    node = _node("string_extract", {"column": "does_not_exist", "pattern": r"(\d+)"})
+    out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
+    assert [c.name for c in out] == ["a", "b"]
+
+
+def test_string_extract_missing_pattern_passthrough():
+    service, input_schema = _service_and_input()
+    node = _node("string_extract", {"column": "b"})
+    out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
+    assert [c.name for c in out] == ["a", "b"]
+
+
+# bin ----------------------------------------------------------------------
+
+
+def test_bin_default_output_column():
+    service, input_schema = _service_and_input()
+    node = _node("bin", {"column": "a", "bins": 5})
+    out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
+    assert [c.name for c in out] == ["a", "b", "a_bin"]
+    assert out[-1].type == "str"
+
+
+def test_bin_explicit_output_column():
+    service, input_schema = _service_and_input()
+    node = _node("bin", {
+        "column": "a",
+        "bins": [0, 10, 50, 100],
+        "labels": ["low", "mid", "high"],
+        "output_column": "fascia",
+    })
+    out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
+    assert [c.name for c in out] == ["a", "b", "fascia"]
+
+
+def test_bin_missing_column_passthrough():
+    service, input_schema = _service_and_input()
+    node = _node("bin", {"column": "missing"})
+    out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
+    assert [c.name for c in out] == ["a", "b"]
+
+
+# string_pad ---------------------------------------------------------------
+
+
+def test_string_pad_overwrite_changes_column_type_to_str():
+    """Senza `output_column`, la colonna sorgente viene sovrascritta:
+    il runtime forza `astype(str)` quindi il tipo cambia in `str`."""
+    service, input_schema = _service_and_input()
+    node = _node("string_pad", {"column": "a", "width": 5})
+    out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
+    assert [c.name for c in out] == ["a", "b"]
+    a_col = next(c for c in out if c.name == "a")
+    assert a_col.type == "str"
+    assert a_col.is_calculated is True
+    # b non viene toccato
+    b_col = next(c for c in out if c.name == "b")
+    assert b_col.type == "str"
+    assert b_col.is_calculated is False
+
+
+def test_string_pad_explicit_output_column_adds_str_column():
+    """Con `output_column != column`, la sorgente resta intatta e
+    viene aggiunta una nuova colonna str."""
+    service, input_schema = _service_and_input()
+    node = _node("string_pad", {
+        "column": "a",
+        "output_column": "a_padded",
+        "width": 4,
+        "fill_char": "0",
+    })
+    out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
+    assert [c.name for c in out] == ["a", "b", "a_padded"]
+    a_col = next(c for c in out if c.name == "a")
+    assert a_col.type == "int"  # tipo originale preservato
+    assert out[-1].type == "str"
+    assert out[-1].is_calculated is True
+
+
+def test_string_pad_explicit_output_collision_overwrites_to_str():
+    """Se `output_column` collide con un'altra colonna esistente, la
+    collisione viene sovrascritta a `str`."""
+    service, input_schema = _service_and_input()
+    node = _node("string_pad", {
+        "column": "a",
+        "output_column": "b",
+        "width": 4,
+    })
+    out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
+    names = [c.name for c in out]
+    assert names == ["a", "b"]
+    b_col = next(c for c in out if c.name == "b")
+    assert b_col.type == "str"
+    assert b_col.is_calculated is True
+    # a (sorgente) preservata
+    a_col = next(c for c in out if c.name == "a")
+    assert a_col.type == "int"
+
+
+def test_string_pad_missing_column_passthrough():
+    service, input_schema = _service_and_input()
+    node = _node("string_pad", {"column": "missing", "width": 5})
+    out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
+    assert [(c.name, c.type) for c in out] == [("a", "int"), ("b", "str")]
+
+
+def test_string_pad_no_column_passthrough():
+    service, input_schema = _service_and_input()
+    node = _node("string_pad", {"width": 5})
+    out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
+    assert [(c.name, c.type) for c in out] == [("a", "int"), ("b", "str")]
