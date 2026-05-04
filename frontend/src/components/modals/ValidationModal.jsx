@@ -27,10 +27,12 @@ const SEVERITY_ICON = {
  * @param {Function} props.onClose
  * @param {import('../../utils/canvasValidationContract').CanvasValidationResult} [props.result]
  *   Nuovo contratto. Se presente, ha precedenza su `issues`/`isValid`.
+ * @param {(nodeId: string) => void} [props.onFocusNode] — Click-to-focus: se presente,
+ *   le issue row con `nodeId` diventano cliccabili e invocano questa callback.
  * @param {Array} [props.issues] — KEEP_COMPAT: ignorato se `result` e' definito.
  * @param {boolean} [props.isValid] — KEEP_COMPAT: ignorato se `result` e' definito.
  */
-export default function ValidationModal({ isOpen, onClose, result, issues, isValid }) {
+export default function ValidationModal({ isOpen, onClose, result, onFocusNode, issues, isValid }) {
   if (!isOpen) return null;
 
   // Resolve shape: nuovo `result` ha priorita'; legacy fallback altrimenti.
@@ -63,7 +65,7 @@ export default function ValidationModal({ isOpen, onClose, result, issues, isVal
                 ❌ Errori ({errors.length}) — bloccano l'esecuzione
               </div>
               {errors.map((issue, i) => (
-                <IssueRow key={issue.id ? `${issue.id}-${i}` : i} issue={issue} />
+                <IssueRow key={issue.id ? `${issue.id}-${i}` : i} issue={issue} onFocusNode={onFocusNode} />
               ))}
             </div>
           )}
@@ -74,7 +76,7 @@ export default function ValidationModal({ isOpen, onClose, result, issues, isVal
                 ⚠️ Avvisi ({warnings.length})
               </div>
               {warnings.map((issue, i) => (
-                <IssueRow key={issue.id ? `${issue.id}-${i}` : i} issue={issue} />
+                <IssueRow key={issue.id ? `${issue.id}-${i}` : i} issue={issue} onFocusNode={onFocusNode} />
               ))}
             </div>
           )}
@@ -85,7 +87,7 @@ export default function ValidationModal({ isOpen, onClose, result, issues, isVal
                 ℹ️ Note ({infos.length})
               </div>
               {infos.map((issue, i) => (
-                <IssueRow key={issue.id ? `${issue.id}-${i}` : i} issue={issue} />
+                <IssueRow key={issue.id ? `${issue.id}-${i}` : i} issue={issue} onFocusNode={onFocusNode} />
               ))}
             </div>
           )}
@@ -94,9 +96,19 @@ export default function ValidationModal({ isOpen, onClose, result, issues, isVal
   );
 }
 
-function IssueRow({ issue }) {
+function IssueRow({ issue, onFocusNode }) {
+  const clickable = !!(issue.nodeId && onFocusNode);
   return (
-    <div className={`validation-modal__issue validation-modal__issue--${issue.severity}`}>
+    <div
+      className={
+        `validation-modal__issue validation-modal__issue--${issue.severity}` +
+        (clickable ? ' validation-modal__issue--clickable' : '')
+      }
+      onClick={clickable ? () => onFocusNode(issue.nodeId) : undefined}
+      role={clickable ? 'button' : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onKeyDown={clickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onFocusNode(issue.nodeId); } } : undefined}
+    >
       <span className="validation-modal__issue-icon">{SEVERITY_ICON[issue.severity]}</span>
       <div className="validation-modal__issue-content">
         <div className="validation-modal__issue-message">{issue.message}</div>

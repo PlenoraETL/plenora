@@ -252,24 +252,17 @@ const ArricchisciEditorContent = () => {
 
   const handleShowConfirmModal = useCallback(async () => {
     const currentNodes = nodesRef.current;
-    if (currentNodes.length === 0) { toast.warning('Canvas vuoto. Aggiungi nodi prima di eseguire.'); return; }
     // Pre-flight access_denied: backend (RB.4.B/RB.7.B) marca i nodi che
     // riferiscono risorse non visibili al gruppo del progetto. Blocca il
     // run prima di chiamare il backend (che fallirebbe a runtime con
     // _assert_file_source_group_access — rete di sicurezza preservata).
+    // NB: access_denied NON e' nel validator — resta come unico guard pre-confirm.
     const denied = describeAccessDeniedNodes(currentNodes);
     if (denied) {
       toast.error('Esecuzione bloccata: rimuovi o sostituisci i nodi con risorse non accessibili.');
       console.warn('[run-blocked] access_denied nodes:\n' + denied.summary);
       return;
     }
-    const enrichers = currentNodes.filter(n => n.type === 'api_enrich');
-    const anyNeedsSource = enrichers.some(n => {
-      if (n.data?.api_type === 'generator') return false;
-      const staticParameters = n.data?.static_parameters || {};
-      return (n.data?.parameters || []).some(p => p.required && p.mode !== 'fixed' && !(p.name in staticParameters));
-    });
-    if (anyNeedsSource && !currentNodes.find(n => n.type === 'project_source' || n.type === 'file_source' || n.type === 'staticValues')) { toast.warning('Aggiungi almeno una sorgente dati.'); return; }
     await handleSaveQuiet();
     // I nodi file-processor (rest_file) lavorano
     // file->file, non riga-per-riga su un DataFrame. Il validate/estimate

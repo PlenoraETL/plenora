@@ -114,7 +114,23 @@ vi.mock('../../src/api/apiConnections', () => ({
 }));
 
 vi.mock('../../src/components/modals/ValidationModal', () => ({
-  default: ({ isOpen }) => (isOpen ? <div data-testid="validation-modal" /> : null),
+  default: ({ isOpen, onFocusNode, result }) => {
+    if (!isOpen) return null;
+    const issues = result?.issues || [];
+    return (
+      <div data-testid="validation-modal">
+        {issues.map((issue, i) => (
+          <div
+            key={i}
+            data-testid={issue.nodeId ? `issue-row-${issue.nodeId}` : `issue-row-${i}`}
+            onClick={issue.nodeId && onFocusNode ? () => onFocusNode(issue.nodeId) : undefined}
+          >
+            {issue.message}
+          </div>
+        ))}
+      </div>
+    );
+  },
 }));
 
 vi.mock('../../src/components/modals/RunHistoryModal', () => ({
@@ -273,5 +289,76 @@ describe('ResultNode (parent) — branch & gating contract', () => {
     });
     expect(validateEstraiCanvasMock).not.toHaveBeenCalled();
     expect(validateManipolaCanvasMock).not.toHaveBeenCalled();
+  });
+
+  it('Click-to-focus: click su issue con nodeId chiude il modal', async () => {
+    validateEstraiCanvasMock.mockReturnValue({
+      isValid: false,
+      issues: [
+        { id: 'SOURCE_ISOLATED', severity: 'error', message: 'Nodo isolato', nodeId: 'src-1', nodeName: 'src-1' },
+      ],
+      ok: false,
+      bySeverity: {
+        error: [{ id: 'SOURCE_ISOLATED', severity: 'error', message: 'Nodo isolato', nodeId: 'src-1', nodeName: 'src-1' }],
+        warning: [],
+        info: [],
+      },
+    });
+
+    // Assicura che getNodes trovi il nodo con una posizione
+    setCanvasState(buildCanvasState({
+      nodes: [
+        { id: 'src-1', type: 'tableNode', position: { x: 100, y: 200 }, data: { columns: [] } },
+        { id: 'result-1', type: 'result', position: { x: 400, y: 200 }, data: {} },
+      ],
+    }));
+
+    const user = userEvent.setup();
+    renderResultNode();
+
+    // Trigger validazione fallita → apre modal
+    await user.click(screen.getByRole('button', { name: /esegui query/i }));
+    await waitFor(() => {
+      expect(screen.getByTestId('validation-modal')).toBeInTheDocument();
+    });
+
+    // Click sulla issue row con nodeId
+    await user.click(screen.getByTestId('issue-row-src-1'));
+
+    // Il modal si deve chiudere (handleFocusNode chiama setShowValidation(false))
+    await waitFor(() => {
+      expect(screen.queryByTestId('validation-modal')).not.toBeInTheDocument();
+    });
+  });
+
+  it('Issue row senza nodeId: nessun onClick', async () => {
+    validateEstraiCanvasMock.mockReturnValue({
+      isValid: false,
+      issues: [
+        { id: 'CANVAS_EMPTY', severity: 'error', message: 'Canvas vuoto' },
+      ],
+      ok: false,
+      bySeverity: {
+        error: [{ id: 'CANVAS_EMPTY', severity: 'error', message: 'Canvas vuoto' }],
+        warning: [],
+        info: [],
+      },
+    });
+
+    const user = userEvent.setup();
+    renderResultNode();
+
+    await user.click(screen.getByRole('button', { name: /esegui query/i }));
+    await waitFor(() => {
+      expect(screen.getByTestId('validation-modal')).toBeInTheDocument();
+    });
+
+    // La issue row senza nodeId non ha data-testid con nodeId
+    const issueRow = screen.getByTestId('issue-row-0');
+    expect(issueRow).toBeInTheDocument();
+
+    // Click sulla row: il modal resta aperto (nessun onFocusNode invocato)
+    await user.click(issueRow);
+    expect(screen.getByTestId('validation-modal')).toBeInTheDocument();
   });
 });

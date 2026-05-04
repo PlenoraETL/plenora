@@ -16,7 +16,7 @@
  *   - ResultNodeImdfView: view quando isImdfMode=true (Batch 2 step 2)
  *   - ResultNodeStandardView: view altrimenti (Batch 2 step 3)
  */
-import React, { useState, memo, useMemo } from 'react';
+import React, { useState, useCallback, memo, useMemo } from 'react';
 import { Handle, Position, useReactFlow, useStore } from 'reactflow';
 import ValidationModal from '../modals/ValidationModal';
 import { validateManipolaCanvas } from '../../utils/validateManipolaCanvas';
@@ -39,7 +39,7 @@ import './ResultNode.css';
  * Tutti gli aggiornamenti avvengono tramite useCanvasStore (updateNodeData, deleteNode).
  */
 const ResultNode = memo(({ data, id }) => {
-  const { getEdges, getNodes } = useReactFlow();
+  const { getEdges, getNodes, setCenter } = useReactFlow();
 
   // Sottoscrizioni reattive per i bottoni Preview/Esegui (propagate alle view)
   const hasOnPreview = useCanvasStore(s => !!s.editorActionsRef?.current?.onPreview);
@@ -190,6 +190,18 @@ const ResultNode = memo(({ data, id }) => {
     useCanvasStore.getState().editorActionsRef.current.onPreview?.(id);
   };
 
+  // Click-to-focus: chiude il modal e centra il canvas sul nodo problematico.
+  const handleFocusNode = useCallback((nodeId) => {
+    const node = getNodes().find(n => n.id === nodeId);
+    if (!node) return;
+    setShowValidation(false);
+    setCenter(
+      node.position.x + (node.width || 200) / 2,
+      node.position.y + (node.height || 80) / 2,
+      { zoom: 1.2, duration: 400 },
+    );
+  }, [getNodes, setCenter]);
+
   return (
     <div className={`result-node result-node--${nodeVariant}`}>
       <Handle
@@ -247,6 +259,7 @@ const ResultNode = memo(({ data, id }) => {
           isOpen={showValidation}
           onClose={() => setShowValidation(false)}
           result={validationResult}
+          onFocusNode={handleFocusNode}
         />
       </div>
     </div>

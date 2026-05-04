@@ -25,6 +25,7 @@ export function createReactFlowMock(options = {}) {
       screenToFlowPosition: ({ x, y }) => ({ x, y }),
       getEdges: () => readState().edges || [],
       getNodes: () => readState().nodes || [],
+      setCenter: () => {},
     }),
     useStore: (selector) => selector({
       edges: readState().edges || [],

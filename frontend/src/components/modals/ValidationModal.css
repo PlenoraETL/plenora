@@ -183,6 +183,20 @@
 }
 [data-theme='light'] .validation-modal__issue--info { background: #F0F7FF; }
 
+/* ── Clickable issue row (click-to-focus) ──────────────────────── */
+.validation-modal__issue--clickable {
+  cursor: pointer;
+  transition: transform 0.12s, filter 0.12s;
+}
+.validation-modal__issue--clickable:hover {
+  transform: translateX(2px);
+  filter: brightness(1.15);
+}
+.validation-modal__issue--clickable:focus-visible {
+  outline: 2px solid var(--plen-blue, #4B8BFF);
+  outline-offset: 1px;
+}
+
 .validation-modal__issue-icon {
   font-size: 13px;
   margin-top: 1px;
