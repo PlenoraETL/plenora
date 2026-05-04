@@ -95,6 +95,9 @@ EXPECTED_DISPATCHER_BRANCHES: Set[str] = {
     "concat_columns", "pivot", "geo_envelope",
     # spatial
     "geo_from_coords",
+    # BE-PHASE2-SCHEMA-INFER-002 batch 1
+    "add_row_number", "uuid_generator", "string_length", "date_extract",
+    "geo_distance", "geo_to_wkt",
 }
 
 # Transform IDs nel registry che ALTERANO lo schema (aggiungono/rimuovono
@@ -102,14 +105,14 @@ EXPECTED_DISPATCHER_BRANCHES: Set[str] = {
 # Drift target: ogni voce qui serve di un metodo `_schema_xxx` dedicato
 # in `_infer_transform_schema`.
 PASSTHROUGH_WRONG_GAP: Set[str] = {
-    "add_row_number",       # aggiunge colonna __rownum__
+    # BE-PHASE2-SCHEMA-INFER-002 batch 1 ha promosso (rimossi):
+    #   add_row_number, uuid_generator, string_length, date_extract,
+    #   geo_distance, geo_to_wkt
     "bin",                  # aggiunge colonna bin output
     "cross_join",           # combina colonne L+R
-    "date_extract",         # aggiunge colonne year/month/day/...
     "flatten_json",         # esplode chiavi JSON in colonne
     "geo_bounds_extractor", # aggiunge minx/miny/maxx/maxy
     "geo_count_points_in_polygons",  # aggiunge counts column
-    "geo_distance",         # aggiunge colonna distanza
     "geo_explode",          # multiplica righe (no schema delta) — boundary
     "geo_length",           # aggiunge length column
     "geo_line_builder",     # produce geometry:line
@@ -119,7 +122,6 @@ PASSTHROUGH_WRONG_GAP: Set[str] = {
     "geo_point_on_surface", # produce geometry:point
     "geo_polygon_builder",  # produce geometry:polygon
     "geo_symmetric_difference",  # combina schemi L+R
-    "geo_to_wkt",           # aggiunge colonna WKT (str)
     "geo_vertex_count",     # aggiunge colonna count int
     "geo_voronoi",          # produce geometry:polygon
     "geo_within",           # filter-like + flag column
@@ -128,11 +130,9 @@ PASSTHROUGH_WRONG_GAP: Set[str] = {
     "reorder_columns",      # cambia ordine (non rilevante per FE), ma vedi nota
     "statistics",           # aggiunge colonne statistiche
     "string_extract",       # aggiunge colonna match
-    "string_length",        # aggiunge colonna len int
     "string_pad",           # passthrough? — verificare con team
     "table_diff",           # aggiunge colonne diff
     "transpose",            # ristruttura schema
-    "uuid_generator",       # aggiunge colonna UUID
     "window_function",      # aggiunge colonna funzione finestra
     "dedup_advanced",       # passthrough rows-only — vedi nota
     "geo_boundary",         # produce geometry:line
@@ -239,9 +239,9 @@ def test_passthrough_wrong_gap_size_lock():
     # Lock attuale al BE-SCHEMA-INFER-001A baseline. Quando una
     # transform passa a dispatcher dedicato, sposta l'entry e
     # decrementa il limite (`assert actual <= N`).
-    assert actual == 36, (
+    assert actual == 30, (
         f"Gap passthrough-WRONG cambiato: {actual}. "
-        f"Aggiorna l'assert e il piano BE-SCHEMA-INFER-002."
+        f"Aggiorna l'assert e il piano BE-SCHEMA-INFER-002+."
     )
 
 
@@ -251,8 +251,8 @@ def test_passthrough_wrong_gap_size_lock():
 
 
 def test_dispatcher_falls_back_to_passthrough_for_unknown_ops():
-    """Verifica end-to-end che un `transform_op` non gestito (qui:
-    fittizio + un caso reale dal gap) ricada nel passthrough con
+    """Verifica end-to-end che un `transform_op` ancora non promosso
+    (qui un'entry reale dal gap residuo) ricada nel passthrough con
     warning. Niente import pesanti — usiamo `SimpleNamespace` per il
     nodo."""
     from types import SimpleNamespace
@@ -269,7 +269,7 @@ def test_dispatcher_falls_back_to_passthrough_for_unknown_ops():
     node = SimpleNamespace(
         id="n1",
         config={},
-        transform_op="add_row_number",  # passthrough-WRONG entry
+        transform_op="bin",  # passthrough-WRONG entry residua
         data=None,
     )
     out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
@@ -300,3 +300,241 @@ def test_dispatcher_falls_back_for_unknown_phantom_op():
     assert len(out) == 1
     assert out[0].name == "x"
     assert out[0].type == "real"
+
+
+# ---------------------------------------------------------------------------
+# 5. Behavioral tests — BE-PHASE2-SCHEMA-INFER-002 batch 1
+# ---------------------------------------------------------------------------
+
+from types import SimpleNamespace  # noqa: E402
+
+from app.services.schema_inference import (  # noqa: E402
+    ColumnSchema,
+    SchemaInferenceService,
+)
+
+
+def _service_and_input():
+    service = SchemaInferenceService(project_service=None)
+    input_schema = [
+        ColumnSchema(name="a", type="int", source_node="src", is_calculated=False),
+        ColumnSchema(name="b", type="str", source_node="src", is_calculated=False),
+    ]
+    return service, input_schema
+
+
+def _node(transform_op: str, config: dict) -> SimpleNamespace:
+    return SimpleNamespace(id="n1", config=config, transform_op=transform_op, data=None)
+
+
+# add_row_number ------------------------------------------------------------
+
+
+def test_add_row_number_default_output_column():
+    service, input_schema = _service_and_input()
+    node = _node("add_row_number", {})
+    out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
+    names = [c.name for c in out]
+    assert names == ["a", "b", "row_number"]
+    assert out[-1].type == "int"
+    assert out[-1].is_calculated is True
+
+
+def test_add_row_number_custom_output_column():
+    service, input_schema = _service_and_input()
+    node = _node("add_row_number", {"output_column": "rn", "start": 100})
+    out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
+    assert [c.name for c in out] == ["a", "b", "rn"]
+    assert out[-1].type == "int"
+
+
+def test_add_row_number_collision_does_not_duplicate():
+    """Se l'output column collide con una colonna esistente, non viene
+    aggiunta una colonna duplicata. Allineato al comportamento runtime
+    (overwrite) — qui lo schema non duplica il nome."""
+    service, input_schema = _service_and_input()
+    node = _node("add_row_number", {"output_column": "a"})
+    out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
+    names = [c.name for c in out]
+    assert names == ["a", "b"]
+
+
+# uuid_generator ------------------------------------------------------------
+
+
+def test_uuid_generator_default():
+    service, input_schema = _service_and_input()
+    node = _node("uuid_generator", {})
+    out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
+    assert [c.name for c in out] == ["a", "b", "uuid"]
+    assert out[-1].type == "str"
+
+
+def test_uuid_generator_custom_column():
+    service, input_schema = _service_and_input()
+    node = _node("uuid_generator", {"output_column": "rec_id"})
+    out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
+    assert [c.name for c in out] == ["a", "b", "rec_id"]
+
+
+# string_length -------------------------------------------------------------
+
+
+def test_string_length_derives_default_output_column():
+    """Senza `output_column`, il runtime usa `f"{column}_length"`."""
+    service, input_schema = _service_and_input()
+    node = _node("string_length", {"column": "b"})
+    out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
+    assert [c.name for c in out] == ["a", "b", "b_length"]
+    assert out[-1].type == "int"
+
+
+def test_string_length_explicit_output_column():
+    service, input_schema = _service_and_input()
+    node = _node("string_length", {"column": "b", "output_column": "blen"})
+    out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
+    assert [c.name for c in out] == ["a", "b", "blen"]
+
+
+def test_string_length_no_column_passthrough():
+    """Senza `column` ne' `output_column` → schema invariato."""
+    service, input_schema = _service_and_input()
+    node = _node("string_length", {})
+    out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
+    assert [c.name for c in out] == ["a", "b"]
+
+
+# date_extract --------------------------------------------------------------
+
+
+def test_date_extract_default_year_only():
+    """Senza `parts`, runtime usa `["year"]`. Prefix derivato da `column`."""
+    service = SchemaInferenceService(project_service=None)
+    input_schema = [ColumnSchema(name="created_at", type="date", source_node="s", is_calculated=False)]
+    node = _node("date_extract", {"column": "created_at"})
+    out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
+    assert [c.name for c in out] == ["created_at", "created_at_year"]
+    assert out[-1].type == "int"
+
+
+def test_date_extract_multiple_parts_with_explicit_prefix():
+    service = SchemaInferenceService(project_service=None)
+    input_schema = [ColumnSchema(name="dt", type="date", source_node="s", is_calculated=False)]
+    node = _node("date_extract", {
+        "column": "dt",
+        "parts": ["year", "month", "day"],
+        "prefix": "ext_",
+    })
+    out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
+    names = [c.name for c in out]
+    assert names == ["dt", "ext_year", "ext_month", "ext_day"]
+    assert all(c.type == "int" for c in out[1:])
+
+
+def test_date_extract_invalid_parts_ignored():
+    """Parts non riconosciute sono ignorate (allineato al runtime)."""
+    service = SchemaInferenceService(project_service=None)
+    input_schema = [ColumnSchema(name="dt", type="date", source_node="s", is_calculated=False)]
+    node = _node("date_extract", {
+        "column": "dt",
+        "parts": ["year", "millennium", "fortnight", "month"],
+    })
+    out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
+    assert [c.name for c in out] == ["dt", "dt_year", "dt_month"]
+
+
+def test_date_extract_string_parts_normalized_to_list():
+    """Tolleranza al config: `parts` come str singola → list."""
+    service = SchemaInferenceService(project_service=None)
+    input_schema = [ColumnSchema(name="dt", type="date", source_node="s", is_calculated=False)]
+    node = _node("date_extract", {"column": "dt", "parts": "month"})
+    out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
+    assert [c.name for c in out] == ["dt", "dt_month"]
+
+
+def test_date_extract_no_column_passthrough():
+    service, input_schema = _service_and_input()
+    node = _node("date_extract", {})
+    out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
+    assert [c.name for c in out] == ["a", "b"]
+
+
+# geo_distance --------------------------------------------------------------
+
+
+def test_geo_distance_uses_left_input_only():
+    """`geo_distance` e' multi-input. Lo schema output e' LEFT +
+    `output_column`. Il right NON contribuisce colonne."""
+    service = SchemaInferenceService(project_service=None)
+    left = [
+        ColumnSchema(name="id", type="int", source_node="L", is_calculated=False),
+        ColumnSchema(name="geometry", type="geometry:point", source_node="L", is_calculated=False),
+    ]
+    right = [
+        ColumnSchema(name="poi_id", type="int", source_node="R", is_calculated=False),
+        ColumnSchema(name="geom_r", type="geometry:polygon", source_node="R", is_calculated=False),
+    ]
+    node = _node("geo_distance", {
+        "left_geom_column": "geometry",
+        "right_geom_column": "geom_r",
+    })
+    out = service._infer_transform_schema(node, [left, right], edges_by_target={})
+    names = [c.name for c in out]
+    assert names == ["id", "geometry", "distance_m"]
+    assert out[-1].type == "real"
+
+
+def test_geo_distance_custom_output_column():
+    service = SchemaInferenceService(project_service=None)
+    left = [ColumnSchema(name="x", type="int", source_node="L", is_calculated=False)]
+    right = [ColumnSchema(name="y", type="int", source_node="R", is_calculated=False)]
+    node = _node("geo_distance", {"output_column": "dist_km"})
+    out = service._infer_transform_schema(node, [left, right], edges_by_target={})
+    assert [c.name for c in out] == ["x", "dist_km"]
+
+
+# geo_to_wkt ---------------------------------------------------------------
+
+
+def test_geo_to_wkt_default_mode_adds_wkt_column():
+    service = SchemaInferenceService(project_service=None)
+    input_schema = [
+        ColumnSchema(name="id", type="int", source_node="s", is_calculated=False),
+        ColumnSchema(name="geometry", type="geometry:point", source_node="s", is_calculated=False),
+    ]
+    node = _node("geo_to_wkt", {"geom_column": "geometry"})
+    out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
+    assert [c.name for c in out] == ["id", "geometry", "geometry_wkt"]
+    assert out[-1].type == "str"
+
+
+def test_geo_to_wkt_latlon_mode_adds_two_columns():
+    service = SchemaInferenceService(project_service=None)
+    input_schema = [ColumnSchema(name="id", type="int", source_node="s", is_calculated=False)]
+    node = _node("geo_to_wkt", {"geom_column": "g", "mode": "latlon"})
+    out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
+    names = [c.name for c in out]
+    assert names == ["id", "latitude", "longitude"]
+    assert all(c.type == "real" for c in out[1:])
+
+
+def test_geo_to_wkt_both_mode_adds_three_columns():
+    service = SchemaInferenceService(project_service=None)
+    input_schema = [ColumnSchema(name="id", type="int", source_node="s", is_calculated=False)]
+    node = _node("geo_to_wkt", {
+        "geom_column": "g",
+        "mode": "both",
+        "wkt_column": "wkt_str",
+        "lat_column": "lat",
+        "lon_column": "lon",
+    })
+    out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
+    assert [c.name for c in out] == ["id", "wkt_str", "lat", "lon"]
+
+
+def test_geo_to_wkt_unknown_mode_falls_back_to_wkt():
+    service = SchemaInferenceService(project_service=None)
+    input_schema = [ColumnSchema(name="id", type="int", source_node="s", is_calculated=False)]
+    node = _node("geo_to_wkt", {"geom_column": "g", "mode": "weird_unknown"})
+    out = service._infer_transform_schema(node, [input_schema], edges_by_target={})
+    assert [c.name for c in out] == ["id", "geometry_wkt"]

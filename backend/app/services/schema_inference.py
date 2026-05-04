@@ -436,6 +436,19 @@ class SchemaInferenceService:
         # Spatial
         elif transform_op == "geo_from_coords":
             return self._schema_geo_from_coords(input_schemas, config, node.id)
+        # Utility / strings (BE-PHASE2-SCHEMA-INFER-002 batch 1)
+        elif transform_op == "add_row_number":
+            return self._schema_add_row_number(input_schemas, config, node.id)
+        elif transform_op == "uuid_generator":
+            return self._schema_uuid_generator(input_schemas, config, node.id)
+        elif transform_op == "string_length":
+            return self._schema_string_length(input_schemas, config, node.id)
+        elif transform_op == "date_extract":
+            return self._schema_date_extract(input_schemas, config, node.id)
+        elif transform_op == "geo_distance":
+            return self._schema_geo_distance(input_schemas, config, node.id)
+        elif transform_op == "geo_to_wkt":
+            return self._schema_geo_to_wkt(input_schemas, config, node.id)
         else:
             logger.warning(f"Operazione {transform_op} non gestita - passthrough")
             return self._schema_passthrough(input_schemas, node.id)
@@ -1355,9 +1368,276 @@ class SchemaInferenceService:
         return result
     
     # =========================================================================
+    # BATCH 1 — BE-PHASE2-SCHEMA-INFER-002
+    # =========================================================================
+    # Handler dedicati per i 6 transform_op del primo batch di parity gap
+    # closure. Ogni handler corrisponde 1:1 alla shape di output del runtime
+    # in `app/core/manipola/transforms/{utility,strings,spatial}.py`.
+    #
+    # Convenzione: input + nuove colonne (mai mutazione del nome di colonne
+    # esistenti, salvo collisione esplicita gestita come "skip add"). Tutti
+    # gli handler sono pure: input → output, niente I/O, niente env.
+
+    def _schema_add_row_number(
+        self,
+        input_schemas: List[List[ColumnSchema]],
+        config: dict,
+        node_id: str,
+    ) -> List[ColumnSchema]:
+        """add_row_number: input + colonna `output_column` (int).
+
+        Runtime: `op_add_row_number` (utility.py) aggiunge `output_column`
+        come int sequenziale globale o per-partition. Gli altri parametri
+        (`start`, `partition_column`, `order_column`, `ascending`) non
+        alterano lo schema.
+        """
+        if not input_schemas:
+            return []
+
+        result = self._copy_schema(input_schemas[0], node_id)
+        output_col = config.get("output_column") or "row_number"
+        if output_col and output_col not in {c.name for c in result}:
+            result.append(ColumnSchema(
+                name=output_col,
+                type="int",
+                source_node=node_id,
+                is_calculated=True,
+            ))
+        return result
+
+    def _schema_uuid_generator(
+        self,
+        input_schemas: List[List[ColumnSchema]],
+        config: dict,
+        node_id: str,
+    ) -> List[ColumnSchema]:
+        """uuid_generator: input + colonna `output_column` (str UUIDv4).
+
+        Runtime: `op_uuid_generator` aggiunge una colonna stringa con UUID
+        v4 per riga.
+        """
+        if not input_schemas:
+            return []
+
+        result = self._copy_schema(input_schemas[0], node_id)
+        output_col = config.get("output_column") or "uuid"
+        if output_col and output_col not in {c.name for c in result}:
+            result.append(ColumnSchema(
+                name=output_col,
+                type="str",
+                source_node=node_id,
+                is_calculated=True,
+            ))
+        return result
+
+    def _schema_string_length(
+        self,
+        input_schemas: List[List[ColumnSchema]],
+        config: dict,
+        node_id: str,
+    ) -> List[ColumnSchema]:
+        """string_length: input + colonna `output_column` (int).
+
+        Runtime: `op_string_length` (strings.py) aggiunge la lunghezza di
+        `column` in `output_column` (default `"{column}_length"`). Se
+        `column` non esiste a runtime il transform e' no-op (warning) —
+        qui replichiamo: senza `column` valido o senza output_col
+        derivabile, schema invariato.
+        """
+        if not input_schemas:
+            return []
+
+        result = self._copy_schema(input_schemas[0], node_id)
+        column = config.get("column") or ""
+        configured_out = config.get("output_column")
+        if configured_out:
+            output_col = configured_out
+        elif column:
+            output_col = f"{column}_length"
+        else:
+            return result  # senza column ne' output_column — schema invariato
+
+        if output_col not in {c.name for c in result}:
+            result.append(ColumnSchema(
+                name=output_col,
+                type="int",
+                source_node=node_id,
+                is_calculated=True,
+            ))
+        return result
+
+    def _schema_date_extract(
+        self,
+        input_schemas: List[List[ColumnSchema]],
+        config: dict,
+        node_id: str,
+    ) -> List[ColumnSchema]:
+        """date_extract: input + 1 colonna per ogni `parts` valida.
+
+        Runtime: `op_date_extract` (utility.py) crea
+        `f"{prefix or column + '_'}{part}"` per ogni `part` in
+        {year, month, day, quarter, weekday, week, hour, minute, second}.
+        Tipo output: `int` per tutte le parti (week e' Int64 in pandas
+        ma resta semanticamente int per il FE).
+
+        Config:
+        - `column`: colonna sorgente datetime (required)
+        - `parts`: list[str] o str singolo (default `["year"]`)
+        - `prefix`: str opzionale (se vuoto, usa `f"{column}_"`)
+
+        Le parts non riconosciute sono ignorate (allineato al runtime).
+        """
+        if not input_schemas:
+            return []
+
+        result = self._copy_schema(input_schemas[0], node_id)
+
+        column = config.get("column") or ""
+        if not column:
+            return result  # no source col -> no schema delta
+
+        raw_parts = config.get("parts")
+        if raw_parts is None:
+            parts: List[str] = ["year"]
+        elif isinstance(raw_parts, str):
+            parts = [raw_parts]
+        elif isinstance(raw_parts, list):
+            parts = [str(p) for p in raw_parts if p]
+        else:
+            parts = ["year"]
+
+        prefix = config.get("prefix")
+        col_prefix = prefix if prefix else f"{column}_"
+
+        valid_parts = {
+            "year", "month", "day", "quarter", "weekday",
+            "week", "hour", "minute", "second",
+        }
+
+        existing = {c.name for c in result}
+        for part in parts:
+            part_lower = part.lower().strip()
+            if part_lower not in valid_parts:
+                continue
+            col_name = f"{col_prefix}{part_lower}"
+            if col_name in existing:
+                continue
+            result.append(ColumnSchema(
+                name=col_name,
+                type="int",
+                source_node=node_id,
+                is_calculated=True,
+            ))
+            existing.add(col_name)
+
+        return result
+
+    def _schema_geo_distance(
+        self,
+        input_schemas: List[List[ColumnSchema]],
+        config: dict,
+        node_id: str,
+    ) -> List[ColumnSchema]:
+        """geo_distance: input sinistro + colonna `output_column` (real).
+
+        Runtime: `op_geo_distance` (spatial.py) e' multi-input (dfs[0] =
+        left, dfs[1] = right). L'output e' un GeoDataFrame con TUTTE le
+        colonne del LEFT + `output_column` (distanza float). Il right
+        non contribuisce colonne allo schema output.
+
+        Right input vuoto/mancante: il runtime ritorna `dfs[0]` (o un
+        empty GDF) — lo schema dichiarato resta comunque LEFT +
+        output_column (allineato col percorso success-path canonico).
+        """
+        if not input_schemas:
+            return []
+
+        # left schema (primo input). Se manca anche un secondo input,
+        # il runtime degrada graziosamente; lo schema FE annunciato resta
+        # comunque coerente col success-path canonico (left + distance).
+        result = self._copy_schema(input_schemas[0], node_id)
+        output_col = config.get("output_column") or "distance_m"
+        if output_col and output_col not in {c.name for c in result}:
+            result.append(ColumnSchema(
+                name=output_col,
+                type="real",
+                source_node=node_id,
+                is_calculated=True,
+            ))
+        return result
+
+    def _schema_geo_to_wkt(
+        self,
+        input_schemas: List[List[ColumnSchema]],
+        config: dict,
+        node_id: str,
+    ) -> List[ColumnSchema]:
+        """geo_to_wkt: input + 1 o 3 colonne in base a `mode`.
+
+        Runtime: `op_geo_to_wkt` (spatial.py) supporta 3 modalita':
+        - `"wkt"` (default): aggiunge `wkt_column` (str)
+        - `"latlon"`: aggiunge `lat_column` (real) + `lon_column` (real)
+        - `"both"`: aggiunge tutte e 3
+
+        Config defaults: `mode="wkt"`, `wkt_column="geometry_wkt"`,
+        `lat_column="latitude"`, `lon_column="longitude"`.
+        """
+        if not input_schemas:
+            return []
+
+        result = self._copy_schema(input_schemas[0], node_id)
+        existing = {c.name for c in result}
+
+        mode = (config.get("mode") or "wkt").lower().strip()
+        if mode not in ("wkt", "latlon", "both"):
+            mode = "wkt"  # allineato al default runtime
+
+        if mode in ("wkt", "both"):
+            wkt_col = config.get("wkt_column") or "geometry_wkt"
+            if wkt_col and wkt_col not in existing:
+                result.append(ColumnSchema(
+                    name=wkt_col, type="str",
+                    source_node=node_id, is_calculated=True,
+                ))
+                existing.add(wkt_col)
+
+        if mode in ("latlon", "both"):
+            lat_col = config.get("lat_column") or "latitude"
+            lon_col = config.get("lon_column") or "longitude"
+            if lat_col and lat_col not in existing:
+                result.append(ColumnSchema(
+                    name=lat_col, type="real",
+                    source_node=node_id, is_calculated=True,
+                ))
+                existing.add(lat_col)
+            if lon_col and lon_col not in existing:
+                result.append(ColumnSchema(
+                    name=lon_col, type="real",
+                    source_node=node_id, is_calculated=True,
+                ))
+                existing.add(lon_col)
+
+        return result
+
+    def _copy_schema(
+        self,
+        schema: List[ColumnSchema],
+        node_id: str,
+    ) -> List[ColumnSchema]:
+        """Helper pure: ricrea lo schema con `source_node` aggiornato a
+        `node_id`. Estratto per evitare la replica del list-comprehension
+        in tutti gli handler nuovi."""
+        return [ColumnSchema(
+            name=col.name,
+            type=col.type,
+            source_node=node_id,
+            is_calculated=col.is_calculated,
+        ) for col in schema]
+
+    # =========================================================================
     # METODI DI SUPPORTO
     # =========================================================================
-    
+
     def _schema_passthrough(
         self, 
         input_schemas: List[List[ColumnSchema]],
