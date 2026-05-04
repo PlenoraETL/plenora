@@ -189,14 +189,19 @@ def test_op_join_not_impacted_by_cross_join_cap(monkeypatch):
 
 def test_main_py_recognizes_manipola_cross_join_stage():
     """`app/main.py` deve mappare `manipola_cross_join` a
-    `_ROW_COUNT_STAGES` con `suggested_action="reduce_inputs_or_raise_cap"`."""
+    `_ROW_COUNT_STAGES` con `suggested_action="reduce_inputs_or_raise_cap"`.
+
+    Membership-based: il set puo' contenere stage aggiuntivi
+    (es. `manipola_multi_join` da batch 002).
+    """
     main_py = (
         Path(__file__).resolve().parent.parent.parent.parent
         / "app" / "main.py"
     )
     src = main_py.read_text(encoding="utf-8")
-    # Stage routing
-    assert '_ROW_COUNT_STAGES = frozenset({"manipola_cross_join"})' in src
+    # Stage routing — `manipola_cross_join` membership in _ROW_COUNT_STAGES
+    assert "_ROW_COUNT_STAGES" in src
+    assert '"manipola_cross_join"' in src
     # Action label per row-count
     assert 'suggested_action = "reduce_inputs_or_raise_cap"' in src
     # Locked: status code split unchanged from batch 002 contract
@@ -210,17 +215,20 @@ def test_main_py_recognizes_manipola_cross_join_stage():
 
 def test_main_py_renders_row_count_message_for_cross_join():
     """Source-bound: il branch `is_row_count` in main.py compone un
-    messaggio row-count-aware (non MB)."""
+    messaggio row-count-aware (non MB) per cross-join (verbo
+    `genererebbe` = preflight pre-merge)."""
     main_py = (
         Path(__file__).resolve().parent.parent.parent.parent
         / "app" / "main.py"
     )
     src = main_py.read_text(encoding="utf-8")
-    # Il messaggio cross-join contiene "righe" (row-count) e cita
-    # observed_bytes/limit_bytes (i campi base reusati come scalari).
-    assert "Il cross-join genererebbe" in src
+    # Il messaggio cross-join usa verbo `genererebbe` (preflight).
+    assert '"genererebbe"' in src
     assert "exc.observed_bytes" in src
     assert "exc.limit_bytes" in src
+    # Narrative parametrica row-count: stage + righe.
+    assert "Lo stage" in src
+    assert "righe" in src
 
 
 def test_main_py_adds_row_count_keys_to_details_for_row_count_stages():

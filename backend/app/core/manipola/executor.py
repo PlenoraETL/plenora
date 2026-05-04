@@ -32,6 +32,58 @@ from .plugin_executor import get_executor
 
 logger = get_logger(__name__)
 
+# BE-GO-READY-TRANSFORMATION-ENGINE-002-MULTI-JOIN-ROW-ESTIMATE:
+# stage identifier per il guard OOM pre-merge del multi-join.
+# Estende la family `manipola_*` (cross-join: `manipola_cross_join`).
+# Il handler in app/main.py riconosce questo stage come row-count
+# stage e produce messaggio + suggested_action row-count-aware.
+MULTI_JOIN_STAGE = "manipola_multi_join"
+
+
+def _estimate_merge_output_rows(
+    left: pd.DataFrame,
+    right: pd.DataFrame,
+    join_keys: List[str],
+    how: str,
+) -> Optional[int]:
+    """Estimate pandas merge output cardinality from key frequencies.
+
+    The estimate is exact for pandas equality joins on the configured keys and
+    join types used by multi-join (`inner`, `left`, `right`, `outer`). It costs
+    O(N+M), but it runs before `pd.merge` allocates the output DataFrame.
+    """
+    join_how = str(how or "inner").lower()
+    if join_how not in {"inner", "left", "right", "outer"}:
+        return None
+    if not join_keys:
+        return None
+
+    left_counts = left.groupby(join_keys, dropna=False).size()
+    right_counts = right.groupby(join_keys, dropna=False).size()
+
+    matched_keys = left_counts.index.intersection(right_counts.index)
+    if len(matched_keys):
+        left_matched = left_counts.loc[matched_keys]
+        right_matched = right_counts.loc[matched_keys]
+        matched_rows = int((left_matched * right_matched).sum())
+        left_matched_input_rows = int(left_matched.sum())
+        right_matched_input_rows = int(right_matched.sum())
+    else:
+        matched_rows = 0
+        left_matched_input_rows = 0
+        right_matched_input_rows = 0
+
+    left_unmatched_rows = len(left) - left_matched_input_rows
+    right_unmatched_rows = len(right) - right_matched_input_rows
+
+    if join_how == "inner":
+        return matched_rows
+    if join_how == "left":
+        return matched_rows + left_unmatched_rows
+    if join_how == "right":
+        return matched_rows + right_unmatched_rows
+    return matched_rows + left_unmatched_rows + right_unmatched_rows
+
 
 # =============================================================================
 # C3 round 3 fix 3: cycle detection runtime cross-project
@@ -839,7 +891,7 @@ class ManipolaExecutor:
     def _esegui_multi_join(self, node, inputs):
         """
         Esegue multi-join su N DataFrame.
-        
+
         Strategia:
         1. Prende il primo DataFrame come base
         2. Fa merge sequenziale con gli altri
@@ -848,10 +900,10 @@ class ManipolaExecutor:
         if len(inputs) < 2:
             logger.warning("Multi-join richiede almeno 2 input")
             return inputs[0] if inputs else pd.DataFrame()
-        
+
         join_keys = _nf(node, 'join_keys') or (node.data or {}).get('config', {}).get('join_keys', [])
         join_type = _nf(node, 'multi_join_type') or (node.data or {}).get('config', {}).get('join_type', 'inner')
-        
+
         if not join_keys:
             logger.warning("Multi-join senza chiavi specificate, cerco colonne comuni")
             # Trova colonne comuni a tutti i DataFrame
@@ -859,37 +911,100 @@ class ManipolaExecutor:
             for df in inputs[1:]:
                 common_cols &= set(df.columns)
             join_keys = list(common_cols)
-            
+
             if not join_keys:
                 logger.warning("Nessuna colonna comune trovata per il join")
                 return inputs[0]
-        
+
         # Verifica che le chiavi esistano in tutti i DataFrame
         for idx, df in enumerate(inputs):
             missing = [k for k in join_keys if k not in df.columns]
             if missing:
                 logger.warning(f"Input {idx}: chiavi mancanti {missing}")
                 return inputs[0]
-        
-        
+
+
         # Inizia con il primo DataFrame
         result = inputs[0].copy()
-        
+
+        # === BE-GO-READY-TRANSFORMATION-ENGINE-002 — Multi-join OOM guard ===
+        # Multi-join sequenziale: ogni step `pd.merge` puo' inflate
+        # l'output rispetto agli input se le chiavi non sono unique.
+        # Senza un guard, un'esplosione al merge step k si propaga ai
+        # merge step k+1, k+2, ... saturando la memoria del worker
+        # (SIGKILL OS).
+        #
+        # Strategia: pre-merge cardinality estimate. Prima di ogni
+        # `pd.merge`, stimiamo le righe output dalle frequenze delle
+        # join key (`groupby(...).size()`). Se la stima supera il cap,
+        # solleviamo PRIMA della materializzazione del DataFrame. Reuse
+        # del contratto Memory/OOM (BE-GO-READY-MEMORY-OOM-001/002,
+        # cross-join 003): stessa eccezione `MemoryLimitExceededError`,
+        # stesso codice envelope `memory_limit_exceeded`, stage
+        # `manipola_multi_join`, status 413.
+        #
+        # Il costo e' O(N+M) per step, ma evita sia il falso positivo
+        # del worst-case cartesian (`len(result) * len(next_df)`) sia
+        # l'OOM del primo merge esplosivo. Il post-merge check resta
+        # come safety net se pandas semantics o join_type non stimabile
+        # divergono.
+        try:
+            _multi_cap = int(settings.get("MULTI_JOIN_MAX_OUTPUT_ROWS", 50_000_000))
+        except Exception:
+            # Contesto pure-test senza Settings: guard off.
+            _multi_cap = 0
+
+        # Sanity: input[0] da solo non deve superare il cap. Cattura
+        # casi degenere (l'utente passa un DataFrame gia' troppo grande
+        # come base del multi-join).
+        if _multi_cap > 0 and len(result) > _multi_cap:
+            from app.shared.exceptions import MemoryLimitExceededError
+            logger.warning(
+                f"Multi-join base input ({len(result)} righe) supera il cap "
+                f"configurato di {_multi_cap} righe — guard attivato pre-loop."
+            )
+            raise MemoryLimitExceededError(
+                observed_bytes=len(result),
+                limit_bytes=_multi_cap,
+                path_basename="multi_join_output",
+                stage=MULTI_JOIN_STAGE,
+            )
+
         # Merge sequenziale con gli altri
         for idx, df in enumerate(inputs[1:], start=2):
             df_copy = df.copy()
-            
+
             # Trova colonne duplicate (non-chiave)
             result_cols = set(result.columns) - set(join_keys)
             df_cols = set(df_copy.columns) - set(join_keys)
             duplicates = result_cols & df_cols
-            
+
             if duplicates:
                 # Rinomina nel df corrente
                 rename_map = {col: f"{col}_{idx}" for col in duplicates}
                 df_copy = df_copy.rename(columns=rename_map)
                 logger.info(f"Rinominate colonne: {list(rename_map.keys())}")
-            
+
+            # Pre-merge exact cardinality estimate. Runs before pandas
+            # materializes the merge output.
+            if _multi_cap > 0:
+                _estimated_rows = _estimate_merge_output_rows(
+                    result, df_copy, join_keys, join_type
+                )
+                if _estimated_rows is not None and _estimated_rows > _multi_cap:
+                    from app.shared.exceptions import MemoryLimitExceededError
+                    logger.warning(
+                        f"Multi-join step #{idx}: output stimato "
+                        f"{_estimated_rows} righe sopra il cap {_multi_cap} "
+                        f"prima del merge — guard attivato."
+                    )
+                    raise MemoryLimitExceededError(
+                        observed_bytes=_estimated_rows,
+                        limit_bytes=_multi_cap,
+                        path_basename="multi_join_output",
+                        stage=MULTI_JOIN_STAGE,
+                    )
+
             # Merge
             result = pd.merge(
                 result,
@@ -897,9 +1012,27 @@ class ManipolaExecutor:
                 on=join_keys,
                 how=join_type
             )
-            
+
             logger.info(f"Dopo merge #{idx}: {len(result)} righe, {len(result.columns)} col")
-        
+
+            # POST-merge cumulative guard: raise PRIMA del merge
+            # successivo se il cumulative output ha sforato. Cattura
+            # l'inflazione effettiva (incluso il caso di non-unique
+            # keys) prevenendo la propagazione N-step.
+            if _multi_cap > 0 and len(result) > _multi_cap:
+                from app.shared.exceptions import MemoryLimitExceededError
+                logger.warning(
+                    f"Multi-join post-step #{idx}: output cumulato "
+                    f"{len(result)} righe supera il cap {_multi_cap} — "
+                    f"guard attivato. Step rimanenti: {len(inputs) - idx}."
+                )
+                raise MemoryLimitExceededError(
+                    observed_bytes=len(result),
+                    limit_bytes=_multi_cap,
+                    path_basename="multi_join_output",
+                    stage=MULTI_JOIN_STAGE,
+                )
+
         return result
 
     def _gestisci_join_default(self, dataframes):

@@ -292,6 +292,24 @@ class Settings:
         # il guard (escape hatch testing/admin).
         # Override via env `CROSS_JOIN_MAX_OUTPUT_ROWS`.
         "CROSS_JOIN_MAX_OUTPUT_ROWS": 50_000_000,
+        # BE-GO-READY-TRANSFORMATION-ENGINE-002-MULTI-JOIN-ROW-ESTIMATE:
+        # cap massimo righe stimate per step dal multi-join sequenziale
+        # (`_esegui_multi_join` in `app.core.manipola.executor`). Il
+        # guard stima la cardinalita' output del prossimo `pd.merge`
+        # dalle frequenze delle join key PRIMA di materializzare il
+        # DataFrame. Se la stima supera il cap solleva
+        # `MemoryLimitExceededError` (stage `manipola_multi_join`).
+        # Reuse contratto Memory/OOM (status 413, codice
+        # `memory_limit_exceeded`).
+        # Default 50_000_000 righe (stesso budget del cross-join: stessa
+        # semantica "row count che il worker puo' tenere in RAM"). Cap
+        # <= 0 disabilita il guard.
+        # La stima usa value-counts sulle join key: costo O(N+M), ma
+        # molto piu' sicuro del worst-case cartesian
+        # (`len(result) * len(next)`) e meno rischioso di lasciare che
+        # il primo merge esploda in memoria.
+        # Override via env `MULTI_JOIN_MAX_OUTPUT_ROWS`.
+        "MULTI_JOIN_MAX_OUTPUT_ROWS": 50_000_000,
 
         # ==================== TASK ARRICCHIMENTO ====================
         "ENRICHMENT_BATCH_SIZE": 100,

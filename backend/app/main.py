@@ -287,8 +287,12 @@ async def canvas_corrupted_handler(request: Request, exc: CanvasCorruptedError):
 # counts (non bytes) in observed/limit_bytes. Il messaggio e'
 # row-count-aware; details aggiunge `limit_rows`/`observed_rows`
 # per FE convenience (le 7 chiavi base restano stabili).
+# BE-GO-READY-TRANSFORMATION-ENGINE-002-MULTI-JOIN-ROW-ESTIMATE:
+# stage `manipola_multi_join` aggiunto al row-count set per il
+# guard pre-merge del multi-join sequenziale (executor.py).
+# Il messaggio differenzia la remediation multi-join via stage.
 _RSS_STAGES = frozenset({"pipeline_execute", "worker_rss"})
-_ROW_COUNT_STAGES = frozenset({"manipola_cross_join"})
+_ROW_COUNT_STAGES = frozenset({"manipola_cross_join", "manipola_multi_join"})
 
 @app.exception_handler(MemoryLimitExceededError)
 async def memory_limit_exceeded_handler(
@@ -315,11 +319,27 @@ async def memory_limit_exceeded_handler(
             f"{limit_mb} MB). Riprova piu' tardi o contatta l'amministratore."
         )
     elif is_row_count:
+        # Stage-specific narrative: i numeri rappresentano row counts
+        # (osservato vs limite), MB nei _mb fields non rilevanti per
+        # il branch row-count.
+        if exc.stage == "manipola_multi_join":
+            _verb = "genererebbe"
+            _hint = (
+                "Riduci la dimensione degli input, rendi le chiavi di join "
+                "piu' selettive, o aggiungi filtri "
+                "su chiavi non-unique a monte, oppure alza il cap."
+            )
+        else:
+            # cross-join (default row-count narrative).
+            _verb = "genererebbe"
+            _hint = (
+                "Riduci la dimensione degli input (filtri/aggregazioni "
+                "a monte) o alza il cap."
+            )
         message = (
-            f"Il cross-join genererebbe {exc.observed_bytes} righe, oltre il "
-            f"limite configurato di {exc.limit_bytes} righe per lo stage "
-            f"'{exc.stage}'. Riduci la dimensione degli input "
-            f"(filtri/aggregazioni a monte) o alza il cap."
+            f"Lo stage '{exc.stage}' {_verb} {exc.observed_bytes} righe, "
+            f"oltre il limite configurato di {exc.limit_bytes} righe. "
+            f"{_hint}"
         )
     else:
         message = (
