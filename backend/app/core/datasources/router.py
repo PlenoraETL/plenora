@@ -70,7 +70,11 @@ def init_datasources(service: DataSourceService) -> None:
 
 def _svc() -> DataSourceService:
     if _service is None:
-        raise HTTPException(500, "DataSourceService non inizializzato")
+        raise_typed_http(
+            error_codes.SERVICE_NOT_INITIALIZED,
+            status_code=500,
+            message="DataSourceService non inizializzato",
+        )
     return _service
 
 

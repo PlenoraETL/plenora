@@ -770,7 +770,11 @@ class ValidationRequest(BaseModel):
 def get_all_schemas(project_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
     """Ottiene lo schema (colonne + tipi) per tutti i nodi del progetto."""
     if not _schema_service:
-        raise HTTPException(500, "Schema service non inizializzato")
+        raise_typed_http(
+            error_codes.SERVICE_NOT_INITIALIZED,
+            status_code=500,
+            message="Schema service non inizializzato",
+        )
     metadata = _project_service.get_project_metadata(project_id)
     assert_group_access(metadata, current_user, f"Progetto '{project_id}'")
     try:
@@ -784,7 +788,11 @@ def get_all_schemas(project_id: str, current_user: CurrentUser = Depends(require
 def get_node_schema(project_id: str, node_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
     """Ottiene lo schema per un singolo nodo."""
     if not _schema_service:
-        raise HTTPException(500, "Schema service non inizializzato")
+        raise_typed_http(
+            error_codes.SERVICE_NOT_INITIALIZED,
+            status_code=500,
+            message="Schema service non inizializzato",
+        )
     metadata = _project_service.get_project_metadata(project_id)
     assert_group_access(metadata, current_user, f"Progetto '{project_id}'")
     try:
@@ -798,7 +806,11 @@ def get_node_schema(project_id: str, node_id: str, current_user: CurrentUser = D
 def validate_connection(project_id: str, request: ValidationRequest, current_user: CurrentUser = Depends(require_not_esecutore)):
     """Valida una connessione tra due nodi."""
     if not _validator:
-        raise HTTPException(500, "Validator non inizializzato")
+        raise_typed_http(
+            error_codes.SERVICE_NOT_INITIALIZED,
+            status_code=500,
+            message="Validator non inizializzato",
+        )
     metadata = _project_service.get_project_metadata(project_id)
     assert_group_access(metadata, current_user, f"Progetto '{project_id}'")
     try:
@@ -817,7 +829,11 @@ def validate_connection(project_id: str, request: ValidationRequest, current_use
 def validate_all_connections(project_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
     """Valida tutte le connessioni del progetto."""
     if not _validator:
-        raise HTTPException(500, "Validator non inizializzato")
+        raise_typed_http(
+            error_codes.SERVICE_NOT_INITIALIZED,
+            status_code=500,
+            message="Validator non inizializzato",
+        )
     metadata = _project_service.get_project_metadata(project_id)
     assert_group_access(metadata, current_user, f"Progetto '{project_id}'")
     try:

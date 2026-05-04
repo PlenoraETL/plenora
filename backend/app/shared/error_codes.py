@@ -179,6 +179,26 @@ immediato; contatta l'admin" + suggerimento chunking/streaming."""
 
 
 # ============================================================
+# Domain-specific — Service initialization family
+# (BE-GO-READY-ERROR-CODES-013-SERVICE-INIT-GUARD-PROMOTION)
+# ============================================================
+# Promozione del pattern `service_init_guard`: i sette call site
+# che sollevavano `HTTPException(500|503, "... non inizializzato")`
+# (router_utils helper + projects/datasources/carica router) ora
+# usano `raise_typed_http(SERVICE_NOT_INITIALIZED, ...)`. Status
+# code preservato per ogni call site (alcuni 500, altri 503): la
+# semantica HTTP non e' uniforme nel codice esistente e questo
+# batch e' di chiusura, non di refactor di status. Messaggio
+# italiano preservato.
+
+SERVICE_NOT_INITIALIZED = "service_not_initialized"
+"""500/503: un servizio module-level non e' stato inizializzato
+da `main.py` (init_*) prima di servire la richiesta. Failure di
+startup, non operational; FE branching: invitare a riprovare e
+contattare l'admin se persiste."""
+
+
+# ============================================================
 # Catalog set — drift detection
 # ============================================================
 # `KNOWN_DOMAIN_CODES` espone l'intero catalog domain-specific
@@ -219,6 +239,8 @@ KNOWN_DOMAIN_CODES: frozenset[str] = frozenset({
     EXTERNAL_SERVICE_UNREACHABLE,
     # Memory/OOM family (BE-GO-READY-MEMORY-OOM-001)
     MEMORY_LIMIT_EXCEEDED,
+    # Service initialization family (BE-GO-READY-ERROR-CODES-013)
+    SERVICE_NOT_INITIALIZED,
 })
 
 # Codici globali (envelope-level): NON domain-specific.
@@ -257,10 +279,9 @@ ACCEPTED_HTTP_FALLBACK_PATTERNS: frozenset[str] = frozenset({
     # per il branching FE; promotion non e' actionable
     # (un codice diverso per ogni ValueError = noise).
     "value_error_str_e",
-    # raise HTTPException(500|503, "<X> non inizializzato")
-    # 5 occ. (carica/datasources/projects). Failure di startup,
-    # mai in prod operational. Codice domain non aggiunge valore.
-    "service_init_guard",
+    # "service_init_guard" promoted to raise_typed_http(SERVICE_NOT_INITIALIZED)
+    # in BE-GO-READY-ERROR-CODES-013. Zero residuals remain.
+    #
     # raise HTTPException(403, "Accesso negato")
     # ~5 occ. generic ACL. Codici granulari saranno valutati nel
     # batch dedicato auth-aligned.

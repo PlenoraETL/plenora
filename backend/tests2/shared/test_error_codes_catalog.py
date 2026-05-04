@@ -84,6 +84,8 @@ EXPECTED_DOMAIN_CODES: Set[str] = {
     "external_service_unreachable",
     # BE-GO-READY-MEMORY-OOM-001 — Memory/OOM family
     "memory_limit_exceeded",
+    # BE-GO-READY-ERROR-CODES-013 — Service initialization family
+    "service_not_initialized",
 }
 
 # Pattern accettati come `http_<status>` fallback intenzionale
@@ -93,8 +95,9 @@ EXPECTED_DOMAIN_CODES: Set[str] = {
 EXPECTED_FALLBACK_PATTERNS: Set[str] = {
     # "internal_error_generic" promoted to raise_typed_http(INTERNAL_ERROR)
     # in BE-GO-READY-ERROR-CODES-011.
+    # "service_init_guard" promoted to raise_typed_http(SERVICE_NOT_INITIALIZED)
+    # in BE-GO-READY-ERROR-CODES-013.
     "value_error_str_e",
-    "service_init_guard",
     "generic_access_denied",
 }
 
@@ -115,11 +118,12 @@ def test_known_global_codes_matches_expected_lock():
     assert error_codes.KNOWN_GLOBAL_CODES == EXPECTED_GLOBAL_CODES
 
 
-def test_catalog_count_domain_twentythree():
-    """23 codici domain (5 pre-existing + 6 batch 006 + 10 batch 009
+def test_catalog_count_domain_twentyfour():
+    """24 codici domain (5 pre-existing + 6 batch 006 + 10 batch 009
     not-found family + 1 batch 010 external-service +
-    1 BE-GO-READY-MEMORY-OOM-001 memory_limit_exceeded)."""
-    assert len(error_codes.KNOWN_DOMAIN_CODES) == 23
+    1 BE-GO-READY-MEMORY-OOM-001 memory_limit_exceeded +
+    1 BE-GO-READY-ERROR-CODES-013 service_not_initialized)."""
+    assert len(error_codes.KNOWN_DOMAIN_CODES) == 24
 
 
 def test_catalog_domain_and_global_disjoint():
@@ -161,6 +165,8 @@ def test_catalog_constants_match_set_values():
         error_codes.EXTERNAL_SERVICE_UNREACHABLE,
         # BE-GO-READY-MEMORY-OOM-001 — Memory/OOM family
         error_codes.MEMORY_LIMIT_EXCEEDED,
+        # BE-GO-READY-ERROR-CODES-013 — Service initialization family
+        error_codes.SERVICE_NOT_INITIALIZED,
     }
     assert domain_constants == set(error_codes.KNOWN_DOMAIN_CODES)
 
@@ -489,6 +495,8 @@ def test_router_constant_refs_find_baseline():
         "EXTERNAL_SERVICE_UNREACHABLE",
         # batch 011 (global fallback promotion)
         "INTERNAL_ERROR",
+        # batch 013 (service init guard promotion)
+        "SERVICE_NOT_INITIALIZED",
     }
     missing = baseline_constants_must_appear - found
     assert missing == set(), (
@@ -547,6 +555,36 @@ def test_no_generic_500_string_detail_in_auth_routers():
             violations.append(f"{py_file.relative_to(_BACKEND_ROOT)}:{text[:match.start()].count(chr(10))+1}")
     assert violations == [], (
         f"Old generic-500 pattern found in auth (should use raise_typed_http): {violations}"
+    )
+
+
+def test_no_service_init_guard_string_detail_in_app():
+    """Source-bound: nessun file sotto `app/` deve contenere old-pattern
+    `raise HTTPException(500|503, "... non inizializzato")` con
+    `detail` stringa. Tutti i call site sono stati promossi a
+    `raise_typed_http(error_codes.SERVICE_NOT_INITIALIZED, ...)` in
+    BE-GO-READY-ERROR-CODES-013."""
+    app_root = _BACKEND_ROOT / "app"
+    old_pattern = re.compile(
+        r'raise\s+HTTPException\('
+        r'(?=[^)]*(?:status_code\s*=\s*)?(?:500|503))'
+        r'(?=[^)]*["\'][^"\']*non inizializzato[^"\']*["\'])',
+        re.DOTALL,
+    )
+    violations = []
+    for py_file in app_root.rglob("*.py"):
+        try:
+            text = py_file.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        for match in old_pattern.finditer(text):
+            violations.append(
+                f"{py_file.relative_to(_BACKEND_ROOT)}:"
+                f"{text[:match.start()].count(chr(10)) + 1}"
+            )
+    assert violations == [], (
+        f"Old service_init_guard pattern found (should use raise_typed_http "
+        f"with SERVICE_NOT_INITIALIZED): {violations}"
     )
 
 

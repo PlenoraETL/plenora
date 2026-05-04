@@ -281,12 +281,15 @@ def execute_carica_task(
             "total_rows": 0,
         }
     finally:
-        # FIX: chiudi le connessioni SQLite thread-local del worker Celery.
-        # Senza questa pulizia, ogni esecuzione lascia 2 connessioni aperte
-        # (config.db + intermediate.db) nel thread.local, che vengono riusate
-        # dal worker pool finché il file handle si esaurisce o il DB resta
-        # locked. Si manifesta dopo ~50 esecuzioni come SQLITE_BUSY o crash
-        # del worker.
+        # FIX: chiudi le connessioni PostgreSQL thread-local del worker Celery.
+        # Storia: la migrazione SQLite -> PostgreSQL (vedi
+        # `app/db/config_db_service.py` docstring) ha mantenuto lo stesso
+        # pattern thread-local, quindi il cleanup resta necessario. Senza
+        # questa pulizia, ogni esecuzione lascia 2 connessioni aperte
+        # (config DB + intermediate DB) nel thread.local, che vengono
+        # riusate dal worker pool finche' il file descriptor si esaurisce
+        # o il pool resta saturo. Pre-migrazione si manifestava come
+        # SQLITE_BUSY; post-migrazione come PG pool exhaustion.
         try:
             from app.core.intermediate.db import close_connection as _close_idb
             _close_idb()
@@ -566,7 +569,7 @@ def _load_upstream_data(
     """Carica il DataFrame dal nodo Result upstream.
 
     Strategia:
-    1. Cerca nel DB SQLite (via SourceLoader, fail-closed sul group_id)
+    1. Cerca nel DB PostgreSQL (via SourceLoader, fail-closed sul group_id)
     2. Se force_recalculate o non trova → riesegui la pipeline
     3. Dopo ricalcolo rilegge l'artefatto specifico della run
     """

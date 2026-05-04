@@ -1,7 +1,24 @@
 -- ============================================================
--- PLENORA — Schema SQLite #3 (intermediate.db)
+-- PLENORA — Schema legacy (storico, ex-SQLite #3 / intermediate.db)
 -- Dati intermedi di esecuzione — feature inspection e confronto run
--- Tabelle fisse + tabelle dinamiche generate a runtime
+-- ============================================================
+--
+-- LEGACY HISTORICAL REFERENCE — NON ESEGUITO A RUNTIME.
+--
+-- Questo file documenta la struttura tabellare originaria del
+-- "intermediate.db" SQLite pre-migrazione PostgreSQL. Le tabelle
+-- effettive su PostgreSQL sono create dalle migrations in
+-- `backend/migrations/`. Il modulo `app/core/intermediate/db.py`
+-- (docstring header) accede a PG via pg_connection pool. La
+-- tabella PG canonica e' `plenora.node_rows` (JSONB unificata)
+-- — vedi commento iniziale in `app/core/intermediate/db.py`.
+--
+-- `init_db()` NON carica questo file. Le PRAGMA SQLite sotto
+-- sono no-op su PostgreSQL.
+--
+-- Riferimento: `app/services/orphan_cleanup_service.py:78` cita
+-- questo file come reference per il modello di FK non-enforced
+-- pre-migrazione.
 -- ============================================================
 
 PRAGMA journal_mode=WAL;

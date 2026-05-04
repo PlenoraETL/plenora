@@ -461,9 +461,10 @@ def _get_connection(connection_id: str) -> Dict[str, Any]:
                 "message": f"Connessione '{connection_id}' non trovata",
             },
         )
-    raise HTTPException(
+    raise_typed_http(
+        error_codes.SERVICE_NOT_INITIALIZED,
         status_code=503,
-        detail="ConnectionService non inizializzato"
+        message="ConnectionService non inizializzato",
     )
 
 

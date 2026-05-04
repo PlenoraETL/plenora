@@ -271,6 +271,13 @@ class Settings:
         # Override via env `LOAD_FILE_MAX_BYTES` per ambienti con worker
         # piu' grossi.
         "LOAD_FILE_MAX_BYTES": 200 * 1024 * 1024,
+        # BE-GO-READY-MEMORY-OOM-002-WORKER-RSS-SAMPLING: cap RSS del
+        # processo worker prima di stage pesanti (pipeline executor).
+        # Default 1.5 GB. Se il RSS corrente supera il cap, il guard
+        # solleva MemoryLimitExceededError mappata a 503 (worker overloaded).
+        # Cap <= 0 disabilita il guard (escape hatch).
+        # Override via env `WORKER_RSS_MAX_BYTES`.
+        "WORKER_RSS_MAX_BYTES": 1_500_000_000,
 
         # ==================== TASK ARRICCHIMENTO ====================
         "ENRICHMENT_BATCH_SIZE": 100,

@@ -270,44 +270,52 @@ async def canvas_corrupted_handler(request: Request, exc: CanvasCorruptedError):
     )
 
 
-# Handler per MemoryLimitExceededError (413):
-# Mappa l'eccezione pura sollevata dal preflight guard di
-# `load_dataframe_from_file` (BE-GO-READY-MEMORY-OOM-001) nel
-# dual-shape envelope. Status 413 (Payload Too Large) e' la
-# semantica HTTP corretta: il client ha inviato un input che
-# supera la capacita' di processing del server in memoria.
+# Handler per MemoryLimitExceededError:
+# Mappa l'eccezione pura sollevata dai guard OOM nel dual-shape
+# envelope. Status code dipende dallo stage:
+# - file preflight (load_dataframe_from_file): 413 Payload Too Large
+#   (il client ha inviato un input troppo grande).
+# - worker RSS (pipeline_execute, ecc.): 503 Service Unavailable
+#   (il worker e' sovraccaricato, riprovare dopo).
 #
 # Stable details shape: stage / limit_bytes / observed_bytes /
 # limit_mb / observed_mb / suggested_action / resource. Permette
-# al FE di mostrare un messaggio uniforme ed eventualmente
-# suggerire un'azione (split file, contact admin). NESSUN
-# absolute path nel payload — solo `path_basename` come `resource`.
+# al FE di mostrare un messaggio uniforme. NESSUN absolute path.
+_RSS_STAGES = frozenset({"pipeline_execute", "worker_rss"})
+
 @app.exception_handler(MemoryLimitExceededError)
 async def memory_limit_exceeded_handler(
     request: Request, exc: MemoryLimitExceededError,
 ):
+    is_rss = exc.stage in _RSS_STAGES or exc.path_basename == "worker_process"
+    status_code = 503 if is_rss else 413
+    suggested_action = "retry_later_or_contact_admin" if is_rss else "split_file_or_contact_admin"
     logger.warning(
-        "Memory limit exceeded in stage=%s resource=%s observed=%d limit=%d",
-        exc.stage, exc.path_basename, exc.observed_bytes, exc.limit_bytes,
+        "Memory limit exceeded in stage=%s resource=%s observed=%d limit=%d status=%d",
+        exc.stage, exc.path_basename, exc.observed_bytes, exc.limit_bytes, status_code,
     )
     limit_mb = round(exc.limit_bytes / (1024 * 1024), 2)
     observed_mb = round(exc.observed_bytes / (1024 * 1024), 2)
+    message = (
+        f"Il worker ha superato il limite di memoria ({observed_mb} MB / "
+        f"{limit_mb} MB). Riprova piu' tardi o contatta l'amministratore."
+    ) if is_rss else (
+        f"L'input richiesto ({observed_mb} MB) supera il limite di "
+        f"memoria configurato ({limit_mb} MB) per lo stage "
+        f"'{exc.stage}'. Contatta l'amministratore o riduci la "
+        f"dimensione del file."
+    )
     return build_error_response(
-        status_code=413,
+        status_code=status_code,
         error=error_codes.MEMORY_LIMIT_EXCEEDED,
-        message=(
-            f"L'input richiesto ({observed_mb} MB) supera il limite di "
-            f"memoria configurato ({limit_mb} MB) per lo stage "
-            f"'{exc.stage}'. Contatta l'amministratore o riduci la "
-            f"dimensione del file."
-        ),
+        message=message,
         details={
             "stage": exc.stage,
             "limit_bytes": exc.limit_bytes,
             "observed_bytes": exc.observed_bytes,
             "limit_mb": limit_mb,
             "observed_mb": observed_mb,
-            "suggested_action": "split_file_or_contact_admin",
+            "suggested_action": suggested_action,
             "resource": exc.path_basename,
         },
         headers=_cors_headers_for(request),

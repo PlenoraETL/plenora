@@ -1,5 +1,28 @@
 -- ============================================================
--- PLENORA — Schema SQLite #1 (config.db)
+-- PLENORA — Schema legacy (storico, ex-SQLite #1 / config.db)
+-- ============================================================
+--
+-- LEGACY HISTORICAL REFERENCE — NON ESEGUITO A RUNTIME.
+--
+-- Questo file documenta la struttura tabellare originaria del
+-- "config.db" SQLite pre-migrazione PostgreSQL. Le tabelle
+-- effettive su PostgreSQL sono create dalle migrations in
+-- `backend/migrations/` (entry-point
+-- `0000_bootstrap_base_tables.sql` + add-on
+-- `2026-XX-XX_*.sql`).
+--
+-- `init_db()` in `app/db/pg_connection.py` NON carica questo file
+-- (verifica solo che le tabelle esistano nello schema applicativo).
+--
+-- Mantenuto come reference storico per:
+-- - chi legge `app/core/eseguibili/db.py:4` ("La tabella e'
+--   definita in app/db/config_schema.sql"): documentazione del
+--   layout originale, non dichiarazione esecutiva;
+-- - chi legge `app/db/config/file_sources.py:275` (commento sulle
+--   indici introdotti contestualmente).
+--
+-- Le PRAGMA SQLite sotto sono no-op su PostgreSQL e restano solo
+-- come testimonianza dell'architettura pre-migrazione.
 -- ============================================================
 
 PRAGMA journal_mode=WAL;

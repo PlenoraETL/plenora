@@ -383,9 +383,11 @@ def transaction():
 def init_db():
     """Verifica che le tabelle esistano su PostgreSQL.
 
-    A differenza di SQLite, non esegue lo schema SQL (le tabelle sono
-    già create dallo script create_pg_schema.py). Verifica solo la
-    connessione e logga il numero di tabelle trovate.
+    A differenza di SQLite, non esegue lo schema SQL: le tabelle
+    sono create dalle migrations in `backend/migrations/`
+    (entry-point `0000_bootstrap_base_tables.sql` + add-on
+    `2026-XX-XX_*.sql`). Questo init verifica solo la connessione
+    e logga il numero di tabelle trovate nello schema applicativo.
     """
     conn = get_connection()
     try:

@@ -1,7 +1,23 @@
 -- ============================================================
--- PLENORA — Schema SQLite #2 (results.db)
+-- PLENORA — Schema legacy (storico, ex-SQLite #2 / results.db)
 -- Risultati finali pipeline + log esecuzioni
--- Crescita continua — retention policy applicata
+-- ============================================================
+--
+-- LEGACY HISTORICAL REFERENCE — NON ESEGUITO A RUNTIME.
+--
+-- Questo file documenta la struttura tabellare originaria del
+-- "results.db" SQLite pre-migrazione PostgreSQL. Le tabelle
+-- effettive su PostgreSQL sono create dalle migrations in
+-- `backend/migrations/`. Il `db_service` facade (vedi
+-- `app/db/results_db_service.py` docstring) instrada le query
+-- al pool PG.
+--
+-- `init_db()` NON carica questo file. Le PRAGMA SQLite sotto
+-- sono no-op su PostgreSQL e restano solo come testimonianza
+-- del modello di concorrenza pre-migrazione (FK cross-db non
+-- enforced perche' i tre SQLite erano file separati; su PG le
+-- FK sono enforced perche' tutte le tabelle vivono nello stesso
+-- schema applicativo).
 -- ============================================================
 
 PRAGMA journal_mode=WAL;

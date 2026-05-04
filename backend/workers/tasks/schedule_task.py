@@ -145,7 +145,7 @@ def schedule_pipeline_task(
 def beat_heartbeat():
     """
     Heartbeat periodico scritto da Beat ogni 60 secondi.
-    Scrive timestamp nel DB SQLite (usato dall'healthcheck).
+    Scrive timestamp nel DB PostgreSQL (usato dall'healthcheck).
     """
     from datetime import datetime, timezone
     try:

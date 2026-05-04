@@ -106,9 +106,20 @@ class OrchestratorService:
             force_recalculate: Se True, forza il ricalcolo anche se ci sono risultati cached
             skip_carica: Se True, non avvia il task CARICA anche se presente nel canvas
                          (usato quando chiamato dal task CARICA stesso per evitare loop)
-            run_id: ID run intermediate.db (opzionale, passato da pipeline_task)
+            run_id: ID run intermediate storage (opzionale, passato da pipeline_task)
         """
         logger.info(f"Esecuzione pipeline progetto: {project_id}", op="execute", project_id=project_id)
+
+        # RSS guard pre-stage: se il worker e' gia' sovraccarico, fallisce
+        # early con 503 invece di avviare una pipeline pesante che farebbe
+        # OOM kernel SIGKILL. Guard disabilitabile via cap <= 0.
+        try:
+            from app.shared.memory_guard import check_worker_rss
+            from app.config import settings as _settings
+            _rss_cap = int(_settings.get("WORKER_RSS_MAX_BYTES", 1_500_000_000))
+            check_worker_rss(cap_bytes=_rss_cap, stage="pipeline_execute")
+        except ImportError:
+            pass  # memory_guard non disponibile, skip
 
         metadata = self.project_service.get_project_metadata(project_id)
         canvas = self.project_service.get_project_canvas(project_id)

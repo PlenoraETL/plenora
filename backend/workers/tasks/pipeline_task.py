@@ -53,7 +53,8 @@ def _build_orchestrator():
 
 
 def _get_project_info(project_id: str) -> dict:
-    """Legge metadata progetto da config.db — non bloccante."""
+    """Legge metadata progetto da PostgreSQL via `config_db_service`
+    (ex `config.db` SQLite pre-migrazione) — non bloccante."""
     try:
         import app.db.config_db_service as cfg_db
         return cfg_db.get_project(project_id) or {}
@@ -164,7 +165,8 @@ def execute_pipeline_task(
     # --- Imposta contesto thread-local (run_id + steps collector) ---
     set_run_context(run_id=run_id, project_id=project_id)
 
-    # --- Apri run su intermediate.db (non bloccante) ---
+    # --- Apri run su intermediate storage (PostgreSQL via
+    #     `app.core.intermediate.db` module — non bloccante) ---
     try:
         from app.core.intermediate import db as idb
         idb.create_run(run_id=run_id, canvas_id=project_id, group_id=group_id, user_id=user_id)
@@ -287,7 +289,7 @@ def execute_pipeline_task(
             steps=get_steps(),
         )
 
-        # Chiudi intermediate.db
+        # Chiudi run intermediate storage (PostgreSQL via writer module)
         try:
             from app.core.intermediate.writer import close_run as idb_close_run
             idb_close_run(
@@ -349,7 +351,7 @@ def execute_pipeline_task(
             debug_payload=debug_payload,
         )
 
-        # Chiudi intermediate.db
+        # Chiudi run intermediate storage (PostgreSQL via writer module)
         try:
             from app.core.intermediate.writer import close_run as idb_close_run
             idb_close_run(
@@ -359,8 +361,10 @@ def execute_pipeline_task(
         except Exception as e:
             logger.debug(f"close_run intermediate fallito post-crash: {type(e).__name__}: {e}")
 
-        # Chiudi connessione SQLite del thread Celery: senza questo,
+        # Chiudi connessione PostgreSQL del thread Celery: senza questo,
         # ogni task lascia aperto un handle che si accumula nel pool.
+        # (Pattern ereditato dalla migrazione SQLite -> PG, vedi
+        # `app/db/config_db_service.py` docstring.)
         try:
             from app.core.intermediate.db import close_connection
             close_connection()
