@@ -22,6 +22,7 @@ import pytest
 import requests
 
 from app.core.arricchisci.api_connector import ApiConnectionService
+from app.core.arricchisci.execution_context import ArricchisciExecutionContext
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
@@ -36,14 +37,30 @@ def _ensure_database_url(monkeypatch):
 @pytest.fixture
 def service(monkeypatch):
     svc = ApiConnectionService()
-    # Imposta group_id per evitare che _assert_file_source_group_access
-    # fallisca con "Contesto di sicurezza non determinabile"
-    svc._current_group_id = "default"
+    # BE-GO-READY-TRANSFORMATION-ENGINE-022: rimossa la singleton
+    # mutation `svc._current_group_id = "default"`. I 6 callsite
+    # `service._execute_rest_file(...)` ricevono `ctx=ctx_default`
+    # esplicito (typed boundary Phase 2). Lo state legacy resta
+    # `None` di default — coerente col contract: il passaggio
+    # esplicito del ctx vince sul fallback singleton.
     # Bypass SSRF guard per i test: usiamo hostname fittizi che non
     # risolverebbero. La logica SSRF e' testata altrove
     # (tests2/security/unit/test_validate_external_url_contract.py).
     monkeypatch.setattr(svc, "_validate_outbound_url", lambda url: None)
     return svc
+
+
+@pytest.fixture
+def ctx_default() -> ArricchisciExecutionContext:
+    """BE-GO-READY-TRANSFORMATION-ENGINE-022: typed execution
+    context fixture per il rest_file taxonomy. Sostituisce il
+    pattern legacy `svc._current_group_id = "default"`. I 6
+    callsite passano `ctx=ctx_default` a `_execute_rest_file`."""
+    return ArricchisciExecutionContext(
+        project_id="proj_test",
+        group_id="default",
+        preview_limit=None,
+    )
 
 
 @pytest.fixture
@@ -65,7 +82,7 @@ def minimal_api_config():
 # ─── error_kind: file_source_not_found ─────────────────────────────────────
 
 
-def test_file_source_not_found_returns_structured_error_kind(service, minimal_api_config):
+def test_file_source_not_found_returns_structured_error_kind(service, minimal_api_config, ctx_default):
     """Bug reale 2026-04-23: file_source_id referenziato nel canvas non esiste
     nel DB. `_resolve_file_source_id_path` ritorna None (via row_meta None).
     Il build multipart deve returnare error_kind='file_source_not_found'."""
@@ -88,6 +105,7 @@ def test_file_source_not_found_returns_structured_error_kind(service, minimal_ap
             node_id="api_enrich_test",
             project_id="proj_test",
             node_results=None,
+            ctx=ctx_default,
         )
 
     assert result["success"] is False
@@ -101,7 +119,7 @@ def test_file_source_not_found_returns_structured_error_kind(service, minimal_ap
 # ─── error_kind: file_source_forbidden ─────────────────────────────────────
 
 
-def test_file_source_forbidden_returns_structured_error_kind(service, minimal_api_config):
+def test_file_source_forbidden_returns_structured_error_kind(service, minimal_api_config, ctx_default):
     """Cross-tenant: `_assert_file_source_group_access` solleva ValueError
     con prefisso 'Accesso negato'. Il catch specifico in _execute_rest_file
     deve intercettarlo e returnare error_kind='file_source_forbidden'."""
@@ -131,6 +149,7 @@ def test_file_source_forbidden_returns_structured_error_kind(service, minimal_ap
             node_id="api_enrich_test",
             project_id="proj_test",
             node_results=None,
+            ctx=ctx_default,
         )
 
     assert result["success"] is False
@@ -144,7 +163,7 @@ def test_file_source_forbidden_returns_structured_error_kind(service, minimal_ap
 
 
 def test_remote_processor_http_error_returns_structured_error_kind(
-    service, minimal_api_config, tmp_path
+    service, minimal_api_config, tmp_path, ctx_default
 ):
     """Upstream IMDF ritorna HTTP 4xx/5xx: error_kind='remote_processor_error'.
 
@@ -180,6 +199,7 @@ def test_remote_processor_http_error_returns_structured_error_kind(
             node_id="api_enrich_test",
             project_id="proj_test",
             node_results=None,
+            ctx=ctx_default,
         )
 
     assert result["success"] is False
@@ -189,7 +209,7 @@ def test_remote_processor_http_error_returns_structured_error_kind(
 
 
 def test_remote_processor_timeout_returns_structured_error_kind(
-    service, minimal_api_config, tmp_path
+    service, minimal_api_config, tmp_path, ctx_default
 ):
     """Upstream timeout: error_kind='remote_processor_error', user_error=True."""
     fake_excel = tmp_path / "extra.xlsx"
@@ -213,6 +233,7 @@ def test_remote_processor_timeout_returns_structured_error_kind(
             node_id="api_enrich_test",
             project_id="proj_test",
             node_results=None,
+            ctx=ctx_default,
         )
 
     assert result["success"] is False
@@ -224,7 +245,7 @@ def test_remote_processor_timeout_returns_structured_error_kind(
 # ─── error_kind: internal ─────────────────────────────────────────────────
 
 
-def test_internal_exception_returns_structured_error_kind(service, minimal_api_config):
+def test_internal_exception_returns_structured_error_kind(service, minimal_api_config, ctx_default):
     """Un'eccezione inattesa diversa da ValueError/requests cade nel safety-net
     finale: error_kind='internal', user_error=False."""
     node_data = {
@@ -247,6 +268,7 @@ def test_internal_exception_returns_structured_error_kind(service, minimal_api_c
             node_id="api_enrich_test",
             project_id="proj_test",
             node_results=None,
+            ctx=ctx_default,
         )
 
     assert result["success"] is False
@@ -261,7 +283,7 @@ def test_internal_exception_returns_structured_error_kind(service, minimal_api_c
 # ─── Anti-regression strutturale ──────────────────────────────────────────
 
 
-def test_all_error_returns_carry_error_kind_and_user_error_fields(service, minimal_api_config):
+def test_all_error_returns_carry_error_kind_and_user_error_fields(service, minimal_api_config, ctx_default):
     """Ogni return di errore DEVE contenere i campi canonici. Blinda che
     non si introducano regressioni che tornano a return senza error_kind."""
     node_data = {
@@ -279,6 +301,7 @@ def test_all_error_returns_carry_error_kind_and_user_error_fields(service, minim
             node_id="api_enrich_test",
             project_id="proj_test",
             node_results=None,
+            ctx=ctx_default,
         )
 
     assert "success" in result and result["success"] is False

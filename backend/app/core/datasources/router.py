@@ -30,12 +30,14 @@ from app.core.auth.auth import (
     require_not_esecutore,
     require_user_or_above,
     require_admin,
+    group_filter,
+)
+from app.core.auth.models import CurrentUser
+from app.core.auth.ownership import (
     assert_group_access,
     assert_resource_visible,
     assert_can_modify,
     compute_can_edit,
-    CurrentUser,
-    group_filter,
 )
 from app.core.datasources.models import (
     DataSource,

@@ -2,8 +2,28 @@ from unittest.mock import patch
 
 import pytest
 
+from app.core.arricchisci.execution_context import ArricchisciExecutionContext
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.arricchisci, pytest.mark.security, pytest.mark.regression]
+
+
+# BE-GO-READY-TRANSFORMATION-ENGINE-022: helper di costruzione context
+# tipato per i 5 site MIGRATE_TO_CTX. Sostituisce il pattern legacy
+# `api_service._current_group_id = X` (singleton mutation) con il
+# typed boundary `ctx=ArricchisciExecutionContext(...)`. Behavior
+# byte-per-byte identico: i 6 mixin reader site (Phase 2) leggono
+# `ctx.group_id` quando il caller passa `ctx=`. Il singleton-state
+# fallback resta KEEP_COMPAT (vedi i lock test
+# `test_resolve_file_source_id_path_fails_closed_without_security_context`
+# che NON setta il ctx — esplicito KEEP_AS_LEGACY_LOCK).
+def _ctx(group_id: str | None = "grp-1", project_id: str = "p-1",
+         preview_limit: int | None = None) -> ArricchisciExecutionContext:
+    return ArricchisciExecutionContext(
+        project_id=project_id,
+        group_id=group_id,
+        preview_limit=preview_limit,
+    )
 
 
 def test_mask_credentials_hides_all_sensitive_auth_fields(api_service):
@@ -31,22 +51,24 @@ def test_assert_file_source_group_access_fails_closed_without_context(api_servic
 
 
 def test_assert_file_source_group_access_blocks_invisible_resource(api_service):
-    api_service._current_group_id = "grp-1"
-
+    # BE-GO-READY-TRANSFORMATION-ENGINE-022: typed ctx Phase 2.
     with patch("app.shared.sharing.is_resource_visible", return_value=False):
         with pytest.raises(ValueError, match="Accesso negato"):
-            api_service._assert_file_source_group_access("fs-1")
+            api_service._assert_file_source_group_access("fs-1", ctx=_ctx())
 
 
 def test_assert_file_source_group_access_wraps_visibility_backend_errors(api_service):
-    api_service._current_group_id = "grp-1"
-
+    # BE-GO-READY-TRANSFORMATION-ENGINE-022: typed ctx Phase 2.
     with patch("app.shared.sharing.is_resource_visible", side_effect=RuntimeError("db error")):
         with pytest.raises(ValueError, match="Errore verifica accesso file_source"):
-            api_service._assert_file_source_group_access("fs-1")
+            api_service._assert_file_source_group_access("fs-1", ctx=_ctx())
 
 
 def test_resolve_file_source_id_path_fails_closed_without_security_context(api_service):
+    # KEEP_AS_LEGACY_LOCK (batch -021 audit): coverage del fallback
+    # `ctx=None → getattr(self, "_current_group_id", None) → None`.
+    # NON migriamo: senza questo lock la rimozione accidentale dei
+    # 3 helper di transizione non sarebbe rilevata.
     api_service._current_group_id = None
 
     with pytest.raises(ValueError, match="Contesto di sicurezza non determinabile"):
@@ -54,8 +76,7 @@ def test_resolve_file_source_id_path_fails_closed_without_security_context(api_s
 
 
 def test_resolve_file_source_id_path_requires_visibility_before_materializing_blob(api_service, monkeypatch, tmp_path):
-    api_service._current_group_id = "grp-1"
-
+    # BE-GO-READY-TRANSFORMATION-ENGINE-022: typed ctx Phase 2.
     import app.config as config_mod
     import app.shared.sharing as sharing_mod
     import app.db.db_service as db_service
@@ -69,7 +90,7 @@ def test_resolve_file_source_id_path_requires_visibility_before_materializing_bl
     monkeypatch.setattr(db_service, "get_file_source", lambda *args, **kwargs: {"data": b"abc"})
 
     with pytest.raises(ValueError, match="Accesso negato"):
-        api_service._resolve_file_source_id_path("fs-1")
+        api_service._resolve_file_source_id_path("fs-1", ctx=_ctx())
 
 
 # =============================================================================
@@ -89,8 +110,7 @@ def test_load_source_project_force_recalculate_blocks_cross_tenant_before_recomp
     solo a recompute gia' avvenuta. Il pre-check fail-closed deve
     sollevare ValueError PRIMA che execute_pipeline venga invocato.
     """
-    api_service._current_group_id = "grp-A"
-
+    # BE-GO-READY-TRANSFORMATION-ENGINE-022: typed ctx Phase 2.
     import app.db.config_db_service as cfg_db
 
     # source_project_id appartiene al tenant B, non a grp-A
@@ -120,6 +140,7 @@ def test_load_source_project_force_recalculate_blocks_cross_tenant_before_recomp
             api_service._load_source_project(
                 {"source_project_id": "proj-tenant-B"},
                 force_recalculate=True,
+                ctx=_ctx(group_id="grp-A"),
             )
 
     assert orchestrator_called["count"] == 0, (
@@ -133,8 +154,7 @@ def test_load_source_project_force_recalculate_blocks_unknown_project(
     """Se il source_project_id non esiste in DB, fail-closed: nessun
     fallthrough che possa diventare un probe per l'enumeration dei
     project_id cross-tenant."""
-    api_service._current_group_id = "grp-A"
-
+    # BE-GO-READY-TRANSFORMATION-ENGINE-022: typed ctx Phase 2.
     import app.db.config_db_service as cfg_db
     monkeypatch.setattr(cfg_db, "get_project", lambda *args, **kwargs: None)
 
@@ -142,6 +162,7 @@ def test_load_source_project_force_recalculate_blocks_unknown_project(
         api_service._load_source_project(
             {"source_project_id": "proj-unknown"},
             force_recalculate=True,
+            ctx=_ctx(group_id="grp-A"),
         )
 
 
@@ -151,8 +172,7 @@ def test_load_source_project_force_recalculate_allows_same_tenant(
     """Same-tenant con force_recalculate=True deve passare il pre-check
     e procedere al recompute. Se il pre-check fosse troppo stretto,
     questo test lo catturerebbe."""
-    api_service._current_group_id = "grp-A"
-
+    # BE-GO-READY-TRANSFORMATION-ENGINE-022: typed ctx Phase 2.
     import app.db.config_db_service as cfg_db
     monkeypatch.setattr(
         cfg_db,
@@ -180,6 +200,7 @@ def test_load_source_project_force_recalculate_allows_same_tenant(
             api_service._load_source_project(
                 {"source_project_id": "proj-same-tenant"},
                 force_recalculate=True,
+                ctx=_ctx(group_id="grp-A"),
             )
 
     assert execute_called["count"] == 1, (

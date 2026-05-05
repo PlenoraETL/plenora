@@ -2,19 +2,29 @@
 PLENORA-ETL — Middleware JWT
 
 Intercetta ogni richiesta HTTP, legge il token Bearer se presente,
-e imposta il group_id nel contesto del thread per il logger.
+e propaga `group_id` / `user_id` ai ContextVar del logger
+(`set_log_group`, `set_user_id`).
 
-NON blocca le richieste senza token (quello lo fa la dependency get_current_user).
-Serve solo a propagare il group_id al logger automaticamente.
+NON blocca le richieste senza token: quel ruolo e' della
+dependency FastAPI `get_current_user`. Questo middleware serve
+ESCLUSIVAMENTE a propagare la correlazione di logging.
+
+BE-GO-READY-SECURITY-ENGINE-002-AUTH-CLEANUP-RESIDUALS:
+  Le 4 scritture su `request.state.{group_id,user_id,username,role}`
+  sono state rimosse: nessun runtime consumer le leggeva piu' (auth
+  scorre via `Depends(get_current_user)` che ricostruisce il
+  CurrentUser dal JWT, non dal request.state). I ContextVar restano
+  l'unica superficie canonica di correlazione lato logging.
+  `request.state.request_id` (RequestIdMiddleware) NON e' impattato.
 
 SECURITY:
-  - Token scaduti: `decode_token` ritorna None → middleware setta TUTTI i
-    campi `request.state.*` a stringa vuota. Quindi un endpoint che legge
-    `request.state.group_id` su un token scaduto vede "".
   - Tutti gli endpoint protetti DEVONO usare `Depends(get_current_user)`
-    o equivalenti — quella dependency rifiuta esplicitamente token mancanti
-    o invalidi con 401. Non basarsi MAI solo su `request.state.role` per
-    autorizzare azioni: usare `current_user: CurrentUser = Depends(...)`.
+    o equivalenti — quella dependency rifiuta esplicitamente token
+    mancanti o invalidi con 401.
+  - Non basarsi MAI su `request.state.*` per autorizzare azioni:
+    usare `current_user: CurrentUser = Depends(...)`.
+  - I ContextVar `log_group` / `user_id` servono solo a
+    correlazione log, non hanno alcuna valenza di authorization.
 
 Endpoint pubblici (no auth):
   - POST /auth/login
@@ -41,35 +51,18 @@ PUBLIC_PATHS = {
 }
 
 
-def _clear_request_state(request: Request) -> None:
-    """Imposta tutti i campi request.state a stringa vuota (utente anonimo).
-
-    NB: il reset dei ContextVar (set_log_group, set_user_id) va fatto
-    esplicitamente dal caller — questo helper tocca solo request.state.
-    """
-    request.state.group_id = ""
-    request.state.user_id = ""
-    request.state.username = ""
-    request.state.role = ""
-
-
 class JWTMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
-        # Imposta group_id dal token se presente (non blocca se assente)
+        # Imposta group_id / user_id nei ContextVar del logger se il
+        # token e' presente e valido (non blocca su assenza/invalidita':
+        # quel ruolo e' della dependency `get_current_user`).
         auth_header = request.headers.get("Authorization", "")
         if auth_header.startswith("Bearer "):
             token = auth_header[7:]
             payload = decode_token(token)
             if payload:
-                group_id = payload.get("group_id", "")
-                user_id = payload.get("sub", "")
-                set_log_group(group_id)
-                set_user_id(user_id)  # C8: correlation user_id nei log
-                # Inietta nel request.state per uso negli endpoint
-                request.state.group_id = group_id
-                request.state.user_id = user_id
-                request.state.username = payload.get("username", "")
-                request.state.role = payload.get("role", "user")
+                set_log_group(payload.get("group_id", ""))
+                set_user_id(payload.get("sub", ""))  # C8: correlation user_id
             else:
                 # Token presente ma decoda fallita (scaduto/invalido/firma errata).
                 # Logghiamo per visibility — utile per detection di replay
@@ -81,11 +74,9 @@ class JWTMiddleware(BaseHTTPMiddleware):
                 )
                 set_log_group("")
                 set_user_id("")  # C8-nit: evita leak user_id da richieste precedenti
-                _clear_request_state(request)
         else:
             set_log_group("")
             set_user_id("")  # C8-nit: evita leak user_id da richieste precedenti
-            _clear_request_state(request)
 
         response = await call_next(request)
         return response

@@ -122,6 +122,34 @@ _PHASE3_PER_NAME_BAN: dict[Path, frozenset[str]] = {
 }
 
 
+# Phase-4: same pattern as Phase-3, applied to the next coherent router
+# group (arricchisci/carica/connections/datasources/eseguibili).
+# Facade may keep FastAPI Depends + `group_filter`. CurrentUser and
+# ownership helpers MUST come from leaf modules.
+_OWNERSHIP_HELPER_BAN_NAMES = frozenset({
+    "CurrentUser",
+    "assert_group_access",
+    "assert_resource_visible",
+    "assert_can_modify",
+    "compute_can_edit",
+})
+
+_PHASE4_PER_NAME_BAN: dict[Path, frozenset[str]] = {
+    _APP / "core" / "arricchisci" / "router.py":
+        _OWNERSHIP_HELPER_BAN_NAMES,
+    # carica/router.py only consumed `assert_resource_visible` from
+    # ownership; CurrentUser is still banned regardless.
+    _APP / "core" / "carica" / "router.py":
+        frozenset({"CurrentUser", "assert_resource_visible"}),
+    _APP / "core" / "connections" / "router.py":
+        _OWNERSHIP_HELPER_BAN_NAMES,
+    _APP / "core" / "datasources" / "router.py":
+        _OWNERSHIP_HELPER_BAN_NAMES,
+    _APP / "core" / "eseguibili" / "router.py":
+        _OWNERSHIP_HELPER_BAN_NAMES,
+}
+
+
 def _imports_facade(path: Path) -> list[tuple[int, str]]:
     """Return [(lineno, names_imported)] for each `from app.core.auth.auth import ...`
     found anywhere in the file (top-level OR nested inside funcs).
@@ -226,6 +254,36 @@ def test_phase3_migrated_file_does_not_import_banned_names_from_facade(
         + f"\nLeaf sources: CurrentUser ← app.core.auth.models; "
         "assert_group_access / assert_resource_visible / "
         "assert_can_modify / compute_can_edit ← app.core.auth.ownership."
+    )
+
+
+@pytest.mark.parametrize(
+    "path,banned_names",
+    list(_PHASE4_PER_NAME_BAN.items()),
+    ids=lambda v: (
+        str(v.relative_to(_BACKEND_ROOT)).replace("\\", "/")
+        if isinstance(v, Path)
+        else "names"
+    ),
+)
+def test_phase4_migrated_file_does_not_import_banned_names_from_facade(
+    path: Path, banned_names: frozenset[str]
+):
+    """Phase-4 contract: applies the Phase-2/3 split pattern to the
+    arricchisci/carica/connections/datasources/eseguibili router group.
+    Facade may keep `get_current_user`, `require_*`,
+    `require_not_esecutore`, `require_admin`, `require_user_or_above`,
+    `group_filter`. Banned: `CurrentUser` + the 4 ownership helpers
+    (each canonical home is `app.core.auth.models` or
+    `app.core.auth.ownership`)."""
+    assert path.exists(), f"migrated file missing: {path}"
+    violations = _per_name_ban_violations(path, banned_names)
+    assert violations == [], (
+        f"{path.relative_to(_BACKEND_ROOT)} pulls Phase-4 banned "
+        f"names from the facade:\n"
+        + "\n".join(f"  line {ln}: {nm}" for ln, nm in violations)
+        + f"\nLeaf sources: CurrentUser ← app.core.auth.models; "
+        "ownership helpers ← app.core.auth.ownership."
     )
 
 
@@ -384,4 +442,80 @@ def test_phase3_features_routes_imports_ownership_helpers_from_leaf():
         assert name in text, (
             f"features/routes.py must still consume {name} (from "
             "ownership leaf)."
+        )
+
+
+# ---------------------------------------------------------------------------
+# Phase-4 leaf-import presence assertions
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        _APP / "core" / "arricchisci" / "router.py",
+        _APP / "core" / "carica" / "router.py",
+        _APP / "core" / "connections" / "router.py",
+        _APP / "core" / "datasources" / "router.py",
+        _APP / "core" / "eseguibili" / "router.py",
+    ],
+    ids=lambda p: str(p.relative_to(_BACKEND_ROOT)).replace("\\", "/"),
+)
+def test_phase4_imports_currentuser_from_models_leaf(path: Path):
+    """Every Phase-4 migrated file must import `CurrentUser` from the
+    leaf `app.core.auth.models`."""
+    text = path.read_text(encoding="utf-8")
+    assert "from app.core.auth.models import CurrentUser" in text, (
+        f"{path.name} must import CurrentUser from app.core.auth.models "
+        "(strangler Phase-4)."
+    )
+
+
+@pytest.mark.parametrize(
+    "path,expected_helpers",
+    [
+        (
+            _APP / "core" / "arricchisci" / "router.py",
+            ("assert_group_access", "assert_resource_visible",
+             "assert_can_modify", "compute_can_edit"),
+        ),
+        (
+            _APP / "core" / "carica" / "router.py",
+            ("assert_resource_visible",),
+        ),
+        (
+            _APP / "core" / "connections" / "router.py",
+            ("assert_group_access", "assert_resource_visible",
+             "assert_can_modify", "compute_can_edit"),
+        ),
+        (
+            _APP / "core" / "datasources" / "router.py",
+            ("assert_group_access", "assert_resource_visible",
+             "assert_can_modify", "compute_can_edit"),
+        ),
+        (
+            _APP / "core" / "eseguibili" / "router.py",
+            ("assert_group_access", "assert_resource_visible",
+             "assert_can_modify", "compute_can_edit"),
+        ),
+    ],
+    ids=lambda v: (
+        str(v.relative_to(_BACKEND_ROOT)).replace("\\", "/")
+        if isinstance(v, Path)
+        else "helpers"
+    ),
+)
+def test_phase4_imports_ownership_helpers_from_leaf(
+    path: Path, expected_helpers: tuple[str, ...]
+):
+    """Each Phase-4 migrated file must import its ownership helpers
+    from `app.core.auth.ownership` — NOT from the facade."""
+    text = path.read_text(encoding="utf-8")
+    assert "from app.core.auth.ownership import" in text, (
+        f"{path.name} must import ownership helpers from "
+        "app.core.auth.ownership leaf."
+    )
+    for name in expected_helpers:
+        assert name in text, (
+            f"{path.name} must still consume {name} (from ownership leaf)."
         )

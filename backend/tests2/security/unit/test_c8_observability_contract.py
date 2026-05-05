@@ -69,12 +69,16 @@ def _build_middleware_app():
 
     @app.get("/ctx")
     async def ctx(request: Request):
+        # BE-GO-READY-SECURITY-ENGINE-002-AUTH-CLEANUP-RESIDUALS:
+        # `request.state.user_id` e' stato rimosso da `JWTMiddleware`
+        # (era dead write — i router consumano `Depends(get_current_user)`).
+        # `request.state.request_id` resta legittimo
+        # (RequestIdMiddleware lo setta + e' usato da consumer reali).
         return JSONResponse(
             {
                 "request_id_ctx": get_request_id(),
                 "request_id_state": getattr(request.state, "request_id", ""),
                 "user_id_ctx": get_user_id(),
-                "user_id_state": getattr(request.state, "user_id", ""),
             }
         )
 
@@ -181,13 +185,11 @@ def test_jwt_middleware_clears_user_id_between_authenticated_and_anonymous_reque
     assert first.status_code == 200
     first_body = first.json()
     assert first_body["user_id_ctx"] == "user-1"
-    assert first_body["user_id_state"] == "user-1"
 
     second = client.get("/ctx")
     assert second.status_code == 200
     second_body = second.json()
     assert second_body["user_id_ctx"] == ""
-    assert second_body["user_id_state"] == ""
 
 
 def test_celery_signals_propagate_request_id_and_clear_after_task():

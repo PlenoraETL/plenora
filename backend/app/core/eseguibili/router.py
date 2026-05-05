@@ -21,12 +21,14 @@ from typing import List, Optional
 from app.core.auth.auth import (
     get_current_user,
     require_admin,
+    group_filter,
+)
+from app.core.auth.models import CurrentUser
+from app.core.auth.ownership import (
     assert_group_access,
     assert_resource_visible,
     assert_can_modify,
     compute_can_edit,
-    CurrentUser,
-    group_filter,
 )
 from app.config import settings
 from app.utils.logger import get_logger

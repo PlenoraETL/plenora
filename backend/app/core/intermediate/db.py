@@ -744,8 +744,122 @@ def _delete_run(run_id: str) -> None:
     basta una singola DELETE sulla tabella runs per pulire tutto atomicamente.
     Prima il codice droppava tabelle dinamiche, poi DELETE node_meta,
     poi DELETE runs — tre statement non atomici che potevano lasciare orphan.
+
+    Flow (BE-GO-READY-STORAGE-ENGINE-016 — W1 race coverage per
+    intermediate full_artifact):
+
+      1. `transaction()`: SELECT artifact_uri da node_meta WHERE
+         run_id=? AND artifact_uri IS NOT NULL AND
+         artifact_status='complete'. Per ogni row, record_pending
+         per (a) data.parquet (artifact_uri) + (b) manifest.json
+         (sibling derivato dallo stesso prefix). Poi
+         DELETE FROM runs WHERE run_id=? (cascade su node_meta /
+         node_rows). Tutto in una sola transazione → commit
+         atomico.
+      2. Post-commit: per ogni reconciliation_ref,
+         compensating_delete + mark_done/mark_failed_attempt.
+
+    Nodi senza artifact (mode metadata_only / preview_only /
+    full_pg, oppure artifact_status="failed" o artifact_uri NULL)
+    vengono saltati interamente: niente record_pending, niente
+    compensating_delete. Comportamento user-visible invariato per
+    quei mode (la grande maggioranza in produzione, dove il
+    default e' metadata_only).
+
+    Manifest sibling derivato come `<prefix>manifest.json` da
+    `<prefix>data.parquet` solo se l'`artifact_uri` termina con
+    `/data.parquet` (forma canonica del writer). Forme diverse
+    (writer futuro con layout differente, o URI con scheme come
+    `s3://`) NON producono record_pending: sicurezza > completeness
+    su un orphan da pochi KB di JSON manifest.
+
+    ADR-0011 contract preservato: storage failure NON propaga; la
+    row DB resta cancellata. La differenza vs pre-batch 016 e' che
+    l'orphan e' ora **tracked** + retry-able dal reconciler.
     """
-    execute("DELETE FROM runs WHERE run_id = ?", (run_id,))
+    # Pre-fetch artifact metadata fuori dalla transaction principale
+    # (read-only, niente lock pessimistico necessario: la run
+    # appartiene per costruzione al chiamante che ha gia' deciso
+    # di cancellarla).
+    artifact_rows = fetchall(
+        "SELECT node_id, artifact_uri "
+        "FROM node_meta "
+        "WHERE run_id = ? "
+        "  AND artifact_uri IS NOT NULL "
+        "  AND artifact_status = 'complete'",
+        (run_id,),
+    )
+
+    # Filtra a path-shaped storage keys (no scheme). Defensive:
+    # protegge contro un futuro writer che persistesse `s3://...`
+    # o `file://...` come artifact_uri — quei shape non sono
+    # cleanable via runtime object storage delete.
+    pending_specs: List[tuple] = []
+    for row in artifact_rows:
+        node_id = row["node_id"]
+        artifact_uri = row["artifact_uri"]
+        if not artifact_uri or "://" in artifact_uri:
+            continue
+        # Parquet (sempre presente per artifact_status="complete").
+        pending_specs.append((node_id, artifact_uri, "data.parquet"))
+        # Manifest sibling (solo se la forma e' canonica).
+        if artifact_uri.endswith("/data.parquet"):
+            manifest_uri = (
+                artifact_uri[: -len("data.parquet")] + "manifest.json"
+            )
+            pending_specs.append((node_id, manifest_uri, "manifest.json"))
+
+    # Apri transaction con record_pending atomico col DELETE.
+    # `pending_refs` accumula (storage_key, ref) per il post-commit.
+    pending_refs: List[tuple] = []
+    with transaction() as conn:
+        with conn.cursor() as cur:
+            if pending_specs:
+                from app.shared.storage_reconciliation import record_pending
+                for node_id, storage_key, kind in pending_specs:
+                    ref = record_pending(
+                        cur,
+                        domain="intermediate_artifact",
+                        storage_key=storage_key,
+                        operation="delete",
+                        reason="run_delete_cascade",
+                        extras={
+                            "run_id": run_id,
+                            "node_id": node_id,
+                            "kind": kind,
+                        },
+                    )
+                    pending_refs.append((storage_key, ref))
+            cur.execute("DELETE FROM runs WHERE run_id = %s", (run_id,))
+
+    # Post-commit: cleanup best-effort + reconciliation transition.
+    if pending_refs:
+        from app.shared.storage_compensation import compensating_delete
+        from app.shared.storage_reconciliation import (
+            mark_done,
+            mark_failed_attempt,
+        )
+        for storage_key, ref in pending_refs:
+            outcome = compensating_delete(
+                storage_key,
+                domain="intermediate_artifact",
+                reason="run_delete_cascade",
+                extras={
+                    "run_id": run_id,
+                    "reconciliation_id": ref.id,
+                },
+                logger=logger,
+            )
+            if outcome in ("ok", "skipped"):
+                mark_done(ref.id)
+            else:
+                # outcome == "failed": ADR-0011 posture preserved
+                # (orphan accepted, run row stays deleted), but now
+                # persisted for the reconciler beat hook.
+                mark_failed_attempt(
+                    ref.id,
+                    error=f"compensating_delete_outcome={outcome}",
+                )
 
 
 def delete_all_runs_for_canvas(canvas_id: str) -> int:

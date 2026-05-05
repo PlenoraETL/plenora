@@ -19,11 +19,13 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 from app.core.auth.auth import (
     require_not_esecutore,
     require_admin,
+)
+from app.core.auth.models import CurrentUser
+from app.core.auth.ownership import (
     assert_group_access,
     assert_resource_visible,
     assert_can_modify,
     compute_can_edit,
-    CurrentUser,
 )
 from pydantic import BaseModel
 from typing import Dict, Any, List, Literal, Optional
