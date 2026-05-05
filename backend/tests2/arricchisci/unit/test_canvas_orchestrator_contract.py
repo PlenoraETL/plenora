@@ -102,12 +102,17 @@ def test_orchestrator_module_exposes_pure_function_api():
         attr = getattr(co, name)
         assert callable(attr)
     # `__all__` documenta esplicitamente la superficie pubblica.
+    # BE-GO-READY-TRANSFORMATION-ENGINE-015: aggiunti
+    # `ArricchisciExecutionContext` + `build_execution_context`
+    # come re-export tipati del context boundary.
     assert set(co.__all__) == {
         "execute_canvas_enrichment",
         "init_execution_context",
         "get_execution_order",
         "run_single_enricher",
         "is_file_source_for_file_processor",
+        "ArricchisciExecutionContext",
+        "build_execution_context",
     }
 
 

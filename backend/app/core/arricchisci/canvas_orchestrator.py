@@ -61,11 +61,14 @@ from collections import deque
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 import pandas as pd
-import psycopg2
 
-import app.db.db_service as db_svc
+import app.db.db_service as db_svc  # noqa: F401  (test-monkeypatch surface preserved)
 from app.core.arricchisci._api_connection_helpers import _nd
-from app.shared.exceptions import ExecutionContextError
+from app.core.arricchisci.execution_context import (
+    ArricchisciExecutionContext,
+    apply_to_legacy_state,
+    build_execution_context,
+)
 from app.utils.logger import get_logger
 
 
@@ -82,6 +85,11 @@ __all__ = [
     "get_execution_order",
     "run_single_enricher",
     "is_file_source_for_file_processor",
+    # BE-GO-READY-TRANSFORMATION-ENGINE-015: re-export per consumer
+    # esterni che vogliono il typed boundary senza dover importare
+    # il modulo `execution_context` separatamente.
+    "ArricchisciExecutionContext",
+    "build_execution_context",
 ]
 
 
@@ -153,41 +161,52 @@ def init_execution_context(
     svc: "ApiConnectionService",
     project_id: str,
     preview_limit: Optional[int],
-) -> None:
+) -> ArricchisciExecutionContext:
     """Inizializza il contesto di esecuzione per `execute_canvas_enrichment`.
 
-    Setta su `svc`:
-    - `svc._preview_limit` — usato da `_load_file_source` per
-      troncare DataFrame in modalita' preview;
-    - `svc._current_group_id` — tenant binding del progetto
-      corrente, letto dai check cross-tenant in
-      `_load_source_project` / `_load_file_source` /
-      `_resolve_file_source_path` / `_assert_file_source_group_access`.
+    BE-GO-READY-TRANSFORMATION-ENGINE-015: l'implementazione e'
+    stata spezzata in due step espliciti:
 
-    Fail-closed: errori `psycopg2.Error` vengono tradotti in
-    `ExecutionContextError` con chain preservata via `from e`. Il
-    boundary di `execute_canvas_enrichment` cattura nel ramo
-    `except Exception` → response safe per il caller.
+    1. `build_execution_context(project_id, preview_limit)` —
+       costruisce un `ArricchisciExecutionContext` immutabile
+       (frozen dataclass) leggendo `db_svc.get_project(...)`.
+       Pure-ish: niente side effect su `svc`.
+    2. `apply_to_legacy_state(svc, ctx)` — KEEP_COMPAT phase 1:
+       rispecchia `ctx.group_id` / `ctx.preview_limit` su
+       `svc._current_group_id` / `svc._preview_limit` perche' i
+       mixin downstream (`api_connection_source_loading`,
+       `api_connection_rest_file`) leggono ancora gli attributi
+       sul singleton. Phase 2 (TE15-R1) migrera' i mixin a ricevere
+       `ctx` esplicitamente.
+
+    Fail-closed: errori `psycopg2.Error` propagati come
+    `ExecutionContextError` (chain preservata) dal builder
+    sopra. Il boundary di `execute_canvas_enrichment` cattura nel
+    ramo `except Exception` → response safe per il caller.
 
     Su progetto inesistente (`_proj_row is None`):
-    `_current_group_id = None`, i check downstream sollevano
-    "Contesto di sicurezza non determinabile". E' un ramo dati
-    legittimo, non errore.
+    `ctx.group_id = None` (ramo dati), `_current_group_id = None`
+    via mirror; i check downstream sollevano "Contesto di
+    sicurezza non determinabile".
+
+    Returns:
+        Il `ArricchisciExecutionContext` costruito. La chiave
+        e' che ogni esecuzione produce un context fresco
+        immutabile invece di mutare lo stato globale del
+        singleton in-place.
     """
+    # Invariant lock-test (`test_init_execution_context_fail_closed::
+    # test_init_execution_context_resets_stale_group_id_before_db_call`):
+    # azzerare il group_id sul singleton PRIMA del path che puo'
+    # fallire (DB lookup). Se `build_execution_context` solleva
+    # `ExecutionContextError`, lo stato stale dal run precedente
+    # non sopravvive. Il preview_limit viene impostato subito per
+    # preservare il comportamento legacy anche sul path di errore.
     svc._preview_limit = preview_limit
-    # Azzera prima del path che puo' fallire: evita stato stale sul
-    # singleton se una chiamata precedente aveva settato group_id e
-    # la nuova solleva ExecutionContextError.
     svc._current_group_id = None
-    try:
-        _proj_row = db_svc.get_project(project_id)
-    except psycopg2.Error as e:
-        raise ExecutionContextError(
-            project_id,
-            reason="errore lettura progetto dal DB",
-            original_error=e,
-        ) from e
-    svc._current_group_id = _proj_row.get("group_id") if _proj_row else None
+    ctx = build_execution_context(project_id, preview_limit)
+    apply_to_legacy_state(svc, ctx)
+    return ctx
 
 
 def run_single_enricher(
