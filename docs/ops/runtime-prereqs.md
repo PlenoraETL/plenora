@@ -4,6 +4,14 @@ Contratto tra i moduli `app/core/admin_backups/` e `app/core/admin_system_status
 
 Scopo: evitare diagnosi sbagliate ("il dashboard dice `unknown`, il codice e' rotto") quando in realta' manca un binario o un permesso.
 
+> Per installare Plenora-ETL da zero su un host nuovo, vedi
+> [install-non-docker.md](install-non-docker.md). Quel runbook è la
+> source-of-truth per la procedura passo-passo (host prereq,
+> Postgres, Redis, object storage, secrets, systemd, frontend, smoke
+> test). Questo documento elenca solo il **contratto runtime** — non
+> la procedura di install. Il path Docker non è ancora implementato:
+> vedi [install-docker.md](install-docker.md).
+
 ---
 
 ## Dipendenze Python
@@ -197,6 +205,8 @@ Notifiche email: hook `TicketNotifier` predisposto, default no-op. Vedi `tickets
 
 ## Link
 
+- Clean install (non-Docker, single-machine): [install-non-docker.md](install-non-docker.md)
+- Clean install (Docker, status / target shape): [install-docker.md](install-docker.md)
 - Backup runbook: [../../backend/deploy/backup-runbook.md](../../backend/deploy/backup-runbook.md)
 - DR runbook: [backup-restore.md](backup-restore.md)
 - JWT incident response: [jwt-incident-response.md](jwt-incident-response.md)

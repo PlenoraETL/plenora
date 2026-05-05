@@ -117,7 +117,110 @@ celery_app.Task = BaseTaskWithRetry
 #   che un task legga request_id di uno precedente se il worker non
 #   rigenera il contesto).
 
-from celery.signals import before_task_publish, task_prerun, task_postrun
+from celery.signals import (
+    before_task_publish,
+    task_prerun,
+    task_postrun,
+    worker_init,
+    worker_process_init,
+    beat_init,
+)
+
+
+# ============================================================
+# BE-GO-READY-BOOTSTRAP-ENGINE-014: worker bootstrap parity
+# ============================================================
+# Web boot path (`app.main`) calls `app.bootstrap.bootstrap()` once
+# before any router import. Workers and beat must cross the SAME
+# four-step boundary (validate_startup → validate_storage_config →
+# init_all_dbs → _repair_psycopg2_ssl_env) so they fail-fast on
+# config/storage/DB problems instead of discovering them at first
+# task execution.
+#
+# Coverage matrix:
+#   - `worker_init`: fires once in the worker MAIN process. Covers
+#     solo / threads / gevent pools (no fork). On prefork it ALSO
+#     fires in the parent — that bootstrap is harmless but the
+#     resulting psycopg2 pool is fork-unsafe; child workers re-init
+#     in `worker_process_init` (force_reset=True) post-fork.
+#   - `worker_process_init`: fires in EACH prefork child after
+#     fork. Forces re-bootstrap so the inherited (broken) pool is
+#     replaced with a child-local one.
+#   - `beat_init`: fires once on the beat scheduler process. Same
+#     boundary as the worker entry.
+#
+# Idempotency: `is_bootstrapped()` short-circuits a second call in
+# the same process when no force_reset is requested. Combined with
+# the underlying steps' own idempotency (validate_startup,
+# init_all_dbs are re-runnable), the handler is safe to fire
+# multiple times.
+#
+# Fail-closed: any exception from `bootstrap()` propagates out of
+# the signal handler. Celery treats raised signal handler exceptions
+# as fatal → the worker / beat process exits → systemd / k8s
+# restart loop surfaces the misconfiguration. NEVER swallow the
+# exception here: bootstrap failure means config/storage/DB is
+# wrong and the worker MUST NOT start accepting tasks.
+
+
+def _bootstrap_worker_process(*, force_reset: bool = False) -> None:
+    """Bootstrap the worker process via the canonical boundary.
+
+    Args:
+        force_reset: when True, drop the in-process completion flag
+            before bootstrap so the four steps re-run. Required in
+            prefork children whose inherited psycopg2 pool is not
+            safe to use post-fork. Default False = idempotent
+            short-circuit on `is_bootstrapped()`.
+
+    Fail-closed: re-raises any exception from `bootstrap()`. Celery
+    propagates it out of the signal handler → process exit →
+    supervisor restart. The `try/except` around the optional
+    breadcrumb log is the ONLY swallowed boundary, and only for
+    the log itself; the bootstrap exception always propagates.
+    """
+    from app import bootstrap as _bootstrap_mod
+
+    if force_reset:
+        # Post-fork in prefork children: the parent's `_BOOT_COMPLETE`
+        # value is inherited but the underlying PG pool is broken.
+        # Reset the flag so the idempotent short-circuit does NOT skip
+        # the re-init.
+        _bootstrap_mod._BOOT_COMPLETE = False
+
+    if _bootstrap_mod.is_bootstrapped():
+        # Already bootstrapped in this process and force_reset=False:
+        # nothing to do (e.g. worker_init firing on solo pool after
+        # an earlier programmatic bootstrap call).
+        return
+
+    # bootstrap() raises on failure; let it propagate.
+    _bootstrap_mod.bootstrap()
+
+
+@worker_init.connect
+def _bootstrap_on_worker_init(**kwargs) -> None:
+    """Worker main process startup. Covers solo / threads / gevent
+    pools where no `worker_process_init` fires. On prefork this also
+    fires in the master; the resulting bootstrap is wasteful but
+    not harmful (child workers re-init via `worker_process_init`).
+    """
+    _bootstrap_worker_process()
+
+
+@worker_process_init.connect
+def _bootstrap_on_worker_process_init(**kwargs) -> None:
+    """Prefork child process post-fork. The psycopg2 pool inherited
+    from the master is NOT safe to use; force re-bootstrap so each
+    child has its own pool / Redis client / settings cache."""
+    _bootstrap_worker_process(force_reset=True)
+
+
+@beat_init.connect
+def _bootstrap_on_beat_init(**kwargs) -> None:
+    """Beat scheduler process startup. Same four-step boundary as
+    the web/worker entry."""
+    _bootstrap_worker_process()
 
 
 @before_task_publish.connect

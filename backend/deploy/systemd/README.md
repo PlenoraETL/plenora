@@ -6,6 +6,12 @@ restore settimanale. Specchio di quelli installati su
 disaster recovery: se si perde il server o si migra region, questi file
 riportano il servizio allo stato live senza riscriverli a memoria.
 
+> Per la procedura completa di clean install di un host nuovo
+> (host prereq, Postgres, Redis, secrets, frontend, smoke test), vedi
+> [`docs/ops/install-non-docker.md`](../../../docs/ops/install-non-docker.md).
+> La sezione "Install su nuovo server" qui sotto resta come
+> riferimento focalizzato sui soli unit file systemd.
+
 ## Rebrand urby-* → plenora-* (completato 2026-04-18)
 
 Migrazione server eseguita via `deploy/migrations/2026-04-18_rename-urby-to-plenora.sh`:

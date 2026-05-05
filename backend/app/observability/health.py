@@ -62,6 +62,7 @@ __all__ = [
     "check_pool_headroom",
     "check_migrations_aligned",
     "check_object_storage",
+    "check_reconciliation_backlog",
     "gather_liveness",
     "gather_readiness",
 ]
@@ -224,6 +225,74 @@ def check_object_storage() -> CheckOutcome:
     return True, "ok"
 
 
+def check_reconciliation_backlog() -> CheckOutcome:
+    """Verifica che il backlog di `plenora.storage_reconciliation_log`
+    non abbia accumulato troppi `pending` o `lost`.
+
+    BE-GO-READY-STORAGE-ENGINE-015-RECONCILIATION-READINESS-CHECK:
+    consumer di `count_active_by_state_domain()` (gia' bounded da
+    SQL filter `state IN ('pending','lost')`). Threshold-based:
+      - `pending_total > STORAGE_RECONCILE_BACKLOG_PENDING_503_THRESHOLD`
+        oppure
+      - `lost_total > STORAGE_RECONCILE_BACKLOG_LOST_503_THRESHOLD`
+    -> outcome `(False, "<state>=<count> over <thr>: ...")`.
+
+    Cap <= 0 su un threshold disabilita SOLO quel branch (escape
+    hatch ops). Se entrambi disabilitati il check resta sempre OK
+    informando comunque `pending=N lost=M`.
+
+    Errori di lettura (`count_active_by_state_domain` swallow → `[]`)
+    sono trattati come fail-OPEN: outcome `(True, "skipped: ...")`,
+    paralleloamente a `check_pool_headroom` / `check_migrations_aligned`.
+    Il summary log nel beat hook resta la fonte primaria di
+    diagnostic per backlog.
+
+    Esposto in `gather_readiness` come 6° check
+    `reconciliation_backlog`. NON e' integrato in `gather_liveness`:
+    /health resta load-balancer-friendly e non deve dipendere dal
+    DB-side state della reconciliation.
+    """
+    try:
+        from app.shared.storage_reconciliation import (
+            count_active_by_state_domain,
+        )
+    except Exception as e:
+        # Modulo rotto / cycle: fail-OPEN diagnostic.
+        return True, f"check skipped: {type(e).__name__}"
+
+    try:
+        from app.config import settings
+        pending_threshold = int(
+            settings.get("STORAGE_RECONCILE_BACKLOG_PENDING_503_THRESHOLD", 1000)
+        )
+        lost_threshold = int(
+            settings.get("STORAGE_RECONCILE_BACKLOG_LOST_503_THRESHOLD", 10)
+        )
+    except Exception as e:
+        return True, f"check skipped: {type(e).__name__}"
+
+    try:
+        counts = count_active_by_state_domain()
+    except Exception as e:
+        # `count_active_by_state_domain` gia' swallow internamente,
+        # ma defense-in-depth.
+        return True, f"check skipped: {type(e).__name__}"
+
+    pending_total = sum(c.count for c in counts if c.state == "pending")
+    lost_total = sum(c.count for c in counts if c.state == "lost")
+
+    over = []
+    if pending_threshold > 0 and pending_total > pending_threshold:
+        over.append(f"pending={pending_total} over {pending_threshold}")
+    if lost_threshold > 0 and lost_total > lost_threshold:
+        over.append(f"lost={lost_total} over {lost_threshold}")
+
+    detail = f"pending={pending_total} lost={lost_total}"
+    if over:
+        return False, f"{'; '.join(over)} ({detail})"
+    return True, detail
+
+
 # ---------------------------------------------------------------------------
 # Payload composition — gather_liveness / gather_readiness
 # ---------------------------------------------------------------------------
@@ -294,6 +363,11 @@ def gather_readiness() -> HealthPayload:
     obj_ok, obj_detail = check_object_storage()
     checks["object_storage"] = {"ok": obj_ok, "detail": obj_detail}
     if not obj_ok:
+        status_code = 503
+
+    backlog_ok, backlog_detail = check_reconciliation_backlog()
+    checks["reconciliation_backlog"] = {"ok": backlog_ok, "detail": backlog_detail}
+    if not backlog_ok:
         status_code = 503
 
     body = {

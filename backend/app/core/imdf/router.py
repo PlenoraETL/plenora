@@ -19,7 +19,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.config import settings
-from app.core.auth.auth import get_current_user, CurrentUser
+from app.core.auth.auth import get_current_user
+from app.core.auth.models import CurrentUser
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 from app.shared.audit_action import audit_action

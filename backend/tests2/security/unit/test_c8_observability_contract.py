@@ -34,6 +34,11 @@ def main_client():
     BE-GO-READY-BOOTSTRAP-ENGINE-011: aggiunto `check_object_storage`
     al monkeypatch — quinto check di `gather_readiness`. Default
     happy path = `(True, "ok")` (capability ON + list_objects ok).
+
+    BE-GO-READY-STORAGE-ENGINE-015: aggiunto
+    `check_reconciliation_backlog` come 6° check. Default happy
+    path = `(True, "pending=0 lost=0")` (tabella vuota o sotto
+    threshold).
     """
     import app.main as main_mod
     import app.observability.health as health_mod
@@ -44,6 +49,10 @@ def main_client():
         patch.object(health_mod, "check_pool_headroom", return_value=(True, "1/12 in uso, 11 free")),
         patch.object(health_mod, "check_migrations_aligned", return_value=(True, "aligned")),
         patch.object(health_mod, "check_object_storage", return_value=(True, "ok")),
+        patch.object(
+            health_mod, "check_reconciliation_backlog",
+            return_value=(True, "pending=0 lost=0"),
+        ),
     ):
         yield TestClient(main_mod.app)
 
@@ -109,6 +118,10 @@ def test_ready_returns_503_when_pool_or_migrations_are_not_ready():
         patch.object(health_mod, "check_pool_headroom", return_value=(False, "pool saturo")),
         patch.object(health_mod, "check_migrations_aligned", return_value=(False, "2 pending")),
         patch.object(health_mod, "check_object_storage", return_value=(True, "ok")),
+        patch.object(
+            health_mod, "check_reconciliation_backlog",
+            return_value=(True, "pending=0 lost=0"),
+        ),
     ):
         client = TestClient(main_mod.app)
         response = client.get("/ready")

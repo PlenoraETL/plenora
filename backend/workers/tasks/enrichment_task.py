@@ -252,21 +252,33 @@ def execute_enrichment_task(
         # Import qui per evitare circular imports.
         # IMPORTANTE: istanziamo una NUOVA `ApiConnectionService` invece di
         # usare il singleton modulo-level. Il singleton ha stato per-execution
-        # (`_current_group_id`, `_preview_limit`) che e' soggetto a race
-        # condition cross-tenant fra task paralleli sullo stesso worker
-        # process (Celery prefork riusa i fork). Un'istanza locale per task
-        # garantisce isolamento totale del tenant binding.
+        # che e' soggetto a race condition cross-tenant fra task paralleli
+        # sullo stesso worker process (Celery prefork riusa i fork).
+        # Un'istanza locale per task garantisce isolamento totale del tenant
+        # binding.
         from app.core.arricchisci.api_connector import ApiConnectionService
         api_connection_service = ApiConnectionService()
-        # Tenant binding: i metodi `_execute_rest_file`,
-        # `_load_source_project`, `_load_file_source` richiedono
-        # `_current_group_id` per i check cross-tenant fail-closed. Senza
-        # questa init falliscono con "Contesto di sicurezza non determinabile
-        # per file_source" su qualunque canvas con nodi rest_file o file_source.
-        api_connection_service._current_group_id = (
-            _group_id if _group_id and _group_id != 'unknown' else None
+        # BE-GO-READY-TRANSFORMATION-ENGINE-020: Phase 3 — costruisci un
+        # `ArricchisciExecutionContext` tipato esplicito invece di mutare
+        # gli attributi singleton `_current_group_id` / `_preview_limit`.
+        # Il context viene threadato esplicitamente ai mixin reader site
+        # (Phase 2 wiring). `apply_to_legacy_state` e' chiamato per
+        # backward-compat con eventuali code path che ancora leggono dal
+        # singleton (es. mixin generator/enricher non ancora migrati a
+        # leggere da ctx). I 6 reader site Phase 2 ignorano il legacy
+        # state quando ricevono `ctx=ctx` esplicito.
+        from app.core.arricchisci.execution_context import (
+            ArricchisciExecutionContext,
+            apply_to_legacy_state,
         )
-        api_connection_service._preview_limit = None  # task celery non e' preview
+        ctx = ArricchisciExecutionContext(
+            project_id=project_id,
+            group_id=(
+                _group_id if _group_id and _group_id != 'unknown' else None
+            ),
+            preview_limit=None,  # task celery non e' preview
+        )
+        apply_to_legacy_state(api_connection_service, ctx)
 
         nodes = canvas.get("nodes", [])
         edges = canvas.get("edges", [])
@@ -353,8 +365,10 @@ def execute_enrichment_task(
 
             if node_type == "project_source":
                 update_task_progress(self, node_progress, f"Caricamento sorgente dati...", task_id=task_id)
+                # BE-GO-READY-TRANSFORMATION-ENGINE-020: passa il typed
+                # ctx esplicito invece di affidarsi al singleton state.
                 result = api_connection_service._load_source_project(
-                    node_data, force_recalculate
+                    node_data, force_recalculate, ctx=ctx,
                 )
                 node_results[node_id] = result
                 return
@@ -384,13 +398,19 @@ def execute_enrichment_task(
                     }
                 else:
                     update_task_progress(self, node_progress, f"Caricamento file...", task_id=task_id)
-                    result = api_connection_service._load_file_source(node_data)
+                    # BE-GO-READY-TRANSFORMATION-ENGINE-020: typed ctx.
+                    result = api_connection_service._load_file_source(
+                        node_data, ctx=ctx,
+                    )
                     node_results[node_id] = result
                 return
 
             if node_type == "staticValues":
                 update_task_progress(self, node_progress, f"Processamento valori statici...", task_id=task_id)
-                result = api_connection_service._load_static_values(node_data)
+                # BE-GO-READY-TRANSFORMATION-ENGINE-020: typed ctx.
+                result = api_connection_service._load_static_values(
+                    node_data, ctx=ctx,
+                )
                 node_results[node_id] = result
                 return
 
@@ -451,9 +471,12 @@ def execute_enrichment_task(
                 api_name = api_config.get("name", api_id)
                 update_task_progress(self, node_progress, f"Esecuzione {api_name} (REST file)...", task_id=task_id)
 
+                # BE-GO-READY-TRANSFORMATION-ENGINE-020: typed ctx
+                # threadato per il rest_file pipeline (group_id letto
+                # da `ctx` invece di singleton state).
                 result = api_connection_service._execute_rest_file(
                     node_data, api_config, nodes, edges, node_id, project_id,
-                    node_results=node_results,
+                    node_results=node_results, ctx=ctx,
                 )
                 if isinstance(result, dict) and not result.get("success", True):
                     raise ValueError(result.get("error", "Errore esecuzione REST file processor"))

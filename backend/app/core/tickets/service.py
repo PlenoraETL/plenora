@@ -44,7 +44,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import HTTPException
 
-from app.core.auth.auth import CurrentUser
+from app.core.auth.models import CurrentUser
 from app.db import tickets_db_service as tdb
 from app.shared import error_codes
 from app.utils.logger import get_logger

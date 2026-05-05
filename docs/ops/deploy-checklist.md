@@ -2,11 +2,18 @@
 
 Checklist operativa pre/post deploy + rollback manuale minimo.
 
+> Questa checklist copre il deploy di un **update** su un host già
+> installato. Per la prima installazione di un host nuovo (clean
+> install) usa [install-non-docker.md](install-non-docker.md);
+> il path Docker non è ancora implementato, vedi
+> [install-docker.md](install-docker.md).
+
 Riferimenti:
 - `incident_response.md` — incident framework generale
 - `runbook.md` — procedure recovery operative
 - `backup-restore.md` — DB backup/restore
 - `dr_drill_playbook.md` — DR drill formale
+- `install-non-docker.md` — clean install (host nuovo)
 
 Il deploy attuale usa `deploy.sh` come wrapper parametrico
 multi-environment (vedi `deploy/profiles/<name>.conf`). Default profilo

@@ -7,7 +7,8 @@ from typing import Any, Dict
 from fastapi import APIRouter, Depends
 
 from app.core.admin_system_status import service
-from app.core.auth.auth import CurrentUser, require_superadmin
+from app.core.auth.auth import require_superadmin
+from app.core.auth.models import CurrentUser
 
 
 router = APIRouter(prefix="/admin/system-status", tags=["admin-system-status"])

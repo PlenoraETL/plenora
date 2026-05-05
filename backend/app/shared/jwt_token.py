@@ -3,7 +3,7 @@
 Estratto da `app.core.auth.auth` (STRUCT-005 Seam D) senza alcun cambio
 comportamentale. `auth.py` re-esporta i simboli per backward-compat con
 test (`auth_mod.SECRET_KEY`, `auth_mod.create_access_token`, ...) e con
-`auth_middleware.py` (`from app.core.auth.auth import decode_token`).
+consumer legacy che importano ancora JWT helpers dalla facade.
 
 Contratto del payload (claim names invariati, side per Go-portability):
     sub       -> user_id (id utente)

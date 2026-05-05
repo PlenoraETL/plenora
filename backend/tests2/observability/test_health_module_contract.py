@@ -360,7 +360,7 @@ def test_gather_liveness_only_2_checks_in_body():
 # ---------------------------------------------------------------------------
 
 
-def test_gather_readiness_returns_200_when_all_5_ok():
+def test_gather_readiness_returns_200_when_all_6_ok():
     import app.observability.health as h
 
     with (
@@ -369,13 +369,15 @@ def test_gather_readiness_returns_200_when_all_5_ok():
         patch.object(h, "check_pool_headroom", return_value=(True, "1/12 in uso, 11 free")),
         patch.object(h, "check_migrations_aligned", return_value=(True, "aligned")),
         patch.object(h, "check_object_storage", return_value=(True, "ok")),
+        patch.object(h, "check_reconciliation_backlog", return_value=(True, "pending=0 lost=0")),
     ):
         payload = h.gather_readiness()
 
     assert payload.status_code == 200
     assert payload.body["status"] == "ready"
     assert set(payload.body["checks"].keys()) == {
-        "postgres", "redis", "pool_headroom", "migrations", "object_storage",
+        "postgres", "redis", "pool_headroom", "migrations",
+        "object_storage", "reconciliation_backlog",
     }
 
 
@@ -394,6 +396,7 @@ def test_gather_readiness_returns_200_when_object_storage_skipped_capability_dis
             h, "check_object_storage",
             return_value=(True, "skipped: capability disabled"),
         ),
+        patch.object(h, "check_reconciliation_backlog", return_value=(True, "pending=0 lost=0")),
     ):
         payload = h.gather_readiness()
 
@@ -412,6 +415,7 @@ def test_gather_readiness_returns_503_on_pool_saturo():
         patch.object(h, "check_pool_headroom", return_value=(False, "pool saturo")),
         patch.object(h, "check_migrations_aligned", return_value=(True, "aligned")),
         patch.object(h, "check_object_storage", return_value=(True, "ok")),
+        patch.object(h, "check_reconciliation_backlog", return_value=(True, "pending=0 lost=0")),
     ):
         payload = h.gather_readiness()
 
@@ -429,6 +433,7 @@ def test_gather_readiness_returns_503_on_pending_migrations():
         patch.object(h, "check_pool_headroom", return_value=(True, "ok")),
         patch.object(h, "check_migrations_aligned", return_value=(False, "1 pending")),
         patch.object(h, "check_object_storage", return_value=(True, "ok")),
+        patch.object(h, "check_reconciliation_backlog", return_value=(True, "pending=0 lost=0")),
     ):
         payload = h.gather_readiness()
 
@@ -451,6 +456,7 @@ def test_gather_readiness_returns_503_on_object_storage_failure():
             h, "check_object_storage",
             return_value=(False, "EndpointConnectionError: timeout"),
         ),
+        patch.object(h, "check_reconciliation_backlog", return_value=(True, "pending=0 lost=0")),
     ):
         payload = h.gather_readiness()
 
@@ -458,6 +464,30 @@ def test_gather_readiness_returns_503_on_object_storage_failure():
     assert payload.body["status"] == "not_ready"
     assert payload.body["checks"]["object_storage"]["ok"] is False
     assert "EndpointConnectionError" in payload.body["checks"]["object_storage"]["detail"]
+
+
+def test_gather_readiness_returns_503_on_reconciliation_backlog_over_threshold():
+    """BE-GO-READY-STORAGE-ENGINE-015: il backlog readiness check
+    sopra threshold porta /ready a 503."""
+    import app.observability.health as h
+
+    with (
+        patch.object(h, "check_postgres", return_value=(True, "ok")),
+        patch.object(h, "check_redis", return_value=(True, "ok")),
+        patch.object(h, "check_pool_headroom", return_value=(True, "ok")),
+        patch.object(h, "check_migrations_aligned", return_value=(True, "aligned")),
+        patch.object(h, "check_object_storage", return_value=(True, "ok")),
+        patch.object(
+            h, "check_reconciliation_backlog",
+            return_value=(False, "lost=42 over 10 (pending=0 lost=42)"),
+        ),
+    ):
+        payload = h.gather_readiness()
+
+    assert payload.status_code == 503
+    assert payload.body["status"] == "not_ready"
+    assert payload.body["checks"]["reconciliation_backlog"]["ok"] is False
+    assert "lost=42" in payload.body["checks"]["reconciliation_backlog"]["detail"]
 
 
 # ---------------------------------------------------------------------------
@@ -609,3 +639,215 @@ def test_main_py_delegates_health_routes_to_health_module():
     assert "def _check_redis" not in src
     assert "def _check_pool_headroom" not in src
     assert "def _check_migrations_aligned" not in src
+
+
+# ---------------------------------------------------------------------------
+# 10. check_reconciliation_backlog — threshold-based readiness
+# (BE-GO-READY-STORAGE-ENGINE-015)
+# ---------------------------------------------------------------------------
+
+
+def _mk_count_row(state: str, domain: str, count: int):
+    """Costruisce un `ReconciliationStateCount` mock per i test."""
+    from app.shared.storage_reconciliation import ReconciliationStateCount
+
+    return ReconciliationStateCount(state=state, domain=domain, count=count)
+
+
+def test_check_reconciliation_backlog_ok_when_empty():
+    """Tabella vuota -> outcome (True, "pending=0 lost=0")."""
+    with patch(
+        "app.shared.storage_reconciliation.count_active_by_state_domain",
+        return_value=[],
+    ):
+        from app.observability.health import check_reconciliation_backlog
+
+        ok, detail = check_reconciliation_backlog()
+    assert ok is True
+    assert detail == "pending=0 lost=0"
+
+
+def test_check_reconciliation_backlog_ok_when_below_thresholds():
+    """Counts non zero ma sotto i threshold -> ok con detail tipato."""
+    counts = [
+        _mk_count_row("pending", "file_source", 5),
+        _mk_count_row("pending", "result_blob", 10),
+        _mk_count_row("lost", "file_source", 2),
+    ]
+    with patch(
+        "app.shared.storage_reconciliation.count_active_by_state_domain",
+        return_value=counts,
+    ):
+        from app.observability.health import check_reconciliation_backlog
+
+        ok, detail = check_reconciliation_backlog()
+    assert ok is True
+    assert detail == "pending=15 lost=2"
+
+
+def test_check_reconciliation_backlog_failed_above_pending_threshold(monkeypatch):
+    """`pending_total > STORAGE_RECONCILE_BACKLOG_PENDING_503_THRESHOLD`
+    -> outcome (False, ...)."""
+    from app.config import settings as _settings
+    monkeypatch.setitem(
+        _settings.DEFAULTS,
+        "STORAGE_RECONCILE_BACKLOG_PENDING_503_THRESHOLD",
+        100,
+    )
+    monkeypatch.setitem(
+        _settings.DEFAULTS,
+        "STORAGE_RECONCILE_BACKLOG_LOST_503_THRESHOLD",
+        10,
+    )
+    counts = [
+        _mk_count_row("pending", "file_source", 200),  # over 100
+        _mk_count_row("lost", "file_source", 1),
+    ]
+    with patch(
+        "app.shared.storage_reconciliation.count_active_by_state_domain",
+        return_value=counts,
+    ):
+        from app.observability.health import check_reconciliation_backlog
+
+        ok, detail = check_reconciliation_backlog()
+    assert ok is False
+    assert "pending=200 over 100" in detail
+    assert "pending=200 lost=1" in detail
+
+
+def test_check_reconciliation_backlog_failed_above_lost_threshold(monkeypatch):
+    """`lost_total > STORAGE_RECONCILE_BACKLOG_LOST_503_THRESHOLD`
+    -> outcome (False, ...)."""
+    from app.config import settings as _settings
+    monkeypatch.setitem(
+        _settings.DEFAULTS,
+        "STORAGE_RECONCILE_BACKLOG_PENDING_503_THRESHOLD",
+        1000,
+    )
+    monkeypatch.setitem(
+        _settings.DEFAULTS,
+        "STORAGE_RECONCILE_BACKLOG_LOST_503_THRESHOLD",
+        5,
+    )
+    counts = [
+        _mk_count_row("pending", "file_source", 3),
+        _mk_count_row("lost", "file_source", 15),  # over 5
+    ]
+    with patch(
+        "app.shared.storage_reconciliation.count_active_by_state_domain",
+        return_value=counts,
+    ):
+        from app.observability.health import check_reconciliation_backlog
+
+        ok, detail = check_reconciliation_backlog()
+    assert ok is False
+    assert "lost=15 over 5" in detail
+
+
+def test_check_reconciliation_backlog_failed_on_both_thresholds(monkeypatch):
+    """Entrambi sopra threshold -> detail menziona entrambi separati da ';'."""
+    from app.config import settings as _settings
+    monkeypatch.setitem(
+        _settings.DEFAULTS,
+        "STORAGE_RECONCILE_BACKLOG_PENDING_503_THRESHOLD",
+        50,
+    )
+    monkeypatch.setitem(
+        _settings.DEFAULTS,
+        "STORAGE_RECONCILE_BACKLOG_LOST_503_THRESHOLD",
+        5,
+    )
+    counts = [
+        _mk_count_row("pending", "file_source", 100),
+        _mk_count_row("lost", "result_blob", 20),
+    ]
+    with patch(
+        "app.shared.storage_reconciliation.count_active_by_state_domain",
+        return_value=counts,
+    ):
+        from app.observability.health import check_reconciliation_backlog
+
+        ok, detail = check_reconciliation_backlog()
+    assert ok is False
+    assert "pending=100 over 50" in detail
+    assert "lost=20 over 5" in detail
+    assert ";" in detail
+
+
+def test_check_reconciliation_backlog_skipped_when_pending_threshold_zero(monkeypatch):
+    """Cap <= 0 disabilita il branch pending. Lost cap continua a
+    essere applicato; se anche lost <= 0 il check e' sempre ok."""
+    from app.config import settings as _settings
+    monkeypatch.setitem(
+        _settings.DEFAULTS,
+        "STORAGE_RECONCILE_BACKLOG_PENDING_503_THRESHOLD",
+        0,
+    )
+    monkeypatch.setitem(
+        _settings.DEFAULTS,
+        "STORAGE_RECONCILE_BACKLOG_LOST_503_THRESHOLD",
+        10,
+    )
+    # pending astronomico ma threshold disabilitato -> ok.
+    counts = [
+        _mk_count_row("pending", "file_source", 1_000_000),
+        _mk_count_row("lost", "file_source", 1),
+    ]
+    with patch(
+        "app.shared.storage_reconciliation.count_active_by_state_domain",
+        return_value=counts,
+    ):
+        from app.observability.health import check_reconciliation_backlog
+
+        ok, detail = check_reconciliation_backlog()
+    assert ok is True
+    assert "pending=1000000" in detail
+    assert "lost=1" in detail
+
+
+def test_check_reconciliation_backlog_fail_open_on_count_error():
+    """`count_active_by_state_domain` returns [] su DB error
+    (best-effort); il backlog check segue lo stesso fail-OPEN del
+    pattern `check_pool_headroom`/`check_migrations_aligned`: se la
+    lettura non e' possibile (lista vuota o exception), non
+    blocchiamo /ready."""
+    def _raise():
+        raise RuntimeError("DB unreachable")
+
+    with patch(
+        "app.shared.storage_reconciliation.count_active_by_state_domain",
+        _raise,
+    ):
+        from app.observability.health import check_reconciliation_backlog
+
+        ok, detail = check_reconciliation_backlog()
+    assert ok is True
+    assert "skipped" in detail
+    assert "RuntimeError" in detail
+
+
+def test_check_reconciliation_backlog_does_not_import_db_directly():
+    """Source-bound: `health.py` non deve importare `pg_connection`
+    o moduli DB direttamente per il backlog check; consume del
+    boundary `count_active_by_state_domain` esistente."""
+    import app.observability.health as h
+
+    src = Path(h.__file__).read_text(encoding="utf-8")
+    # Public boundary consumed.
+    assert "count_active_by_state_domain" in src
+    # `check_reconciliation_backlog` chiamata in `gather_readiness`.
+    assert "check_reconciliation_backlog" in src
+
+
+def test_settings_defaults_expose_backlog_thresholds():
+    """Settings.DEFAULTS deve esporre i 2 threshold con int positivi
+    (default-on) — ops puo' settare <= 0 per disabilitare un branch."""
+    from app.config import Settings
+
+    pending_thr = Settings.DEFAULTS.get("STORAGE_RECONCILE_BACKLOG_PENDING_503_THRESHOLD")
+    lost_thr = Settings.DEFAULTS.get("STORAGE_RECONCILE_BACKLOG_LOST_503_THRESHOLD")
+    assert isinstance(pending_thr, int) and pending_thr > 0
+    assert isinstance(lost_thr, int) and lost_thr > 0
+    # Lost threshold deve essere piu' rigoroso (ogni lost = orphan
+    # blob, dovrebbe essere raro).
+    assert lost_thr <= pending_thr

@@ -351,6 +351,23 @@ class Settings:
         #   richiedere intervention. Cap <= 0 -> prune disabilitato.
         "STORAGE_RECONCILE_TERMINAL_RETENTION_DAYS": 30,
         "STORAGE_RECONCILE_PRUNE_BATCH_SIZE": 500,
+        # BE-GO-READY-STORAGE-ENGINE-015-RECONCILIATION-READINESS-CHECK
+        # Threshold per il readiness check `reconciliation_backlog`
+        # esposto in `app.observability.health.gather_readiness()`.
+        # Sopra il threshold il check ritorna `(False, ...)` e /ready
+        # va a 503; sotto resta `(True, "<count> entries")`. Cap <= 0
+        # disabilita il singolo branch (escape hatch ops). Liveness
+        # NON e' impattata.
+        # - PENDING_503: numero massimo di righe `state='pending'`
+        #   tollerate. Default 1000 (con beat ogni 15min e batch
+        #   50 → ~200/h smaltite; 1000 = ~5h di accumulo). Alza per
+        #   ambienti high-throughput.
+        # - LOST_503: numero massimo di righe `state='lost'` (max
+        #   attempts exceeded → ops review necessaria). Default 10:
+        #   ogni `lost` indica un orphan blob non rimosso, dovrebbe
+        #   essere raro.
+        "STORAGE_RECONCILE_BACKLOG_PENDING_503_THRESHOLD": 1000,
+        "STORAGE_RECONCILE_BACKLOG_LOST_503_THRESHOLD": 10,
 
         # ==================== TASK ARRICCHIMENTO ====================
         "ENRICHMENT_BATCH_SIZE": 100,

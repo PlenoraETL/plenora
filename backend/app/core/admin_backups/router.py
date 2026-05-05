@@ -13,7 +13,8 @@ from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.core.auth.auth import require_superadmin, CurrentUser
+from app.core.auth.auth import require_superadmin
+from app.core.auth.models import CurrentUser
 from app.core.admin_backups import service
 from app.core.admin_backups.service import (
     AdminBackupCredentialsError,
