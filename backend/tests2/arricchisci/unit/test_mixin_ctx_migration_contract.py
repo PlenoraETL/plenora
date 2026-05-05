@@ -563,3 +563,109 @@ def test_rest_file_strict_helpers_still_present():
         f"Atteso: i 2 helper ctx-strict introdotti in -024/-026 "
         f"per i path file_source / project_source."
     )
+
+
+# ---------------------------------------------------------------------------
+# BE-GO-READY-TRANSFORMATION-ENGINE-029 — source-loading migratable locks
+# ---------------------------------------------------------------------------
+
+
+def test_te029_source_loading_migratable_tests_use_ctx_and_stale_singleton():
+    """Source-bound guard: i 6 test classificati come MIGRATABLE da
+    TE-028 sono stati migrati a ctx esplicito in TE-029. Ognuno deve:
+      1. usare la fixture `_make_service_no_singleton()` (NON
+         `_make_service(group_id=...)`);
+      2. settare `_current_group_id = "stale-grp-LEAK"` come decoy;
+      3. passare `ctx=_ctx_grp(...)` al call site del SUT.
+
+    Senza questa coverage, un futuro refactor potrebbe rollback i 6
+    test al pattern singleton-source-of-truth, indebolendo la
+    Phase-2 ctx coverage in source loading.
+
+    I 6 test target (in `test_api_connector_source_loading_core.py`):
+      - `test_load_source_project_propagates_group_id_via_source_loader`
+      - `test_load_source_project_blocks_cross_tenant_via_loader`
+      - `test_load_source_project_preserves_cross_tenant_detail_in_message`
+      - `test_load_source_project_distinguishes_project_not_found_from_cross_tenant`
+      - `test_resolve_file_source_path_project_branch_passes_through_source_loader`
+      - `test_resolve_file_source_path_blocks_cross_tenant_project_source`
+    """
+    src_path = (
+        _BACKEND_ROOT / "tests2" / "security" / "unit"
+        / "test_api_connector_source_loading_core.py"
+    )
+    text = src_path.read_text(encoding="utf-8")
+    tree = ast.parse(text)
+
+    migrated_tests = {
+        "test_load_source_project_propagates_group_id_via_source_loader",
+        "test_load_source_project_blocks_cross_tenant_via_loader",
+        "test_load_source_project_preserves_cross_tenant_detail_in_message",
+        "test_load_source_project_distinguishes_project_not_found_from_cross_tenant",
+        "test_resolve_file_source_path_project_branch_passes_through_source_loader",
+        "test_resolve_file_source_path_blocks_cross_tenant_project_source",
+    }
+
+    found = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name in migrated_tests:
+            found[node.name] = ast.unparse(node)
+
+    missing = migrated_tests - set(found.keys())
+    assert not missing, (
+        f"TE-029 migrated source-loading tests missing in "
+        f"test_api_connector_source_loading_core.py: {sorted(missing)}"
+    )
+
+    for test_name, body_src in found.items():
+        assert "_make_service_no_singleton()" in body_src, (
+            f"{test_name}: must use `_make_service_no_singleton()` "
+            f"fixture — TE-029 migration moves these tests off the "
+            f"singleton-pre-set pattern. Got body:\n{body_src}"
+        )
+        # ast.unparse normalizes string quoting; accept both forms.
+        assert (
+            'svc._current_group_id = "stale-grp-LEAK"' in body_src
+            or "svc._current_group_id = 'stale-grp-LEAK'" in body_src
+        ), (
+            f"{test_name}: must set svc._current_group_id = "
+            f"'stale-grp-LEAK' to prove ctx wins over stale singleton. "
+            f"Got body:\n{body_src}"
+        )
+        assert "ctx=_ctx_grp(" in body_src, (
+            f"{test_name}: must pass `ctx=_ctx_grp(group_id=...)` to "
+            f"the SUT call. Got body:\n{body_src}"
+        )
+
+
+def test_te029_source_loading_resolve_group_id_legacy_helper_still_present():
+    """Lock complementare TE-029: il helper legacy `_resolve_group_id`
+    in `api_connection_source_loading.py` resta presente.
+
+    Motivo: sia i 3 critical fail-closed lock test (KEEP-on-legacy)
+    sia il consumer esterno `workers/tasks/enrichment_task.py` (che
+    fa direct mutation `svc._current_group_id = ...` invece di
+    passare ctx) dipendono dal fallback legacy. Rimuovere il helper
+    in TE-029 sarebbe prematuro — la rimozione e' in scope di TE-030
+    (post-migrazione del worker)."""
+    src_path = (
+        _BACKEND_ROOT / "app" / "core" / "arricchisci"
+        / "api_connection_source_loading.py"
+    )
+    src = src_path.read_text(encoding="utf-8")
+    tree = ast.parse(src)
+
+    found = False
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "_resolve_group_id":
+            found = True
+            break
+
+    assert found, (
+        "`_resolve_group_id` helper rimosso prematuramente. "
+        "TE-029 mantiene il helper legacy attivo: i 3 critical "
+        "fail-closed lock test (`_make_service(group_id=None)` "
+        "+ no ctx) dipendono dalla legacy fallback. La rimozione "
+        "e' in scope di TE-030 dopo migrazione di "
+        "workers/tasks/enrichment_task.py."
+    )

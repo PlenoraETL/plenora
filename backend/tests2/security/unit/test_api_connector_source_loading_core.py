@@ -76,8 +76,13 @@ def test_load_source_project_propagates_group_id_via_source_loader():
     chiama SourceLoader.load con expected_group_id non vuoto. Il
     resolver riceve il group_id e applica il check cross-tenant.
     Pre-Refactor #3: materialize_latest era chiamato senza
-    expected_group_id → check disabilitato."""
-    svc = _make_service(group_id="grp-A")
+    expected_group_id → check disabilitato.
+
+    BE-GO-READY-TRANSFORMATION-ENGINE-029: migrato a ctx esplicito.
+    Stale singleton "stale-grp-LEAK" prova che `ctx.group_id` vince
+    sul singleton legacy."""
+    svc = _make_service_no_singleton()
+    svc._current_group_id = "stale-grp-LEAK"
     captured = {}
 
     def _fake_load(ref, *, expected_group_id):
@@ -90,8 +95,10 @@ def test_load_source_project_propagates_group_id_via_source_loader():
         df = svc._load_source_project(
             {"source_project_id": "proj-1", "columns": []},
             force_recalculate=False,
+            ctx=_ctx_grp(group_id="grp-A"),
         )
 
+    # Ctx wins over stale singleton.
     assert captured["group_id"] == "grp-A"
     assert isinstance(captured["ref"].project, LatestProjectArtifactRef)
     assert captured["ref"].project.project_id == "proj-1"
@@ -109,30 +116,47 @@ def test_load_source_project_fail_closed_without_current_group_id():
 def test_load_source_project_blocks_cross_tenant_via_loader():
     """End-to-end con resolver reale: cross-tenant → ValueError
     con il messaggio storico (back-compat con i test che lo
-    asseriscono)."""
+    asseriscono).
+
+    BE-GO-READY-TRANSFORMATION-ENGINE-029: migrato a ctx esplicito.
+    Stale singleton prova che la cross-tenant block usa
+    `ctx.group_id`, non il singleton legacy."""
     import app.db.db_service as db_service
 
-    svc = _make_service(group_id="grp-mine")
+    svc = _make_service_no_singleton()
+    svc._current_group_id = "stale-grp-LEAK"
     with patch.object(db_service, "get_project",
                       return_value={"id": "proj-99", "group_id": "grp-other"}), \
          patch.object(db_service, "get_latest_result", return_value=None):
         with pytest.raises(ValueError, match="Accesso negato: progetto sorgente 'proj-99'"):
-            svc._load_source_project({"source_project_id": "proj-99"})
+            svc._load_source_project(
+                {"source_project_id": "proj-99"},
+                ctx=_ctx_grp(group_id="grp-mine"),
+            )
 
 
 def test_load_source_project_preserves_cross_tenant_detail_in_message():
     """Pre-fix il wrapper mappava OGNI SourceLoadingError a
     'appartiene a un gruppo diverso' anche quando in realta' era
     'progetto inesistente' o 'errore DB'. Ora il messaggio del
-    loader viene preservato dopo il prefisso storico."""
+    loader viene preservato dopo il prefisso storico.
+
+    BE-GO-READY-TRANSFORMATION-ENGINE-029: migrato a ctx esplicito.
+    Stale singleton prova che il dettaglio cross-tenant (`grp-other`
+    vs `grp-mine`) e' calcolato sul `ctx.group_id`, non sul
+    singleton legacy."""
     import app.db.db_service as db_service
 
-    svc = _make_service(group_id="grp-mine")
+    svc = _make_service_no_singleton()
+    svc._current_group_id = "stale-grp-LEAK"
     with patch.object(db_service, "get_project",
                       return_value={"id": "proj-99", "group_id": "grp-other"}), \
          patch.object(db_service, "get_latest_result", return_value=None):
         with pytest.raises(ValueError) as exc_info:
-            svc._load_source_project({"source_project_id": "proj-99"})
+            svc._load_source_project(
+                {"source_project_id": "proj-99"},
+                ctx=_ctx_grp(group_id="grp-mine"),
+            )
 
     msg = str(exc_info.value)
     # Prefisso storico per back-compat
@@ -144,13 +168,20 @@ def test_load_source_project_preserves_cross_tenant_detail_in_message():
 
 def test_load_source_project_distinguishes_project_not_found_from_cross_tenant():
     """Caso diverso da cross-tenant: progetto inesistente. Il
-    messaggio deve riportare 'non trovato', non 'gruppo diverso'."""
+    messaggio deve riportare 'non trovato', non 'gruppo diverso'.
+
+    BE-GO-READY-TRANSFORMATION-ENGINE-029: migrato a ctx esplicito.
+    Stale singleton presente come decoy."""
     import app.db.db_service as db_service
 
-    svc = _make_service(group_id="grp-mine")
+    svc = _make_service_no_singleton()
+    svc._current_group_id = "stale-grp-LEAK"
     with patch.object(db_service, "get_project", return_value=None):
         with pytest.raises(ValueError) as exc_info:
-            svc._load_source_project({"source_project_id": "proj-ghost"})
+            svc._load_source_project(
+                {"source_project_id": "proj-ghost"},
+                ctx=_ctx_grp(group_id="grp-mine"),
+            )
 
     msg = str(exc_info.value)
     assert "Accesso negato: progetto sorgente 'proj-ghost'" in msg
@@ -171,8 +202,15 @@ def test_resolve_file_source_path_project_branch_passes_through_source_loader():
     resolver con expected_group_id propagato.
 
     Verifichiamo che (a) il loader venga chiamato, (b) con il
-    group_id corrente, (c) col project_id estratto dal node."""
-    svc = _make_service(group_id="grp-A")
+    group_id corrente, (c) col project_id estratto dal node.
+
+    BE-GO-READY-TRANSFORMATION-ENGINE-029: migrato a ctx esplicito.
+    Il branch project_source di `_resolve_file_source_path` usa
+    `_extract_project_source_group_id` (TE-026 strict) che legge
+    SOLO da `ctx`. Stale singleton confirma che il singleton legacy
+    non viene consultato."""
+    svc = _make_service_no_singleton()
+    svc._current_group_id = "stale-grp-LEAK"
     nodes = [
         {"id": "src-1", "type": "project_source", "data": {"source_project_id": "proj-1"}},
         {"id": "tgt-1"},
@@ -181,7 +219,10 @@ def test_resolve_file_source_path_project_branch_passes_through_source_loader():
 
     with patch("app.core.artifacts.SourceLoader") as loader_cls:
         loader_cls.return_value.resolve_project_path.return_value = "/tmp/output.csv"
-        result = svc._resolve_file_source_path(nodes, edges, "tgt-1")
+        result = svc._resolve_file_source_path(
+            nodes, edges, "tgt-1",
+            ctx=_ctx_grp(group_id="grp-A"),
+        )
 
     assert result == "/tmp/output.csv"
     loader_cls.return_value.resolve_project_path.assert_called_once()
@@ -189,17 +230,22 @@ def test_resolve_file_source_path_project_branch_passes_through_source_loader():
     # Argomento posizionale: LatestProjectArtifactRef(project_id="proj-1")
     project_ref = call_args.args[0]
     assert project_ref.project_id == "proj-1"
-    # Keyword: expected_group_id propagato
+    # Keyword: expected_group_id propagato — ctx.group_id, NON stale singleton
     assert call_args.kwargs.get("expected_group_id") == "grp-A"
 
 
 def test_resolve_file_source_path_blocks_cross_tenant_project_source():
     """End-to-end: project_source di altro gruppo → ValueError
     fail-closed. Pre-fix questo path ritornava silenziosamente None
-    o tentava di servire il file di un altro tenant."""
+    o tentava di servire il file di un altro tenant.
+
+    BE-GO-READY-TRANSFORMATION-ENGINE-029: migrato a ctx esplicito.
+    Stale singleton prova che il check cross-tenant usa
+    `ctx.group_id`, non il singleton legacy."""
     import app.db.db_service as db_service
 
-    svc = _make_service(group_id="grp-mine")
+    svc = _make_service_no_singleton()
+    svc._current_group_id = "stale-grp-LEAK"
     nodes = [
         {"id": "src-1", "type": "project_source", "data": {"source_project_id": "proj-other"}},
         {"id": "tgt-1"},
@@ -210,7 +256,10 @@ def test_resolve_file_source_path_blocks_cross_tenant_project_source():
                       return_value={"id": "proj-other", "group_id": "grp-other"}), \
          patch.object(db_service, "get_latest_result", return_value=None):
         with pytest.raises(ValueError, match="Accesso negato: progetto sorgente 'proj-other'"):
-            svc._resolve_file_source_path(nodes, edges, "tgt-1")
+            svc._resolve_file_source_path(
+                nodes, edges, "tgt-1",
+                ctx=_ctx_grp(group_id="grp-mine"),
+            )
 
 
 def test_resolve_file_source_path_fail_closed_without_current_group_id():

@@ -337,6 +337,67 @@ jobs:
           print("OK: PlenoraBeatScheduler symbol resolves.")
           PYEOF
 
+      - name: Verify Celery worker enqueue smoke
+        # BE-GO-READY-INSTALLATION-019-CELERY-WORKER-ENQUEUE-SMOKE-IMPL.
+        #
+        # Real worker enqueue/dequeue smoke. Spawns a `celery worker`
+        # in `--pool=solo` mode (deterministic, no fork), enqueues
+        # the pure no-op `cleanroom.ping` task, and waits for the
+        # result with a hard 30s cap via `AsyncResult.get(timeout=N)`
+        # against the existing Redis result backend. No fragile
+        # shell sleep loops: the only `sleep` is in the trap-based
+        # teardown after the smoke has already passed or failed,
+        # which is bounded teardown not bounded readiness.
+        #
+        # The pure-no-op primitive lives at
+        # backend/workers/tasks/cleanroom_task.py and is registered
+        # via the canonical name `cleanroom.ping`. Contract is
+        # locked by tests2/shared/test_celery_enqueue_smoke_design_guard.py.
+        #
+        # Failure modes:
+        # - worker fails to start (import error, bootstrap fail) ->
+        #   AsyncResult.get(timeout=30) raises TimeoutError; the
+        #   worker.log artifact is uploaded for diagnosis;
+        # - task does not return "pong" -> AssertionError in the
+        #   probe;
+        # - broker unreachable -> caught earlier by the readiness
+        #   step.
+        working-directory: backend
+        run: |
+          set -e
+          mkdir -p .cleanroom-logs
+          nohup celery -A workers.celery_app worker \
+              --pool=solo --loglevel=info \
+              -Q celery -n cleanroom@%h \
+              > .cleanroom-logs/worker.log 2>&1 &
+          worker_pid=$!
+          echo "$worker_pid" > .cleanroom-logs/worker.pid
+          echo "celery worker started (pid=${worker_pid})"
+          # Trap-based teardown: send TERM, wait briefly, force KILL.
+          # `sleep 2` here is bounded teardown (after the assertion
+          # has run), not a readiness sleep loop.
+          trap 'kill -TERM "$(cat .cleanroom-logs/worker.pid 2>/dev/null)" 2>/dev/null || true; sleep 2; kill -9 "$(cat .cleanroom-logs/worker.pid 2>/dev/null)" 2>/dev/null || true' EXIT
+          python - <<'PYEOF'
+          # Bounded smoke. AsyncResult.get(timeout=30) blocks at most
+          # 30s by polling the Redis result backend; no shell sleep.
+          # If the worker is slow to come online, get() retries
+          # internally up to the timeout cap.
+          from workers.celery_app import celery_app
+          ar = celery_app.send_task("cleanroom.ping")
+          result = ar.get(timeout=30)
+          assert result == "pong", f"unexpected result: {result!r}"
+          print(f"OK: cleanroom.ping enqueue/dequeue round-trip succeeded; result={result!r}")
+          PYEOF
+
+      - name: Upload worker log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cleanroom-celery-worker-log
+          path: backend/.cleanroom-logs/worker.log
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Stop backend
         # Teardown best-effort. `if: always()` cosi' gira anche se
         # uno step precedente e' fallito.
@@ -349,6 +410,17 @@ jobs:
               kill "$pid" || true
               sleep 2
               kill -9 "$pid" 2>/dev/null || true
+            fi
+          fi
+          # Best-effort kill of the cleanroom Celery worker if its
+          # own EXIT trap did not run (e.g. a step earlier in the
+          # job got cancelled).
+          if [ -f .cleanroom-logs/worker.pid ]; then
+            wpid=$(cat .cleanroom-logs/worker.pid)
+            if kill -0 "$wpid" 2>/dev/null; then
+              kill "$wpid" || true
+              sleep 2
+              kill -9 "$wpid" 2>/dev/null || true
             fi
           fi
 

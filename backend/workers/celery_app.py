@@ -41,6 +41,10 @@ celery_app = Celery(
         "workers.tasks.schedule_task",
         "workers.tasks.pipeline_task",
         "workers.tasks.imdf_publish_task",
+        # BE-GO-READY-INSTALLATION-019: pure no-op `cleanroom.ping`
+        # task used by the CI cleanroom enqueue/dequeue smoke. Zero
+        # production cost; see backend/workers/tasks/cleanroom_task.py.
+        "workers.tasks.cleanroom_task",
     ]
 )
 

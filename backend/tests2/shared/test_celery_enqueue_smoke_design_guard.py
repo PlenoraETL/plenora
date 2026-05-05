@@ -1,40 +1,38 @@
-"""Architectural lock for the Celery worker enqueue/dequeue smoke design.
+"""Architectural lock for the Celery worker enqueue/dequeue smoke.
 
-BE-GO-READY-INSTALLATION-018-CELERY-WORKER-ENQUEUE-SMOKE-DESIGN.
+BE-GO-READY-INSTALLATION-019-CELERY-WORKER-ENQUEUE-SMOKE-IMPL
+(originally scaffolded by INSTALLATION-018 as design + skipped
+contract; flipped to implemented contract by 019).
 
-This stream did NOT add a real enqueue/dequeue smoke step to
-`.github/workflows/ci-cleanroom.yml`. The brief was explicit that
-fragile sleep loops are not acceptable; a deterministic completion
-signal exists at the primitive level (Redis result backend +
-`AsyncResult.get(timeout=N)`) but the missing piece is a pure
-no-op test-only task. Adding a runtime task module is app-code
-work and belongs to a separate stream (INSTALLATION-019).
+The cleanroom CI lane (`.github/workflows/ci-cleanroom.yml`) now
+spawns a real `celery worker` and exercises a real enqueue/
+dequeue round-trip via the pure no-op `cleanroom.ping` task. This
+guard locks the three surfaces of that contract:
 
-The purpose of this guard suite is to ensure the gap and its
-closure path **cannot be silently forgotten**. Two failure modes:
+  Group A - docs section 12.6 of install-non-docker.md still
+  documents the bounded smoke pattern (no fragile sleep loops,
+  hard timeout via `AsyncResult.get`, `--pool=solo` for
+  determinism, `ignore_result=False` on the primitive task).
 
-  A. Someone removes or rewrites the design section in
-     `docs/ops/install-non-docker.md` section 12.6 without
-     replacing it with a real smoke - the guard fails because the
-     canonical primitive name and the bounded-smoke pattern
-     disappear from the docs.
-  B. Someone adds a `cleanroom.ping` task or a workflow step
-     that purports to close the gap but does it incorrectly
-     (e.g. `ignore_result=True`, side-effecting body, sleep
-     loops, missing teardown) - the guard fails because the
-     contract documented in 12.6.2 is no longer locked.
+  Group B - workflow step and runtime task module land together.
+  Either both present or both absent; one without the other
+  silently breaks the smoke (NotRegistered) or leaves a dead
+  task module in production for no benefit.
 
-The guard is intentionally split into "design present" assertions
-(today's posture: PASS) and "implementation contract" assertions
-that activate only when the implementation lands (today: skipped
-with an explicit pytest.skip pointing at INSTALLATION-019).
+  Group C - the runtime task (`workers/tasks/cleanroom_task.py`)
+  satisfies the contract from section 12.6.2 of the install doc:
+  pure no-op, canonical name `cleanroom.ping`, `ignore_result=False`,
+  registered in `celery_app.include=[...]`.
+
+If a future refactor breaks any of these, the guard fails before
+the smoke regression hits CI.
 
 Outside scope of this guard:
-  - the implementation itself (lives in INSTALLATION-019);
   - the existing INSTALLATION-014 readiness step contracts (locked
     separately by `test_celery_cleanroom_readiness_guard.py`);
   - the install script packaging contract (locked by
-    `test_install_script_packaging_guard.py`).
+    `test_install_script_packaging_guard.py`);
+  - beat schedule tick smoke (open, see section 12.6.4).
 """
 
 from __future__ import annotations
@@ -56,10 +54,10 @@ _CLEANROOM_TASK_PY = (
 )
 
 _DESIGN_SECTION_HEADER = (
-    "### 12.6 Real worker enqueue/dequeue smoke (DESIGN, NOT IMPLEMENTED)"
+    "### 12.6 Real worker enqueue/dequeue smoke (IMPLEMENTED)"
 )
 _CANONICAL_TASK_NAME = "cleanroom.ping"
-_NEXT_STREAM_TAG = (
+_IMPL_STREAM_TAG = (
     "BE-GO-READY-INSTALLATION-019-CELERY-WORKER-ENQUEUE-SMOKE-IMPL"
 )
 
@@ -84,26 +82,25 @@ def doc_section_12_6(doc_text: str) -> str:
 
 
 # =====================================================================
-# Group A - "Design present" assertions (today: must PASS)
+# Group A - Doc section 12.6 documents the bounded smoke (must PASS)
 # =====================================================================
 
 
 def test_design_section_12_6_exists(doc_text: str):
     assert _DESIGN_SECTION_HEADER in doc_text, (
         f"docs/ops/install-non-docker.md must contain section 12.6 "
-        f"with header {_DESIGN_SECTION_HEADER!r}. Removing this "
-        "section without replacing it with a real enqueue smoke "
-        "silently closes the gap and leaves the cleanroom blind to "
-        "worker enqueue regressions."
+        f"with header {_DESIGN_SECTION_HEADER!r}. The section is "
+        "the contract surface for the implemented enqueue smoke; "
+        "renaming or deleting it breaks the closure trail and "
+        "leaves a future regression untriaged."
     )
 
 
 def test_design_section_names_canonical_primitive(doc_section_12_6: str):
     assert _CANONICAL_TASK_NAME in doc_section_12_6, (
         f"Section 12.6 must name the canonical primitive "
-        f"{_CANONICAL_TASK_NAME!r}. Renaming the primitive in docs "
-        "without coordinating the implementation stream "
-        "(INSTALLATION-019) breaks the closure path."
+        f"{_CANONICAL_TASK_NAME!r}. The CI workflow step sends to "
+        "this exact name; renaming silently breaks the smoke."
     )
 
 
@@ -112,8 +109,9 @@ def test_design_section_documents_bounded_smoke_pattern(
 ):
     # The four invariants of the smoke pattern (no sleep loops,
     # bounded timeout, --pool=solo for determinism, AsyncResult.get
-    # for the completion signal) must all appear in 12.6 so a future
-    # implementer cannot drift to a fragile pattern.
+    # for the completion signal) must remain locked in the docs so
+    # a future PR cannot drift the implementation to a fragile
+    # pattern.
     expectations = (
         ("AsyncResult.get(timeout=", "Section 12.6 must document the bounded AsyncResult.get(timeout=N) pattern."),
         ("--pool=solo", "Section 12.6 must document --pool=solo to avoid prefork complexity in the smoke."),
@@ -124,28 +122,12 @@ def test_design_section_documents_bounded_smoke_pattern(
         assert needle in doc_section_12_6, message
 
 
-def test_design_section_calls_out_missing_primitive_explicitly(
+def test_design_section_records_implementation_stream(
     doc_section_12_6: str,
 ):
-    assert "Blocker" in doc_section_12_6 or "blocker" in doc_section_12_6, (
-        "Section 12.6 must contain a Blocker / blocker subsection "
-        "naming the missing primitive. Without an explicit blocker "
-        "section the gap is harder to triage when the next stream "
-        "is scheduled."
-    )
-    assert "no test-only" in doc_section_12_6 or "no-op task" in doc_section_12_6, (
-        "Section 12.6 must explain that no test-only / no-op task "
-        "exists today (this is the actual blocker, not a CI infra "
-        "gap)."
-    )
-
-
-def test_design_section_points_at_next_implementation_stream(
-    doc_section_12_6: str,
-):
-    assert _NEXT_STREAM_TAG in doc_section_12_6, (
-        f"Section 12.6 must reference the next implementation "
-        f"stream tag {_NEXT_STREAM_TAG!r} so the closure path is "
+    assert _IMPL_STREAM_TAG in doc_section_12_6, (
+        f"Section 12.6 must reference the implementation stream "
+        f"tag {_IMPL_STREAM_TAG!r} so the closure provenance is "
         "discoverable from the docs alone."
     )
 
@@ -200,23 +182,50 @@ def test_workflow_does_not_silently_close_gap_without_real_smoke():
 
 @pytest.fixture(scope="module")
 def cleanroom_task_text() -> str:
-    if not _CLEANROOM_TASK_PY.is_file():
-        pytest.skip(
-            f"{_CLEANROOM_TASK_PY.relative_to(_REPO_ROOT)} is absent. "
-            "Implementation belongs to INSTALLATION-019 "
-            "(see docs/ops/install-non-docker.md section 12.6.3). "
-            "When this file is added, this test fixture activates "
-            "automatically and locks the contract from 12.6.2."
-        )
+    assert _CLEANROOM_TASK_PY.is_file(), (
+        f"{_CLEANROOM_TASK_PY.relative_to(_REPO_ROOT)} must exist - "
+        "INSTALLATION-019 added this primitive. If it has been "
+        "deleted, the workflow enqueue smoke step also has to be "
+        "removed atomically (Group B asserts the IFF), and the "
+        "rationale belongs in a new audit entry."
+    )
     return _CLEANROOM_TASK_PY.read_text(encoding="utf-8")
+
+
+def _python_code_only(source: str) -> str:
+    """Return the source with all string literals and comments
+    stripped, so contract checks against forbidden patterns do not
+    false-positive on docstrings that legitimately mention them.
+
+    Uses tokenize for correctness (handles f-strings, triple-quoted
+    strings, and comments uniformly).
+    """
+    import io
+    import tokenize
+
+    out = []
+    try:
+        tokens = list(tokenize.generate_tokens(io.StringIO(source).readline))
+    except tokenize.TokenizeError:
+        # If the file does not tokenize cleanly fall back to the raw
+        # source: a tokenize failure is a real bug the test should
+        # surface elsewhere (the import below will raise).
+        return source
+    for tok in tokens:
+        if tok.type in (tokenize.STRING, tokenize.COMMENT):
+            continue
+        out.append(tok.string)
+    return " ".join(out)
 
 
 def test_cleanroom_task_is_pure_noop(cleanroom_task_text: str):
     # The task module MUST be free of side-effecting imports. Any of
-    # the following in the source means the task body could touch
-    # DB / file / network / config / settings - violating the
-    # "pure no-op" contract from section 12.6.2.
-    forbidden_imports = (
+    # the following in the actual code (NOT docstrings or comments)
+    # means the task body could touch DB / file / network / config /
+    # settings - violating the "pure no-op" contract from
+    # section 12.6.2.
+    code_only = _python_code_only(cleanroom_task_text)
+    forbidden_patterns = (
         "from app.",
         "import app.",
         "from app ",
@@ -229,15 +238,13 @@ def test_cleanroom_task_is_pure_noop(cleanroom_task_text: str):
         "Path(",
         "os.environ",
     )
-    offending = []
-    for needle in forbidden_imports:
-        if needle in cleanroom_task_text:
-            offending.append(needle)
+    offending = [p for p in forbidden_patterns if p in code_only]
     assert not offending, (
         f"workers/tasks/cleanroom_task.py must be a pure no-op. "
-        f"Forbidden patterns found: {offending}. The task body must "
-        "not touch DB, config, files, network, or environment - "
-        "see install-non-docker.md section 12.6.2."
+        f"Forbidden patterns found in code (excluding docstrings/"
+        f"comments): {offending}. The task body must not touch DB, "
+        "config, files, network, or environment - see "
+        "install-non-docker.md section 12.6.2."
     )
 
 
@@ -256,9 +263,12 @@ def test_cleanroom_task_does_not_ignore_result(cleanroom_task_text: str):
         "cannot observe completion of an ignored-result task - "
         "the smoke would silently pass without verifying anything."
     )
-    assert "ignore_result=True" not in cleanroom_task_text, (
+    code_only = _python_code_only(cleanroom_task_text)
+    assert "ignore_result=True" not in code_only, (
         "ignore_result=True is incompatible with the bounded smoke "
-        "pattern in install-non-docker.md section 12.6.1."
+        "pattern in install-non-docker.md section 12.6.1. "
+        "(Mention in docstring is OK; only the actual decorator "
+        "argument is forbidden.)"
     )
 
 

@@ -115,16 +115,18 @@ from app.core.auth.auth import (
     require_user_or_above,
     require_file_owner,
 )
-# BE-GO-READY-AUTH-ENGINE-010 Phase-5 + AUTH-ENGINE-011: leaf-safe
-# symbols (`CurrentUser` + 3 ownership helpers + `group_filter`)
-# consumed directly from their canonical leaf modules. Facade
+# BE-GO-READY-AUTH-ENGINE-013 Phase-7 contract fan-out: pure
+# contract symbols (`CurrentUser`, `group_filter`) consumed from
+# the shared contract module. DB-bound ownership helpers stay on
+# `app.core.auth.ownership` (their canonical home - they require
+# `app.db.db_service` for `compute_can_edit` / `assert_can_modify`).
+# FastAPI Depends + `require_*` stay on the auth facade. Facade
 # KEEP_COMPAT re-exports preserved.
-from app.core.auth.models import CurrentUser
+from app.shared.contracts.auth import CurrentUser, group_filter
 from app.core.auth.ownership import (
     assert_group_access,
     assert_resource_visible,
     compute_can_edit,
-    group_filter,
 )
 from app.shared.sharing import visible_resource_ids
 from app.shared.path_policy import assert_path_within as _core_assert

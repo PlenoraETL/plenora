@@ -115,10 +115,26 @@ def test_ci_cleanroom_celery_probe_is_bounded_and_sleep_free(
     workflow_text: str,
 ):
     # Slice the Celery readiness step out of the workflow to scope
-    # the assertion to that step only.
-    start = workflow_text.index("Verify Celery cleanroom readiness")
-    end = workflow_text.index("Stop backend", start)
-    step_block = workflow_text[start:end]
+    # the assertion to that step only. We do NOT pin the slice end
+    # to "Stop backend" because INSTALLATION-019 inserted the
+    # enqueue smoke step between readiness and Stop backend; the
+    # slice must end at the next `- name:` step header.
+    lines = workflow_text.splitlines()
+    start_idx = next(
+        i for i, line in enumerate(lines)
+        if "Verify Celery cleanroom readiness" in line
+    )
+    end_idx = next(
+        (
+            i
+            for i, line in enumerate(
+                lines[start_idx + 1 :], start=start_idx + 1
+            )
+            if line.lstrip().startswith("- name:")
+        ),
+        len(lines),
+    )
+    step_block = "\n".join(lines[start_idx:end_idx])
 
     # No fragile sleep loops in the readiness step. We strip YAML
     # comment lines first so the rationale prose can mention

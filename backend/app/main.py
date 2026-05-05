@@ -412,7 +412,7 @@ from app.core.arricchisci.router import (
 from app.core.carica.router import router as carica_router, init_carica_service
 from app.core.features.routes import router as features_router
 from app.core.scheduler.router import router as schedules_router
-from app.core.orchestrator.router import pipeline_router, tasks_router, init_orchestrator
+from app.core.orchestrator.router import pipeline_router, tasks_router
 from app.core.logs.router import router as logs_router
 from app.core.logs.runs_router import router as runs_router
 from app.core.datasources.router import router as datasources_router, init_datasources
@@ -435,7 +435,12 @@ init_projects(project_service)
 init_arricchisci(project_service, api_connection_service)
 init_datasources(datasource_service)
 init_carica_service(connection_service)
-init_orchestrator(orchestrator)
+# BE-GO-READY-BOOTSTRAP-ENGINE-018-ROUTER-REGISTRY-FIRST-SLICE:
+# orchestrator router-init wiring goes through the typed registry.
+# The other 5 init_* calls above stay procedural (out of scope for
+# this slice; follow-up streams will migrate them one by one).
+from app.runtime.router_registry import bind_router_services, ORCHESTRATOR_BINDING
+bind_router_services(_runtime_services, ORCHESTRATOR_BINDING)
 # features: usa lazy init interno, nessuna init_* necessaria
 
 

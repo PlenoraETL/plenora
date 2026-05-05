@@ -22,15 +22,16 @@ from app.core.auth.auth import (
     get_current_user,
     require_admin,
 )
-# BE-GO-READY-AUTH-ENGINE-011: `group_filter` canonical home is
-# `app.core.auth.ownership`. Facade KEEP_COMPAT re-export preserved.
-from app.core.auth.models import CurrentUser
+# BE-GO-READY-AUTH-ENGINE-013 Phase-7 contract fan-out: pure
+# contract symbols (`CurrentUser`, `group_filter`) come from the
+# shared contract module. DB-bound ownership helpers stay on
+# `app.core.auth.ownership`. Facade KEEP_COMPAT preserved.
+from app.shared.contracts.auth import CurrentUser, group_filter
 from app.core.auth.ownership import (
     assert_group_access,
     assert_resource_visible,
     assert_can_modify,
     compute_can_edit,
-    group_filter,
 )
 from app.config import settings
 from app.utils.logger import get_logger

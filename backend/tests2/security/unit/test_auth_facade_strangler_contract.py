@@ -548,19 +548,21 @@ def test_phase2_imdf_lazy_assert_resource_visible_kept_on_facade_residual():
         # this file (the contract re-exports `CurrentUser` from the
         # models leaf, so the canonical implementation home is
         # unchanged; only the consumer-facing source moved).
+        # features/routes.py: same — Phase-7 (TE-013) fan-out moved
+        # `CurrentUser` consumption to `app.shared.contracts.auth`.
         _APP / "core" / "logs" / "runs_router.py",
         _APP / "core" / "estrai" / "router.py",
         _APP / "core" / "manipola" / "api" / "transforms_api.py",
-        _APP / "core" / "features" / "routes.py",
     ],
     ids=lambda p: str(p.relative_to(_BACKEND_ROOT)).replace("\\", "/"),
 )
 def test_phase3_imports_currentuser_from_models_leaf(path: Path):
     """Every Phase-3 migrated file must import `CurrentUser` from the
     leaf `app.core.auth.models`. Phase-7 migrated files (logs/router,
-    intermediate/router, projects/router, scheduler/router) consume
-    the contract instead — locked by
-    `test_auth_shared_contract_module_contract.py`."""
+    intermediate/router, projects/router, scheduler/router,
+    features/routes, files/router, connections/router,
+    datasources/router, eseguibili/router) consume the contract
+    instead — locked by Phase-7 contract-fan-out section below."""
     text = path.read_text(encoding="utf-8")
     assert "from app.core.auth.models import CurrentUser" in text, (
         f"{path.name} must import CurrentUser from app.core.auth.models "
@@ -599,17 +601,20 @@ def test_phase3_features_routes_imports_ownership_helpers_from_leaf():
 @pytest.mark.parametrize(
     "path",
     [
+        # connections/router, datasources/router, eseguibili/router
+        # were Phase-7 (TE-013) fan-out migrated to consume
+        # `CurrentUser` from `app.shared.contracts.auth`. They moved
+        # off the `models` direct-leaf list. Phase-7 lock takes over.
         _APP / "core" / "arricchisci" / "router.py",
         _APP / "core" / "carica" / "router.py",
-        _APP / "core" / "connections" / "router.py",
-        _APP / "core" / "datasources" / "router.py",
-        _APP / "core" / "eseguibili" / "router.py",
     ],
     ids=lambda p: str(p.relative_to(_BACKEND_ROOT)).replace("\\", "/"),
 )
 def test_phase4_imports_currentuser_from_models_leaf(path: Path):
     """Every Phase-4 migrated file must import `CurrentUser` from the
-    leaf `app.core.auth.models`."""
+    leaf `app.core.auth.models`. Phase-7 (TE-013) migrated files
+    (connections/router, datasources/router, eseguibili/router)
+    consume the contract instead — see Phase-7 section."""
     text = path.read_text(encoding="utf-8")
     assert "from app.core.auth.models import CurrentUser" in text, (
         f"{path.name} must import CurrentUser from app.core.auth.models "
@@ -665,3 +670,101 @@ def test_phase4_imports_ownership_helpers_from_leaf(
         assert name in text, (
             f"{path.name} must still consume {name} (from ownership leaf)."
         )
+
+
+# ---------------------------------------------------------------------------
+# Phase-7 (BE-GO-READY-AUTH-ENGINE-013) contract fan-out
+# ---------------------------------------------------------------------------
+#
+# Phase-7 moves pure-contract consumption (`CurrentUser`,
+# `group_filter`) for a coherent group of routers from the leaf
+# implementation modules (`app.core.auth.models`,
+# `app.core.auth.ownership`) to the shared contract module
+# `app.shared.contracts.auth`. Identity is preserved end-to-end:
+# the contract module re-exports `CurrentUser` from `auth.models`
+# and defines `group_filter` as the canonical pure policy
+# (`auth.ownership.group_filter` re-exports for KEEP_COMPAT).
+#
+# Routers continue to import:
+#   - DB-bound ownership helpers (`assert_*`, `compute_can_edit`)
+#     from `app.core.auth.ownership` (their canonical home — they
+#     drag `app.db.db_service`);
+#   - FastAPI Depends + `require_*` from the auth facade.
+#
+# The 5 routers below were migrated in TE-013 (this batch).
+# Phase-7 supersedes the Phase-3/4/5 `models`-direct-leaf
+# assertions for these files.
+
+_PHASE7_CONTRACT_FAN_OUT_FILES = (
+    _APP / "core" / "features" / "routes.py",
+    _APP / "core" / "files" / "router.py",
+    _APP / "core" / "connections" / "router.py",
+    _APP / "core" / "datasources" / "router.py",
+    _APP / "core" / "eseguibili" / "router.py",
+)
+
+
+@pytest.mark.parametrize(
+    "path",
+    _PHASE7_CONTRACT_FAN_OUT_FILES,
+    ids=lambda p: str(p.relative_to(_BACKEND_ROOT)).replace("\\", "/"),
+)
+def test_phase7_imports_currentuser_and_group_filter_from_contract(path: Path):
+    """Phase-7 contract fan-out: `CurrentUser` AND `group_filter`
+    must come from `app.shared.contracts.auth` — NOT from
+    `app.core.auth.models` / `app.core.auth.ownership`."""
+    text = path.read_text(encoding="utf-8")
+    assert (
+        "from app.shared.contracts.auth import" in text
+    ), (
+        f"{path.relative_to(_BACKEND_ROOT)} must import from "
+        "app.shared.contracts.auth (Phase-7 contract fan-out)."
+    )
+    for name in ("CurrentUser", "group_filter"):
+        assert name in text, (
+            f"{path.name} must consume `{name}` (Phase-7 contract)."
+        )
+
+
+@pytest.mark.parametrize(
+    "path",
+    _PHASE7_CONTRACT_FAN_OUT_FILES,
+    ids=lambda p: str(p.relative_to(_BACKEND_ROOT)).replace("\\", "/"),
+)
+def test_phase7_does_not_import_currentuser_from_models_leaf(path: Path):
+    """Phase-7 contract: source-bound check that the migrated file
+    does NOT import `CurrentUser` from `app.core.auth.models`
+    (canonical for Phase-3/4/5; superseded by the contract for
+    Phase-7 files)."""
+    text = path.read_text(encoding="utf-8")
+    assert (
+        "from app.core.auth.models import CurrentUser" not in text
+    ), (
+        f"{path.relative_to(_BACKEND_ROOT)} regressed to importing "
+        "CurrentUser from `app.core.auth.models` — Phase-7 routes "
+        "this through `app.shared.contracts.auth` instead."
+    )
+
+
+@pytest.mark.parametrize(
+    "path",
+    _PHASE7_CONTRACT_FAN_OUT_FILES,
+    ids=lambda p: str(p.relative_to(_BACKEND_ROOT)).replace("\\", "/"),
+)
+def test_phase7_does_not_import_group_filter_from_ownership_leaf(path: Path):
+    """Phase-7 contract: source-bound check that the migrated file
+    does NOT import `group_filter` from `app.core.auth.ownership`
+    (KEEP_COMPAT re-export still exists, but the canonical
+    home is the contract module). Detects via AST to avoid false
+    positives when `group_filter` appears only as a comment."""
+    text = path.read_text(encoding="utf-8")
+    tree = ast.parse(text, filename=str(path))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == "app.core.auth.ownership":
+            names = {a.name for a in node.names}
+            assert "group_filter" not in names, (
+                f"{path.relative_to(_BACKEND_ROOT)} line {node.lineno}: "
+                "regressed to importing `group_filter` from "
+                "`app.core.auth.ownership` — Phase-7 routes this "
+                "through `app.shared.contracts.auth`."
+            )
