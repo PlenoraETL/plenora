@@ -75,6 +75,123 @@ def test_resolve_file_source_id_path_fails_closed_without_security_context(api_s
         api_service._resolve_file_source_id_path("fs-1")
 
 
+# ---------------------------------------------------------------------------
+# BE-GO-READY-TRANSFORMATION-ENGINE-024: ctx-strict file-source path
+# ---------------------------------------------------------------------------
+
+
+def test_assert_file_source_group_access_ctx_wins_over_stale_singleton(api_service):
+    """TE-024 lock: quando `ctx` e' fornito, `ctx.group_id` vince
+    SEMPRE su `svc._current_group_id` stale. La visibility check
+    deve essere chiamata con `ctx.group_id`, non con il valore
+    legacy. Garantisce che un singleton stale (race window /
+    leak fra worker pickup precedenti) NON apra un canale
+    cross-tenant quando il caller ha gia' dichiarato il contesto
+    tipato."""
+    # Stato legacy stale (es. residuo di una run precedente).
+    api_service._current_group_id = "stale-grp-A"
+
+    # Ctx esplicito con il gruppo "corretto" della run corrente.
+    ctx_winner = _ctx(group_id="winner-grp-B")
+
+    captured_args = []
+
+    def _capture_visibility(table, file_source_id, group_id, **kwargs):
+        captured_args.append((table, file_source_id, group_id))
+        # `winner-grp-B` ha visibilita' sulla risorsa.
+        return group_id == "winner-grp-B"
+
+    with patch("app.shared.sharing.is_resource_visible", side_effect=_capture_visibility):
+        # Niente raise: la visibility check passa con ctx.group_id.
+        api_service._assert_file_source_group_access("fs-1", ctx=ctx_winner)
+
+    assert captured_args == [("file_sources", "fs-1", "winner-grp-B")], (
+        f"Expected is_resource_visible chiamato con winner-grp-B; "
+        f"got {captured_args}"
+    )
+
+
+def test_assert_file_source_group_access_ctx_with_none_group_does_not_fall_back_to_singleton(api_service):
+    """TE-024 lock: quando `ctx` e' fornito ma `ctx.group_id` e'
+    None, il path file-source DEVE fail-closed senza fallback su
+    `_current_group_id`. Senza questo lock, un caller che passa
+    `ctx=ArricchisciExecutionContext(group_id=None, ...)`
+    (progetto inesistente / lookup fallito) cadrebbe in modo
+    silente sul singleton stale, aprendo un canale cross-tenant
+    semantico."""
+    # Singleton stale che NON deve essere consultato.
+    api_service._current_group_id = "stale-grp-leak"
+
+    # Ctx esplicito con group_id=None (ramo dati legittimo: progetto
+    # inesistente in DB → ExecutionContext.build_execution_context
+    # ritorna group_id=None).
+    ctx_unknown = _ctx(group_id=None)
+
+    visibility_called = {"count": 0}
+
+    def _track_visibility(*args, **kwargs):
+        visibility_called["count"] += 1
+        return True  # se mai chiamato, sarebbe gia' un bug
+
+    with patch("app.shared.sharing.is_resource_visible", side_effect=_track_visibility):
+        with pytest.raises(ValueError, match="Contesto di sicurezza non determinabile"):
+            api_service._assert_file_source_group_access("fs-1", ctx=ctx_unknown)
+
+    assert visibility_called["count"] == 0, (
+        "is_resource_visible non deve essere chiamato quando ctx.group_id e' None — "
+        "fail-closed PRIMA di consultare il singleton legacy."
+    )
+
+
+def test_resolve_file_source_id_path_ctx_wins_over_stale_singleton(api_service, monkeypatch, tmp_path):
+    """TE-024 lock end-to-end: il livello superiore
+    `_resolve_file_source_id_path` propaga ctx fino alla
+    visibility check, e ctx.group_id vince su singleton stale.
+    Cache hit-path NON viene esercitato: monkey-patcha
+    `is_resource_visible` per ritornare True solo per
+    winner-grp-B, e mock del DB blob per evitare I/O reale."""
+    import app.config as config_mod
+    import app.shared.sharing as sharing_mod
+    import app.db.db_service as db_service
+
+    # Stato legacy stale.
+    api_service._current_group_id = "stale-grp-A"
+
+    monkeypatch.setattr(
+        config_mod,
+        "settings",
+        type("S", (), {"get_file_source_dir": lambda self, file_source_id: tmp_path / file_source_id})(),
+    )
+
+    # Mock del DB blob lookup.
+    monkeypatch.setattr(
+        db_service,
+        "get_file_source",
+        lambda fs_id, include_data=False: {
+            "original_filename": "input.bin",
+            "data": b"abc" if include_data else None,
+        },
+    )
+
+    seen_group_ids = []
+
+    def _visibility_lock(table, file_source_id, group_id, **kwargs):
+        seen_group_ids.append(group_id)
+        return group_id == "winner-grp-B"
+
+    monkeypatch.setattr(sharing_mod, "is_resource_visible", _visibility_lock)
+
+    # Ctx esplicito vince su singleton stale.
+    result = api_service._resolve_file_source_id_path(
+        "fs-1", ctx=_ctx(group_id="winner-grp-B"),
+    )
+
+    assert seen_group_ids == ["winner-grp-B"], (
+        f"Expected visibility check con winner-grp-B; got {seen_group_ids}"
+    )
+    assert result is not None, "blob materialization deve aver successo per winner-grp-B"
+
+
 def test_resolve_file_source_id_path_requires_visibility_before_materializing_blob(api_service, monkeypatch, tmp_path):
     # BE-GO-READY-TRANSFORMATION-ENGINE-022: typed ctx Phase 2.
     import app.config as config_mod

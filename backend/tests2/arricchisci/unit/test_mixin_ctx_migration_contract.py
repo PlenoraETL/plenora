@@ -168,12 +168,62 @@ def test_load_static_values_uses_ctx_group_id_over_singleton(api_service):
 # ---------------------------------------------------------------------------
 
 
-def test_load_static_values_falls_back_to_singleton_when_ctx_none(api_service):
-    """KEEP_COMPAT: se `ctx` non e' fornito, il reader cade sul
-    singleton state. Garantisce che `enrichment_task.py` (che
-    setta `_current_group_id` direttamente) e i test setup
-    continuino a funzionare invariati."""
-    api_service._current_group_id = "grp-SINGLETON"
+def test_load_static_values_ignores_stale_singleton_with_explicit_ctx(api_service):
+    """BE-GO-READY-TRANSFORMATION-ENGINE-023 (slice migration):
+    invariant esplicito di tenant isolation per il branch static.
+
+    Setup adversariale: il singleton ha un `_current_group_id`
+    stale ("grp-LEAK") da una pre-existing execution. Il caller
+    passa un context tipato con `group_id="grp-CALLER"`. Il
+    branch static MUST consumare `ctx.group_id` (typed boundary
+    wins) e NEVER toccare il singleton.
+
+    Lock pre-emptivo della rimozione del legacy fallback nel
+    helper `_group_id_from_ctx`: anche se future regression
+    accidentalmente ripristinasse un fallback al singleton, il
+    valore stale non vincerebbe contro il ctx esplicito.
+    """
+    from app.core.arricchisci.execution_context import (
+        ArricchisciExecutionContext,
+    )
+
+    api_service._current_group_id = "grp-LEAK"
+    ctx = ArricchisciExecutionContext(
+        project_id="p1", group_id="grp-CALLER", preview_limit=None,
+    )
+    captured = {}
+
+    class _FakeSL:
+        def load(self, ref, expected_group_id):
+            captured["group_id"] = expected_group_id
+            return pd.DataFrame()
+
+    with patch("app.core.artifacts.SourceLoader", return_value=_FakeSL()):
+        api_service._load_static_values(
+            {"id": "sv1", "type": "staticValues", "fields": []},
+            ctx=ctx,
+        )
+
+    assert captured["group_id"] == "grp-CALLER", (
+        "REGRESSIONE: ctx.group_id deve vincere contro stale singleton "
+        f"({api_service._current_group_id!r}). Il typed boundary e' "
+        "broken se questo test fallisce."
+    )
+
+
+def test_load_static_values_uses_static_sentinel_when_ctx_none(api_service):
+    """BE-GO-READY-TRANSFORMATION-ENGINE-023 (slice migration):
+    `_load_static_values` non legge piu' `_current_group_id` dal
+    singleton. Quando `ctx` non e' fornito, usa il sentinel
+    `"_static_"` come placeholder (lo static branch e' tenant-
+    agnostic).
+
+    Regression guard contro stale-state leak: anche se
+    `svc._current_group_id` ha un valore residuo da un'altra
+    esecuzione, lo static branch NON deve consumarlo. Questo
+    previene la propagazione accidentale di tenant binding fra
+    esecuzioni concorrenti sul singleton."""
+    api_service._current_group_id = "grp-STALE-LEAK"
     captured = {}
 
     class _FakeSL:
@@ -186,7 +236,14 @@ def test_load_static_values_falls_back_to_singleton_when_ctx_none(api_service):
             {"id": "sv1", "type": "staticValues", "fields": []},
         )  # NO ctx kwarg
 
-    assert captured["group_id"] == "grp-SINGLETON"
+    # Post-batch -023: lo static branch usa il sentinel e ignora
+    # lo stale singleton state.
+    assert captured["group_id"] == "_static_", (
+        f"REGRESSIONE Phase 5 slice: `_load_static_values` ha letto "
+        f"`_current_group_id={api_service._current_group_id!r}` invece "
+        f"del sentinel `_static_` quando ctx=None. Stale-state leak "
+        f"cross-execution e' tornato disponibile."
+    )
 
 
 def test_load_file_source_uses_ctx_preview_limit_over_singleton(api_service):

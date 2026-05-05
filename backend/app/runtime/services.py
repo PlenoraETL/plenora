@@ -1,0 +1,171 @@
+"""Typed runtime composition factory — first slice.
+
+BE-GO-READY-BOOTSTRAP-ENGINE-011-RUNTIME-CONTAINER-FIRST-SLICE.
+
+Replaces the procedural service construction block in
+`app/main.py:363-387` with a typed factory that returns a frozen
+`RuntimeServices` dataclass. The motivation is twofold:
+
+  1. **Explicit dependency order**. The orchestrator depends on 5
+     other services. The procedural form expressed this implicitly
+     by ordering the assignments. The factory expresses it as
+     positional construction of a single typed object whose shape
+     is asserted by a contract test.
+  2. **No more module-global as primary API**. `app/main.py` retains
+     the old names `project_service`, `connection_service`, etc.
+     for monkeypatch backward-compat (tests that do
+     `patch.object(main_mod, "orchestrator", ...)` keep working),
+     but those bindings are NOW DERIVED from the returned container
+     instead of being the source of truth. The factory return value
+     is the canonical surface; the module globals are a compatibility
+     re-export.
+
+Bootstrap relationship
+======================
+The factory MUST be called only after `app.bootstrap.bootstrap()`
+has completed successfully. The construction itself does not touch
+DB / Redis / object storage at import-time, but the services it
+returns assume those subsystems are reachable on first request. The
+contract test locks `is_bootstrapped() == True` before
+`build_runtime_services()` is invoked.
+
+Out of scope (per task brief)
+=============================
+- DI container framework. The factory is hand-wired.
+- Routers, `init_*` glue, middleware, exception handlers, health
+  checks. Those remain in `main.py`.
+- Auth / scheduler / api_connection / datasource / DB facade. Those
+  use module-level singletons (`api_connection_service`,
+  `datasource_service`) and are NOT yet part of the container.
+- Frontend / shutdown / Celery worker bootstrap.
+
+Go-ready mapping
+================
+::
+
+    type RuntimeServices struct {
+        ProjectService     ProjectService
+        ConnectionService  ConnectionService
+        DatabaseInspector  DatabaseInspector
+        QueryGenerator     QueryGenerator
+        QueryExecutor      QueryExecutor
+        FeaturesService    FeaturesService
+        Orchestrator       OrchestratorService
+    }
+
+    func BuildRuntimeServices(deps RuntimeDeps) RuntimeServices
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from app.core.estrai.database_inspector import DatabaseInspector
+    from app.core.estrai.query_generator import QueryGenerator
+    from app.core.features.features_service import FeaturesService
+    from app.core.orchestrator.service import OrchestratorService
+    from app.db.query_executor import QueryExecutor
+    from app.services.connection_service import ConnectionService
+    from app.services.project_service import ProjectService
+
+
+__all__ = ["RuntimeServices", "build_runtime_services"]
+
+
+@dataclass(frozen=True)
+class RuntimeServices:
+    """Frozen typed container for the first-slice shared services.
+
+    The 7 fields cover the coherent dependency cluster previously
+    bound at `app/main.py:374-387` module top-level. Each field is a
+    constructed instance, NOT a class. Frozen so reassignments
+    surface as errors instead of silently rebinding.
+
+    Field roles:
+      - `project_service`: project CRUD facade.
+      - `connection_service`: external DB connection registry.
+      - `database_inspector`: introspection over DB connections.
+      - `query_generator`: ESTRAI SQL generation pipeline.
+      - `query_executor`: raw query execution + result staging.
+      - `features_service`: ArcGIS Feature Service consumer.
+      - `orchestrator`: pipeline orchestrator (depends on the above 5,
+        excluding `database_inspector`).
+    """
+
+    project_service: "ProjectService"
+    connection_service: "ConnectionService"
+    database_inspector: "DatabaseInspector"
+    query_generator: "QueryGenerator"
+    query_executor: "QueryExecutor"
+    features_service: "FeaturesService"
+    orchestrator: "OrchestratorService"
+
+
+def build_runtime_services(
+    *,
+    settings: Any,
+    save_function: Any,
+) -> RuntimeServices:
+    """Construct the first-slice shared services in dependency order.
+
+    Args:
+        settings: app `Settings` singleton. Read for
+            `DATA_DIR` (composed into the executor's results dir).
+        save_function: dataframe save function injected into
+            `QueryExecutor` and `FeaturesService`. Today this is
+            `app.utils.dataframe.save_dataframe`; injected to keep
+            the factory dependency-explicit and to allow tests to
+            substitute a stub.
+
+    Returns:
+        Fully wired `RuntimeServices`. The orchestrator references
+        the 5 prior services by name (kw-only on
+        `OrchestratorService.__init__`), so reordering the dependent
+        construction would surface as a missing-kwarg `TypeError`
+        rather than a silent runtime hazard.
+
+    Raises:
+        Whatever the underlying constructors raise. The factory does
+        not wrap or remap; bootstrap-completion semantics are owned
+        by `app.bootstrap`. A contract test locks the order
+        invariant.
+    """
+    # Lazy imports keep this module cheap to load (e.g. for tests
+    # that import only the typed dataclass to assert shape).
+    from app.core.estrai.database_inspector import DatabaseInspector
+    from app.core.estrai.query_generator import QueryGenerator
+    from app.core.features.features_service import FeaturesService
+    from app.core.orchestrator.service import OrchestratorService
+    from app.db.query_executor import QueryExecutor
+    from app.services.connection_service import ConnectionService
+    from app.services.project_service import ProjectService
+
+    project_service = ProjectService()
+    connection_service = ConnectionService()
+    database_inspector = DatabaseInspector()
+    query_generator = QueryGenerator()
+    query_executor = QueryExecutor(
+        results_dir=settings.DATA_DIR / "temp",
+        save_function=save_function,
+    )
+    features_service = FeaturesService(save_function=save_function)
+
+    orchestrator = OrchestratorService(
+        project_service=project_service,
+        executor=query_executor,
+        generator=query_generator,
+        connection_service=connection_service,
+        features_service=features_service,
+    )
+
+    return RuntimeServices(
+        project_service=project_service,
+        connection_service=connection_service,
+        database_inspector=database_inspector,
+        query_generator=query_generator,
+        query_executor=query_executor,
+        features_service=features_service,
+        orchestrator=orchestrator,
+    )

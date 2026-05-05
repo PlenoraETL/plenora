@@ -401,7 +401,148 @@ Caveats:
 
 ---
 
-## 12. Related docs
+## 12. Cleanroom acceptance targets
+
+A clean install is "complete" only when it passes the matrix below
+end-to-end on a host that has had no prior Plenora-ETL artifacts. The
+preflight gate (`scripts/install.sh --check`) covers the
+host-packaging side; the `/ready` gate covers the application side.
+Together they form the acceptance contract for any clean-install
+claim.
+
+### 12.1 Preflight: host packaging guard
+
+`scripts/install.sh --check` is bounded, idempotent, ASCII-only, and
+performs **no writes and no service probes that need credentials**.
+It returns exit 0 only when ALL of the following are true on the
+host:
+
+| Probe | What is checked | Failure mode |
+|---|---|---|
+| `python3.11` on PATH and version `3.11.x` | binary present + interpreter reports the pinned major.minor | `[ERROR] python3.11 not found` / `unexpected version` |
+| `node`, `npm`, `psql`, `redis-cli`, `curl`, `git` on PATH | each command resolvable | `[ERROR] Missing command: <name>` |
+| `gdal` shared library | `python3.11 -c "ctypes.util.find_library('gdal')"` returns non-empty (matches what fiona/geopandas see at runtime) | `[ERROR] shared lib 'gdal' NOT found` |
+| `pg_dump` version | reports a usable major version (warn-only - server-side major is operator territory) | `[WARN] pg_dump not found` |
+| Optional: `backend/venv/bin/python` smoke import | `psycopg2`, `redis`, `celery`, `fastapi`, `uvicorn`, `pyarrow`, `pandas`, `fiona`, `geopandas`, `shapely` all import cleanly via the venv | `[ERROR] venv smoke import FAILED` |
+
+The single source of truth for these probes is `scripts/install.sh`
+(`INSTALLER_REQUIRED_COMMANDS`, `INSTALLER_REQUIRED_PYTHON_MAJOR_MINOR`,
+`INSTALLER_REQUIRED_SHARED_LIBS`). A source-bound test
+(`backend/tests2/shared/test_install_script_packaging_guard.py`)
+locks the contract so silent regressions surface as test failures.
+
+### 12.2 Non-Docker single-machine cleanroom (canonical target)
+
+Acceptance criteria (all required):
+
+1. `scripts/install.sh --check` exits 0 on a fresh Ubuntu 24.04
+   host whose only Plenora-related state is the cloned repo.
+2. After `scripts/install.sh --non-interactive` (with the env vars
+   from section 6.1 set) and the manual steps section 7 to section 9, **all** of:
+   - `systemctl is-active plenora-backend plenora-celery plenora-beat`
+     reports `active` for each;
+   - `curl -fsS http://127.0.0.1:5004/health` returns 200 with
+     `postgres.ok=true` and `redis.ok=true`;
+   - `curl -fsS http://127.0.0.1:5004/ready` returns 200 with
+     migrations aligned and `reconciliation_backlog` ok;
+   - admin login succeeds and an end-to-end pipeline preview
+     completes.
+3. **Idempotency**: a second run of `scripts/install.sh
+   --non-interactive` on the same host preserves operator-added
+   non-managed keys (e.g. `LOG_RETENTION_DAYS=60`,
+   `CORS_ORIGINS=https://...`) and existing secrets.
+
+This target is operational TODAY - the production deployment at
+`lab.plenora.it` is the reference. The cleanroom step is gated
+on operator availability of a fresh VM; no in-repo CI lane runs it.
+
+### 12.3 Docker / compose cleanroom (NOT IMPLEMENTED)
+
+See [install-docker.md](install-docker.md). The Docker batch
+(`INSTALLATION-010..013` in the audit) has not landed; an operator
+cannot `docker compose up` Plenora-ETL today. Once the batch ships,
+the acceptance criteria are:
+
+1. `docker compose -f docker-compose.yml up -d --wait` returns 0
+   on a fresh host with only Docker installed (no Plenora-related
+   volumes, images, or networks pre-existing).
+2. `docker compose ps` shows postgres, redis, backend, worker, beat,
+   frontend all `healthy`.
+3. `curl -fsS http://localhost:<frontend-port>/api/health` returns
+   200 (proxied through frontend) and the frontend serves the SPA.
+4. `docker compose down -v` removes ALL state without leaking
+   volumes or networks.
+5. CI lane runs the same compose-up + smoke + compose-down on every
+   PR that touches `backend/**`, `frontend/**`, or
+   `docker-compose.yml`.
+
+Until the artifacts exist, this section is normative for the
+future stream, not procedure operators run today.
+
+### 12.4 CI clean install smoke
+
+Authoritative workflow today:
+[`.github/workflows/ci-cleanroom.yml`](../../.github/workflows/ci-cleanroom.yml).
+Triggers an HTTP-only boot from an empty Postgres + Redis pair on
+every path-filtered PR (paths: `backend/app/db/**`, `backend/app/main.py`,
+`backend/app/config.py`, `backend/migrations/**`,
+`backend/requirements.txt`, the workflow file itself).
+
+Acceptance criteria:
+
+1. Pre-condition: `plenora` schema does NOT pre-exist (regression
+   guard against accidental `CREATE SCHEMA` workarounds).
+2. `python -m uvicorn app.main:app` boots on a fresh stack and
+   `/ready` returns 200 within `ready_timeout_seconds` (default 60s).
+3. Post-condition: `plenora.schema_migrations` exists with N
+   migrations applied (currently 18) - confirms the runner-side
+   `ensure_schema(DB_SCHEMA)` path actually fired, not a
+   workaround.
+4. Diagnostic-tier today (`continue-on-error: true`): green runs do
+   not yet promote to required check. Promotion criterion: 3-4
+   consecutive green runs on real PRs (audit section 7.B residual
+   INSTALLATION-006 evidence).
+
+Gaps still open vs the ideal CI smoke:
+
+- No Celery worker / beat path exercised - see audit section 7.3
+  (`INSTALLATION-014-CELERY-CLEANROOM` candidate).
+- No frontend build verified - frontend CI is in `ci.yml` (vitest
+  only), no end-to-end `npm run build` + serve on the cleanroom
+  stack.
+- No backup unit smoke - covered by the production weekly
+  `plenora-backup-test.timer` drill, not by CI.
+
+These are explicitly accepted gaps; closing each is a bounded
+follow-up stream.
+
+### 12.5 Test harness
+
+Source-bound architecture lock for the install script:
+`backend/tests2/shared/test_install_script_packaging_guard.py`.
+Asserts that:
+
+- `INSTALLER_REQUIRED_COMMANDS` contains the canonical 7 entries
+  in the documented order;
+- `INSTALLER_REQUIRED_PYTHON_MAJOR_MINOR` matches the Python
+  version pinned in `.github/workflows/ci-cleanroom.yml`;
+- `INSTALLER_REQUIRED_SHARED_LIBS` mentions `gdal`;
+- the `--check` flag is wired to `CHECK_ONLY` and short-circuits
+  before any prompt or service probe;
+- `step_validate_packaging` exists and is invoked in `main`;
+- the script is ASCII-only;
+- the script does not invoke `apt install` / `apt-get install`
+  / `dnf install` / `yum install` / `pacman -S` (no destructive
+  package install automation, per scope rule).
+
+The lock test is the contract surface for the cleanroom acceptance
+target - if a future refactor silently removes a probe or the
+ASCII-only invariant, the lock test fails before the operator ever
+sees a regressed installer.
+
+---
+
+## 13. Related docs
 
 - [`runtime-prereqs.md`](runtime-prereqs.md) — runtime contract
   (env vars, IAM, dependencies, graceful-degradation policy).

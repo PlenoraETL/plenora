@@ -150,6 +150,33 @@ _PHASE4_PER_NAME_BAN: dict[Path, frozenset[str]] = {
 }
 
 
+# Phase-5 (BE-GO-READY-AUTH-ENGINE-010): contract-boundary prep on
+# the next coherent router group (files / intermediate / projects /
+# scheduler). Same split as Phase-3/4: facade may keep FastAPI
+# Depends (`get_current_user`, `require_*`, `require_*_owner`,
+# `require_admin`, `require_user_or_above`, `require_superadmin`,
+# `require_not_esecutore`) and `group_filter`. CurrentUser + the 4
+# ownership helpers MUST come from their leaf modules
+# (`app.core.auth.models` / `app.core.auth.ownership`).
+#
+# Audit context — see `.agent-temp/BE_AUTH_ENGINE_AUDIT.md` Incoming
+# Phase-5 section for the proposed `app.shared.contracts.auth`
+# split (pure contracts vs. implementation deps). This phase
+# preserves the facade as the dependency-magnet target only for
+# names that cannot move yet (FastAPI Depends + `group_filter`),
+# leaving every leaf-safe symbol on a direct leaf import.
+_PHASE5_PER_NAME_BAN: dict[Path, frozenset[str]] = {
+    _APP / "core" / "files" / "router.py":
+        _OWNERSHIP_HELPER_BAN_NAMES,
+    _APP / "core" / "intermediate" / "router.py":
+        frozenset({"CurrentUser", "assert_group_access"}),
+    _APP / "core" / "projects" / "router.py":
+        frozenset({"CurrentUser", "assert_group_access"}),
+    _APP / "core" / "scheduler" / "router.py":
+        frozenset({"CurrentUser", "assert_group_access"}),
+}
+
+
 def _imports_facade(path: Path) -> list[tuple[int, str]]:
     """Return [(lineno, names_imported)] for each `from app.core.auth.auth import ...`
     found anywhere in the file (top-level OR nested inside funcs).
@@ -280,6 +307,37 @@ def test_phase4_migrated_file_does_not_import_banned_names_from_facade(
     violations = _per_name_ban_violations(path, banned_names)
     assert violations == [], (
         f"{path.relative_to(_BACKEND_ROOT)} pulls Phase-4 banned "
+        f"names from the facade:\n"
+        + "\n".join(f"  line {ln}: {nm}" for ln, nm in violations)
+        + f"\nLeaf sources: CurrentUser ← app.core.auth.models; "
+        "ownership helpers ← app.core.auth.ownership."
+    )
+
+
+@pytest.mark.parametrize(
+    "path,banned_names",
+    list(_PHASE5_PER_NAME_BAN.items()),
+    ids=lambda v: (
+        str(v.relative_to(_BACKEND_ROOT)).replace("\\", "/")
+        if isinstance(v, Path)
+        else "names"
+    ),
+)
+def test_phase5_migrated_file_does_not_import_banned_names_from_facade(
+    path: Path, banned_names: frozenset[str]
+):
+    """Phase-5 contract: contract-boundary prep on
+    files/intermediate/projects/scheduler. Same split as Phase-2/3/4.
+    Facade may keep FastAPI Depends (`get_current_user`,
+    `require_*`, `require_*_owner`, `require_admin`,
+    `require_user_or_above`, `require_superadmin`,
+    `require_not_esecutore`) + `group_filter`. Banned: `CurrentUser`
+    + ownership helpers (canonical leaves: `app.core.auth.models`
+    + `app.core.auth.ownership`)."""
+    assert path.exists(), f"migrated file missing: {path}"
+    violations = _per_name_ban_violations(path, banned_names)
+    assert violations == [], (
+        f"{path.relative_to(_BACKEND_ROOT)} pulls Phase-5 banned "
         f"names from the facade:\n"
         + "\n".join(f"  line {ln}: {nm}" for ln, nm in violations)
         + f"\nLeaf sources: CurrentUser ← app.core.auth.models; "

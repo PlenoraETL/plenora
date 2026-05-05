@@ -361,30 +361,30 @@ async def memory_limit_exceeded_handler(
 
 
 # ==================== INIZIALIZZA SERVIZI SHARED ====================
+#
+# BE-GO-READY-BOOTSTRAP-ENGINE-011-RUNTIME-CONTAINER-FIRST-SLICE:
+# il 6-tuple di shared services + l'orchestrator e' costruito da
+# `app.runtime.build_runtime_services(...)` come singolo typed
+# container `RuntimeServices`. I module-globals sotto sono RE-EXPORT
+# del container per preservare la monkeypatch surface dei test
+# (`patch.object(main_mod, "orchestrator", ...)`). Il source of truth
+# del wiring e' la factory, non queste 7 righe.
 
-from app.services.project_service import ProjectService
-from app.services.connection_service import ConnectionService
-from app.core.estrai.database_inspector import DatabaseInspector
-from app.core.estrai.query_generator import QueryGenerator
-from app.db.query_executor import QueryExecutor
-from app.core.orchestrator.service import OrchestratorService
 from app.core.arricchisci.api_connector import api_connection_service
-from app.core.features.features_service import FeaturesService
+from app.runtime import build_runtime_services
 
-project_service = ProjectService()
-connection_service = ConnectionService()
-database_inspector = DatabaseInspector()
-query_generator = QueryGenerator()
-query_executor = QueryExecutor(results_dir=settings.DATA_DIR / "temp", save_function=save_dataframe)
-features_service = FeaturesService(save_function=save_dataframe)
-
-orchestrator = OrchestratorService(
-    project_service=project_service,
-    executor=query_executor,
-    generator=query_generator,
-    connection_service=connection_service,
-    features_service=features_service
+_runtime_services = build_runtime_services(
+    settings=settings,
+    save_function=save_dataframe,
 )
+
+project_service = _runtime_services.project_service
+connection_service = _runtime_services.connection_service
+database_inspector = _runtime_services.database_inspector
+query_generator = _runtime_services.query_generator
+query_executor = _runtime_services.query_executor
+features_service = _runtime_services.features_service
+orchestrator = _runtime_services.orchestrator
 
 
 # ==================== INIT MODULI ====================

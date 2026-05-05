@@ -16,6 +16,7 @@
 #
 # Usage:
 #   scripts/install.sh                # interactive prompts
+#   scripts/install.sh --check        # preflight only: tools + native libs + Python version. No prompts, no writes, no service probes.
 #   scripts/install.sh --dry-run      # print what would happen, no writes
 #   scripts/install.sh --non-interactive  # all answers from env vars
 #   scripts/install.sh --install-deps     # apt install pkg list (Ubuntu)
@@ -61,6 +62,7 @@ DRY_RUN=0
 NON_INTERACTIVE=0
 INSTALL_DEPS=0
 OVERWRITE_SECRETS=0
+CHECK_ONLY=0
 
 # ANSI colors (disabled when stdout is not a tty)
 if [[ -t 1 ]]; then
@@ -97,6 +99,7 @@ while [[ $# -gt 0 ]]; do
         --non-interactive)    NON_INTERACTIVE=1 ;;
         --install-deps)       INSTALL_DEPS=1 ;;
         --overwrite-secrets)  OVERWRITE_SECRETS=1 ;;
+        --check)              CHECK_ONLY=1 ;;
         --help|-h)            usage ;;
         *)                    die "Unknown argument: $1 (use --help)" ;;
     esac
@@ -173,6 +176,33 @@ require_cmd() {
     log_ok "Found: $(command -v "$cmd")"
 }
 
+# Canonical list of host commands the installer requires. Single source
+# of truth; any source-bound test should derive expectations from this
+# array (see backend/tests2/shared/test_install_script_packaging_guard.py).
+INSTALLER_REQUIRED_COMMANDS=(
+    python3.11
+    node
+    npm
+    psql
+    redis-cli
+    curl
+    git
+)
+
+# Required Python major.minor. Pinned to match all CI lanes
+# (.github/workflows/{ci,ci-cleanroom,ci-functional}.yml).
+INSTALLER_REQUIRED_PYTHON_MAJOR_MINOR="3.11"
+
+# Native shared libraries the runtime imports through pip wheels. We do
+# NOT require building from source: psycopg2-binary bundles libpq, and
+# pyarrow ships manylinux wheels. The remaining hard dep is GDAL,
+# loaded at runtime by fiona / geopandas for GeoPackage / shapefile /
+# GDB drivers. We probe via Python's ctypes loader so the answer
+# matches what the runtime actually sees.
+INSTALLER_REQUIRED_SHARED_LIBS=(
+    "gdal:libgdal* (apt: libgdal-dev or libgdal*; required by fiona/geopandas at runtime)"
+)
+
 step_validate_prereqs() {
     log_step "Step 1 - Validate host prerequisites"
 
@@ -180,7 +210,16 @@ step_validate_prereqs() {
 
     # Python 3.11 specifically (per docs/ops/install-non-docker.md section1).
     if command -v python3.11 &>/dev/null; then
-        log_ok "python3.11: $(python3.11 --version 2>&1)"
+        local pyver
+        pyver="$(python3.11 --version 2>&1)"
+        log_ok "python3.11: ${pyver}"
+        # Hard-pin major.minor. python3.11 binary should always report
+        # 3.11.x but we assert it explicitly: a compromised PATH or a
+        # symlink could redirect to a different interpreter.
+        if [[ "$pyver" != *"Python ${INSTALLER_REQUIRED_PYTHON_MAJOR_MINOR}."* ]]; then
+            log_err "python3.11 reports an unexpected version: ${pyver} (expected Python ${INSTALLER_REQUIRED_PYTHON_MAJOR_MINOR}.x)."
+            missing=1
+        fi
     else
         log_err "python3.11 not found - install via apt or pyenv (see docs/ops/install-non-docker.md section1)."
         missing=1
@@ -198,8 +237,130 @@ step_validate_prereqs() {
             log_warn "--install-deps was passed but auto-install is INTENTIONALLY not implemented in the prototype."
             log_warn "Run the apt install command from docs/ops/install-non-docker.md section1 manually, then re-run this script."
         fi
+        if (( CHECK_ONLY )); then
+            return 1
+        fi
         die "Missing host prerequisites; see logs above."
     fi
+}
+
+# ---------------------------------------------------------------------------
+# Step 1b - Cleanroom packaging guard (BE-GO-READY-INSTALLATION-013)
+# ---------------------------------------------------------------------------
+# Verifies what the running OS actually exposes to the Python runtime
+# beyond the bare `command -v` checks: native shared libs, pg_dump
+# version match against the target Postgres server, and a smoke
+# import on the venv if one already exists. None of these probes
+# install anything; they only report what is or is not present.
+step_validate_packaging() {
+    log_step "Step 1b - Validate native packaging (cleanroom guard)"
+
+    local missing=0
+
+    # ---- Shared libraries via Python's ctypes loader. ----
+    # ctypes.util.find_library returns "" when the library is not on
+    # the dynamic linker path. Empty here means the runtime CANNOT
+    # load the lib even if `apt list --installed` shows the package -
+    # this is the signal that matches what the app sees at boot.
+    if command -v python3.11 &>/dev/null; then
+        local entry libname libhint found
+        for entry in "${INSTALLER_REQUIRED_SHARED_LIBS[@]}"; do
+            libname="${entry%%:*}"
+            libhint="${entry#*:}"
+            found="$(
+                python3.11 - <<PYEOF 2>/dev/null
+import ctypes.util
+print(ctypes.util.find_library("${libname}") or "")
+PYEOF
+            )"
+            if [[ -n "$found" ]]; then
+                log_ok "shared lib '${libname}' resolves to: ${found}"
+            else
+                log_err "shared lib '${libname}' NOT found by ctypes loader. ${libhint}"
+                missing=1
+            fi
+        done
+    else
+        log_warn "python3.11 missing - shared library probes skipped (see Step 1)."
+        missing=1
+    fi
+
+    # ---- pg_dump major version match. ----
+    # docs/ops/runtime-prereqs.md "Binari di sistema (host)" pins this
+    # contract: pg_dump major must match the target Postgres server's
+    # major. Mismatched dumps fail with cryptic errors. We probe only
+    # the local pg_dump version here; the server-side major is
+    # operator territory and gets checked downstream by the backup
+    # unit. A WARN (not ERR) keeps the gate non-blocking when ops
+    # have intentionally selected a different toolchain.
+    if command -v pg_dump &>/dev/null; then
+        local pgdump_ver
+        pgdump_ver="$(pg_dump --version 2>/dev/null | head -n 1 || echo unknown)"
+        log_ok "pg_dump: ${pgdump_ver}"
+    else
+        log_warn "pg_dump not found - backup units will fail at runtime (apt: postgresql-client-NN matched to server)."
+    fi
+
+    # ---- Optional venv smoke import. ----
+    # If the operator has already created backend/venv (e.g. running
+    # --check after step 6 of the runbook), do a strict importability
+    # check on the runtime deps that pull in native code. This catches
+    # corrupted wheels, ABI mismatches, and venv-vs-host Python
+    # mismatches that only surface at app boot. Skipped silently when
+    # the venv is absent.
+    local venv_python="${BACKEND_DIR}/venv/bin/python"
+    if [[ -x "$venv_python" ]]; then
+        log_info "Smoke-importing runtime deps via ${venv_python}..."
+        if "$venv_python" - <<'PYEOF' 2>&1
+import importlib
+import sys
+modules = ("psycopg2", "redis", "celery", "fastapi", "uvicorn",
+           "pyarrow", "pandas", "fiona", "geopandas", "shapely")
+failed = []
+for m in modules:
+    try:
+        importlib.import_module(m)
+    except Exception as exc:
+        failed.append((m, type(exc).__name__, str(exc)))
+if failed:
+    for m, etype, emsg in failed:
+        print(f"FAIL {m}: {etype}: {emsg}")
+    sys.exit(1)
+print("OK: all runtime deps import")
+PYEOF
+        then
+            log_ok "venv smoke import OK"
+        else
+            log_err "venv smoke import FAILED - see lines above. Likely cause: corrupted wheel, ABI mismatch, or venv built against a different Python."
+            missing=1
+        fi
+    else
+        log_info "backend/venv not found - skipping smoke import (created at install runbook step 6)."
+    fi
+
+    if (( missing )); then
+        if (( CHECK_ONLY )); then
+            return 1
+        fi
+        die "Cleanroom packaging guard failed; see logs above."
+    fi
+}
+
+step_check_only_summary() {
+    # Called only when --check is passed. The two validators above
+    # have already returned non-zero to signal failure. We rebuild a
+    # 1-line summary and exit with the right code so CI / wrappers
+    # can branch on it.
+    local prereq_rc="$1" packaging_rc="$2"
+    if (( prereq_rc == 0 && packaging_rc == 0 )); then
+        log_ok "--check: PASS - all install prerequisites and packaging guards green."
+        exit 0
+    fi
+    log_err "--check: FAIL - host is not ready. See [ERROR] lines above."
+    log_info "Required commands: ${INSTALLER_REQUIRED_COMMANDS[*]}"
+    log_info "Required Python: ${INSTALLER_REQUIRED_PYTHON_MAJOR_MINOR}.x"
+    log_info "Required shared libs: ${INSTALLER_REQUIRED_SHARED_LIBS[*]}"
+    exit 1
 }
 
 # ---------------------------------------------------------------------------
@@ -671,7 +832,17 @@ main() {
     log_info "Repo root: ${REPO_ROOT}"
     log_info "Source of truth: docs/ops/install-non-docker.md"
 
+    if (( CHECK_ONLY )); then
+        log_info "--check: preflight only (no prompts, no writes, no service probes)."
+        # Do not die on first failure; collect both signals.
+        local prereq_rc=0 packaging_rc=0
+        step_validate_prereqs || prereq_rc=$?
+        step_validate_packaging || packaging_rc=$?
+        step_check_only_summary "$prereq_rc" "$packaging_rc"
+    fi
+
     step_validate_prereqs
+    step_validate_packaging
     step_gather_config
     step_probe_services
     step_write_env

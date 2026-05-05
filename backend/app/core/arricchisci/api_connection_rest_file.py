@@ -294,6 +294,39 @@ def _resolve_rest_file_group_id(
         return ctx.group_id
     return getattr(self_obj, "_current_group_id", None)
 
+
+def _extract_file_source_group_id(
+    self_obj,
+    ctx: Optional[ArricchisciExecutionContext],
+) -> Optional[str]:
+    """BE-GO-READY-TRANSFORMATION-ENGINE-024: variante ctx-strict
+    per la catena di risoluzione `file_source` (chiamata da
+    `_assert_file_source_group_access` → `_resolve_file_source_id_path`).
+
+    Differenza vs `_resolve_rest_file_group_id`:
+      - **Ctx fornito**: ritorna `ctx.group_id` esclusivamente.
+        Se il caller passa `ctx`, lo stato singleton legacy NON
+        viene mai consultato — anche se `ctx.group_id is None`
+        (intent: ctx vince sempre, fail-closed esplicito a valle).
+      - **Ctx assente**: KEEP_COMPAT — fallback su
+        `getattr(self_obj, "_current_group_id", None)` per i
+        callsite legacy non ancora migrati e per il lock test
+        `test_resolve_file_source_id_path_fails_closed_without_security_context`
+        che NON setta il ctx.
+
+    Razionale: la catena `file_source` (visibility check + blob
+    materialization) e' un boundary di security ad alto rischio
+    cross-tenant. Quando il caller dichiara esplicitamente il
+    context tipato, qualsiasi stato singleton stale (race window
+    da execution precedente, leak fra worker pickup) DEVE essere
+    ignorato — altrimenti un `ctx.group_id=None` esplicito
+    cadrebbe in fallback su `_current_group_id` di un'altra run,
+    aprendo un canale cross-tenant.
+    """
+    if ctx is not None:
+        return ctx.group_id
+    return getattr(self_obj, "_current_group_id", None)
+
 # Stesso logger name di `api_connector.py` (`__name__` valuta a
 # `"app.core.arricchisci.api_connector"`). Singleton stdlib per nome →
 # record indistinguibili dai consumer che attaccano handler / filtrano
@@ -878,15 +911,21 @@ class ApiConnectionRestFileMixin:
         gruppo del progetto corrente. Fail-closed se il contesto non e' noto.
 
         BE-GO-READY-TRANSFORMATION-ENGINE-019: accetta `ctx` come
-        kwarg opzionale. Se fornito, il `group_id` viene letto dal
-        context tipato; altrimenti fallback a
-        `getattr(self, "_current_group_id", None)` (KEEP_COMPAT
-        Phase 1).
+        kwarg opzionale.
+
+        BE-GO-READY-TRANSFORMATION-ENGINE-024: la catena di
+        risoluzione `file_source` usa `_extract_file_source_group_id`
+        (ctx-strict): se `ctx` e' fornito, `ctx.group_id` vince in
+        modo assoluto e lo stato singleton legacy NON e' consultato
+        — anche se `ctx.group_id is None` (in quel caso fail-closed
+        esplicito sotto). Solo quando `ctx is None` (legacy
+        callsite) si applica il KEEP_COMPAT fallback su
+        `_current_group_id`.
 
         Raises:
             ValueError con 403-like message se cross-tenant.
         """
-        current_group_id = _resolve_rest_file_group_id(self, ctx)
+        current_group_id = _extract_file_source_group_id(self, ctx)
         if not current_group_id:
             # Se non conosciamo il gruppo corrente meglio rifiutare che
             # rischiare un leak (schedule/task context mancante e' gia' un

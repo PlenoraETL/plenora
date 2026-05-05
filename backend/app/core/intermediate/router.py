@@ -16,10 +16,13 @@ from pydantic import BaseModel
 from app.core.auth.auth import (
     get_current_user,
     require_not_esecutore,
-    assert_group_access,
-    CurrentUser,
     group_filter,
 )
+# BE-GO-READY-AUTH-ENGINE-010 Phase-5 strangler: `CurrentUser` and
+# `assert_group_access` consumed directly from their canonical leaf
+# modules. Facade still owns FastAPI Depends + `group_filter`.
+from app.core.auth.models import CurrentUser
+from app.core.auth.ownership import assert_group_access
 from app.core.intermediate import db as idb
 from app.shared import error_codes
 from app.utils.logger import get_logger

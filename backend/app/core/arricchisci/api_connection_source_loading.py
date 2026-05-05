@@ -244,6 +244,38 @@ def _resolve_preview_limit(
         return ctx.preview_limit
     return getattr(self_obj, "_preview_limit", None)
 
+
+def _group_id_from_ctx(
+    ctx: Optional[ArricchisciExecutionContext],
+) -> Optional[str]:
+    """BE-GO-READY-TRANSFORMATION-ENGINE-023: helper strict.
+
+    Ritorna `ctx.group_id` se il caller passa un context tipato,
+    altrimenti `None`. **Non legge** `_current_group_id` dal
+    singleton — la "tenant binding via singleton mutation" non e'
+    parte del contract di questo helper.
+
+    Differenza vs `_resolve_group_id`: nessun fallback al
+    singleton. Usato dal slice `_load_static_values` (tenant-
+    agnostic per definizione: il group_id viene usato solo come
+    placeholder per soddisfare la guardia del SourceLoader). Il
+    risultato `None` viene poi sostituito da un sentinel constant
+    (`"_static_"`) dal caller.
+
+    Decisione di slice (audit -021):
+      `_load_static_values` non ha tenant binding semantico
+      (processing puro di template variables come `{{NOW}}`,
+      `{{TODAY}}`). La sua dipendenza pre-batch dal singleton era
+      un side effect del helper `_resolve_group_id`, non del
+      contract della funzione. La rimozione del fallback per il
+      branch static elimina lo stale-state coupling al singleton
+      (un eventuale `svc._current_group_id` pre-set da un'altra
+      esecuzione non puo' ne' deve influenzare il static).
+    """
+    if ctx is not None:
+        return ctx.group_id
+    return None
+
 # Stesso logger name di `api_connector.py` (`__name__` valuta a
 # `"app.core.arricchisci.api_connector"`). Singleton stdlib per nome →
 # record indistinguibili dai consumer che attaccano handler / filtrano
@@ -565,6 +597,16 @@ class ApiConnectionSourceLoadingMixin:
         (processing puro di template variables); il `group_id` viene
         usato solo per soddisfare la guardia del loader, con
         fallback a `"_static_"`.
+
+        BE-GO-READY-TRANSFORMATION-ENGINE-023 (slice migration):
+        questa funzione NON legge piu' `_current_group_id` dal
+        singleton. Usa il helper strict `_group_id_from_ctx(ctx)`
+        che ritorna esclusivamente `ctx.group_id` (o `None`); il
+        sentinel `"_static_"` viene applicato come placeholder
+        quando il context non fornisce un group_id. Questo elimina
+        la dipendenza dello static branch da stato mutabile cross-
+        execution (un `svc._current_group_id` pre-set da un'altra
+        esecuzione non puo' piu' influenzare lo static).
         """
         from app.core.artifacts import SourceLoader, SourceRef
 
@@ -576,11 +618,11 @@ class ApiConnectionSourceLoadingMixin:
 
         ref = SourceRef.from_node_data('staticValues', node_data)
         # Static branch non tocca DB ne' file: il group_id e' richiesto
-        # solo dalla guardia del loader. Passiamo il group_id corrente
-        # se disponibile, oppure un placeholder costante (lo static
-        # non ha tenant binding semantico, e' processing puro di
-        # template variables).
-        executing_group_id = _resolve_group_id(self, ctx) or "_static_"
+        # solo dalla guardia del loader. Passiamo il group_id dal
+        # context tipato se disponibile, oppure un placeholder
+        # costante (lo static non ha tenant binding semantico, e'
+        # processing puro di template variables).
+        executing_group_id = _group_id_from_ctx(ctx) or "_static_"
         return SourceLoader().load(ref, expected_group_id=executing_group_id)
 
     # =========================================================================
