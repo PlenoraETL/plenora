@@ -936,6 +936,111 @@ finalize the pattern and lock it.
 - **Catchup detection smoke**: `_emit_catchup_runs()` covers a
   separate code path. Optional follow-up.
 
+### 12.8 Cleanroom Celery smoke vs production drift (sanity check, NOT equivalence)
+
+`BE-GO-READY-INSTALLATION-022-CELERY-DRIFT-STORAGE-DEBT-GUARD`.
+
+The Celery cleanroom smokes (sections 12.6 and 12.7) are
+deliberately scoped: they catch silent regressions in the
+import + broker + dispatch + beat-tick surface, not the full
+production profile. This section enumerates the divergences so
+operators and reviewers cannot mistake a green cleanroom for a
+green production change.
+
+The drift list below is locked by
+`backend/tests2/shared/test_cleanroom_celery_drift_doc_guard.py`
+so any future PR cannot silently elide it.
+
+#### 12.8.1 Drift table
+
+| Aspect | Production (`plenora-celery.service`, `plenora-beat.service`) | Cleanroom smoke (`ci-cleanroom.yml`) | Drift class |
+|---|---|---|---|
+| Worker pool | `prefork` (default; ExecStart does NOT pass `--pool`) | `--pool=solo` (deterministic, single-threaded) | **HIGH** - fork-unsafe pool / `worker_process_init` re-bootstrap path NOT exercised |
+| Worker concurrency | `--concurrency=4` (4 child processes) | 1 (solo, no fork) | **HIGH** - inter-child race / shared-state contention NOT exercised |
+| `worker_prefetch_multiplier` | 1 (`celery_app.conf`) | 1 (same conf) | none |
+| Result backend | Redis (`CELERY_RESULT_BACKEND`) | Redis (same conf) | none |
+| Broker | Redis (`CELERY_BROKER_URL`) | Redis (same conf) | none |
+| `task_acks_late` | `True` | `True` (same conf) | none |
+| `task_reject_on_worker_lost` | `True` | `True` (same conf) | none |
+| `task_track_started` | `True` | `True` (same conf) | none |
+| `task_soft_time_limit` / `task_time_limit` | `CELERY_TASK_TIMEOUT - 60` / `CELERY_TASK_TIMEOUT` (3600s default) | same conf | none |
+| `task_default_rate_limit` | `100/m` | same conf | none |
+| Beat interval (`max_interval`) | 60.0 seconds | 5.0 seconds (env-gated `cleanroom.beat_ping`) | **MEDIUM** - production-cadence timing windows NOT exercised |
+| Beat leader-lock TTL | `_LEADER_LOCK_TTL_SECONDS=120` | same | none |
+| Schedule lock TTL / heartbeat | `SCHEDULE_LOCK_TTL_SECONDS=600` / `SCHEDULE_LOCK_HEARTBEAT_INTERVAL_SECONDS=180` | same | none |
+| Number of beat instances | 1 (singleton enforced by Redis SETNX leader lock) | 1 (same) | none |
+| Catchup detection (`_emit_catchup_runs`) | active on every leader tick | NOT exercised (no PG `schedules` rows seeded) | **MEDIUM** - the whole catchup branch is uncovered by cleanroom |
+| Storage cleanup beat hooks (`_cleanup_eseguibili_outputs`, `_cleanup_imdf_bundles`, `_archive_old_logs`, `_cleanup_old_logs`, `_cleanup_old_schedule_logs`, `_archive_old_audit_actions`, `_cleanup_orphan_temp_files`, `_reconcile_storage`, `_check_stuck_tasks`) | run on every leader tick | NOT exercised (cleanroom smoke is a single tick at most) | **MEDIUM** - retention / reconciliation paths uncovered |
+| `worker_init` / `worker_process_init` / `beat_init` signal handlers (worker bootstrap parity) | fire on every worker / child / beat start | fire on the cleanroom worker start (single process) | partial (solo path only; prefork child re-init NOT exercised) |
+| Real domain task body (DB writes, file I/O, S3) | every production task | NOT exercised - cleanroom uses only `cleanroom.ping` and `cleanroom.beat_ping` (pure no-ops) | **HIGH** - bugs in real task bodies surface only in `ci-functional` (mocked) and prod |
+
+**Net read of the drift**: the cleanroom smoke covers the
+**packaging + plumbing + boot** layer of the worker / beat path.
+It does NOT cover the **execution semantics under prod profile**
+(prefork concurrency, real task bodies, full beat tick budget).
+A green cleanroom run is a necessary condition for a healthy
+deploy; it is not a sufficient one.
+
+#### 12.8.2 What this means for reviewers
+
+When evaluating a Celery / beat / worker change:
+
+- A green `ci-cleanroom` run proves the change does not break
+  imports, broker connectivity, or basic enqueue/dequeue under
+  solo. Treat it as a smoke pass.
+- The change must ALSO be exercised against `ci.yml` (unit) and,
+  for risky areas, `ci-functional.yml` (HTTP-live). Neither
+  covers the production prefork profile end-to-end either, but
+  together with the production weekly drill they form the
+  deploy gate today.
+- For changes touching the **worker pool**, **concurrency**,
+  **fork-time bootstrap** (`worker_process_init`), the
+  **beat tick body** beyond import, or the **catchup /
+  retention path**, request manual verification under the
+  staging deploy before merging. A future bounded stream
+  closes some of this gap (see 12.8.3).
+
+#### 12.8.3 Future closure path for prefork / production-like smoke
+
+Two bounded streams would close most of the HIGH and MEDIUM
+drift, in priority order:
+
+1. `BE-GO-READY-INSTALLATION-024-CELERY-PREFORK-WORKER-SMOKE`
+   (closes HIGH-1 and HIGH-2): re-runs the existing
+   `cleanroom.ping` enqueue smoke with `--concurrency=2` and
+   no `--pool=solo`. Two children fork from the parent; each
+   re-bootstraps via `worker_process_init` and processes one
+   ping in parallel. Failure modes caught: fork-unsafe psycopg2
+   pool reuse, shared-state race in worker bootstrap, missing
+   `force_reset=True` in the prefork init signal handler. No
+   sleep loops: `AsyncResult.get(timeout=N)` for both pings,
+   gather as `[ar1.get(timeout=20), ar2.get(timeout=20)]`.
+2. `BE-GO-READY-INSTALLATION-025-CELERY-BEAT-RETENTION-TICK-SMOKE`
+   (closes MEDIUM-3 and MEDIUM-4): with the beat process
+   already spawned by 021, observe that the storage cleanup +
+   retention tick hooks ran at least once via PG row count
+   delta on `plenora.beat_heartbeat` and `plenora.schedule_logs`.
+   Bounded; uses the same env-gated short interval as 021.
+
+Both are explicitly out of scope for INSTALLATION-022 (this
+stream). Listed so the gap cannot be silently forgotten.
+
+#### 12.8.4 Hard non-goals
+
+These remain explicitly NOT pursued by future closure streams:
+
+- **No replacement of the prod weekly backup-test drill**
+  (`plenora-backup-test.timer`) by CI smokes - that drill
+  exists for a different reason (real PG dump + restore on a
+  throwaway DB) and stays in production.
+- **No multi-host / cluster smoke** - leader election under a
+  real network partition is not in scope; the
+  `_LEADER_LOCK_TTL_SECONDS=120` value is locked by the
+  existing storage reconciliation boundedness suite, that is
+  enough.
+- **No long-running soak test** in CI - the cleanroom is a
+  smoke (seconds), not a soak (hours).
+
 ---
 
 ## 13. Related docs

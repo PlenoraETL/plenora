@@ -420,7 +420,7 @@ class ApiConnectionSourceLoadingMixin:
         node_data: Dict,
         force_recalculate: bool = False,
         *,
-        ctx: Optional[ArricchisciExecutionContext] = None,
+        ctx: ArricchisciExecutionContext,
     ) -> pd.DataFrame:
         """Carica dati dal progetto sorgente via SourceLoader.
 
@@ -429,15 +429,15 @@ class ApiConnectionSourceLoadingMixin:
         filesystem restano qui perche' sono specifici di api_connector
         (manipola usa orchestrator_callback).
 
-        BE-GO-READY-TRANSFORMATION-ENGINE-019/-030B: accetta `ctx`
-        come kwarg opzionale e legge il `group_id` ESCLUSIVAMENTE
-        dal context tipato via `_group_id_from_ctx(ctx)`. Quando
-        `ctx is None` o `ctx.group_id is None`, il loader fail-closes
-        con `ValueError("Contesto di sicurezza non determinabile...")`.
-        Storia: pre-030B usava il legacy `_resolve_group_id`
-        (ctx-or-singleton-fallback) per back-compat con consumer
-        esterni; -030A ha migrato il worker a passare `ctx=ctx`
-        esplicito, -030B ha promosso questo callsite a strict.
+        BE-GO-READY-TRANSFORMATION-ENGINE-032: `ctx` e' ora un
+        keyword-only **required** parameter (no default). Tutti i 3
+        production callsite (`canvas_orchestrator`, `executor.preview`,
+        `enrichment_task`) e tutti i test callsite passano `ctx=ctx`
+        esplicito post-TE-019/-020/-030A/-030B/-031. Il `group_id`
+        viene letto ESCLUSIVAMENTE da `ctx.group_id` via
+        `_group_id_from_ctx(ctx)`; se `ctx.group_id is None`
+        (project non trovato) il loader fail-closes con
+        `ValueError("Contesto di sicurezza non determinabile...")`.
         """
         from app.core.artifacts import (
             SourceLoader,
@@ -529,7 +529,7 @@ class ApiConnectionSourceLoadingMixin:
         self,
         node_data: Dict,
         *,
-        ctx: Optional[ArricchisciExecutionContext] = None,
+        ctx: ArricchisciExecutionContext,
     ) -> pd.DataFrame:
         """Carica dati da file source via SourceLoader.
 
@@ -537,23 +537,22 @@ class ApiConnectionSourceLoadingMixin:
         CRS lungo le trasformazioni downstream) sono garantiti dal
         loader unico.
 
-        BE-GO-READY-TRANSFORMATION-ENGINE-019/-030B: accetta `ctx`
-        come kwarg opzionale e legge il `group_id` ESCLUSIVAMENTE
-        dal context tipato via `_group_id_from_ctx(ctx)`. Quando
-        `ctx is None` o `ctx.group_id is None`, il loader fail-closes
-        con `ValueError("Contesto di sicurezza non determinabile...")`.
-        Storia: pre-030B usava il legacy `_resolve_group_id`
-        (ctx-or-singleton-fallback). -030B ha promosso il callsite
-        a strict dopo che -030A ha rimosso il direct mutation
-        nel worker.
+        BE-GO-READY-TRANSFORMATION-ENGINE-032: `ctx` e' ora un
+        keyword-only **required** parameter (no default). Tutti i 3
+        production callsite e tutti i test callsite passano
+        `ctx=ctx` esplicito. Il `group_id` viene letto
+        ESCLUSIVAMENTE da `ctx.group_id` via
+        `_group_id_from_ctx(ctx)`; se `ctx.group_id is None` il
+        loader fail-closes con `ValueError("Contesto di sicurezza
+        non determinabile...")`.
 
         BE-GO-READY-TRANSFORMATION-ENGINE-025 (slice migration):
         `preview_limit` viene letto ESCLUSIVAMENTE da
         `ctx.preview_limit` via `_preview_limit_from_ctx(ctx)`. Lo
         `svc._preview_limit` legacy non e' piu' consultato —
         elimina lo stale-state cross-execution leak. Quando
-        `ctx is None`, il preview_limit e' considerato non-richiesto
-        (no truncation).
+        `ctx.preview_limit is None`, il preview_limit e' considerato
+        non-richiesto (no truncation).
         """
         from app.core.artifacts import (
             SourceLoader,
@@ -619,21 +618,30 @@ class ApiConnectionSourceLoadingMixin:
         Le variabili template ({{NOW}}, {{TODAY}}, ecc.) vengono
         processate dentro il loader.
 
-        BE-GO-READY-TRANSFORMATION-ENGINE-019: accetta `ctx`
-        opzionale. Lo static branch non ha tenant binding semantico
-        (processing puro di template variables); il `group_id` viene
-        usato solo per soddisfare la guardia del loader, con
-        fallback a `"_static_"`.
+        BE-GO-READY-TRANSFORMATION-ENGINE-032: `ctx` resta
+        **Optional** (a differenza di `_load_source_project` /
+        `_load_file_source` migrati a required in -032).
+
+        Rationale:
+          1. Lo static branch e' tenant-agnostic per definizione
+             (puro processing di template variables); non ha
+             semantica cross-tenant da proteggere via ctx.
+          2. Quando `ctx is None` o `ctx.group_id is None`, il
+             callsite usa il sentinel costante `"_static_"` come
+             placeholder per soddisfare la guardia del SourceLoader.
+             Non c'e' fail-closed.
+          3. Due regression locks dipendono dal contract
+             `ctx-Optional` per asserire il sentinel behavior:
+             - `tests2/security/unit/test_api_connector_source_loading_core.py::test_load_static_values_works_without_db_or_user`
+             - `tests2/arricchisci/unit/test_mixin_ctx_migration_contract.py::test_load_static_values_uses_static_sentinel_when_ctx_none`
+             Cambiare la signature a required romperebbe il contract.
 
         BE-GO-READY-TRANSFORMATION-ENGINE-023 (slice migration):
         questa funzione NON legge piu' `_current_group_id` dal
         singleton. Usa il helper strict `_group_id_from_ctx(ctx)`
         che ritorna esclusivamente `ctx.group_id` (o `None`); il
         sentinel `"_static_"` viene applicato come placeholder
-        quando il context non fornisce un group_id. Questo elimina
-        la dipendenza dello static branch da stato mutabile cross-
-        execution (un `svc._current_group_id` pre-set da un'altra
-        esecuzione non puo' piu' influenzare lo static).
+        quando il context non fornisce un group_id.
         """
         from app.core.artifacts import SourceLoader, SourceRef
 

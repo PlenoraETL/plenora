@@ -145,13 +145,49 @@ def test_contract_init_imports_no_forbidden_surface():
 
 
 _EXPECTED_PUBLIC_SYMBOLS = {
+    # Identity type
     "CurrentUser",
+    # Role tuples
     "VALID_ROLES",
     "ROLES_ABOVE_VIEWER",
     "ROLES_ADMIN_OR_ABOVE",
     "ROLES_KIOSK_ONLY",
+    # Pure policy
     "group_filter",
+    # Phase-10 (TE-016): pure auth DTOs
+    "LoginRequest",
+    "TokenResponse",
+    "UserCreate",
+    "ChangePasswordRequest",
+    "UserResponse",
+    "ResetPasswordRequest",
+    "GroupCreate",
+    "GroupResponse",
+    "MFAEnrollResponse",
+    "MFAVerifyRequest",
+    "MFADisableRequest",
+    "MFAStatusResponse",
 }
+
+
+# Phase-10 minor DTOs that the contract re-exports from
+# `app.core.auth.models`. Identity must be preserved end-to-end:
+# `contract.X is auth.models.X is auth.X` (the facade also
+# re-exports them at line 194 of auth.py).
+_PHASE10_MINOR_DTOS = (
+    "LoginRequest",
+    "TokenResponse",
+    "UserCreate",
+    "ChangePasswordRequest",
+    "UserResponse",
+    "ResetPasswordRequest",
+    "GroupCreate",
+    "GroupResponse",
+    "MFAEnrollResponse",
+    "MFAVerifyRequest",
+    "MFADisableRequest",
+    "MFAStatusResponse",
+)
 
 
 def test_contract_module_all_matches_expected_surface():
@@ -194,6 +230,49 @@ def test_contract_current_user_is_leaf_identity():
         "Python class as `app.core.auth.models.CurrentUser`. "
         "Re-exporting the canonical leaf is mandatory; redefining "
         "would break monkeypatch surfaces and `Depends` typing."
+    )
+
+
+@pytest.mark.parametrize("dto_name", _PHASE10_MINOR_DTOS)
+def test_contract_phase10_dto_is_leaf_identity(dto_name: str):
+    """Phase-10 (TE-016): each minor DTO re-exported by the
+    contract must be the SAME class as `app.core.auth.models.X`
+    (not a redefinition). Identity preservation is the binding
+    invariant of every fan-out batch — without it, any consumer
+    holding a reference to `auth.models.LoginRequest` and a
+    consumer holding `contracts.auth.LoginRequest` would fail
+    `isinstance` checks against each other."""
+    import app.core.auth.models as leaf_mod
+    import app.shared.contracts.auth as contract_mod
+
+    leaf = getattr(leaf_mod, dto_name)
+    contract = getattr(contract_mod, dto_name)
+
+    assert contract is leaf, (
+        f"`app.shared.contracts.auth.{dto_name}` must be the same "
+        f"Python class as `app.core.auth.models.{dto_name}`. "
+        "Re-exporting the canonical leaf is mandatory."
+    )
+
+
+@pytest.mark.parametrize("dto_name", _PHASE10_MINOR_DTOS)
+def test_contract_phase10_dto_is_facade_identity(dto_name: str):
+    """Phase-10: identity also holds across the facade
+    re-export chain. `app.core.auth.auth` re-exports the 13
+    models at line 194; `contracts.auth` re-exports from
+    `auth.models`. The chain
+    `auth.auth.X is auth.models.X is contracts.auth.X` must
+    survive any future facade rework."""
+    import app.core.auth.auth as facade
+    import app.shared.contracts.auth as contract_mod
+
+    facade_obj = getattr(facade, dto_name)
+    contract_obj = getattr(contract_mod, dto_name)
+
+    assert contract_obj is facade_obj, (
+        f"Identity chain broken for `{dto_name}`: "
+        "the facade and the contract must resolve to the same "
+        "class object (both routed through `app.core.auth.models`)."
     )
 
 

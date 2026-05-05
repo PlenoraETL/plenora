@@ -46,6 +46,18 @@ Symbols exposed
   re-exports `group_filter` from here for KEEP_COMPAT; identity
   preserved (`auth.group_filter is ownership.group_filter is
   contract.group_filter`).
+- **Auth DTOs (Phase-10 / TE-016)** — re-export from
+  `app.core.auth.models`. 12 pure pydantic models that travel
+  across the API boundary as request/response payloads:
+  ``LoginRequest``, ``TokenResponse``, ``UserCreate``,
+  ``ChangePasswordRequest``, ``UserResponse``,
+  ``ResetPasswordRequest``, ``GroupCreate``, ``GroupResponse``,
+  ``MFAEnrollResponse``, ``MFAVerifyRequest``,
+  ``MFADisableRequest``, ``MFAStatusResponse``. All zero-method
+  pydantic data containers — pure types, no methods touching DB
+  / FastAPI / disclosure. Identity preserved
+  (`contract.LoginRequest is auth.models.LoginRequest is
+  auth.LoginRequest`).
 
 Symbols intentionally NOT exposed (per task brief)
 ===================================================
@@ -72,7 +84,21 @@ from __future__ import annotations
 
 from typing import Optional
 
-from app.core.auth.models import CurrentUser
+from app.core.auth.models import (
+    ChangePasswordRequest,
+    CurrentUser,
+    GroupCreate,
+    GroupResponse,
+    LoginRequest,
+    MFADisableRequest,
+    MFAEnrollResponse,
+    MFAStatusResponse,
+    MFAVerifyRequest,
+    ResetPasswordRequest,
+    TokenResponse,
+    UserCreate,
+    UserResponse,
+)
 from app.core.auth.roles import (
     ROLES_ABOVE_VIEWER,
     ROLES_ADMIN_OR_ABOVE,
@@ -82,12 +108,28 @@ from app.core.auth.roles import (
 
 
 __all__ = [
+    # Identity types
     "CurrentUser",
+    # Role tuples
     "VALID_ROLES",
     "ROLES_ABOVE_VIEWER",
     "ROLES_ADMIN_OR_ABOVE",
     "ROLES_KIOSK_ONLY",
+    # Pure policy
     "group_filter",
+    # Auth DTOs (Phase-10): pure pydantic request/response payloads
+    "LoginRequest",
+    "TokenResponse",
+    "UserCreate",
+    "ChangePasswordRequest",
+    "UserResponse",
+    "ResetPasswordRequest",
+    "GroupCreate",
+    "GroupResponse",
+    "MFAEnrollResponse",
+    "MFAVerifyRequest",
+    "MFADisableRequest",
+    "MFAStatusResponse",
 ]
 
 

@@ -22,16 +22,31 @@ class _LogCapturer(logging.Handler):
 
 def _attach_logger():
     capturer = _LogCapturer()
-    mod_logger = logging.getLogger("app.db.results_db_service")
-    mod_logger.addHandler(capturer)
-    return mod_logger, capturer
+    # BE-GO-READY-RESOURCE-ENGINE-002: il PERF log e' emesso ora dal
+    # modulo loader (che possiede la dispatch consolidata). Il
+    # capturer si attacca al logger del loader; il public surface di
+    # `get_result_data` e' invariato, sono solo cambiate le coordinate
+    # del logger interno.
+    capturer = _LogCapturer()
+    loader_logger = logging.getLogger(
+        "app.core.resources.loaders.result_blob"
+    )
+    loader_logger.addHandler(capturer)
+    return loader_logger, capturer
 
 
 def test_get_result_data_converts_memoryview_to_bytes(monkeypatch):
+    # BE-GO-READY-RESOURCE-ENGINE-002: SQL fetch happens inside the
+    # loader's `_fetch_row`, which lazily imports
+    # `app.db.pg_connection.fetchone`. Patching at that boundary is
+    # the canonical replacement for the pre-pilot
+    # `monkeypatch.setattr(results_db_service, "fetchone", ...)`.
+    import app.db.pg_connection as pg_conn
+
     monkeypatch.setattr(
-        results_db_service,
+        pg_conn,
         "fetchone",
-        lambda sql, params: {"data": memoryview(b"abc")},
+        lambda sql, params=(): {"data": memoryview(b"abc"), "storage_key": None},
     )
 
     data = results_db_service.get_result_data("res-1")
@@ -40,14 +55,16 @@ def test_get_result_data_converts_memoryview_to_bytes(monkeypatch):
 
 
 def test_get_result_data_uses_group_filter_when_provided(monkeypatch):
+    import app.db.pg_connection as pg_conn
+
     seen = {}
 
-    def _fetchone(sql, params):
+    def _fetchone(sql, params=()):
         seen["sql"] = sql
         seen["params"] = params
-        return {"data": b"abc"}
+        return {"data": b"abc", "storage_key": None}
 
-    monkeypatch.setattr(results_db_service, "fetchone", _fetchone)
+    monkeypatch.setattr(pg_conn, "fetchone", _fetchone)
 
     results_db_service.get_result_data("res-1", group_id="grp-1")
 
@@ -64,11 +81,17 @@ def test_get_result_data_logs_backend_db_legacy_for_bytea_row(monkeypatch):
     """Row con storage_key=NULL e data BYTEA: il log marker deve riportare
     `backend=db_legacy` (non piu' `backend=db`). Distinzione semantica:
     i nuovi result in policy=object_storage non scrivono mai BYTEA, quindi
-    qualunque hit su questo path e' su row legacy pre-migration."""
+    qualunque hit su questo path e' su row legacy pre-migration.
+
+    BE-GO-READY-RESOURCE-ENGINE-002: il log e' ora emesso dal loader;
+    il marker e il formato sono preservati verbatim dal pilot.
+    """
+    import app.db.pg_connection as pg_conn
+
     monkeypatch.setattr(
-        results_db_service,
+        pg_conn,
         "fetchone",
-        lambda sql, params: {"data": b"legacy bytes", "storage_key": None},
+        lambda sql, params=(): {"data": b"legacy bytes", "storage_key": None},
     )
 
     mod_logger, capturer = _attach_logger()
@@ -89,18 +112,27 @@ def test_get_result_data_logs_backend_object_storage_when_storage_key_set(
     """Row con storage_key valorizzato: il log marker deve riportare
     `backend=object_storage` (non piu' `backend=s3` provider-hardcoded).
     Naming coerente con la nomenclatura architetturale (S3/MinIO vivono
-    sotto la stessa astrazione runtime object storage)."""
+    sotto la stessa astrazione runtime object storage).
+
+    BE-GO-READY-RESOURCE-ENGINE-002: la dispatch S3 vive ora nel
+    loader; il test patch `_download_object_storage` (canonical post-
+    pilot symbol) invece del vecchio `_s3_download_bytes` (che e'
+    ora un thin wrapper sul loader).
+    """
+    import app.db.pg_connection as pg_conn
+    import app.core.resources.loaders.result_blob as result_blob_loader
+
     monkeypatch.setattr(
-        results_db_service,
+        pg_conn,
         "fetchone",
-        lambda sql, params: {
+        lambda sql, params=(): {
             "data": None,
             "storage_key": "results/p1/r1.bin",
         },
     )
     monkeypatch.setattr(
-        results_db_service,
-        "_s3_download_bytes",
+        result_blob_loader,
+        "_download_object_storage",
         lambda key: b"object storage bytes",
     )
 

@@ -98,6 +98,7 @@ __all__ = [
     "ORCHESTRATOR_BINDING",
     "CONNECTIONS_BINDING",
     "PROJECTS_BINDING",
+    "ARRICCHISCI_BINDING",
 ]
 
 
@@ -218,4 +219,29 @@ PROJECTS_BINDING = RouterBinding(
     name="projects",
     init_fn=_projects_init,
     extract=lambda services: (services.project_service,),
+)
+
+
+def _arricchisci_init(*args: Any, **kwargs: Any) -> None:
+    """Lazy thunk: import + invoke ``init_arricchisci``.
+
+    BE-GO-READY-BOOTSTRAP-ENGINE-021: 2-arg slice consuming
+    ``services.project_service`` and ``services.api_connection_service``.
+    The second arg is the wrap-don't-move singleton landed in
+    BOOTSTRAP-ENGINE-016 (identity invariant already locked by the
+    runtime container contract test). Same lazy-thunk pattern as the
+    other slices.
+    """
+    from app.core.arricchisci.router import init_arricchisci
+
+    init_arricchisci(*args, **kwargs)
+
+
+ARRICCHISCI_BINDING = RouterBinding(
+    name="arricchisci",
+    init_fn=_arricchisci_init,
+    extract=lambda services: (
+        services.project_service,
+        services.api_connection_service,
+    ),
 )

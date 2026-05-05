@@ -5,20 +5,9 @@ Contiene: results (output pipeline), execution_logs.
 Migrato a PostgreSQL: usa pg_connection pool.
 """
 
-import time
 from typing import Dict, List, Optional
 from app.utils.logger import get_logger
 
-
-def _short_key(storage_key: Optional[str], max_len: int = 60) -> str:
-    """Abbrevia una storage_key per log: prime 12 + '...' + ultimi 30 char.
-    Evita di loggare path interi che possano contenere project_id/result_id
-    sensibili o filenames lunghi rumorosi."""
-    if not storage_key:
-        return "<none>"
-    if len(storage_key) <= max_len:
-        return storage_key
-    return f"{storage_key[:12]}...{storage_key[-30:]}"
 
 # Importa tutto da pg_connection
 from app.db.pg_connection import (
@@ -77,44 +66,19 @@ def get_result(result_id: str) -> Optional[Dict]:
 
 
 def _s3_download_bytes(storage_key: str) -> Optional[bytes]:
-    """Scarica un oggetto S3-backed come bytes. None su errore loggato."""
-    # RB.#19 Step A: timing log per profilare hot path source loading.
-    # Misura il roundtrip S3 GET + concat chunks.
-    _t0 = time.monotonic()
-    try:
-        # Lazy import per non forzare cloud_backends in ogni path
-        from app.shared.cloud_backends import (
-            ObjectStorageDisabledError,
-            get_runtime_object_storage,
-        )
-        try:
-            storage = get_runtime_object_storage()
-        except ObjectStorageDisabledError as _disabled:
-            # Batch 1.5: capability off -> non possiamo scaricare nulla.
-            # Il caller (get_result_data) tratta None come "non disponibile".
-            duration_ms = round((time.monotonic() - _t0) * 1000, 1)
-            logger.warning(
-                f"[FS-4] S3 download skip su {_short_key(storage_key)}: "
-                f"object storage disabilitato (duration_ms={duration_ms}). {_disabled}"
-            )
-            return None
-        stream = storage.get_object_stream(storage_key)
-        chunks = list(stream["body"])
-        data = b"".join(chunks)
-        duration_ms = round((time.monotonic() - _t0) * 1000, 1)
-        logger.info(
-            f"[PERF] s3_download op=get_bytes storage_key={_short_key(storage_key)} "
-            f"size_bytes={len(data)} duration_ms={duration_ms}"
-        )
-        return data
-    except Exception as e:
-        duration_ms = round((time.monotonic() - _t0) * 1000, 1)
-        logger.error(
-            f"[FS-4] S3 download {_short_key(storage_key)} fallito "
-            f"(duration_ms={duration_ms}): {e}",
-            exc_info=True,
-        )
-        return None
+    """Scarica un oggetto S3-backed come bytes. None su errore loggato.
+
+    BE-GO-READY-RESOURCE-ENGINE-002: thin back-compat wrapper su
+    ``app.core.resources.loaders.result_blob._download_object_storage``.
+    Le firma e la semantica observable sono invariate (gli stessi log
+    "[PERF] s3_download op=get_bytes" + "[FS-4] S3 download skip"
+    vengono ora emessi dal modulo loader).
+    """
+    from app.core.resources.loaders.result_blob import (
+        _download_object_storage,
+    )
+
+    return _download_object_storage(storage_key)
 
 
 def get_result_data(result_id: str, group_id: str = None) -> Optional[bytes]:
@@ -122,49 +86,24 @@ def get_result_data(result_id: str, group_id: str = None) -> Optional[bytes]:
 
     FS-4: se `storage_key` e' presente sulla row, scarica da S3 invece
     che leggere BYTEA. Semantica caller-side invariata (bytes in memory).
+
+    BE-GO-READY-RESOURCE-ENGINE-002: thin back-compat shim sopra
+    ``ResultBlobLoader``. Quando un caller fornisce ``group_id``, il
+    filtro SQL fail-closes esattamente come pre-pilot. Quando
+    ``group_id=None`` (legacy router/orchestrator path) la semantica
+    fail-open di prima e' preservata, instradata pero' attraverso la
+    SAME dispatch dello shim consolidato. La duplicazione tra
+    ``get_result_data`` e ``_s3_download_bytes`` (storage_key
+    branching) e' chiusa da questo shim.
+
+    Nuovi caller dovrebbero costruire un ``ResourceRef`` ed invocare
+    il registry direttamente; i 2 caller esistenti
+    (``project_service.get_result_data`` wrapper, router orchestrator)
+    continuano a funzionare senza migrazione atomica.
     """
-    # RB.#19 Step A: timing log per separare DB lookup da S3 download.
-    _t0 = time.monotonic()
-    if group_id:
-        row = fetchone(
-            "SELECT data, storage_key FROM results WHERE id = ? AND group_id = ?",
-            (result_id, group_id)
-        )
-    else:
-        row = fetchone(
-            "SELECT data, storage_key FROM results WHERE id = ?",
-            (result_id,),
-        )
-    if not row:
-        return None
+    from app.core.resources.loaders.result_blob import _dispatch_by_id
 
-    storage_key = row.get("storage_key")
-    if storage_key:
-        # _s3_download_bytes logga il proprio timing dettagliato; qui
-        # logghiamo il tempo totale (DB lookup + object storage fetch).
-        data = _s3_download_bytes(storage_key)
-        duration_ms = round((time.monotonic() - _t0) * 1000, 1)
-        size = len(data) if data else 0
-        logger.info(
-            f"[PERF] get_result_data op=fetch_blob backend=object_storage "
-            f"result_id={result_id} size_bytes={size} duration_ms={duration_ms}"
-        )
-        return data
-
-    # Fallback BYTEA: row legacy pre-migration object storage. Mantenuto
-    # per retro-compatibilita' (storage_key=NULL + data BYTEA presente).
-    # backend=db_legacy distingue dal path nuovo (sempre object_storage
-    # quando STORAGE_POLICY=object_storage).
-    data = row.get("data")
-    # PostgreSQL BYTEA: psycopg2 ritorna memoryview, convertiamo a bytes
-    if isinstance(data, memoryview):
-        data = bytes(data)
-    duration_ms = round((time.monotonic() - _t0) * 1000, 1)
-    size = len(data) if data else 0
-    logger.info(
-        f"[PERF] get_result_data op=fetch_blob backend=db_legacy "
-        f"result_id={result_id} size_bytes={size} duration_ms={duration_ms}"
-    )
+    data, _backend = _dispatch_by_id(result_id, group_id_filter=group_id or None)
     return data
 
 

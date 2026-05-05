@@ -949,3 +949,117 @@ def test_phase9_models_leaf_currentuser_consumers_locked_to_allowlist():
         "CurrentUser from auth.models. Trim the allowlist:\n"
         + "\n".join(f"  {p}" for p in sorted(missing))
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase-10 (BE-GO-READY-AUTH-ENGINE-016) minor-DTO contract fan-out
+# ---------------------------------------------------------------------------
+#
+# Phase-10 extends the contract module to expose 12 pure auth
+# DTOs (`LoginRequest`, `TokenResponse`, `UserCreate`, etc.).
+# Pre-batch the only direct importers in `app/+workers/` were
+# the 5 sibling files within `app.core.auth.*` (the facade itself
+# + the extracted users/groups handlers + ownership) and the
+# contract module's own re-export. There are NO non-sibling
+# consumers in the runtime tree at the start of TE-016 — the fan-
+# out is contract-side only, opening the door for future
+# consumers (especially tests + worker-side helpers) to migrate.
+#
+# The allowlist guard below catches any future regression to
+# `from app.core.auth.models import LoginRequest` (etc.) by
+# non-sibling consumers — they must instead import from
+# `app.shared.contracts.auth`.
+
+_PHASE10_MINOR_DTOS = frozenset({
+    "LoginRequest",
+    "TokenResponse",
+    "UserCreate",
+    "ChangePasswordRequest",
+    "UserResponse",
+    "ResetPasswordRequest",
+    "GroupCreate",
+    "GroupResponse",
+    "MFAEnrollResponse",
+    "MFAVerifyRequest",
+    "MFADisableRequest",
+    "MFAStatusResponse",
+})
+
+# Same allowlist shape as Phase-9 — the 5 sibling/contract-owner
+# files that legitimately import from `app.core.auth.models`.
+# Reuses `_PHASE9_MODELS_LEAF_ALLOWLIST` semantically; declared
+# separately for the DTO-specific guard's failure message.
+_PHASE10_MODELS_LEAF_ALLOWLIST = frozenset({
+    str((_APP / "core" / "auth" / "auth.py").relative_to(_BACKEND_ROOT)).replace("\\", "/"),
+    str((_APP / "core" / "auth" / "ownership.py").relative_to(_BACKEND_ROOT)).replace("\\", "/"),
+    str((_APP / "core" / "auth" / "users_router.py").relative_to(_BACKEND_ROOT)).replace("\\", "/"),
+    str((_APP / "core" / "auth" / "groups_router.py").relative_to(_BACKEND_ROOT)).replace("\\", "/"),
+    str((_APP / "shared" / "contracts" / "auth.py").relative_to(_BACKEND_ROOT)).replace("\\", "/"),
+})
+
+
+def test_phase10_minor_dto_consumers_locked_to_allowlist():
+    """Whole-tree scan: only the documented allowlist files may
+    import any of the 12 Phase-10 minor DTOs from
+    `app.core.auth.models` directly. Every other consumer must
+    go through `app.shared.contracts.auth`."""
+    found: dict[str, set[str]] = {}
+    for py in _APP.rglob("*.py"):
+        if "__pycache__" in str(py):
+            continue
+        try:
+            text = py.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        if "from app.core.auth.models" not in text:
+            continue
+        try:
+            tree = ast.parse(text, filename=str(py))
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module == "app.core.auth.models":
+                hit_dtos = {a.name for a in node.names if a.name in _PHASE10_MINOR_DTOS}
+                if hit_dtos:
+                    rel = str(py.relative_to(_BACKEND_ROOT)).replace("\\", "/")
+                    found.setdefault(rel, set()).update(hit_dtos)
+
+    extra = {p: dtos for p, dtos in found.items() if p not in _PHASE10_MODELS_LEAF_ALLOWLIST}
+    assert not extra, (
+        "Files outside the Phase-10 allowlist regressed to "
+        "importing minor auth DTOs from `app.core.auth.models`:\n"
+        + "\n".join(f"  {p}: {sorted(dtos)}" for p, dtos in sorted(extra.items()))
+        + "\nMigrate them to `from app.shared.contracts.auth "
+        "import <DTO>` instead, or extend "
+        "_PHASE10_MODELS_LEAF_ALLOWLIST with documented rationale."
+    )
+
+
+def test_phase10_contract_module_exposes_all_minor_dtos():
+    """Source-bound: `app.shared.contracts.auth` MUST expose
+    every Phase-10 minor DTO in its `__all__`. Otherwise the
+    fan-out is incomplete — consumers cannot route through the
+    contract without a missing symbol."""
+    contract_path = _APP / "shared" / "contracts" / "auth.py"
+    text = contract_path.read_text(encoding="utf-8")
+    tree = ast.parse(text, filename=str(contract_path))
+
+    # Find `__all__` assignment.
+    all_names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == "__all__":
+                    if isinstance(node.value, (ast.List, ast.Tuple)):
+                        for elt in node.value.elts:
+                            if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                                all_names.add(elt.value)
+
+    missing = _PHASE10_MINOR_DTOS - all_names
+    assert not missing, (
+        "app/shared/contracts/auth.py `__all__` is missing "
+        "Phase-10 minor DTOs:\n"
+        + "\n".join(f"  {n}" for n in sorted(missing))
+        + "\nAdd them to `__all__` AND to the `from "
+        "app.core.auth.models import (...)` block."
+    )

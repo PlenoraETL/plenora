@@ -737,3 +737,141 @@ def test_te030b_source_loading_callsites_use_strict_helper():
         f"group_id: {missing}. Verificare che la promozione strict "
         f"sia preservata."
     )
+
+
+# ---------------------------------------------------------------------------
+# BE-GO-READY-TRANSFORMATION-ENGINE-032 — ctx required signatures
+# ---------------------------------------------------------------------------
+
+
+def _get_signature_from_mixin(method_name: str):
+    """Helper: ottiene la signature di un metodo del mixin
+    `ApiConnectionSourceLoadingMixin` evitando l'inheritance MRO
+    via `ApiConnectionService` (che istanzia DB pool / logger).
+    """
+    from app.core.arricchisci.api_connection_source_loading import (
+        ApiConnectionSourceLoadingMixin,
+    )
+    return inspect.signature(getattr(ApiConnectionSourceLoadingMixin, method_name))
+
+
+def test_te032_load_source_project_ctx_is_required_keyword_only():
+    """BE-GO-READY-TRANSFORMATION-ENGINE-032: `ctx` su
+    `_load_source_project` e' un keyword-only **required**
+    parameter — niente default `None`. I 3 production callsite
+    (canvas_orchestrator, executor.preview, enrichment_task) e
+    tutti i test callsite passano `ctx=ctx` esplicito post-
+    TE-019/-020/-030A/-030B/-031.
+
+    Lock contro rollback a `Optional` con default None: senza,
+    un futuro refactor potrebbe accidentalmente accettare
+    callsite senza ctx, riaprendo il foot-gun di tenant binding
+    via singleton fallback (chiuso da TE-030B).
+    """
+    sig = _get_signature_from_mixin("_load_source_project")
+    assert "ctx" in sig.parameters, (
+        "`ctx` parameter mancante da `_load_source_project` signature."
+    )
+    p = sig.parameters["ctx"]
+    assert p.kind == inspect.Parameter.KEYWORD_ONLY, (
+        f"`ctx` deve essere KEYWORD_ONLY, trovato kind={p.kind}."
+    )
+    assert p.default is inspect.Parameter.empty, (
+        f"REGRESSIONE TE-032: `ctx` su `_load_source_project` ha "
+        f"default `{p.default!r}` — deve essere required (no default). "
+        f"Cambiare la signature a `ctx: ArricchisciExecutionContext` "
+        f"senza default."
+    )
+
+
+def test_te032_load_file_source_ctx_is_required_keyword_only():
+    """BE-GO-READY-TRANSFORMATION-ENGINE-032: `ctx` su
+    `_load_file_source` e' un keyword-only **required** parameter."""
+    sig = _get_signature_from_mixin("_load_file_source")
+    assert "ctx" in sig.parameters, (
+        "`ctx` parameter mancante da `_load_file_source` signature."
+    )
+    p = sig.parameters["ctx"]
+    assert p.kind == inspect.Parameter.KEYWORD_ONLY, (
+        f"`ctx` deve essere KEYWORD_ONLY, trovato kind={p.kind}."
+    )
+    assert p.default is inspect.Parameter.empty, (
+        f"REGRESSIONE TE-032: `ctx` su `_load_file_source` ha default "
+        f"`{p.default!r}` — deve essere required (no default)."
+    )
+
+
+def test_te032_load_static_values_keeps_optional_ctx():
+    """BE-GO-READY-TRANSFORMATION-ENGINE-032: a differenza dei 2
+    sibling, `_load_static_values` mantiene `ctx: Optional[...] =
+    None`.
+
+    Rationale: lo static branch e' tenant-agnostic; quando ctx
+    e' None usa il sentinel `"_static_"` come placeholder. Due
+    regression test esplicitamente lockano il behavior `ctx=None`
+    (cfr. `test_load_static_values_uses_static_sentinel_when_ctx_none`
+    in questo modulo, e `test_load_static_values_works_without_db_or_user`
+    in `tests2/security/unit/test_api_connector_source_loading_core.py`).
+
+    Cambiare static_values a required romperebbe quei lock.
+    """
+    sig = _get_signature_from_mixin("_load_static_values")
+    assert "ctx" in sig.parameters, (
+        "`ctx` parameter mancante da `_load_static_values` signature."
+    )
+    p = sig.parameters["ctx"]
+    assert p.kind == inspect.Parameter.KEYWORD_ONLY, (
+        f"`ctx` deve essere KEYWORD_ONLY, trovato kind={p.kind}."
+    )
+    assert p.default is None, (
+        f"REGRESSIONE TE-032: `ctx` su `_load_static_values` deve "
+        f"avere `default=None` (Optional) per preservare il sentinel "
+        f"behavior con ctx=None. Trovato default={p.default!r}."
+    )
+
+
+def test_te032_no_app_workers_callsite_omits_ctx_for_tenant_loaders():
+    """BE-GO-READY-TRANSFORMATION-ENGINE-032: AST-bound regression
+    guard. Nessuna call a `_load_source_project` o
+    `_load_file_source` in `app/` o `workers/` deve omettere il
+    kwarg `ctx=`. Inclusi i call site su `api_connection_service`
+    (singleton import) e su `svc` (instance-level).
+
+    Senza questo guard, un futuro callsite production potrebbe
+    accidentalmente omettere ctx → TypeError al runtime per il
+    keyword-only required, oppure (peggio) un wrapper che
+    accetta `ctx=None` di default re-introdurrebbe il foot-gun.
+
+    `_load_static_values` e' explicitly excluded perche'
+    Optional per design (sentinel `"_static_"` quando ctx=None).
+    """
+    roots = ["app", "workers"]
+    targets = {"_load_source_project", "_load_file_source"}
+    violations: list = []
+    for root in roots:
+        root_path = _BACKEND_ROOT / root
+        for py_path in root_path.rglob("*.py"):
+            try:
+                tree = ast.parse(py_path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                f = node.func
+                if not isinstance(f, ast.Attribute):
+                    continue
+                if f.attr not in targets:
+                    continue
+                # Skip the `def` lines (these are FunctionDef, not Call).
+                has_ctx = any(kw.arg == "ctx" for kw in node.keywords)
+                if not has_ctx:
+                    rel = py_path.relative_to(_BACKEND_ROOT)
+                    violations.append((str(rel), node.lineno, f.attr))
+
+    assert not violations, (
+        f"TE-032 regression: callsite production di tenant-bound "
+        f"loader senza `ctx=` kwarg:\n"
+        + "\n".join(f"  {v[0]}:{v[1]} → {v[2]}" for v in violations)
+        + "\nPost-TE-032 i 2 metodi richiedono ctx esplicito."
+    )

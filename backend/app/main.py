@@ -407,7 +407,7 @@ from app.core.estrai.router import functions_router
 from app.core.manipola.router import router as transforms_router
 from app.core.arricchisci.router import (
     enrichment_router, api_connections_router, templates_router,
-    enrich_router, init_arricchisci
+    enrich_router,
 )
 from app.core.carica.router import router as carica_router, init_carica_service
 from app.core.features.routes import router as features_router
@@ -430,20 +430,21 @@ from app.core.admin_system_status.router import router as admin_system_status_ro
 from app.core.tickets.router import router as tickets_router
 
 # Inizializza moduli che necessitano di servizi
-# BE-GO-READY-BOOTSTRAP-ENGINE-018/019/020-ROUTER-REGISTRY: connections,
-# projects and orchestrator init flow through the typed registry.
-# Order preserved: connections, projects, arricchisci, datasources,
-# carica, orchestrator. Streams 021-023 will migrate the remaining
-# 3 init_* calls (arricchisci, datasources, carica).
+# BE-GO-READY-BOOTSTRAP-ENGINE-018/019/020/021-ROUTER-REGISTRY:
+# connections, projects, arricchisci and orchestrator init flow
+# through the typed registry. Order preserved: connections, projects,
+# arricchisci, datasources, carica, orchestrator. Streams 022-023
+# will migrate the remaining 2 init_* calls (datasources, carica).
 from app.runtime.router_registry import (
     bind_router_services,
+    ARRICCHISCI_BINDING,
     CONNECTIONS_BINDING,
     ORCHESTRATOR_BINDING,
     PROJECTS_BINDING,
 )
 bind_router_services(_runtime_services, CONNECTIONS_BINDING)
 bind_router_services(_runtime_services, PROJECTS_BINDING)
-init_arricchisci(project_service, api_connection_service)
+bind_router_services(_runtime_services, ARRICCHISCI_BINDING)
 init_datasources(datasource_service)
 init_carica_service(connection_service)
 bind_router_services(_runtime_services, ORCHESTRATOR_BINDING)

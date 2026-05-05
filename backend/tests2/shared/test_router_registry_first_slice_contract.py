@@ -757,3 +757,212 @@ def test_router_registry_does_not_import_projects_router_at_top_level():
                 "app.core.projects.router must be imported lazily "
                 "inside the binding's init_fn thunk, not at module top"
             )
+
+
+# ---------------------------------------------------------------------------
+# 8. BE-GO-READY-BOOTSTRAP-ENGINE-021: arricchisci binding (2-arg slice)
+# ---------------------------------------------------------------------------
+
+
+def test_runtime_module_exposes_arricchisci_binding():
+    """``ARRICCHISCI_BINDING`` is part of the public registry surface."""
+    from app.runtime import ARRICCHISCI_BINDING, RouterBinding
+
+    assert isinstance(ARRICCHISCI_BINDING, RouterBinding)
+
+
+def test_arricchisci_binding_name_is_stable():
+    from app.runtime import ARRICCHISCI_BINDING
+
+    assert ARRICCHISCI_BINDING.name == "arricchisci"
+
+
+def test_arricchisci_extract_returns_two_typed_fields_in_order():
+    """The extract closure pulls
+    ``(project_service, api_connection_service)`` in that exact
+    positional order. Identity is preserved on both fields.
+    """
+    from app.runtime import ARRICCHISCI_BINDING
+
+    sentinel_proj = object()
+    sentinel_api = object()
+    fake_services = SimpleNamespace(
+        project_service=sentinel_proj,
+        api_connection_service=sentinel_api,
+    )
+
+    args = ARRICCHISCI_BINDING.extract(fake_services)
+
+    assert isinstance(args, tuple)
+    assert len(args) == 2
+    assert args[0] is sentinel_proj
+    assert args[1] is sentinel_api
+
+
+def test_arricchisci_init_fn_invokes_router_module_init(monkeypatch):
+    """The binding's ``init_fn`` resolves to
+    ``app.core.arricchisci.router.init_arricchisci`` and forwards its
+    positional args verbatim, in order.
+    """
+    from app.core.arricchisci import router as arricchisci_router_mod
+    from app.runtime import ARRICCHISCI_BINDING
+
+    captured: list = []
+
+    def _fake_init_arricchisci(project_service, api_connection_service):
+        captured.append((project_service, api_connection_service))
+
+    monkeypatch.setattr(
+        arricchisci_router_mod,
+        "init_arricchisci",
+        _fake_init_arricchisci,
+    )
+
+    sentinel_proj = object()
+    sentinel_api = object()
+    ARRICCHISCI_BINDING.init_fn(sentinel_proj, sentinel_api)
+
+    assert captured == [(sentinel_proj, sentinel_api)]
+
+
+def test_bind_arricchisci_passes_both_container_owned_instances_by_identity():
+    """Identity invariant for the 2-arg slice: BOTH values reach
+    ``init_fn`` by identity. The second arg is the wrap-don't-move
+    `api_connection_service` singleton (BOOTSTRAP-016) -- identity is
+    critical because it is the SAME object as the canonical
+    `app.core.arricchisci.api_connector.api_connection_service` and
+    several test patch sites depend on that.
+    """
+    from app.runtime import ARRICCHISCI_BINDING, bind_router_services
+
+    captured: list = []
+
+    def _spy_init(project_service, api_connection_service):
+        captured.append((project_service, api_connection_service))
+
+    sentinel_proj = object()
+    sentinel_api = object()
+    fake_services = SimpleNamespace(
+        project_service=sentinel_proj,
+        api_connection_service=sentinel_api,
+    )
+
+    spy_binding = type(ARRICCHISCI_BINDING)(
+        name=ARRICCHISCI_BINDING.name,
+        init_fn=_spy_init,
+        extract=ARRICCHISCI_BINDING.extract,
+    )
+
+    bind_router_services(fake_services, spy_binding)
+
+    assert len(captured) == 1
+    proj, api = captured[0]
+    assert proj is sentinel_proj
+    assert api is sentinel_api
+
+
+def test_bind_arricchisci_attribute_error_on_missing_api_field():
+    """Fail-fast: a typo / rename on either field surfaces as
+    ``AttributeError`` at startup."""
+    from app.runtime import ARRICCHISCI_BINDING, bind_router_services
+
+    incomplete_services = SimpleNamespace(project_service=object())
+
+    with pytest.raises(AttributeError):
+        bind_router_services(incomplete_services, ARRICCHISCI_BINDING)
+
+
+def test_bind_arricchisci_type_error_on_signature_drift():
+    """Fail-fast on signature drift: 2-arg extract vs 1-arg
+    ``init_fn`` substitute surfaces as ``TypeError`` at startup.
+    """
+    from app.runtime import ARRICCHISCI_BINDING, bind_router_services
+
+    def _one_arg_init(only_one):
+        pass
+
+    drift_binding = type(ARRICCHISCI_BINDING)(
+        name=ARRICCHISCI_BINDING.name,
+        init_fn=_one_arg_init,
+        extract=ARRICCHISCI_BINDING.extract,
+    )
+
+    fake_services = SimpleNamespace(
+        project_service=object(),
+        api_connection_service=object(),
+    )
+
+    with pytest.raises(TypeError):
+        bind_router_services(fake_services, drift_binding)
+
+
+def test_main_py_does_not_call_init_arricchisci_directly():
+    """``app/main.py`` must route the arricchisci init through the
+    registry. A direct call bypasses the typed binding."""
+    src = _read_source("app/main.py")
+
+    bad = "init_arricchisci(project_service, api_connection_service)"
+    assert bad not in src, (
+        "app/main.py should call the arricchisci init through "
+        "bind_router_services(_runtime_services, ARRICCHISCI_BINDING) "
+        "instead of init_arricchisci(project_service, api_connection_service)"
+    )
+
+
+def test_main_py_imports_the_arricchisci_binding():
+    """Positive lock: ``main.py`` imports ``ARRICCHISCI_BINDING``."""
+    src = _read_source("app/main.py")
+
+    assert "ARRICCHISCI_BINDING" in src, (
+        "app/main.py must import ARRICCHISCI_BINDING from app.runtime"
+    )
+
+
+def test_main_py_does_not_import_init_arricchisci():
+    """The router-side ``init_arricchisci`` symbol must no longer
+    appear in ``main.py``'s import list."""
+    src = _read_source("app/main.py")
+
+    tree = ast.parse(src)
+    imported_names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                imported_names.add(alias.asname or alias.name)
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                imported_names.add(alias.asname or alias.name)
+
+    assert "init_arricchisci" not in imported_names, (
+        "app/main.py must not import init_arricchisci directly; the "
+        "registry's lazy thunk imports it on demand"
+    )
+
+
+def test_arricchisci_router_does_not_import_from_main():
+    """Architectural lock: arricchisci router must not depend on
+    ``app.main``. Composition flows main -> runtime -> router."""
+    src = _read_source("app/core/arricchisci/router.py")
+    tree = ast.parse(src)
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            assert module != "app.main" and not module.startswith("app.main."), (
+                f"app/core/arricchisci/router.py must not import from "
+                f"app.main (found: {module})"
+            )
+
+
+def test_router_registry_does_not_import_arricchisci_router_at_top_level():
+    """The arricchisci router import must live inside the lazy thunk."""
+    src = _read_source("app/runtime/router_registry.py")
+    tree = ast.parse(src)
+
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            assert "arricchisci.router" not in module, (
+                "app.core.arricchisci.router must be imported lazily "
+                "inside the binding's init_fn thunk, not at module top"
+            )
