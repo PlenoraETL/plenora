@@ -82,6 +82,42 @@ sudo adduser --system --group --home /home/ubuntu --shell /bin/bash ubuntu
 
 Skip if the host already has the user.
 
+### 1.2 Verify host packages (post-apt)
+
+After the apt one-liner above, confirm the install actually
+landed every native binary the runtime needs. Each command
+exits non-zero if missing:
+
+```
+python3.11 --version    # Python 3.11.x
+pg_config --version     # PostgreSQL 17.x or 16.x
+psql --version
+redis-server --version  # 7.x or 6.x
+redis-cli --version
+gdalinfo --version      # GDAL 3.x.x (binds fiona/geopandas via ctypes)
+node --version          # LTS active line; package.json does NOT pin engines
+npm --version
+curl --version | head -n 1
+git --version
+```
+
+`scripts/install.sh --check` runs the equivalent probes
+non-interactively (see [install-marco-dry-run.md](install-marco-dry-run.md)
+section 3 for the Python-import + service-probe layer).
+
+> Distro target: the apt one-liner above is **Ubuntu 24.04
+> reference**. Ubuntu 22.04 / Debian 12 use the same package
+> names with possibly different majors. Fedora / RHEL use
+> different package names entirely (`gdal-devel`,
+> `postgresql-devel`) and are not in scope for this runbook.
+
+> `libmagic1` is in the apt list as a precautionary
+> inclusion. The runtime uses
+> [`filetype`](https://pypi.org/project/filetype/) which is
+> pure-Python and does NOT require libmagic. If `libmagic1`
+> is missing on the host, no Plenora-ETL runtime import
+> fails. Tracked at `requirements.txt:61`.
+
 ---
 
 ## 2. Provision PostgreSQL

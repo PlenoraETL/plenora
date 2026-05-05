@@ -222,15 +222,38 @@ def _dispatch_by_id(
 # settings imports, no domain-specific tempdir resolution; the engine
 # returns a raw stdlib tempfile path and the caller owns its lifecycle
 # via Resource.is_temporary=True).
+#
+# Path mode is FALLBACK-ONLY. The default for new consumers is bytes mode
+# (in-memory, no tempfile). Path mode exists for callers that
+# unavoidably need a filesystem path (e.g. legacy parsers that take
+# `str` paths only). The temp materialization is idempotent and
+# narrowly scoped: every materialized file carries the
+# ``plenora-result-blob-`` prefix so cleanup helpers can identify and
+# safely target only files this engine produced.
 # ---------------------------------------------------------------------------
+
+
+# Explicit prefix for every tempfile this engine writes. The prefix
+# is the audit/cleanup hook: a cleanup helper that refuses to touch
+# files NOT bearing this prefix is safe even when given an arbitrary
+# Path argument (defense-in-depth against accidental
+# `cleanup_temp_path("/etc/passwd")` calls). Stable string contract:
+# changing this prefix is a contract break.
+_RESULT_BLOB_TEMP_PREFIX = "plenora-result-blob-"
 
 
 def _materialize_to_temp_path(data: bytes) -> Path:
     """Write ``data`` to a fresh tempfile and return its Path.
 
-    Stdlib-only: ``tempfile.NamedTemporaryFile(delete=False)``. The
-    caller is responsible for cleanup (the loader returns
-    ``Resource(is_temporary=True)`` to signal that contract).
+    Stdlib-only: ``tempfile.NamedTemporaryFile(delete=False,
+    prefix=_RESULT_BLOB_TEMP_PREFIX)``. The caller is responsible for
+    cleanup (the loader returns ``Resource(is_temporary=True)`` to
+    signal that contract; ``cleanup_temp_path`` below is the safe
+    helper to do it).
+
+    The ``plenora-result-blob-`` prefix makes every materialized file
+    identifiable in `tempfile.gettempdir()` listings (operator audit)
+    and acts as the narrow guard for ``cleanup_temp_path``.
 
     Cleanup on write failure: the partial tempfile is closed and
     unlinked best-effort, then the original exception is re-raised.
@@ -247,7 +270,10 @@ def _materialize_to_temp_path(data: bytes) -> Path:
     ``tempfile`` honors transparently) or copy the result to their
     preferred root after the loader returns.
     """
-    tf = tempfile.NamedTemporaryFile(delete=False)
+    tf = tempfile.NamedTemporaryFile(
+        delete=False,
+        prefix=_RESULT_BLOB_TEMP_PREFIX,
+    )
     path = Path(tf.name)
     try:
         tf.write(data)
@@ -265,6 +291,69 @@ def _materialize_to_temp_path(data: bytes) -> Path:
     else:
         tf.close()
         return path
+
+
+def cleanup_temp_path(path: Path) -> bool:
+    """Best-effort delete of a tempfile materialized by
+    :func:`_materialize_to_temp_path`.
+
+    Narrow, stdlib-only cleanup helper. Refuses to delete anything
+    that does NOT match the engine's invariants:
+
+    1. The path's basename MUST start with ``plenora-result-blob-``.
+       Without this guard, an accidental
+       ``cleanup_temp_path(Path("/etc/passwd"))`` call could destroy
+       arbitrary files.
+    2. The path's resolved parent MUST be (or be inside) the stdlib
+       tempfile root (``tempfile.gettempdir()``). Without this guard,
+       a malicious / drifted prefix on a path outside `/tmp` would
+       still be deletable. The combination of (1) AND (2) is the
+       defense-in-depth contract.
+
+    Returns ``True`` on successful delete, ``False`` on guard
+    rejection or filesystem error. Never raises — the helper is
+    designed for use in worker / cleanup-hook contexts where any
+    exception would surface as a noisy log without aiding recovery.
+
+    Caller contract:
+      - ``Resource(is_temporary=True)`` is a SIGNAL that the caller
+        owns cleanup. This helper is the recommended way to honor
+        that contract.
+      - The helper does NOT scan the tempdir; it only operates on
+        the explicit path passed in. Bulk cleanup (e.g. a beat job
+        sweeping orphaned ``plenora-result-blob-*`` files) is OUT OF
+        SCOPE here — see the audit § "future cleanup sweep".
+    """
+    try:
+        # Defense 1: prefix check on basename.
+        name = path.name
+        if not name.startswith(_RESULT_BLOB_TEMP_PREFIX):
+            return False
+
+        # Defense 2: resolved parent must be inside the stdlib
+        # tempdir. We resolve both paths so symlinked tempdirs
+        # (macOS uses /private/var/folders) compare correctly.
+        try:
+            resolved_parent = path.resolve(strict=False).parent
+        except OSError:
+            return False
+        try:
+            tempdir_resolved = Path(tempfile.gettempdir()).resolve(strict=False)
+        except OSError:
+            return False
+        try:
+            resolved_parent.relative_to(tempdir_resolved)
+        except ValueError:
+            # Parent is NOT under the tempdir — refuse.
+            return False
+
+        # Both guards passed; delete (idempotent).
+        if not path.exists():
+            return False
+        _os.unlink(path)
+        return True
+    except Exception:
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -379,4 +468,4 @@ class ResultBlobLoader:
         )
 
 
-__all__ = ["ResultBlobLoader"]
+__all__ = ["ResultBlobLoader", "cleanup_temp_path"]

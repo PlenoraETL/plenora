@@ -313,22 +313,45 @@ from app.core.auth.ownership import group_filter  # noqa: F401
 # ============================================================
 #
 # STRUCT-005 Seam B': i 6 helper puri vivono in `app.core.auth.ownership`.
-# Qui restano i re-export per backward-compat con i 17 router che fanno
-# `from app.core.auth.auth import assert_group_access, …`.
 #
-# Le 3 dependency FastAPI `require_*_owner` restano invece in questo
-# modulo perche' usano `Depends(get_current_user)`: spostarle in
-# ownership.py creerebbe un cycle `auth.py ↔ ownership.py`. Sono thin
-# wrapper che chiamano `_check_ownership` (re-esportato qui sotto).
+# BE-GO-READY-AUTH-ENGINE-019-OWNERSHIP-REEXPORT-REMOVAL:
+# 4 re-export rimossi dopo audit: `_extract_group_and_id`,
+# `assert_group_access`, `compute_can_edit`, `assert_can_modify`.
+# Tutti i 6 router production (files / arricchisci / features /
+# connections / datasources / eseguibili) gia' importano gli helper
+# dal leaf `app.core.auth.ownership` (Phase-7/8 contract fan-out
+# completati). Grep di `from app.core.auth.auth import <name>` per
+# i 4 nomi rimossi: zero hit fuori da docstring / contract test
+# (che e' aggiornato in tandem con questo stream).
+#
+# Restano due re-export, ognuno con motivazione esplicita:
+#
+#   - `_check_ownership`: usato INTERNAMENTE dai 3 wrapper
+#     `require_*_owner` qui sotto. Non e' superficie pubblica, ma
+#     l'import deve esserci perche' i wrapper lo chiamano.
+#
+#   - `assert_resource_visible`: Phase-2 residual lockato dal test
+#     `test_phase2_imdf_lazy_assert_resource_visible_kept_on_facade_residual`.
+#     `app/core/imdf/router.py:140` ha un body-local lazy
+#     `from app.core.auth.auth import assert_resource_visible`,
+#     e 2 test files (`test_imdf_security_contract.py`,
+#     `test_imdf_bundles_management_contract.py`) monkeypatchano
+#     `auth_mod.assert_resource_visible`. La migrazione di IMDF al
+#     leaf e' owned dallo stream
+#     `BE-GO-READY-AUTH-ENGINE-XXX-IMDF-OWNERSHIP-MIGRATION` (R-019.1).
+#
+# Le 3 dependency FastAPI `require_*_owner` restano in questo modulo
+# perche' usano `Depends(get_current_user)`: spostarle in
+# ownership.py creerebbe un cycle `auth.py ↔ ownership.py`. Sono
+# thin wrapper che chiamano `_check_ownership`.
 
-from app.core.auth.ownership import (  # noqa: F401  (re-export pubblico)
-    _extract_group_and_id,
-    assert_group_access,
-    compute_can_edit,
-    assert_can_modify,
-    assert_resource_visible,
-    _check_ownership,
-)
+# Internal-only: usato dai 3 require_*_owner sotto.
+from app.core.auth.ownership import _check_ownership  # noqa: F401
+
+# KEEP_COMPAT (Phase-2 residual R-019.1): IMDF router lazy + 2
+# test files monkeypatchano `auth_mod.assert_resource_visible`.
+# Owner: `BE-GO-READY-AUTH-ENGINE-XXX-IMDF-OWNERSHIP-MIGRATION`.
+from app.core.auth.ownership import assert_resource_visible  # noqa: F401
 
 
 def require_project_owner(

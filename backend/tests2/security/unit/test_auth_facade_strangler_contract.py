@@ -1325,3 +1325,188 @@ def test_phase12_app_workers_no_pure_dto_imports_from_facade():
         "exists for test monkey-patch contracts, but production "
         "consumers must route through the contract module."
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase-13 (BE-GO-READY-AUTH-ENGINE-019) ownership re-export removal
+# ---------------------------------------------------------------------------
+#
+# Stream 019 removed 4 ownership helper re-exports from the facade
+# (`app.core.auth.auth`):
+#
+#   - `_extract_group_and_id`
+#   - `assert_group_access`
+#   - `compute_can_edit`
+#   - `assert_can_modify`
+#
+# Audit findings: zero callsites in `app/` or `tests2/` depended on
+# facade identity for any of these. All 6 production routers that
+# consume ownership helpers (files / arricchisci / features /
+# connections / datasources / eseguibili) already import from the
+# leaf `app.core.auth.ownership` (Phase-7/8 contract fan-out
+# completed). `app.shared.authz_helpers` likewise imports from the
+# leaf.
+#
+# The 2 remaining ownership re-exports on the facade are documented:
+#
+#   - `assert_resource_visible`: Phase-2 imdf residual (locked by
+#     `test_phase2_imdf_lazy_assert_resource_visible_kept_on_facade_residual`);
+#     `app/core/imdf/router.py:140` body-local lazy import + 2 IMDF
+#     test files monkeypatch `auth_mod.assert_resource_visible`.
+#     Owner: `BE-GO-READY-AUTH-ENGINE-XXX-IMDF-OWNERSHIP-MIGRATION` (R-019.1).
+#   - `_check_ownership`: internal use by the 3 `require_*_owner`
+#     wrappers in `auth.py`; not a public API.
+
+_PHASE13_REMOVED_OWNERSHIP_NAMES = frozenset(
+    {
+        "_extract_group_and_id",
+        "assert_group_access",
+        "compute_can_edit",
+        "assert_can_modify",
+    }
+)
+
+
+def _scan_facade_imports_of(
+    roots: tuple[Path, ...], banned_names: frozenset[str]
+) -> dict[str, list[tuple[int, str]]]:
+    """Walk every .py under each root and collect facade imports
+    that pull a name in `banned_names`.
+
+    Returns a dict keyed by relative path -> list of (lineno, name).
+    """
+    hits: dict[str, list[tuple[int, str]]] = {}
+    for root in roots:
+        for path in root.rglob("*.py"):
+            if "__pycache__" in path.parts:
+                continue
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            try:
+                tree = ast.parse(text, filename=str(path))
+            except SyntaxError:
+                continue
+            file_hits: list[tuple[int, str]] = []
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom) and node.module == _FACADE_MODULE:
+                    for alias in node.names:
+                        if alias.name in banned_names:
+                            file_hits.append((node.lineno, alias.name))
+            if file_hits:
+                rel = str(path.relative_to(_BACKEND_ROOT)).replace("\\", "/")
+                hits[rel] = file_hits
+    return hits
+
+
+def test_phase13_no_facade_import_of_removed_ownership_names_in_app():
+    """Source-bound: NO file under `app/` (excluding `auth.py`
+    itself, which sources them locally) may do
+    `from app.core.auth.auth import <removed_name>`.
+
+    Every router / shared / service must consume ownership helpers
+    from the leaf `app.core.auth.ownership`. The 4 removed names
+    cannot be re-introduced as a facade import without this lock
+    catching it at CI time.
+    """
+    hits = _scan_facade_imports_of(
+        (_APP,), _PHASE13_REMOVED_OWNERSHIP_NAMES
+    )
+    # `app/core/auth/auth.py` itself imports from the leaf and may
+    # legitimately mention these names as a local target (it does
+    # not — they were removed in 019 — but we explicitly allowlist
+    # the file so a future internal reuse is not blocked).
+    hits.pop("app/core/auth/auth.py", None)
+
+    assert not hits, (
+        "BE-GO-READY-AUTH-ENGINE-019 regression: file(s) under app/ "
+        "import removed ownership names from the facade:\n"
+        + "\n".join(
+            f"  {rel}: " + "; ".join(
+                f"line {ln} import {nm}" for (ln, nm) in lh
+            )
+            for rel, lh in sorted(hits.items())
+        )
+        + "\nImport from `app.core.auth.ownership` instead."
+    )
+
+
+def test_phase13_no_facade_import_of_removed_ownership_names_in_tests():
+    """Symmetric lock for the test surface. Tests may legitimately
+    monkeypatch via `*_router_module.<helper>` (already widespread)
+    or directly call `ownership.<helper>`. They must NOT re-introduce
+    `from app.core.auth.auth import <removed_name>`.
+
+    Allowlist: the strangler-contract test file mentions the names
+    in docstrings + parametrize lists and is excluded.
+    """
+    tests_root = _BACKEND_ROOT / "tests2"
+    hits = _scan_facade_imports_of(
+        (tests_root,), _PHASE13_REMOVED_OWNERSHIP_NAMES
+    )
+    # The strangler-contract test files (this file + the smoke
+    # contract) reference the removed names in docstrings and lists
+    # but never via facade ImportFrom; the AST scan filters those
+    # already. Defensive allowlist in case a new contract test
+    # legitimately exercises the removal.
+    allowlist = {
+        "tests2/security/unit/test_auth_facade_strangler_contract.py",
+        "tests2/security/unit/test_auth_models_and_ownership_module_contract.py",
+    }
+    hits = {rel: lh for rel, lh in hits.items() if rel not in allowlist}
+
+    assert not hits, (
+        "BE-GO-READY-AUTH-ENGINE-019 regression: test file(s) "
+        "import removed ownership names from the facade:\n"
+        + "\n".join(
+            f"  {rel}: " + "; ".join(
+                f"line {ln} import {nm}" for (ln, nm) in lh
+            )
+            for rel, lh in sorted(hits.items())
+        )
+        + "\nImport from `app.core.auth.ownership` directly, or "
+        "monkeypatch via the consuming router module."
+    )
+
+
+def test_phase13_facade_does_not_expose_removed_ownership_names():
+    """Runtime defense-in-depth: `app.core.auth.auth` MUST NOT
+    expose the 4 removed names as module attributes. Catches a
+    diff that re-introduces the import block silently.
+    """
+    import importlib
+
+    auth_mod = importlib.import_module("app.core.auth.auth")
+    leaked = sorted(
+        n for n in _PHASE13_REMOVED_OWNERSHIP_NAMES if hasattr(auth_mod, n)
+    )
+    assert not leaked, (
+        f"BE-GO-READY-AUTH-ENGINE-019 regression: "
+        f"`app.core.auth.auth` re-exposes removed names: {leaked}. "
+        "Importare da `app.core.auth.ownership` invece."
+    )
+
+
+def test_phase13_facade_still_exposes_residual_ownership_names():
+    """Symmetric positive lock for the 2 ownership names that REMAIN
+    on the facade (Phase-2 imdf residual + internal use). If these
+    disappear, IMDF tests + `require_*_owner` wrappers break.
+    """
+    import importlib
+
+    auth_mod = importlib.import_module("app.core.auth.auth")
+    ownership_mod = importlib.import_module("app.core.auth.ownership")
+
+    for name in ("assert_resource_visible", "_check_ownership"):
+        facade_obj = getattr(auth_mod, name, None)
+        leaf_obj = getattr(ownership_mod, name, None)
+        assert facade_obj is not None, (
+            f"app.core.auth.auth.{name} disappeared. This breaks "
+            "Phase-2 imdf residual contract (assert_resource_visible) "
+            "or `require_*_owner` internal wiring (_check_ownership)."
+        )
+        assert facade_obj is leaf_obj, (
+            f"app.core.auth.auth.{name} drifted from "
+            f"app.core.auth.ownership.{name} (identity invariant lost)."
+        )

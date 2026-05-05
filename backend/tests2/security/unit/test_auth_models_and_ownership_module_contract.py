@@ -40,6 +40,9 @@ _MODELS = (
     "MFAStatusResponse",
 )
 
+# Full set of 6 helpers: ALL must live in the canonical leaf
+# `app.core.auth.ownership`. Adding a 7th helper here is a
+# contract change.
 _OWNERSHIP_HELPERS = (
     "_extract_group_and_id",
     "assert_group_access",
@@ -47,6 +50,25 @@ _OWNERSHIP_HELPERS = (
     "assert_can_modify",
     "assert_resource_visible",
     "_check_ownership",
+)
+
+# BE-GO-READY-AUTH-ENGINE-019-OWNERSHIP-REEXPORT-REMOVAL:
+# subset still re-exported from `app.core.auth.auth` for
+# KEEP_COMPAT. The other 4 (`_extract_group_and_id`,
+# `assert_group_access`, `compute_can_edit`, `assert_can_modify`)
+# have ZERO callsites depending on facade identity (verified by
+# grep across `app/` + `tests2/`) and are no longer re-exported.
+# `assert_resource_visible` stays for Phase-2 imdf residual;
+# `_check_ownership` stays for internal use by `require_*_owner`.
+_FACADE_REEXPORTED_OWNERSHIP_HELPERS = (
+    "assert_resource_visible",
+    "_check_ownership",
+)
+_FACADE_NO_LONGER_REEXPORTED = (
+    "_extract_group_and_id",
+    "assert_group_access",
+    "compute_can_edit",
+    "assert_can_modify",
 )
 
 
@@ -83,18 +105,60 @@ def test_auth_reexports_models_with_object_identity():
         )
 
 
-def test_auth_reexports_ownership_helpers_with_object_identity():
-    """Stesso contratto per gli helper ownership: identita' garantita,
-    cosi' chi ha gia' fatto `from app.core.auth.auth import assert_group_access`
-    continua a vedere la funzione vera, e i monkeypatch su `auth_mod.X`
-    si comportano come prima.
+def test_auth_reexports_remaining_ownership_helpers_with_object_identity():
+    """Identity contract per gli helper ownership ANCORA re-esportati
+    dal facade dopo BE-GO-READY-AUTH-ENGINE-019-OWNERSHIP-REEXPORT-REMOVAL.
+
+    Solo `assert_resource_visible` (Phase-2 imdf residual) e
+    `_check_ownership` (uso interno dai 3 `require_*_owner`)
+    restano sul facade. Per quei 2 nomi, identita' garantita:
+    `auth_mod.X is ownership.X`.
     """
     from app.core.auth import auth as auth_mod
     from app.core.auth import ownership
 
-    for name in _OWNERSHIP_HELPERS:
+    for name in _FACADE_REEXPORTED_OWNERSHIP_HELPERS:
         assert getattr(auth_mod, name) is getattr(ownership, name), (
-            f"auth.{name} e ownership.{name} dovrebbero essere lo stesso oggetto"
+            f"auth.{name} e ownership.{name} dovrebbero essere lo stesso "
+            "oggetto (residual re-export ancora supportato)"
+        )
+
+
+def test_auth_no_longer_reexports_removed_ownership_helpers():
+    """BE-GO-READY-AUTH-ENGINE-019: 4 helper rimossi dal facade
+    (`_extract_group_and_id`, `assert_group_access`,
+    `compute_can_edit`, `assert_can_modify`). Devono NON essere
+    accessibili come attributi del modulo `app.core.auth.auth`.
+
+    Conseguenza: `from app.core.auth.auth import <name>` solleva
+    `ImportError` e `auth_mod.<name>` solleva `AttributeError`.
+    Tutti i consumer production (6 router) gia' importano dal leaf.
+    """
+    from app.core.auth import auth as auth_mod
+
+    for name in _FACADE_NO_LONGER_REEXPORTED:
+        assert not hasattr(auth_mod, name), (
+            f"app.core.auth.auth.{name} e' stato rimosso da "
+            "BE-GO-READY-AUTH-ENGINE-019. Se questa asserzione "
+            "fallisce, qualcuno ha re-introdotto il re-export. "
+            "Importare da `app.core.auth.ownership` invece."
+        )
+
+
+def test_auth_no_longer_reexports_removed_ownership_helpers_via_import():
+    """Defense-in-depth: `from app.core.auth.auth import <removed>`
+    deve sollevare `ImportError`. Lock simmetrico al precedente.
+    """
+    import importlib
+
+    auth_mod = importlib.import_module("app.core.auth.auth")
+    # Force module attribute access via __dict__ lookup (mirrors what
+    # `from ... import` does internally).
+    for name in _FACADE_NO_LONGER_REEXPORTED:
+        assert name not in auth_mod.__dict__, (
+            f"`from app.core.auth.auth import {name}` is no longer "
+            "supported after BE-GO-READY-AUTH-ENGINE-019. "
+            "Importare da `app.core.auth.ownership` invece."
         )
 
 

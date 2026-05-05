@@ -284,13 +284,183 @@ optional for a first PC test - skip them.
 
 ---
 
-## 3. Failure triage checklist
+## 3. Native dependency verification
+
+`BE-GO-READY-INSTALLATION-025-LINUX-NATIVE-DEPS-VERIFY`.
+
+After step 2.1 (apt install) AND step 2.6 (venv +
+`pip install -r requirements.txt`), run the probes below to
+confirm every native binary AND every Python wheel that
+binds to a native shared library is actually importable on
+the host. Each probe prints a version string on success and
+exits non-zero on failure - they are safe to copy/paste in
+any order.
+
+> **Distro target**: the apt one-liner in step 2.1 is
+> Ubuntu 24.04 specific. Ubuntu 22.04 / Debian 12 use the
+> same package names with possibly different major
+> versions for `postgresql-*`. Fedora / RHEL use different
+> package names entirely (`gdal-devel`, `postgresql-devel`,
+> etc.) - those are NOT in scope for this dry-run pack;
+> stick to Ubuntu/Debian for the first PC test.
+
+### 3.1 OS binaries (run after step 2.1)
+
+```bash
+# Python
+python3.11 --version
+# expect: Python 3.11.x
+
+# Postgres (server + client)
+pg_config --version
+# expect: PostgreSQL 17.x (or 16.x if Ubuntu default is kept)
+psql --version
+# expect: psql (PostgreSQL) 17.x (matched to server major)
+
+# Redis (server + client)
+redis-server --version
+# expect: Redis server v=7.x.x ... (or 6.x; both work)
+redis-cli --version
+# expect: redis-cli 7.x.x
+
+# GDAL (geo stack used by fiona / geopandas via ctypes)
+gdalinfo --version
+# expect: GDAL 3.x.x ...
+
+# Node + npm (frontend build)
+node --version
+# expect: v20.x or v22.x (LTS active line; package.json does
+# NOT pin engines, the LTS is the operational baseline)
+npm --version
+
+# Other CLI prereqs
+curl --version | head -n 1
+git --version
+```
+
+If `gdalinfo` is missing on a host that supposedly installed
+`libgdal-dev`, the most common cause is a partial apt
+install: re-run the apt one-liner in step 2.1 with `-y` AND
+without any `--no-install-recommends` flag.
+
+### 3.2 Python imports inside the venv (run after step 2.6)
+
+This probe is the same surface that
+`scripts/install.sh --check` runs in `step_validate_packaging`
+when `backend/venv/` already exists. Running it manually
+post-install gives Marco an explicit signal that every wheel
+binding to a native shared library actually loads:
+
+```bash
+cd ~/plenora-etl/backend
+./venv/bin/python - <<'PYEOF'
+import importlib
+import sys
+
+modules = (
+    # Web stack
+    "fastapi", "uvicorn", "starlette", "pydantic",
+    # PG client (psycopg2-binary bundles libpq)
+    "psycopg2",
+    # Redis client (pure-Python)
+    "redis",
+    # Celery + kombu
+    "celery", "kombu",
+    # Geo / dataframe stack (fiona binds GDAL via ctypes;
+    # geopandas + shapely use it transitively)
+    "fiona", "geopandas", "shapely", "pyarrow", "pandas",
+    # MIME sniffing - filetype is pure-Python, NO libmagic
+    # dependency. We import it explicitly so a future
+    # accidental swap to python-magic surfaces here.
+    "filetype",
+    # Misc deps that touch the network or the FS
+    "boto3", "requests", "httpx", "paramiko",
+    "cryptography",
+)
+
+failures = []
+for m in modules:
+    try:
+        importlib.import_module(m)
+    except Exception as exc:
+        failures.append((m, type(exc).__name__, str(exc)))
+
+if failures:
+    for m, etype, emsg in failures:
+        print(f"FAIL {m}: {etype}: {emsg}")
+    sys.exit(1)
+
+print(f"OK: {len(modules)} runtime modules import cleanly")
+PYEOF
+```
+
+Notes:
+
+- **`fiona` is NOT a direct entry in `requirements.txt`** -
+  it is pulled in transitively by `geopandas>=1.1.0`. If the
+  probe above fails on `fiona` import after a successful
+  `pip install -r requirements.txt`, the most likely cause
+  is an ABI mismatch between the `geopandas` wheel and the
+  `gdalinfo` major version. Fix: stick to a manylinux wheel
+  (`pip install --only-binary :all: geopandas fiona`).
+- **`libmagic` is intentionally NOT verified.**
+  `requirements.txt:61` documents `filetype>=1.2.0` as
+  "MIME sniffing pure-Python (no libmagic dep)". The apt
+  one-liner in step 2.1 includes `libmagic1` as a
+  precautionary inclusion only; if it is missing on the
+  host, NO Plenora-ETL runtime import fails. Do NOT add a
+  `libmagic` verification.
+- **`psycopg2-binary` bundles libpq**: the wheel ships with
+  its own libpq.so. The OS-level `psql` and `pg_config`
+  checks above are for the *backup unit* (`pg_dump` /
+  `pg_restore`) and for `pg_hba.conf` operator visibility,
+  NOT for the application import path.
+
+### 3.3 Service probes (run after step 2.2 + 2.3)
+
+Already part of the command sequence (step 2.2 Postgres
+probe, step 2.3 Redis probe, step 2.4 `--check` runs both).
+Reproduced here as the canonical verification commands so a
+post-install sanity sweep is one place to find them:
+
+```bash
+# Postgres reachable + role privileges OK
+psql "postgresql://plenora:plenora@127.0.0.1:5432/plenora" \
+    -c "SELECT current_user, current_database(), version();"
+# expect: 1 row with user=plenora, database=plenora,
+#         server version 17.x or 16.x
+
+# Postgres role can CREATE on the DB (required by schema autocreate)
+psql "postgresql://plenora:plenora@127.0.0.1:5432/plenora" \
+    -c "SELECT has_database_privilege('plenora', 'CREATE');"
+# expect: t
+
+# Redis reachable
+redis-cli -u redis://127.0.0.1:6379/0 PING
+# expect: PONG
+
+# Redis selected DB is writable (broker / result backend / leader-lock)
+redis-cli -u redis://127.0.0.1:6379/0 SET plenora:smoke ok
+redis-cli -u redis://127.0.0.1:6379/0 GET plenora:smoke
+redis-cli -u redis://127.0.0.1:6379/0 DEL plenora:smoke
+# expect: OK / ok / 1
+```
+
+If the `has_database_privilege` probe returns `f`, the role
+will fail at `migrations_runner.ensure_schema(DB_SCHEMA)`
+during the first uvicorn boot. Re-run the role creation in
+step 2.2 with `CREATEDB` (the script there already does -
+double-check for typos).
+
+---
+
+## 4. Failure triage checklist
 
 If any step fails, check this in order. The four boot gates
 log loudly: `journalctl` (or the foreground terminal output)
 will say which one tripped.
 
-### 3.1 `scripts/install.sh --check` FAIL
+### 4.1 `scripts/install.sh --check` FAIL
 
 | Symptom | Fix |
 |---|---|
@@ -300,7 +470,7 @@ will say which one tripped.
 | `shared lib 'gdal' NOT found` | `sudo apt install libgdal-dev` (step 2.1 covers it) |
 | `pg_dump not found` | `sudo apt install postgresql-client-NN` matched to server major; warn-only - the install proceeds |
 
-### 3.2 `bash scripts/install.sh --non-interactive` FAIL
+### 4.2 `bash scripts/install.sh --non-interactive` FAIL
 
 | Symptom | Fix |
 |---|---|
@@ -309,7 +479,7 @@ will say which one tripped.
 | `Missing /path/.env.example` | wrong CWD - run `bash scripts/install.sh` from the repo root |
 | `--check` passes but install hangs | likely an interactive prompt - re-run with `--non-interactive` and the `PLENORA_INSTALL_*` env vars |
 
-### 3.3 Foreground uvicorn FAIL
+### 4.3 Foreground uvicorn FAIL
 
 The four boot gates fire in this order; whichever first
 prints `[ERROR]`/`SystemExit` is the one to fix.
@@ -321,7 +491,7 @@ prints `[ERROR]`/`SystemExit` is the one to fix.
 | `init_all_dbs` -> migrations | `permission denied for schema "plenora"` | role missing `CREATE` on DB; re-run the `CREATE USER ... CREATEDB` SQL from step 2.2 |
 | `_repair_psycopg2_ssl_env` | rare, log self-explanatory | usually a downstream symptom of a failed `init_all_dbs` |
 
-### 3.4 Foreground celery worker FAIL
+### 4.4 Foreground celery worker FAIL
 
 Same four boot gates run via `worker_init` signal. Most
 common new failure here:
@@ -331,7 +501,7 @@ common new failure here:
 - `psycopg2.OperationalError: ...` -> Postgres unreachable
   by the worker process (separate connection from API).
 
-### 3.5 Foreground celery beat FAIL
+### 4.5 Foreground celery beat FAIL
 
 - `[LEADER] Redis non raggiungibile` -> Redis down. Beat
   goes to standby; tick is a no-op until Redis is back.
@@ -339,7 +509,7 @@ common new failure here:
   -> standby due to leader-lock contention. Ensure no other
   beat process is running.
 
-### 3.6 `/health` returns 200 but `/ready` returns 503
+### 4.6 `/health` returns 200 but `/ready` returns 503
 
 Read the failing check name from the response body:
 
@@ -350,7 +520,7 @@ Read the failing check name from the response body:
 | `object_storage` | only fires on `STORAGE_POLICY != db`. For first PC test stay on `db`. |
 | `reconciliation_backlog` | only fires when `pending` or `lost` cross threshold. Fresh DB cannot trip this. |
 
-### 3.7 Total reset (DESTRUCTIVE - first PC test only)
+### 4.7 Total reset (DESTRUCTIVE - first PC test only)
 
 If the install is completely stuck and Marco wants to start
 over, this wipes EVERYTHING the install created. Do NOT run
@@ -379,7 +549,7 @@ rm -f  ~/plenora-etl/backend/.env
 
 ---
 
-## 4. What is NOT in this dry-run pack
+## 5. What is NOT in this dry-run pack
 
 For each below, the answer for the first PC test is "skip;
 not needed":
@@ -400,7 +570,7 @@ not needed":
 
 ---
 
-## 5. Related docs
+## 6. Related docs
 
 - [install-non-docker.md section 13](install-non-docker.md#13-operator-quick-reference-checklist-real-linux-pc-test)
   - the full reference checklist with decision matrix and
