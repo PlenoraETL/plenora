@@ -18,7 +18,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi import HTTPException
 
-from app.core.auth.auth import CurrentUser
+from app.shared.contracts.auth import CurrentUser
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]

@@ -21,11 +21,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.core.auth.auth import (
-    CurrentUser,
-    require_not_esecutore,
-    get_current_user,
-)
+from app.shared.contracts.auth import CurrentUser
+from app.core.auth.auth import require_not_esecutore, get_current_user
 from app.core.orchestrator.router import pipeline_router
 
 

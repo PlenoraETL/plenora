@@ -415,7 +415,12 @@ from app.core.scheduler.router import router as schedules_router
 from app.core.orchestrator.router import pipeline_router, tasks_router
 from app.core.logs.router import router as logs_router
 from app.core.logs.runs_router import router as runs_router
-from app.core.datasources.router import router as datasources_router, init_datasources
+# BE-GO-READY-BOOTSTRAP-ENGINE-022: `init_datasources` ora viene
+# invocata via `DATASOURCES_BINDING` nel typed router registry
+# (vedi linea ~445). Il direct import qui sotto e' rimosso —
+# l'unica importazione necessaria e' il `router` per il
+# `app.include_router(...)` piu' avanti.
+from app.core.datasources.router import router as datasources_router
 from app.core.intermediate.router import router as intermediate_router
 # BE-GO-READY-BOOTSTRAP-ENGINE-017: `datasource_service` is now
 # bound at module-top from the runtime container (see line ~395).
@@ -430,22 +435,23 @@ from app.core.admin_system_status.router import router as admin_system_status_ro
 from app.core.tickets.router import router as tickets_router
 
 # Inizializza moduli che necessitano di servizi
-# BE-GO-READY-BOOTSTRAP-ENGINE-018/019/020/021-ROUTER-REGISTRY:
-# connections, projects, arricchisci and orchestrator init flow
-# through the typed registry. Order preserved: connections, projects,
-# arricchisci, datasources, carica, orchestrator. Streams 022-023
-# will migrate the remaining 2 init_* calls (datasources, carica).
+# BE-GO-READY-BOOTSTRAP-ENGINE-018/019/020/021/022-ROUTER-REGISTRY:
+# connections, projects, arricchisci, datasources, and orchestrator
+# init flow through the typed registry. Order preserved: connections,
+# projects, arricchisci, datasources, carica, orchestrator. Stream
+# 023 will migrate the remaining `init_carica_service` call.
 from app.runtime.router_registry import (
     bind_router_services,
     ARRICCHISCI_BINDING,
     CONNECTIONS_BINDING,
+    DATASOURCES_BINDING,
     ORCHESTRATOR_BINDING,
     PROJECTS_BINDING,
 )
 bind_router_services(_runtime_services, CONNECTIONS_BINDING)
 bind_router_services(_runtime_services, PROJECTS_BINDING)
 bind_router_services(_runtime_services, ARRICCHISCI_BINDING)
-init_datasources(datasource_service)
+bind_router_services(_runtime_services, DATASOURCES_BINDING)
 init_carica_service(connection_service)
 bind_router_services(_runtime_services, ORCHESTRATOR_BINDING)
 # features: usa lazy init interno, nessuna init_* necessaria

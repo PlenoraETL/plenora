@@ -26,7 +26,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.core.auth.auth import CurrentUser, require_admin, require_not_esecutore
+from app.shared.contracts.auth import CurrentUser
+from app.core.auth.auth import require_admin, require_not_esecutore
 from app.core.datasources import router as ds_router_module
 from app.core.datasources.router import router as ds_router
 

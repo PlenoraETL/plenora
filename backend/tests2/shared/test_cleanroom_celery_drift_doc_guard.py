@@ -61,9 +61,11 @@ def drift_section(doc_text: str) -> str:
     if _DRIFT_SECTION_HEADER not in doc_text:
         return ""
     start = doc_text.index(_DRIFT_SECTION_HEADER)
-    # Section ends at the next top-level `---` separator before
-    # the `## 13. Related docs` header.
-    end_marker = "\n---\n\n## 13. Related docs"
+    # Section 12.8 ends at the next H2 - which is `## 13.`
+    # (Operator quick-reference checklist) since
+    # INSTALLATION-023 renumbered the related-docs anchor to
+    # `## 14.`.
+    end_marker = "\n## 13."
     end = doc_text.find(end_marker, start)
     if end == -1:
         end = len(doc_text)

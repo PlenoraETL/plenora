@@ -34,7 +34,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.core.auth.auth import CurrentUser, require_admin, require_not_esecutore
+from app.shared.contracts.auth import CurrentUser
+from app.core.auth.auth import require_admin, require_not_esecutore
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.regression]

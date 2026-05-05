@@ -26,7 +26,7 @@ import app.db.db_service  # noqa: F401
 import app.core.auth.auth  # noqa: F401
 import app.core.imdf.router as imdf_router  # noqa: F401
 
-from app.core.auth.auth import CurrentUser
+from app.shared.contracts.auth import CurrentUser
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
 

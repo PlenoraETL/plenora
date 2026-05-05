@@ -28,7 +28,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.core.auth.auth import CurrentUser, require_admin
+from app.shared.contracts.auth import CurrentUser
+from app.core.auth.auth import require_admin
 from app.core.arricchisci import router as arric_router_module
 from app.core.arricchisci.router import api_connections_router
 

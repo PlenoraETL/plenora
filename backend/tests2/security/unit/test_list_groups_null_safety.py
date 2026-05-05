@@ -15,7 +15,8 @@ from unittest.mock import patch
 
 import pytest
 
-from app.core.auth.auth import list_groups, CurrentUser
+from app.shared.contracts.auth import CurrentUser
+from app.core.auth.auth import list_groups
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]

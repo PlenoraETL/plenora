@@ -5,7 +5,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.core.auth.auth import CurrentUser, require_not_esecutore
+from app.shared.contracts.auth import CurrentUser
+from app.core.auth.auth import require_not_esecutore
 from app.core.arricchisci.router import enrichment_router
 
 
@@ -135,7 +136,7 @@ def test_load_request_data_prefers_file_source_over_project_id():
     Era la regola del wrapper helper `load_data` rimosso, ora
     enforced inline da `_load_request_data`."""
     from app.core.arricchisci.router import _load_request_data
-    from app.core.auth.auth import CurrentUser
+    from app.shared.contracts.auth import CurrentUser
 
     request = SimpleNamespace(file_source_id="fs-1", project_id="proj-1")
     user = CurrentUser(user_id="u", username="t", group_id="grp-1", role="admin")
@@ -156,7 +157,7 @@ def test_load_request_data_prefers_file_source_over_project_id():
 def test_load_request_data_returns_none_when_no_source_specified():
     """Niente file_source_id ne' project_id → None, niente errore."""
     from app.core.arricchisci.router import _load_request_data
-    from app.core.auth.auth import CurrentUser
+    from app.shared.contracts.auth import CurrentUser
 
     request = SimpleNamespace(file_source_id=None, project_id=None)
     user = CurrentUser(user_id="u", username="t", group_id="grp-1", role="admin")

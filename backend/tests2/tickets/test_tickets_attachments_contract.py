@@ -22,7 +22,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.core.auth.auth import CurrentUser
+from app.shared.contracts.auth import CurrentUser
 from app.core.tickets.router import _require_not_esecutore, router as tickets_router
 
 

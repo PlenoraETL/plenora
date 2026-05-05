@@ -1043,7 +1043,338 @@ These remain explicitly NOT pursued by future closure streams:
 
 ---
 
-## 13. Related docs
+## 13. Operator quick-reference checklist (real Linux PC test)
+
+`BE-GO-READY-INSTALLATION-023-CLEAN-INSTALL-DOCKER-SINGLE-MACHINE-CHECKLIST`.
+
+This section is the operator-facing index for a real first-time
+install on a Linux PC (Ubuntu 24.04 reference). It is a compact
+checklist anchored to the detailed sections above; do NOT use it
+as a standalone install procedure - cross-link to the full
+sections for every item.
+
+### 13.1 Path A: Docker / compose
+
+> **NOT INSTALLABLE TODAY.** No `Dockerfile`, no
+> `docker-compose.yml`, no Helm/K8s manifest exists in the repo.
+> An operator with Docker installed CANNOT install Plenora-ETL
+> via `docker compose up`. See
+> [install-docker.md](install-docker.md) for the target shape
+> the future Docker batch must satisfy
+> (`INSTALLATION-010..013`).
+
+If the operator's PC has Docker installed but is performing a
+real first-time install today, the Docker tooling is NOT
+sufficient on its own. The operator MUST follow Path B below.
+Having Docker installed does not change the install procedure.
+
+### 13.2 Path B: Single-machine, no Docker (canonical, INSTALLABLE today)
+
+Go in this order. Each step links to its detailed reference
+section. Skipping or reordering steps will fail one of the four
+boot gates (`Settings.validate_startup` ->
+`validate_storage_config` ->
+`init_all_dbs`+`apply_pending_migrations` ->
+`_repair_psycopg2_ssl_env`, see
+[section 0](#0-acceptance-criteria)).
+
+#### 13.2.1 Pre-install operator decisions
+
+Resolve these BEFORE running any command. Each decision is
+locked in `backend/.env` later; fix-then-rerun is supported by
+`scripts/install.sh` thanks to the idempotent merger
+(INSTALLATION-012), but knowing the answers up front shortens
+the install to a single pass.
+
+| Decision | Options | Default for first-time PC | Reference |
+|---|---|---|---|
+| `ENVIRONMENT` | `development` / `staging` / `production` | `development` | section 6.1 |
+| Object storage choice | (a) **disabled** (`STORAGE_POLICY=db`); (b) **local** (`OBJECT_STORAGE_BACKEND=local`); (c) **S3-compatible** (`CLOUD_PROVIDER=minio` + MinIO server); (d) **AWS** (`CLOUD_PROVIDER=aws` + IAM role) | (a) `STORAGE_POLICY=db` for the first PC test - simplest, no buckets, no IAM, no MinIO server | section 4 |
+| Postgres | local on the same host, OR managed (RDS / Cloud SQL) | local on the same host for first PC test | section 2 |
+| Redis | local on the same host, OR managed (ElastiCache / Memorystore) | local on the same host | section 3 |
+| Number of uvicorn workers | `UVICORN_WORKERS` env (display only); systemd `--workers` flag is hardcoded to `2` | 1-2 for a PC | systemd unit edit (section 7) |
+| Number of Celery worker children | `CELERY_CONCURRENCY` env (display only); systemd `--concurrency` flag is hardcoded to `4` | 2 for a PC | systemd unit edit (section 7) |
+| Number of beat instances | always 1 (Redis SETNX leader-lock enforces singleton) | 1 | section 12.8.1 |
+| Backend port | `PLENORA_BACKEND_PORT` env (default 5004) | 5004 | section 6.1 |
+| Frontend serve | direct via nginx/Caddy/Apache from `frontend/dist/` | local nginx | section 8 |
+
+> **NB on object storage choice (b) "local"**: declared in
+> `app.config.Settings.DEFAULTS.OBJECT_STORAGE_BACKEND` as
+> *future*, currently **NOT IMPLEMENTED**. For a PC test
+> without S3 / MinIO, only choice (a) `STORAGE_POLICY=db` is
+> a real option. (c) and (d) require external infrastructure.
+> See section 11 (Known limitations) for the runtime-side
+> tracking.
+
+#### 13.2.2 Step-by-step checklist
+
+```text
+[ ] Step 1 - OS packages installed (section 1)
+    sudo apt update && sudo apt install -y \
+      python3.11 python3.11-venv python3.11-dev \
+      build-essential libpq-dev \
+      postgresql-client-17 \
+      libgdal-dev libmagic1 \
+      redis-server \
+      curl ca-certificates \
+      nodejs npm
+    -> verify with `scripts/install.sh --check` (preflight).
+
+[ ] Step 2 - Application user + home (section 1.1)
+    sudo adduser --system --group --home /home/ubuntu --shell /bin/bash ubuntu
+    -> skip if already present.
+
+[ ] Step 3 - PostgreSQL provisioned (section 2)
+    Create database `plenora`, role with CREATE on DB +
+    ownership/USAGE on schema `plenora`. The schema is
+    auto-created at first boot by
+    `migrations_runner.ensure_schema(DB_SCHEMA)` - do NOT run
+    `psql ... CREATE SCHEMA` manually.
+    For weekly backup-test drill: `ALTER ROLE <user> CREATEDB;`
+    Probe: psql "$DATABASE_URL" -c "SELECT 1"
+
+[ ] Step 4 - Redis provisioned (section 3)
+    Single instance, single DB. AOF recommended
+    (`appendonly yes`). One canonical URL covers broker, result
+    backend, scheduler leader-lock, JWT blacklist - NO separate
+    REDIS_URL.
+    Probe: redis-cli -u "$CELERY_BROKER_URL" PING
+
+[ ] Step 5 - Object storage decision (section 4)
+    First PC test: STORAGE_POLICY=db, BACKUP_BUCKET=<dummy>.
+    No bucket creation, no IAM, no MinIO. The dummy
+    BACKUP_BUCKET satisfies validate_storage_config() but is
+    never accessed.
+
+[ ] Step 6 - Secrets decision (section 5)
+    First PC test: AWS path (SSM Parameter Store) NOT needed.
+    Inline secrets in `backend/.env` - the installer generates
+    PLENORA_ENCRYPTION_KEY and JWT_SECRET_KEY automatically.
+    chmod 600 .env after generation.
+
+[ ] Step 7 - Checkout + venv + .env (section 6)
+    sudo -iu ubuntu
+    git clone <repo> /home/ubuntu/plenora-etl
+    cd /home/ubuntu/plenora-etl
+
+    Recommended: use the guided installer
+        bash scripts/install.sh
+    or non-interactive
+        bash scripts/install.sh --non-interactive
+    The installer:
+      - validates host prerequisites (--check mode also
+        available for dry-run);
+      - prompts for the decision-matrix values OR consumes
+        PLENORA_INSTALL_* env vars;
+      - generates the two SECRET_INFRA secrets;
+      - probes Postgres (SELECT 1) and Redis (PING);
+      - writes `backend/.env` atomically with chmod 600;
+      - rerun is idempotent: operator overrides preserved.
+
+    Manual fallback: section 6 has the equivalent commands.
+
+[ ] Step 8 - Migrations / DB init
+    Already applied automatically when the backend boots for
+    the first time. The runner is idempotent; rerun safe.
+    No separate migrate command.
+
+[ ] Step 9 - systemd units installed (section 7)
+    cd backend/deploy/systemd
+    sudo cp plenora-backend.service plenora-celery.service \
+            plenora-beat.service \
+            /etc/systemd/system/
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now \
+        plenora-backend.service \
+        plenora-celery.service \
+        plenora-beat.service
+
+    Optional (backup drill, daily 02:00 UTC + weekly restore):
+        sudo cp plenora-backup.{service,timer} \
+                plenora-backup-test.{service,timer} \
+                /etc/systemd/system/
+        sudo systemctl enable --now \
+            plenora-backup.timer plenora-backup-test.timer
+
+    To deviate from /home/ubuntu/plenora-etl/backend OR
+    user `ubuntu` OR --workers/--concurrency values: edit
+    the unit files BEFORE the cp. Worker count is hardcoded
+    at the CLI flag (UVICORN_WORKERS / CELERY_CONCURRENCY env
+    are display-only).
+
+[ ] Step 10 - Frontend build + reverse proxy (section 8)
+    cd /home/ubuntu/plenora-etl/frontend
+    npm ci && npm run build
+    Configure nginx/Caddy/Apache to:
+      - serve frontend/dist/ at the public origin;
+      - proxy /api/*, /health, /ready, /auth/* to
+        127.0.0.1:5004 (or PLENORA_BACKEND_PORT).
+
+[ ] Step 11 - Smoke test (section 9)
+    curl -fsS http://127.0.0.1:5004/health   # 200
+    curl -fsS http://127.0.0.1:5004/ready    # 200
+    systemctl is-active plenora-backend plenora-celery plenora-beat
+    Admin login + manual preview + scheduled task tick.
+```
+
+#### 13.2.3 Rollback / troubleshooting
+
+When `/ready` does NOT return 200 within 60 seconds, the
+recovery sequence is:
+
+```text
+journalctl -u plenora-backend -n 200 --no-pager
+journalctl -u plenora-celery -n 200 --no-pager
+journalctl -u plenora-beat -n 200 --no-pager
+```
+
+The four boot gates log loud:
+
+- `Settings.validate_startup` failure -> DATA_DIR not writable
+  OR Redis not reachable. Re-check sections 1 and 3.
+- `validate_storage_config` failure -> incoherent
+  STORAGE_POLICY x CLOUD_PROVIDER x bucket combination.
+  Re-check section 4 and the decision matrix.
+- `init_all_dbs` / migrations failure -> DB role missing
+  CREATE on schema, OR DSN wrong. Re-check section 2.
+- `_repair_psycopg2_ssl_env` failure is rare and
+  self-explanatory in the log.
+
+To roll back to a clean state on a PC test:
+
+```text
+sudo systemctl stop plenora-backend plenora-celery plenora-beat
+sudo systemctl disable plenora-backend plenora-celery plenora-beat
+sudo rm /etc/systemd/system/plenora-{backend,celery,beat,backup,backup-test}.{service,timer}
+sudo systemctl daemon-reload
+
+# DB cleanup (LOCAL test only - do NOT run on a real DB):
+psql "$DATABASE_URL" -c "DROP SCHEMA plenora CASCADE;"
+
+# Redis cleanup (broker / result backend keys):
+redis-cli -u "$CELERY_BROKER_URL" FLUSHDB
+
+# App state cleanup:
+rm -rf /home/ubuntu/plenora-etl/data
+rm -f /home/ubuntu/plenora-etl/backend/.env
+
+# Now start again at Step 7.
+```
+
+Schema reset is destructive. Only run it on a PC test DB.
+
+For deeper recovery (rotation / incident response), see
+[runbook.md](runbook.md), [backup-restore.md](backup-restore.md),
+and [jwt-incident-response.md](jwt-incident-response.md).
+
+#### 13.2.4 Critical gotchas
+
+These are NOT optional reads:
+
+- **Schema autocreate**: do NOT pre-create the `plenora`
+  schema in PG. The runner creates it via
+  `migrations_runner.ensure_schema(DB_SCHEMA)`. A pre-existing
+  schema can mask migration ordering bugs.
+- **Single Redis URL**: setting `REDIS_URL` has NO effect.
+  The canonical env vars are `CELERY_BROKER_URL` AND
+  `CELERY_RESULT_BACKEND` - set both to the SAME URL.
+- **Object storage = db**: with `STORAGE_POLICY=db`, all
+  uploads go into PG BYTEA. Hard cap is `RESULT_DB_HARD_CAP_BYTES`
+  (default 500 MB). If the PC test will upload anything larger,
+  switch policy to `hybrid` or `object_storage` (requires
+  MinIO or S3 setup).
+- **Cleanroom CI is NOT a substitute for this checklist**.
+  See [section 12.8](#128-cleanroom-celery-smoke-vs-production-drift-sanity-check-not-equivalence)
+  for the drift list. CI green = sanity check; PC install
+  green = real install.
+- **Idempotent rerun**: `scripts/install.sh` rerun preserves
+  operator-added non-installer-managed keys (e.g.
+  `LOG_RETENTION_DAYS=60`, custom `CORS_ORIGINS`). It does
+  NOT preserve installer-managed keys overwritten by hand -
+  see INSTALLATION-012 / section 6.1.
+
+### 13.3 Path C and beyond (NOT in scope here)
+
+- **Helm / Kubernetes**: NOT IMPLEMENTED. Out of scope for
+  any first PC test. See `BE_INSTALLATION_AUDIT.md` section 7.B.
+- **Multi-host cluster**: NOT IN SCOPE. Beat singleton is
+  enforced by Redis SETNX, but storage cleanup hooks +
+  `delete_by_task` post-download eager cleanup were designed
+  for single-host.
+- **Cross-cloud (Azure / GCP)**: factory placeholders exist
+  in `app/shared/cloud_backends.py` but are NOT IMPLEMENTED.
+
+### 13.4 Marco's first-PC-test command sequence (suggested)
+
+The literal sequence Marco can copy/paste, expecting an
+Ubuntu 24.04 PC with Docker pre-installed (Docker is NOT
+needed; mentioned only because the brief said the PC has it):
+
+```bash
+# Step 1 - OS packages
+sudo apt update
+sudo apt install -y python3.11 python3.11-venv python3.11-dev \
+  build-essential libpq-dev postgresql-client-17 \
+  libgdal-dev libmagic1 redis-server curl ca-certificates \
+  nodejs npm
+
+# Step 2 - Application user (skip if Marco's user is fine)
+# sudo adduser --system --group --home /home/ubuntu --shell /bin/bash ubuntu
+
+# Step 3 - Postgres (local)
+sudo -iu postgres createuser --createdb --createrole plenora
+sudo -iu postgres createdb -O plenora plenora
+sudo -iu postgres psql -c "ALTER USER plenora WITH PASSWORD 'plenora';"
+# (or: install via apt and configure pg_hba for trust on localhost.)
+
+# Step 4 - Redis (local)
+sudo systemctl enable --now redis-server
+redis-cli PING
+
+# Step 5 - Checkout + installer
+cd ~
+git clone <repo-url> plenora-etl
+cd plenora-etl
+
+# Preflight - confirm everything is ready
+bash scripts/install.sh --check
+
+# Run the installer (interactive prompts, --non-interactive
+# also supported with PLENORA_INSTALL_* env vars)
+bash scripts/install.sh
+
+# Step 6 - venv + deps (the installer does NOT install Python deps)
+cd backend
+python3.11 -m venv venv
+./venv/bin/pip install --upgrade pip
+./venv/bin/pip install -r requirements.txt
+
+# Step 7 - first boot in foreground (no systemd) for sanity
+./venv/bin/python -m uvicorn app.main:app \
+    --host 127.0.0.1 --port 5004 --workers 1
+# In another shell:
+./venv/bin/celery -A workers.celery_app worker --loglevel=info \
+    --pool=solo
+# In a third shell:
+./venv/bin/celery -A workers.celery_app beat \
+    -S workers.beat_scheduler.PlenoraBeatScheduler --loglevel=info
+
+# Step 8 - smoke
+curl -fsS http://127.0.0.1:5004/health
+curl -fsS http://127.0.0.1:5004/ready
+
+# Step 9 - if green, install systemd units (section 7)
+# If anything fails, see 13.2.3 above.
+```
+
+Step 7 is intentionally foreground (no systemd) so Marco can
+see the four boot gate logs in real time on the first run.
+After the foreground smoke is green, install the systemd units
+to make it persistent (section 7).
+
+---
+
+## 14. Related docs
 
 - [`runtime-prereqs.md`](runtime-prereqs.md) — runtime contract
   (env vars, IAM, dependencies, graceful-degradation policy).

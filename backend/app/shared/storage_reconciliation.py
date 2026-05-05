@@ -97,6 +97,7 @@ __all__ = [
     "is_storage_key_referenced",
     "compute_next_retry_at",
     "count_active_by_state_domain",
+    "count_pending_by_operation",
     "prune_terminal_older_than",
 ]
 
@@ -687,6 +688,40 @@ def record_upload_intent(
     save (W2 race) lascia comunque una traccia che il reconciler
     puo' chiudere.
 
+    NOT a transactional outbox
+    --------------------------
+    Questo NON e' un transactional outbox. Differenze sostanziali:
+
+    - L'INSERT autocommit avviene PRIMA della transazione del
+      caller (caller's DB save), non dentro la stessa transaction
+      del business write. Un crash tra `record_upload_intent` e
+      l'upload effettivo lascia una pending row su un blob mai
+      caricato; il reconciler la chiude col path "orphan" dopo il
+      grace window (compensating_delete e' no-op su key
+      inesistente — accettato).
+    - La closure dipende da un beat hook periodico
+      (`STORAGE_RECONCILE_INTERVAL_SECONDS`) + grace window
+      (`STORAGE_RECONCILE_UPLOAD_INTENT_GRACE_SECONDS`) +
+      observation indiretta (`is_storage_key_referenced` su
+      `plenora.file_sources.storage_key`). Un vero outbox
+      committerebbe la pending entry nella stessa transaction
+      della business write e produrrebbe garanzie at-least-once
+      sul publisher; qui il garante e' il reconciler heuristico.
+    - Reconciler disabilitato (`STORAGE_RECONCILE_INTERVAL_SECONDS<=0`
+      OR `STORAGE_RECONCILE_UPLOAD_INTENT_GRACE_SECONDS<=0` OR
+      `STORAGE_RECONCILE_UPLOAD_INTENT_BATCH_SIZE<=0`) lascia le
+      righe pending in tabella senza closure path. Le ops devono
+      sapere che il "self-clearing" pattern dipende dal beat hook
+      attivo. Visibilita' via:
+        - `count_pending_by_operation()` (per-operation counter
+          dedicato a questo gap);
+        - `gather_readiness().checks.reconciliation_backlog.detail`
+          (espone il breakdown per-operation).
+    - L'engine alignment (STORAGE_ARTIFACT_ENGINE) e' "compensating
+      reconciliation log" — non "outbox/saga framework". L'audit
+      `BE_STORAGE_ENGINE_AUDIT.md` §23 documenta i failure modes
+      e le closure paths future.
+
     Differenza chiave da `record_pending`:
     - `record_pending` richiede un cursor del caller e partecipa
       alla transazione del caller (atomic con il DB DELETE);
@@ -877,3 +912,91 @@ def is_storage_key_referenced(storage_key: str) -> Optional[bool]:
         return None
 
     return bool(rows)
+
+
+# ---------------------------------------------------------------------------
+# Per-operation visibility (BE-GO-READY-STORAGE-ENGINE-023)
+# ---------------------------------------------------------------------------
+#
+# `count_active_by_state_domain` aggregates by `(state, domain)` —
+# it does NOT differentiate between `operation='delete'` and
+# `operation='upload_intent'` rows. Two failure modes were
+# previously invisible:
+#
+#   1. The upload_intent self-clearing pattern depends on the beat
+#      hook running. If the reconciler is disabled
+#      (STORAGE_RECONCILE_INTERVAL_SECONDS<=0) or the upload_intent
+#      branch is disabled (STORAGE_RECONCILE_UPLOAD_INTENT_GRACE_SECONDS<=0
+#      or STORAGE_RECONCILE_UPLOAD_INTENT_BATCH_SIZE<=0), pending
+#      upload_intent rows accumulate without closure. The total
+#      `pending` count from `count_active_by_state_domain` masks
+#      this: a backlog of 100 pending upload_intents looks like
+#      100 pending deletes.
+#   2. A growing upload_intent backlog signals a different incident
+#      than a growing delete backlog. Delete backlog ⇒ object
+#      storage / network problem; upload_intent backlog ⇒
+#      reconciler disabled OR `is_storage_key_referenced` chronic
+#      read-error OR mass DB-save rollback storm. Operators need
+#      to differentiate.
+#
+# This helper is read-only, swallow-on-error (best-effort),
+# zero behaviour change to existing callers. The readiness check
+# `check_reconciliation_backlog` consumes it to surface the
+# breakdown in its detail string and (optionally) trigger a 503
+# on a per-operation threshold.
+
+
+_COUNT_PENDING_BY_OPERATION_SQL = (
+    "SELECT operation, COUNT(*) AS count "
+    "FROM plenora.storage_reconciliation_log "
+    "WHERE state = 'pending' "
+    "GROUP BY operation "
+    "ORDER BY operation ASC"
+)
+
+
+def count_pending_by_operation() -> dict[str, int]:
+    """Read-only count di righe `state='pending'` raggruppate per
+    `operation` (today: `'delete'` | `'upload_intent'`).
+
+    BE-GO-READY-STORAGE-ENGINE-023-UPLOAD-INTENT-READINESS-GUARD:
+    visibility helper dedicato al gap tra il counter generico
+    `count_active_by_state_domain` (per state+domain) e l'esigenza
+    operativa di distinguere delete-side W1 backlog da upload_intent-
+    side W2 backlog.
+
+    Best-effort: errori di lettura → warning strutturato + ritorno
+    `{}` (il caller, oggi `check_reconciliation_backlog`, non puo'
+    permettersi di crashare la readiness probe).
+
+    Returns:
+        `dict[str, int]` keyed on operation name. Manca chiavi per
+        operations che hanno zero pending (es. `{'delete': 12}` se
+        nessun upload_intent e' pending). Su errore di lettura: `{}`.
+    """
+    try:
+        from app.db.pg_connection import fetchall
+
+        rows = fetchall(_COUNT_PENDING_BY_OPERATION_SQL, ())
+    except Exception as e:
+        logger.warning(
+            "event=storage_reconciliation_count_by_operation_failed "
+            "count_error=%s count_error_msg=%r",
+            type(e).__name__, str(e),
+        )
+        return {}
+
+    out: dict[str, int] = {}
+    for row in rows or ():
+        if isinstance(row, dict):
+            op = row.get("operation")
+            count = row.get("count")
+        else:
+            op, count = row
+        if op is None:
+            continue
+        try:
+            out[str(op)] = int(count) if count is not None else 0
+        except (TypeError, ValueError):
+            continue
+    return out

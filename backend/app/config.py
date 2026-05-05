@@ -383,6 +383,19 @@ class Settings:
         #   essere raro.
         "STORAGE_RECONCILE_BACKLOG_PENDING_503_THRESHOLD": 1000,
         "STORAGE_RECONCILE_BACKLOG_LOST_503_THRESHOLD": 10,
+        # BE-GO-READY-STORAGE-ENGINE-023-UPLOAD-INTENT-READINESS-GUARD
+        # Threshold dedicato al backlog `pending` di
+        # `operation='upload_intent'` (vedi
+        # `count_pending_by_operation`). Distingue il W2 race
+        # backlog dal W1 race delete-backlog tracciato dal
+        # PENDING_503_THRESHOLD globale.
+        # Default 0 = OPT-IN: il branch e' disabilitato e il
+        # backlog upload_intent contribuisce solo al detail string
+        # del check (no 503 dedicato). Operators possono attivare
+        # il branch impostando un cap > 0 (es. 200) quando
+        # vogliono un alert specifico W2.
+        # Cap <= 0 disabilita il branch (escape hatch ops).
+        "STORAGE_RECONCILE_BACKLOG_UPLOAD_INTENT_503_THRESHOLD": 0,
 
         # ==================== TASK ARRICCHIMENTO ====================
         "ENRICHMENT_BATCH_SIZE": 100,

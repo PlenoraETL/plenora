@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
-from app.core.auth.auth import CurrentUser
+from app.shared.contracts.auth import CurrentUser
 from app.core.features.models import ArcGISConnection, ArcGISCreate
 
 

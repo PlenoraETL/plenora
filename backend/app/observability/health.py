@@ -238,9 +238,23 @@ def check_reconciliation_backlog() -> CheckOutcome:
       - `lost_total > STORAGE_RECONCILE_BACKLOG_LOST_503_THRESHOLD`
     -> outcome `(False, "<state>=<count> over <thr>: ...")`.
 
+    BE-GO-READY-STORAGE-ENGINE-023-UPLOAD-INTENT-READINESS-GUARD:
+    additivo, due cambi:
+      1. il detail string ora include il breakdown per-operation
+         (es. `"pending=15 (delete=12 upload_intent=3) lost=0"`) cosi'
+         le ops possono distinguere W1 backlog (delete) da W2
+         backlog (upload_intent self-clearing pattern). Il
+         breakdown e' stampato solo se il counter per-operation
+         e' non vuoto (best-effort: errore di lettura non blocca);
+      2. opt-in `STORAGE_RECONCILE_BACKLOG_UPLOAD_INTENT_503_THRESHOLD`
+         (default 0 = disabled): quando > 0 e il pending count
+         per `operation='upload_intent'` lo supera, il check va
+         a 503 con un over-marker dedicato. Permette agli operatori
+         di flaggare il W2 backlog separatamente dal W1.
+
     Cap <= 0 su un threshold disabilita SOLO quel branch (escape
-    hatch ops). Se entrambi disabilitati il check resta sempre OK
-    informando comunque `pending=N lost=M`.
+    hatch ops). Se tutti disabilitati il check resta sempre OK
+    informando comunque pending/lost + breakdown.
 
     Errori di lettura (`count_active_by_state_domain` swallow → `[]`)
     sono trattati come fail-OPEN: outcome `(True, "skipped: ...")`,
@@ -256,6 +270,7 @@ def check_reconciliation_backlog() -> CheckOutcome:
     try:
         from app.shared.storage_reconciliation import (
             count_active_by_state_domain,
+            count_pending_by_operation,
         )
     except Exception as e:
         # Modulo rotto / cycle: fail-OPEN diagnostic.
@@ -269,6 +284,12 @@ def check_reconciliation_backlog() -> CheckOutcome:
         lost_threshold = int(
             settings.get("STORAGE_RECONCILE_BACKLOG_LOST_503_THRESHOLD", 10)
         )
+        upload_intent_threshold = int(
+            settings.get(
+                "STORAGE_RECONCILE_BACKLOG_UPLOAD_INTENT_503_THRESHOLD",
+                0,
+            )
+        )
     except Exception as e:
         return True, f"check skipped: {type(e).__name__}"
 
@@ -279,6 +300,14 @@ def check_reconciliation_backlog() -> CheckOutcome:
         # ma defense-in-depth.
         return True, f"check skipped: {type(e).__name__}"
 
+    # Per-operation breakdown: best-effort, errors degrade to empty
+    # dict (no per-operation visibility but the global
+    # state-domain numbers still drive the 503 logic).
+    try:
+        per_op = count_pending_by_operation()
+    except Exception:
+        per_op = {}
+
     pending_total = sum(c.count for c in counts if c.state == "pending")
     lost_total = sum(c.count for c in counts if c.state == "lost")
 
@@ -288,7 +317,19 @@ def check_reconciliation_backlog() -> CheckOutcome:
     if lost_threshold > 0 and lost_total > lost_threshold:
         over.append(f"lost={lost_total} over {lost_threshold}")
 
+    upload_intent_pending = int(per_op.get("upload_intent", 0))
+    if (
+        upload_intent_threshold > 0
+        and upload_intent_pending > upload_intent_threshold
+    ):
+        over.append(
+            f"upload_intent={upload_intent_pending} over {upload_intent_threshold}"
+        )
+
     detail = f"pending={pending_total} lost={lost_total}"
+    if per_op:
+        breakdown = " ".join(f"{k}={per_op[k]}" for k in sorted(per_op.keys()))
+        detail = f"pending={pending_total} ({breakdown}) lost={lost_total}"
     if over:
         return False, f"{'; '.join(over)} ({detail})"
     return True, detail

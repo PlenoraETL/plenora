@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.core.auth.auth import CurrentUser
+from app.shared.contracts.auth import CurrentUser
 from app.core.scheduler.models import (
     ScheduleConcurrency,
     ScheduleConfig,

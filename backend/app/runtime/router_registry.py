@@ -99,6 +99,7 @@ __all__ = [
     "CONNECTIONS_BINDING",
     "PROJECTS_BINDING",
     "ARRICCHISCI_BINDING",
+    "DATASOURCES_BINDING",
 ]
 
 
@@ -244,4 +245,26 @@ ARRICCHISCI_BINDING = RouterBinding(
         services.project_service,
         services.api_connection_service,
     ),
+)
+
+
+def _datasources_init(*args: Any, **kwargs: Any) -> None:
+    """Lazy thunk: import + invoke ``init_datasources``.
+
+    BE-GO-READY-BOOTSTRAP-ENGINE-022: 1-arg slice consuming
+    ``services.datasource_service``. The ``datasource_service`` is
+    the wrap-don't-move singleton landed in BOOTSTRAP-ENGINE-017
+    (identity invariant already locked by the runtime container
+    contract test). Same lazy-thunk pattern as the other slices
+    (keeps the registry module import-cheap).
+    """
+    from app.core.datasources.router import init_datasources
+
+    init_datasources(*args, **kwargs)
+
+
+DATASOURCES_BINDING = RouterBinding(
+    name="datasources",
+    init_fn=_datasources_init,
+    extract=lambda services: (services.datasource_service,),
 )

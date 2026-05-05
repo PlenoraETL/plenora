@@ -1,7 +1,7 @@
 import pytest
 from fastapi import HTTPException
 
-from app.core.auth.auth import CurrentUser
+from app.shared.contracts.auth import CurrentUser
 from app.shared.authz_helpers import (
     assert_canvas_resources_access,
     assert_file_source_access,

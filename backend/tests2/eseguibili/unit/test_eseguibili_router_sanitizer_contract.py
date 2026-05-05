@@ -22,7 +22,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.core.auth.auth import CurrentUser, get_current_user
+from app.shared.contracts.auth import CurrentUser
+from app.core.auth.auth import get_current_user
 from app.core.eseguibili import router as eseguibili_router_module
 from app.core.eseguibili.router import router as eseguibili_router
 

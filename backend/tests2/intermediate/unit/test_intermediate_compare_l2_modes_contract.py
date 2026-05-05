@@ -371,7 +371,7 @@ def test_l2_mixed_metadata_full_pg_returns_metadata_reason(superdmin_or_admin: b
     e' deterministica: metadata_only ha priorita' (motivo specifico)."""
     # Riusiamo la fixture superadmin_user via build_client
     from tests2.intermediate.unit.conftest import build_client as _bc
-    from app.core.auth.auth import CurrentUser
+    from app.shared.contracts.auth import CurrentUser
     user = CurrentUser(user_id="u", username="x", group_id="g", role="superadmin")
     client = _bc(user)
 

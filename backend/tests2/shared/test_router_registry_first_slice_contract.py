@@ -966,3 +966,294 @@ def test_router_registry_does_not_import_arricchisci_router_at_top_level():
                 "app.core.arricchisci.router must be imported lazily "
                 "inside the binding's init_fn thunk, not at module top"
             )
+
+
+# ---------------------------------------------------------------------------
+# 9. BE-GO-READY-BOOTSTRAP-ENGINE-022: datasources binding (1-arg slice)
+# ---------------------------------------------------------------------------
+
+
+def test_runtime_module_exposes_datasources_binding():
+    """``DATASOURCES_BINDING`` is part of the public registry surface."""
+    from app.runtime import DATASOURCES_BINDING, RouterBinding
+
+    assert isinstance(DATASOURCES_BINDING, RouterBinding)
+
+
+def test_datasources_binding_name_is_stable():
+    from app.runtime import DATASOURCES_BINDING
+
+    assert DATASOURCES_BINDING.name == "datasources"
+
+
+def test_datasources_extract_returns_datasource_service_field_only():
+    """The extract closure pulls exactly ``services.datasource_service``,
+    wrapped in a 1-tuple. Identity preserved."""
+    from app.runtime import DATASOURCES_BINDING
+
+    sentinel = object()
+    fake_services = SimpleNamespace(datasource_service=sentinel)
+
+    args = DATASOURCES_BINDING.extract(fake_services)
+
+    assert isinstance(args, tuple)
+    assert len(args) == 1
+    assert args[0] is sentinel
+
+
+def test_datasources_init_fn_invokes_router_module_init(monkeypatch):
+    """The binding's ``init_fn`` resolves to
+    ``app.core.datasources.router.init_datasources`` and forwards its
+    positional args verbatim.
+    """
+    from app.core.datasources import router as datasources_router_mod
+    from app.runtime import DATASOURCES_BINDING
+
+    captured: list = []
+
+    def _fake_init_datasources(datasource_service):
+        captured.append(datasource_service)
+
+    monkeypatch.setattr(
+        datasources_router_mod,
+        "init_datasources",
+        _fake_init_datasources,
+    )
+
+    sentinel = object()
+    DATASOURCES_BINDING.init_fn(sentinel)
+
+    assert captured == [sentinel]
+
+
+def test_bind_datasources_passes_container_owned_instance_by_identity():
+    """Identity invariant: the value passed to ``init_fn`` IS the
+    container's ``datasource_service`` field (the wrap-don't-move
+    singleton from BOOTSTRAP-017), not a copy."""
+    from app.runtime import DATASOURCES_BINDING, bind_router_services
+
+    captured: list = []
+
+    def _spy_init(datasource_service):
+        captured.append(datasource_service)
+
+    sentinel = object()
+    fake_services = SimpleNamespace(datasource_service=sentinel)
+
+    spy_binding = type(DATASOURCES_BINDING)(
+        name=DATASOURCES_BINDING.name,
+        init_fn=_spy_init,
+        extract=DATASOURCES_BINDING.extract,
+    )
+
+    bind_router_services(fake_services, spy_binding)
+
+    assert captured == [sentinel]
+    assert captured[0] is sentinel
+
+
+def test_bind_datasources_attribute_error_on_missing_field():
+    """Fail-fast: a typo or rename on ``datasource_service`` surfaces
+    as ``AttributeError`` at startup."""
+    from app.runtime import DATASOURCES_BINDING, bind_router_services
+
+    incomplete_services = SimpleNamespace()
+
+    with pytest.raises(AttributeError):
+        bind_router_services(incomplete_services, DATASOURCES_BINDING)
+
+
+def test_bind_datasources_type_error_on_signature_drift():
+    """Fail-fast on signature drift: a 2-arg ``init_fn`` substitute
+    while ``extract`` returns 1 arg surfaces as ``TypeError`` at
+    startup."""
+    from app.runtime import DATASOURCES_BINDING, bind_router_services
+
+    def _two_arg_init(a, b):
+        pass
+
+    drift_binding = type(DATASOURCES_BINDING)(
+        name=DATASOURCES_BINDING.name,
+        init_fn=_two_arg_init,
+        extract=DATASOURCES_BINDING.extract,
+    )
+
+    fake_services = SimpleNamespace(datasource_service=object())
+
+    with pytest.raises(TypeError):
+        bind_router_services(fake_services, drift_binding)
+
+
+def test_datasources_binding_uses_runtime_container_singleton_identity():
+    """End-to-end identity: the datasource_service exposed by
+    `RuntimeServices` (built via `build_runtime_services()`) IS the
+    canonical `app.core.datasources.service.datasource_service`
+    singleton (BOOTSTRAP-017 wrap-don't-move). The binding's extract
+    surfaces that same object — so `init_datasources` receives the
+    canonical singleton, not a freshly-constructed double.
+
+    This locks the chain: container.datasource_service is
+    canonical_singleton, AND extract(container) returns
+    (container.datasource_service,)."""
+    import app.core.datasources.service as datasources_svc_mod
+    from app.config import settings as _settings
+    from app.runtime import DATASOURCES_BINDING
+    from app.runtime.services import build_runtime_services
+
+    # Test stub for `save_function`; the factory only stores it on
+    # the executor + features service — never invoked in this test.
+    def _fake_save(*args, **kwargs):
+        raise AssertionError("save_function should not be called in this test")
+
+    services = build_runtime_services(
+        settings=_settings,
+        save_function=_fake_save,
+    )
+
+    canonical = datasources_svc_mod.datasource_service
+    assert services.datasource_service is canonical, (
+        "RuntimeServices.datasource_service must BE the canonical "
+        "`app.core.datasources.service.datasource_service` singleton "
+        "(BOOTSTRAP-017 wrap-don't-move)"
+    )
+
+    args = DATASOURCES_BINDING.extract(services)
+    assert len(args) == 1
+    assert args[0] is canonical, (
+        "DATASOURCES_BINDING.extract must surface the canonical "
+        "datasource_service singleton by identity"
+    )
+
+
+def test_main_py_does_not_call_init_datasources_directly():
+    """``app/main.py`` must route the datasources init through the
+    registry. A direct ``init_datasources(datasource_service)`` call
+    bypasses the typed binding and is a regression."""
+    src = _read_source("app/main.py")
+
+    bad = "init_datasources(datasource_service)"
+    assert bad not in src, (
+        "app/main.py should call the datasources init through "
+        "bind_router_services(_runtime_services, DATASOURCES_BINDING) "
+        "instead of init_datasources(datasource_service)"
+    )
+
+
+def test_main_py_imports_the_datasources_binding():
+    """Positive lock: ``main.py`` imports ``DATASOURCES_BINDING``."""
+    src = _read_source("app/main.py")
+
+    assert "DATASOURCES_BINDING" in src, (
+        "app/main.py must import DATASOURCES_BINDING from app.runtime"
+    )
+
+
+def test_main_py_does_not_import_init_datasources():
+    """The router-side ``init_datasources`` symbol must no longer
+    appear in ``main.py``'s import list — the registry's lazy thunk
+    owns the import now."""
+    src = _read_source("app/main.py")
+
+    tree = ast.parse(src)
+    imported_names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                imported_names.add(alias.asname or alias.name)
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                imported_names.add(alias.asname or alias.name)
+
+    assert "init_datasources" not in imported_names, (
+        "app/main.py must not import init_datasources directly; the "
+        "registry's lazy thunk imports it on demand"
+    )
+
+
+def test_datasources_router_does_not_import_from_main():
+    """Architectural lock: datasources router must not depend on
+    ``app.main``. Composition flows main -> runtime -> router."""
+    src = _read_source("app/core/datasources/router.py")
+    tree = ast.parse(src)
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            assert module != "app.main" and not module.startswith("app.main."), (
+                f"app/core/datasources/router.py must not import from "
+                f"app.main (found: {module})"
+            )
+
+
+def test_router_registry_does_not_import_datasources_router_at_top_level():
+    """The datasources router import must live inside the lazy thunk."""
+    src = _read_source("app/runtime/router_registry.py")
+    tree = ast.parse(src)
+
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            assert "datasources.router" not in module, (
+                "app.core.datasources.router must be imported lazily "
+                "inside the binding's init_fn thunk, not at module top"
+            )
+
+
+# ---------------------------------------------------------------------------
+# 10. BE-GO-READY-BOOTSTRAP-ENGINE-022: startup order lock
+# ---------------------------------------------------------------------------
+#
+# The migrated init order in `main.py` MUST be:
+#   1. CONNECTIONS_BINDING
+#   2. PROJECTS_BINDING
+#   3. ARRICCHISCI_BINDING
+#   4. DATASOURCES_BINDING (new this stream)
+#   5. init_carica_service(...)        -- procedural, owned by stream 023
+#   6. ORCHESTRATOR_BINDING
+#
+# Order matters: arricchisci consumes project_service (which projects
+# init bound), datasources init does not depend on the others, and
+# orchestrator runs LAST so it sees a fully-wired stack. Reordering
+# is a bootstrap regression — this lock is the canonical guard.
+
+
+def test_main_py_init_order_is_canonical():
+    """Source-bound startup order lock for the 5 typed bindings + the
+    one remaining procedural call (`init_carica_service`).
+
+    Scans `app/main.py` for the literal call sites and asserts they
+    appear in the canonical order:
+      connections, projects, arricchisci, datasources, carica,
+      orchestrator
+    """
+    src = _read_source("app/main.py")
+
+    markers = [
+        ("CONNECTIONS_BINDING",   "bind_router_services(_runtime_services, CONNECTIONS_BINDING)"),
+        ("PROJECTS_BINDING",      "bind_router_services(_runtime_services, PROJECTS_BINDING)"),
+        ("ARRICCHISCI_BINDING",   "bind_router_services(_runtime_services, ARRICCHISCI_BINDING)"),
+        ("DATASOURCES_BINDING",   "bind_router_services(_runtime_services, DATASOURCES_BINDING)"),
+        ("init_carica_service",   "init_carica_service(connection_service)"),
+        ("ORCHESTRATOR_BINDING",  "bind_router_services(_runtime_services, ORCHESTRATOR_BINDING)"),
+    ]
+
+    positions = []
+    for label, literal in markers:
+        idx = src.find(literal)
+        assert idx >= 0, (
+            f"Expected `{literal}` in app/main.py — bootstrap order "
+            f"marker `{label}` is missing or has drifted in shape."
+        )
+        positions.append((label, idx))
+
+    actual_order = [label for label, _ in positions]
+    actual_indices = [idx for _, idx in positions]
+
+    assert actual_indices == sorted(actual_indices), (
+        f"Bootstrap init order regression in app/main.py.\n"
+        f"  Expected canonical order: {[lbl for lbl, _ in markers]}\n"
+        f"  Got positional order:     {actual_order}\n"
+        "Reordering the init list breaks runtime invariants "
+        "(arricchisci needs project_service init first; orchestrator "
+        "must run last so the full stack is wired)."
+    )

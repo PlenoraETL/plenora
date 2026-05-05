@@ -1063,3 +1063,160 @@ def test_phase10_contract_module_exposes_all_minor_dtos():
         + "\nAdd them to `__all__` AND to the `from "
         "app.core.auth.models import (...)` block."
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase-11 (BE-GO-READY-AUTH-ENGINE-017) — pure-DTO consumer migration
+# in tests2/ + workers/
+# ---------------------------------------------------------------------------
+#
+# Phase-11 extends the Phase-9/10 contract fan-out to the test
+# tree (`tests2/`) and worker tree (`workers/`). Pure-DTO names
+# (`CurrentUser`, the 12 minor DTOs, role tuples, `group_filter`)
+# previously imported from `app.core.auth.auth` (facade re-export)
+# or `app.core.auth.models` (leaf) by non-app-tree consumers
+# must now route through `app.shared.contracts.auth`.
+#
+# Allowlist: 2 contract test files that legitimately need to
+# import directly from the facade/leaf to assert the identity
+# property (`auth.X is contract.X is models.X`). Adding any
+# new consumer outside the allowlist requires migrating that
+# consumer, not extending the allowlist silently.
+#
+# Distinction from Phase-9/10:
+#   - Phase-9/10 scan `_APP.rglob` (production tree).
+#   - Phase-11 scans `tests2/` and `workers/`.
+#   - Both feed into the same architectural goal: the runtime +
+#     test surface consume `app.shared.contracts.auth` for pure
+#     DTOs; only auth siblings + the contract module itself
+#     consume from the leaf.
+
+_PURE_DTO_NAMES_PHASE11 = frozenset({
+    "CurrentUser",
+    # Role tuples (constants, pure)
+    "VALID_ROLES",
+    "ROLES_ABOVE_VIEWER",
+    "ROLES_ADMIN_OR_ABOVE",
+    "ROLES_KIOSK_ONLY",
+    # Pure policy
+    "group_filter",
+    # Phase-10 minor DTOs
+    "LoginRequest",
+    "TokenResponse",
+    "UserCreate",
+    "ChangePasswordRequest",
+    "UserResponse",
+    "ResetPasswordRequest",
+    "GroupCreate",
+    "GroupResponse",
+    "MFAEnrollResponse",
+    "MFAVerifyRequest",
+    "MFADisableRequest",
+    "MFAStatusResponse",
+})
+
+
+# Allowlist for Phase-11: contract test files that MUST import
+# directly from the facade/leaf to assert identity equality
+# (`auth.X is contract.X`). They are fundamentally testing the
+# strangler/contract-module wiring, so routing them through the
+# contract module would tautologize the tests.
+_PHASE11_FACADE_LEAF_ALLOWLIST = frozenset({
+    "tests2/security/unit/test_auth_facade_strangler_contract.py",
+    "tests2/security/unit/test_auth_shared_contract_module_contract.py",
+})
+
+
+def _scan_tree_for_pure_dto_facade_or_leaf_imports(roots: list[Path]) -> dict[str, list[tuple[int, str, list[str]]]]:
+    """Scan `roots` for ImportFrom of pure DTO names from
+    `app.core.auth.auth` or `app.core.auth.models`. Return dict
+    {rel_path: [(lineno, module, names), ...]}.
+    """
+    found: dict[str, list[tuple[int, str, list[str]]]] = {}
+    for root in roots:
+        if not root.exists():
+            continue
+        for py in root.rglob("*.py"):
+            if "__pycache__" in str(py):
+                continue
+            try:
+                text = py.read_text(encoding="utf-8")
+            except (UnicodeDecodeError, OSError):
+                continue
+            try:
+                tree = ast.parse(text, filename=str(py))
+            except SyntaxError:
+                continue
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.ImportFrom):
+                    continue
+                if node.module not in (
+                    "app.core.auth.auth", "app.core.auth.models",
+                ):
+                    continue
+                hit = [a.name for a in node.names if a.name in _PURE_DTO_NAMES_PHASE11]
+                if not hit:
+                    continue
+                rel = str(py.relative_to(_BACKEND_ROOT)).replace("\\", "/")
+                found.setdefault(rel, []).append(
+                    (node.lineno, node.module, hit)
+                )
+    return found
+
+
+def test_phase11_tests2_workers_pure_dto_consumers_locked_to_allowlist():
+    """BE-GO-READY-AUTH-ENGINE-017: pure-DTO consumers in
+    `tests2/` + `workers/` must route through
+    `app.shared.contracts.auth`. The only exceptions are 2
+    contract test files asserting identity equality between
+    facade/leaf/contract paths.
+
+    Migration target: any test/worker file importing
+    `CurrentUser`, the 12 minor DTOs, role tuples, or
+    `group_filter` from `app.core.auth.auth` /
+    `app.core.auth.models` must instead import from
+    `app.shared.contracts.auth`. Mixed imports (pure-DTO +
+    facade implementation names) must split into 2 lines.
+    """
+    roots = [_BACKEND_ROOT / "tests2", _BACKEND_ROOT / "workers"]
+    found = _scan_tree_for_pure_dto_facade_or_leaf_imports(roots)
+    extra = {
+        rel: hits for rel, hits in found.items()
+        if rel not in _PHASE11_FACADE_LEAF_ALLOWLIST
+    }
+    assert not extra, (
+        "Phase-11 (TE-017) regression: files in tests2/ + workers/ "
+        "outside the allowlist still import pure DTO names "
+        "directly from `app.core.auth.auth` or "
+        "`app.core.auth.models`:\n"
+        + "\n".join(
+            f"  {rel}: " + "; ".join(
+                f"line {ln} from {mod} import {sorted(nm)}"
+                for (ln, mod, nm) in hits
+            )
+            for rel, hits in sorted(extra.items())
+        )
+        + "\nMigrate them to `from app.shared.contracts.auth "
+        "import <name>`. For mixed imports, split into 2 lines: "
+        "pure DTOs from contracts; impure facade names "
+        "(require_*, get_current_user, etc.) from "
+        "`app.core.auth.auth`."
+    )
+
+
+def test_phase11_allowlist_is_used_only_when_legitimate():
+    """Lock complementare: l'allowlist Phase-11 deve elencare
+    SOLO file che hanno effettivamente import facade/leaf attivi.
+    Trim regression: se uno dei 2 file allowlistati smettesse di
+    importare pure-DTO names da auth.auth/models, il rationale
+    dell'allowlist sarebbe stantio e l'entry andrebbe rimossa.
+    """
+    roots = [_BACKEND_ROOT / "tests2", _BACKEND_ROOT / "workers"]
+    found = _scan_tree_for_pure_dto_facade_or_leaf_imports(roots)
+    stale_allowlist_entries = _PHASE11_FACADE_LEAF_ALLOWLIST - set(found.keys())
+    assert not stale_allowlist_entries, (
+        "Phase-11 allowlist contains entries that no longer "
+        "import pure-DTO names from auth.auth/auth.models:\n"
+        + "\n".join(f"  {p}" for p in sorted(stale_allowlist_entries))
+        + "\nTrim them from `_PHASE11_FACADE_LEAF_ALLOWLIST`."
+    )

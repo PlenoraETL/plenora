@@ -74,7 +74,13 @@ def doc_section_12_6(doc_text: str) -> str:
     start = doc_text.index(_DESIGN_SECTION_HEADER)
     # Section 12.6 ends at the next top-level `---` separator before
     # the `## 13. Related docs` header that follows.
-    end_marker = "\n---\n\n## 13. Related docs"
+    # Section 12.6 ends at the next 12.x sub-section (12.7 added by
+    # INSTALLATION-020) or, if absent, at the next H2 (which is now
+    # `## 13.` after INSTALLATION-023 renumbered the related-docs
+    # anchor to `## 14.`).
+    end_marker = "\n### 12.7 "
+    if end_marker not in doc_text[start:]:
+        end_marker = "\n## "
     end = doc_text.find(end_marker, start)
     if end == -1:
         end = len(doc_text)
