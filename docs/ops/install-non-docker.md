@@ -498,18 +498,48 @@ Acceptance criteria:
    migrations applied (currently 18) - confirms the runner-side
    `ensure_schema(DB_SCHEMA)` path actually fired, not a
    workaround.
-4. Diagnostic-tier today (`continue-on-error: true`): green runs do
+4. **Celery cleanroom readiness** (added by
+   `BE-GO-READY-INSTALLATION-014`): after the backend boot
+   verification, an in-process probe asserts:
+   - `workers.celery_app` imports cleanly with the cleanroom env
+     (`CELERY_BROKER_URL`, `DATABASE_URL`, `PLENORA_ENCRYPTION_KEY`,
+     etc.);
+   - `celery_app.main == "dataflow_tasks"` (CLI contract for
+     `celery -A workers.celery_app worker` and the systemd
+     `plenora-celery.service` ExecStart);
+   - each include module
+     (`workers.tasks.{enrichment_task,carica_task,schedule_task,pipeline_task,imdf_publish_task}`)
+     imports without exception - catches import-time bugs in any
+     task module that would crash a real worker on startup;
+   - the broker (the cleanroom Redis service) accepts a
+     `kombu.connection.ensure_connection(timeout=5, max_retries=1)` -
+     bounded, sleep-free, single attempt;
+   - `workers.beat_scheduler.PlenoraBeatScheduler` symbol resolves
+     (rename / deletion guard for `plenora-beat.service` ExecStart
+     `-S` argument).
+   No real `celery worker` / `celery beat` is spawned (would
+   require fragile sleep loops). Task enqueue / dequeue is
+   intentionally NOT exercised here.
+5. Diagnostic-tier today (`continue-on-error: true`): green runs do
    not yet promote to required check. Promotion criterion: 3-4
    consecutive green runs on real PRs (audit section 7.B residual
    INSTALLATION-006 evidence).
 
 Gaps still open vs the ideal CI smoke:
 
-- No Celery worker / beat path exercised - see audit section 7.3
-  (`INSTALLATION-014-CELERY-CLEANROOM` candidate).
+- No real `celery worker` enqueue/dequeue - the readiness probe
+  catches import + broker reachability only. End-to-end task
+  execution requires either fragile sleep loops or a deterministic
+  task-completed signal we do not have today; closure is a future
+  bounded stream `INSTALLATION-018-CELERY-WORKER-ENQUEUE-SMOKE`.
+- No real `celery beat` schedule tick exercised - same constraint;
+  beat scheduler instantiation is gated on PG state and beat
+  leader-lock state, which the readiness probe deliberately does
+  NOT touch (PG state is already validated by the `/ready`
+  post-condition).
 - No frontend build verified - frontend CI is in `ci.yml` (vitest
   only), no end-to-end `npm run build` + serve on the cleanroom
-  stack.
+  stack. Closure: `INSTALLATION-017-FRONTEND-CLEANROOM`.
 - No backup unit smoke - covered by the production weekly
   `plenora-backup-test.timer` drill, not by CI.
 

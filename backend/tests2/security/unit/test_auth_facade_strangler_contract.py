@@ -177,6 +177,42 @@ _PHASE5_PER_NAME_BAN: dict[Path, frozenset[str]] = {
 }
 
 
+# Phase-6 (BE-GO-READY-AUTH-ENGINE-011): `group_filter` leaf
+# extraction. The function moved to its canonical home
+# `app.core.auth.ownership` (pure policy helper, zero side
+# effects). The auth.py facade keeps a `KEEP_COMPAT` re-export
+# (no auth.py shrink) but app routers MUST consume `group_filter`
+# from the leaf — facade pull becomes a strangler regression.
+#
+# The 9 router files below are the complete set of app callsites
+# using `group_filter` at this batch's start. Facade may keep
+# FastAPI Depends + `require_*` (Bucket A from the Phase-5
+# audit's contract-boundary analysis); banned name: just
+# `group_filter`.
+_PHASE6_GROUP_FILTER_BAN: frozenset[str] = frozenset({"group_filter"})
+
+_PHASE6_PER_NAME_BAN: dict[Path, frozenset[str]] = {
+    _APP / "core" / "connections" / "router.py":
+        _PHASE6_GROUP_FILTER_BAN,
+    _APP / "core" / "datasources" / "router.py":
+        _PHASE6_GROUP_FILTER_BAN,
+    _APP / "core" / "eseguibili" / "router.py":
+        _PHASE6_GROUP_FILTER_BAN,
+    _APP / "core" / "features" / "routes.py":
+        _PHASE6_GROUP_FILTER_BAN,
+    _APP / "core" / "files" / "router.py":
+        _PHASE6_GROUP_FILTER_BAN,
+    _APP / "core" / "intermediate" / "router.py":
+        _PHASE6_GROUP_FILTER_BAN,
+    _APP / "core" / "logs" / "router.py":
+        _PHASE6_GROUP_FILTER_BAN,
+    _APP / "core" / "projects" / "router.py":
+        _PHASE6_GROUP_FILTER_BAN,
+    _APP / "core" / "scheduler" / "router.py":
+        _PHASE6_GROUP_FILTER_BAN,
+}
+
+
 def _imports_facade(path: Path) -> list[tuple[int, str]]:
     """Return [(lineno, names_imported)] for each `from app.core.auth.auth import ...`
     found anywhere in the file (top-level OR nested inside funcs).
@@ -331,9 +367,9 @@ def test_phase5_migrated_file_does_not_import_banned_names_from_facade(
     Facade may keep FastAPI Depends (`get_current_user`,
     `require_*`, `require_*_owner`, `require_admin`,
     `require_user_or_above`, `require_superadmin`,
-    `require_not_esecutore`) + `group_filter`. Banned: `CurrentUser`
-    + ownership helpers (canonical leaves: `app.core.auth.models`
-    + `app.core.auth.ownership`)."""
+    `require_not_esecutore`). Banned: `CurrentUser` + ownership
+    helpers (canonical leaves: `app.core.auth.models` +
+    `app.core.auth.ownership`)."""
     assert path.exists(), f"migrated file missing: {path}"
     violations = _per_name_ban_violations(path, banned_names)
     assert violations == [], (
@@ -342,6 +378,50 @@ def test_phase5_migrated_file_does_not_import_banned_names_from_facade(
         + "\n".join(f"  line {ln}: {nm}" for ln, nm in violations)
         + f"\nLeaf sources: CurrentUser ← app.core.auth.models; "
         "ownership helpers ← app.core.auth.ownership."
+    )
+
+
+@pytest.mark.parametrize(
+    "path,banned_names",
+    list(_PHASE6_PER_NAME_BAN.items()),
+    ids=lambda v: (
+        str(v.relative_to(_BACKEND_ROOT)).replace("\\", "/")
+        if isinstance(v, Path)
+        else "names"
+    ),
+)
+def test_phase6_migrated_file_does_not_import_group_filter_from_facade(
+    path: Path, banned_names: frozenset[str]
+):
+    """Phase-6 contract (BE-GO-READY-AUTH-ENGINE-011):
+    `group_filter` canonical home is `app.core.auth.ownership`.
+    The 9 app routers using it MUST consume the leaf directly;
+    facade pull is a strangler regression. The auth.py facade
+    keeps a KEEP_COMPAT re-export so the symbol identity is
+    preserved for any test/code that still imports
+    `from app.core.auth.auth import group_filter` — but the
+    routers themselves are pinned to the leaf."""
+    assert path.exists(), f"migrated file missing: {path}"
+    violations = _per_name_ban_violations(path, banned_names)
+    assert violations == [], (
+        f"{path.relative_to(_BACKEND_ROOT)} pulls Phase-6 banned "
+        f"name `group_filter` from the facade:\n"
+        + "\n".join(f"  line {ln}: {nm}" for ln, nm in violations)
+        + "\nLeaf source: group_filter ← app.core.auth.ownership."
+    )
+
+
+def test_group_filter_leaf_canonical_home():
+    """Lock the canonical home: `group_filter` lives in
+    `app.core.auth.ownership` AND is re-exported by the
+    `app.core.auth.auth` facade (KEEP_COMPAT). Both surfaces must
+    resolve to the same callable identity."""
+    from app.core.auth.auth import group_filter as gf_facade
+    from app.core.auth.ownership import group_filter as gf_leaf
+
+    assert gf_facade is gf_leaf, (
+        "auth.py group_filter and ownership.py group_filter MUST "
+        "be the same object (KEEP_COMPAT identity preserved)."
     )
 
 

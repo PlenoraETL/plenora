@@ -327,6 +327,45 @@ def _extract_file_source_group_id(
         return ctx.group_id
     return getattr(self_obj, "_current_group_id", None)
 
+
+def _extract_project_source_group_id(
+    self_obj,
+    ctx: Optional[ArricchisciExecutionContext],
+) -> Optional[str]:
+    """BE-GO-READY-TRANSFORMATION-ENGINE-026: variante ctx-strict
+    per il branch `project_source` di `_resolve_file_source_path`
+    (chiama `SourceLoader.resolve_project_path` con
+    `expected_group_id`).
+
+    Stesso contract di `_extract_file_source_group_id`
+    (TE-024) per simmetria e per chiudere il residual TE24-R1:
+      - **Ctx fornito**: ritorna `ctx.group_id` esclusivamente.
+        Anche con `ctx.group_id is None`, NON cadiamo sul
+        singleton legacy — la run dichiarata fail-closed a
+        valle.
+      - **Ctx assente**: KEEP_COMPAT — fallback su
+        `getattr(self_obj, "_current_group_id", None)` per i
+        legacy callsite non ancora migrati. Nessun lock test
+        attualmente esercita il fallback `ctx=None +
+        _current_group_id=None` per il branch project_source,
+        ma il fallback resta per simmetria col helper TE-024
+        e per non rompere chiamate dirette esterne (es.
+        `enrichment_task.py`).
+
+    Razionale: `SourceLoader.resolve_project_path` accetta
+    `expected_group_id` come tenant binding fail-closed.
+    Passare un singleton stale qui significherebbe che un
+    canvas cross-tenant con `project_source` referenziando un
+    progetto di un altro tenant verrebbe risolto attraverso
+    il group_id sbagliato — il loader bloccherebbe comunque
+    (defense in depth), ma il messaggio di errore + il log
+    `[SECURITY]` riferirebbe il group sbagliato. Ctx-strict
+    rende il fallimento attribuibile alla run corretta.
+    """
+    if ctx is not None:
+        return ctx.group_id
+    return getattr(self_obj, "_current_group_id", None)
+
 # Stesso logger name di `api_connector.py` (`__name__` valuta a
 # `"app.core.arricchisci.api_connector"`). Singleton stdlib per nome →
 # record indistinguibili dai consumer che attaccano handler / filtrano
@@ -1108,9 +1147,16 @@ class ApiConnectionRestFileMixin:
             # Tenant binding fail-closed via SourceLoader: tutto il
             # source loading di api_connector passa per il loader unico,
             # niente accesso diretto ad ArtifactResolver. Senza
-            # _current_group_id rifiutiamo esplicitamente: meglio
-            # errore visibile che leak silente.
-            executing_group_id = _resolve_rest_file_group_id(self, ctx)
+            # group_id rifiutiamo esplicitamente: meglio errore
+            # visibile che leak silente.
+            #
+            # BE-GO-READY-TRANSFORMATION-ENGINE-026: ctx-strict per
+            # il branch project_source. Quando `ctx` e' fornito,
+            # `ctx.group_id` vince sempre — anche se None — e lo
+            # stato singleton legacy NON viene mai consultato. Chiude
+            # il residual TE24-R1 (`_resolve_file_source_path`
+            # project_source path ancora su `_resolve_rest_file_group_id`).
+            executing_group_id = _extract_project_source_group_id(self, ctx)
             if not executing_group_id:
                 logger.error(
                     f"[SECURITY] _resolve_file_source_path: group_id "

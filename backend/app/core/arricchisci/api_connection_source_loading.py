@@ -245,6 +245,38 @@ def _resolve_preview_limit(
     return getattr(self_obj, "_preview_limit", None)
 
 
+def _preview_limit_from_ctx(
+    ctx: Optional[ArricchisciExecutionContext],
+) -> Optional[int]:
+    """BE-GO-READY-TRANSFORMATION-ENGINE-025: helper strict per
+    `preview_limit`.
+
+    Ritorna `ctx.preview_limit` se il caller passa un context tipato,
+    altrimenti `None`. **Non legge** `_preview_limit` dal singleton
+    — il preview-limit pre-set sul singleton e' considerato stale
+    state che NON deve influenzare il flusso `_load_file_source`
+    quando il caller non ha esplicitamente dichiarato un context.
+
+    Differenza vs `_resolve_preview_limit`: nessun fallback al
+    singleton. Usato dal slice `_load_file_source` per il
+    preview_limit (non per group_id, che resta KEEP_AS_LEGACY_LOCK
+    per coverage dei fail-closed core tests in
+    `test_api_connector_source_loading_core.py`).
+
+    Decisione di slice (audit -023/-025):
+      Il `preview_limit` e' tenant-non-sensitive ma cross-execution
+      sensitive: un eventual `svc._preview_limit = 100` di un
+      precedente run potrebbe truncare silenziosamente l'output di
+      un run successivo che NON aveva intenzione di limitare.
+      Spostare la lettura sul typed boundary chiude questa race
+      window senza richiedere migrazione del piu' delicato
+      `group_id` reader (che resta legacy lock).
+    """
+    if ctx is not None:
+        return ctx.preview_limit
+    return None
+
+
 def _group_id_from_ctx(
     ctx: Optional[ArricchisciExecutionContext],
 ) -> Optional[str]:
@@ -530,9 +562,20 @@ class ApiConnectionSourceLoadingMixin:
         loader unico.
 
         BE-GO-READY-TRANSFORMATION-ENGINE-019: accetta `ctx` come
-        kwarg opzionale. `group_id` e `preview_limit` vengono letti
-        da `ctx` se fornito, altrimenti fallback a singleton state
-        (KEEP_COMPAT).
+        kwarg opzionale. `group_id` viene letto da `ctx` se fornito,
+        altrimenti fallback a singleton state (KEEP_AS_LEGACY_LOCK
+        — preserva i fail-closed core tests in
+        `tests2/security/unit/test_api_connector_source_loading_core.py`).
+
+        BE-GO-READY-TRANSFORMATION-ENGINE-025 (slice migration):
+        `preview_limit` ora viene letto ESCLUSIVAMENTE da
+        `ctx.preview_limit` via `_preview_limit_from_ctx(ctx)`. Lo
+        `svc._preview_limit` legacy non e' piu' consultato —
+        elimina lo stale-state cross-execution leak (un previous
+        run che setta `_preview_limit=N` non puo' piu' truncare il
+        run successivo che NON dichiara un context tipato). Quando
+        `ctx is None`, il preview_limit e' considerato non-richiesto
+        (no truncation).
         """
         from app.core.artifacts import (
             SourceLoader,
@@ -564,8 +607,15 @@ class ApiConnectionSourceLoadingMixin:
             # messaggio originale del loader viene propagato come-is.
             raise ValueError(str(e)) from e
 
-        # Tronca per preview (opzionale)
-        _plimit = _resolve_preview_limit(self, ctx)
+        # Tronca per preview (opzionale).
+        # BE-GO-READY-TRANSFORMATION-ENGINE-025 (slice migration):
+        # il preview_limit ora viene letto SOLO da `ctx.preview_limit`
+        # (typed boundary). Lo `svc._preview_limit` legacy non e' piu'
+        # consultato — un eventuale stale value pre-set da un'altra
+        # esecuzione non puo' truncare silenziosamente l'output del
+        # run corrente. Group_id resta KEEP_AS_LEGACY_LOCK
+        # (`_resolve_group_id` sopra) per i fail-closed core tests.
+        _plimit = _preview_limit_from_ctx(ctx)
         if _plimit and isinstance(_plimit, int) and _plimit > 0:
             df = df.head(_plimit)
 

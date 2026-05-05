@@ -241,6 +241,102 @@ jobs:
             "SELECT count(*) FROM plenora.schema_migrations")
           echo "OK: schema 'plenora' creato, ${applied} migration tracciate."
 
+      - name: Verify Celery cleanroom readiness
+        # BE-GO-READY-INSTALLATION-014-CELERY-CLEANROOM-READINESS.
+        #
+        # Bounded import + broker probe. Does NOT spawn a real
+        # `celery worker` / `celery beat` (would require fragile
+        # sleep loops to wait for ready and external services we
+        # do not have). What we DO assert:
+        #
+        # 1. workers.celery_app imports cleanly under the cleanroom
+        #    env (this exercises the same settings/dotenv loading
+        #    path that a real worker would, AND the import-time
+        #    `include=[...]` task module list - if any task module
+        #    has an import-time bug it surfaces here).
+        # 2. The Celery app `main` is the canonical "dataflow_tasks"
+        #    (renaming would break worker discovery via the
+        #    `celery -A workers.celery_app` CLI contract).
+        # 3. All 5 expected task modules registered tasks.
+        # 4. Broker connectivity via `connection().ensure_connection`
+        #    with a 5s timeout and a single attempt - uses the
+        #    existing redis:7-alpine service container, no extra
+        #    infra. Sleep-free: kombu's ensure_connection blocks at
+        #    most `timeout` seconds.
+        # 5. PlenoraBeatScheduler resolves as a symbol (does NOT
+        #    instantiate; constructor touches PG which is already
+        #    covered by the /ready post-condition).
+        working-directory: backend
+        run: |
+          set -e
+          python - <<'PYEOF'
+          import importlib
+          import sys
+          # 1 + 2: import the Celery app + verify the canonical main
+          # name. The systemd unit (plenora-celery.service) invokes
+          # `celery -A workers.celery_app worker`; renaming either the
+          # module path or the Celery `main` would break the CLI
+          # contract silently.
+          from workers.celery_app import celery_app
+          assert celery_app.main == "dataflow_tasks", \
+              f"Celery main name regressed: got {celery_app.main!r}, expected 'dataflow_tasks'"
+          # 3: every module in `include=[...]` must import cleanly.
+          # This is the strict catch for import-time bugs in any task
+          # module - the kind that would crash the worker on startup
+          # in production but would NOT be caught by app HTTP boot.
+          expected_modules = (
+              "workers.tasks.enrichment_task",
+              "workers.tasks.carica_task",
+              "workers.tasks.schedule_task",
+              "workers.tasks.pipeline_task",
+              "workers.tasks.imdf_publish_task",
+          )
+          import_failures = []
+          for mod in expected_modules:
+              try:
+                  importlib.import_module(mod)
+              except Exception as exc:
+                  import_failures.append((mod, type(exc).__name__, str(exc)))
+          if import_failures:
+              print("::error::Celery include module(s) failed to import:")
+              for mod, etype, emsg in import_failures:
+                  print(f"  {mod}: {etype}: {emsg}")
+              sys.exit(1)
+          # After the explicit imports above, the Celery task registry
+          # must hold the app tasks alongside the celery.* built-ins.
+          # Built-ins are typically ~10 entries; we assert strictly
+          # MORE than that, which proves at least one app-side task
+          # registered (i.e. the @app.task decorators ran).
+          registered = list(celery_app.tasks.keys())
+          builtin_count = sum(1 for t in registered if t.startswith("celery."))
+          app_count = len(registered) - builtin_count
+          if app_count < 1:
+              print(f"::error::Celery registry has only {builtin_count} built-in task(s) "
+                    f"and 0 app tasks. Registered: {sorted(registered)}")
+              sys.exit(1)
+          print(f"OK: Celery app main='{celery_app.main}', "
+                f"{len(expected_modules)} include module(s) imported, "
+                f"{app_count} app task(s) + {builtin_count} built-in(s) registered.")
+          # 4: broker connectivity (bounded, no sleep loop). kombu's
+          # ensure_connection blocks for at most `timeout` seconds.
+          conn = celery_app.connection()
+          try:
+              conn.ensure_connection(timeout=5, max_retries=1)
+              print(f"OK: Celery broker reachable at {conn.as_uri(include_password=False)}")
+          finally:
+              conn.release()
+          # 5: beat scheduler symbol resolves. We do NOT instantiate -
+          # the constructor reads from PG (which is already covered by
+          # the /ready post-condition in the previous step) and beat
+          # leader-lock state in Redis. Symbol resolution alone catches
+          # rename / deletion regressions that would break
+          # plenora-beat.service ExecStart.
+          from workers.beat_scheduler import PlenoraBeatScheduler
+          assert PlenoraBeatScheduler.__name__ == "PlenoraBeatScheduler", \
+              "PlenoraBeatScheduler class renamed; systemd unit and docs need to be updated."
+          print("OK: PlenoraBeatScheduler symbol resolves.")
+          PYEOF
+
       - name: Stop backend
         # Teardown best-effort. `if: always()` cosi' gira anche se
         # uno step precedente e' fallito.

@@ -192,6 +192,106 @@ def test_resolve_file_source_id_path_ctx_wins_over_stale_singleton(api_service, 
     assert result is not None, "blob materialization deve aver successo per winner-grp-B"
 
 
+# ---------------------------------------------------------------------------
+# BE-GO-READY-TRANSFORMATION-ENGINE-026: ctx-strict project_source path
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_file_source_path_project_source_ctx_wins_over_stale_singleton(api_service, monkeypatch):
+    """TE-026 lock: nel branch `project_source` di
+    `_resolve_file_source_path`, quando `ctx` e' fornito,
+    `ctx.group_id` vince SEMPRE su `svc._current_group_id` stale.
+    `SourceLoader.resolve_project_path` deve ricevere
+    `expected_group_id=ctx.group_id`, non il valore legacy.
+    Senza questo, un singleton stale (residuo di una run
+    precedente) farebbe attribuire un'eventuale block
+    cross-tenant al group sbagliato — confondendo log e
+    diagnosi."""
+    # Stato legacy stale.
+    api_service._current_group_id = "stale-grp-A"
+
+    # Canvas con un edge da project_source verso un nodo target.
+    nodes = [
+        {"id": "src", "type": "project_source",
+         "data": {"source_project_id": "proj-X"}},
+        {"id": "tgt", "type": "rest_file"},
+    ]
+    edges = [{"source": "src", "target": "tgt"}]
+
+    captured = []
+
+    class _FakeLoader:
+        def resolve_project_path(self, ref, expected_group_id):
+            captured.append({
+                "project_id": getattr(ref, "project_id", None),
+                "expected_group_id": expected_group_id,
+            })
+            return "/tmp/fake/output.bin"
+
+    # Patch del symbol al sito di lazy-import (`from app.core.artifacts
+    # import ... SourceLoader`). _resolve_file_source_path importa
+    # `SourceLoader` direttamente nel body, quindi patch sul module
+    # `app.core.artifacts`.
+    import app.core.artifacts as artifacts_mod
+    monkeypatch.setattr(artifacts_mod, "SourceLoader", _FakeLoader)
+
+    # Ctx esplicito con il group "winner".
+    result = api_service._resolve_file_source_path(
+        nodes, edges, "tgt", ctx=_ctx(group_id="winner-grp-B"),
+    )
+
+    assert result == "/tmp/fake/output.bin"
+    assert len(captured) == 1, (
+        f"Expected 1 SourceLoader.resolve_project_path call; got {len(captured)}"
+    )
+    assert captured[0]["expected_group_id"] == "winner-grp-B", (
+        f"Expected expected_group_id=winner-grp-B; got "
+        f"{captured[0]['expected_group_id']!r} (singleton leak suspected)"
+    )
+    assert captured[0]["project_id"] == "proj-X"
+
+
+def test_resolve_file_source_path_project_source_ctx_with_none_group_does_not_fall_back_to_singleton(api_service, monkeypatch):
+    """TE-026 lock: quando il caller passa `ctx` con
+    `group_id=None`, il branch `project_source` DEVE fail-closed
+    senza fallback su `_current_group_id`. Senza questo, una
+    `ArricchisciExecutionContext(project_id=..., group_id=None,
+    ...)` (ramo dati legittimo: progetto inesistente in DB)
+    cadrebbe in modo silente sul singleton di una run precedente,
+    aprendo un canale cross-tenant."""
+    # Singleton stale che NON deve essere consultato.
+    api_service._current_group_id = "stale-grp-leak"
+
+    nodes = [
+        {"id": "src", "type": "project_source",
+         "data": {"source_project_id": "proj-X"}},
+        {"id": "tgt", "type": "rest_file"},
+    ]
+    edges = [{"source": "src", "target": "tgt"}]
+
+    loader_called = {"count": 0}
+
+    class _FakeLoader:
+        def resolve_project_path(self, ref, expected_group_id):
+            loader_called["count"] += 1
+            return "/tmp/should-never-be-returned"
+
+    import app.core.artifacts as artifacts_mod
+    monkeypatch.setattr(artifacts_mod, "SourceLoader", _FakeLoader)
+
+    # Ctx esplicito con group_id=None (ramo dati legittimo).
+    with pytest.raises(ValueError, match="Contesto di sicurezza non determinabile"):
+        api_service._resolve_file_source_path(
+            nodes, edges, "tgt", ctx=_ctx(group_id=None),
+        )
+
+    assert loader_called["count"] == 0, (
+        "SourceLoader.resolve_project_path non deve essere chiamato "
+        "quando ctx.group_id e' None — fail-closed PRIMA di consultare "
+        "il singleton legacy."
+    )
+
+
 def test_resolve_file_source_id_path_requires_visibility_before_materializing_blob(api_service, monkeypatch, tmp_path):
     # BE-GO-READY-TRANSFORMATION-ENGINE-022: typed ctx Phase 2.
     import app.config as config_mod

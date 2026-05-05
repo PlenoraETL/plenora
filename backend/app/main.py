@@ -370,7 +370,6 @@ async def memory_limit_exceeded_handler(
 # (`patch.object(main_mod, "orchestrator", ...)`). Il source of truth
 # del wiring e' la factory, non queste 7 righe.
 
-from app.core.arricchisci.api_connector import api_connection_service
 from app.runtime import build_runtime_services
 
 _runtime_services = build_runtime_services(
@@ -385,6 +384,13 @@ query_generator = _runtime_services.query_generator
 query_executor = _runtime_services.query_executor
 features_service = _runtime_services.features_service
 orchestrator = _runtime_services.orchestrator
+# BE-GO-READY-BOOTSTRAP-ENGINE-016-API-CONNECTION-SLICE: il
+# singleton `api_connection_service` ora vive esplicitamente nel
+# container. Identita' preservata: e' il MEDESIMO oggetto del
+# canonical module-level
+# `app.core.arricchisci.api_connector.api_connection_service`. Il
+# patch surface esistente continua a funzionare invariata.
+api_connection_service = _runtime_services.api_connection_service
 
 
 # ==================== INIT MODULI ====================

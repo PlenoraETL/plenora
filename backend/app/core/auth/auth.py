@@ -292,15 +292,15 @@ def require_superadmin(current_user: CurrentUser = Depends(get_current_user)) ->
         _disclosure.raise_disclosure(_disclosure.role_superadmin_required())
     return current_user
 
-def group_filter(current_user: CurrentUser) -> Optional[str]:
-    """
-    Ritorna il group_id da usare come filtro.
-    superadmin → None (nessun filtro, vede tutto)
-    altri      → current_user.group_id
-    """
-    if current_user.role == "superadmin":
-        return None
-    return current_user.group_id
+# BE-GO-READY-AUTH-ENGINE-011-GROUP-FILTER-LEAF-EXTRACTION:
+# `group_filter` canonical home is now `app.core.auth.ownership`
+# (pure policy helper, zero side effects). Re-export preserved as
+# `KEEP_COMPAT` so any test/code that still does
+# `from app.core.auth.auth import group_filter` (or
+# `auth_mod.group_filter`) continues to resolve to the same object.
+# App routers (9) consume the leaf directly per Phase-6 strangler
+# ban (`tests2/security/unit/test_auth_facade_strangler_contract.py`).
+from app.core.auth.ownership import group_filter  # noqa: F401
 
 
 # ============================================================

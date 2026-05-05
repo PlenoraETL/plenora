@@ -34,13 +34,13 @@ from app.core.auth.auth import (
     require_not_esecutore,
     require_admin,
     require_schedule_owner,
-    group_filter,
 )
-# BE-GO-READY-AUTH-ENGINE-010 Phase-5 strangler: `CurrentUser` and
-# `assert_group_access` consumed directly from their canonical leaf
-# modules. Facade still owns FastAPI Depends + `group_filter`.
+# BE-GO-READY-AUTH-ENGINE-010 Phase-5 + AUTH-ENGINE-011:
+# `CurrentUser`, `assert_group_access`, and `group_filter` consumed
+# directly from their canonical leaf modules. Facade KEEP_COMPAT
+# re-exports preserved.
 from app.core.auth.models import CurrentUser
-from app.core.auth.ownership import assert_group_access
+from app.core.auth.ownership import assert_group_access, group_filter
 import app.db.db_service as db
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http

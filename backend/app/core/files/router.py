@@ -114,19 +114,17 @@ from app.core.auth.auth import (
     require_not_esecutore,
     require_user_or_above,
     require_file_owner,
-    group_filter,
 )
-# BE-GO-READY-AUTH-ENGINE-010 Phase-5 strangler: leaf-safe symbols
-# (`CurrentUser` + 3 ownership helpers) consumed directly from their
-# canonical leaf modules instead of re-exports on the auth.py facade.
-# Facade still owns the FastAPI Depends + `group_filter` (no leaf
-# yet for those — see audit §"future contract boundary" for the
-# split rationale).
+# BE-GO-READY-AUTH-ENGINE-010 Phase-5 + AUTH-ENGINE-011: leaf-safe
+# symbols (`CurrentUser` + 3 ownership helpers + `group_filter`)
+# consumed directly from their canonical leaf modules. Facade
+# KEEP_COMPAT re-exports preserved.
 from app.core.auth.models import CurrentUser
 from app.core.auth.ownership import (
     assert_group_access,
     assert_resource_visible,
     compute_can_edit,
+    group_filter,
 )
 from app.shared.sharing import visible_resource_ids
 from app.shared.path_policy import assert_path_within as _core_assert

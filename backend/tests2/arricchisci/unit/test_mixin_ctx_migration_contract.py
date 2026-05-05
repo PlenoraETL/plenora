@@ -246,6 +246,91 @@ def test_load_static_values_uses_static_sentinel_when_ctx_none(api_service):
     )
 
 
+def test_load_file_source_ignores_stale_preview_limit_when_ctx_none(api_service):
+    """BE-GO-READY-TRANSFORMATION-ENGINE-025 (slice migration):
+    `_load_file_source` non legge piu' `_preview_limit` dal
+    singleton. Quando `ctx is None`, il preview_limit e' considerato
+    non-richiesto (no truncation) — anche se `svc._preview_limit`
+    ha un valore stale da una pre-existing execution.
+
+    Regression guard contro stale-state cross-execution leak: un
+    `_preview_limit=3` lasciato da T1 non deve truncare
+    silenziosamente l'output di T2 che chiama `_load_file_source`
+    senza un context tipato. Pre-batch -025 questo era un fail-soft
+    behavior che dipendeva dall'ordine di esecuzione sul singleton.
+    """
+    from app.core.arricchisci import api_connection_source_loading as mod
+
+    api_service._current_group_id = "grp-A"
+    # Stale preview_limit residuo da una pre-existing execution.
+    api_service._preview_limit = 3
+
+    df_source = pd.DataFrame([{"a": i} for i in range(10)])
+
+    class _FakeSL:
+        def load(self, ref, expected_group_id):
+            return df_source.copy()
+
+    with patch("app.core.artifacts.SourceLoader", return_value=_FakeSL()), \
+         patch.object(mod, "filter_visible_columns",
+                      side_effect=lambda df, cols: df):
+        result = api_service._load_file_source(
+            {"id": "fs1", "file_source_id": "f-1"},
+        )  # NO ctx kwarg
+
+    assert len(result) == 10, (
+        f"REGRESSIONE Phase 5 slice -025: stale `_preview_limit=3` "
+        f"sul singleton ha truncato l'output ({len(result)} righe) "
+        f"anche senza ctx esplicito. Cross-execution leak ripristinato."
+    )
+
+
+def test_load_file_source_ctx_preview_limit_wins_over_stale_singleton(api_service):
+    """BE-GO-READY-TRANSFORMATION-ENGINE-025 (slice migration):
+    invariant esplicito di tenant/run isolation per il preview_limit.
+
+    Setup adversariale: il singleton ha `_preview_limit = 999`
+    stale. Il caller passa `ctx.preview_limit = 5`. La truncation
+    deve usare 5 (typed boundary), NON 999 (singleton stale).
+
+    Lock pre-emptivo della rimozione del fallback nel helper
+    `_preview_limit_from_ctx`: anche se future regression
+    accidentalmente ripristinasse un fallback al singleton, il
+    valore stale non vincerebbe contro il ctx esplicito.
+    """
+    from app.core.arricchisci import api_connection_source_loading as mod
+    from app.core.arricchisci.execution_context import (
+        ArricchisciExecutionContext,
+    )
+
+    api_service._current_group_id = "grp-A"
+    api_service._preview_limit = 999  # stale singleton
+
+    ctx = ArricchisciExecutionContext(
+        project_id="p1", group_id="grp-A", preview_limit=5,
+    )
+
+    df_source = pd.DataFrame([{"a": i} for i in range(20)])
+
+    class _FakeSL:
+        def load(self, ref, expected_group_id):
+            return df_source.copy()
+
+    with patch("app.core.artifacts.SourceLoader", return_value=_FakeSL()), \
+         patch.object(mod, "filter_visible_columns",
+                      side_effect=lambda df, cols: df):
+        result = api_service._load_file_source(
+            {"id": "fs1", "file_source_id": "f-1"},
+            ctx=ctx,
+        )
+
+    assert len(result) == 5, (
+        f"REGRESSIONE: ctx.preview_limit=5 deve vincere contro stale "
+        f"singleton _preview_limit={api_service._preview_limit}. Got "
+        f"{len(result)} rows."
+    )
+
+
 def test_load_file_source_uses_ctx_preview_limit_over_singleton(api_service):
     """Phase 2 lock: `preview_limit` letto dal ctx tipato quando
     fornito, dal singleton come KEEP_COMPAT fallback."""

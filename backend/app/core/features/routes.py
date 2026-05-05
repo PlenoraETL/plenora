@@ -34,14 +34,16 @@ from app.core.auth.auth import (
     get_current_user,
     require_not_esecutore,
     require_admin,
-    group_filter,
 )
+# BE-GO-READY-AUTH-ENGINE-011: `group_filter` canonical home is
+# `app.core.auth.ownership`. Facade KEEP_COMPAT re-export preserved.
 from app.core.auth.models import CurrentUser
 from app.core.auth.ownership import (
     assert_group_access,
     assert_resource_visible,
     assert_can_modify,
     compute_can_edit,
+    group_filter,
 )
 from app.core.features.models import (
     ArcGISConnection,

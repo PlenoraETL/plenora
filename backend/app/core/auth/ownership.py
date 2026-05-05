@@ -31,6 +31,8 @@ Cycle prevention:
 
 from __future__ import annotations
 
+from typing import Optional
+
 from fastapi import HTTPException
 
 import app.db.db_service as db
@@ -44,6 +46,23 @@ def _extract_group_and_id(resource):
     if isinstance(resource, dict):
         return resource.get("group_id"), resource.get("id")
     return getattr(resource, "group_id", None), getattr(resource, "id", None)
+
+
+def group_filter(current_user: CurrentUser) -> Optional[str]:
+    """
+    Ritorna il group_id da usare come filtro.
+    superadmin → None (nessun filtro, vede tutto)
+    altri      → current_user.group_id
+
+    BE-GO-READY-AUTH-ENGINE-011 (canonical home): pure policy
+    helper, zero side effects, zero `app.*` imports beyond
+    `CurrentUser` (`app.core.auth.models`). Re-exported by the
+    `app.core.auth.auth` facade for KEEP_COMPAT (the 9 router
+    callsites pull this leaf directly post-Phase-6).
+    """
+    if current_user.role == "superadmin":
+        return None
+    return current_user.group_id
 
 
 def assert_group_access(

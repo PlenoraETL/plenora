@@ -62,6 +62,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from app.core.arricchisci.api_connector import ApiConnectionService
     from app.core.estrai.database_inspector import DatabaseInspector
     from app.core.estrai.query_generator import QueryGenerator
     from app.core.features.features_service import FeaturesService
@@ -76,12 +77,12 @@ __all__ = ["RuntimeServices", "build_runtime_services"]
 
 @dataclass(frozen=True)
 class RuntimeServices:
-    """Frozen typed container for the first-slice shared services.
+    """Frozen typed container for shared service singletons.
 
-    The 7 fields cover the coherent dependency cluster previously
-    bound at `app/main.py:374-387` module top-level. Each field is a
-    constructed instance, NOT a class. Frozen so reassignments
-    surface as errors instead of silently rebinding.
+    Bundles the coherent slice previously constructed at module-load
+    time in `app/main.py`. Each field is a constructed instance, NOT
+    a class. Frozen so reassignments surface as errors instead of
+    silently rebinding.
 
     Field roles:
       - `project_service`: project CRUD facade.
@@ -92,6 +93,17 @@ class RuntimeServices:
       - `features_service`: ArcGIS Feature Service consumer.
       - `orchestrator`: pipeline orchestrator (depends on the above 5,
         excluding `database_inspector`).
+      - `api_connection_service`: arricchisci API connection
+        singleton (added by BE-GO-READY-BOOTSTRAP-ENGINE-016).
+        IMPORTANT: this field is the SAME object as the canonical
+        module-level singleton
+        `app.core.arricchisci.api_connector.api_connection_service`.
+        The container does not own its construction — `api_connector`
+        constructs it eagerly at module import as before. The
+        container exposes it for explicit dependency wiring; the
+        public import path + the test monkeypatch surface
+        (`patch("app.core.arricchisci.api_connector.api_connection_service.<method>", ...)`)
+        are preserved. Identity invariant locked by contract test.
     """
 
     project_service: "ProjectService"
@@ -101,6 +113,7 @@ class RuntimeServices:
     query_executor: "QueryExecutor"
     features_service: "FeaturesService"
     orchestrator: "OrchestratorService"
+    api_connection_service: "ApiConnectionService"
 
 
 def build_runtime_services(
@@ -142,6 +155,22 @@ def build_runtime_services(
     from app.services.connection_service import ConnectionService
     from app.services.project_service import ProjectService
 
+    # BE-GO-READY-BOOTSTRAP-ENGINE-016-API-CONNECTION-SLICE: importa
+    # il singleton CANONICO da `api_connector` invece di
+    # ricostruirlo. Razionale: il singleton viene costruito
+    # eagerly al primo import del modulo `api_connector` (line
+    # `api_connection_service = ApiConnectionService()`), ed e' la
+    # superficie pubblica usata da:
+    #   - `app.core.arricchisci.executor` (top-level import);
+    #   - `app.core.eseguibili.scanner` (lazy import);
+    #   - 4+ test che fanno
+    #     `patch("app.core.arricchisci.api_connector.api_connection_service.<method>", ...)`.
+    # Ricostruirlo qui creerebbe due istanze divergenti rompendo
+    # ogni patch site. Il container espone IL MEDESIMO oggetto via
+    # un attributo tipato; identity invariant lockato dal contract
+    # test.
+    from app.core.arricchisci.api_connector import api_connection_service
+
     project_service = ProjectService()
     connection_service = ConnectionService()
     database_inspector = DatabaseInspector()
@@ -168,4 +197,5 @@ def build_runtime_services(
         query_executor=query_executor,
         features_service=features_service,
         orchestrator=orchestrator,
+        api_connection_service=api_connection_service,
     )

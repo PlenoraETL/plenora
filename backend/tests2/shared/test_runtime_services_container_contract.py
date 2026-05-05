@@ -50,11 +50,17 @@ def test_runtime_module_exposes_typed_factory_and_container():
     assert RuntimeServices.__dataclass_params__.frozen is True
 
 
-def test_runtime_services_has_seven_canonical_fields():
-    """The container shape locks the first slice (7 fields).
+def test_runtime_services_has_eight_canonical_fields():
+    """The container shape locks the post-016 slice (8 fields).
 
     Adding new fields requires explicit contract update; removing
     one is a regression.
+
+    History:
+      - 011 (first slice): 7 fields (project, connection, inspector,
+        generator, executor, features, orchestrator).
+      - 016 (this batch): +1 `api_connection_service` (arricchisci
+        singleton).
     """
     from app.runtime import RuntimeServices
 
@@ -67,6 +73,7 @@ def test_runtime_services_has_seven_canonical_fields():
         "query_executor",
         "features_service",
         "orchestrator",
+        "api_connection_service",
     }
 
 
@@ -83,9 +90,12 @@ def test_runtime_services_is_frozen():
         query_executor=object(),
         features_service=object(),
         orchestrator=object(),
+        api_connection_service=object(),
     )
     with pytest.raises(Exception):
         instance.orchestrator = object()  # type: ignore[misc]
+    with pytest.raises(Exception):
+        instance.api_connection_service = object()  # type: ignore[misc]
 
 
 # ---------------------------------------------------------------------------
@@ -153,6 +163,11 @@ def test_build_runtime_services_constructs_in_canonical_order():
 
     fake_settings = SimpleNamespace(DATA_DIR=Path("/tmp/plenora"))
     fake_save_fn = MagicMock(name="save_dataframe")
+    # BE-GO-READY-BOOTSTRAP-ENGINE-016: the factory imports the
+    # canonical singleton from `api_connector` instead of constructing
+    # one. Stub it with an identifiable sentinel so the identity
+    # invariant is locked.
+    api_conn_sentinel = MagicMock(name="ApiConnectionService_singleton")
 
     with (
         patch("app.services.project_service.ProjectService", _ProjectService),
@@ -162,6 +177,10 @@ def test_build_runtime_services_constructs_in_canonical_order():
         patch("app.db.query_executor.QueryExecutor", _QueryExecutor),
         patch("app.core.features.features_service.FeaturesService", _FeaturesService),
         patch("app.core.orchestrator.service.OrchestratorService", _OrchestratorService),
+        patch(
+            "app.core.arricchisci.api_connector.api_connection_service",
+            api_conn_sentinel,
+        ),
     ):
         from app.runtime import build_runtime_services
 
@@ -184,8 +203,9 @@ def test_build_runtime_services_constructs_in_canonical_order():
             "OrchestratorService"
         ), f"{dep} must be constructed before OrchestratorService"
 
-    # 3. Returned container is the typed dataclass with the 7 fields
-    # bound to the freshly constructed instances.
+    # 3. Returned container is the typed dataclass with the 8 fields
+    # bound to the freshly constructed instances + the canonical
+    # singleton imported from `api_connector`.
     from app.runtime import RuntimeServices
 
     assert isinstance(result, RuntimeServices)
@@ -196,11 +216,28 @@ def test_build_runtime_services_constructs_in_canonical_order():
     assert result.query_executor is executor_instance
     assert result.features_service is features_instance
     assert result.orchestrator is orchestrator_instance
+    # IDENTITY INVARIANT (016): the container does NOT construct a
+    # second ApiConnectionService — it must consume the canonical
+    # `api_connector.api_connection_service` singleton.
+    assert result.api_connection_service is api_conn_sentinel
 
     # 4. Wiring assertions: settings + save_function flowed through.
     assert executor_instance.results_dir == Path("/tmp/plenora") / "temp"
     assert executor_instance.save_function is fake_save_fn
     assert features_instance.save_function is fake_save_fn
+
+    # 5. The factory MUST NOT also call `ApiConnectionService()`.
+    # Constructing a second instance would diverge from the canonical
+    # singleton and break the test patch surface
+    # (`patch("app.core.arricchisci.api_connector.api_connection_service.<method>", ...)`).
+    # Construction count tracked above does not include
+    # `ApiConnectionService` because the factory imports the
+    # already-constructed singleton instead of calling the class.
+    assert "ApiConnectionService" not in construction_order, (
+        "build_runtime_services must NOT construct ApiConnectionService; "
+        "it must import the canonical singleton from "
+        "`app.core.arricchisci.api_connector.api_connection_service`."
+    )
 
 
 def test_build_runtime_services_kw_only():
@@ -252,8 +289,12 @@ def test_main_py_consumes_runtime_services_factory():
 
 def test_main_py_rebinds_globals_from_runtime_container():
     """Source-bound: `main.py` exposes `_runtime_services` and
-    re-exports the 7 fields as module-globals (monkeypatch
-    backward compat)."""
+    re-exports the 8 fields as module-globals (monkeypatch
+    backward compat).
+
+    BE-GO-READY-BOOTSTRAP-ENGINE-016: added
+    `api_connection_service` as the 8th re-export.
+    """
     main_py = (
         Path(__file__).resolve().parent.parent.parent / "app" / "main.py"
     )
@@ -269,6 +310,7 @@ def test_main_py_rebinds_globals_from_runtime_container():
         "query_executor",
         "features_service",
         "orchestrator",
+        "api_connection_service",
     ):
         assert f"{name} = _runtime_services.{name}" in src, (
             f"main.py must re-export `{name}` from the container "
@@ -371,3 +413,102 @@ def test_runtime_services_module_does_not_import_fastapi_or_starlette():
                 f"app/runtime/services.py imports '{f}' on line: {line!r}. "
                 "The factory must stay leaf."
             )
+
+
+# ---------------------------------------------------------------------------
+# 6. BE-GO-READY-BOOTSTRAP-ENGINE-016 — api_connection_service slice
+# ---------------------------------------------------------------------------
+
+
+def test_runtime_container_owns_api_connection_service_field():
+    """The 8th field exists, is typed, and references the canonical
+    arricchisci singleton — NOT a fresh construction."""
+    import app.core.arricchisci.api_connector as api_connector_mod
+    from app.runtime import RuntimeServices, build_runtime_services
+    from types import SimpleNamespace
+    from pathlib import Path as _Path
+
+    fake_settings = SimpleNamespace(DATA_DIR=_Path("/tmp/plenora"))
+    container = build_runtime_services(
+        settings=fake_settings,
+        save_function=MagicMock(name="save_dataframe"),
+    )
+    # Identity invariant: the field is the SAME object as the
+    # canonical module-level singleton. Any test that
+    # `patch("app.core.arricchisci.api_connector.api_connection_service.<method>", ...)`
+    # therefore patches the SAME instance the container exposes.
+    assert isinstance(container, RuntimeServices)
+    assert container.api_connection_service is api_connector_mod.api_connection_service
+
+
+def test_main_py_no_longer_imports_api_connection_service_directly():
+    """Source-bound: `app/main.py` must NOT import
+    `api_connection_service` directly from `api_connector` — the
+    canonical path is now the container.
+
+    The arricchisci singleton stays in `api_connector.py` (test
+    patch surface preserved), but `main.py` consumes it via the
+    container re-export, not via a direct import.
+    """
+    main_py = (
+        Path(__file__).resolve().parent.parent.parent / "app" / "main.py"
+    )
+    src = main_py.read_text(encoding="utf-8")
+    forbidden_import = (
+        "from app.core.arricchisci.api_connector import api_connection_service"
+    )
+    assert forbidden_import not in src, (
+        "app/main.py still imports `api_connection_service` directly "
+        "from `api_connector`. Post-016 the container owns the field; "
+        "main.py should re-export from `_runtime_services`."
+    )
+
+
+def test_api_connector_module_still_exposes_singleton_for_patch_surface():
+    """The canonical module-level singleton MUST still exist on
+    `app.core.arricchisci.api_connector`. Removing it would break
+    every existing test that uses
+    `patch("app.core.arricchisci.api_connector.api_connection_service.<method>", ...)`.
+
+    Locked here because the slice approach is "wrap, don't move".
+    """
+    import app.core.arricchisci.api_connector as api_connector_mod
+
+    assert hasattr(api_connector_mod, "api_connection_service"), (
+        "Canonical singleton path missing: "
+        "app.core.arricchisci.api_connector.api_connection_service. "
+        "BE-GO-READY-BOOTSTRAP-ENGINE-016 keeps construction in "
+        "`api_connector` to preserve the test patch surface."
+    )
+
+
+def test_factory_does_not_reconstruct_api_connection_service():
+    """The factory MUST NOT call `ApiConnectionService()` on its own
+    — it must consume the canonical singleton via import. A second
+    construction would produce a divergent instance, breaking every
+    `patch("...api_connection_service.<method>", ...)` test.
+    """
+    src_path = (
+        Path(__file__).resolve().parent.parent.parent
+        / "app" / "runtime" / "services.py"
+    )
+    src = src_path.read_text(encoding="utf-8")
+    # Reject any line that constructs ApiConnectionService inline.
+    for line in src.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#") or stripped.startswith('"'):
+            continue
+        assert "ApiConnectionService(" not in line, (
+            f"app/runtime/services.py constructs ApiConnectionService "
+            f"on line: {line!r}. Use the canonical singleton import "
+            "instead (`from app.core.arricchisci.api_connector "
+            "import api_connection_service`)."
+        )
+    # Positive assertion: the factory imports the singleton.
+    assert (
+        "from app.core.arricchisci.api_connector import api_connection_service"
+        in src
+    ), (
+        "app/runtime/services.py must import the canonical singleton "
+        "to preserve the public/patch surface."
+    )

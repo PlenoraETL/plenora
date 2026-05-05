@@ -7,8 +7,11 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 from app.config import settings
-from app.core.auth.auth import get_current_user, require_not_esecutore, group_filter
+from app.core.auth.auth import get_current_user, require_not_esecutore
+# BE-GO-READY-AUTH-ENGINE-011: `group_filter` canonical home is
+# `app.core.auth.ownership`. Facade KEEP_COMPAT re-export preserved.
 from app.core.auth.models import CurrentUser
+from app.core.auth.ownership import group_filter
 from app.db.pg_connection import fetchone as _fetchone, fetchall as _fetchall
 from app.shared.authz_helpers import assert_project_visible
 from app.utils.logger import get_logger
