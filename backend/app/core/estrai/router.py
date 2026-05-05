@@ -18,7 +18,8 @@ from app.db.sql_functions import (
     get_function_catalog,
     translate_calculated_column,
 )
-from app.core.auth.auth import get_current_user, require_not_esecutore, CurrentUser
+from app.core.auth.auth import get_current_user, require_not_esecutore
+from app.core.auth.models import CurrentUser
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)

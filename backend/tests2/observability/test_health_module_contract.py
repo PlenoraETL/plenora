@@ -26,6 +26,24 @@ pytestmark = [pytest.mark.unit, pytest.mark.observability, pytest.mark.contract]
 
 
 # ---------------------------------------------------------------------------
+# Autouse fixture for BE-GO-READY-BOOTSTRAP-ENGINE-015 — default-True
+# `is_bootstrapped()`. Without this fixture, the conftest stubs
+# `app.bootstrap.bootstrap` to a no-op which leaves `_BOOT_COMPLETE`
+# at False, making the new `check_bootstrap_complete` always
+# return False and breaking every existing pre-015 readiness test.
+# Tests that exercise the False branch override via
+# `patch.object(h, "check_bootstrap_complete", ...)`.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _stub_is_bootstrapped_default_true(monkeypatch):
+    monkeypatch.setattr(
+        "app.bootstrap.is_bootstrapped", lambda: True,
+    )
+
+
+# ---------------------------------------------------------------------------
 # 1. Module purity: leaf module, no FastAPI / Starlette
 # ---------------------------------------------------------------------------
 
@@ -360,7 +378,9 @@ def test_gather_liveness_only_2_checks_in_body():
 # ---------------------------------------------------------------------------
 
 
-def test_gather_readiness_returns_200_when_all_6_ok():
+def test_gather_readiness_returns_200_when_all_7_ok():
+    """BE-GO-READY-BOOTSTRAP-ENGINE-015: readiness aggregation now
+    has 7 checks (added `bootstrap_complete`)."""
     import app.observability.health as h
 
     with (
@@ -370,6 +390,7 @@ def test_gather_readiness_returns_200_when_all_6_ok():
         patch.object(h, "check_migrations_aligned", return_value=(True, "aligned")),
         patch.object(h, "check_object_storage", return_value=(True, "ok")),
         patch.object(h, "check_reconciliation_backlog", return_value=(True, "pending=0 lost=0")),
+        patch.object(h, "check_bootstrap_complete", return_value=(True, "ok")),
     ):
         payload = h.gather_readiness()
 
@@ -378,6 +399,7 @@ def test_gather_readiness_returns_200_when_all_6_ok():
     assert set(payload.body["checks"].keys()) == {
         "postgres", "redis", "pool_headroom", "migrations",
         "object_storage", "reconciliation_backlog",
+        "bootstrap_complete",
     }
 
 
@@ -488,6 +510,135 @@ def test_gather_readiness_returns_503_on_reconciliation_backlog_over_threshold()
     assert payload.body["status"] == "not_ready"
     assert payload.body["checks"]["reconciliation_backlog"]["ok"] is False
     assert "lost=42" in payload.body["checks"]["reconciliation_backlog"]["detail"]
+
+
+# ---------------------------------------------------------------------------
+# 8.6 check_bootstrap_complete — BE-GO-READY-BOOTSTRAP-ENGINE-015
+# ---------------------------------------------------------------------------
+
+
+def test_check_bootstrap_complete_returns_ok_when_bootstrapped(monkeypatch):
+    """`is_bootstrapped() == True` -> outcome `(True, "ok")`."""
+    monkeypatch.setattr("app.bootstrap.is_bootstrapped", lambda: True)
+    from app.observability.health import check_bootstrap_complete
+
+    ok, detail = check_bootstrap_complete()
+    assert ok is True
+    assert detail == "ok"
+
+
+def test_check_bootstrap_complete_returns_false_when_not_bootstrapped(monkeypatch):
+    """`is_bootstrapped() == False` -> outcome
+    `(False, "bootstrap not complete")`. Slow-boot window /
+    partial bootstrap / CLI import without bootstrap call."""
+    monkeypatch.setattr("app.bootstrap.is_bootstrapped", lambda: False)
+    from app.observability.health import check_bootstrap_complete
+
+    ok, detail = check_bootstrap_complete()
+    assert ok is False
+    assert detail == "bootstrap not complete"
+
+
+def test_check_bootstrap_complete_fail_closed_on_import_error(monkeypatch):
+    """Fail-CLOSED on import error: a broken `app.bootstrap`
+    module means /ready cannot confirm a bootstrap that it
+    cannot verify. Distinct from the diagnostic helpers
+    (`check_pool_headroom` / `check_migrations_aligned` /
+    `check_object_storage` / `check_reconciliation_backlog`)
+    which fail-OPEN on import error."""
+    import sys
+
+    # Force the import of `app.bootstrap.is_bootstrapped` to fail.
+    # We do this by replacing `app.bootstrap` in `sys.modules` with
+    # a stub that has no `is_bootstrapped` attribute, then
+    # restoring it. The lazy import inside `check_bootstrap_complete`
+    # picks up our broken stub.
+    real_module = sys.modules.get("app.bootstrap")
+    try:
+        broken = type(sys)("app.bootstrap")  # empty module stub
+        sys.modules["app.bootstrap"] = broken
+
+        from app.observability.health import check_bootstrap_complete
+
+        ok, detail = check_bootstrap_complete()
+        assert ok is False
+        # Detail contains the exception class name (`ImportError` or
+        # `AttributeError`); we don't pin the exact ExcType.
+        assert ":" in detail
+    finally:
+        if real_module is not None:
+            sys.modules["app.bootstrap"] = real_module
+        else:
+            sys.modules.pop("app.bootstrap", None)
+
+
+def test_gather_readiness_returns_503_when_bootstrap_not_complete():
+    """BE-GO-READY-BOOTSTRAP-ENGINE-015: when bootstrap_complete
+    fails, /ready returns 503 with `bootstrap_complete.ok=False`."""
+    import app.observability.health as h
+
+    with (
+        patch.object(h, "check_postgres", return_value=(True, "ok")),
+        patch.object(h, "check_redis", return_value=(True, "ok")),
+        patch.object(h, "check_pool_headroom", return_value=(True, "ok")),
+        patch.object(h, "check_migrations_aligned", return_value=(True, "aligned")),
+        patch.object(h, "check_object_storage", return_value=(True, "ok")),
+        patch.object(h, "check_reconciliation_backlog", return_value=(True, "pending=0 lost=0")),
+        patch.object(
+            h, "check_bootstrap_complete",
+            return_value=(False, "bootstrap not complete"),
+        ),
+    ):
+        payload = h.gather_readiness()
+
+    assert payload.status_code == 503
+    assert payload.body["status"] == "not_ready"
+    assert payload.body["checks"]["bootstrap_complete"]["ok"] is False
+    assert payload.body["checks"]["bootstrap_complete"]["detail"] == (
+        "bootstrap not complete"
+    )
+
+
+def test_gather_readiness_includes_bootstrap_complete_key():
+    """Even when not stubbed at the gather level, the
+    `bootstrap_complete` key MUST appear in the readiness body.
+    Source-bound guard against accidental removal of the
+    aggregation line."""
+    import app.observability.health as h
+
+    # Use the default autouse fixture (is_bootstrapped → True)
+    # plus stub the other 6 to avoid real DB/Redis/S3 I/O.
+    with (
+        patch.object(h, "check_postgres", return_value=(True, "ok")),
+        patch.object(h, "check_redis", return_value=(True, "ok")),
+        patch.object(h, "check_pool_headroom", return_value=(True, "ok")),
+        patch.object(h, "check_migrations_aligned", return_value=(True, "aligned")),
+        patch.object(h, "check_object_storage", return_value=(True, "ok")),
+        patch.object(h, "check_reconciliation_backlog", return_value=(True, "pending=0 lost=0")),
+    ):
+        payload = h.gather_readiness()
+
+    assert "bootstrap_complete" in payload.body["checks"]
+    assert payload.body["checks"]["bootstrap_complete"]["ok"] is True
+    assert payload.body["checks"]["bootstrap_complete"]["detail"] == "ok"
+
+
+def test_gather_liveness_does_not_include_bootstrap_complete():
+    """Liveness MUST NOT include the bootstrap_complete check.
+    Liveness is "process responds" (PG SELECT 1 + Redis PING);
+    bootstrap completion is a readiness concern. A k8s liveness
+    probe failure kills the pod — we must NEVER kill a pod that
+    is just bootstrapping slowly."""
+    import app.observability.health as h
+
+    with (
+        patch.object(h, "check_postgres", return_value=(True, "ok")),
+        patch.object(h, "check_redis", return_value=(True, "ok")),
+    ):
+        payload = h.gather_liveness()
+
+    assert "bootstrap_complete" not in payload.body["checks"]
+    assert set(payload.body["checks"].keys()) == {"postgres", "redis"}
 
 
 # ---------------------------------------------------------------------------

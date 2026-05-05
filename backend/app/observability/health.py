@@ -63,6 +63,7 @@ __all__ = [
     "check_migrations_aligned",
     "check_object_storage",
     "check_reconciliation_backlog",
+    "check_bootstrap_complete",
     "gather_liveness",
     "gather_readiness",
 ]
@@ -293,6 +294,74 @@ def check_reconciliation_backlog() -> CheckOutcome:
     return True, detail
 
 
+def check_bootstrap_complete() -> CheckOutcome:
+    """Verifica che il boundary canonico `app.bootstrap.bootstrap()`
+    sia stato attraversato dal processo web.
+
+    BE-GO-READY-BOOTSTRAP-ENGINE-015-READY-CONSUMES-IS-BOOTSTRAPPED:
+    consumer del flag tipato `app.bootstrap.is_bootstrapped()`
+    introdotto nel batch 026 (BOOTSTRAP-ENGINE-013). Il flag flippa a
+    True solo dopo che i 4 step canonici (`validate_startup`,
+    `validate_storage_config`, `init_all_dbs`,
+    `_repair_psycopg2_ssl_env`) sono completati senza eccezioni.
+
+    Outcome:
+      - True quando `is_bootstrapped()` ritorna True;
+      - False quando `is_bootstrapped()` ritorna False (slow-boot
+        window, partial bootstrap dopo crash mid-step, oppure boot
+        non ancora avvenuto in setup CLI/test che importano `app`
+        senza chiamare `bootstrap()`).
+
+    Rationale del fail-fast esplicito:
+      Senza questo check, durante la finestra "FastAPI app esiste,
+      uvicorn ascolta, ma `bootstrap()` sta ancora eseguendo lo
+      step 3 (`init_all_dbs` con migration pesanti)" il `/ready`
+      restituirebbe 503 perche' i singoli check (PG / Redis /
+      migrations) gia' falliscono — ma il messaggio sarebbe meno
+      chiaro. Il check `bootstrap_complete` rende esplicito alla
+      readiness probe (k8s / load balancer) che il problema e' a
+      livello di boundary, non di una singola dipendenza. Il check
+      resta additivo: `gather_readiness` continua a comporre anche
+      gli altri check diagnostici nello stesso payload.
+
+    Boundary contract:
+      - NON tocca `gather_liveness`. Liveness rimane "il processo
+        risponde" (PG SELECT 1 + Redis PING). La completion del
+        bootstrap e' una nozione di readiness, non di liveness:
+        un k8s liveness probe che fallisce uccide il pod, ma il
+        pod che sta bootstrappando NON va ucciso, va solo escluso
+        dal load balancing.
+      - Esposto in `gather_readiness` come 7° check
+        `bootstrap_complete`.
+      - Fail-CLOSED: a differenza dei diagnostic check
+        (`check_pool_headroom` / `check_migrations_aligned` /
+        `check_object_storage` import-error / `check_reconciliation_backlog`),
+        un import-error qui significa "il modulo bootstrap e'
+        rotto" → /ready deve fallire (non vogliamo rispondere
+        "ready" su un app che non ha nemmeno un boundary di
+        bootstrap valido).
+
+    Test harness considerations:
+      Il conftest in `tests2/conftest.py` no-op `bootstrap()`. I
+      test che esercitano `gather_readiness` end-to-end devono
+      monkeypatchare `app.bootstrap.is_bootstrapped` o `_BOOT_COMPLETE`
+      al valore desiderato — gli stessi test esistenti per gli
+      altri 6 check usano `patch.object(h, "check_*", ...)` come
+      escape hatch.
+    """
+    try:
+        from app.bootstrap import is_bootstrapped
+    except Exception as e:
+        # Import error: il modulo bootstrap e' rotto. Fail-CLOSED
+        # — non possiamo confermare un bootstrap che non sappiamo
+        # nemmeno verificare.
+        return False, f"{type(e).__name__}: {e}"
+
+    if is_bootstrapped():
+        return True, "ok"
+    return False, "bootstrap not complete"
+
+
 # ---------------------------------------------------------------------------
 # Payload composition — gather_liveness / gather_readiness
 # ---------------------------------------------------------------------------
@@ -326,16 +395,20 @@ def gather_liveness() -> HealthPayload:
 
 def gather_readiness() -> HealthPayload:
     """Compose /ready body. Readiness = liveness + pool_headroom +
-    migrations_aligned + object_storage.
+    migrations_aligned + object_storage + reconciliation_backlog +
+    bootstrap_complete.
 
-    Status: 200 se tutti e 5 i check ok (o `object_storage` skipped
+    Status: 200 se tutti e 7 i check ok (o `object_storage` skipped
     by capability), 503 altrimenti. Body shape:
-    `{"status": "ready"|"not_ready", "checks": {...5 keys...}}`.
+    `{"status": "ready"|"not_ready", "checks": {...7 keys...}}`.
 
     BE-GO-READY-BOOTSTRAP-ENGINE-011: aggiunto check `object_storage`
-    come additivo. `/health` (gather_liveness) NON include questo
-    check — preserva la separazione load-balancer (latenza bounded)
-    vs readiness rigorosa.
+    come additivo.
+    BE-GO-READY-STORAGE-ENGINE-015: aggiunto `reconciliation_backlog`.
+    BE-GO-READY-BOOTSTRAP-ENGINE-015: aggiunto `bootstrap_complete`
+    come additivo. Liveness (`gather_liveness`) NON include nessuno
+    di questi 5 check addizionali — preserva la separazione
+    load-balancer (latenza bounded) vs readiness rigorosa.
     """
     checks: dict = {}
     status_code = 200
@@ -368,6 +441,11 @@ def gather_readiness() -> HealthPayload:
     backlog_ok, backlog_detail = check_reconciliation_backlog()
     checks["reconciliation_backlog"] = {"ok": backlog_ok, "detail": backlog_detail}
     if not backlog_ok:
+        status_code = 503
+
+    boot_ok, boot_detail = check_bootstrap_complete()
+    checks["bootstrap_complete"] = {"ok": boot_ok, "detail": boot_detail}
+    if not boot_ok:
         status_code = 503
 
     body = {
