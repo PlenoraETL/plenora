@@ -48,6 +48,7 @@ import os
 import json
 import threading
 from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 import psycopg2
@@ -266,6 +267,60 @@ def close_connection():
     esplicitamente — la connessione viene restituita al pool automaticamente.
     """
     pass
+
+
+# ── Pool headroom (BE-GO-READY-BOOTSTRAP-ENGINE-010) ────────────────────────
+
+
+@dataclass(frozen=True)
+class PoolHeadroom:
+    """Snapshot tipato del pool psycopg2 per /ready diagnostic.
+
+    BE-GO-READY-BOOTSTRAP-ENGINE-010: incapsula i campi prima esposti
+    via accesso ai simboli privati `_get_pool` / `_POOL_MAX`. Il
+    chiamante (`app.observability.health.check_pool_headroom`) consuma
+    questo dataclass invece di toccare gli internals di psycopg2.
+
+    Fields:
+        max: dimensione massima del pool (`DB_POOL_MAX`).
+        in_use: numero di connessioni attualmente checked-out
+            (`pool._used`). Best-effort: psycopg2 non espone un'API
+            ufficiale, accediamo all'attribute interno con fallback
+            a 0 se l'introspezione fallisce.
+        free: numero di connessioni idle nel pool (`pool._pool`).
+            Stesso caveat di `in_use`.
+    """
+
+    max: int
+    in_use: int
+    free: int
+
+    @property
+    def saturated(self) -> bool:
+        """True se non c'e' headroom (`in_use >= max`)."""
+        return self.in_use >= self.max
+
+
+def get_pool_headroom() -> PoolHeadroom:
+    """Public typed accessor sul pool headroom diagnostic.
+
+    Lazy-init del pool al primo uso (delegato a `_get_pool()`).
+    Best-effort sull'introspezione: usa `getattr(...)` con default
+    vuoto sui due attribute privati di `psycopg2.pool.ThreadedConnectionPool`
+    (`_used`, `_pool`) — psycopg2 non espone API ufficiale per
+    queste counts; ci adattiamo all'invariante del modulo.
+
+    Raises:
+        Qualunque errore di lazy-init del pool (DB unreachable,
+        config invalida) propaga al chiamante. Il consumer in
+        `app.observability.health.check_pool_headroom` lo cattura
+        e mappa a fail-OPEN `(True, "introspection skipped: ...")`
+        per preservare il behavior pre-batch-010.
+    """
+    pool = _get_pool()
+    in_use = len(getattr(pool, "_used", {}) or {})
+    free = len(getattr(pool, "_pool", []) or [])
+    return PoolHeadroom(max=_POOL_MAX, in_use=in_use, free=free)
 
 
 # ── Query helpers (stessa interfaccia di config_db_service) ─────────────────

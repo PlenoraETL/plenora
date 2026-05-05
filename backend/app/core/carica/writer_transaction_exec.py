@@ -140,6 +140,7 @@ from app.core.carica.models import (
     WriteResult,
     WriteStatus,
 )
+from app.core.carica.writer_batch_loop import run_batched_inserts
 from app.utils.logger import get_logger
 
 # Stesso logger name di `database_writer.py`: i record sono
@@ -226,26 +227,22 @@ class TransactionExecutionMixin:
                 if self.db_type == "oracle":
                     self._oracle_setup(conn)
 
-                for batch_num in range(total_batches):
-                    start_idx = batch_num * batch_size
-                    end_idx = min(start_idx + batch_size, len(df))
-                    batch_df = df.iloc[start_idx:end_idx]
-
+                def _process_batch(batch_df, batch_num, _conn=conn):
                     rows_in_batch = self._execute_batch(
-                        conn, batch_df, columns, sql, operation
+                        _conn, batch_df, columns, sql, operation
                     )
                     result.rows_written += rows_in_batch
                     result.batches_completed = batch_num + 1
 
-                    # Progresso
-                    elapsed = time.time() - start_time
-                    self.report_progress(BatchProgress(
-                        batch_number=batch_num + 1,
-                        total_batches=total_batches,
-                        rows_written=result.rows_written,
-                        total_rows=result.total_rows,
-                        elapsed_seconds=elapsed,
-                    ))
+                run_batched_inserts(
+                    df=df,
+                    result=result,
+                    batch_size=batch_size,
+                    total_batches=total_batches,
+                    start_time=start_time,
+                    process_batch=_process_batch,
+                    report_progress=self.report_progress,
+                )
 
             # engine.begin() ha gia' committato all'exit normale del with
             result.status = WriteStatus.SUCCESS
@@ -275,26 +272,26 @@ class TransactionExecutionMixin:
         batch. Se un batch fallisce, fa rollback e continua sul successivo
         con una connessione fresca.
         """
-        conn = self.engine.connect()
+        # Mutable holder: la connection viene chiusa+riaperta dopo
+        # ogni batch fallito (vedi `_process_batch` qui sotto).
+        # Lista a 1 elemento per consentire mutation dal closure
+        # senza `nonlocal` esplicito.
+        conn_holder = [self.engine.connect()]
         try:
             if self.db_type == "oracle":
-                self._oracle_setup(conn)
+                self._oracle_setup(conn_holder[0])
 
-            for batch_num in range(total_batches):
-                start_idx = batch_num * batch_size
-                end_idx = min(start_idx + batch_size, len(df))
-                batch_df = df.iloc[start_idx:end_idx]
-
+            def _process_batch(batch_df, batch_num):
                 try:
                     rows_in_batch = self._execute_batch(
-                        conn, batch_df, columns, sql, operation
+                        conn_holder[0], batch_df, columns, sql, operation
                     )
-                    conn.commit()
+                    conn_holder[0].commit()
                     result.rows_written += rows_in_batch
                     result.batches_completed = batch_num + 1
                 except Exception as e:
                     try:
-                        conn.rollback()
+                        conn_holder[0].rollback()
                     except Exception as rb_err:
                         logger.debug(
                             "[BATCH] conn.rollback() post errore batch fallito, ignoro: %s: %s",
@@ -303,34 +300,34 @@ class TransactionExecutionMixin:
                         )
                     # Chiudi e riapri la connessione dopo errore
                     try:
-                        conn.close()
+                        conn_holder[0].close()
                     except Exception as cl_err:
                         logger.debug(
                             "[BATCH] conn.close() pre-riapertura fallito, ignoro: %s: %s",
                             type(cl_err).__name__,
                             cl_err,
                         )
-                    conn = self.engine.connect()
+                    conn_holder[0] = self.engine.connect()
                     if self.db_type == "oracle":
-                        self._oracle_setup(conn)
+                        self._oracle_setup(conn_holder[0])
                     failed_rows = len(batch_df)
                     result.rows_failed += failed_rows
                     logger.error(
                         f"Errore batch {batch_num + 1}/{total_batches}: {e}"
                     )
 
-                # Progresso
-                elapsed = time.time() - start_time
-                self.report_progress(BatchProgress(
-                    batch_number=batch_num + 1,
-                    total_batches=total_batches,
-                    rows_written=result.rows_written,
-                    total_rows=result.total_rows,
-                    elapsed_seconds=elapsed,
-                ))
+            run_batched_inserts(
+                df=df,
+                result=result,
+                batch_size=batch_size,
+                total_batches=total_batches,
+                start_time=start_time,
+                process_batch=_process_batch,
+                report_progress=self.report_progress,
+            )
         finally:
             try:
-                conn.close()
+                conn_holder[0].close()
             except Exception as cl_err:
                 logger.debug(
                     "[BATCH] conn.close() in finally fallito, ignoro: %s: %s",

@@ -176,13 +176,15 @@ def test_check_redis_fail_closed_on_exception():
 
 
 def test_check_pool_headroom_fail_open_on_introspection_error():
-    """Preserved da main.py: if introspection fails, return (True,
-    "introspection skipped: ..."). Non vogliamo che un dict access
-    failure penalizzi /ready quando _check_postgres e' gia' OK."""
+    """BE-GO-READY-BOOTSTRAP-ENGINE-010: il consumer e' ora il public
+    helper `pg_connection.get_pool_headroom()`. Se il helper solleva
+    (lazy-init pool fallito, etc.), `check_pool_headroom` deve
+    catchare e ritornare fail-OPEN — preservando il behavior pre-batch
+    da main.py."""
     def _raise():
         raise RuntimeError("pool not init")
 
-    with patch("app.db.pg_connection._get_pool", _raise):
+    with patch("app.db.pg_connection.get_pool_headroom", _raise):
         from app.observability.health import check_pool_headroom
 
         ok, detail = check_pool_headroom()
@@ -191,29 +193,60 @@ def test_check_pool_headroom_fail_open_on_introspection_error():
 
 
 def test_check_pool_headroom_failed_when_pool_saturo():
-    fake_pool = type("P", (), {"_used": {"a": 1, "b": 2, "c": 3}, "_pool": []})()
-    with (
-        patch("app.db.pg_connection._get_pool", return_value=fake_pool),
-        patch("app.db.pg_connection._POOL_MAX", 3),
-    ):
+    """Pool saturo (in_use >= max): outcome `(False, "pool saturo: …")`.
+    Detail string preservato byte-per-byte da pre-batch-010."""
+    from app.db.pg_connection import PoolHeadroom
+
+    headroom = PoolHeadroom(max=3, in_use=3, free=0)
+    with patch("app.db.pg_connection.get_pool_headroom", return_value=headroom):
         from app.observability.health import check_pool_headroom
 
         ok, detail = check_pool_headroom()
     assert ok is False
     assert "pool saturo" in detail
+    assert "3/3 in uso" in detail
+    assert "0 free" in detail
 
 
 def test_check_pool_headroom_ok_with_free_slots():
-    fake_pool = type("P", (), {"_used": {"a": 1}, "_pool": [object(), object()]})()
-    with (
-        patch("app.db.pg_connection._get_pool", return_value=fake_pool),
-        patch("app.db.pg_connection._POOL_MAX", 12),
-    ):
+    """Headroom disponibile: outcome `(True, "<used>/<max> in uso, <free> free")`."""
+    from app.db.pg_connection import PoolHeadroom
+
+    headroom = PoolHeadroom(max=12, in_use=1, free=2)
+    with patch("app.db.pg_connection.get_pool_headroom", return_value=headroom):
         from app.observability.health import check_pool_headroom
 
         ok, detail = check_pool_headroom()
     assert ok is True
     assert "1/12 in uso" in detail
+    assert "2 free" in detail
+
+
+def test_check_pool_headroom_does_not_import_private_pool_symbols():
+    """Source-bound: `health.py` NON deve piu' importare `_get_pool`
+    o `_POOL_MAX`. La dipendenza dai privati e' stata incapsulata in
+    `pg_connection.get_pool_headroom`.
+
+    Lo scan e' limitato alle linee `import` / `from` per evitare
+    falsi positivi sulle citazioni docstring (le docstring possono
+    riferirsi ai nomi privati nei commenti storici).
+    """
+    import app.observability.health as h
+
+    src = Path(h.__file__).read_text(encoding="utf-8")
+    forbidden = ("_get_pool", "_POOL_MAX")
+    for line in src.splitlines():
+        stripped = line.strip()
+        if not (stripped.startswith("import ") or stripped.startswith("from ")):
+            continue
+        for sym in forbidden:
+            assert sym not in line, (
+                f"app/observability/health.py importa ancora il simbolo "
+                f"privato {sym!r} a riga: {line!r}. Usa "
+                f"`pg_connection.get_pool_headroom()` come public helper."
+            )
+    # Public helper consumed.
+    assert "get_pool_headroom" in src
 
 
 # ---------------------------------------------------------------------------

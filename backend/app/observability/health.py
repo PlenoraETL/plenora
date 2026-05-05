@@ -127,27 +127,31 @@ def check_migrations_aligned() -> CheckOutcome:
 
 
 def check_pool_headroom() -> CheckOutcome:
-    """Verifica che il pool PG non sia saturo: almeno 1 slot libero."""
+    """Verifica che il pool PG non sia saturo: almeno 1 slot libero.
+
+    BE-GO-READY-BOOTSTRAP-ENGINE-010: consume del helper public
+    `pg_connection.get_pool_headroom()` (typed `PoolHeadroom`).
+    L'accesso ai simboli privati `_get_pool` / `_POOL_MAX` e'
+    incapsulato dentro `pg_connection`; questo modulo resta agnostico
+    rispetto agli internals di psycopg2.
+    """
     try:
-        # NEEDS_CONTEXT batch 010 (vedi
-        # `.agent-temp/BE_BOOTSTRAP_ENGINE_AUDIT.md` §8.6 R-008.1):
-        # `_get_pool` e `_POOL_MAX` sono simboli privati di
-        # `pg_connection`. Li riusiamo as-is per behavior preservation
-        # (best-effort diagnostic). La promozione a public helper
-        # `pg_connection.get_pool_headroom()` e' tracciata in batch 010.
-        from app.db.pg_connection import _get_pool, _POOL_MAX
-        pool = _get_pool()
-        # psycopg2.pool._used e' lista conn in uso, _pool e' lista free.
-        # Accesso interno — best-effort diagnostic.
-        in_use = len(getattr(pool, "_used", {}) or {})
-        free = len(getattr(pool, "_pool", []) or [])
-        used_total = in_use
-        if used_total >= _POOL_MAX:
-            return False, f"pool saturo: {used_total}/{_POOL_MAX} in uso, {free} free"
-        return True, f"{used_total}/{_POOL_MAX} in uso, {free} free"
+        from app.db.pg_connection import get_pool_headroom
+        headroom = get_pool_headroom()
+        if headroom.saturated:
+            return (
+                False,
+                f"pool saturo: {headroom.in_use}/{headroom.max} in uso, "
+                f"{headroom.free} free",
+            )
+        return (
+            True,
+            f"{headroom.in_use}/{headroom.max} in uso, {headroom.free} free",
+        )
     except Exception as e:
         # Se non riusciamo a ispezionare, non falliamo /ready —
-        # un SELECT 1 e' gia' successo sopra.
+        # un SELECT 1 e' gia' successo sopra. Behavior pre-batch-010
+        # preservato byte-per-byte.
         return True, f"introspection skipped: {type(e).__name__}"
 
 

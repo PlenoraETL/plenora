@@ -198,6 +198,7 @@ from app.core.carica.models import (
     WriteResult,
     WriteStatus,
 )
+from app.core.carica.writer_batch_loop import run_batched_inserts
 from app.utils.logger import get_logger, get_request_id, get_user_id
 
 # Stesso logger name di `database_writer.py`: i record sono
@@ -270,25 +271,22 @@ class ReplaceStrategiesMixin:
 
                 conn.execute(text(trunc_sql))
 
-                for batch_num in range(total_batches):
-                    start_idx = batch_num * batch_size
-                    end_idx = min(start_idx + batch_size, total_rows)
-                    batch_df = df.iloc[start_idx:end_idx]
-
+                def _process_batch(batch_df, batch_num, _conn=conn):
                     rows_in_batch = self._execute_batch(
-                        conn, batch_df, active_cols, insert_sql, "insert"
+                        _conn, batch_df, active_cols, insert_sql, "insert"
                     )
                     result.rows_written += rows_in_batch
                     result.batches_completed = batch_num + 1
 
-                    elapsed = time.time() - start_time
-                    self.report_progress(BatchProgress(
-                        batch_number=batch_num + 1,
-                        total_batches=total_batches,
-                        rows_written=result.rows_written,
-                        total_rows=result.total_rows,
-                        elapsed_seconds=elapsed,
-                    ))
+                run_batched_inserts(
+                    df=df,
+                    result=result,
+                    batch_size=batch_size,
+                    total_batches=total_batches,
+                    start_time=start_time,
+                    process_batch=_process_batch,
+                    report_progress=self.report_progress,
+                )
 
                 conn.commit()
                 result.status = WriteStatus.SUCCESS
@@ -440,11 +438,7 @@ class ReplaceStrategiesMixin:
                 if self.db_type == "oracle":
                     self._oracle_setup(conn)
 
-                for batch_num in range(total_batches):
-                    start_idx = batch_num * batch_size
-                    end_idx = min(start_idx + batch_size, total_rows)
-                    batch_df = df.iloc[start_idx:end_idx]
-
+                def _process_batch(batch_df, batch_num, _conn=conn):
                     # IMPORTANT: target_table=stg_table per il bulk path.
                     # insert_sql qui punta alla shadow `<src>__stg`, non
                     # alla tabella target. Senza questo override il bulk
@@ -452,20 +446,21 @@ class ReplaceStrategiesMixin:
                     # rompendo la semantica stage+swap (che esiste apposta
                     # per non toccare il target finche' lo shadow e' completo).
                     rows_in_batch = self._execute_batch(
-                        conn, batch_df, active_cols, insert_sql, "insert",
+                        _conn, batch_df, active_cols, insert_sql, "insert",
                         target_table=stg_table,
                     )
                     result.rows_written += rows_in_batch
                     result.batches_completed = batch_num + 1
 
-                    elapsed = time.time() - start_time
-                    self.report_progress(BatchProgress(
-                        batch_number=batch_num + 1,
-                        total_batches=total_batches,
-                        rows_written=result.rows_written,
-                        total_rows=result.total_rows,
-                        elapsed_seconds=elapsed,
-                    ))
+                run_batched_inserts(
+                    df=df,
+                    result=result,
+                    batch_size=batch_size,
+                    total_batches=total_batches,
+                    start_time=start_time,
+                    process_batch=_process_batch,
+                    report_progress=self.report_progress,
+                )
         except Exception as e:
             # Shadow pieno a meta'/vuoto: target intatto, cleanup shadow
             logger.error(
@@ -668,27 +663,25 @@ class ReplaceStrategiesMixin:
                 if self.db_type == "oracle":
                     self._oracle_setup(conn)
 
-                for batch_num in range(total_batches):
-                    start_idx = batch_num * batch_size
-                    end_idx = min(start_idx + batch_size, total_rows)
-                    batch_df = df.iloc[start_idx:end_idx]
-
+                def _process_batch(batch_df, batch_num, _conn=conn):
                     # target_table=stg_table: insert_sql punta alla shadow
                     # `__stg`, il bulk path deve scrivere lì, non sul target.
                     rows = self._execute_batch(
-                        conn, batch_df, active_cols, insert_sql, "insert",
+                        _conn, batch_df, active_cols, insert_sql, "insert",
                         target_table=stg_table,
                     )
                     result.rows_written += rows
                     result.batches_completed = batch_num + 1
 
-                    self.report_progress(BatchProgress(
-                        batch_number=batch_num + 1,
-                        total_batches=total_batches,
-                        rows_written=result.rows_written,
-                        total_rows=result.total_rows,
-                        elapsed_seconds=time.time() - start_time,
-                    ))
+                run_batched_inserts(
+                    df=df,
+                    result=result,
+                    batch_size=batch_size,
+                    total_batches=total_batches,
+                    start_time=start_time,
+                    process_batch=_process_batch,
+                    report_progress=self.report_progress,
+                )
         except Exception as e:
             logger.error(
                 f"[REPLACE ATOMIC] INSERT shadow fallito, target intatto, "
@@ -1117,30 +1110,28 @@ END;"""))
                 self._oracle_setup(conn)
                 conn.execute(text(f"DELETE FROM {interim_qualified}"))
 
-                for batch_num in range(total_batches):
-                    start_idx = batch_num * batch_size
-                    end_idx = min(start_idx + batch_size, total_rows)
-                    batch_df = df.iloc[start_idx:end_idx]
-
+                def _process_batch(batch_df, batch_num, _conn=conn):
                     # Oracle online_redefinition: insert_sql punta alla
                     # interim `__RDF`. Bulk path su Oracle non e'
                     # implementato (dispatcher solleva NotSupported →
                     # fallback executemany), ma passiamo target_table
                     # comunque per safety futura.
                     rows = self._execute_batch(
-                        conn, batch_df, active_cols, insert_sql, "insert",
+                        _conn, batch_df, active_cols, insert_sql, "insert",
                         target_table=interim,
                     )
                     result.rows_written += rows
                     result.batches_completed = batch_num + 1
 
-                    self.report_progress(BatchProgress(
-                        batch_number=batch_num + 1,
-                        total_batches=total_batches,
-                        rows_written=result.rows_written,
-                        total_rows=result.total_rows,
-                        elapsed_seconds=time.time() - start_time,
-                    ))
+                run_batched_inserts(
+                    df=df,
+                    result=result,
+                    batch_size=batch_size,
+                    total_batches=total_batches,
+                    start_time=start_time,
+                    process_batch=_process_batch,
+                    report_progress=self.report_progress,
+                )
 
                 conn.commit()
 
