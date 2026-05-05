@@ -334,6 +334,23 @@ class Settings:
         "STORAGE_RECONCILE_BATCH_SIZE": 50,
         "STORAGE_RECONCILE_MAX_ATTEMPTS": 5,
         "STORAGE_RECONCILE_BACKOFF_BASE_SECONDS": 60,
+        # BE-GO-READY-STORAGE-ENGINE-008-RECONCILIATION-OPERATIONAL-GUARDRAILS
+        # Operational tuning (ADR-0021 OPERATIONAL_TUNING) per evitare
+        # che `plenora.storage_reconciliation_log` diventi una discarica
+        # silenziosa di terminali. Tutto override env consentito.
+        # - STORAGE_RECONCILE_TERMINAL_RETENTION_DAYS: giorni di retention
+        #   per le righe terminali `done` / `orphan_deleted` (audit
+        #   trail). Sopra il cutoff il beat hook ne rimuove fino a
+        #   `STORAGE_RECONCILE_PRUNE_BATCH_SIZE` per tick. Default 30
+        #   giorni: bilancia visibilita' forensic vs storage cost.
+        #   Cap <= 0 -> prune disabilitato (la tabella cresce; ops
+        #   accetta esplicitamente).
+        # - STORAGE_RECONCILE_PRUNE_BATCH_SIZE: cap righe potate per
+        #   tick. Default 500: bound deliberatamente alto rispetto al
+        #   normale write-rate per assorbire backlog accumulato senza
+        #   richiedere intervention. Cap <= 0 -> prune disabilitato.
+        "STORAGE_RECONCILE_TERMINAL_RETENTION_DAYS": 30,
+        "STORAGE_RECONCILE_PRUNE_BATCH_SIZE": 500,
 
         # ==================== TASK ARRICCHIMENTO ====================
         "ENRICHMENT_BATCH_SIZE": 100,

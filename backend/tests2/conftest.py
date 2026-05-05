@@ -20,6 +20,16 @@ _ensure_backend_on_path()
 # esplicitamente STORAGE_POLICY via monkeypatch.
 os.environ.setdefault("STORAGE_POLICY", "db")
 
+# Molti unit/contract test importano moduli che transitano da
+# `app.db.pg_connection` a collect time. Quel modulo valida
+# DATABASE_URL al top-level prima che i test possano monkeypatchare
+# le funzioni DB, quindi serve un placeholder test-only globale.
+# I test/integration che usano un DB reale preservano il valore gia'
+# presente nell'env CI/dev.
+os.environ.setdefault(
+    "DATABASE_URL", "postgresql://test:test@127.0.0.1:5432/test"
+)
+
 
 # ---------------------------------------------------------------------------
 # DB-init isolation a session bootstrap (Phase 3 Batch B closeout, 3)

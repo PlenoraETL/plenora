@@ -28,7 +28,6 @@ Porte: backend su 8000, frontend React su 5173
 """
 
 import os
-from typing import Tuple
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -500,64 +499,12 @@ def root():
     return {"status": "ok", "service": "PLENORA-ETL API"}
 
 
-def _check_postgres() -> Tuple[bool, str]:
-    """SELECT 1 sul pool PG. Return (ok, detail)."""
-    try:
-        from app.db.pg_connection import fetchone
-        row = fetchone("SELECT 1 AS v")
-        if row and int(row.get("v", 0)) == 1:
-            return True, "ok"
-        return False, f"SELECT 1 ha restituito: {row!r}"
-    except Exception as e:
-        return False, f"{type(e).__name__}: {e}"
-
-
-def _check_redis() -> Tuple[bool, str]:
-    """PING su Redis broker Celery."""
-    try:
-        import redis
-        r = redis.from_url(settings.CELERY_BROKER_URL, socket_connect_timeout=2)
-        if r.ping():
-            return True, "ok"
-        return False, "PING non ha risposto True"
-    except Exception as e:
-        return False, f"{type(e).__name__}: {e}"
-
-
-def _check_migrations_aligned() -> Tuple[bool, str]:
-    """C8-nit: /ready rigoroso include check "migrations allineate".
-    Confronta files in migrations/ con righe in schema_migrations.
-    503 se ci sono pending (deploy a meta' / file committato ma non
-    ancora applicato dal runner)."""
-    try:
-        from app.db.migrations_runner import list_pending_migrations
-        pending = list_pending_migrations()
-        if pending:
-            return False, f"{len(pending)} pending: {', '.join(pending[:3])}"
-        return True, "aligned"
-    except Exception as e:
-        # Non falliamo /ready per un problema di introspection stessa —
-        # un check PG/Redis a monte ha gia' validato la raggiungibilita'.
-        return True, f"check skipped: {type(e).__name__}"
-
-
-def _check_pool_headroom() -> Tuple[bool, str]:
-    """Verifica che il pool PG non sia saturo: almeno 1 slot libero."""
-    try:
-        from app.db.pg_connection import _get_pool, _POOL_MAX
-        pool = _get_pool()
-        # psycopg2.pool._used e' lista conn in uso, _pool e' lista free.
-        # Accesso interno — best-effort diagnostic.
-        in_use = len(getattr(pool, "_used", {}) or {})
-        free = len(getattr(pool, "_pool", []) or [])
-        used_total = in_use
-        if used_total >= _POOL_MAX:
-            return False, f"pool saturo: {used_total}/{_POOL_MAX} in uso, {free} free"
-        return True, f"{used_total}/{_POOL_MAX} in uso, {free} free"
-    except Exception as e:
-        # Se non riusciamo a ispezionare, non falliamo /ready —
-        # un SELECT 1 e' gia' successo sopra.
-        return True, f"introspection skipped: {type(e).__name__}"
+# BE-GO-READY-BOOTSTRAP-ENGINE-009-HEALTH-EXTRACTION:
+# Le 4 funzioni `_check_*` + payload composer sono state estratte in
+# `app/observability/health.py`. Le route restano qui per preservare
+# il routing wiring FastAPI; delegano a `gather_liveness` /
+# `gather_readiness` che restituiscono `HealthPayload` typed.
+from app.observability.health import gather_liveness, gather_readiness
 
 
 @app.get("/health")
@@ -567,26 +514,8 @@ def health():
     Ritorna 200 se entrambe le dipendenze critiche rispondono, 503
     altrimenti. Pensato per load balancer / K8s readinessProbe.
     """
-    checks = {}
-    status_code = 200
-
-    pg_ok, pg_detail = _check_postgres()
-    checks["postgres"] = {"ok": pg_ok, "detail": pg_detail}
-    if not pg_ok:
-        status_code = 503
-
-    redis_ok, redis_detail = _check_redis()
-    checks["redis"] = {"ok": redis_ok, "detail": redis_detail}
-    if not redis_ok:
-        status_code = 503
-
-    return JSONResponse(
-        content={
-            "status": "ok" if status_code == 200 else "unhealthy",
-            "checks": checks,
-        },
-        status_code=status_code,
-    )
+    payload = gather_liveness()
+    return JSONResponse(content=payload.body, status_code=payload.status_code)
 
 
 @app.get("/ready")
@@ -594,40 +523,13 @@ def ready():
     """C8: readiness check rigoroso. Include:
     - /health checks (PG + Redis)
     - headroom sul pool PG (non saturo)
+    - migrations allineate al codice committato
 
     Pensato per K8s readinessProbe conservativo (rimuove pod dal pool
     di load balancing se qualcosa e' degradato anche non-fatal).
     """
-    checks = {}
-    status_code = 200
-
-    pg_ok, pg_detail = _check_postgres()
-    checks["postgres"] = {"ok": pg_ok, "detail": pg_detail}
-    if not pg_ok:
-        status_code = 503
-
-    redis_ok, redis_detail = _check_redis()
-    checks["redis"] = {"ok": redis_ok, "detail": redis_detail}
-    if not redis_ok:
-        status_code = 503
-
-    pool_ok, pool_detail = _check_pool_headroom()
-    checks["pool_headroom"] = {"ok": pool_ok, "detail": pool_detail}
-    if not pool_ok:
-        status_code = 503
-
-    mig_ok, mig_detail = _check_migrations_aligned()
-    checks["migrations"] = {"ok": mig_ok, "detail": mig_detail}
-    if not mig_ok:
-        status_code = 503
-
-    return JSONResponse(
-        content={
-            "status": "ready" if status_code == 200 else "not_ready",
-            "checks": checks,
-        },
-        status_code=status_code,
-    )
+    payload = gather_readiness()
+    return JSONResponse(content=payload.body, status_code=payload.status_code)
 
 
 # ==================== STARTUP ====================

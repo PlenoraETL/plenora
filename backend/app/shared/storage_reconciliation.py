@@ -85,6 +85,7 @@ __all__ = [
     "ReconciliationState",
     "ReconciliationEntryRef",
     "PendingReconciliationRow",
+    "ReconciliationStateCount",
     "record_pending",
     "mark_done",
     "mark_failed_attempt",
@@ -92,6 +93,8 @@ __all__ = [
     "mark_lost",
     "fetch_due_pending_deletes",
     "compute_next_retry_at",
+    "count_active_by_state_domain",
+    "prune_terminal_older_than",
 ]
 
 
@@ -469,3 +472,164 @@ def compute_next_retry_at(
     delta_seconds = base_seconds * (2 ** capped_exponent)
     base_now = now if now is not None else datetime.now(_tz.utc)
     return base_now + timedelta(seconds=delta_seconds)
+
+
+# ---------------------------------------------------------------------------
+# Operational guardrails (BE-GO-READY-STORAGE-ENGINE-008)
+# ---------------------------------------------------------------------------
+#
+# Goal: prevent `plenora.storage_reconciliation_log` from becoming a
+# silent landfill. Two minimal, additive helpers — NO new transitions
+# on existing states, NO new operations, NO new migration:
+#
+#   1. `count_active_by_state_domain` — read-only aggregation of
+#      `pending` and `lost` rows by `(state, domain)` for periodic
+#      summary logs. Terminal `done`/`orphan_deleted` are intentionally
+#      excluded from "active" because they are the audit trail, not
+#      operator concern.
+#   2. `prune_terminal_older_than` — bounded DELETE of `done` /
+#      `orphan_deleted` rows older than a retention window. Caller
+#      supplies cap; helper enforces single batched DELETE with
+#      `LIMIT` semantics emulated via subquery (PG doesn't support
+#      `DELETE ... LIMIT` directly).
+
+
+@dataclass(frozen=True)
+class ReconciliationStateCount:
+    """Tipato counter per row di `count_active_by_state_domain`.
+
+    Stable shape per logging strutturato e dashboard future:
+      - `state`: `"pending"` | `"lost"` (terminali esclusi
+        intenzionalmente da questo helper);
+      - `domain`: tag callsite (`"file_source"`, `"result_blob"`,
+        ...);
+      - `count`: numero di righe nello stato/dominio.
+    """
+
+    state: ReconciliationState
+    domain: str
+    count: int
+
+
+_COUNT_ACTIVE_BY_STATE_DOMAIN_SQL = (
+    "SELECT state, domain, COUNT(*) AS count "
+    "FROM plenora.storage_reconciliation_log "
+    "WHERE state IN ('pending', 'lost') "
+    "GROUP BY state, domain "
+    "ORDER BY state ASC, domain ASC"
+)
+
+
+def count_active_by_state_domain() -> list["ReconciliationStateCount"]:
+    """Read-only count di righe `pending` e `lost` per `(state, domain)`.
+
+    BE-GO-READY-STORAGE-ENGINE-008: alimenta il summary log per beat
+    run cosi' ops puo' notare orphan accumulation senza ispezionare
+    il DB direttamente. Solo `pending` (lavoro non ancora finito) e
+    `lost` (richiede review) — i terminali `done`/`orphan_deleted`
+    sono audit trail e vengono potati da `prune_terminal_older_than`.
+
+    Best-effort: errori di lettura -> warning strutturato +
+    ritorno `[]` (il caller, oggi il beat hook, non puo' permettersi
+    di crashare il tick).
+
+    Returns:
+        Lista di `ReconciliationStateCount` ordinata per `state` ASC
+        poi `domain` ASC. Vuoto se la tabella e' vuota o tutti
+        terminali. Su errore di lettura: `[]`.
+    """
+    try:
+        from app.db.pg_connection import fetchall
+
+        rows = fetchall(_COUNT_ACTIVE_BY_STATE_DOMAIN_SQL, ())
+    except Exception as e:
+        logger.warning(
+            "event=storage_reconciliation_count_failed "
+            "count_error=%s count_error_msg=%r",
+            type(e).__name__, str(e),
+        )
+        return []
+
+    out: list[ReconciliationStateCount] = []
+    for row in rows or ():
+        if isinstance(row, dict):
+            state = row["state"]
+            domain = row["domain"]
+            count = row["count"]
+        else:
+            state, domain, count = row
+        out.append(
+            ReconciliationStateCount(
+                state=str(state),  # type: ignore[arg-type]
+                domain=str(domain),
+                count=int(count) if count is not None else 0,
+            )
+        )
+    return out
+
+
+_PRUNE_TERMINAL_SQL = (
+    "DELETE FROM plenora.storage_reconciliation_log "
+    "WHERE id IN ("
+    "    SELECT id FROM plenora.storage_reconciliation_log "
+    "    WHERE state IN ('done', 'orphan_deleted') "
+    "      AND updated_at < ? "
+    "    ORDER BY updated_at ASC "
+    "    LIMIT ?"
+    ")"
+)
+
+
+def prune_terminal_older_than(
+    *,
+    older_than: datetime,
+    limit: int,
+) -> int:
+    """Bounded DELETE di righe terminali `done` / `orphan_deleted`
+    con `updated_at < older_than`, fino a `limit` righe.
+
+    BE-GO-READY-STORAGE-ENGINE-008: la tabella e' append-only nel
+    runtime; senza prune i terminali (success path + reconciler
+    success path) crescono indefinitamente. Questo helper rimuove
+    SOLO i terminali — pending/lost non vengono mai toccati.
+
+    PG non supporta `DELETE ... LIMIT` diretto: il helper usa
+    `DELETE WHERE id IN (SELECT ... LIMIT n)` per restare bounded
+    per call. La sub-SELECT ordina per `updated_at ASC` cosi' i
+    piu' vecchi vengono potati prima.
+
+    Best-effort: errori di esecuzione -> warning strutturato +
+    ritorno `0`. Caller (beat hook) non deve poter crashare il
+    tick a causa di un prune fallito.
+
+    Args:
+        older_than: cutoff `datetime` UTC. Righe con `updated_at`
+            strettamente minore sono candidate. tz-aware atteso.
+        limit: max righe per call. Deve essere `int > 0`. Caller
+            owns il valore (oggi `STORAGE_RECONCILE_PRUNE_BATCH_SIZE`
+            da Settings).
+
+    Returns:
+        Numero di righe effettivamente cancellate (`cursor.rowcount`).
+        `0` su errore o quando non ci sono righe candidate.
+
+    Raises:
+        ValueError se `limit <= 0` (invariante caller, non DB).
+    """
+    if not isinstance(limit, int) or limit <= 0:
+        raise ValueError(
+            f"prune_terminal_older_than: limit must be int > 0, got {limit!r}"
+        )
+
+    try:
+        from app.db.pg_connection import execute as pg_execute
+
+        cur = pg_execute(_PRUNE_TERMINAL_SQL, (older_than, limit))
+        return int(getattr(cur, "rowcount", 0) or 0)
+    except Exception as e:
+        logger.warning(
+            "event=storage_reconciliation_prune_failed "
+            "prune_error=%s prune_error_msg=%r",
+            type(e).__name__, str(e),
+        )
+        return 0

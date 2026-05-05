@@ -23,14 +23,22 @@ pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
 
 @pytest.fixture
 def main_client():
-    """TestClient sull'app reale con check health/readiness monkeypatchati."""
+    """TestClient sull'app reale con check health/readiness monkeypatchati.
+
+    BE-GO-READY-BOOTSTRAP-ENGINE-009: i 4 helper sono stati estratti
+    in `app/observability/health.py`; il monkeypatch attacca al
+    nuovo namespace public (`check_*`). Le route in `main.py`
+    delegano via `gather_liveness` / `gather_readiness`, che a loro
+    volta chiamano i `check_*` patchati.
+    """
     import app.main as main_mod
+    import app.observability.health as health_mod
 
     with (
-        patch.object(main_mod, "_check_postgres", return_value=(True, "ok")),
-        patch.object(main_mod, "_check_redis", return_value=(True, "ok")),
-        patch.object(main_mod, "_check_pool_headroom", return_value=(True, "1/12 in uso, 11 free")),
-        patch.object(main_mod, "_check_migrations_aligned", return_value=(True, "aligned")),
+        patch.object(health_mod, "check_postgres", return_value=(True, "ok")),
+        patch.object(health_mod, "check_redis", return_value=(True, "ok")),
+        patch.object(health_mod, "check_pool_headroom", return_value=(True, "1/12 in uso, 11 free")),
+        patch.object(health_mod, "check_migrations_aligned", return_value=(True, "aligned")),
     ):
         yield TestClient(main_mod.app)
 
@@ -71,10 +79,11 @@ def test_health_returns_200_when_postgres_and_redis_are_ok(main_client):
 
 def test_health_returns_503_when_redis_fails():
     import app.main as main_mod
+    import app.observability.health as health_mod
 
     with (
-        patch.object(main_mod, "_check_postgres", return_value=(True, "ok")),
-        patch.object(main_mod, "_check_redis", return_value=(False, "ConnectionError: boom")),
+        patch.object(health_mod, "check_postgres", return_value=(True, "ok")),
+        patch.object(health_mod, "check_redis", return_value=(False, "ConnectionError: boom")),
     ):
         client = TestClient(main_mod.app)
         response = client.get("/health")
@@ -87,12 +96,13 @@ def test_health_returns_503_when_redis_fails():
 
 def test_ready_returns_503_when_pool_or_migrations_are_not_ready():
     import app.main as main_mod
+    import app.observability.health as health_mod
 
     with (
-        patch.object(main_mod, "_check_postgres", return_value=(True, "ok")),
-        patch.object(main_mod, "_check_redis", return_value=(True, "ok")),
-        patch.object(main_mod, "_check_pool_headroom", return_value=(False, "pool saturo")),
-        patch.object(main_mod, "_check_migrations_aligned", return_value=(False, "2 pending")),
+        patch.object(health_mod, "check_postgres", return_value=(True, "ok")),
+        patch.object(health_mod, "check_redis", return_value=(True, "ok")),
+        patch.object(health_mod, "check_pool_headroom", return_value=(False, "pool saturo")),
+        patch.object(health_mod, "check_migrations_aligned", return_value=(False, "2 pending")),
     ):
         client = TestClient(main_mod.app)
         response = client.get("/ready")

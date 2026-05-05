@@ -1277,10 +1277,11 @@ class PlenoraBeatScheduler(Scheduler):
             logger.warning(
                 f"Reconcile storage: fetch fallito: {e}", exc_info=True
             )
-            return
-
-        if not rows:
-            return
+            # Continue to the operational guardrails section: summary
+            # + prune are independent of the fetch result. A fetch
+            # failure must NOT silence the backlog visibility — that
+            # is precisely the scenario where ops needs to see counts.
+            rows = []
 
         ok_count = 0
         failed_count = 0
@@ -1334,6 +1335,65 @@ class PlenoraBeatScheduler(Scheduler):
                 "ok=%d failed=%d lost=%d batch=%d",
                 ok_count, failed_count, lost_count, len(rows),
             )
+
+        # ------------------------------------------------------------------
+        # BE-GO-READY-STORAGE-ENGINE-008: operational guardrails.
+        # Eseguiti DOPO la passa di reconcile per non interferire con il
+        # set di righe lette da `fetch_due_pending_deletes`. Entrambi
+        # best-effort: errori loggati, il tick non crasha.
+        # ------------------------------------------------------------------
+        # 1. Summary log: count righe `pending`/`lost` per (state,domain).
+        #    Lascia traccia osservabile per ops anche quando non c'e'
+        #    lavoro nel batch corrente (es. backlog di `lost` accumulato).
+        try:
+            counts = _recon.count_active_by_state_domain()
+            if counts:
+                # Aggregato totale per livello (utile per alerting su
+                # threshold) + per-row breakdown per dashboard manuale.
+                pending_total = sum(c.count for c in counts if c.state == "pending")
+                lost_total = sum(c.count for c in counts if c.state == "lost")
+                breakdown = " ".join(
+                    f"{c.state}.{c.domain}={c.count}" for c in counts
+                )
+                logger.info(
+                    "event=storage_reconciliation_summary "
+                    "pending_total=%d lost_total=%d %s",
+                    pending_total, lost_total, breakdown,
+                )
+        except Exception as e:
+            logger.warning(
+                f"Reconcile storage: summary count fallito: {e}",
+                exc_info=True,
+            )
+
+        # 2. Prune dei terminali `done`/`orphan_deleted` oltre la
+        #    retention window. Boundary helper applica `LIMIT` server-
+        #    side; qui il caller decide cap + cutoff.
+        retention_days = _read_int(
+            "STORAGE_RECONCILE_TERMINAL_RETENTION_DAYS", 30,
+        )
+        prune_batch = _read_int(
+            "STORAGE_RECONCILE_PRUNE_BATCH_SIZE", 500,
+        )
+        if retention_days > 0 and prune_batch > 0:
+            try:
+                from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+                cutoff = _dt.now(_tz.utc) - _td(days=retention_days)
+                pruned = _recon.prune_terminal_older_than(
+                    older_than=cutoff,
+                    limit=prune_batch,
+                )
+                if pruned:
+                    logger.info(
+                        "event=storage_reconciliation_prune_tick "
+                        "pruned=%d cutoff=%s retention_days=%d limit=%d",
+                        pruned, cutoff.isoformat(), retention_days,
+                        prune_batch,
+                    )
+            except Exception as e:
+                logger.warning(
+                    f"Reconcile storage: prune fallito: {e}", exc_info=True,
+                )
 
     # ------------------------------------------------------------------
     # Persistenza — non usiamo file shelve, tutto su DB
