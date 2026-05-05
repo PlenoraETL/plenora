@@ -33,6 +33,7 @@ import pandas as pd
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
+from app.core.carica.ddl_generator import DDLGenerator
 from app.core.carica.models import ConflictDetail, ConflictReport
 
 
@@ -45,6 +46,14 @@ class ConflictChecker:
     Attributes:
         engine: SQLAlchemy engine per la connessione al DB destinazione
         db_type: tipo database ("postgres", "oracle", "mssql", "mysql")
+        ddl: `DDLGenerator` boundary per quoting/qualified-name SQL.
+            BE-GO-READY-TRANSFORMATION-ENGINE-013: il caller di solito
+            inietta `self.ddl` del writer (gia' istanziato in
+            `DatabaseWriter.__init__`) per evitare doppia istanza +
+            duplicazione delle policy di quoting/qualified-name.
+            Se `None`, viene costruito un `DDLGenerator(db_type)` ad
+            hoc — backward-compat per callsite esistenti
+            (`router.py`, test legacy che passano solo engine+db_type).
     """
 
     # Numero massimo di valori nella clausola IN per query
@@ -52,9 +61,20 @@ class ConflictChecker:
     # Numero massimo di dettagli conflitto da restituire
     MAX_DETAILS = 100
 
-    def __init__(self, engine: Engine, db_type: str):
+    def __init__(
+        self,
+        engine: Engine,
+        db_type: str,
+        *,
+        ddl: Optional[DDLGenerator] = None,
+    ):
         self.engine = engine
         self.db_type = db_type.lower()
+        # BE-GO-READY-TRANSFORMATION-ENGINE-013-CONFLICT-CHECKER-DDL-DEPENDENCY-INJECTION:
+        # consume `DDLGenerator` come boundary SQL/dialetto. La fallback
+        # locale al ddl=None preserva backward-compat per callsite
+        # esistenti che non passano `ddl=...`.
+        self.ddl = ddl if ddl is not None else DDLGenerator(self.db_type)
 
     def check(
         self,
@@ -294,25 +314,29 @@ class ConflictChecker:
     # ========================================================================
     # HELPER
     # ========================================================================
+    #
+    # BE-GO-READY-TRANSFORMATION-ENGINE-013: i due helper `_qualified_name`
+    # e `_quote_col` ora delegano a `DDLGenerator` (la stessa boundary che
+    # il writer usa per CREATE/DROP/INSERT). Pre-stream questi metodi
+    # duplicavano la logica di `DDLGenerator.qualified_table_name` /
+    # `DDLGenerator.quote_column` (TE11-R4). Lasciati come thin wrapper
+    # per minimizzare la diff sui callsite interni
+    # (`_check_single_column`, `_check_multi_column`).
+    #
+    # Differenza minore vs pre-stream: `DDLGenerator.qualified_table_name`
+    # fa `.strip()` su schema/table (B-BE-60). Per `ConflictChecker`
+    # il caller tipico passa `self.config.schema_name` / `table_name`
+    # gia' validati: lo strip non cambia il SQL emesso. Per i pochi
+    # casi con whitespace accidentale, il nuovo path produce un nome
+    # piu' robusto.
 
     def _qualified_name(self, schema: str, table: str) -> str:
-        """Nome tabella qualificato con schema."""
-        if self.db_type in ("mysql", "mariadb"):
-            return f"`{schema}`.`{table}`" if schema else f"`{table}`"
-        elif self.db_type == "oracle":
-            s = schema.upper() if schema else ""
-            t = table.upper()
-            return f'"{s}"."{t}"' if s else f'"{t}"'
-        else:
-            return f'"{schema}"."{table}"' if schema else f'"{table}"'
+        """Nome tabella qualificato con schema (delega a DDLGenerator)."""
+        return self.ddl.qualified_table_name(schema, table)
 
     def _quote_col(self, name: str) -> str:
-        """Quota un nome colonna."""
-        if self.db_type in ("mysql", "mariadb"):
-            return f"`{name}`"
-        elif self.db_type == "oracle":
-            return f'"{name.upper()}"'
-        return f'"{name}"'
+        """Quota un nome colonna (delega a DDLGenerator)."""
+        return self.ddl.quote_column(name)
 
 
 def _serialize_value(val) -> Any:

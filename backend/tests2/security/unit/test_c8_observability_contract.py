@@ -30,6 +30,10 @@ def main_client():
     nuovo namespace public (`check_*`). Le route in `main.py`
     delegano via `gather_liveness` / `gather_readiness`, che a loro
     volta chiamano i `check_*` patchati.
+
+    BE-GO-READY-BOOTSTRAP-ENGINE-011: aggiunto `check_object_storage`
+    al monkeypatch — quinto check di `gather_readiness`. Default
+    happy path = `(True, "ok")` (capability ON + list_objects ok).
     """
     import app.main as main_mod
     import app.observability.health as health_mod
@@ -39,6 +43,7 @@ def main_client():
         patch.object(health_mod, "check_redis", return_value=(True, "ok")),
         patch.object(health_mod, "check_pool_headroom", return_value=(True, "1/12 in uso, 11 free")),
         patch.object(health_mod, "check_migrations_aligned", return_value=(True, "aligned")),
+        patch.object(health_mod, "check_object_storage", return_value=(True, "ok")),
     ):
         yield TestClient(main_mod.app)
 
@@ -103,6 +108,7 @@ def test_ready_returns_503_when_pool_or_migrations_are_not_ready():
         patch.object(health_mod, "check_redis", return_value=(True, "ok")),
         patch.object(health_mod, "check_pool_headroom", return_value=(False, "pool saturo")),
         patch.object(health_mod, "check_migrations_aligned", return_value=(False, "2 pending")),
+        patch.object(health_mod, "check_object_storage", return_value=(True, "ok")),
     ):
         client = TestClient(main_mod.app)
         response = client.get("/ready")

@@ -418,8 +418,15 @@ class WriterPreflightLifecycleMixin:
         df: pd.DataFrame,
         match_columns: List[str],
     ) -> ConflictReport:
-        """Pre-check conflitti per APPEND."""
-        checker = ConflictChecker(self.engine, self.db_type)
+        """Pre-check conflitti per APPEND.
+
+        BE-GO-READY-TRANSFORMATION-ENGINE-013: passa esplicitamente
+        `self.ddl` al ConflictChecker per riutilizzare la boundary
+        SQL/dialetto del writer (closure di TE11-R4: niente piu'
+        duplicazione di `_qualified_name`/`_quote_col` lato
+        `ConflictChecker`).
+        """
+        checker = ConflictChecker(self.engine, self.db_type, ddl=self.ddl)
         return checker.check(
             df,
             self.config.schema_name,

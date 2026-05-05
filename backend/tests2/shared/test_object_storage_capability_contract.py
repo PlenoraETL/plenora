@@ -203,11 +203,23 @@ def test_results_db_service_s3_download_returns_none_when_disabled():
 
 
 def test_results_db_service_s3_delete_silent_when_disabled():
-    """Capability off -> _s3_delete_best_effort no-op silenzioso."""
-    from app.db import results_db_service
-    # No raise, no warning logged from cloud_backends-side; pass smoke.
+    """Capability off -> compensating_delete no-op silenzioso sul
+    domain `result_blob` (post BE-GO-READY-STORAGE-ENGINE-007 il
+    wrapper privato `_s3_delete_best_effort` e' stato rimosso: il
+    runtime ora invoca direttamente `compensating_delete` da
+    `delete_result` / `delete_results_for_project`, e questo test
+    verifica lo stesso invariante capability-off chiamando il
+    boundary canonico)."""
+    from app.shared.storage_compensation import compensating_delete
+
+    # No raise, outcome="skipped" su capability off; pass smoke.
     with _patch_capability(False, "s3"):
-        results_db_service._s3_delete_best_effort("results/foo/bar.bin")
+        out = compensating_delete(
+            "results/foo/bar.bin",
+            domain="result_blob",
+            reason="row_delete_post_commit",
+        )
+    assert out == "skipped"
 
 
 def test_file_sources_delete_skips_s3_cleanup_when_disabled(monkeypatch):

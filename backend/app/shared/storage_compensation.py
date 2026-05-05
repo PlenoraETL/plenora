@@ -8,8 +8,11 @@ sezione 3.1):
 
   - `app.utils.result_store._cleanup_uploaded_result_blob`
     (compensating delete dopo `db.save_result(...)` fallita post-upload);
-  - `app.db.results_db_service._s3_delete_best_effort`
-    (cleanup S3 post-DELETE row);
+  - `app.db.results_db_service.delete_result` /
+    `delete_results_for_project` (cleanup S3 post-DELETE row /
+    bulk; post BE-GO-READY-STORAGE-ENGINE-007 il vecchio wrapper
+    privato `_s3_delete_best_effort` e' stato rimosso e i due
+    callsite invocano `compensating_delete` direttamente);
   - `app.db.config.file_sources.delete_file_source`
     (cleanup post-commit con refcount-aware skip);
   - `app.services.file_service._delete_blob` callback consumato da

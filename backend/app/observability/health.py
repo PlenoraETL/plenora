@@ -61,6 +61,7 @@ __all__ = [
     "check_redis",
     "check_pool_headroom",
     "check_migrations_aligned",
+    "check_object_storage",
     "gather_liveness",
     "gather_readiness",
 ]
@@ -155,6 +156,74 @@ def check_pool_headroom() -> CheckOutcome:
         return True, f"introspection skipped: {type(e).__name__}"
 
 
+def check_object_storage() -> CheckOutcome:
+    """Verifica raggiungibilita' object storage runtime.
+
+    BE-GO-READY-BOOTSTRAP-ENGINE-011-OBSERVABILITY-OBJECT-STORAGE-HEALTH:
+    consumer dei boundary capability + factory esistenti in
+    `app.shared.cloud_backends`. NON importa boto3 / S3 SDK
+    direttamente; la SDK e' incapsulata dentro `cloud_backends`.
+
+    Strategia (in ordine):
+    1. Se `object_storage_enabled()` e' False (policy:
+       `STORAGE_POLICY=db` o capability disabilitata) -> outcome
+       `(True, "skipped: capability disabled")`. Modalita'
+       on-prem/local senza object storage e' configurazione
+       legittima, NON deve far fallire /ready.
+    2. Altrimenti,
+       `get_runtime_object_storage().list_objects(prefix=".plenora-readiness-probe/")`
+       con un dry-run leggero su prefisso dedicato normalmente vuoto.
+       Bucket assente, credenziali scadute, network unreachable ->
+       exception -> outcome `(False, "<ExcType>: <msg>")`.
+    3. `ObjectStorageDisabledError` race (capability ON al check
+       sopra, OFF al call) -> outcome `(True, "skipped: capability
+       disabled (race)")`.
+
+    Esposto in `gather_readiness` come quinto check `object_storage`.
+    NON e' integrato in `gather_liveness` per scelta:  /health resta
+    "load balancer-friendly" e non deve dipendere da provider di
+    storage cloud (latenza variabile, regional outages,
+    credentials).
+    """
+    try:
+        from app.shared.cloud_backends import (
+            ObjectStorageDisabledError,
+            get_runtime_object_storage,
+            object_storage_enabled,
+        )
+    except Exception as e:
+        # Import failure (modulo rotto / cycle): treat as fail-OPEN
+        # diagnostic, parallelo a `check_pool_headroom` /
+        # `check_migrations_aligned`. Un broken import del modulo
+        # cloud_backends sarebbe gia' stato catturato dal boot
+        # validate (`validate_storage_config`) o dai test.
+        return True, f"check skipped: {type(e).__name__}"
+
+    if not object_storage_enabled():
+        # Modalita' DB-only / on-prem: capability disabilitata e'
+        # configurazione legittima, non un errore.
+        return True, "skipped: capability disabled"
+
+    try:
+        storage = get_runtime_object_storage()
+    except ObjectStorageDisabledError:
+        # Race teorica: capability ON al check, OFF qui.
+        return True, "skipped: capability disabled (race)"
+    except Exception as e:
+        return False, f"{type(e).__name__}: {e}"
+
+    try:
+        # Dry-run lookup su prefisso dedicato normalmente vuoto. Non
+        # usiamo prefix="" perche' `cloud_backends.list_objects`
+        # ritorna una lista materializzata e su bucket grandi
+        # scorrerebbe tutte le pagine.
+        storage.list_objects(prefix=".plenora-readiness-probe/")
+    except Exception as e:
+        return False, f"{type(e).__name__}: {e}"
+
+    return True, "ok"
+
+
 # ---------------------------------------------------------------------------
 # Payload composition — gather_liveness / gather_readiness
 # ---------------------------------------------------------------------------
@@ -187,10 +256,17 @@ def gather_liveness() -> HealthPayload:
 
 
 def gather_readiness() -> HealthPayload:
-    """Compose /ready body. Readiness = liveness + pool_headroom + migrations_aligned.
+    """Compose /ready body. Readiness = liveness + pool_headroom +
+    migrations_aligned + object_storage.
 
-    Status: 200 se tutti e 4 i check ok, 503 altrimenti. Body shape:
-    `{"status": "ready"|"not_ready", "checks": {...4 keys...}}`.
+    Status: 200 se tutti e 5 i check ok (o `object_storage` skipped
+    by capability), 503 altrimenti. Body shape:
+    `{"status": "ready"|"not_ready", "checks": {...5 keys...}}`.
+
+    BE-GO-READY-BOOTSTRAP-ENGINE-011: aggiunto check `object_storage`
+    come additivo. `/health` (gather_liveness) NON include questo
+    check — preserva la separazione load-balancer (latenza bounded)
+    vs readiness rigorosa.
     """
     checks: dict = {}
     status_code = 200
@@ -213,6 +289,11 @@ def gather_readiness() -> HealthPayload:
     mig_ok, mig_detail = check_migrations_aligned()
     checks["migrations"] = {"ok": mig_ok, "detail": mig_detail}
     if not mig_ok:
+        status_code = 503
+
+    obj_ok, obj_detail = check_object_storage()
+    checks["object_storage"] = {"ok": obj_ok, "detail": obj_detail}
+    if not obj_ok:
         status_code = 503
 
     body = {

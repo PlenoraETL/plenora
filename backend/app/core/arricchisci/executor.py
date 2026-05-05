@@ -27,6 +27,7 @@ from app.models import CanvasState
 from app.config import settings
 from app.utils.logger import get_logger, append_step
 from app.core.arricchisci.api_connector import api_connection_service
+from app.core.arricchisci.canvas_orchestrator import get_execution_order
 from app.shared.columns_metadata import save_columns_metadata_with_retry
 
 logger = get_logger(__name__)
@@ -150,7 +151,12 @@ class EnrichExecutor:
             api_connections = api_connection_service.list_api_connections_decrypted()
 
             # Ordine topologico
-            execution_order = api_connection_service._get_execution_order(nodes, edges)
+            # BE-GO-READY-TRANSFORMATION-ENGINE-014: callsite migrato dal
+            # wrapper KEEP_COMPAT `api_connection_service._get_execution_order(...)`
+            # alla pure function modulo-level
+            # `canvas_orchestrator.get_execution_order(...)`. Behavior
+            # byte-per-byte identico (Kahn topo-sort deterministico).
+            execution_order = get_execution_order(nodes, edges)
             node_map = {n["id"]: n for n in nodes}
             node_results = {}
 
