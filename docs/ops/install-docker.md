@@ -25,6 +25,12 @@ The non-Docker install path is fully supported and documented at
 deployment at `lab.plenora.it` runs that path on a single EC2 host
 under systemd.
 
+For a first-time clean install on a fresh Linux PC (with or
+without Docker pre-installed), the executable copy/paste pack
+is [install-marco-dry-run.md](install-marco-dry-run.md). That
+page assumes `STORAGE_POLICY=db`, local Postgres, local Redis,
+no Docker, no MinIO, no AWS - the smallest viable smoke profile.
+
 ---
 
 ## What is missing

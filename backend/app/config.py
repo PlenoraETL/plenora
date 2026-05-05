@@ -396,6 +396,21 @@ class Settings:
         # vogliono un alert specifico W2.
         # Cap <= 0 disabilita il branch (escape hatch ops).
         "STORAGE_RECONCILE_BACKLOG_UPLOAD_INTENT_503_THRESHOLD": 0,
+        # BE-GO-READY-OBSERVABILITY-ENGINE-024-BEAT-HEARTBEAT-READINESS
+        # Massima eta' (secondi) tollerata su `plenora.beat_heartbeat.ts`
+        # prima che il check `beat_heartbeat` di `gather_readiness`
+        # vada a 503. Lo heartbeat e' scritto da
+        # `PlenoraBeatScheduler._write_heartbeat()` ad ogni tick
+        # (max_interval=60s default). Threshold tipico: 2-3x il tick
+        # interval per assorbire jitter / failover leader.
+        # Default 0 = OPT-IN disabled: dev/test/CLI environment senza
+        # beat scheduler attivo NON triggerano 503. Operators di
+        # production setano un valore > 0 (es. 180-300s) per alertare
+        # quando il reconciler beat non e' running. Cap <= 0 disabilita
+        # il branch (escape hatch ops).
+        # Closes R-023.1 (silent accumulation gap su upload_intent
+        # backlog quando il reconciler beat non gira).
+        "READINESS_BEAT_HEARTBEAT_MAX_AGE_SECONDS": 0,
 
         # ==================== TASK ARRICCHIMENTO ====================
         "ENRICHMENT_BATCH_SIZE": 100,

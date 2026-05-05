@@ -1306,6 +1306,14 @@ These are NOT optional reads:
 
 ### 13.4 Marco's first-PC-test command sequence (suggested)
 
+> **Companion dry-run pack**: a one-page copy/paste version
+> of this sequence with expected `/health` / `/ready`
+> output shapes and a failure triage checklist lives at
+> [install-marco-dry-run.md](install-marco-dry-run.md)
+> (`BE-GO-READY-INSTALLATION-024`). Use that page as the
+> on-screen checklist during the install; come back here
+> for any decision matrix detail or full-context reference.
+
 The literal sequence Marco can copy/paste, expecting an
 Ubuntu 24.04 PC with Docker pre-installed (Docker is NOT
 needed; mentioned only because the brief said the PC has it):
@@ -1390,3 +1398,6 @@ to make it persistent (section 7).
   — IAM policy install for the AWS path.
 - [`install-docker.md`](install-docker.md) — Docker install path
   (NOT IMPLEMENTED, target shape only).
+- [`install-marco-dry-run.md`](install-marco-dry-run.md) — one-page
+  copy/paste dry-run pack for the first real Linux PC test
+  (`BE-GO-READY-INSTALLATION-024`).

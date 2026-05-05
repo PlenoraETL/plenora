@@ -63,6 +63,7 @@ __all__ = [
     "check_migrations_aligned",
     "check_object_storage",
     "check_reconciliation_backlog",
+    "check_beat_heartbeat",
     "check_bootstrap_complete",
     "gather_liveness",
     "gather_readiness",
@@ -335,6 +336,99 @@ def check_reconciliation_backlog() -> CheckOutcome:
     return True, detail
 
 
+def check_beat_heartbeat() -> CheckOutcome:
+    """Verifica che il beat scheduler abbia scritto un heartbeat
+    recente in `plenora.beat_heartbeat`.
+
+    BE-GO-READY-OBSERVABILITY-ENGINE-024-BEAT-HEARTBEAT-READINESS:
+    chiude la R-023.1 (silent accumulation gap su upload_intent
+    backlog quando il reconciler beat non gira). Lo heartbeat
+    e' gia' scritto ad ogni tick da
+    `PlenoraBeatScheduler._write_heartbeat()` (INSERT ... ON
+    CONFLICT su `plenora.beat_heartbeat WHERE id='beat'`); questo
+    helper lo legge e verifica che `now - ts` non superi un
+    threshold.
+
+    Threshold-based opt-in:
+      - `READINESS_BEAT_HEARTBEAT_MAX_AGE_SECONDS <= 0` (default)
+        → outcome `(True, "skipped: disabled (threshold=0)")`.
+        DEV/test sicuro: senza beat scheduler attivo
+        (test runner, CLI, smoke environment) il check non
+        triggera mai 503;
+      - `> 0` → outcome `(False, "stale beat: ...")` se l'eta'
+        dell'heartbeat supera il threshold; `(False, "missing
+        heartbeat: ...")` se la row non esiste; `(True, ...)`
+        altrimenti.
+
+    Failure detail wording (locked dai test):
+      - row missing: `"missing heartbeat (table empty)"`;
+      - row presente ma stale: `"stale beat: age=Ns max=Ts"`;
+      - row presente ma `ts` malformato: fail-OPEN
+        `"check skipped: ..."`.
+
+    Errori di lettura (DB unreachable / table missing in dev):
+    fail-OPEN `(True, "check skipped: <ExcType>")`. Lo stesso
+    pattern di `check_pool_headroom` / `check_migrations_aligned`
+    / `check_reconciliation_backlog`: una probe diagnostic non
+    deve far fallire /ready se il segnale stesso e' degradato.
+
+    Esposto in `gather_readiness` come 8° check `beat_heartbeat`.
+    NON in `gather_liveness`: /health resta load-balancer-friendly
+    e non deve dipendere dallo stato del beat scheduler.
+    """
+    try:
+        from app.config import settings
+        max_age = int(
+            settings.get("READINESS_BEAT_HEARTBEAT_MAX_AGE_SECONDS", 0)
+        )
+    except Exception as e:
+        return True, f"check skipped: {type(e).__name__}"
+
+    if max_age <= 0:
+        # Default disabled: dev / test / CLI environments without a
+        # running beat process never trigger 503. Operators opt in
+        # via env override.
+        return True, "skipped: disabled (threshold=0)"
+
+    try:
+        from app.db.pg_connection import fetchone
+        row = fetchone(
+            "SELECT ts FROM plenora.beat_heartbeat WHERE id = 'beat'"
+        )
+    except Exception as e:
+        # Table missing (fresh dev DB) / DB unreachable / SQL syntax
+        # error: fail-OPEN diagnostic. The PG check upstream already
+        # validates DB reachability.
+        return True, f"check skipped: {type(e).__name__}"
+
+    if not row or not row.get("ts"):
+        return False, "missing heartbeat (table empty)"
+
+    try:
+        from datetime import datetime, timezone
+        ts_raw = row["ts"]
+        if isinstance(ts_raw, str):
+            beat_time = datetime.fromisoformat(ts_raw)
+        else:
+            beat_time = ts_raw
+        if beat_time.tzinfo is None:
+            beat_time = beat_time.replace(tzinfo=timezone.utc)
+        age_seconds = (datetime.now(timezone.utc) - beat_time).total_seconds()
+    except Exception as e:
+        # Malformed timestamp: fail-OPEN. A consistent ts shape would
+        # have come from `_write_heartbeat` which uses isoformat;
+        # anything else is a corruption that the readiness probe
+        # cannot diagnose.
+        return True, f"check skipped: {type(e).__name__}"
+
+    if age_seconds > max_age:
+        return (
+            False,
+            f"stale beat: age={int(age_seconds)}s max={max_age}s",
+        )
+    return True, f"age={int(age_seconds)}s max={max_age}s"
+
+
 def check_bootstrap_complete() -> CheckOutcome:
     """Verifica che il boundary canonico `app.bootstrap.bootstrap()`
     sia stato attraversato dal processo web.
@@ -437,19 +531,24 @@ def gather_liveness() -> HealthPayload:
 def gather_readiness() -> HealthPayload:
     """Compose /ready body. Readiness = liveness + pool_headroom +
     migrations_aligned + object_storage + reconciliation_backlog +
-    bootstrap_complete.
+    beat_heartbeat + bootstrap_complete.
 
-    Status: 200 se tutti e 7 i check ok (o `object_storage` skipped
-    by capability), 503 altrimenti. Body shape:
-    `{"status": "ready"|"not_ready", "checks": {...7 keys...}}`.
+    Status: 200 se tutti gli 8 check sono ok (o skipped da
+    capability/threshold), 503 altrimenti. Body shape:
+    `{"status": "ready"|"not_ready", "checks": {...8 keys...}}`.
 
     BE-GO-READY-BOOTSTRAP-ENGINE-011: aggiunto check `object_storage`
     come additivo.
     BE-GO-READY-STORAGE-ENGINE-015: aggiunto `reconciliation_backlog`.
     BE-GO-READY-BOOTSTRAP-ENGINE-015: aggiunto `bootstrap_complete`
-    come additivo. Liveness (`gather_liveness`) NON include nessuno
-    di questi 5 check addizionali — preserva la separazione
-    load-balancer (latenza bounded) vs readiness rigorosa.
+    come additivo.
+    BE-GO-READY-OBSERVABILITY-ENGINE-024: aggiunto `beat_heartbeat`.
+    Default opt-in disabled (`READINESS_BEAT_HEARTBEAT_MAX_AGE_SECONDS=0`)
+    cosi' dev/test senza beat scheduler attivo NON triggerano 503.
+
+    Liveness (`gather_liveness`) NON include nessuno di questi 6
+    check addizionali — preserva la separazione load-balancer
+    (latenza bounded) vs readiness rigorosa.
     """
     checks: dict = {}
     status_code = 200
@@ -482,6 +581,11 @@ def gather_readiness() -> HealthPayload:
     backlog_ok, backlog_detail = check_reconciliation_backlog()
     checks["reconciliation_backlog"] = {"ok": backlog_ok, "detail": backlog_detail}
     if not backlog_ok:
+        status_code = 503
+
+    beat_ok, beat_detail = check_beat_heartbeat()
+    checks["beat_heartbeat"] = {"ok": beat_ok, "detail": beat_detail}
+    if not beat_ok:
         status_code = 503
 
     boot_ok, boot_detail = check_bootstrap_complete()

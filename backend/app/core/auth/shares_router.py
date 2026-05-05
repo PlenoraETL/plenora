@@ -21,10 +21,11 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 
 import app.db.db_service as db
-from app.core.auth.auth import (
-    require_superadmin,
-    CurrentUser,
-)
+from app.core.auth.auth import require_superadmin
+# BE-GO-READY-AUTH-ENGINE-018 Phase-12 contract fan-out: pure
+# `CurrentUser` consumed from the shared contract module. Facade
+# keeps `require_superadmin` (FastAPI Depends).
+from app.shared.contracts.auth import CurrentUser
 from app.shared.audit_action import audit_action
 from app.shared.sharing import (
     _SHAREABLE,

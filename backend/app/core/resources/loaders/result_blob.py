@@ -1,6 +1,7 @@
 """Result-blob loader — pilot Resource Engine kind.
 
 BE-GO-READY-RESOURCE-ENGINE-002-RESULT-BLOB-LOADER-PILOT.
+BE-GO-READY-RESOURCE-ENGINE-004-RESULT-BLOB-PATH-MODE.
 
 Closes the duplication between
 ``app/db/results_db_service.py::get_result_data`` and
@@ -11,14 +12,17 @@ output. The loader now owns:
 
   - the SQL row lookup with optional ``group_id`` filter;
   - the BYTEA-vs-object-storage dispatch;
-  - the structured timing log shape.
+  - the structured timing log shape;
+  - tempfile materialization for ``mode='path'`` (stdlib-only).
 
 What this loader does NOT own (anti-god-engine):
 
   - parsing the bytes (CSV/Parquet/Geo dispatch lives in
     ``app/utils/dataframe.py``);
   - DataFrame / GeoDataFrame construction;
-  - run-artifact materialization (``ArtifactResolver`` owns it);
+  - run-artifact materialization (``ArtifactResolver`` owns it;
+    its project-level tenant guard is orthogonal to the engine's
+    group-level guard — see audit R-003.1);
   - delete / save / list (those are `storage_reconciliation` /
     `result_store` / domain-specific endpoints).
 
@@ -64,7 +68,10 @@ Pure leaf module:
 
 from __future__ import annotations
 
+import os as _os
+import tempfile
 import time
+from pathlib import Path
 from typing import Optional, Tuple
 
 from app.core.resources.types import (
@@ -211,6 +218,56 @@ def _dispatch_by_id(
 
 
 # ---------------------------------------------------------------------------
+# Path-mode helper: write bytes to a stdlib tempfile (anti-god-engine: no
+# settings imports, no domain-specific tempdir resolution; the engine
+# returns a raw stdlib tempfile path and the caller owns its lifecycle
+# via Resource.is_temporary=True).
+# ---------------------------------------------------------------------------
+
+
+def _materialize_to_temp_path(data: bytes) -> Path:
+    """Write ``data`` to a fresh tempfile and return its Path.
+
+    Stdlib-only: ``tempfile.NamedTemporaryFile(delete=False)``. The
+    caller is responsible for cleanup (the loader returns
+    ``Resource(is_temporary=True)`` to signal that contract).
+
+    Cleanup on write failure: the partial tempfile is closed and
+    unlinked best-effort, then the original exception is re-raised.
+    Mirrors the hardening pattern used by
+    ``ArtifactResolver._write_temp_blob`` (disk-full / permission /
+    EROFS surface as the original I/O exception, never as a leaked
+    half-written tempfile).
+
+    The loader does NOT honor a domain-specific TEMP_DIR (e.g.
+    ``settings.TEMP_DIR``) on purpose: the anti-god-engine rule is
+    that the resource engine has zero ``app.config`` imports.
+    Callers that need a specific tempdir override can either set
+    the stdlib ``TMPDIR`` / ``TEMP`` / ``TMP`` env vars (which
+    ``tempfile`` honors transparently) or copy the result to their
+    preferred root after the loader returns.
+    """
+    tf = tempfile.NamedTemporaryFile(delete=False)
+    path = Path(tf.name)
+    try:
+        tf.write(data)
+    except Exception:
+        try:
+            tf.close()
+        except Exception:
+            pass
+        try:
+            if path.exists():
+                _os.unlink(path)
+        except Exception:
+            pass
+        raise
+    else:
+        tf.close()
+        return path
+
+
+# ---------------------------------------------------------------------------
 # ResultBlobLoader — Protocol-compliant fail-closed entry point
 # ---------------------------------------------------------------------------
 
@@ -237,17 +294,21 @@ class ResultBlobLoader:
                 "ResultBlobLoader.load: ref.result_id required "
                 f"(got {ref.result_id!r})."
             )
-        if mode != "bytes":
-            # v1 only supports bytes mode. path/stream require
-            # additional plumbing (temp file materialization, stream
-            # passthrough) and are deferred to a follow-up stream.
+        if mode not in ("bytes", "path"):
+            # bytes (RESOURCE-ENGINE-002) + path (RESOURCE-ENGINE-004).
+            # `stream` stays unsupported — adding it requires a
+            # safe Iterator[bytes] passthrough for both BYTEA (already
+            # fully read into memory) and object storage (we currently
+            # consume the stream into a list inside _download_object_storage).
+            # Implementing it without re-reading or losing seekability
+            # is non-trivial; deferred to a follow-up stream.
             raise ValueError(
                 f"ResultBlobLoader.load: mode={mode!r} not supported. "
-                "v1 supports mode='bytes' only; path/stream are "
+                "v1 supports mode='bytes' and mode='path'; stream is "
                 "deferred to a follow-up stream."
             )
 
-        # Tenant binding:
+        # Tenant binding (shared between bytes and path modes):
         #   - is_superadmin=False -> SQL filter on group_id (fail-closed:
         #     a row owned by another group does not return).
         #   - is_superadmin=True  -> SQL filter skipped; the bypass is
@@ -257,12 +318,18 @@ class ResultBlobLoader:
 
             get_logger(__name__).info(
                 f"[AUDIT] ResultBlobLoader.load is_superadmin=True "
-                f"result_id={ref.result_id} expected_group_id={ref.expected_group_id!r}"
+                f"result_id={ref.result_id} mode={mode} "
+                f"expected_group_id={ref.expected_group_id!r}"
             )
             group_id_filter: Optional[str] = None
         else:
             group_id_filter = ref.expected_group_id
 
+        # Single dispatch site: bytes and path modes share the SAME
+        # fail-closed lookup + tenant filter + BYTEA/S3 branch.
+        # No second SQL query; no second tenant check; no parallel
+        # dispatch path. The mode only affects the materialization
+        # step (in-memory bytes vs tempfile path).
         data, backend = _dispatch_by_id(
             ref.result_id, group_id_filter=group_id_filter
         )
@@ -271,19 +338,44 @@ class ResultBlobLoader:
                 f"ResultBlobLoader.load: result_id={ref.result_id!r} "
                 f"not found (or not visible to group_id={ref.expected_group_id!r})"
             )
-        # data may legitimately be None when object storage is disabled
-        # or download failed. The pre-pilot caller treated this as
-        # "blob not available"; we surface it as size_bytes=0 with
-        # data=None so the caller can branch. The Resource envelope
-        # always carries size_bytes; a None-data Resource is a
-        # signal "row exists but blob unavailable".
-        size = len(data) if data else 0
+
+        if mode == "bytes":
+            # data may legitimately be None when object storage is
+            # disabled or download failed. The pre-pilot caller
+            # treated this as "blob not available"; we surface it as
+            # size_bytes=0 with data=None so the caller can branch.
+            # The Resource envelope always carries size_bytes; a
+            # None-data Resource is a signal "row exists but blob
+            # unavailable".
+            size = len(data) if data else 0
+            return Resource(
+                kind="result_blob",
+                size_bytes=size,
+                data=data,
+                format_hint=None,
+                is_temporary=False,
+            )
+
+        # mode == "path"
+        # In path mode a None-data Resource is NOT useful: callers
+        # asking for a path want a file they can open. Surface the
+        # "row exists but blob unavailable" case as FileNotFoundError
+        # rather than silently materializing a zero-byte tempfile
+        # (that would hide object-storage outages from the caller).
+        if data is None:
+            raise FileNotFoundError(
+                f"ResultBlobLoader.load: result_id={ref.result_id!r} "
+                "blob data unavailable (object storage download "
+                "returned None or row carries empty BYTEA). "
+                "mode='path' cannot materialize a missing blob."
+            )
+        tmp_path = _materialize_to_temp_path(data)
         return Resource(
             kind="result_blob",
-            size_bytes=size,
-            data=data,
+            size_bytes=len(data),
+            path=tmp_path,
             format_hint=None,
-            is_temporary=False,
+            is_temporary=True,
         )
 
 

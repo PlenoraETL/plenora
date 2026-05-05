@@ -378,9 +378,10 @@ def test_gather_liveness_only_2_checks_in_body():
 # ---------------------------------------------------------------------------
 
 
-def test_gather_readiness_returns_200_when_all_7_ok():
-    """BE-GO-READY-BOOTSTRAP-ENGINE-015: readiness aggregation now
-    has 7 checks (added `bootstrap_complete`)."""
+def test_gather_readiness_returns_200_when_all_8_ok():
+    """BE-GO-READY-OBSERVABILITY-ENGINE-024: readiness aggregation
+    now has 8 checks (added `beat_heartbeat`, default OPT-IN
+    disabled so this test stubs it as OK)."""
     import app.observability.health as h
 
     with (
@@ -390,6 +391,10 @@ def test_gather_readiness_returns_200_when_all_7_ok():
         patch.object(h, "check_migrations_aligned", return_value=(True, "aligned")),
         patch.object(h, "check_object_storage", return_value=(True, "ok")),
         patch.object(h, "check_reconciliation_backlog", return_value=(True, "pending=0 lost=0")),
+        patch.object(
+            h, "check_beat_heartbeat",
+            return_value=(True, "skipped: disabled (threshold=0)"),
+        ),
         patch.object(h, "check_bootstrap_complete", return_value=(True, "ok")),
     ):
         payload = h.gather_readiness()
@@ -399,6 +404,7 @@ def test_gather_readiness_returns_200_when_all_7_ok():
     assert set(payload.body["checks"].keys()) == {
         "postgres", "redis", "pool_headroom", "migrations",
         "object_storage", "reconciliation_backlog",
+        "beat_heartbeat",
         "bootstrap_complete",
     }
 

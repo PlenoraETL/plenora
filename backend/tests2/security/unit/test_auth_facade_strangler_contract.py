@@ -1220,3 +1220,108 @@ def test_phase11_allowlist_is_used_only_when_legitimate():
         + "\n".join(f"  {p}" for p in sorted(stale_allowlist_entries))
         + "\nTrim them from `_PHASE11_FACADE_LEAF_ALLOWLIST`."
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase-12 (BE-GO-READY-AUTH-ENGINE-018) — pure-DTO consumer migration
+# in app/+workers/ FROM the facade
+# ---------------------------------------------------------------------------
+#
+# Phase-12 closes the symmetry gap left by Phase-9/10/11:
+#
+#   - Phase-9 covers `from app.core.auth.models import CurrentUser`
+#     in `app/+workers/` (allowlist = 5 sibling files).
+#   - Phase-10 covers `from app.core.auth.models import <minor_DTO>`
+#     in `app/+workers/` (same allowlist).
+#   - Phase-11 covers BOTH facade and leaf in `tests2/+workers/`.
+#   - Phase-12 (this lock) covers FACADE-side imports in `app/+workers/`:
+#     `from app.core.auth.auth import <pure_DTO_name>`.
+#
+# Pure-DTO names = `CurrentUser` + 12 minor DTOs + 4 role tuples +
+# `group_filter` (the same surface enumerated by Phase-11). Allowlist
+# contains only the facade module itself (`app/core/auth/auth.py`)
+# which is the canonical re-export site — every other consumer must
+# go through `app.shared.contracts.auth`.
+#
+# The facade still re-exports these names for the test surface
+# (`auth_mod.<name>` monkey-patch contracts in `tests2/security/unit/`),
+# so this lock only restricts NEW production-code imports from
+# pulling DTOs via the facade. Removal of the facade re-exports
+# themselves is gated on test-side migration (see Phase-11's
+# tests2/ allowlist).
+
+_PHASE12_PURE_DTO_NAMES = _PURE_DTO_NAMES_PHASE11
+
+# Allowlist: only `auth.py` itself may import pure DTO names from
+# `app.core.auth.auth` (the facade). Every other file in
+# `app/+workers/` must route through the contract module. The
+# facade self-import is a degenerate case (it imports `from
+# app.core.auth.models`, not from itself), so this allowlist is
+# conceptually empty — but we keep it as an explicit set so a
+# future degenerate import would still surface as a controlled
+# allowlist entry rather than silent regression.
+_PHASE12_FACADE_DTO_ALLOWLIST: frozenset[str] = frozenset()
+
+
+def test_phase12_app_workers_no_pure_dto_imports_from_facade():
+    """BE-GO-READY-AUTH-ENGINE-018: pure-DTO consumers in
+    `app/+workers/` MUST NOT import `CurrentUser`, the 12 minor
+    DTOs, role tuples, or `group_filter` from
+    `app.core.auth.auth` (the facade). The contract module
+    `app.shared.contracts.auth` is the canonical consumer-facing
+    source. Phase-9/10 already cover the symmetric ban for
+    `app.core.auth.models`; Phase-12 closes the gap on the
+    facade side.
+
+    Failure mode: a developer adds a new production-code module
+    that does `from app.core.auth.auth import LoginRequest` (etc.)
+    and bypasses the contract. The strangler must not silently
+    accept that.
+    """
+    roots = [_APP, _BACKEND_ROOT / "workers"]
+    found: dict[str, list[tuple[int, list[str]]]] = {}
+    for root in roots:
+        if not root.exists():
+            continue
+        for py in root.rglob("*.py"):
+            if "__pycache__" in str(py):
+                continue
+            try:
+                text = py.read_text(encoding="utf-8")
+            except (UnicodeDecodeError, OSError):
+                continue
+            try:
+                tree = ast.parse(text, filename=str(py))
+            except SyntaxError:
+                continue
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.ImportFrom):
+                    continue
+                if node.module != _FACADE_MODULE:
+                    continue
+                hit = [a.name for a in node.names if a.name in _PHASE12_PURE_DTO_NAMES]
+                if not hit:
+                    continue
+                rel = str(py.relative_to(_BACKEND_ROOT)).replace("\\", "/")
+                found.setdefault(rel, []).append((node.lineno, hit))
+
+    extra = {
+        rel: hits for rel, hits in found.items()
+        if rel not in _PHASE12_FACADE_DTO_ALLOWLIST
+    }
+    assert not extra, (
+        "Phase-12 (TE-018) regression: files in app/+workers/ "
+        "import pure DTO / role / group_filter names from the "
+        "facade `app.core.auth.auth`:\n"
+        + "\n".join(
+            f"  {rel}: " + "; ".join(
+                f"line {ln} import {sorted(nm)}"
+                for (ln, nm) in hits
+            )
+            for rel, hits in sorted(extra.items())
+        )
+        + "\nMigrate them to `from app.shared.contracts.auth "
+        "import <name>` instead. The facade re-export still "
+        "exists for test monkey-patch contracts, but production "
+        "consumers must route through the contract module."
+    )

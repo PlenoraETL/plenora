@@ -100,6 +100,7 @@ __all__ = [
     "PROJECTS_BINDING",
     "ARRICCHISCI_BINDING",
     "DATASOURCES_BINDING",
+    "CARICA_BINDING",
 ]
 
 
@@ -267,4 +268,30 @@ DATASOURCES_BINDING = RouterBinding(
     name="datasources",
     init_fn=_datasources_init,
     extract=lambda services: (services.datasource_service,),
+)
+
+
+def _carica_init(*args: Any, **kwargs: Any) -> None:
+    """Lazy thunk: import + invoke ``init_carica_service``.
+
+    BE-GO-READY-BOOTSTRAP-ENGINE-023: 1-arg slice consuming
+    ``services.connection_service``. The carica router previously
+    set its module-private ``_connection_service`` and built a
+    ``CaricaExecutor`` from a positional ``init_carica_service(
+    connection_service)`` call in ``main.py``. This thunk preserves
+    that signature exactly while routing through the typed registry,
+    closing the last procedural ``init_*`` call in ``main.py``.
+
+    Same lazy-thunk pattern as the other slices (keeps the registry
+    module import-cheap).
+    """
+    from app.core.carica.router import init_carica_service
+
+    init_carica_service(*args, **kwargs)
+
+
+CARICA_BINDING = RouterBinding(
+    name="carica",
+    init_fn=_carica_init,
+    extract=lambda services: (services.connection_service,),
 )

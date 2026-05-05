@@ -1200,31 +1200,34 @@ def test_router_registry_does_not_import_datasources_router_at_top_level():
 
 
 # ---------------------------------------------------------------------------
-# 10. BE-GO-READY-BOOTSTRAP-ENGINE-022: startup order lock
+# 10. BE-GO-READY-BOOTSTRAP-ENGINE-022/023: startup order lock
 # ---------------------------------------------------------------------------
 #
-# The migrated init order in `main.py` MUST be:
+# Post-stream-023 the migrated init order in `main.py` MUST be (all
+# 6 are typed bindings — no procedural ``init_*`` left):
 #   1. CONNECTIONS_BINDING
 #   2. PROJECTS_BINDING
 #   3. ARRICCHISCI_BINDING
-#   4. DATASOURCES_BINDING (new this stream)
-#   5. init_carica_service(...)        -- procedural, owned by stream 023
+#   4. DATASOURCES_BINDING
+#   5. CARICA_BINDING (new this stream — replaced
+#      ``init_carica_service(connection_service)``)
 #   6. ORCHESTRATOR_BINDING
 #
 # Order matters: arricchisci consumes project_service (which projects
-# init bound), datasources init does not depend on the others, and
+# init bound), datasources init does not depend on the others, carica
+# consumes connection_service (already wired by step 1), and
 # orchestrator runs LAST so it sees a fully-wired stack. Reordering
 # is a bootstrap regression — this lock is the canonical guard.
 
 
 def test_main_py_init_order_is_canonical():
-    """Source-bound startup order lock for the 5 typed bindings + the
-    one remaining procedural call (`init_carica_service`).
+    """Source-bound startup order lock for the 6 typed bindings.
 
-    Scans `app/main.py` for the literal call sites and asserts they
-    appear in the canonical order:
+    Scans `app/main.py` for the literal `bind_router_services(...)`
+    call sites and asserts they appear in the canonical order:
       connections, projects, arricchisci, datasources, carica,
       orchestrator
+    Post-TE-023 there are NO procedural `init_*` calls remaining.
     """
     src = _read_source("app/main.py")
 
@@ -1233,7 +1236,7 @@ def test_main_py_init_order_is_canonical():
         ("PROJECTS_BINDING",      "bind_router_services(_runtime_services, PROJECTS_BINDING)"),
         ("ARRICCHISCI_BINDING",   "bind_router_services(_runtime_services, ARRICCHISCI_BINDING)"),
         ("DATASOURCES_BINDING",   "bind_router_services(_runtime_services, DATASOURCES_BINDING)"),
-        ("init_carica_service",   "init_carica_service(connection_service)"),
+        ("CARICA_BINDING",        "bind_router_services(_runtime_services, CARICA_BINDING)"),
         ("ORCHESTRATOR_BINDING",  "bind_router_services(_runtime_services, ORCHESTRATOR_BINDING)"),
     ]
 
@@ -1254,6 +1257,251 @@ def test_main_py_init_order_is_canonical():
         f"  Expected canonical order: {[lbl for lbl, _ in markers]}\n"
         f"  Got positional order:     {actual_order}\n"
         "Reordering the init list breaks runtime invariants "
-        "(arricchisci needs project_service init first; orchestrator "
-        "must run last so the full stack is wired)."
+        "(arricchisci needs project_service init first; carica "
+        "consumes connection_service; orchestrator must run last "
+        "so the full stack is wired)."
+    )
+
+
+# ---------------------------------------------------------------------------
+# 11. BE-GO-READY-BOOTSTRAP-ENGINE-023: carica binding (1-arg slice)
+# ---------------------------------------------------------------------------
+
+
+def test_runtime_module_exposes_carica_binding():
+    """``CARICA_BINDING`` is part of the public registry surface."""
+    from app.runtime import CARICA_BINDING, RouterBinding
+
+    assert isinstance(CARICA_BINDING, RouterBinding)
+
+
+def test_carica_binding_name_is_stable():
+    from app.runtime import CARICA_BINDING
+
+    assert CARICA_BINDING.name == "carica"
+
+
+def test_carica_extract_returns_connection_service_field_only():
+    """The extract closure pulls exactly ``services.connection_service``,
+    wrapped in a 1-tuple. Identity preserved."""
+    from app.runtime import CARICA_BINDING
+
+    sentinel = object()
+    fake_services = SimpleNamespace(connection_service=sentinel)
+
+    args = CARICA_BINDING.extract(fake_services)
+
+    assert isinstance(args, tuple)
+    assert len(args) == 1
+    assert args[0] is sentinel
+
+
+def test_carica_init_fn_invokes_router_module_init(monkeypatch):
+    """The binding's ``init_fn`` resolves to
+    ``app.core.carica.router.init_carica_service`` and forwards its
+    positional args verbatim.
+    """
+    from app.core.carica import router as carica_router_mod
+    from app.runtime import CARICA_BINDING
+
+    captured: list = []
+
+    def _fake_init_carica_service(connection_service):
+        captured.append(connection_service)
+
+    monkeypatch.setattr(
+        carica_router_mod,
+        "init_carica_service",
+        _fake_init_carica_service,
+    )
+
+    sentinel = object()
+    CARICA_BINDING.init_fn(sentinel)
+
+    assert captured == [sentinel]
+
+
+def test_bind_carica_passes_container_owned_instance_by_identity():
+    """Identity invariant: the value passed to ``init_fn`` IS the
+    container's ``connection_service`` field, not a copy."""
+    from app.runtime import CARICA_BINDING, bind_router_services
+
+    captured: list = []
+
+    def _spy_init(connection_service):
+        captured.append(connection_service)
+
+    sentinel = object()
+    fake_services = SimpleNamespace(connection_service=sentinel)
+
+    spy_binding = type(CARICA_BINDING)(
+        name=CARICA_BINDING.name,
+        init_fn=_spy_init,
+        extract=CARICA_BINDING.extract,
+    )
+
+    bind_router_services(fake_services, spy_binding)
+
+    assert captured == [sentinel]
+    assert captured[0] is sentinel
+
+
+def test_bind_carica_attribute_error_on_missing_field():
+    """Fail-fast: a typo or rename on ``connection_service`` surfaces
+    as ``AttributeError`` at startup."""
+    from app.runtime import CARICA_BINDING, bind_router_services
+
+    incomplete_services = SimpleNamespace()
+
+    with pytest.raises(AttributeError):
+        bind_router_services(incomplete_services, CARICA_BINDING)
+
+
+def test_bind_carica_type_error_on_signature_drift():
+    """Fail-fast on signature drift: a 2-arg ``init_fn`` substitute
+    while ``extract`` returns 1 arg surfaces as ``TypeError`` at
+    startup."""
+    from app.runtime import CARICA_BINDING, bind_router_services
+
+    def _two_arg_init(a, b):
+        pass
+
+    drift_binding = type(CARICA_BINDING)(
+        name=CARICA_BINDING.name,
+        init_fn=_two_arg_init,
+        extract=CARICA_BINDING.extract,
+    )
+
+    fake_services = SimpleNamespace(connection_service=object())
+
+    with pytest.raises(TypeError):
+        bind_router_services(fake_services, drift_binding)
+
+
+def test_carica_binding_uses_runtime_container_singleton_identity():
+    """End-to-end identity: the connection_service exposed by
+    `RuntimeServices` (built via `build_runtime_services()`) is the
+    SAME object surfaced via `CARICA_BINDING.extract(container)`,
+    so `init_carica_service` receives the canonical singleton, not
+    a freshly-constructed double.
+
+    This locks the chain: container.connection_service IS the
+    bound instance, AND extract(container) returns
+    (container.connection_service,)."""
+    from app.config import settings as _settings
+    from app.runtime import CARICA_BINDING
+    from app.runtime.services import build_runtime_services
+
+    def _fake_save(*args, **kwargs):
+        raise AssertionError("save_function should not be called in this test")
+
+    services = build_runtime_services(
+        settings=_settings,
+        save_function=_fake_save,
+    )
+
+    args = CARICA_BINDING.extract(services)
+    assert len(args) == 1
+    assert args[0] is services.connection_service, (
+        "CARICA_BINDING.extract must surface the container's "
+        "connection_service singleton by identity"
+    )
+
+
+def test_main_py_does_not_call_init_carica_service_directly():
+    """``app/main.py`` must route the carica init through the
+    registry. A direct ``init_carica_service(connection_service)``
+    call bypasses the typed binding and is a regression."""
+    src = _read_source("app/main.py")
+
+    bad = "init_carica_service(connection_service)"
+    assert bad not in src, (
+        "app/main.py should call the carica init through "
+        "bind_router_services(_runtime_services, CARICA_BINDING) "
+        "instead of init_carica_service(connection_service)"
+    )
+
+
+def test_main_py_imports_the_carica_binding():
+    """Positive lock: ``main.py`` imports ``CARICA_BINDING``."""
+    src = _read_source("app/main.py")
+
+    assert "CARICA_BINDING" in src, (
+        "app/main.py must import CARICA_BINDING from app.runtime"
+    )
+
+
+def test_main_py_does_not_import_init_carica_service():
+    """The router-side ``init_carica_service`` symbol must no longer
+    appear in ``main.py``'s import list — the registry's lazy thunk
+    owns the import now."""
+    src = _read_source("app/main.py")
+
+    tree = ast.parse(src)
+    imported_names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                imported_names.add(alias.name)
+
+    assert "init_carica_service" not in imported_names, (
+        "app/main.py must not import init_carica_service directly; "
+        "the registry's lazy thunk in CARICA_BINDING owns the import."
+    )
+
+
+def test_router_registry_does_not_import_carica_router_at_top_level():
+    """The carica router import must live inside the lazy thunk."""
+    src = _read_source("app/runtime/router_registry.py")
+    tree = ast.parse(src)
+
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            assert "carica.router" not in module, (
+                "app.core.carica.router must be imported lazily "
+                "inside the binding's init_fn thunk, not at module top"
+            )
+
+
+def test_main_py_init_block_has_no_procedural_router_init_calls():
+    """BE-GO-READY-BOOTSTRAP-ENGINE-023 closure lock: after this
+    stream there must be ZERO procedural ``init_*(...)`` calls in
+    the init block of ``app/main.py``. All router-side init is
+    routed through ``bind_router_services(_runtime_services, *_BINDING)``.
+
+    AST-bound: scan top-level Call nodes whose callable is a Name
+    starting with ``init_`` (e.g. ``init_orchestrator``,
+    ``init_carica_service``) and assert none remain. The bootstrap
+    helper ``init_app_components`` and the runtime ``init_runtime_*``
+    are NOT router init calls and are excluded by name match.
+    """
+    src = _read_source("app/main.py")
+    tree = ast.parse(src)
+
+    # Router-side init function names that USED to be called from
+    # main.py procedurally before the typed registry migration.
+    forbidden_router_inits = {
+        "init_orchestrator",
+        "init_connections",
+        "init_projects",
+        "init_arricchisci",
+        "init_datasources",
+        "init_carica_service",
+    }
+
+    violations: list[tuple[int, str]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        f = node.func
+        if isinstance(f, ast.Name) and f.id in forbidden_router_inits:
+            violations.append((node.lineno, f.id))
+
+    assert not violations, (
+        "BE-GO-READY-BOOTSTRAP-ENGINE-023 regression: app/main.py "
+        "still contains procedural router-side init calls:\n"
+        + "\n".join(f"  line {ln}: {name}(...)" for ln, name in violations)
+        + "\nRoute through bind_router_services(_runtime_services, "
+        "<NAME>_BINDING) instead."
     )

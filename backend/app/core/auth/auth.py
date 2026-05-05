@@ -81,8 +81,13 @@ logger = get_logger(__name__)
 # `monkeypatch.setattr(auth_mod, "_check_rate_limit_in_memory", ...)`
 # continuano a funzionare invariati.
 
+# BE-GO-READY-AUTH-ENGINE-018-FACADE-DEATH-AUDIT-SAFE-DELETIONS:
+# `InMemoryRateLimitFallback` re-export removed (proven dead — zero
+# callsites in `backend/app`, `backend/workers`, `backend/tests2`
+# verified by exhaustive grep + AST scan). The class remains the
+# canonical implementation in `app.core.auth.rate_limit_fallback`;
+# importers should pull it from there if they ever need the type.
 from app.core.auth.rate_limit_fallback import (
-    InMemoryRateLimitFallback,  # noqa: F401  (re-export pubblico tipato)
     RateLimitFallbackTriggered,
     _STORE as _rate_limit_fallback_store,
     record_failed_login_in_memory as _record_failed_login_in_memory,

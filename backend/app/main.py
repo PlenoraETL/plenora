@@ -409,7 +409,7 @@ from app.core.arricchisci.router import (
     enrichment_router, api_connections_router, templates_router,
     enrich_router,
 )
-from app.core.carica.router import router as carica_router, init_carica_service
+from app.core.carica.router import router as carica_router
 from app.core.features.routes import router as features_router
 from app.core.scheduler.router import router as schedules_router
 from app.core.orchestrator.router import pipeline_router, tasks_router
@@ -435,14 +435,16 @@ from app.core.admin_system_status.router import router as admin_system_status_ro
 from app.core.tickets.router import router as tickets_router
 
 # Inizializza moduli che necessitano di servizi
-# BE-GO-READY-BOOTSTRAP-ENGINE-018/019/020/021/022-ROUTER-REGISTRY:
-# connections, projects, arricchisci, datasources, and orchestrator
-# init flow through the typed registry. Order preserved: connections,
-# projects, arricchisci, datasources, carica, orchestrator. Stream
-# 023 will migrate the remaining `init_carica_service` call.
+# BE-GO-READY-BOOTSTRAP-ENGINE-018/019/020/021/022/023-ROUTER-REGISTRY:
+# tutti i 6 init_* router-side fluiscono ora attraverso il typed
+# registry. Order preserved: connections, projects, arricchisci,
+# datasources, carica, orchestrator. Stream 023 ha chiuso
+# l'ultimo init procedurale (`init_carica_service`) migrandolo a
+# `CARICA_BINDING`.
 from app.runtime.router_registry import (
     bind_router_services,
     ARRICCHISCI_BINDING,
+    CARICA_BINDING,
     CONNECTIONS_BINDING,
     DATASOURCES_BINDING,
     ORCHESTRATOR_BINDING,
@@ -452,7 +454,7 @@ bind_router_services(_runtime_services, CONNECTIONS_BINDING)
 bind_router_services(_runtime_services, PROJECTS_BINDING)
 bind_router_services(_runtime_services, ARRICCHISCI_BINDING)
 bind_router_services(_runtime_services, DATASOURCES_BINDING)
-init_carica_service(connection_service)
+bind_router_services(_runtime_services, CARICA_BINDING)
 bind_router_services(_runtime_services, ORCHESTRATOR_BINDING)
 # features: usa lazy init interno, nessuna init_* necessaria
 
