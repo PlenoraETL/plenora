@@ -51,14 +51,25 @@ def _arricchisci_file_source_denied():
 
 
 def _arricchisci_project_source_denied():
+    """BE-GO-READY-TRANSFORMATION-ENGINE-030B: ctx-strict — il
+    callsite arricchisci usa `_group_id_from_ctx(ctx)` (no singleton
+    fallback). Stale singleton 'stale-grp-LEAK' come decoy: il
+    cross-tenant denial e' calcolato sul `ctx.group_id`."""
+    from app.core.arricchisci.execution_context import (
+        ArricchisciExecutionContext,
+    )
+
     service = ApiConnectionService.__new__(ApiConnectionService)
-    service._current_group_id = "grp-1"
+    service._current_group_id = "stale-grp-LEAK"
     service.results_dir = None
     node_data = {"source_project_id": "proj-99"}
+    ctx = ArricchisciExecutionContext(
+        project_id="p-1", group_id="grp-1", preview_limit=None,
+    )
 
     with patch("app.db.db_service.get_project", return_value={"id": "proj-99", "group_id": "grp-2"}):
         with pytest.raises(ValueError, match="Accesso negato: progetto sorgente 'proj-99'"):
-            service._load_source_project(node_data)
+            service._load_source_project(node_data, ctx=ctx)
 
 
 @pytest.mark.parametrize(

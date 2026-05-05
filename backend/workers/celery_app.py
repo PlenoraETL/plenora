@@ -21,6 +21,8 @@ Avvio Beat:
     celery -A workers.celery_app beat -S workers.beat_scheduler.PlenoraBeatScheduler --loglevel=info
 """
 
+import os
+
 from celery import Celery
 from app.config import settings
 from app.utils.logger import get_logger
@@ -45,6 +47,10 @@ celery_app = Celery(
         # task used by the CI cleanroom enqueue/dequeue smoke. Zero
         # production cost; see backend/workers/tasks/cleanroom_task.py.
         "workers.tasks.cleanroom_task",
+        # BE-GO-READY-INSTALLATION-021: pure no-op `cleanroom.beat_ping`
+        # task fired by the CI cleanroom beat tick smoke (env-gated).
+        # Zero production cost; see workers/tasks/cleanroom_beat_task.py.
+        "workers.tasks.cleanroom_beat_task",
     ]
 )
 
@@ -83,6 +89,46 @@ celery_app.conf.update(
     # Redis broker — connection pool e health check
     broker_connection_retry_on_startup=True,
 )
+
+
+# ============================================================
+# BE-GO-READY-INSTALLATION-021-CELERY-BEAT-TICK-SMOKE-IMPL
+# Env-gated cleanroom beat tick smoke firing path.
+# ============================================================
+#
+# Production deploys leave `PLENORA_CLEANROOM_BEAT_PING` UNSET so this
+# block is a no-op: nothing is added to `beat_schedule`, beat behaves
+# exactly as today (DB-driven schedules only via
+# `PlenoraBeatScheduler._sync_from_db`).
+#
+# The CI cleanroom workflow sets `PLENORA_CLEANROOM_BEAT_PING=1` ONLY
+# on the spawned beat process; the env var is NOT propagated to web /
+# worker / production beat. When set, this populates
+# `celery_app.conf.beat_schedule` with a 5-second interval entry that
+# fires `cleanroom.beat_ping` (pure no-op task at
+# `workers/tasks/cleanroom_beat_task.py`). The matching shim in
+# `PlenoraBeatScheduler.setup_schedule()` merges config-based
+# `beat_schedule` entries into `self.data` alongside DB schedules so
+# the parent `Scheduler.tick()` fires them.
+#
+# The `import os` at top-of-module is intentional: this is the
+# single ADR-0021 TEST_ONLY env-read in this file, gated to the
+# cleanroom path. No other behaviour depends on env state at import
+# time.
+if os.getenv("PLENORA_CLEANROOM_BEAT_PING") == "1":
+    from celery.schedules import schedule as _celery_schedule
+
+    celery_app.conf.beat_schedule = {
+        **(celery_app.conf.beat_schedule or {}),
+        "cleanroom-beat-ping": {
+            "task": "cleanroom.beat_ping",
+            "schedule": _celery_schedule(run_every=5.0),
+        },
+    }
+    logger.info(
+        "[CLEANROOM] PLENORA_CLEANROOM_BEAT_PING=1: registered "
+        "cleanroom.beat_ping at 5s interval in beat_schedule"
+    )
 
 
 class BaseTaskWithRetry(celery_app.Task):

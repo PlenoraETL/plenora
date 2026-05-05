@@ -28,7 +28,8 @@ from app.services.task_service import TaskType
 from app.utils.router_utils import require_service
 from app.shared.audit_action import audit_action
 from app.core.auth.auth import get_current_user, require_not_esecutore
-from app.core.auth.models import CurrentUser
+# BE-GO-READY-AUTH-ENGINE-015 Phase-9 contract fan-out.
+from app.shared.contracts.auth import CurrentUser
 from app.core.auth.ownership import assert_group_access
 
 # ── Content-Type per formato file ─────────────────────────────────────────

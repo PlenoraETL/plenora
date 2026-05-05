@@ -7,10 +7,13 @@ Lock i 3 invariant del migration batch:
    modulo-level), NON `api_connection_service._get_execution_order(...)`
    (singleton wrapper KEEP_COMPAT).
 2. **Import esplicito**: `executor.py` importa
-   `get_execution_order` da
+   `get_execution_order` e `init_execution_context` da
    `app.core.arricchisci.canvas_orchestrator` al top-level (no
    lazy import, no re-export via api_connection_service).
-3. **Behavior preservation**: la chiamata diretta alla pure
+3. **Preview ctx-strict**: i tre loader source/static in
+   `EnrichExecutor.preview()` ricevono `ctx=ctx`, cosi' la rimozione
+   del fallback singleton in TE-030B non rompe la preview HTTP.
+4. **Behavior preservation**: la chiamata diretta alla pure
    function ritorna lo stesso ordering del wrapper KEEP_COMPAT
    (Kahn topo-sort deterministico byte-per-byte).
 
@@ -102,32 +105,72 @@ def test_executor_calls_canvas_orchestrator_get_execution_order():
 # ---------------------------------------------------------------------------
 
 
-def test_executor_imports_get_execution_order_from_canvas_orchestrator():
-    """Import top-level `from app.core.arricchisci.canvas_orchestrator
-    import get_execution_order` (no lazy import, no re-export via
+def test_executor_imports_canvas_orchestrator_helpers():
+    """Import top-level da `app.core.arricchisci.canvas_orchestrator`
+    per i due helper usati dalla preview: `get_execution_order` e
+    `init_execution_context` (no lazy import, no re-export via
     api_connection_service)."""
     src = _EXECUTOR_PY.read_text(encoding="utf-8")
     tree = ast.parse(src)
-    found = False
+    found = set()
     for node in tree.body:
         if not isinstance(node, ast.ImportFrom):
             continue
         if node.module != "app.core.arricchisci.canvas_orchestrator":
             continue
         for alias in node.names:
-            if alias.name == "get_execution_order":
-                found = True
-                break
-        if found:
-            break
-    assert found, (
-        "Atteso: top-level `from app.core.arricchisci.canvas_orchestrator "
-        "import get_execution_order` in executor.py."
+            if alias.name in {"get_execution_order", "init_execution_context"}:
+                found.add(alias.name)
+    assert found == {"get_execution_order", "init_execution_context"}, (
+        "Atteso: top-level import di `get_execution_order` e "
+        "`init_execution_context` da canvas_orchestrator in executor.py."
     )
 
 
 # ---------------------------------------------------------------------------
-# 3. Behavior preservation (smoke parity)
+# 3. Preview ctx-strict callsites
+# ---------------------------------------------------------------------------
+
+
+def test_executor_preview_passes_ctx_to_source_loaders():
+    """TE-031 regression guard: dopo TE-030B i source loader sono
+    ctx-strict. `EnrichExecutor.preview()` deve costruire `ctx` e
+    passarlo ai tre loader source/static, altrimenti la preview HTTP
+    fail-chiude per file_source/project_source nodes."""
+    src = _EXECUTOR_PY.read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    target_methods = {
+        "_load_static_values",
+        "_load_file_source",
+        "_load_source_project",
+    }
+    found = {name: False for name in target_methods}
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if not isinstance(func, ast.Attribute):
+            continue
+        if func.attr not in target_methods:
+            continue
+        has_ctx_kw = any(
+            kw.arg == "ctx"
+            and isinstance(kw.value, ast.Name)
+            and kw.value.id == "ctx"
+            for kw in node.keywords
+        )
+        found[func.attr] = has_ctx_kw
+
+    missing = [name for name, ok in found.items() if not ok]
+    assert not missing, (
+        "EnrichExecutor.preview must pass `ctx=ctx` to source/static "
+        f"loaders. Missing ctx kwarg on: {missing}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# 4. Behavior preservation (smoke parity)
 # ---------------------------------------------------------------------------
 
 

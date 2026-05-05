@@ -126,8 +126,8 @@ def test_load_static_values_uses_ctx_group_id_over_singleton(api_service):
     lock un tenant leak sarebbe possibile dopo Phase 2.
 
     Lo static branch e' il path piu' semplice da testare (no DB,
-    no SourceLoader real call) — esercita comunque
-    `_resolve_group_id` source path.
+    no SourceLoader real call) — esercita comunque la `group_id`
+    resolution path via `_group_id_from_ctx(ctx)` (TE-023 strict).
     """
     from app.core.arricchisci.execution_context import (
         ArricchisciExecutionContext,
@@ -246,24 +246,39 @@ def test_load_static_values_uses_static_sentinel_when_ctx_none(api_service):
     )
 
 
-def test_load_file_source_ignores_stale_preview_limit_when_ctx_none(api_service):
-    """BE-GO-READY-TRANSFORMATION-ENGINE-025 (slice migration):
-    `_load_file_source` non legge piu' `_preview_limit` dal
-    singleton. Quando `ctx is None`, il preview_limit e' considerato
-    non-richiesto (no truncation) — anche se `svc._preview_limit`
-    ha un valore stale da una pre-existing execution.
+def test_load_file_source_ignores_stale_preview_limit_when_ctx_preview_none(api_service):
+    """BE-GO-READY-TRANSFORMATION-ENGINE-025 (slice migration) +
+    -030B (group_id strict promotion): `_load_file_source` non
+    legge piu' `_preview_limit` ne' `_current_group_id` dal
+    singleton. Quando `ctx.preview_limit is None`, il preview_limit
+    e' considerato non-richiesto (no truncation) — anche se
+    `svc._preview_limit` ha un valore stale da una pre-existing
+    execution.
 
     Regression guard contro stale-state cross-execution leak: un
     `_preview_limit=3` lasciato da T1 non deve truncare
-    silenziosamente l'output di T2 che chiama `_load_file_source`
-    senza un context tipato. Pre-batch -025 questo era un fail-soft
+    silenziosamente l'output di T2 che passa un ctx con
+    `preview_limit=None`. Pre-batch -025 questo era un fail-soft
     behavior che dipendeva dall'ordine di esecuzione sul singleton.
+
+    Storia: pre-TE-030B il test usava `ctx=None` (singleton fallback
+    per group_id). Post-TE-030B il fallback singleton e' stato
+    rimosso, quindi il test passa ctx con `group_id` valido +
+    `preview_limit=None` per esercitare il medesimo invariant
+    (stale singleton preview_limit ignored).
     """
     from app.core.arricchisci import api_connection_source_loading as mod
+    from app.core.arricchisci.execution_context import (
+        ArricchisciExecutionContext,
+    )
 
-    api_service._current_group_id = "grp-A"
-    # Stale preview_limit residuo da una pre-existing execution.
+    # Stale singleton state da una pre-existing execution.
+    api_service._current_group_id = "stale-grp-LEAK"
     api_service._preview_limit = 3
+
+    ctx = ArricchisciExecutionContext(
+        project_id="p1", group_id="grp-A", preview_limit=None,
+    )
 
     df_source = pd.DataFrame([{"a": i} for i in range(10)])
 
@@ -276,12 +291,14 @@ def test_load_file_source_ignores_stale_preview_limit_when_ctx_none(api_service)
                       side_effect=lambda df, cols: df):
         result = api_service._load_file_source(
             {"id": "fs1", "file_source_id": "f-1"},
-        )  # NO ctx kwarg
+            ctx=ctx,
+        )
 
     assert len(result) == 10, (
         f"REGRESSIONE Phase 5 slice -025: stale `_preview_limit=3` "
         f"sul singleton ha truncato l'output ({len(result)} righe) "
-        f"anche senza ctx esplicito. Cross-execution leak ripristinato."
+        f"anche con ctx.preview_limit=None. Cross-execution leak "
+        f"ripristinato."
     )
 
 
@@ -638,16 +655,24 @@ def test_te029_source_loading_migratable_tests_use_ctx_and_stale_singleton():
         )
 
 
-def test_te029_source_loading_resolve_group_id_legacy_helper_still_present():
-    """Lock complementare TE-029: il helper legacy `_resolve_group_id`
-    in `api_connection_source_loading.py` resta presente.
+def test_te030b_source_loading_legacy_helpers_removed():
+    """BE-GO-READY-TRANSFORMATION-ENGINE-030B regression guard: i 2
+    helper legacy in `api_connection_source_loading.py` —
+    `_resolve_group_id` (ctx-or-singleton-fallback) e
+    `_resolve_preview_limit` (idem per preview) — DEVONO essere stati
+    rimossi.
 
-    Motivo: sia i 3 critical fail-closed lock test (KEEP-on-legacy)
-    sia il consumer esterno `workers/tasks/enrichment_task.py` (che
-    fa direct mutation `svc._current_group_id = ...` invece di
-    passare ctx) dipendono dal fallback legacy. Rimuovere il helper
-    in TE-029 sarebbe prematuro — la rimozione e' in scope di TE-030
-    (post-migrazione del worker)."""
+    Motivo: post-TE-030A (worker no-singleton-mutation) + TE-030B
+    (3 critical fail-closed test migrati a ctx-strict + 2 callsite
+    promossi a `_group_id_from_ctx`), entrambi i legacy helper sono
+    dead code. La loro re-introduzione riaprirebbe il leak singleton
+    cross-execution che le strict variant chiudono.
+
+    Pre-TE-030B questo lock asseriva il contrario (helper MUST
+    exist) per impedire rimozione prematura mentre il worker /
+    fail-closed locks dipendevano ancora dalla fallback. Post-TE-030B
+    il lock e' invertito.
+    """
     src_path = (
         _BACKEND_ROOT / "app" / "core" / "arricchisci"
         / "api_connection_source_loading.py"
@@ -655,17 +680,60 @@ def test_te029_source_loading_resolve_group_id_legacy_helper_still_present():
     src = src_path.read_text(encoding="utf-8")
     tree = ast.parse(src)
 
-    found = False
+    forbidden = {"_resolve_group_id", "_resolve_preview_limit"}
+    violations = []
     for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef) and node.name == "_resolve_group_id":
-            found = True
-            break
+        if isinstance(node, ast.FunctionDef) and node.name in forbidden:
+            violations.append((node.name, node.lineno))
 
-    assert found, (
-        "`_resolve_group_id` helper rimosso prematuramente. "
-        "TE-029 mantiene il helper legacy attivo: i 3 critical "
-        "fail-closed lock test (`_make_service(group_id=None)` "
-        "+ no ctx) dipendono dalla legacy fallback. La rimozione "
-        "e' in scope di TE-030 dopo migrazione di "
-        "workers/tasks/enrichment_task.py."
+    assert not violations, (
+        f"BE-GO-READY-TRANSFORMATION-ENGINE-030B regression: legacy "
+        f"helper(s) re-introdotti in api_connection_source_loading.py: "
+        f"{violations}. Questi helper mescolano Phase-2 ctx con "
+        f"singleton fallback in modo implicito (foot-gun cross-tenant "
+        f"leak). Usare `_group_id_from_ctx(ctx)` / "
+        f"`_preview_limit_from_ctx(ctx)` strict invece."
+    )
+
+
+def test_te030b_source_loading_callsites_use_strict_helper():
+    """Positive lock TE-030B: i 2 callsite production
+    `_load_source_project` e `_load_file_source` in
+    `api_connection_source_loading.py` DEVONO chiamare
+    `_group_id_from_ctx(ctx)` (strict) e NON nessun helper legacy
+    rimosso.
+
+    Senza questo lock, un futuro refactor potrebbe rollback i
+    callsite a un nuovo helper ctx-or-fallback re-introducendo lo
+    stesso pattern foot-gun.
+    """
+    src_path = (
+        _BACKEND_ROOT / "app" / "core" / "arricchisci"
+        / "api_connection_source_loading.py"
+    )
+    src = src_path.read_text(encoding="utf-8")
+    tree = ast.parse(src)
+
+    target_methods = {"_load_source_project", "_load_file_source"}
+    seen_strict_call = {name: False for name in target_methods}
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        if node.name not in target_methods:
+            continue
+        for sub in ast.walk(node):
+            if not isinstance(sub, ast.Call):
+                continue
+            f = sub.func
+            if isinstance(f, ast.Name) and f.id == "_group_id_from_ctx":
+                seen_strict_call[node.name] = True
+                break
+
+    missing = [name for name, ok in seen_strict_call.items() if not ok]
+    assert not missing, (
+        f"TE-030B regression: i seguenti callsite non chiamano "
+        f"`_group_id_from_ctx(ctx)` strict per la resolve del "
+        f"group_id: {missing}. Verificare che la promozione strict "
+        f"sia preservata."
     )

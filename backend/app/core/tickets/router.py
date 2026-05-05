@@ -25,7 +25,8 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, Upl
 from pydantic import BaseModel, Field
 
 from app.core.auth.auth import get_current_user
-from app.core.auth.models import CurrentUser
+# BE-GO-READY-AUTH-ENGINE-015 Phase-9 contract fan-out.
+from app.shared.contracts.auth import CurrentUser
 from app.core.tickets import service as svc
 from app.db import tickets_db_service as tdb
 from app.utils.logger import get_logger

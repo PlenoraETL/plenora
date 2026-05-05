@@ -8,7 +8,8 @@ from fastapi import APIRouter, Depends
 
 from app.core.admin_system_status import service
 from app.core.auth.auth import require_superadmin
-from app.core.auth.models import CurrentUser
+# BE-GO-READY-AUTH-ENGINE-015 Phase-9 contract fan-out.
+from app.shared.contracts.auth import CurrentUser
 
 
 router = APIRouter(prefix="/admin/system-status", tags=["admin-system-status"])

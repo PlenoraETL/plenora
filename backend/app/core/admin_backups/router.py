@@ -14,7 +14,8 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.auth.auth import require_superadmin
-from app.core.auth.models import CurrentUser
+# BE-GO-READY-AUTH-ENGINE-015 Phase-9 contract fan-out.
+from app.shared.contracts.auth import CurrentUser
 from app.core.admin_backups import service
 from app.core.admin_backups.service import (
     AdminBackupCredentialsError,

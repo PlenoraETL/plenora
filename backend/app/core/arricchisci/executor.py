@@ -27,7 +27,10 @@ from app.models import CanvasState
 from app.config import settings
 from app.utils.logger import get_logger, append_step
 from app.core.arricchisci.api_connector import api_connection_service
-from app.core.arricchisci.canvas_orchestrator import get_execution_order
+from app.core.arricchisci.canvas_orchestrator import (
+    get_execution_order,
+    init_execution_context,
+)
 from app.shared.columns_metadata import save_columns_metadata_with_retry
 
 logger = get_logger(__name__)
@@ -147,6 +150,16 @@ class EnrichExecutor:
             if not nodes:
                 return {"success": False, "message": "Nessun nodo nel canvas"}
 
+            # BE-GO-READY-TRANSFORMATION-ENGINE-031: preview HTTP usa
+            # gli stessi loader ctx-strict del path canvas/task. Dopo
+            # TE-030B i loader non leggono piu' `_current_group_id` dal
+            # singleton; senza ctx questo endpoint fail-chiuderebbe su
+            # file_source/project_source. `init_execution_context`
+            # preserva anche il mirror legacy per i path non ancora
+            # migrati, ma i tre loader sotto ricevono `ctx=ctx`
+            # esplicitamente.
+            ctx = init_execution_context(api_connection_service, project_id, limit)
+
             # Carica tutte le API connections con credenziali decifrate (1 query)
             api_connections = api_connection_service.list_api_connections_decrypted()
 
@@ -179,13 +192,23 @@ class EnrichExecutor:
                 node_data.update(node)  # root keys override
 
                 if node_type == "staticValues":
-                    node_results[node_id] = api_connection_service._load_static_values(node_data)
+                    node_results[node_id] = api_connection_service._load_static_values(
+                        node_data,
+                        ctx=ctx,
+                    )
 
                 elif node_type == "file_source":
-                    node_results[node_id] = api_connection_service._load_file_source(node_data)
+                    node_results[node_id] = api_connection_service._load_file_source(
+                        node_data,
+                        ctx=ctx,
+                    )
 
                 elif node_type == "project_source":
-                    node_results[node_id] = api_connection_service._load_source_project(node_data, False)
+                    node_results[node_id] = api_connection_service._load_source_project(
+                        node_data,
+                        False,
+                        ctx=ctx,
+                    )
 
                 elif node_type == "api_enrich":
                     api_id = node_data.get("api_id")

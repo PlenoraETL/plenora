@@ -699,6 +699,31 @@ both are documented so the next stream picks them up explicitly.
 
 `BE-GO-READY-INSTALLATION-020-CELERY-BEAT-TICK-SMOKE-DESIGN-FIRST-GUARD`.
 
+> **Implementation status (post-021):** the design has been
+> IMPLEMENTED by `BE-GO-READY-INSTALLATION-021-CELERY-BEAT-TICK-SMOKE-IMPL`.
+> The header above is preserved as the canonical section anchor of
+> the design guard test (`Group A`). The runtime artefacts now in
+> place are:
+>
+>   - `backend/workers/tasks/cleanroom_beat_task.py` (pure no-op
+>     `cleanroom.beat_ping`, `ignore_result=False`);
+>   - `backend/workers/celery_app.py` env-gated registration of
+>     `cleanroom-beat-ping` in `beat_schedule` (5s interval) when
+>     `PLENORA_CLEANROOM_BEAT_PING=1`;
+>   - `backend/workers/beat_scheduler.py` `_merge_config_beat_schedule`
+>     shim that loads config-based `beat_schedule` entries into
+>     `self.data` alongside DB schedules (DB-driven namespace
+>     `urby:schedule:<id>` is reserved);
+>   - `.github/workflows/ci-cleanroom.yml` `Verify Celery beat tick smoke`
+>     step that spawns worker + beat with the env var set and probes
+>     the Redis result backend (`celery-task-meta-*`) for
+>     `status=SUCCESS` + `result="beat_pong"` within a 25-second
+>     bounded deadline.
+>
+> Group C of the design guard test now activates automatically (the
+> `beat_task_text` fixture no longer skips because the file exists)
+> and locks the contract from 12.7.2 against regression.
+
 The CI cleanroom probe added by INSTALLATION-014 covers the beat
 scheduler **symbol** (`PlenoraBeatScheduler` resolves), and 019
 covers the **worker** enqueue/dequeue round-trip. Neither covers

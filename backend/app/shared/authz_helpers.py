@@ -14,7 +14,8 @@ tenant indovinandone l'id.
 
 from fastapi import HTTPException
 
-from app.core.auth.models import CurrentUser
+# BE-GO-READY-AUTH-ENGINE-015 Phase-9 contract fan-out.
+from app.shared.contracts.auth import CurrentUser
 from app.core.auth.ownership import (
     assert_group_access,
     assert_resource_visible,

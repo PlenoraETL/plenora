@@ -104,13 +104,19 @@ Intra-cluster:
   `_recompute_upstream_project` (×1), `_filesystem_fallback_load_project`
   (×1). Tutti nello stesso mixin.
 
-State refs (`self.<attr>`) — letti da `_init_execution_context` (core):
+State refs (`self.<attr>`):
 - `self.results_dir` (in `_load_source_project`) — settato in `__init__`
   di `ApiConnectionService`. Accesso via MRO trasparente.
-- `getattr(self, '_current_group_id', None)` (in `_load_*` x3) —
-  settato da `_init_execution_context` (core).
-- `getattr(self, '_preview_limit', None)` (in `_load_file_source`) —
-  settato da `_init_execution_context` (core).
+
+Tenant binding (`group_id`) e preview_limit: TE-023/-025/-030B hanno
+migrato i 3 callsite mixin (`_load_source_project`, `_load_file_source`,
+`_load_static_values`) a leggere ESCLUSIVAMENTE dal typed
+`ArricchisciExecutionContext` via `_group_id_from_ctx(ctx)` e
+`_preview_limit_from_ctx(ctx)`. Il singleton `_current_group_id` /
+`_preview_limit` NON viene piu' consultato da questi callsite.
+`init_execution_context` (canvas_orchestrator) ancora applica un
+mirror legacy via `apply_to_legacy_state` per il preview path
+in-process (helper preservato ma non load-bearing).
 
 Coupling esterno
 ================
@@ -214,37 +220,6 @@ from app.utils.dataframe import (
 from app.utils.logger import get_logger
 
 
-def _resolve_group_id(
-    self_obj,
-    ctx: Optional[ArricchisciExecutionContext],
-) -> Optional[str]:
-    """BE-GO-READY-TRANSFORMATION-ENGINE-019: helper di transizione.
-
-    Ritorna `ctx.group_id` se il caller ha passato un context tipato
-    (Phase 2), altrimenti fallback a
-    `getattr(self_obj, "_current_group_id", None)` (KEEP_COMPAT
-    Phase 1).
-
-    Permette di migrare i 6 reader site uno per uno senza rompere
-    consumer esterni (`enrichment_task.py`, test setup) che ancora
-    fanno direct mutation sullo stato singleton.
-    """
-    if ctx is not None:
-        return ctx.group_id
-    return getattr(self_obj, "_current_group_id", None)
-
-
-def _resolve_preview_limit(
-    self_obj,
-    ctx: Optional[ArricchisciExecutionContext],
-) -> Optional[int]:
-    """BE-GO-READY-TRANSFORMATION-ENGINE-019: speculare a
-    `_resolve_group_id` per `_preview_limit`."""
-    if ctx is not None:
-        return ctx.preview_limit
-    return getattr(self_obj, "_preview_limit", None)
-
-
 def _preview_limit_from_ctx(
     ctx: Optional[ArricchisciExecutionContext],
 ) -> Optional[int]:
@@ -257,11 +232,10 @@ def _preview_limit_from_ctx(
     state che NON deve influenzare il flusso `_load_file_source`
     quando il caller non ha esplicitamente dichiarato un context.
 
-    Differenza vs `_resolve_preview_limit`: nessun fallback al
-    singleton. Usato dal slice `_load_file_source` per il
-    preview_limit (non per group_id, che resta KEEP_AS_LEGACY_LOCK
-    per coverage dei fail-closed core tests in
-    `test_api_connector_source_loading_core.py`).
+    Storia (TE25/TE30B): introdotto in -025 a fianco del legacy
+    `_resolve_preview_limit` (ctx-or-singleton-fallback). Il legacy
+    helper era dead code dopo che -025 ha sostituito l'unico
+    callsite production: in -030B e' stato rimosso.
 
     Decisione di slice (audit -023/-025):
       Il `preview_limit` e' tenant-non-sensitive ma cross-execution
@@ -269,8 +243,7 @@ def _preview_limit_from_ctx(
       precedente run potrebbe truncare silenziosamente l'output di
       un run successivo che NON aveva intenzione di limitare.
       Spostare la lettura sul typed boundary chiude questa race
-      window senza richiedere migrazione del piu' delicato
-      `group_id` reader (che resta legacy lock).
+      window.
     """
     if ctx is not None:
         return ctx.preview_limit
@@ -287,22 +260,22 @@ def _group_id_from_ctx(
     singleton — la "tenant binding via singleton mutation" non e'
     parte del contract di questo helper.
 
-    Differenza vs `_resolve_group_id`: nessun fallback al
-    singleton. Usato dal slice `_load_static_values` (tenant-
-    agnostic per definizione: il group_id viene usato solo come
-    placeholder per soddisfare la guardia del SourceLoader). Il
-    risultato `None` viene poi sostituito da un sentinel constant
-    (`"_static_"`) dal caller.
+    Storia (TE19/TE23/TE30B): in -019 il legacy `_resolve_group_id`
+    (ctx-or-singleton-fallback) era l'helper unico. -023 ha
+    introdotto questa variante strict per il branch static. -030B
+    ha promosso anche `_load_source_project` e `_load_file_source`
+    a usare lo strict helper, completando la migrazione e
+    rimuovendo il legacy `_resolve_group_id` come dead code.
 
     Decisione di slice (audit -021):
       `_load_static_values` non ha tenant binding semantico
       (processing puro di template variables come `{{NOW}}`,
       `{{TODAY}}`). La sua dipendenza pre-batch dal singleton era
-      un side effect del helper `_resolve_group_id`, non del
-      contract della funzione. La rimozione del fallback per il
-      branch static elimina lo stale-state coupling al singleton
-      (un eventuale `svc._current_group_id` pre-set da un'altra
-      esecuzione non puo' ne' deve influenzare il static).
+      un side effect del helper legacy, non del contract della
+      funzione. La rimozione del fallback per il branch static
+      elimina lo stale-state coupling al singleton (un eventuale
+      `svc._current_group_id` pre-set da un'altra esecuzione non
+      puo' ne' deve influenzare il static).
     """
     if ctx is not None:
         return ctx.group_id
@@ -456,12 +429,15 @@ class ApiConnectionSourceLoadingMixin:
         filesystem restano qui perche' sono specifici di api_connector
         (manipola usa orchestrator_callback).
 
-        BE-GO-READY-TRANSFORMATION-ENGINE-019: accetta `ctx` come
-        kwarg opzionale. Se fornito, il `group_id` viene letto dal
-        context tipato (Phase 2). KEEP_COMPAT: se `ctx is None`,
-        fallback a `getattr(self, "_current_group_id", None)` per
-        consumer esterni che ancora fanno direct mutation
-        (`workers/tasks/enrichment_task.py`, test setup).
+        BE-GO-READY-TRANSFORMATION-ENGINE-019/-030B: accetta `ctx`
+        come kwarg opzionale e legge il `group_id` ESCLUSIVAMENTE
+        dal context tipato via `_group_id_from_ctx(ctx)`. Quando
+        `ctx is None` o `ctx.group_id is None`, il loader fail-closes
+        con `ValueError("Contesto di sicurezza non determinabile...")`.
+        Storia: pre-030B usava il legacy `_resolve_group_id`
+        (ctx-or-singleton-fallback) per back-compat con consumer
+        esterni; -030A ha migrato il worker a passare `ctx=ctx`
+        esplicito, -030B ha promosso questo callsite a strict.
         """
         from app.core.artifacts import (
             SourceLoader,
@@ -480,7 +456,7 @@ class ApiConnectionSourceLoadingMixin:
         if not source_project_id:
             raise ValueError("source_project_id non specificato")
 
-        executing_group_id = _resolve_group_id(self, ctx)
+        executing_group_id = _group_id_from_ctx(ctx)
         if not executing_group_id:
             raise ValueError(
                 "Contesto di sicurezza non determinabile (group_id mancante)"
@@ -561,19 +537,21 @@ class ApiConnectionSourceLoadingMixin:
         CRS lungo le trasformazioni downstream) sono garantiti dal
         loader unico.
 
-        BE-GO-READY-TRANSFORMATION-ENGINE-019: accetta `ctx` come
-        kwarg opzionale. `group_id` viene letto da `ctx` se fornito,
-        altrimenti fallback a singleton state (KEEP_AS_LEGACY_LOCK
-        — preserva i fail-closed core tests in
-        `tests2/security/unit/test_api_connector_source_loading_core.py`).
+        BE-GO-READY-TRANSFORMATION-ENGINE-019/-030B: accetta `ctx`
+        come kwarg opzionale e legge il `group_id` ESCLUSIVAMENTE
+        dal context tipato via `_group_id_from_ctx(ctx)`. Quando
+        `ctx is None` o `ctx.group_id is None`, il loader fail-closes
+        con `ValueError("Contesto di sicurezza non determinabile...")`.
+        Storia: pre-030B usava il legacy `_resolve_group_id`
+        (ctx-or-singleton-fallback). -030B ha promosso il callsite
+        a strict dopo che -030A ha rimosso il direct mutation
+        nel worker.
 
         BE-GO-READY-TRANSFORMATION-ENGINE-025 (slice migration):
-        `preview_limit` ora viene letto ESCLUSIVAMENTE da
+        `preview_limit` viene letto ESCLUSIVAMENTE da
         `ctx.preview_limit` via `_preview_limit_from_ctx(ctx)`. Lo
         `svc._preview_limit` legacy non e' piu' consultato —
-        elimina lo stale-state cross-execution leak (un previous
-        run che setta `_preview_limit=N` non puo' piu' truncare il
-        run successivo che NON dichiara un context tipato). Quando
+        elimina lo stale-state cross-execution leak. Quando
         `ctx is None`, il preview_limit e' considerato non-richiesto
         (no truncation).
         """
@@ -593,7 +571,7 @@ class ApiConnectionSourceLoadingMixin:
         if not file_source_id:
             raise ValueError("file_source_id non specificato")
 
-        executing_group_id = _resolve_group_id(self, ctx)
+        executing_group_id = _group_id_from_ctx(ctx)
         if not executing_group_id:
             raise ValueError(
                 "Contesto di sicurezza non determinabile (group_id mancante)"
@@ -608,13 +586,12 @@ class ApiConnectionSourceLoadingMixin:
             raise ValueError(str(e)) from e
 
         # Tronca per preview (opzionale).
-        # BE-GO-READY-TRANSFORMATION-ENGINE-025 (slice migration):
-        # il preview_limit ora viene letto SOLO da `ctx.preview_limit`
-        # (typed boundary). Lo `svc._preview_limit` legacy non e' piu'
-        # consultato — un eventuale stale value pre-set da un'altra
-        # esecuzione non puo' truncare silenziosamente l'output del
-        # run corrente. Group_id resta KEEP_AS_LEGACY_LOCK
-        # (`_resolve_group_id` sopra) per i fail-closed core tests.
+        # BE-GO-READY-TRANSFORMATION-ENGINE-025/-030B (slice migration):
+        # sia il `preview_limit` (TE-025) sia il `group_id` (TE-030B)
+        # vengono ora letti SOLO dal `ctx` (typed boundary). I legacy
+        # state `svc._preview_limit` / `svc._current_group_id` non
+        # sono piu' consultati — eliminato lo stale-state cross-
+        # execution leak.
         _plimit = _preview_limit_from_ctx(ctx)
         if _plimit and isinstance(_plimit, int) and _plimit > 0:
             df = df.head(_plimit)

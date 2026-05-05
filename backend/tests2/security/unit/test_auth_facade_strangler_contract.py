@@ -463,12 +463,17 @@ def test_ownership_imports_roles_from_leaf_module():
 
 
 def test_authz_helpers_imports_models_and_ownership_leaves():
-    """Lock the split: `CurrentUser` from `auth.models`, ownership
-    helpers from `auth.ownership`. Pre-Phase-1 all 3 came from the
-    facade in a single ImportFrom block."""
+    """Lock the split: `CurrentUser` and ownership helpers come from
+    leaf modules — NOT from the facade.
+
+    Phase-9 (TE-015): `CurrentUser` source moved from
+    `app.core.auth.models` → `app.shared.contracts.auth` (the
+    contract module re-exports from auth.models, identity
+    preserved). `assert_*` ownership helpers stay on
+    `app.core.auth.ownership` (DB-bound canonical home)."""
     path = _APP / "shared" / "authz_helpers.py"
     text = path.read_text(encoding="utf-8")
-    assert "from app.core.auth.models import CurrentUser" in text
+    assert "from app.shared.contracts.auth import CurrentUser" in text
     assert "from app.core.auth.ownership import" in text
     assert "assert_group_access" in text
     assert "assert_resource_visible" in text
@@ -479,26 +484,16 @@ def test_authz_helpers_imports_models_and_ownership_leaves():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    "path",
-    [
-        _APP / "shared" / "async_user_recheck.py",
-        _APP / "core" / "tickets" / "service.py",
-        _APP / "core" / "admin_backups" / "router.py",
-        _APP / "core" / "admin_system_status" / "router.py",
-        _APP / "core" / "tickets" / "router.py",
-        _APP / "core" / "orchestrator" / "router.py",
-        _APP / "core" / "imdf" / "router.py",
-    ],
-    ids=lambda p: str(p.relative_to(_BACKEND_ROOT)).replace("\\", "/"),
-)
-def test_phase2_imports_currentuser_from_models_leaf(path: Path):
-    """Every Phase-2 migrated file must import `CurrentUser` from the
-    leaf `app.core.auth.models`."""
-    text = path.read_text(encoding="utf-8")
-    assert "from app.core.auth.models import CurrentUser" in text, (
-        f"{path.name} must import CurrentUser from app.core.auth.models "
-        "(strangler Phase-2)."
+def test_phase2_imports_currentuser_from_models_leaf():
+    """Phase-2 was a transitional `models`-direct-leaf phase. All 7
+    files have since migrated to the contract module:
+      - all 7 → Phase-9 (TE-015)
+
+    The lock is now empty by design (locked by Phase-9 section).
+    Placeholder kept for documentation."""
+    pytest.skip(
+        "Phase-2 superseded by Phase-9 contract fan-out (TE-015). "
+        "All files migrated to app.shared.contracts.auth."
     )
 
 
@@ -813,3 +808,144 @@ def test_phase8_does_not_import_currentuser_from_models_leaf(path: Path):
                 "`app.core.auth.models` — Phase-8 routes this "
                 "through `app.shared.contracts.auth`."
             )
+
+
+# ---------------------------------------------------------------------------
+# Phase-9 (BE-GO-READY-AUTH-ENGINE-015) contract fan-out + facade death map
+# ---------------------------------------------------------------------------
+#
+# Phase-9 closes TE14-R1: the remaining 8 non-router consumers of
+# `CurrentUser` from `app.core.auth.models` migrate to consume
+# from `app.shared.contracts.auth`. After this batch:
+#   - `app.core.auth.ownership` retains its sibling-package
+#     direct import from `auth.models` (cycle prevention — the
+#     contract module re-exports FROM ownership/models, so
+#     `ownership` cannot route through the contract);
+#   - `app.shared.contracts.auth` itself owns the canonical
+#     re-export (`from app.core.auth.models import CurrentUser`);
+#   - all OTHER `app/+workers/` callsites consume from the
+#     contract.
+#
+# These 8 files include 2 services/helpers (Phase-1 full-ban
+# files extending), 2 worker-side helpers, and 6 routers (some
+# previously on Phase-2/5 per-name ban — those bans still hold
+# for the OTHER banned names; CurrentUser source moves only).
+
+_PHASE9_CONTRACT_FAN_OUT_FILES = (
+    _APP / "core" / "admin_backups" / "router.py",
+    _APP / "core" / "admin_system_status" / "router.py",
+    _APP / "core" / "imdf" / "router.py",
+    _APP / "core" / "orchestrator" / "router.py",
+    _APP / "core" / "tickets" / "router.py",
+    _APP / "core" / "tickets" / "service.py",
+    _APP / "shared" / "async_user_recheck.py",
+    _APP / "shared" / "authz_helpers.py",
+)
+
+
+@pytest.mark.parametrize(
+    "path",
+    _PHASE9_CONTRACT_FAN_OUT_FILES,
+    ids=lambda p: str(p.relative_to(_BACKEND_ROOT)).replace("\\", "/"),
+)
+def test_phase9_imports_currentuser_from_contract(path: Path):
+    """Phase-9 contract fan-out: `CurrentUser` must come from
+    `app.shared.contracts.auth` — NOT from `app.core.auth.models`."""
+    text = path.read_text(encoding="utf-8")
+    assert (
+        "from app.shared.contracts.auth import" in text
+        and "CurrentUser" in text
+    ), (
+        f"{path.relative_to(_BACKEND_ROOT)} must import CurrentUser "
+        "from app.shared.contracts.auth (Phase-9 contract fan-out)."
+    )
+
+
+@pytest.mark.parametrize(
+    "path",
+    _PHASE9_CONTRACT_FAN_OUT_FILES,
+    ids=lambda p: str(p.relative_to(_BACKEND_ROOT)).replace("\\", "/"),
+)
+def test_phase9_does_not_import_currentuser_from_models_leaf(path: Path):
+    """Phase-9 contract: source-bound check that the migrated file
+    does NOT import `CurrentUser` from `app.core.auth.models`.
+    AST-bound to avoid false positives from comments."""
+    text = path.read_text(encoding="utf-8")
+    tree = ast.parse(text, filename=str(path))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == "app.core.auth.models":
+            names = {a.name for a in node.names}
+            assert "CurrentUser" not in names, (
+                f"{path.relative_to(_BACKEND_ROOT)} line {node.lineno}: "
+                "regressed to importing CurrentUser from "
+                "`app.core.auth.models` — Phase-9 routes this "
+                "through `app.shared.contracts.auth`."
+            )
+
+
+# Files that legitimately keep `from app.core.auth.models import
+# CurrentUser` post-Phase-9. Three categories:
+#
+# A) Siblings within the `app.core.auth` package: routing
+#    through `app.shared.contracts.auth` would create an
+#    unnecessary round-trip (the contract re-exports FROM
+#    auth.models). Cycle-neutral but architecturally noisy —
+#    KEEP direct import. Includes the facade itself
+#    (`auth.auth`), the extracted handler modules
+#    (`auth.users_router`, `auth.groups_router`), and the
+#    ownership leaf (`auth.ownership`).
+# B) The contract module IS the canonical re-export site
+#    (`shared/contracts/auth.py`) — it MUST consume
+#    `auth.models` directly to provide the contract surface.
+_PHASE9_MODELS_LEAF_ALLOWLIST = frozenset({
+    str((_APP / "core" / "auth" / "auth.py").relative_to(_BACKEND_ROOT)).replace("\\", "/"),
+    str((_APP / "core" / "auth" / "ownership.py").relative_to(_BACKEND_ROOT)).replace("\\", "/"),
+    str((_APP / "core" / "auth" / "users_router.py").relative_to(_BACKEND_ROOT)).replace("\\", "/"),
+    str((_APP / "core" / "auth" / "groups_router.py").relative_to(_BACKEND_ROOT)).replace("\\", "/"),
+    str((_APP / "shared" / "contracts" / "auth.py").relative_to(_BACKEND_ROOT)).replace("\\", "/"),
+})
+
+
+def test_phase9_models_leaf_currentuser_consumers_locked_to_allowlist():
+    """Source-bound facade death map lock: after Phase-9, only the
+    explicit allowlist (`auth.ownership`, `contracts.auth`) is
+    permitted to import `CurrentUser` directly from
+    `app.core.auth.models`. Every other consumer regression to
+    the leaf would be caught here."""
+    found: set[str] = set()
+    for py in _APP.rglob("*.py"):
+        if "__pycache__" in str(py):
+            continue
+        try:
+            text = py.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        if "from app.core.auth.models" not in text:
+            continue
+        try:
+            tree = ast.parse(text, filename=str(py))
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module == "app.core.auth.models":
+                if any(a.name == "CurrentUser" for a in node.names):
+                    rel = str(py.relative_to(_BACKEND_ROOT)).replace("\\", "/")
+                    found.add(rel)
+                    break
+
+    extra = found - _PHASE9_MODELS_LEAF_ALLOWLIST
+    assert not extra, (
+        "Files outside the Phase-9 allowlist regressed to importing "
+        "CurrentUser from `app.core.auth.models`:\n"
+        + "\n".join(f"  {p}" for p in sorted(extra))
+        + "\nMigrate them to `from app.shared.contracts.auth import "
+        "CurrentUser` instead, or extend "
+        "_PHASE9_MODELS_LEAF_ALLOWLIST with documented rationale."
+    )
+
+    missing = _PHASE9_MODELS_LEAF_ALLOWLIST - found
+    assert not missing, (
+        "Phase-9 allowlist names files that no longer import "
+        "CurrentUser from auth.models. Trim the allowlist:\n"
+        + "\n".join(f"  {p}" for p in sorted(missing))
+    )

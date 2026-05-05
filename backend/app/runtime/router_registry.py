@@ -97,6 +97,7 @@ __all__ = [
     "bind_router_services",
     "ORCHESTRATOR_BINDING",
     "CONNECTIONS_BINDING",
+    "PROJECTS_BINDING",
 ]
 
 
@@ -198,4 +199,23 @@ CONNECTIONS_BINDING = RouterBinding(
         services.connection_service,
         services.database_inspector,
     ),
+)
+
+
+def _projects_init(*args: Any, **kwargs: Any) -> None:
+    """Lazy thunk: import + invoke ``init_projects``.
+
+    BE-GO-READY-BOOTSTRAP-ENGINE-020: 1-arg slice consuming
+    ``services.project_service``. Same lazy-thunk pattern as the
+    orchestrator binding (keeps the registry module import-cheap).
+    """
+    from app.core.projects.router import init_projects
+
+    init_projects(*args, **kwargs)
+
+
+PROJECTS_BINDING = RouterBinding(
+    name="projects",
+    init_fn=_projects_init,
+    extract=lambda services: (services.project_service,),
 )

@@ -567,3 +567,193 @@ def test_router_registry_does_not_import_connections_router_at_top_level():
                 "app.core.connections.router must be imported lazily "
                 "inside the binding's init_fn thunk, not at module top"
             )
+
+
+# ---------------------------------------------------------------------------
+# 7. BE-GO-READY-BOOTSTRAP-ENGINE-020: projects binding (1-arg slice)
+# ---------------------------------------------------------------------------
+
+
+def test_runtime_module_exposes_projects_binding():
+    """``PROJECTS_BINDING`` is part of the public registry surface."""
+    from app.runtime import PROJECTS_BINDING, RouterBinding
+
+    assert isinstance(PROJECTS_BINDING, RouterBinding)
+
+
+def test_projects_binding_name_is_stable():
+    from app.runtime import PROJECTS_BINDING
+
+    assert PROJECTS_BINDING.name == "projects"
+
+
+def test_projects_extract_returns_project_service_field_only():
+    """The extract closure pulls exactly ``services.project_service``,
+    wrapped in a 1-tuple. Identity preserved."""
+    from app.runtime import PROJECTS_BINDING
+
+    sentinel = object()
+    fake_services = SimpleNamespace(project_service=sentinel)
+
+    args = PROJECTS_BINDING.extract(fake_services)
+
+    assert isinstance(args, tuple)
+    assert len(args) == 1
+    assert args[0] is sentinel
+
+
+def test_projects_init_fn_invokes_router_module_init(monkeypatch):
+    """The binding's ``init_fn`` resolves to
+    ``app.core.projects.router.init_projects`` and forwards its
+    positional args verbatim.
+    """
+    from app.core.projects import router as projects_router_mod
+    from app.runtime import PROJECTS_BINDING
+
+    captured: list = []
+
+    def _fake_init_projects(project_service):
+        captured.append(project_service)
+
+    monkeypatch.setattr(
+        projects_router_mod,
+        "init_projects",
+        _fake_init_projects,
+    )
+
+    sentinel = object()
+    PROJECTS_BINDING.init_fn(sentinel)
+
+    assert captured == [sentinel]
+
+
+def test_bind_projects_passes_container_owned_instance_by_identity():
+    """Identity invariant: the value passed to ``init_fn`` IS the
+    container's ``project_service`` field, not a copy."""
+    from app.runtime import PROJECTS_BINDING, bind_router_services
+
+    captured: list = []
+
+    def _spy_init(project_service):
+        captured.append(project_service)
+
+    sentinel = object()
+    fake_services = SimpleNamespace(project_service=sentinel)
+
+    spy_binding = type(PROJECTS_BINDING)(
+        name=PROJECTS_BINDING.name,
+        init_fn=_spy_init,
+        extract=PROJECTS_BINDING.extract,
+    )
+
+    bind_router_services(fake_services, spy_binding)
+
+    assert captured == [sentinel]
+    assert captured[0] is sentinel
+
+
+def test_bind_projects_attribute_error_on_missing_field():
+    """Fail-fast: a typo or rename on ``project_service`` surfaces as
+    ``AttributeError`` at startup."""
+    from app.runtime import PROJECTS_BINDING, bind_router_services
+
+    incomplete_services = SimpleNamespace()
+
+    with pytest.raises(AttributeError):
+        bind_router_services(incomplete_services, PROJECTS_BINDING)
+
+
+def test_bind_projects_type_error_on_signature_drift():
+    """Fail-fast on signature drift: if the router renames /
+    reorders ``init_projects`` arguments, the dispatcher surfaces
+    a ``TypeError`` at startup. Verified by replacing ``init_fn`` with
+    a 2-arg function while ``extract`` still returns 1 arg.
+    """
+    from app.runtime import PROJECTS_BINDING, bind_router_services
+
+    def _two_arg_init(a, b):
+        pass
+
+    drift_binding = type(PROJECTS_BINDING)(
+        name=PROJECTS_BINDING.name,
+        init_fn=_two_arg_init,
+        extract=PROJECTS_BINDING.extract,
+    )
+
+    fake_services = SimpleNamespace(project_service=object())
+
+    with pytest.raises(TypeError):
+        bind_router_services(fake_services, drift_binding)
+
+
+def test_main_py_does_not_call_init_projects_directly():
+    """``app/main.py`` must route the projects init through the
+    registry. A direct ``init_projects(project_service)`` call
+    bypasses the typed binding and is a regression."""
+    src = _read_source("app/main.py")
+
+    bad = "init_projects(project_service)"
+    assert bad not in src, (
+        "app/main.py should call the projects init through "
+        "bind_router_services(_runtime_services, PROJECTS_BINDING) "
+        "instead of init_projects(project_service)"
+    )
+
+
+def test_main_py_imports_the_projects_binding():
+    """Positive lock: ``main.py`` imports ``PROJECTS_BINDING``."""
+    src = _read_source("app/main.py")
+
+    assert "PROJECTS_BINDING" in src, (
+        "app/main.py must import PROJECTS_BINDING from app.runtime"
+    )
+
+
+def test_main_py_does_not_import_init_projects():
+    """The router-side ``init_projects`` symbol must no longer
+    appear in ``main.py``'s import list."""
+    src = _read_source("app/main.py")
+
+    tree = ast.parse(src)
+    imported_names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                imported_names.add(alias.asname or alias.name)
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                imported_names.add(alias.asname or alias.name)
+
+    assert "init_projects" not in imported_names, (
+        "app/main.py must not import init_projects directly; the "
+        "registry's lazy thunk imports it on demand"
+    )
+
+
+def test_projects_router_does_not_import_from_main():
+    """Architectural lock: projects router must not depend on
+    ``app.main``. Composition flows main -> runtime -> router."""
+    src = _read_source("app/core/projects/router.py")
+    tree = ast.parse(src)
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            assert module != "app.main" and not module.startswith("app.main."), (
+                f"app/core/projects/router.py must not import from "
+                f"app.main (found: {module})"
+            )
+
+
+def test_router_registry_does_not_import_projects_router_at_top_level():
+    """The projects router import must live inside the lazy thunk."""
+    src = _read_source("app/runtime/router_registry.py")
+    tree = ast.parse(src)
+
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            assert "projects.router" not in module, (
+                "app.core.projects.router must be imported lazily "
+                "inside the binding's init_fn thunk, not at module top"
+            )

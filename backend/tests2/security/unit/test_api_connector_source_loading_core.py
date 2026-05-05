@@ -105,12 +105,27 @@ def test_load_source_project_propagates_group_id_via_source_loader():
     assert df["x"].tolist() == [1]
 
 
-def test_load_source_project_fail_closed_without_current_group_id():
-    """Senza _current_group_id non si carica niente: hard fail
-    (era fail-OPEN parziale pre-Refactor #3)."""
-    svc = _make_service(group_id=None)
+def test_load_source_project_fail_closed_without_ctx_group_id():
+    """BE-GO-READY-TRANSFORMATION-ENGINE-030B: ctx-strict fail-closed.
+
+    Pre-TE-030B il loader leggeva il group_id via `_resolve_group_id`
+    (legacy ctx-or-singleton) e questo test verificava il fail-closed
+    sul fallback singleton (`_make_service(group_id=None)` + no ctx).
+    Post-TE-030B `_load_source_project` usa `_group_id_from_ctx`
+    strict: il fail-closed e' triggerato da `ctx.group_id=None`,
+    NON dal singleton.
+
+    Stale singleton 'stale-grp-LEAK' confirma che il singleton non
+    e' piu' consultato (anche con un valore non-None il fail-closed
+    scatta perche' `ctx.group_id=None`).
+    """
+    svc = _make_service_no_singleton()
+    svc._current_group_id = "stale-grp-LEAK"
     with pytest.raises(ValueError, match="Contesto di sicurezza"):
-        svc._load_source_project({"source_project_id": "proj-1"})
+        svc._load_source_project(
+            {"source_project_id": "proj-1"},
+            ctx=_ctx_grp(group_id=None),
+        )
 
 
 def test_load_source_project_blocks_cross_tenant_via_loader():
@@ -262,8 +277,17 @@ def test_resolve_file_source_path_blocks_cross_tenant_project_source():
             )
 
 
-def test_resolve_file_source_path_fail_closed_without_current_group_id():
-    svc = _make_service(group_id=None)
+def test_resolve_file_source_path_fail_closed_without_ctx_group_id():
+    """BE-GO-READY-TRANSFORMATION-ENGINE-030B: ctx-strict fail-closed
+    per il branch project_source di `_resolve_file_source_path` (gia'
+    ctx-strict via `_extract_project_source_group_id` da TE-026).
+
+    Adottato il canonical pattern stale-singleton-LEAK + ctx con
+    group_id=None per allinearsi ai 3 critical fail-closed locks
+    sotto la nuova semantica TE-030B.
+    """
+    svc = _make_service_no_singleton()
+    svc._current_group_id = "stale-grp-LEAK"
     nodes = [
         {"id": "src-1", "type": "project_source", "data": {"source_project_id": "proj-1"}},
         {"id": "tgt-1"},
@@ -271,7 +295,9 @@ def test_resolve_file_source_path_fail_closed_without_current_group_id():
     edges = [{"source": "src-1", "target": "tgt-1"}]
 
     with pytest.raises(ValueError, match="Contesto di sicurezza"):
-        svc._resolve_file_source_path(nodes, edges, "tgt-1")
+        svc._resolve_file_source_path(
+            nodes, edges, "tgt-1", ctx=_ctx_grp(group_id=None),
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -371,10 +397,20 @@ def test_load_file_source_blocks_cross_tenant_via_loader():
     svc_fs.load_dataframe.assert_not_called()
 
 
-def test_load_file_source_fail_closed_without_current_group_id():
-    svc = _make_service(group_id=None)
+def test_load_file_source_fail_closed_without_ctx_group_id():
+    """BE-GO-READY-TRANSFORMATION-ENGINE-030B: ctx-strict fail-closed
+    su `_load_file_source` (post-promozione a `_group_id_from_ctx`).
+
+    Stale singleton 'stale-grp-LEAK' confirma che il singleton non
+    viene piu' consultato dal nuovo helper strict.
+    """
+    svc = _make_service_no_singleton()
+    svc._current_group_id = "stale-grp-LEAK"
     with pytest.raises(ValueError, match="Contesto di sicurezza"):
-        svc._load_file_source({"file_source_id": "fs-1"})
+        svc._load_file_source(
+            {"file_source_id": "fs-1"},
+            ctx=_ctx_grp(group_id=None),
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -409,23 +445,24 @@ def test_load_static_values_empty_fields_returns_single_empty_row():
 # ---------------------------------------------------------------------------
 
 
-def test_te028_critical_fail_closed_locks_remain_singleton_path():
-    """Source-bound guard: i 3 test classificati come "critical fail-
-    closed lock" da TE-028 audit DEVONO restare sul fallback Phase-1
-    (singleton `_current_group_id=None` + nessun `ctx`). Senza queste
-    coverage, la rimozione accidentale del fallback nei 2 helper di
-    transizione (`_resolve_group_id`, `_resolve_preview_limit`) non
-    sarebbe rilevata.
+def test_te030b_critical_fail_closed_locks_use_ctx_strict_missing_group():
+    """Source-bound guard: i 3 test critical fail-closed lock,
+    migrati in TE-030B da pattern legacy singleton-fallback a pattern
+    ctx-strict missing group, DEVONO mantenere la canonical shape:
+      1. `_make_service_no_singleton()` (NON `_make_service(...)`);
+      2. setattr `_current_group_id = "stale-grp-LEAK"` (decoy);
+      3. `ctx=_ctx_grp(group_id=None)` al call site.
 
-    I 3 test critical:
-      - `test_load_source_project_fail_closed_without_current_group_id`
-      - `test_resolve_file_source_path_fail_closed_without_current_group_id`
-      - `test_load_file_source_fail_closed_without_current_group_id`
+    Pre-TE-030B (TE-028) la shape era inversa: `_make_service(
+    group_id=None)` + no ctx — esercitava la legacy fallback. Post-
+    TE-030B il helper legacy `_resolve_group_id` e' rimosso e i 2
+    callsite production usano `_group_id_from_ctx` strict; la sola
+    via di fail-closed e' un ctx con `group_id=None`.
 
-    Forma attesa per ogni test:
-      1. costruisce svc con `_make_service(group_id=None)` (NON
-         `_make_service_no_singleton`);
-      2. NON passa `ctx=` al call site.
+    I 3 test critical (rinominati da TE-028 a TE-030B):
+      - `test_load_source_project_fail_closed_without_ctx_group_id`
+      - `test_resolve_file_source_path_fail_closed_without_ctx_group_id`
+      - `test_load_file_source_fail_closed_without_ctx_group_id`
     """
     import ast
     from pathlib import Path
@@ -434,9 +471,9 @@ def test_te028_critical_fail_closed_locks_remain_singleton_path():
     tree = ast.parse(text)
 
     critical_tests = {
-        "test_load_source_project_fail_closed_without_current_group_id",
-        "test_resolve_file_source_path_fail_closed_without_current_group_id",
-        "test_load_file_source_fail_closed_without_current_group_id",
+        "test_load_source_project_fail_closed_without_ctx_group_id",
+        "test_resolve_file_source_path_fail_closed_without_ctx_group_id",
+        "test_load_file_source_fail_closed_without_ctx_group_id",
     }
 
     found = {}
@@ -447,26 +484,36 @@ def test_te028_critical_fail_closed_locks_remain_singleton_path():
 
     missing = critical_tests - set(found.keys())
     assert not missing, (
-        f"TE-028 critical fail-closed locks missing in this file:\n"
+        f"TE-030B critical fail-closed locks missing in this file:\n"
         f"  {sorted(missing)}\n"
-        f"These tests prove the legacy singleton fallback fail-closes "
-        f"correctly when both ctx and `_current_group_id` are None. "
+        f"These tests prove the ctx-strict fail-closed path: when "
+        f"`ctx.group_id=None`, the loader rifiuta esplicitamente. "
         f"Removing them weakens the security contract."
     )
 
     for test_name, body_src in found.items():
-        # 1. Must use `_make_service(group_id=None)` — NOT
-        #    `_make_service_no_singleton`.
-        assert "_make_service(group_id=None)" in body_src, (
+        # 1. Must use `_make_service_no_singleton()` (NOT
+        #    `_make_service(group_id=...)`).
+        assert "_make_service_no_singleton()" in body_src, (
             f"{test_name}: must construct svc via "
-            f"`_make_service(group_id=None)` to exercise the singleton "
-            f"fallback path. Got body:\n{body_src}"
+            f"`_make_service_no_singleton()` — TE-030B migration moves "
+            f"the fail-closed assertion off the singleton path. "
+            f"Got body:\n{body_src}"
         )
-        # 2. Must NOT pass `ctx=` to the SUT call (otherwise the test
-        #    no longer covers the legacy fallback path).
-        assert "ctx=" not in body_src, (
-            f"{test_name}: must NOT pass ctx= to the call — this test "
-            f"is a critical legacy-fallback lock. Got body:\n{body_src}"
+        # 2. Must set stale singleton decoy.
+        assert (
+            'svc._current_group_id = "stale-grp-LEAK"' in body_src
+            or "svc._current_group_id = 'stale-grp-LEAK'" in body_src
+        ), (
+            f"{test_name}: must set svc._current_group_id = "
+            f"'stale-grp-LEAK' to prove the singleton is NOT consulted "
+            f"by the strict helper. Got body:\n{body_src}"
+        )
+        # 3. Must pass `ctx=_ctx_grp(group_id=None)`.
+        assert "ctx=_ctx_grp(group_id=None)" in body_src, (
+            f"{test_name}: must pass `ctx=_ctx_grp(group_id=None)` to "
+            f"the SUT call — this is what triggers the ctx-strict "
+            f"fail-closed path. Got body:\n{body_src}"
         )
 
 

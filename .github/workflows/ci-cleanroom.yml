@@ -290,6 +290,8 @@ jobs:
               "workers.tasks.schedule_task",
               "workers.tasks.pipeline_task",
               "workers.tasks.imdf_publish_task",
+              "workers.tasks.cleanroom_task",
+              "workers.tasks.cleanroom_beat_task",
           )
           import_failures = []
           for mod in expected_modules:
@@ -398,6 +400,132 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+      - name: Verify Celery beat tick smoke
+        # BE-GO-READY-INSTALLATION-021-CELERY-BEAT-TICK-SMOKE-IMPL.
+        #
+        # Real beat tick smoke. Spawns:
+        #   - a `celery worker` (--pool=solo) to execute the
+        #     beat-fired task;
+        #   - a `celery beat -S workers.beat_scheduler.PlenoraBeatScheduler`
+        #     with PLENORA_CLEANROOM_BEAT_PING=1 set so the env-gated
+        #     5-second beat_schedule entry registers and the beat
+        #     scheduler fires `cleanroom.beat_ping` every 5s.
+        #
+        # The 019 enqueue smoke killed its worker via trap on shell
+        # exit, so this step starts a fresh worker. Both worker and
+        # beat are torn down via trap (TERM, sleep 2, KILL) at the
+        # end of this step's shell.
+        #
+        # Observation pattern: scan the Redis result backend for
+        # `celery-task-meta-*` keys with status=SUCCESS and
+        # result="beat_pong". Bounded deadline = 25s; beat fires
+        # every 5s so the deadline allows ~5 fire windows. This is
+        # NOT a fragile sleep loop: the deadline is hard-bounded,
+        # the inner sleep is a courtesy poll-cadence (0.5s), and
+        # the loop exits as soon as ONE matching key is observed.
+        #
+        # Failure modes:
+        #   - beat fails to start (import error, bootstrap fail) ->
+        #     no beat ticks, deadline expires; both logs uploaded
+        #     for diagnosis;
+        #   - PlenoraBeatScheduler shim does not load
+        #     config-based entries -> no firing path, deadline
+        #     expires (this is the regression we lock against);
+        #   - worker fails to register cleanroom_beat_task -> task
+        #     fires but worker raises NotRegistered, no SUCCESS in
+        #     backend, deadline expires.
+        working-directory: backend
+        env:
+          PLENORA_CLEANROOM_BEAT_PING: "1"
+        run: |
+          set -e
+          mkdir -p .cleanroom-logs
+          # 1. Spawn worker (fresh — 019's worker is dead).
+          nohup celery -A workers.celery_app worker \
+              --pool=solo --loglevel=info \
+              -Q celery -n cleanroom-beat@%h \
+              > .cleanroom-logs/beat-worker.log 2>&1 &
+          beat_worker_pid=$!
+          echo "$beat_worker_pid" > .cleanroom-logs/beat-worker.pid
+          echo "celery worker (beat smoke) started (pid=${beat_worker_pid})"
+          # 2. Spawn beat with PlenoraBeatScheduler. The opt-in env
+          # var is set on this shell only; it propagates to the
+          # `celery beat` child. Production beat NEVER sees this.
+          nohup celery -A workers.celery_app beat \
+              -S workers.beat_scheduler.PlenoraBeatScheduler \
+              --loglevel=info \
+              > .cleanroom-logs/beat.log 2>&1 &
+          beat_pid=$!
+          echo "$beat_pid" > .cleanroom-logs/beat.pid
+          echo "celery beat started (pid=${beat_pid})"
+          # 3. Trap-based teardown for BOTH processes.
+          trap '
+            kill -TERM "$(cat .cleanroom-logs/beat.pid 2>/dev/null)" 2>/dev/null || true;
+            kill -TERM "$(cat .cleanroom-logs/beat-worker.pid 2>/dev/null)" 2>/dev/null || true;
+            sleep 2;
+            kill -9 "$(cat .cleanroom-logs/beat.pid 2>/dev/null)" 2>/dev/null || true;
+            kill -9 "$(cat .cleanroom-logs/beat-worker.pid 2>/dev/null)" 2>/dev/null || true;
+          ' EXIT
+          # 4. Bounded smoke probe. Scans Redis backend keyspace for
+          # the canonical "beat_pong" result; exits as soon as found.
+          python - <<'PYEOF'
+          import json
+          import sys
+          import time
+
+          import redis as _redis
+          from workers.celery_app import celery_app
+
+          backend_url = celery_app.conf.result_backend
+          r = _redis.Redis.from_url(backend_url)
+
+          deadline = time.monotonic() + 25.0
+          found_key = None
+          while time.monotonic() < deadline:
+              for key in r.scan_iter(match="celery-task-meta-*", count=100):
+                  raw = r.get(key)
+                  if not raw:
+                      continue
+                  try:
+                      meta = json.loads(raw)
+                  except Exception:
+                      continue
+                  if (
+                      meta.get("status") == "SUCCESS"
+                      and meta.get("result") == "beat_pong"
+                  ):
+                      found_key = key.decode("utf-8") if isinstance(key, (bytes, bytearray)) else str(key)
+                      break
+              if found_key:
+                  break
+              time.sleep(0.5)
+
+          if found_key:
+              elapsed = 25.0 - (deadline - time.monotonic())
+              print(
+                  f"OK: cleanroom.beat_ping fired and round-tripped "
+                  f"(key={found_key}, elapsed={elapsed:.1f}s)"
+              )
+              sys.exit(0)
+
+          print(
+              "::error::No cleanroom.beat_ping SUCCESS observed in result "
+              "backend within 25s deadline"
+          )
+          sys.exit(1)
+          PYEOF
+
+      - name: Upload beat log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cleanroom-celery-beat-log
+          path: |
+            backend/.cleanroom-logs/beat.log
+            backend/.cleanroom-logs/beat-worker.log
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Stop backend
         # Teardown best-effort. `if: always()` cosi' gira anche se
         # uno step precedente e' fallito.
@@ -423,6 +551,20 @@ jobs:
               kill -9 "$wpid" 2>/dev/null || true
             fi
           fi
+          # Same fallback for the beat smoke worker + beat process
+          # (INSTALLATION-021). If the beat step's EXIT trap fired
+          # cleanly these PID files reference dead processes; kill
+          # is a no-op.
+          for fname in beat-worker.pid beat.pid; do
+            if [ -f ".cleanroom-logs/$fname" ]; then
+              bpid=$(cat ".cleanroom-logs/$fname")
+              if kill -0 "$bpid" 2>/dev/null; then
+                kill "$bpid" || true
+                sleep 2
+                kill -9 "$bpid" 2>/dev/null || true
+              fi
+            fi
+          done
 
       - name: Upload backend log on failure
         # Log artifact upload per diagnostica post-mortem in caso di

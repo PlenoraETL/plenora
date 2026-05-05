@@ -1515,10 +1515,88 @@ class PlenoraBeatScheduler(Scheduler):
     # ------------------------------------------------------------------
 
     def setup_schedule(self):
-        """Inizializza schedule vuoto — verrà popolato dal DB al primo tick."""
+        """Inizializza schedule vuoto — verrà popolato dal DB al primo tick.
+
+        BE-GO-READY-INSTALLATION-021: dopo il sync DB, merge anche le
+        entry config-based `celery_app.conf.beat_schedule` (env-gated
+        cleanroom opt-in). DB-driven schedules vivono nel namespace
+        `urby:schedule:<id>`; le config entry usano nomi qualunque
+        ALTRI da quel prefix per coesistere senza collisioni.
+        """
         self.data = {}
         self._sync_from_db()
+        self._merge_config_beat_schedule()
         logger.info(f"Beat avviato con {len(self.data)} schedule attivi")
+
+    def _merge_config_beat_schedule(self):
+        """Merge `self.app.conf.beat_schedule` entries into `self.data`.
+
+        BE-GO-READY-INSTALLATION-021-CELERY-BEAT-TICK-SMOKE-IMPL.
+
+        PlenoraBeatScheduler caricava SOLO schedule dal DB via
+        `_sync_from_db`; config-based `beat_schedule` (la API
+        Celery standard per definire entry programmatiche) era
+        ignorato. Questo shim aggiunge un caricamento idempotente
+        delle entry NON `urby:schedule:`-namespace, cosi':
+
+          - DB schedules (namespace `urby:schedule:<id>`) restano
+            l'ownership di `_sync_from_db` (incluso eviction loop);
+          - config entries (qualunque altro nome) sono caricate UNA
+            VOLTA in `setup_schedule` e sopravvivono ai sync DB
+            successivi (il cleanup loop di `_sync_from_db` filtra
+            solo per il prefix `urby:schedule:`).
+
+        Idempotente: chiamabile multiple volte senza side-effect.
+        Best-effort: errori per-entry vengono loggati e non bloccano
+        il caricamento delle altre entry o l'avvio del beat.
+        """
+        try:
+            config_schedule = getattr(self.app.conf, "beat_schedule", None) or {}
+        except Exception as e:
+            logger.warning(f"[CONFIG-BEAT] Errore lettura beat_schedule: {e}")
+            return
+
+        if not config_schedule:
+            return
+
+        for name, entry in config_schedule.items():
+            if not isinstance(name, str):
+                continue
+            if name.startswith("urby:schedule:"):
+                # Riservato a `_sync_from_db` — un'eventuale collisione
+                # tra config + DB favorisce il DB (sorgente di verita').
+                continue
+            if name in self.data:
+                # Idempotente: gia' caricato.
+                continue
+            try:
+                if not isinstance(entry, dict):
+                    continue
+                task = entry.get("task")
+                schedule = entry.get("schedule")
+                if not task or schedule is None:
+                    logger.warning(
+                        f"[CONFIG-BEAT] Entry {name!r} senza task/schedule, skip"
+                    )
+                    continue
+                self.data[name] = ScheduleEntry(
+                    name=name,
+                    task=task,
+                    schedule=schedule,
+                    args=tuple(entry.get("args") or ()),
+                    kwargs=dict(entry.get("kwargs") or {}),
+                    options=dict(entry.get("options") or {}),
+                    app=self.app,
+                    last_run_at=self.app.now(),
+                )
+                logger.info(
+                    f"[CONFIG-BEAT] Entry caricata: {name!r} task={task!r}"
+                )
+            except Exception as e:
+                logger.warning(
+                    f"[CONFIG-BEAT] Errore caricamento entry {name!r}: {e}",
+                    exc_info=True,
+                )
 
     def sync(self):
         """Sync periodico richiesto da Celery — già gestito in tick()."""
