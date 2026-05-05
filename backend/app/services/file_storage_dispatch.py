@@ -29,10 +29,20 @@ Side-effect:
     Eccezioni dell'upload vengono LOGGATE e RILANCIATE - il caller
     (FileSourceService) e' responsabile dell'orphan guard
     (no row DB se l'upload fallisce).
+  - BE-GO-READY-STORAGE-ENGINE-008-UPLOAD-INTENT-PATTERN: per il
+    branch object_storage registra autocommit una riga
+    `operation='upload_intent'` in
+    `plenora.storage_reconciliation_log` PRIMA dell'upload.
+    Su exception dell'upload chiama `mark_done` per chiudere
+    l'intento (nessun blob caricato → nessun orphan possibile).
+    Su success lascia la row `pending`: il reconciler beat hook
+    la chiude dopo il grace window controllando se la
+    `storage_key` e' stata referenziata in `plenora.file_sources`.
 
 Cycle: leaf module rispetto a `app.services.file_service`. Importa
 solo stdlib, app.config, app.shared.cloud_backends. Nessun import
-da `app.services.*`.
+da `app.services.*`. Importa `app.shared.storage_reconciliation`
+solo nel branch object_storage (lazy import dentro il try block).
 """
 
 from __future__ import annotations
@@ -155,6 +165,36 @@ def dispatch_blob_storage(
     # `imdf-bundles/` nel naming bucket.
     key_id = storage_key_id if storage_key_id is not None else file_id
     storage_key = f"{_OBJECT_STORAGE_PREFIX}/{key_id}/{filename}"
+
+    # BE-GO-READY-STORAGE-ENGINE-008: record upload_intent BEFORE the
+    # upload. Self-clearing pattern (no caller-side mark_done): if the
+    # caller's downstream `db.save_file_source` commits, the reconciler
+    # beat hook observes `plenora.file_sources.storage_key` after the
+    # grace window and marks the intent done. If the caller dies in
+    # the W2 window (post-upload, pre-DB-save), the reconciler runs
+    # `compensating_delete` after the grace window expires.
+    #
+    # Best-effort: a record failure (autocommit error) does NOT block
+    # the upload. The W2 race for that single dispatch reverts to
+    # current pre-008 behavior (orphan possible, ADR-0011 acceptable);
+    # logged so ops can spot the degradation.
+    intent_id: Optional[str] = None
+    try:
+        from app.shared.storage_reconciliation import record_upload_intent
+        intent_id = record_upload_intent(
+            domain="file_source",
+            storage_key=storage_key,
+            reason="upload_intent_pre_dispatch",
+            extras={"file_id": file_id, "size_bytes": size, "policy": policy},
+        )
+    except Exception as e:
+        # `record_upload_intent` is itself best-effort. Anything
+        # raised here is pathological (import failure). Log and
+        # continue — do not block the upload.
+        logger.warning(
+            f"[FS-B1-large] upload_intent record fallito per {file_id}: {e}"
+        )
+
     try:
         from app.shared.cloud_backends import get_runtime_object_storage
         storage = get_runtime_object_storage()
@@ -164,6 +204,19 @@ def dispatch_blob_storage(
             f"[FS-B1-large] Upload object storage fallito per {file_id} "
             f"(policy={policy}, {size // (1024 * 1024)} MB): {e}"
         )
+        # Upload failed -> no orphan possible. Close the intent so the
+        # reconciler does not later attempt a delete on a key that was
+        # never written. Best-effort: `mark_done` swallows its own DB
+        # errors.
+        if intent_id is not None:
+            try:
+                from app.shared.storage_reconciliation import mark_done
+                mark_done(intent_id)
+            except Exception:
+                # Pathological (import failure). Reconciler will still
+                # close the intent eventually (compensating_delete on a
+                # non-existent key is a no-op on most backends).
+                pass
         raise
     logger.info(
         f"[FS-B1-large] File source {file_id} su object storage "

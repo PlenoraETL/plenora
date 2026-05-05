@@ -695,6 +695,222 @@ Two gaps remain after 019:
 Neither is a hard blocker for the current cleanroom contract;
 both are documented so the next stream picks them up explicitly.
 
+### 12.7 Real beat tick smoke (DESIGN, NOT IMPLEMENTED)
+
+`BE-GO-READY-INSTALLATION-020-CELERY-BEAT-TICK-SMOKE-DESIGN-FIRST-GUARD`.
+
+The CI cleanroom probe added by INSTALLATION-014 covers the beat
+scheduler **symbol** (`PlenoraBeatScheduler` resolves), and 019
+covers the **worker** enqueue/dequeue round-trip. Neither covers
+a real beat **tick** firing a task end-to-end. This section
+documents the audit findings, the missing primitive, and the
+bounded smoke pattern that should land once the primitive exists.
+The design is locked by
+`backend/tests2/shared/test_celery_beat_tick_smoke_design_guard.py`
+so the gap cannot be silently forgotten.
+
+#### 12.7.1 Audit: what completion signals exist today
+
+Two beat-related surfaces exist:
+
+1. **`PlenoraBeatScheduler._write_heartbeat()`** in
+   `backend/workers/beat_scheduler.py` is an **in-process
+   method** (not a Celery task). It runs on every leader tick
+   (`max_interval=60.0` seconds default) and writes the current
+   timestamp to the PG `beat_heartbeat` table via
+   `INSERT ... ON CONFLICT (id) DO UPDATE`. Observable via
+   `psql -c "SELECT ts FROM plenora.beat_heartbeat WHERE
+   id='beat'"`.
+
+2. **`workers.tasks.schedule_task.beat_heartbeat`** is a Celery
+   task with `ignore_result=True` and `max_retries=0`. Its
+   docstring says "scritto da Beat ogni 60 secondi", but a
+   source review of `PlenoraBeatScheduler.tick()` shows that
+   `_write_heartbeat()` is invoked DIRECTLY in the beat process
+   - the Celery task is NOT actually wired to the production
+   beat schedule. It is a residual primitive without a current
+   firing path.
+
+Available primitives that a sleep-free smoke could rely on:
+
+- **Redis result backend**: same as 019, available.
+- **`AsyncResult.get(timeout=N)`**: same, available - but only
+  observes tasks that round-trip a non-ignored result.
+- **PG observation of `beat_heartbeat.ts`**: deterministic but
+  requires a polling loop (even if bounded, a 60s `max_interval`
+  is too coarse for a CI smoke without a tight cadence).
+
+Available control surfaces in the beat scheduler that a smoke
+could use:
+
+- **`max_interval`** is class-level; reducing it for cleanroom
+  would touch production runtime code.
+- **`celery_app.conf.beat_schedule`** is the standard Celery
+  beat config. `PlenoraBeatScheduler` does NOT explicitly
+  consume it (its `tick()` calls `_sync_from_db()` and delegates
+  to `super().tick()`). Whether the parent `Scheduler.tick()`
+  honors `beat_schedule` in this composition is undocumented and
+  must be verified before the implementation stream relies on
+  it.
+
+#### 12.7.2 Blocker: the missing primitive
+
+There is no beat-fired Celery task today with
+`ignore_result=False`. The only candidate (`beat_heartbeat`) is
+`ignore_result=True` AND not actually fired by the production
+beat (the `_write_heartbeat()` in-process method is what runs).
+
+The minimal primitive required:
+
+```python
+# in backend/workers/tasks/cleanroom_beat_task.py (NEW file)
+from workers.celery_app import celery_app
+
+@celery_app.task(name="cleanroom.beat_ping", ignore_result=False, bind=False)
+def cleanroom_beat_ping() -> str:
+    """Cleanroom beat tick smoke target - pure no-op, fired
+    deterministically by beat when the cleanroom opt-in is on."""
+    return "beat_pong"
+```
+
+Plus an opt-in firing path for beat:
+
+```python
+# in backend/workers/celery_app.py (additive, gated by env)
+import os
+if os.getenv("PLENORA_CLEANROOM_BEAT_PING") == "1":
+    from celery.schedules import schedule
+    celery_app.conf.beat_schedule = {
+        **(celery_app.conf.beat_schedule or {}),
+        "cleanroom-beat-ping": {
+            "task": "cleanroom.beat_ping",
+            "schedule": schedule(run_every=5.0),  # 5s interval
+        },
+    }
+```
+
+Plus a confirmation that `PlenoraBeatScheduler.tick()` propagates
+`celery_app.conf.beat_schedule` entries (or, if not, a small
+shim in `_sync_from_db()` that merges them).
+
+Hard contract (locked by Group C of the design guard test):
+
+- `cleanroom.beat_ping` is a pure no-op (same banned imports as
+  `cleanroom.ping`);
+- `ignore_result=False`;
+- the firing path is **gated by an env var** so production
+  deploys never enqueue the cleanroom heartbeat;
+- the cleanroom CI workflow sets the env var before spawning
+  beat, asserts via `AsyncResult.get(timeout=...)` against the
+  result backend, then tears down the beat process via the
+  same trap-based pattern as 019.
+
+#### 12.7.3 Why this is a separate stream
+
+Adding the firing path requires editing
+`backend/workers/celery_app.py` to consume an env-gated
+`beat_schedule` entry, and possibly editing
+`backend/workers/beat_scheduler.py` if the parent
+`Scheduler.tick()` does not propagate config-based entries
+through the PG-driven custom scheduler. This is non-trivial app-
+code work that:
+
+- changes production beat startup behaviour conditional on an
+  env var (small but real surface);
+- requires a new lock test extension on the existing
+  INSTALLATION-014 readiness guard to handle the 7th `include`
+  module entry;
+- requires verifying that `_sync_from_db()` and
+  `super().tick()` compose correctly for config-based entries.
+
+The next bounded stream is
+`BE-GO-READY-INSTALLATION-021-CELERY-BEAT-TICK-SMOKE-IMPL`,
+which:
+
+1. Adds `backend/workers/tasks/cleanroom_beat_task.py` with the
+   contract in 12.7.2;
+2. Updates `backend/workers/celery_app.py` to register the task
+   AND wire the env-gated `beat_schedule` config;
+3. Verifies `PlenoraBeatScheduler` honors config entries (or
+   adds a minimal merge shim if it does not);
+4. Adds the workflow steps `Verify Celery beat tick smoke` and
+   the matching `Upload beat log on failure` between 019's
+   enqueue smoke and `Stop backend`, with the env var
+   `PLENORA_CLEANROOM_BEAT_PING=1` set on the spawned beat
+   process only;
+5. Flips the Group C tests in
+   `test_celery_beat_tick_smoke_design_guard.py` from skip to
+   active.
+
+#### 12.7.4 Why design + guard, not implementation today
+
+The brief explicitly bans:
+
+- broad production schedule seeding (which a PG `schedules`
+  table seed would be);
+- fragile sleep loops in CI;
+- Docker artifacts.
+
+The cleanest implementation requires the env-gated
+`beat_schedule` mechanism, which is a behavioural change to the
+beat startup path. That justifies a dedicated stream rather than
+folding into INSTALLATION-019. The audit confirms no existing
+deterministic primitive with `AsyncResult.get`-observable result
+is fired by the current beat - so a smoke today would have to
+choose between PG polling (a sleep loop, even if bounded) or
+seeding the production `schedules` table (banned).
+
+#### 12.7.5 Bounded smoke pattern (target shape)
+
+When INSTALLATION-021 lands, the smoke pattern is:
+
+```bash
+# in ci-cleanroom.yml, AFTER the existing enqueue smoke step:
+mkdir -p .cleanroom-logs
+PLENORA_CLEANROOM_BEAT_PING=1 \
+nohup celery -A workers.celery_app beat \
+    -S workers.beat_scheduler.PlenoraBeatScheduler \
+    --loglevel=info \
+    > .cleanroom-logs/beat.log 2>&1 &
+beat_pid=$!
+echo "$beat_pid" > .cleanroom-logs/beat.pid
+trap 'kill -TERM "$beat_pid" 2>/dev/null || true; sleep 2; kill -9 "$beat_pid" 2>/dev/null || true' EXIT
+python - <<'PYEOF'
+# A worker is already up from the 019 enqueue step; reuse it.
+# AsyncResult.get(timeout=20) blocks at most 20s polling Redis.
+# The 5s beat schedule fires twice in that window, so a single
+# tick missed for transient reasons still leaves the smoke green.
+from workers.celery_app import celery_app
+import time
+deadline = time.monotonic() + 20.0
+last_observed = None
+while time.monotonic() < deadline:
+    # Inspect the result backend for any cleanroom.beat_ping
+    # result emitted by the running worker. Fast path: poll the
+    # backend's recent results. Implementation detail TBD by 021
+    # depending on how Celery exposes it.
+    ...
+PYEOF
+```
+
+Implementation note for 021: the canonical pattern uses
+`celery_app.events.Receiver` or backend keyspace polling rather
+than reusing `AsyncResult.get` (the latter requires the task
+ID, which beat does not surface to the test harness). 021 will
+finalize the pattern and lock it.
+
+#### 12.7.6 What stays open after 021
+
+- **Prefork pool beat tick smoke**: 021 will use `--pool=solo`
+  for the worker side. A separate smoke under prefork covers
+  the W2 fork-unsafe pool class for beat-driven tasks. Bounded
+  follow-up.
+- **Beat leader-election smoke**: two beat processes racing for
+  the Redis leader lock with deterministic outcome. Optional;
+  not blocking work.
+- **Catchup detection smoke**: `_emit_catchup_runs()` covers a
+  separate code path. Optional follow-up.
+
 ---
 
 ## 13. Related docs

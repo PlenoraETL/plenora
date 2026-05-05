@@ -15,6 +15,7 @@ old module-global names re-bind from the container in `main.py`
 
 from app.runtime.services import RuntimeServices, build_runtime_services
 from app.runtime.router_registry import (
+    CONNECTIONS_BINDING,
     ORCHESTRATOR_BINDING,
     RouterBinding,
     bind_router_services,
@@ -26,4 +27,5 @@ __all__ = [
     "RouterBinding",
     "bind_router_services",
     "ORCHESTRATOR_BINDING",
+    "CONNECTIONS_BINDING",
 ]

@@ -87,11 +87,14 @@ __all__ = [
     "PendingReconciliationRow",
     "ReconciliationStateCount",
     "record_pending",
+    "record_upload_intent",
     "mark_done",
     "mark_failed_attempt",
     "mark_orphan_deleted",
     "mark_lost",
     "fetch_due_pending_deletes",
+    "fetch_due_stale_upload_intents",
+    "is_storage_key_referenced",
     "compute_next_retry_at",
     "count_active_by_state_domain",
     "prune_terminal_older_than",
@@ -633,3 +636,244 @@ def prune_terminal_older_than(
             type(e).__name__, str(e),
         )
         return 0
+
+
+# ---------------------------------------------------------------------------
+# Upload-intent lifecycle (BE-GO-READY-STORAGE-ENGINE-008-UPLOAD-INTENT-PATTERN)
+# ---------------------------------------------------------------------------
+#
+# Closes R-021.1: `app/services/file_storage_dispatch.py` had an
+# upload-then-DB-save W2 orphan race. Pattern is "self-clearing":
+#
+#   1. Caller (`dispatch_blob_storage`) records `operation='upload_intent'`
+#      autocommit BEFORE the upload. No caller-side transaction
+#      coupling: callers are not in scope for this stream and are not
+#      modified.
+#   2. On upload exception, caller invokes `mark_done(intent_id)` —
+#      no orphan exists because nothing was uploaded.
+#   3. On upload success, the intent row stays `pending`. The
+#      reconciler beat hook closes it after a grace window:
+#        - if `plenora.file_sources.storage_key` already references the
+#          key → caller's DB save committed → `mark_done`;
+#        - otherwise → `compensating_delete` + `mark_orphan_deleted`
+#          (or backoff + `mark_failed_attempt`, eventually `mark_lost`).
+#
+# Boundedness: pending upload_intents transition to terminal within
+# `grace_seconds + max_attempts * backoff` of creation. Terminal
+# rows are pruned by `prune_terminal_older_than` (already wired into
+# the beat hook). No state can accumulate forever.
+
+
+_INSERT_UPLOAD_INTENT_SQL = (
+    "INSERT INTO plenora.storage_reconciliation_log "
+    "(domain, storage_key, operation, state, reason, extras) "
+    "VALUES (%s, %s, 'upload_intent', 'pending', %s, %s::jsonb) "
+    "RETURNING id"
+)
+
+
+def record_upload_intent(
+    *,
+    domain: str,
+    storage_key: str,
+    reason: str,
+    extras: Optional[Mapping[str, Any]] = None,
+) -> Optional[str]:
+    """Autocommit INSERT di una pending `upload_intent` row.
+
+    BE-GO-READY-STORAGE-ENGINE-008: cattura l'intento di upload
+    PRIMA che il blob venga effettivamente caricato sull'object
+    storage, cosi' una process death tra upload e caller-side DB
+    save (W2 race) lascia comunque una traccia che il reconciler
+    puo' chiudere.
+
+    Differenza chiave da `record_pending`:
+    - `record_pending` richiede un cursor del caller e partecipa
+      alla transazione del caller (atomic con il DB DELETE);
+    - `record_upload_intent` apre la PROPRIA transazione (autocommit)
+      perche' il caller (`dispatch_blob_storage`) non possiede
+      ancora alcuna transazione DB — la INSERT `file_sources`
+      avviene dopo il return.
+
+    Best-effort: errore DB → warning strutturato + ritorno `None`.
+    Il caller procede comunque con l'upload (la W2 race per quel
+    singolo dispatch resta — comportamento attuale, non peggiora).
+
+    Args:
+        domain: tag callsite (`"file_source"`, ...). Non interpretato.
+        storage_key: chiave object storage che sara' caricata
+            (es. `"file-sources/<id>/<filename>"`).
+        reason: motivo persistito (`"upload_intent_pre_dispatch"`).
+        extras: optional `Mapping[str, Any]` serialized to JSONB.
+
+    Returns:
+        Stringa UUID dell'intent appena inserito, o `None` se la
+        INSERT autocommit e' fallita (best-effort).
+    """
+    extras_json = json.dumps(dict(extras)) if extras else None
+    try:
+        from app.db.pg_connection import fetchone as pg_fetchone
+
+        row = pg_fetchone(
+            _INSERT_UPLOAD_INTENT_SQL,
+            (domain, storage_key, reason, extras_json),
+        )
+        if row is None:
+            return None
+        new_id = row["id"] if isinstance(row, dict) else row[0]
+        return str(new_id)
+    except Exception as e:
+        logger.warning(
+            "event=storage_reconciliation_upload_intent_record_failed "
+            "domain=%s storage_key=%s "
+            "record_error=%s record_error_msg=%r",
+            domain, storage_key, type(e).__name__, str(e),
+        )
+        return None
+
+
+_FETCH_DUE_STALE_UPLOAD_INTENTS_SQL = (
+    "SELECT id, domain, storage_key, operation, attempts "
+    "FROM plenora.storage_reconciliation_log "
+    "WHERE state = 'pending' "
+    "  AND operation = 'upload_intent' "
+    "  AND created_at < ? "
+    "  AND (next_retry_at IS NULL OR next_retry_at <= ?) "
+    "ORDER BY next_retry_at NULLS FIRST, created_at ASC "
+    "LIMIT ?"
+)
+
+
+def fetch_due_stale_upload_intents(
+    *,
+    limit: int,
+    grace_seconds: int,
+    now: Optional[datetime] = None,
+) -> list["PendingReconciliationRow"]:
+    """Read-only fetch di `upload_intent` pending stantii.
+
+    BE-GO-READY-STORAGE-ENGINE-008: il reconciler beat hook chiama
+    questo helper DOPO il fetch dei delete-pending. Solo le righe
+    `created_at < now - grace_seconds` sono candidate, cosi' un
+    upload "in volo" (ancora dentro la finestra normale di
+    upload+DB-save) non viene chiuso prematuramente.
+
+    Filtri:
+      - `state = 'pending'`;
+      - `operation = 'upload_intent'`;
+      - `created_at < now - grace_seconds` (grace window);
+      - `next_retry_at IS NULL OR <= now` (rispetta backoff).
+
+    Args:
+        limit: cap righe per call. Caller (beat hook) passa
+            `STORAGE_RECONCILE_UPLOAD_INTENT_BATCH_SIZE`.
+        grace_seconds: finestra di grazia tra `created_at` e `now`.
+            Caller passa `STORAGE_RECONCILE_UPLOAD_INTENT_GRACE_SECONDS`.
+        now: UTC `datetime` per i filtri temporali. `None` ⇒
+            `datetime.now(timezone.utc)`.
+
+    Returns:
+        Lista di `PendingReconciliationRow` (stessa shape del fetch
+        delete). Vuoto su zero righe o errore (best-effort).
+
+    Raises:
+        ValueError se `limit <= 0` o `grace_seconds < 0`.
+    """
+    if not isinstance(limit, int) or limit <= 0:
+        raise ValueError(
+            f"fetch_due_stale_upload_intents: limit must be a positive int, "
+            f"got {limit!r}"
+        )
+    if not isinstance(grace_seconds, int) or grace_seconds < 0:
+        raise ValueError(
+            f"fetch_due_stale_upload_intents: grace_seconds must be int >= 0, "
+            f"got {grace_seconds!r}"
+        )
+
+    from datetime import timedelta as _td, timezone as _tz
+
+    base_now = now if now is not None else datetime.now(_tz.utc)
+    grace_cutoff = base_now - _td(seconds=grace_seconds)
+
+    try:
+        from app.db.pg_connection import fetchall
+
+        rows = fetchall(
+            _FETCH_DUE_STALE_UPLOAD_INTENTS_SQL,
+            (grace_cutoff, base_now, limit),
+        )
+    except Exception as e:
+        logger.warning(
+            "event=storage_reconciliation_upload_intent_fetch_failed "
+            "fetch_error=%s fetch_error_msg=%r",
+            type(e).__name__, str(e),
+        )
+        return []
+
+    out: list[PendingReconciliationRow] = []
+    for row in rows or ():
+        if isinstance(row, dict):
+            row_id = row["id"]
+            domain = row["domain"]
+            storage_key = row["storage_key"]
+            operation = row["operation"]
+            attempts = row["attempts"]
+        else:
+            row_id, domain, storage_key, operation, attempts = row
+        out.append(
+            PendingReconciliationRow(
+                id=str(row_id),
+                domain=str(domain),
+                storage_key=str(storage_key),
+                operation=str(operation),  # type: ignore[arg-type]
+                attempts=int(attempts) if attempts is not None else 0,
+            )
+        )
+    return out
+
+
+_FILE_SOURCE_STORAGE_KEY_REF_SQL = (
+    "SELECT 1 FROM plenora.file_sources "
+    "WHERE storage_key = ? LIMIT 1"
+)
+
+
+def is_storage_key_referenced(storage_key: str) -> Optional[bool]:
+    """Verifica se `storage_key` e' referenziato da una row in
+    `plenora.file_sources` (idx_file_sources_storage_key_notnull).
+
+    BE-GO-READY-STORAGE-ENGINE-008: il reconciler usa questo helper
+    per decidere se un upload_intent stantio rappresenta:
+      - `True`  → caller's DB save committed; intent va `mark_done`;
+      - `False` → orphan candidate; intent va `compensating_delete`
+        + `mark_orphan_deleted`;
+      - `None`  → read-error; il caller DEVE NON procedere alla
+        delete (rischio data loss su key live). Il beat hook
+        tratta questo caso come `mark_failed_attempt` + retry.
+
+    La distinzione `False` vs `None` e' critica: confondere read-
+    error con "non referenziato" porterebbe il reconciler a
+    cancellare blob ancora vivi. Il caller MUST branchare
+    esplicitamente sui tre stati.
+
+    Args:
+        storage_key: chiave object storage da cercare.
+
+    Returns:
+        `True` se la riga esiste; `False` se non esiste; `None`
+        se la lettura ha fallito (DB unreachable, syntax error,
+        ecc.).
+    """
+    try:
+        from app.db.pg_connection import fetchall
+
+        rows = fetchall(_FILE_SOURCE_STORAGE_KEY_REF_SQL, (storage_key,))
+    except Exception as e:
+        logger.warning(
+            "event=storage_reconciliation_storage_key_ref_failed "
+            "storage_key=%s ref_error=%s ref_error_msg=%r",
+            storage_key, type(e).__name__, str(e),
+        )
+        return None
+
+    return bool(rows)

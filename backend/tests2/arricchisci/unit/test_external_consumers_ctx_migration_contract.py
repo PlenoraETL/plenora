@@ -7,18 +7,21 @@ Lock i 5 invariant della Phase 3 (closure di TE15-R2):
    piu' direct mutation di `api_connection_service._current_group_id`
    o `_preview_limit`. Il typed context e' la primary surface.
 2. **Context construction**: il task istanzia un
-   `ArricchisciExecutionContext` esplicito e chiama
-   `apply_to_legacy_state(...)` per il mirror legacy phase 1+2.
+   `ArricchisciExecutionContext` esplicito.
+   BE-GO-READY-TRANSFORMATION-ENGINE-030A: il worker NON chiama piu'
+   `apply_to_legacy_state(...)` ne' importa il helper. Tutto il
+   tenant binding nel worker path passa per `ctx=ctx` esplicito sui
+   4 mixin callsite. La singleton-mutation via
+   `apply_to_legacy_state` resta valida in `canvas_orchestrator`
+   (preview path in-process, scope separato).
 3. **Threading completo**: i 4 mixin callsite nel task
    (`_load_source_project`, `_load_file_source`,
    `_load_static_values`, `_execute_rest_file`) ricevono `ctx=ctx`
    esplicito.
-4. **Behavior preserved**: `setattr:_current_group_id` event continua
-   ad essere registrato dal fake `ApiConnectionService` (via
-   `apply_to_legacy_state` interno) — le KEEP_COMPAT lock test
-   pre-existing
-   (`test_enrichment_task_tenant_binding_lock.py`) continuano a
-   passare invariate.
+4. **Helper preserved**: `apply_to_legacy_state` resta funzionale
+   (usato da `canvas_orchestrator`); il test
+   `test_apply_to_legacy_state_still_emits_setattr_events` lo
+   verifica indipendentemente dal worker.
 5. **Concurrency**: 2 task concorrenti istanziano 2 context
    distinti con tenant binding isolato (frozen dataclass + new
    ApiConnectionService instance per task).
@@ -99,8 +102,14 @@ def test_enrichment_task_no_direct_singleton_mutation():
 
 def test_enrichment_task_imports_and_uses_typed_context():
     """`enrichment_task.py` deve importare `ArricchisciExecutionContext`
-    + `apply_to_legacy_state` dal modulo `execution_context` e
-    costruire il context esplicitamente."""
+    dal modulo `execution_context` e costruire il context esplicitamente.
+
+    BE-GO-READY-TRANSFORMATION-ENGINE-030A: post-migrazione il worker
+    NON chiama piu' `apply_to_legacy_state` ne' muta
+    `svc._current_group_id` direttamente. I 4 mixin callsite sono
+    ctx-aware: il ctx tipato e' l'unica via di tenant binding nel
+    worker path. Vedi `test_enrichment_task_does_not_call_apply_to_legacy_state`
+    sotto per il regression-guard complementare."""
     src = _ENRICHMENT_TASK_PY.read_text(encoding="utf-8")
     assert (
         "from app.core.arricchisci.execution_context import" in src
@@ -108,8 +117,51 @@ def test_enrichment_task_imports_and_uses_typed_context():
     assert "ArricchisciExecutionContext(" in src, (
         "Atteso costruzione esplicita di ArricchisciExecutionContext."
     )
-    assert "apply_to_legacy_state(" in src, (
-        "Atteso chiamata a apply_to_legacy_state(...) per KEEP_COMPAT."
+
+
+def test_enrichment_task_does_not_call_apply_to_legacy_state():
+    """BE-GO-READY-TRANSFORMATION-ENGINE-030A regression guard:
+    il worker NON deve piu' chiamare `apply_to_legacy_state(...)`
+    ne' importarlo dal modulo `execution_context`. Tutto il tenant
+    binding nel worker path passa per `ctx=ctx` thread esplicito ai
+    4 mixin callsite (TE-020). La singleton-mutation via
+    `apply_to_legacy_state` resta valida in
+    `app.core.arricchisci.canvas_orchestrator` per il preview path
+    in-process (scope separato).
+
+    AST-bound: nessun `Call` con `func=Name('apply_to_legacy_state')`
+    ne' nessun `ImportFrom` con `name='apply_to_legacy_state'`.
+    """
+    src = _ENRICHMENT_TASK_PY.read_text(encoding="utf-8")
+    tree = ast.parse(src)
+
+    forbidden_calls = []
+    forbidden_imports = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            f = node.func
+            if isinstance(f, ast.Name) and f.id == "apply_to_legacy_state":
+                forbidden_calls.append(node.lineno)
+            elif isinstance(f, ast.Attribute) and f.attr == "apply_to_legacy_state":
+                forbidden_calls.append(node.lineno)
+        elif isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                if alias.name == "apply_to_legacy_state":
+                    forbidden_imports.append(node.lineno)
+
+    assert not forbidden_calls, (
+        f"BE-GO-READY-TRANSFORMATION-ENGINE-030A regression: "
+        f"`enrichment_task.py` chiama `apply_to_legacy_state(...)` "
+        f"alle linee {forbidden_calls}. Il worker NON deve piu' "
+        f"mutare `_current_group_id` via legacy state mirror — "
+        f"tutto il tenant binding e' via `ctx=ctx` esplicito ai "
+        f"4 mixin callsite."
+    )
+    assert not forbidden_imports, (
+        f"BE-GO-READY-TRANSFORMATION-ENGINE-030A regression: "
+        f"`enrichment_task.py` importa `apply_to_legacy_state` "
+        f"alle linee {forbidden_imports}. Rimuovere l'import: il "
+        f"worker non lo usa piu'."
     )
 
 

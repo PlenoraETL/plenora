@@ -20,7 +20,11 @@ from app.core.auth.auth import (
     require_not_esecutore,
     require_admin,
 )
-from app.core.auth.models import CurrentUser
+# BE-GO-READY-AUTH-ENGINE-014 Phase-8 contract fan-out: pure
+# contract `CurrentUser` consumed from the shared contract module.
+# DB-bound ownership helpers stay on `app.core.auth.ownership`.
+# FastAPI Depends + `require_*` stay on the auth facade.
+from app.shared.contracts.auth import CurrentUser
 from app.core.auth.ownership import (
     assert_group_access,
     assert_resource_visible,

@@ -3,10 +3,17 @@
 Il task deve:
 1. instanziare una `ApiConnectionService()` locale, non usare un
    singleton condiviso fra task concorrenti;
-2. impostare `_current_group_id` prima di qualunque loader/executor che
-   applica controlli fail-closed;
+2. propagare il tenant binding ai loader/executor con un
+   `ArricchisciExecutionContext` (`ctx.group_id`) esplicito;
 3. propagare gli identificativi (`result_id`, `task_id`) necessari ai
    consumer downstream.
+
+BE-GO-READY-TRANSFORMATION-ENGINE-030A: post-migrazione il worker
+NON muta piu' `svc._current_group_id` ne' chiama
+`apply_to_legacy_state(...)`. Tutto il tenant binding passa per
+`ctx=ctx` esplicito sui 4 mixin callsite. I test sotto verificano
+il ctx propagato osservando le `kwargs` registrate dal fake
+ApiConnectionService nel `_call_log`.
 
 PR test/phase-1-test-reliability — modernizzazione behavior-bound:
 i test pre-fix usavano `inspect.getsource` + grep stringhe / posizioni
@@ -16,14 +23,16 @@ source rompe anche preservando il behavior.
 
 Post-fix: i test invocano il task in Celery eager mode (vedi
 `tests2/_helpers/celery_eager.py`) con un fake `ApiConnectionService`
-che registra le call e i setattr in un call_log. Le proprieta'
+che registra ogni call e setattr in un call_log. Le proprieta'
 osservabili sono:
   - istanziazione locale (counter > 0)
-  - setattr di `_current_group_id` PRIMA della prima call a un loader
+  - prima call a un loader passa `ctx` con `group_id` valido
+    (post-TE-030A; pre-migrazione era setattr di `_current_group_id`
+    PRIMA della prima call al loader)
   - propagazione di `result_id` nei dict di result
   - propagazione di `task_id` in tutti i call site di `update_task_progress`
-  - chiamata a `get_eseguibile` PRIMA del setattr di `_current_group_id`
-    nel branch is_eseguibile
+  - chiamata a `get_eseguibile` con propagazione del group_id nel
+    `ctx` della prima call loader nel branch is_eseguibile
 
 I 3 test gia' behavior-bound (signature/hasattr/stub) sono mantenuti
 invariati.
@@ -105,16 +114,23 @@ def test_execute_enrichment_task_instantiates_local_api_service(
 # =============================================================================
 
 
-def test_execute_enrichment_task_sets_current_group_id_before_loaders(
+def test_execute_enrichment_task_passes_ctx_with_group_id_to_loaders(
     celery_eager, monkeypatch,
 ):
-    """Senza setattr di `_current_group_id` PRIMA dei loader, i metodi
-    `_load_source_project` etc. falliscono fail-closed con
-    'Contesto di sicurezza non determinabile'.
+    """BE-GO-READY-TRANSFORMATION-ENGINE-030A: post-migrazione il
+    worker NON muta piu' `svc._current_group_id` ne' chiama
+    `apply_to_legacy_state(...)`. Tutto il tenant binding passa per
+    il `ctx=ctx` esplicito sui 4 mixin callsite.
 
-    Behavior probe: nel `_call_log` del fake api_cs deve apparire
-    un evento `setattr:_current_group_id` PRIMA di qualunque
-    `_load_*` / `_execute_rest_file`.
+    Senza un `ctx` con `group_id` valido, i metodi `_load_*` /
+    `_execute_rest_file` fallirebbero fail-closed con 'Contesto di
+    sicurezza non determinabile'.
+
+    Behavior probe: la prima call a `_load_source_project` /
+    `_load_file_source` / `_execute_rest_file` registrata nel
+    `_call_log` del fake api_cs deve avere `ctx` come kwarg, e
+    `ctx.group_id` deve essere quello atteso (`"test-group"` dal
+    fake project metadata).
     """
     from tests2._helpers.celery_eager import (
         install_enrichment_task_mocks, invoke_enrichment_task,
@@ -134,28 +150,34 @@ def test_execute_enrichment_task_sets_current_group_id_before_loaders(
     api_cs = spies.api_cs_instances[0]
     log = api_cs._call_log
 
-    # Trova indici
-    setattr_idx = next(
-        (i for i, ev in enumerate(log) if ev[0] == "setattr:_current_group_id"),
-        -1,
-    )
-    loader_idx = next(
-        (i for i, ev in enumerate(log)
+    loader_event = next(
+        (ev for ev in log
          if ev[0] in ("_load_source_project", "_load_file_source",
                       "_execute_rest_file")),
-        -1,
+        None,
     )
-
-    assert setattr_idx != -1, (
-        f"Il task non ha mai settato `_current_group_id`. call_log: {log}"
-    )
-    assert loader_idx != -1, (
+    assert loader_event is not None, (
         f"Il task non ha mai chiamato un loader. call_log: {log}"
     )
-    assert setattr_idx < loader_idx, (
-        f"`_current_group_id` settato DOPO il primo loader (fail-closed "
-        f"violation). setattr_idx={setattr_idx} loader_idx={loader_idx} "
-        f"call_log={log}"
+
+    _name, _args, kwargs = loader_event
+    assert "ctx" in kwargs, (
+        f"REGRESSIONE TE-030A: la prima call a `{_name}` non passa "
+        f"`ctx=` esplicito. Senza il typed context, il reader cade su "
+        f"un singleton che il worker non setta piu'. Loader event: "
+        f"{loader_event}"
+    )
+    ctx = kwargs["ctx"]
+    assert ctx is not None, (
+        f"REGRESSIONE TE-030A: ctx kwarg passato come None. Loader "
+        f"event: {loader_event}"
+    )
+    assert getattr(ctx, "group_id", None) == "test-group", (
+        f"REGRESSIONE TE-030A: ctx.group_id atteso 'test-group' (dal "
+        f"fake project metadata), trovato {getattr(ctx, 'group_id', None)!r}. "
+        f"Senza un group_id valido sul ctx, il loader fallisce "
+        f"fail-closed con 'Contesto di sicurezza non determinabile'. "
+        f"Loader event: {loader_event}"
     )
 
 
@@ -345,17 +367,21 @@ def test_execute_enrichment_task_eseguibile_branch_fetches_group_id(
     celery_eager, monkeypatch,
 ):
     """Regression guard BUG-ESEG-GROUP: il branch `is_eseguibile=True`
-    deve recuperare il `_group_id` dalla tabella `eseguibili` PRIMA di
-    settarlo su `api_connection_service._current_group_id`.
+    deve recuperare il `_group_id` dalla tabella `eseguibili` e
+    propagarlo nel `ctx.group_id` passato ai 4 mixin callsite.
 
     Pre-fix: `_group_id = ""` rimaneva vuoto, propagato come None,
     facendo fallire il primo loader con 'group_id mancante'.
 
-    Behavior probe: `get_eseguibile` deve essere chiamato e
-    `eseguibile_lookups` registrato PRIMA del primo evento
-    `setattr:_current_group_id` nel call_log del fake api_cs.
-    Inoltre il valore settato deve essere il group_id ritornato da
-    get_eseguibile (non None).
+    BE-GO-READY-TRANSFORMATION-ENGINE-030A: post-migrazione il valore
+    NON viene piu' settato su `svc._current_group_id` (singleton
+    legacy) — viene scritto in `ctx.group_id` e passato come kwarg
+    al primo loader.
+
+    Behavior probe:
+      1. `get_eseguibile` chiamato con il project_id;
+      2. la prima call a un loader nel `_call_log` ha
+         `ctx.group_id == "grp-eseg-test"`.
     """
     from tests2._helpers.celery_eager import (
         install_enrichment_task_mocks, invoke_enrichment_task,
@@ -380,18 +406,35 @@ def test_execute_enrichment_task_eseguibile_branch_fetches_group_id(
         f"{spies.eseguibile_lookups}"
     )
 
-    # 2. ApiCS istanziata e _current_group_id settato col valore corretto
+    # 2. ApiCS istanziata e ctx propagato con il group_id corretto al
+    #    primo loader callsite.
     assert spies.api_cs_instances, "ApiCS mai istanziato nel ramo eseguibile"
     api_cs = spies.api_cs_instances[0]
-    settings = api_cs._group_id_assignments
-    assert settings, "_current_group_id mai settato"
-    # L'ultimo (o l'unico) valore settato deve essere il group_id
-    # ritornato dal lookup eseguibile
-    last_value = settings[-1][1]
-    assert last_value == "grp-eseg-test", (
-        f"_current_group_id settato a {last_value!r}, atteso 'grp-eseg-test'. "
+    log = api_cs._call_log
+
+    loader_event = next(
+        (ev for ev in log
+         if ev[0] in ("_load_source_project", "_load_file_source",
+                      "_execute_rest_file")),
+        None,
+    )
+    assert loader_event is not None, (
+        f"Il task non ha mai chiamato un loader nel ramo eseguibile. "
+        f"call_log: {log}"
+    )
+    _name, _args, kwargs = loader_event
+    ctx = kwargs.get("ctx")
+    assert ctx is not None, (
+        f"REGRESSIONE TE-030A: ctx kwarg mancante o None nella prima "
+        f"call a `{_name}` del ramo eseguibile. Loader event: "
+        f"{loader_event}"
+    )
+    assert getattr(ctx, "group_id", None) == "grp-eseg-test", (
+        f"ctx.group_id atteso 'grp-eseg-test' (dal lookup "
+        f"get_eseguibile), trovato {getattr(ctx, 'group_id', None)!r}. "
         f"Il branch is_eseguibile non sta propagando il group_id "
-        f"recuperato da get_eseguibile."
+        f"recuperato da get_eseguibile dentro il ctx tipato. "
+        f"Loader event: {loader_event}"
     )
 
 

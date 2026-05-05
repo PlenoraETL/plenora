@@ -400,7 +400,7 @@ datasource_service = _runtime_services.datasource_service
 
 # ==================== INIT MODULI ====================
 
-from app.core.connections.router import router as connections_router, init_connections
+from app.core.connections.router import router as connections_router
 from app.core.projects.router import router as projects_router, init_projects
 from app.core.files.router import router as files_router
 from app.core.estrai.router import functions_router
@@ -430,16 +430,21 @@ from app.core.admin_system_status.router import router as admin_system_status_ro
 from app.core.tickets.router import router as tickets_router
 
 # Inizializza moduli che necessitano di servizi
-init_connections(connection_service, database_inspector)
+# BE-GO-READY-BOOTSTRAP-ENGINE-018/019-ROUTER-REGISTRY: connections
+# and orchestrator init flow through the typed registry. Order
+# preserved: connections first (legacy ordering), then projects /
+# arricchisci / datasources / carica (still procedural; follow-up
+# streams 020-023 will migrate them), then orchestrator last.
+from app.runtime.router_registry import (
+    bind_router_services,
+    CONNECTIONS_BINDING,
+    ORCHESTRATOR_BINDING,
+)
+bind_router_services(_runtime_services, CONNECTIONS_BINDING)
 init_projects(project_service)
 init_arricchisci(project_service, api_connection_service)
 init_datasources(datasource_service)
 init_carica_service(connection_service)
-# BE-GO-READY-BOOTSTRAP-ENGINE-018-ROUTER-REGISTRY-FIRST-SLICE:
-# orchestrator router-init wiring goes through the typed registry.
-# The other 5 init_* calls above stay procedural (out of scope for
-# this slice; follow-up streams will migrate them one by one).
-from app.runtime.router_registry import bind_router_services, ORCHESTRATOR_BINDING
 bind_router_services(_runtime_services, ORCHESTRATOR_BINDING)
 # features: usa lazy init interno, nessuna init_* necessaria
 

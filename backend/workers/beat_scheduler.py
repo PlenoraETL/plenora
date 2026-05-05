@@ -1337,6 +1337,121 @@ class PlenoraBeatScheduler(Scheduler):
             )
 
         # ------------------------------------------------------------------
+        # BE-GO-READY-STORAGE-ENGINE-008-UPLOAD-INTENT-PATTERN:
+        # second branch of the reconciler — chiude R-021.1.
+        # Processa righe `operation='upload_intent'` stantie (older than
+        # grace window). Per ciascuna:
+        #   - se `is_storage_key_referenced(storage_key)` is True →
+        #     caller's DB save committed → `mark_done`;
+        #   - se False → orphan candidate → `compensating_delete` +
+        #     `mark_orphan_deleted`;
+        #   - se None → read-error → `mark_failed_attempt` (skip questa
+        #     row, riprova al prossimo tick); promuovi a `lost` dopo
+        #     max_attempts.
+        # Cap <= 0 su grace o batch disabilita il branch (escape hatch
+        # ops; il delete branch sopra resta attivo).
+        # ------------------------------------------------------------------
+        ui_grace_s = _read_int("STORAGE_RECONCILE_UPLOAD_INTENT_GRACE_SECONDS", 600)
+        ui_batch_size = _read_int("STORAGE_RECONCILE_UPLOAD_INTENT_BATCH_SIZE", 50)
+        if ui_grace_s > 0 and ui_batch_size > 0:
+            try:
+                ui_rows = _recon.fetch_due_stale_upload_intents(
+                    limit=ui_batch_size,
+                    grace_seconds=ui_grace_s,
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Reconcile storage: upload_intent fetch fallito: {e}",
+                    exc_info=True,
+                )
+                ui_rows = []
+
+            ui_done_count = 0
+            ui_orphan_count = 0
+            ui_failed_count = 0
+            ui_lost_count = 0
+            for row in ui_rows:
+                try:
+                    if row.operation != "upload_intent":
+                        # belt-and-suspenders: SQL gia' filtra
+                        continue
+
+                    referenced = _recon.is_storage_key_referenced(row.storage_key)
+                    if referenced is True:
+                        # caller's DB save committed -> intent satisfied
+                        _recon.mark_done(row.id)
+                        ui_done_count += 1
+                        continue
+                    if referenced is None:
+                        # read-error: skip delete (data-loss risk).
+                        # Increment attempts + backoff -> retry next tick.
+                        new_attempts = row.attempts + 1
+                        if new_attempts >= max_attempts:
+                            _recon.mark_lost(
+                                row.id,
+                                error=(
+                                    "upload_intent_ref_check_failed "
+                                    f"max_attempts ({new_attempts})"
+                                ),
+                            )
+                            ui_lost_count += 1
+                        else:
+                            next_retry = _recon.compute_next_retry_at(
+                                new_attempts,
+                                base_seconds=backoff_base,
+                            )
+                            _recon.mark_failed_attempt(
+                                row.id,
+                                error="upload_intent_ref_check_failed",
+                                next_retry_at=next_retry,
+                            )
+                            ui_failed_count += 1
+                        continue
+
+                    # referenced is False -> orphan candidate
+                    outcome = compensating_delete(
+                        row.storage_key,
+                        domain=row.domain,
+                        reason="upload_intent_orphan",
+                        extras={"reconciliation_id": row.id},
+                    )
+                    if outcome == "ok" or outcome == "skipped":
+                        _recon.mark_orphan_deleted(row.id)
+                        ui_orphan_count += 1
+                    else:
+                        new_attempts = row.attempts + 1
+                        if new_attempts >= max_attempts:
+                            _recon.mark_lost(
+                                row.id,
+                                error=f"upload_intent_max_attempts ({new_attempts})",
+                            )
+                            ui_lost_count += 1
+                        else:
+                            next_retry = _recon.compute_next_retry_at(
+                                new_attempts,
+                                base_seconds=backoff_base,
+                            )
+                            _recon.mark_failed_attempt(
+                                row.id,
+                                error="upload_intent_compensating_delete_failed",
+                                next_retry_at=next_retry,
+                            )
+                            ui_failed_count += 1
+                except Exception as e:
+                    logger.warning(
+                        f"Reconcile storage: errore upload_intent id={row.id}: {e}",
+                        exc_info=True,
+                    )
+
+            if ui_done_count or ui_orphan_count or ui_failed_count or ui_lost_count:
+                logger.info(
+                    "event=storage_reconciliation_upload_intent_tick "
+                    "done=%d orphan=%d failed=%d lost=%d batch=%d",
+                    ui_done_count, ui_orphan_count, ui_failed_count,
+                    ui_lost_count, len(ui_rows),
+                )
+
+        # ------------------------------------------------------------------
         # BE-GO-READY-STORAGE-ENGINE-008: operational guardrails.
         # Eseguiti DOPO la passa di reconcile per non interferire con il
         # set di righe lette da `fetch_due_pending_deletes`. Entrambi

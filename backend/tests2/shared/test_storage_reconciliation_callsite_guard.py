@@ -26,11 +26,16 @@ explicit classification decision.
 
 Out of scope (locked elsewhere)
 ================================
-- Adding `upload_intent` runtime support in the reconciler
-  (filtered to `operation='delete'` today; closure path
-  `BE-GO-READY-STORAGE-ENGINE-008-UPLOAD-INTENT-PATTERN`).
 - Replacing the subsystem with a broker / saga / outbox framework
   (explicitly out of brief).
+
+Closed by later streams
+=======================
+- BE-GO-READY-STORAGE-ENGINE-008-UPLOAD-INTENT-PATTERN closed the
+  upload_intent W2 race for `file_storage_dispatch.py`
+  (record_upload_intent + reconciler upload-intent branch with
+  `is_storage_key_referenced` check). The dispatch callsite is now
+  `tracked`.
 
 Classification taxonomy
 =======================
@@ -147,15 +152,17 @@ _CALLSITE_CLASSIFICATION: dict[str, tuple[Classification, str]] = {
         "lifecycle is the safety net.",
     ),
     "app/services/file_storage_dispatch.py": (
-        "missing",
-        "W2 race: upload-then-DB-save without pre-upload "
-        "record_pending(operation='upload_intent'). If process "
-        "dies between upload and the file_sources INSERT, the "
-        "blob is orphaned with no application-side trail. "
-        "Closure path: `BE-GO-READY-STORAGE-ENGINE-008-"
-        "UPLOAD-INTENT-PATTERN` - requires paired update to the "
-        "reconciler (today filters `operation='delete'` only). "
-        "Tracked as audit residual R-021.1.",
+        "tracked",
+        "W2 race covered by upload_intent self-clearing pattern "
+        "(BE-GO-READY-STORAGE-ENGINE-008, R-021.1 closed). "
+        "Pre-upload `record_upload_intent(domain='file_source', "
+        "operation='upload_intent')` runs autocommit; on upload "
+        "exception `mark_done` clears the intent (no orphan "
+        "possible). On upload success the intent stays pending "
+        "and the reconciler beat hook closes it after a grace "
+        "window via `is_storage_key_referenced(file_sources.storage_key)`: "
+        "True -> mark_done, False -> compensating_delete + "
+        "mark_orphan_deleted, None -> mark_failed_attempt (retry).",
     ),
     "app/shared/cloud_backends.py": (
         "intentionally_excluded",
@@ -357,23 +364,30 @@ def test_classification_includes_known_tracked_upload_callsites():
 
 
 def test_no_silently_added_missing_classifications():
-    """Soft cap: at most ONE `missing` classification is allowed
-    without an audit-document update. Adding a 2nd `missing` here
-    means the OUTBOX gap is widening; the developer should pause and
-    update `BE_STORAGE_ENGINE_AUDIT.md` first.
+    """Hard cap: ZERO `missing` classifications after STORAGE-ENGINE-008.
 
-    Today the only `missing` entry is `app/services/file_storage_dispatch.py`
-    (W2 race, R-021.1). Closure path: `STORAGE-ENGINE-008-UPLOAD-INTENT-PATTERN`.
+    History:
+      - Post-021 baseline: cap was 1 — `app/services/file_storage_dispatch.py`
+        was `missing` with R-021.1 (W2 race orphan candidate).
+      - STORAGE-ENGINE-008 closed R-021.1 by adding the upload_intent
+        self-clearing pattern; the dispatch entry is now `tracked`.
+        Cap therefore drops to 0.
+
+    Adding a NEW `missing` entry REQUIRES, in this order:
+      1. add an audit residual (R-NNN.x) in
+         `.agent-temp/BE_STORAGE_ENGINE_AUDIT.md` naming the next
+         bounded stream that closes it;
+      2. relax this assertion (`<= 1`) and document the bump in the
+         audit report's residual list.
+    The cap exists to keep the OUTBOX gap from widening silently.
     """
     missing = [
         path
         for path, (cls, _) in _CALLSITE_CLASSIFICATION.items()
         if cls == "missing"
     ]
-    # Locked at 1: one known orphan candidate (file_storage_dispatch).
-    # Adding more REQUIRES updating this assertion + the audit report.
-    assert len(missing) <= 1, (
-        f"More than one `missing` classification detected: {missing}. "
+    assert len(missing) == 0, (
+        f"`missing` classification(s) detected: {missing}. "
         "Update `BE_STORAGE_ENGINE_AUDIT.md` with the new residual + "
         "closure path BEFORE relaxing this assertion. The cap exists "
         "to keep the OUTBOX gap from widening silently."

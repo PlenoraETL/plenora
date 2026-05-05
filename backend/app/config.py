@@ -351,6 +351,21 @@ class Settings:
         #   richiedere intervention. Cap <= 0 -> prune disabilitato.
         "STORAGE_RECONCILE_TERMINAL_RETENTION_DAYS": 30,
         "STORAGE_RECONCILE_PRUNE_BATCH_SIZE": 500,
+        # BE-GO-READY-STORAGE-ENGINE-008-UPLOAD-INTENT-PATTERN
+        # Tunables del reconciler beat hook per il branch
+        # `operation='upload_intent'` (W2 race coverage: chiude
+        # R-021.1 lasciato aperto da STORAGE-021).
+        # - STORAGE_RECONCILE_UPLOAD_INTENT_GRACE_SECONDS: finestra
+        #   tra `created_at` e ora corrente prima che un upload_intent
+        #   sia considerato stantio. Deve essere >= max realistic
+        #   upload+commit time. Default 600s (10 min): generoso ma
+        #   bounded. Cap <= 0 disabilita il branch (escape hatch ops:
+        #   il reconciler delete-side resta attivo).
+        # - STORAGE_RECONCILE_UPLOAD_INTENT_BATCH_SIZE: max righe
+        #   `upload_intent` pending lette per tick. Default 50,
+        #   stesso ordine del delete branch. Cap <= 0 disabilita.
+        "STORAGE_RECONCILE_UPLOAD_INTENT_GRACE_SECONDS": 600,
+        "STORAGE_RECONCILE_UPLOAD_INTENT_BATCH_SIZE": 50,
         # BE-GO-READY-STORAGE-ENGINE-015-RECONCILIATION-READINESS-CHECK
         # Threshold per il readiness check `reconciliation_backlog`
         # esposto in `app.observability.health.gather_readiness()`.

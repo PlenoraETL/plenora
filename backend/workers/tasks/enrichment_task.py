@@ -259,17 +259,23 @@ def execute_enrichment_task(
         from app.core.arricchisci.api_connector import ApiConnectionService
         api_connection_service = ApiConnectionService()
         # BE-GO-READY-TRANSFORMATION-ENGINE-020: Phase 3 — costruisci un
-        # `ArricchisciExecutionContext` tipato esplicito invece di mutare
-        # gli attributi singleton `_current_group_id` / `_preview_limit`.
-        # Il context viene threadato esplicitamente ai mixin reader site
-        # (Phase 2 wiring). `apply_to_legacy_state` e' chiamato per
-        # backward-compat con eventuali code path che ancora leggono dal
-        # singleton (es. mixin generator/enricher non ancora migrati a
-        # leggere da ctx). I 6 reader site Phase 2 ignorano il legacy
-        # state quando ricevono `ctx=ctx` esplicito.
+        # `ArricchisciExecutionContext` tipato esplicito; il context
+        # viene threadato esplicitamente ai 4 mixin callsite
+        # (`_load_source_project`, `_load_file_source`,
+        # `_load_static_values`, `_execute_rest_file`) tramite `ctx=ctx`.
+        #
+        # BE-GO-READY-TRANSFORMATION-ENGINE-030A: chiusura TE28-R4 /
+        # TE29-R1 — il worker NON chiama piu' `apply_to_legacy_state`
+        # ne' muta `svc._current_group_id` / `svc._preview_limit`. I 4
+        # mixin reader site sono ctx-aware da TE-019/-020/-024/-026: il
+        # ctx tipato e' ora l'unica via di tenant binding nel path del
+        # worker. Sblocca la rimozione di `_resolve_group_id` (legacy
+        # ctx-or-singleton fallback) in TE-030B. La singleton-mutation
+        # via `apply_to_legacy_state` resta in
+        # `app.core.arricchisci.canvas_orchestrator` per il preview path
+        # in-process (scope separato).
         from app.core.arricchisci.execution_context import (
             ArricchisciExecutionContext,
-            apply_to_legacy_state,
         )
         ctx = ArricchisciExecutionContext(
             project_id=project_id,
@@ -278,7 +284,6 @@ def execute_enrichment_task(
             ),
             preview_limit=None,  # task celery non e' preview
         )
-        apply_to_legacy_state(api_connection_service, ctx)
 
         nodes = canvas.get("nodes", [])
         edges = canvas.get("edges", [])

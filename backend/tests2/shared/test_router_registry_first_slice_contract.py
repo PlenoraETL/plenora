@@ -353,3 +353,217 @@ def test_router_registry_does_not_import_orchestrator_router_at_top_level():
                 "app.core.orchestrator.router must be imported lazily "
                 "inside the binding's init_fn thunk, not at module top"
             )
+
+
+# ---------------------------------------------------------------------------
+# 6. BE-GO-READY-BOOTSTRAP-ENGINE-019: connections binding (2-arg slice)
+# ---------------------------------------------------------------------------
+
+
+def test_runtime_module_exposes_connections_binding():
+    """``CONNECTIONS_BINDING`` is part of the public registry surface."""
+    from app.runtime import CONNECTIONS_BINDING, RouterBinding
+
+    assert isinstance(CONNECTIONS_BINDING, RouterBinding)
+
+
+def test_connections_binding_name_is_stable():
+    from app.runtime import CONNECTIONS_BINDING
+
+    assert CONNECTIONS_BINDING.name == "connections"
+
+
+def test_connections_extract_returns_two_typed_fields_in_order():
+    """The extract closure pulls ``(connection_service, database_inspector)``
+    in that exact positional order. Identity is preserved on both
+    fields - the binding does not reconstruct, copy, or reorder.
+    """
+    from app.runtime import CONNECTIONS_BINDING
+
+    sentinel_conn = object()
+    sentinel_inspector = object()
+    fake_services = SimpleNamespace(
+        connection_service=sentinel_conn,
+        database_inspector=sentinel_inspector,
+    )
+
+    args = CONNECTIONS_BINDING.extract(fake_services)
+
+    assert isinstance(args, tuple)
+    assert len(args) == 2
+    assert args[0] is sentinel_conn
+    assert args[1] is sentinel_inspector
+
+
+def test_connections_init_fn_invokes_router_module_init(monkeypatch):
+    """The binding's ``init_fn`` resolves to
+    ``app.core.connections.router.init_connections`` and forwards its
+    positional args verbatim, in order.
+    """
+    from app.core.connections import router as connections_router_mod
+    from app.runtime import CONNECTIONS_BINDING
+
+    captured: list = []
+
+    def _fake_init_connections(connection_service, database_inspector):
+        captured.append((connection_service, database_inspector))
+
+    monkeypatch.setattr(
+        connections_router_mod,
+        "init_connections",
+        _fake_init_connections,
+    )
+
+    sentinel_conn = object()
+    sentinel_inspector = object()
+    CONNECTIONS_BINDING.init_fn(sentinel_conn, sentinel_inspector)
+
+    assert captured == [(sentinel_conn, sentinel_inspector)]
+
+
+def test_bind_connections_passes_both_container_owned_instances_by_identity():
+    """Identity invariant for the 2-arg slice: BOTH values reach
+    ``init_fn`` by identity, not as fresh constructions or copies.
+    """
+    from app.runtime import CONNECTIONS_BINDING, bind_router_services
+
+    captured: list = []
+
+    def _spy_init(connection_service, database_inspector):
+        captured.append((connection_service, database_inspector))
+
+    sentinel_conn = object()
+    sentinel_inspector = object()
+    fake_services = SimpleNamespace(
+        connection_service=sentinel_conn,
+        database_inspector=sentinel_inspector,
+    )
+
+    spy_binding = type(CONNECTIONS_BINDING)(
+        name=CONNECTIONS_BINDING.name,
+        init_fn=_spy_init,
+        extract=CONNECTIONS_BINDING.extract,
+    )
+
+    bind_router_services(fake_services, spy_binding)
+
+    assert len(captured) == 1
+    conn, inspector = captured[0]
+    assert conn is sentinel_conn
+    assert inspector is sentinel_inspector
+
+
+def test_bind_connections_attribute_error_on_missing_inspector_field():
+    """Fail-fast for the 2-arg extract: a typo on EITHER field surfaces
+    as ``AttributeError`` at startup, not as a NoneType inspector
+    later at request time.
+    """
+    from app.runtime import CONNECTIONS_BINDING, bind_router_services
+
+    # Container is missing ``database_inspector``.
+    incomplete_services = SimpleNamespace(connection_service=object())
+
+    with pytest.raises(AttributeError):
+        bind_router_services(incomplete_services, CONNECTIONS_BINDING)
+
+
+def test_bind_connections_type_error_on_signature_drift(monkeypatch):
+    """Fail-fast on signature drift: if the router renames /
+    reorders ``init_connections`` arguments, the dispatcher surfaces
+    a ``TypeError`` at startup. Verified by replacing ``init_fn`` with
+    a 1-arg function while ``extract`` still returns 2 args.
+    """
+    from app.runtime import CONNECTIONS_BINDING, bind_router_services
+
+    def _one_arg_init(only_one):
+        pass
+
+    drift_binding = type(CONNECTIONS_BINDING)(
+        name=CONNECTIONS_BINDING.name,
+        init_fn=_one_arg_init,
+        extract=CONNECTIONS_BINDING.extract,
+    )
+
+    fake_services = SimpleNamespace(
+        connection_service=object(),
+        database_inspector=object(),
+    )
+
+    with pytest.raises(TypeError):
+        bind_router_services(fake_services, drift_binding)
+
+
+def test_main_py_does_not_call_init_connections_directly():
+    """``app/main.py`` must route the connections init through the
+    registry. A direct ``init_connections(connection_service, database_inspector)``
+    call bypasses the typed binding and is a regression."""
+    src = _read_source("app/main.py")
+
+    bad = "init_connections(connection_service, database_inspector)"
+    assert bad not in src, (
+        "app/main.py should call the connections init through "
+        "bind_router_services(_runtime_services, CONNECTIONS_BINDING) "
+        "instead of init_connections(connection_service, database_inspector)"
+    )
+
+
+def test_main_py_imports_the_connections_binding():
+    """Positive lock: ``main.py`` imports ``CONNECTIONS_BINDING``."""
+    src = _read_source("app/main.py")
+
+    assert "CONNECTIONS_BINDING" in src, (
+        "app/main.py must import CONNECTIONS_BINDING from app.runtime"
+    )
+
+
+def test_main_py_does_not_import_init_connections():
+    """The router-side ``init_connections`` symbol must no longer
+    appear in ``main.py``'s import list - the registry's lazy thunk
+    owns the import now."""
+    src = _read_source("app/main.py")
+
+    tree = ast.parse(src)
+    imported_names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                imported_names.add(alias.asname or alias.name)
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                imported_names.add(alias.asname or alias.name)
+
+    assert "init_connections" not in imported_names, (
+        "app/main.py must not import init_connections directly; the "
+        "registry's lazy thunk imports it on demand"
+    )
+
+
+def test_connections_router_does_not_import_from_main():
+    """Architectural lock: connections router must not depend on
+    ``app.main``. Composition flows main -> runtime -> router.
+    """
+    src = _read_source("app/core/connections/router.py")
+    tree = ast.parse(src)
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            assert module != "app.main" and not module.startswith("app.main."), (
+                f"app/core/connections/router.py must not import from "
+                f"app.main (found: {module})"
+            )
+
+
+def test_router_registry_does_not_import_connections_router_at_top_level():
+    """The connections router import must live inside the lazy thunk
+    (same hygiene rule as the orchestrator slice)."""
+    src = _read_source("app/runtime/router_registry.py")
+    tree = ast.parse(src)
+
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            assert "connections.router" not in module, (
+                "app.core.connections.router must be imported lazily "
+                "inside the binding's init_fn thunk, not at module top"
+            )

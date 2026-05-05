@@ -12,7 +12,8 @@ from typing import Dict, Any
 
 from app.core.manipola.plugin_executor import get_executor
 from app.core.auth.auth import get_current_user, require_not_esecutore
-from app.core.auth.models import CurrentUser
+# BE-GO-READY-AUTH-ENGINE-014 Phase-8 contract fan-out.
+from app.shared.contracts.auth import CurrentUser
 
 router = APIRouter(prefix="/transforms", tags=["transforms"])
 

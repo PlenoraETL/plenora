@@ -96,6 +96,7 @@ __all__ = [
     "RouterBinding",
     "bind_router_services",
     "ORCHESTRATOR_BINDING",
+    "CONNECTIONS_BINDING",
 ]
 
 
@@ -172,4 +173,29 @@ ORCHESTRATOR_BINDING = RouterBinding(
     name="orchestrator",
     init_fn=_orchestrator_init,
     extract=lambda services: (services.orchestrator,),
+)
+
+
+def _connections_init(*args: Any, **kwargs: Any) -> None:
+    """Lazy thunk: import + invoke ``init_connections``.
+
+    BE-GO-READY-BOOTSTRAP-ENGINE-019: 2-arg variant. The connections
+    router takes (connection_service, database_inspector). Both
+    instances are owned by ``RuntimeServices`` and exposed by identity
+    via the typed extract. The thunk pattern is identical to
+    :func:`_orchestrator_init` (lazy import to keep registry module
+    import-cheap).
+    """
+    from app.core.connections.router import init_connections
+
+    init_connections(*args, **kwargs)
+
+
+CONNECTIONS_BINDING = RouterBinding(
+    name="connections",
+    init_fn=_connections_init,
+    extract=lambda services: (
+        services.connection_service,
+        services.database_inspector,
+    ),
 )
