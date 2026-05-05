@@ -26,7 +26,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
-from app.core.auth.auth import decode_token
+from app.shared.jwt_token import decode_token
 from app.utils.logger import set_log_group, set_user_id, get_logger
 
 logger = get_logger(__name__)

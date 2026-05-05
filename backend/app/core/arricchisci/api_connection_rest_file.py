@@ -272,8 +272,27 @@ import psycopg2
 import app.db.db_service as db_svc
 from app.config import settings
 from app.core.arricchisci._api_connection_helpers import _nd
+from app.core.arricchisci.execution_context import (
+    ArricchisciExecutionContext,
+)
 from app.shared.exceptions import FileSourceResolutionError
 from app.utils.logger import get_logger
+
+
+def _resolve_rest_file_group_id(
+    self_obj,
+    ctx: Optional[ArricchisciExecutionContext],
+) -> Optional[str]:
+    """BE-GO-READY-TRANSFORMATION-ENGINE-019: speculare a
+    `_resolve_group_id` in `api_connection_source_loading.py`.
+
+    Ritorna `ctx.group_id` se Phase 2 (typed context fornito),
+    altrimenti `getattr(self_obj, "_current_group_id", None)`
+    (KEEP_COMPAT Phase 1).
+    """
+    if ctx is not None:
+        return ctx.group_id
+    return getattr(self_obj, "_current_group_id", None)
 
 # Stesso logger name di `api_connector.py` (`__name__` valuta a
 # `"app.core.arricchisci.api_connector"`). Singleton stdlib per nome →
@@ -366,6 +385,7 @@ class ApiConnectionRestFileMixin:
         input_path: Optional[str],
         extra_files_cfg: Dict,
         opened_handles: List,
+        ctx: Optional[ArricchisciExecutionContext] = None,
     ) -> tuple:
         """Costruisce i dict `files` e `data` per `requests.post(multipart)`.
 
@@ -437,7 +457,7 @@ class ApiConnectionRestFileMixin:
                             f"Campo file extra '{name}' richiesto ma non configurato sul nodo",
                         )
                     continue
-                extra_path = self._resolve_file_source_id_path(fs_id)
+                extra_path = self._resolve_file_source_id_path(fs_id, ctx=ctx)
                 if not extra_path:
                     if required:
                         # B3-B.5b rewrite #4/8: forward-ref classe → self
@@ -569,7 +589,9 @@ class ApiConnectionRestFileMixin:
     def _execute_rest_file(self, node_data: Dict, api_config: Dict,
                            nodes: List[Dict], edges: List[Dict],
                            node_id: str, project_id: str,
-                           node_results: Optional[Dict] = None) -> Dict:
+                           node_results: Optional[Dict] = None,
+                           *,
+                           ctx: Optional[ArricchisciExecutionContext] = None) -> Dict:
         """
         Esegue un connector REST di tipo "Processore File" (connection_type='rest_file').
 
@@ -658,6 +680,7 @@ class ApiConnectionRestFileMixin:
                 nodes, edges, node_id,
                 node_results=node_results,
                 materialize_format=materialize_format,
+                ctx=ctx,
             )
         except (ValueError, SourceLoadingError, FileSourceResolutionError) as e:
             msg = str(e)
@@ -687,6 +710,7 @@ class ApiConnectionRestFileMixin:
                 input_path=input_path,
                 extra_files_cfg=extra_files_cfg,
                 opened_handles=opened_handles,
+                ctx=ctx,
             )
             if build_err is not None:
                 return build_err
@@ -844,15 +868,25 @@ class ApiConnectionRestFileMixin:
     # file-processor nodes.
     # =========================================================================
 
-    def _assert_file_source_group_access(self, file_source_id: str) -> None:
+    def _assert_file_source_group_access(
+        self,
+        file_source_id: str,
+        *,
+        ctx: Optional[ArricchisciExecutionContext] = None,
+    ) -> None:
         """Defense-in-depth: verifica che `file_source_id` sia visibile al
-        gruppo del progetto corrente (stored in `self._current_group_id`
-        da `execute_enrichment`). Fail-closed se il contesto non e' noto.
+        gruppo del progetto corrente. Fail-closed se il contesto non e' noto.
+
+        BE-GO-READY-TRANSFORMATION-ENGINE-019: accetta `ctx` come
+        kwarg opzionale. Se fornito, il `group_id` viene letto dal
+        context tipato; altrimenti fallback a
+        `getattr(self, "_current_group_id", None)` (KEEP_COMPAT
+        Phase 1).
 
         Raises:
             ValueError con 403-like message se cross-tenant.
         """
-        current_group_id = getattr(self, "_current_group_id", None)
+        current_group_id = _resolve_rest_file_group_id(self, ctx)
         if not current_group_id:
             # Se non conosciamo il gruppo corrente meglio rifiutare che
             # rischiare un leak (schedule/task context mancante e' gia' un
@@ -884,7 +918,12 @@ class ApiConnectionRestFileMixin:
                 f"Errore verifica accesso file_source '{file_source_id}'"
             ) from _sec_err
 
-    def _resolve_file_source_id_path(self, file_source_id: str) -> Optional[str]:
+    def _resolve_file_source_id_path(
+        self,
+        file_source_id: str,
+        *,
+        ctx: Optional[ArricchisciExecutionContext] = None,
+    ) -> Optional[str]:
         """Materializza il blob di un file_source su filesystem come cache.
 
         DB e' sempre source of truth. Questa funzione estrae il blob dal
@@ -908,7 +947,7 @@ class ApiConnectionRestFileMixin:
         if not file_source_id:
             return None
 
-        self._assert_file_source_group_access(file_source_id)
+        self._assert_file_source_group_access(file_source_id, ctx=ctx)
 
         import os as _os
         from app.config import settings
@@ -989,14 +1028,25 @@ class ApiConnectionRestFileMixin:
         )
         return str(out_path.resolve())
 
-    def _resolve_file_source_path(self, nodes: List[Dict], edges: List[Dict],
-                                   target_node_id: str) -> Optional[str]:
+    def _resolve_file_source_path(
+        self,
+        nodes: List[Dict],
+        edges: List[Dict],
+        target_node_id: str,
+        *,
+        ctx: Optional[ArricchisciExecutionContext] = None,
+    ) -> Optional[str]:
         """
         Risolve il path originale del file dal nodo file_source collegato.
 
         Cerca il nodo sorgente collegato via edge al target_node_id.
         Se è un file_source, trova il file originale nel file system.
         Se è un project_source, trova l'ultimo output del progetto.
+
+        BE-GO-READY-TRANSFORMATION-ENGINE-019: accetta `ctx` come
+        kwarg opzionale; il `group_id` viene letto da `ctx` se
+        fornito (Phase 2), altrimenti fallback a singleton state
+        (KEEP_COMPAT).
         """
         # Trova edge in ingresso
         input_edge = next((e for e in edges if e['target'] == target_node_id), None)
@@ -1009,7 +1059,7 @@ class ApiConnectionRestFileMixin:
 
         if source_node.get('type') == 'file_source':
             file_source_id = _nd(source_node, 'file_source_id')
-            return self._resolve_file_source_id_path(file_source_id)
+            return self._resolve_file_source_id_path(file_source_id, ctx=ctx)
 
         elif source_node.get('type') == 'project_source':
             source_project_id = _nd(source_node, 'source_project_id')
@@ -1021,7 +1071,7 @@ class ApiConnectionRestFileMixin:
             # niente accesso diretto ad ArtifactResolver. Senza
             # _current_group_id rifiutiamo esplicitamente: meglio
             # errore visibile che leak silente.
-            executing_group_id = getattr(self, '_current_group_id', None)
+            executing_group_id = _resolve_rest_file_group_id(self, ctx)
             if not executing_group_id:
                 logger.error(
                     f"[SECURITY] _resolve_file_source_path: group_id "
@@ -1064,6 +1114,8 @@ class ApiConnectionRestFileMixin:
         target_node_id: str,
         node_results: Optional[Dict] = None,
         materialize_format: str = "xlsx",
+        *,
+        ctx: Optional[ArricchisciExecutionContext] = None,
     ) -> tuple:
         """Risolve il path di input per un nodo file-processor (rest_file)
         accettando come predecessore anche un api_enrich o un altro file-processor.
@@ -1146,4 +1198,6 @@ class ApiConnectionRestFileMixin:
                     return (data_bytes, filename), False
 
         # Fallback: comportamento classico (file_source / project_source)
-        return self._resolve_file_source_path(nodes, edges, target_node_id), False
+        return self._resolve_file_source_path(
+            nodes, edges, target_node_id, ctx=ctx,
+        ), False

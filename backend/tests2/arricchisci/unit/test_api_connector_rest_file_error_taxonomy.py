@@ -114,7 +114,10 @@ def test_file_source_forbidden_returns_structured_error_kind(service, minimal_ap
         },
     }
 
-    def _raise_forbidden(fs_id):
+    def _raise_forbidden(fs_id, **_kwargs):
+        # BE-GO-READY-TRANSFORMATION-ENGINE-019: il chiamante passa
+        # `ctx=...` come kwarg dopo Phase 2; accettiamo `**_kwargs`
+        # per preservare la firma flessibile del side_effect.
         raise ValueError(
             f"Accesso negato: il file sorgente '{fs_id}' non appartiene al tuo gruppo"
         )

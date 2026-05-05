@@ -169,7 +169,7 @@ def _clear_failed_logins(ip: str):
 # STRUCT-005 Seam D: la logica vive in `app.shared.jwt_token`.
 # Qui restano i re-export per backward-compat con i test
 # (`auth_mod.SECRET_KEY`, `auth_mod.create_access_token`, ...) e con
-# `auth_middleware.py` che fa `from app.core.auth.auth import decode_token`.
+# i consumer legacy che importano ancora JWT helpers dalla facade.
 #
 # Payload contract invariato: sub/username/group_id/role/exp/iat/jti.
 # Algoritmo: HS256. Policy SECRET_KEY invariata (RuntimeError prod/staging,

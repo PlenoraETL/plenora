@@ -54,6 +54,43 @@ _PSYCOPG2_SSL_ENV_VARS: tuple[str, ...] = (
 )
 
 
+# BE-GO-READY-BOOTSTRAP-ENGINE-013-DEPENDENCY-GRAPH-LOCK.
+# Typed completion flag. Flipped to True only after all four
+# canonical bootstrap steps have returned successfully. Reset on
+# `teardown()` so a hot-reload / test-harness can re-bootstrap.
+#
+# Intentionally NOT a DI container: this is a single boolean used
+# only as a read-only "boundary completed" indicator. Writers stay
+# in this module; readers consume `is_bootstrapped()` and never
+# mutate the flag directly. Drift guard lives in
+# `tests2/shared/test_bootstrap_dependency_graph_lock.py`.
+_BOOT_COMPLETE: bool = False
+
+
+def is_bootstrapped() -> bool:
+    """Return True iff `bootstrap()` has completed successfully.
+
+    Read-only boundary. Writers MUST go through `bootstrap()` /
+    `teardown()`; consumers should treat the value as a transient
+    process-local fact (process restart resets to False, then the
+    next `bootstrap()` flips it).
+
+    Use cases:
+      - observability probes (e.g. `/ready` can refuse traffic until
+        bootstrap completes — not wired here, owner of `/ready` is
+        `app.observability.health` and integrates as a follow-up);
+      - test harness (assert the bootstrap path actually flipped
+        the flag after a fake-stubbed run).
+
+    The flag does NOT replace the underlying steps' own readiness
+    semantics: PG pool init / Redis ping / storage config validity
+    each have their own observability surface. `is_bootstrapped()`
+    is the single source of truth for "the four-step boundary has
+    been crossed at least once in this process".
+    """
+    return _BOOT_COMPLETE
+
+
 def _repair_psycopg2_ssl_env() -> None:
     """Pop the three SSL env vars that psycopg2 tends to set.
 
@@ -71,7 +108,15 @@ def bootstrap() -> None:
     """Run the four boot side effects in their canonical order.
 
     See module docstring for contract details.
+
+    BE-GO-READY-BOOTSTRAP-ENGINE-013: on successful completion,
+    flips `_BOOT_COMPLETE` to True (read via `is_bootstrapped()`).
+    On exception from any step the flag stays at its current value —
+    a partial bootstrap is NOT marked complete, and a re-run after
+    a transient failure can still flip it on success.
     """
+    global _BOOT_COMPLETE
+
     # Local imports keep the module load cheap (no transitive
     # `app.config` / `app.shared.cloud_backends` / `app.db.db_service`
     # work until the function is actually invoked). Important for
@@ -100,6 +145,11 @@ def bootstrap() -> None:
     # avviene quando psycopg2 apre la prima connessione.
     _repair_psycopg2_ssl_env()
 
+    # 5. Mark boundary crossed. Set LAST so any exception from
+    # steps 1-4 leaves the flag at its prior value — there is no
+    # path that can flip the flag with an incomplete bootstrap.
+    _BOOT_COMPLETE = True
+
 
 def teardown() -> None:
     """Run shutdown side effects in their canonical order.
@@ -108,7 +158,15 @@ def teardown() -> None:
     it preserves the current `main.lifespan()` behavior by closing only
     the PostgreSQL pool. Do not add new shutdown side effects here
     without a dedicated audit/contract update.
+
+    BE-GO-READY-BOOTSTRAP-ENGINE-013: resets `_BOOT_COMPLETE` so
+    `is_bootstrapped()` correctly reflects "post-shutdown" state.
+    Test harnesses that exercise the full lifecycle can therefore
+    observe the flag transitions False → True → False.
     """
+    global _BOOT_COMPLETE
+
     from app.db.pg_connection import close_pool
 
     close_pool()
+    _BOOT_COMPLETE = False

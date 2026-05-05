@@ -204,11 +204,45 @@ import pandas as pd
 
 from app.config import settings
 from app.core.arricchisci._api_connection_helpers import _nd
+from app.core.arricchisci.execution_context import (
+    ArricchisciExecutionContext,
+)
 from app.utils.dataframe import (
     filter_visible_columns,
     find_latest_output_file,
 )
 from app.utils.logger import get_logger
+
+
+def _resolve_group_id(
+    self_obj,
+    ctx: Optional[ArricchisciExecutionContext],
+) -> Optional[str]:
+    """BE-GO-READY-TRANSFORMATION-ENGINE-019: helper di transizione.
+
+    Ritorna `ctx.group_id` se il caller ha passato un context tipato
+    (Phase 2), altrimenti fallback a
+    `getattr(self_obj, "_current_group_id", None)` (KEEP_COMPAT
+    Phase 1).
+
+    Permette di migrare i 6 reader site uno per uno senza rompere
+    consumer esterni (`enrichment_task.py`, test setup) che ancora
+    fanno direct mutation sullo stato singleton.
+    """
+    if ctx is not None:
+        return ctx.group_id
+    return getattr(self_obj, "_current_group_id", None)
+
+
+def _resolve_preview_limit(
+    self_obj,
+    ctx: Optional[ArricchisciExecutionContext],
+) -> Optional[int]:
+    """BE-GO-READY-TRANSFORMATION-ENGINE-019: speculare a
+    `_resolve_group_id` per `_preview_limit`."""
+    if ctx is not None:
+        return ctx.preview_limit
+    return getattr(self_obj, "_preview_limit", None)
 
 # Stesso logger name di `api_connector.py` (`__name__` valuta a
 # `"app.core.arricchisci.api_connector"`). Singleton stdlib per nome →
@@ -344,13 +378,26 @@ class ApiConnectionSourceLoadingMixin:
         )
         return load_dataframe_from_file(output_file)
 
-    def _load_source_project(self, node_data: Dict, force_recalculate: bool = False) -> pd.DataFrame:
+    def _load_source_project(
+        self,
+        node_data: Dict,
+        force_recalculate: bool = False,
+        *,
+        ctx: Optional[ArricchisciExecutionContext] = None,
+    ) -> pd.DataFrame:
         """Carica dati dal progetto sorgente via SourceLoader.
 
         Cross-tenant fail-closed delegato al loader (che a sua volta
         delega ad ArtifactResolver). Recompute upstream + fallback
         filesystem restano qui perche' sono specifici di api_connector
         (manipola usa orchestrator_callback).
+
+        BE-GO-READY-TRANSFORMATION-ENGINE-019: accetta `ctx` come
+        kwarg opzionale. Se fornito, il `group_id` viene letto dal
+        context tipato (Phase 2). KEEP_COMPAT: se `ctx is None`,
+        fallback a `getattr(self, "_current_group_id", None)` per
+        consumer esterni che ancora fanno direct mutation
+        (`workers/tasks/enrichment_task.py`, test setup).
         """
         from app.core.artifacts import (
             SourceLoader,
@@ -369,7 +416,7 @@ class ApiConnectionSourceLoadingMixin:
         if not source_project_id:
             raise ValueError("source_project_id non specificato")
 
-        executing_group_id = getattr(self, '_current_group_id', None)
+        executing_group_id = _resolve_group_id(self, ctx)
         if not executing_group_id:
             raise ValueError(
                 "Contesto di sicurezza non determinabile (group_id mancante)"
@@ -438,12 +485,22 @@ class ApiConnectionSourceLoadingMixin:
         logger.info(f"Caricato progetto {source_project_id}: {len(df)} righe")
         return df
 
-    def _load_file_source(self, node_data: Dict) -> pd.DataFrame:
+    def _load_file_source(
+        self,
+        node_data: Dict,
+        *,
+        ctx: Optional[ArricchisciExecutionContext] = None,
+    ) -> pd.DataFrame:
         """Carica dati da file source via SourceLoader.
 
         Visibility check + preserve GeoDataFrame (per non perdere il
         CRS lungo le trasformazioni downstream) sono garantiti dal
         loader unico.
+
+        BE-GO-READY-TRANSFORMATION-ENGINE-019: accetta `ctx` come
+        kwarg opzionale. `group_id` e `preview_limit` vengono letti
+        da `ctx` se fornito, altrimenti fallback a singleton state
+        (KEEP_COMPAT).
         """
         from app.core.artifacts import (
             SourceLoader,
@@ -461,7 +518,7 @@ class ApiConnectionSourceLoadingMixin:
         if not file_source_id:
             raise ValueError("file_source_id non specificato")
 
-        executing_group_id = getattr(self, '_current_group_id', None)
+        executing_group_id = _resolve_group_id(self, ctx)
         if not executing_group_id:
             raise ValueError(
                 "Contesto di sicurezza non determinabile (group_id mancante)"
@@ -476,7 +533,7 @@ class ApiConnectionSourceLoadingMixin:
             raise ValueError(str(e)) from e
 
         # Tronca per preview (opzionale)
-        _plimit = getattr(self, '_preview_limit', None)
+        _plimit = _resolve_preview_limit(self, ctx)
         if _plimit and isinstance(_plimit, int) and _plimit > 0:
             df = df.head(_plimit)
 
@@ -492,11 +549,22 @@ class ApiConnectionSourceLoadingMixin:
         )
         return df
 
-    def _load_static_values(self, node_data: Dict) -> pd.DataFrame:
+    def _load_static_values(
+        self,
+        node_data: Dict,
+        *,
+        ctx: Optional[ArricchisciExecutionContext] = None,
+    ) -> pd.DataFrame:
         """Carica dati da nodo StaticValues via SourceLoader.
 
         Le variabili template ({{NOW}}, {{TODAY}}, ecc.) vengono
         processate dentro il loader.
+
+        BE-GO-READY-TRANSFORMATION-ENGINE-019: accetta `ctx`
+        opzionale. Lo static branch non ha tenant binding semantico
+        (processing puro di template variables); il `group_id` viene
+        usato solo per soddisfare la guardia del loader, con
+        fallback a `"_static_"`.
         """
         from app.core.artifacts import SourceLoader, SourceRef
 
@@ -512,7 +580,7 @@ class ApiConnectionSourceLoadingMixin:
         # se disponibile, oppure un placeholder costante (lo static
         # non ha tenant binding semantico, e' processing puro di
         # template variables).
-        executing_group_id = getattr(self, '_current_group_id', None) or "_static_"
+        executing_group_id = _resolve_group_id(self, ctx) or "_static_"
         return SourceLoader().load(ref, expected_group_id=executing_group_id)
 
     # =========================================================================

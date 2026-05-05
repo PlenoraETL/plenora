@@ -22,8 +22,10 @@ continuano a funzionare invariati.
 
 Cycle prevention:
   - `CurrentUser` viene da `app.core.auth.models` (leaf module).
-  - `ROLES_ADMIN_OR_ABOVE` e' importato lazy dentro `_check_ownership`
-    (pattern gia' usato altrove in auth.py per `mfa`/`request_utils`).
+  - `ROLES_ADMIN_OR_ABOVE` viene da `app.core.auth.roles` (leaf module
+    senza dipendenze app — vedi roles.py:1). BE-GO-READY-AUTH-ENGINE-005
+    ha promosso questo import da lazy a eager (top-level): la facade
+    `auth.py` non e' piu' nella catena.
   - `app.shared.sharing` resta lazy dentro `assert_resource_visible`.
 """
 
@@ -34,6 +36,7 @@ from fastapi import HTTPException
 import app.db.db_service as db
 from app.core.auth import disclosure as _disclosure
 from app.core.auth.models import CurrentUser
+from app.core.auth.roles import ROLES_ADMIN_OR_ABOVE
 
 
 def _extract_group_and_id(resource):
@@ -222,11 +225,6 @@ def _check_ownership(
     - 403 se l'utente non è del gruppo (a meno che superadmin).
     - 403 se l'utente non è owner E non è admin/superadmin.
     """
-    # Lazy import: evita cycle `auth.py ↔ ownership.py` (auth re-esporta
-    # da ownership, ownership leggerebbe ROLES_ADMIN_OR_ABOVE da auth).
-    # Pattern gia' usato in auth.py (mfa, request_utils lazy).
-    from app.core.auth.auth import ROLES_ADMIN_OR_ABOVE
-
     if not resource:
         raise HTTPException(status_code=404, detail=f"{resource_label} non trovato")
 

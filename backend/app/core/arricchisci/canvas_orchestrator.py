@@ -275,7 +275,7 @@ def execute_canvas_enrichment(
     propagato a `_write_intermediate_snapshot`. None = bit-compat.
     """
     try:
-        init_execution_context(svc, project_id, preview_limit)
+        ctx = init_execution_context(svc, project_id, preview_limit)
 
         nodes = canvas.get("nodes", [])
         edges = canvas.get("edges", [])
@@ -317,8 +317,11 @@ def execute_canvas_enrichment(
                 logger.debug(f"Esecuzione nodo: {node_id} ({node_type})")
 
                 if node_type == "project_source":
+                    # BE-GO-READY-TRANSFORMATION-ENGINE-019: Phase 2 —
+                    # passa il typed `ctx` al posto di affidarsi al
+                    # singleton state.
                     node_results[node_id] = svc._load_source_project(
-                        node_data, force_recalculate
+                        node_data, force_recalculate, ctx=ctx,
                     )
 
                 elif node_type == "file_source":
@@ -330,10 +333,16 @@ def execute_canvas_enrichment(
                             "file_source_id": _nd(node, "file_source_id"),
                         }
                     else:
-                        node_results[node_id] = svc._load_file_source(node_data)
+                        # BE-GO-READY-TRANSFORMATION-ENGINE-019: typed ctx.
+                        node_results[node_id] = svc._load_file_source(
+                            node_data, ctx=ctx,
+                        )
 
                 elif node_type == "staticValues":
-                    node_results[node_id] = svc._load_static_values(node_data)
+                    # BE-GO-READY-TRANSFORMATION-ENGINE-019: typed ctx.
+                    node_results[node_id] = svc._load_static_values(
+                        node_data, ctx=ctx,
+                    )
 
                 elif node_type == "result":
                     input_edge = next(
@@ -418,9 +427,13 @@ def execute_canvas_enrichment(
                     if ctype == "rest_file":
                         # Esegui in sequenza prima del gruppo parallelo
                         if should_execute_node(nd, input_df):
+                            # BE-GO-READY-TRANSFORMATION-ENGINE-019:
+                            # typed ctx threaded through il rest-file
+                            # pipeline (group_id letto da `ctx` invece
+                            # di singleton).
                             result = svc._execute_rest_file(
                                 nd, api_cfg, nodes, edges, nid, project_id,
-                                node_results=node_results,
+                                node_results=node_results, ctx=ctx,
                             )
                             if isinstance(result, dict) and not result.get(
                                 "success", True
