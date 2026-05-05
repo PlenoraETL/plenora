@@ -391,6 +391,11 @@ orchestrator = _runtime_services.orchestrator
 # `app.core.arricchisci.api_connector.api_connection_service`. Il
 # patch surface esistente continua a funzionare invariata.
 api_connection_service = _runtime_services.api_connection_service
+# BE-GO-READY-BOOTSTRAP-ENGINE-017-DATASOURCE-SLICE: il singleton
+# `datasource_service` ora vive esplicitamente nel container.
+# Identita' preservata: e' il MEDESIMO oggetto del canonical
+# module-level `app.core.datasources.service.datasource_service`.
+datasource_service = _runtime_services.datasource_service
 
 
 # ==================== INIT MODULI ====================
@@ -412,7 +417,11 @@ from app.core.logs.router import router as logs_router
 from app.core.logs.runs_router import router as runs_router
 from app.core.datasources.router import router as datasources_router, init_datasources
 from app.core.intermediate.router import router as intermediate_router
-from app.core.datasources.service import datasource_service
+# BE-GO-READY-BOOTSTRAP-ENGINE-017: `datasource_service` is now
+# bound at module-top from the runtime container (see line ~395).
+# The previous `from app.core.datasources.service import
+# datasource_service` is removed; identity is preserved (same
+# singleton, exposed via `_runtime_services.datasource_service`).
 from app.core.eseguibili.router import router as eseguibili_router
 from app.core.imdf.router import router as imdf_router
 from app.core.auth.shares_router import router as shares_router

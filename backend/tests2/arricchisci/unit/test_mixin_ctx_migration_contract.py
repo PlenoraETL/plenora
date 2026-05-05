@@ -478,3 +478,88 @@ def test_canvas_orchestrator_init_returns_ctx_used_in_dispatch():
         "Atteso assignment `ctx = init_execution_context(...)` nel "
         "body di `execute_canvas_enrichment`."
     )
+
+
+# ---------------------------------------------------------------------------
+# rest_file legacy helper removal (BE-GO-READY-TRANSFORMATION-ENGINE-027)
+# ---------------------------------------------------------------------------
+
+
+def test_rest_file_legacy_resolve_helper_is_removed():
+    """BE-GO-READY-TRANSFORMATION-ENGINE-027 lock:
+    `_resolve_rest_file_group_id` (legacy helper introdotto in
+    -019, sostituito da `_extract_file_source_group_id` /
+    `_extract_project_source_group_id` strict helpers in -024/-026)
+    NON deve piu' esistere come definizione attiva nel modulo.
+
+    Verifica AST-bound: nessun `def _resolve_rest_file_group_id`
+    a livello modulo. Le menzioni in docstring/commenti restano
+    ammesse (documentazione storica della removal).
+
+    Rationale: l'helper legacy mescolava il path Phase 2 (typed
+    ctx) con il fallback singleton in modo *implicito*. La sua
+    presenza, anche dead, sarebbe un foot-gun: future modifiche
+    potrebbero re-introdurla come "scorciatoia" perdendo il
+    fail-closed strict per i path file_source/project_source. Il
+    lock previene la reintroduzione."""
+    import ast
+
+    src_path = (
+        _BACKEND_ROOT / "app" / "core" / "arricchisci"
+        / "api_connection_rest_file.py"
+    )
+    src = src_path.read_text(encoding="utf-8")
+    tree = ast.parse(src)
+
+    forbidden_def_names = {"_resolve_rest_file_group_id"}
+
+    violations = []
+    for node in ast.walk(tree):
+        # Catch both module-level FunctionDef and any nested
+        # def. We don't expect nested defs of this name, but be
+        # defensive against future refactors.
+        if isinstance(node, ast.FunctionDef) and node.name in forbidden_def_names:
+            violations.append((node.name, node.lineno))
+
+    assert not violations, (
+        f"REGRESSIONE BE-GO-READY-TRANSFORMATION-ENGINE-027: "
+        f"helper legacy reintrodotto: {violations}. "
+        f"Usare invece `_extract_file_source_group_id` (strict, "
+        f"per file_source path) o `_extract_project_source_group_id` "
+        f"(strict, per project_source path). Il legacy helper "
+        f"mescolava Phase 2 (ctx) e fallback singleton in modo "
+        f"implicito — foot-gun rimosso intenzionalmente in -027."
+    )
+
+
+def test_rest_file_strict_helpers_still_present():
+    """Lock complementare al test sopra: assicura che le
+    rimpiazzanti strict (`_extract_file_source_group_id`,
+    `_extract_project_source_group_id`) siano ancora presenti
+    come definizioni a livello modulo. Senza questo lock, una
+    rimozione accidentale di entrambe (legacy + strict) lascierebbe
+    il file privo di un boundary di resolve esplicito."""
+    import ast
+
+    src_path = (
+        _BACKEND_ROOT / "app" / "core" / "arricchisci"
+        / "api_connection_rest_file.py"
+    )
+    src = src_path.read_text(encoding="utf-8")
+    tree = ast.parse(src)
+
+    expected = {
+        "_extract_file_source_group_id",
+        "_extract_project_source_group_id",
+    }
+    found = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name in expected:
+            found.add(node.name)
+
+    missing = expected - found
+    assert not missing, (
+        f"Strict helper rimpiazzanti mancanti: {missing}. "
+        f"Atteso: i 2 helper ctx-strict introdotti in -024/-026 "
+        f"per i path file_source / project_source."
+    )

@@ -39,12 +39,12 @@ from app.core.auth.auth import (
     require_project_owner,
     require_superadmin,
 )
-# BE-GO-READY-AUTH-ENGINE-010 Phase-5 + AUTH-ENGINE-011:
-# `CurrentUser`, `assert_group_access`, and `group_filter` consumed
-# directly from their canonical leaf modules. Facade KEEP_COMPAT
-# re-exports preserved.
-from app.core.auth.models import CurrentUser
-from app.core.auth.ownership import assert_group_access, group_filter
+# BE-GO-READY-AUTH-ENGINE-012: pure-contract symbols
+# (`CurrentUser`, `group_filter`) consumed from
+# `app.shared.contracts.auth`. DB-bound `assert_group_access`
+# stays on `app.core.auth.ownership`.
+from app.shared.contracts.auth import CurrentUser, group_filter
+from app.core.auth.ownership import assert_group_access
 from .models import ProjectCreate
 
 class ProjectCreateWithCanvas(ProjectCreate):

@@ -570,6 +570,138 @@ target - if a future refactor silently removes a probe or the
 ASCII-only invariant, the lock test fails before the operator ever
 sees a regressed installer.
 
+### 12.6 Real worker enqueue/dequeue smoke (DESIGN, NOT IMPLEMENTED)
+
+`BE-GO-READY-INSTALLATION-018-CELERY-WORKER-ENQUEUE-SMOKE-DESIGN`.
+
+The CI cleanroom probe added by INSTALLATION-014 covers worker
+import + broker connectivity + beat scheduler symbol. It does NOT
+spawn a real `celery worker` process and does NOT enqueue or
+dequeue a real task. This section documents the **exact missing
+primitive** that blocks closure of that gap and the bounded smoke
+pattern that should land once the primitive exists. The design is
+locked by `backend/tests2/shared/test_celery_enqueue_smoke_design_guard.py`
+so the gap cannot be silently forgotten.
+
+#### 12.6.1 Audit: what completion signals exist today
+
+The cleanroom stack already has the deterministic primitives a
+sleep-free smoke needs:
+
+- **Redis result backend**: `CELERY_RESULT_BACKEND=redis://...` is
+  set in `ci-cleanroom.yml` env, so `AsyncResult.get(timeout=N)`
+  blocks until the task completes (or `N` seconds elapse) by
+  reading the backend - sleep-free from the test's perspective.
+- **`task_track_started=True`** is on (`backend/workers/celery_app.py`),
+  so `STARTED` is observable.
+- **`task_send_sent_event=True`** is on, so the publisher side has
+  a definite "sent" event.
+
+The bounded smoke pattern is therefore:
+
+```bash
+# In ci-cleanroom.yml, AFTER the existing Celery readiness step:
+celery -A workers.celery_app worker \
+    --pool=solo --loglevel=info -Q celery -n cleanroom@%h \
+    > .cleanroom-logs/worker.log 2>&1 &
+echo $! > .cleanroom-logs/worker.pid
+python - <<'PYEOF'
+from workers.celery_app import celery_app
+ar = celery_app.send_task("cleanroom.ping")
+result = ar.get(timeout=30)   # bounded, sleep-free
+assert result == "pong", f"got {result!r}"
+PYEOF
+kill "$(cat .cleanroom-logs/worker.pid)" || true
+```
+
+`--pool=solo` avoids prefork complexity; `-Q celery -n cleanroom@%h`
+isolates the worker; `AsyncResult.get(timeout=30)` uses Redis
+backend polling internally with no shell sleep loop.
+
+#### 12.6.2 Blocker: the missing primitive
+
+There is no test-only / no-op task registered with `celery_app`.
+Every existing task in `workers/tasks/*.py` requires real domain
+state (group_id, project_id, file_source_id, real PG rows) and has
+side effects (DB writes, file I/O, S3 uploads) that are not safe
+to exercise in a cleanroom smoke. `beat_heartbeat` is the closest
+candidate but is `ignore_result=True`, so `AsyncResult.get(...)`
+cannot observe its completion.
+
+The minimal primitive required is a single task:
+
+```python
+# in backend/workers/tasks/cleanroom_task.py (NEW file)
+from workers.celery_app import celery_app
+
+@celery_app.task(name="cleanroom.ping", ignore_result=False, bind=False)
+def cleanroom_ping() -> str:
+    """Cleanroom smoke task - pure no-op, no DB, no file, no
+    network. Returns the literal "pong" so an enqueue/dequeue
+    smoke can assert end-to-end task transit via AsyncResult."""
+    return "pong"
+```
+
+Hard contract:
+
+- pure no-op: NO `app.db.*`, `app.config`, file I/O, `requests`, or
+  any other side-effecting import in the task module;
+- `ignore_result=False`: the result must round-trip through the
+  Redis backend so `AsyncResult.get` returns it;
+- name `"cleanroom.ping"`: stable, namespaced, will not collide
+  with production task names;
+- module file `workers/tasks/cleanroom_task.py` and entry in the
+  `include=[...]` list of `workers/celery_app.py`;
+- task is the ONLY symbol exported from the module - no helpers,
+  no constants, no transitive imports.
+
+#### 12.6.3 Why this is a separate stream
+
+Adding a runtime task module is an app-code change, even if the
+task body is trivial. It deserves its own stream because:
+
+- the task module joins the Celery `include=[...]` and therefore
+  must satisfy the existing INSTALLATION-014 lock test (which
+  verifies the 5 canonical task modules);
+- production worker startup will load it (zero-cost but non-zero
+  surface);
+- the cleanroom workflow step that spawns a worker MUST teardown
+  cleanly even on `/ready` failure (`if: always()` already
+  established for the existing backend teardown);
+- the smoke and the task land together in the same change so the
+  lock test transitions from "primitive missing" to "primitive +
+  smoke present" atomically.
+
+The next bounded stream is
+`BE-GO-READY-INSTALLATION-019-CELERY-WORKER-ENQUEUE-SMOKE-IMPL`,
+which:
+
+1. Adds `backend/workers/tasks/cleanroom_task.py` with the contract
+   in 12.6.2;
+2. Updates `backend/workers/celery_app.py` `include=[...]` to
+   register it;
+3. Updates `backend/tests2/shared/test_celery_cleanroom_readiness_guard.py`
+   to expect the 6th include module;
+4. Adds the workflow step `Verify Celery worker enqueue smoke`
+   between the existing readiness step and `Stop backend`,
+   following the bounded pattern in 12.6.1;
+5. Updates `backend/tests2/shared/test_celery_enqueue_smoke_design_guard.py`
+   to flip from "primitive missing" to "primitive + smoke present".
+
+#### 12.6.4 What stays open after 019
+
+Even after 019 lands, two further gaps remain:
+
+- **Beat schedule tick smoke**: requires seeded PG `schedules`
+  rows and a deterministic "tick fired" signal (today the only
+  signal is the `beat_heartbeat` task, but it is
+  `ignore_result=True`). Closure path:
+  `INSTALLATION-020-CELERY-BEAT-TICK-SMOKE`.
+- **Prefork worker smoke**: 019 uses `--pool=solo` to avoid the
+  fork/process-init complexity. A separate smoke under the
+  production prefork pool would catch the W2 fork-unsafe pool
+  class of bugs but is not blocked work today.
+
 ---
 
 ## 13. Related docs

@@ -542,7 +542,12 @@ def test_phase2_imdf_lazy_assert_resource_visible_kept_on_facade_residual():
 @pytest.mark.parametrize(
     "path",
     [
-        _APP / "core" / "logs" / "router.py",
+        # logs/router.py was Phase-7 migrated to the contract module
+        # (`app.shared.contracts.auth`). Removed from the Phase-3
+        # `models` direct-leaf list — Phase-7 supersedes Phase-3 for
+        # this file (the contract re-exports `CurrentUser` from the
+        # models leaf, so the canonical implementation home is
+        # unchanged; only the consumer-facing source moved).
         _APP / "core" / "logs" / "runs_router.py",
         _APP / "core" / "estrai" / "router.py",
         _APP / "core" / "manipola" / "api" / "transforms_api.py",
@@ -552,7 +557,10 @@ def test_phase2_imdf_lazy_assert_resource_visible_kept_on_facade_residual():
 )
 def test_phase3_imports_currentuser_from_models_leaf(path: Path):
     """Every Phase-3 migrated file must import `CurrentUser` from the
-    leaf `app.core.auth.models`."""
+    leaf `app.core.auth.models`. Phase-7 migrated files (logs/router,
+    intermediate/router, projects/router, scheduler/router) consume
+    the contract instead — locked by
+    `test_auth_shared_contract_module_contract.py`."""
     text = path.read_text(encoding="utf-8")
     assert "from app.core.auth.models import CurrentUser" in text, (
         f"{path.name} must import CurrentUser from app.core.auth.models "

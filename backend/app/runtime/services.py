@@ -63,6 +63,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from app.core.arricchisci.api_connector import ApiConnectionService
+    from app.core.datasources.service import DataSourceService
     from app.core.estrai.database_inspector import DatabaseInspector
     from app.core.estrai.query_generator import QueryGenerator
     from app.core.features.features_service import FeaturesService
@@ -104,6 +105,15 @@ class RuntimeServices:
         public import path + the test monkeypatch surface
         (`patch("app.core.arricchisci.api_connector.api_connection_service.<method>", ...)`)
         are preserved. Identity invariant locked by contract test.
+      - `datasource_service`: datasources singleton (added by
+        BE-GO-READY-BOOTSTRAP-ENGINE-017). Same "wrap, don't move"
+        strategy as `api_connection_service`: identity-preserving
+        re-export of the canonical
+        `app.core.datasources.service.datasource_service` singleton.
+        Construction stays at the module level
+        (`service.py:440`); the container exposes the SAME object.
+        `init_datasources(service)` consumes the container's field
+        in `main.py`, no router-side change required.
     """
 
     project_service: "ProjectService"
@@ -114,6 +124,7 @@ class RuntimeServices:
     features_service: "FeaturesService"
     orchestrator: "OrchestratorService"
     api_connection_service: "ApiConnectionService"
+    datasource_service: "DataSourceService"
 
 
 def build_runtime_services(
@@ -171,6 +182,17 @@ def build_runtime_services(
     # test.
     from app.core.arricchisci.api_connector import api_connection_service
 
+    # BE-GO-READY-BOOTSTRAP-ENGINE-017-DATASOURCE-SLICE: stesso
+    # pattern wrap-don't-move per `datasource_service`. Costruzione
+    # canonica resta a `app/core/datasources/service.py:440`. Il
+    # singleton e' consumato oggi solo da `app/main.py` (import +
+    # `init_datasources(service)`); nessun test patcha la canonical
+    # path (i test del modulo costruiscono `DataSourceService()`
+    # fresco). Strategia conservativa: identity preservata, futuri
+    # test che dovessero patchare `app.core.datasources.service.datasource_service`
+    # avrebbero lo stesso behavior.
+    from app.core.datasources.service import datasource_service
+
     project_service = ProjectService()
     connection_service = ConnectionService()
     database_inspector = DatabaseInspector()
@@ -198,4 +220,5 @@ def build_runtime_services(
         features_service=features_service,
         orchestrator=orchestrator,
         api_connection_service=api_connection_service,
+        datasource_service=datasource_service,
     )

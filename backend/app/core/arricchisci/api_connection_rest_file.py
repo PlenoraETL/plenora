@@ -279,22 +279,6 @@ from app.shared.exceptions import FileSourceResolutionError
 from app.utils.logger import get_logger
 
 
-def _resolve_rest_file_group_id(
-    self_obj,
-    ctx: Optional[ArricchisciExecutionContext],
-) -> Optional[str]:
-    """BE-GO-READY-TRANSFORMATION-ENGINE-019: speculare a
-    `_resolve_group_id` in `api_connection_source_loading.py`.
-
-    Ritorna `ctx.group_id` se Phase 2 (typed context fornito),
-    altrimenti `getattr(self_obj, "_current_group_id", None)`
-    (KEEP_COMPAT Phase 1).
-    """
-    if ctx is not None:
-        return ctx.group_id
-    return getattr(self_obj, "_current_group_id", None)
-
-
 def _extract_file_source_group_id(
     self_obj,
     ctx: Optional[ArricchisciExecutionContext],
@@ -303,7 +287,18 @@ def _extract_file_source_group_id(
     per la catena di risoluzione `file_source` (chiamata da
     `_assert_file_source_group_access` → `_resolve_file_source_id_path`).
 
-    Differenza vs `_resolve_rest_file_group_id`:
+    Storia: in batch -019 esisteva un primo helper
+    `_resolve_rest_file_group_id` (legacy fallback uniforme:
+    ctx.group_id se ctx, altrimenti singleton). In -024 lo strict
+    `_extract_file_source_group_id` ha sostituito il legacy helper
+    nei 2 path file_source/project_source. In -027 il helper
+    legacy `_resolve_rest_file_group_id` e' stato **rimosso come
+    dead code** (zero callsite attivi, verificato source-bound).
+    Lock di prevenzione re-introduzione vive in
+    `tests2/arricchisci/unit/test_mixin_ctx_migration_contract.py`
+    (vedi sezione "rest_file legacy helper removal").
+
+    Behavior:
       - **Ctx fornito**: ritorna `ctx.group_id` esclusivamente.
         Se il caller passa `ctx`, lo stato singleton legacy NON
         viene mai consultato — anche se `ctx.group_id is None`
@@ -1154,8 +1149,8 @@ class ApiConnectionRestFileMixin:
             # il branch project_source. Quando `ctx` e' fornito,
             # `ctx.group_id` vince sempre — anche se None — e lo
             # stato singleton legacy NON viene mai consultato. Chiude
-            # il residual TE24-R1 (`_resolve_file_source_path`
-            # project_source path ancora su `_resolve_rest_file_group_id`).
+            # il residual TE24-R1 (project_source path migrato a
+            # strict helper).
             executing_group_id = _extract_project_source_group_id(self, ctx)
             if not executing_group_id:
                 logger.error(

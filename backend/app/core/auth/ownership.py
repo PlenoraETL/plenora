@@ -31,8 +31,6 @@ Cycle prevention:
 
 from __future__ import annotations
 
-from typing import Optional
-
 from fastapi import HTTPException
 
 import app.db.db_service as db
@@ -48,21 +46,19 @@ def _extract_group_and_id(resource):
     return getattr(resource, "group_id", None), getattr(resource, "id", None)
 
 
-def group_filter(current_user: CurrentUser) -> Optional[str]:
-    """
-    Ritorna il group_id da usare come filtro.
-    superadmin → None (nessun filtro, vede tutto)
-    altri      → current_user.group_id
-
-    BE-GO-READY-AUTH-ENGINE-011 (canonical home): pure policy
-    helper, zero side effects, zero `app.*` imports beyond
-    `CurrentUser` (`app.core.auth.models`). Re-exported by the
-    `app.core.auth.auth` facade for KEEP_COMPAT (the 9 router
-    callsites pull this leaf directly post-Phase-6).
-    """
-    if current_user.role == "superadmin":
-        return None
-    return current_user.group_id
+# BE-GO-READY-AUTH-ENGINE-012-SHARED-CONTRACT-BOUNDARY: canonical
+# home for `group_filter` moved to the pure `app.shared.contracts.auth`
+# module. `ownership.py` re-exports for KEEP_COMPAT so the
+# `app.core.auth.auth` facade chain (auth → ownership → contract)
+# still resolves the symbol. Reason for the move: `ownership.py`
+# imports `app.db.db_service` for `compute_can_edit` /
+# `assert_can_modify`, which would violate the contract module's
+# purity rule (no DB-bound transitive deps on a contract). Identity
+# preserved: `auth.group_filter is ownership.group_filter is
+# contract.group_filter` — locked by
+# `tests2/security/unit/test_auth_facade_strangler_contract.py::
+# test_group_filter_leaf_canonical_home`.
+from app.shared.contracts.auth import group_filter  # noqa: F401
 
 
 def assert_group_access(
