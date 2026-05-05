@@ -131,14 +131,21 @@ def _superadmin_user():
 
 def test_reset_password_nonsuperadmin_user_not_found_returns_403(monkeypatch):
     """C10: admin non-superadmin su user_id inesistente DEVE ricevere 403,
-    non 404. Altrimenti puo' enumerare utenti del gruppo altrui."""
-    from app.core.auth import auth as auth_mod
+    non 404. Altrimenti puo' enumerare utenti del gruppo altrui.
 
-    monkeypatch.setattr(auth_mod.db, "get_user", lambda uid: None)
+    BE-GO-READY-AUTH-ENGINE-021: `reset_password` no longer re-exported
+    from `app.core.auth.auth`. Call via the canonical leaf
+    `app.core.auth.users_router` (where the handler lives since
+    AUTH-ENGINE-003 extraction).
+    """
+    from app.core.auth import users_router as users_mod
+    from app.shared.contracts.auth import ResetPasswordRequest
 
-    data = auth_mod.ResetPasswordRequest(new_password="newsecret12345")
+    monkeypatch.setattr(users_mod.db, "get_user", lambda uid: None)
+
+    data = ResetPasswordRequest(new_password="newsecret12345")
     with pytest.raises(HTTPException) as excinfo:
-        auth_mod.reset_password("nonexistent", data, _admin_user())
+        users_mod.reset_password("nonexistent", data, _admin_user())
     assert excinfo.value.status_code == 403, (
         f"REGRESSIONE C10: user missing → {excinfo.value.status_code}, "
         f"admin puo' distinguere missing vs other-group."
@@ -147,47 +154,49 @@ def test_reset_password_nonsuperadmin_user_not_found_returns_403(monkeypatch):
 
 def test_reset_password_nonsuperadmin_user_other_group_returns_403(monkeypatch):
     """Controllo simmetrico: user esiste ma in altro gruppo → 403."""
-    from app.core.auth import auth as auth_mod
+    from app.core.auth import users_router as users_mod
+    from app.shared.contracts.auth import ResetPasswordRequest
 
     other_user = {"id": "x", "group_id": "g_other", "username": "x", "is_active": True}
-    monkeypatch.setattr(auth_mod.db, "get_user", lambda uid: other_user)
+    monkeypatch.setattr(users_mod.db, "get_user", lambda uid: other_user)
 
-    data = auth_mod.ResetPasswordRequest(new_password="newsecret12345")
+    data = ResetPasswordRequest(new_password="newsecret12345")
     with pytest.raises(HTTPException) as excinfo:
-        auth_mod.reset_password("x", data, _admin_user())
+        users_mod.reset_password("x", data, _admin_user())
     assert excinfo.value.status_code == 403
 
 
 def test_reset_password_superadmin_user_not_found_returns_404(monkeypatch):
     """Superadmin: 404 accettabile — ha visibilita' totale, nessun
     enumeration (non ci sono utenti "nascosti")."""
-    from app.core.auth import auth as auth_mod
+    from app.core.auth import users_router as users_mod
+    from app.shared.contracts.auth import ResetPasswordRequest
 
-    monkeypatch.setattr(auth_mod.db, "get_user", lambda uid: None)
+    monkeypatch.setattr(users_mod.db, "get_user", lambda uid: None)
 
-    data = auth_mod.ResetPasswordRequest(new_password="newsecret12345")
+    data = ResetPasswordRequest(new_password="newsecret12345")
     with pytest.raises(HTTPException) as excinfo:
-        auth_mod.reset_password("nonexistent", data, _superadmin_user())
+        users_mod.reset_password("nonexistent", data, _superadmin_user())
     assert excinfo.value.status_code == 404
 
 
 def test_delete_user_nonsuperadmin_user_not_found_returns_403(monkeypatch):
     """delete-user: stesso pattern di reset-password."""
-    from app.core.auth import auth as auth_mod
+    from app.core.auth import users_router as users_mod
 
-    monkeypatch.setattr(auth_mod.db, "get_user", lambda uid: None)
+    monkeypatch.setattr(users_mod.db, "get_user", lambda uid: None)
 
     with pytest.raises(HTTPException) as excinfo:
-        auth_mod.delete_user("nonexistent", _admin_user())
+        users_mod.delete_user("nonexistent", _admin_user())
     assert excinfo.value.status_code == 403
 
 
 def test_delete_user_nonsuperadmin_user_other_group_returns_403(monkeypatch):
-    from app.core.auth import auth as auth_mod
+    from app.core.auth import users_router as users_mod
 
     other_user = {"id": "x", "group_id": "g_other", "username": "x", "is_active": True}
-    monkeypatch.setattr(auth_mod.db, "get_user", lambda uid: other_user)
+    monkeypatch.setattr(users_mod.db, "get_user", lambda uid: other_user)
 
     with pytest.raises(HTTPException) as excinfo:
-        auth_mod.delete_user("x", _admin_user())
+        users_mod.delete_user("x", _admin_user())
     assert excinfo.value.status_code == 403

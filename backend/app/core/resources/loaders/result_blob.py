@@ -105,24 +105,37 @@ def _fetch_row(
     result_id: str,
     *,
     group_id_filter: Optional[str],
+    project_id_filter: Optional[str] = None,
 ) -> Optional[dict]:
-    """SELECT data, storage_key FROM results WHERE id = ? [AND group_id = ?].
+    """SELECT data, storage_key, project_id FROM results
+    WHERE id = ? [AND group_id = ?] [AND project_id = ?].
 
     `group_id_filter=None` -> no WHERE clause on group_id (back-compat
     fail-open path; only used by the legacy shim).
+
+    `project_id_filter=None` (default) -> no WHERE clause on
+    project_id (back-compat for existing callers). Non-empty
+    string -> additional AND filter (RESOURCE-ENGINE-007 row-metadata
+    project-level binding). The clause is built dynamically so the
+    SQL still uses `?` placeholders for every value (no string
+    interpolation; psycopg2 quotes both filters).
     """
     from app.db.pg_connection import fetchone
 
+    clauses = ["id = ?"]
+    params: list = [result_id]
     if group_id_filter:
-        return fetchone(
-            "SELECT data, storage_key FROM results "
-            "WHERE id = ? AND group_id = ?",
-            (result_id, group_id_filter),
-        )
-    return fetchone(
-        "SELECT data, storage_key FROM results WHERE id = ?",
-        (result_id,),
+        clauses.append("group_id = ?")
+        params.append(group_id_filter)
+    if project_id_filter:
+        clauses.append("project_id = ?")
+        params.append(project_id_filter)
+
+    sql = (
+        "SELECT data, storage_key, project_id FROM results "
+        "WHERE " + " AND ".join(clauses)
     )
+    return fetchone(sql, tuple(params))
 
 
 def _download_object_storage(storage_key: str) -> Optional[bytes]:
@@ -173,6 +186,7 @@ def _dispatch_by_id(
     result_id: str,
     *,
     group_id_filter: Optional[str],
+    project_id_filter: Optional[str] = None,
 ) -> Tuple[Optional[bytes], str]:
     """Shared dispatch core: SQL row lookup + BYTEA-vs-S3 branch.
 
@@ -184,13 +198,23 @@ def _dispatch_by_id(
     Protocol-compliant ``ResultBlobLoader.load()`` and the
     back-compat shim in ``results_db_service.get_result_data``
     funnel through here.
+
+    ``project_id_filter`` (RESOURCE-ENGINE-007) is row-metadata
+    only: the SQL ``WHERE project_id = ?`` clause is what
+    enforces the binding. The fail-closed surface is identical to
+    the group-level filter — a row owned by another project
+    simply does not return (becomes ``"none"`` backend tag).
     """
     from app.utils.logger import get_logger
 
     logger = get_logger(__name__)
     _t0 = time.monotonic()
 
-    row = _fetch_row(result_id, group_id_filter=group_id_filter)
+    row = _fetch_row(
+        result_id,
+        group_id_filter=group_id_filter,
+        project_id_filter=project_id_filter,
+    )
     if not row:
         return None, "none"
 
@@ -408,11 +432,21 @@ class ResultBlobLoader:
             get_logger(__name__).info(
                 f"[AUDIT] ResultBlobLoader.load is_superadmin=True "
                 f"result_id={ref.result_id} mode={mode} "
-                f"expected_group_id={ref.expected_group_id!r}"
+                f"expected_group_id={ref.expected_group_id!r} "
+                f"expected_project_id={ref.expected_project_id!r}"
             )
             group_id_filter: Optional[str] = None
         else:
             group_id_filter = ref.expected_group_id
+
+        # RESOURCE-ENGINE-007: optional row-metadata project-level
+        # binding. None => no project filter (back-compat for
+        # every existing caller). Non-empty => SQL `AND project_id
+        # = ?`. is_superadmin does NOT bypass project filter when
+        # the caller explicitly opts in: the audit-bypass semantic
+        # only applies to the primary group filter; project
+        # binding is a row-level invariant the caller asked for.
+        project_id_filter: Optional[str] = ref.expected_project_id or None
 
         # Single dispatch site: bytes and path modes share the SAME
         # fail-closed lookup + tenant filter + BYTEA/S3 branch.
@@ -420,12 +454,21 @@ class ResultBlobLoader:
         # dispatch path. The mode only affects the materialization
         # step (in-memory bytes vs tempfile path).
         data, backend = _dispatch_by_id(
-            ref.result_id, group_id_filter=group_id_filter
+            ref.result_id,
+            group_id_filter=group_id_filter,
+            project_id_filter=project_id_filter,
         )
         if backend == "none":
             raise FileNotFoundError(
                 f"ResultBlobLoader.load: result_id={ref.result_id!r} "
-                f"not found (or not visible to group_id={ref.expected_group_id!r})"
+                f"not found (or not visible to "
+                f"group_id={ref.expected_group_id!r}"
+                + (
+                    f", project_id={ref.expected_project_id!r}"
+                    if ref.expected_project_id
+                    else ""
+                )
+                + ")"
             )
 
         if mode == "bytes":

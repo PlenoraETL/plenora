@@ -62,7 +62,7 @@ def test_path_mode_is_now_supported():
     payload = b"hello-path-mode"
     captured = {}
 
-    def _fake_dispatch(result_id, *, group_id_filter):
+    def _fake_dispatch(result_id, *, group_id_filter, project_id_filter=None):
         captured["result_id"] = result_id
         captured["group_id_filter"] = group_id_filter
         return payload, "db_legacy"
@@ -123,7 +123,7 @@ def test_path_mode_uses_same_dispatch_function_as_bytes_mode():
 
     calls: list[tuple] = []
 
-    def _counting_dispatch(result_id, *, group_id_filter):
+    def _counting_dispatch(result_id, *, group_id_filter, project_id_filter=None):
         calls.append((result_id, group_id_filter))
         return b"x", "db_legacy"
 
@@ -158,7 +158,7 @@ def test_path_mode_honors_superadmin_filter_skip(monkeypatch):
 
     seen_filter = {}
 
-    def _spy_dispatch(result_id, *, group_id_filter):
+    def _spy_dispatch(result_id, *, group_id_filter, project_id_filter=None):
         seen_filter["filter"] = group_id_filter
         return b"x", "db_legacy"
 
@@ -192,7 +192,7 @@ def test_path_mode_passes_group_id_filter_when_not_superadmin(monkeypatch):
 
     seen_filter = {}
 
-    def _spy_dispatch(result_id, *, group_id_filter):
+    def _spy_dispatch(result_id, *, group_id_filter, project_id_filter=None):
         seen_filter["filter"] = group_id_filter
         return b"x", "object_storage"
 
@@ -227,7 +227,7 @@ def test_path_mode_raises_file_not_found_on_missing_row():
         result_id="r1",
     )
 
-    def _no_row_dispatch(result_id, *, group_id_filter):
+    def _no_row_dispatch(result_id, *, group_id_filter, project_id_filter=None):
         return None, "none"
 
     with patch.object(loader_mod, "_dispatch_by_id", _no_row_dispatch):
@@ -250,7 +250,7 @@ def test_path_mode_raises_file_not_found_when_blob_data_is_none():
         result_id="r1",
     )
 
-    def _row_but_no_data(result_id, *, group_id_filter):
+    def _row_but_no_data(result_id, *, group_id_filter, project_id_filter=None):
         # Row exists (storage_key returned object_storage backend),
         # but the download failed (None bytes).
         return None, "object_storage"
@@ -385,7 +385,7 @@ def test_path_mode_resource_envelope_has_path_only_no_data_no_stream():
         result_id="r1",
     )
 
-    def _ok_dispatch(result_id, *, group_id_filter):
+    def _ok_dispatch(result_id, *, group_id_filter, project_id_filter=None):
         return b"abc", "db_legacy"
 
     with patch.object(loader_mod, "_dispatch_by_id", _ok_dispatch):
@@ -419,7 +419,7 @@ def test_path_mode_writes_distinct_tempfiles_per_call(monkeypatch):
     monkeypatch.setattr(
         loader_mod,
         "_dispatch_by_id",
-        lambda result_id, *, group_id_filter: (b"data", "db_legacy"),
+        lambda result_id, *, group_id_filter, project_id_filter=None: (b"data", "db_legacy"),
     )
     loader = loader_mod.ResultBlobLoader()
 

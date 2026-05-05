@@ -58,23 +58,30 @@ def test_delete_group_cascade_failure_is_logged_then_raised_as_500(monkeypatch):
     Il fallback pre-fix catturava `Exception as e` ma non usava mai `e`:
     il log diagnostico non veniva emesso → regressione di osservabilita'.
     """
-    from app.core.auth import auth as auth_mod
+    # BE-GO-READY-AUTH-ENGINE-021-USERS-GROUPS-REEXPORT-REMOVAL:
+    # `delete_group` is no longer re-exported from `app.core.auth.auth`.
+    # Call it via the canonical leaf module `app.core.auth.groups_router`
+    # (where the handler actually lives since AUTH-ENGINE-004 extraction).
+    # `cfg_db` is imported locally inside the handler in groups_router,
+    # so we patch the source module directly.
+    from app.core.auth import groups_router as groups_mod
+    import app.db.config_db_service as cfg_db
 
-    monkeypatch.setattr(auth_mod.cfg_db, "get_group", lambda gid: {"id": gid, "name": "g"})
+    monkeypatch.setattr(cfg_db, "get_group", lambda gid: {"id": gid, "name": "g"})
 
     boom = RuntimeError("simulated cascade failure")
 
     def _raising_cascade(gid):
         raise boom
 
-    monkeypatch.setattr(auth_mod.cfg_db, "delete_group_cascade", _raising_cascade)
+    monkeypatch.setattr(cfg_db, "delete_group_cascade", _raising_cascade)
 
     target_logger = logging.getLogger(_AUTH_LOGGER)
     handler = _ListHandler()
     target_logger.addHandler(handler)
     try:
         with pytest.raises(HTTPException) as excinfo:
-            auth_mod.delete_group("some_group", _superadmin_user())
+            groups_mod.delete_group("some_group", _superadmin_user())
     finally:
         target_logger.removeHandler(handler)
 

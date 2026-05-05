@@ -53,9 +53,16 @@ def assert_visible_ok():
 
 @pytest.fixture
 def get_storage_mock():
-    """Object storage mock con .download(key, path)."""
+    """Object storage mock con `.download(key, path)` (per
+    `temp_file_for` legacy path) e `.get_object_stream(key)` (per
+    `get_blob_from_db` post-RESOURCE-ENGINE-006)."""
     storage = MagicMock()
     storage.download = MagicMock()
+    storage.get_object_stream = MagicMock(return_value={
+        "body": iter([b""]),
+        "size": 0,
+        "content_type": "application/octet-stream",
+    })
     return MagicMock(return_value=storage)
 
 
@@ -88,14 +95,23 @@ def test_get_blob_returns_bytea_from_row_data(
 def test_get_blob_downloads_from_storage_key_when_no_data(
     fake_logger, assert_visible_ok, tmp_path,
 ):
+    """BE-GO-READY-RESOURCE-ENGINE-006: storage_key branch usa
+    `get_object_stream(key)` + concatenazione bytes invece del
+    tempfile roundtrip pre-batch (`download(key, tmp_path)` +
+    `read_bytes()` + `unlink`).
+    """
     from app.services.file_blob_materialization import get_blob_from_db
 
     db_get = MagicMock(return_value={"data": None, "storage_key": "file-sources/x/y.csv"})
 
     storage = MagicMock()
-    def fake_download(key, path):
-        Path(path).write_bytes(b"downloaded-bytes")
-    storage.download = MagicMock(side_effect=fake_download)
+    storage.get_object_stream = MagicMock(return_value={
+        "body": iter([b"down", b"loaded-", b"bytes"]),
+        "size": 16,
+        "content_type": "text/csv",
+    })
+    # download MUST NOT be called any more on this path
+    storage.download = MagicMock()
     get_storage = MagicMock(return_value=storage)
 
     out = get_blob_from_db(
@@ -107,10 +123,78 @@ def test_get_blob_downloads_from_storage_key_when_no_data(
         logger=fake_logger,
     )
     assert out == b"downloaded-bytes"
-    storage.download.assert_called_once()
-    # download arg: storage_key + tmp path
-    args = storage.download.call_args[0]
-    assert args[0] == "file-sources/x/y.csv"
+    storage.get_object_stream.assert_called_once_with("file-sources/x/y.csv")
+    storage.download.assert_not_called()
+
+
+def test_get_blob_storage_key_branch_does_not_create_tempfile(
+    fake_logger, assert_visible_ok, tmp_path,
+):
+    """BE-GO-READY-RESOURCE-ENGINE-006 (R-005.1): regression guard.
+    Il branch storage_key NON deve creare alcun file dentro
+    `temp_dir`. Pre-batch scriveva un NamedTemporaryFile e
+    leggeva-poi-unlink-ava; post-batch e' bytes-first puro.
+    """
+    from app.services.file_blob_materialization import get_blob_from_db
+
+    db_get = MagicMock(return_value={"data": None, "storage_key": "file-sources/a/b.bin"})
+    storage = MagicMock()
+    storage.get_object_stream = MagicMock(return_value={
+        "body": iter([b"payload-bytes"]),
+        "size": 13,
+        "content_type": "application/octet-stream",
+    })
+    storage.download = MagicMock()
+    get_storage = MagicMock(return_value=storage)
+
+    # Snapshot of `temp_dir` content pre-call.
+    pre_files = sorted(p.name for p in Path(tmp_path).iterdir())
+
+    out = get_blob_from_db(
+        "file_z", "grp1",
+        assert_visible=assert_visible_ok,
+        db_get_file_source=db_get,
+        get_object_storage=get_storage,
+        temp_dir=str(tmp_path),
+        logger=fake_logger,
+    )
+    assert out == b"payload-bytes"
+
+    # No new files were created in temp_dir.
+    post_files = sorted(p.name for p in Path(tmp_path).iterdir())
+    assert post_files == pre_files, (
+        f"Regressione R-005.1: il branch storage_key ha creato "
+        f"file in temp_dir ({set(post_files) - set(pre_files)}). "
+        f"Il path bytes-first NON deve materializzare tempfile."
+    )
+
+
+def test_get_blob_returns_none_and_logs_when_get_object_stream_fails(
+    fake_logger, assert_visible_ok, tmp_path,
+):
+    """Object storage failure (`ObjectStorageDisabledError` o errore
+    network/auth durante `get_object_stream`) -> log error + return
+    None. Best-effort identico al pre-batch contract.
+    """
+    from app.services.file_blob_materialization import get_blob_from_db
+
+    db_get = MagicMock(return_value={"data": None, "storage_key": "file-sources/x/y.csv"})
+    storage = MagicMock()
+    storage.get_object_stream = MagicMock(
+        side_effect=RuntimeError("S3 down")
+    )
+    get_storage = MagicMock(return_value=storage)
+
+    out = get_blob_from_db(
+        "file_q", "grp1",
+        assert_visible=assert_visible_ok,
+        db_get_file_source=db_get,
+        get_object_storage=get_storage,
+        temp_dir=str(tmp_path),
+        logger=fake_logger,
+    )
+    assert out is None
+    fake_logger.error.assert_called_once()
 
 
 def test_get_blob_returns_none_when_row_missing(

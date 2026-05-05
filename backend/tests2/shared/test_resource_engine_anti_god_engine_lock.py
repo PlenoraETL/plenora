@@ -273,11 +273,19 @@ def test_storage_key_dispatch_lives_in_exactly_one_module():
 def test_loader_owns_the_dispatch_tokens():
     """Symmetric assertion: the dispatch tokens MUST live in the
     loader module post-migration. Removing them from the loader
-    silently re-introduces fallback paths in callers."""
+    silently re-introduces fallback paths in callers.
+
+    BE-GO-READY-RESOURCE-ENGINE-007: SELECT now includes
+    `project_id` to support optional row-metadata project-level
+    binding (`ResourceRef.expected_project_id`). The base SELECT
+    is a stable string contract; the WHERE clause is built
+    dynamically per filter set."""
     text = _RESULT_BLOB_PY.read_text(encoding="utf-8")
     required = (
-        # SQL row fetch (with optional group_id filter)
-        "SELECT data, storage_key FROM results",
+        # SQL row fetch with project_id column (RESOURCE-ENGINE-007).
+        # The base SELECT shape is the stable contract; the WHERE
+        # is composed at runtime from optional filters.
+        "SELECT data, storage_key, project_id FROM results",
         # BYTEA conversion path
         "isinstance(data, memoryview)",
         # object storage download symbol

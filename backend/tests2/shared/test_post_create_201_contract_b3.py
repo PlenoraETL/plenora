@@ -27,27 +27,9 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
 
 
-def _assert_post_route_status_201(router, path: str, context: str):
-    """Helper: cerca route POST esatto, verifica status_code=201.
-
-    Duplicato intenzionale dello stesso helper di
-    test_post_create_201_contract_b2.py: scope F3-B3 e' chiudere il
-    cluster, non consolidare helper cross-file (niente shared helper,
-    come da vincoli utente)."""
-    post_routes = [
-        r for r in router.routes
-        if getattr(r, "path", None) == path
-        and "POST" in getattr(r, "methods", set())
-    ]
-    assert len(post_routes) == 1, (
-        f"{context}: mi aspetto esattamente 1 route POST {path!r}, "
-        f"trovato: {[(r.path, r.methods) for r in router.routes if 'POST' in getattr(r, 'methods', set())]!r}"
-    )
-    assert post_routes[0].status_code == 201, (
-        f"{context}: POST {path} DEVE dichiarare status_code=201 nel "
-        f"decoratore; ottenuto {post_routes[0].status_code!r} "
-        f"(None = default 200)"
-    )
+# BE-GO-READY-TEST-INFRA-001: helper extracted to a shared module.
+# Body + assertion messages preserved byte-exact.
+from tests2.shared._route_status_helpers import _assert_post_route_status_201
 
 
 def test_post_files_upload_declares_201_on_route():

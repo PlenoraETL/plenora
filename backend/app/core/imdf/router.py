@@ -22,6 +22,14 @@ from app.config import settings
 from app.core.auth.auth import get_current_user
 # BE-GO-READY-AUTH-ENGINE-015 Phase-9 contract fan-out.
 from app.shared.contracts.auth import CurrentUser
+# BE-GO-READY-AUTH-ENGINE-020-IMDF-OWNERSHIP-MIGRATION:
+# `assert_resource_visible` consumed from the leaf
+# `app.core.auth.ownership` (canonical home). Closes
+# AUTH R-019.1: prior body-local lazy
+# `from app.core.auth.auth import assert_resource_visible`
+# is gone, the facade re-export is removed too. Tests
+# monkeypatch via the consuming router-module surface.
+from app.core.auth.ownership import assert_resource_visible
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 from app.shared.audit_action import audit_action
@@ -137,7 +145,6 @@ def _assert_bundle_group_access(bundle_dir: Path, current_user: CurrentUser) -> 
 
     try:
         import app.db.db_service as db_svc
-        from app.core.auth.auth import assert_resource_visible
         project = db_svc.get_project(bundle_project_id)
         if not project:
             raise HTTPException(

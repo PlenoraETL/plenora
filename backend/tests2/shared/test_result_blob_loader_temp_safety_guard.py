@@ -315,7 +315,7 @@ def test_loader_path_mode_returns_is_temporary_true():
     # shape contract.
     captured: list = []
 
-    def _fake_dispatch(result_id, *, group_id_filter):
+    def _fake_dispatch(result_id, *, group_id_filter, project_id_filter=None):
         captured.append((result_id, group_id_filter))
         return b"engine-owned-bytes", "db_legacy"
 

@@ -423,7 +423,10 @@ def test_loader_returns_resource_dataclass_only():
 
     payload = b"hello-world"
 
-    def _fake_dispatch(result_id, *, group_id_filter):
+    def _fake_dispatch(result_id, *, group_id_filter, project_id_filter=None):
+        # RESOURCE-ENGINE-007: dispatch gained an optional
+        # project_id_filter kwarg. Accept it (default None) for
+        # backward compatibility with this contract test.
         return payload, "db_legacy"
 
     original = loader_mod._dispatch_by_id

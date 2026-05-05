@@ -110,25 +110,36 @@ def test_groups_router_importable_from_auth_module():
     assert via_auth is via_new
 
 
-def test_group_crud_handlers_reexported_from_auth_module():
-    """KEEP_COMPAT: i 4 handler sono accessibili come
-    `auth_mod.list_groups`, `auth_mod.create_group`,
-    `auth_mod.get_group_summary`, `auth_mod.delete_group` per i test
-    esistenti che li chiamano direttamente. Identita' Python
-    preservata."""
+def test_group_crud_handlers_canonical_home_is_groups_router():
+    """BE-GO-READY-AUTH-ENGINE-021-USERS-GROUPS-REEXPORT-REMOVAL:
+    i 4 handler vivono ESCLUSIVAMENTE in `app.core.auth.groups_router`
+    (canonical home post-AUTH-ENGINE-004 extraction). Il facade
+    `app.core.auth.auth` NON li re-esporta piu'.
+
+    Pre-021 il facade re-esportava `list_groups` / `create_group` /
+    `get_group_summary` / `delete_group` per supportare due test che
+    li chiamavano via `auth_mod.<name>`. Quei test sono stati migrati
+    al modulo canonico e il re-export e' stato rimosso. Il lock
+    simmetrico (assenza dal facade) vive in
+    `test_auth_models_and_ownership_module_contract.py::
+    test_auth_no_longer_reexports_removed_handlers`.
+    """
     from app.core.auth import auth as auth_mod
     from app.core.auth import groups_router as gr_mod
 
     for name in ("list_groups", "create_group", "get_group_summary",
                  "delete_group"):
-        assert hasattr(auth_mod, name), (
-            f"REGRESSIONE: `{name}` non e' piu' raggiungibile come "
-            f"`auth_mod.{name}` dopo l'estrazione."
+        # Positive lock: handler is callable from canonical home.
+        assert callable(getattr(gr_mod, name, None)), (
+            f"REGRESSIONE: `{name}` non e' callable da "
+            f"`app.core.auth.groups_router`."
         )
-        assert getattr(auth_mod, name) is getattr(gr_mod, name), (
-            f"`auth_mod.{name}` deve essere lo stesso oggetto di "
-            f"`groups_router_mod.{name}` per preservare i monkeypatch "
-            f"esistenti."
+        # Negative lock: handler is NO LONGER on the facade.
+        assert not hasattr(auth_mod, name), (
+            f"REGRESSIONE BE-GO-READY-AUTH-ENGINE-021: `{name}` e' "
+            f"stato re-introdotto su `app.core.auth.auth`. Il canonical "
+            f"home e' `app.core.auth.groups_router`; chiama via quel "
+            f"modulo invece di `auth_mod.<name>`."
         )
 
 

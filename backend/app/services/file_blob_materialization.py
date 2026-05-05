@@ -61,6 +61,26 @@ def get_blob_from_db(
     N1: `expected_group_id` obbligatorio per il fail-closed check
     (delegato ad `assert_visible`). Chi chiama senza passarlo riceve
     PermissionError lanciata dal callback.
+
+    BE-GO-READY-RESOURCE-ENGINE-006 (R-005.1 closure): il branch
+    storage_key NON usa piu' un tempfile roundtrip. La precedente
+    implementazione (`download(key, tmp_path)` + `read_bytes()` +
+    `unlink`) e' stata sostituita con `get_object_stream(key)` +
+    concatenazione dell'iterable di chunks in bytes in-memory. Questo
+    elimina il roundtrip su disco (1 write + 1 read + 1 unlink),
+    chiude il foot-gun di leak su crash mid-write, e si allinea alla
+    bytes-first policy. Il parametro `temp_dir` resta nella signature
+    KEEP_COMPAT per non rompere i caller (es. `temp_file_for` che
+    re-inietta lo stesso valore) ma non e' piu' consultato in questo
+    branch — Worker 2 / future cleanup stream puo' rimuoverlo dopo
+    audit dei caller.
+
+    Object storage disabled / fetch failure: il comportamento e'
+    invariato. Quando `get_object_storage()` solleva
+    `ObjectStorageDisabledError` (object storage off) o
+    `get_object_stream` solleva un'eccezione network/auth, l'eccezione
+    viene catturata dal try/except esterno -> `logger.error` +
+    return None. Stesso contract pre-batch.
     """
     assert_visible(file_id, expected_group_id or "")
     try:
@@ -72,21 +92,17 @@ def get_blob_from_db(
         storage_key = row.get("storage_key")
         if storage_key:
             storage = get_object_storage()
-            # Il Protocol object storage espone `download(key, path)`,
-            # quindi passiamo per temp file e leggiamo i bytes.
-            tmp = tempfile.NamedTemporaryFile(delete=False, dir=temp_dir)
-            tmp.close()
-            tmp_path = Path(tmp.name)
-            try:
-                storage.download(storage_key, tmp_path)
-                return tmp_path.read_bytes()
-            finally:
-                try:
-                    tmp_path.unlink()
-                except Exception as e:
-                    logger.debug(
-                        f"cleanup tmp S3 blob fallito per {tmp_path}: {e}"
-                    )
+            # ObjectStorage Protocol espone `get_object_stream(key)`
+            # che ritorna `{"body": Iterable[bytes], "size": int,
+            # "content_type": str}`. Concateniamo i chunks in memoria;
+            # il chunk size e' provider-tunable (S3 default 64KiB) ma
+            # il caller riceve bytes monolitici come l'API legacy.
+            # NB: contract bit-per-bit invariato lato chiamante; il
+            # vecchio path scriveva su disco per poi leggerlo
+            # interamente in memoria comunque, quindi nessun
+            # cambiamento di profilo memoria.
+            resp = storage.get_object_stream(storage_key)
+            return b"".join(resp["body"])
         return None
     except Exception as e:
         logger.error(f"[GESTITO] Errore lettura blob {file_id}: {e}")

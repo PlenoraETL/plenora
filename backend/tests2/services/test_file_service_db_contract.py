@@ -489,7 +489,14 @@ def test_upload_failure_does_not_create_db_row(monkeypatch):
 
 def test_read_blob_from_s3_downloads_and_cleans_temp(monkeypatch, tmp_path):
     """`_get_blob_from_db` con `storage_key` set: estrae blob via
-    storage.download in temp file, ritorna bytes, cleanup temp.
+    `storage.get_object_stream` in-memory, ritorna bytes, ZERO temp
+    file creato.
+
+    BE-GO-READY-RESOURCE-ENGINE-006 (R-005.1 closure): il branch S3
+    e' bytes-first puro post-batch — niente piu' tempfile roundtrip
+    (`download(key, tmp_path)` + `read_bytes()` + `unlink`). Il test
+    verifica anche che NESSUN tempfile venga creato durante la
+    chiamata.
     """
     from app.services.file_service import FileSourceService
 
@@ -499,8 +506,12 @@ def test_read_blob_from_s3_downloads_and_cleans_temp(monkeypatch, tmp_path):
     s3_payload = b"s3-blob-content-42"
 
     class FakeStorage:
-        def download(self, key, path):
-            Path(path).write_bytes(s3_payload)
+        def get_object_stream(self, key):
+            return {
+                "body": iter([b"s3-blob-", b"content-", b"42"]),
+                "size": len(s3_payload),
+                "content_type": "application/octet-stream",
+            }
 
     fake_module = MagicMock()
     fake_module.get_runtime_object_storage.return_value = FakeStorage()
@@ -534,7 +545,8 @@ def test_read_blob_from_s3_downloads_and_cleans_temp(monkeypatch, tmp_path):
 
     monkeypatch.setattr(real_db, "get_file_source", _fake_get)
 
-    # Spy su tempfile per verificare cleanup
+    # Spy su tempfile.NamedTemporaryFile: post-batch il branch S3
+    # non DEVE creare alcun tempfile (regression guard R-005.1).
     created_temps: list[Path] = []
     real_named = tempfile.NamedTemporaryFile
 
@@ -550,15 +562,23 @@ def test_read_blob_from_s3_downloads_and_cleans_temp(monkeypatch, tmp_path):
     out = svc._get_blob_from_db("file_s3", expected_group_id="G1")
 
     assert out == s3_payload
-    # Tutti i temp file creati devono essere eliminati
-    leaked = [p for p in created_temps if p.exists()]
-    assert not leaked, f"Temp file leak dopo S3 read: {leaked}"
+    # Post-RESOURCE-ENGINE-006: zero tempfile creati nel branch S3.
+    assert not created_temps, (
+        f"Regressione R-005.1: il branch storage_key ha creato "
+        f"tempfile ({created_temps}) — il path e' bytes-first via "
+        f"get_object_stream."
+    )
 
 
 def test_read_blob_from_s3_cleanup_temp_on_download_exception(monkeypatch):
-    """Se `storage.download` solleva (es. timeout, 403), il temp file
-    creato viene comunque eliminato dal `finally`. `_get_blob_from_db`
-    ritorna None (catched dal try/except esterno del metodo).
+    """Se `storage.get_object_stream` solleva (es. timeout, 403, S3
+    disabled), `_get_blob_from_db` ritorna None (catched dal
+    try/except esterno del metodo) e ZERO tempfile e' stato creato.
+
+    BE-GO-READY-RESOURCE-ENGINE-006 (R-005.1): il path e' bytes-first
+    puro — niente tempfile da pulire neanche su exception path. Il
+    test e' rinforzato come regression guard contro re-introduzione
+    del download-then-read tempfile pattern.
     """
     from app.services.file_service import FileSourceService
 
@@ -566,9 +586,8 @@ def test_read_blob_from_s3_cleanup_temp_on_download_exception(monkeypatch):
     import app.db.db_service as real_db
 
     class FakeStorage:
-        def download(self, key, path):
-            # Simuliamo: il temp file e' stato creato vuoto dal caller,
-            # noi solleviamo durante il download effettivo.
+        def get_object_stream(self, key):
+            # Simuliamo failure durante l'apertura dello stream.
             raise RuntimeError("S3 403 AccessDenied simulato")
 
     fake_module = MagicMock()
@@ -611,6 +630,10 @@ def test_read_blob_from_s3_cleanup_temp_on_download_exception(monkeypatch):
     out = svc._get_blob_from_db("file_s3", expected_group_id="G1")
     assert out is None
 
-    # Il temp file deve essere stato eliminato anche se download ha sollevato
-    leaked = [p for p in created_temps if p.exists()]
-    assert not leaked, f"Temp file leak dopo exception: {leaked}"
+    # Post-RESOURCE-ENGINE-006: il branch S3 NON crea piu' tempfile,
+    # neanche su exception path. Pre-batch il test verificava che il
+    # temp creato fosse poi unlink-ato; post-batch zero tempfile esiste.
+    assert not created_temps, (
+        f"Regressione R-005.1: tempfile creato sull'exception path "
+        f"({created_temps}) — il branch storage_key e' bytes-first."
+    )

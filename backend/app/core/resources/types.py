@@ -64,6 +64,24 @@ class ResourceRef:
     background reconciliation), it MUST pass ``is_superadmin=True``
     AND a non-empty ``expected_group_id`` (the bypass is recorded
     in the loader's structured log for audit symmetry).
+
+    ``expected_project_id`` is OPTIONAL (default ``None``).
+    BE-GO-READY-RESOURCE-ENGINE-007: when set to a non-empty
+    string, the loader applies a SECONDARY row-level filter on
+    the resource's `project_id` column (in addition to the
+    primary `group_id` filter). When ``None``, no project-level
+    filter is applied — back-compat for every existing caller.
+
+    The project-level check is intentionally row-metadata only:
+    the loader compares the value against the column on the
+    resource row. There is NO call into project services, no
+    project lifecycle check, no recompute path. This narrow
+    contract preserves the engine's anti-god-engine boundary —
+    no imports from projects/auth/FastAPI/dataframe/GIS — while
+    unlocking ``ArtifactResolver`` migration where the resolver
+    needs both group AND project tenant binding (its
+    project-level guard is orthogonal to the engine's
+    group-level guard, see audit R-003.1).
     """
 
     kind: ResourceKind
@@ -75,6 +93,11 @@ class ResourceRef:
     artifact_uri: Optional[str] = None
 
     is_superadmin: bool = False
+
+    # Optional project-level binding (RESOURCE-ENGINE-007). None
+    # means no project-level filter. Non-empty string adds an
+    # AND filter on the resource row's `project_id` column.
+    expected_project_id: Optional[str] = None
 
     def __post_init__(self) -> None:
         if not self.expected_group_id:

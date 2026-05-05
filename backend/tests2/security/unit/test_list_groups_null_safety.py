@@ -16,7 +16,11 @@ from unittest.mock import patch
 import pytest
 
 from app.shared.contracts.auth import CurrentUser
-from app.core.auth.auth import list_groups
+# BE-GO-READY-AUTH-ENGINE-021: `list_groups` no longer re-exported
+# from `app.core.auth.auth`. Import from the canonical leaf
+# `app.core.auth.groups_router` (handler home since AUTH-ENGINE-004
+# extraction).
+from app.core.auth.groups_router import list_groups
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
@@ -39,7 +43,7 @@ def test_list_groups_with_null_description_returns_empty_string(superadmin_user)
         {"id": "g2", "name": "Gruppo B", "description": "desc valida"},
     ]
 
-    with patch("app.core.auth.auth.db.list_groups", return_value=groups_from_db):
+    with patch("app.core.auth.groups_router.db.list_groups", return_value=groups_from_db):
         result = list_groups(current_user=superadmin_user)
 
     assert len(result) == 2
@@ -53,7 +57,7 @@ def test_list_groups_with_null_name_returns_empty_string(superadmin_user):
         {"id": "g1", "name": None, "description": "desc"},
     ]
 
-    with patch("app.core.auth.auth.db.list_groups", return_value=groups_from_db):
+    with patch("app.core.auth.groups_router.db.list_groups", return_value=groups_from_db):
         result = list_groups(current_user=superadmin_user)
 
     assert len(result) == 1
@@ -67,7 +71,7 @@ def test_list_groups_missing_description_key_still_returns_empty(superadmin_user
         {"id": "g1", "name": "Gruppo A"},  # nessuna chiave description
     ]
 
-    with patch("app.core.auth.auth.db.list_groups", return_value=groups_from_db):
+    with patch("app.core.auth.groups_router.db.list_groups", return_value=groups_from_db):
         result = list_groups(current_user=superadmin_user)
 
     assert len(result) == 1

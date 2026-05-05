@@ -55,20 +55,27 @@ def _target_user(group_id="g1", user_id="usr_target"):
 
 @pytest.fixture
 def mock_db(monkeypatch):
-    """Monkeypatcha db.get_user/update_user/get_group per isolare il test."""
-    from app.core.auth import auth as auth_mod
+    """Monkeypatcha db.get_user/update_user/get_group per isolare il test.
+
+    BE-GO-READY-AUTH-ENGINE-021: il fixture restituisce
+    `app.core.auth.users_router` (canonical handler home post-
+    AUTH-ENGINE-003 extraction) invece del facade `auth`. La firma
+    dei test (`mock_db.update_user(...)`) e' invariata; cambia
+    solo il modulo cui si attaccano i monkeypatch.
+    """
+    from app.core.auth import users_router as users_mod
 
     target = _target_user()
-    monkeypatch.setattr(auth_mod.db, "get_user", lambda uid: target)
+    monkeypatch.setattr(users_mod.db, "get_user", lambda uid: target)
     # update_user: echo dei campi modificati sul target
     def _upd(uid, **fields):
         result = dict(target)
         result.update(fields)
         return result
-    monkeypatch.setattr(auth_mod.db, "update_user", _upd)
+    monkeypatch.setattr(users_mod.db, "update_user", _upd)
     # get_group: sempre esistente
-    monkeypatch.setattr(auth_mod.db, "get_group", lambda gid: {"id": gid, "name": "fake"})
-    return auth_mod
+    monkeypatch.setattr(users_mod.db, "get_group", lambda gid: {"id": gid, "name": "fake"})
+    return users_mod
 
 
 # ── 1. password rifiutata ─────────────────────────────────────────────────
@@ -172,15 +179,20 @@ def test_update_user_accepts_role_from_superadmin(mock_db):
 
 
 def test_update_user_denies_cross_group_access(monkeypatch):
-    """admin di gruppo A non puo' modificare utente di gruppo B."""
-    from app.core.auth import auth as auth_mod
+    """admin di gruppo A non puo' modificare utente di gruppo B.
+
+    BE-GO-READY-AUTH-ENGINE-021: `update_user` no longer re-exported
+    from `app.core.auth.auth`. Call via `app.core.auth.users_router`
+    (canonical handler home since AUTH-ENGINE-003 extraction).
+    """
+    from app.core.auth import users_router as users_mod
 
     target_in_other_group = _target_user(group_id="gruppo_b", user_id="usr_b")
-    monkeypatch.setattr(auth_mod.db, "get_user", lambda uid: target_in_other_group)
+    monkeypatch.setattr(users_mod.db, "get_user", lambda uid: target_in_other_group)
 
     admin_of_a = _admin_user(group_id="gruppo_a")
     with pytest.raises(HTTPException) as exc:
-        auth_mod.update_user(
+        users_mod.update_user(
             user_id="usr_b",
             data={"email": "new@x.it"},
             current_user=admin_of_a,

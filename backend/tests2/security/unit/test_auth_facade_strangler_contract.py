@@ -510,22 +510,47 @@ def test_phase2_orchestrator_imports_assert_group_access_from_ownership():
     )
 
 
-def test_phase2_imdf_lazy_assert_resource_visible_kept_on_facade_residual():
-    """Phase-2 trade-off: `imdf/router.py:138` keeps the body-local
-    lazy `from app.core.auth.auth import assert_resource_visible`
-    because `test_imdf_security_contract.py` monkeypatches
-    `auth_mod.assert_resource_visible`. Phase-3 owns: migrate the
-    test to monkeypatch the leaf AND retarget this lazy import to
-    `app.core.auth.ownership`. Locked here as an explicit residual
-    so the lazy facade import does not silently spread."""
+def test_phase2_imdf_lazy_assert_resource_visible_migrated_to_leaf():
+    """BE-GO-READY-AUTH-ENGINE-020 closed R-019.1: imdf/router.py
+    no longer carries a body-local lazy `from app.core.auth.auth
+    import assert_resource_visible`; the import is now top-level
+    `from app.core.auth.ownership import assert_resource_visible`.
+    The 2 IMDF test files monkeypatch the consuming router-module
+    surface (`app.core.imdf.router.assert_resource_visible`)
+    instead of the facade.
+
+    This lock supersedes the prior Phase-2 residual contract
+    (`test_phase2_imdf_lazy_assert_resource_visible_kept_on_facade_residual`):
+    the lazy facade import MUST NOT reappear, and the leaf import
+    MUST be present.
+    """
     path = _APP / "core" / "imdf" / "router.py"
     text = path.read_text(encoding="utf-8")
+    # AST scan for the banned facade import (more robust than a
+    # raw substring grep because the migration audit comment in
+    # imdf/router.py mentions the old line as historical context).
+    tree = ast.parse(text, filename=str(path))
+    facade_imports = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom)
+        and node.module == _FACADE_MODULE
+        and any(a.name == "assert_resource_visible" for a in node.names)
+    ]
+    assert facade_imports == [], (
+        "imdf/router.py regressed to facade import for "
+        "assert_resource_visible at line(s) "
+        f"{[n.lineno for n in facade_imports]}. "
+        "Use `from app.core.auth.ownership import "
+        "assert_resource_visible` instead."
+    )
     assert (
-        "from app.core.auth.auth import assert_resource_visible" in text
+        "from app.core.auth.ownership import assert_resource_visible"
+        in text
     ), (
-        "imdf/router.py must still keep the lazy facade import for "
-        "assert_resource_visible (test monkeypatch surface). A future "
-        "phase will migrate the test and retarget this to the leaf."
+        "imdf/router.py must import `assert_resource_visible` from "
+        "the ownership leaf at module top after AUTH-ENGINE-020 "
+        "(closes R-019.1)."
     )
 
 
@@ -1363,6 +1388,9 @@ _PHASE13_REMOVED_OWNERSHIP_NAMES = frozenset(
         "assert_group_access",
         "compute_can_edit",
         "assert_can_modify",
+        # BE-GO-READY-AUTH-ENGINE-020: closed R-019.1. IMDF
+        # migrated to leaf; facade re-export removed.
+        "assert_resource_visible",
     }
 )
 
@@ -1489,22 +1517,23 @@ def test_phase13_facade_does_not_expose_removed_ownership_names():
 
 
 def test_phase13_facade_still_exposes_residual_ownership_names():
-    """Symmetric positive lock for the 2 ownership names that REMAIN
-    on the facade (Phase-2 imdf residual + internal use). If these
-    disappear, IMDF tests + `require_*_owner` wrappers break.
+    """Symmetric positive lock for the ownership name(s) that REMAIN
+    on the facade. After AUTH-ENGINE-020 closed R-019.1, the only
+    remaining re-export is `_check_ownership` (internal use by the
+    3 `require_*_owner` wrappers — not a public API). If it
+    disappears, the require_*_owner wrappers break.
     """
     import importlib
 
     auth_mod = importlib.import_module("app.core.auth.auth")
     ownership_mod = importlib.import_module("app.core.auth.ownership")
 
-    for name in ("assert_resource_visible", "_check_ownership"):
+    for name in ("_check_ownership",):
         facade_obj = getattr(auth_mod, name, None)
         leaf_obj = getattr(ownership_mod, name, None)
         assert facade_obj is not None, (
             f"app.core.auth.auth.{name} disappeared. This breaks "
-            "Phase-2 imdf residual contract (assert_resource_visible) "
-            "or `require_*_owner` internal wiring (_check_ownership)."
+            "`require_*_owner` internal wiring."
         )
         assert facade_obj is leaf_obj, (
             f"app.core.auth.auth.{name} drifted from "

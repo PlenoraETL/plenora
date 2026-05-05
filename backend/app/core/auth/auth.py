@@ -200,11 +200,17 @@ from app.core.auth.models import (  # noqa: F401  (re-export pubblico)
     LoginRequest,
     TokenResponse,
     CurrentUser,
-    UserCreate,
+    # BE-GO-READY-AUTH-ENGINE-021-USERS-GROUPS-REEXPORT-REMOVAL:
+    # `UserCreate`, `ResetPasswordRequest`, `GroupCreate` rimossi
+    # dal facade. Erano 1-occurrence-only in auth.py (zero uso
+    # interno); zero callsite via `from app.core.auth.auth import`
+    # in tutto l'albero (verificato whole-tree). Consumer canonici:
+    # `app.core.auth.users_router` (interno),
+    # `app.core.auth.groups_router` (interno),
+    # `app.shared.contracts.auth` (Phase-10 fan-out per tests +
+    # workers + futuri esterni).
     ChangePasswordRequest,
     UserResponse,
-    ResetPasswordRequest,
-    GroupCreate,
     GroupResponse,
     MFAEnrollResponse,
     MFAVerifyRequest,
@@ -314,44 +320,33 @@ from app.core.auth.ownership import group_filter  # noqa: F401
 #
 # STRUCT-005 Seam B': i 6 helper puri vivono in `app.core.auth.ownership`.
 #
-# BE-GO-READY-AUTH-ENGINE-019-OWNERSHIP-REEXPORT-REMOVAL:
-# 4 re-export rimossi dopo audit: `_extract_group_and_id`,
-# `assert_group_access`, `compute_can_edit`, `assert_can_modify`.
-# Tutti i 6 router production (files / arricchisci / features /
-# connections / datasources / eseguibili) gia' importano gli helper
-# dal leaf `app.core.auth.ownership` (Phase-7/8 contract fan-out
-# completati). Grep di `from app.core.auth.auth import <name>` per
-# i 4 nomi rimossi: zero hit fuori da docstring / contract test
-# (che e' aggiornato in tandem con questo stream).
+# BE-GO-READY-AUTH-ENGINE-019: 4 re-export rimossi
+# (`_extract_group_and_id`, `assert_group_access`,
+# `compute_can_edit`, `assert_can_modify`). Tutti i 6 router
+# production (files / arricchisci / features / connections /
+# datasources / eseguibili) importano dal leaf.
 #
-# Restano due re-export, ognuno con motivazione esplicita:
+# BE-GO-READY-AUTH-ENGINE-020: chiusura R-019.1 — IMDF migrato
+# al leaf (`app/core/imdf/router.py` ora ha import top-level
+# `from app.core.auth.ownership import assert_resource_visible`)
+# e i 2 test IMDF (`test_imdf_security_contract.py`,
+# `test_imdf_bundles_management_contract.py`) monkeypatchano via
+# `app.core.imdf.router.assert_resource_visible`. Il re-export
+# `assert_resource_visible` dal facade e' rimosso.
+#
+# Resta UN solo re-export, esplicitamente interno:
 #
 #   - `_check_ownership`: usato INTERNAMENTE dai 3 wrapper
 #     `require_*_owner` qui sotto. Non e' superficie pubblica, ma
 #     l'import deve esserci perche' i wrapper lo chiamano.
 #
-#   - `assert_resource_visible`: Phase-2 residual lockato dal test
-#     `test_phase2_imdf_lazy_assert_resource_visible_kept_on_facade_residual`.
-#     `app/core/imdf/router.py:140` ha un body-local lazy
-#     `from app.core.auth.auth import assert_resource_visible`,
-#     e 2 test files (`test_imdf_security_contract.py`,
-#     `test_imdf_bundles_management_contract.py`) monkeypatchano
-#     `auth_mod.assert_resource_visible`. La migrazione di IMDF al
-#     leaf e' owned dallo stream
-#     `BE-GO-READY-AUTH-ENGINE-XXX-IMDF-OWNERSHIP-MIGRATION` (R-019.1).
-#
-# Le 3 dependency FastAPI `require_*_owner` restano in questo modulo
-# perche' usano `Depends(get_current_user)`: spostarle in
+# Le 3 dependency FastAPI `require_*_owner` restano in questo
+# modulo perche' usano `Depends(get_current_user)`: spostarle in
 # ownership.py creerebbe un cycle `auth.py ↔ ownership.py`. Sono
 # thin wrapper che chiamano `_check_ownership`.
 
 # Internal-only: usato dai 3 require_*_owner sotto.
 from app.core.auth.ownership import _check_ownership  # noqa: F401
-
-# KEEP_COMPAT (Phase-2 residual R-019.1): IMDF router lazy + 2
-# test files monkeypatchano `auth_mod.assert_resource_visible`.
-# Owner: `BE-GO-READY-AUTH-ENGINE-XXX-IMDF-OWNERSHIP-MIGRATION`.
-from app.core.auth.ownership import assert_resource_visible  # noqa: F401
 
 
 def require_project_owner(
@@ -589,51 +584,36 @@ def mfa_disable(
 
 # --- Gestione utenti (admin only) ---
 # BE-GO-READY-AUTH-ENGINE-003-USERS-ROUTER-EXTRACTION:
-# i 5 endpoint admin CRUD `/auth/users*` sono stati spostati in
-# `app.core.auth.users_router`. `users_router` viene re-esportato qui
-# (KEEP_COMPAT) per non rompere `from app.core.auth.auth import
+# i 5 endpoint admin CRUD `/auth/users*` vivono in
+# `app.core.auth.users_router`. `users_router` resta re-esportato
+# qui (KEEP_COMPAT) per non rompere `from app.core.auth.auth import
 # users_router` nei caller / test esistenti. `main.py` lo monta
-# direttamente dal modulo nuovo. Behavior user-facing invariato:
-# stessi error code / messaggi / status / headers / anti-enumeration
-# invariants gestiti dal layer `disclosure`.
+# direttamente dal modulo nuovo.
+#
+# BE-GO-READY-AUTH-ENGINE-021-USERS-GROUPS-REEXPORT-REMOVAL:
+# le 5 funzioni handler (`list_users`, `create_user`, `update_user`,
+# `reset_password`, `delete_user`) NON sono piu' re-esportate dal
+# facade. Zero callsite produzione (verificato whole-tree); i 3 test
+# che le chiamavano via `auth_mod.<name>` sono stati migrati a
+# `app.core.auth.users_router` (canonical handler home).
 
-from app.core.auth.users_router import (  # noqa: F401
-    users_router,
-    # KEEP_COMPAT: i 5 endpoint sono stati spostati in users_router.py
-    # ma vengono ri-esportati qui perche' i test esistenti li
-    # chiamano via `auth_mod.<name>(...)`:
-    #  - tests2/security/unit/test_auth_enumeration_contract.py
-    #    (`auth_mod.reset_password / delete_user`);
-    #  - tests2/security/unit/test_update_user_contract.py
-    #    (`auth_mod.update_user`).
-    list_users,
-    create_user,
-    update_user,
-    reset_password,
-    delete_user,
-)
+from app.core.auth.users_router import users_router  # noqa: F401
 
 # ============================================================
 # ROUTER GRUPPI
 # ============================================================
 # BE-GO-READY-AUTH-ENGINE-004-GROUPS-ROUTER-EXTRACTION:
-# i 4 endpoint admin CRUD `/auth/groups*` sono stati spostati in
-# `app.core.auth.groups_router`. `groups_router` viene re-esportato
+# i 4 endpoint admin CRUD `/auth/groups*` vivono in
+# `app.core.auth.groups_router`. `groups_router` resta re-esportato
 # qui (KEEP_COMPAT) per non rompere `from app.core.auth.auth import
 # groups_router` nei caller esistenti (incluso `main.py` storico).
-# `main.py` ora lo importa direttamente dal modulo nuovo. Behavior
-# user-facing invariato: stessi error code / messaggi / status /
-# headers / cascade-delete behavior gestiti dal layer `disclosure`.
+#
+# BE-GO-READY-AUTH-ENGINE-021-USERS-GROUPS-REEXPORT-REMOVAL:
+# le 4 funzioni handler (`list_groups`, `create_group`,
+# `get_group_summary`, `delete_group`) NON sono piu' re-esportate
+# dal facade. Zero callsite produzione (verificato whole-tree); i 2
+# test che le toccavano (delete_group log + list_groups null safety)
+# sono stati migrati a `app.core.auth.groups_router`.
 
-from app.core.auth.groups_router import (  # noqa: F401
-    groups_router,
-    # KEEP_COMPAT: i 4 handler vengono ri-esportati qui perche' i
-    # test esistenti li chiamano via `auth_mod.<name>(...)`:
-    #  - tests2/security/unit/test_auth_delete_group_logging_contract.py
-    #    (`auth_mod.delete_group(...)`).
-    list_groups,
-    create_group,
-    get_group_summary,
-    delete_group,
-)
+from app.core.auth.groups_router import groups_router  # noqa: F401
 

@@ -172,8 +172,10 @@ _EXPECTED_PUBLIC_SYMBOLS = {
 
 # Phase-10 minor DTOs that the contract re-exports from
 # `app.core.auth.models`. Identity must be preserved end-to-end:
-# `contract.X is auth.models.X is auth.X` (the facade also
-# re-exports them at line 194 of auth.py).
+# `contract.X is auth.models.X` (always); plus
+# `contract.X is auth.X` for the subset still on the facade
+# (the 3 DTOs `UserCreate`, `ResetPasswordRequest`, `GroupCreate`
+# were removed from the facade by AUTH-ENGINE-021).
 _PHASE10_MINOR_DTOS = (
     "LoginRequest",
     "TokenResponse",
@@ -187,6 +189,16 @@ _PHASE10_MINOR_DTOS = (
     "MFAVerifyRequest",
     "MFADisableRequest",
     "MFAStatusResponse",
+)
+
+# Subset still re-exported by the facade post-AUTH-ENGINE-021.
+# Used by the facade-identity parametrization. The 3 DTOs removed
+# from the facade keep their leaf-identity test (above) but no
+# longer have a facade chain to verify.
+_PHASE10_MINOR_DTOS_ON_FACADE = tuple(
+    d
+    for d in _PHASE10_MINOR_DTOS
+    if d not in ("UserCreate", "ResetPasswordRequest", "GroupCreate")
 )
 
 
@@ -255,14 +267,19 @@ def test_contract_phase10_dto_is_leaf_identity(dto_name: str):
     )
 
 
-@pytest.mark.parametrize("dto_name", _PHASE10_MINOR_DTOS)
+@pytest.mark.parametrize("dto_name", _PHASE10_MINOR_DTOS_ON_FACADE)
 def test_contract_phase10_dto_is_facade_identity(dto_name: str):
     """Phase-10: identity also holds across the facade
-    re-export chain. `app.core.auth.auth` re-exports the 13
-    models at line 194; `contracts.auth` re-exports from
-    `auth.models`. The chain
+    re-export chain for DTOs still re-exported by
+    `app.core.auth.auth`. The chain
     `auth.auth.X is auth.models.X is contracts.auth.X` must
-    survive any future facade rework."""
+    survive any future facade rework.
+
+    AUTH-ENGINE-021 removed `UserCreate`, `ResetPasswordRequest`,
+    `GroupCreate` from the facade; those 3 DTOs are tested for
+    LEAF identity only (`contract.X is auth.models.X`) and for
+    facade ABSENCE (separate lock in
+    `test_auth_models_and_ownership_module_contract.py`)."""
     import app.core.auth.auth as facade
     import app.shared.contracts.auth as contract_mod
 

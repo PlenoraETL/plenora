@@ -33,26 +33,13 @@ from __future__ import annotations
 
 import pytest
 
+# BE-GO-READY-TEST-INFRA-001: helper extracted to a shared module.
+# Body + assertion messages preserved byte-exact; the local copy that
+# used to live here now lives at tests2/shared/_route_status_helpers.py.
+from tests2.shared._route_status_helpers import _assert_delete_route_status_204
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
-
-
-def _assert_delete_route_status_204(router, path: str, context: str):
-    """Helper: cerca route DELETE esatto, verifica status_code=204."""
-    delete_routes = [
-        r for r in router.routes
-        if getattr(r, "path", None) == path
-        and "DELETE" in getattr(r, "methods", set())
-    ]
-    assert len(delete_routes) == 1, (
-        f"{context}: mi aspetto esattamente 1 route DELETE {path!r}, "
-        f"trovato: {[(r.path, r.methods) for r in router.routes if 'DELETE' in getattr(r, 'methods', set())]!r}"
-    )
-    assert delete_routes[0].status_code == 204, (
-        f"{context}: DELETE {path} DEVE dichiarare status_code=204 nel "
-        f"decoratore; ottenuto {delete_routes[0].status_code!r} "
-        f"(None = default 200)"
-    )
 
 
 def test_delete_connections_declares_204_on_route():

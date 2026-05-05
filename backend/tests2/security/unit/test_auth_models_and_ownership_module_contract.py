@@ -24,20 +24,48 @@ from pydantic import BaseModel
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
 
 
+# BE-GO-READY-AUTH-ENGINE-021-USERS-GROUPS-REEXPORT-REMOVAL:
+# `UserCreate`, `ResetPasswordRequest`, `GroupCreate` rimossi dal
+# facade re-export (zero callsite, 1-occurrence-only in auth.py
+# pre-batch). `_FACADE_NO_LONGER_REEXPORTED_DTOS` lock simmetrico
+# sotto. Tutti e 13 i DTO restano canonici in
+# `app.core.auth.models` e raggiungibili via
+# `app.shared.contracts.auth` (Phase-10 fan-out).
 _MODELS = (
     "LoginRequest",
     "TokenResponse",
     "CurrentUser",
-    "UserCreate",
     "ChangePasswordRequest",
     "UserResponse",
-    "ResetPasswordRequest",
-    "GroupCreate",
     "GroupResponse",
     "MFAEnrollResponse",
     "MFAVerifyRequest",
     "MFADisableRequest",
     "MFAStatusResponse",
+)
+
+# DTOs explicitly removed from the facade in AUTH-ENGINE-021. Their
+# canonical home is `app.core.auth.models`; consumers must use the
+# leaf module or the contract module (`app.shared.contracts.auth`).
+_FACADE_NO_LONGER_REEXPORTED_DTOS = (
+    "UserCreate",
+    "ResetPasswordRequest",
+    "GroupCreate",
+)
+
+# Functions explicitly removed from the facade in AUTH-ENGINE-021.
+# Their canonical home is the per-domain router module
+# (`app.core.auth.users_router` / `app.core.auth.groups_router`).
+_FACADE_NO_LONGER_REEXPORTED_HANDLERS = (
+    "list_users",
+    "create_user",
+    "update_user",
+    "reset_password",
+    "delete_user",
+    "list_groups",
+    "create_group",
+    "get_group_summary",
+    "delete_group",
 )
 
 # Full set of 6 helpers: ALL must live in the canonical leaf
@@ -52,16 +80,14 @@ _OWNERSHIP_HELPERS = (
     "_check_ownership",
 )
 
-# BE-GO-READY-AUTH-ENGINE-019-OWNERSHIP-REEXPORT-REMOVAL:
-# subset still re-exported from `app.core.auth.auth` for
-# KEEP_COMPAT. The other 4 (`_extract_group_and_id`,
-# `assert_group_access`, `compute_can_edit`, `assert_can_modify`)
-# have ZERO callsites depending on facade identity (verified by
-# grep across `app/` + `tests2/`) and are no longer re-exported.
-# `assert_resource_visible` stays for Phase-2 imdf residual;
-# `_check_ownership` stays for internal use by `require_*_owner`.
+# BE-GO-READY-AUTH-ENGINE-019: 4 ownership re-exports rimossi
+# (`_extract_group_and_id`, `assert_group_access`,
+# `compute_can_edit`, `assert_can_modify`).
+# BE-GO-READY-AUTH-ENGINE-020: chiude R-019.1 — IMDF migrato
+# al leaf, anche `assert_resource_visible` rimosso dal facade.
+# Resta SOLO `_check_ownership` (uso interno dai 3
+# `require_*_owner` wrapper, non e' superficie pubblica).
 _FACADE_REEXPORTED_OWNERSHIP_HELPERS = (
-    "assert_resource_visible",
     "_check_ownership",
 )
 _FACADE_NO_LONGER_REEXPORTED = (
@@ -69,6 +95,7 @@ _FACADE_NO_LONGER_REEXPORTED = (
     "assert_group_access",
     "compute_can_edit",
     "assert_can_modify",
+    "assert_resource_visible",
 )
 
 
@@ -169,4 +196,119 @@ def test_require_owner_dependencies_remain_in_auth_module():
     for name in ("require_project_owner", "require_schedule_owner", "require_file_owner"):
         assert callable(getattr(auth_mod, name, None)), (
             f"{name} dovrebbe restare definita in auth.py"
+        )
+
+
+# ---------------------------------------------------------------------------
+# AUTH-ENGINE-021 removal locks
+# ---------------------------------------------------------------------------
+
+
+def test_auth_no_longer_reexports_removed_dtos():
+    """BE-GO-READY-AUTH-ENGINE-021: 3 DTOs removed from the facade
+    (`UserCreate`, `ResetPasswordRequest`, `GroupCreate`). Each was
+    1-occurrence-only in auth.py pre-batch (zero internal use)
+    and had zero `from app.core.auth.auth import` consumers anywhere.
+
+    Re-introducing the re-export silently widens the facade surface;
+    the leaf module `app.core.auth.models` and the contract module
+    `app.shared.contracts.auth` are the canonical homes.
+    """
+    from app.core.auth import auth as auth_mod
+
+    for name in _FACADE_NO_LONGER_REEXPORTED_DTOS:
+        assert not hasattr(auth_mod, name), (
+            f"app.core.auth.auth.{name} was removed by "
+            "BE-GO-READY-AUTH-ENGINE-021. If this assertion fails, "
+            "someone re-introduced the re-export. Import from "
+            "`app.core.auth.models` (leaf) or "
+            "`app.shared.contracts.auth` (Phase-10 fan-out) instead."
+        )
+
+
+def test_auth_no_longer_reexports_removed_dtos_via_import():
+    """Defense-in-depth: `from app.core.auth.auth import <removed_dto>`
+    must raise ImportError. Symmetric to the hasattr lock."""
+    import importlib
+
+    auth_mod = importlib.import_module("app.core.auth.auth")
+    for name in _FACADE_NO_LONGER_REEXPORTED_DTOS:
+        assert name not in auth_mod.__dict__, (
+            f"`from app.core.auth.auth import {name}` is no longer "
+            "supported after BE-GO-READY-AUTH-ENGINE-021. "
+            "Import from `app.core.auth.models` instead."
+        )
+
+
+def test_auth_no_longer_reexports_removed_handlers():
+    """BE-GO-READY-AUTH-ENGINE-021: 9 router handler functions removed
+    from the facade (5 users + 4 groups). Each was kept exclusively
+    for `auth_mod.<name>` test patch surfaces; the 4 affected tests
+    have been migrated to `app.core.auth.users_router` /
+    `app.core.auth.groups_router` (canonical handler home since
+    AUTH-ENGINE-003/004 extraction).
+    """
+    from app.core.auth import auth as auth_mod
+
+    for name in _FACADE_NO_LONGER_REEXPORTED_HANDLERS:
+        assert not hasattr(auth_mod, name), (
+            f"app.core.auth.auth.{name} was removed by "
+            "BE-GO-READY-AUTH-ENGINE-021. If this assertion fails, "
+            "someone re-introduced the re-export. Call the handler "
+            "via `app.core.auth.users_router` or "
+            "`app.core.auth.groups_router` instead."
+        )
+
+
+def test_auth_no_longer_reexports_removed_handlers_via_import():
+    """Defense-in-depth: `from app.core.auth.auth import <handler>`
+    must raise ImportError for the 9 removed handler names."""
+    import importlib
+
+    auth_mod = importlib.import_module("app.core.auth.auth")
+    for name in _FACADE_NO_LONGER_REEXPORTED_HANDLERS:
+        assert name not in auth_mod.__dict__, (
+            f"`from app.core.auth.auth import {name}` is no longer "
+            "supported after BE-GO-READY-AUTH-ENGINE-021. "
+            "Call via `app.core.auth.users_router` / "
+            "`app.core.auth.groups_router` instead."
+        )
+
+
+def test_users_router_module_exposes_handlers():
+    """Positive lock: the 5 users handler functions live on
+    `app.core.auth.users_router` (canonical home post-extraction)."""
+    from app.core.auth import users_router as users_mod
+
+    for name in (
+        "list_users",
+        "create_user",
+        "update_user",
+        "reset_password",
+        "delete_user",
+    ):
+        assert callable(getattr(users_mod, name, None)), (
+            f"app.core.auth.users_router.{name} must be callable. "
+            "Removing it would break the 4 tests migrated by "
+            "BE-GO-READY-AUTH-ENGINE-021 + the FastAPI router "
+            "registration."
+        )
+
+
+def test_groups_router_module_exposes_handlers():
+    """Positive lock: the 4 groups handler functions live on
+    `app.core.auth.groups_router` (canonical home post-extraction)."""
+    from app.core.auth import groups_router as groups_mod
+
+    for name in (
+        "list_groups",
+        "create_group",
+        "get_group_summary",
+        "delete_group",
+    ):
+        assert callable(getattr(groups_mod, name, None)), (
+            f"app.core.auth.groups_router.{name} must be callable. "
+            "Removing it would break the 2 tests migrated by "
+            "BE-GO-READY-AUTH-ENGINE-021 + the FastAPI router "
+            "registration."
         )

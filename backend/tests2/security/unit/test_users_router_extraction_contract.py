@@ -106,26 +106,36 @@ def test_users_router_importable_from_auth_module():
     assert via_auth is via_new
 
 
-def test_user_crud_handlers_reexported_from_auth_module():
-    """KEEP_COMPAT: i 5 handler sono accessibili come
-    `auth_mod.list_users`, `auth_mod.create_user`,
-    `auth_mod.update_user`, `auth_mod.reset_password`,
-    `auth_mod.delete_user` per i test esistenti che li chiamano
-    direttamente. Identita' preservata: lo stesso oggetto funzione
-    vive nel nuovo modulo."""
+def test_user_crud_handlers_canonical_home_is_users_router():
+    """BE-GO-READY-AUTH-ENGINE-021-USERS-GROUPS-REEXPORT-REMOVAL:
+    i 5 handler vivono ESCLUSIVAMENTE in `app.core.auth.users_router`
+    (canonical home post-AUTH-ENGINE-003 extraction). Il facade
+    `app.core.auth.auth` NON li re-esporta piu'.
+
+    Pre-021 il facade re-esportava i 5 handler per supportare i 3
+    test (`test_auth_enumeration_contract`, `test_update_user_contract`)
+    che li chiamavano via `auth_mod.<name>`. Quei test sono stati
+    migrati al modulo canonico e il re-export e' stato rimosso. Il
+    lock simmetrico (assenza dal facade) vive in
+    `test_auth_models_and_ownership_module_contract.py::
+    test_auth_no_longer_reexports_removed_handlers`.
+    """
     from app.core.auth import auth as auth_mod
     from app.core.auth import users_router as ur_mod
 
     for name in ("list_users", "create_user", "update_user",
                  "reset_password", "delete_user"):
-        assert hasattr(auth_mod, name), (
-            f"REGRESSIONE: `{name}` non e' piu' raggiungibile "
-            f"come `auth_mod.{name}` dopo l'estrazione."
+        # Positive lock: handler is callable from canonical home.
+        assert callable(getattr(ur_mod, name, None)), (
+            f"REGRESSIONE: `{name}` non e' callable da "
+            f"`app.core.auth.users_router`."
         )
-        assert getattr(auth_mod, name) is getattr(ur_mod, name), (
-            f"`auth_mod.{name}` deve essere lo stesso oggetto di "
-            f"`users_router_mod.{name}` per preservare i monkeypatch "
-            f"esistenti."
+        # Negative lock: handler is NO LONGER on the facade.
+        assert not hasattr(auth_mod, name), (
+            f"REGRESSIONE BE-GO-READY-AUTH-ENGINE-021: `{name}` e' "
+            f"stato re-introdotto su `app.core.auth.auth`. Il canonical "
+            f"home e' `app.core.auth.users_router`; chiama via quel "
+            f"modulo invece di `auth_mod.<name>`."
         )
 
 

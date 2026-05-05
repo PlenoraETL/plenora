@@ -247,14 +247,14 @@ def test_resource_engine_canonical_usage_docs_bytes_mode():
 
 _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
     # ---- NamedTemporaryFile ----
-    ("app/services/file_blob_materialization.py", 77): (
-        "MIGRATION_CANDIDATE",
-        "S3 download-to-tempfile-then-read-bytes; ObjectStorage "
-        "Protocol exposes get_object_stream returning chunk "
-        "iterator — replace with bytes-concat. Worker 2 / next "
-        "stream.",
-    ),
-    ("app/services/file_blob_materialization.py", 171): (
+    # NOTE (BE-GO-READY-RESOURCE-ENGINE-006, R-005.1 closure): the
+    # former entry at file_blob_materialization.py:77 (S3 download-
+    # to-tempfile-then-read-bytes) has been migrated to bytes-first
+    # via `ObjectStorage.get_object_stream` + bytes concatenation.
+    # The line is no longer a tempfile call site; the inventory
+    # ratchet (`test_temp_materialization_inventory_is_complete`)
+    # confirms it is no longer in the AST scan.
+    ("app/services/file_blob_materialization.py", 187): (
         "PATH_REQUIRED_FILE",
         "temp_file_for caller contract returns Path for SHP/GDB "
         "downstream consumers (fiona/geopandas read_file). Bytes "
@@ -307,7 +307,7 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
         "DIR_MULTIFILE",
         "IMDF bundle re-cache fallback: same multi-file pattern.",
     ),
-    ("app/core/resources/loaders/result_blob.py", 273): (
+    ("app/core/resources/loaders/result_blob.py", 297): (
         "PATH_REQUIRED_FILE",
         "ResultBlobLoader._materialize_to_temp_path (mode='path'): "
         "the ENGINE'S OWN path-mode tempfile. Caller-owned "
@@ -355,7 +355,7 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
     ),
 
     # ---- mkdtemp ----
-    ("app/services/file_blob_materialization.py", 149): (
+    ("app/services/file_blob_materialization.py", 165): (
         "DIR_MULTIFILE",
         "SHP/GDB blob extraction destination: zip from BYTEA "
         "extracted into mkdtemp; caller cleans the dir parent "
@@ -492,11 +492,17 @@ def test_temp_inventory_entries_have_valid_category_and_rationale():
 
 def test_temp_inventory_migration_candidates_are_tracked():
     """Lock the named MIGRATION_CANDIDATE sites so future
-    bytes-first work has a stable handle. Pre-batch we expect
-    EXACTLY 2 named candidates: the resolver tempfile and the
-    file_blob_materialization S3-download-to-tempfile site.
-    A regression that drops one without migrating the
-    underlying call would silently lose the tracking.
+    bytes-first work has a stable handle. Post-RESOURCE-ENGINE-006
+    (R-005.1 closure) the only remaining candidate is the
+    ArtifactResolver `_write_temp_blob` (gated on R-003.1
+    project-level binding gap). The
+    `file_blob_materialization.py:77` S3 candidate has been
+    migrated to bytes-first via `get_object_stream` and is no
+    longer a tempfile call site.
+
+    A regression that drops the remaining candidate without
+    migrating the underlying call would silently lose the
+    tracking.
     """
     candidates = sorted(
         rel_ln
@@ -505,7 +511,6 @@ def test_temp_inventory_migration_candidates_are_tracked():
     )
     expected = sorted([
         ("app/core/artifacts/resolver.py", 362),
-        ("app/services/file_blob_materialization.py", 77),
     ])
     assert candidates == expected, (
         f"MIGRATION_CANDIDATE inventory drift.\n"

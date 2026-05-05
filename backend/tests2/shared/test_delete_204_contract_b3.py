@@ -33,25 +33,9 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
 
 
-def _assert_delete_route_status_204(router, path: str, context: str):
-    """Helper: cerca route DELETE esatto, verifica status_code=204.
-
-    Duplicato intenzionale di F2-B1/B2 (niente helper shared per vincolo
-    utente)."""
-    delete_routes = [
-        r for r in router.routes
-        if getattr(r, "path", None) == path
-        and "DELETE" in getattr(r, "methods", set())
-    ]
-    assert len(delete_routes) == 1, (
-        f"{context}: mi aspetto esattamente 1 route DELETE {path!r}, "
-        f"trovato: {[(r.path, r.methods) for r in router.routes if 'DELETE' in getattr(r, 'methods', set())]!r}"
-    )
-    assert delete_routes[0].status_code == 204, (
-        f"{context}: DELETE {path} DEVE dichiarare status_code=204 nel "
-        f"decoratore; ottenuto {delete_routes[0].status_code!r} "
-        f"(None = default 200)"
-    )
+# BE-GO-READY-TEST-INFRA-001: helper extracted to a shared module.
+# Body + assertion messages preserved byte-exact.
+from tests2.shared._route_status_helpers import _assert_delete_route_status_204
 
 
 def test_delete_tickets_declares_204_on_route():
