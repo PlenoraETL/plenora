@@ -114,16 +114,12 @@ from app.core.resources.types import (
 # ---------------------------------------------------------------------------
 
 
-def _resolve_max_bytes() -> int:
-    """Backward-compat alias for the shared helper.
-
-    Tests and the back-compat shim
-    (``app.db.results_db_service``) reference this name; new code
-    should call ``resolve_resource_max_bytes`` directly. Kept as a
-    thin one-line re-export so the contract test that bans local
-    env parsing in this module still passes.
-    """
-    return resolve_resource_max_bytes()
+# BE-GO-READY-MEMORY-ENGINE-007: the loader-local
+# ``_resolve_max_bytes`` compat alias was removed. The canonical
+# entry point is ``resolve_resource_max_bytes`` from
+# ``app.core.resources.resource_caps`` (already imported above).
+# Tests and the legacy ``app.db.results_db_service`` shim now call
+# the helper directly.
 
 
 # ---------------------------------------------------------------------------
@@ -231,7 +227,7 @@ def _fetch_row(
 
 
 def _download_object_storage(storage_key: str) -> Optional[bytes]:
-    """Object storage GET, bounded by ``_resolve_max_bytes()``.
+    """Object storage GET, bounded by ``resolve_resource_max_bytes()``.
 
     Returns ``None`` on disabled capability or download failure
     (best-effort logging; mirrors pre-010 connectivity-error
@@ -250,7 +246,7 @@ def _download_object_storage(storage_key: str) -> Optional[bytes]:
 
     logger = get_logger(__name__)
     _t0 = time.monotonic()
-    max_bytes = _resolve_max_bytes()
+    max_bytes = resolve_resource_max_bytes()
     try:
         from app.shared.cloud_backends import (
             ObjectStorageDisabledError,
@@ -338,9 +334,9 @@ def _dispatch_by_id(
     # Resolve once and pass through; the SQL preflight + the
     # downstream cap enforcement MUST agree on the same cap value
     # for a given dispatch (a runtime env mutation between two
-    # `_resolve_max_bytes()` calls would otherwise create a tiny
-    # window of disagreement that would be hard to reason about).
-    max_bytes = _resolve_max_bytes()
+    # `resolve_resource_max_bytes()` calls would otherwise create a
+    # tiny window of disagreement that would be hard to reason about).
+    max_bytes = resolve_resource_max_bytes()
 
     row = _fetch_row(
         result_id,

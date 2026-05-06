@@ -118,14 +118,10 @@ from app.core.resources.types import (
 # ---------------------------------------------------------------------------
 
 
-def _resolve_max_bytes() -> int:
-    """Backward-compat alias for the shared helper.
-
-    Kept as a thin one-line re-export for tests and any
-    transitional caller that still references the local symbol;
-    new code should call ``resolve_resource_max_bytes`` directly.
-    """
-    return resolve_resource_max_bytes()
+# BE-GO-READY-MEMORY-ENGINE-007: the loader-local
+# ``_resolve_max_bytes`` compat alias was removed. The canonical
+# entry point is ``resolve_resource_max_bytes`` from
+# ``app.core.resources.resource_caps`` (already imported above).
 
 
 # ---------------------------------------------------------------------------
@@ -199,7 +195,7 @@ def _fetch_row(
 
 
 def _download_object_storage(storage_key: str) -> Optional[bytes]:
-    """Object storage GET, bounded by ``_resolve_max_bytes()``.
+    """Object storage GET, bounded by ``resolve_resource_max_bytes()``.
 
     Returns ``None`` on disabled capability or download failure
     (best-effort logging; mirrors the file-blob materialization
@@ -216,7 +212,7 @@ def _download_object_storage(storage_key: str) -> Optional[bytes]:
 
     logger = get_logger(__name__)
     _t0 = time.monotonic()
-    max_bytes = _resolve_max_bytes()
+    max_bytes = resolve_resource_max_bytes()
     try:
         from app.shared.cloud_backends import (
             ObjectStorageDisabledError,
@@ -287,7 +283,7 @@ def _dispatch_by_id(
     _t0 = time.monotonic()
     # Resolve once and pass through; the SQL preflight + the
     # downstream cap enforcement MUST agree on the same cap value.
-    max_bytes = _resolve_max_bytes()
+    max_bytes = resolve_resource_max_bytes()
 
     row = _fetch_row(
         file_source_id,

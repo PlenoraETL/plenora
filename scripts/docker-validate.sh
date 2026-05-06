@@ -4,6 +4,8 @@
 # =============================================================================
 #
 # BE-GO-READY-INSTALL-012-DOCKER-LINUX-VALIDATION-PACK.
+# BE-GO-READY-INSTALL-013-DOCKER-VALIDATE-LINUX-SAFETY (preflight +
+# LF lock hardening).
 #
 # Runs the eight executable validation commands documented in
 # docs/ops/install-docker.md "Validation pack for the Linux PC test"
@@ -13,6 +15,15 @@
 # Status: FIRST SCAFFOLD, NOT YET VALIDATED. Every command in this
 # script is a hypothesis until run on a real Linux host.
 #
+# LF line endings (BE-GO-READY-INSTALL-013):
+#   This file MUST be checked out with LF line endings on every
+#   platform. A CRLF copy fails on Linux with
+#     `bash: bad interpreter: /usr/bin/env bash^M`
+#   The repo's `.gitattributes` pins `scripts/*.sh text eol=lf` and
+#   the source-bound test in
+#   `backend/tests2/shared/test_docker_validate_script_guard.py`
+#   asserts the on-disk file has zero `\r\n` sequences.
+#
 # Non-destructive contract (enforced by source-bound test
 # tests2/shared/test_docker_validate_script_guard.py):
 #   - never runs `docker compose down` (removes containers);
@@ -20,6 +31,13 @@
 #   - never deletes / overwrites .env.docker;
 #   - never runs `docker volume rm` against plenora-* volumes;
 #   - never runs `docker system prune` variants.
+#
+# Preflights (run BEFORE any docker invocation; exit 2 with a
+# diagnostic pointer if any precondition fails):
+#   - repo root (looks for `docker-compose.yml`);
+#   - docker binary on PATH;
+#   - docker compose plugin available (`docker compose version`);
+#   - `.env.docker` populated (Step 2 of install-docker.md).
 #
 # Usage:
 #   bash scripts/docker-validate.sh                # run the pack
@@ -29,8 +47,8 @@
 # Exit codes:
 #   0  : all eight steps reached completion (NOT a validation pass —
 #        Marco must read the per-step output to confirm shapes).
-#   2  : invocation error (bad flag, missing .env.docker, not in repo
-#        root).
+#   2  : invocation error (bad flag, missing docker binary / compose
+#        plugin / .env.docker, not in repo root).
 #   non-zero (other): the failing `docker compose` / `curl` / `python`
 #        sub-command's exit code, surfaced as-is.
 # =============================================================================
@@ -81,13 +99,49 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-# Pre-flight: verify we are at the repo root (where docker-compose.yml
-# lives) and that .env.docker exists with the two canonical secrets.
+# Pre-flight 1: repo root. Every subsequent docker invocation
+# resolves docker-compose.yml relative to PWD, so a wrong cwd would
+# either fail late with a confusing diagnostic or (worse) operate
+# on an unrelated compose project on the same host.
 if [ ! -f "docker-compose.yml" ]; then
-    echo "ERROR: docker-compose.yml not found. Run from the repo root." >&2
+    echo "ERROR: docker-compose.yml not found in current directory." >&2
+    echo "       Run from the repo root:" >&2
+    echo "         cd /path/to/plenora && bash scripts/docker-validate.sh" >&2
     exit 2
 fi
 
+# Pre-flight 2: docker binary on PATH. `command -v` is the POSIX
+# canonical "is this on PATH" test; it is faster and saner than
+# parsing `which` output. Skipped in dry-run because dry-run only
+# prints the canonical commands without executing anything.
+if [ "$DRY_RUN" -eq 0 ] && ! command -v docker >/dev/null 2>&1; then
+    echo "ERROR: 'docker' binary not found on PATH." >&2
+    echo "       Install Docker Engine first:" >&2
+    echo "         https://docs.docker.com/engine/install/" >&2
+    echo "       After install, verify:" >&2
+    echo "         docker --version" >&2
+    exit 2
+fi
+
+# Pre-flight 3: docker compose plugin (the `docker compose ...`
+# subcommand, not the legacy `docker-compose` standalone). Without
+# the plugin every step beyond #1 would fail; we surface the gap
+# upfront with the canonical install pointer. Skipped in dry-run.
+if [ "$DRY_RUN" -eq 0 ] && ! docker compose version >/dev/null 2>&1; then
+    echo "ERROR: 'docker compose' plugin not available." >&2
+    echo "       The validation pack uses the v2 'docker compose'" >&2
+    echo "       subcommand (NOT the legacy 'docker-compose' tool)." >&2
+    echo "       Install the compose plugin:" >&2
+    echo "         https://docs.docker.com/compose/install/linux/" >&2
+    echo "       After install, verify:" >&2
+    echo "         docker compose version" >&2
+    exit 2
+fi
+
+# Pre-flight 4: .env.docker exists. The validation pack consumes
+# the secrets file Step 2 of install-docker.md creates; this script
+# NEVER produces or overwrites it (a regenerate path would silently
+# rotate the encryption / JWT keys and break running deployments).
 if [ "$DRY_RUN" -eq 0 ] && [ ! -f ".env.docker" ]; then
     echo "ERROR: .env.docker not found." >&2
     echo "       Run Step 2 of docs/ops/install-docker.md first:" >&2

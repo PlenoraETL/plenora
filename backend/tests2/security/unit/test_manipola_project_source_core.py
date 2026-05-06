@@ -207,6 +207,191 @@ def test_load_file_sources_reapplies_crs_from_node_columns_metadata():
     )
 
 
+# ---------------------------------------------------------------------------
+# BE-GO-READY-TRANSFORMATION-ENGINE-004 — explicit tenant boundary
+# ---------------------------------------------------------------------------
+#
+# Pre-004 the three `_carica_sorgenti_*` methods read `group_id`
+# directly from `self._current_group_id`. A stale or wrong
+# attribute value silently authorized cross-tenant source loads.
+#
+# Post-004 the methods accept `group_id` as a kwarg; production
+# callers (`execute()` / `preview()`) pass the value resolved by
+# `_init_security_context`. The legacy attribute is consulted only
+# as a fallback when the kwarg is None / empty (back-compat for
+# tests that set `executor._current_group_id = X` directly).
+#
+# These tests lock the precedence: an explicit `group_id` MUST
+# override a stale `_current_group_id`.
+
+
+def test_explicit_group_id_overrides_stale_current_group_id():
+    """If `_current_group_id` says "grp-attacker" but the caller
+    passes `group_id="grp-victim"`, the resolver MUST be invoked
+    with `expected_group_id="grp-victim"` — the explicit value
+    wins. This protects against a stale instance attribute
+    silently authorizing the wrong tenant's data."""
+    executor = _make_executor(group_id="grp-attacker")  # stale
+    dataframes = {}
+
+    captured = {}
+
+    from app.core.artifacts import ArtifactResolutionError
+
+    class _StubResolver:
+        def materialize_latest(self, ref, *, expected_group_id=None,
+                               is_superadmin=False):
+            captured["expected_group_id"] = expected_group_id
+            # Raise the same typed error the resolver would raise
+            # on a cross-tenant block. The production caller catches
+            # it and fails closed; the test cares only that the
+            # expected_group_id was the one we passed.
+            raise ArtifactResolutionError(
+                "stub: capture expected_group_id and abort"
+            )
+
+    with patch(
+        "app.core.artifacts.ArtifactResolver",
+        return_value=_StubResolver(),
+    ), patch(
+        "app.core.manipola.executor.find_latest_output_file",
+        return_value=None,
+    ):
+        executor._carica_sorgenti_progetto(
+            _canvas_with_project_source("proj-99"), dataframes,
+            force_recalculate=False,
+            group_id="grp-victim",
+        )
+
+    assert captured.get("expected_group_id") == "grp-victim", (
+        f"Resolver must be called with the EXPLICIT group_id "
+        f"('grp-victim'), not the stale instance attribute "
+        f"('grp-attacker'). Got: {captured.get('expected_group_id')!r}. "
+        "BE-GO-READY-TRANSFORMATION-ENGINE-004 pins the precedence."
+    )
+
+
+def test_explicit_group_id_none_falls_back_to_current_group_id():
+    """Back-compat: if the explicit kwarg is None (or omitted),
+    the legacy `_current_group_id` attribute is consulted. This
+    keeps existing tests working without edits."""
+    executor = _make_executor(group_id="grp-legacy")
+    dataframes = {}
+
+    captured = {}
+
+    from app.core.artifacts import ArtifactResolutionError
+
+    class _StubResolver:
+        def materialize_latest(self, ref, *, expected_group_id=None,
+                               is_superadmin=False):
+            captured["expected_group_id"] = expected_group_id
+            raise ArtifactResolutionError(
+                "stub: capture expected_group_id and abort"
+            )
+
+    with patch(
+        "app.core.artifacts.ArtifactResolver",
+        return_value=_StubResolver(),
+    ), patch(
+        "app.core.manipola.executor.find_latest_output_file",
+        return_value=None,
+    ):
+        # No `group_id=` kwarg -> fallback to _current_group_id.
+        executor._carica_sorgenti_progetto(
+            _canvas_with_project_source("proj-99"), dataframes,
+            force_recalculate=False,
+        )
+
+    assert captured.get("expected_group_id") == "grp-legacy", (
+        "Without an explicit kwarg the helper must fall back to "
+        "`_current_group_id` for back-compat."
+    )
+
+
+def test_explicit_empty_group_id_falls_back_to_current_group_id():
+    """An empty string explicit kwarg is treated as 'not provided'
+    (falsey) and falls through to `_current_group_id`. Mirror of
+    the precedence rule documented on
+    `_resolve_executing_group_id`."""
+    executor = _make_executor(group_id="grp-1")
+    dataframes = {}
+
+    # Empty string explicit kwarg -> falsey -> fallback path.
+    # We don't need to mock the resolver here: the test cares only
+    # that the executor reaches the resolver at all (i.e. did NOT
+    # fail-closed because of the empty explicit value). A None
+    # `materialize_latest` return is fine.
+    captured = {}
+
+    from app.core.artifacts import ArtifactResolutionError
+
+    class _StubResolver:
+        def materialize_latest(self, ref, *, expected_group_id=None,
+                               is_superadmin=False):
+            captured["expected_group_id"] = expected_group_id
+            raise ArtifactResolutionError(
+                "stub: capture expected_group_id and abort"
+            )
+
+    with patch(
+        "app.core.artifacts.ArtifactResolver",
+        return_value=_StubResolver(),
+    ), patch(
+        "app.core.manipola.executor.find_latest_output_file",
+        return_value=None,
+    ):
+        executor._carica_sorgenti_progetto(
+            _canvas_with_project_source("proj-99"), dataframes,
+            force_recalculate=False,
+            group_id="",
+        )
+
+    assert captured.get("expected_group_id") == "grp-1", (
+        "Empty-string explicit group_id must fall back to "
+        "`_current_group_id`, not propagate the empty value to "
+        "the resolver."
+    )
+
+
+def test_explicit_group_id_none_with_no_attribute_is_fail_closed():
+    """If the explicit kwarg is None AND `_current_group_id` is
+    unset, the loader must fail-closed (no silent pass-through to
+    the resolver with an empty tenant binding)."""
+    executor = ManipolaExecutor(project_service=object())
+    # No `_current_group_id` attribute set on the instance.
+    executor.results_base_dir = None
+    dataframes = {}
+
+    result = executor._carica_sorgenti_progetto(
+        _canvas_with_project_source("proj-99"), dataframes,
+        force_recalculate=False,
+        # group_id omitted -> None
+    )
+
+    assert result is not None
+    assert result["success"] is False
+    assert "Contesto di sicurezza" in result["message"]
+
+
+def test_resolve_executing_group_id_helper_precedence():
+    """Source-bound unit test for the new helper: explicit value
+    wins, falsey explicit falls back, both empty -> None."""
+    executor = ManipolaExecutor(project_service=object())
+    executor._current_group_id = "grp-attribute"
+
+    # Explicit non-empty wins
+    assert executor._resolve_executing_group_id("grp-explicit") == "grp-explicit"
+    # Falsey (None / empty / 0) falls back
+    assert executor._resolve_executing_group_id(None) == "grp-attribute"
+    assert executor._resolve_executing_group_id("") == "grp-attribute"
+
+    # No attribute at all -> None
+    executor2 = ManipolaExecutor(project_service=object())
+    assert executor2._resolve_executing_group_id(None) is None
+    assert executor2._resolve_executing_group_id("grp-explicit") == "grp-explicit"
+
+
 def test_load_project_sources_fail_closed_when_check_raises_unexpectedly():
     """Pre-Refactor #2 il `try/except Exception` swallowava qualsiasi
     errore durante il check degradandolo a warning e proseguiva.

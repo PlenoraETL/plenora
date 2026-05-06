@@ -195,29 +195,73 @@ class ManipolaExecutor:
     # ESECUZIONE COMPLETA
     # =========================================================================
 
-    def _init_security_context(self, project_id: str, *, strict: bool) -> None:
-        """Memorizza `_current_group_id` del progetto corrente per i
-        check cross-tenant in `_carica_sorgenti_progetto` /
-        `_carica_sorgenti_file`.
+    def _init_security_context(self, project_id: str, *, strict: bool) -> Optional[str]:
+        """Risolve il `group_id` del progetto corrente per i check
+        cross-tenant in `_carica_sorgenti_progetto` /
+        `_carica_sorgenti_file` / `_carica_sorgenti_statiche`.
+
+        BE-GO-READY-TRANSFORMATION-ENGINE-004 (tenant-context boundary):
+        questa funzione **ritorna** il `group_id` risolto cosi' i caller
+        (execute / preview) lo possono propagare esplicitamente ai
+        loader di sorgenti come kwarg. L'attributo legacy
+        `self._current_group_id` resta scritto per back-compat — i
+        loader cadono su quello solo se il chiamante non passa il
+        parametro esplicito (back-compat con i test esistenti). Il
+        valore esplicito SEMPRE prevale sull'attributo: una stale
+        `_current_group_id` non puo' autorizzare una sorgente quando
+        il caller passa un group_id diverso.
 
         - `strict=True` (execute): se il group_id non e' determinabile
           solleva ValueError fail-closed (l'esecuzione persiste output
           e va legata a un tenant).
-        - `strict=False` (preview): in caso di lookup fallito setta
-          None e prosegue. Senza questa init, i source loader fail-closed
-          silently e il preview ritorna "Nessun dato sorgente disponibile"
-          anche su canvas validi.
+        - `strict=False` (preview): in caso di lookup fallito ritorna
+          None e prosegue. Senza questa init, i source loader
+          fail-closed silently e il preview ritorna "Nessun dato
+          sorgente disponibile" anche su canvas validi.
         """
+        resolved: Optional[str]
         try:
             import app.db.db_service as _db
             _proj_row = _db.get_project(project_id)
-            self._current_group_id = _proj_row.get("group_id") if _proj_row else None
+            resolved = _proj_row.get("group_id") if _proj_row else None
         except Exception as e:
             logger.error(f"[GESTITO] Impossibile determinare group_id per {project_id}: {e}", exc_info=True)
-            self._current_group_id = None
+            resolved = None
 
-        if strict and self._current_group_id is None:
+        # Back-compat: scriviamo l'attributo cosi' i test storici che
+        # fanno `executor._current_group_id = X` continuano a vedere
+        # un valore coerente quando ispezionano lo stato dell'istanza
+        # dopo `execute()`/`preview()`. La produzione legge dal
+        # parametro esplicito.
+        self._current_group_id = resolved
+
+        if strict and resolved is None:
             raise ValueError(f"group_id non determinabile per progetto {project_id}")
+        return resolved
+
+    def _resolve_executing_group_id(self, explicit: Optional[str]) -> Optional[str]:
+        """Tenant-context boundary helper.
+
+        Restituisce il `group_id` da usare per il check cross-tenant
+        nelle 3 funzioni `_carica_sorgenti_*`. Regola:
+
+          1. se `explicit` e' un valore non vuoto -> ritorna quello
+             (production path: `execute()`/`preview()` lo passano
+             dopo aver risolto il progetto via
+             `_init_security_context`);
+          2. altrimenti ritorna `getattr(self, "_current_group_id",
+             None)` (back-compat per i test che settano l'attributo
+             direttamente senza chiamare `execute()`/`preview()`).
+
+        L'`explicit` arg vince **sempre** sull'attributo legacy: una
+        stale `_current_group_id` non puo' autorizzare una sorgente
+        quando il caller passa un group_id diverso. Mantiene il
+        contratto fail-closed (caller riceve `None` se nessuna fonte
+        ha un valore non vuoto).
+        """
+        if explicit:
+            return explicit
+        return getattr(self, "_current_group_id", None)
 
     def execute(
         self,
@@ -238,7 +282,7 @@ class ManipolaExecutor:
         """
         logger.info(f"Esecuzione MANIPOLA: {project_id}", op="execute", project_id=project_id)
 
-        self._init_security_context(project_id, strict=True)
+        executing_group_id = self._init_security_context(project_id, strict=True)
 
         # C3 round 3 fix 3: push del project_id sulla chain di
         # esecuzione corrente. _carica_sorgenti_progetto verifica la
@@ -250,10 +294,16 @@ class ManipolaExecutor:
         dataframes = {}
 
         try:
+            # BE-GO-READY-TRANSFORMATION-ENGINE-004: tenant boundary
+            # esplicito. `executing_group_id` viene risolto dal progetto
+            # corrente e propagato come kwarg ai 3 source loader: il
+            # check cross-tenant si basa sul valore esplicito, non su
+            # `self._current_group_id` (che resta scritto solo per
+            # back-compat con i test legacy).
             for loader in [
-                lambda: self._carica_sorgenti_progetto(canvas, dataframes, force_recalculate, run_id=run_id),
-                lambda: self._carica_sorgenti_file(canvas, dataframes),
-                lambda: self._carica_sorgenti_statiche(canvas, dataframes),
+                lambda: self._carica_sorgenti_progetto(canvas, dataframes, force_recalculate, run_id=run_id, group_id=executing_group_id),
+                lambda: self._carica_sorgenti_file(canvas, dataframes, group_id=executing_group_id),
+                lambda: self._carica_sorgenti_statiche(canvas, dataframes, group_id=executing_group_id),
             ]:
                 err = loader()
                 if err:
@@ -373,13 +423,24 @@ class ManipolaExecutor:
         try:
             # Stesso tenant binding di execute(). `strict=False` perche'
             # preview non persiste output: se il lookup DB fallisce
-            # procediamo con _current_group_id=None e i loader fail-closed.
-            self._init_security_context(project_id, strict=False)
+            # `executing_group_id` resta None e i loader fail-closed.
+            executing_group_id = self._init_security_context(
+                project_id, strict=False
+            )
 
             dataframes = {}
-            self._carica_sorgenti_progetto(canvas, dataframes, force_recalculate=False)
-            self._carica_sorgenti_file(canvas, dataframes)
-            self._carica_sorgenti_statiche(canvas, dataframes)
+            # BE-GO-READY-TRANSFORMATION-ENGINE-004: stesso tenant
+            # boundary esplicito di execute().
+            self._carica_sorgenti_progetto(
+                canvas, dataframes, force_recalculate=False,
+                group_id=executing_group_id,
+            )
+            self._carica_sorgenti_file(
+                canvas, dataframes, group_id=executing_group_id,
+            )
+            self._carica_sorgenti_statiche(
+                canvas, dataframes, group_id=executing_group_id,
+            )
 
             if not dataframes:
                 return {"success": False, "message": "Nessun dato sorgente disponibile"}
@@ -413,24 +474,34 @@ class ManipolaExecutor:
     # CARICAMENTO SORGENTI
     # =========================================================================
 
-    def _carica_sorgenti_progetto(self, canvas, dataframes, force_recalculate, run_id: str = None):
+    def _carica_sorgenti_progetto(
+        self, canvas, dataframes, force_recalculate, run_id: str = None,
+        *, group_id: Optional[str] = None,
+    ):
         """Carica DataFrame dai progetti sorgente (type=project_source).
 
         SECURITY: verifica che ogni source_project_id appartenga allo stesso
         gruppo del progetto corrente. Senza questo check, un utente potrebbe
         inserire nel canvas un source_project_id di un altro tenant e
         esfiltrare i dati durante l'esecuzione della pipeline.
+
+        BE-GO-READY-TRANSFORMATION-ENGINE-004 (tenant boundary): il
+        ``group_id`` esplicito vince sempre su `_current_group_id`; il
+        fallback all'attributo legacy resta solo per back-compat con i
+        test che settano l'attributo direttamente sull'istanza.
         """
         source_nodes = [n for n in canvas.nodes if n.type == "project_source"]
 
-        # Tenant binding obbligatorio fail-closed: `_current_group_id`
-        # viene settato da `_init_security_context` chiamato da
-        # execute() / preview(). Se manca rifiutiamo l'esecuzione.
-        executing_group_id = getattr(self, "_current_group_id", None)
+        # Tenant binding obbligatorio fail-closed. La risoluzione
+        # passa per `_resolve_executing_group_id` cosi' un valore
+        # esplicito passato dal caller (production path) prevale su
+        # `self._current_group_id` (test back-compat fallback).
+        executing_group_id = self._resolve_executing_group_id(group_id)
         if not executing_group_id:
             logger.error(
                 "[SECURITY] manipola._carica_sorgenti_progetto: "
-                "_current_group_id assente, fail-closed"
+                "group_id assente (esplicito None e _current_group_id "
+                "non settato), fail-closed"
             )
             return {
                 "success": False,
@@ -643,12 +714,19 @@ class ManipolaExecutor:
 
         return None
 
-    def _carica_sorgenti_file(self, canvas, dataframes):
+    def _carica_sorgenti_file(
+        self, canvas, dataframes,
+        *, group_id: Optional[str] = None,
+    ):
         """Carica DataFrame dai nodi file_source via SourceLoader.
 
         Visibility check cross-tenant + preserve del GeoDataFrame
         sono entrambi garantiti dal loader unico, niente duplicazione
         inline.
+
+        BE-GO-READY-TRANSFORMATION-ENGINE-004: ``group_id`` esplicito
+        prevale su `_current_group_id` (vedi
+        ``_resolve_executing_group_id``).
         """
         file_nodes = [n for n in canvas.nodes if n.type == "file_source"]
         if not file_nodes:
@@ -660,7 +738,7 @@ class ManipolaExecutor:
             SourceRef,
         )
 
-        current_group_id = getattr(self, "_current_group_id", None)
+        current_group_id = self._resolve_executing_group_id(group_id)
         if not current_group_id:
             logger.error(
                 "[SECURITY] group_id corrente sconosciuto, rifiuto "
@@ -707,12 +785,20 @@ class ManipolaExecutor:
 
         return None
 
-    def _carica_sorgenti_statiche(self, canvas, dataframes):
+    def _carica_sorgenti_statiche(
+        self, canvas, dataframes,
+        *, group_id: Optional[str] = None,
+    ):
         """Carica DataFrame dai nodi StaticValues via SourceLoader.
 
         Wrapper sottile sopra `SourceLoader._load_static`. Il template
         processing (`process_static_fields`) vive nel loader unico;
         qui resta solo l'iterazione sui nodi del canvas.
+
+        BE-GO-READY-TRANSFORMATION-ENGINE-004: ``group_id`` esplicito
+        prevale su `_current_group_id`. Lo static branch resta
+        processing puro (no DB / no file), quindi il placeholder
+        ``_static_`` resta valido se non c'e' tenant determinabile.
         """
         static_nodes = [n for n in canvas.nodes if n.type == "staticValues"]
         if not static_nodes:
@@ -721,9 +807,13 @@ class ManipolaExecutor:
         from app.core.artifacts import SourceLoader, SourceRef
 
         # Static branch e' processing puro: non tocca DB ne' file. Il
-        # group_id e' richiesto solo dalla guardia del loader; usiamo
-        # il _current_group_id se disponibile, oppure un placeholder.
-        current_group_id = getattr(self, "_current_group_id", None) or "_static_"
+        # group_id e' richiesto solo dalla guardia del loader. Usiamo
+        # il valore esplicito (production path) o il fallback legacy
+        # (`_current_group_id`); se entrambi mancanti il placeholder
+        # `"_static_"` soddisfa la guardia non-vuota del loader senza
+        # introdurre ambiguita' cross-tenant (la pipeline non legge
+        # alcuna risorsa esterna in questo branch).
+        current_group_id = self._resolve_executing_group_id(group_id) or "_static_"
         loader = SourceLoader()
 
         for node in static_nodes:

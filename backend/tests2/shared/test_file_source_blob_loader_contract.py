@@ -339,43 +339,35 @@ def test_storage_key_oversize_raises_memory_limit_exceeded(monkeypatch):
 
 def test_default_cap_is_200_mib(monkeypatch):
     """Default cap is 200 MiB post BE-GO-READY-MEMORY-ENGINE-005
-    (was 500 MiB). BE-GO-READY-MEMORY-ENGINE-006 centralized the
-    resolver: the loader's compat alias must agree with the
-    shared helper on the same default."""
+    (was 500 MiB). BE-GO-READY-MEMORY-ENGINE-007 removed the
+    loader's compat alias; tests now call the canonical
+    ``resolve_resource_max_bytes`` directly."""
     monkeypatch.delenv("RESOURCE_MAX_BYTES", raising=False)
-    from app.core.resources.loaders.file_source_blob import (
-        _resolve_max_bytes,
-    )
     from app.core.resources.resource_caps import (
         RESOURCE_MAX_BYTES_DEFAULT,
         resolve_resource_max_bytes,
     )
 
-    assert _resolve_max_bytes() == 200 * 1024 * 1024
     assert resolve_resource_max_bytes() == 200 * 1024 * 1024
     assert RESOURCE_MAX_BYTES_DEFAULT == 200 * 1024 * 1024
 
 
 def test_env_override_is_honored(monkeypatch):
     monkeypatch.setenv("RESOURCE_MAX_BYTES", "12345")
-    from app.core.resources.loaders.file_source_blob import (
-        _resolve_max_bytes,
-    )
+    from app.core.resources.resource_caps import resolve_resource_max_bytes
 
-    assert _resolve_max_bytes() == 12345
+    assert resolve_resource_max_bytes() == 12345
 
 
 def test_invalid_env_falls_back_to_default(monkeypatch):
-    from app.core.resources.loaders.file_source_blob import (
-        _resolve_max_bytes,
-    )
+    from app.core.resources.resource_caps import resolve_resource_max_bytes
 
     monkeypatch.setenv("RESOURCE_MAX_BYTES", "not-an-int")
-    assert _resolve_max_bytes() == 200 * 1024 * 1024
+    assert resolve_resource_max_bytes() == 200 * 1024 * 1024
     monkeypatch.setenv("RESOURCE_MAX_BYTES", "0")
-    assert _resolve_max_bytes() == 200 * 1024 * 1024
+    assert resolve_resource_max_bytes() == 200 * 1024 * 1024
     monkeypatch.setenv("RESOURCE_MAX_BYTES", "-1")
-    assert _resolve_max_bytes() == 200 * 1024 * 1024
+    assert resolve_resource_max_bytes() == 200 * 1024 * 1024
 
 
 # ---------------------------------------------------------------------------

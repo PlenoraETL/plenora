@@ -1,2 +1,10 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# BE-GO-READY-INSTALL-013-DOCKER-VALIDATE-LINUX-SAFETY:
+# bash scripts MUST check out with LF line endings on every
+# platform. A CRLF copy of `scripts/docker-validate.sh` would
+# fail with `bad interpreter: /usr/bin/env bash^M` on Linux,
+# so we pin the eol explicitly. Locked source-bound by
+# `tests2/shared/test_docker_validate_script_guard.py`.
+scripts/*.sh text eol=lf

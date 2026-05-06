@@ -438,7 +438,7 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
         "DIR_MULTIFILE",
         "IMDF bundle re-cache fallback: same multi-file pattern.",
     ),
-    ("app/core/resources/loaders/result_blob.py", 455): (
+    ("app/core/resources/loaders/result_blob.py", 451): (
         "PATH_REQUIRED_FILE",
         "ResultBlobLoader._materialize_to_temp_path (mode='path'): "
         "the ENGINE'S OWN path-mode tempfile. Caller-owned "
@@ -514,7 +514,7 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
         "STAGING_INGESTION",
         "Upload-side ZIP extraction during ingestion validation.",
     ),
-    ("app/core/arricchisci/api_connection_rest_file.py", 790): (
+    ("app/core/arricchisci/api_connection_rest_file.py", 799): (
         "STAGING_INGESTION",
         "REST file processor: tempdir hosting multipart upload "
         "staging + binary response buffer for the outbound HTTP "

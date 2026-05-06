@@ -4,7 +4,7 @@ BE-GO-READY-RESOURCE-ENGINE-010-RESULT-BLOB-BOUNDED-BYTES.
 
 Locks the result-blob byte cap:
 
-  - object-storage reads are bounded by ``_resolve_max_bytes()``;
+  - object-storage reads are bounded by ``resolve_resource_max_bytes()``;
     iteration stops AT the first cap-exceeding chunk; remaining
     chunks are NOT consumed (no OOM amplification);
   - exceeding the cap raises :class:`MemoryLimitExceededError`
@@ -58,10 +58,9 @@ _RESULT_BLOB_PY = (
 
 def test_default_cap_is_200_mib():
     """Default cap mirrors ``RESOURCE_MAX_BYTES`` (200 MiB post
-    BE-GO-READY-MEMORY-ENGINE-005). BE-GO-READY-MEMORY-ENGINE-006
-    centralized the resolver: the loader's compat alias and the
-    shared helper MUST agree on the same default."""
-    from app.core.resources.loaders import result_blob as loader_mod
+    BE-GO-READY-MEMORY-ENGINE-005). BE-GO-READY-MEMORY-ENGINE-007
+    removed the loader's compat alias: tests now call the canonical
+    ``resolve_resource_max_bytes`` directly."""
     from app.core.resources.resource_caps import (
         RESOURCE_MAX_BYTES_DEFAULT,
         RESOURCE_MAX_BYTES_ENV,
@@ -71,7 +70,6 @@ def test_default_cap_is_200_mib():
     # Clear any test-side env override before resolving.
     prior = os.environ.pop(RESOURCE_MAX_BYTES_ENV, None)
     try:
-        assert loader_mod._resolve_max_bytes() == 200 * 1024 * 1024
         assert resolve_resource_max_bytes() == 200 * 1024 * 1024
         assert RESOURCE_MAX_BYTES_DEFAULT == 200 * 1024 * 1024
     finally:
@@ -82,13 +80,14 @@ def test_default_cap_is_200_mib():
 def test_env_override_takes_effect_at_call_time(monkeypatch):
     """Setting ``RESOURCE_MAX_BYTES`` overrides the default; the
     read happens per-call so a runtime mutation is immediately
-    observed. The loader alias delegates to
-    ``resolve_resource_max_bytes`` (MEMORY-006)."""
-    from app.core.resources.loaders import result_blob as loader_mod
-    from app.core.resources.resource_caps import RESOURCE_MAX_BYTES_ENV
+    observed."""
+    from app.core.resources.resource_caps import (
+        RESOURCE_MAX_BYTES_ENV,
+        resolve_resource_max_bytes,
+    )
 
     monkeypatch.setenv(RESOURCE_MAX_BYTES_ENV, "1024")
-    assert loader_mod._resolve_max_bytes() == 1024
+    assert resolve_resource_max_bytes() == 1024
 
 
 @pytest.mark.parametrize("bad_value", ["", "not-a-number", "0", "-1"])
@@ -98,14 +97,14 @@ def test_invalid_or_nonpositive_env_falls_back_to_default(
     """Empty / non-int / non-positive values silently fall back to
     the default. A misconfigured env must NOT silently disable the
     cap."""
-    from app.core.resources.loaders import result_blob as loader_mod
     from app.core.resources.resource_caps import (
         RESOURCE_MAX_BYTES_DEFAULT,
         RESOURCE_MAX_BYTES_ENV,
+        resolve_resource_max_bytes,
     )
 
     monkeypatch.setenv(RESOURCE_MAX_BYTES_ENV, bad_value)
-    assert loader_mod._resolve_max_bytes() == RESOURCE_MAX_BYTES_DEFAULT
+    assert resolve_resource_max_bytes() == RESOURCE_MAX_BYTES_DEFAULT
 
 
 # ---------------------------------------------------------------------------

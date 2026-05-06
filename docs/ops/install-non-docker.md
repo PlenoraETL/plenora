@@ -1467,7 +1467,7 @@ to make it persistent (section 7).
 - [`backend/deploy/iam/README.md`](../../backend/deploy/iam/README.md)
   — IAM policy install for the AWS path.
 - [`install-docker.md`](install-docker.md) — Docker install path
-  (NOT IMPLEMENTED, target shape only).
+  (FIRST SCAFFOLD, NOT YET VALIDATED on a real Linux PC).
 - [`install-marco-dry-run.md`](install-marco-dry-run.md) — one-page
   copy/paste dry-run pack for the first real Linux PC test
   (`BE-GO-READY-INSTALLATION-024`).

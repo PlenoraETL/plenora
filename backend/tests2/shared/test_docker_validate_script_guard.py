@@ -207,6 +207,189 @@ def test_validate_script_does_not_clobber_env_docker():
 
 
 # =====================================================================
+# BE-GO-READY-INSTALL-013-DOCKER-VALIDATE-LINUX-SAFETY
+# =====================================================================
+# Adds two structural guards that make the script safe to run on a
+# real Linux PC without surprises:
+#   - LF-only line endings (a CRLF copy fails with `bad interpreter:
+#     /usr/bin/env bash^M`);
+#   - explicit preflight diagnostics for missing `docker` binary AND
+#     missing `docker compose` plugin (the v2 subcommand) BEFORE any
+#     docker invocation runs.
+
+
+def test_validate_script_uses_lf_line_endings():
+    """The script MUST be checked out with LF line endings. A CRLF
+    copy fails on Linux with `bad interpreter: /usr/bin/env bash^M`
+    — the kernel reads the shebang line literally including the CR
+    and tries to exec a non-existent interpreter.
+
+    Locking the line-ending shape source-bound is the canonical
+    cross-platform fix: the repo's `.gitattributes` pins
+    `scripts/*.sh text eol=lf`, and this test asserts the on-disk
+    file in the working tree carries the expected ending. Together
+    they prevent a Windows contributor from re-saving with CRLF
+    and pushing a script that breaks every Linux runner.
+    """
+    raw = _SCRIPT.read_bytes()
+    crlf_count = raw.count(b"\r\n")
+    assert crlf_count == 0, (
+        f"scripts/docker-validate.sh contains {crlf_count} CRLF "
+        "(`\\r\\n`) line ending(s). Linux executes the shebang "
+        "line literally; a CRLF copy fails with 'bad interpreter: "
+        "/usr/bin/env bash^M'. Re-save the file with LF endings "
+        "and verify `.gitattributes` pins `scripts/*.sh "
+        "text eol=lf`."
+    )
+    # Defense-in-depth: a lone CR (\r) without a following LF is
+    # also a line-ending hazard (legacy classic-Mac style). The
+    # script is plain text that should never contain CR at all.
+    cr_count = raw.count(b"\r")
+    assert cr_count == 0, (
+        f"scripts/docker-validate.sh contains {cr_count} bare CR "
+        "byte(s). The file must be pure LF (no CR, no CRLF) so "
+        "the shebang line resolves cleanly on every Linux host."
+    )
+
+
+def test_gitattributes_pins_scripts_to_lf():
+    """`.gitattributes` MUST contain a rule that pins `scripts/*.sh`
+    to LF line endings. Without it a Windows clone with
+    `core.autocrlf=true` can rewrite the file to CRLF on checkout
+    even when the index version is LF — the script then fails on
+    the first `bash` invocation with a `^M` interpreter error.
+
+    This is the structural counterpart of the LF source-bound test
+    above: the source-bound test catches a bad commit BEFORE merge,
+    the .gitattributes rule keeps the working-copy LF AFTER merge.
+    """
+    gitattributes = _REPO_ROOT / ".gitattributes"
+    assert gitattributes.is_file(), (
+        ".gitattributes must exist at the repo root with an "
+        "explicit `scripts/*.sh text eol=lf` rule (BE-GO-READY-"
+        "INSTALL-013). Without it, Windows checkouts with "
+        "core.autocrlf=true rewrite the validation script to "
+        "CRLF and break it on Linux."
+    )
+    text = gitattributes.read_text(encoding="utf-8")
+    # The rule shape `scripts/*.sh ... eol=lf` is the canonical form.
+    # We accept either `text eol=lf` or just `eol=lf` after the
+    # path glob.
+    assert "scripts/*.sh" in text, (
+        ".gitattributes must include a rule path-globbing "
+        "`scripts/*.sh` (BE-GO-READY-INSTALL-013). Currently "
+        "missing — the LF guarantee on the validation script "
+        "is then implicit only and breaks under "
+        "core.autocrlf=true."
+    )
+    assert "eol=lf" in text, (
+        ".gitattributes must contain `eol=lf` for `scripts/*.sh` "
+        "(BE-GO-READY-INSTALL-013). The bare path glob without "
+        "the explicit `eol=lf` does not enforce line endings on "
+        "Windows checkouts."
+    )
+
+
+def test_validate_script_preflights_docker_binary():
+    """Preflight: missing `docker` binary on PATH must be detected
+    BEFORE any docker invocation runs. Without the preflight, step
+    1 (`docker compose config`) fails with the shell's generic
+    `command not found` and the operator has no install pointer.
+
+    Source-bound: the script must include both the `command -v
+    docker` check AND the install-docs URL pointer in the error
+    message."""
+    text = _SCRIPT.read_text(encoding="utf-8")
+    assert "command -v docker" in text, (
+        "scripts/docker-validate.sh must preflight the `docker` "
+        "binary via `command -v docker` BEFORE any docker "
+        "invocation. Without the preflight the operator hits "
+        "`command not found` mid-pack with no install pointer."
+    )
+    assert "'docker' binary not found" in text, (
+        "scripts/docker-validate.sh must surface a clear "
+        "diagnostic (`'docker' binary not found on PATH.`) when "
+        "the preflight detects a missing docker binary."
+    )
+    assert "docs.docker.com/engine/install" in text, (
+        "scripts/docker-validate.sh missing-docker error message "
+        "must point at the canonical install URL "
+        "(docs.docker.com/engine/install) so the operator can "
+        "fix the precondition without context-switching."
+    )
+
+
+def test_validate_script_preflights_docker_compose_plugin():
+    """Preflight: `docker compose` v2 plugin must be detected
+    BEFORE step 1. The validation pack uses the plugin shape
+    (`docker compose ...` with a SPACE) NOT the legacy
+    `docker-compose` standalone tool. Without the preflight, hosts
+    with only the legacy tool installed fail step 1 with a
+    confusing `unknown command "compose"`."""
+    text = _SCRIPT.read_text(encoding="utf-8")
+    assert "docker compose version" in text, (
+        "scripts/docker-validate.sh must preflight the "
+        "`docker compose` plugin via `docker compose version` "
+        "BEFORE any compose-prefixed step. The preflight is the "
+        "diagnostic that distinguishes 'docker installed but "
+        "compose plugin missing' from 'docker not installed at "
+        "all'."
+    )
+    assert "'docker compose' plugin not available" in text, (
+        "scripts/docker-validate.sh must surface a clear "
+        "diagnostic when the compose plugin preflight fails. "
+        "Operators on legacy hosts see 'unknown command \"compose\"' "
+        "from the plugin failure path; the explicit preflight "
+        "message points at the right install URL."
+    )
+    assert "docs.docker.com/compose/install" in text, (
+        "scripts/docker-validate.sh missing-compose-plugin error "
+        "message must point at the canonical install URL "
+        "(docs.docker.com/compose/install) — the compose plugin "
+        "install path is DIFFERENT from the docker engine "
+        "install path on most distros."
+    )
+
+
+def test_validate_script_preflights_run_in_correct_order():
+    """Preflight ordering: the four preconditions MUST be checked
+    BEFORE the `run_step` invocations. Without the ordering a
+    failed precondition would surface only AFTER step 1's docker
+    invocation, defeating the diagnostic value of the preflight.
+
+    Source-bound: assert the four preflight ERROR markers all
+    appear textually BEFORE the first `run_step 1` call.
+    """
+    text = _SCRIPT.read_text(encoding="utf-8")
+    preflight_markers = (
+        "ERROR: docker-compose.yml not found",
+        "ERROR: 'docker' binary not found",
+        "ERROR: 'docker compose' plugin not available",
+        "ERROR: .env.docker not found",
+    )
+    first_step_marker = "run_step 1 "
+    first_step_pos = text.find(first_step_marker)
+    assert first_step_pos != -1, (
+        "scripts/docker-validate.sh must invoke `run_step 1` for "
+        "the canonical first command (locked by "
+        "test_validate_script_runs_eight_canonical_commands)."
+    )
+    for marker in preflight_markers:
+        pos = text.find(marker)
+        assert pos != -1, (
+            f"scripts/docker-validate.sh must contain preflight "
+            f"diagnostic {marker!r} (BE-GO-READY-INSTALL-013)."
+        )
+        assert pos < first_step_pos, (
+            f"scripts/docker-validate.sh preflight diagnostic "
+            f"{marker!r} must appear textually BEFORE the first "
+            "`run_step 1` invocation. A preflight that fires AFTER "
+            "step 1 has no diagnostic value -- the operator has "
+            "already seen the cryptic docker-side failure."
+        )
+
+
+# =====================================================================
 # install-docker.md: validation pack section
 # =====================================================================
 

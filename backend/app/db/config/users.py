@@ -38,6 +38,20 @@ def list_users(group_id: str) -> List[Dict]:
     )
 
 
+def list_all_users() -> List[Dict]:
+    """Lista TUTTI gli utenti (no filtro per gruppo).
+
+    Usato esclusivamente dal superadmin (vedi
+    `app/core/auth/users_router.py:list_users`). Single-query (no N+1
+    per gruppo); il caller filtra/sanifica i campi prima di
+    serializzare. La SELECT replica `SELECT * FROM users ORDER BY
+    username` cosi' la shape della riga combacia byte-per-byte con
+    quella che il router pre-DB-ENGINE-006 leggeva via
+    `_cfg_db.fetchall`.
+    """
+    return fetchall("SELECT * FROM users ORDER BY username")
+
+
 def create_user(user_id: str, username: str, password_hash: str, group_id: str,
                 role: str = "user", email: str = "") -> Dict:
     from datetime import datetime, timezone

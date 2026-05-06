@@ -56,7 +56,7 @@ def test_get_result_data_converts_memoryview_to_bytes(monkeypatch):
 
 def test_get_result_data_uses_group_filter_when_provided(monkeypatch):
     import app.db.pg_connection as pg_conn
-    import app.core.resources.loaders.result_blob as result_blob_loader
+    from app.core.resources.resource_caps import resolve_resource_max_bytes
 
     seen = {}
 
@@ -76,8 +76,10 @@ def test_get_result_data_uses_group_filter_when_provided(monkeypatch):
     assert "group_id = ?" in seen["sql"]
     # 013: the BYTEA SQL preflight prepends `max_bytes` as the
     # leading bound parameter (CASE WHEN length(data) > ?). The
-    # WHERE-clause params follow in declaration order.
-    expected_cap = result_blob_loader._resolve_max_bytes()
+    # WHERE-clause params follow in declaration order. MEMORY-007
+    # removed the loader's `_resolve_max_bytes` alias; the canonical
+    # entry point is `resolve_resource_max_bytes`.
+    expected_cap = resolve_resource_max_bytes()
     assert seen["params"] == (expected_cap, "res-1", "grp-1")
 
 

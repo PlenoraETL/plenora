@@ -77,8 +77,6 @@ _FACADE_LEAF = "config_db_service"
 #     lazy `_safe_set_clause` import — intentional cycle break.
 #   - `app/core/auth/auth.py`: heavy `cfg_db.*` usage spanning users,
 #     projects, groups; migration owned by future AUTH-ENGINE batch.
-#   - `app/core/auth/users_router.py`: USERS cluster + raw fetchall
-#     for the admin list endpoint.
 #   - `app/services/project_service.py`: only uses
 #     `update_project_canvas_key_atomic` — kept verbatim in facade.
 #     (groups callsites migrated by DB-ENGINE-003.)
@@ -116,6 +114,21 @@ _FACADE_LEAF = "config_db_service"
 #     (connections) → `pg_connection.fetchall`.
 # All four had ZERO test monkeypatch coupling on `cfg_db.<name>`, so
 # the migration is purely an import edit + lazy-import rewire.
+#
+# Removed by BE-GO-READY-DB-ENGINE-006-FACADE-PROD-PURGE-NEXT
+# (this batch):
+#   - `app/core/auth/users_router.py` — superadmin admin-list path
+#     migrated from `_cfg_db.fetchall("SELECT * FROM users ORDER BY
+#     username")` to a new leaf helper
+#     `app.db.config.users.list_all_users()` (returns the same row
+#     shape; tested via `test_users_router_extraction_contract.py`
+#     which only asserts handler location/URL routes -- no
+#     monkeypatch coupling on `cfg_db.<name>` for the superadmin
+#     branch). Eliminates the last raw-SQL-via-facade call from a
+#     router and removes the `users_router` carve-out from the
+#     architecture-guard `pg_connection`-direct-import allowlist
+#     (the leaf owns the `pg_connection.fetchall` call now, so the
+#     router stays compliant with `test_pg_connection_not_imported_from_new_routers`).
 _FACADE_PROD_ALLOWLIST: frozenset[str] = frozenset({
     "app/db/db_service.py",
     "app/db/config/users.py",
@@ -124,7 +137,6 @@ _FACADE_PROD_ALLOWLIST: frozenset[str] = frozenset({
     "app/db/config/connections.py",
     "app/db/config/datasources.py",
     "app/core/auth/auth.py",
-    "app/core/auth/users_router.py",
     "app/services/project_service.py",
 })
 

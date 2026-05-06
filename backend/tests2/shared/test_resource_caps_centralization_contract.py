@@ -28,11 +28,9 @@ What this contract bans (per loader file)
   ``RESOURCE_MAX_BYTES`` literal -- that is structurally a local
   env-parsing reimplementation.
 
-Both loaders are still allowed to expose a ``_resolve_max_bytes``
-SYMBOL as a thin compat alias that delegates to the helper; this
-keeps existing tests + the legacy
-``app.db.results_db_service`` shim happy without preserving the
-duplicated implementation.
+Both loaders MUST NOT expose a ``_resolve_max_bytes`` compat alias
+anymore. BE-GO-READY-MEMORY-ENGINE-007 made the shared helper the
+only public entry point for this cap.
 
 Why source-bound
 ----------------
@@ -252,27 +250,27 @@ def test_artifact_preview_cap_is_not_collapsed_into_resource_max_bytes():
     )
 
 
-def test_loader_compat_aliases_call_through_helper():
-    """The two loaders may keep ``_resolve_max_bytes`` as a
-    backward-compat alias for tests / the legacy shim. If they
-    do, the alias's body MUST be a one-line delegation to
-    ``resolve_resource_max_bytes`` -- never local env parsing."""
+def test_loader_compat_aliases_are_removed():
+    """BE-GO-READY-MEMORY-ENGINE-007: the loader-local
+    ``_resolve_max_bytes`` compat aliases were deleted. The
+    canonical entry point is ``resolve_resource_max_bytes`` from
+    ``app.core.resources.resource_caps``; reintroducing the alias
+    would re-create a parallel symbol that future contributors
+    might extend with local env parsing (the canonical drift).
+
+    This lock fails LOUD if a contributor restores
+    ``def _resolve_max_bytes`` in either loader, instead of
+    silently allowing it under the (older) delegation rule."""
+    pattern = re.compile(r"^\s*def\s+_resolve_max_bytes\s*\(", re.MULTILINE)
+    bad: list[str] = []
     for path in _LOADERS:
-        text = path.read_text(encoding="utf-8")
-        if "def _resolve_max_bytes" not in text:
-            continue
-        # Extract the function body (single source line that calls
-        # the helper). Match the pattern within the function block.
-        m = re.search(
-            r"def _resolve_max_bytes\([^)]*\) ?-> ?int:\s*"
-            r"(?:'''[\s\S]*?'''\s*|\"\"\"[\s\S]*?\"\"\"\s*)?"
-            r"return resolve_resource_max_bytes\(\)",
-            text,
-        )
-        rel = path.relative_to(_BACKEND_ROOT).as_posix()
-        assert m, (
-            f"{rel}: `_resolve_max_bytes` exists but is not a "
-            "thin one-line `return resolve_resource_max_bytes()` "
-            "delegation. Either delete the alias or restore the "
-            "delegation pattern."
-        )
+        text = _python_code_only(path.read_text(encoding="utf-8"))
+        if pattern.search(text):
+            bad.append(path.relative_to(_BACKEND_ROOT).as_posix())
+    assert not bad, (
+        "Loaders MUST NOT define a local `_resolve_max_bytes` "
+        "alias (BE-GO-READY-MEMORY-ENGINE-007 deleted the compat "
+        "wrappers). Call `resolve_resource_max_bytes` from "
+        "`app.core.resources.resource_caps` directly. "
+        "Offenders:\n  " + "\n  ".join(bad)
+    )

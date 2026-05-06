@@ -105,8 +105,8 @@ def test_load_filters_by_group_id_when_not_superadmin():
     parameter is the BYTEA preflight cap (max_bytes), followed
     by the WHERE-clause params in declaration order.
     """
-    from app.core.resources.loaders import result_blob as loader_mod
     from app.core.resources.loaders.result_blob import ResultBlobLoader
+    from app.core.resources.resource_caps import resolve_resource_max_bytes
 
     captured, fake = fake_fetchone(row=None)  # simulate "not found" / cross-tenant
 
@@ -121,15 +121,15 @@ def test_load_filters_by_group_id_when_not_superadmin():
         f"SQL must filter by group_id; got: {sql}"
     )
     # 013: max_bytes is the leading bound parameter (CASE cap).
-    expected_cap = loader_mod._resolve_max_bytes()
+    expected_cap = resolve_resource_max_bytes()
     assert captured["params"] == (expected_cap, "r1", "g1")
 
 
 def test_load_skips_group_filter_when_superadmin():
     """is_superadmin=True bypasses the group filter; the bypass is
     recorded in the audit log."""
-    from app.core.resources.loaders import result_blob as loader_mod
     from app.core.resources.loaders.result_blob import ResultBlobLoader
+    from app.core.resources.resource_caps import resolve_resource_max_bytes
 
     captured, fake = fake_fetchone(
         row={"data": b"payload", "data_size": 7, "storage_key": None}
@@ -143,7 +143,7 @@ def test_load_skips_group_filter_when_superadmin():
     assert "AND group_id" not in captured["sql"]
     # 013: max_bytes precedes the WHERE-clause params; with no
     # group filter the only WHERE-bound value is `r1`.
-    expected_cap = loader_mod._resolve_max_bytes()
+    expected_cap = resolve_resource_max_bytes()
     assert captured["params"] == (expected_cap, "r1")
     assert out.data == b"payload"
 
@@ -277,7 +277,7 @@ def test_back_compat_shim_with_group_id_filters_sql():
     placeholder); WHERE-clause params follow.
     """
     from app.db import results_db_service
-    from app.core.resources.loaders import result_blob as loader_mod
+    from app.core.resources.resource_caps import resolve_resource_max_bytes
 
     captured, fake = fake_fetchone(
         row={"data": b"x", "data_size": 1, "storage_key": None}
@@ -288,7 +288,7 @@ def test_back_compat_shim_with_group_id_filters_sql():
 
     assert out == b"x"
     assert "AND group_id = ?" in captured["sql"]
-    expected_cap = loader_mod._resolve_max_bytes()
+    expected_cap = resolve_resource_max_bytes()
     assert captured["params"] == (expected_cap, "r1", "g1")
 
 
@@ -297,7 +297,7 @@ def test_back_compat_shim_without_group_id_skips_filter():
     group_id_filter=None -> SQL does NOT filter on group_id
     (legacy fail-open path preserved)."""
     from app.db import results_db_service
-    from app.core.resources.loaders import result_blob as loader_mod
+    from app.core.resources.resource_caps import resolve_resource_max_bytes
 
     captured, fake = fake_fetchone(
         row={"data": b"y", "data_size": 1, "storage_key": None}
@@ -308,7 +308,7 @@ def test_back_compat_shim_without_group_id_skips_filter():
 
     assert out == b"y"
     assert "AND group_id" not in captured["sql"]
-    expected_cap = loader_mod._resolve_max_bytes()
+    expected_cap = resolve_resource_max_bytes()
     assert captured["params"] == (expected_cap, "r1")
 
 

@@ -327,25 +327,32 @@ def _extract_project_source_group_id(
     self_obj,
     ctx: Optional[ArricchisciExecutionContext],
 ) -> Optional[str]:
-    """BE-GO-READY-TRANSFORMATION-ENGINE-026: variante ctx-strict
+    """BE-GO-READY-TRANSFORMATION-ENGINE-026 +
+    BE-GO-READY-ORCHESTRATION-ENGINE-009: variante ctx-strict
     per il branch `project_source` di `_resolve_file_source_path`
     (chiama `SourceLoader.resolve_project_path` con
     `expected_group_id`).
 
-    Stesso contract di `_extract_file_source_group_id`
-    (TE-024) per simmetria e per chiudere il residual TE24-R1:
+    Behavior (ctx-strict):
       - **Ctx fornito**: ritorna `ctx.group_id` esclusivamente.
         Anche con `ctx.group_id is None`, NON cadiamo sul
         singleton legacy — la run dichiarata fail-closed a
-        valle.
-      - **Ctx assente**: KEEP_COMPAT — fallback su
-        `getattr(self_obj, "_current_group_id", None)` per i
-        legacy callsite non ancora migrati. Nessun lock test
-        attualmente esercita il fallback `ctx=None +
-        _current_group_id=None` per il branch project_source,
-        ma il fallback resta per simmetria col helper TE-024
-        e per non rompere chiamate dirette esterne (es.
-        `enrichment_task.py`).
+        valle (caller raise `ValueError("Contesto di sicurezza
+        non determinabile (group_id mancante)")`).
+      - **Ctx assente**: ritorna `None` (fail-closed esplicito).
+        ORCHESTRATION-ENGINE-009 ha rimosso il fallback su
+        `getattr(self_obj, "_current_group_id", None)`: il
+        callsite di produzione (`_resolve_file_source_path`,
+        unico chiamante in app + workers) propaga sempre `ctx`
+        attraverso la catena `_get_input_path_for_rest_file ->
+        _resolve_input_path_for_file_processor ->
+        _resolve_file_source_path`. Nessun caller esterno (es.
+        `enrichment_task.py`) chiama questo helper o
+        `_resolve_file_source_path` direttamente. Il parametro
+        `self_obj` resta nella firma per simmetria con
+        `_extract_file_source_group_id` e perche' il lock test
+        `test_rest_file_strict_helpers_still_present` scansiona
+        per nome funzione.
 
     Razionale: `SourceLoader.resolve_project_path` accetta
     `expected_group_id` come tenant binding fail-closed.
@@ -355,11 +362,13 @@ def _extract_project_source_group_id(
     il group_id sbagliato — il loader bloccherebbe comunque
     (defense in depth), ma il messaggio di errore + il log
     `[SECURITY]` riferirebbe il group sbagliato. Ctx-strict
-    rende il fallimento attribuibile alla run corretta.
+    senza fallback singleton rende il fallimento attribuibile
+    alla run corretta E impedisce qualsiasi leak da una run
+    precedente nello stesso processo worker.
     """
-    if ctx is not None:
-        return ctx.group_id
-    return getattr(self_obj, "_current_group_id", None)
+    if ctx is None:
+        return None
+    return ctx.group_id
 
 # Stesso logger name di `api_connector.py` (`__name__` valuta a
 # `"app.core.arricchisci.api_connector"`). Singleton stdlib per nome →

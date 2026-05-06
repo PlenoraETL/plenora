@@ -106,9 +106,15 @@ def list_users(current_user: CurrentUser = Depends(require_admin)):
     admin      → solo utenti del proprio gruppo
     """
     if current_user.role == "superadmin":
-        # Superadmin: tutti gli utenti con una singola query (no N+1 per gruppo)
-        import app.db.config_db_service as _cfg_db
-        users = _cfg_db.fetchall("SELECT * FROM users ORDER BY username")
+        # Superadmin: tutti gli utenti con una singola query (no N+1 per gruppo).
+        # BE-GO-READY-DB-ENGINE-006-FACADE-PROD-PURGE-NEXT: leaf import
+        # (`app.db.config.users.list_all_users`) replaces the prior
+        # `_cfg_db.fetchall(...)` raw-SQL shim through the facade. The
+        # leaf helper preserves the `SELECT * FROM users ORDER BY username`
+        # shape used by `UserResponse.model_fields` filtering below, so
+        # the response payload is byte-identical.
+        from app.db.config.users import list_all_users
+        users = list_all_users()
     else:
         users = db.list_users(current_user.group_id)
     return [UserResponse(**{k: u[k] for k in UserResponse.model_fields if k in u}) for u in users]
