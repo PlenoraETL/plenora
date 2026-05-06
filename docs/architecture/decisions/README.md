@@ -79,6 +79,10 @@ Non cancellare mai un ADR: il registro e' append-only. Un errore in un ADR si re
 - [ADR-0019](0019-2026-05-01-intermediate-mode-per-call-override.md) — `INTERMEDIATE_PERSISTENCE_MODE` per-call override via kwarg propagation + endpoint dual-auth superadmin (R-25 completion)
 - [ADR-0020](0020-2026-05-01-source-bound-test-keep-list.md) — Source-bound test KEEP list post R-04/R-04b: 7 `inspect.getsource` residui classificati in 3 categorie legittime (policy enforcement / AST sentinel / scheduler integration deferred)
 - [ADR-0021](0021-2026-05-03-env-config-boundary.md) — Env / Settings / `runtime_policy.yaml` config boundary: classificazione 7-bucket (SECRET_INFRA / DEPLOY_INFRA / APP_POLICY / OPERATIONAL_TUNING / FEATURE_FLAG / TEST_ONLY / LEGACY_COMPAT) + regole di routing + removal criteria per LEGACY_COMPAT
+- [ADR-0022](0022-2026-05-04-auth-disclosure-policy.md) — Auth Disclosure Policy And Domain Error Codes: 401 vs 403 disclosure tradeoff, domain error codes, auth facade retirement
+
+### External providers / macro-component boundaries
+- [ADR-0023](0023-2026-05-06-arcgis-external-provider-boundary.md) — ArcGIS classified as external read/write provider (CONNECTION_ENGINE), not IMDF subdomain; IMDF is publish consumer; import guard in `tests2/shared/test_arcgis_provider_boundary_guard.py`
 
 ## Workflow
 

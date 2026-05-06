@@ -86,6 +86,7 @@ from app.core.resources.types import (
     ResourceKind,
     ResourceRef,
 )
+from app.core.resources.loaders._shared import _short_key
 
 
 # ---------------------------------------------------------------------------
@@ -125,20 +126,6 @@ from app.core.resources.types import (
 # ---------------------------------------------------------------------------
 # Internal helpers — log key abbreviation + SQL row fetch
 # ---------------------------------------------------------------------------
-
-
-def _short_key(storage_key: Optional[str], max_len: int = 60) -> str:
-    """Abbrevia una storage_key per log: prime 12 + '...' + ultimi 30 char.
-
-    Mirror of the helper in ``results_db_service`` so the loader's log
-    line shape stays identical to the pre-pilot logs (no ops dashboard
-    breakage).
-    """
-    if not storage_key:
-        return "<none>"
-    if len(storage_key) <= max_len:
-        return storage_key
-    return f"{storage_key[:12]}...{storage_key[-30:]}"
 
 
 def _fetch_row(

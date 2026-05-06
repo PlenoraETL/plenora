@@ -109,7 +109,36 @@ Backup / log archive:
 Reconciliation backlog: surfaced via the `/ready` check
 `reconciliation_backlog`.
 
-## 4. DB config facade strangler + canonical `app/db/config/*`
+## 4. Connections / External Providers
+
+`CONNECTION_ENGINE`.
+
+External providers are remote read/write systems accessed via typed
+client adapters. They are NOT domain modules; they are infrastructure
+that domain modules consume.
+
+| Provider | Canonical client | Consumer(s) | Mode |
+|---|---|---|---|
+| **ArcGIS REST** | `app/core/features/arcgis_client.py:ArcGISClient` | Features (connection CRUD + browse), Estrai (read source), Carica (write sink), IMDF (publish adapter — see below) | read + write |
+| User DBs (PostgreSQL/MySQL/…) | `app/db/query_executor.py` | Estrai / Arricchisci | read |
+| External REST APIs | — (per-connection session) | Arricchisci (enricher + generator) | read + write |
+| Object Storage (S3/MinIO) | `app/shared/cloud_backends.py` | Resource Engine, file service, IMDF bundle storage | read + write |
+
+**ArcGIS boundary (ADR-0023):**
+
+`app/core/features/arcgis_client.py:ArcGISClient` is the canonical
+ArcGIS REST client: token lifecycle, retry/backoff, pagination, Esri
+type mapping. New ArcGIS communication should prefer this or a shared
+protocol derived from it.
+
+`app/core/imdf/arcgis_uploader.py` + `arcgis/` subpackage is the
+**IMDF publish adapter** (`KEEP_CUSTOM`): IMDF-specific 5-layer
+publication sequence, service lifecycle, OBJECTID batch resolution.
+This adapter may maintain its own ArcGIS REST session. It must NOT
+import from `app.core.features.*`. Locked by
+`tests2/shared/test_arcgis_provider_boundary_guard.py`.
+
+## 4b. DB config facade strangler + canonical `app/db/config/*`
 
 `CONNECTION_ENGINE` / `DEPLOYMENT_RUNTIME_ENGINE`.
 

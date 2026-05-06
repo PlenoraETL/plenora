@@ -20,6 +20,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import pandas as pd
 
 from app.utils.logger import get_logger
+from app.shared.canvas_node import CanvasNode  # BE-GO-READY-ARCH-055-W3
 
 logger = get_logger(__name__)
 
@@ -106,7 +107,7 @@ def _extract_consumed_columns(node_data: Dict) -> Set[str]:
       - "X"       → colonna "X"
       - "{X},{Y}" → colonne "X", "Y" (template syntax)
     """
-    pm = node_data.get("param_mapping") or (node_data.get("data") or {}).get("param_mapping") or {}
+    pm = CanvasNode(node_data).get_field("param_mapping") or {}
     cols = set()
     for _, mapping_value in pm.items():
         if not mapping_value or not isinstance(mapping_value, str):
@@ -121,7 +122,7 @@ def _extract_consumed_columns(node_data: Dict) -> Set[str]:
 
 def _extract_produced_columns(node_data: Dict) -> Set[str]:
     """Estrae le colonne che un nodo api_enrich aggiunge al DataFrame."""
-    om = node_data.get("output_mapping") or (node_data.get("data") or {}).get("output_mapping") or []
+    om = CanvasNode(node_data).get_field("output_mapping") or []
     return {m.get("column", "") for m in om if m.get("column")}
 
 
@@ -157,15 +158,12 @@ def _node_may_explode_cardinality(
     Used by `compute_parallel_groups` per escludere i nodi cardinality-
     changing dai batch paralleli column-by-column merge.
     """
-    if node.get("type") != "api_enrich":
+    cn = CanvasNode(node)
+    if cn.type != "api_enrich":
         return False
-    om = (
-        node.get("output_mapping")
-        or (node.get("data") or {}).get("output_mapping")
-        or []
-    )
+    om = cn.get_field("output_mapping") or []
     if not om and api_connections is not None:
-        api_id = node.get("api_id") or (node.get("data") or {}).get("api_id")
+        api_id = cn.get_field("api_id")
         if api_id:
             cfg = api_connections.get(api_id) or {}
             om = cfg.get("output_mapping") or []
@@ -225,13 +223,13 @@ def compute_parallel_groups(
     # Pre-compute produced columns per nodo
     produced = {}
     for n in nodes:
-        if n.get("type") == "api_enrich":
+        if CanvasNode(n).type == "api_enrich":
             produced[n["id"]] = _extract_produced_columns(n)
 
     # Pre-compute consumed columns per nodo
     consumed = {}
     for n in nodes:
-        if n.get("type") == "api_enrich":
+        if CanvasNode(n).type == "api_enrich":
             consumed[n["id"]] = _extract_consumed_columns(n)
 
     groups: List[Tuple[str, List[str]]] = []
@@ -244,9 +242,10 @@ def compute_parallel_groups(
         Richiede `api_connections` nel closure: senza, ritorna sempre False
         (compat legacy). `api_id` puo' stare al root del nodo o dentro `data`.
         """
-        if api_connections is None or n.get("type") != "api_enrich":
+        cn = CanvasNode(n)
+        if api_connections is None or cn.type != "api_enrich":
             return False
-        api_id = n.get("api_id") or (n.get("data") or {}).get("api_id")
+        api_id = cn.get_field("api_id")
         if not api_id:
             return False
         cfg = api_connections.get(api_id) or {}
@@ -256,7 +255,7 @@ def compute_parallel_groups(
         node = node_map.get(node_id)
         if not node:
             continue
-        ntype = node.get("type")
+        ntype = CanvasNode(node).type
 
         # File-processor: non batchabile. Flush del batch corrente e
         # emissione come single, cosi' a runtime riceve il DataFrame

@@ -1,9 +1,13 @@
 """Resource Engine loaders.
 
 BE-GO-READY-RESOURCE-ENGINE-002-RESULT-BLOB-LOADER-PILOT.
+BE-GO-READY-RESOURCE-ENGINE-020-FILE-SOURCE-BLOB-LOADER.
 
-v1 ships exactly one loader (`ResultBlobLoader`). Other kinds
-(file_source_blob, intermediate_artifact, eseguibili_output,
+v2 ships two loaders:
+  - ``ResultBlobLoader``      — kind ``result_blob``
+  - ``FileSourceBlobLoader``  — kind ``file_source_blob``
+
+Other kinds (intermediate_artifact, eseguibili_output,
 imdf_bundle) remain in the audit (sec. 2.1) and join only after
 their tenant binding is plumbed through.
 
@@ -14,5 +18,6 @@ this package. Locked by
 """
 
 from app.core.resources.loaders.result_blob import ResultBlobLoader
+from app.core.resources.loaders.file_source_blob import FileSourceBlobLoader
 
-__all__ = ["ResultBlobLoader"]
+__all__ = ["ResultBlobLoader", "FileSourceBlobLoader"]

@@ -498,19 +498,6 @@ def test_authz_helpers_imports_models_and_ownership_leaves():
 # ---------------------------------------------------------------------------
 
 
-def test_phase2_imports_currentuser_from_models_leaf():
-    """Phase-2 was a transitional `models`-direct-leaf phase. All 7
-    files have since migrated to the contract module:
-      - all 7 → Phase-9 (TE-015)
-
-    The lock is now empty by design (locked by Phase-9 section).
-    Placeholder kept for documentation."""
-    pytest.skip(
-        "Phase-2 superseded by Phase-9 contract fan-out (TE-015). "
-        "All files migrated to app.shared.contracts.auth."
-    )
-
-
 def test_phase2_orchestrator_imports_assert_group_access_from_ownership():
     """`orchestrator/router.py` must import `assert_group_access` from
     the ownership leaf."""
@@ -573,24 +560,6 @@ def test_phase2_imdf_lazy_assert_resource_visible_migrated_to_leaf():
 # ---------------------------------------------------------------------------
 
 
-def test_phase3_imports_currentuser_from_models_leaf():
-    """Phase-3 was a transitional `models`-direct-leaf phase. All 5
-    files have since migrated to the contract module:
-      - logs/router.py + features/routes.py: Phase-7 (TE-012/013)
-      - logs/runs_router.py, estrai/router.py,
-        manipola/api/transforms_api.py: Phase-8 (TE-014)
-
-    The lock is now empty by design (locked by Phase-7/8 sections).
-    This placeholder remains so the strangler suite explicitly
-    documents Phase-3's status and so that future regressions
-    landing back on the `models` leaf would force reopening this
-    test list."""
-    pytest.skip(
-        "Phase-3 superseded by Phase-7/8 contract fan-out (TE-013/014). "
-        "All files migrated to app.shared.contracts.auth."
-    )
-
-
 def test_phase3_features_routes_imports_ownership_helpers_from_leaf():
     """`features/routes.py` must import the 4 ownership helpers
     (`assert_group_access`, `assert_resource_visible`,
@@ -617,21 +586,6 @@ def test_phase3_features_routes_imports_ownership_helpers_from_leaf():
 # ---------------------------------------------------------------------------
 # Phase-4 leaf-import presence assertions
 # ---------------------------------------------------------------------------
-
-
-def test_phase4_imports_currentuser_from_models_leaf():
-    """Phase-4 was a transitional `models`-direct-leaf phase. All 5
-    files have since migrated to the contract module:
-      - connections/router, datasources/router, eseguibili/router:
-        Phase-7 (TE-013)
-      - arricchisci/router, carica/router: Phase-8 (TE-014)
-
-    The lock is now empty by design (locked by Phase-7/8 sections).
-    Placeholder kept for documentation."""
-    pytest.skip(
-        "Phase-4 superseded by Phase-7/8 contract fan-out (TE-013/014). "
-        "All files migrated to app.shared.contracts.auth."
-    )
 
 
 @pytest.mark.parametrize(

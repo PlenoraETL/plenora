@@ -46,9 +46,16 @@ _TYPES_PY = _BACKEND_ROOT / "app" / "core" / "resources" / "types.py"
 
 def _iter_loader_modules():
     """Yield each loader .py file under ``app/core/resources/loaders/``
-    (excluding ``__init__.py`` and pycache)."""
+    (excluding ``__init__.py``, private package utilities, and pycache).
+
+    Private utilities (files starting with ``_``) are shared helpers
+    for the loader modules (e.g. ``_shared.py``). They are NOT
+    loaders and MUST NOT carry a ``kind`` property.
+    """
     for path in _LOADERS_DIR.glob("*.py"):
         if path.name == "__init__.py":
+            continue
+        if path.name.startswith("_"):
             continue
         yield path
 

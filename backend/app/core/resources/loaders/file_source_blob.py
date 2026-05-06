@@ -104,6 +104,7 @@ from app.core.resources.types import (
     ResourceKind,
     ResourceRef,
 )
+from app.core.resources.loaders._shared import _short_key
 
 
 # ---------------------------------------------------------------------------
@@ -127,19 +128,6 @@ from app.core.resources.types import (
 # ---------------------------------------------------------------------------
 # Internal helpers — log key abbreviation + SQL row fetch
 # ---------------------------------------------------------------------------
-
-
-def _short_key(key: Optional[str], max_len: int = 60) -> str:
-    """Abbrevia una chiave per log: prime 12 + '...' + ultimi 30 char.
-
-    Mirror of the result-blob helper so log line shapes stay
-    consistent across loaders (no ops dashboard breakage).
-    """
-    if not key:
-        return "<none>"
-    if len(key) <= max_len:
-        return key
-    return f"{key[:12]}...{key[-30:]}"
 
 
 def _fetch_row(

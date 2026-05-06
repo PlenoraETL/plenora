@@ -244,7 +244,7 @@ def test_no_new_kind_in_loaders_directory_without_registration():
     loaders_dir = _RESOURCES_PKG / "loaders"
     loader_files = sorted(
         p.name for p in loaders_dir.glob("*.py")
-        if p.name not in {"__init__.py"}
+        if p.name not in {"__init__.py"} and not p.name.startswith("_")
     )
     assert loader_files == ["file_source_blob.py", "result_blob.py"], (
         f"Loader directory must currently contain exactly "
