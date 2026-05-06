@@ -525,8 +525,9 @@ class ManipolaExecutor:
             try:
                 from app.utils.logger import open_run
                 from app.core.intermediate import db as idb
-                import app.db.config_db_service as cfg_db
-                upstream_meta = cfg_db.get_project(source_project_id) or {}
+                # BE-GO-READY-DB-ENGINE-004: leaf canonico invece del facade.
+                from app.db.config.projects import get_project as _get_project
+                upstream_meta = _get_project(source_project_id) or {}
                 open_run(
                     run_id=upstream_run_id,
                     project_id=source_project_id,

@@ -12,11 +12,12 @@ Vincoli:
   DEDICATO ``ARTIFACT_PREVIEW_MAX_BYTES`` (env, default 25 MB —
   mirror della Settings.DEFAULTS senza importare ``app.config``:
   stesso boundary pattern di ``result_blob.py``). La preview ha un
-  cap MOLTO piu' basso del generico ``RESOURCE_MAX_BYTES`` (500 MB)
-  perche' la preview vive sul thread-pool dell'API ed e' concorrente
-  per definizione: N tab/utenti che fanno refresh di N nodi non
-  possono sommare 500 MB ciascuno o l'API satura la RAM del processo
-  prima di un OOM kill. Oversize NON viene degradato a errore
+  cap molto piu' basso del generico ``RESOURCE_MAX_BYTES``
+  (default 200 MB post BE-GO-READY-MEMORY-ENGINE-005) perche' la
+  preview vive sul thread-pool dell'API ed e' concorrente per
+  definizione: N tab/utenti che fanno refresh di N nodi non
+  possono sommare 200 MB ciascuno o l'API satura la RAM del
+  processo prima di un OOM kill. Oversize NON viene degradato a errore
   best-effort: la ``MemoryLimitExceededError`` propaga al boundary
   FastAPI (handler ``app/main.py``) che mappa a HTTP 413 con stage
   ``intermediate_artifact_preview``. Questo evita che un artifact
@@ -84,7 +85,7 @@ def _resolve_max_bytes() -> int:
     takes effect without restart). Default 25 MB matches
     ``Settings.DEFAULTS["ARTIFACT_PREVIEW_MAX_BYTES"]`` (BE-GO-READY-
     RUNTIME-001-PREVIEW-MAX-BYTES-CAP). Separate from
-    ``RESOURCE_MAX_BYTES`` (500 MB) on purpose: the preview is
+    ``RESOURCE_MAX_BYTES`` (default 200 MB post MEMORY-005) on purpose: the preview is
     concurrency-sensitive (N concurrent API requests) and only
     renders ``df.head(limit)``, so the byte budget is much tighter.
     Invalid / non-positive values fall back to the 25 MB default.

@@ -10,7 +10,14 @@ Pattern testato (rappresentativo, uno per file del batch):
 - sftp.disconnect: close() fallisce → swallow con breadcrumb
 - local list_files: OSError su stat → continue con breadcrumb
 - service.mark_as_processed: file_info fallisce → swallow con breadcrumb
-- resolver._write_temp_blob: TEMP_DIR config fallisce → swallow con breadcrumb
+
+Closed (BE-GO-READY-RESOURCE-ENGINE-023): the
+`resolver._write_temp_blob` TEMP_DIR breadcrumb test was
+removed as dead code along with the helper itself. Path-mode
+tempfile materialization now lives in
+``ResultBlobLoader._materialize_to_temp_path`` whose temp
+lifecycle contract is locked in
+``tests2/shared/test_result_blob_loader_path_mode_contract.py``.
 
 Invariants bloccati:
 - il flow resta invariato (return/continue/raise esterno preservati)
@@ -101,7 +108,6 @@ def test_ftp_maybe_hash_logs_debug_on_silent_return_none(monkeypatch):
     finally:
         _detach_collector(logger, handler, prev)
 
-
 # ─── 2) sftp.disconnect ────────────────────────────────────────────────────
 
 def test_sftp_disconnect_logs_debug_on_close_failure():
@@ -132,8 +138,6 @@ def test_sftp_disconnect_logs_debug_on_close_failure():
         )
     finally:
         _detach_collector(logger, handler, prev)
-
-
 # ─── 3) local list_files: stat fail → continue con breadcrumb ─────────────
 
 def test_local_list_files_logs_debug_on_stat_failure(tmp_path, monkeypatch):
@@ -195,8 +199,6 @@ def test_local_list_files_logs_debug_on_stat_failure(tmp_path, monkeypatch):
         )
     finally:
         _detach_collector(logger, handler, prev)
-
-
 # ─── 4) service.mark_as_processed: snapshot fail → breadcrumb ─────────────
 
 def test_service_mark_as_processed_logs_debug_on_snapshot_failure(
@@ -233,66 +235,5 @@ def test_service_mark_as_processed_logs_debug_on_snapshot_failure(
             f"Il breadcrumb DEVE includere ds_id + filename per correlazione, "
             f"ottenuto: {msg!r}"
         )
-    finally:
-        _detach_collector(logger, handler, prev)
-
-
-# ─── 5) resolver._write_temp_blob: TEMP_DIR config skip → breadcrumb ──────
-
-def test_resolver_write_temp_blob_logs_debug_on_temp_dir_config_failure(
-    monkeypatch,
-):
-    """La lettura di ``settings.TEMP_DIR`` è best-effort: se l'import di
-    app.config fallisce, tempfile va su default di sistema e breadcrumb DEBUG.
-
-    Simuliamo il fail iniettando un settings che solleva AttributeError
-    nell'accesso a ``TEMP_DIR`` tramite ``getattr`` — meno invasivo che
-    rompere l'import module-level.
-    """
-    from app.core.artifacts.resolver import ArtifactResolver
-
-    resolver = ArtifactResolver.__new__(ArtifactResolver)
-
-    # getattr con default non solleva; per far fallire forziamo una property
-    # che solleva. Patchamo l'import `from app.config import settings as _settings`
-    # forzando il modulo app.config a sollevare nel re-import interno.
-    import app.config as app_config
-    original_settings = app_config.settings
-
-    class _ExplodingSettings:
-        def __getattribute__(self, name):
-            if name == "TEMP_DIR":
-                raise RuntimeError("config read boom")
-            return getattr(original_settings, name)
-
-    monkeypatch.setattr(app_config, "settings", _ExplodingSettings())
-
-    handler, logger, prev = _attach_collector("app.core.artifacts.resolver")
-    try:
-        # _write_temp_blob scrive un blob e ritorna path — flow invariato
-        blob = b"hello breadcrumb"
-        path = resolver._write_temp_blob(blob, fmt="txt")
-        try:
-            assert path.exists()
-            assert path.read_bytes() == blob
-
-            debug_records = [r for r in handler.records if r.levelno == logging.DEBUG]
-            assert debug_records, (
-                "Atteso almeno un logger.debug su TEMP_DIR config fail"
-            )
-            msg = " ".join(r.getMessage() for r in debug_records)
-            assert "RuntimeError" in msg, (
-                f"Il breadcrumb DEVE includere type(e).__name__, ottenuto: {msg!r}"
-            )
-            assert "TEMP_DIR" in msg, (
-                f"Il breadcrumb DEVE identificare il contesto (TEMP_DIR), "
-                f"ottenuto: {msg!r}"
-            )
-        finally:
-            # Cleanup del tempfile creato
-            try:
-                path.unlink()
-            except OSError:
-                pass
     finally:
         _detach_collector(logger, handler, prev)

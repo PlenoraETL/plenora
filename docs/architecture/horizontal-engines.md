@@ -61,9 +61,9 @@ Public surface:
 Bounded-read helper (the part with real consumers today):
 
 - `backend/app/core/resources/bounded_reader.py:read_stream_bounded(...)`.
-- Stage cap: `RESOURCE_MAX_BYTES` (default 500 MB; `<= 0`
-  disables). Per-loader caps may be tighter (e.g.
-  `ARTIFACT_PREVIEW_MAX_BYTES` 25 MB).
+- Stage cap: `RESOURCE_MAX_BYTES` (default 200 MB post
+  BE-GO-READY-MEMORY-ENGINE-005; `<= 0` disables). Per-loader
+  caps may be tighter (e.g. `ARTIFACT_PREVIEW_MAX_BYTES` 25 MB).
 - Used in production by:
   `app/db/results_db_service.py`,
   `app/services/file_blob_materialization.py`,

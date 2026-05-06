@@ -314,28 +314,38 @@ class Settings:
         # massimo (byte) per un singolo blob letto via Resource Engine
         # (`ResultBlobLoader` mode='bytes'/'path' + future kinds:
         # file_source_blob, intermediate_artifact, eseguibili_output).
-        # Default 500 MB: ricoperchio sopra `LOAD_FILE_MAX_BYTES`
-        # (200 MB upload sincrono) e sotto `WORKER_RSS_MAX_BYTES`
-        # (1.5 GB) — un singolo result/file scaricato non puo' da solo
-        # consumare l'intero budget RSS del worker. Cap <= 0 disabilita
-        # il guard. Override via env `RESOURCE_MAX_BYTES`. La wiring
-        # consumer-side (cap pre-return in `get_result_data` /
-        # `_dispatch_by_id`) e' deferita: il loader stesso non importa
-        # `app.config` per anti-god-engine; il guard vivra' a livello
-        # caller (es. `results_db_service` o `cloud_backends`). Vedi
-        # `.agent-temp/BE_INSTALLATION_AUDIT.md` (BE-INSTALL-006).
-        "RESOURCE_MAX_BYTES": 500 * 1024 * 1024,
+        # Default 200 MB (BE-GO-READY-MEMORY-ENGINE-005): allineato a
+        # `LOAD_FILE_MAX_BYTES` (200 MB) -- un singolo blob letto sotto
+        # cap non puo' eccedere quello che il path di upload sincrono
+        # gia' tollera. Sotto `WORKER_RSS_MAX_BYTES` (1.5 GB) di un
+        # ordine di grandezza, quindi N download concorrenti restano
+        # nel budget RSS del worker anche su host piccoli. Pre-005 il
+        # default era 500 MB, basato sull'idea "ricoperchio sopra
+        # LOAD_FILE_MAX_BYTES" che pero' permetteva a un solo blob di
+        # consumare 1/3 del budget RSS del worker; correggere il
+        # default e' piu' sicuro che chiedere all'operatore l'override
+        # post-installazione. Cap <= 0 disabilita il guard. Override
+        # via env `RESOURCE_MAX_BYTES`. La wiring consumer-side (cap
+        # pre-return in `get_result_data` / `_dispatch_by_id`) e'
+        # deferita: il loader stesso non importa `app.config` per
+        # anti-god-engine; il guard vivra' a livello caller (es.
+        # `results_db_service` o `cloud_backends`). Vedi
+        # `.agent-temp/BE_INSTALLATION_AUDIT.md` (BE-INSTALL-006) e
+        # `.agent-temp/BE_MEMORY_OOM_AUDIT.md` (MEMORY-ENGINE-005).
+        "RESOURCE_MAX_BYTES": 200 * 1024 * 1024,
         # BE-GO-READY-RUNTIME-001-PREVIEW-MAX-BYTES-CAP: cap dedicato
         # per la preview HTTP di intermediate artifacts (Parquet) e
         # per qualunque preview-side path che oggi materializza bytes
         # in `BytesIO` prima di passarli a pandas/pyarrow.
-        # Separato da `RESOURCE_MAX_BYTES` (500 MB) perche' la preview
-        # vive sul thread-pool della API e ha un budget RAM
-        # drasticamente piu' stretto di un download/job worker:
+        # Separato da `RESOURCE_MAX_BYTES` (200 MB post MEMORY-005)
+        # perche' la preview vive sul thread-pool della API e ha un
+        # budget RAM drasticamente piu' stretto di un download/job
+        # worker:
         # - una richiesta preview puo' essere concorrente (N richieste
-        #   da N tab/utenti contemporanei). Con cap 500 MB un solo
-        #   refresh di un dataset grande consuma quasi tutto il
-        #   `WORKER_RSS_MAX_BYTES` (1.5 GB) dell'API process;
+        #   da N tab/utenti contemporanei). Anche con cap 200 MB un
+        #   solo refresh di un dataset grande consumerebbe ~1/8 del
+        #   `WORKER_RSS_MAX_BYTES` (1.5 GB) dell'API process; con N=4
+        #   tab si saturerebbe il budget;
         # - la preview restituisce solo `df.head(limit)` (default 100
         #   righe): leggere centinaia di MB di Parquet per renderne 100
         #   righe e' uno spreco strutturale. La cap reale dovra'

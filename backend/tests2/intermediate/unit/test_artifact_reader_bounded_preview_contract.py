@@ -14,7 +14,7 @@ Locks the intermediate artifact preview cap:
   - the cap is the dedicated ``ARTIFACT_PREVIEW_MAX_BYTES`` env
     (default 25 MiB, ``Settings.DEFAULTS`` mirror; no
     ``app.config`` import in the reader). Separate from
-    ``RESOURCE_MAX_BYTES`` (500 MiB) because preview is
+    ``RESOURCE_MAX_BYTES`` (200 MiB post MEMORY-005) because preview is
     concurrency-sensitive (BE-GO-READY-RUNTIME-001-PREVIEW-MAX-
     BYTES-CAP);
   - connectivity / parser / schema failures continue to flow
@@ -55,7 +55,7 @@ _ARTIFACT_READER_PY = (
 def test_default_cap_is_25_mib(monkeypatch):
     """Default cap is 25 MiB when ``ARTIFACT_PREVIEW_MAX_BYTES`` is
     unset. The preview cap is intentionally MUCH lower than
-    ``RESOURCE_MAX_BYTES`` (500 MiB) because the preview vive sul
+    ``RESOURCE_MAX_BYTES`` (200 MiB post MEMORY-005) because the preview vive sul
     thread-pool API ed e' concorrenza-sensibile."""
     from app.core.intermediate import artifact_reader as ar
 
@@ -85,7 +85,7 @@ def test_invalid_env_falls_back_to_default(monkeypatch):
 
 def test_resource_max_bytes_does_not_drive_preview(monkeypatch):
     """``RESOURCE_MAX_BYTES`` MUST NOT be the env that drives the
-    preview cap (that would re-couple a 500 MB blob cap to the
+    preview cap (that would re-couple the generic blob cap to the
     25 MB preview budget). Setting it should NOT change
     ``_resolve_max_bytes()``."""
     from app.core.intermediate import artifact_reader as ar

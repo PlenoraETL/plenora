@@ -101,9 +101,9 @@ from app.core.resources.types import (
 # a per-chunk pre-check; the iterator is aborted as soon as the cap
 # would be exceeded. The cap is read from
 # ``RESOURCE_MAX_BYTES`` env (stdlib ``os.environ``); if unset /
-# invalid, falls back to ``_DEFAULT_RESULT_BLOB_MAX_BYTES`` (500 MB,
-# mirroring ``settings.RESOURCE_MAX_BYTES`` without importing
-# ``app.config``).
+# invalid, falls back to ``_DEFAULT_RESULT_BLOB_MAX_BYTES`` (200 MB
+# post BE-GO-READY-MEMORY-ENGINE-005; mirrors
+# ``settings.RESOURCE_MAX_BYTES`` without importing ``app.config``).
 #
 # Anti-god-engine note: NO ``app.config`` import. Stdlib only.
 # Worker 6 added the matching Settings default and install docs.
@@ -111,7 +111,7 @@ from app.core.resources.types import (
 # engine boundary (no ``app.config`` import) stays intact.
 # ---------------------------------------------------------------------------
 
-_DEFAULT_RESULT_BLOB_MAX_BYTES = 500 * 1024 * 1024  # 500 MB
+_DEFAULT_RESULT_BLOB_MAX_BYTES = 200 * 1024 * 1024  # 200 MB (MEMORY-005)
 
 _RESULT_BLOB_MAX_BYTES_ENV = "RESOURCE_MAX_BYTES"
 
@@ -445,10 +445,12 @@ def _materialize_to_temp_path(data: bytes) -> Path:
 
     Cleanup on write failure: the partial tempfile is closed and
     unlinked best-effort, then the original exception is re-raised.
-    Mirrors the hardening pattern used by
-    ``ArtifactResolver._write_temp_blob`` (disk-full / permission /
-    EROFS surface as the original I/O exception, never as a leaked
-    half-written tempfile).
+    Disk-full / permission / EROFS surface as the original I/O
+    exception, never as a leaked half-written tempfile. (This
+    helper is the typed replacement for the pre-019 resolver
+    shim ``ArtifactResolver._write_temp_blob``, which was deleted
+    in BE-GO-READY-RESOURCE-ENGINE-023 once production callers
+    had all migrated to the registry's path mode.)
 
     The loader does NOT honor a domain-specific TEMP_DIR (e.g.
     ``settings.TEMP_DIR``) on purpose: the anti-god-engine rule is

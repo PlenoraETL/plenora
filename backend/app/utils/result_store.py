@@ -34,11 +34,14 @@ def _apply_results_retention(project_id: str) -> None:
     N viene letto da projects.retention_n nelle config tables, default DEFAULT_RESULTS_RETENTION.
     """
     try:
-        import app.db.config_db_service as cfg_db
+        # BE-GO-READY-DB-ENGINE-004: import diretto del leaf canonico
+        # (`app.db.config.projects.get_project_retention_n`) invece del
+        # facade `config_db_service`. Allowlist strangler trimmed.
+        from app.db.config.projects import get_project_retention_n
         import app.db.results_db_service as res_db
 
         # Legge retention_n dal progetto (config tables)
-        retention_n = cfg_db.get_project_retention_n(project_id)
+        retention_n = get_project_retention_n(project_id)
         if retention_n is None:
             retention_n = DEFAULT_RESULTS_RETENTION
 

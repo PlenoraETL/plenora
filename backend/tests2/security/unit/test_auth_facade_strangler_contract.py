@@ -84,15 +84,22 @@ _PHASE2_PER_NAME_BAN: dict[Path, frozenset[str]] = {
         frozenset({"CurrentUser"}),
     _APP / "core" / "orchestrator" / "router.py":
         frozenset({"CurrentUser", "assert_group_access"}),
-    # imdf/router.py: CurrentUser top-level migrated to leaf;
-    # body-local lazy `assert_resource_visible` deliberately KEPT on
-    # facade because `tests2/security/unit/test_imdf_security_contract.py`
-    # monkeypatches `auth_mod.assert_resource_visible` for the
-    # `_assert_bundle_group_access` flow. Phase-3 will migrate the
-    # test to monkeypatch the leaf and then ban the lazy facade import
-    # here too.
+    # imdf/router.py: CurrentUser top-level migrated to leaf
+    # (Phase-9 contract fan-out). `assert_resource_visible`
+    # migrated to leaf by AUTH-ENGINE-020 (closes R-019.1):
+    # the IMDF router now imports it from
+    # `app.core.auth.ownership` at module top, the 2 IMDF
+    # tests monkeypatch via the consuming router-module
+    # surface, and the facade re-export was removed.
+    # AUTH-ENGINE-025 adds `assert_resource_visible` to this
+    # per-name ban dict as a defense-in-depth lock alongside
+    # the global Phase-13 lock + the dedicated
+    # `test_phase2_imdf_lazy_assert_resource_visible_migrated_to_leaf`
+    # test: the symbol cannot be re-imported via the facade in
+    # `imdf/router.py` even if a future diff also widens the
+    # global allowlist.
     _APP / "core" / "imdf" / "router.py":
-        frozenset({"CurrentUser"}),
+        frozenset({"CurrentUser", "assert_resource_visible"}),
 }
 
 
@@ -1372,13 +1379,8 @@ def test_phase12_app_workers_no_pure_dto_imports_from_facade():
 # completed). `app.shared.authz_helpers` likewise imports from the
 # leaf.
 #
-# The 2 remaining ownership re-exports on the facade are documented:
+# The remaining ownership re-export on the facade is documented:
 #
-#   - `assert_resource_visible`: Phase-2 imdf residual (locked by
-#     `test_phase2_imdf_lazy_assert_resource_visible_kept_on_facade_residual`);
-#     `app/core/imdf/router.py:140` body-local lazy import + 2 IMDF
-#     test files monkeypatch `auth_mod.assert_resource_visible`.
-#     Owner: `BE-GO-READY-AUTH-ENGINE-XXX-IMDF-OWNERSHIP-MIGRATION` (R-019.1).
 #   - `_check_ownership`: internal use by the 3 `require_*_owner`
 #     wrappers in `auth.py`; not a public API.
 

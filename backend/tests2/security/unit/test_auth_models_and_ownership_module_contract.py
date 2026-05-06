@@ -136,9 +136,8 @@ def test_auth_reexports_remaining_ownership_helpers_with_object_identity():
     """Identity contract per gli helper ownership ANCORA re-esportati
     dal facade dopo BE-GO-READY-AUTH-ENGINE-019-OWNERSHIP-REEXPORT-REMOVAL.
 
-    Solo `assert_resource_visible` (Phase-2 imdf residual) e
-    `_check_ownership` (uso interno dai 3 `require_*_owner`)
-    restano sul facade. Per quei 2 nomi, identita' garantita:
+    Solo `_check_ownership` (uso interno dai 3 `require_*_owner`)
+    resta sul facade. Per quel nome, identita' garantita:
     `auth_mod.X is ownership.X`.
     """
     from app.core.auth import auth as auth_mod

@@ -11,7 +11,8 @@ Locks the result-blob byte cap:
     rather than returning ``None`` (resource cap is a security
     signal, NOT a connectivity fallback);
   - the cap is configurable via ``RESOURCE_MAX_BYTES`` env var;
-    default = 500 MiB matching ``Settings.DEFAULTS``;
+    default = 200 MiB matching ``Settings.DEFAULTS`` (lowered from
+    500 MiB by BE-GO-READY-MEMORY-ENGINE-005);
   - BYTEA path also enforces the cap post-fetch (residual R-010.1:
     PG already loaded the row by then; preflight via
     ``SELECT length(data)`` deferred to Worker 6);
@@ -55,16 +56,17 @@ _RESULT_BLOB_PY = (
 # ---------------------------------------------------------------------------
 
 
-def test_default_cap_is_500_mib():
-    """Default cap mirrors ``RESOURCE_MAX_BYTES`` (500 MiB)."""
+def test_default_cap_is_200_mib():
+    """Default cap mirrors ``RESOURCE_MAX_BYTES`` (200 MiB post
+    BE-GO-READY-MEMORY-ENGINE-005)."""
     from app.core.resources.loaders import result_blob as loader_mod
 
     # Clear any test-side env override before resolving.
     env_var = loader_mod._RESULT_BLOB_MAX_BYTES_ENV
     prior = os.environ.pop(env_var, None)
     try:
-        assert loader_mod._resolve_max_bytes() == 500 * 1024 * 1024
-        assert loader_mod._DEFAULT_RESULT_BLOB_MAX_BYTES == 500 * 1024 * 1024
+        assert loader_mod._resolve_max_bytes() == 200 * 1024 * 1024
+        assert loader_mod._DEFAULT_RESULT_BLOB_MAX_BYTES == 200 * 1024 * 1024
     finally:
         if prior is not None:
             os.environ[env_var] = prior

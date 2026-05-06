@@ -88,6 +88,17 @@ _FACADE_LEAF = "config_db_service"
 # Removed by BE-GO-READY-DB-ENGINE-003-GROUPS-CALLSITE-MIGRATION:
 #   - `app/core/auth/groups_router.py` — now imports
 #     `app.db.config.groups` directly; zero facade refs remain.
+#
+# Removed by BE-GO-READY-DB-ENGINE-004-FACADE-LOW-RISK-IMPORT-PURGE
+# (this batch): the following files no longer import the facade after
+# migrating their `cfg_db.get_project*` lookups to
+# `app.db.config.projects` (no monkeypatch coupling on `cfg_db.<name>`
+# for these consumers, so the migration is purely an import edit):
+#   - `app/utils/result_store.py` — used `cfg_db.get_project_retention_n`.
+#   - `app/utils/debug_payload_builder.py` — 2× `cfg_db.get_project`.
+#   - `workers/tasks/pipeline_task.py` — `cfg_db.get_project`.
+#   - `app/core/intermediate/db.py` — `cfg_db.get_project_retention_n`.
+#   - `app/core/manipola/executor.py` — `cfg_db.get_project`.
 _FACADE_PROD_ALLOWLIST: frozenset[str] = frozenset({
     "app/db/db_service.py",
     "app/db/config/users.py",
@@ -98,15 +109,10 @@ _FACADE_PROD_ALLOWLIST: frozenset[str] = frozenset({
     "app/core/auth/auth.py",
     "app/core/auth/users_router.py",
     "app/core/datasources/service.py",
-    "app/core/intermediate/db.py",
-    "app/core/manipola/executor.py",
     "app/core/arricchisci/api_connection_source_loading.py",
     "app/core/arricchisci/api_connection_management.py",
     "app/services/connection_service.py",
     "app/services/project_service.py",
-    "app/utils/result_store.py",
-    "app/utils/debug_payload_builder.py",
-    "workers/tasks/pipeline_task.py",
 })
 
 

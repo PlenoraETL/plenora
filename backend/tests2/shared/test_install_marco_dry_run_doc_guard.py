@@ -79,28 +79,52 @@ def test_dry_run_doc_has_canonical_title(doc_text: str):
 
 def test_dry_run_doc_keeps_docker_honest(doc_text: str):
     # The Docker honesty disclaimer is the load-bearing claim of
-    # this page: Marco's PC has Docker installed but Plenora has
-    # NO Dockerfile, NO compose, NO Helm. Removing or softening
-    # this would let an operator try `docker compose up` and
-    # waste an afternoon.
+    # this page. Updated by INSTALL-011: the repo NOW ships a
+    # FIRST SCAFFOLD Dockerfile + compose, but the scaffold is
+    # NOT YET VALIDATED on a real Linux PC, so the first-PC test
+    # path remains the single-machine one. The disclaimer must
+    # name both facts so an operator with Docker installed cannot
+    # mistake the scaffold for the go-ready path.
     assert "Docker status (honest, NOT the go-ready path)" in doc_text, (
         "The Docker-status callout must keep the literal "
         "'Docker status (honest, NOT the go-ready path)' header "
         "so an operator skimming the page cannot miss it."
     )
-    assert "NO `Dockerfile`" in doc_text, (
-        "The Docker-status callout must explicitly state NO "
-        "`Dockerfile` exists in the repo at this commit."
+    assert "FIRST SCAFFOLD" in doc_text, (
+        "The Docker-status callout must explicitly state that "
+        "the Dockerfile + compose are FIRST SCAFFOLD (per "
+        "INSTALL-011). Without this, an operator may either "
+        "miss that the scaffold exists OR mistake it for a "
+        "validated path."
     )
-    assert "NO `docker-compose.yml`" in doc_text, (
-        "The Docker-status callout must explicitly state NO "
-        "`docker-compose.yml` exists in the repo at this commit."
+    # The disclaimer wraps across a markdown blockquote line
+    # break ("> NOT YET\n> VALIDATED"), so we check the
+    # canonical anchor phrases independently rather than as a
+    # single contiguous substring.
+    assert "NOT YET" in doc_text and "VALIDATED" in doc_text, (
+        "The Docker-status callout must contain the canonical "
+        "'NOT YET VALIDATED end-to-end on a real Linux PC' "
+        "phrase (may wrap across a blockquote line break) so "
+        "the scaffold is not mistaken for the validated path."
     )
-    assert "CANNOT install Plenora-ETL" in doc_text, (
-        "The Docker-status callout must contain the literal "
-        "'CANNOT install Plenora-ETL via `docker compose up`' "
-        "wording so the funnel to the no-Docker path is "
-        "unambiguous."
+    assert "end-to-end on a real Linux PC" in doc_text, (
+        "The Docker-status callout must explicitly say "
+        "'end-to-end on a real Linux PC' so the validation gap "
+        "is unmistakable."
+    )
+    assert "BE-GO-READY-INSTALL-011" in doc_text, (
+        "The Docker-status callout must reference the "
+        "BE-GO-READY-INSTALL-011 stream tag so the audit trail "
+        "is preserved."
+    )
+    # The funnel back to the no-Docker path must remain.
+    assert "the only go-ready path for the first pc test is this one" \
+        in doc_text.lower(), (
+        "The Docker-status callout must explicitly funnel the "
+        "operator back to the single-machine path as the only "
+        "go-ready first-PC test path. Without the funnel, an "
+        "operator might assume the scaffold IS the go-ready "
+        "path."
     )
 
 

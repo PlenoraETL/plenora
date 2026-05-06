@@ -10,14 +10,17 @@ this page is the executable subset for **the first real PC test
 on a fresh Ubuntu/Linux host with Docker already installed**.
 
 > **Docker status (honest, NOT the go-ready path).** Marco's PC
-> has Docker installed. Plenora-ETL has **NO `Dockerfile`** and
-> **NO `docker-compose.yml`** and NO Helm chart in this commit.
-> An operator with Docker pre-installed CANNOT install Plenora-ETL
-> via `docker compose up`. See
-> [install-docker.md](install-docker.md) for the target shape
-> of the future Docker batch (`INSTALLATION-010..013`); until
-> that batch ships and is tested, **the only go-ready path is
-> this one**, which does not use Docker at all.
+> has Docker installed. Plenora-ETL now ships a **FIRST SCAFFOLD**
+> `Dockerfile` and `docker-compose.yml`
+> (`BE-GO-READY-INSTALL-011`), but the scaffold is **NOT YET
+> VALIDATED end-to-end on a real Linux PC** and there is no Helm
+> chart. An operator who runs `docker compose up` against the
+> scaffold is testing the scaffold, NOT following the go-ready
+> path. See [install-docker.md](install-docker.md) for the
+> scaffold runbook (build / up / health / cleanroom.ping /
+> non-destructive stop) and the explicit limitations.
+> **The only go-ready path for the first PC test is this one**,
+> which does not use Docker at all.
 
 ---
 
@@ -705,7 +708,7 @@ Expected (defaults, no override in `backend/.env`):
 ```
 LOAD_FILE_MAX_BYTES=209715200
 WORKER_RSS_MAX_BYTES=1500000000
-RESOURCE_MAX_BYTES=524288000
+RESOURCE_MAX_BYTES=209715200
 ARTIFACT_PREVIEW_MAX_BYTES=26214400
 CROSS_JOIN_MAX_OUTPUT_ROWS=50000000
 MULTI_JOIN_MAX_OUTPUT_ROWS=50000000
@@ -719,9 +722,14 @@ are:
 ```
 LOAD_FILE_MAX_BYTES=104857600    # 100 MB upload cap
 WORKER_RSS_MAX_BYTES=838860800   # 800 MB worker RSS
-RESOURCE_MAX_BYTES=209715200     # 200 MB single-blob read cap
+RESOURCE_MAX_BYTES=104857600     # 100 MB single-blob read cap
 ARTIFACT_PREVIEW_MAX_BYTES=10485760 # 10 MB preview cap
 ```
+
+The runtime default for `RESOURCE_MAX_BYTES` is 200 MB
+(BE-GO-READY-MEMORY-ENGINE-005, lowered from 500 MB). Hosts
+with >=8 GB RAM can keep the default; hosts with <=4 GB
+should override down to 100 MB as shown above.
 
 A cap `<= 0` disables the corresponding guard (escape hatch).
 `RESOURCE_MAX_BYTES` is enforced by bounded blob/resource readers

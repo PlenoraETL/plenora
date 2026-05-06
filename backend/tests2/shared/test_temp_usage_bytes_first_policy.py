@@ -383,11 +383,16 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
     # The line is no longer a tempfile call site; the inventory
     # ratchet (`test_temp_materialization_inventory_is_complete`)
     # confirms it is no longer in the AST scan.
-    ("app/services/file_blob_materialization.py", 250): (
+    ("app/services/file_service.py", 631): (
         "PATH_REQUIRED_FILE",
-        "temp_file_for caller contract returns Path for SHP/GDB "
-        "downstream consumers (fiona/geopandas read_file). Bytes "
-        "API not available in those drivers.",
+        "FileSourceService._temp_file_for caller contract returns "
+        "Path for SHP/GDB downstream consumers (fiona/geopandas "
+        "read_file). Bytes API not available in those drivers. "
+        "Post BE-GO-READY-RESOURCE-ENGINE-024: this entry replaces "
+        "the retired `app/services/file_blob_materialization.py` "
+        "helper -- the SHP/GDB extraction lives inline in the "
+        "service now, fed by the Resource Engine `mode='bytes'` "
+        "fetch via `self._get_blob_from_db`.",
     ),
     ("app/services/file_multi_layer_upload.py", 142): (
         "STAGING_INGESTION",
@@ -408,20 +413,11 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
         "disk before persisting to DB BYTEA / object storage. "
         "Tempfile is the ingestion buffer.",
     ),
-    ("app/core/artifacts/resolver.py", 572): (
-        "MIGRATION_CANDIDATE",
-        "_write_temp_blob in ArtifactResolver: helper retained "
-        "for direct unit-test exposure (test_temp_lifecycle_core "
-        "+ test_silent_skip_breadcrumbs); ZERO production callers "
-        "remain. _materialize_from_result_id was migrated in "
-        "BE-GO-READY-RESOURCE-ENGINE-019 (RunArtifactRef path); "
-        "materialize_latest was migrated in "
-        "BE-GO-READY-RESOURCE-ENGINE-021 (LatestProjectArtifactRef "
-        "path). The latest-row's group_id is threaded into the "
-        "ResourceRef.expected_group_id slot directly. Remove the "
-        "helper + its dedicated unit tests in a small follow-up "
-        "cleanup worker once stability is confirmed.",
-    ),
+    # Closed (BE-GO-READY-RESOURCE-ENGINE-023): the resolver's
+    # `_write_temp_blob` helper at app/core/artifacts/resolver.py:572
+    # was deleted as dead code. R-021.1 is closed; the typed
+    # replacement is `ResultBlobLoader._materialize_to_temp_path`,
+    # already inventoried below as PATH_REQUIRED_FILE.
     ("app/core/eseguibili/router.py", 333): (
         "PATH_REQUIRED_FILE",
         "Eseguibile output materialization: temp path written to "
@@ -442,13 +438,15 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
         "DIR_MULTIFILE",
         "IMDF bundle re-cache fallback: same multi-file pattern.",
     ),
-    ("app/core/resources/loaders/result_blob.py", 461): (
+    ("app/core/resources/loaders/result_blob.py", 463): (
         "PATH_REQUIRED_FILE",
         "ResultBlobLoader._materialize_to_temp_path (mode='path'): "
         "the ENGINE'S OWN path-mode tempfile. Caller-owned "
         "cleanup (is_temporary=True). This is the typed "
-        "replacement for the resolver's _write_temp_blob. "
-        "Fallback-only: callers should prefer mode='bytes'.",
+        "replacement for the resolver's _write_temp_blob "
+        "(deleted in BE-GO-READY-RESOURCE-ENGINE-023 once all "
+        "production callers had migrated). Fallback-only: "
+        "callers should prefer mode='bytes'.",
     ),
 
     # ---- TemporaryDirectory ----
@@ -476,7 +474,7 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
         "OGR driver requires path; multi-file zip not "
         "expressible as bytes-only.",
     ),
-    ("app/utils/result_store.py", 552): (
+    ("app/utils/result_store.py", 555): (
         "PATH_REQUIRED_FILE",
         "save_pipeline_result gpkg/shp branch: GDAL/OGR drivers "
         "require a path argument; BytesIO not supported by fiona "
@@ -491,11 +489,16 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
     ),
 
     # ---- mkdtemp ----
-    ("app/services/file_blob_materialization.py", 228): (
+    ("app/services/file_service.py", 599): (
         "DIR_MULTIFILE",
         "SHP/GDB blob extraction destination: zip from BYTEA "
         "extracted into mkdtemp; caller cleans the dir parent "
-        "after read.",
+        "after read. Post BE-GO-READY-RESOURCE-ENGINE-024: this "
+        "entry replaces the retired "
+        "`app/services/file_blob_materialization.py` mkdtemp "
+        "callsite. The bytes feeding the extraction now arrive "
+        "through the Resource Engine's `FileSourceBlobLoader` via "
+        "`FileSourceService._get_blob_from_db`.",
     ),
     ("app/services/file_multi_layer_upload.py", 153): (
         "DIR_MULTIFILE",
@@ -627,31 +630,25 @@ def test_temp_inventory_entries_have_valid_category_and_rationale():
 
 
 def test_temp_inventory_migration_candidates_are_tracked():
-    """Lock the named MIGRATION_CANDIDATE sites so future
-    bytes-first work has a stable handle. Post-RESOURCE-ENGINE-006
-    (R-005.1 closure) the only remaining candidate is the
-    ArtifactResolver `_write_temp_blob` (gated on R-003.1
-    project-level binding gap). The
-    `file_blob_materialization.py:77` S3 candidate has been
-    migrated to bytes-first via `get_object_stream` and is no
-    longer a tempfile call site.
+    """Lock that the MIGRATION_CANDIDATE inventory is empty.
 
-    A regression that drops the remaining candidate without
-    migrating the underlying call would silently lose the
-    tracking.
+    Post-BE-GO-READY-RESOURCE-ENGINE-023 the ArtifactResolver
+    `_write_temp_blob` helper was deleted as dead code (R-021.1
+    closure); RESOURCE-ENGINE-019/021 had already migrated every
+    production caller to the engine's path-mode loader, leaving
+    the helper with zero callers and only its own unit tests.
+    Both the helper and its dedicated tests are now gone.
+
+    A regression that re-introduces a MIGRATION_CANDIDATE row
+    without naming the underlying call site would silently erode
+    the bytes-first ratchet.
     """
     candidates = sorted(
         rel_ln
         for rel_ln, (cat, _) in _TEMP_INVENTORY.items()
         if cat == "MIGRATION_CANDIDATE"
     )
-    expected = sorted([
-        # BE-GO-READY-RESOURCE-ENGINE-021/022 line shift: latest
-        # and fetch_run_blob now delegate to the registry. The helper
-        # remains only for direct lifecycle unit tests and is still
-        # tracked until a small cleanup worker deletes it safely.
-        ("app/core/artifacts/resolver.py", 572),
-    ])
+    expected: list[tuple[str, int]] = []
     assert candidates == expected, (
         f"MIGRATION_CANDIDATE inventory drift.\n"
         f"  expected: {expected}\n"

@@ -4,11 +4,12 @@ BE-GO-READY-RESOURCE-ENGINE-020-FILE-SOURCE-BLOB-LOADER.
 
 Closes the duplication between the engine's result-blob storage
 read path (``app/core/resources/loaders/result_blob.py``) and the
-service-layer file-source read path
-(``app/services/file_blob_materialization.py``). Both leaf
-readers shared the same dispatch shape (storage_key non-null ->
-object storage; else PG BYTEA fallback) AND the same bounded-bytes
-contract; v1 of the engine had only the result loader, leaving the
+pre-020 service-layer file-source read path (formerly
+``app/services/file_blob_materialization.py``, retired in
+BE-GO-READY-RESOURCE-ENGINE-024). Both leaf readers shared the
+same dispatch shape (storage_key non-null -> object storage;
+else PG BYTEA fallback) AND the same bounded-bytes contract; v1
+of the engine had only the result loader, leaving the
 file-source path as a parallel implementation in the service
 layer.
 
@@ -29,10 +30,11 @@ What this loader does NOT own (anti-god-engine):
 
   - parsing the bytes (CSV/Parquet/Geo dispatch lives in
     ``app/utils/dataframe.py`` and ``app/services/file_load_dispatch``);
-  - ZIP extraction for SHP/GDB temp-file materialization (still
-    in ``app/services/file_blob_materialization.temp_file_for``;
-    it can keep calling ``get_blob_from_db`` which itself
-    delegates to this loader as the storage-read primitive);
+  - ZIP extraction for SHP/GDB temp-file materialization (lives
+    inline in ``FileSourceService._temp_file_for`` post-024,
+    which fetches the blob bytes via this loader's `mode='bytes'`
+    surface and then owns the SHP/GDB ZIP extraction + tempdir
+    cleanup lifecycle);
   - the service-layer sharing check (``FileSourceService._assert_visible``
     handles owned-vs-shared visibility before this loader is
     invoked);
@@ -67,12 +69,12 @@ Mode support
 v1 ships exactly ``mode='bytes'``. ``mode='path'`` and
 ``mode='stream'`` raise ``ValueError`` — the file-source
 consumers that need a path use the SHP/GDB-aware
-``temp_file_for`` helper at the service layer (which has its
-own zip extraction + tempdir lifecycle); a generic engine
-``mode='path'`` would not preserve those semantics. Adding a
-generic path mode (with the ``plenora-file-source-blob-`` prefix
-+ ``cleanup_temp_path`` audit guard mirroring ``result_blob.py``)
-is residual scope.
+``FileSourceService._temp_file_for`` (which fetches via this
+loader and owns its own zip extraction + tempdir lifecycle); a
+generic engine ``mode='path'`` would not preserve those
+semantics. Adding a generic path mode (with the
+``plenora-file-source-blob-`` prefix + ``cleanup_temp_path``
+audit guard mirroring ``result_blob.py``) is residual scope.
 
 Boundary
 --------
@@ -111,7 +113,7 @@ from app.core.resources.types import (
 # operator-tunable budget.
 # ---------------------------------------------------------------------------
 
-_DEFAULT_FILE_SOURCE_BLOB_MAX_BYTES = 500 * 1024 * 1024  # 500 MB
+_DEFAULT_FILE_SOURCE_BLOB_MAX_BYTES = 200 * 1024 * 1024  # 200 MB (MEMORY-005)
 
 _FILE_SOURCE_BLOB_MAX_BYTES_ENV = "RESOURCE_MAX_BYTES"
 
@@ -357,9 +359,12 @@ class FileSourceBlobLoader:
 
     v1 supports ``mode="bytes"`` only. ``mode="path"`` and
     ``mode="stream"`` raise ``ValueError`` -- the file-source
-    consumers that need a filesystem path use the SHP/GDB-aware
-    ``app.services.file_blob_materialization.temp_file_for`` which
-    has its own ZIP-extraction lifecycle.
+    consumers that need a filesystem path use
+    ``FileSourceService._temp_file_for`` which fetches the bytes
+    via this loader and owns its SHP/GDB ZIP-extraction lifecycle
+    inline (post BE-GO-READY-RESOURCE-ENGINE-024 the legacy
+    ``app.services.file_blob_materialization`` helper module was
+    retired).
 
     Tenant binding (mirror of ``ResultBlobLoader``):
       - ``is_superadmin=False`` -> SQL ``WHERE group_id = ?``
@@ -389,13 +394,15 @@ class FileSourceBlobLoader:
         if mode != "bytes":
             # path / stream are deferred. v1 keeps the surface narrow:
             # the file-source consumers that need a path (SHP/GDB
-            # extraction) use temp_file_for at the service layer,
-            # which has its own zip-aware lifecycle.
+            # extraction) call FileSourceService._temp_file_for at
+            # the service layer, which fetches via this loader and
+            # owns its own zip-aware lifecycle.
             raise ValueError(
                 f"FileSourceBlobLoader.load: mode={mode!r} not supported. "
                 "v1 supports mode='bytes' only; path/stream are deferred. "
                 "For path-mode SHP/GDB consumers, use "
-                "`app.services.file_blob_materialization.temp_file_for`."
+                "`FileSourceService._temp_file_for` (post-024 lives "
+                "inline in the service, not in a separate module)."
             )
 
         # Tenant binding:

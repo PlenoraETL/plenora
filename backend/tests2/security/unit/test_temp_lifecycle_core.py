@@ -1,6 +1,6 @@
 """Core-level test per Refactor #4 Step C: temp file lifecycle.
 
-Verifica che i 3 call site identificati nell'audit non leakino
+Verifica che i call site identificati nell'audit non leakino
 tempfile su path errore:
 
 1. `arricchisci/api_connector._rest_file` — `mkdtemp(prefix="plenora_exec_")`
@@ -12,9 +12,15 @@ tempfile su path errore:
    IMDF") falliscono. Ora try/except che cleanup la tmp dir creata,
    solo se `_we_own_tmp` (caller non ha passato dest_dir esplicito).
 
-3. `artifacts/resolver._write_temp_blob` — `NamedTemporaryFile(delete=False)`
-   senza cleanup su exception di `tf.write(blob)`. Ora unlink esplicito
-   prima di re-raise.
+Closed (BE-GO-READY-RESOURCE-ENGINE-023):
+- `artifacts/resolver._write_temp_blob` was deleted as dead code
+  (R-021.1 closure). The tempfile lifecycle for result-blob path
+  materialization now lives in
+  `app.core.resources.loaders.result_blob._materialize_to_temp_path`
+  with the `plenora-result-blob-` audit prefix; tests for that
+  contract live in
+  `tests2/shared/test_result_blob_loader_path_mode_contract.py`
+  and `test_result_blob_loader_temp_safety_guard.py`.
 
 Test core-level: chiamano direttamente le funzioni, niente HTTP,
 niente CurrentUser.
@@ -32,87 +38,6 @@ pytestmark = [
     pytest.mark.contract,
     pytest.mark.regression,
 ]
-
-
-# ---------------------------------------------------------------------------
-# Fix 1: artifacts/resolver._write_temp_blob unlink su errore
-# ---------------------------------------------------------------------------
-
-
-def test_write_temp_blob_cleans_up_on_write_error():
-    """Pre-fix: NamedTemporaryFile(delete=False) + write che esplode
-    lasciava un file vuoto. Ora unlink esplicito prima di re-raise."""
-    from app.core.artifacts.resolver import ArtifactResolver
-
-    resolver = ArtifactResolver()
-
-    captured_path = {}
-
-    real_named_tempfile = __import__("tempfile").NamedTemporaryFile
-
-    def _wrapped_tempfile(*args, **kwargs):
-        tf = real_named_tempfile(*args, **kwargs)
-        captured_path["name"] = tf.name
-        # Sostituiamo write con uno che esplode
-        original_write = tf.write
-
-        def _boom(_blob):
-            raise OSError("disk full simulato")
-
-        tf.write = _boom
-        return tf
-
-    with patch("app.core.artifacts.resolver.tempfile.NamedTemporaryFile",
-               side_effect=_wrapped_tempfile):
-        with pytest.raises(OSError, match="disk full"):
-            resolver._write_temp_blob(b"some-blob", "csv")
-
-    # Il path deve essere stato creato MA poi rimosso dal cleanup
-    assert "name" in captured_path
-    assert not Path(captured_path["name"]).exists(), (
-        "_write_temp_blob deve cleanup il tempfile su errore di write"
-    )
-
-
-def test_write_temp_blob_returns_path_on_success(tmp_path):
-    """Sanity: il path success funziona ancora dopo il refactor."""
-    from app.core.artifacts.resolver import ArtifactResolver
-
-    resolver = ArtifactResolver()
-    path = resolver._write_temp_blob(b"id\n1\n", "csv")
-    try:
-        assert path.exists()
-        assert path.read_bytes() == b"id\n1\n"
-        assert path.suffix == ".csv"
-    finally:
-        path.unlink(missing_ok=True)
-
-
-def test_write_temp_blob_uses_settings_temp_dir(tmp_path, monkeypatch):
-    """R#4 Step C cleanup: i tempfile dell'artifact resolver devono
-    essere creati dentro settings.TEMP_DIR per coerenza con file_service
-    e con il resto del backend, non nel temp di sistema. Pre-fix
-    venivano sparpagliati nel default Python tempfile."""
-    from app.core.artifacts.resolver import ArtifactResolver
-    from types import SimpleNamespace
-
-    custom_temp = tmp_path / "urby_temp"
-    custom_temp.mkdir()
-
-    fake_settings = SimpleNamespace(TEMP_DIR=custom_temp)
-    import app.config as config_mod
-    monkeypatch.setattr(config_mod, "settings", fake_settings, raising=False)
-
-    resolver = ArtifactResolver()
-    path = resolver._write_temp_blob(b"id\n1\n", "csv")
-    try:
-        assert path.exists()
-        # Il tempfile deve vivere DENTRO custom_temp, non nel system temp
-        assert path.parent.resolve() == custom_temp.resolve(), (
-            f"Atteso tempfile dentro {custom_temp}, trovato in {path.parent}"
-        )
-    finally:
-        path.unlink(missing_ok=True)
 
 
 # ---------------------------------------------------------------------------

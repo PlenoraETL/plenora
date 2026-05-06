@@ -53,11 +53,17 @@ def _build_orchestrator():
 
 
 def _get_project_info(project_id: str) -> dict:
-    """Legge metadata progetto da PostgreSQL via `config_db_service`
-    (ex `config.db` SQLite pre-migrazione) — non bloccante."""
+    """Legge metadata progetto da PostgreSQL.
+
+    BE-GO-READY-DB-ENGINE-004: import diretto del leaf
+    `app.db.config.projects.get_project`; il facade
+    `config_db_service` non e' piu' un canale richiesto. Funzione
+    invariata behaviorally — ritorna `{}` su errore o se il
+    progetto non esiste.
+    """
     try:
-        import app.db.config_db_service as cfg_db
-        return cfg_db.get_project(project_id) or {}
+        from app.db.config.projects import get_project
+        return get_project(project_id) or {}
     except Exception as e:
         logger.debug(f"project info lookup fallito: {type(e).__name__}: {e}")
         return {}

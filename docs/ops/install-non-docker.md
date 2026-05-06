@@ -295,7 +295,7 @@ ops needs require it.
 |---|---|---|---|
 | `LOAD_FILE_MAX_BYTES` | 200 MB | 100 MB | 200–500 MB |
 | `WORKER_RSS_MAX_BYTES` | 1.5 GB | 800 MB | 1.5–3 GB |
-| `RESOURCE_MAX_BYTES` | 500 MB | 200 MB | 500 MB–1 GB |
+| `RESOURCE_MAX_BYTES` | 200 MB | 100 MB | 500 MB–1 GB |
 | `ARTIFACT_PREVIEW_MAX_BYTES` | 25 MB | 10–25 MB | 25–50 MB |
 
 Cap `<= 0` disables the corresponding guard (escape hatch). The

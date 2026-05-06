@@ -700,8 +700,11 @@ def apply_runs_retention(canvas_id: str, group_id: str) -> None:
     try:
         # Legge retention_n dal progetto in config.db
         try:
-            import app.db.config_db_service as cfg_db
-            retention_n = cfg_db.get_project_retention_n(canvas_id)
+            # BE-GO-READY-DB-ENGINE-004: leaf canonico
+            # (`app.db.config.projects.get_project_retention_n`) invece
+            # del facade `config_db_service`. Allowlist trimmed.
+            from app.db.config.projects import get_project_retention_n
+            retention_n = get_project_retention_n(canvas_id)
             if retention_n is None:
                 retention_n = DEFAULT_RUNS_RETENTION
         except Exception as e:

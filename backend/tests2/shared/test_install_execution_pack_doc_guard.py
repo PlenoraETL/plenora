@@ -56,7 +56,7 @@ _INSTALL_DOCKER = _REPO_ROOT / "docs" / "ops" / "install-docker.md"
 
 
 _ROLLBACK_HEADER = "### 4.8 Non-destructive rollback (foreground smoke)"
-_DOCKER_STATUS_HEADER = "## Status today (command-first, executable)"
+_DOCKER_STATUS_HEADER = "## Status today (command-first, executable scaffold)"
 
 
 @pytest.fixture(scope="module")
@@ -216,20 +216,30 @@ def test_docker_status_section_exists(docker_status_section: str):
     )
 
 
-def test_docker_status_section_marks_docker_not_implemented(
+def test_docker_status_section_marks_validation_pending(
     docker_status_section: str,
 ):
-    # The honesty disclaimer is the load-bearing claim of the
-    # section. Without explicit "NOT IMPLEMENTED" markers, the
-    # table reads as if the Docker path is real.
-    not_impl_count = docker_status_section.count("NOT IMPLEMENTED")
-    assert not_impl_count >= 8, (
-        f"The 'Status today' section must contain 'NOT "
-        f"IMPLEMENTED' at least 8 times (one per harness row). "
-        f"Found {not_impl_count}. Each row must mark the Docker "
-        "side as NOT IMPLEMENTED so an operator skimming the "
-        "table cannot mistake any row for a working Docker "
-        "step."
+    # INSTALL-011 supersedes the original "NOT IMPLEMENTED"
+    # honesty markers with "NO (scaffold)" validation markers.
+    # The table now contains executable Docker commands per row;
+    # the load-bearing honesty signal is the per-row "NO
+    # (scaffold)" cell that says the command has not been
+    # validated on a real Linux PC yet.
+    no_scaffold_count = docker_status_section.count("NO (scaffold)")
+    assert no_scaffold_count >= 8, (
+        f"The 'Status today' section must contain 'NO "
+        f"(scaffold)' at least 8 times (one per harness row). "
+        f"Found {no_scaffold_count}. Each row must mark the "
+        "Docker side as 'NO (scaffold)' for the 'Validated on "
+        "Linux PC' column so an operator does not mistake an "
+        "executable scaffold command for a validated path."
+    )
+    # The scaffold flag must remain visible alongside.
+    assert "FIRST SCAFFOLD" in docker_status_section or \
+           "scaffold" in docker_status_section.lower(), (
+        "The 'Status today' section must reference the FIRST "
+        "SCAFFOLD nature of the Docker path so the validation "
+        "gap is unmistakable."
     )
 
 

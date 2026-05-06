@@ -335,13 +335,15 @@ def test_storage_key_oversize_raises_memory_limit_exceeded(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_default_cap_is_500_mib(monkeypatch):
+def test_default_cap_is_200_mib(monkeypatch):
+    """Default cap is 200 MiB post BE-GO-READY-MEMORY-ENGINE-005
+    (was 500 MiB)."""
     monkeypatch.delenv("RESOURCE_MAX_BYTES", raising=False)
     from app.core.resources.loaders.file_source_blob import (
         _resolve_max_bytes,
     )
 
-    assert _resolve_max_bytes() == 500 * 1024 * 1024
+    assert _resolve_max_bytes() == 200 * 1024 * 1024
 
 
 def test_env_override_is_honored(monkeypatch):
@@ -359,9 +361,9 @@ def test_invalid_env_falls_back_to_default(monkeypatch):
     )
 
     monkeypatch.setenv("RESOURCE_MAX_BYTES", "not-an-int")
-    assert _resolve_max_bytes() == 500 * 1024 * 1024
+    assert _resolve_max_bytes() == 200 * 1024 * 1024
     monkeypatch.setenv("RESOURCE_MAX_BYTES", "0")
-    assert _resolve_max_bytes() == 500 * 1024 * 1024
+    assert _resolve_max_bytes() == 200 * 1024 * 1024
 
 
 # ---------------------------------------------------------------------------

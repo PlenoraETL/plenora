@@ -1,0 +1,137 @@
+# BE-GO-READY-INSTALL-011-FIRST-DOCKER-SCAFFOLD
+#
+# First executable Docker scaffold for Plenora-ETL. Brings up:
+#   - postgres   : Plenora catalog DB (schema autocreates on backend boot)
+#   - redis      : Celery broker + result backend + leader-lock + JWT
+#                  blacklist (one canonical URL)
+#   - backend    : FastAPI (uvicorn :5004) with /health and /ready
+#   - worker     : Celery worker (--pool=solo for determinism)
+#   - beat       : Celery beat with PlenoraBeatScheduler
+#
+# Frontend, MinIO, and the systemd backup unit are intentionally OUT
+# of this scaffold (target shape lives in docs/ops/install-docker.md
+# section "Target shape"). This compose intentionally provides the
+# minimum to exercise the smoke harness items 1-8 from
+# docs/ops/install-marco-dry-run.md section 5.
+#
+# Production caveat: STORAGE_POLICY=db means BYTEA-only blob path.
+# Real deployments should switch to object_storage; not in scope here.
+
+services:
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: plenora
+      POSTGRES_PASSWORD: plenora
+      POSTGRES_DB: plenora
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U plenora -d plenora"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    # AOF on so the beat leader-lock survives Redis restarts.
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "PING"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 3s
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: plenora-backend:scaffold
+    env_file:
+      - .env.docker
+    environment:
+      DATABASE_URL: postgresql://plenora:plenora@postgres:5432/plenora
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      DATA_DIR: /data
+    volumes:
+      - data-dir:/data
+    ports:
+      - "5004:5004"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # CMD inherited from Dockerfile (uvicorn). HEALTHCHECK inherited.
+    restart: unless-stopped
+
+  worker:
+    image: plenora-backend:scaffold
+    # Reuses the backend image; rebuild path is `docker compose build
+    # backend`. Keeping it here means `docker compose up worker` will
+    # also build the backend image on first run.
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file:
+      - .env.docker
+    environment:
+      DATABASE_URL: postgresql://plenora:plenora@postgres:5432/plenora
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      DATA_DIR: /data
+    volumes:
+      - data-dir:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    # --pool=solo for the scaffold: deterministic, no fork-time
+    # bootstrap re-run, matches the dry-run pack section 2.7 worker
+    # command. Production should use prefork (target shape).
+    entrypoint: ["python", "-m", "celery", "-A", "workers.celery_app", "worker"]
+    command: ["--pool=solo", "--loglevel=info"]
+    restart: unless-stopped
+
+  beat:
+    image: plenora-backend:scaffold
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file:
+      - .env.docker
+    environment:
+      DATABASE_URL: postgresql://plenora:plenora@postgres:5432/plenora
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      DATA_DIR: /data
+    volumes:
+      - data-dir:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    # Singleton enforced by Redis SETNX leader-lock. Scaling beat up
+    # is safe (additional replicas go to standby) but unnecessary.
+    entrypoint: ["python", "-m", "celery", "-A", "workers.celery_app", "beat"]
+    command: ["-S", "workers.beat_scheduler.PlenoraBeatScheduler", "--loglevel=info"]
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  redis-data:
+  data-dir:

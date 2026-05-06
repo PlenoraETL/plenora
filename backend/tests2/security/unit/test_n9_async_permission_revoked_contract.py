@@ -427,10 +427,10 @@ def test_shared_recheck_returns_permission_revoked_on_disabled_user(monkeypatch)
     def fake_get_user(uid):
         return {"id": uid, "username": "x", "group_id": "g", "role": "user", "is_active": False}
 
-    # NB: `async_user_recheck.py:22` fa `from app.db.config_db_service import
-    # get_user` AT MODULE LOAD: il symbol `get_user` e' bound nel namespace
-    # del modulo enricher, non riferito ogni volta all'origine. Patchare
-    # `"app.db.config_db_service.get_user"` (origine) lascia invariato il
+    # NB: `async_user_recheck.py` importa `get_user` dal leaf canonico
+    # `app.db.config.users` AT MODULE LOAD: il symbol `get_user` e' bound nel namespace
+    # del modulo helper, non riferito ogni volta all'origine. Patchare
+    # l'origine lascia invariato il
     # symbol bound qui → la chiamata reale a `pg_connection.fetchone` parte
     # → access violation se DB non raggiungibile (vedi review #8 Batch B).
     # Pattern simmetrico a `test_n11_canvas_types_propagation_contract.py`

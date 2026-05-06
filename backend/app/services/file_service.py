@@ -532,29 +532,108 @@ class FileSourceService:
     def _temp_file_for(
         self, file_id: str, expected_group_id: str = None,
     ) -> Optional[Path]:
-        """Wrapper compat: delega a `file_blob_materialization.temp_file_for`.
+        """Materialize a file_source blob to a tempfile and return
+        the on-disk path (for SHP/GDB: returns the path of the .shp
+        / .gdb inside an extracted tempdir; caller cleans the parent).
 
-        Per SHP/GDB: estrae lo ZIP in temp dir e ritorna il path del
-        .shp/.gdb. Il chiamante deve eliminare la dir parent dopo l'uso.
+        BE-GO-READY-RESOURCE-ENGINE-024 (legacy helper retired):
+        the bytes fetch routes through ``self._get_blob_from_db``
+        (which itself goes through the Resource Engine via
+        ``FileSourceBlobLoader`` since RESOURCE-ENGINE-020). The
+        SHP/GDB ZIP extraction + single-file tempfile materialization
+        live INLINE here -- the previously-shared
+        ``app.services.file_blob_materialization.temp_file_for``
+        wrapper has been deleted, eliminating the legacy duplicate
+        read path that bypassed the engine's tenant-binding
+        contract via callback injection.
 
-        N1: `expected_group_id` obbligatorio (fail-closed via assert_visible).
+        Tenant binding: ``self._get_blob_from_db`` calls
+        ``self._assert_visible`` which raises ``PermissionError`` on
+        cross-tenant access not authorized by ownership OR shared-
+        via-table. SHP/GDB cleanup is preserved verbatim from the
+        pre-024 helper: the tmpdir is rmtree'd on every error path
+        (zip-extraction failure, no .shp/.gdb found inside).
+
+        N1: ``expected_group_id`` obbligatorio (fail-closed via
+        ``_assert_visible`` invocato da ``_get_blob_from_db``).
         """
-        from app.services.file_blob_materialization import temp_file_for
+        import io
+        import tempfile
+        import zipfile
         from app.config import settings
-        from app.shared.cloud_backends import get_runtime_object_storage
         from app.shared.file_cleanup import rmtree_safe
         from app.utils.zip_safe import safe_extractall
         import app.db.db_service as db
-        return temp_file_for(
-            file_id, expected_group_id,
-            assert_visible=self._assert_visible,
-            db_get_file_source=db.get_file_source,
-            get_object_storage=get_runtime_object_storage,
-            temp_dir=settings.TEMP_DIR,
-            safe_extractall=safe_extractall,
-            cleanup=rmtree_safe,
-            logger=self._logger,
+
+        # Metadata fetch (no blob): we need ``format`` +
+        # ``original_filename`` to choose extension / extraction mode.
+        try:
+            row_meta = db.get_file_source(file_id, include_data=False)
+        except Exception as e:
+            self._logger.warning(
+                f"[GESTITO] _temp_file_for {file_id}: fetch metadata fallito: {e}"
+            )
+            return None
+        if not row_meta:
+            return None
+
+        # Blob bytes via the Resource Engine. ``_get_blob_from_db``
+        # owns the tenant-binding ``_assert_visible`` call AND the
+        # fail-soft contract (returns None on missing row /
+        # capability disabled / oversize / fetch failure). Pre-024
+        # the legacy helper duplicated those checks via injected
+        # callbacks; post-024 they live in exactly one place.
+        blob = self._get_blob_from_db(file_id, expected_group_id)
+        if not blob:
+            return None
+
+        fmt = row_meta.get("format", "")
+        original_filename = row_meta.get("original_filename", f"{file_id}.bin")
+
+        # SHP / GDB: blob is a ZIP - extract into a tempdir and return
+        # the .shp / .gdb path. Caller cleans up the tempdir parent
+        # after use. We clean up ONLY error paths here (extraction
+        # failure or zip valid but no .shp/.gdb inside): without it
+        # every malformed shapefile would leak a tempdir per worker.
+        if fmt in ("shp", "gdb"):
+            tmp_dir = Path(tempfile.mkdtemp(dir=settings.TEMP_DIR))
+            try:
+                with zipfile.ZipFile(io.BytesIO(blob), "r") as z:
+                    safe_extractall(z, tmp_dir)
+                if fmt == "shp":
+                    shp_files = (
+                        list(tmp_dir.rglob("*.shp"))
+                        + list(tmp_dir.rglob("*.SHP"))
+                    )
+                    if shp_files:
+                        return shp_files[0]
+                else:
+                    gdb_dirs = [
+                        f for f in tmp_dir.rglob("*")
+                        if f.is_dir() and f.suffix.lower() == ".gdb"
+                    ]
+                    if gdb_dirs:
+                        return gdb_dirs[0]
+            except Exception as e:
+                self._logger.error(
+                    f"[GESTITO] Errore estrazione {fmt.upper()} zip {file_id}: {e}"
+                )
+            # Cleanup tmp_dir on both error paths (extraction
+            # exception OR valid zip without .shp/.gdb): the
+            # alternative leaks a tempdir per malformed shapefile.
+            rmtree_safe(tmp_dir)
+            return None
+
+        # Single-file format: materialize the blob with the
+        # original filename's suffix so downstream readers can
+        # dispatch by extension.
+        suffix = Path(original_filename).suffix or ".bin"
+        tmp = tempfile.NamedTemporaryFile(
+            delete=False, suffix=suffix, dir=settings.TEMP_DIR,
         )
+        tmp.write(blob)
+        tmp.close()
+        return Path(tmp.name)
 
     # ==================== CRUD ====================
 

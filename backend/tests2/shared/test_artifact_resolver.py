@@ -288,7 +288,7 @@ def test_materialize_run_propagates_loader_oversize_unchanged(
     fake_registry = _fake_registry_raising(
         MemoryLimitExceededError(
             observed_bytes=999_999_999,
-            limit_bytes=500 * 1024 * 1024,
+            limit_bytes=200 * 1024 * 1024,
             path_basename="result_id=res-1",
             stage="result_blob_oversize",
         )
@@ -298,16 +298,16 @@ def test_materialize_run_propagates_loader_oversize_unchanged(
     )
 
     ref = RunArtifactRef(project_id="proj-1", result_id="res-1")
-    # Resolver wraps unexpected exceptions in ArtifactResolutionError
-    # with the "lettura blob ... fallita" prefix (broad-except path);
-    # the wrapped __cause__ is the typed MemoryLimitExceededError so
-    # the boundary handler can still distinguish the cap path via
-    # `e.__cause__` if needed. The important property pinned here:
-    # the cap signal is NOT silently turned into "senza blob dati".
-    with pytest.raises(ArtifactResolutionError) as exc_info:
+    # Resolver has a dedicated ``except MemoryLimitExceededError:
+    # raise`` clause that propagates the typed cap signal raw to
+    # the FastAPI 413 boundary handler. The cap signal MUST NOT
+    # be wrapped in ArtifactResolutionError ("senza blob dati" or
+    # "lettura blob ... fallita") -- those would obscure the
+    # operator path the 413 handler depends on.
+    with pytest.raises(MemoryLimitExceededError) as exc_info:
         resolver.materialize_run(ref)
-    assert "senza blob" not in str(exc_info.value)
-    assert isinstance(exc_info.value.__cause__, MemoryLimitExceededError)
+    assert exc_info.value.stage == "result_blob_oversize"
+    assert exc_info.value.observed_bytes == 999_999_999
 
 
 def test_materialize_run_output_path_must_be_inside_project_results(
@@ -883,7 +883,7 @@ def test_materialize_latest_propagates_loader_oversize_unchanged(
     fake_registry = _fake_registry_raising(
         MemoryLimitExceededError(
             observed_bytes=999_999_999,
-            limit_bytes=500 * 1024 * 1024,
+            limit_bytes=200 * 1024 * 1024,
             path_basename="result_id=res-1",
             stage="result_blob_oversize",
         )
@@ -899,7 +899,7 @@ def test_materialize_latest_propagates_loader_oversize_unchanged(
     # must NOT be wrapped in ArtifactResolutionError, otherwise the
     # FastAPI MemoryLimitExceededError handler would not produce 413.
     assert exc_info.value.stage == "result_blob_oversize"
-    assert exc_info.value.limit_bytes == 500 * 1024 * 1024
+    assert exc_info.value.limit_bytes == 200 * 1024 * 1024
 
 
 def test_materialize_latest_translates_other_loader_faults(

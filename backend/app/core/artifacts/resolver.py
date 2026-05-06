@@ -8,9 +8,6 @@ check di tenant binding.
 
 from __future__ import annotations
 
-import os
-import tempfile
-import time
 from pathlib import Path
 from typing import Optional
 
@@ -533,75 +530,3 @@ class ArtifactResolver:
             format=fmt,
             is_temporary=False,
         )
-
-    def _write_temp_blob(self, blob: bytes, fmt: str) -> Path:
-        """Materializza un blob in un tempfile e ritorna il path.
-
-        I tempfile vengono creati dentro `settings.TEMP_DIR` (se
-        configurata) per coerenza con il resto del backend
-        (`file_service` ecc.) — non sparpagliati nel temp di sistema.
-        Fallback al default Python `tempfile` solo se TEMP_DIR non
-        e' valorizzata (es. test environment minimale).
-
-        Cleanup: errore durante `tf.write(blob)` (disk full, permission)
-        triggera un unlink esplicito prima di re-raise. Sul path
-        success il caller wrappa il Path ritornato in
-        `MaterializedArtifact(is_temporary=True)`, il cui context
-        manager garantisce il cleanup downstream.
-        """
-        import os as _os
-
-        suffix = f".{fmt}" if fmt else ""
-        tempfile_kwargs = {"delete": False, "suffix": suffix}
-        # intent: optional feature / outcome: fail-open (TEMP_DIR config best-effort)
-        try:
-            from app.config import settings as _settings
-            _tmp_dir = getattr(_settings, "TEMP_DIR", None)
-            if _tmp_dir:
-                tempfile_kwargs["dir"] = str(_tmp_dir)
-        except Exception as e:
-            logger.debug(
-                "_write_temp_blob: TEMP_DIR config skipped, uso default tempfile: %s: %s",
-                type(e).__name__, e,
-            )
-
-        # RB.#19 Step A: timing log per quantificare l'I/O wasteful
-        # del path bytes -> tempfile -> read. Step B (futuro) elimina
-        # questo round-trip per format BytesIO-safe (CSV/Parquet/JSON).
-        _t0 = time.monotonic()
-        tf = tempfile.NamedTemporaryFile(**tempfile_kwargs)
-        path = Path(tf.name)
-        try:
-            tf.write(blob)
-        # intent: resource guard / outcome: fail-closed (cleanup + re-raise)
-        except Exception as e:
-            logger.debug(
-                "_write_temp_blob: tf.write fallita per %r, avvio cleanup: %s: %s",
-                str(path), type(e).__name__, e,
-            )
-            # intent: optional feature / outcome: fail-open (close best-effort)
-            try:
-                tf.close()
-            except Exception as _close_err:
-                logger.debug(
-                    "_write_temp_blob: tf.close cleanup skipped: %s: %s",
-                    type(_close_err).__name__, _close_err,
-                )
-            # intent: optional feature / outcome: fail-open (unlink best-effort)
-            try:
-                if path.exists():
-                    _os.unlink(path)
-            except Exception as _unlink_err:
-                logger.debug(
-                    "_write_temp_blob: unlink cleanup skipped per %r: %s: %s",
-                    str(path), type(_unlink_err).__name__, _unlink_err,
-                )
-            raise
-        else:
-            tf.close()
-            duration_ms = round((time.monotonic() - _t0) * 1000, 1)
-            logger.info(
-                f"[PERF] write_temp_blob op=materialize fmt={fmt or '<none>'} "
-                f"size_bytes={len(blob)} duration_ms={duration_ms}"
-            )
-            return path
