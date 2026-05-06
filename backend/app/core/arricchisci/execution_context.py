@@ -1,10 +1,14 @@
 """Arricchisci execution context — typed boundary.
 
 BE-GO-READY-TRANSFORMATION-ENGINE-015-ARRICCHISCI-EXECUTION-CONTEXT.
+BE-GO-READY-ORCHESTRATION-ENGINE-012-KILL-APPLY-TO-LEGACY-STATE.
 
 Introduce un boundary tipato per il contesto di una singola
-esecuzione canvas-arricchisci, riducendo la dipendenza da stato
-mutabile sul singleton `api_connection_service`.
+esecuzione canvas-arricchisci. Post-OE011 / OE012 il modulo
+NON scrive piu' alcuno stato sul singleton
+`api_connection_service`: i mixin di produzione consumano
+direttamente il `ctx`, e il vecchio scaffold "mirror legacy"
+(`apply_to_legacy_state`) e' stato eliminato.
 
 Boundary contract
 =================
@@ -24,36 +28,20 @@ Pattern di uso
 ```python
 ctx = build_execution_context(project_id, preview_limit)
 # ctx.group_id == _proj_row['group_id'] o None se progetto inesistente
-# canvas_orchestrator scrive i valori sul singleton per KEEP_COMPAT
-# coi mixin esistenti (Phase 1):
-apply_to_legacy_state(svc, ctx)
+# I mixin di produzione ricevono il ctx come parametro esplicito
+# (signature *_with_ctx); nessuno stato viene mirror-ato sul
+# singleton.
 ```
-
-Phase 1 vs Phase 2
-==================
-**Phase 1 (questo batch)**: il contesto vive accanto allo stato
-singleton. `canvas_orchestrator` lo costruisce prima di scrivere i
-valori su `svc._current_group_id` / `svc._preview_limit`. I mixin
-legacy (`api_connection_source_loading`, `api_connection_rest_file`)
-continuano a leggere `getattr(self, "_current_group_id", None)` —
-KEEP_COMPAT preservata.
-
-**Phase 2 (residuo TE15-R1)**: migrare i 6 mixin reader site a
-ricevere il contesto tipato come kwarg, eliminare lo stato
-mutabile dal singleton. Audit dedicato + 6 mixin updates.
 
 Concurrency
 ===========
 `@dataclass(frozen=True)` produce un'istanza immutabile dopo la
 costruzione (raise `FrozenInstanceError` su setattr). Due
-esecuzioni concorrenti che istanziano due `ArricchisciExecutionContext`
-distinti hanno tenant/preview state isolato byte-per-byte —
-contrast: due esecuzioni concorrenti sullo stesso singleton
-condividerebbero `svc._current_group_id` (race window). Il
-`workers/tasks/enrichment_task.py` mitiga gia' instanziando una
-nuova `ApiConnectionService` per task (commento al line 254
-pre-batch); questo modulo offre lo stesso pattern come boundary
-tipato esplicito.
+esecuzioni concorrenti che istanziano due
+`ArricchisciExecutionContext` distinti hanno tenant/preview
+state isolato byte-per-byte. Il `workers/tasks/enrichment_task.py`
+istanzia una nuova `ApiConnectionService` per task; questo
+modulo offre lo stesso pattern come boundary tipato esplicito.
 
 Go-ready mapping
 ================
@@ -67,7 +55,7 @@ Go-ready mapping
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, TYPE_CHECKING
+from typing import Optional
 
 import psycopg2
 
@@ -75,14 +63,9 @@ import app.db.db_service as db_svc
 from app.shared.exceptions import ExecutionContextError
 
 
-if TYPE_CHECKING:
-    from app.core.arricchisci.api_connector import ApiConnectionService
-
-
 __all__ = [
     "ArricchisciExecutionContext",
     "build_execution_context",
-    "apply_to_legacy_state",
 ]
 
 
@@ -131,8 +114,9 @@ def build_execution_context(
     determinabile (group_id mancante)".
 
     Pure function: nessun side effect su `svc` o stato globale.
-    Per applicare il contesto al singleton (KEEP_COMPAT phase 1)
-    usa `apply_to_legacy_state(svc, ctx)`.
+    Post-OE012 il singleton non viene piu' mirror-ato (la
+    funzione `apply_to_legacy_state` e' stata cancellata): i
+    mixin consumano `ctx` direttamente.
 
     Args:
         project_id: id del progetto in esecuzione.
@@ -161,33 +145,13 @@ def build_execution_context(
         preview_limit=preview_limit,
     )
 
-
-def apply_to_legacy_state(
-    svc: "ApiConnectionService",
-    ctx: ArricchisciExecutionContext,
-) -> None:
-    """Mirror dei valori del contesto sullo stato legacy mutabile
-    `svc._current_group_id` / `svc._preview_limit` (KEEP_COMPAT
-    phase 1).
-
-    Necessario perche' i mixin downstream
-    (`api_connection_source_loading`, `api_connection_rest_file`)
-    leggono ancora `getattr(self, "_current_group_id", None)`. Il
-    workers task (`enrichment_task.py`) scrive direttamente questi
-    attributi su un'istanza locale — pattern speculare alla
-    dipendenza legacy.
-
-    Phase 2 (TE15-R1, audit dedicato): migrare i 6 mixin reader
-    site a ricevere `ctx` come kwarg esplicito; a quel punto
-    questa funzione potra' essere rimossa e i 2 attributi
-    `_current_group_id` / `_preview_limit` cancellati dal
-    singleton.
-
-    Order matters: azzera `_current_group_id` PRIMA di scrivere il
-    nuovo valore. Questo replica l'invariant del legacy
-    `init_execution_context` (non lasciare stato stale dal run
-    precedente sul singleton se l'init solleva).
-    """
-    svc._preview_limit = ctx.preview_limit
-    svc._current_group_id = None
-    svc._current_group_id = ctx.group_id
+# BE-GO-READY-ORCHESTRATION-ENGINE-012: `apply_to_legacy_state`
+# was deleted. Pre-012 it mirrored ctx values onto
+# `svc._current_group_id` / `svc._preview_limit` for legacy
+# mixin readers; OE011 retired the only production caller (the
+# orchestrator) and made every mixin ctx-strict. The standalone
+# function then existed only to keep retired tests green and was
+# itself documented as test-surface-only. OE012 removes it
+# entirely; the negative source-bound lock in
+# `tests2/arricchisci/unit/test_external_consumers_ctx_migration_contract.py`
+# enforces that no production / test code re-introduces it.

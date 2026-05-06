@@ -29,6 +29,7 @@ from app.utils.dataframe import (
 from app.utils.geo import detect_geometry_column, extract_srid_from_column_type
 from app.utils.template_variables import process_static_fields
 from .plugin_executor import get_executor
+from .source_loading import load_file_sources
 
 logger = get_logger(__name__)
 
@@ -726,92 +727,47 @@ class ManipolaExecutor:
     ):
         """Carica DataFrame dai nodi file_source via SourceLoader.
 
-        Visibility check cross-tenant + preserve del GeoDataFrame
-        sono entrambi garantiti dal loader unico, niente duplicazione
-        inline.
+        BE-GO-READY-TRANSFORMATION-ENGINE-006-MANIPOLA-SOURCE-LOADING-SLICE:
+        thin delegator. Il body vive in
+        ``app.core.manipola.source_loading.load_file_sources`` —
+        funzione pura con parametri espliciti, zero stato di
+        classe. Il nome del metodo e' preservato cosi' i test
+        esistenti e i caller esterni (oggi nessuno fuori dal
+        modulo, ma il metodo e' parte della superficie pubblica
+        dell'executor) continuano a funzionare invariati.
 
-        BE-GO-READY-TRANSFORMATION-ENGINE-004: ``group_id`` esplicito
-        e' il canale primario di tenant binding (production:
-        ``execute``/``preview`` lo passano sempre dopo
-        ``_init_security_context``).
+        Behaviour-preserving:
 
-        BE-GO-READY-TRANSFORMATION-ENGINE-005 (chain-local cut):
-        questa catena NON cade piu' su ``self._current_group_id`` se
-        il caller non passa ``group_id`` esplicito. Il fallback
-        singleton sopravvive in ``_resolve_executing_group_id``
-        per le altre 2 catene (``_carica_sorgenti_progetto`` /
-        ``_carica_sorgenti_statiche``) e per i test legacy che
-        ancora dipendono da quell'attributo, ma il branch
-        ``file_source`` e' ora ``ctx-strict``: una stale
-        ``_current_group_id`` (race window cross-run, residuo da
-        un'esecuzione precedente nello stesso processo worker) NON
-        puo' piu' autorizzare un ``file_source``. Mirror della
-        cut equivalente fatta sul lato arricchisci da
-        ``BE-GO-READY-ORCHESTRATION-ENGINE-010``.
+          - Visibility check cross-tenant + preserve del
+            GeoDataFrame sono ancora garantiti dal ``SourceLoader``
+            unificato, nessuna duplicazione inline.
+          - ``TRANSFORMATION-ENGINE-004``: ``group_id`` esplicito
+            e' il canale primario di tenant binding (production:
+            ``execute``/``preview`` lo passano sempre dopo
+            ``_init_security_context``).
+          - ``TRANSFORMATION-ENGINE-005`` (chain-local cut):
+            questa catena NON consulta ``self._current_group_id``
+            ne' nel delegator ne' nel modulo estratto. Una stale
+            singleton (race window cross-run, residuo da
+            un'esecuzione precedente nello stesso processo
+            worker) NON puo' autorizzare un ``file_source``.
+            Mirror della cut arricchisci
+            ``BE-GO-READY-ORCHESTRATION-ENGINE-010``.
+
+        Il delegator NON passa ``self._current_group_id`` al
+        helper: l'argomento ``group_id`` del helper e' l'**unico**
+        canale tenant per questa catena. Le altre 2 catene
+        (``_carica_sorgenti_progetto``, ``_carica_sorgenti_statiche``)
+        mantengono il fallback singleton via
+        ``_resolve_executing_group_id``; i loro cuts sono i
+        follow-up streams ``TE-007 / TE-008``.
         """
-        file_nodes = [n for n in canvas.nodes if n.type == "file_source"]
-        if not file_nodes:
-            return None
-
-        from app.core.artifacts import (
-            SourceLoader,
-            SourceLoadingError,
-            SourceRef,
+        return load_file_sources(
+            canvas,
+            dataframes,
+            group_id=group_id,
+            logger=logger,
         )
-
-        # Tenant binding ctx-strict: NON consultiamo
-        # ``_resolve_executing_group_id`` cosi' lo stale singleton
-        # non entra nemmeno come fallback. Production callers
-        # passano sempre ``group_id`` esplicito (TE-004); i test
-        # che esercitano questa catena passano l'argomento
-        # esplicitamente.
-        current_group_id = group_id
-        if not current_group_id:
-            logger.error(
-                "[SECURITY] manipola._carica_sorgenti_file: explicit "
-                "group_id required (post TRANSFORMATION-ENGINE-005, "
-                "no singleton fallback), fail-closed"
-            )
-            return {
-                "success": False,
-                "message": "Contesto di sicurezza non determinabile",
-            }
-
-        loader = SourceLoader()
-
-        for node in file_nodes:
-            fid = _nf(node, 'file_source_id')
-            if not fid:
-                continue
-
-            ref = SourceRef.from_node_data(
-                'file_source',
-                {'file_source_id': fid},
-            )
-            try:
-                data = loader.load(ref, expected_group_id=current_group_id)
-            except SourceLoadingError as e:
-                # Visibility block o errore di materializzazione: il
-                # loader produce gia' un messaggio nel formato atteso
-                # ("Accesso negato: il file sorgente '...'"), lo
-                # propaghiamo come-is nel dict di errore.
-                return {"success": False, "message": str(e)}
-            except Exception as e:
-                return {"success": False, "message": f"Errore file '{fid}': {e}"}
-
-            node_columns = _nf(node, 'columns', [])
-            data = filter_visible_columns(data, node_columns)
-            # Preserva CRS: SourceLoader ritorna gia' un GeoDataFrame se
-            # `file_source_service.load_dataframe` ne ha prodotto uno,
-            # ma per i file dove il CRS era ricostruito dai metadati del
-            # nodo (geometry:subtype:SRID nelle column definitions) serve
-            # ancora l'upgrade DataFrame→GeoDataFrame qui. Allineato al
-            # branch project_source (linea 432). Idempotente: no-op se
-            # `data` e' gia' un GeoDataFrame.
-            data = _applica_crs_da_colonne(data, node_columns)
-            dataframes[node.id] = data
-
-        return None
 
     def _carica_sorgenti_statiche(
         self, canvas, dataframes,
@@ -970,40 +926,31 @@ class ManipolaExecutor:
         return current_df
     
     def _ordina_topologicamente(self, nodes, edges, dataframes):
-        """Ordina i nodi in ordine topologico (Kahn's algorithm). Rileva cicli."""
-        node_ids = {n.id for n in nodes}
+        """Ordina i nodi in ordine topologico (Kahn's algorithm). Rileva cicli.
+
+        BE-GO-READY-GRAPH-ENGINE-001-SHARED-TOPOLOGICAL-SORT: the
+        Kahn implementation moved to the shared leaf
+        ``app.shared.graph.kahn_topological_order``. This method
+        is the Manipola canvas adapter: it extracts ``.id`` from
+        the typed node objects + ``.source`` / ``.target`` from
+        the typed edge objects and forwards to the pure utility
+        with ``on_cycle='raise'`` (legacy shape: ``ValueError``
+        with the canonical Italian message). The shared utility's
+        :class:`GraphCycleError` subclasses ``ValueError`` so any
+        existing caller that catches ``ValueError`` keeps working
+        and the message text is preserved verbatim.
+        """
+        from app.shared.graph import kahn_topological_order
+
+        node_ids = [n.id for n in nodes]
         node_map = {n.id: n for n in nodes}
+        edge_pairs = [(edge.source, edge.target) for edge in edges]
 
-        # Costruisci grafo
-        in_degree = {n.id: 0 for n in nodes}
-        out_edges_map = {n.id: [] for n in nodes}
-
-        for edge in edges:
-            if edge.target in node_ids:
-                if edge.source in node_ids:
-                    in_degree[edge.target] += 1
-                    out_edges_map[edge.source].append(edge.target)
-
-        # Nodi pronti (in_degree == 0 significa che dipendono solo da sorgenti)
-        queue = [nid for nid, deg in in_degree.items() if deg == 0]
-
-        sorted_ids = []
-        while queue:
-            nid = queue.pop(0)
-            sorted_ids.append(nid)
-
-            for target_id in out_edges_map.get(nid, []):
-                in_degree[target_id] -= 1
-                if in_degree[target_id] == 0:
-                    queue.append(target_id)
-
-        # Ciclo rilevato: alcuni nodi non sono stati raggiunti
-        if len(sorted_ids) != len(nodes):
-            cycle_nodes = [nid for nid in node_ids if nid not in set(sorted_ids)]
-            raise ValueError(
-                f"Ciclo rilevato nel canvas tra i nodi: {cycle_nodes}. "
-                "Rimuovere le connessioni circolari prima di eseguire la pipeline."
-            )
+        # ``on_cycle='raise'`` -> GraphCycleError (subclass of
+        # ValueError) with the verbatim Italian operator message.
+        sorted_ids = kahn_topological_order(
+            node_ids, edge_pairs, on_cycle="raise",
+        )
 
         return [node_map[nid] for nid in sorted_ids]
     

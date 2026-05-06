@@ -194,7 +194,9 @@ def test_load_file_sources_reapplies_crs_from_node_columns_metadata():
          patch("app.core.manipola.executor._applica_crs_da_colonne",
                side_effect=_fake_apply_crs):
         svc.load_dataframe.return_value = (df_flat, None)
-        result = executor._carica_sorgenti_file(canvas, dataframes)
+        result = executor._carica_sorgenti_file(
+            canvas, dataframes, group_id="grp-1"
+        )
 
     assert result is None  # nessun errore
     assert captured.get("called") is True, (

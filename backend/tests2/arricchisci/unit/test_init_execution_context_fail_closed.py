@@ -17,15 +17,16 @@ Post-fix:
   dal boundary Fix-C e trasformato in response safe con
   `user_error=False`.
 
-BE-GO-READY-ORCHESTRATION-ENGINE-011-CANVAS-CTX-NO-LEGACY-STATE-CUT:
-post-cut, `init_execution_context` no longer mutates
-`svc._current_group_id` / `svc._preview_limit`. The mirror
-(`apply_to_legacy_state(svc, ctx)`) was dead-write -- production
-mixin readers are all ctx-strict. The tests below now assert the
-TYPED `ctx` return value carries the right tenant binding;
-singleton-state assertions were retired (the guard
-`test_init_execution_context_does_not_write_singleton_state`
-locks the cut from the opposite direction).
+BE-GO-READY-ORCHESTRATION-ENGINE-011-CANVAS-CTX-NO-LEGACY-STATE-CUT
++ BE-GO-READY-ORCHESTRATION-ENGINE-012-KILL-APPLY-TO-LEGACY-STATE:
+`init_execution_context` no longer mutates
+`svc._current_group_id` / `svc._preview_limit`. Post-OE012 the
+legacy mirror function (`apply_to_legacy_state`) has been
+deleted; production mixin readers are all ctx-strict. The
+tests below now assert the TYPED `ctx` return value carries the
+right tenant binding; the negative source-bound lock in
+`test_external_consumers_ctx_migration_contract.py` enforces
+that the helper is never re-introduced.
 """
 
 import psycopg2

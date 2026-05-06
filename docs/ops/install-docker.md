@@ -397,22 +397,54 @@ VALIDATED`) MUST stay accurate.
 ## Known scaffold limitations (validation gaps)
 
 These are the explicit gaps the scaffold does NOT close. Each
-is the closure path for a follow-up stream:
+is the closure path for a follow-up stream.
 
-- **No Linux-PC validation report**: every command above is a
-  hypothesis until run on a real Ubuntu/Debian host. Closure:
-  follow-up stream `BE-GO-READY-INSTALL-012-DOCKER-SCAFFOLD-VALIDATE-ON-LINUX`.
-- **No frontend image**: the scaffold ships only the backend
-  side. An operator who wants the full SPA must build the
-  frontend separately. Closure: `INSTALL-013-FRONTEND-DOCKER`.
+### What ships today vs what does NOT
+
+`BE-GO-READY-INSTALL-018-DOCKER-FE-GAP-AUDIT` -- audit-only
+truth table. The scaffold is BACKEND-ONLY and the full
+"Plenora-ETL on Docker" experience does NOT exist yet.
+
+| Component | Ships in this scaffold? | Validated on Linux PC? | Closure stream |
+|---|---|---|---|
+| `backend/Dockerfile` (FastAPI / uvicorn :5004) | YES | NO (FIRST SCAFFOLD) | `INSTALL-012-DOCKER-SCAFFOLD-VALIDATE-ON-LINUX` |
+| `worker` service (Celery `--pool=solo`, reuses `plenora-backend:scaffold` image) | YES | NO (FIRST SCAFFOLD) | same |
+| `beat` service (`PlenoraBeatScheduler`, reuses `plenora-backend:scaffold` image) | YES | NO (FIRST SCAFFOLD) | same |
+| `postgres` service (postgres:17-alpine) | YES | NO (FIRST SCAFFOLD) | same |
+| `redis` service (redis:7-alpine) | YES | NO (FIRST SCAFFOLD) | same |
+| `frontend/Dockerfile` (SPA build + nginx static serve) | NO (no file at `frontend/Dockerfile*`) | NO | `INSTALL-013-FRONTEND-DOCKER` |
+| `frontend` service in `docker-compose.yml` | NO (5 services: postgres / redis / backend / worker / beat) | NO | `INSTALL-013-FRONTEND-DOCKER` (compose row added with the Dockerfile) |
+| Reverse proxy / TLS termination | NO | NO | out of scope (operator-side nginx/Caddy/Apache) |
+| MinIO profile (`STORAGE_POLICY=object_storage`) | NO | NO | `INSTALL-014-MINIO-PROFILE` |
+| Backup / backup-test units (systemd timers) | NO | NO | not on the Docker roadmap; systemd-only path |
+| Docker-side CI lane (`docker compose up + cleanroom.ping`) | NO (only `ci.yml`, `ci-cleanroom.yml`, `ci-functional.yml`; none invoke `docker build` / `docker compose`) | NO | `INSTALL-015-DOCKER-CI` |
+
+Therefore the "full-stack Docker" answer is: **does NOT exist
+today**. An operator running `docker compose up` against this
+repo gets a backend-only API with PG + Redis. Serving the SPA
+requires building the frontend separately on the host (per
+`install-non-docker.md` section 8) and pointing a reverse
+proxy at the published `:5004` for `/api/*` and at the
+host-side `frontend/dist/` for the SPA assets.
+
+### Item-level closure pointers
+
+- **No Linux-PC validation report**: every command in this
+  doc is a hypothesis until run on a real Ubuntu/Debian host.
+  Closure: `INSTALL-012-DOCKER-SCAFFOLD-VALIDATE-ON-LINUX`.
+- **No frontend image** (NO `frontend/Dockerfile*` file
+  exists in the repo as of this commit): the scaffold ships
+  only the backend side. An operator who wants the full SPA
+  must build the frontend separately. Closure:
+  `INSTALL-013-FRONTEND-DOCKER`.
 - **No MinIO profile**: `STORAGE_POLICY=db` is the only path
-  the scaffold validates; switching to `object_storage`
+  the scaffold exercises; switching to `object_storage`
   requires either MinIO + bucket setup or AWS credentials.
   Closure: `INSTALL-014-MINIO-PROFILE`.
-- **No CI lane**: `ci-cleanroom.yml` continues to validate
-  only the single-machine boot path. A Docker-side CI lane
-  (`docker compose up + cleanroom.ping`) is bounded but
-  non-trivial. Closure: `INSTALL-015-DOCKER-CI`.
+- **No Docker CI lane**: `ci-cleanroom.yml` continues to
+  validate only the single-machine boot path. A Docker-side
+  CI lane (`docker compose up + cleanroom.ping`) is bounded
+  but non-trivial. Closure: `INSTALL-015-DOCKER-CI`.
 - **No HTTPS / reverse proxy**: the scaffold publishes 5004
   directly on the host. Production needs nginx/Caddy/Apache
   in front; out of scope.
@@ -425,6 +457,30 @@ is the closure path for a follow-up stream:
   version, fiona/geopandas wheels will need a rebuild. The
   build will fail loudly (compile error) rather than silently;
   no validation gap here, just a known maintenance touchpoint.
+
+### When can the Docker path be called "validated"?
+
+A path is "validated" only when ALL of the following hold:
+
+1. A green
+   [`first-pc-validation-report-template.md`](first-pc-validation-report-template.md)
+   section 3.10 (9-line acceptance summary) lands on a real
+   Linux PC at a known commit SHA -- closes the
+   backend/worker/beat side.
+2. `frontend/Dockerfile` exists, builds reproducibly, AND a
+   `frontend` service is added to `docker-compose.yml` AND
+   the SPA is reachable through a reverse-proxy service in
+   compose -- closes `INSTALL-013-FRONTEND-DOCKER`.
+3. `.github/workflows/` has a CI job that runs `docker
+   compose up` and asserts `cleanroom.ping -> pong` from
+   inside the worker container -- closes
+   `INSTALL-015-DOCKER-CI`.
+
+Until all three land, the FIRST SCAFFOLD / NOT YET VALIDATED
+markers in this doc and in
+`install-marco-dry-run.md` MUST stay. A doc PR that flips the
+markers without citing the three artifacts above is a
+regression of the honesty contract.
 
 If `docker compose build backend` fails on a real PC, the
 most likely root cause is `libgdal-dev` major mismatch

@@ -65,11 +65,26 @@ def patched_blacklist(fake_redis):
 def auth_client(monkeypatch, patched_blacklist):
     """TestClient con router auth montato + user fittizio, ma senza DB reale.
 
-    Mock di `db.get_user` in modo che un qualunque sub valido restituisca
+    Mock di `get_user` in modo che un qualunque sub valido restituisca
     un user attivo — cosi' possiamo testare il flusso auth puro senza
     boot del DB.
+
+    BE-GO-READY-AUTH-ENGINE-015-DEPENDENCIES-OFF-DB-SERVICE: il
+    patch path e' migrato dalla facade `auth_mod.db` al canonical
+    leaf `app.db.config.users`. Pre-015 `dependencies.get_current_user`
+    chiamava `db.get_user(...)` via l'alias facade
+    `import app.db.db_service as db`; post-015 chiama
+    `_users_dal.get_user(...)` via `import app.db.config.users
+    as _users_dal`. Patchando il leaf canonico (l'unico module
+    object referenziato da entrambi i siti — auth.py per la
+    login e dependencies.py per il get_current_user — via la
+    re-export chain `db_service.get_user is config_db_service
+    .get_user is config.users.get_user`) il monkeypatch
+    continua a coprire entrambi i percorsi senza dover
+    duplicare il fake.
     """
     from app.core.auth import auth as auth_mod
+    import app.db.config.users as _users_dal
 
     def _fake_get_user(user_id: str):
         return {
@@ -82,6 +97,19 @@ def auth_client(monkeypatch, patched_blacklist):
             "created_at": "2026-01-01T00:00:00Z",
         }
 
+    # AUTH-ENGINE-015: due call site distinti consumano `get_user`
+    # in questa flow, e `from X import Y` bind alla import-time
+    # rendono i due namespace indipendenti (rebinding su
+    # `db_service.get_user` NON propaga a `config.users.get_user`
+    # e viceversa):
+    #   1) `dependencies.get_current_user` post-015 chiama
+    #      `_users_dal.get_user` via `import app.db.config.users
+    #      as _users_dal` → patch su `_users_dal.get_user`;
+    #   2) `auth.py` route handlers (es. `/auth/me`, `/auth/change-
+    #      password`) chiamano `db.get_user` via `import
+    #      app.db.db_service as db` → patch su `auth_mod.db.get_user`.
+    # Patchiamo entrambe per coprire l'intera flow login + protected.
+    monkeypatch.setattr(_users_dal, "get_user", _fake_get_user)
     monkeypatch.setattr(auth_mod.db, "get_user", _fake_get_user)
 
     app = FastAPI()

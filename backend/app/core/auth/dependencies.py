@@ -63,7 +63,27 @@ Allowed dependencies:
   - ``app.shared.jwt_token.decode_token`` (pure JWT decode);
   - ``app.shared.token_blacklist`` (lazy import inside the
     function body to keep the module-edge cheap);
-  - ``app.db.db_service`` (DB lookup for the active-user check).
+  - ``app.db.config.users`` (canonical leaf for the active-
+    user lookup; replaces the legacy ``app.db.db_service``
+    facade after BE-GO-READY-AUTH-ENGINE-015).
+
+BE-GO-READY-AUTH-ENGINE-015-DEPENDENCIES-OFF-DB-SERVICE: the
+``import app.db.db_service as db`` was replaced with
+``import app.db.config.users as _users_dal`` so this leaf
+module no longer drags the cross-engine
+``app.db.db_service`` re-export bundle. The lookup
+``_users_dal.get_user(...)`` resolves the same canonical
+function the facade was re-exporting. Tests that previously
+patched ``auth_mod.db.get_user`` to mock the active-user
+check now patch ``app.db.config.users.get_user`` (the new
+canonical site); see
+``tests2/security/unit/test_jwt_logout_blacklist.py`` for
+the migrated patch shape.
+
+A source-bound lock asserting this module never re-imports
+``app.db.db_service`` lives in
+``tests2/security/unit/test_auth_dependencies_db_facade_lock.py
+::test_dependencies_does_not_import_db_service``.
 """
 
 from __future__ import annotations
@@ -73,7 +93,7 @@ from typing import Optional
 from fastapi import Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-import app.db.db_service as db
+import app.db.config.users as _users_dal
 from app.core.auth import disclosure as _disclosure
 from app.core.auth.roles import (
     ROLES_ABOVE_VIEWER,
@@ -113,7 +133,7 @@ def get_current_user(
     from app.shared.token_blacklist import is_jti_blacklisted
     if is_jti_blacklisted(payload.get("jti")):
         _disclosure.raise_disclosure(_disclosure.token_revoked())
-    user = db.get_user(payload["sub"])
+    user = _users_dal.get_user(payload["sub"])
     if not user or not user.get("is_active"):
         _disclosure.raise_disclosure(_disclosure.user_not_found_or_disabled())
     return CurrentUser(

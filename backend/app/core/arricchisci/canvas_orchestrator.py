@@ -57,32 +57,25 @@ Go-ready mapping
 
 from __future__ import annotations
 
-from collections import deque
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 import pandas as pd
 
 import app.db.db_service as db_svc  # noqa: F401  (test-monkeypatch surface preserved)
 from app.core.arricchisci._api_connection_helpers import _nd
-# BE-GO-READY-ORCHESTRATION-ENGINE-011-CANVAS-CTX-NO-LEGACY-STATE-CUT:
-# `apply_to_legacy_state` is no longer imported here -- the
-# orchestrator's `init_execution_context` no longer mirrors `ctx`
-# values onto `svc._current_group_id` / `svc._preview_limit`.
-# Production mixin readers
-# (`_extract_file_source_group_id` / `_extract_project_source_group_id`
-# in `api_connection_rest_file`; `_group_id_from_ctx` /
-# `_preview_limit_from_ctx` in `api_connection_source_loading`) are
-# all CTX-STRICT (verified by AST scan: zero production reads of
-# the legacy singleton attributes). The singleton-mutation in
-# `apply_to_legacy_state` was therefore dead-write in production
-# even before this cut.
-#
-# The function `apply_to_legacy_state` itself stays exported by
-# `execution_context.py` (test-only surface: the 2 standalone
-# mirror tests in `test_arricchisci_execution_context_contract.py`
-# still call it directly). Removing the function entirely is a
-# follow-up worker once those test guards are retired
-# (R-OE011.1, classified in the audit).
+from app.shared.graph import kahn_topological_order
+# BE-GO-READY-ORCHESTRATION-ENGINE-011-CANVAS-CTX-NO-LEGACY-STATE-CUT
+# + BE-GO-READY-ORCHESTRATION-ENGINE-012-KILL-APPLY-TO-LEGACY-STATE:
+# the orchestrator no longer mirrors `ctx` values onto
+# `svc._current_group_id` / `svc._preview_limit`. Production mixin
+# readers (`_extract_file_source_group_id` /
+# `_extract_project_source_group_id` in `api_connection_rest_file`;
+# `_group_id_from_ctx` / `_preview_limit_from_ctx` in
+# `api_connection_source_loading`) are all CTX-STRICT. The
+# `apply_to_legacy_state` helper was deleted from
+# `execution_context.py` in OE012; the negative source-bound lock in
+# `tests2/arricchisci/unit/test_external_consumers_ctx_migration_contract.py`
+# enforces that nothing re-introduces it.
 from app.core.arricchisci.execution_context import (
     ArricchisciExecutionContext,
     build_execution_context,
@@ -125,29 +118,25 @@ def get_execution_order(
     Pure function: non legge state del servizio. Estratta da
     `ApiConnectionService._get_execution_order`. Behavior preservato
     byte-per-byte.
+
+    BE-GO-READY-GRAPH-ENGINE-001-SHARED-TOPOLOGICAL-SORT: the
+    Kahn implementation moved to the shared leaf
+    ``app.shared.graph.kahn_topological_order``. This wrapper
+    is the canvas-arricchisci adapter: it pulls ``id`` /
+    ``source`` / ``target`` from the canvas dict shape and
+    forwards to the pure utility with ``on_cycle='truncate'``
+    (legacy shape: cycle nodes silently omitted, no exception).
+    Behavior identical byte-for-byte to the pre-graph-engine
+    implementation; locked by
+    `tests2/arricchisci/unit/test_canvas_orchestrator_contract.py`.
     """
-    graph = {n["id"]: [] for n in nodes}
-    in_degree = {n["id"]: 0 for n in nodes}
-
-    for edge in edges:
-        source = edge.get("source")
-        target = edge.get("target")
-        if source in graph and target in in_degree:
-            graph[source].append(target)
-            in_degree[target] += 1
-
-    queue = deque([n for n, d in in_degree.items() if d == 0])
-    order = []
-
-    while queue:
-        node = queue.popleft()
-        order.append(node)
-        for neighbor in graph[node]:
-            in_degree[neighbor] -= 1
-            if in_degree[neighbor] == 0:
-                queue.append(neighbor)
-
-    return order
+    node_ids = [n["id"] for n in nodes]
+    edge_pairs = [
+        (edge.get("source"), edge.get("target")) for edge in edges
+    ]
+    return kahn_topological_order(
+        node_ids, edge_pairs, on_cycle="truncate",
+    )
 
 
 def is_file_source_for_file_processor(

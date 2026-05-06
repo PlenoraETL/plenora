@@ -1,30 +1,33 @@
-"""Contract test BE-GO-READY-TRANSFORMATION-ENGINE-020 — Phase 3 external
-consumers migration to typed `ArricchisciExecutionContext`.
+"""Contract test BE-GO-READY-TRANSFORMATION-ENGINE-020 + closure
+BE-GO-READY-ORCHESTRATION-ENGINE-012-KILL-APPLY-TO-LEGACY-STATE.
 
-Lock i 5 invariant della Phase 3 (closure di TE15-R2):
+Lock degli invariant residui dopo OE012 (deletion del legacy
+mirror scaffold):
 
-1. **Source-bound**: `workers/tasks/enrichment_task.py` NON contiene
-   piu' direct mutation di `api_connection_service._current_group_id`
-   o `_preview_limit`. Il typed context e' la primary surface.
+1. **Source-bound (worker)**: `workers/tasks/enrichment_task.py`
+   NON contiene piu' direct mutation di
+   `api_connection_service._current_group_id` o `_preview_limit`.
+   Il typed context e' la primary (e unica) surface di tenant
+   binding nel worker path.
 2. **Context construction**: il task istanzia un
    `ArricchisciExecutionContext` esplicito.
-   BE-GO-READY-TRANSFORMATION-ENGINE-030A: il worker NON chiama piu'
-   `apply_to_legacy_state(...)` ne' importa il helper. Tutto il
-   tenant binding nel worker path passa per `ctx=ctx` esplicito sui
-   4 mixin callsite. La singleton-mutation via
-   `apply_to_legacy_state` resta valida in `canvas_orchestrator`
-   (preview path in-process, scope separato).
 3. **Threading completo**: i 4 mixin callsite nel task
    (`_load_source_project`, `_load_file_source`,
    `_load_static_values`, `_execute_rest_file`) ricevono `ctx=ctx`
    esplicito.
-4. **Helper preserved**: `apply_to_legacy_state` resta funzionale
-   (usato da `canvas_orchestrator`); il test
-   `test_apply_to_legacy_state_still_emits_setattr_events` lo
-   verifica indipendentemente dal worker.
-5. **Concurrency**: 2 task concorrenti istanziano 2 context
-   distinti con tenant binding isolato (frozen dataclass + new
-   ApiConnectionService instance per task).
+4. **Negative source-bound lock (repo-wide)**: NESSUN file sotto
+   `app/`, `workers/`, `tests2/` (eccetto questo modulo che
+   definisce il lock) puo' definire / chiamare / importare
+   `apply_to_legacy_state`. La funzione e' stata cancellata da
+   `app.core.arricchisci.execution_context` in OE012; il lock
+   protegge contro re-introduzione.
+
+Pre-OE012 questo file lockava anche il path "helper preserved
+in canvas_orchestrator" e la concurrency-mirror tramite
+`apply_to_legacy_state`. Entrambi sono stati ritirati: il
+helper non esiste piu', e l'isolamento concorrente e' gia'
+coperto dal frozen-dataclass test in
+`test_arricchisci_execution_context_contract.py`.
 """
 
 from __future__ import annotations
@@ -96,72 +99,22 @@ def test_enrichment_task_no_direct_singleton_mutation():
 
 
 # ---------------------------------------------------------------------------
-# 2. Context construction + apply_to_legacy_state usage
+# 2. Context construction (typed boundary primary surface)
 # ---------------------------------------------------------------------------
 
 
 def test_enrichment_task_imports_and_uses_typed_context():
     """`enrichment_task.py` deve importare `ArricchisciExecutionContext`
     dal modulo `execution_context` e costruire il context esplicitamente.
-
-    BE-GO-READY-TRANSFORMATION-ENGINE-030A: post-migrazione il worker
-    NON chiama piu' `apply_to_legacy_state` ne' muta
-    `svc._current_group_id` direttamente. I 4 mixin callsite sono
-    ctx-aware: il ctx tipato e' l'unica via di tenant binding nel
-    worker path. Vedi `test_enrichment_task_does_not_call_apply_to_legacy_state`
-    sotto per il regression-guard complementare."""
+    Post-OE012 il worker NON chiama il legacy mirror (la funzione
+    e' stata cancellata) e NON muta `svc._current_group_id`
+    direttamente."""
     src = _ENRICHMENT_TASK_PY.read_text(encoding="utf-8")
     assert (
         "from app.core.arricchisci.execution_context import" in src
     ), "Atteso import del modulo execution_context."
     assert "ArricchisciExecutionContext(" in src, (
         "Atteso costruzione esplicita di ArricchisciExecutionContext."
-    )
-
-
-def test_enrichment_task_does_not_call_apply_to_legacy_state():
-    """BE-GO-READY-TRANSFORMATION-ENGINE-030A regression guard:
-    il worker NON deve piu' chiamare `apply_to_legacy_state(...)`
-    ne' importarlo dal modulo `execution_context`. Tutto il tenant
-    binding nel worker path passa per `ctx=ctx` thread esplicito ai
-    4 mixin callsite (TE-020). La singleton-mutation via
-    `apply_to_legacy_state` resta valida in
-    `app.core.arricchisci.canvas_orchestrator` per il preview path
-    in-process (scope separato).
-
-    AST-bound: nessun `Call` con `func=Name('apply_to_legacy_state')`
-    ne' nessun `ImportFrom` con `name='apply_to_legacy_state'`.
-    """
-    src = _ENRICHMENT_TASK_PY.read_text(encoding="utf-8")
-    tree = ast.parse(src)
-
-    forbidden_calls = []
-    forbidden_imports = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Call):
-            f = node.func
-            if isinstance(f, ast.Name) and f.id == "apply_to_legacy_state":
-                forbidden_calls.append(node.lineno)
-            elif isinstance(f, ast.Attribute) and f.attr == "apply_to_legacy_state":
-                forbidden_calls.append(node.lineno)
-        elif isinstance(node, ast.ImportFrom):
-            for alias in node.names:
-                if alias.name == "apply_to_legacy_state":
-                    forbidden_imports.append(node.lineno)
-
-    assert not forbidden_calls, (
-        f"BE-GO-READY-TRANSFORMATION-ENGINE-030A regression: "
-        f"`enrichment_task.py` chiama `apply_to_legacy_state(...)` "
-        f"alle linee {forbidden_calls}. Il worker NON deve piu' "
-        f"mutare `_current_group_id` via legacy state mirror — "
-        f"tutto il tenant binding e' via `ctx=ctx` esplicito ai "
-        f"4 mixin callsite."
-    )
-    assert not forbidden_imports, (
-        f"BE-GO-READY-TRANSFORMATION-ENGINE-030A regression: "
-        f"`enrichment_task.py` importa `apply_to_legacy_state` "
-        f"alle linee {forbidden_imports}. Rimuovere l'import: il "
-        f"worker non lo usa piu'."
     )
 
 
@@ -213,89 +166,84 @@ def test_enrichment_task_threads_ctx_to_mixin_callsites():
 
 
 # ---------------------------------------------------------------------------
-# 4. Behavior preserved: existing tenant-binding lock tests still apply
+# 4. Negative source-bound lock (BE-GO-READY-ORCHESTRATION-ENGINE-012)
 # ---------------------------------------------------------------------------
 
 
-def test_apply_to_legacy_state_still_emits_setattr_events():
-    """Sanity check del path di compatibilita': il
-    `FakeApiConnectionService` (test helper) registra ogni setattr
-    di `_current_group_id`. `apply_to_legacy_state` fa 2 setattr
-    su `_current_group_id` (None reset + ctx.group_id) — entrambi
-    devono apparire nel call_log come `setattr:_current_group_id`.
+# Files that the lock MUST tolerate as "self-references" — this
+# test file defines the lock and obviously names the symbol; the
+# cancellation note in execution_context.py is doc-comment only.
+_LOCK_SELF_FILES = {
+    Path("tests2") / "arricchisci" / "unit"
+    / "test_external_consumers_ctx_migration_contract.py",
+    # Files where the symbol appears ONLY in prose (no def/import/call).
+    # These are deliberately allowed; the violation classifier below
+    # checks AST shape (defs / imports / calls), not raw substring.
+}
 
-    Lock comportamentale di base: senza questo invariant, i lock
-    test pre-existing in
-    `test_enrichment_task_tenant_binding_lock.py` non potrebbero
-    osservare il binding del tenant.
+
+def _scan_apply_to_legacy_state_violations() -> list[tuple[str, int, str]]:
+    """Walk every .py under app/, workers/, tests2/ and report any
+    AST node that DEFINES, IMPORTS, or CALLS `apply_to_legacy_state`.
+
+    Returns a list of (relative_path_posix, lineno, kind) tuples.
+    `kind` is one of {"def", "import", "call"}. Comments / strings
+    do NOT count (the check parses the file with `ast`, which
+    skips them).
     """
-    from tests2._helpers.celery_eager import FakeApiConnectionService
-    from app.core.arricchisci.execution_context import (
-        ArricchisciExecutionContext,
-        apply_to_legacy_state,
+    roots = [_BACKEND_ROOT / "app", _BACKEND_ROOT / "workers", _BACKEND_ROOT / "tests2"]
+    violations: list[tuple[str, int, str]] = []
+    for root in roots:
+        if not root.exists():
+            continue
+        for py in root.rglob("*.py"):
+            if "__pycache__" in py.parts:
+                continue
+            rel = py.relative_to(_BACKEND_ROOT)
+            if rel in _LOCK_SELF_FILES:
+                continue
+            try:
+                src = py.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            try:
+                tree = ast.parse(src, filename=str(py))
+            except SyntaxError:
+                continue
+            for node in ast.walk(tree):
+                if isinstance(node, ast.FunctionDef) and node.name == "apply_to_legacy_state":
+                    violations.append((rel.as_posix(), node.lineno, "def"))
+                elif isinstance(node, ast.ImportFrom):
+                    for alias in node.names:
+                        if alias.name == "apply_to_legacy_state":
+                            violations.append((rel.as_posix(), node.lineno, "import"))
+                elif isinstance(node, ast.Call):
+                    f = node.func
+                    if isinstance(f, ast.Name) and f.id == "apply_to_legacy_state":
+                        violations.append((rel.as_posix(), node.lineno, "call"))
+                    elif isinstance(f, ast.Attribute) and f.attr == "apply_to_legacy_state":
+                        violations.append((rel.as_posix(), node.lineno, "call"))
+    return violations
+
+
+def test_apply_to_legacy_state_is_not_defined_imported_or_called_anywhere():
+    """BE-GO-READY-ORCHESTRATION-ENGINE-012 negative source-bound lock.
+
+    The legacy-mirror scaffold `apply_to_legacy_state` was deleted.
+    No file under `backend/app`, `backend/workers`, or
+    `backend/tests2` (except this lock module itself) may define,
+    import, or call the symbol.
+
+    Triggers a regression LOUD if a contributor re-introduces the
+    helper "for safety" or copy-pastes a stale test from prior
+    branches.
+    """
+    violations = _scan_apply_to_legacy_state_violations()
+    assert not violations, (
+        "BE-GO-READY-ORCHESTRATION-ENGINE-012 regression: "
+        "`apply_to_legacy_state` is alive somewhere again. The "
+        "legacy mirror was killed because every production reader "
+        "is ctx-strict; reintroducing the helper would re-open the "
+        "global-state scaffold. Offenders:\n  "
+        + "\n  ".join(f"{rel}:{ln} ({kind})" for rel, ln, kind in violations)
     )
-
-    fake = FakeApiConnectionService()
-    # Snapshot del log dopo init (FakeApiConnectionService.__init__
-    # registra 1 setattr di `_current_group_id = None` come effetto
-    # di costruzione).
-    pre_apply_count = len(fake._call_log)
-
-    ctx = ArricchisciExecutionContext(
-        project_id="p1",
-        group_id="grp-A",
-        preview_limit=None,
-    )
-    apply_to_legacy_state(fake, ctx)
-
-    post_apply_events = [
-        ev for ev in fake._call_log[pre_apply_count:]
-        if ev[0] == "setattr:_current_group_id"
-    ]
-    # 2 events da apply_to_legacy_state: reset a None + ctx.group_id.
-    # `_preview_limit` viene scritto prima, ma non e' tracciato dal
-    # FakeApiConnectionService (registra solo `_current_group_id`).
-    assert len(post_apply_events) == 2
-    assert post_apply_events[0] == ("setattr:_current_group_id", None)
-    assert post_apply_events[1] == ("setattr:_current_group_id", "grp-A")
-    assert fake._current_group_id == "grp-A"
-
-
-# ---------------------------------------------------------------------------
-# 5. Concurrency: two contexts isolated even if same singleton class
-# ---------------------------------------------------------------------------
-
-
-def test_two_task_contexts_stay_isolated_with_typed_boundary():
-    """Phase 3 lock: due esecuzioni concorrenti del task
-    istanziano 2 `ApiConnectionService` distinti + 2 context
-    frozen distinti. Il typed boundary garantisce che il tenant
-    binding non leak fra esecuzioni anche con singleton class
-    condivisa."""
-    from app.core.arricchisci.execution_context import (
-        ArricchisciExecutionContext,
-        apply_to_legacy_state,
-    )
-    from tests2._helpers.celery_eager import FakeApiConnectionService
-
-    svc_a = FakeApiConnectionService()
-    svc_b = FakeApiConnectionService()
-    ctx_a = ArricchisciExecutionContext(
-        project_id="p-A", group_id="grp-A", preview_limit=10,
-    )
-    ctx_b = ArricchisciExecutionContext(
-        project_id="p-B", group_id="grp-B", preview_limit=None,
-    )
-
-    apply_to_legacy_state(svc_a, ctx_a)
-    apply_to_legacy_state(svc_b, ctx_b)
-
-    # Tenant binding isolato sui singleton instance distinti.
-    assert svc_a._current_group_id == "grp-A"
-    assert svc_b._current_group_id == "grp-B"
-    assert svc_a._preview_limit == 10
-    assert svc_b._preview_limit is None
-    # I context sono immutabili — non possono essere alterati post-
-    # construction (lock pre-existing in
-    # test_arricchisci_execution_context_contract).
-    assert ctx_a is not ctx_b

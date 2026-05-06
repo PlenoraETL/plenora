@@ -114,9 +114,9 @@ migrato i 3 callsite mixin (`_load_source_project`, `_load_file_source`,
 `ArricchisciExecutionContext` via `_group_id_from_ctx(ctx)` e
 `_preview_limit_from_ctx(ctx)`. Il singleton `_current_group_id` /
 `_preview_limit` NON viene piu' consultato da questi callsite.
-`init_execution_context` (canvas_orchestrator) ancora applica un
-mirror legacy via `apply_to_legacy_state` per il preview path
-in-process (helper preservato ma non load-bearing).
+Post-OE011/OE012: l'orchestrator non mirror-a piu' i valori sul
+singleton, e la funzione legacy `apply_to_legacy_state` e' stata
+cancellata.
 
 Coupling esterno
 ================

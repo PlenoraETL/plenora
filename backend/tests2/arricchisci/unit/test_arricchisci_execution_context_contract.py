@@ -1,35 +1,33 @@
 """Contract test BE-GO-READY-TRANSFORMATION-ENGINE-015 — typed
 execution context per arricchisci canvas execution.
 
-Lock i 7 invariant del nuovo boundary:
+Lock degli invariant residui post-OE012:
 
 1. **Module + symbol exposure**: `app.core.arricchisci.execution_context`
    esporta `ArricchisciExecutionContext` (frozen dataclass) +
-   `build_execution_context` + `apply_to_legacy_state`. Re-export
-   da `canvas_orchestrator` per i 2 simboli pubblici (typed shape
-   + builder).
+   `build_execution_context`. Re-export da `canvas_orchestrator`
+   per i 2 simboli pubblici (typed shape + builder).
 2. **Frozen / immutable**: il context e' immutabile dopo la
    costruzione. `setattr` solleva `FrozenInstanceError`.
 3. **Concurrency isolation**: due context distinti hanno valori
    isolati byte-per-byte (no shared mutable state).
 4. **Builder fail-closed**: `build_execution_context` propaga
    `psycopg2.Error` come `ExecutionContextError` con chain
-   preservata. Stessa shape del legacy.
+   preservata.
 5. **Builder happy path**: `group_id` letto da `db_svc.get_project`;
    `None` quando il progetto non esiste; `preview_limit`
    passato through invariato.
-6. **`init_execution_context` ritorna il context**: Phase 1
-   transition path. Il chiamante puo' ricevere il typed boundary
-   senza chiamare il builder separatamente.
-7. **KEEP_COMPAT mirroring**: `apply_to_legacy_state(svc, ctx)` +
-   l'invariant "`_current_group_id` azzerato PRIMA del DB call"
-   lockato in `test_init_execution_context_fail_closed` resta
-   verde.
+6. **`init_execution_context` ritorna il context senza scrivere
+   sul singleton**: post-OE011 il legacy mirror e' stato ritirato.
+   OE012 ha cancellato la funzione `apply_to_legacy_state`
+   completamente (nessun caller di produzione ne aveva mai
+   beneficiato, e i test che la proteggevano sono stati eliminati
+   nello stesso diff).
 
-Nota residuo TE15-R1: i 6 mixin reader site
-(`api_connection_source_loading.py` x4 + `api_connection_rest_file.py` x2)
-continuano a leggere `getattr(self, "_current_group_id", None)` —
-out of scope (Phase 2 audit dedicato).
+Lock storico ritirato: il punto 7 pre-OE012 ("KEEP_COMPAT
+mirroring tramite `apply_to_legacy_state`") e' stato cancellato
+insieme alla funzione. Il negative source-bound lock vive in
+`test_external_consumers_ctx_migration_contract.py`.
 """
 
 from __future__ import annotations
@@ -49,15 +47,17 @@ pytestmark = [pytest.mark.unit, pytest.mark.arricchisci, pytest.mark.contract]
 
 
 def test_execution_context_module_exposes_typed_boundary():
+    """Post-OE012: il modulo espone il typed shape + il builder.
+    `apply_to_legacy_state` e' stato cancellato (legacy mirror dead
+    write); il negative lock vive in
+    `test_external_consumers_ctx_migration_contract.py`."""
     from app.core.arricchisci.execution_context import (
         ArricchisciExecutionContext,
-        apply_to_legacy_state,
         build_execution_context,
     )
 
     assert ArricchisciExecutionContext.__name__ == "ArricchisciExecutionContext"
     assert callable(build_execution_context)
-    assert callable(apply_to_legacy_state)
 
 
 def test_canvas_orchestrator_reexports_context_boundary():
@@ -262,38 +262,16 @@ def test_init_execution_context_does_not_write_singleton_state(
 
 
 # ---------------------------------------------------------------------------
-# 7. apply_to_legacy_state mirroring + isolation when reused per task
+# 7. (RITIRATO post-OE012) apply_to_legacy_state mirroring tests
 # ---------------------------------------------------------------------------
-
-
-def test_apply_to_legacy_state_mirrors_context(api_service):
-    from app.core.arricchisci.execution_context import (
-        ArricchisciExecutionContext,
-        apply_to_legacy_state,
-    )
-
-    api_service._current_group_id = "grp-PREVIOUS"
-    api_service._preview_limit = 999
-    ctx = ArricchisciExecutionContext(
-        project_id="p-new", group_id="grp-NEW", preview_limit=5,
-    )
-    apply_to_legacy_state(api_service, ctx)
-    assert api_service._current_group_id == "grp-NEW"
-    assert api_service._preview_limit == 5
-
-
-def test_apply_to_legacy_state_with_none_group_clears_singleton(api_service):
-    """Progetto inesistente ⇒ `ctx.group_id = None` ⇒ il singleton
-    viene azzerato (no stale tenant binding cross-execution)."""
-    from app.core.arricchisci.execution_context import (
-        ArricchisciExecutionContext,
-        apply_to_legacy_state,
-    )
-
-    api_service._current_group_id = "grp-STALE"
-    ctx = ArricchisciExecutionContext(
-        project_id="p-missing", group_id=None, preview_limit=None,
-    )
-    apply_to_legacy_state(api_service, ctx)
-    assert api_service._current_group_id is None
-    assert api_service._preview_limit is None
+#
+# Pre-OE012 questa sezione locckava due test che esercitavano la
+# funzione `apply_to_legacy_state` in modalita' standalone:
+#   - test_apply_to_legacy_state_mirrors_context
+#   - test_apply_to_legacy_state_with_none_group_clears_singleton
+# Entrambi sono stati eliminati insieme alla funzione. Lo state
+# `_current_group_id` / `_preview_limit` sul singleton non e' piu'
+# letto da nessun reader di produzione (OE011 ha reso ctx-strict
+# i mixin), quindi non ha piu' senso lockarne la mirror.
+# Il negative source-bound lock vive in
+# `tests2/arricchisci/unit/test_external_consumers_ctx_migration_contract.py`.

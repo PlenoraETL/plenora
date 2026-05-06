@@ -1,9 +1,17 @@
 """
-CRUD per la tabella `eseguibili` (storage: PostgreSQL via app.db.db_service).
+CRUD per la tabella `eseguibili` (storage: PostgreSQL via
+`app.db.pg_connection`).
 
 Lo schema PG e' creato dalle migrazioni in `backend/migrations/`. Il file
 storico `app/db/config_schema.sql` e' mantenuto come reference legacy
 (vedi header del file). Questo modulo contiene solo le funzioni di accesso.
+
+Migrato da `app.db.db_service` a `app.db.pg_connection` da
+BE-GO-READY-DB-ENGINE-011: gli unici simboli usati qui
+(`execute`, `fetchone`, `fetchall`) sono primitive DAL la cui canonical home
+e' `pg_connection`; il facade `db_service` li re-esporta solo per
+back-compat. Zero monkeypatch coupling sul nome `eseguibili.db.db.<x>`,
+quindi la migrazione e' un'edit di import senza rotture downstream.
 """
 
 import json
@@ -11,7 +19,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 
-import app.db.db_service as db
+from app.db import pg_connection as db
 
 
 def _now() -> str:
