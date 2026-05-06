@@ -168,16 +168,22 @@ def test_materialize_from_result_id_logs_error_before_raise_on_lookup_failure(
 def test_materialize_from_result_id_logs_error_before_raise_on_blob_read_failure(
     monkeypatch, capture_resolver_logs,
 ):
-    """``db_service.get_result_data`` solleva → log ERROR ``[GESTITO]`` con
-    ``exc_info=True`` PRIMA del raise di ``ArtifactResolutionError``.
-
-    Path richiede row valida + tenant match: mockiamo ``get_result`` per
-    ritornare una row compatibile col ``expected_project_id``, così il
-    primo catch non intercetta il test.
+    """BE-GO-READY-RESOURCE-ENGINE-019: il blob fetch ora delega a
+    ``default_registry().get(ref, mode='path')``. Il broad-except
+    nel resolver cattura eccezioni NON-FileNotFoundError dal
+    registry (fault della libreria PG / driver / I/O di basso
+    livello) e le traduce in ``ArtifactResolutionError`` con il
+    messaggio canonical "lettura blob ... fallita" + log ERROR
+    [GESTITO] + exc_info=True PRIMA del raise. Path richiede row
+    valida + tenant match: mockiamo ``get_result`` per ritornare
+    una row compatibile (incl. ``group_id`` non-empty richiesto
+    dall'engine) cosi' il primo catch non intercetta il test.
     """
     from app.core.artifacts.resolver import ArtifactResolver
     from app.core.artifacts.types import ArtifactResolutionError
+    import app.core.artifacts.resolver as resolver_mod
     import app.db.db_service as db_service
+    from types import SimpleNamespace
 
     class _UnderlyingBlobError(IOError):
         """Simula un errore di lettura blob (I/O, timeout, corruzione)."""
@@ -186,16 +192,25 @@ def test_materialize_from_result_id_logs_error_before_raise_on_blob_read_failure
         return {
             "id": result_id,
             "project_id": "proj-abc",
+            "group_id": "grp-1",
             "format": "csv",
         }
 
-    def _raising_get_result_data(result_id):
+    monkeypatch.setattr(db_service, "get_result", _ok_get_result)
+
+    # 019: l'errore di lettura blob arriva dal registry, NON da
+    # `db_service.get_result_data`. Mock il registry per simulare
+    # un fault del loader (non-FileNotFoundError -> broad except).
+    def _raising_get(ref, *, mode):  # noqa: ARG001
         raise _UnderlyingBlobError(
-            f"blob corruption detected on {result_id}"
+            f"blob corruption detected on {ref.result_id}"
         )
 
-    monkeypatch.setattr(db_service, "get_result", _ok_get_result)
-    monkeypatch.setattr(db_service, "get_result_data", _raising_get_result_data)
+    monkeypatch.setattr(
+        resolver_mod,
+        "default_registry",
+        lambda: SimpleNamespace(get=_raising_get),
+    )
 
     resolver = ArtifactResolver()
 
@@ -228,20 +243,55 @@ def test_materialize_from_result_id_logs_error_before_raise_on_blob_read_failure
 def test_materialize_from_result_id_happy_path_unaffected_by_log_fix(
     monkeypatch, capture_resolver_logs,
 ):
-    """Difensivo: se ``get_result`` ritorna una row OK e ``get_result_data``
-    ritorna un blob, il path di successo NON deve emettere alcun log
-    ``[GESTITO]`` — il fix C3 tocca solo i due broad catch.
+    """BE-GO-READY-RESOURCE-ENGINE-019: se ``get_result`` ritorna
+    una row OK (incl. ``group_id``) e il registry ritorna un
+    Resource path-mode, il path di successo NON deve emettere
+    alcun log ``[GESTITO]`` — il fix C3 tocca solo i due broad
+    catch.
     """
+    import tempfile
+    from pathlib import Path
+    from types import SimpleNamespace
     from app.core.artifacts.resolver import ArtifactResolver
+    import app.core.artifacts.resolver as resolver_mod
     import app.db.db_service as db_service
+    from app.core.resources import Resource
 
     monkeypatch.setattr(
         db_service, "get_result",
-        lambda rid: {"id": rid, "project_id": "proj-x", "format": "csv"},
+        lambda rid: {
+            "id": rid,
+            "project_id": "proj-x",
+            "group_id": "grp-1",
+            "format": "csv",
+        },
     )
+
+    # 019: il registry materializza il blob in un tempfile (path
+    # mode) col prefix canonico `plenora-result-blob-`. Il
+    # resolver wrappa il path in MaterializedArtifact e si occupa
+    # del lifecycle.
+    def _ok_get(ref, *, mode):  # noqa: ARG001
+        tf = tempfile.NamedTemporaryFile(
+            delete=False,
+            prefix="plenora-result-blob-",
+            suffix=".csv",
+        )
+        try:
+            tf.write(b"col1,col2\n1,2\n")
+        finally:
+            tf.close()
+        return Resource(
+            kind="result_blob",
+            size_bytes=12,
+            path=Path(tf.name),
+            is_temporary=True,
+        )
+
     monkeypatch.setattr(
-        db_service, "get_result_data",
-        lambda rid: b"col1,col2\n1,2\n",
+        resolver_mod,
+        "default_registry",
+        lambda: SimpleNamespace(get=_ok_get),
     )
 
     resolver = ArtifactResolver()

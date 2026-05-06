@@ -1,3 +1,4 @@
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -20,6 +21,63 @@ def resolver():
 
 
 # ---------------------------------------------------------------------------
+# Helpers for the BE-GO-READY-RESOURCE-ENGINE-019 registry boundary tests.
+# The resolver's `_materialize_from_result_id` now delegates blob fetch +
+# tempfile materialization to `default_registry().get(ref, mode='path')`.
+# Tests that previously mocked `db_service.get_result_data` now mock the
+# registry's `get(ref, mode)` surface AS IMPORTED INTO the resolver
+# module so the patch lands at the canonical boundary.
+# ---------------------------------------------------------------------------
+
+
+def _fake_registry_returning_blob(payload: bytes, *, suffix: str = "") -> tuple[list, object]:
+    """Build a fake registry whose `get(ref, mode)` materializes
+    ``payload`` to a fresh tempfile (mirroring the loader's path-mode
+    contract: prefix `plenora-result-blob-`, returns a Resource with
+    ``path`` set, ``is_temporary=True``).
+
+    Returns ``(captured_calls, fake_registry)``. The caller asserts
+    on the captured `(ref, mode)` tuples to verify the resolver's
+    delegation contract; the fake_registry is patched onto
+    ``app.core.artifacts.resolver.default_registry``.
+    """
+    from app.core.resources import Resource
+
+    captured: list = []
+
+    def _get(ref, *, mode):
+        captured.append((ref, mode))
+        tf = tempfile.NamedTemporaryFile(
+            delete=False,
+            prefix="plenora-result-blob-",
+            suffix=suffix,
+        )
+        path = Path(tf.name)
+        try:
+            tf.write(payload)
+        finally:
+            tf.close()
+        return Resource(
+            kind="result_blob",
+            size_bytes=len(payload),
+            path=path,
+            is_temporary=True,
+        )
+
+    return captured, SimpleNamespace(get=_get)
+
+
+def _fake_registry_raising(exc: BaseException) -> object:
+    """Build a fake registry whose `get(ref, mode)` raises ``exc``.
+    Used to exercise the resolver's typed-error translation path."""
+
+    def _get(ref, *, mode):  # noqa: ARG001
+        raise exc
+
+    return SimpleNamespace(get=_get)
+
+
+# ---------------------------------------------------------------------------
 # materialize_run
 # ---------------------------------------------------------------------------
 
@@ -39,14 +97,31 @@ def test_materialize_run_inline_df_takes_priority(resolver):
 
 
 def test_materialize_run_result_id_beats_output_path(resolver, monkeypatch):
+    """BE-GO-READY-RESOURCE-ENGINE-019: the resolver delegates the
+    blob fetch + tempfile materialization to
+    ``default_registry().get(ref, mode='path')``. The row metadata
+    (format, group_id, project_id) is still fetched via
+    ``db_service.get_result``; only the BYTES branch was migrated.
+    """
     import app.db.db_service as db_service
+    import app.core.artifacts.resolver as resolver_mod
 
     monkeypatch.setattr(
         db_service,
         "get_result",
-        lambda rid: {"id": rid, "project_id": "proj-1", "format": "csv"},
+        lambda rid: {
+            "id": rid,
+            "project_id": "proj-1",
+            "group_id": "grp-1",
+            "format": "csv",
+        },
     )
-    monkeypatch.setattr(db_service, "get_result_data", lambda rid: b"id\n1\n")
+    captured, fake_registry = _fake_registry_returning_blob(
+        b"id\n1\n", suffix=".csv",
+    )
+    monkeypatch.setattr(
+        resolver_mod, "default_registry", lambda: fake_registry,
+    )
 
     ref = RunArtifactRef(
         project_id="proj-1",
@@ -62,17 +137,43 @@ def test_materialize_run_result_id_beats_output_path(resolver, monkeypatch):
         assert m.path.read_bytes() == b"id\n1\n"
     # cleanup automatico via context manager
     assert not m.path.exists()
+    # Delegation contract: exactly one registry call with the
+    # canonical typed ResourceRef + path mode.
+    assert len(captured) == 1
+    ref_passed, mode_passed = captured[0]
+    assert ref_passed.kind == "result_blob"
+    assert ref_passed.result_id == "res-1"
+    assert ref_passed.expected_group_id == "grp-1"
+    assert ref_passed.expected_project_id == "proj-1"
+    assert mode_passed == "path"
 
 
 def test_materialize_run_rejects_cross_tenant_result_id(resolver, monkeypatch):
+    """The resolver-level project_id check fires BEFORE the registry
+    call; the loader is never invoked. Tripwire mock on the
+    registry would AssertionError if the resolver delegated past
+    the cross-tenant gate."""
     import app.db.db_service as db_service
+    import app.core.artifacts.resolver as resolver_mod
 
     monkeypatch.setattr(
         db_service,
         "get_result",
-        lambda rid: {"id": rid, "project_id": "proj-2", "format": "csv"},
+        lambda rid: {
+            "id": rid,
+            "project_id": "proj-2",
+            "group_id": "grp-1",
+            "format": "csv",
+        },
     )
-    monkeypatch.setattr(db_service, "get_result_data", lambda rid: b"x")
+
+    def _tripwire():
+        raise AssertionError(
+            "default_registry() must NOT be invoked when the "
+            "resolver-level cross-tenant check has already failed"
+        )
+
+    monkeypatch.setattr(resolver_mod, "default_registry", _tripwire)
 
     ref = RunArtifactRef(
         project_id="proj-1",
@@ -94,18 +195,119 @@ def test_materialize_run_missing_result_id_is_hard_fail(resolver, monkeypatch):
 
 
 def test_materialize_run_missing_blob_is_hard_fail(resolver, monkeypatch):
+    """BE-GO-READY-RESOURCE-ENGINE-019: a missing blob now arrives
+    as ``FileNotFoundError`` from the registry's `get(...)` call.
+    The resolver translates it to ``ArtifactResolutionError`` with
+    the canonical Italian operator string -- preserved verbatim
+    from the pre-019 surface so log greps / tests downstream do
+    not regress."""
     import app.db.db_service as db_service
+    import app.core.artifacts.resolver as resolver_mod
 
     monkeypatch.setattr(
         db_service,
         "get_result",
-        lambda rid: {"id": rid, "project_id": "proj-1", "format": "csv"},
+        lambda rid: {
+            "id": rid,
+            "project_id": "proj-1",
+            "group_id": "grp-1",
+            "format": "csv",
+        },
     )
-    monkeypatch.setattr(db_service, "get_result_data", lambda rid: None)
+    fake_registry = _fake_registry_raising(
+        FileNotFoundError(
+            "ResultBlobLoader.load: result_id='res-1' not found"
+        )
+    )
+    monkeypatch.setattr(
+        resolver_mod, "default_registry", lambda: fake_registry,
+    )
 
     ref = RunArtifactRef(project_id="proj-1", result_id="res-1")
     with pytest.raises(ArtifactResolutionError, match="senza blob"):
         resolver.materialize_run(ref)
+
+
+def test_materialize_run_missing_group_id_is_hard_fail(resolver, monkeypatch):
+    """BE-GO-READY-RESOURCE-ENGINE-019: a row whose ``group_id`` is
+    None / empty is data corruption (every production result row
+    has it). The resolver fail-closes BEFORE constructing a
+    ResourceRef -- the engine's typed contract requires a non-empty
+    ``expected_group_id``, and the resolver gives a clearer
+    operator message than the raw ResourceRef ValueError."""
+    import app.db.db_service as db_service
+    import app.core.artifacts.resolver as resolver_mod
+
+    monkeypatch.setattr(
+        db_service,
+        "get_result",
+        lambda rid: {
+            "id": rid,
+            "project_id": "proj-1",
+            "group_id": None,  # corruption / pre-tenant-binding row
+            "format": "csv",
+        },
+    )
+
+    def _tripwire():
+        raise AssertionError(
+            "default_registry() must NOT be invoked when the row "
+            "has no group_id (resolver fail-closes upstream)"
+        )
+
+    monkeypatch.setattr(resolver_mod, "default_registry", _tripwire)
+
+    ref = RunArtifactRef(project_id="proj-1", result_id="res-1")
+    with pytest.raises(ArtifactResolutionError, match="senza group_id"):
+        resolver.materialize_run(ref)
+
+
+def test_materialize_run_propagates_loader_oversize_unchanged(
+    resolver, monkeypatch,
+):
+    """The loader's ``MemoryLimitExceededError`` (BE-GO-READY-
+    RESOURCE-ENGINE-010 / 013) is NOT a 'missing blob' signal --
+    it is a typed cap failure that must propagate to the FastAPI
+    413 handler, NOT be translated into the generic resolver
+    ``ArtifactResolutionError(senza blob dati)``. This test
+    pins that distinction."""
+    import app.db.db_service as db_service
+    import app.core.artifacts.resolver as resolver_mod
+    from app.shared.exceptions import MemoryLimitExceededError
+
+    monkeypatch.setattr(
+        db_service,
+        "get_result",
+        lambda rid: {
+            "id": rid,
+            "project_id": "proj-1",
+            "group_id": "grp-1",
+            "format": "csv",
+        },
+    )
+    fake_registry = _fake_registry_raising(
+        MemoryLimitExceededError(
+            observed_bytes=999_999_999,
+            limit_bytes=500 * 1024 * 1024,
+            path_basename="result_id=res-1",
+            stage="result_blob_oversize",
+        )
+    )
+    monkeypatch.setattr(
+        resolver_mod, "default_registry", lambda: fake_registry,
+    )
+
+    ref = RunArtifactRef(project_id="proj-1", result_id="res-1")
+    # Resolver wraps unexpected exceptions in ArtifactResolutionError
+    # with the "lettura blob ... fallita" prefix (broad-except path);
+    # the wrapped __cause__ is the typed MemoryLimitExceededError so
+    # the boundary handler can still distinguish the cap path via
+    # `e.__cause__` if needed. The important property pinned here:
+    # the cap signal is NOT silently turned into "senza blob dati".
+    with pytest.raises(ArtifactResolutionError) as exc_info:
+        resolver.materialize_run(ref)
+    assert "senza blob" not in str(exc_info.value)
+    assert isinstance(exc_info.value.__cause__, MemoryLimitExceededError)
 
 
 def test_materialize_run_output_path_must_be_inside_project_results(

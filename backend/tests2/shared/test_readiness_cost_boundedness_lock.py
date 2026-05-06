@@ -360,13 +360,18 @@ def test_diagnostic_checks_use_skipped_wording_on_internal_error():
 def test_check_postgres_remains_fail_closed():
     """`check_postgres` is the ONE check that should NEVER be
     fail-OPEN: if PG is unreachable, /ready cannot reasonably claim
-    readiness (every other DB-backed check would lie)."""
+    readiness (every other DB-backed check would lie).
+
+    Post OPS-002, the probe goes through `get_connection` (so the
+    `SET LOCAL statement_timeout` can run on the same transaction
+    as `SELECT 1`); patch that entry point to simulate unreachable
+    PG."""
     from app.observability import health as h
 
-    def _raise(sql, params=()):
+    def _raise():
         raise RuntimeError("PG unreachable")
 
-    with patch("app.db.pg_connection.fetchone", _raise):
+    with patch("app.db.pg_connection.get_connection", _raise):
         ok, detail = h.check_postgres()
 
     assert ok is False, (
@@ -581,4 +586,363 @@ def test_health_module_has_no_top_level_heavy_imports():
         "body (lazy import) so `import app.observability.health` "
         "stays cheap. The lazy-leaf design is documented in the "
         "module docstring (\"Boundary\" section)."
+    )
+
+
+# =====================================================================
+# 7. OPS-002: PG + object-storage readiness timeout bounds
+# =====================================================================
+#
+# BE-GO-READY-OPS-002-READINESS-PG-OBJECTSTORE-TIMEOUTS adds two
+# bounds matching the OPS-001 Redis pattern:
+#   (a) `check_postgres` runs `SELECT 1` inside a transaction with
+#       `SET LOCAL statement_timeout = Nms`. Without this a PG that
+#       accepts the TCP connection but stalls in execution (lock,
+#       backend exhaustion, query plan stuck) would block /ready
+#       beyond the kernel TCP keepalive.
+#   (b) `check_object_storage` calls a one-shot bounded boto3 client
+#       via `storage.readiness_probe(timeout_seconds=...)` instead
+#       of the runtime `list_objects` (which uses the boto3 default
+#       60s connect + 60s read with 3 retries -> ~360s worst case).
+#       The readiness client passes `Config(connect_timeout,
+#       read_timeout, retries={"max_attempts": 1})`.
+#
+# Both timeouts are configurable; both fall back to a hardcoded
+# default when the setting is <= 0 or non-int (mirroring the
+# Redis "footgun" guard).
+
+
+def test_pg_timeout_setting_default_is_two_seconds():
+    """`READINESS_PG_TIMEOUT_SECONDS` default = 2. Matches Redis. Cap
+    <= 0 falls back to the hardcoded 2 (intentionally NOT
+    disable-able)."""
+    from app.config import Settings
+
+    val = Settings.DEFAULTS["READINESS_PG_TIMEOUT_SECONDS"]
+    assert val == 2, (
+        f"READINESS_PG_TIMEOUT_SECONDS default must be 2 seconds. "
+        f"Got {val!r}. Tightening below 2s risks false positives on "
+        "warm-restart PG; raising above 5s starts to drift outside "
+        "the load-balancer-friendly latency budget for /health."
+    )
+
+
+def test_object_storage_timeout_setting_default_is_three_seconds():
+    """`READINESS_OBJECT_STORAGE_TIMEOUT_SECONDS` default = 3. One
+    second above PG/Redis to absorb regional S3 latency. Cap <= 0
+    falls back to 3."""
+    from app.config import Settings
+
+    val = Settings.DEFAULTS["READINESS_OBJECT_STORAGE_TIMEOUT_SECONDS"]
+    assert val == 3, (
+        f"READINESS_OBJECT_STORAGE_TIMEOUT_SECONDS default must be "
+        f"3 seconds. Got {val!r}. The +1s over the PG/Redis 2s "
+        "absorbs regional S3 latency without drifting outside the "
+        "load-balancer-friendly /ready window."
+    )
+
+
+def test_check_postgres_uses_statement_timeout():
+    """`check_postgres` MUST `SET LOCAL statement_timeout = Nms` on
+    its transaction before running `SELECT 1`. Without this a stalled
+    PG would block /ready beyond the TCP keepalive."""
+    from app.observability import health as h
+
+    captured: list[str] = []
+
+    class _StubCursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return None
+
+        def execute(self, sql, params=None):
+            captured.append(sql)
+
+        def fetchone(self):
+            return {"v": 1}
+
+    class _StubConn:
+        def cursor(self):
+            return _StubCursor()
+
+        def commit(self):
+            pass
+
+        def rollback(self):
+            pass
+
+    with patch("app.db.pg_connection.get_connection", return_value=_StubConn()), \
+         patch("app.db.pg_connection.put_connection", lambda c: None):
+        ok, detail = h.check_postgres()
+
+    assert ok is True
+    assert detail == "ok"
+    assert any("SET LOCAL statement_timeout" in s for s in captured), (
+        f"check_postgres must issue `SET LOCAL statement_timeout = Nms` "
+        f"on the probe transaction. Captured statements: {captured}. "
+        "Without this bound a stalled PG (locks, exhausted backends) "
+        "would block /ready beyond the kernel TCP keepalive."
+    )
+    assert any("SELECT 1" in s for s in captured), (
+        f"check_postgres must still issue `SELECT 1`. Captured: "
+        f"{captured}."
+    )
+
+
+def test_check_postgres_falls_back_to_two_seconds_on_invalid_setting():
+    """`check_postgres` must NOT honour <=0 or non-int settings as
+    "no timeout" — that would break the cost-boundedness invariant."""
+    from app.observability import health as h
+
+    captured: list[str] = []
+
+    class _StubCursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return None
+
+        def execute(self, sql, params=None):
+            captured.append(sql)
+
+        def fetchone(self):
+            return {"v": 1}
+
+    class _StubConn:
+        def cursor(self):
+            return _StubCursor()
+
+        def commit(self):
+            pass
+
+        def rollback(self):
+            pass
+
+    class _SettingsStub:
+        def get(self, key, default=None):
+            if key == "READINESS_PG_TIMEOUT_SECONDS":
+                return 0  # invalid: must fall back to 2
+            return default
+
+    with patch("app.db.pg_connection.get_connection", return_value=_StubConn()), \
+         patch("app.db.pg_connection.put_connection", lambda c: None), \
+         patch("app.config.settings", new=_SettingsStub()):
+        ok, _ = h.check_postgres()
+
+    assert ok is True
+    set_local = next(
+        (s for s in captured if "SET LOCAL statement_timeout" in s),
+        None,
+    )
+    assert set_local is not None
+    # 2 seconds -> 2000ms
+    assert "2000" in set_local, (
+        f"statement_timeout fallback must be 2000ms on invalid setting; "
+        f"got {set_local!r}."
+    )
+
+
+def test_check_object_storage_uses_bounded_probe_method():
+    """`check_object_storage` MUST go through
+    `storage.readiness_probe(timeout_seconds=...)`, NOT the runtime
+    `list_objects`. The runtime path uses boto3 defaults (60s connect
+    + 60s read with 3 retries) which can total ~360s on a hung
+    endpoint."""
+    from app.observability import health as h
+
+    captured: dict = {}
+
+    class _StubStorage:
+        def list_objects(self, prefix):
+            captured["list_objects_called"] = True
+            return []
+
+        def readiness_probe(self, timeout_seconds):
+            captured["readiness_probe_timeout"] = timeout_seconds
+
+    with patch(
+        "app.shared.cloud_backends.object_storage_enabled",
+        return_value=True,
+    ), patch(
+        "app.shared.cloud_backends.get_runtime_object_storage",
+        return_value=_StubStorage(),
+    ):
+        ok, detail = h.check_object_storage()
+
+    assert ok is True
+    assert detail == "ok"
+    assert "readiness_probe_timeout" in captured, (
+        "check_object_storage must call `storage.readiness_probe(...)`, "
+        f"not list_objects. Captured: {captured}."
+    )
+    assert "list_objects_called" not in captured, (
+        "check_object_storage must NOT call `storage.list_objects(...)` "
+        "on the readiness path: that uses unbounded boto3 defaults."
+    )
+
+
+def test_check_object_storage_falls_back_to_three_seconds_on_invalid_setting():
+    from app.observability import health as h
+
+    captured: dict = {}
+
+    class _StubStorage:
+        def readiness_probe(self, timeout_seconds):
+            captured["timeout"] = timeout_seconds
+
+    class _SettingsStub:
+        def get(self, key, default=None):
+            if key == "READINESS_OBJECT_STORAGE_TIMEOUT_SECONDS":
+                return -1  # invalid: must fall back to 3
+            return default
+
+    with patch(
+        "app.shared.cloud_backends.object_storage_enabled",
+        return_value=True,
+    ), patch(
+        "app.shared.cloud_backends.get_runtime_object_storage",
+        return_value=_StubStorage(),
+    ), patch(
+        "app.config.settings", new=_SettingsStub()
+    ):
+        ok, _ = h.check_object_storage()
+
+    assert ok is True
+    assert captured.get("timeout") == 3, (
+        f"object_storage timeout fallback must be 3s on invalid "
+        f"setting; got {captured.get('timeout')!r}."
+    )
+
+
+def test_object_storage_readiness_probe_builds_bounded_boto3_client():
+    """`AwsS3ObjectStorage.readiness_probe` MUST build a one-shot
+    boto3 client with `Config(connect_timeout, read_timeout,
+    retries={"max_attempts": 1})`. The retry disable is critical:
+    boto3's default 3-attempt exponential retry would multiply the
+    timeout window by ~3x on a hung endpoint."""
+    from app.shared.cloud_backends import AwsS3ObjectStorage
+
+    captured: dict = {}
+
+    class _StubClient:
+        def list_objects_v2(self, **kwargs):
+            captured["list_kwargs"] = kwargs
+            return {}
+
+    def _stub_boto3_client(service, **kwargs):
+        captured["service"] = service
+        captured["client_kwargs"] = kwargs
+        return _StubClient()
+
+    storage = AwsS3ObjectStorage(bucket="probe-bucket", region="eu-south-1")
+    with patch("boto3.client", side_effect=_stub_boto3_client):
+        storage.readiness_probe(timeout_seconds=2)
+
+    assert captured["service"] == "s3"
+    cfg = captured["client_kwargs"].get("config")
+    assert cfg is not None, (
+        "readiness_probe must pass a botocore Config to boto3.client; "
+        f"got kwargs={captured['client_kwargs']!r}."
+    )
+    assert cfg.connect_timeout == 2, (
+        f"readiness Config.connect_timeout must equal the requested "
+        f"timeout_seconds; got {cfg.connect_timeout!r}."
+    )
+    assert cfg.read_timeout == 2, (
+        f"readiness Config.read_timeout must equal the requested "
+        f"timeout_seconds; got {cfg.read_timeout!r}."
+    )
+    # botocore stores retries config as a dict on the Config object.
+    retries = getattr(cfg, "retries", None)
+    assert retries is not None, "readiness Config must declare retries"
+    assert retries.get("max_attempts") == 1, (
+        f"readiness Config.retries.max_attempts must be 1 to disable "
+        f"the 3-attempt exponential default; got "
+        f"{retries.get('max_attempts')!r}."
+    )
+    # The probe must scope to the dedicated prefix and bound the page
+    # size so even an enabled bucket does not page through everything.
+    list_kwargs = captured.get("list_kwargs", {})
+    assert list_kwargs.get("Bucket") == "probe-bucket"
+    assert list_kwargs.get("Prefix") == ".plenora-readiness-probe/"
+    assert list_kwargs.get("MaxKeys") == 1
+
+
+def test_minio_readiness_probe_preserves_endpoint_and_addressing_style():
+    """MinIO subclass MUST keep `endpoint_url`, explicit credentials,
+    and `addressing_style=path` on the readiness client (vanilla
+    MinIO does NOT support virtual-hosted style). Dropping any of
+    these would break the probe on every MinIO deploy."""
+    from app.shared.cloud_backends import MinioObjectStorage
+
+    captured: dict = {}
+
+    class _StubClient:
+        def list_objects_v2(self, **kwargs):
+            return {}
+
+    def _stub_boto3_client(service, **kwargs):
+        captured["client_kwargs"] = kwargs
+        return _StubClient()
+
+    storage = MinioObjectStorage(
+        bucket="probe-bucket",
+        endpoint_url="http://minio:9000",
+        access_key="ak",
+        secret_key="sk",
+        region="us-east-1",
+    )
+    with patch("boto3.client", side_effect=_stub_boto3_client):
+        storage.readiness_probe(timeout_seconds=2)
+
+    kwargs = captured["client_kwargs"]
+    assert kwargs.get("endpoint_url") == "http://minio:9000"
+    assert kwargs.get("aws_access_key_id") == "ak"
+    assert kwargs.get("aws_secret_access_key") == "sk"
+    cfg = kwargs.get("config")
+    assert cfg is not None
+    s3_cfg = getattr(cfg, "s3", None) or {}
+    assert s3_cfg.get("addressing_style") == "path", (
+        "MinIO readiness Config must keep `addressing_style=path`; "
+        f"got {s3_cfg!r}."
+    )
+    assert cfg.connect_timeout == 2 and cfg.read_timeout == 2
+    retries = getattr(cfg, "retries", None) or {}
+    assert retries.get("max_attempts") == 1
+
+
+def test_pg_check_uses_statement_timeout_in_source():
+    """Source-bound mirror of the behavioural test above. Removing
+    the `SET LOCAL statement_timeout` from `check_postgres` would
+    silently re-introduce the unbounded probe — this lock catches
+    that diff at PR-review time without exercising the runtime.
+
+    Uses raw text (NOT `python_code_only`) because the SQL fragment
+    is a string literal that the tokenizer would strip; the
+    behavioural test above (`test_check_postgres_uses_statement_timeout`)
+    is the runtime guard against the docstring-only false positive."""
+    text = _HEALTH_PY.read_text(encoding="utf-8")
+    assert "SET LOCAL statement_timeout" in text, (
+        "check_postgres() must `SET LOCAL statement_timeout = Nms` "
+        "on the probe transaction. Without this bound a stalled PG "
+        "(locks, exhausted backends) would block /ready beyond the "
+        "kernel TCP keepalive."
+    )
+
+
+def test_object_storage_check_uses_readiness_probe_in_source():
+    """Source-bound mirror: `check_object_storage` MUST reference
+    `readiness_probe`. Reverting to `list_objects` would re-introduce
+    the unbounded probe path. The behavioural test above
+    (`test_check_object_storage_uses_bounded_probe_method`) guards
+    against a comment-only false positive."""
+    text = _HEALTH_PY.read_text(encoding="utf-8")
+    assert "readiness_probe" in text, (
+        "check_object_storage() must call `storage.readiness_probe("
+        "timeout_seconds=...)`. The runtime `list_objects` path uses "
+        "boto3 default timeouts (60s+60s with 3 retries = ~360s) "
+        "and is unsafe on the readiness path."
     )

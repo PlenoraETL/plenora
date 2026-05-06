@@ -470,6 +470,31 @@ class Settings:
         # un /health senza timeout sarebbe un footgun ops).
         "READINESS_REDIS_TIMEOUT_SECONDS": 2,
 
+        # BE-GO-READY-OPS-002-READINESS-PG-OBJECTSTORE-TIMEOUTS:
+        # Timeout (secondi) per `SELECT 1` dentro check_postgres().
+        # Applicato a livello di statement via `SET LOCAL
+        # statement_timeout = Nms` sulla transaction del probe.
+        # Senza questo bound una PG che accetta la connessione TCP
+        # ma stalla nell'esecuzione (lock, backend esauriti) bloccherebbe
+        # /health e /ready oltre il TCP keepalive del kernel.
+        # Lo `SET LOCAL` non altera lo statement_timeout di altre query
+        # del pool: il bound resta confinato al readiness probe.
+        # Cap <= 0 cade al fallback hardcoded di 2s (stesso footgun
+        # rationale del Redis timeout).
+        "READINESS_PG_TIMEOUT_SECONDS": 2,
+
+        # BE-GO-READY-OPS-002-READINESS-PG-OBJECTSTORE-TIMEOUTS:
+        # Timeout (secondi) per la probe `readiness_probe()` dentro
+        # check_object_storage(). Applicato sia a `connect_timeout`
+        # (TCP handshake) che a `read_timeout` (operazione list_objects)
+        # del client boto3 one-shot creato dal probe; il client usa
+        # anche `retries.max_attempts=1` per evitare il retry
+        # exponenziale (3 tentativi) che sommerebbe ~360s worst case
+        # su un endpoint hung. Default 3s = leggermente sopra il PG/Redis
+        # 2s per assorbire la latenza S3 regionale.
+        # Cap <= 0 cade al fallback hardcoded di 3s.
+        "READINESS_OBJECT_STORAGE_TIMEOUT_SECONDS": 3,
+
         # ==================== TASK ARRICCHIMENTO ====================
         "ENRICHMENT_BATCH_SIZE": 100,
         "ENRICHMENT_MAX_WORKERS": 5,

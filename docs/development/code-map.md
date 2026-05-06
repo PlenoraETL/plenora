@@ -725,6 +725,10 @@ Intervento/confini: leggere stato da `store/` (`useCanvasStore`); nessun fetch d
 
 Sintesi trasversale dei confini operativi piu' importanti del repo. Toccarli senza pensarci rompe sicurezza, isolamento o compatibilita' dei dataset.
 
+> **Per la mappa orizzontale (Auth/Ownership/Disclosure, Resource Engine, Storage, DB config, Health/Ready, Install smoke) e l'elenco "Do not import"** vedi
+> [`../architecture/horizontal-engines.md`](../architecture/horizontal-engines.md). Questa sezione resta la sintesi per-modulo verticale.
+
+
 - **`backend/app/core/intermediate/`** = contratto dati tra step pipeline. Estrai/Manipola/Arricchisci/Carica scambiano dataset *solo* tramite intermediate. Cambiare lo schema `RunSummary`/`node_meta` o il formato di `write_node`/`compute_row_hash` significa rompere tutti gli step a valle.
 - **Storage result/runtime object storage**: in `STORAGE_POLICY=object_storage`, i nuovi result non vanno mai in BYTEA. Il DB conserva metadata + `storage_key`; `data` BYTEA e' solo legacy read path. Runtime artifacts/result usano `OBJECT_STORAGE_BUCKET`/`PLENORA_ARTIFACT_BUCKET`, non `BACKUP_BUCKET`.
 - **`backend/app/shared/crypto.py`** = unico punto di crypto-at-rest. Env canonica unica `PLENORA_ENCRYPTION_KEY` (gli alias legacy sono rimossi dal 2026-04-23). Qualsiasi nuovo segreto persistito passa da `encrypt`/`decrypt`/`encrypt_dict_fields`. Mai reimplementare Fernet altrove ne reintrodurre fallback runtime.

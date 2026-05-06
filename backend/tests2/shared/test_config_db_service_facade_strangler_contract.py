@@ -16,9 +16,19 @@ imported through it:
   - `update_project_canvas_key_atomic`: 62-LOC SELECT FOR UPDATE +
     JSON merge transaction, kept verbatim to preserve atomic contract
     + the 8 dedicated test files patching `cfg_db.update_*` directly.
-  - GROUPS cluster (`get_group`, `list_groups`, `create_group`,
-    `get_group_summary`, `delete_group`, `delete_group_cascade`):
-    not yet extracted to `app/db/config/groups.py`.
+
+GROUPS cluster (`get_group`, `list_groups`, `create_group`,
+`get_group_summary`, `delete_group`, `delete_group_cascade`) was
+extracted to `app/db/config/groups.py` by
+`BE-GO-READY-DB-ENGINE-002-GROUPS-CLUSTER-EXTRACTION`. The facade
+now re-exports the cluster (mirror of users/projects/...). Existing
+`monkeypatch.setattr(cfg_db, "get_group", ...)` / `cfg_db.delete_group_cascade`
+patterns continue to work because the names remain module
+attributes on the facade. Migrating the production callsites
+(`groups_router.py`, `project_service.py`) off the facade is the
+follow-up worker `BE-GO-READY-DB-ENGINE-XXX-GROUPS-ROUTER-CALLSITE-MIGRATION`,
+deferred because it requires updating the test patch targets in
+the same change.
 
 Every other symbol re-exported by the facade has a canonical leaf
 module. New code MUST import those names from the leaf, not from

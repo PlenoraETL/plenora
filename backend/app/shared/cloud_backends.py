@@ -311,6 +311,50 @@ class AwsS3ObjectStorage:
         client = self._client()
         client.delete_object(Bucket=self.bucket, Key=key)
 
+    def _readiness_client(self, timeout_seconds: int):
+        """Boto3 client con timeout bounded e retry singolo, per /ready.
+
+        BE-GO-READY-OPS-002-READINESS-PG-OBJECTSTORE-TIMEOUTS: il client
+        runtime usa i default boto3 (60s connect, 60s read, 3 retry) che
+        sommati possono superare i 6 minuti su un endpoint hung. Il
+        readiness path usa invece un client one-shot bounded.
+
+        `retries={"max_attempts": 1}` disabilita il retry exponenziale:
+        /ready non vuole "ritenta su 5xx" — vuole sapere SUBITO se il
+        provider non risponde dentro la finestra.
+        """
+        import boto3
+        from botocore.config import Config
+
+        return boto3.client(
+            "s3",
+            region_name=self.region,
+            config=Config(
+                connect_timeout=timeout_seconds,
+                read_timeout=timeout_seconds,
+                retries={"max_attempts": 1},
+            ),
+        )
+
+    def readiness_probe(self, timeout_seconds: int) -> None:
+        """Probe leggera del bucket con timeout bounded.
+
+        Esegue `list_objects_v2` con `MaxKeys=1` su un prefisso dedicato
+        normalmente vuoto. Bucket assente, credenziali scadute, network
+        unreachable -> exception (il caller in `health.check_object_storage`
+        la traduce in `(False, "<ExcType>: <msg>")`).
+
+        Bound: `timeout_seconds` applicato sia al TCP handshake
+        (`connect_timeout`) sia all'operazione (`read_timeout`); retry
+        disabilitato (`max_attempts=1`). Worst case ~ 2 * timeout_seconds.
+        """
+        client = self._readiness_client(timeout_seconds)
+        client.list_objects_v2(
+            Bucket=self.bucket,
+            Prefix=".plenora-readiness-probe/",
+            MaxKeys=1,
+        )
+
 
 class MinioObjectStorage(AwsS3ObjectStorage):
     """MinIO via boto3 (S3-compatible endpoint).
@@ -354,6 +398,28 @@ class MinioObjectStorage(AwsS3ObjectStorage):
             aws_access_key_id=self.access_key,
             aws_secret_access_key=self.secret_key,
             config=Config(s3={"addressing_style": "path"}),
+        )
+
+    def _readiness_client(self, timeout_seconds: int):
+        """Override del builder readiness per MinIO: stesso bound della
+        parent (connect+read timeout, max_attempts=1) ma con
+        endpoint_url + credenziali esplicite e addressing_style=path
+        (MinIO non supporta virtual-hosted style)."""
+        import boto3
+        from botocore.config import Config
+
+        return boto3.client(
+            "s3",
+            region_name=self.region,
+            endpoint_url=self.endpoint_url,
+            aws_access_key_id=self.access_key,
+            aws_secret_access_key=self.secret_key,
+            config=Config(
+                s3={"addressing_style": "path"},
+                connect_timeout=timeout_seconds,
+                read_timeout=timeout_seconds,
+                retries={"max_attempts": 1},
+            ),
         )
 
     def _extra_args(self) -> dict:

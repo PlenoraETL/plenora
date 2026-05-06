@@ -89,10 +89,58 @@ class HealthPayload:
 
 
 def check_postgres() -> CheckOutcome:
-    """SELECT 1 sul pool PG. Return (ok, detail)."""
+    """SELECT 1 sul pool PG con statement_timeout bounded.
+
+    BE-GO-READY-OPS-002-READINESS-PG-OBJECTSTORE-TIMEOUTS: il timeout e'
+    applicato a livello di statement via `SET LOCAL statement_timeout`.
+    Senza questo bound, una PG che accetta la connessione TCP ma stalla
+    nell'esecuzione (lock, backend esauriti, query plan stuck) farebbe
+    bloccare /health e /ready oltre il timeout di rete del kernel.
+
+    Il `SET LOCAL` ha scope sulla transaction in corso e viene
+    automaticamente revocato quando la transazione termina (commit o
+    rollback). Non altera il `statement_timeout` di altre query del
+    pool: il bound resta confinato al readiness probe.
+
+    Timeout letto da `READINESS_PG_TIMEOUT_SECONDS` (default 2). Cap
+    <= 0 ricade sul fallback hardcoded di 2s (non disabilitabile:
+    /health senza bound sarebbe un footgun ops, stessa policy di
+    `READINESS_REDIS_TIMEOUT_SECONDS`).
+
+    Return (ok, detail). Fail-CLOSED su exception: PG e' dipendenza
+    obbligatoria, niente fail-OPEN come i diagnostic checks.
+    """
     try:
-        from app.db.pg_connection import fetchone
-        row = fetchone("SELECT 1 AS v")
+        from app.db.pg_connection import get_connection, put_connection
+        from app.config import settings
+        try:
+            timeout = int(settings.get("READINESS_PG_TIMEOUT_SECONDS", 2))
+        except Exception:
+            timeout = 2
+        if timeout <= 0:
+            timeout = 2
+        timeout_ms = timeout * 1000
+        # Build the SET LOCAL statement via concatenation (timeout_ms is
+        # an int, so no SQL injection surface). f-string interpolation
+        # would push the literal into a tokenizer FSTRING_MIDDLE token,
+        # which the source-bound guard test strips before scanning —
+        # keeping it as a plain string keeps the lock honest.
+        set_local_sql = "SET LOCAL statement_timeout = " + str(timeout_ms)
+        conn = get_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(set_local_sql)
+                cur.execute("SELECT 1 AS v")
+                row = cur.fetchone()
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            raise
+        finally:
+            put_connection(conn)
         if row and int(row.get("v", 0)) == 1:
             return True, "ok"
         return False, f"SELECT 1 ha restituito: {row!r}"
@@ -237,12 +285,27 @@ def check_object_storage() -> CheckOutcome:
     except Exception as e:
         return False, f"{type(e).__name__}: {e}"
 
+    # BE-GO-READY-OPS-002-READINESS-PG-OBJECTSTORE-TIMEOUTS: la probe
+    # passa per `readiness_probe(timeout_seconds=...)` che costruisce
+    # un client boto3 one-shot con `connect_timeout`+`read_timeout`+
+    # `retries.max_attempts=1`. Senza bound, list_objects userebbe i
+    # default boto3 (60s+60s con 3 retry = ~360s worst case), ben
+    # oltre la finestra "load-balancer-friendly" di /ready.
+    #
+    # Cap <= 0 ricade sul fallback hardcoded di 3s (parallelo al
+    # `READINESS_REDIS_TIMEOUT_SECONDS`/`READINESS_PG_TIMEOUT_SECONDS`
+    # 2s; +1s per assorbire la latenza S3 regionale).
+    from app.config import settings
     try:
-        # Dry-run lookup su prefisso dedicato normalmente vuoto. Non
-        # usiamo prefix="" perche' `cloud_backends.list_objects`
-        # ritorna una lista materializzata e su bucket grandi
-        # scorrerebbe tutte le pagine.
-        storage.list_objects(prefix=".plenora-readiness-probe/")
+        timeout = int(
+            settings.get("READINESS_OBJECT_STORAGE_TIMEOUT_SECONDS", 3)
+        )
+    except Exception:
+        timeout = 3
+    if timeout <= 0:
+        timeout = 3
+    try:
+        storage.readiness_probe(timeout_seconds=timeout)
     except Exception as e:
         return False, f"{type(e).__name__}: {e}"
 

@@ -260,3 +260,338 @@ def test_install_sh_exists_and_is_executable_text():
     assert "bash" in head, (
         f"scripts/install.sh shebang must invoke bash; found: {head!r}"
     )
+
+
+# =====================================================================
+# 9. --smoke flag wired and short-circuits without prompts/writes
+# =====================================================================
+#
+# BE-GO-READY-INSTALL-009-SMOKE-SCRIPT-GUARDS. The --smoke option is
+# the post-install verification hook (rows 7-8 of the canonical
+# clean-install harness). The contract: it MUST be parsed in argv,
+# documented in the usage block, branched on inside main() BEFORE any
+# prompt/write step, and it MUST NOT mutate state.
+
+
+def test_smoke_flag_documented_in_usage_block(install_sh_text: str):
+    # `usage()` renders the comment block in lines 2..50 of the
+    # script (it `sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'`).
+    # The Usage section must therefore mention --smoke inside that
+    # range so `bash scripts/install.sh --help` surfaces the option.
+    header_lines = install_sh_text.splitlines()[1:50]
+    head = "\n".join(header_lines)
+    assert "--smoke" in head, (
+        "Usage header (lines 2-50, rendered by `usage()`) must "
+        "document the --smoke flag so `bash scripts/install.sh "
+        "--help` shows it."
+    )
+    # Pin the canonical one-line description so a future edit cannot
+    # silently demote --smoke to a no-op or rename it.
+    assert "post-install smoke" in head, (
+        "Usage header must describe --smoke as 'post-install smoke' "
+        "to align with the canonical wording in "
+        "docs/ops/install-marco-dry-run.md section 5.0."
+    )
+
+
+def test_smoke_flag_is_parsed(install_sh_text: str):
+    assert "--smoke)" in install_sh_text, (
+        "`--smoke` flag must be parsed in the argv loop alongside "
+        "`--check`."
+    )
+    assert "SMOKE_ONLY=1" in install_sh_text, (
+        "`--smoke` must set SMOKE_ONLY=1 (mirrors the CHECK_ONLY "
+        "pattern)."
+    )
+    assert "SMOKE_ONLY=0" in install_sh_text, (
+        "Default value `SMOKE_ONLY=0` must be initialized at the top "
+        "of the globals block (set -u would otherwise trip on the "
+        "(( SMOKE_ONLY )) test)."
+    )
+
+
+def test_smoke_only_short_circuits_before_prompts_and_writes(
+    install_sh_text: str,
+):
+    # main() must enter the SMOKE_ONLY branch BEFORE step_gather_config
+    # (which prompts), step_probe_services (which connects to PG/Redis),
+    # and step_write_env (which writes backend/.env). Exit must happen
+    # via step_smoke_summary which `exit`s explicitly.
+    main_start = install_sh_text.index("\nmain() {")
+    main_end = install_sh_text.index("\n}\n", main_start)
+    main_body = install_sh_text[main_start:main_end]
+
+    assert "(( SMOKE_ONLY ))" in main_body, (
+        "main() must branch on SMOKE_ONLY before running the full "
+        "install pipeline."
+    )
+    assert "step_smoke_summary" in main_body, (
+        "main() must invoke step_smoke_summary in the --smoke branch "
+        "so the script exits with a structured PASS/FAIL summary."
+    )
+
+    smoke_pos = main_body.index("(( SMOKE_ONLY ))")
+    gather_pos = main_body.index("step_gather_config")
+    probe_pos = main_body.index("step_probe_services")
+    write_pos = main_body.index("step_write_env")
+
+    assert smoke_pos < gather_pos, (
+        "SMOKE_ONLY branch must short-circuit BEFORE "
+        "step_gather_config; otherwise --smoke would prompt the "
+        "operator (forbidden by the smoke contract)."
+    )
+    assert smoke_pos < probe_pos, (
+        "SMOKE_ONLY branch must short-circuit BEFORE "
+        "step_probe_services; the smoke flag must not connect to "
+        "PG/Redis on its own (those probes belong to the full "
+        "installer)."
+    )
+    assert smoke_pos < write_pos, (
+        "SMOKE_ONLY branch must short-circuit BEFORE step_write_env; "
+        "--smoke is read-only and must not touch backend/.env."
+    )
+
+
+# =====================================================================
+# 10. INSTALLER_SMOKE_MEMORY_CAPS canonical (six caps)
+# =====================================================================
+#
+# The smoke harness reads runtime-effective memory caps via
+# `app.config.settings.get(...)`. The list is the single source of
+# truth on the script side; the doc cross-checks the same names via
+# `test_install_smoke_harness_doc_guard.py`. ARTIFACT_PREVIEW_MAX_BYTES
+# joined the canonical set in INSTALL-009.
+
+
+_EXPECTED_SMOKE_MEMORY_CAPS = (
+    "LOAD_FILE_MAX_BYTES",
+    "WORKER_RSS_MAX_BYTES",
+    "RESOURCE_MAX_BYTES",
+    "ARTIFACT_PREVIEW_MAX_BYTES",
+    "CROSS_JOIN_MAX_OUTPUT_ROWS",
+    "MULTI_JOIN_MAX_OUTPUT_ROWS",
+)
+
+
+def test_installer_smoke_memory_caps_array_is_canonical(
+    install_sh_text: str,
+):
+    assert "INSTALLER_SMOKE_MEMORY_CAPS=(" in install_sh_text, (
+        "INSTALLER_SMOKE_MEMORY_CAPS array must exist as the script-"
+        "side single source of truth for the smoke caps loop."
+    )
+    start = install_sh_text.index("INSTALLER_SMOKE_MEMORY_CAPS=(")
+    end = install_sh_text.index(")", start)
+    array_block = install_sh_text[start:end]
+    for cap in _EXPECTED_SMOKE_MEMORY_CAPS:
+        assert cap in array_block, (
+            f"INSTALLER_SMOKE_MEMORY_CAPS missing canonical cap: "
+            f"{cap!r}. Dropping a cap here means the runtime guard "
+            "becomes invisible at install time. Adding a cap here "
+            "without also updating the doc-side list "
+            "(test_install_smoke_harness_doc_guard.py) is also a bug."
+        )
+
+
+def test_installer_smoke_memory_caps_includes_artifact_preview(
+    install_sh_text: str,
+):
+    # Pin ARTIFACT_PREVIEW_MAX_BYTES specifically: this cap was added
+    # by BE-GO-READY-RESOURCE-ENGINE-012 (intermediate artifact bounded
+    # preview) and must remain in the smoke loop so operators see the
+    # runtime-effective value at install time.
+    start = install_sh_text.index("INSTALLER_SMOKE_MEMORY_CAPS=(")
+    end = install_sh_text.index(")", start)
+    array_block = install_sh_text[start:end]
+    assert "ARTIFACT_PREVIEW_MAX_BYTES" in array_block, (
+        "ARTIFACT_PREVIEW_MAX_BYTES must remain in "
+        "INSTALLER_SMOKE_MEMORY_CAPS. The intermediate artifact "
+        "preview reader (R-008.H1) is bounded by this cap; dropping "
+        "it from the smoke loop would let an operator declare a "
+        "small-PC install green without verifying the cap that "
+        "actually triggers on Parquet preview."
+    )
+
+
+# =====================================================================
+# 11. Smoke branch is non-destructive (no writes, no service mutation)
+# =====================================================================
+
+
+def _slice_smoke_block(text: str) -> str:
+    """Return the source region containing every step_smoke_* function
+    plus the SMOKE_ONLY branch in main(), so the heuristics below
+    inspect only the smoke implementation, not the surrounding
+    installer body."""
+    start_marker = "step_smoke_caps_visibility() {"
+    if start_marker not in text:
+        return ""
+    start = text.index(start_marker)
+    # Stop at step_check_only_summary which sits adjacent to the
+    # smoke functions (the check-summary helper post-dates the smoke
+    # block and is not part of --smoke).
+    end_marker = "step_check_only_summary() {"
+    end = text.find(end_marker, start)
+    if end == -1:
+        end = len(text)
+    return text[start:end]
+
+
+_SMOKE_FORBIDDEN_PATTERNS = (
+    # Filesystem mutation primitives: --smoke must not write or
+    # delete anything in the repo or in /etc.
+    "mv ",
+    "rm ",
+    "rmdir ",
+    "truncate ",
+    "tee ",
+    "chmod ",
+    "chown ",
+    # systemd / service mutation.
+    "systemctl start ",
+    "systemctl stop ",
+    "systemctl restart ",
+    "systemctl enable ",
+    "systemctl disable ",
+    # Package managers (already enforced globally; restated here for
+    # locality so a smoke-section regression surfaces in this test).
+    "apt install",
+    "apt-get install",
+)
+
+
+def test_smoke_branch_does_not_mutate_state(install_sh_text: str):
+    smoke_block = _slice_smoke_block(install_sh_text)
+    assert smoke_block, (
+        "Could not locate the smoke section (step_smoke_* functions). "
+        "Either the section was removed or its anchor renamed; both "
+        "are regressions of the --smoke contract."
+    )
+    offending: list[tuple[int, str, str]] = []
+    for lineno, line in enumerate(smoke_block.splitlines(), start=1):
+        stripped = line.lstrip()
+        if stripped.startswith("#"):
+            continue
+        for pat in _SMOKE_FORBIDDEN_PATTERNS:
+            if pat in stripped:
+                offending.append((lineno, pat, line.rstrip()))
+                break
+    assert not offending, (
+        "Smoke section must be non-destructive (no writes, no "
+        "service mutation, no package install). Offending lines "
+        "(numbered relative to the smoke block):\n"
+        + "\n".join(f"  {ln}: {pat!r} -> {src}" for ln, pat, src in offending)
+    )
+
+
+def test_smoke_branch_does_not_call_write_env_or_probe_services(
+    install_sh_text: str,
+):
+    smoke_block = _slice_smoke_block(install_sh_text)
+    # step_write_env writes backend/.env; step_probe_services makes
+    # network calls; step_gather_config prompts. None must appear in
+    # the smoke implementation.
+    for forbidden in (
+        "step_write_env",
+        "step_probe_services",
+        "step_gather_config",
+    ):
+        assert forbidden not in smoke_block, (
+            f"--smoke implementation must not call {forbidden}. "
+            "Smoke is read-only by contract; calling that helper "
+            "would either prompt, mutate the .env, or initiate "
+            "service probes outside the operator-controlled smoke "
+            "knobs (PLENORA_SMOKE_*)."
+        )
+
+
+# =====================================================================
+# 12. Optional health/ready curl uses bounded --max-time
+# =====================================================================
+
+
+def test_smoke_health_ready_curl_uses_max_time(install_sh_text: str):
+    smoke_block = _slice_smoke_block(install_sh_text)
+    # Every curl INVOCATION in the smoke section must carry an
+    # explicit `--max-time N` so a hung uvicorn cannot block the
+    # smoke harness indefinitely. We match lines whose first token
+    # (after optional `if`/`!`/whitespace) is `curl` - this skips
+    # `command -v curl` checks while catching `curl ...` and
+    # `if curl ...` invocations.
+    curl_lines: list[str] = []
+    for raw in smoke_block.splitlines():
+        line = raw.lstrip()
+        if line.startswith("#"):
+            continue
+        # Strip a leading `if ` or `if ! ` so the heuristic catches
+        # `if curl ...` invocation blocks.
+        if line.startswith("if "):
+            line = line[len("if "):].lstrip()
+        if line.startswith("! "):
+            line = line[len("! "):].lstrip()
+        if line.startswith("curl "):
+            curl_lines.append(raw)
+    assert curl_lines, (
+        "Smoke section must invoke curl at least once (health/ready "
+        "probe). None found - the smoke 3 step regressed."
+    )
+    for line in curl_lines:
+        assert "--max-time" in line, (
+            "Every curl call in the smoke section must include "
+            f"`--max-time` to bound the request. Offending line: {line!r}"
+        )
+
+
+# =====================================================================
+# 13. cleanroom.ping uses bounded AsyncResult.get(timeout=)
+# =====================================================================
+
+
+def test_smoke_cleanroom_ping_uses_bounded_get(install_sh_text: str):
+    smoke_block = _slice_smoke_block(install_sh_text)
+    assert "cleanroom.ping" in smoke_block, (
+        "Smoke section must invoke `cleanroom.ping` (the canonical "
+        "deterministic primitive shared with the cleanroom CI lane)."
+    )
+    assert "ar.get(timeout=30)" in smoke_block \
+           or "AsyncResult.get(timeout=30)" in smoke_block, (
+        "cleanroom.ping smoke must use the bounded "
+        "`AsyncResult.get(timeout=30)` primitive (NOT a sleep loop, "
+        "NOT an unbounded .get()). Same pattern as the cleanroom CI "
+        "workflow; locked by section 5.3 of "
+        "docs/ops/install-marco-dry-run.md."
+    )
+
+
+# =====================================================================
+# 14. Smoke branch reads only the operator-controlled smoke env vars
+# =====================================================================
+
+
+def test_smoke_branch_only_reads_smoke_env_vars(install_sh_text: str):
+    smoke_block = _slice_smoke_block(install_sh_text)
+    # The smoke section may consult only PLENORA_SMOKE_* variables.
+    # Reading PLENORA_INSTALL_* would mean the smoke flag is
+    # double-purposing the installer's input env vars, which violates
+    # the read-only contract (those drive prompts/writes).
+    for forbidden in (
+        "PLENORA_INSTALL_DATABASE_URL",
+        "PLENORA_INSTALL_REDIS_URL",
+        "PLENORA_INSTALL_STORAGE_POLICY",
+    ):
+        assert forbidden not in smoke_block, (
+            f"--smoke must not read {forbidden}. The smoke flag is "
+            "post-install verification; it consumes only "
+            "PLENORA_SMOKE_* env vars."
+        )
+    # Positive lock: at least the two documented smoke knobs must be
+    # consulted.
+    for required in (
+        "PLENORA_SMOKE_BACKEND_URL",
+        "PLENORA_SMOKE_RUN_PING",
+    ):
+        assert required in smoke_block, (
+            f"--smoke must consult {required} (documented in the "
+            "usage header and in docs/ops/install-marco-dry-run.md "
+            "section 5.0)."
+        )

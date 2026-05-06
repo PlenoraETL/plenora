@@ -23,6 +23,14 @@ from app.core.artifacts.types import (
     RunArtifactRef,
     RunBlob,
 )
+# BE-GO-READY-RESOURCE-ENGINE-019: top-level import so the
+# `default_registry` symbol is patchable on this module via
+# `monkeypatch.setattr(resolver_mod, "default_registry", ...)`.
+# The registry singleton is itself lazy (constructed on first
+# call by `default_registry()` -- not at import time), so this
+# import does not eagerly build the loader graph; it merely
+# brings the function reference into the resolver's namespace.
+from app.core.resources import ResourceRef, default_registry
 
 logger = get_logger(__name__)
 
@@ -176,7 +184,29 @@ class ArtifactResolver:
     def _materialize_from_result_id(
         self, *, result_id: str, expected_project_id: str
     ) -> MaterializedArtifact:
+        """Resolve a `result_id` via the Resource Engine path mode.
+
+        BE-GO-READY-RESOURCE-ENGINE-019 (R-PILOT-017.A closure):
+        the blob fetch + tempfile materialization is delegated to
+        ``default_registry().get(ref, mode='path')`` -- the FIRST
+        real production caller of the registry surface. Pre-019
+        the path was a two-step ``db_service.get_result_data`` +
+        ``self._write_temp_blob`` shim; post-019 the loader owns
+        SQL preflight (013), bounded read (010), safe-prefixed
+        tempfile materialization (006), and the cap envelope
+        contract in one place. The resolver continues to own the
+        upstream row lookup (for `format` / `group_id` metadata)
+        and the cross-tenant project_id check (which produces the
+        Italian operator error string the rest of the system
+        depends on).
+        """
         import app.db.db_service as db_service
+
+        # ResourceRef + default_registry are top-level imports on
+        # this module (see header). That makes the symbols
+        # patchable for tests AND keeps a single canonical lookup
+        # point: production calls go through the same module-level
+        # `default_registry` reference the tests monkeypatch.
 
         # intent: boundary / outcome: fail-closed (broad→domain con chain preservata)
         try:
@@ -205,9 +235,43 @@ class ArtifactResolver:
                 f"project_id '{expected_project_id}'"
             )
 
+        # ResourceRef requires a non-empty `expected_group_id`.
+        # The row's `group_id` IS the resource's tenant binding:
+        # the loader uses it for the SQL filter (already verified
+        # by the row lookup above; passing it through preserves
+        # the typed contract and gives defense-in-depth in the
+        # event of a row-mutation race between lookup and load).
+        group_id = row.get("group_id")
+        if not group_id:
+            raise ArtifactResolutionError(
+                f"result_id '{result_id}': row senza group_id "
+                "(data corruption or pre-tenant-binding row)"
+            )
+
+        ref = ResourceRef(
+            kind="result_blob",
+            result_id=result_id,
+            expected_group_id=group_id,
+            # Pass the project_id again so the loader's row-level
+            # project filter (RESOURCE-ENGINE-007) gives a second
+            # check at the SQL boundary. Tautological vs the
+            # resolver-level check above, but cheap and keeps the
+            # typed contract honest.
+            expected_project_id=expected_project_id,
+        )
+
         # intent: boundary / outcome: fail-closed (broad→domain con chain preservata)
         try:
-            blob = db_service.get_result_data(result_id)
+            resource = default_registry().get(ref, mode="path")
+        except FileNotFoundError as e:
+            # Loader fail-closed: row missing OR cross-tenant OR
+            # blob unavailable. Resolver translates to its own
+            # typed exception with the canonical Italian message
+            # so existing operator dashboards / log greps keep
+            # working bit-for-bit.
+            raise ArtifactResolutionError(
+                f"result_id '{result_id}' senza blob dati"
+            ) from e
         except Exception as e:
             logger.error(
                 "[GESTITO] resolver lettura blob result_id '%s' fallita: %s",
@@ -218,15 +282,13 @@ class ArtifactResolver:
                 f"lettura blob result_id '{result_id}' fallita: {e}"
             ) from e
 
-        if not blob:
-            raise ArtifactResolutionError(
-                f"result_id '{result_id}' senza blob dati"
-            )
-
+        # Format is row metadata; the loader is byte-level only and
+        # does not learn the format. The resolver attaches it to
+        # the MaterializedArtifact for downstream readers
+        # (load_dataframe_from_file dispatches on format/extension).
         fmt = row.get("format") or "csv"
-        tmp_path = self._write_temp_blob(blob, fmt)
         return MaterializedArtifact(
-            path=tmp_path,
+            path=resource.path,
             format=fmt,
             is_temporary=True,
         )

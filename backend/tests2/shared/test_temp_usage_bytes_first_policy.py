@@ -89,7 +89,17 @@ _WORKERS = _BACKEND_ROOT / "workers"
 # requires a real reason the bytes path doesn't work).
 
 _RESOURCE_ENGINE_PATH_MODE_ALLOWLIST: dict[str, str] = {
-    # (empty pre-batch — populated by future streams)
+    "app/core/artifacts/resolver.py": (
+        "BE-GO-READY-RESOURCE-ENGINE-019: ArtifactResolver. "
+        "_materialize_from_result_id requires a filesystem path "
+        "for downstream pandas/geopandas readers (load_dataframe_"
+        "from_file dispatches by extension; OGR / shapefile / "
+        "geopackage drivers require seekable on-disk paths). "
+        "Path mode is the typed replacement for the resolver's "
+        "pre-019 _write_temp_blob shim; bytes mode would force "
+        "every downstream reader through BytesIO, which the OGR "
+        "/ fiona stack does not support without a tempfile bounce."
+    ),
 }
 
 
@@ -222,13 +232,18 @@ def test_resource_engine_canonical_usage_docs_bytes_mode():
 # letting it slip in via "just one more entry".
 
 
-_BATCH_042_ALLOWLIST_SNAPSHOT_SIZE = 0
+# Pre-batch-042 boundary was 0 (zero production path-mode
+# callers). BE-GO-READY-RESOURCE-ENGINE-019 added the FIRST
+# production caller (ArtifactResolver -> registry, mode='path')
+# with a documented rationale (downstream OGR/fiona/geopandas
+# readers require a filesystem path). Snapshot bumped to 1.
+_BATCH_042_ALLOWLIST_SNAPSHOT_SIZE = 1
 
 
 def test_resource_engine_path_mode_allowlist_size_snapshot():
     """Snapshot lock: the size of
     ``_RESOURCE_ENGINE_PATH_MODE_ALLOWLIST`` MUST equal the
-    batch-042 boundary value (0). Adding the FIRST production
+    current batch boundary value. Adding a NEW production
     path-mode caller is a deliberate decision point that must
     update this snapshot AND carry a documented rationale in
     the allowlist entry. The mismatch surfaces the change to
@@ -237,23 +252,22 @@ def test_resource_engine_path_mode_allowlist_size_snapshot():
 
     Why a separate test from
     ``test_resource_engine_path_mode_callers_locked_to_allowlist``:
-    that test merely asserts every caller is allowlisted.
-    With an empty allowlist it is satisfied by zero callers
-    AND by zero unlisted callers. It does NOT block adding an
-    allowlist entry. This snapshot does.
+    that test merely asserts every caller is allowlisted; this
+    snapshot blocks adding an allowlist entry without an
+    intentional snapshot bump.
     """
     actual = len(_RESOURCE_ENGINE_PATH_MODE_ALLOWLIST)
     assert actual == _BATCH_042_ALLOWLIST_SNAPSHOT_SIZE, (
         f"Resource Engine path-mode allowlist size changed "
-        f"from {_BATCH_042_ALLOWLIST_SNAPSHOT_SIZE} (batch 042 "
-        f"snapshot) to {actual}. If this is intentional, "
-        "update `_BATCH_042_ALLOWLIST_SNAPSHOT_SIZE` AND "
-        "ensure each new entry carries a documented rationale "
-        "(see `test_resource_engine_path_mode_allowlist_"
-        "rationale_non_empty`). Path mode is fallback-only "
-        "for downstream libraries that structurally require "
-        "a filesystem path (OGR/GDAL drivers, multi-file "
-        "artifacts, parquet random-access)."
+        f"from {_BATCH_042_ALLOWLIST_SNAPSHOT_SIZE} to {actual}. "
+        "If this is intentional, update "
+        "`_BATCH_042_ALLOWLIST_SNAPSHOT_SIZE` AND ensure each "
+        "new entry carries a documented rationale (see "
+        "`test_resource_engine_path_mode_allowlist_rationale_"
+        "non_empty`). Path mode is fallback-only for downstream "
+        "libraries that structurally require a filesystem path "
+        "(OGR/GDAL drivers, multi-file artifacts, parquet "
+        "random-access)."
     )
 
 
@@ -394,13 +408,16 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
         "disk before persisting to DB BYTEA / object storage. "
         "Tempfile is the ingestion buffer.",
     ),
-    ("app/core/artifacts/resolver.py", 362): (
+    ("app/core/artifacts/resolver.py", 424): (
         "MIGRATION_CANDIDATE",
-        "_write_temp_blob in ArtifactResolver: writes BYTEA blob "
-        "to a tempfile so caller can read with pandas. Migration "
-        "candidate post-R-003.1 (project-level binding gap) — "
-        "ResultBlobLoader.load(mode='path') is the typed "
-        "replacement. Worker / next stream owns the migration.",
+        "_write_temp_blob in ArtifactResolver: still used by the "
+        "`materialize_latest` (LatestProjectArtifactRef) branch "
+        "ONLY. The `_materialize_from_result_id` (RunArtifactRef) "
+        "branch was migrated to "
+        "`default_registry().get(ref, mode='path')` in "
+        "BE-GO-READY-RESOURCE-ENGINE-019. Remaining callsite "
+        "blocks on adding `expected_group_id` resolution to the "
+        "latest-by-project path; deferred to W-A2 follow-up.",
     ),
     ("app/core/eseguibili/router.py", 333): (
         "PATH_REQUIRED_FILE",
@@ -626,7 +643,14 @@ def test_temp_inventory_migration_candidates_are_tracked():
         if cat == "MIGRATION_CANDIDATE"
     )
     expected = sorted([
-        ("app/core/artifacts/resolver.py", 362),
+        # BE-GO-READY-RESOURCE-ENGINE-019 line shift: the resolver
+        # gained the registry-delegation block in
+        # `_materialize_from_result_id`, pushing `_write_temp_blob`
+        # (still used by `materialize_latest`) down to line 424.
+        # The MIGRATION_CANDIDATE classification is preserved
+        # because the latest-by-project branch is NOT migrated yet
+        # (W-A2 follow-up).
+        ("app/core/artifacts/resolver.py", 424),
     ])
     assert candidates == expected, (
         f"MIGRATION_CANDIDATE inventory drift.\n"

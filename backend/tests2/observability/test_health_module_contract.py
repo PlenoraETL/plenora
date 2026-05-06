@@ -115,8 +115,53 @@ def test_health_payload_fields():
 # ---------------------------------------------------------------------------
 
 
+def _make_pg_stub_conn(rows=None, default_row=None):
+    """Build a (StubConn, captured_sql) pair for `check_postgres` tests.
+
+    BE-GO-READY-OPS-002-READINESS-PG-OBJECTSTORE-TIMEOUTS: post-bound,
+    `check_postgres` opens a transaction via `get_connection` and runs
+    `SET LOCAL statement_timeout = Nms` followed by `SELECT 1` on the
+    same cursor; tests stub the pool entry points (`get_connection` /
+    `put_connection`) instead of the legacy `fetchone` shim.
+    """
+    captured: list[str] = []
+    # `check_postgres` calls `fetchone()` exactly once, after SELECT 1
+    # (the SET LOCAL execute does not call fetchone). Single-row default
+    # is therefore the SELECT 1 result.
+    if rows is None:
+        rows = [default_row if default_row is not None else {"v": 1}]
+    rows_iter = iter(rows)
+
+    class _StubCursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return None
+
+        def execute(self, sql, params=None):
+            captured.append(sql)
+
+        def fetchone(self):
+            return next(rows_iter)
+
+    class _StubConn:
+        def cursor(self):
+            return _StubCursor()
+
+        def commit(self):
+            pass
+
+        def rollback(self):
+            pass
+
+    return _StubConn(), captured
+
+
 def test_check_postgres_ok_on_select_1():
-    with patch("app.db.pg_connection.fetchone", return_value={"v": 1}):
+    conn, _ = _make_pg_stub_conn()
+    with patch("app.db.pg_connection.get_connection", return_value=conn), \
+         patch("app.db.pg_connection.put_connection", lambda c: None):
         from app.observability.health import check_postgres
 
         ok, detail = check_postgres()
@@ -125,7 +170,10 @@ def test_check_postgres_ok_on_select_1():
 
 
 def test_check_postgres_failed_on_unexpected_row():
-    with patch("app.db.pg_connection.fetchone", return_value=None):
+    # SELECT 1 returns None -> failure branch.
+    conn, _ = _make_pg_stub_conn(rows=[None])
+    with patch("app.db.pg_connection.get_connection", return_value=conn), \
+         patch("app.db.pg_connection.put_connection", lambda c: None):
         from app.observability.health import check_postgres
 
         ok, detail = check_postgres()
@@ -134,10 +182,10 @@ def test_check_postgres_failed_on_unexpected_row():
 
 
 def test_check_postgres_fail_closed_on_exception():
-    def _raise(*a, **kw):
+    def _raise():
         raise RuntimeError("DB down")
 
-    with patch("app.db.pg_connection.fetchone", _raise):
+    with patch("app.db.pg_connection.get_connection", _raise):
         from app.observability.health import check_postgres
 
         ok, detail = check_postgres()
@@ -668,14 +716,17 @@ def test_check_object_storage_returns_skipped_when_capability_off():
 
 
 def test_check_object_storage_ok_when_list_objects_succeeds():
-    """Capability ON + `list_objects(prefix=".plenora-readiness-probe/")` ritorna senza
-    sollevare -> outcome `(True, "ok")`."""
-    calls = []
+    """Capability ON + `readiness_probe(timeout_seconds=...)` returns
+    without raising -> outcome `(True, "ok")`.
+
+    BE-GO-READY-OPS-002-READINESS-PG-OBJECTSTORE-TIMEOUTS: the probe
+    no longer goes through the runtime `list_objects`; the bounded
+    `readiness_probe` method is the contract surface."""
+    timeouts: list[int] = []
 
     class _Storage:
-        def list_objects(self, prefix):
-            calls.append(prefix)
-            return []
+        def readiness_probe(self, timeout_seconds):
+            timeouts.append(timeout_seconds)
 
     with (
         patch("app.shared.cloud_backends.object_storage_enabled", return_value=True),
@@ -689,14 +740,14 @@ def test_check_object_storage_ok_when_list_objects_succeeds():
         ok, detail = check_object_storage()
     assert ok is True
     assert detail == "ok"
-    assert calls == [".plenora-readiness-probe/"]
+    assert len(timeouts) == 1 and timeouts[0] > 0
 
 
 def test_check_object_storage_failed_on_network_error():
-    """Capability ON + `list_objects` solleva -> outcome
+    """Capability ON + `readiness_probe` raises -> outcome
     `(False, "<ExcType>: <msg>")`."""
     class _RaisingStorage:
-        def list_objects(self, prefix):
+        def readiness_probe(self, timeout_seconds):
             raise ConnectionError("S3 endpoint unreachable")
 
     with (

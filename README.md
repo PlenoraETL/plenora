@@ -59,7 +59,7 @@ Tutta la documentazione vive in [`docs/`](docs/).
 ### Per dominio
 
 - **Product**: [overview](docs/product/overview.md) · [roadmap](docs/product/roadmap.md)
-- **Architecture**: [overview](docs/architecture/overview.md) · [decisions (ADR)](docs/architecture/decisions/) · [invariants](docs/architecture/invariants.md) · [inventory](docs/architecture/inventory_report.md)
+- **Architecture**: [overview](docs/architecture/overview.md) · [horizontal engines map](docs/architecture/horizontal-engines.md) · [decisions (ADR)](docs/architecture/decisions/) · [invariants](docs/architecture/invariants.md) · [inventory](docs/architecture/inventory_report.md)
 - **Development**: [onboarding](docs/development/onboarding.md) · [backend](docs/development/backend.md) · [frontend](docs/development/frontend.md) · [contributing](docs/development/contributing.md) · [changelog](docs/development/changelog.md) · [code map](docs/development/code-map.md)
 - **Ops**: [install non-Docker](docs/ops/install-non-docker.md) · [install Docker (status)](docs/ops/install-docker.md) · [runbook](docs/ops/runbook.md) · [deploy checklist](docs/ops/deploy-checklist.md) · [backup/restore](docs/ops/backup-restore.md) · [DR drill](docs/ops/dr_drill_playbook.md) · [incident response](docs/ops/incident_response.md) · [JWT incident](docs/ops/jwt-incident-response.md) · [runtime prereqs](docs/ops/runtime-prereqs.md)
 - **Compliance**: [secrets management](docs/compliance/secrets-management.md) · [SBOM](docs/compliance/sbom.md) · [ISO 27001 SoA](docs/compliance/soa-iso-27001.md) · [GDPR](docs/compliance/registro-trattamenti-gdpr.md)
