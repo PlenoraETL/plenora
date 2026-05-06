@@ -66,7 +66,8 @@ Bounded-read helper (the part with real consumers today):
   caps may be tighter (e.g. `ARTIFACT_PREVIEW_MAX_BYTES` 25 MB).
 - Used in production by:
   `app/db/results_db_service.py`,
-  `app/services/file_blob_materialization.py`,
+  `app/core/resources/loaders/result_blob.py`,
+  `app/core/resources/loaders/file_source_blob.py`,
   `app/core/intermediate/artifact_reader.py`.
 
 Preview parser:

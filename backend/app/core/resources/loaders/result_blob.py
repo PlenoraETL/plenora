@@ -79,6 +79,7 @@ from typing import Optional, Tuple
 from app.shared.exceptions import MemoryLimitExceededError
 
 from app.core.resources.bounded_reader import read_stream_bounded
+from app.core.resources.resource_caps import resolve_resource_max_bytes
 from app.core.resources.types import (
     OutputMode,
     Resource,
@@ -100,38 +101,29 @@ from app.core.resources.types import (
 # 010 inverts the read: chunks are accumulated into a `bytearray` with
 # a per-chunk pre-check; the iterator is aborted as soon as the cap
 # would be exceeded. The cap is read from
-# ``RESOURCE_MAX_BYTES`` env (stdlib ``os.environ``); if unset /
-# invalid, falls back to ``_DEFAULT_RESULT_BLOB_MAX_BYTES`` (200 MB
-# post BE-GO-READY-MEMORY-ENGINE-005; mirrors
-# ``settings.RESOURCE_MAX_BYTES`` without importing ``app.config``).
+# ``RESOURCE_MAX_BYTES`` env via the shared
+# ``app.core.resources.resource_caps.resolve_resource_max_bytes``
+# helper (BE-GO-READY-MEMORY-ENGINE-006); the helper handles the
+# 200 MB default + invalid / non-positive fallback in one place so
+# this loader and ``file_source_blob.py`` cannot drift on the
+# resolution rules.
 #
-# Anti-god-engine note: NO ``app.config`` import. Stdlib only.
-# Worker 6 added the matching Settings default and install docs.
-# The loader intentionally reads the env directly so the anti-god-
-# engine boundary (no ``app.config`` import) stays intact.
+# Anti-god-engine note: NO ``app.config`` import (the helper is
+# stdlib-only too). The loader continues to read env via the helper
+# rather than importing ``app.config`` from a leaf module.
 # ---------------------------------------------------------------------------
-
-_DEFAULT_RESULT_BLOB_MAX_BYTES = 200 * 1024 * 1024  # 200 MB (MEMORY-005)
-
-_RESULT_BLOB_MAX_BYTES_ENV = "RESOURCE_MAX_BYTES"
 
 
 def _resolve_max_bytes() -> int:
-    """Resolve the result-blob byte cap.
+    """Backward-compat alias for the shared helper.
 
-    Override via the ``RESOURCE_MAX_BYTES`` env var.
-    Invalid / non-positive values fall back to the default. Read at
-    each call so monkeypatch / runtime override (env mutation) takes
-    effect without a process restart.
+    Tests and the back-compat shim
+    (``app.db.results_db_service``) reference this name; new code
+    should call ``resolve_resource_max_bytes`` directly. Kept as a
+    thin one-line re-export so the contract test that bans local
+    env parsing in this module still passes.
     """
-    raw = _os.environ.get(_RESULT_BLOB_MAX_BYTES_ENV)
-    if not raw:
-        return _DEFAULT_RESULT_BLOB_MAX_BYTES
-    try:
-        v = int(raw)
-    except (TypeError, ValueError):
-        return _DEFAULT_RESULT_BLOB_MAX_BYTES
-    return v if v > 0 else _DEFAULT_RESULT_BLOB_MAX_BYTES
+    return resolve_resource_max_bytes()
 
 
 # ---------------------------------------------------------------------------

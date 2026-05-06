@@ -50,13 +50,15 @@ class DataSourceService:
     def list_datasources(self, group_id: str = None) -> DataSourceList:
         # group_id=None → no filter (superadmin o path allowed_groups)
         # Fix N+1: fetch tutte le row in una query, parse config in memoria
-        import app.db.config_db_service as _cfg_db
+        # BE-GO-READY-DB-ENGINE-005: migrato off facade
+        # `config_db_service.fetchall` (re-export di pg_connection).
+        from app.db.pg_connection import fetchall as _fetchall
         if group_id is None:
-            rows = _cfg_db.fetchall(
+            rows = _fetchall(
                 "SELECT * FROM datasources ORDER BY name"
             )
         else:
-            rows = _cfg_db.fetchall(
+            rows = _fetchall(
                 "SELECT * FROM datasources WHERE group_id = %s ORDER BY name",
                 (group_id,)
             )

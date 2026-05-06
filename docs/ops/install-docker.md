@@ -206,6 +206,194 @@ rm -f .env.docker        # DESTRUCTIVE: removes generated secrets
 
 ---
 
+## Validation pack for the Linux PC test (FIRST SCAFFOLD, NOT YET VALIDATED)
+
+`BE-GO-READY-INSTALL-012-DOCKER-LINUX-VALIDATION-PACK`.
+
+> **Status: FIRST SCAFFOLD, NOT YET VALIDATED.** This pack
+> packages the Step 1-7 commands above into a single contiguous
+> copy/paste sequence with the **exact** expected output for
+> each command. Until Marco runs it on his Linux PC and pastes
+> the outputs back, every line below is a hypothesis. The
+> wrapper script `scripts/docker-validate.sh` (also dry-run
+> friendly via `--dry-run`) is the convenience runner; the raw
+> commands below are the contract.
+
+### What Marco runs
+
+From the repo root, after Step 2 above (`.env.docker` exists
+with both secrets set):
+
+```bash
+# 0. Convenience wrapper (recommended). Use --dry-run first
+#    to print the exact command sequence without executing it.
+bash scripts/docker-validate.sh --dry-run
+bash scripts/docker-validate.sh
+```
+
+The wrapper is **non-destructive**: it never runs
+`docker compose down`, `down -v`, `rm -rf volumes/`, or
+overwrites `.env.docker`. It only runs the eight commands
+below in order, and it preserves volumes (`postgres-data`,
+`redis-data`, `data-dir`) on stop.
+
+If Marco prefers raw commands (skip the wrapper), the eight
+items map to the canonical 1:1 sequence:
+
+```bash
+# 1. config (no apply)
+docker compose config
+
+# 2. build backend image (also produces worker/beat image
+#    since they reuse it)
+docker compose build backend
+
+# 3. up postgres + redis + backend (gates on healthchecks)
+docker compose up -d postgres redis
+docker compose up -d --wait backend
+
+# 4. /health and /ready from the host
+curl -fsS http://127.0.0.1:5004/health
+curl -fsS http://127.0.0.1:5004/ready
+
+# 5. up worker + beat
+docker compose up -d worker beat
+
+# 6. cleanroom.ping round-trip
+docker compose exec worker python -c \
+    "from workers.celery_app import celery_app; \
+     print(celery_app.send_task('cleanroom.ping').get(timeout=30))"
+
+# 7. memory caps visibility
+docker compose exec backend python -c "
+from app.config import settings
+for k in ('LOAD_FILE_MAX_BYTES','WORKER_RSS_MAX_BYTES','RESOURCE_MAX_BYTES','ARTIFACT_PREVIEW_MAX_BYTES','CROSS_JOIN_MAX_OUTPUT_ROWS','MULTI_JOIN_MAX_OUTPUT_ROWS'):
+    print(f'{k}={settings.get(k)}')
+"
+
+# 8. non-destructive stop (preserves volumes)
+docker compose stop
+```
+
+### Expected output (paste back exactly)
+
+For each numbered item, Marco should paste back the **exact
+stdout** he sees. The shapes below are the assertion targets.
+
+1. **`docker compose config`** -- exit 0. Stdout: a fully
+   resolved YAML dump of the same five services
+   (`postgres`, `redis`, `backend`, `worker`, `beat`) with
+   `${VAR}` references substituted from `.env.docker`.
+   Failure paste: any `services.<svc>.environment.* required
+   variable ... is not set` line.
+
+2. **`docker compose build backend`** -- exit 0. Final
+   stdout line ends with
+   `=> => naming to docker.io/library/plenora-backend:scaffold`
+   (or local equivalent). Failure paste: the last 50 lines
+   of `apt-get install` output (the most likely failure is
+   `libgdal-dev` major-version mismatch on the bookworm
+   base).
+
+3. **`docker compose up -d --wait backend`** -- exit 0.
+   Final line: `Container plenora-backend-1  Healthy`. The
+   command does NOT exit until the Dockerfile's
+   `HEALTHCHECK` reports healthy (probe = `/health` inside
+   the container). Failure paste:
+   `docker compose ps` (look for `(unhealthy)` on backend)
+   AND `docker compose logs --tail 200 backend`.
+
+4. **`curl -fsS http://127.0.0.1:5004/health`** + same on
+   `/ready`. Both return HTTP 200 with a JSON envelope
+   `{"status":"ok","checks":{...}}` for `/health` and
+   `{"status":"ready","checks":{...}}` for `/ready`. The
+   `/ready` payload exposes 8 keys: `postgres`, `redis`,
+   `pool_headroom`, `migrations`, `object_storage`,
+   `reconciliation_backlog`, `beat_heartbeat`,
+   `bootstrap_complete`. Failure paste:
+   `curl -is http://127.0.0.1:5004/ready` (with `-i` to
+   see status line) AND `docker compose logs --tail 200
+   backend`.
+
+5. **`docker compose up -d worker beat`** -- exit 0. Both
+   containers report `Started`. Verify with
+   `docker compose ps` that `plenora-worker-1` and
+   `plenora-beat-1` are `running`. Failure paste:
+   `docker compose logs --tail 200 worker beat`.
+
+6. **`cleanroom.ping`** -- exit 0. Stdout: literal `pong`.
+   Failure paste: the full traceback (most common failure:
+   `kombu.exceptions.OperationalError: Error 111 connecting
+   to redis:6379. Connection refused.` -- means worker is
+   up but Redis is not reachable from inside the worker
+   container, which would also block step 5).
+
+7. **memory caps visibility** -- exit 0. Stdout: six lines
+   of the form `<KEY>=<VALUE>`. Default scaffold values
+   (no override in `.env.docker`):
+
+   ```
+   LOAD_FILE_MAX_BYTES=209715200
+   WORKER_RSS_MAX_BYTES=1500000000
+   RESOURCE_MAX_BYTES=209715200
+   ARTIFACT_PREVIEW_MAX_BYTES=26214400
+   CROSS_JOIN_MAX_OUTPUT_ROWS=50000000
+   MULTI_JOIN_MAX_OUTPUT_ROWS=50000000
+   ```
+
+   Override values (if `.env.docker` sets any of these)
+   are also acceptable -- the shape is what matters.
+   Failure paste: the full traceback (most common: the
+   key is missing from `Settings.DEFAULTS`, returning
+   `None`).
+
+8. **`docker compose stop`** -- exit 0. Final stdout block
+   shows each container `Stopped`. After the command,
+   `docker compose ps -a` lists the five containers as
+   `Exited (0)`, and
+   `docker volume ls --filter name=plenora` lists
+   `postgres-data`, `redis-data`, `data-dir` (volumes
+   preserved). Failure paste:
+   `docker compose ps -a` AND `docker volume ls`.
+
+### What the script does NOT do
+
+The wrapper `scripts/docker-validate.sh` deliberately
+**never** runs:
+
+- `docker compose down` (removes containers; the scaffold
+  uses `stop` for non-destructive teardown);
+- `docker compose down -v` (removes volumes -- DESTRUCTIVE);
+- `rm` against `.env.docker` (never overwrite or delete
+  generated secrets);
+- `docker volume rm` of any `plenora-*` volume;
+- any `docker system prune` variant.
+
+If a `--dry-run` flag is passed, the script prints each
+command exactly as it would run, with no execution, and
+exits 0. This lets Marco preview the sequence before
+spending the disk + time on the build step.
+
+### Reporting back
+
+When Marco runs the pack, the artifacts to paste back are:
+
+1. The full stdout of `bash scripts/docker-validate.sh`
+   (or, if running raw commands, stdout of each step in
+   sequence).
+2. For any failed step, the corresponding "Failure paste"
+   command output listed above.
+3. The host metadata: `uname -a`, `docker --version`,
+   `docker compose version`,
+   `cat /etc/os-release | grep PRETTY_NAME`.
+
+The validation gate closes only after the round-trip
+succeeds end-to-end on a real Linux host. Until then this
+section's status header (`FIRST SCAFFOLD, NOT YET
+VALIDATED`) MUST stay accurate.
+
+---
+
 ## Known scaffold limitations (validation gaps)
 
 These are the explicit gaps the scaffold does NOT close. Each

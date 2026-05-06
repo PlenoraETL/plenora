@@ -208,8 +208,11 @@ class ApiConnectionManagementMixin:
         group_id=None → no filter (used by superadmin and by allowed_groups path).
         """
         if group_id is None:
-            import app.db.config_db_service as _cfg_db
-            rows = _cfg_db.fetchall(
+            # BE-GO-READY-DB-ENGINE-005: `fetchall` is the canonical
+            # raw-SQL helper on `app.db.pg_connection`; the legacy
+            # `_cfg_db.fetchall` was a re-export of the same function.
+            from app.db.pg_connection import fetchall as _fetchall
+            rows = _fetchall(
                 "SELECT * FROM api_connections ORDER BY created_at DESC"
             )
             for row in rows:
@@ -245,11 +248,14 @@ class ApiConnectionManagementMixin:
         Fix N+1: era un loop di get_api_connection(id, include_token=True).
         Ora fa UNA sola query e decifra inline. Ritorna dict id -> config.
         """
-        import app.db.config_db_service as _cfg_db
+        # BE-GO-READY-DB-ENGINE-005: migrated off `_cfg_db.fetchall`
+        # to the canonical `app.db.pg_connection.fetchall` (the
+        # re-export the facade was forwarding to).
+        from app.db.pg_connection import fetchall as _fetchall
         if group_id is None:
-            rows = _cfg_db.fetchall("SELECT * FROM api_connections")
+            rows = _fetchall("SELECT * FROM api_connections")
         else:
-            rows = _cfg_db.fetchall(
+            rows = _fetchall(
                 "SELECT * FROM api_connections WHERE group_id = %s",
                 (group_id,)
             )

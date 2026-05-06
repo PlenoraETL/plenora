@@ -58,27 +58,36 @@ _RESULT_BLOB_PY = (
 
 def test_default_cap_is_200_mib():
     """Default cap mirrors ``RESOURCE_MAX_BYTES`` (200 MiB post
-    BE-GO-READY-MEMORY-ENGINE-005)."""
+    BE-GO-READY-MEMORY-ENGINE-005). BE-GO-READY-MEMORY-ENGINE-006
+    centralized the resolver: the loader's compat alias and the
+    shared helper MUST agree on the same default."""
     from app.core.resources.loaders import result_blob as loader_mod
+    from app.core.resources.resource_caps import (
+        RESOURCE_MAX_BYTES_DEFAULT,
+        RESOURCE_MAX_BYTES_ENV,
+        resolve_resource_max_bytes,
+    )
 
     # Clear any test-side env override before resolving.
-    env_var = loader_mod._RESULT_BLOB_MAX_BYTES_ENV
-    prior = os.environ.pop(env_var, None)
+    prior = os.environ.pop(RESOURCE_MAX_BYTES_ENV, None)
     try:
         assert loader_mod._resolve_max_bytes() == 200 * 1024 * 1024
-        assert loader_mod._DEFAULT_RESULT_BLOB_MAX_BYTES == 200 * 1024 * 1024
+        assert resolve_resource_max_bytes() == 200 * 1024 * 1024
+        assert RESOURCE_MAX_BYTES_DEFAULT == 200 * 1024 * 1024
     finally:
         if prior is not None:
-            os.environ[env_var] = prior
+            os.environ[RESOURCE_MAX_BYTES_ENV] = prior
 
 
 def test_env_override_takes_effect_at_call_time(monkeypatch):
-    """Setting ``RESOURCE_MAX_BYTES`` overrides the
-    default; the read happens per-call so a runtime mutation is
-    immediately observed."""
+    """Setting ``RESOURCE_MAX_BYTES`` overrides the default; the
+    read happens per-call so a runtime mutation is immediately
+    observed. The loader alias delegates to
+    ``resolve_resource_max_bytes`` (MEMORY-006)."""
     from app.core.resources.loaders import result_blob as loader_mod
+    from app.core.resources.resource_caps import RESOURCE_MAX_BYTES_ENV
 
-    monkeypatch.setenv(loader_mod._RESULT_BLOB_MAX_BYTES_ENV, "1024")
+    monkeypatch.setenv(RESOURCE_MAX_BYTES_ENV, "1024")
     assert loader_mod._resolve_max_bytes() == 1024
 
 
@@ -90,12 +99,13 @@ def test_invalid_or_nonpositive_env_falls_back_to_default(
     the default. A misconfigured env must NOT silently disable the
     cap."""
     from app.core.resources.loaders import result_blob as loader_mod
-
-    monkeypatch.setenv(loader_mod._RESULT_BLOB_MAX_BYTES_ENV, bad_value)
-    assert (
-        loader_mod._resolve_max_bytes()
-        == loader_mod._DEFAULT_RESULT_BLOB_MAX_BYTES
+    from app.core.resources.resource_caps import (
+        RESOURCE_MAX_BYTES_DEFAULT,
+        RESOURCE_MAX_BYTES_ENV,
     )
+
+    monkeypatch.setenv(RESOURCE_MAX_BYTES_ENV, bad_value)
+    assert loader_mod._resolve_max_bytes() == RESOURCE_MAX_BYTES_DEFAULT
 
 
 # ---------------------------------------------------------------------------
@@ -222,7 +232,7 @@ def test_object_storage_oversize_raises_without_consuming_full_iterator(
 
     # Cap = 100 bytes; emit two 60-byte chunks then a "huge" chunk
     # that the loader MUST NOT touch.
-    monkeypatch.setenv(loader_mod._RESULT_BLOB_MAX_BYTES_ENV, "100")
+    monkeypatch.setenv("RESOURCE_MAX_BYTES", "100")
     body = _TrackingBody([b"a" * 60, b"b" * 60, b"c" * 10_000_000])
     fake_storage = _FakeStorage(body)
 
@@ -258,7 +268,7 @@ def test_object_storage_under_cap_returns_full_bytes(monkeypatch):
     (regression cover for the read-loop refactor)."""
     from app.core.resources.loaders import result_blob as loader_mod
 
-    monkeypatch.setenv(loader_mod._RESULT_BLOB_MAX_BYTES_ENV, "1024")
+    monkeypatch.setenv("RESOURCE_MAX_BYTES", "1024")
     body = _TrackingBody([b"abc", b"de", b"fg"])
     fake_storage = _FakeStorage(body)
 
@@ -288,7 +298,7 @@ def test_object_storage_oversize_does_not_swallow_to_none(monkeypatch):
     from app.shared.exceptions import MemoryLimitExceededError
     from app.core.resources.loaders import result_blob as loader_mod
 
-    monkeypatch.setenv(loader_mod._RESULT_BLOB_MAX_BYTES_ENV, "10")
+    monkeypatch.setenv("RESOURCE_MAX_BYTES", "10")
     body = _TrackingBody([b"x" * 100])
     fake_storage = _FakeStorage(body)
     monkeypatch.setattr(
@@ -335,7 +345,7 @@ def test_bytea_oversize_raises_at_dispatch(monkeypatch):
     from app.shared.exceptions import MemoryLimitExceededError
     from app.core.resources.loaders import result_blob as loader_mod
 
-    monkeypatch.setenv(loader_mod._RESULT_BLOB_MAX_BYTES_ENV, "50")
+    monkeypatch.setenv("RESOURCE_MAX_BYTES", "50")
     # 013: `data` is NULL on the wire when length(data) > cap; the
     # loader reads `data_size` to detect oversize, so the mock must
     # carry both fields the production SQL projects.
@@ -385,7 +395,7 @@ def test_bytea_preflight_does_not_touch_data_field(monkeypatch):
         def __bytes__(self):
             raise AssertionError("loader bytes()'d `data` on oversize")
 
-    monkeypatch.setenv(loader_mod._RESULT_BLOB_MAX_BYTES_ENV, "50")
+    monkeypatch.setenv("RESOURCE_MAX_BYTES", "50")
     _, fake_fetch = fake_fetchone(
         row={
             "data": _ExplodingSentinel(),
@@ -419,7 +429,7 @@ def test_bytea_preflight_sql_carries_length_and_case(monkeypatch):
         return None  # row-not-found is fine for SQL-shape inspection
 
     monkeypatch.setattr("app.db.pg_connection.fetchone", _capture)
-    monkeypatch.setenv(loader_mod._RESULT_BLOB_MAX_BYTES_ENV, "12345")
+    monkeypatch.setenv("RESOURCE_MAX_BYTES", "12345")
 
     ref = make_result_ref()
     with pytest.raises(FileNotFoundError):
@@ -452,7 +462,7 @@ def test_bytea_under_cap_returns_normally(monkeypatch):
     skips the preflight branch and yields the bytes verbatim."""
     from app.core.resources.loaders import result_blob as loader_mod
 
-    monkeypatch.setenv(loader_mod._RESULT_BLOB_MAX_BYTES_ENV, "1024")
+    monkeypatch.setenv("RESOURCE_MAX_BYTES", "1024")
     _, fake_fetch = fake_fetchone(
         row={"data": b"small", "data_size": 5, "storage_key": None}
     )
@@ -475,7 +485,7 @@ def test_path_mode_oversize_does_not_create_tempfile(monkeypatch, tmp_path):
     from app.shared.exceptions import MemoryLimitExceededError
     from app.core.resources.loaders import result_blob as loader_mod
 
-    monkeypatch.setenv(loader_mod._RESULT_BLOB_MAX_BYTES_ENV, "10")
+    monkeypatch.setenv("RESOURCE_MAX_BYTES", "10")
     body = _TrackingBody([b"x" * 100])
     fake_storage = _FakeStorage(body)
     monkeypatch.setattr(

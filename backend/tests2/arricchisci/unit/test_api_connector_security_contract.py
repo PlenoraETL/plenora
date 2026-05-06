@@ -328,11 +328,15 @@ def test_load_source_project_force_recalculate_blocks_cross_tenant_before_recomp
     sollevare ValueError PRIMA che execute_pipeline venga invocato.
     """
     # BE-GO-READY-TRANSFORMATION-ENGINE-022: typed ctx Phase 2.
-    import app.db.config_db_service as cfg_db
+    # BE-GO-READY-DB-ENGINE-005: production code now does
+    # `from app.db.config.projects import get_project as _get_project`
+    # at the lazy-import boundary. Patch the canonical leaf so the
+    # bind picks up the fake.
+    import app.db.config.projects as _projects_leaf
 
     # source_project_id appartiene al tenant B, non a grp-A
     monkeypatch.setattr(
-        cfg_db,
+        _projects_leaf,
         "get_project",
         lambda project_id, group_id=None: {
             "id": project_id,
@@ -372,8 +376,10 @@ def test_load_source_project_force_recalculate_blocks_unknown_project(
     fallthrough che possa diventare un probe per l'enumeration dei
     project_id cross-tenant."""
     # BE-GO-READY-TRANSFORMATION-ENGINE-022: typed ctx Phase 2.
-    import app.db.config_db_service as cfg_db
-    monkeypatch.setattr(cfg_db, "get_project", lambda *args, **kwargs: None)
+    # BE-GO-READY-DB-ENGINE-005: patch the canonical leaf (see
+    # the cross-tenant test above for rationale).
+    import app.db.config.projects as _projects_leaf
+    monkeypatch.setattr(_projects_leaf, "get_project", lambda *args, **kwargs: None)
 
     with pytest.raises(ValueError, match="Accesso negato"):
         api_service._load_source_project(
@@ -390,9 +396,10 @@ def test_load_source_project_force_recalculate_allows_same_tenant(
     e procedere al recompute. Se il pre-check fosse troppo stretto,
     questo test lo catturerebbe."""
     # BE-GO-READY-TRANSFORMATION-ENGINE-022: typed ctx Phase 2.
-    import app.db.config_db_service as cfg_db
+    # BE-GO-READY-DB-ENGINE-005: patch the canonical leaf.
+    import app.db.config.projects as _projects_leaf
     monkeypatch.setattr(
-        cfg_db,
+        _projects_leaf,
         "get_project",
         lambda project_id, group_id=None: {
             "id": project_id,

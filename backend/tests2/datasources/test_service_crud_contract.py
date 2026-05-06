@@ -95,7 +95,10 @@ def test_list_datasources_filters_by_group_id_uses_where_clause(monkeypatch):
     nessun errore, solo lista gonfia.
     """
     from app.core.datasources.service import DataSourceService
-    import app.db.config_db_service as cfg_db
+    # BE-GO-READY-DB-ENGINE-005: production code does
+    # `from app.db.pg_connection import fetchall as _fetchall`
+    # at the lazy-import boundary. Patch the canonical helper.
+    import app.db.pg_connection as pg
 
     captured = []
 
@@ -103,7 +106,7 @@ def test_list_datasources_filters_by_group_id_uses_where_clause(monkeypatch):
         captured.append((query, params))
         return []
 
-    monkeypatch.setattr(cfg_db, "fetchall", fake_fetchall)
+    monkeypatch.setattr(pg, "fetchall", fake_fetchall)
 
     service = DataSourceService()
     service.list_datasources(group_id="tenant-a")
@@ -131,7 +134,10 @@ def test_list_datasources_no_where_clause_when_group_id_is_none(monkeypatch):
     del caller (router/auth layer) proteggere la chiamata.
     """
     from app.core.datasources.service import DataSourceService
-    import app.db.config_db_service as cfg_db
+    # BE-GO-READY-DB-ENGINE-005: production code does
+    # `from app.db.pg_connection import fetchall as _fetchall`
+    # at the lazy-import boundary. Patch the canonical helper.
+    import app.db.pg_connection as pg
 
     captured = []
 
@@ -139,7 +145,7 @@ def test_list_datasources_no_where_clause_when_group_id_is_none(monkeypatch):
         captured.append((query, params))
         return []
 
-    monkeypatch.setattr(cfg_db, "fetchall", fake_fetchall)
+    monkeypatch.setattr(pg, "fetchall", fake_fetchall)
 
     service = DataSourceService()
     service.list_datasources(group_id=None)
@@ -172,7 +178,10 @@ def test_list_datasources_uses_single_fetchall_no_per_row_requery(monkeypatch):
     c'è un path di re-fetch che non deve esserci.
     """
     from app.core.datasources.service import DataSourceService
-    import app.db.config_db_service as cfg_db
+    # BE-GO-READY-DB-ENGINE-005: production code does
+    # `from app.db.pg_connection import fetchall as _fetchall`
+    # at the lazy-import boundary.
+    import app.db.pg_connection as pg
     import app.db.db_service as db
 
     rows = [_make_row(f"ds-{i}", "tenant-a", f"ds{i}") for i in range(5)]
@@ -188,7 +197,7 @@ def test_list_datasources_uses_single_fetchall_no_per_row_requery(monkeypatch):
         get_datasource_count[0] += 1
         return rows[0]  # non dovrebbe mai essere chiamato
 
-    monkeypatch.setattr(cfg_db, "fetchall", fake_fetchall)
+    monkeypatch.setattr(pg, "fetchall", fake_fetchall)
     monkeypatch.setattr(db, "get_datasource", fake_get_datasource)
 
     service = DataSourceService()

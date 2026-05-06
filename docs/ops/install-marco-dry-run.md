@@ -773,16 +773,16 @@ domain table.
 
 ### 5.4 Docker vs single-machine deltas
 
-Plenora-ETL has NO `Dockerfile` and NO `docker-compose.yml` at
-this commit (see the disclaimer at the top of this page and
-[install-docker.md](install-docker.md)). The single-machine
-sequence above (steps 2.1-2.9 + harness rows 7-8) is the ONLY
-go-ready path today.
+Plenora-ETL now has a FIRST SCAFFOLD Docker path
+(`backend/Dockerfile`, `docker-compose.yml`, `.env.docker.example`,
+`scripts/docker-validate.sh`; see [install-docker.md](install-docker.md)).
+It is **NOT YET VALIDATED** end-to-end on Marco's Linux PC. The
+single-machine sequence above (steps 2.1-2.9 + harness rows 7-8)
+remains the ONLY go-ready path today.
 
-When the future Docker batch lands
-(`BE-GO-READY-INSTALLATION-010..013`), the deltas are:
+Docker scaffold deltas:
 
-| Harness item | Single-machine path (today) | Docker path (target shape only) |
+| Harness item | Single-machine path (today) | Docker path (first scaffold, not yet validated) |
 |---|---|---|
 | 1 (clone + env) | `git clone` + `bash scripts/install.sh` | `git clone` + `cp .env.docker.example .env` + secret generation per [install-docker.md section D](install-docker.md#d-envdockerexample) |
 | 2 (backend deps) | `./venv/bin/pip install -r requirements.txt` | baked into `backend/Dockerfile` build stage (per [install-docker.md section A](install-docker.md#a-backenddockerfile)) |
@@ -815,8 +815,9 @@ not needed":
 - frontend build + reverse proxy (Marco can hit the API
   directly via `curl`/`http` for the first smoke; bring up
   the frontend after the API is stable);
-- Docker / docker-compose - **NOT IMPLEMENTED** in this
-  repo at this commit;
+- Docker / docker-compose - first scaffold exists, but is not
+  validated; skip unless explicitly running the Docker validation
+  pack from [install-docker.md](install-docker.md);
 - Helm / Kubernetes / multi-host - **OUT OF SCOPE**.
 
 ---
@@ -830,8 +831,8 @@ not needed":
   - cleanroom-vs-production drift; explains why a green
   `ci-cleanroom.yml` does NOT mean a real PC install will
   pass.
-- [install-docker.md](install-docker.md) - Docker target
-  shape, NOT IMPLEMENTED.
+- [install-docker.md](install-docker.md) - Docker first scaffold
+  and Linux validation pack, NOT YET VALIDATED.
 - [runtime-prereqs.md](runtime-prereqs.md) - runtime
   contract (env, IAM, dependencies).
 - [runbook.md](runbook.md) and

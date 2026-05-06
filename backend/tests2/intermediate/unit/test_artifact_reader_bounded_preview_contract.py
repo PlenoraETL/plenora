@@ -261,6 +261,107 @@ def test_artifact_reader_does_not_reference_pandas():
     )
 
 
+def test_artifact_reader_no_full_file_pd_read_parquet_pattern():
+    """BE-GO-READY-PREVIEW-ENGINE-003 explicit OOM regression lock:
+    the canonical OOM-causing pattern
+    ``pd.read_parquet(BytesIO(body_bytes))`` MUST NOT reappear in
+    ``artifact_reader.py`` under ANY shape. Pre-016 the orchestrator
+    materialized the FULL parquet file into a DataFrame before
+    trimming with ``df.head(limit)``; that was O(file_rows × ncols)
+    RAM regardless of the caller's preview ``limit``.
+
+    Post-016 the orchestrator delegates the bounded byte buffer to
+    ``preview_parser.parse_parquet_preview`` which uses
+    ``pyarrow.parquet.ParquetFile.iter_batches`` (locked separately
+    in ``test_preview_parser_streaming_contract.py``). The
+    orchestrator MUST NOT re-introduce a pandas full-file decode
+    path even temporarily ("just to handle a fallback"): every
+    decode boundary lives in the parser leaf.
+
+    Banned tokens (substring scan over executable code with
+    docstrings/comments stripped):
+      - ``pd.read_parquet(``: the legacy full-file decode call.
+      - ``BytesIO(``: the wrapper used by the pre-016 pattern.
+        The orchestrator passes raw ``body_bytes: bytes`` to the
+        parser; it MUST NOT wrap them in ``BytesIO`` -- the parser
+        owns the ``pa.BufferReader`` zero-copy view.
+      - ``import io`` and ``from io``: the orchestrator has no
+        legitimate need for the ``io`` module after the W-016
+        split; banning the import is defense-in-depth against
+        ``BytesIO(body_bytes)`` re-entry.
+    """
+    text = _ARTIFACT_READER_PY.read_text(encoding="utf-8")
+    code_only = python_code_only(text)
+    forbidden_substrings = (
+        "pd.read_parquet(",
+        "BytesIO(",
+        "import io",
+        "from io ",
+    )
+    offenders = [s for s in forbidden_substrings if s in code_only]
+    assert not offenders, (
+        f"app/core/intermediate/artifact_reader.py contains the "
+        f"OOM-prone full-file decode pattern in executable code: "
+        f"{offenders}. The W-016 / W-018 boundary requires every "
+        "parquet decode to live in `preview_parser.py` via "
+        "`pyarrow.parquet.ParquetFile.iter_batches` (bounded by "
+        "`limit`). Re-introducing `pd.read_parquet(BytesIO(...))` "
+        "here would silently restore O(file_rows × ncols) RAM "
+        "cost regardless of the caller's preview limit, defeating "
+        "the W-018 streaming contract. Delegate to "
+        "`preview_parser.parse_parquet_preview(body_bytes, "
+        "limit=limit)` and let the parser own the buffer."
+    )
+
+
+def test_artifact_reader_no_temp_file_fallback():
+    """BE-GO-READY-PREVIEW-ENGINE-003 'no temp file fallback' lock:
+    the orchestrator MUST NOT materialize the bounded byte buffer
+    to disk before handing it to the parser. The pre-W-016 design
+    space included a "write to tempfile then pyarrow.read_table(path)"
+    fallback that would have:
+
+      - doubled the working-set memory (bytes in RAM PLUS a
+        tempfile flush);
+      - leaked tempfiles on parser exception (the parser raises
+        ``ParquetPreviewParseError`` on bad bytes; a tempfile-
+        based path needs explicit unlink-on-error scaffolding);
+      - re-introduced an OS-tmpdir quota dependency on the
+        preview surface.
+
+    The W-018 streaming primitive (pyarrow ``iter_batches`` over
+    ``pa.BufferReader``) makes the tempfile path unnecessary
+    even for very large files (``ARTIFACT_PREVIEW_MAX_BYTES`` =
+    25 MiB caps it upstream). Banning the tempfile primitives at
+    source level prevents a future contributor from re-adding
+    the path "for safety" without tripping CI.
+
+    Banned tokens (substring scan over executable code):
+      - ``tempfile.``: any use of the stdlib tempfile module
+        (``NamedTemporaryFile``, ``mkdtemp``, ``TemporaryDirectory``,
+        ``mkstemp``).
+      - ``import tempfile`` / ``from tempfile``: the orchestrator
+        has no legitimate need for the module after W-018.
+    """
+    text = _ARTIFACT_READER_PY.read_text(encoding="utf-8")
+    code_only = python_code_only(text)
+    forbidden_substrings = (
+        "tempfile.",
+        "import tempfile",
+        "from tempfile",
+    )
+    offenders = [s for s in forbidden_substrings if s in code_only]
+    assert not offenders, (
+        f"app/core/intermediate/artifact_reader.py uses the "
+        f"tempfile module in executable code: {offenders}. The "
+        "W-018 streaming primitive (`pyarrow.parquet.ParquetFile` "
+        "+ `iter_batches`) makes a temp-file fallback unnecessary; "
+        "re-introducing one would double working-set memory + "
+        "leak temps on parser exception. Pass `body_bytes: bytes` "
+        "directly to `preview_parser.parse_parquet_preview`."
+    )
+
+
 def test_preview_parser_module_owns_pandas_import_edge():
     """016 contract: the leaf parser module exists and is the
     canonical owner of the pandas import boundary for the

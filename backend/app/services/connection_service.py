@@ -156,13 +156,15 @@ class ConnectionService:
     def list_connections(self, group_id: str = None) -> ConnectionList:
         # group_id=None → no filter (usato da superadmin e dalla path allowed_groups)
         # Fix N+1: fetch tutte le righe complete in una query, no loop di get_connection_config
-        import app.db.config_db_service as _cfg_db
+        # BE-GO-READY-DB-ENGINE-005: migrato off facade
+        # `config_db_service.fetchall` (re-export di pg_connection).
+        from app.db.pg_connection import fetchall as _fetchall
         if group_id is None:
-            rows = _cfg_db.fetchall(
+            rows = _fetchall(
                 "SELECT * FROM connections ORDER BY name"
             )
         else:
-            rows = _cfg_db.fetchall(
+            rows = _fetchall(
                 "SELECT * FROM connections WHERE group_id = %s ORDER BY name",
                 (group_id,)
             )

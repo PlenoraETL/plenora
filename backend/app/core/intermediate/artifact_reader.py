@@ -6,7 +6,7 @@ Legge preview da `data.parquet` su runtime object storage per il modo
 dall'endpoint `GET /api/runs/{run_id}/nodes/{node_id}/data`.
 
 Vincoli:
-- Niente download su disco: stream bytes -> BytesIO -> pandas.read_parquet.
+- Niente download su disco: stream bytes bounded -> preview parser leaf.
 - Lettura bytes-first BOUNDED via
   ``app.core.resources.bounded_reader.read_stream_bounded`` con cap
   DEDICATO ``ARTIFACT_PREVIEW_MAX_BYTES`` (env, default 25 MB —
@@ -22,7 +22,8 @@ Vincoli:
   FastAPI (handler ``app/main.py``) che mappa a HTTP 413 con stage
   ``intermediate_artifact_preview``. Questo evita che un artifact
   corrotto/giga riempia RAM e OOM-killi il worker.
-- Limite righe applicato lato pandas (`df.head(limit)`).
+- Limite righe applicato dal parser leaf via batch streaming
+  (`preview_parser.parse_parquet_preview`, pyarrow iter_batches).
 - Best-effort SOLO per errori non-OOM (capability off, key missing,
   decode fail): ritornano `ArtifactPreviewResult(rows=[],
   col_schema={}, error=...)`. L'endpoint puo' rispondere 200 con
@@ -85,9 +86,10 @@ def _resolve_max_bytes() -> int:
     takes effect without restart). Default 25 MB matches
     ``Settings.DEFAULTS["ARTIFACT_PREVIEW_MAX_BYTES"]`` (BE-GO-READY-
     RUNTIME-001-PREVIEW-MAX-BYTES-CAP). Separate from
-    ``RESOURCE_MAX_BYTES`` (default 200 MB post MEMORY-005) on purpose: the preview is
-    concurrency-sensitive (N concurrent API requests) and only
-    renders ``df.head(limit)``, so the byte budget is much tighter.
+    ``RESOURCE_MAX_BYTES`` (default 200 MB post MEMORY-005) on purpose:
+    the preview is concurrency-sensitive (N concurrent API requests) and
+    the parser returns at most ``limit`` rows, so the byte budget is much
+    tighter.
     Invalid / non-positive values fall back to the 25 MB default.
     """
     raw = _os.environ.get(_ARTIFACT_PREVIEW_MAX_BYTES_ENV)
@@ -182,9 +184,11 @@ def load_preview_from_artifact(
         )
 
     # Streaming download: la preview e' piccola (limit << dataset),
-    # ma scaricare tutto il Parquet in BytesIO e' inevitabile per leggere
-    # con `pd.read_parquet` (no random-access sui chunks via boto3 boundary).
-    # La materializzazione e' BOUNDED: l'iteratore viene abortito al
+    # ma il boundary object-storage ci consegna chunks bytes; la
+    # materializzazione del buffer e' BOUNDED e il decode resta nel
+    # parser leaf (`preview_parser.parse_parquet_preview`, pyarrow
+    # iter_batches), non in questo orchestrator.
+    # L'iteratore viene abortito al
     # primo chunk che supererebbe ``ARTIFACT_PREVIEW_MAX_BYTES``
     # (default 25 MB — preview-specific cap, separato da
     # ``RESOURCE_MAX_BYTES``). Oversize NON viene mascherato da error

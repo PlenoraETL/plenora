@@ -78,7 +78,10 @@ _BLOB_CONSUMER_INVENTORY: dict[tuple[str, int], tuple[
     # following streams have closed the unbounded reads by replacing
     # `b"".join(stream["body"])` with bounded readers:
     #   - app/services/file_blob_materialization.py — closed by
-    #     `_bounded_read_iterable(...)` at line 226 (RESOURCE-ENGINE-011).
+    #     `_bounded_read_iterable(...)` (RESOURCE-ENGINE-011).
+    #     The module itself was later retired in
+    #     RESOURCE-ENGINE-024 (commit 1862394); the file_source
+    #     read path now goes through `FileSourceBlobLoader`.
     #   - app/core/resources/loaders/result_blob.py — closed by
     #     `read_stream_bounded(...)` (RESOURCE-ENGINE-010).
     #   - app/core/intermediate/artifact_reader.py — closed by
@@ -263,8 +266,9 @@ def test_blob_consumer_high_risk_assignment_is_complete():
 
     Audit-time TE-008 identified 3 HIGH-risk callsites; all 3 are
     now CLOSED in production by bounded readers
-    (file_blob_materialization, result_blob, intermediate
-    artifact_reader). HIGH-risk inventory is empty.
+    (the legacy `file_blob_materialization` reader, retired in
+    RESOURCE-ENGINE-024; `result_blob`; intermediate
+    `artifact_reader`). HIGH-risk inventory is empty.
 
     Trim/extend in the same PR that closes the underlying issue.
     """

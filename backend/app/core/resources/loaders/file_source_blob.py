@@ -91,13 +91,13 @@ Pure leaf module, mirroring the result-blob loader:
 
 from __future__ import annotations
 
-import os as _os
 import time
 from typing import Optional, Tuple
 
 from app.shared.exceptions import MemoryLimitExceededError
 
 from app.core.resources.bounded_reader import read_stream_bounded
+from app.core.resources.resource_caps import resolve_resource_max_bytes
 from app.core.resources.types import (
     OutputMode,
     Resource,
@@ -107,32 +107,25 @@ from app.core.resources.types import (
 
 
 # ---------------------------------------------------------------------------
-# Cap resolution — mirror of ``result_blob.py``: stdlib-only, no
-# ``app.config`` import (anti-god-engine boundary). Reads the same
-# ``RESOURCE_MAX_BYTES`` env so the two leaves agree on a single
-# operator-tunable budget.
+# Cap resolution — single source of truth shared with
+# ``result_blob.py`` via
+# ``app.core.resources.resource_caps.resolve_resource_max_bytes``
+# (BE-GO-READY-MEMORY-ENGINE-006). Both loaders agree on the
+# 200 MB default + the invalid/non-positive env fallback in one
+# place; the source-bound contract in
+# ``tests2/shared/test_resource_caps_centralization_contract.py``
+# bans local env parsing here.
 # ---------------------------------------------------------------------------
-
-_DEFAULT_FILE_SOURCE_BLOB_MAX_BYTES = 200 * 1024 * 1024  # 200 MB (MEMORY-005)
-
-_FILE_SOURCE_BLOB_MAX_BYTES_ENV = "RESOURCE_MAX_BYTES"
 
 
 def _resolve_max_bytes() -> int:
-    """Resolve the file-source blob byte cap.
+    """Backward-compat alias for the shared helper.
 
-    Override via ``RESOURCE_MAX_BYTES`` env. Invalid / non-positive
-    values fall back to the default. Read at each call so
-    monkeypatch / runtime override takes effect without restart.
+    Kept as a thin one-line re-export for tests and any
+    transitional caller that still references the local symbol;
+    new code should call ``resolve_resource_max_bytes`` directly.
     """
-    raw = _os.environ.get(_FILE_SOURCE_BLOB_MAX_BYTES_ENV)
-    if not raw:
-        return _DEFAULT_FILE_SOURCE_BLOB_MAX_BYTES
-    try:
-        v = int(raw)
-    except (TypeError, ValueError):
-        return _DEFAULT_FILE_SOURCE_BLOB_MAX_BYTES
-    return v if v > 0 else _DEFAULT_FILE_SOURCE_BLOB_MAX_BYTES
+    return resolve_resource_max_bytes()
 
 
 # ---------------------------------------------------------------------------

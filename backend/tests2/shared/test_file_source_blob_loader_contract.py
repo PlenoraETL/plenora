@@ -18,8 +18,10 @@ Locks the second Resource Engine loader's behavior:
   - oversized BYTEA -> ``MemoryLimitExceededError`` with stage
     ``file_source_blob_oversize``;
   - the loader does NOT support ``mode='path'`` / ``mode='stream'``
-    (deferred; the SHP/GDB temp lifecycle stays in
-    ``file_blob_materialization.temp_file_for``).
+    (deferred; the SHP/GDB temp lifecycle is owned inline by
+    ``FileSourceService._temp_file_for`` -- the legacy
+    ``file_blob_materialization.temp_file_for`` helper was retired
+    in RESOURCE-ENGINE-024).
 """
 
 from __future__ import annotations
@@ -337,13 +339,21 @@ def test_storage_key_oversize_raises_memory_limit_exceeded(monkeypatch):
 
 def test_default_cap_is_200_mib(monkeypatch):
     """Default cap is 200 MiB post BE-GO-READY-MEMORY-ENGINE-005
-    (was 500 MiB)."""
+    (was 500 MiB). BE-GO-READY-MEMORY-ENGINE-006 centralized the
+    resolver: the loader's compat alias must agree with the
+    shared helper on the same default."""
     monkeypatch.delenv("RESOURCE_MAX_BYTES", raising=False)
     from app.core.resources.loaders.file_source_blob import (
         _resolve_max_bytes,
     )
+    from app.core.resources.resource_caps import (
+        RESOURCE_MAX_BYTES_DEFAULT,
+        resolve_resource_max_bytes,
+    )
 
     assert _resolve_max_bytes() == 200 * 1024 * 1024
+    assert resolve_resource_max_bytes() == 200 * 1024 * 1024
+    assert RESOURCE_MAX_BYTES_DEFAULT == 200 * 1024 * 1024
 
 
 def test_env_override_is_honored(monkeypatch):
@@ -363,6 +373,8 @@ def test_invalid_env_falls_back_to_default(monkeypatch):
     monkeypatch.setenv("RESOURCE_MAX_BYTES", "not-an-int")
     assert _resolve_max_bytes() == 200 * 1024 * 1024
     monkeypatch.setenv("RESOURCE_MAX_BYTES", "0")
+    assert _resolve_max_bytes() == 200 * 1024 * 1024
+    monkeypatch.setenv("RESOURCE_MAX_BYTES", "-1")
     assert _resolve_max_bytes() == 200 * 1024 * 1024
 
 

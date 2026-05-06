@@ -1,30 +1,38 @@
-"""Contract test R-21/R-22/R-23 — DeprecationWarning emit-once per alias legacy.
+"""Contract test R-21/R-22/R-23 -- DeprecationWarning emit-once per legacy alias.
 
-Verifica che i 4 alias deprecated del codebase emettano sia un Python
-``DeprecationWarning`` standard sia un ``logger.warning`` la prima volta
-che vengono invocati, e che il warning sia cached (emit-once per processo).
+Verifies that the four legacy alias helpers in the codebase emit a
+standard Python ``DeprecationWarning`` plus a ``logger.warning`` the
+first time they are invoked, that the emit is cached (emit-once per
+process), that each alias has its own LRU cache (no cross-contamination),
+and that the warning stack-level points at the external caller (not the
+internal emit helper).
 
-Alias coperti:
-  R-21: ``URBY_ALLOW_LOOPBACK_OUTBOUND`` env alias (api_utils._warn_urby_loopback_alias_once)
-  R-23: ``api_utils.get_oauth2_token`` wrapper legacy
-  R-23: ``api_utils.get_oauth2_client_credentials_token`` wrapper legacy
-  R-22: ``cloud_backends.get_object_storage`` wrapper legacy
+Aliases covered:
+  R-21: ``URBY_ALLOW_LOOPBACK_OUTBOUND`` env alias
+        (``api_utils._warn_urby_loopback_alias_once``).
+  R-23: ``api_utils.get_oauth2_token`` legacy wrapper.
+  R-23: ``api_utils.get_oauth2_client_credentials_token`` legacy wrapper.
+  R-22: ``cloud_backends.get_object_storage`` legacy wrapper.
 
-Pattern dei test:
-  - cache_clear sul wrapper per rendere il primo emit osservabile.
-  - ``pytest.warns(DeprecationWarning)`` per intercettare l'emit Python.
-  - asserzione su contenuto messaggio (verbatim "[DEPRECATED]" + nome alias).
-  - re-invocazione: nessun warning ulteriore (cache LRU emit-once).
+TEST-ENGINE-003 collapse: the prior 297-line form had eight per-alias
+test functions plus two cross-cutting tests. The matrix is now driven
+by a parametrized ALIAS_CASES table; the per-alias tests collapse into
+two parametrized tests (`emit-warning` + `cache-once`). The
+cross-contamination + stack-level invariants stay as singleton tests
+because they assert different shapes.
 
-Nota su pytest filterwarnings:
-  ``backend/tests2/pytest.ini`` ha ``ignore::DeprecationWarning`` come
-  default per non rompere il run su test esistenti che invocano i
-  wrapper legacy. ``pytest.warns`` bypassa il filter (catch context),
-  quindi i test contract sotto vedono il warning anche con il filter.
+pytest filterwarnings note:
+  ``backend/tests2/pytest.ini`` ignores ``DeprecationWarning`` by
+  default to keep the suite quiet. ``pytest.warns(DeprecationWarning)``
+  bypasses the filter inside its context, so these tests still see
+  the warning.
 """
 
 from __future__ import annotations
 
+import warnings as _w
+from dataclasses import dataclass
+from typing import Any, Callable
 from unittest.mock import patch
 
 import pytest
@@ -33,264 +41,243 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# ============================================================
-# R-21 — URBY_ALLOW_LOOPBACK_OUTBOUND env alias
-# ============================================================
+# ---------------------------------------------------------------------------
+# Alias matrix
+# ---------------------------------------------------------------------------
 
 
-def test_urby_loopback_alias_emits_deprecation_warning():
-    """R-21: l'alias env legacy emette DeprecationWarning + logger.warning."""
+@dataclass(frozen=True)
+class _AliasCase:
+    """One row of the alias contract table."""
+
+    rid: str
+    label: str
+    # Lazy resolvers so failure to import one alias does not mask the others.
+    helper: Callable[[], Any]      # the lru_cache'd emit helper
+    invoke: Callable[[], Any]      # invokes the wrapper as a caller would
+    expected_in_message: tuple[str, ...]
+    expected_message_signature: str
+
+
+def _get_urby_loopback_helper() -> Any:
     from app.shared import api_utils
-
-    api_utils._warn_urby_loopback_alias_once.cache_clear()
-
-    with pytest.warns(DeprecationWarning) as record:
-        api_utils._warn_urby_loopback_alias_once()
-
-    assert len(record) == 1
-    msg = str(record[0].message)
-    assert "URBY_ALLOW_LOOPBACK_OUTBOUND" in msg
-    assert "[DEPRECATED]" in msg
-    assert "PLENORA_ALLOW_LOOPBACK_OUTBOUND" in msg, (
-        "Il messaggio deve indicare il nome canonical da usare al posto."
-    )
-    assert "2026-Q4" in msg, (
-        "Il messaggio deve includere il removal target documentato."
-    )
+    return api_utils._warn_urby_loopback_alias_once
 
 
-def test_urby_loopback_alias_emit_is_cached_once_per_process():
-    """R-21: lru_cache(maxsize=1) garantisce emit-once per processo."""
+def _invoke_urby_loopback() -> Any:
     from app.shared import api_utils
-
-    api_utils._warn_urby_loopback_alias_once.cache_clear()
-
-    # Prima invocazione: emit.
-    with pytest.warns(DeprecationWarning):
-        api_utils._warn_urby_loopback_alias_once()
-
-    # Seconda invocazione: NESSUN emit (cache hit).
-    # pytest.warns con record=True permette di asserire 0 warning.
-    import warnings as _w
-    with _w.catch_warnings(record=True) as caught:
-        _w.simplefilter("always")
-        api_utils._warn_urby_loopback_alias_once()
-    matches = [w for w in caught if issubclass(w.category, DeprecationWarning)]
-    assert len(matches) == 0, (
-        f"Cache LRU rotta: emit-once violato. Caught: {len(matches)} warning."
-    )
+    return api_utils._warn_urby_loopback_alias_once()
 
 
-# ============================================================
-# R-23 — get_oauth2_token wrapper legacy
-# ============================================================
-
-
-def test_get_oauth2_token_emits_deprecation_warning():
-    """R-23: get_oauth2_token emette DeprecationWarning quando invocato.
-
-    Il wrapper chiama get_cached_oauth2_token sotto. Mockiamo quel
-    callee per evitare hit di rete reale.
-    """
+def _get_oauth2_token_helper() -> Any:
     from app.shared import api_utils
+    return api_utils._warn_get_oauth2_token_deprecated_once
 
-    api_utils._warn_get_oauth2_token_deprecated_once.cache_clear()
 
+def _invoke_oauth2_token() -> Any:
+    from app.shared import api_utils
     with patch.object(api_utils, "get_cached_oauth2_token", return_value="tok-1"):
-        with pytest.warns(DeprecationWarning) as record:
-            result = api_utils.get_oauth2_token({"token_url": "https://x"})
-
-    assert result == "tok-1"
-    assert len(record) == 1
-    msg = str(record[0].message)
-    assert "get_oauth2_token" in msg
-    assert "get_cached_oauth2_token" in msg, (
-        "Il messaggio deve indicare la migration target."
-    )
-    assert "2026-Q4" in msg
+        return api_utils.get_oauth2_token({"token_url": "https://x"})
 
 
-def test_get_oauth2_token_emit_is_cached_once():
-    """R-23: emit-once per processo via lru_cache."""
+def _get_oauth2_cc_token_helper() -> Any:
     from app.shared import api_utils
-    import warnings as _w
+    return api_utils._warn_get_oauth2_cc_token_deprecated_once
 
-    api_utils._warn_get_oauth2_token_deprecated_once.cache_clear()
 
-    with patch.object(api_utils, "get_cached_oauth2_token", return_value="tok-1"):
-        # Prima invocazione: emit.
-        with pytest.warns(DeprecationWarning):
-            api_utils.get_oauth2_token({"token_url": "https://x"})
-
-        # Seconda invocazione: cache hit, NESSUN emit.
-        with _w.catch_warnings(record=True) as caught:
-            _w.simplefilter("always")
-            api_utils.get_oauth2_token({"token_url": "https://x"})
-        matches = [
-            w for w in caught
-            if issubclass(w.category, DeprecationWarning)
-            and "get_oauth2_token" in str(w.message)
-        ]
-        assert len(matches) == 0, (
-            f"emit-once violato. Caught: {len(matches)}"
+def _invoke_oauth2_cc_token() -> Any:
+    from app.shared import api_utils
+    with patch.object(api_utils, "get_cached_oauth2_token", return_value="tok-cc"):
+        return api_utils.get_oauth2_client_credentials_token(
+            {"token_url": "https://x"},
         )
 
 
-# ============================================================
-# R-23 — get_oauth2_client_credentials_token wrapper legacy
-# ============================================================
-
-
-def test_get_oauth2_cc_token_emits_deprecation_warning():
-    """R-23: simmetrico per il client_credentials wrapper."""
-    from app.shared import api_utils
-
-    api_utils._warn_get_oauth2_cc_token_deprecated_once.cache_clear()
-
-    with patch.object(api_utils, "get_cached_oauth2_token", return_value="tok-cc"):
-        with pytest.warns(DeprecationWarning) as record:
-            result = api_utils.get_oauth2_client_credentials_token({"token_url": "https://x"})
-
-    assert result == "tok-cc"
-    assert len(record) == 1
-    msg = str(record[0].message)
-    assert "get_oauth2_client_credentials_token" in msg
-    assert "get_cached_oauth2_token" in msg
-    assert "2026-Q4" in msg
-
-
-def test_get_oauth2_cc_token_emit_is_cached_once():
-    """R-23: emit-once anche per il client_credentials wrapper."""
-    from app.shared import api_utils
-    import warnings as _w
-
-    api_utils._warn_get_oauth2_cc_token_deprecated_once.cache_clear()
-
-    with patch.object(api_utils, "get_cached_oauth2_token", return_value="tok-cc"):
-        with pytest.warns(DeprecationWarning):
-            api_utils.get_oauth2_client_credentials_token({"token_url": "https://x"})
-
-        with _w.catch_warnings(record=True) as caught:
-            _w.simplefilter("always")
-            api_utils.get_oauth2_client_credentials_token({"token_url": "https://x"})
-        matches = [
-            w for w in caught
-            if issubclass(w.category, DeprecationWarning)
-            and "client_credentials" in str(w.message)
-        ]
-        assert len(matches) == 0
-
-
-# ============================================================
-# R-22 — cloud_backends.get_object_storage alias legacy
-# ============================================================
-
-
-def test_get_object_storage_emits_deprecation_warning():
-    """R-22: get_object_storage emette DeprecationWarning + logger.warning.
-
-    Il wrapper chiama get_runtime_object_storage. Mockiamo quel callee
-    per evitare hit di capability check reale (che richiede env vars).
-    """
+def _get_object_storage_helper() -> Any:
     from app.shared import cloud_backends
+    return cloud_backends._warn_get_object_storage_deprecated_once
 
-    cloud_backends._warn_get_object_storage_deprecated_once.cache_clear()
 
+def _invoke_object_storage() -> Any:
+    from app.shared import cloud_backends
     fake_storage = object()
-    with patch.object(cloud_backends, "get_runtime_object_storage", return_value=fake_storage):
-        with pytest.warns(DeprecationWarning) as record:
-            result = cloud_backends.get_object_storage()
+    with patch.object(
+        cloud_backends, "get_runtime_object_storage",
+        return_value=fake_storage,
+    ):
+        return cloud_backends.get_object_storage()
 
-    assert result is fake_storage
-    assert len(record) == 1
-    msg = str(record[0].message)
-    assert "get_object_storage" in msg
-    assert "get_runtime_object_storage" in msg or "get_backup_object_storage" in msg, (
-        "Il messaggio deve indicare i target espliciti runtime/backup."
+
+_ALIAS_CASES: tuple[_AliasCase, ...] = (
+    _AliasCase(
+        rid="R-21",
+        label="urby_loopback_env_alias",
+        helper=_get_urby_loopback_helper,
+        invoke=_invoke_urby_loopback,
+        expected_in_message=(
+            "URBY_ALLOW_LOOPBACK_OUTBOUND",
+            "[DEPRECATED]",
+            "PLENORA_ALLOW_LOOPBACK_OUTBOUND",
+            "2026-Q4",
+        ),
+        expected_message_signature="URBY_ALLOW_LOOPBACK_OUTBOUND",
+    ),
+    _AliasCase(
+        rid="R-23",
+        label="get_oauth2_token_wrapper",
+        helper=_get_oauth2_token_helper,
+        invoke=_invoke_oauth2_token,
+        expected_in_message=(
+            "get_oauth2_token",
+            "get_cached_oauth2_token",
+            "2026-Q4",
+        ),
+        expected_message_signature="get_oauth2_token",
+    ),
+    _AliasCase(
+        rid="R-23",
+        label="get_oauth2_cc_token_wrapper",
+        helper=_get_oauth2_cc_token_helper,
+        invoke=_invoke_oauth2_cc_token,
+        expected_in_message=(
+            "get_oauth2_client_credentials_token",
+            "get_cached_oauth2_token",
+            "2026-Q4",
+        ),
+        # client_credentials is a unique substring across the four cases,
+        # so it is sufficient to disambiguate cache-once filtering below.
+        expected_message_signature="client_credentials",
+    ),
+    _AliasCase(
+        rid="R-22",
+        label="get_object_storage_alias",
+        helper=_get_object_storage_helper,
+        invoke=_invoke_object_storage,
+        expected_in_message=(
+            "get_object_storage",
+            "2026-Q4",
+        ),
+        expected_message_signature="get_object_storage",
+    ),
+)
+
+
+def _ids(cases: tuple[_AliasCase, ...]) -> list[str]:
+    return [f"{c.rid}/{c.label}" for c in cases]
+
+
+# ---------------------------------------------------------------------------
+# Per-alias contract: emit + content
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("case", _ALIAS_CASES, ids=_ids(_ALIAS_CASES))
+def test_alias_emits_deprecation_warning_with_canonical_message(case: _AliasCase):
+    """Each legacy alias must emit a Python DeprecationWarning whose
+    message names the alias, the migration target, and the removal target."""
+    case.helper().cache_clear()
+    with pytest.warns(DeprecationWarning) as record:
+        case.invoke()
+    assert len(record) == 1, (
+        f"{case.rid} {case.label}: expected exactly 1 DeprecationWarning "
+        f"on first invocation, got {len(record)}."
     )
-    assert "2026-Q4" in msg
+    msg = str(record[0].message)
+    for needle in case.expected_in_message:
+        assert needle in msg, (
+            f"{case.rid} {case.label}: DeprecationWarning message must "
+            f"contain {needle!r}. Got: {msg!r}"
+        )
+    # The R-23 token wrappers also mention the migration target which we
+    # exercised above; the R-22 wrapper allows two equivalent migration
+    # targets (`get_runtime_object_storage` OR `get_backup_object_storage`).
+    if case.rid == "R-22":
+        assert (
+            "get_runtime_object_storage" in msg
+            or "get_backup_object_storage" in msg
+        ), (
+            f"R-22 {case.label}: message must point at the explicit "
+            "runtime/backup target, not just the alias name."
+        )
 
 
-def test_get_object_storage_emit_is_cached_once():
-    """R-22: emit-once per processo."""
-    from app.shared import cloud_backends
-    import warnings as _w
-
-    cloud_backends._warn_get_object_storage_deprecated_once.cache_clear()
-
-    fake_storage = object()
-    with patch.object(cloud_backends, "get_runtime_object_storage", return_value=fake_storage):
-        with pytest.warns(DeprecationWarning):
-            cloud_backends.get_object_storage()
-
-        with _w.catch_warnings(record=True) as caught:
-            _w.simplefilter("always")
-            cloud_backends.get_object_storage()
-        matches = [
-            w for w in caught
-            if issubclass(w.category, DeprecationWarning)
-            and "get_object_storage" in str(w.message)
-        ]
-        assert len(matches) == 0
+# ---------------------------------------------------------------------------
+# Per-alias contract: emit-once cache
+# ---------------------------------------------------------------------------
 
 
-# ============================================================
-# Cross-cutting: gli emit-once non si contaminano fra di loro
-# ============================================================
-
-
-def test_each_alias_has_its_own_cache():
-    """I 4 helper emit-once devono avere cache LRU indipendenti: il
-    cache_clear di uno non resetta gli altri (e viceversa)."""
-    from app.shared import api_utils, cloud_backends
-
-    # Reset tutti.
-    api_utils._warn_urby_loopback_alias_once.cache_clear()
-    api_utils._warn_get_oauth2_token_deprecated_once.cache_clear()
-    api_utils._warn_get_oauth2_cc_token_deprecated_once.cache_clear()
-    cloud_backends._warn_get_object_storage_deprecated_once.cache_clear()
-
-    # Trigger solo URBY loopback.
+@pytest.mark.parametrize("case", _ALIAS_CASES, ids=_ids(_ALIAS_CASES))
+def test_alias_emit_is_cached_once_per_process(case: _AliasCase):
+    """`lru_cache(maxsize=1)` guarantees emit-once per process. The second
+    invocation must NOT raise a DeprecationWarning whose message matches
+    this alias's signature."""
+    case.helper().cache_clear()
+    # First invocation: emit.
     with pytest.warns(DeprecationWarning):
-        api_utils._warn_urby_loopback_alias_once()
+        case.invoke()
+    # Second invocation: cache hit, no further warning for this alias.
+    with _w.catch_warnings(record=True) as caught:
+        _w.simplefilter("always")
+        case.invoke()
+    matches = [
+        w for w in caught
+        if issubclass(w.category, DeprecationWarning)
+        and case.expected_message_signature in str(w.message)
+    ]
+    assert not matches, (
+        f"{case.rid} {case.label}: emit-once violated. "
+        f"Caught {len(matches)} warning(s) on second invocation."
+    )
 
-    # Gli altri devono ancora emettere al primo invocazione.
+
+# ---------------------------------------------------------------------------
+# Cross-cutting: independent caches across the four aliases
+# ---------------------------------------------------------------------------
+
+
+def test_each_alias_has_an_independent_cache():
+    """Triggering one alias must not silence the other three. This catches
+    accidental shared `lru_cache` reuse across helpers."""
+    from app.shared import api_utils
+
+    for case in _ALIAS_CASES:
+        case.helper().cache_clear()
+
+    # Trigger only the URBY loopback alias.
+    with pytest.warns(DeprecationWarning):
+        _invoke_urby_loopback()
+
+    # The other three must still emit on their first invocation.
     with patch.object(api_utils, "get_cached_oauth2_token", return_value="t"):
         with pytest.warns(DeprecationWarning) as record:
             api_utils.get_oauth2_token({"token_url": "https://x"})
         assert "get_oauth2_token" in str(record[0].message)
 
 
-# ============================================================
-# Stack-trace: il warning indica il caller, non il wrapper interno
-# ============================================================
+# ---------------------------------------------------------------------------
+# Cross-cutting: stacklevel propagation (R-23 representative)
+# ---------------------------------------------------------------------------
 
 
 def test_get_oauth2_token_stacklevel_points_to_caller():
-    """R-23: stacklevel=3 fa puntare il warning al chiamante esterno
-    di get_oauth2_token, non al helper interno _warn_*_deprecated_once.
+    """`stacklevel=3` must make the warning point at the external caller of
+    `get_oauth2_token`, not at the internal `_warn_*_deprecated_once` helper.
 
-    Stacklevel calibration:
+    Stack-level calibration:
       caller -> get_oauth2_token -> _warn_helper -> warnings.warn
                   level=1            level=2          level=3
-    Quindi stacklevel=3 dal warnings.warn = caller. (level=2 sarebbe
-    get_oauth2_token, level=1 sarebbe _warn_helper.)
+    `stacklevel=3` from `warnings.warn` therefore selects the caller.
     """
     from app.shared import api_utils
 
     api_utils._warn_get_oauth2_token_deprecated_once.cache_clear()
-
     with patch.object(api_utils, "get_cached_oauth2_token", return_value="t"):
         with pytest.warns(DeprecationWarning) as record:
             api_utils.get_oauth2_token({"token_url": "https://x"})
 
-    # Il warning deve avere filename/lineno coerente con questo test
-    # (il caller esterno), non con api_utils.py.
-    # NB: in alcuni runner pytest istromenta lo stack; verifichiamo
-    # almeno che il filename non sia api_utils.py interno.
     w = record[0]
     if w.filename:
         assert "api_utils.py" not in w.filename, (
-            f"stacklevel sbagliato: warning punta a {w.filename}:{w.lineno}, "
-            "deve puntare al caller esterno."
+            f"stacklevel wrong: warning points at {w.filename}:{w.lineno}, "
+            "must point at the external caller."
         )

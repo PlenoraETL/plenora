@@ -1,33 +1,33 @@
-"""Contract test P-CLR — POST /api/logs/clear rimosso (anti-reintroduzione).
+"""Source-bound tombstone for the removed POST /api/logs/clear endpoint.
 
-Contesto: P-CLR ha rimosso `POST /logs/clear` (commit 698ff9d, 2026-04-22).
-La log retention passa al beat worker (O-ARC pipeline archive-before-purge)
-come unico consumer autorizzato di DELETE su `plenora.logs`. Riferimento:
-`orchestrate/phase_2_hardening/p_clr_finalization.md §5.4` +
-`backend/docs/architecture/invariants.md §1.4`.
+Contract test P-CLR -- POST /api/logs/clear rimosso (anti-reintroduzione).
 
-Questo test blinda la rimozione: se qualcuno reintroduce
-`@router.post("/clear")` in `backend/app/core/logs/router.py` (anche come
-no-op o compat) la suite rompe e richiede review esplicita del team.
+Background: P-CLR removed `POST /logs/clear` (commit 698ff9d, 2026-04-22).
+Log retention is now driven by the beat worker (O-ARC pipeline
+archive-before-purge) as the only authorised consumer of DELETE on
+`plenora.logs`. References:
+  - `orchestrate/phase_2_hardening/p_clr_finalization.md` sec. 5.4;
+  - `backend/docs/architecture/invariants.md` sec. 1.4.
 
-Comportamento HTTP atteso: la route e' stata completamente rimossa
-(nessun verbo la serve). FastAPI ritorna **404 Not Found** — non 405
-Method Not Allowed — perche' il path `/logs/clear` non e' registrato
-per alcun metodo.
+This test blocks re-introduction: if anyone re-adds `@router.post("/clear")`
+in `backend/app/core/logs/router.py` (even as a no-op or compat shim),
+this source-bound check fails and forces explicit team review.
 
-Scope: regression unit-level via TestClient isolato, stesso pattern
-di `test_logs_cross_tenant_contract.py` e `test_logs_search_input_validation.py`.
-Nessuna chiamata al DB (fetchall/fetchone stubbati).
+TEST-ENGINE-003 shrink: replaced the prior 100-line TestClient-based
+form (3 HTTP round-trips: POST, GET, OpenAPI schema absence) with a
+single AST scan of the router source. Equivalent regression coverage:
+the only realistic path that would re-expose `/clear` is a future PR
+that adds `@router.post("/clear")` (or any verb) back to
+`logs/router.py`. The HTTP-side tests would have caught the same
+re-introduction one boot earlier; an AST scan catches it at PR time.
 """
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-from unittest.mock import MagicMock
+import ast
+from pathlib import Path
 
 import pytest
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
 
 pytestmark = [
@@ -38,63 +38,51 @@ pytestmark = [
 ]
 
 
-def _user(role: str = "superadmin") -> SimpleNamespace:
-    return SimpleNamespace(
-        user_id="u1", username="alice",
-        group_id="g1", role=role,
-    )
+_ROUTER_PATH = (
+    Path(__file__).resolve().parents[3]
+    / "app" / "core" / "logs" / "router.py"
+)
 
 
-@pytest.fixture
-def client(monkeypatch):
-    from app.core.logs import router as logs_router
-    from app.core.auth.auth import require_not_esecutore
+def _route_paths(tree: ast.AST) -> list[str]:
+    """Collect every literal path passed to `@router.<verb>(...)` in the
+    given module AST."""
+    paths: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        # Match `router.<verb>(...)` decorator-style calls.
+        func = node.func
+        if not (
+            isinstance(func, ast.Attribute)
+            and isinstance(func.value, ast.Name)
+            and func.value.id == "router"
+        ):
+            continue
+        # First positional arg is the path string.
+        if node.args and isinstance(node.args[0], ast.Constant) \
+                and isinstance(node.args[0].value, str):
+            paths.append(node.args[0].value)
+    return paths
 
-    # Stub DB: se qualcuno reintroducesse l'endpoint, il test deve fallire
-    # sull'asserzione HTTP prima che il DB venga toccato.
-    monkeypatch.setattr(logs_router, "_fetchall", MagicMock(return_value=[]))
-    monkeypatch.setattr(logs_router, "_fetchone", MagicMock(return_value={"c": 0}))
 
-    app = FastAPI()
-    # Auth override innocuo per parita' con gli altri test logs/* nella
-    # cartella. La route non esiste, quindi il codice HTTP viene deciso
-    # dal routing FastAPI prima della dependency resolution.
-    app.dependency_overrides[require_not_esecutore] = lambda: _user()
-    app.include_router(logs_router.router, prefix="/api")
-    return TestClient(app, raise_server_exceptions=False)
+def test_logs_clear_route_not_re_registered():
+    """`logs/router.py` must not declare any verb on `/clear`.
 
-
-def test_post_logs_clear_returns_404_after_removal(client):
-    """POST /api/logs/clear -> 404 Not Found.
-
-    Hard guard anti-reintroduzione: la route non esiste piu' in
-    `logs/router.py`. Reintrodurla anche come alias/no-op fa rompere
-    questo test.
+    The endpoint was deleted by P-CLR. Re-adding it under any HTTP verb
+    is the canonical regression mode this test exists to block.
     """
-    response = client.post("/api/logs/clear")
-    assert response.status_code == 404, (
-        f"REGRESSIONE P-CLR: POST /api/logs/clear deve essere 404 dopo la "
-        f"rimozione dell'endpoint, ottenuto {response.status_code}. "
-        f"Body: {response.text[:200]}"
-    )
-
-
-def test_get_logs_clear_returns_404(client):
-    """GET /api/logs/clear -> 404. Anti-alias accidentale su altro verbo."""
-    response = client.get("/api/logs/clear")
-    assert response.status_code == 404, (
-        f"REGRESSIONE P-CLR: GET /api/logs/clear deve essere 404, "
-        f"ottenuto {response.status_code}."
-    )
-
-
-def test_logs_clear_absent_from_openapi_schema(client):
-    """L'OpenAPI schema non deve piu' esporre `/logs/clear` in alcun
-    verbo. Blinda documentazione API generata e client auto-generati."""
-    schema = client.get("/openapi.json").json()
-    paths = schema.get("paths", {})
-    offending = [p for p in paths if p.endswith("/logs/clear")]
+    tree = ast.parse(_ROUTER_PATH.read_text(encoding="utf-8"))
+    offending = [p for p in _route_paths(tree) if p == "/clear"]
     assert not offending, (
-        f"REGRESSIONE P-CLR: path /logs/clear reintrodotto nell'OpenAPI "
-        f"schema: {offending}"
+        f"REGRESSIONE P-CLR: `@router.<verb>(\"/clear\")` re-introduced "
+        f"in {_ROUTER_PATH.name}. Found {len(offending)} occurrence(s). "
+        "The /logs/clear endpoint was removed (commit 698ff9d, "
+        "2026-04-22) because the trigger plenora.block_log_modifications "
+        "rejects every DELETE without the beat-worker bypass. Re-adding "
+        "this endpoint -- even as a no-op or compat shim -- requires "
+        "explicit team review and a paired O-ARC architecture decision. "
+        "If the re-introduction is intentional, delete this test and "
+        "document the new owner of plenora.logs DELETE in "
+        "invariants.md sec. 1.4."
     )

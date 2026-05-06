@@ -11,10 +11,12 @@ This runbook is the consolidated, committable form of audit
 `backend/deploy/systemd/README.md`) link here instead of duplicating
 the procedure.
 
-For the Docker path, see [install-docker.md](install-docker.md) — at
-the time of writing, that path is **NOT IMPLEMENTED** (no Dockerfile,
-no compose). For day-2 operations (deploy of an UPDATE, not a fresh
-install) see [`deploy-checklist.md`](deploy-checklist.md).
+For the Docker path, see [install-docker.md](install-docker.md) — that
+path now has a **FIRST SCAFFOLD** (`backend/Dockerfile`,
+`docker-compose.yml`, `scripts/docker-validate.sh`) but is **NOT YET
+VALIDATED** end-to-end on a real Linux PC. For day-2 operations
+(deploy of an UPDATE, not a fresh install) see
+[`deploy-checklist.md`](deploy-checklist.md).
 
 ---
 
@@ -523,12 +525,13 @@ This target is operational TODAY - the production deployment at
 `lab.plenora.it` is the reference. The cleanroom step is gated
 on operator availability of a fresh VM; no in-repo CI lane runs it.
 
-### 12.3 Docker / compose cleanroom (NOT IMPLEMENTED)
+### 12.3 Docker / compose cleanroom (FIRST SCAFFOLD, NOT YET VALIDATED)
 
-See [install-docker.md](install-docker.md). The Docker batch
-(`INSTALLATION-010..013` in the audit) has not landed; an operator
-cannot `docker compose up` Plenora-ETL today. Once the batch ships,
-the acceptance criteria are:
+See [install-docker.md](install-docker.md). The first Docker scaffold
+has landed (`backend/Dockerfile`, `docker-compose.yml`,
+`.env.docker.example`, `scripts/docker-validate.sh`), but it has not
+yet been validated end-to-end on a real Linux PC. The acceptance
+criteria for promoting it from scaffold to validated path are:
 
 1. `docker compose -f docker-compose.yml up -d --wait` returns 0
    on a fresh host with only Docker installed (no Plenora-related
@@ -543,8 +546,9 @@ the acceptance criteria are:
    PR that touches `backend/**`, `frontend/**`, or
    `docker-compose.yml`.
 
-Until the artifacts exist, this section is normative for the
-future stream, not procedure operators run today.
+Until the Linux validation report exists, this section is normative for
+the validation stream, not a replacement for the single-machine
+go-ready procedure above.
 
 ### 12.4 CI clean install smoke
 
@@ -1122,18 +1126,17 @@ sections for every item.
 
 ### 13.1 Path A: Docker / compose
 
-> **NOT INSTALLABLE TODAY.** No `Dockerfile`, no
-> `docker-compose.yml`, no Helm/K8s manifest exists in the repo.
-> An operator with Docker installed CANNOT install Plenora-ETL
-> via `docker compose up`. See
-> [install-docker.md](install-docker.md) for the target shape
-> the future Docker batch must satisfy
-> (`INSTALLATION-010..013`).
+> **FIRST SCAFFOLD, NOT YET VALIDATED.** The repo now ships a
+> backend Dockerfile, compose scaffold, `.env.docker.example`, and
+> `scripts/docker-validate.sh`. An operator can test the scaffold with
+> [install-docker.md](install-docker.md), but the go-ready first-PC
+> path remains Path B until the Docker validation report is closed.
 
-If the operator's PC has Docker installed but is performing a
-real first-time install today, the Docker tooling is NOT
-sufficient on its own. The operator MUST follow Path B below.
-Having Docker installed does not change the install procedure.
+If the operator's PC has Docker installed but is performing a real
+first-time install today, Docker is a scaffold-validation stream, not
+the go-ready install path. The operator MUST follow Path B below unless
+they are explicitly testing Docker and will paste back the validation
+pack transcript.
 
 ### 13.2 Path B: Single-machine, no Docker (canonical, INSTALLABLE today)
 

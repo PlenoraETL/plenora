@@ -89,16 +89,33 @@ _FACADE_LEAF = "config_db_service"
 #   - `app/core/auth/groups_router.py` — now imports
 #     `app.db.config.groups` directly; zero facade refs remain.
 #
-# Removed by BE-GO-READY-DB-ENGINE-004-FACADE-LOW-RISK-IMPORT-PURGE
-# (this batch): the following files no longer import the facade after
-# migrating their `cfg_db.get_project*` lookups to
-# `app.db.config.projects` (no monkeypatch coupling on `cfg_db.<name>`
-# for these consumers, so the migration is purely an import edit):
+# Removed by BE-GO-READY-DB-ENGINE-004-FACADE-LOW-RISK-IMPORT-PURGE:
+# the following files no longer import the facade after migrating
+# their `cfg_db.get_project*` lookups to `app.db.config.projects`
+# (no monkeypatch coupling on `cfg_db.<name>` for these consumers,
+# so the migration is purely an import edit):
 #   - `app/utils/result_store.py` — used `cfg_db.get_project_retention_n`.
 #   - `app/utils/debug_payload_builder.py` — 2× `cfg_db.get_project`.
 #   - `workers/tasks/pipeline_task.py` — `cfg_db.get_project`.
 #   - `app/core/intermediate/db.py` — `cfg_db.get_project_retention_n`.
 #   - `app/core/manipola/executor.py` — `cfg_db.get_project`.
+#
+# Removed by BE-GO-READY-DB-ENGINE-005-FACADE-LOW-RISK-PROD-PURGE
+# (this batch): four further consumers migrated their lazy
+# `_cfg_db.fetchall(...)` raw-SQL calls to the canonical
+# `app.db.pg_connection.fetchall` (the same function the facade was
+# re-exporting), and `api_connection_source_loading.py` migrated its
+# `_cfg_db.get_project` lookup to the leaf `app.db.config.projects`:
+#   - `app/core/arricchisci/api_connection_source_loading.py` — 1×
+#     `_cfg_db.get_project` → `app.db.config.projects.get_project`.
+#   - `app/core/arricchisci/api_connection_management.py` — 3×
+#     `_cfg_db.fetchall` (api_connections) → `pg_connection.fetchall`.
+#   - `app/core/datasources/service.py` — 2× `_cfg_db.fetchall`
+#     (datasources) → `pg_connection.fetchall`.
+#   - `app/services/connection_service.py` — 2× `_cfg_db.fetchall`
+#     (connections) → `pg_connection.fetchall`.
+# All four had ZERO test monkeypatch coupling on `cfg_db.<name>`, so
+# the migration is purely an import edit + lazy-import rewire.
 _FACADE_PROD_ALLOWLIST: frozenset[str] = frozenset({
     "app/db/db_service.py",
     "app/db/config/users.py",
@@ -108,10 +125,6 @@ _FACADE_PROD_ALLOWLIST: frozenset[str] = frozenset({
     "app/db/config/datasources.py",
     "app/core/auth/auth.py",
     "app/core/auth/users_router.py",
-    "app/core/datasources/service.py",
-    "app/core/arricchisci/api_connection_source_loading.py",
-    "app/core/arricchisci/api_connection_management.py",
-    "app/services/connection_service.py",
     "app/services/project_service.py",
 })
 

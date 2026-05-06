@@ -9,9 +9,11 @@ code calls into the loader module's INTERNAL functions
 (`_dispatch_by_id`, `_download_object_storage`) directly via
 `app.db.results_db_service`. The package's `bounded_reader`
 helper IS used in production by three modules
-(`results_db_service`, `file_blob_materialization`,
-`artifact_reader`), but the registry/`ResourceRef` plumbing has
-zero real consumers as of this audit.
+(`results_db_service`, the legacy `file_blob_materialization`
+reader -- retired in RESOURCE-ENGINE-024 in favor of
+`FileSourceBlobLoader`, `artifact_reader`), but the
+registry/`ResourceRef` plumbing has zero real consumers as of
+this audit.
 
 Risk: the engine becomes speculative architecture - new kinds,
 new loaders, new abstractions land "for the future" with no
