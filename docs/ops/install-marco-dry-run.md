@@ -547,6 +547,53 @@ rm -f  ~/plenora-etl/backend/.env
 # Now restart at step 2.4
 ```
 
+### 4.8 Non-destructive rollback (foreground smoke)
+
+`BE-GO-READY-INSTALL-010-LINUX-EXECUTION-PACK`.
+
+If the foreground smoke (step 2.7) failed but Marco wants to
+keep the configured `.env`, the migrated schema, and the Redis
+state for the next attempt, this rollback path stops the
+foreground processes WITHOUT touching DB / Redis / `.env`. Use
+it when iterating on a transient issue (port conflict, missing
+dep) and you do NOT want to redo step 2.5 (installer) or step
+2.7 (uvicorn boot triggers migration runner).
+
+```bash
+# Stop the three foreground processes (Ctrl-C in each terminal,
+# or kill by PID if the shell was lost).
+pkill -INT -f 'uvicorn app.main:app' 2>/dev/null || true
+pkill -INT -f 'celery -A workers.celery_app worker' 2>/dev/null || true
+pkill -INT -f 'celery -A workers.celery_app beat' 2>/dev/null || true
+
+# Confirm none survived (give SIGTERM 2s, then SIGKILL stragglers
+# only if necessary).
+sleep 2
+pkill -KILL -f 'uvicorn app.main:app' 2>/dev/null || true
+pkill -KILL -f 'celery -A workers.celery_app' 2>/dev/null || true
+pgrep -af 'uvicorn|celery' || echo "no plenora processes left"
+```
+
+What this DOES NOT do (intentional):
+
+- does NOT `DROP SCHEMA` (migrations stay applied);
+- does NOT `FLUSHDB` (Redis broker / result backend / leader-
+  lock keys preserved);
+- does NOT remove `backend/.env` (secrets + decisions
+  preserved; `chmod 600` retained);
+- does NOT touch systemd units (none installed in step 2.7
+  yet);
+- does NOT remove the venv or the cloned repo.
+
+Restart from step 2.7 (foreground processes) after fixing the
+underlying cause. If the issue requires re-running the
+installer to refresh non-secret keys, run
+`bash scripts/install.sh --non-interactive` again - the
+idempotent merger preserves operator-added keys
+(`INSTALLATION-012`).
+
+For a destructive total reset (PC-test-only), see section 4.7.
+
 ---
 
 ## 5. Clean-install smoke harness (canonical sequence)

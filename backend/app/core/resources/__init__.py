@@ -18,9 +18,9 @@ Anti-god-engine rules (locked by
     No `DataFrame`, `GeoDataFrame`, preview dict, parsed records.
   - Tenant binding is mandatory at the type level
     (`ResourceRef.expected_group_id` non-empty by `__post_init__`).
-  - One loader per `ResourceKind`. v1 ships exactly one
-    (`ResultBlobLoader`); other kinds (file_source_blob,
-    intermediate_artifact, eseguibili_output, imdf_bundle) join
+  - One loader per `ResourceKind`. v1 ships two
+    (`ResultBlobLoader`, `FileSourceBlobLoader`); other kinds
+    (intermediate_artifact, eseguibili_output, imdf_bundle) join
     only after their tenant binding is plumbed through (audit
     sec. 5 + sec. 7 of `BE_RESOURCE_ENGINE_AUDIT.md`).
 

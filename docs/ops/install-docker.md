@@ -45,6 +45,38 @@ Audit reference: `BE_INSTALLATION_AUDIT.md` §6.1 (P0 blocker), §7.1.
 
 ---
 
+## Status today (command-first, executable)
+
+`BE-GO-READY-INSTALL-010-LINUX-EXECUTION-PACK`.
+
+If your PC has Docker installed, the table below maps every
+harness item to the **command an operator can run today** and
+the explicit **NOT IMPLEMENTED** marker for the Docker side.
+The "Today's command" column is the same single-machine path
+as [install-marco-dry-run.md](install-marco-dry-run.md) sec. 2 +
+sec. 5; **Docker is not an alternative path - there is no
+Dockerfile to bake an image from.**
+
+| # | Harness item | Today's command (single-machine) | Docker status (today) |
+|---|---|---|---|
+| 1 | prereqs | `bash scripts/install.sh --check` (after `apt install` per dry-run sec. 2.1) | NOT IMPLEMENTED - no Dockerfile, no compose; `docker compose up` will fail with `no configuration file provided` |
+| 2 | env decisions | `bash scripts/install.sh --non-interactive` with `PLENORA_INSTALL_*` env vars (dry-run sec. 2.5) | NOT IMPLEMENTED - target `.env.docker.example` is documented below in section "Target shape D" |
+| 3 | install (deps + DB init) | `./venv/bin/pip install -r requirements.txt` then first uvicorn boot triggers `migrations_runner.ensure_schema(DB_SCHEMA)` (dry-run sec. 2.6 + sec. 2.7) | NOT IMPLEMENTED - target `backend/Dockerfile` build stage is documented below in section "Target shape A" |
+| 4 | smoke (foreground) | three terminals: uvicorn / celery worker `--pool=solo` / celery beat (dry-run sec. 2.7) | NOT IMPLEMENTED - target compose `services: backend / worker / beat` documented below in section "Target shape C" |
+| 5 | health/ready | `curl -fsS http://127.0.0.1:5004/{health,ready}` (dry-run sec. 2.8) | NOT IMPLEMENTED - target `HEALTHCHECK` in Dockerfile + compose `--wait` documented in target shape A + C |
+| 6 | Celery check (real worker round-trip) | `./venv/bin/python -c "from workers.celery_app import celery_app; print(celery_app.send_task('cleanroom.ping').get(timeout=30))"` -> `pong` (dry-run sec. 5.3) | NOT IMPLEMENTED - target `docker compose exec worker python -c "..."` requires the worker container which does not exist |
+| 7 | memory caps visibility | `./venv/bin/python` heredoc using `app.config.settings.get(KEY)` for the six caps (dry-run sec. 5.2) | NOT IMPLEMENTED on Docker, but the override SHAPE is fixed: three commented `LOAD_FILE_MAX_BYTES` / `WORKER_RSS_MAX_BYTES` / `RESOURCE_MAX_BYTES` lines in the target `.env.docker.example` (section D) |
+| 8 | non-destructive rollback | `pkill -INT -f 'uvicorn app.main:app'` and same for celery (dry-run sec. 4.8) | NOT IMPLEMENTED today; the future Docker equivalent is `docker compose stop` (preserves volumes) - documented as target only |
+
+**Operator instruction**: a PC with Docker installed should
+proceed via the single-machine path
+([install-marco-dry-run.md](install-marco-dry-run.md)).
+Having Docker installed is neutral - it does NOT change the
+install procedure today, and trying `docker compose up` will
+fail with a missing-config error within seconds.
+
+---
+
 ## Target shape (specification only)
 
 When the Docker batch lands, it must deliver these artifacts and

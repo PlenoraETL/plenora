@@ -1,9 +1,11 @@
 """Typed contracts for the Resource Engine.
 
 BE-GO-READY-RESOURCE-ENGINE-002-RESULT-BLOB-LOADER-PILOT.
+BE-GO-READY-RESOURCE-ENGINE-020-FILE-SOURCE-BLOB-LOADER.
 
 Only four canonical names live here:
-  - ``ResourceKind``        : Literal of supported kinds (v1: result_blob).
+  - ``ResourceKind``        : Literal of supported kinds
+                              (v1: result_blob, file_source_blob).
   - ``ResourceRef``         : frozen typed reference (kind + id + tenant).
   - ``Resource``            : frozen result envelope (bytes|path|stream).
   - ``ResourceLoader``      : Protocol implemented per kind.
@@ -30,14 +32,16 @@ from typing import Iterator, Literal, Optional, Protocol, runtime_checkable
 # ResourceKind
 # ---------------------------------------------------------------------------
 #
-# v1 ships exactly one kind (`result_blob`). Other kinds remain in
-# the audit (sec. 2.1) and join only after their tenant binding is
-# plumbed through. Adding a kind to this Literal without adding the
-# matching loader registration in `registry.py` is a regression
-# (the registry's `get()` raises `KeyError` for unregistered kinds).
+# v1 ships two kinds (`result_blob`, `file_source_blob`). Other
+# kinds remain in the audit (sec. 2.1) and join only after their
+# tenant binding is plumbed through. Adding a kind to this Literal
+# without adding the matching loader registration in `registry.py`
+# is a regression (the registry's `get()` raises `KeyError` for
+# unregistered kinds).
 
 ResourceKind = Literal[
     "result_blob",
+    "file_source_blob",
 ]
 
 

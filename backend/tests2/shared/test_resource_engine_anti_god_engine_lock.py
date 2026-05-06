@@ -309,19 +309,27 @@ def test_default_registry_resolves_result_blob_kind():
     from app.core.resources import build_default_registry
 
     reg = build_default_registry()
-    # The registry MUST have `result_blob` registered out of the box
-    # (the v1 pilot kind). Other kinds MUST NOT be registered (audit
-    # sec. 5 + 7: deferred until tenant binding plumbing lands).
+    # The registry MUST have both `result_blob` (RESOURCE-ENGINE-002
+    # pilot) AND `file_source_blob` (RESOURCE-ENGINE-020 second
+    # loader) registered out of the box. Other kinds MUST NOT be
+    # registered (audit sec. 5 + 7: deferred until tenant binding
+    # plumbing lands).
     assert "result_blob" in reg._loaders, (  # noqa: SLF001
         "build_default_registry() must register `result_blob` out of "
         "the box (v1 pilot kind)."
     )
-    assert sorted(reg._loaders.keys()) == ["result_blob"], (  # noqa: SLF001
+    assert "file_source_blob" in reg._loaders, (  # noqa: SLF001
+        "build_default_registry() must register `file_source_blob` "
+        "out of the box (RESOURCE-ENGINE-020 second loader)."
+    )
+    assert sorted(reg._loaders.keys()) == [  # noqa: SLF001
+        "file_source_blob", "result_blob",
+    ], (
         f"Default registry has unexpected kinds: "
-        f"{sorted(reg._loaders.keys())}. v1 ships exactly one loader "
-        "(`result_blob`); other kinds (file_source_blob, "
-        "intermediate_artifact, eseguibili_output, imdf_bundle) join "
-        "only after their tenant binding plumbing lands."
+        f"{sorted(reg._loaders.keys())}. v1 ships exactly two loaders "
+        "(`result_blob`, `file_source_blob`); other kinds "
+        "(intermediate_artifact, eseguibili_output, imdf_bundle) "
+        "join only after their tenant binding plumbing lands."
     )
 
 

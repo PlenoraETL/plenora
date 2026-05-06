@@ -75,7 +75,12 @@ from app.shared.audit_action import audit_action
 from app.shared.error_envelope import raise_typed_http
 from app.utils.logger import get_logger
 
-import app.db.db_service as db
+# BE-GO-READY-DB-ENGINE-003-GROUPS-CALLSITE-MIGRATION: import the
+# canonical leaf module directly; the previous `app.db.db_service`
+# / `app.db.config_db_service` indirections were strangler facades
+# kept only while callsites migrated. Module-as-attribute so tests
+# can `monkeypatch.setattr(groups_mod._groups, "get_group", ...)`.
+from app.db.config import groups as _groups
 
 
 logger = get_logger(__name__)
@@ -124,9 +129,9 @@ def list_groups(current_user: CurrentUser = Depends(require_admin)):
                   cross-gruppo, quindi non ha bisogno di vedere gli altri)
     """
     if current_user.role == "superadmin":
-        groups = db.list_groups()
+        groups = _groups.list_groups()
     else:
-        g = db.get_group(current_user.group_id)
+        g = _groups.get_group(current_user.group_id)
         groups = [g] if g else []
     # Bug #3 (2026-04-23): description=NULL nel DB ritorna None da dict.get,
     # non la stringa default; GroupResponse.description: str alza ValidationError.
@@ -143,9 +148,9 @@ def list_groups(current_user: CurrentUser = Depends(require_admin)):
 def create_group(data: GroupCreate,
                  current_user: CurrentUser = Depends(require_superadmin)):
     """Crea nuovo gruppo (solo superadmin)."""
-    if db.get_group(data.group_id):
+    if _groups.get_group(data.group_id):
         _disclosure.raise_disclosure(_disclosure.group_id_already_exists())
-    group = db.create_group(data.group_id, data.name, data.description)
+    group = _groups.create_group(data.group_id, data.name, data.description)
     return GroupResponse(group_id=group["id"], name=group["name"], description=group.get("description", ""))
 
 
@@ -156,10 +161,9 @@ def get_group_summary(group_id: str,
     Ritorna il conteggio di tutte le entità del gruppo.
     Usato dal frontend per mostrare il modale di conferma prima del cascade delete.
     """
-    import app.db.config_db_service as cfg_db
-    if not cfg_db.get_group(group_id):
+    if not _groups.get_group(group_id):
         _disclosure.raise_disclosure(_disclosure.group_not_found())
-    return cfg_db.get_group_summary(group_id)
+    return _groups.get_group_summary(group_id)
 
 
 @groups_router.delete("/{group_id}", status_code=200)
@@ -172,14 +176,13 @@ def delete_group(group_id: str,
     connections, projects (+ results.db + intermediate.db), users, log.db, gruppo.
     Blocca solo se il gruppo è 'default'.
     """
-    import app.db.config_db_service as cfg_db
     if group_id == "default":
         _disclosure.raise_disclosure(_disclosure.group_default_not_deletable())
-    if not cfg_db.get_group(group_id):
+    if not _groups.get_group(group_id):
         _disclosure.raise_disclosure(_disclosure.group_not_found())
 
     try:
-        report = cfg_db.delete_group_cascade(group_id)
+        report = _groups.delete_group_cascade(group_id)
     except Exception as e:
         logger.error(f"[CRASH] delete_group_cascade fallito per group_id={group_id}: {e}", exc_info=True)
         raise_typed_http(

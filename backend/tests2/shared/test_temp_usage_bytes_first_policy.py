@@ -408,16 +408,19 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
         "disk before persisting to DB BYTEA / object storage. "
         "Tempfile is the ingestion buffer.",
     ),
-    ("app/core/artifacts/resolver.py", 424): (
+    ("app/core/artifacts/resolver.py", 572): (
         "MIGRATION_CANDIDATE",
-        "_write_temp_blob in ArtifactResolver: still used by the "
-        "`materialize_latest` (LatestProjectArtifactRef) branch "
-        "ONLY. The `_materialize_from_result_id` (RunArtifactRef) "
-        "branch was migrated to "
-        "`default_registry().get(ref, mode='path')` in "
-        "BE-GO-READY-RESOURCE-ENGINE-019. Remaining callsite "
-        "blocks on adding `expected_group_id` resolution to the "
-        "latest-by-project path; deferred to W-A2 follow-up.",
+        "_write_temp_blob in ArtifactResolver: helper retained "
+        "for direct unit-test exposure (test_temp_lifecycle_core "
+        "+ test_silent_skip_breadcrumbs); ZERO production callers "
+        "remain. _materialize_from_result_id was migrated in "
+        "BE-GO-READY-RESOURCE-ENGINE-019 (RunArtifactRef path); "
+        "materialize_latest was migrated in "
+        "BE-GO-READY-RESOURCE-ENGINE-021 (LatestProjectArtifactRef "
+        "path). The latest-row's group_id is threaded into the "
+        "ResourceRef.expected_group_id slot directly. Remove the "
+        "helper + its dedicated unit tests in a small follow-up "
+        "cleanup worker once stability is confirmed.",
     ),
     ("app/core/eseguibili/router.py", 333): (
         "PATH_REQUIRED_FILE",
@@ -643,14 +646,11 @@ def test_temp_inventory_migration_candidates_are_tracked():
         if cat == "MIGRATION_CANDIDATE"
     )
     expected = sorted([
-        # BE-GO-READY-RESOURCE-ENGINE-019 line shift: the resolver
-        # gained the registry-delegation block in
-        # `_materialize_from_result_id`, pushing `_write_temp_blob`
-        # (still used by `materialize_latest`) down to line 424.
-        # The MIGRATION_CANDIDATE classification is preserved
-        # because the latest-by-project branch is NOT migrated yet
-        # (W-A2 follow-up).
-        ("app/core/artifacts/resolver.py", 424),
+        # BE-GO-READY-RESOURCE-ENGINE-021/022 line shift: latest
+        # and fetch_run_blob now delegate to the registry. The helper
+        # remains only for direct lifecycle unit tests and is still
+        # tracked until a small cleanup worker deletes it safely.
+        ("app/core/artifacts/resolver.py", 572),
     ])
     assert candidates == expected, (
         f"MIGRATION_CANDIDATE inventory drift.\n"

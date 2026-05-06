@@ -20,15 +20,13 @@ imported through it:
 GROUPS cluster (`get_group`, `list_groups`, `create_group`,
 `get_group_summary`, `delete_group`, `delete_group_cascade`) was
 extracted to `app/db/config/groups.py` by
-`BE-GO-READY-DB-ENGINE-002-GROUPS-CLUSTER-EXTRACTION`. The facade
-now re-exports the cluster (mirror of users/projects/...). Existing
-`monkeypatch.setattr(cfg_db, "get_group", ...)` / `cfg_db.delete_group_cascade`
-patterns continue to work because the names remain module
-attributes on the facade. Migrating the production callsites
-(`groups_router.py`, `project_service.py`) off the facade is the
-follow-up worker `BE-GO-READY-DB-ENGINE-XXX-GROUPS-ROUTER-CALLSITE-MIGRATION`,
-deferred because it requires updating the test patch targets in
-the same change.
+`BE-GO-READY-DB-ENGINE-002-GROUPS-CLUSTER-EXTRACTION`.
+`BE-GO-READY-DB-ENGINE-003-GROUPS-CALLSITE-MIGRATION` then migrated
+the production callsites: `groups_router.py` no longer imports the
+facade (allowlist row removed), and `project_service.py` switched
+its 2 group calls (`_ensure_default_group`) to the canonical leaf
+while keeping the facade import for `update_project_canvas_key_atomic`
+(SELECT FOR UPDATE + JSON merge stays in the facade).
 
 Every other symbol re-exported by the facade has a canonical leaf
 module. New code MUST import those names from the leaf, not from
@@ -79,12 +77,17 @@ _FACADE_LEAF = "config_db_service"
 #     lazy `_safe_set_clause` import — intentional cycle break.
 #   - `app/core/auth/auth.py`: heavy `cfg_db.*` usage spanning users,
 #     projects, groups; migration owned by future AUTH-ENGINE batch.
-#   - `app/core/auth/groups_router.py`: GROUPS cluster (no canonical
-#     leaf module yet).
+#   - `app/core/auth/users_router.py`: USERS cluster + raw fetchall
+#     for the admin list endpoint.
 #   - `app/services/project_service.py`: only uses
 #     `update_project_canvas_key_atomic` — kept verbatim in facade.
+#     (groups callsites migrated by DB-ENGINE-003.)
 #   - Remaining entries: pending migration chunks listed in the death
 #     map (BE-GO-READY-DB-ENGINE-001 report).
+#
+# Removed by BE-GO-READY-DB-ENGINE-003-GROUPS-CALLSITE-MIGRATION:
+#   - `app/core/auth/groups_router.py` — now imports
+#     `app.db.config.groups` directly; zero facade refs remain.
 _FACADE_PROD_ALLOWLIST: frozenset[str] = frozenset({
     "app/db/db_service.py",
     "app/db/config/users.py",
@@ -93,7 +96,6 @@ _FACADE_PROD_ALLOWLIST: frozenset[str] = frozenset({
     "app/db/config/connections.py",
     "app/db/config/datasources.py",
     "app/core/auth/auth.py",
-    "app/core/auth/groups_router.py",
     "app/core/auth/users_router.py",
     "app/core/datasources/service.py",
     "app/core/intermediate/db.py",

@@ -82,26 +82,28 @@ _PILOT_EXIT_HEADER = (
 # =====================================================================
 
 
-def test_resource_kind_literal_has_exactly_one_entry():
-    """The pilot ships exactly one kind. Adding a 2nd is allowed
-    ONLY when the audit has been updated with the production
-    caller documentation (see test below) - bumping this
-    assertion AND adding the audit row are paired changes."""
+def test_resource_kind_literal_has_pilot_graduation_entries():
+    """Post-BE-GO-READY-RESOURCE-ENGINE-020 the pilot has
+    GRADUATED with the second real loader (`file_source_blob`).
+    The Literal now ships two entries; adding a 3rd kind requires
+    extending ``BE_RESOURCE_ENGINE_AUDIT.md`` with a named
+    production caller AND bumping this assertion in the same PR."""
     from app.core.resources.types import ResourceKind
 
-    kinds = get_args(ResourceKind)
-    assert kinds == ("result_blob",), (
-        "ResourceKind Literal must currently have exactly the "
-        f"single entry 'result_blob'. Got: {kinds}. To add a 2nd "
-        "kind, FIRST extend BE_RESOURCE_ENGINE_AUDIT.md with the "
-        f"named production caller AND update this lock test to the "
-        "new cardinality."
+    kinds = tuple(sorted(get_args(ResourceKind)))
+    assert kinds == ("file_source_blob", "result_blob"), (
+        "ResourceKind Literal must currently have exactly the two "
+        f"entries 'result_blob' (RESOURCE-ENGINE-002) and "
+        f"'file_source_blob' (RESOURCE-ENGINE-020 graduation). "
+        f"Got: {kinds}. To add a 3rd kind, FIRST extend "
+        "BE_RESOURCE_ENGINE_AUDIT.md with the named production "
+        "caller AND update this lock test to the new cardinality."
     )
 
 
-def test_default_registry_singleton_has_exactly_one_loader():
-    """The default registry pre-populates exactly one loader at
-    pilot. A second registration is paired with the
+def test_default_registry_singleton_has_graduation_loaders():
+    """The default registry pre-populates the two graduation
+    loaders. A third registration is paired with the
     `ResourceKind` Literal extension above and the audit
     documentation."""
     from app.core.resources.registry import build_default_registry
@@ -115,16 +117,21 @@ def test_default_registry_singleton_has_exactly_one_loader():
         "Default registry must expose `_loaders` dict for "
         "introspection by source-bound tests."
     )
-    assert len(loaders) == 1, (
-        f"Default registry must hold exactly one loader at pilot. "
-        f"Got: {sorted(loaders.keys())}. Adding a loader requires "
-        "the matching `ResourceKind` Literal entry, the audit "
-        "production-caller documentation, and an update to this "
-        "lock test."
+    assert len(loaders) == 2, (
+        f"Default registry must hold exactly two loaders post-"
+        f"graduation. Got: {sorted(loaders.keys())}. Adding a "
+        "loader requires the matching `ResourceKind` Literal "
+        "entry, the audit production-caller documentation, and "
+        "an update to this lock test."
     )
     assert "result_blob" in loaders, (
         "Default registry must register ResultBlobLoader under "
         f"the canonical kind 'result_blob'. Got: {sorted(loaders.keys())}."
+    )
+    assert "file_source_blob" in loaders, (
+        "Default registry must register FileSourceBlobLoader "
+        "under the canonical kind 'file_source_blob' "
+        f"(RESOURCE-ENGINE-020). Got: {sorted(loaders.keys())}."
     )
 
 
@@ -237,15 +244,14 @@ def test_no_new_kind_in_loaders_directory_without_registration():
         p.name for p in loaders_dir.glob("*.py")
         if p.name not in {"__init__.py"}
     )
-    assert loader_files == ["result_blob.py"], (
-        f"Pilot loader directory must currently contain exactly "
-        f"`result_blob.py`. Got: {loader_files}. Adding a new "
-        "loader file is the pilot-graduation signal; update the "
-        "PILOT-EXIT-CRITERIA section of "
-        "BE_RESOURCE_ENGINE_AUDIT.md, extend `ResourceKind`, "
-        "register the loader in `build_default_registry()`, and "
-        "update this lock test to the new file list IN THE SAME "
-        "PR."
+    assert loader_files == ["file_source_blob.py", "result_blob.py"], (
+        f"Loader directory must currently contain exactly "
+        f"`file_source_blob.py` (RESOURCE-ENGINE-020) and "
+        f"`result_blob.py` (RESOURCE-ENGINE-002). "
+        f"Got: {loader_files}. Adding a new loader file requires: "
+        "the matching `ResourceKind` Literal entry, registration "
+        "in `build_default_registry()`, an audit production-caller "
+        "row, and an update to this lock test IN THE SAME PR."
     )
 
 

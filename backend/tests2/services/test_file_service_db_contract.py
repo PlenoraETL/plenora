@@ -517,7 +517,11 @@ def test_read_blob_from_s3_downloads_and_cleans_temp(monkeypatch, tmp_path):
     fake_module.get_runtime_object_storage.return_value = FakeStorage()
     monkeypatch.setitem(sys.modules, "app.shared.cloud_backends", fake_module)
 
-    # Prepopola il fake DB con una row S3-backed
+    # Prepopola il fake DB con una row S3-backed.
+    # _assert_visible legge via `db_service.get_file_source` (no
+    # data); il loader Resource Engine (RESOURCE-ENGINE-020) legge
+    # la riga blob via `app.db.pg_connection.fetchone` con SQL
+    # preflight bounded-BYTEA. Patchiamo entrambi.
     def _fake_get(file_id, include_data=False):
         return {
             "id": "file_s3",
@@ -544,6 +548,18 @@ def test_read_blob_from_s3_downloads_and_cleans_temp(monkeypatch, tmp_path):
         }
 
     monkeypatch.setattr(real_db, "get_file_source", _fake_get)
+
+    # Engine SQL preflight fake: storage_key set -> data=NULL via
+    # CASE branch; data_size=NULL because length(data) is NULL.
+    def _fake_fetchone(_sql, _params=()):
+        return {
+            "storage_key": "file-sources/file_s3/large.bin",
+            "data_size": None,
+            "data": None,
+        }
+
+    import app.db.pg_connection as _pg
+    monkeypatch.setattr(_pg, "fetchone", _fake_fetchone)
 
     # Spy su tempfile.NamedTemporaryFile: post-batch il branch S3
     # non DEVE creare alcun tempfile (regression guard R-005.1).
@@ -613,6 +629,17 @@ def test_read_blob_from_s3_cleanup_temp_on_download_exception(monkeypatch):
         }
 
     monkeypatch.setattr(real_db, "get_file_source", _fake_get)
+
+    # Engine SQL preflight fake: storage_key path (data=NULL).
+    def _fake_fetchone(_sql, _params=()):
+        return {
+            "storage_key": "file-sources/file_s3/x.bin",
+            "data_size": None,
+            "data": None,
+        }
+
+    import app.db.pg_connection as _pg
+    monkeypatch.setattr(_pg, "fetchone", _fake_fetchone)
 
     created_temps: list[Path] = []
     real_named = tempfile.NamedTemporaryFile

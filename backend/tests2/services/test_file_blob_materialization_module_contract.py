@@ -553,26 +553,52 @@ def test_temp_file_for_returns_none_when_blob_missing(
 # =============================================================================
 
 
-def test_file_service_get_blob_wrapper_delegates(tmp_path):
-    """`FileSourceService._get_blob_from_db` thin wrapper:
-    passa assert_visible/db_get/storage/temp_dir/logger del service."""
+def test_file_service_get_blob_routes_through_resource_engine(tmp_path):
+    """BE-GO-READY-RESOURCE-ENGINE-020 migration:
+    ``FileSourceService._get_blob_from_db`` routes the storage read
+    through the Resource Engine (``FileSourceBlobLoader``), NOT the
+    legacy ``file_blob_materialization.get_blob_from_db`` helper.
+
+    The wrapper still calls ``_assert_visible`` first
+    (fail-closed N1 preserved); after authorization the actual
+    fetch is delegated to ``default_registry().get(ref,
+    mode="bytes")``."""
     from app.services.file_service import FileSourceService
+    from app.core.resources import Resource
 
     svc = FileSourceService.__new__(FileSourceService)
     svc._assert_visible = MagicMock()
     svc._logger = MagicMock()
 
+    fake_resource = Resource(
+        kind="file_source_blob",
+        size_bytes=4,
+        data=b"fake",
+        format_hint=None,
+        is_temporary=False,
+    )
+
     with patch(
-        "app.services.file_blob_materialization.get_blob_from_db",
-        return_value=b"fake",
-    ) as mock_shared:
+        "app.core.resources.default_registry"
+    ) as mock_registry_factory:
+        mock_registry = MagicMock()
+        mock_registry.get.return_value = fake_resource
+        mock_registry_factory.return_value = mock_registry
+
         out = svc._get_blob_from_db("file_a", "grp1")
 
     assert out == b"fake"
-    mock_shared.assert_called_once()
-    kwargs = mock_shared.call_args.kwargs
-    assert kwargs["assert_visible"] is svc._assert_visible
-    assert kwargs["logger"] is svc._logger
+    svc._assert_visible.assert_called_once_with("file_a", "grp1")
+    mock_registry.get.assert_called_once()
+    # The ref passed to the engine MUST carry the file_source_id
+    # and the caller's group_id (fail-closed by construction).
+    ref = mock_registry.get.call_args.args[0]
+    assert ref.kind == "file_source_blob"
+    assert ref.file_source_id == "file_a"
+    assert ref.expected_group_id == "grp1"
+    assert ref.is_superadmin is False
+    # Mode is bytes for v1.
+    assert mock_registry.get.call_args.kwargs.get("mode") == "bytes"
 
 
 def test_file_service_temp_file_for_wrapper_delegates(tmp_path):

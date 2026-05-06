@@ -430,25 +430,104 @@ class FileSourceService:
     def _get_blob_from_db(
         self, file_id: str, expected_group_id: str = None,
     ) -> Optional[bytes]:
-        """Wrapper compat: delega a `file_blob_materialization.get_blob_from_db`.
+        """Read the file_source blob, fail-soft.
 
-        STRUCT-001 Seam D-D: la logica vive in
-        `app.services.file_blob_materialization.get_blob_from_db` con
-        collaborator espliciti. Fail-closed N1 PRESERVATO: il check
-        `_assert_visible` resta nel service e viene passato come callback.
+        BE-GO-READY-RESOURCE-ENGINE-020-FILE-SOURCE-BLOB-LOADER:
+        the storage-read primitive lives in
+        ``app.core.resources.loaders.file_source_blob.FileSourceBlobLoader``.
+        This wrapper:
+
+          1. Calls ``self._assert_visible(file_id, expected_group_id)``
+             which raises ``PermissionError`` on cross-tenant access
+             not authorized by ownership OR shared-via-table.
+          2. Routes the actual fetch (SQL preflight + bounded
+             BYTEA + bounded object-storage download) through the
+             Resource Engine.
+
+        Tenant dispatch:
+          - **Owned case** (file's group_id == caller's group_id,
+            covers ~all real traffic): the engine's SQL filter
+            ``WHERE id = ? AND group_id = ?`` matches and returns
+            the row. No audit log line.
+          - **Shared case** (cross-group fetch authorized via
+            ``*_shares``): the SQL filter excludes the row, the
+            engine raises ``FileNotFoundError``, and we retry
+            with ``is_superadmin=True``. The retry path produces
+            a single ``[AUDIT] FileSourceBlobLoader.load
+            is_superadmin=True`` log line which is exactly the
+            artifact ops want for cross-group fetches.
+          - **Superadmin caller** (``expected_group_id == "*"``):
+            the first-shot ref already carries
+            ``is_superadmin=True`` so no retry is required.
+
+        Fail-soft contract preserved:
+          - missing row -> ``None`` (engine ``FileNotFoundError``
+            after the bypass retry collapses to ``None``);
+          - object-storage disabled / download failure -> ``None``
+            (engine returns ``Resource(data=None)`` -> ``None``);
+          - oversize -> log error + ``None`` (engine raises
+            ``MemoryLimitExceededError``; we catch + log here so
+            ``get_blob_bytes`` callers continue to see the
+            pre-020 ``Optional[bytes]`` surface).
         """
-        from app.services.file_blob_materialization import get_blob_from_db
-        from app.config import settings
-        from app.shared.cloud_backends import get_runtime_object_storage
-        import app.db.db_service as db
-        return get_blob_from_db(
-            file_id, expected_group_id,
-            assert_visible=self._assert_visible,
-            db_get_file_source=db.get_file_source,
-            get_object_storage=get_runtime_object_storage,
-            temp_dir=settings.TEMP_DIR,
-            logger=self._logger,
-        )
+        from app.core.resources import ResourceRef, default_registry
+        from app.shared.exceptions import MemoryLimitExceededError
+
+        # `_assert_visible` re-raises PermissionError to the caller
+        # (kept identical to pre-020 behavior). After it returns,
+        # the caller has been authorized for this file_source.
+        self._assert_visible(file_id, expected_group_id or "")
+
+        is_superadmin_caller = expected_group_id == self.SUPERADMIN_BYPASS
+
+        def _fetch(is_superadmin: bool) -> Optional[bytes]:
+            ref = ResourceRef(
+                kind="file_source_blob",
+                file_source_id=file_id,
+                expected_group_id=(expected_group_id or "").strip()
+                or self.SUPERADMIN_BYPASS,
+                is_superadmin=is_superadmin,
+            )
+            resource = default_registry().get(ref, mode="bytes")
+            return resource.data
+
+        try:
+            return _fetch(is_superadmin=is_superadmin_caller)
+        except FileNotFoundError:
+            # Owned-path SQL filter excluded the row. Either the
+            # file genuinely does not exist OR `_assert_visible`
+            # authorized via *_shares. Retry with bypass: the
+            # engine's audit log records the cross-group fetch.
+            if is_superadmin_caller:
+                # First shot already had bypass; no further retry.
+                return None
+            try:
+                return _fetch(is_superadmin=True)
+            except FileNotFoundError:
+                return None
+            except MemoryLimitExceededError as e:
+                self._logger.error(
+                    f"[GESTITO] Blob {file_id} oversize su retry "
+                    f"is_superadmin=True: {e}. "
+                    f"Cap RESOURCE_MAX_BYTES limita la lettura."
+                )
+                return None
+            except Exception as e:
+                self._logger.error(
+                    f"[GESTITO] Errore lettura blob {file_id} (retry): {e}"
+                )
+                return None
+        except MemoryLimitExceededError as e:
+            self._logger.error(
+                f"[GESTITO] Blob {file_id} oversize: {e}. "
+                f"Cap RESOURCE_MAX_BYTES limita la lettura."
+            )
+            return None
+        except Exception as e:
+            self._logger.error(
+                f"[GESTITO] Errore lettura blob {file_id}: {e}"
+            )
+            return None
 
     def _temp_file_for(
         self, file_id: str, expected_group_id: str = None,

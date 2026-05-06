@@ -1,6 +1,7 @@
 """Default in-process resource registry.
 
 BE-GO-READY-RESOURCE-ENGINE-002-RESULT-BLOB-LOADER-PILOT.
+BE-GO-READY-RESOURCE-ENGINE-020-FILE-SOURCE-BLOB-LOADER.
 
 The registry is intentionally trivial: a `dict[ResourceKind,
 ResourceLoader]` with explicit `register` (raises on duplicate) and
@@ -13,9 +14,9 @@ Pilot uses a module-level singleton built lazily by
 call ``build_default_registry()`` directly.
 
 Anti-god-engine: this module imports only `app.core.resources.types`
-and `app.core.resources.loaders.result_blob`. Adding any other
-loader here MUST be paired with adding its kind to
-`ResourceKind` AND wiring its tenant binding plumbing.
+and the loader modules under `app.core.resources.loaders.*`.
+Adding any other loader here MUST be paired with adding its kind
+to `ResourceKind` AND wiring its tenant binding plumbing.
 """
 
 from __future__ import annotations
@@ -71,17 +72,27 @@ _REGISTRY: Optional[_DefaultResourceRegistry] = None
 def build_default_registry() -> _DefaultResourceRegistry:
     """Construct a fresh registry pre-populated with the v1 loaders.
 
-    v1 ships exactly one loader (`ResultBlobLoader`); other kinds
-    join only after their tenant binding is plumbed through (audit
-    sec. 5/7 of `BE_RESOURCE_ENGINE_AUDIT.md`).
+    v1 ships two loaders:
+      - ``ResultBlobLoader`` (RESOURCE-ENGINE-002 pilot);
+      - ``FileSourceBlobLoader`` (RESOURCE-ENGINE-020, second
+        real loader graduating the pilot).
+
+    Other kinds (`intermediate_artifact`, `eseguibili_output`,
+    `imdf_bundle`) join only after their tenant binding is
+    plumbed through (audit sec. 5/7 of
+    `BE_RESOURCE_ENGINE_AUDIT.md`).
 
     Used directly by tests that want isolation. Production code
     consumes the module-level singleton via `default_registry()`.
     """
     from app.core.resources.loaders.result_blob import ResultBlobLoader
+    from app.core.resources.loaders.file_source_blob import (
+        FileSourceBlobLoader,
+    )
 
     reg = _DefaultResourceRegistry()
     reg.register(ResultBlobLoader())
+    reg.register(FileSourceBlobLoader())
     return reg
 
 

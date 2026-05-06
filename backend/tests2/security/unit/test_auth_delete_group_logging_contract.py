@@ -62,19 +62,25 @@ def test_delete_group_cascade_failure_is_logged_then_raised_as_500(monkeypatch):
     # `delete_group` is no longer re-exported from `app.core.auth.auth`.
     # Call it via the canonical leaf module `app.core.auth.groups_router`
     # (where the handler actually lives since AUTH-ENGINE-004 extraction).
-    # `cfg_db` is imported locally inside the handler in groups_router,
-    # so we patch the source module directly.
+    #
+    # BE-GO-READY-DB-ENGINE-003-GROUPS-CALLSITE-MIGRATION: groups_router
+    # now binds the leaf as `groups_mod._groups`; patch that symbol
+    # rather than the legacy `cfg_db` facade so the test exercises the
+    # actual call path.
     from app.core.auth import groups_router as groups_mod
-    import app.db.config_db_service as cfg_db
 
-    monkeypatch.setattr(cfg_db, "get_group", lambda gid: {"id": gid, "name": "g"})
+    monkeypatch.setattr(
+        groups_mod._groups,
+        "get_group",
+        lambda gid: {"id": gid, "name": "g"},
+    )
 
     boom = RuntimeError("simulated cascade failure")
 
     def _raising_cascade(gid):
         raise boom
 
-    monkeypatch.setattr(cfg_db, "delete_group_cascade", _raising_cascade)
+    monkeypatch.setattr(groups_mod._groups, "delete_group_cascade", _raising_cascade)
 
     target_logger = logging.getLogger(_AUTH_LOGGER)
     handler = _ListHandler()

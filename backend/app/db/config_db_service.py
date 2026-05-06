@@ -75,17 +75,15 @@ def init_db():
 # applicato a users/projects/connections/file_sources/datasources/
 # api_connections/schedules.
 #
-# Consumer principali (non migrati in DB-ENGINE-002):
-#   - `app/db/db_service.py` re-export (cross-engine bulk surface);
-#   - `app/core/auth/groups_router.py` 3 callsite via `cfg_db.*`
-#     (`get_group`, `get_group_summary`, `delete_group_cascade`)
-#     piu' 3 via `db.*` (`list_groups`, `get_group`, `create_group`);
-#   - `app/services/project_service.py` 2 callsite via `db.*`
-#     (`get_group`, `create_group`).
-# Migrazione dei callsite e' deferita a un worker successivo
-# (`BE-GO-READY-DB-ENGINE-XXX-GROUPS-ROUTER-CALLSITE-MIGRATION`)
-# perche' richiede simultaneamente l'aggiornamento dei test che
-# fanno `monkeypatch.setattr(cfg_db, ...)`.
+# BE-GO-READY-DB-ENGINE-003-GROUPS-CALLSITE-MIGRATION: due caller
+# di production migrati al leaf canonico:
+#   - `app/core/auth/groups_router.py` -> `from app.db.config import
+#     groups as _groups` (rimosso dall'allowlist strangler);
+#   - `app/services/project_service.py::_ensure_default_group` -> 2
+#     callsite migrati al leaf; il file resta in allowlist solo per
+#     `update_project_canvas_key_atomic` (kept in the facade).
+# Caller residui via `db.*` re-export:
+#   - `app/db/db_service.py` (cross-engine bulk surface, KEEP_COMPAT).
 from app.db.config.groups import (  # noqa: F401,E402
     get_group,
     list_groups,

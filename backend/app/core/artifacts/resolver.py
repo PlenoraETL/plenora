@@ -31,6 +31,7 @@ from app.core.artifacts.types import (
 # import does not eagerly build the loader graph; it merely
 # brings the function reference into the resolver's namespace.
 from app.core.resources import ResourceRef, default_registry
+from app.shared.exceptions import MemoryLimitExceededError
 
 logger = get_logger(__name__)
 
@@ -108,6 +109,26 @@ class ArtifactResolver:
 
         Ritorna `None` se il progetto esiste ma non ha alcun risultato
         (semantica compatibile con `get_result_as_tempfile`).
+
+        BE-GO-READY-RESOURCE-ENGINE-021 (R-019.1 closure): il blob
+        fetch + tempfile materialization e' delegato a
+        ``default_registry().get(ref, mode='path')`` come in
+        ``_materialize_from_result_id`` (019). Tenant binding:
+        ``expected_group_id`` per ResourceRef arriva da
+        ``row['group_id']`` (la riga `latest` per definizione e' del
+        gruppo corretto -- garantito o dal SQL filter di
+        ``get_latest_result(group_id=...)`` o, in superadmin,
+        dall'audit-bypass del loader). ``is_superadmin=True`` viene
+        passato al ResourceRef per simmetria con il check di gruppo
+        upstream (cross-group reads permessi all'admin sono
+        registrati nello structured log del loader).
+
+        Loader fail-modes:
+        - ``FileNotFoundError`` -> ``return None`` (semantica
+          legacy "blob non disponibile" preservata).
+        - ``MemoryLimitExceededError`` -> propaga al boundary 413.
+        - altri fault -> wrap in ``ArtifactResolutionError(lettura
+          latest blob ... fallita)`` con ``[GESTITO]`` log + chain.
         """
         import app.db.db_service as db_service
 
@@ -128,14 +149,64 @@ class ArtifactResolver:
         if not row:
             return None
 
-        blob = db_service.get_result_data(row["id"])
-        if not blob:
+        # ResourceRef.expected_group_id is REQUIRED non-empty. The
+        # latest-row's `group_id` IS the resource tenant binding;
+        # use it for the loader's SQL filter. is_superadmin is
+        # threaded through so the project-level cross-group bypass
+        # (already enforced upstream via the project_id project
+        # check above) keeps its symmetric audit log entry on the
+        # loader side.
+        result_row_group_id = row.get("group_id")
+        if not result_row_group_id:
+            raise ArtifactResolutionError(
+                f"latest result for project_id '{ref.project_id}' "
+                "without group_id (data corruption or pre-tenant-"
+                "binding row)"
+            )
+
+        result_id = row["id"]
+        result_ref = ResourceRef(
+            kind="result_blob",
+            result_id=result_id,
+            expected_group_id=result_row_group_id,
+            # Pass project_id as the row-level project filter
+            # (RESOURCE-ENGINE-007). `get_latest_result` already
+            # selected by project_id, but the second filter at
+            # the SQL boundary closes any race window between
+            # the latest-row lookup and the blob load.
+            expected_project_id=ref.project_id,
+            is_superadmin=bool(is_superadmin),
+        )
+
+        # intent: boundary / outcome: fail-closed (broad→domain con chain preservata)
+        try:
+            resource = default_registry().get(result_ref, mode="path")
+        except FileNotFoundError:
+            # Legacy semantics: missing / unavailable blob -> None
+            # (NOT ArtifactResolutionError). The router/UI treats
+            # None as "no latest result available"; raising would
+            # 500 the request.
             return None
+        except MemoryLimitExceededError:
+            # Preserve the typed exception so FastAPI maps it to the
+            # memory-limit 413 envelope. Wrapping here would turn an
+            # operator cap into a generic artifact failure.
+            raise
+        except Exception as e:
+            logger.error(
+                "[GESTITO] resolver lettura latest blob "
+                "project_id='%s' result_id='%s' fallita: %s",
+                ref.project_id, result_id, e,
+                exc_info=True,
+            )
+            raise ArtifactResolutionError(
+                f"lettura blob latest project_id "
+                f"'{ref.project_id}' fallita: {e}"
+            ) from e
 
         fmt = row.get("format") or "csv"
-        tmp_path = self._write_temp_blob(blob, fmt)
         return MaterializedArtifact(
-            path=tmp_path,
+            path=resource.path,
             format=fmt,
             is_temporary=True,
         )
@@ -149,10 +220,34 @@ class ArtifactResolver:
         response senza tempfile. Stessa cross-tenant policy di
         materialize_run: result_id appartenente ad altro project_id
         solleva ArtifactResolutionError.
+
+        BE-GO-READY-RESOURCE-ENGINE-022-FETCH-RUN-BLOB-REGISTRY-MIGRATION
+        (R-019.2 closure):
+          La materializzazione bytes passa attraverso
+          `default_registry().get(ResourceRef(kind="result_blob", ...),
+          mode="bytes")` invece di `db_service.get_result_data`.
+          Same row metadata lookup come prima (per filename / format /
+          project_id verify); solo il fetch del payload BYTEA / object
+          storage e' migrato. Mirror del pattern gia' applicato a
+          `_materialize_from_result_id` da RESOURCE-ENGINE-019, ma con
+          `mode="bytes"` (no tempfile) — il caller HTTP fa
+          `StreamingResponse(blob.data)` direttamente.
         """
         import app.db.db_service as db_service
 
-        row = db_service.get_result(result_id)
+        # intent: boundary / outcome: fail-closed (broad→domain con chain preservata)
+        try:
+            row = db_service.get_result(result_id)
+        except Exception as e:
+            logger.error(
+                "[GESTITO] resolver lookup result_id '%s' fallito: %s",
+                result_id, e,
+                exc_info=True,
+            )
+            raise ArtifactResolutionError(
+                f"lookup result_id '{result_id}' fallito: {e}"
+            ) from e
+
         if not row:
             raise ArtifactResolutionError(
                 f"result_id '{result_id}' non trovato"
@@ -163,14 +258,64 @@ class ArtifactResolver:
                 f"project_id '{expected_project_id}'"
             )
 
-        data = db_service.get_result_data(row["id"])
-        if not data:
+        # ResourceRef requires a non-empty `expected_group_id`.
+        # The row's `group_id` IS the resource's tenant binding;
+        # mirror del defensive check in _materialize_from_result_id.
+        group_id = row.get("group_id")
+        if not group_id:
+            raise ArtifactResolutionError(
+                f"result_id '{result_id}': row senza group_id "
+                "(data corruption or pre-tenant-binding row)"
+            )
+
+        ref = ResourceRef(
+            kind="result_blob",
+            result_id=result_id,
+            expected_group_id=group_id,
+            # Pass project_id again so the loader's row-level
+            # project filter (RESOURCE-ENGINE-007) gives a second
+            # check at the SQL boundary. Tautological vs the
+            # resolver-level check above but cheap.
+            expected_project_id=expected_project_id,
+        )
+
+        # intent: boundary / outcome: fail-closed (broad→domain con chain preservata)
+        try:
+            resource = default_registry().get(ref, mode="bytes")
+        except FileNotFoundError as e:
+            # Loader fail-closed: row missing OR cross-tenant OR
+            # blob unavailable. Translate to the canonical Italian
+            # message so existing operator log greps keep working.
+            raise ArtifactResolutionError(
+                f"result_id '{result_id}' senza blob dati"
+            ) from e
+        except MemoryLimitExceededError:
+            # Preserve the typed exception for the FastAPI 413 handler.
+            # The HTTP download path is still a resource read and must not
+            # degrade an oversize signal into a generic artifact error.
+            raise
+        except Exception as e:
+            logger.error(
+                "[GESTITO] resolver lettura blob result_id '%s' fallita: %s",
+                result_id, e,
+                exc_info=True,
+            )
+            raise ArtifactResolutionError(
+                f"lettura blob result_id '{result_id}' fallita: {e}"
+            ) from e
+
+        # In bytes mode the loader returns the bytes inline. A None
+        # `data` means "row exists but blob unavailable" (es. object
+        # storage download returned None). Per il download HTTP
+        # questa condizione deve essere un errore tipato come prima
+        # del migration: pre-022 ricadeva sul fail "senza blob dati".
+        if not resource.data:
             raise ArtifactResolutionError(
                 f"result_id '{result_id}' senza blob dati"
             )
 
         return RunBlob(
-            data=data,
+            data=resource.data,
             filename=row.get("filename") or f"{result_id}",
             format=row.get("format") or "csv",
             project_id=row["project_id"],
@@ -272,6 +417,9 @@ class ArtifactResolver:
             raise ArtifactResolutionError(
                 f"result_id '{result_id}' senza blob dati"
             ) from e
+        except MemoryLimitExceededError:
+            # Preserve the typed exception for the FastAPI 413 handler.
+            raise
         except Exception as e:
             logger.error(
                 "[GESTITO] resolver lettura blob result_id '%s' fallita: %s",

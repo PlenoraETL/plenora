@@ -36,6 +36,12 @@ from app.models import (
 )
 import app.db.db_service as db
 
+# BE-GO-READY-DB-ENGINE-003-GROUPS-CALLSITE-MIGRATION: groups
+# cluster moved off the strangler facade. The 2 callsites in
+# `_ensure_default_group` go through the canonical leaf instead
+# of `db.*` (which still re-exports for legacy consumers).
+from app.db.config import groups as _groups
+
 logger = get_logger(__name__)
 
 
@@ -59,8 +65,10 @@ class ProjectService:
 
     def _ensure_default_group(self):
         """Crea il gruppo default se non esiste (migrazione da filesystem)."""
-        if not db.get_group(self.DEFAULT_GROUP):
-            db.create_group(self.DEFAULT_GROUP, "Default", "Gruppo di default")
+        if not _groups.get_group(self.DEFAULT_GROUP):
+            _groups.create_group(
+                self.DEFAULT_GROUP, "Default", "Gruppo di default"
+            )
 
     def _row_to_metadata(self, row: dict) -> Optional[ProjectMetadata]:
         """Converte riga DB in ProjectMetadata."""
