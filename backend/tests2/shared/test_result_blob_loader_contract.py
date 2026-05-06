@@ -99,7 +99,13 @@ def test_load_rejects_unsupported_mode():
 def test_load_filters_by_group_id_when_not_superadmin():
     """SQL fail-closes on cross-tenant: the WHERE clause keyed on
     `id AND group_id` returns nothing for a row owned by another
-    group, raising FileNotFoundError downstream."""
+    group, raising FileNotFoundError downstream.
+
+    013 note: the WHERE shape is unchanged; the leading SQL
+    parameter is the BYTEA preflight cap (max_bytes), followed
+    by the WHERE-clause params in declaration order.
+    """
+    from app.core.resources.loaders import result_blob as loader_mod
     from app.core.resources.loaders.result_blob import ResultBlobLoader
 
     captured, fake = fake_fetchone(row=None)  # simulate "not found" / cross-tenant
@@ -114,16 +120,19 @@ def test_load_filters_by_group_id_when_not_superadmin():
     assert "WHERE id = ? AND group_id = ?" in sql, (
         f"SQL must filter by group_id; got: {sql}"
     )
-    assert captured["params"] == ("r1", "g1")
+    # 013: max_bytes is the leading bound parameter (CASE cap).
+    expected_cap = loader_mod._resolve_max_bytes()
+    assert captured["params"] == (expected_cap, "r1", "g1")
 
 
 def test_load_skips_group_filter_when_superadmin():
     """is_superadmin=True bypasses the group filter; the bypass is
     recorded in the audit log."""
+    from app.core.resources.loaders import result_blob as loader_mod
     from app.core.resources.loaders.result_blob import ResultBlobLoader
 
     captured, fake = fake_fetchone(
-        row={"data": b"payload", "storage_key": None}
+        row={"data": b"payload", "data_size": 7, "storage_key": None}
     )
 
     ref = make_result_ref(group_id="audit-group", is_superadmin=True)
@@ -132,7 +141,10 @@ def test_load_skips_group_filter_when_superadmin():
         out = loader.load(ref, mode="bytes")
 
     assert "AND group_id" not in captured["sql"]
-    assert captured["params"] == ("r1",)
+    # 013: max_bytes precedes the WHERE-clause params; with no
+    # group filter the only WHERE-bound value is `r1`.
+    expected_cap = loader_mod._resolve_max_bytes()
+    assert captured["params"] == (expected_cap, "r1")
     assert out.data == b"payload"
 
 
@@ -259,17 +271,25 @@ def test_load_returns_size_bytes_zero_when_object_storage_disabled():
 
 def test_back_compat_shim_with_group_id_filters_sql():
     """get_result_data(result_id, group_id) -> dispatch with
-    group_id_filter -> SQL filters on (id, group_id)."""
-    from app.db import results_db_service
+    group_id_filter -> SQL filters on (id, group_id).
 
-    captured, fake = fake_fetchone(row={"data": b"x", "storage_key": None})
+    013 note: max_bytes leads the params tuple (CASE preflight
+    placeholder); WHERE-clause params follow.
+    """
+    from app.db import results_db_service
+    from app.core.resources.loaders import result_blob as loader_mod
+
+    captured, fake = fake_fetchone(
+        row={"data": b"x", "data_size": 1, "storage_key": None}
+    )
 
     with patch("app.db.pg_connection.fetchone", fake):
         out = results_db_service.get_result_data("r1", group_id="g1")
 
     assert out == b"x"
     assert "AND group_id = ?" in captured["sql"]
-    assert captured["params"] == ("r1", "g1")
+    expected_cap = loader_mod._resolve_max_bytes()
+    assert captured["params"] == (expected_cap, "r1", "g1")
 
 
 def test_back_compat_shim_without_group_id_skips_filter():
@@ -277,15 +297,19 @@ def test_back_compat_shim_without_group_id_skips_filter():
     group_id_filter=None -> SQL does NOT filter on group_id
     (legacy fail-open path preserved)."""
     from app.db import results_db_service
+    from app.core.resources.loaders import result_blob as loader_mod
 
-    captured, fake = fake_fetchone(row={"data": b"y", "storage_key": None})
+    captured, fake = fake_fetchone(
+        row={"data": b"y", "data_size": 1, "storage_key": None}
+    )
 
     with patch("app.db.pg_connection.fetchone", fake):
         out = results_db_service.get_result_data("r1")
 
     assert out == b"y"
     assert "AND group_id" not in captured["sql"]
-    assert captured["params"] == ("r1",)
+    expected_cap = loader_mod._resolve_max_bytes()
+    assert captured["params"] == (expected_cap, "r1")
 
 
 def test_back_compat_shim_dispatches_to_object_storage():

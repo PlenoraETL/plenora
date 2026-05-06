@@ -549,7 +549,153 @@ rm -f  ~/plenora-etl/backend/.env
 
 ---
 
-## 5. What is NOT in this dry-run pack
+## 5. Clean-install smoke harness (canonical sequence)
+
+`BE-GO-READY-INSTALL-007-CLEAN-INSTALL-SMOKE-HARNESS`.
+
+The eight items below are the canonical clean-install smoke
+harness. Each row is a single thing the operator must verify
+before the install can be declared green; the right-hand column
+points at the exact command/section. This page is the
+operator-facing single source - do NOT improvise the order; the
+boot gates fire in the same order and skipping a row makes the
+diagnosis path harder.
+
+### 5.1 Eight-item canonical mapping
+
+| # | Harness item | Where the command lives | Pass signal |
+|---|---|---|---|
+| 1 | clone + env setup (repo cloned, decisions resolved) | step 2.4 above; decisions table in section 1 | `--check` exits 0 |
+| 2 | backend deps (venv + `pip install -r requirements.txt`) | step 2.6 above | `./venv/bin/python -c "import fastapi, celery, psycopg2"` exits 0 |
+| 3 | DB init + migrations (schema autocreate on first uvicorn boot) | step 2.7 (uvicorn) + post-smoke `psql ... SELECT count(*) FROM plenora.schema_migrations` | row count matches the deployed migration count (currently 18; see step 2.8) |
+| 4 | object storage choice locked in `.env` | step 2.5 (installer) - first PC test = `STORAGE_POLICY=db` + dummy `BACKUP_BUCKET` | `/ready` reports `object_storage` as `skipped: STORAGE_POLICY=db` |
+| 5 | workers/beat count (foreground for first run) | step 2.7 - uvicorn `--workers 1`, celery worker `--pool=solo`, beat singleton | three foreground processes log "ready" / "running on" / "PlenoraBeatScheduler avviato" |
+| 6 | health + ready checks | step 2.8 above | `/health` 200 AND `/ready` 200 with all 6 ready checks ok |
+| 7 | memory caps visibility (RESOURCE_MAX_BYTES + siblings) | section 5.2 below | one-liner prints the four caps with the values the runtime will use |
+| 8 | tiny ETL/project smoke (real worker dispatches a real task) | section 5.3 below | `cleanroom.ping` round-trips `pong` via `AsyncResult.get(timeout=30)` |
+
+The harness is COMPLETE only when all eight rows are green. A
+green `/health` + `/ready` (rows 1-6) without rows 7 and 8 means
+the boot gates pass but the operator has NOT verified that the
+memory budget on this host is what the runtime will enforce, and
+has NOT verified that a worker actually consumes a task from the
+broker. Both have been the silent-failure mode in past first-PC
+attempts.
+
+### 5.2 Memory caps visibility (row 7)
+
+The runtime memory budget is governed by four `Settings.DEFAULTS`
+keys. Defaults are sane for an 8-16 GB server; for a smaller PC
+the operator should override them BEFORE step 2.7. Run inside
+the venv with `backend/.env` already in place:
+
+```bash
+cd ~/plenora-etl/backend
+./venv/bin/python - <<'PYEOF'
+from app.config import settings
+keys = (
+    "LOAD_FILE_MAX_BYTES",
+    "WORKER_RSS_MAX_BYTES",
+    "RESOURCE_MAX_BYTES",
+    "CROSS_JOIN_MAX_OUTPUT_ROWS",
+    "MULTI_JOIN_MAX_OUTPUT_ROWS",
+)
+for key in keys:
+    val = settings.get(key)
+    print(f"{key}={val}")
+PYEOF
+```
+
+Expected (defaults, no override in `backend/.env`):
+
+```
+LOAD_FILE_MAX_BYTES=209715200
+WORKER_RSS_MAX_BYTES=1500000000
+RESOURCE_MAX_BYTES=524288000
+CROSS_JOIN_MAX_OUTPUT_ROWS=50000000
+MULTI_JOIN_MAX_OUTPUT_ROWS=50000000
+```
+
+For Marco's reference PC (small single-machine, <=4 GB host
+RAM) the recommended overrides per
+[install-non-docker.md section 6.2](install-non-docker.md#62-memory-caps-recommended-values)
+are:
+
+```
+LOAD_FILE_MAX_BYTES=104857600    # 100 MB upload cap
+WORKER_RSS_MAX_BYTES=838860800   # 800 MB worker RSS
+RESOURCE_MAX_BYTES=209715200     # 200 MB single-blob read cap
+```
+
+A cap `<= 0` disables the corresponding guard (escape hatch).
+`RESOURCE_MAX_BYTES` is enforced by bounded blob/resource readers
+(`ResultBlobLoader`, file blob materialization, and intermediate
+artifact preview); additional future resource kinds should reuse the
+same cap rather than introducing a parallel setting.
+
+### 5.3 Tiny ETL/project smoke (row 8)
+
+Plenora-ETL ships a pure no-op task `cleanroom.ping`
+(`backend/workers/tasks/cleanroom_task.py`). It is the same
+deterministic primitive the cleanroom CI lane uses for the
+worker enqueue/dequeue smoke. Reuse it locally for the first
+PC test - it requires NO PG `connections` row, NO file source,
+and NO real ETL state:
+
+```bash
+cd ~/plenora-etl/backend
+./venv/bin/python - <<'PYEOF'
+from workers.celery_app import celery_app
+ar = celery_app.send_task("cleanroom.ping")
+print(ar.get(timeout=30))
+PYEOF
+```
+
+Expected output: `pong`.
+
+A `kombu.exceptions.OperationalError` means the broker URL is
+wrong or Redis is down - re-run step 2.3 probe. A
+`celery.exceptions.TimeoutError` means the foreground worker in
+step 2.7 is not actually consuming tasks; re-check the worker
+terminal log for an exception during boot. A non-`pong` return
+means a future change broke the cleanroom contract; bisect from
+`workers/tasks/cleanroom_task.py` and the `include=[...]` list
+in `workers/celery_app.py`.
+
+This smoke is bounded (`AsyncResult.get(timeout=30)`),
+sleep-free, and idempotent. Re-running it does not pollute any
+domain table.
+
+### 5.4 Docker vs single-machine deltas
+
+Plenora-ETL has NO `Dockerfile` and NO `docker-compose.yml` at
+this commit (see the disclaimer at the top of this page and
+[install-docker.md](install-docker.md)). The single-machine
+sequence above (steps 2.1-2.9 + harness rows 7-8) is the ONLY
+go-ready path today.
+
+When the future Docker batch lands
+(`BE-GO-READY-INSTALLATION-010..013`), the deltas are:
+
+| Harness item | Single-machine path (today) | Docker path (target shape only) |
+|---|---|---|
+| 1 (clone + env) | `git clone` + `bash scripts/install.sh` | `git clone` + `cp .env.docker.example .env` + secret generation per [install-docker.md section D](install-docker.md#d-envdockerexample) |
+| 2 (backend deps) | `./venv/bin/pip install -r requirements.txt` | baked into `backend/Dockerfile` build stage (per [install-docker.md section A](install-docker.md#a-backenddockerfile)) |
+| 3 (DB init) | first uvicorn boot triggers `migrations_runner.ensure_schema(DB_SCHEMA)` | same code path; `backend` service `depends_on: postgres` (healthy) |
+| 4 (object storage) | `STORAGE_POLICY=db` in `backend/.env` | `STORAGE_POLICY=db` in `.env.docker.example` (already set) |
+| 5 (workers/beat) | three foreground processes (uvicorn / worker / beat) | `worker` and `beat` services share the backend image with overridden `CMD` |
+| 6 (health/ready) | `curl http://127.0.0.1:5004/{health,ready}` | `docker compose ps` healthcheck (gated by `HEALTHCHECK` in `Dockerfile`) plus the same `curl` |
+| 7 (memory caps) | `RESOURCE_MAX_BYTES` etc. in `backend/.env` | three commented overrides already present in `.env.docker.example` (per [install-docker.md section D](install-docker.md#d-envdockerexample) lines `LOAD_FILE_MAX_BYTES` / `WORKER_RSS_MAX_BYTES` / `RESOURCE_MAX_BYTES`) |
+| 8 (tiny ETL smoke) | `celery_app.send_task("cleanroom.ping")` from `./venv/bin/python` | `docker compose exec worker python -c "..."` against the running worker container |
+
+The caps surface MUST stay visible in both `.env`/`.env.docker.example`
+and in the harness step 7 output. Removing any of the five caps
+from either location is a regression - locked by the harness
+guard test.
+
+---
+
+## 6. What is NOT in this dry-run pack
 
 For each below, the answer for the first PC test is "skip;
 not needed":
@@ -570,7 +716,7 @@ not needed":
 
 ---
 
-## 6. Related docs
+## 7. Related docs
 
 - [install-non-docker.md section 13](install-non-docker.md#13-operator-quick-reference-checklist-real-linux-pc-test)
   - the full reference checklist with decision matrix and

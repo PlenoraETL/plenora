@@ -56,20 +56,29 @@ def test_get_result_data_converts_memoryview_to_bytes(monkeypatch):
 
 def test_get_result_data_uses_group_filter_when_provided(monkeypatch):
     import app.db.pg_connection as pg_conn
+    import app.core.resources.loaders.result_blob as result_blob_loader
 
     seen = {}
 
     def _fetchone(sql, params=()):
         seen["sql"] = sql
         seen["params"] = params
-        return {"data": b"abc", "storage_key": None}
+        # 013: the SQL CASE returns NULL for `data` when oversize,
+        # so production rows always carry a `data_size` column.
+        # Mocks must mirror that shape now that the loader reads
+        # `data_size` for the BYTEA preflight branch.
+        return {"data": b"abc", "data_size": 3, "storage_key": None}
 
     monkeypatch.setattr(pg_conn, "fetchone", _fetchone)
 
     results_db_service.get_result_data("res-1", group_id="grp-1")
 
     assert "group_id = ?" in seen["sql"]
-    assert seen["params"] == ("res-1", "grp-1")
+    # 013: the BYTEA SQL preflight prepends `max_bytes` as the
+    # leading bound parameter (CASE WHEN length(data) > ?). The
+    # WHERE-clause params follow in declaration order.
+    expected_cap = result_blob_loader._resolve_max_bytes()
+    assert seen["params"] == (expected_cap, "res-1", "grp-1")
 
 
 # ==============================================================================

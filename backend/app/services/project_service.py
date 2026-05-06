@@ -444,7 +444,7 @@ class ProjectService:
         # Cleanup comparison_keys (config tables) — chiavi di confronto associate
         # ai nodi del canvas, identificate da canvas_id == project_id.
         try:
-            from app.db.config_db_service import delete_comparison_keys
+            from app.db.config.comparison_keys import delete_comparison_keys
             delete_comparison_keys(project_id)
         except Exception as e:
             logger.warning(

@@ -316,22 +316,28 @@ def test_object_storage_connectivity_error_still_returns_none(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# 4. BYTEA path: post-fetch cap check
+# 4. BYTEA path: SQL preflight cap check (BE-GO-READY-RESOURCE-ENGINE-013)
 # ---------------------------------------------------------------------------
 
 
 def test_bytea_oversize_raises_at_dispatch(monkeypatch):
-    """Even on the BYTEA path, an oversized row raises
-    MemoryLimitExceededError instead of being returned to the
-    caller. Documented residual R-010.1: PG has already loaded the
-    row by this point, so the cap is a downstream guard, not a
-    preflight."""
+    """An oversized BYTEA row raises MemoryLimitExceededError
+    BEFORE the bytes ever reach Python. Post-013 the SQL
+    ``CASE WHEN length(data) > ? THEN NULL ELSE data END``
+    nullifies ``data`` server-side; the loader uses the
+    projected ``data_size`` column to raise. The mock returns
+    ``data=None`` (mirroring the SQL CASE result) and
+    ``data_size=100`` (mirroring the ``length(data)`` projection).
+    """
     from app.shared.exceptions import MemoryLimitExceededError
     from app.core.resources.loaders import result_blob as loader_mod
 
     monkeypatch.setenv(loader_mod._RESULT_BLOB_MAX_BYTES_ENV, "50")
+    # 013: `data` is NULL on the wire when length(data) > cap; the
+    # loader reads `data_size` to detect oversize, so the mock must
+    # carry both fields the production SQL projects.
     _, fake_fetch = fake_fetchone(
-        row={"data": b"x" * 100, "storage_key": None}
+        row={"data": None, "data_size": 100, "storage_key": None}
     )
     monkeypatch.setattr("app.db.pg_connection.fetchone", fake_fetch)
 
@@ -341,17 +347,111 @@ def test_bytea_oversize_raises_at_dispatch(monkeypatch):
 
     err = exc_info.value
     assert err.limit_bytes == 50
-    assert err.observed_bytes == 100
+    assert err.observed_bytes == 100, (
+        "observed_bytes must be the SQL `length(data)` value, not "
+        "len(data) (data is None when preflight fires)"
+    )
     assert err.stage == "result_blob_oversize"
 
 
+def test_bytea_preflight_does_not_touch_data_field(monkeypatch):
+    """013 contract: the loader's oversize decision is driven by
+    ``data_size`` from the SQL projection, NOT by ``len(data)``.
+    Even a mock that puts a sentinel object into ``data`` (which
+    would crash any ``len()`` call) MUST still raise cleanly,
+    proving the loader never reads ``data`` on the oversize path.
+    """
+    from app.shared.exceptions import MemoryLimitExceededError
+    from app.core.resources.loaders import result_blob as loader_mod
+
+    class _ExplodingSentinel:
+        """If anything calls len() / iterates / casts this, the
+        test fails loudly. Stand-in for a row whose `data` field
+        the loader MUST NOT touch on the oversize path."""
+
+        def __len__(self):
+            raise AssertionError(
+                "loader read `data` on the oversize path; the 013 "
+                "preflight contract requires that `data_size` alone "
+                "drives the cap decision"
+            )
+
+        def __iter__(self):
+            raise AssertionError("loader iterated `data` on oversize")
+
+        def __bytes__(self):
+            raise AssertionError("loader bytes()'d `data` on oversize")
+
+    monkeypatch.setenv(loader_mod._RESULT_BLOB_MAX_BYTES_ENV, "50")
+    _, fake_fetch = fake_fetchone(
+        row={
+            "data": _ExplodingSentinel(),
+            "data_size": 999,  # >> cap, preflight must fire
+            "storage_key": None,
+        }
+    )
+    monkeypatch.setattr("app.db.pg_connection.fetchone", fake_fetch)
+
+    ref = make_result_ref()
+    with pytest.raises(MemoryLimitExceededError) as exc_info:
+        loader_mod.ResultBlobLoader().load(ref, mode="bytes")
+
+    assert exc_info.value.observed_bytes == 999
+    assert exc_info.value.limit_bytes == 50
+
+
+def test_bytea_preflight_sql_carries_length_and_case(monkeypatch):
+    """013 wire-level contract: the SQL fired by the loader MUST
+    contain the ``length(data)`` projection AND a CASE that NULLs
+    out ``data`` when ``length(data) > ?``. Without this shape,
+    PG would still ship the oversized BYTEA back to Python before
+    the loader could check the size."""
+    from app.core.resources.loaders import result_blob as loader_mod
+
+    captured: dict = {}
+
+    def _capture(sql, params=()):
+        captured["sql"] = sql
+        captured["params"] = params
+        return None  # row-not-found is fine for SQL-shape inspection
+
+    monkeypatch.setattr("app.db.pg_connection.fetchone", _capture)
+    monkeypatch.setenv(loader_mod._RESULT_BLOB_MAX_BYTES_ENV, "12345")
+
+    ref = make_result_ref()
+    with pytest.raises(FileNotFoundError):
+        loader_mod.ResultBlobLoader().load(ref, mode="bytes")
+
+    sql = captured["sql"]
+    # length(data) projection (data_size column) — required for
+    # caller-side cap enforcement.
+    assert "length(data) AS data_size" in sql, (
+        "SQL must project `length(data) AS data_size` so the loader "
+        "can raise on oversize without touching the bytes"
+    )
+    # CASE-bounded data column — required for wire-level preflight.
+    assert "CASE" in sql and "WHEN length(data) > ?" in sql, (
+        "SQL must NULL `data` via CASE WHEN length(data) > ?, "
+        "otherwise PG ships the oversized BYTEA over the wire"
+    )
+    assert "ELSE data" in sql, (
+        "SQL CASE must fall through to `data` only when under cap"
+    )
+    # max_bytes is the leading bound parameter (CASE placeholder
+    # appears before any WHERE-clause placeholder).
+    assert captured["params"][0] == 12345
+
+
 def test_bytea_under_cap_returns_normally(monkeypatch):
-    """Sanity: BYTEA payloads under the cap pass through unchanged."""
+    """Sanity: BYTEA payloads under the cap pass through unchanged.
+    Production SQL CASE returns the actual ``data`` and the
+    ``data_size`` projection mirrors ``len(data)``; the loader
+    skips the preflight branch and yields the bytes verbatim."""
     from app.core.resources.loaders import result_blob as loader_mod
 
     monkeypatch.setenv(loader_mod._RESULT_BLOB_MAX_BYTES_ENV, "1024")
     _, fake_fetch = fake_fetchone(
-        row={"data": b"small", "storage_key": None}
+        row={"data": b"small", "data_size": 5, "storage_key": None}
     )
     monkeypatch.setattr("app.db.pg_connection.fetchone", fake_fetch)
 

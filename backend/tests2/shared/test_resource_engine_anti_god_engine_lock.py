@@ -275,17 +275,29 @@ def test_loader_owns_the_dispatch_tokens():
     loader module post-migration. Removing them from the loader
     silently re-introduces fallback paths in callers.
 
-    BE-GO-READY-RESOURCE-ENGINE-007: SELECT now includes
+    BE-GO-READY-RESOURCE-ENGINE-007: SELECT includes
     `project_id` to support optional row-metadata project-level
-    binding (`ResourceRef.expected_project_id`). The base SELECT
-    is a stable string contract; the WHERE clause is built
-    dynamically per filter set."""
+    binding (`ResourceRef.expected_project_id`).
+
+    BE-GO-READY-RESOURCE-ENGINE-013: SELECT now also projects
+    `length(data) AS data_size` and wraps `data` in a CASE that
+    NULLs out the column when `length(data) > ?` (BYTEA preflight
+    cap). The fixed projection of `storage_key, project_id,
+    length(data) AS data_size` is the stable contract; the WHERE
+    is composed at runtime from optional filters.
+    """
     text = _RESULT_BLOB_PY.read_text(encoding="utf-8")
     required = (
-        # SQL row fetch with project_id column (RESOURCE-ENGINE-007).
-        # The base SELECT shape is the stable contract; the WHERE
-        # is composed at runtime from optional filters.
-        "SELECT data, storage_key, project_id FROM results",
+        # SQL row metadata projection (RESOURCE-ENGINE-007 +
+        # RESOURCE-ENGINE-013). storage_key and project_id are the
+        # always-present row-metadata columns; data_size is the
+        # 013 wire-level preflight projection.
+        "storage_key, project_id, length(data) AS data_size",
+        # 013: CASE-bounded `data` column. Without this, PG would
+        # ship the oversized BYTEA over the wire before any cap
+        # check could fire.
+        "WHEN length(data) > ? THEN NULL",
+        "ELSE data",
         # BYTEA conversion path
         "isinstance(data, memoryview)",
         # object storage download symbol

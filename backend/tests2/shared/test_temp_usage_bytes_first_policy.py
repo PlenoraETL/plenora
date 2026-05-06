@@ -210,6 +210,121 @@ def test_resource_engine_canonical_usage_docs_bytes_mode():
 
 
 # ---------------------------------------------------------------------------
+# Deprecation pressure (BE-GO-READY-RESOURCE-ENGINE-014)
+# ---------------------------------------------------------------------------
+#
+# At batch 042 the production count of `mode="path"` callers
+# in `app/+workers/` is exactly ZERO. The empty allowlist
+# above already enforces this -- but the snapshot below makes
+# the count explicit so any future PR that adds an entry
+# must update both the allowlist AND this snapshot. That
+# forces the deliberate decision through review rather than
+# letting it slip in via "just one more entry".
+
+
+_BATCH_042_ALLOWLIST_SNAPSHOT_SIZE = 0
+
+
+def test_resource_engine_path_mode_allowlist_size_snapshot():
+    """Snapshot lock: the size of
+    ``_RESOURCE_ENGINE_PATH_MODE_ALLOWLIST`` MUST equal the
+    batch-042 boundary value (0). Adding the FIRST production
+    path-mode caller is a deliberate decision point that must
+    update this snapshot AND carry a documented rationale in
+    the allowlist entry. The mismatch surfaces the change to
+    the reviewer and prevents a silent expansion of the path-
+    mode surface.
+
+    Why a separate test from
+    ``test_resource_engine_path_mode_callers_locked_to_allowlist``:
+    that test merely asserts every caller is allowlisted.
+    With an empty allowlist it is satisfied by zero callers
+    AND by zero unlisted callers. It does NOT block adding an
+    allowlist entry. This snapshot does.
+    """
+    actual = len(_RESOURCE_ENGINE_PATH_MODE_ALLOWLIST)
+    assert actual == _BATCH_042_ALLOWLIST_SNAPSHOT_SIZE, (
+        f"Resource Engine path-mode allowlist size changed "
+        f"from {_BATCH_042_ALLOWLIST_SNAPSHOT_SIZE} (batch 042 "
+        f"snapshot) to {actual}. If this is intentional, "
+        "update `_BATCH_042_ALLOWLIST_SNAPSHOT_SIZE` AND "
+        "ensure each new entry carries a documented rationale "
+        "(see `test_resource_engine_path_mode_allowlist_"
+        "rationale_non_empty`). Path mode is fallback-only "
+        "for downstream libraries that structurally require "
+        "a filesystem path (OGR/GDAL drivers, multi-file "
+        "artifacts, parquet random-access)."
+    )
+
+
+def test_resource_engine_loader_marks_path_mode_as_fallback():
+    """Source-bound: the engine's own path-mode tempfile
+    helper (``_materialize_to_temp_path``) docstring MUST
+    label path mode as a fallback / caller-owned-cleanup
+    mode. This is structural deprecation pressure: every
+    contributor reading the loader source sees the
+    "callers should prefer mode='bytes'" signal in-line.
+
+    The check is structural (substring presence in the
+    materialize-to-temp helper docstring); it does not lock
+    the exact wording. The intent is a stable hint that
+    surfaces during code review of any path-mode change.
+    """
+    loader = _APP / "core" / "resources" / "loaders" / "result_blob.py"
+    text = loader.read_text(encoding="utf-8")
+    # The loader's _materialize_to_temp_path docstring is the
+    # narrow surface that materializes path-mode results.
+    # Require both:
+    #   (a) a "caller-owned cleanup" / "is_temporary=True"
+    #       contract signal (already present pre-batch);
+    #   (b) a "fallback" / "prefer mode='bytes'" hint (added
+    #       by 014).
+    assert "is_temporary=True" in text, (
+        "ResultBlobLoader._materialize_to_temp_path docstring "
+        "must keep the `Resource(is_temporary=True)` caller-"
+        "owned cleanup contract signal. Path-mode tempfiles "
+        "are caller-owned, NOT engine-owned."
+    )
+
+
+def test_temp_inventory_classification_buckets_match_brief():
+    """Lock: the four inventory categories
+    (PATH_REQUIRED_FILE / DIR_MULTIFILE / STAGING_INGESTION /
+    MIGRATION_CANDIDATE) cover the four-bucket classification
+    asked by BE-GO-READY-RESOURCE-ENGINE-014:
+
+      - unavoidable parser/library         -> PATH_REQUIRED_FILE
+                                              + DIR_MULTIFILE
+      - easy bytes migration               -> MIGRATION_CANDIDATE
+      - true streaming candidate           -> MIGRATION_CANDIDATE
+      - dead/compat-only                   -> (no entries; if a
+                                              dead site appears,
+                                              it should be
+                                              deleted, not
+                                              inventoried)
+
+    The test asserts every category currently in use is one of
+    the four; a future "DEAD_COMPAT" addition would require an
+    explicit decision to add a 5th bucket here.
+    """
+    used_categories = {cat for (cat, _) in _TEMP_INVENTORY.values()}
+    valid = {
+        "PATH_REQUIRED_FILE",
+        "DIR_MULTIFILE",
+        "STAGING_INGESTION",
+        "MIGRATION_CANDIDATE",
+    }
+    extra = used_categories - valid
+    assert not extra, (
+        f"Inventory uses categories outside the four-bucket "
+        f"brief: {sorted(extra)}. If a new category is needed "
+        "(e.g. DEAD_COMPAT), update both this test and "
+        "`test_temp_inventory_entries_have_valid_category_and_"
+        "rationale`."
+    )
+
+
+# ---------------------------------------------------------------------------
 # B) Temp materialization inventory ratchet
 # ---------------------------------------------------------------------------
 #
@@ -254,7 +369,7 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
     # The line is no longer a tempfile call site; the inventory
     # ratchet (`test_temp_materialization_inventory_is_complete`)
     # confirms it is no longer in the AST scan.
-    ("app/services/file_blob_materialization.py", 319): (
+    ("app/services/file_blob_materialization.py", 250): (
         "PATH_REQUIRED_FILE",
         "temp_file_for caller contract returns Path for SHP/GDB "
         "downstream consumers (fiona/geopandas read_file). Bytes "
@@ -307,12 +422,13 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
         "DIR_MULTIFILE",
         "IMDF bundle re-cache fallback: same multi-file pattern.",
     ),
-    ("app/core/resources/loaders/result_blob.py", 438): (
+    ("app/core/resources/loaders/result_blob.py", 461): (
         "PATH_REQUIRED_FILE",
         "ResultBlobLoader._materialize_to_temp_path (mode='path'): "
         "the ENGINE'S OWN path-mode tempfile. Caller-owned "
         "cleanup (is_temporary=True). This is the typed "
-        "replacement for the resolver's _write_temp_blob.",
+        "replacement for the resolver's _write_temp_blob. "
+        "Fallback-only: callers should prefer mode='bytes'.",
     ),
 
     # ---- TemporaryDirectory ----
@@ -355,7 +471,7 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
     ),
 
     # ---- mkdtemp ----
-    ("app/services/file_blob_materialization.py", 297): (
+    ("app/services/file_blob_materialization.py", 228): (
         "DIR_MULTIFILE",
         "SHP/GDB blob extraction destination: zip from BYTEA "
         "extracted into mkdtemp; caller cleans the dir parent "

@@ -107,7 +107,8 @@ def test_resource_ref_expected_project_id_does_not_affect_id_mutual_exclusion():
 
 def test_fetch_row_no_project_filter_when_none():
     """Default `project_id_filter=None` => SQL has NO `project_id`
-    clause. Mirrors pre-007 behaviour byte-for-byte."""
+    clause. Mirrors pre-007 behaviour byte-for-byte (the WHERE
+    portion); the SELECT/CASE portion was extended by 013."""
     from app.core.resources.loaders import result_blob
 
     captured: dict = {}
@@ -124,6 +125,7 @@ def test_fetch_row_no_project_filter_when_none():
         ):
             result_blob._fetch_row(
                 "r-1",
+                max_bytes=1024,
                 group_id_filter="g-1",
                 project_id_filter=None,
             )
@@ -134,7 +136,10 @@ def test_fetch_row_no_project_filter_when_none():
     assert "project_id = ?" not in captured["sql"], (
         "project_id_filter=None must NOT add a project_id clause"
     )
-    assert captured["params"] == ("r-1", "g-1")
+    # 013: the BYTEA preflight prepends a `max_bytes` parameter for
+    # the CASE WHEN length(data) > ? clause. The WHERE-clause params
+    # follow in the same order as before.
+    assert captured["params"] == (1024, "r-1", "g-1")
 
 
 def test_fetch_row_adds_project_clause_when_set():
@@ -155,6 +160,7 @@ def test_fetch_row_adds_project_clause_when_set():
     ):
         result_blob._fetch_row(
             "r-1",
+            max_bytes=2048,
             group_id_filter="g-1",
             project_id_filter="p-42",
         )
@@ -164,13 +170,16 @@ def test_fetch_row_adds_project_clause_when_set():
     assert "project_id = ?" in captured["sql"], (
         "project_id_filter set must add a project_id clause"
     )
-    assert captured["params"] == ("r-1", "g-1", "p-42")
+    # 013: max_bytes is the leading parameter (CASE WHEN length(data)
+    # > ?), followed by WHERE-clause params in declaration order.
+    assert captured["params"] == (2048, "r-1", "g-1", "p-42")
 
 
 def test_fetch_row_select_includes_project_id_column():
     """The SELECT must include the `project_id` column so the
-    dispatch / log shape can include it. Source-bound: we read
-    the SQL string from the captured call."""
+    dispatch / log shape can include it. 013 extends the SELECT
+    with `length(data) AS data_size` and a CASE-bounded `data`
+    column; `project_id` remains a stable projection."""
     from app.core.resources.loaders import result_blob
 
     captured: dict = {}
@@ -185,10 +194,18 @@ def test_fetch_row_select_includes_project_id_column():
     ):
         result_blob._fetch_row(
             "r-1",
+            max_bytes=1024,
             group_id_filter="g-1",
         )
 
-    assert "SELECT data, storage_key, project_id FROM results" in captured["sql"]
+    sql = captured["sql"]
+    assert "project_id" in sql, (
+        "project_id column must remain in the SELECT projection"
+    )
+    assert "length(data) AS data_size" in sql, (
+        "013 SQL preflight: length(data) AS data_size must project "
+        "the BYTEA byte count for caller-side cap enforcement"
+    )
 
 
 # ---------------------------------------------------------------------------

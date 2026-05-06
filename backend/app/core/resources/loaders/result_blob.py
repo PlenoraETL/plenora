@@ -3,6 +3,7 @@
 BE-GO-READY-RESOURCE-ENGINE-002-RESULT-BLOB-LOADER-PILOT.
 BE-GO-READY-RESOURCE-ENGINE-004-RESULT-BLOB-PATH-MODE.
 BE-GO-READY-RESOURCE-ENGINE-010-RESULT-BLOB-BOUNDED-BYTES.
+BE-GO-READY-RESOURCE-ENGINE-013-RESULT-BLOB-BYTEA-PREFLIGHT.
 
 Closes the duplication between
 ``app/db/results_db_service.py::get_result_data`` and
@@ -155,11 +156,31 @@ def _short_key(storage_key: Optional[str], max_len: int = 60) -> str:
 def _fetch_row(
     result_id: str,
     *,
+    max_bytes: int,
     group_id_filter: Optional[str],
     project_id_filter: Optional[str] = None,
 ) -> Optional[dict]:
-    """SELECT data, storage_key, project_id FROM results
-    WHERE id = ? [AND group_id = ?] [AND project_id = ?].
+    """SELECT row metadata + bounded BYTEA via SQL preflight.
+
+    BE-GO-READY-RESOURCE-ENGINE-013 (R-010.1 closure): the BYTEA
+    cap is enforced **inside the SQL** via a CASE expression that
+    NULLs out ``data`` when ``length(data) > max_bytes``. The
+    oversized BYTEA payload therefore never crosses the PG/Python
+    wire -- pre-013 the row was loaded into the psycopg2 driver
+    before the cap could fire. ``data_size`` (= ``length(data)``)
+    is also returned so the dispatch raises with the actual
+    observed size and an audit log records the preflight value.
+
+    Returns a row dict with keys:
+
+      - ``storage_key``: ``Optional[str]``
+      - ``project_id``: ``Optional[str]``
+      - ``data_size``: ``Optional[int]`` -- ``length(data)``;
+        ``NULL`` when ``data`` is ``NULL`` (e.g. on the
+        object-storage row branch or a degenerate empty row)
+      - ``data``: ``Optional[bytes]`` -- ALWAYS ``NULL`` when
+        ``storage_key`` is set OR when ``length(data) > max_bytes``
+        (the wire-level preflight contract)
 
     `group_id_filter=None` -> no WHERE clause on group_id (back-compat
     fail-open path; only used by the legacy shim).
@@ -169,24 +190,52 @@ def _fetch_row(
     string -> additional AND filter (RESOURCE-ENGINE-007 row-metadata
     project-level binding). The clause is built dynamically so the
     SQL still uses `?` placeholders for every value (no string
-    interpolation; psycopg2 quotes both filters).
+    interpolation; psycopg2 quotes every filter).
+
+    SQL shape note:
+    ``length(data)`` is referenced twice (once for the ``data_size``
+    projection, once inside the CASE). PostgreSQL stores the
+    uncompressed byte length in the BYTEA varlena header, so
+    ``length(data)`` is an O(1) header read regardless of TOAST;
+    the dual evaluation cost is negligible relative to a wire
+    transfer of the bytes themselves. Single-query was preferred
+    over a metadata-then-data two-step both to avoid the extra
+    round trip and to keep the read atomic (no race window between
+    preflight and fetch where the row could be mutated).
     """
     from app.db.pg_connection import fetchone
 
     clauses = ["id = ?"]
-    params: list = [result_id]
+    where_params: list = [result_id]
     if group_id_filter:
         clauses.append("group_id = ?")
-        params.append(group_id_filter)
+        where_params.append(group_id_filter)
     if project_id_filter:
         clauses.append("project_id = ?")
-        params.append(project_id_filter)
+        where_params.append(project_id_filter)
 
+    # SQL fragment layout note: the SELECT projection is kept on
+    # a single source line so source-bound contract tests
+    # (anti-god-engine lock) can grep the canonical token
+    # ``storage_key, project_id, length(data) AS data_size`` as
+    # one literal substring. The CASE / WHERE / FROM clauses span
+    # multiple lines for readability.
     sql = (
-        "SELECT data, storage_key, project_id FROM results "
-        "WHERE " + " AND ".join(clauses)
+        "SELECT storage_key, project_id, length(data) AS data_size, "
+        "CASE "
+        "WHEN storage_key IS NOT NULL THEN NULL "
+        "WHEN length(data) > ? THEN NULL "
+        "ELSE data "
+        "END AS data "
+        "FROM results WHERE " + " AND ".join(clauses)
     )
-    return fetchone(sql, tuple(params))
+    # Parameter order matches placeholder order in the SQL text:
+    #   1. CASE WHEN length(data) > ?  -> max_bytes
+    #   2. WHERE id = ?                -> result_id
+    #   3. AND group_id = ?            -> group_id_filter (if set)
+    #   4. AND project_id = ?          -> project_id_filter (if set)
+    params = (max_bytes, *where_params)
+    return fetchone(sql, params)
 
 
 def _download_object_storage(storage_key: str) -> Optional[bytes]:
@@ -294,9 +343,16 @@ def _dispatch_by_id(
 
     logger = get_logger(__name__)
     _t0 = time.monotonic()
+    # Resolve once and pass through; the SQL preflight + the
+    # downstream cap enforcement MUST agree on the same cap value
+    # for a given dispatch (a runtime env mutation between two
+    # `_resolve_max_bytes()` calls would otherwise create a tiny
+    # window of disagreement that would be hard to reason about).
+    max_bytes = _resolve_max_bytes()
 
     row = _fetch_row(
         result_id,
+        max_bytes=max_bytes,
         group_id_filter=group_id_filter,
         project_id_filter=project_id_filter,
     )
@@ -314,33 +370,32 @@ def _dispatch_by_id(
         )
         return data, "object_storage"
 
-    data = row.get("data")
-    if isinstance(data, memoryview):
-        data = bytes(data)
-    # BE-GO-READY-RESOURCE-ENGINE-010: post-fetch cap check on
-    # BYTEA. The PG driver has already loaded the row into memory by
-    # this point (single fetchone result), so the cap here is
-    # post-facto -- it cannot prevent the initial allocation. It
-    # still serves as a strict downstream contract: callers will
-    # never see a Resource larger than the cap, regardless of
-    # backend. Documented as residual R-010.1 (PG-side row-size
-    # check would require a SELECT length(data) preflight; deferred
-    # to Worker 6 and the planned Settings consolidation).
-    if data is not None and len(data) > _resolve_max_bytes():
-        max_bytes = _resolve_max_bytes()
+    # BE-GO-READY-RESOURCE-ENGINE-013 (R-010.1 closure): BYTEA cap
+    # is now SQL preflight. ``data_size`` carries the authoritative
+    # ``length(data)`` projection; the SQL CASE has already nulled
+    # out ``data`` if oversize, so the BYTEA payload never crossed
+    # the PG/Python wire. Pre-013 the cap was post-fetch (PG had
+    # already loaded the bytes into the driver before any check
+    # could run).
+    data_size = row.get("data_size")
+    if data_size is not None and data_size > max_bytes:
         duration_ms = round((time.monotonic() - _t0) * 1000, 1)
         logger.error(
             f"[PERF] get_result_data op=fetch_blob backend=db_legacy "
             f"result_id={result_id} ABORTED oversize: "
-            f"observed_bytes={len(data)} limit_bytes={max_bytes} "
-            f"duration_ms={duration_ms}"
+            f"observed_bytes={data_size} limit_bytes={max_bytes} "
+            f"duration_ms={duration_ms} preflight=length(data)"
         )
         raise MemoryLimitExceededError(
-            observed_bytes=len(data),
+            observed_bytes=data_size,
             limit_bytes=max_bytes,
             path_basename=f"result_id={result_id}",
             stage="result_blob_oversize",
         )
+
+    data = row.get("data")
+    if isinstance(data, memoryview):
+        data = bytes(data)
     duration_ms = round((time.monotonic() - _t0) * 1000, 1)
     size = len(data) if data else 0
     logger.info(

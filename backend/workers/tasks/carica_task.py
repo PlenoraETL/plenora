@@ -296,7 +296,7 @@ def execute_carica_task(
         except Exception as e:
             logger.debug(f"close_connection intermediate fallito: {type(e).__name__}: {e}")
         try:
-            from app.db.config_db_service import close_connection as _close_cfg
+            from app.db.pg_connection import close_connection as _close_cfg
             _close_cfg()
         except Exception as e:
             logger.debug(f"close_connection config fallito: {type(e).__name__}: {e}")

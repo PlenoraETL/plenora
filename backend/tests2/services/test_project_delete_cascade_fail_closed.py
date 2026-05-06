@@ -119,7 +119,7 @@ def _patch_cascade(
             "app.db.results_db_service.delete_results_for_project",
             **results_patch
         ), patch(
-            "app.db.config_db_service.delete_comparison_keys",
+            "app.db.config.comparison_keys.delete_comparison_keys",
             **ck_patch
         ), patch(
             "app.services.project_service.db.delete_project",

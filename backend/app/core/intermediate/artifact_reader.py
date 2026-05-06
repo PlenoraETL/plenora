@@ -7,24 +7,82 @@ dall'endpoint `GET /api/runs/{run_id}/nodes/{node_id}/data`.
 
 Vincoli:
 - Niente download su disco: stream bytes -> BytesIO -> pandas.read_parquet.
+- Lettura bytes-first BOUNDED via
+  ``app.core.resources.bounded_reader.read_stream_bounded`` con cap
+  ``RESOURCE_MAX_BYTES`` (env, default 500 MB — mirror della
+  Settings.DEFAULTS senza importare ``app.config``: stesso boundary
+  pattern di ``result_blob.py``). Oversize NON viene degradato a
+  errore best-effort: la ``MemoryLimitExceededError`` propaga al
+  boundary FastAPI (handler ``app/main.py``) che mappa a HTTP 413
+  con stage ``intermediate_artifact_preview``. Questo evita che un
+  artifact corrotto/giga riempia RAM e OOM-killi il worker.
 - Limite righe applicato lato pandas (`df.head(limit)`).
-- Best-effort: errori (capability off, key missing, decode fail)
-  ritornano `ArtifactPreviewResult(rows=[], col_schema={}, error=...)`.
-  L'endpoint puo' rispondere 200 con messaggio operativo invece di 500.
+- Best-effort SOLO per errori non-OOM (capability off, key missing,
+  decode fail): ritornano `ArtifactPreviewResult(rows=[],
+  col_schema={}, error=...)`. L'endpoint puo' rispondere 200 con
+  messaggio operativo invece di 500.
 - Capability gate via `get_runtime_object_storage()` (cloud_backends).
 
 Vedi anche `app/core/intermediate/artifact_writer.py` per il counterpart
 write-side e per il layout key.
+
+Anti-god-engine note:
+``app.core.resources.bounded_reader`` is stdlib-only (no FastAPI/DB/
+config); importing it from this leaf reader does not violate the
+existing import boundary. The cap is read directly from
+``os.environ['RESOURCE_MAX_BYTES']`` (mirror of
+``Settings.DEFAULTS``) so the reader stays free of an
+``app.config`` dependency, matching the result-blob loader's
+pattern.
 """
 
 from __future__ import annotations
 
 import io
 import logging
+import os as _os
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from app.core.resources.bounded_reader import read_stream_bounded
+from app.shared.exceptions import MemoryLimitExceededError
+
 logger = logging.getLogger(__name__)
+
+
+_DEFAULT_ARTIFACT_READ_MAX_BYTES = 500 * 1024 * 1024  # 500 MB
+_ARTIFACT_READ_MAX_BYTES_ENV = "RESOURCE_MAX_BYTES"
+
+
+def _resolve_max_bytes() -> int:
+    """Resolve the artifact-preview read cap.
+
+    Mirror of ``app.core.resources.loaders.result_blob._resolve_max_bytes``:
+    read ``RESOURCE_MAX_BYTES`` from ``os.environ`` at each call so
+    monkeypatch / runtime env override takes effect without restart.
+    Invalid / non-positive values fall back to 500 MB.
+    """
+    raw = _os.environ.get(_ARTIFACT_READ_MAX_BYTES_ENV)
+    if not raw:
+        return _DEFAULT_ARTIFACT_READ_MAX_BYTES
+    try:
+        v = int(raw)
+    except (TypeError, ValueError):
+        return _DEFAULT_ARTIFACT_READ_MAX_BYTES
+    return v if v > 0 else _DEFAULT_ARTIFACT_READ_MAX_BYTES
+
+
+def _short_label(artifact_uri: str, max_len: int = 60) -> str:
+    """Operator-visible short identifier for the bounded-read label.
+
+    Avoids leaking full storage paths to the client via the boundary
+    handler (which echoes ``path_basename`` in the HTTP-413 envelope).
+    """
+    if not artifact_uri:
+        return "<none>"
+    if len(artifact_uri) <= max_len:
+        return artifact_uri
+    return f"{artifact_uri[:12]}...{artifact_uri[-30:]}"
 
 
 @dataclass
@@ -52,8 +110,15 @@ def load_preview_from_artifact(
     """Scarica `data.parquet` via runtime object storage e ritorna le
     prime `limit` righe + schema.
 
-    Best-effort: nessun errore solleva; il caller riceve un risultato
-    con `error` valorizzato.
+    Best-effort per errori di connettivita'/decode: il caller riceve
+    un ``ArtifactPreviewResult`` con ``error`` valorizzato e nessuna
+    eccezione viene sollevata.
+
+    Eccezione tipata: ``MemoryLimitExceededError`` viene PROPAGATA al
+    boundary FastAPI (HTTP 413) quando l'artifact supera
+    ``RESOURCE_MAX_BYTES``. Questo e' intenzionale: trasformare
+    oversize in error best-effort nasconderebbe il cap di risorsa al
+    client e all'operator.
     """
     if not artifact_uri:
         return ArtifactPreviewResult(error="artifact_uri vuoto")
@@ -90,9 +155,43 @@ def load_preview_from_artifact(
     # Streaming download: la preview e' piccola (limit << dataset),
     # ma scaricare tutto il Parquet in BytesIO e' inevitabile per leggere
     # con `pd.read_parquet` (no random-access sui chunks via boto3 boundary).
+    # La materializzazione e' BOUNDED: l'iteratore viene abortito al
+    # primo chunk che supererebbe ``RESOURCE_MAX_BYTES``. Oversize
+    # NON viene mascherato da error best-effort: ``MemoryLimitExceededError``
+    # propaga al boundary handler (HTTP 413 con stage
+    # ``intermediate_artifact_preview``).
+    max_bytes = _resolve_max_bytes()
     try:
         stream = storage.get_object_stream(artifact_uri)
-        body_bytes = b"".join(stream["body"])
+    except Exception as e:
+        logger.warning(
+            "[ARTIFACT-READ] download artifact fallito per %s: %s",
+            artifact_uri, e,
+        )
+        return ArtifactPreviewResult(
+            error=f"download artifact fallito: {type(e).__name__}: {e}",
+        )
+
+    try:
+        body_bytes = read_stream_bounded(
+            stream["body"],
+            max_bytes=max_bytes,
+            label=_short_label(artifact_uri),
+            stage="intermediate_artifact_preview",
+        )
+    except MemoryLimitExceededError as oversize:
+        logger.error(
+            "[ARTIFACT-READ] preview artifact ABORTED oversize "
+            "artifact_uri=%s observed_bytes=%s limit_bytes=%s",
+            _short_label(artifact_uri),
+            oversize.observed_bytes,
+            oversize.limit_bytes,
+        )
+        # Typed/controlled propagation: boundary handler maps to HTTP 413.
+        # NOT degraded to best-effort `error=...`: silently returning
+        # empty rows on a 50-GB artifact would hide the resource cap
+        # signal from the operator and from the client.
+        raise
     except Exception as e:
         logger.warning(
             "[ARTIFACT-READ] download artifact fallito per %s: %s",
