@@ -325,6 +325,36 @@ class Settings:
         # caller (es. `results_db_service` o `cloud_backends`). Vedi
         # `.agent-temp/BE_INSTALLATION_AUDIT.md` (BE-INSTALL-006).
         "RESOURCE_MAX_BYTES": 500 * 1024 * 1024,
+        # BE-GO-READY-RUNTIME-001-PREVIEW-MAX-BYTES-CAP: cap dedicato
+        # per la preview HTTP di intermediate artifacts (Parquet) e
+        # per qualunque preview-side path che oggi materializza bytes
+        # in `BytesIO` prima di passarli a pandas/pyarrow.
+        # Separato da `RESOURCE_MAX_BYTES` (500 MB) perche' la preview
+        # vive sul thread-pool della API e ha un budget RAM
+        # drasticamente piu' stretto di un download/job worker:
+        # - una richiesta preview puo' essere concorrente (N richieste
+        #   da N tab/utenti contemporanei). Con cap 500 MB un solo
+        #   refresh di un dataset grande consuma quasi tutto il
+        #   `WORKER_RSS_MAX_BYTES` (1.5 GB) dell'API process;
+        # - la preview restituisce solo `df.head(limit)` (default 100
+        #   righe): leggere centinaia di MB di Parquet per renderne 100
+        #   righe e' uno spreco strutturale. La cap reale dovra'
+        #   diventare row-group streaming (residual: `pyarrow.fs`).
+        # Default 25 MB: bilancia
+        # - dataset reali small-medium (CSV / Parquet < 25 MB e' la
+        #   stragrande maggioranza dei file di test users uploaded);
+        # - margine sopra `LOAD_FILE_MAX_BYTES` per artifact-side
+        #   compressione Parquet (Parquet 25 MB ~ CSV 100-200 MB);
+        # - sotto la soglia che farebbe un singolo refresh API
+        #   pesare > 1/50 del budget RSS del processo.
+        # Cap <= 0 disabilita il guard (la preview ricade sul cap
+        # generico `RESOURCE_MAX_BYTES`). Override via env
+        # `ARTIFACT_PREVIEW_MAX_BYTES`. Wiring: il reader
+        # (`app/core/intermediate/artifact_reader.py`) legge questa
+        # entry via `os.environ` (mirror dello stesso pattern
+        # anti-god-engine usato da `result_blob.py`). Streaming
+        # Parquet pyarrow.fs e' lavoro futuro residual.
+        "ARTIFACT_PREVIEW_MAX_BYTES": 25 * 1024 * 1024,
 
         # BE-GO-READY-STORAGE-ENGINE-006-RECONCILIATION-BEAT-HOOK:
         # Tunables del reconciler beat hook che processa le entry
@@ -426,6 +456,19 @@ class Settings:
         # Closes R-023.1 (silent accumulation gap su upload_intent
         # backlog quando il reconciler beat non gira).
         "READINESS_BEAT_HEARTBEAT_MAX_AGE_SECONDS": 0,
+
+        # BE-GO-READY-OPS-001-READINESS-COST-BOUNDEDNESS:
+        # Timeout (secondi) per la PING Redis dentro check_redis().
+        # Applicato sia a `socket_connect_timeout` (TCP handshake)
+        # che a `socket_timeout` (operazione PING dopo handshake).
+        # Senza socket_timeout, una Redis che accetta la connessione
+        # ma stalla nel rispondere bloccherebbe /health e /ready oltre
+        # il connect_timeout. Default 2s mantiene il comportamento
+        # storico; operatori possono ridurlo (es. 1s) in deploy
+        # k8s con SLO stretti, o alzarlo (es. 5s) in reti rumorose.
+        # Cap <= 0 cade al fallback hardcoded di 2s (non disabilitabile:
+        # un /health senza timeout sarebbe un footgun ops).
+        "READINESS_REDIS_TIMEOUT_SECONDS": 2,
 
         # ==================== TASK ARRICCHIMENTO ====================
         "ENRICHMENT_BATCH_SIZE": 100,

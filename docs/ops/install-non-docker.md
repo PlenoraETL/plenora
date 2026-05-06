@@ -283,6 +283,7 @@ Pool sizing (`DB_POOL_MIN`, `DB_POOL_MAX`,
 `AUDIT_RETENTION_DAYS`), feature flags (`ENABLE_ASYNC_ENRICHMENT`,
 `MSSQL_FAST_EXECUTEMANY`, `CARICA_BULK_INSERT`), memory caps
 (`LOAD_FILE_MAX_BYTES`, `WORKER_RSS_MAX_BYTES`, `RESOURCE_MAX_BYTES`,
+`ARTIFACT_PREVIEW_MAX_BYTES`,
 `CROSS_JOIN_MAX_OUTPUT_ROWS`, `MULTI_JOIN_MAX_OUTPUT_ROWS`), and
 storage thresholds all have sensible defaults in `Settings.DEFAULTS`
 and do not need to be set for a clean install. Override only when
@@ -295,12 +296,26 @@ ops needs require it.
 | `LOAD_FILE_MAX_BYTES` | 200 MB | 100 MB | 200–500 MB |
 | `WORKER_RSS_MAX_BYTES` | 1.5 GB | 800 MB | 1.5–3 GB |
 | `RESOURCE_MAX_BYTES` | 500 MB | 200 MB | 500 MB–1 GB |
+| `ARTIFACT_PREVIEW_MAX_BYTES` | 25 MB | 10–25 MB | 25–50 MB |
 
 Cap `<= 0` disables the corresponding guard (escape hatch). The
 `RESOURCE_MAX_BYTES` consumer-side wiring is currently a config
 default only — the Resource Engine loaders cannot import
 `app.config` (anti-god-engine). Caller-level enforcement is tracked
 in `BE_INSTALLATION_AUDIT.md` (BE-INSTALL-006).
+
+`ARTIFACT_PREVIEW_MAX_BYTES` is a DEDICATED preview cap
+separate from the generic blob cap `RESOURCE_MAX_BYTES`. It
+bounds the bytes-first read inside
+`app/core/intermediate/artifact_reader.py`, which is invoked
+synchronously from the API thread-pool when a user opens the
+data preview of a node. Because the preview is concurrent (N
+tabs / N users hitting N nodes), the cap is intentionally
+much smaller than `RESOURCE_MAX_BYTES`: 25 MB stops a single
+giant Parquet artifact from saturating the API process RAM.
+Oversize raises `MemoryLimitExceededError` at stage
+`intermediate_artifact_preview` and the boundary handler
+returns HTTP 413.
 
 For full classification per ADR-0021, see audit
 `BE_INSTALLATION_AUDIT.md` §3.

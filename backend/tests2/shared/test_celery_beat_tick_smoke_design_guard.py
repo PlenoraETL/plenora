@@ -45,6 +45,8 @@ from pathlib import Path
 
 import pytest
 
+from tests2.shared._source_scan import python_code_only as _python_code_only
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
@@ -242,27 +244,6 @@ def beat_task_text() -> str:
             "automatically and locks the contract from 12.7.2."
         )
     return _BEAT_TASK_PY.read_text(encoding="utf-8")
-
-
-def _python_code_only(source: str) -> str:
-    """Strip string literals and comments via tokenize so docstring
-    text mentioning forbidden patterns does not false-positive.
-    Same helper as test_celery_enqueue_smoke_design_guard.py."""
-    import io
-    import tokenize
-
-    out = []
-    try:
-        tokens = list(
-            tokenize.generate_tokens(io.StringIO(source).readline)
-        )
-    except tokenize.TokenizeError:
-        return source
-    for tok in tokens:
-        if tok.type in (tokenize.STRING, tokenize.COMMENT):
-            continue
-        out.append(tok.string)
-    return " ".join(out)
 
 
 def test_beat_task_is_pure_noop(beat_task_text: str):

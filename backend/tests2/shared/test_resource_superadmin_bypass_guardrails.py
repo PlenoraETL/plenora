@@ -67,11 +67,11 @@ Companion contracts:
 
 from __future__ import annotations
 
-import io
-import tokenize
 from pathlib import Path
 
 import pytest
+
+from tests2.shared._source_scan import python_code_only as _python_code_only
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
@@ -117,42 +117,6 @@ _NORMAL_REQUEST_ENTRYPOINT_GLOBS: tuple[str, ...] = (
 # ---------------------------------------------------------------------------
 # Tokenize helpers
 # ---------------------------------------------------------------------------
-
-
-def _python_code_only(source: str) -> str:
-    """Return source with string literals, f-string literal parts,
-    and comments stripped.
-
-    Python 3.12+ tokenizes f-strings into ``FSTRING_START`` /
-    ``FSTRING_MIDDLE`` / ``FSTRING_END`` plus the embedded
-    expression tokens. We strip the literal portions (they read
-    as runtime data, not code) but keep the expressions (those
-    really are code and must remain visible to the scan).
-
-    Mirrors the spirit of the helper in
-    ``test_resource_engine_anti_god_engine_lock.py``; the two
-    source-bound locks share the same definition of "code".
-    """
-    out: list[str] = []
-    try:
-        tokens = list(tokenize.generate_tokens(io.StringIO(source).readline))
-    except tokenize.TokenizeError:
-        # Fall back to raw text on malformed sources; the scan would
-        # rather over-report (a false positive in a malformed file is
-        # better than missing a real regression).
-        return source
-    _strip_types = {
-        tokenize.STRING,
-        tokenize.COMMENT,
-        getattr(tokenize, "FSTRING_START", -1),
-        getattr(tokenize, "FSTRING_MIDDLE", -1),
-        getattr(tokenize, "FSTRING_END", -1),
-    }
-    for tok in tokens:
-        if tok.type in _strip_types:
-            continue
-        out.append(tok.string)
-    return " ".join(out)
 
 
 def _iter_app_py():

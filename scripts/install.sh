@@ -17,11 +17,18 @@
 # Usage:
 #   scripts/install.sh                # interactive prompts
 #   scripts/install.sh --check        # preflight only: tools + native libs + Python version. No prompts, no writes, no service probes.
+#   scripts/install.sh --smoke        # post-install smoke: memory caps visibility + app import + optional health/ready curl + optional cleanroom.ping. Non-destructive, no prompts, no writes.
 #   scripts/install.sh --dry-run      # print what would happen, no writes
 #   scripts/install.sh --non-interactive  # all answers from env vars
 #   scripts/install.sh --install-deps     # apt install pkg list (Ubuntu)
 #   scripts/install.sh --overwrite-secrets  # rewrite even if already set
 #   scripts/install.sh --help
+#
+# Smoke env vars (read-only consumers, only honoured with --smoke):
+#   PLENORA_SMOKE_BACKEND_URL  e.g. http://127.0.0.1:5004
+#                              when set: curl /health and /ready
+#   PLENORA_SMOKE_RUN_PING     1 to send `cleanroom.ping` via Celery
+#                              (requires reachable broker and venv)
 #
 # Env vars (consumed when present, prompted otherwise):
 #   PLENORA_INSTALL_DATABASE_URL    Postgres DSN
@@ -63,6 +70,7 @@ NON_INTERACTIVE=0
 INSTALL_DEPS=0
 OVERWRITE_SECRETS=0
 CHECK_ONLY=0
+SMOKE_ONLY=0
 
 # ANSI colors (disabled when stdout is not a tty)
 if [[ -t 1 ]]; then
@@ -100,6 +108,7 @@ while [[ $# -gt 0 ]]; do
         --install-deps)       INSTALL_DEPS=1 ;;
         --overwrite-secrets)  OVERWRITE_SECRETS=1 ;;
         --check)              CHECK_ONLY=1 ;;
+        --smoke)              SMOKE_ONLY=1 ;;
         --help|-h)            usage ;;
         *)                    die "Unknown argument: $1 (use --help)" ;;
     esac
@@ -344,6 +353,154 @@ PYEOF
         fi
         die "Cleanroom packaging guard failed; see logs above."
     fi
+}
+
+# ---------------------------------------------------------------------------
+# Step S - Post-install smoke (--smoke)
+# ---------------------------------------------------------------------------
+# Non-destructive, prompt-free, read-only verification of a freshly
+# installed clean machine. Implements rows 7 and 8 of the canonical
+# clean-install smoke harness documented in
+# docs/ops/install-marco-dry-run.md section 5, and adds two optional
+# probes (health/ready curl, cleanroom.ping) for the operator who
+# already started uvicorn + worker.
+#
+# Contracts:
+#   - never writes a file, never restarts a service, never installs
+#     a package;
+#   - exits 0 only when every attempted check passed (caps + import +
+#     any optional probe the operator opted into);
+#   - exits 1 on the first hard fail;
+#   - skipped checks (no venv, no backend URL, no broker) emit WARN
+#     but do not fail the harness.
+
+# Memory caps locked by the harness guard test
+# `tests2/shared/test_install_smoke_harness_doc_guard.py::test_harness_5_2_lists_canonical_memory_caps`.
+# Single source of truth on the script side; doc cross-checks via the
+# guard test - if a cap is added to the runtime, both lists update.
+INSTALLER_SMOKE_MEMORY_CAPS=(
+    LOAD_FILE_MAX_BYTES
+    WORKER_RSS_MAX_BYTES
+    RESOURCE_MAX_BYTES
+    ARTIFACT_PREVIEW_MAX_BYTES
+    CROSS_JOIN_MAX_OUTPUT_ROWS
+    MULTI_JOIN_MAX_OUTPUT_ROWS
+)
+
+step_smoke_caps_visibility() {
+    log_step "Smoke 1 - Memory caps visibility"
+    local venv_python="${BACKEND_DIR}/venv/bin/python"
+    if [[ ! -x "$venv_python" ]]; then
+        log_warn "backend/venv not found - skipping caps visibility (run install runbook step 6 first)."
+        return 2
+    fi
+    local script="" cap
+    script+="from app.config import settings"$'\n'
+    for cap in "${INSTALLER_SMOKE_MEMORY_CAPS[@]}"; do
+        script+="print(f\"${cap}={settings.get('${cap}')}\")"$'\n'
+    done
+    if (cd "$BACKEND_DIR" && "$venv_python" -c "$script"); then
+        log_ok "Memory caps visible (settings.get fallthrough OK)."
+        return 0
+    fi
+    log_err "Failed to read memory caps via settings.get - venv or backend/.env may be broken."
+    return 1
+}
+
+step_smoke_app_import() {
+    log_step "Smoke 2 - Backend import sanity"
+    local venv_python="${BACKEND_DIR}/venv/bin/python"
+    if [[ ! -x "$venv_python" ]]; then
+        log_warn "backend/venv not found - skipping import sanity."
+        return 2
+    fi
+    # Importing app.config is sufficient to exercise the Settings
+    # singleton, .env load, and ADR-0021 boundary without booting
+    # FastAPI or touching the DB.
+    if (cd "$BACKEND_DIR" && "$venv_python" -c "import app.config; import workers.celery_app"); then
+        log_ok "app.config and workers.celery_app import cleanly."
+        return 0
+    fi
+    log_err "Backend import failed - check venv installation and backend/.env."
+    return 1
+}
+
+step_smoke_health_ready() {
+    log_step "Smoke 3 - /health and /ready"
+    local url="${PLENORA_SMOKE_BACKEND_URL:-}"
+    if [[ -z "$url" ]]; then
+        log_info "PLENORA_SMOKE_BACKEND_URL not set - skipping health/ready probes."
+        return 2
+    fi
+    if ! command -v curl &>/dev/null; then
+        log_warn "curl not found - skipping health/ready probes."
+        return 2
+    fi
+    local rc=0
+    if curl -fsS --max-time 5 "${url%/}/health" >/dev/null; then
+        log_ok "GET ${url%/}/health returned 200."
+    else
+        log_err "GET ${url%/}/health failed - is uvicorn running on ${url}?"
+        rc=1
+    fi
+    if curl -fsS --max-time 10 "${url%/}/ready" >/dev/null; then
+        log_ok "GET ${url%/}/ready returned 200 (all readiness checks green)."
+    else
+        log_err "GET ${url%/}/ready failed - inspect 'journalctl -u plenora-backend -n 100' for the failed gate."
+        rc=1
+    fi
+    return $rc
+}
+
+step_smoke_cleanroom_ping() {
+    log_step "Smoke 4 - Celery cleanroom.ping round-trip"
+    if [[ "${PLENORA_SMOKE_RUN_PING:-0}" != "1" ]]; then
+        log_info "PLENORA_SMOKE_RUN_PING not set to 1 - skipping cleanroom.ping (requires foreground worker)."
+        return 2
+    fi
+    local venv_python="${BACKEND_DIR}/venv/bin/python"
+    if [[ ! -x "$venv_python" ]]; then
+        log_warn "backend/venv not found - skipping cleanroom.ping."
+        return 2
+    fi
+    local out
+    if ! out="$(cd "$BACKEND_DIR" && "$venv_python" - <<'PYEOF' 2>&1
+from workers.celery_app import celery_app
+ar = celery_app.send_task("cleanroom.ping")
+print(ar.get(timeout=30))
+PYEOF
+    )"; then
+        log_err "cleanroom.ping round-trip failed: ${out}"
+        log_info "Hint: kombu.exceptions.OperationalError -> broker URL wrong or Redis down."
+        log_info "Hint: celery.exceptions.TimeoutError  -> worker not consuming tasks (check the foreground worker terminal)."
+        return 1
+    fi
+    if [[ "${out: -4}" == "pong" ]]; then
+        log_ok "cleanroom.ping returned 'pong' (worker dispatch + broker round-trip OK)."
+        return 0
+    fi
+    log_err "cleanroom.ping returned unexpected output: ${out}"
+    return 1
+}
+
+step_smoke_summary() {
+    local caps_rc="$1" import_rc="$2" hr_rc="$3" ping_rc="$4"
+    log_step "Smoke summary"
+    local hard_fail=0
+    # rc==0 OK, rc==1 hard fail, rc==2 skipped (warn-only)
+    [[ $caps_rc -eq 1 ]] && hard_fail=1
+    [[ $import_rc -eq 1 ]] && hard_fail=1
+    [[ $hr_rc -eq 1 ]] && hard_fail=1
+    [[ $ping_rc -eq 1 ]] && hard_fail=1
+    if (( hard_fail )); then
+        log_err "--smoke: FAIL - one or more harness checks did not pass."
+        log_info "Re-read docs/ops/install-marco-dry-run.md section 5 and the [ERROR] lines above."
+        exit 1
+    fi
+    log_ok "--smoke: PASS - every attempted check is green."
+    log_info "Skipped checks (rc=2) are non-fatal but reduce coverage."
+    log_info "To raise coverage: export PLENORA_SMOKE_BACKEND_URL and PLENORA_SMOKE_RUN_PING=1 then re-run."
+    exit 0
 }
 
 step_check_only_summary() {
@@ -839,6 +996,18 @@ main() {
         step_validate_prereqs || prereq_rc=$?
         step_validate_packaging || packaging_rc=$?
         step_check_only_summary "$prereq_rc" "$packaging_rc"
+    fi
+
+    if (( SMOKE_ONLY )); then
+        log_info "--smoke: post-install verification (no prompts, no writes, no service restarts)."
+        # Collect every rc; never short-circuit so the operator sees
+        # the full state of the harness in one run.
+        local caps_rc=0 import_rc=0 hr_rc=0 ping_rc=0
+        step_smoke_caps_visibility || caps_rc=$?
+        step_smoke_app_import || import_rc=$?
+        step_smoke_health_ready || hr_rc=$?
+        step_smoke_cleanroom_ping || ping_rc=$?
+        step_smoke_summary "$caps_rc" "$import_rc" "$hr_rc" "$ping_rc"
     fi
 
     step_validate_prereqs

@@ -561,6 +561,52 @@ operator-facing single source - do NOT improvise the order; the
 boot gates fire in the same order and skipping a row makes the
 diagnosis path harder.
 
+### 5.0 Executable hook
+
+`BE-GO-READY-INSTALL-008-SMOKE-SCRIPT-HOOK`. Rows 1-6 are
+covered by `bash scripts/install.sh --check` (preflight) and the
+boot/curl steps in section 2. Rows 7 and 8 plus an app-import
+sanity probe are wrapped by:
+
+```bash
+cd ~/plenora-etl
+PLENORA_SMOKE_BACKEND_URL=http://127.0.0.1:5004 \
+PLENORA_SMOKE_RUN_PING=1 \
+bash scripts/install.sh --smoke
+```
+
+The flag is non-destructive: zero prompts, zero writes, zero
+package installs, zero service restarts. It exits 0 only when
+every attempted check is green. Both env vars are optional - omit
+`PLENORA_SMOKE_BACKEND_URL` to skip the health/ready curl
+(useful when the operator has not yet started uvicorn) and omit
+`PLENORA_SMOKE_RUN_PING` to skip the cleanroom.ping round-trip
+(useful when no foreground worker is running). Skipped checks
+emit WARN but do not fail the harness.
+
+What `--smoke` does internally:
+
+1. `Smoke 1 - Memory caps visibility`: runs the section 5.2
+   one-liner inside `backend/venv/bin/python` and prints all
+   six canonical caps via `app.config.settings.get(...)`.
+2. `Smoke 2 - Backend import sanity`: imports `app.config` and
+   `workers.celery_app` to verify the venv + `backend/.env` can
+   construct the Settings singleton without booting FastAPI.
+3. `Smoke 3 - /health and /ready`: when
+   `PLENORA_SMOKE_BACKEND_URL` is set, curls `${URL}/health` and
+   `${URL}/ready` with a 5-10 s timeout.
+4. `Smoke 4 - Celery cleanroom.ping round-trip`: when
+   `PLENORA_SMOKE_RUN_PING=1`, sends `cleanroom.ping` and
+   asserts `pong` via `AsyncResult.get(timeout=30)` exactly as
+   documented in section 5.3.
+
+The prose in 5.2 / 5.3 / 5.4 below remains the canonical
+description of the contract; the script is the convenience
+wrapper, not a replacement. Each subsection below stays
+copy/paste-ready for the operator who prefers to run a single
+step manually or has an installation that diverges from the
+default `~/plenora-etl/backend/venv` layout.
+
 ### 5.1 Eight-item canonical mapping
 
 | # | Harness item | Where the command lives | Pass signal |
@@ -571,7 +617,7 @@ diagnosis path harder.
 | 4 | object storage choice locked in `.env` | step 2.5 (installer) - first PC test = `STORAGE_POLICY=db` + dummy `BACKUP_BUCKET` | `/ready` reports `object_storage` as `skipped: STORAGE_POLICY=db` |
 | 5 | workers/beat count (foreground for first run) | step 2.7 - uvicorn `--workers 1`, celery worker `--pool=solo`, beat singleton | three foreground processes log "ready" / "running on" / "PlenoraBeatScheduler avviato" |
 | 6 | health + ready checks | step 2.8 above | `/health` 200 AND `/ready` 200 with all 6 ready checks ok |
-| 7 | memory caps visibility (RESOURCE_MAX_BYTES + siblings) | section 5.2 below | one-liner prints the four caps with the values the runtime will use |
+| 7 | memory caps visibility (RESOURCE_MAX_BYTES + siblings) | section 5.2 below | one-liner prints the six caps with the values the runtime will use |
 | 8 | tiny ETL/project smoke (real worker dispatches a real task) | section 5.3 below | `cleanroom.ping` round-trips `pong` via `AsyncResult.get(timeout=30)` |
 
 The harness is COMPLETE only when all eight rows are green. A
@@ -584,7 +630,7 @@ attempts.
 
 ### 5.2 Memory caps visibility (row 7)
 
-The runtime memory budget is governed by four `Settings.DEFAULTS`
+The runtime memory budget is governed by six `Settings.DEFAULTS`
 keys. Defaults are sane for an 8-16 GB server; for a smaller PC
 the operator should override them BEFORE step 2.7. Run inside
 the venv with `backend/.env` already in place:
@@ -597,6 +643,7 @@ keys = (
     "LOAD_FILE_MAX_BYTES",
     "WORKER_RSS_MAX_BYTES",
     "RESOURCE_MAX_BYTES",
+    "ARTIFACT_PREVIEW_MAX_BYTES",
     "CROSS_JOIN_MAX_OUTPUT_ROWS",
     "MULTI_JOIN_MAX_OUTPUT_ROWS",
 )
@@ -612,6 +659,7 @@ Expected (defaults, no override in `backend/.env`):
 LOAD_FILE_MAX_BYTES=209715200
 WORKER_RSS_MAX_BYTES=1500000000
 RESOURCE_MAX_BYTES=524288000
+ARTIFACT_PREVIEW_MAX_BYTES=26214400
 CROSS_JOIN_MAX_OUTPUT_ROWS=50000000
 MULTI_JOIN_MAX_OUTPUT_ROWS=50000000
 ```
@@ -625,13 +673,15 @@ are:
 LOAD_FILE_MAX_BYTES=104857600    # 100 MB upload cap
 WORKER_RSS_MAX_BYTES=838860800   # 800 MB worker RSS
 RESOURCE_MAX_BYTES=209715200     # 200 MB single-blob read cap
+ARTIFACT_PREVIEW_MAX_BYTES=10485760 # 10 MB preview cap
 ```
 
 A cap `<= 0` disables the corresponding guard (escape hatch).
 `RESOURCE_MAX_BYTES` is enforced by bounded blob/resource readers
-(`ResultBlobLoader`, file blob materialization, and intermediate
-artifact preview); additional future resource kinds should reuse the
-same cap rather than introducing a parallel setting.
+(`ResultBlobLoader`, file blob materialization). Preview endpoints
+use the lower `ARTIFACT_PREVIEW_MAX_BYTES` cap because they decode
+the bounded bytes into pandas/pyarrow structures and can run
+concurrently on API workers.
 
 ### 5.3 Tiny ETL/project smoke (row 8)
 
@@ -685,11 +735,11 @@ When the future Docker batch lands
 | 4 (object storage) | `STORAGE_POLICY=db` in `backend/.env` | `STORAGE_POLICY=db` in `.env.docker.example` (already set) |
 | 5 (workers/beat) | three foreground processes (uvicorn / worker / beat) | `worker` and `beat` services share the backend image with overridden `CMD` |
 | 6 (health/ready) | `curl http://127.0.0.1:5004/{health,ready}` | `docker compose ps` healthcheck (gated by `HEALTHCHECK` in `Dockerfile`) plus the same `curl` |
-| 7 (memory caps) | `RESOURCE_MAX_BYTES` etc. in `backend/.env` | three commented overrides already present in `.env.docker.example` (per [install-docker.md section D](install-docker.md#d-envdockerexample) lines `LOAD_FILE_MAX_BYTES` / `WORKER_RSS_MAX_BYTES` / `RESOURCE_MAX_BYTES`) |
+| 7 (memory caps) | `RESOURCE_MAX_BYTES`, `ARTIFACT_PREVIEW_MAX_BYTES`, etc. in `backend/.env` | commented overrides already present in `.env.docker.example` (per [install-docker.md section D](install-docker.md#d-envdockerexample) lines `LOAD_FILE_MAX_BYTES` / `WORKER_RSS_MAX_BYTES` / `RESOURCE_MAX_BYTES` / `ARTIFACT_PREVIEW_MAX_BYTES`) |
 | 8 (tiny ETL smoke) | `celery_app.send_task("cleanroom.ping")` from `./venv/bin/python` | `docker compose exec worker python -c "..."` against the running worker container |
 
 The caps surface MUST stay visible in both `.env`/`.env.docker.example`
-and in the harness step 7 output. Removing any of the five caps
+and in the harness step 7 output. Removing any of the six caps
 from either location is a regression - locked by the harness
 guard test.
 

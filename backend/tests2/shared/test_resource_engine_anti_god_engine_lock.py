@@ -31,6 +31,8 @@ from pathlib import Path
 
 import pytest
 
+from tests2.shared._source_scan import python_code_only as _python_code_only
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
@@ -150,24 +152,6 @@ _BANNED_IMPORT_NEEDLES = (
     "from app.core.intermediate",
     "import app.core.intermediate",
 )
-
-
-def _python_code_only(source: str) -> str:
-    """Strip string literals and comments via tokenize so docstring
-    text mentioning forbidden patterns does not false-positive."""
-    import io
-    import tokenize
-
-    out = []
-    try:
-        tokens = list(tokenize.generate_tokens(io.StringIO(source).readline))
-    except tokenize.TokenizeError:
-        return source
-    for tok in tokens:
-        if tok.type in (tokenize.STRING, tokenize.COMMENT):
-            continue
-        out.append(tok.string)
-    return " ".join(out)
 
 
 def _iter_resources_py():

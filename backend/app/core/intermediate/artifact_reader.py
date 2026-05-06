@@ -9,13 +9,18 @@ Vincoli:
 - Niente download su disco: stream bytes -> BytesIO -> pandas.read_parquet.
 - Lettura bytes-first BOUNDED via
   ``app.core.resources.bounded_reader.read_stream_bounded`` con cap
-  ``RESOURCE_MAX_BYTES`` (env, default 500 MB — mirror della
-  Settings.DEFAULTS senza importare ``app.config``: stesso boundary
-  pattern di ``result_blob.py``). Oversize NON viene degradato a
-  errore best-effort: la ``MemoryLimitExceededError`` propaga al
-  boundary FastAPI (handler ``app/main.py``) che mappa a HTTP 413
-  con stage ``intermediate_artifact_preview``. Questo evita che un
-  artifact corrotto/giga riempia RAM e OOM-killi il worker.
+  DEDICATO ``ARTIFACT_PREVIEW_MAX_BYTES`` (env, default 25 MB —
+  mirror della Settings.DEFAULTS senza importare ``app.config``:
+  stesso boundary pattern di ``result_blob.py``). La preview ha un
+  cap MOLTO piu' basso del generico ``RESOURCE_MAX_BYTES`` (500 MB)
+  perche' la preview vive sul thread-pool dell'API ed e' concorrente
+  per definizione: N tab/utenti che fanno refresh di N nodi non
+  possono sommare 500 MB ciascuno o l'API satura la RAM del processo
+  prima di un OOM kill. Oversize NON viene degradato a errore
+  best-effort: la ``MemoryLimitExceededError`` propaga al boundary
+  FastAPI (handler ``app/main.py``) che mappa a HTTP 413 con stage
+  ``intermediate_artifact_preview``. Questo evita che un artifact
+  corrotto/giga riempia RAM e OOM-killi il worker.
 - Limite righe applicato lato pandas (`df.head(limit)`).
 - Best-effort SOLO per errori non-OOM (capability off, key missing,
   decode fail): ritornano `ArtifactPreviewResult(rows=[],
@@ -30,46 +35,68 @@ Anti-god-engine note:
 ``app.core.resources.bounded_reader`` is stdlib-only (no FastAPI/DB/
 config); importing it from this leaf reader does not violate the
 existing import boundary. The cap is read directly from
-``os.environ['RESOURCE_MAX_BYTES']`` (mirror of
+``os.environ['ARTIFACT_PREVIEW_MAX_BYTES']`` (mirror of
 ``Settings.DEFAULTS``) so the reader stays free of an
 ``app.config`` dependency, matching the result-blob loader's
 pattern.
+
+BE-GO-READY-RESOURCE-ENGINE-016 (parser-boundary split): the
+pandas-bound parsing of the downloaded byte buffer is delegated
+to the leaf module ``app.core.intermediate.preview_parser``.
+This file is now a pure I/O orchestrator -- it owns capability
+gating, bounded streaming, and best-effort error envelope
+construction; it does NOT import pandas or perform any
+DataFrame work. ``import pandas`` lives ONLY inside
+``preview_parser.parse_parquet_preview`` (lazy, inside the
+function body). A source-bound test in
+``tests2/intermediate/unit/test_artifact_reader_bounded_preview_contract.py``
+locks that the reader does not regress on the pandas-import
+edge.
 """
 
 from __future__ import annotations
 
-import io
 import logging
 import os as _os
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from app.core.intermediate.preview_parser import (
+    ParquetPreviewParseError,
+    parse_parquet_preview,
+)
 from app.core.resources.bounded_reader import read_stream_bounded
 from app.shared.exceptions import MemoryLimitExceededError
 
 logger = logging.getLogger(__name__)
 
 
-_DEFAULT_ARTIFACT_READ_MAX_BYTES = 500 * 1024 * 1024  # 500 MB
-_ARTIFACT_READ_MAX_BYTES_ENV = "RESOURCE_MAX_BYTES"
+_DEFAULT_ARTIFACT_PREVIEW_MAX_BYTES = 25 * 1024 * 1024  # 25 MB
+_ARTIFACT_PREVIEW_MAX_BYTES_ENV = "ARTIFACT_PREVIEW_MAX_BYTES"
 
 
 def _resolve_max_bytes() -> int:
     """Resolve the artifact-preview read cap.
 
-    Mirror of ``app.core.resources.loaders.result_blob._resolve_max_bytes``:
-    read ``RESOURCE_MAX_BYTES`` from ``os.environ`` at each call so
-    monkeypatch / runtime env override takes effect without restart.
-    Invalid / non-positive values fall back to 500 MB.
+    Mirror of ``app.core.resources.loaders.result_blob._resolve_max_bytes``
+    but PREVIEW-specific: reads ``ARTIFACT_PREVIEW_MAX_BYTES`` from
+    ``os.environ`` at each call (monkeypatch / runtime env override
+    takes effect without restart). Default 25 MB matches
+    ``Settings.DEFAULTS["ARTIFACT_PREVIEW_MAX_BYTES"]`` (BE-GO-READY-
+    RUNTIME-001-PREVIEW-MAX-BYTES-CAP). Separate from
+    ``RESOURCE_MAX_BYTES`` (500 MB) on purpose: the preview is
+    concurrency-sensitive (N concurrent API requests) and only
+    renders ``df.head(limit)``, so the byte budget is much tighter.
+    Invalid / non-positive values fall back to the 25 MB default.
     """
-    raw = _os.environ.get(_ARTIFACT_READ_MAX_BYTES_ENV)
+    raw = _os.environ.get(_ARTIFACT_PREVIEW_MAX_BYTES_ENV)
     if not raw:
-        return _DEFAULT_ARTIFACT_READ_MAX_BYTES
+        return _DEFAULT_ARTIFACT_PREVIEW_MAX_BYTES
     try:
         v = int(raw)
     except (TypeError, ValueError):
-        return _DEFAULT_ARTIFACT_READ_MAX_BYTES
-    return v if v > 0 else _DEFAULT_ARTIFACT_READ_MAX_BYTES
+        return _DEFAULT_ARTIFACT_PREVIEW_MAX_BYTES
+    return v if v > 0 else _DEFAULT_ARTIFACT_PREVIEW_MAX_BYTES
 
 
 def _short_label(artifact_uri: str, max_len: int = 60) -> str:
@@ -116,7 +143,8 @@ def load_preview_from_artifact(
 
     Eccezione tipata: ``MemoryLimitExceededError`` viene PROPAGATA al
     boundary FastAPI (HTTP 413) quando l'artifact supera
-    ``RESOURCE_MAX_BYTES``. Questo e' intenzionale: trasformare
+    ``ARTIFACT_PREVIEW_MAX_BYTES`` (default 25 MB, indipendente da
+    ``RESOURCE_MAX_BYTES``). Questo e' intenzionale: trasformare
     oversize in error best-effort nasconderebbe il cap di risorsa al
     client e all'operator.
     """
@@ -156,10 +184,11 @@ def load_preview_from_artifact(
     # ma scaricare tutto il Parquet in BytesIO e' inevitabile per leggere
     # con `pd.read_parquet` (no random-access sui chunks via boto3 boundary).
     # La materializzazione e' BOUNDED: l'iteratore viene abortito al
-    # primo chunk che supererebbe ``RESOURCE_MAX_BYTES``. Oversize
-    # NON viene mascherato da error best-effort: ``MemoryLimitExceededError``
-    # propaga al boundary handler (HTTP 413 con stage
-    # ``intermediate_artifact_preview``).
+    # primo chunk che supererebbe ``ARTIFACT_PREVIEW_MAX_BYTES``
+    # (default 25 MB — preview-specific cap, separato da
+    # ``RESOURCE_MAX_BYTES``). Oversize NON viene mascherato da error
+    # best-effort: ``MemoryLimitExceededError`` propaga al boundary
+    # handler (HTTP 413 con stage ``intermediate_artifact_preview``).
     max_bytes = _resolve_max_bytes()
     try:
         stream = storage.get_object_stream(artifact_uri)
@@ -201,33 +230,44 @@ def load_preview_from_artifact(
             error=f"download artifact fallito: {type(e).__name__}: {e}",
         )
 
+    # BE-GO-READY-RESOURCE-ENGINE-016: parsing the bounded byte
+    # buffer is delegated to the leaf parser module. Pandas lives
+    # ONLY inside ``preview_parser.parse_parquet_preview``;
+    # ``artifact_reader`` (this file) is a pure I/O orchestrator
+    # and contains zero pandas references at any indentation
+    # level. The error envelope shape -- ``read_parquet
+    # fallito: ...`` and ``to_dict fallito: ...`` strings --
+    # is preserved verbatim so router callers and existing
+    # contract tests do not regress.
     try:
-        import pandas as pd
-        df = pd.read_parquet(io.BytesIO(body_bytes))
-    except Exception as e:
-        logger.warning(
-            "[ARTIFACT-READ] read_parquet fallito per %s: %s",
-            artifact_uri, e,
-        )
+        parsed = parse_parquet_preview(body_bytes, limit=limit)
+    except ParquetPreviewParseError as e:
+        if e.stage == "read_parquet":
+            logger.warning(
+                "[ARTIFACT-READ] read_parquet fallito per %s: %s",
+                artifact_uri, e.cause,
+            )
+            return ArtifactPreviewResult(
+                error=(
+                    f"read_parquet fallito: "
+                    f"{type(e.cause).__name__}: {e.cause}"
+                ),
+            )
+        # stage == "to_dict": preserve the partial schema +
+        # row_count so the caller learns the dataset shape even
+        # when individual rows could not be materialized.
         return ArtifactPreviewResult(
-            error=f"read_parquet fallito: {type(e).__name__}: {e}",
+            row_count=e.partial_row_count,
+            col_schema=e.partial_schema,
+            error=(
+                f"to_dict fallito: "
+                f"{type(e.cause).__name__}: {e.cause}"
+            ),
         )
 
-    row_count = int(len(df))
-    head = df.head(int(limit))
-    try:
-        rows = head.to_dict(orient="records")
-    except Exception as e:
-        return ArtifactPreviewResult(
-            row_count=row_count,
-            col_schema={str(c): str(df[c].dtype) for c in df.columns},
-            error=f"to_dict fallito: {type(e).__name__}: {e}",
-        )
-
-    col_schema = {str(c): str(df[c].dtype) for c in df.columns}
     return ArtifactPreviewResult(
-        rows=rows,
-        col_schema=col_schema,
-        row_count=row_count,
+        rows=parsed.rows,
+        col_schema=parsed.col_schema,
+        row_count=parsed.row_count,
         error=None,
     )

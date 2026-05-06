@@ -33,6 +33,7 @@ from unittest.mock import patch
 
 import pytest
 
+from tests2.shared._source_scan import python_code_only as _python_code_only
 from tests2.shared._resource_loader_helpers import (
     fake_fetchone,
     make_result_ref,
@@ -552,26 +553,6 @@ def test_stream_mode_raises_before_any_storage_access(monkeypatch):
 # ---------------------------------------------------------------------------
 # 7. Source-bound: the unbounded `b"".join(list(...))` pattern is gone
 # ---------------------------------------------------------------------------
-
-
-def _python_code_only(source: str) -> str:
-    """Strip string literals + comments via tokenize so the loader's
-    own audit comment / docstring (which legitimately mentions the
-    banned pre-010 pattern as historical context) does not
-    false-positive."""
-    import io
-    import tokenize
-
-    out = []
-    try:
-        tokens = list(tokenize.generate_tokens(io.StringIO(source).readline))
-    except tokenize.TokenizeError:
-        return source
-    for tok in tokens:
-        if tok.type in (tokenize.STRING, tokenize.COMMENT):
-            continue
-        out.append(tok.string)
-    return " ".join(out)
 
 
 def test_source_no_longer_contains_unbounded_join_pattern():

@@ -28,6 +28,8 @@ from unittest.mock import patch
 
 import pytest
 
+from tests2.shared._source_scan import python_code_only as _python_code_only
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
@@ -268,24 +270,6 @@ _BANNED_NETWORK_IMPORTS = (
 )
 
 
-def _python_code_only(source: str) -> str:
-    """Strip string literals and comments via tokenize so docstring
-    text mentioning forbidden patterns does not false-positive."""
-    import io
-    import tokenize
-
-    out = []
-    try:
-        tokens = list(tokenize.generate_tokens(io.StringIO(source).readline))
-    except tokenize.TokenizeError:
-        return source
-    for tok in tokens:
-        if tok.type in (tokenize.STRING, tokenize.COMMENT):
-            continue
-        out.append(tok.string)
-    return " ".join(out)
-
-
 def test_health_module_has_no_unbounded_network_imports():
     """Source-bound: `app/observability/health.py` MUST NOT import
     a generic HTTP client. Any check that hits a remote service
@@ -408,3 +392,193 @@ def test_check_redis_remains_fail_closed():
 
     assert ok is False
     assert "RuntimeError" in detail
+
+
+# =====================================================================
+# 6. OPS-001: liveness cheapness + Redis PING-level timeout
+# =====================================================================
+#
+# BE-GO-READY-OPS-001-READINESS-COST-BOUNDEDNESS adds three locks:
+#   (a) liveness must NEVER call any of the 6 readiness-only checks
+#       (load-balancer-friendly latency budget);
+#   (b) Redis PING must be bounded at the OPERATION level
+#       (`socket_timeout`), not only at the TCP handshake level
+#       (`socket_connect_timeout`);
+#   (c) the Redis timeout is configurable via
+#       `READINESS_REDIS_TIMEOUT_SECONDS` so operators can tune
+#       per-deploy without source edits.
+
+
+def test_gather_liveness_keyset_is_exactly_two():
+    """Liveness keyset MUST be exactly `{postgres, redis}`. Adding
+    any of the 6 readiness-only checks to liveness would expand the
+    /health latency budget beyond the load-balancer-friendly target
+    (PG SELECT 1 + Redis PING ~ low-ms each, bounded by
+    READINESS_REDIS_TIMEOUT_SECONDS).
+
+    A k8s liveness probe failure kills the pod; a readiness probe
+    failure only removes it from the load-balancer pool. Liveness
+    must therefore be the cheapest, most boring check possible."""
+    from app.observability import health as h
+
+    with patch.object(h, "check_postgres", return_value=(True, "ok")), \
+         patch.object(h, "check_redis", return_value=(True, "ok")):
+        payload = h.gather_liveness()
+
+    keys = list(payload.body["checks"].keys())
+    assert keys == ["postgres", "redis"], (
+        f"gather_liveness keyset changed: expected ['postgres', "
+        f"'redis'], got {keys}. Liveness must NOT include any of "
+        "the 6 readiness-only checks (pool_headroom, migrations, "
+        "object_storage, reconciliation_backlog, beat_heartbeat, "
+        "bootstrap_complete). A liveness probe failure kills the "
+        "pod; only the cheapest checks belong here."
+    )
+
+
+def test_gather_liveness_does_not_call_readiness_only_checks():
+    """If liveness called any of the 6 readiness-only checks they
+    would fire here (we patch them to raise). Patching the 2
+    liveness checks to OK + the 6 readiness checks to RAISE proves
+    liveness never touches them."""
+    from app.observability import health as h
+
+    def _explode():
+        raise AssertionError(
+            "Readiness-only check called from gather_liveness — "
+            "this would expand the /health latency budget."
+        )
+
+    with patch.object(h, "check_postgres", return_value=(True, "ok")), \
+         patch.object(h, "check_redis", return_value=(True, "ok")), \
+         patch.object(h, "check_pool_headroom", side_effect=_explode), \
+         patch.object(h, "check_migrations_aligned", side_effect=_explode), \
+         patch.object(h, "check_object_storage", side_effect=_explode), \
+         patch.object(h, "check_reconciliation_backlog", side_effect=_explode), \
+         patch.object(h, "check_beat_heartbeat", side_effect=_explode), \
+         patch.object(h, "check_bootstrap_complete", side_effect=_explode):
+        payload = h.gather_liveness()
+
+    assert payload.status_code == 200
+    assert payload.body["status"] == "ok"
+
+
+def test_redis_check_uses_socket_operation_timeout():
+    """Source-bound: `check_redis` must pass BOTH
+    `socket_connect_timeout` (TCP handshake bound) AND
+    `socket_timeout` (PING-operation bound). Without the
+    operation timeout, a Redis that accepts the TCP handshake but
+    stalls before responding to PING would block /health/ready
+    until the kernel TCP keepalive fires (~minutes)."""
+    text = _HEALTH_PY.read_text(encoding="utf-8")
+    code_only = _python_code_only(text)
+    assert "socket_timeout" in code_only, (
+        "check_redis() must pass `socket_timeout=` in addition to "
+        "`socket_connect_timeout=`. Without it, a Redis that accepts "
+        "the connection but stalls before responding to PING would "
+        "block /health/ready beyond the connect timeout window."
+    )
+
+
+def test_redis_timeout_setting_default_is_two_seconds():
+    """`READINESS_REDIS_TIMEOUT_SECONDS` default = 2. Bounds both
+    the TCP handshake and the PING. Operators may tune per-deploy
+    (k8s tight SLO -> 1; noisy network -> 5). Cap <= 0 falls back
+    to the hardcoded 2 (intentionally NOT disable-able: /health
+    without a bound would be a footgun)."""
+    from app.config import Settings
+
+    val = Settings.DEFAULTS["READINESS_REDIS_TIMEOUT_SECONDS"]
+    assert val == 2, (
+        f"READINESS_REDIS_TIMEOUT_SECONDS default must be 2 seconds. "
+        f"Got {val!r}. Tightening below 2s risks false positives on "
+        "warm-restart Redis pods; raising above 5s starts to drift "
+        "outside the load-balancer-friendly latency budget for "
+        "/health."
+    )
+
+
+def test_check_redis_falls_back_to_two_seconds_on_invalid_setting():
+    """`check_redis` must NOT honour <=0 or non-int settings as
+    "no timeout" — that would break the cost-boundedness invariant
+    via a typo'd env. The fallback is a hardcoded 2."""
+    from app.observability import health as h
+
+    captured: dict = {}
+
+    class _StubRedis:
+        @classmethod
+        def from_url(cls, url, **kwargs):
+            captured.update(kwargs)
+            return cls()
+
+        def ping(self):
+            return True
+
+    class _SettingsStub:
+        CELERY_BROKER_URL = "redis://stub"
+
+        def get(self, key, default=None):
+            if key == "READINESS_REDIS_TIMEOUT_SECONDS":
+                return 0  # invalid: must fall back to 2
+            return default
+
+    with patch("app.config.settings", new=_SettingsStub()), \
+         patch("redis.from_url", _StubRedis.from_url):
+        ok, _ = h.check_redis()
+
+    assert ok is True
+    assert captured.get("socket_connect_timeout") == 2, (
+        f"socket_connect_timeout fallback must be 2s on invalid "
+        f"setting; got {captured.get('socket_connect_timeout')!r}."
+    )
+    assert captured.get("socket_timeout") == 2, (
+        f"socket_timeout fallback must be 2s on invalid setting; "
+        f"got {captured.get('socket_timeout')!r}."
+    )
+
+
+def test_health_module_has_no_top_level_heavy_imports():
+    """Source-bound: `app/observability/health.py` MUST keep heavy
+    deps (redis SDK, boto3, app.bootstrap, migrations runner,
+    cloud_backends, storage_reconciliation) under the `def
+    check_*` lazy-import pattern. Top-level imports of these would
+    pay startup cost on every `import app.observability.health`
+    (e.g. CLI tools, alembic, conftest, the eager-import
+    `app.main` chain) — defeating the lazy-leaf design.
+    """
+    text = _HEALTH_PY.read_text(encoding="utf-8")
+    code_only = _python_code_only(text)
+
+    # Walk top-level lines only (no function bodies). A top-level
+    # import has zero leading whitespace; a lazy import inside a
+    # function is indented. We scan the source line-by-line and
+    # examine only zero-indent lines.
+    banned_top = {
+        "import redis",
+        "from redis",
+        "import boto3",
+        "from boto3",
+        "from app.bootstrap",
+        "import app.bootstrap",
+        "from app.db.migrations_runner",
+        "from app.shared.cloud_backends",
+        "from app.shared.storage_reconciliation",
+        "from app.db.pg_connection",
+    }
+    offenders: list[str] = []
+    for raw_line in code_only.splitlines():
+        if not raw_line:
+            continue
+        if raw_line[0] in (" ", "\t"):
+            continue  # indented -> inside function/class -> lazy
+        for needle in banned_top:
+            if raw_line.startswith(needle):
+                offenders.append(raw_line.strip())
+    assert not offenders, (
+        f"`app/observability/health.py` has top-level heavy "
+        f"imports: {offenders}. Move each into the `def check_*` "
+        "body (lazy import) so `import app.observability.health` "
+        "stays cheap. The lazy-leaf design is documented in the "
+        "module docstring (\"Boundary\" section)."
+    )

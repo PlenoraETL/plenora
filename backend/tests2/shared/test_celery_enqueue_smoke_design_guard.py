@@ -41,6 +41,8 @@ from pathlib import Path
 
 import pytest
 
+from tests2.shared._source_scan import python_code_only as _python_code_only
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
@@ -196,32 +198,6 @@ def cleanroom_task_text() -> str:
         "rationale belongs in a new audit entry."
     )
     return _CLEANROOM_TASK_PY.read_text(encoding="utf-8")
-
-
-def _python_code_only(source: str) -> str:
-    """Return the source with all string literals and comments
-    stripped, so contract checks against forbidden patterns do not
-    false-positive on docstrings that legitimately mention them.
-
-    Uses tokenize for correctness (handles f-strings, triple-quoted
-    strings, and comments uniformly).
-    """
-    import io
-    import tokenize
-
-    out = []
-    try:
-        tokens = list(tokenize.generate_tokens(io.StringIO(source).readline))
-    except tokenize.TokenizeError:
-        # If the file does not tokenize cleanly fall back to the raw
-        # source: a tokenize failure is a real bug the test should
-        # surface elsewhere (the import below will raise).
-        return source
-    for tok in tokens:
-        if tok.type in (tokenize.STRING, tokenize.COMMENT):
-            continue
-        out.append(tok.string)
-    return " ".join(out)
 
 
 def test_cleanroom_task_is_pure_noop(cleanroom_task_text: str):

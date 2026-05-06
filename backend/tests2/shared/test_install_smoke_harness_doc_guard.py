@@ -18,10 +18,10 @@ Locks today:
   - 5.1 enumerates the eight harness rows in canonical order
     (clone/env, deps, DB init, object storage, workers/beat,
     health/ready, memory caps, ETL smoke);
-  - 5.2 memory caps visibility lists the five canonical caps
+  - 5.2 memory caps visibility lists the six canonical caps
     (LOAD_FILE_MAX_BYTES, WORKER_RSS_MAX_BYTES,
-    RESOURCE_MAX_BYTES, CROSS_JOIN_MAX_OUTPUT_ROWS,
-    MULTI_JOIN_MAX_OUTPUT_ROWS) AND uses the canonical
+    RESOURCE_MAX_BYTES, ARTIFACT_PREVIEW_MAX_BYTES,
+    CROSS_JOIN_MAX_OUTPUT_ROWS, MULTI_JOIN_MAX_OUTPUT_ROWS) AND uses the canonical
     `app.config.settings.get(...)` accessor - NOT a private
     attribute or a re-implementation;
   - 5.3 tiny ETL smoke uses `cleanroom.ping` (the existing
@@ -61,6 +61,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _DRY_RUN = _REPO_ROOT / "docs" / "ops" / "install-marco-dry-run.md"
+_INSTALL_SH = _REPO_ROOT / "scripts" / "install.sh"
 
 
 _HARNESS_HEADER = "## 5. Clean-install smoke harness (canonical sequence)"
@@ -143,14 +144,15 @@ def test_harness_lists_eight_canonical_items(harness_section: str):
 
 
 def test_harness_5_2_lists_canonical_memory_caps(harness_section: str):
-    # The five canonical memory caps that govern the runtime
-    # memory budget. All five MUST appear in 5.2 - dropping any
+    # The six canonical memory caps that govern the runtime
+    # memory budget. All six MUST appear in 5.2 - dropping any
     # of them lets an operator declare a small-PC install green
     # without verifying the cap that would actually trigger.
     expected_caps = (
         "LOAD_FILE_MAX_BYTES",
         "WORKER_RSS_MAX_BYTES",
         "RESOURCE_MAX_BYTES",
+        "ARTIFACT_PREVIEW_MAX_BYTES",
         "CROSS_JOIN_MAX_OUTPUT_ROWS",
         "MULTI_JOIN_MAX_OUTPUT_ROWS",
     )
@@ -161,6 +163,30 @@ def test_harness_5_2_lists_canonical_memory_caps(harness_section: str):
             "before the foreground smoke. Dropping a cap here "
             "means the corresponding guard is invisible to the "
             "operator at install time."
+        )
+
+
+def test_install_sh_smoke_lists_same_memory_caps():
+    """The executable `install.sh --smoke` path must print the same
+    caps as the operator-facing section 5.2 one-liner. Otherwise the
+    docs and command drift immediately after a new cap lands."""
+    script = _INSTALL_SH.read_text(encoding="utf-8")
+    expected_caps = (
+        "LOAD_FILE_MAX_BYTES",
+        "WORKER_RSS_MAX_BYTES",
+        "RESOURCE_MAX_BYTES",
+        "ARTIFACT_PREVIEW_MAX_BYTES",
+        "CROSS_JOIN_MAX_OUTPUT_ROWS",
+        "MULTI_JOIN_MAX_OUTPUT_ROWS",
+    )
+    assert "INSTALLER_SMOKE_MEMORY_CAPS=(" in script, (
+        "scripts/install.sh --smoke must keep a visible "
+        "INSTALLER_SMOKE_MEMORY_CAPS array."
+    )
+    for cap in expected_caps:
+        assert cap in script, (
+            f"scripts/install.sh --smoke must print memory cap {cap!r}, "
+            "matching docs/ops/install-marco-dry-run.md section 5.2."
         )
 
 

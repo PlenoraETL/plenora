@@ -101,11 +101,33 @@ def check_postgres() -> CheckOutcome:
 
 
 def check_redis() -> CheckOutcome:
-    """PING su Redis broker Celery."""
+    """PING su Redis broker Celery.
+
+    BE-GO-READY-OPS-001-READINESS-COST-BOUNDEDNESS: il timeout e'
+    applicato sia al TCP handshake (`socket_connect_timeout`) sia
+    all'operazione PING (`socket_timeout`). Senza socket_timeout
+    una Redis che accetta la connessione ma stalla bloccherebbe
+    /health/ready oltre il connect_timeout (worst-case TCP keepalive
+    finch* il kernel non droppa la socket).
+
+    Timeout letto da `READINESS_REDIS_TIMEOUT_SECONDS` (default 2);
+    un valore <= 0 ricade sul fallback hardcoded 2 (non
+    disabilitabile: /health senza bound sarebbe un footgun ops).
+    """
     try:
         import redis
         from app.config import settings
-        r = redis.from_url(settings.CELERY_BROKER_URL, socket_connect_timeout=2)
+        try:
+            timeout = int(settings.get("READINESS_REDIS_TIMEOUT_SECONDS", 2))
+        except Exception:
+            timeout = 2
+        if timeout <= 0:
+            timeout = 2
+        r = redis.from_url(
+            settings.CELERY_BROKER_URL,
+            socket_connect_timeout=timeout,
+            socket_timeout=timeout,
+        )
         if r.ping():
             return True, "ok"
         return False, "PING non ha risposto True"
