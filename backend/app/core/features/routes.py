@@ -30,7 +30,7 @@ from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel
 from typing import Optional, List
 
-from app.core.auth.auth import (
+from app.core.auth.dependencies import (
     get_current_user,
     require_not_esecutore,
     require_admin,

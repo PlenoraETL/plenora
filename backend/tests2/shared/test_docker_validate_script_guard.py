@@ -488,3 +488,86 @@ def test_install_docker_doc_documents_script_non_destructive_contract():
         "`docker compose down` (and its `-v` variant) are NOT "
         "run by the validation pack."
     )
+
+
+# =====================================================================
+# BE-GO-READY-INSTALL-019: FE gap warnings in script output
+# =====================================================================
+
+
+def test_validate_script_defines_fe_gap_report_function():
+    """BE-GO-READY-INSTALL-019: `report_fe_gap_status` must be defined
+    in the script to make FE/CI gap truth visible to the operator at
+    pack-start instead of requiring them to read the docs separately.
+
+    The three gaps it reports match exactly the three negative locks in
+    `test_install_docker_fe_gap_guard.py`."""
+    text = _SCRIPT.read_text(encoding="utf-8")
+    assert "report_fe_gap_status() {" in text, (
+        "scripts/docker-validate.sh must define `report_fe_gap_status` "
+        "(BE-GO-READY-INSTALL-019). The function reports the three "
+        "FE/CI artifacts missing from the current scaffold so the "
+        "operator sees the gaps upfront without reading the docs."
+    )
+
+
+def test_validate_script_fe_gap_report_has_canonical_warn_messages():
+    """The three canonical WARN messages must exist in the script.
+
+    Each string corresponds to one of the three negative locks in
+    `test_install_docker_fe_gap_guard.py`. Dropping one silently hides
+    that gap class from the operator-facing report."""
+    text = _SCRIPT.read_text(encoding="utf-8")
+    warn_messages = (
+        "FE image NOT BUILT",
+        "full-stack Docker NOT AVAILABLE",
+        "Docker CI NOT WIRED",
+    )
+    for msg in warn_messages:
+        assert msg in text, (
+            f"scripts/docker-validate.sh FE gap report must include "
+            f"WARN message {msg!r} (BE-GO-READY-INSTALL-019). Missing "
+            "one means a gap class is hidden from the operator-facing "
+            "transcript."
+        )
+
+
+def test_validate_script_ci_gap_check_looks_for_run_steps_not_comments():
+    """The CI detector must not treat a workflow comment that mentions
+    `docker compose` as a wired Docker CI lane. It should look for a
+    workflow `run:` step that invokes docker compose."""
+    text = _SCRIPT.read_text(encoding="utf-8")
+    assert "^[[:space:]]*-[[:space:]]*run:" in text, (
+        "scripts/docker-validate.sh must detect Docker CI from "
+        "workflow `run:` steps, not arbitrary comments/doc strings."
+    )
+    assert "grep -rlF \"docker compose\" .github/workflows/" not in text, (
+        "A plain recursive grep would count comments mentioning "
+        "`docker compose` as a real CI lane. Keep the run-step "
+        "regex instead."
+    )
+
+
+def test_validate_script_calls_fe_gap_report_before_run_step_1():
+    """report_fe_gap_status must be CALLED before run_step 1 so the
+    operator sees the FE gap summary before the pack starts executing.
+
+    A call that appears only after step 1 (or not at all) means the
+    gaps are invisible until after the potentially long build begins."""
+    text = _SCRIPT.read_text(encoding="utf-8")
+    call_pos = text.find("\nreport_fe_gap_status\n")
+    step1_pos = text.find("run_step 1 ")
+    assert call_pos != -1, (
+        "scripts/docker-validate.sh must invoke `report_fe_gap_status` "
+        "as a standalone call (not just define it) "
+        "(BE-GO-READY-INSTALL-019)."
+    )
+    assert step1_pos != -1, (
+        "run_step 1 must exist in scripts/docker-validate.sh "
+        "(locked by test_validate_script_runs_eight_canonical_commands)."
+    )
+    assert call_pos < step1_pos, (
+        "report_fe_gap_status must be called BEFORE `run_step 1` "
+        "(BE-GO-READY-INSTALL-019). A late call means the FE gap "
+        "summary appears only after the build has started."
+    )

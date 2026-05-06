@@ -492,23 +492,24 @@ class ManipolaExecutor:
         inserire nel canvas un source_project_id di un altro tenant e
         esfiltrare i dati durante l'esecuzione della pipeline.
 
-        BE-GO-READY-TRANSFORMATION-ENGINE-004 (tenant boundary): il
-        ``group_id`` esplicito vince sempre su `_current_group_id`; il
-        fallback all'attributo legacy resta solo per back-compat con i
-        test che settano l'attributo direttamente sull'istanza.
+        BE-GO-READY-TRANSFORMATION-ENGINE-007 (ctx-strict): il
+        ``group_id`` esplicito e' OBBLIGATORIO. Il singleton fallback
+        ``self._current_group_id`` e' stato rimosso da questa catena.
+        Se ``group_id`` e' None o vuoto il metodo ritorna fail-closed
+        senza invocare il resolver. I caller (execute / preview)
+        ricevono il ``group_id`` da ``_init_security_context`` e lo
+        propagano esplicitamente.
         """
         source_nodes = [n for n in canvas.nodes if n.type == "project_source"]
 
-        # Tenant binding obbligatorio fail-closed. La risoluzione
-        # passa per `_resolve_executing_group_id` cosi' un valore
-        # esplicito passato dal caller (production path) prevale su
-        # `self._current_group_id` (test back-compat fallback).
-        executing_group_id = self._resolve_executing_group_id(group_id)
+        # Ctx-strict: no singleton fallback. Il group_id deve provenire
+        # da _init_security_context via execute()/preview(). Se manca,
+        # fail-closed immediato senza toccare il resolver.
+        executing_group_id = group_id
         if not executing_group_id:
             logger.error(
                 "[SECURITY] manipola._carica_sorgenti_progetto: "
-                "group_id assente (esplicito None e _current_group_id "
-                "non settato), fail-closed"
+                "group_id esplicito mancante (ctx-strict), fail-closed"
             )
             return {
                 "success": False,
@@ -756,11 +757,11 @@ class ManipolaExecutor:
 
         Il delegator NON passa ``self._current_group_id`` al
         helper: l'argomento ``group_id`` del helper e' l'**unico**
-        canale tenant per questa catena. Le altre 2 catene
-        (``_carica_sorgenti_progetto``, ``_carica_sorgenti_statiche``)
-        mantengono il fallback singleton via
-        ``_resolve_executing_group_id``; i loro cuts sono i
-        follow-up streams ``TE-007 / TE-008``.
+        canale tenant per questa catena.
+        ``_carica_sorgenti_progetto`` e' ctx-strict (TE-007 cut: nessun
+        fallback singleton). ``_carica_sorgenti_statiche`` delega a
+        ``_resolve_executing_group_id`` con sentinel ``"_static_"``
+        non-autorizzante (TE-008).
         """
         return load_file_sources(
             canvas,
@@ -779,10 +780,13 @@ class ManipolaExecutor:
         processing (`process_static_fields`) vive nel loader unico;
         qui resta solo l'iterazione sui nodi del canvas.
 
-        BE-GO-READY-TRANSFORMATION-ENGINE-004: ``group_id`` esplicito
-        prevale su `_current_group_id`. Lo static branch resta
-        processing puro (no DB / no file), quindi il placeholder
-        ``_static_`` resta valido se non c'e' tenant determinabile.
+        BE-GO-READY-TRANSFORMATION-ENGINE-008 (ctx-strict cut): lo
+        static branch e' pure processing (no DB, no file I/O). Il
+        ``group_id`` esplicito del caller e' l'unico canale tenant;
+        ``self._current_group_id`` NON e' consultato. Se ``group_id``
+        e' assente il sentinel non-autorizzante ``"_static_"`` soddisfa
+        la guardia non-vuota del loader senza ambiguita' cross-tenant
+        (nessuna risorsa esterna caricata in questo branch).
         """
         static_nodes = [n for n in canvas.nodes if n.type == "staticValues"]
         if not static_nodes:
@@ -790,14 +794,9 @@ class ManipolaExecutor:
 
         from app.core.artifacts import SourceLoader, SourceRef
 
-        # Static branch e' processing puro: non tocca DB ne' file. Il
-        # group_id e' richiesto solo dalla guardia del loader. Usiamo
-        # il valore esplicito (production path) o il fallback legacy
-        # (`_current_group_id`); se entrambi mancanti il placeholder
-        # `"_static_"` soddisfa la guardia non-vuota del loader senza
-        # introdurre ambiguita' cross-tenant (la pipeline non legge
-        # alcuna risorsa esterna in questo branch).
-        current_group_id = self._resolve_executing_group_id(group_id) or "_static_"
+        # TE-008: pure processing — do NOT read self._current_group_id.
+        # Explicit group_id (production path) or non-authorizing sentinel.
+        current_group_id = group_id or "_static_"
         loader = SourceLoader()
 
         for node in static_nodes:

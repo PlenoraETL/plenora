@@ -19,7 +19,7 @@ Auth model uniforme:
 from fastapi import APIRouter, HTTPException, Depends
 
 from app.utils.logger import get_logger
-from app.core.auth.auth import (
+from app.core.auth.dependencies import (
     get_current_user,
     require_not_esecutore,
     require_admin,
@@ -167,8 +167,8 @@ def delete_connection(
     # progetti che la usano restano dipendenze legittime, ma admin del
     # gruppo proprietario non deve vederne i nomi). Superadmin: nessun
     # filtro.
-    import app.db.db_service as _db
-    using_projects = _db.fetchall(
+    from app.db.pg_connection import fetchall as _fetchall
+    using_projects = _fetchall(
         "SELECT id, name, project_type, group_id FROM projects WHERE connection_id = ?",
         (connection_id,)
     )

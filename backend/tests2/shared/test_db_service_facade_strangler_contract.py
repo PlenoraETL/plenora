@@ -143,7 +143,6 @@ _FACADE_FILE = "app/db/db_service.py"
 #     `eseguibili.db.db.<name>`. Allowlist row removed.
 _DB_SERVICE_PROD_ALLOWLIST: frozenset[str] = frozenset({
     "app/bootstrap.py",
-    "app/core/admin_system_status/service.py",
     "app/core/arricchisci/api_connection_management.py",
     "app/core/arricchisci/api_connection_rest_file.py",
     "app/core/arricchisci/api_connector.py",
@@ -155,10 +154,8 @@ _DB_SERVICE_PROD_ALLOWLIST: frozenset[str] = frozenset({
     "app/core/auth/shares_router.py",
     "app/core/auth/users_router.py",
     "app/core/carica/executor.py",
-    "app/core/connections/router.py",
     "app/core/datasources/router.py",
     "app/core/datasources/service.py",
-    "app/core/eseguibili/service.py",
     "app/core/features/features_service.py",
     "app/core/files/router.py",
     "app/core/imdf/router.py",
@@ -172,7 +169,6 @@ _DB_SERVICE_PROD_ALLOWLIST: frozenset[str] = frozenset({
     "app/services/file_service.py",
     "app/services/orphan_cleanup_service.py",
     "app/services/project_service.py",
-    "app/services/schema_inference.py",
     "app/shared/authz_helpers.py",
     "app/utils/result_store.py",
     "workers/beat_scheduler.py",

@@ -188,6 +188,67 @@ run_step() {
     fi
 }
 
+# ---------------------------------------------------------------------------
+# FE gap status report (BE-GO-READY-INSTALL-019-AUTOMATE-INSTALL-TRUTH-CHECKS)
+# ---------------------------------------------------------------------------
+# Checks the three FE/CI artifacts that must exist before the Docker path
+# can be called validated. Non-blocking: emits WARN lines, does not exit.
+# Run before any docker step so gaps are visible upfront.
+# Source of truth: tests2/shared/test_install_docker_fe_gap_guard.py.
+report_fe_gap_status() {
+    echo ""
+    echo "=============================================================="
+    echo "DOCKER PATH GAP REPORT (FIRST SCAFFOLD, NOT YET VALIDATED)"
+    echo "=============================================================="
+    local gaps=0
+
+    if ls frontend/Dockerfile* >/dev/null 2>&1; then
+        echo "  [OK]   frontend/Dockerfile* found."
+    else
+        echo "  [WARN] frontend/Dockerfile not found -- FE image NOT BUILT."
+        gaps=$(( gaps + 1 ))
+    fi
+
+    local fe_service=0
+    for needle in "  frontend:" "  web:" "  nginx:" "  caddy:" "  spa:"; do
+        if grep -qF "$needle" docker-compose.yml 2>/dev/null; then
+            fe_service=1
+            break
+        fi
+    done
+    if [ "$fe_service" -eq 1 ]; then
+        echo "  [OK]   frontend service in docker-compose.yml."
+    else
+        echo "  [WARN] No frontend service in docker-compose.yml -- full-stack Docker NOT AVAILABLE."
+        gaps=$(( gaps + 1 ))
+    fi
+
+    local ci_wired=0
+    if [ -d ".github/workflows" ]; then
+        if grep -rE "^[[:space:]]*-[[:space:]]*run:.*(docker[[:space:]]+compose|docker-compose)\\b" .github/workflows/ >/dev/null 2>&1; then
+            ci_wired=1
+        fi
+    fi
+    if [ "$ci_wired" -eq 1 ]; then
+        echo "  [OK]   Docker compose CI lane found."
+    else
+        echo "  [WARN] No docker compose CI lane in .github/workflows/ -- Docker CI NOT WIRED."
+        gaps=$(( gaps + 1 ))
+    fi
+
+    echo ""
+    if [ "$gaps" -gt 0 ]; then
+        echo "  $gaps FE/CI gap(s) open. Backend-only scaffold until all three close."
+        echo "  See docs/ops/install-docker.md 'What ships today vs what does NOT'."
+    else
+        echo "  All three FE/CI artifacts present. See install-docker.md to flip markers."
+    fi
+    echo "=============================================================="
+    echo ""
+}
+
+report_fe_gap_status
+
 run_step 1 "config (no apply)" -- \
     docker compose config
 

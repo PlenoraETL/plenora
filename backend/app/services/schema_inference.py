@@ -245,8 +245,8 @@ class SchemaInferenceService:
             return []
         
         # Carica metadata dal DB (canvas.columns_metadata)
-        from app.db import db_service as _db
-        row = _db.get_project(source_project_id)
+        from app.db.config.projects import get_project as _get_project
+        row = _get_project(source_project_id)
         if not row:
             logger.warning(f"Metadata non trovato per progetto {source_project_id}")
             return []

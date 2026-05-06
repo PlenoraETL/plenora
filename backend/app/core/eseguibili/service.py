@@ -41,9 +41,9 @@ def create_from_project(
         ValueError: se il progetto non esiste o non è di tipo arricchisci,
                     o se l'utente non ha accesso al gruppo.
     """
-    import app.db.db_service as db
+    from app.db.config.projects import get_project
 
-    proj = db.get_project(source_project_id)
+    proj = get_project(source_project_id)
     if not proj:
         raise ValueError(f"Progetto '{source_project_id}' non trovato")
 

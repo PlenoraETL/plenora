@@ -219,9 +219,9 @@ def get_verify_restore_status() -> Dict[str, Any]:
 def get_schedules_status() -> Dict[str, Any]:
     """Count schedule attivi + count failing — cross-group (superadmin)."""
     try:
-        from app.db import db_service as db
+        from app.db.pg_connection import fetchall
         # Query cross-group: superadmin vede TUTTI gli schedule.
-        rows = db.fetchall(
+        rows = fetchall(
             "SELECT id, name, is_enabled, last_status FROM schedules"
         )
     except Exception as e:

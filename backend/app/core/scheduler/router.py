@@ -29,12 +29,12 @@ Registrazione: montato in main.py come:
 from fastapi import APIRouter, HTTPException, Query, Depends
 from typing import Optional
 from app.utils.logger import get_logger
-from app.core.auth.auth import (
+from app.core.auth.dependencies import (
     get_current_user,
     require_not_esecutore,
     require_admin,
-    require_schedule_owner,
 )
+from app.core.auth.auth import require_schedule_owner
 # BE-GO-READY-AUTH-ENGINE-012: pure-contract symbols
 # (`CurrentUser`, `group_filter`) consumed from
 # `app.shared.contracts.auth`. DB-bound `assert_group_access`

@@ -48,14 +48,18 @@ def _canvas(nodes, edges=None):
     return SimpleNamespace(nodes=nodes, edges=edges or [])
 
 
+_EXECUTOR_GROUP_ID = "g1"
+
+
 def _executor_with_callback(callback) -> ManipolaExecutor:
     """ManipolaExecutor con orchestrator_callback iniettato + tenant
-    binding fittizio."""
+    binding fittizio. TE-007: group_id non viene piu' letto dal
+    singleton; i test passano group_id=_EXECUTOR_GROUP_ID esplicitamente."""
     executor = ManipolaExecutor(
         project_service=object(),
         orchestrator_callback=callback,
     )
-    executor._current_group_id = "g1"
+    executor._current_group_id = _EXECUTOR_GROUP_ID  # kept for compat, not consulted
     return executor
 
 
@@ -98,6 +102,7 @@ def test_upstream_failure_does_not_leak_source_project_id():
          }):
         result = executor._carica_sorgenti_progetto(
             canvas, dataframes, force_recalculate=True,
+            group_id=_EXECUTOR_GROUP_ID,
         )
 
     assert result is not None, "ramo error deve ritornare dict, non None"
@@ -137,6 +142,7 @@ def test_upstream_failure_result_is_wrappable_without_pid_mismatch():
          }):
         result = executor._carica_sorgenti_progetto(
             canvas, dataframes, force_recalculate=True,
+            group_id=_EXECUTOR_GROUP_ID,
         )
 
     # La chiamata deve passare senza ValueError. Il safety net resta
@@ -181,6 +187,7 @@ def test_upstream_failure_message_includes_source_project_id():
          }):
         result = executor._carica_sorgenti_progetto(
             canvas, dataframes, force_recalculate=True,
+            group_id=_EXECUTOR_GROUP_ID,
         )
 
     msg = result.get("message", "")
@@ -252,6 +259,7 @@ def test_upstream_success_path_unchanged():
 
         result = executor._carica_sorgenti_progetto(
             canvas, dataframes, force_recalculate=True,
+            group_id=_EXECUTOR_GROUP_ID,
         )
 
     # Success path: nessun dict di errore (None == continue dal loader)

@@ -18,7 +18,8 @@ from app.db.sql_functions import (
     get_function_catalog,
     translate_calculated_column,
 )
-from app.core.auth.auth import get_current_user, require_not_esecutore
+# BE-GO-READY-AUTH-ENGINE-016 dep-import off facade.
+from app.core.auth.dependencies import get_current_user, require_not_esecutore
 # BE-GO-READY-AUTH-ENGINE-014 Phase-8 contract fan-out.
 from app.shared.contracts.auth import CurrentUser
 from app.utils.logger import get_logger

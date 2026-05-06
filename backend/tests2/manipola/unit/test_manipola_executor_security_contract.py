@@ -100,7 +100,7 @@ def test_load_file_sources_ignores_stale_singleton_post_005():
 
 def test_load_project_sources_blocks_cross_tenant_source_project():
     executor = ManipolaExecutor(project_service=object())
-    executor._current_group_id = "grp-1"
+    executor._current_group_id = "stale-grp-DECOY"  # must not be consulted (TE-007 ctx-strict)
     executor.results_base_dir = None
     dataframes = {}
     canvas = build_canvas(
@@ -108,7 +108,9 @@ def test_load_project_sources_blocks_cross_tenant_source_project():
     )
 
     with patch("app.db.db_service.get_project", return_value={"id": "proj-99", "group_id": "grp-2"}):
-        result = executor._carica_sorgenti_progetto(canvas, dataframes, force_recalculate=False)
+        result = executor._carica_sorgenti_progetto(
+            canvas, dataframes, force_recalculate=False, group_id="grp-1",
+        )
 
     assert result == {
         "success": False,

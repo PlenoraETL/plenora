@@ -18,7 +18,7 @@ from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, B
 from fastapi.responses import FileResponse
 from typing import List, Optional
 
-from app.core.auth.auth import (
+from app.core.auth.dependencies import (
     get_current_user,
     require_admin,
 )

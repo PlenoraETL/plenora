@@ -24,7 +24,8 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 from pydantic import BaseModel, Field
 
-from app.core.auth.auth import get_current_user
+# BE-GO-READY-AUTH-ENGINE-016 dep-import off facade.
+from app.core.auth.dependencies import get_current_user
 # BE-GO-READY-AUTH-ENGINE-015 Phase-9 contract fan-out.
 from app.shared.contracts.auth import CurrentUser
 from app.core.tickets import service as svc

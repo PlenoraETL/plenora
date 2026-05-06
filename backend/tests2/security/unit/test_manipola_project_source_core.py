@@ -107,6 +107,7 @@ def test_load_project_sources_blocks_cross_tenant_via_resolver():
         result = executor._carica_sorgenti_progetto(
             _canvas_with_project_source("proj-99"), dataframes,
             force_recalculate=False,
+            group_id="grp-1",
         )
 
     assert result["success"] is False
@@ -132,6 +133,7 @@ def test_load_project_sources_fail_closed_when_source_project_missing():
         result = executor._carica_sorgenti_progetto(
             _canvas_with_project_source("proj-ghost"), dataframes,
             force_recalculate=False,
+            group_id="grp-1",
         )
 
     assert result["success"] is False
@@ -273,87 +275,85 @@ def test_explicit_group_id_overrides_stale_current_group_id():
     )
 
 
-def test_explicit_group_id_none_falls_back_to_current_group_id():
-    """Back-compat: if the explicit kwarg is None (or omitted),
-    the legacy `_current_group_id` attribute is consulted. This
-    keeps existing tests working without edits."""
-    executor = _make_executor(group_id="grp-legacy")
+def test_stale_current_group_id_ignored_when_kwarg_missing():
+    """BE-GO-READY-TRANSFORMATION-ENGINE-007: the singleton
+    `_current_group_id` is NO LONGER consulted when the explicit
+    `group_id` kwarg is absent. Calling without the kwarg must
+    fail-closed immediately, even if the attribute carries a value.
+    The resolver must not be invoked at all."""
+    executor = _make_executor(group_id="grp-legacy")  # stale attribute
     dataframes = {}
 
-    captured = {}
+    resolver_called = {"count": 0}
 
-    from app.core.artifacts import ArtifactResolutionError
+    from app.core.artifacts import ArtifactResolutionError  # noqa: F401
 
     class _StubResolver:
         def materialize_latest(self, ref, *, expected_group_id=None,
                                is_superadmin=False):
-            captured["expected_group_id"] = expected_group_id
-            raise ArtifactResolutionError(
-                "stub: capture expected_group_id and abort"
-            )
+            resolver_called["count"] += 1
+            raise ArtifactResolutionError("must not reach resolver")
 
     with patch(
         "app.core.artifacts.ArtifactResolver",
         return_value=_StubResolver(),
-    ), patch(
-        "app.core.manipola.executor.find_latest_output_file",
-        return_value=None,
     ):
-        # No `group_id=` kwarg -> fallback to _current_group_id.
-        executor._carica_sorgenti_progetto(
+        result = executor._carica_sorgenti_progetto(
             _canvas_with_project_source("proj-99"), dataframes,
             force_recalculate=False,
         )
 
-    assert captured.get("expected_group_id") == "grp-legacy", (
-        "Without an explicit kwarg the helper must fall back to "
-        "`_current_group_id` for back-compat."
+    assert result is not None
+    assert result["success"] is False
+    assert "Contesto di sicurezza" in result["message"], (
+        f"Expected ctx-strict fail-closed, got: {result['message']!r}. "
+        "TE-007: _current_group_id must not authorize project-source "
+        "when explicit group_id kwarg is absent."
     )
+    assert resolver_called["count"] == 0, (
+        "Resolver must NOT be called when group_id kwarg is missing — "
+        "ctx-strict fail-closed happens before the resolver."
+    )
+    assert dataframes == {}
 
 
-def test_explicit_empty_group_id_falls_back_to_current_group_id():
-    """An empty string explicit kwarg is treated as 'not provided'
-    (falsey) and falls through to `_current_group_id`. Mirror of
-    the precedence rule documented on
-    `_resolve_executing_group_id`."""
-    executor = _make_executor(group_id="grp-1")
+def test_empty_explicit_kwarg_fails_closed_not_fallback():
+    """BE-GO-READY-TRANSFORMATION-ENGINE-007: an empty-string explicit
+    kwarg is falsey and MUST NOT fall back to `_current_group_id` —
+    the project-source chain is ctx-strict. An empty kwarg must
+    fail-closed the same way as a missing kwarg."""
+    executor = _make_executor(group_id="grp-1")  # stale attribute
     dataframes = {}
 
-    # Empty string explicit kwarg -> falsey -> fallback path.
-    # We don't need to mock the resolver here: the test cares only
-    # that the executor reaches the resolver at all (i.e. did NOT
-    # fail-closed because of the empty explicit value). A None
-    # `materialize_latest` return is fine.
-    captured = {}
+    resolver_called = {"count": 0}
 
-    from app.core.artifacts import ArtifactResolutionError
+    from app.core.artifacts import ArtifactResolutionError  # noqa: F401
 
     class _StubResolver:
         def materialize_latest(self, ref, *, expected_group_id=None,
                                is_superadmin=False):
-            captured["expected_group_id"] = expected_group_id
-            raise ArtifactResolutionError(
-                "stub: capture expected_group_id and abort"
-            )
+            resolver_called["count"] += 1
+            raise ArtifactResolutionError("must not reach resolver")
 
     with patch(
         "app.core.artifacts.ArtifactResolver",
         return_value=_StubResolver(),
-    ), patch(
-        "app.core.manipola.executor.find_latest_output_file",
-        return_value=None,
     ):
-        executor._carica_sorgenti_progetto(
+        result = executor._carica_sorgenti_progetto(
             _canvas_with_project_source("proj-99"), dataframes,
             force_recalculate=False,
             group_id="",
         )
 
-    assert captured.get("expected_group_id") == "grp-1", (
-        "Empty-string explicit group_id must fall back to "
-        "`_current_group_id`, not propagate the empty value to "
-        "the resolver."
+    assert result is not None
+    assert result["success"] is False
+    assert "Contesto di sicurezza" in result["message"], (
+        f"Expected ctx-strict fail-closed, got: {result['message']!r}. "
+        "TE-007: empty-string group_id must not fall back to stale "
+        "_current_group_id."
     )
+    assert resolver_called["count"] == 0
+    assert dataframes == {}
 
 
 def test_explicit_group_id_none_with_no_attribute_is_fail_closed():

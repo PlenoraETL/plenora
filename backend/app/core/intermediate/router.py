@@ -13,7 +13,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from app.core.auth.auth import (
+from app.core.auth.dependencies import (
     get_current_user,
     require_not_esecutore,
 )

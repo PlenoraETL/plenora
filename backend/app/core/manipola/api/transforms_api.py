@@ -11,7 +11,8 @@ from fastapi import APIRouter, Depends
 from typing import Dict, Any
 
 from app.core.manipola.plugin_executor import get_executor
-from app.core.auth.auth import get_current_user, require_not_esecutore
+# BE-GO-READY-AUTH-ENGINE-016 dep-import off facade.
+from app.core.auth.dependencies import get_current_user, require_not_esecutore
 # BE-GO-READY-AUTH-ENGINE-014 Phase-8 contract fan-out.
 from app.shared.contracts.auth import CurrentUser
 
