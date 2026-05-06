@@ -148,23 +148,26 @@ def _applica_crs_da_colonne(df, node_columns):
     perdano il CRS perché il CSV non lo preserva.
     """
     import geopandas as gpd
-    from app.utils.geo import extract_srid_from_column_type, to_geodataframe, detect_geometry_column
+    from app.utils.geo import to_geodataframe
+    from app.shared.resource_metadata import ResourceMetadata
 
     if isinstance(df, gpd.GeoDataFrame):
         return df  # già GeoDataFrame, non toccare
 
-    # Cerca colonna geometrica con SRID nei metadati del nodo
-    geom_col = None
-    srid = None
-    for col in node_columns:
-        col_name = col.get('alias') or col.get('name', '')
-        col_type = col.get('type', '')
-        if col_type.startswith('geometry') and col_name in df.columns:
-            extracted = extract_srid_from_column_type(col_type)
-            if extracted:
-                geom_col = col_name
-                srid = extracted
-                break
+    # Normalise alias → name before building ResourceMetadata: after
+    # filter_visible_columns the DataFrame uses the alias as the actual
+    # column name, so the lookup must use the same key.
+    _meta_input = [
+        {"name": c.get("alias") or c.get("name", ""), "type": c.get("type", "")}
+        for c in (node_columns or [])
+        if c.get("alias") or c.get("name")
+    ]
+    meta = ResourceMetadata.from_columns_list(_meta_input, source_kind="file")
+
+    # Apply CRS only when the geometry column is present in the DataFrame
+    # and carries an explicit EPSG code in the type string.
+    geom_col = meta.geometry_column if (meta.geometry_column and meta.geometry_column in df.columns) else None
+    srid = meta.crs_epsg if geom_col else None
 
     if geom_col and srid:
         try:

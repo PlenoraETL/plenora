@@ -62,7 +62,7 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 import pandas as pd
 
 import app.db.db_service as db_svc  # noqa: F401  (test-monkeypatch surface preserved)
-from app.core.arricchisci._api_connection_helpers import _nd
+from app.shared.canvas_node import CanvasNode  # BE-GO-READY-ARCH-056-W3
 from app.shared.graph import kahn_topological_order
 # BE-GO-READY-ORCHESTRATION-ENGINE-011-CANVAS-CTX-NO-LEGACY-STATE-CUT
 # + BE-GO-READY-ORCHESTRATION-ENGINE-012-KILL-APPLY-TO-LEGACY-STATE:
@@ -155,9 +155,12 @@ def is_file_source_for_file_processor(
         if de.get("source") != node_id:
             continue
         target_node = node_map.get(de.get("target"))
-        if not target_node or target_node.get("type") != "api_enrich":
+        if not target_node:
             continue
-        target_api_id = _nd(target_node, "api_id")
+        _tcn = CanvasNode(target_node)
+        if _tcn.type != "api_enrich":
+            continue
+        target_api_id = _tcn.get_field("api_id")
         target_api_config = api_connections.get(target_api_id, {})
         if target_api_config.get("connection_type") == "rest_file":
             return True
@@ -235,13 +238,14 @@ def run_single_enricher(
     callback da `execute_parallel_enrichers`. Solleva `ValueError`
     se l'api_id non e' nelle connections decifrate.
     """
-    api_id = _nd(node_data, "api_id")
+    _ncn = CanvasNode(node_data)
+    api_id = _ncn.get_field("api_id")
     api_config = api_conns.get(api_id)
     if not api_config:
         raise ValueError(f"API '{api_id}' non trovata")
     if api_config.get("api_type", "enricher") == "generator":
         return svc._execute_api_generator(api_config, in_df)
-    param_mapping = _nd(node_data, "param_mapping", {})
+    param_mapping = _ncn.get_field("param_mapping", {})
     return svc._execute_api_enricher(in_df, api_config, param_mapping)
 
 
@@ -288,13 +292,13 @@ def execute_canvas_enrichment(
     propagato a `_write_intermediate_snapshot`. None = bit-compat.
     """
     try:
-        ctx = init_execution_context(svc, project_id, preview_limit)
-
         nodes = canvas.get("nodes", [])
         edges = canvas.get("edges", [])
 
         if not nodes:
             return {"success": False, "error": "Nessun nodo nel canvas"}
+
+        ctx = init_execution_context(svc, project_id, preview_limit)
 
         # Carica tutte le API connections con credenziali decifrate (1 query)
         api_connections = svc.list_api_connections_decrypted()
@@ -325,7 +329,7 @@ def execute_canvas_enrichment(
                 node = node_map.get(node_id)
                 if not node:
                     continue
-                node_type = node.get("type")
+                node_type = CanvasNode(node).type
                 node_data = node
                 logger.debug(f"Esecuzione nodo: {node_id} ({node_type})")
 
@@ -343,7 +347,7 @@ def execute_canvas_enrichment(
                     ):
                         node_results[node_id] = {
                             "_passthrough_file_source": True,
-                            "file_source_id": _nd(node, "file_source_id"),
+                            "file_source_id": CanvasNode(node).get_field("file_source_id"),
                         }
                     else:
                         # BE-GO-READY-TRANSFORMATION-ENGINE-019: typed ctx.
@@ -434,7 +438,7 @@ def execute_canvas_enrichment(
                 parallel_ids = []
                 for nid in step_node_ids:
                     nd = node_map.get(nid)
-                    api_id = _nd(nd, "api_id")
+                    api_id = CanvasNode(nd).get_field("api_id") if nd else None
                     api_cfg = api_connections.get(api_id, {})
                     ctype = api_cfg.get("connection_type")
                     if ctype == "rest_file":
@@ -511,16 +515,16 @@ def execute_canvas_enrichment(
                         )
 
         result_node = next(
-            (n for n in nodes if n.get("type") == "result"), None
+            (n for n in nodes if CanvasNode(n).type == "result"), None
         )
-        output_format = (
-            _nd(result_node, "format", format) or format
-            if result_node else format
-        )
-        output_name = (
-            _nd(result_node, "fileName", _nd(result_node, "name", "output"))
-            if result_node else "output"
-        )
+        if result_node:
+            _rcn = CanvasNode(result_node)
+            output_format = _rcn.get_field("format", format) or format
+            _fn = _rcn.get_field("fileName")
+            output_name = _fn if _fn is not None else _rcn.get_field("name", "output")
+        else:
+            output_format = format
+            output_name = "output"
 
         final_result = svc._find_final_result(
             node_results, result_node, execution_order

@@ -138,7 +138,7 @@ def test_build_context_raises_execution_context_error_on_db_error(monkeypatch):
     """`psycopg2.OperationalError` → `ExecutionContextError` con
     chain preservata. Stesso contract del legacy
     `init_execution_context`."""
-    from app.core.arricchisci import execution_context as ec_mod
+    from app.core.arricchisci import execution_context as ec_mod  # noqa: F401
     from app.shared.exceptions import ExecutionContextError
 
     original = psycopg2.OperationalError("pool exhausted")
@@ -146,7 +146,7 @@ def test_build_context_raises_execution_context_error_on_db_error(monkeypatch):
     def _boom(_pid):
         raise original
 
-    monkeypatch.setattr(ec_mod.db_svc, "get_project", _boom)
+    monkeypatch.setattr("app.core.arricchisci.execution_context._get_project", _boom)
 
     with pytest.raises(ExecutionContextError) as exc_info:
         ec_mod.build_execution_context("proj-1", preview_limit=None)
@@ -164,8 +164,7 @@ def test_build_context_happy_path(monkeypatch):
     from app.core.arricchisci import execution_context as ec_mod
 
     monkeypatch.setattr(
-        ec_mod.db_svc,
-        "get_project",
+        "app.core.arricchisci.execution_context._get_project",
         lambda pid: {"id": pid, "group_id": "grp-A", "name": "p1"},
     )
 
@@ -179,9 +178,9 @@ def test_build_context_missing_project_yields_none_group(monkeypatch):
     """Progetto inesistente → `group_id=None` (ramo dati legittimo,
     non eccezione). I mixin downstream sollevano "Contesto di
     sicurezza non determinabile"."""
-    from app.core.arricchisci import execution_context as ec_mod
+    from app.core.arricchisci import execution_context as ec_mod  # noqa: F401
 
-    monkeypatch.setattr(ec_mod.db_svc, "get_project", lambda pid: None)
+    monkeypatch.setattr("app.core.arricchisci.execution_context._get_project", lambda pid: None)
     ctx = ec_mod.build_execution_context("proj-unknown", preview_limit=None)
     assert ctx.group_id is None
     assert ctx.preview_limit is None
@@ -207,8 +206,7 @@ def test_init_execution_context_returns_typed_context(api_service, monkeypatch):
     )
 
     monkeypatch.setattr(
-        co.db_svc,
-        "get_project",
+        "app.core.arricchisci.execution_context._get_project",
         lambda pid: {"id": pid, "group_id": "grp-Z", "name": "px"},
     )
 
@@ -238,8 +236,7 @@ def test_init_execution_context_does_not_write_singleton_state(
     from app.core.arricchisci import canvas_orchestrator as co
 
     monkeypatch.setattr(
-        co.db_svc,
-        "get_project",
+        "app.core.arricchisci.execution_context._get_project",
         lambda pid: {"id": pid, "group_id": "grp-FRESH", "name": "p"},
     )
 

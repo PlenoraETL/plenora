@@ -59,12 +59,12 @@ def _count_features_where_via_post(client, conn, layer_url: str, where: str) -> 
 # patchare `validator._coarse_type_*`) e per non cambiare il call site
 # di `validate_publish`.
 def _coarse_type_from_esri(esri_type: str) -> str:
-    from app.core.features.arcgis_client import EsriTypeMapper
+    from app.shared.esri_types import EsriTypeMapper  # ADR-0023: moved from features
     return EsriTypeMapper.map_esri_field_to_schema_bucket(esri_type)
 
 
 def _coarse_type_from_dtype(dtype) -> str:
-    from app.core.features.arcgis_client import EsriTypeMapper
+    from app.shared.esri_types import EsriTypeMapper  # ADR-0023: moved from features
     return EsriTypeMapper.map_pandas_dtype_to_schema_bucket(dtype)
 
 

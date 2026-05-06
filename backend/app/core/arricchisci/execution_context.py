@@ -2,6 +2,7 @@
 
 BE-GO-READY-TRANSFORMATION-ENGINE-015-ARRICCHISCI-EXECUTION-CONTEXT.
 BE-GO-READY-ORCHESTRATION-ENGINE-012-KILL-APPLY-TO-LEGACY-STATE.
+BE-GO-READY-ARCH-056-W1-SHARED-CANVAS-EXECUTION-CONTEXT.
 
 Introduce un boundary tipato per il contesto di una singola
 esecuzione canvas-arricchisci. Post-OE011 / OE012 il modulo
@@ -9,6 +10,14 @@ NON scrive piu' alcuno stato sul singleton
 `api_connection_service`: i mixin di produzione consumano
 direttamente il `ctx`, e il vecchio scaffold "mirror legacy"
 (`apply_to_legacy_state`) e' stato eliminato.
+
+KEEP_COMPAT: `ArricchisciExecutionContext` is now a thin frozen
+subclass of `app.shared.execution_context.CanvasExecutionContext`
+(W1, 056). The shared base carries the three fields; the Arricchisci
+class adds nothing — its only purpose is to preserve the
+`__name__ == "ArricchisciExecutionContext"` contract required by
+existing tests and call sites. Manipola migration is deferred
+to a later batch (Worker 6 owns Manipola).
 
 Boundary contract
 =================
@@ -61,6 +70,7 @@ import psycopg2
 
 from app.db.config.projects import get_project as _get_project
 from app.shared.exceptions import ExecutionContextError
+from app.shared.execution_context import CanvasExecutionContext
 
 
 __all__ = [
@@ -70,30 +80,17 @@ __all__ = [
 
 
 @dataclass(frozen=True)
-class ArricchisciExecutionContext:
-    """Contesto immutabile di una singola esecuzione canvas arricchisci.
+class ArricchisciExecutionContext(CanvasExecutionContext):
+    """KEEP_COMPAT thin subclass of `CanvasExecutionContext`.
 
-    Attributes:
-        project_id: id del progetto in esecuzione. Sempre presente
-            (input obbligatorio).
-        group_id: tenant binding del progetto. `None` quando il
-            progetto non esiste nel DB (`db_svc.get_project` ha
-            ritornato `None`) — i mixin downstream sollevano
-            "Contesto di sicurezza non determinabile" quando
-            tentano operazioni cross-tenant. Non e' un errore
-            di configurazione: e' un ramo dati legittimo.
-        preview_limit: se `int>0`, tronca i DataFrame caricati
-            via `_load_file_source` (preview UI). `None` o
-            `<=0` = no truncating (esecuzione full).
+    Adds no new fields. Exists solely to preserve the
+    `ArricchisciExecutionContext.__name__` contract for existing
+    tests and call sites while the shared base type is used for
+    typed dispatch and future Go rewrite mapping.
 
-    Frozen: immutabile dopo `__init__`. Due esecuzioni
-    concorrenti istanziano due context distinti, niente race
-    cross-tenant.
+    See `app.shared.execution_context.CanvasExecutionContext` for
+    field documentation.
     """
-
-    project_id: str
-    group_id: Optional[str]
-    preview_limit: Optional[int]
 
 
 def build_execution_context(

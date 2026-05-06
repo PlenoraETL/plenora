@@ -37,6 +37,7 @@ from app.core.estrai.query_generator import QueryGenerator
 from app.services.connection_service import ConnectionService
 from app.config import settings
 from app.shared import error_codes
+from app.shared.executor_protocol import CanvasExecutorProtocol
 from app.utils.logger import get_logger
 
 # Import dai moduli separati
@@ -83,10 +84,47 @@ class OrchestratorService:
             project_service=project_service,
             orchestrator_callback=self.execute_pipeline  # Per esecuzione ricorsiva
         )
-        
+
         self.enrich_executor = EnrichExecutor(
             project_service=project_service
         )
+
+        # BE-GO-READY-ARCH-056-W2: Protocol tripwire — fire once at init to
+        # catch misconfigured executor objects before any request is served.
+        # MagicMock satisfies the Protocol (it responds to any attr access),
+        # so test harnesses that replace executor attrs post-init are unaffected.
+        for _mtype, _exc in [
+            ("estrai",      self.estrai_executor),
+            ("manipola",    self.manipola_executor),
+            ("arricchisci", self.enrich_executor),
+        ]:
+            assert isinstance(_exc, CanvasExecutorProtocol), (
+                f"Executor for '{_mtype}' ({type(_exc).__name__}) does not "
+                f"satisfy CanvasExecutorProtocol (missing execute or preview)"
+            )
+
+    @property
+    def _executor_dispatch(self) -> Dict[str, CanvasExecutorProtocol]:
+        """Typed dispatch table: module_type → CanvasExecutorProtocol.
+
+        BE-GO-READY-ARCH-056-W2-ORCHESTRATOR-TYPED-DISPATCH.
+
+        Built as a property (not cached) so that tests replacing a concrete
+        executor attribute (e.g. ``svc.estrai_executor = MagicMock()``) see
+        the updated object without patching the dict separately.
+
+        Consumers:
+        - ``execute_preview``: dispatches ``preview`` entirely through this table.
+        - ``execute_pipeline``: uses this table as the canonical "supported
+          module types" registry (guard only); execute calls still go through
+          the concrete attributes to pass engine-specific kwargs that are not
+          part of the Protocol's minimal surface (e.g. ``force_recalculate``).
+        """
+        return {
+            "estrai":      self.estrai_executor,
+            "manipola":    self.manipola_executor,
+            "arricchisci": self.enrich_executor,
+        }
 
     # =========================================================================
     # PUNTI DI INGRESSO
@@ -131,32 +169,35 @@ class OrchestratorService:
             )
 
 
+        # BE-GO-READY-ARCH-056-W2: dispatch guard — check supported types via
+        # the typed dispatch table before calling any executor. Replaces the
+        # old `else: return failure` branch at the bottom of the if/elif chain.
+        if metadata.project_type not in self._executor_dispatch:
+            return PipelineArtifact.failure(
+                project_id=project_id,
+                message=f"Tipo progetto '{metadata.project_type}' non supportato",
+            )
+
         # Esegui la pipeline in base al tipo.
         # `intermediate_mode_override` (R-25 PR-B2.b): kwarg passing-through
         # a tutti e 3 gli executor (estrai/manipola/arricchisci). None = bit-compat.
-        result = None
+        # Engine-specific kwargs differ (estrai has no force_recalculate), so
+        # we call through concrete attributes rather than the Protocol interface
+        # whose execute() signature captures only the common surface.
         if metadata.project_type == "estrai":
             result = self.estrai_executor.execute(
                 project_id, canvas, run_id=run_id,
                 intermediate_mode_override=intermediate_mode_override,
             )
-
         elif metadata.project_type == "manipola":
             result = self.manipola_executor.execute(
                 project_id, canvas, force_recalculate, run_id=run_id,
                 intermediate_mode_override=intermediate_mode_override,
             )
-
-        elif metadata.project_type == "arricchisci":
+        else:  # "arricchisci" — already validated by dispatch guard above
             result = self.enrich_executor.execute(
                 project_id, canvas, force_recalculate, run_id=run_id,
                 intermediate_mode_override=intermediate_mode_override,
-            )
-
-        else:
-            return PipelineArtifact.failure(
-                project_id=project_id,
-                message=f"Tipo progetto '{metadata.project_type}' non supportato",
             )
 
         # Wrap il dict raw degli executor in PipelineArtifact (preserva
@@ -188,17 +229,13 @@ class OrchestratorService:
         if not metadata or not canvas:
             return {"success": False, "message": f"Progetto {project_id} non trovato"}
 
-        if metadata.project_type == "estrai":
-            return self.estrai_executor.preview(project_id, canvas, limit)
-
-        elif metadata.project_type == "manipola":
-            return self.manipola_executor.preview(project_id, canvas, limit)
-
-        elif metadata.project_type == "arricchisci":
-            return self.enrich_executor.preview(project_id, canvas, limit)
-
-        else:
+        # BE-GO-READY-ARCH-056-W2: preview uses the full typed dispatch table.
+        # All three executors share the same preview(project_id, canvas, limit)
+        # signature (Protocol surface), so no engine-specific branching needed.
+        executor = self._executor_dispatch.get(metadata.project_type)
+        if executor is None:
             return {"success": False, "message": f"Preview non supportata per tipo '{metadata.project_type}'"}
+        return executor.preview(project_id, canvas, limit)
 
     # =========================================================================
     # CARICA — Rilevamento e avvio task caricamento su database

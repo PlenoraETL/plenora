@@ -78,7 +78,6 @@ from typing import Optional, Tuple
 
 from app.shared.exceptions import MemoryLimitExceededError
 
-from app.core.resources.bounded_reader import read_stream_bounded
 from app.core.resources.resource_caps import resolve_resource_max_bytes
 from app.core.resources.types import (
     OutputMode,
@@ -86,7 +85,10 @@ from app.core.resources.types import (
     ResourceKind,
     ResourceRef,
 )
-from app.core.resources.loaders._shared import _short_key
+from app.core.resources.loaders._shared import (
+    _short_key,
+    _download_object_storage_impl,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -214,81 +216,20 @@ def _fetch_row(
 
 
 def _download_object_storage(storage_key: str) -> Optional[bytes]:
-    """Object storage GET, bounded by ``resolve_resource_max_bytes()``.
+    """Object storage GET — thin adapter for ``result_blob`` kind.
 
-    Returns ``None`` on disabled capability or download failure
-    (best-effort logging; mirrors pre-010 connectivity-error
-    semantics bit-for-bit). Raises :class:`MemoryLimitExceededError`
-    on cap exceeded -- this is NOT swallowed by the broad-except
-    below because oversize is a security/resource cap signal, not
-    a connectivity issue, and the caller MUST learn about it.
-
-    The bounded read aborts iteration as soon as a chunk would push
-    the running size over the cap; subsequent chunks are NOT
-    consumed. This is the entire point of 010: pre-010 the iterator
-    was fully drained via ``list(stream["body"])`` before any size
-    check, so the OOM had already happened by the time we'd ask.
+    Delegates to ``_download_object_storage_impl`` with the
+    kind-specific log prefix ``[FS-4]`` and stage
+    ``"result_blob_oversize"``.  Kept as a module-level name so
+    existing monkeypatch targets (tests that patch
+    ``app.core.resources.loaders.result_blob._download_object_storage``)
+    continue to work unchanged.
     """
-    from app.utils.logger import get_logger
-
-    logger = get_logger(__name__)
-    _t0 = time.monotonic()
-    max_bytes = resolve_resource_max_bytes()
-    try:
-        from app.shared.cloud_backends import (
-            ObjectStorageDisabledError,
-            get_runtime_object_storage,
-        )
-
-        try:
-            storage = get_runtime_object_storage()
-        except ObjectStorageDisabledError as _disabled:
-            duration_ms = round((time.monotonic() - _t0) * 1000, 1)
-            logger.warning(
-                f"[FS-4] S3 download skip su {_short_key(storage_key)}: "
-                f"object storage disabilitato (duration_ms={duration_ms}). "
-                f"{_disabled}"
-            )
-            return None
-        stream = storage.get_object_stream(storage_key)
-        # Bounded read: aborts iteration on first cap-exceeding chunk.
-        # MemoryLimitExceededError propagates past the broad-except
-        # below (oversize is a security/resource signal, not a
-        # connectivity error).
-        try:
-            data = read_stream_bounded(
-                stream["body"],
-                max_bytes=max_bytes,
-                label=_short_key(storage_key),
-                stage="result_blob_oversize",
-            )
-        except MemoryLimitExceededError as oversize:
-            duration_ms = round((time.monotonic() - _t0) * 1000, 1)
-            logger.error(
-                f"[FS-4] S3 download {_short_key(storage_key)} ABORTED "
-                f"oversize: observed_bytes={oversize.observed_bytes} "
-                f"limit_bytes={oversize.limit_bytes} "
-                f"duration_ms={duration_ms}"
-            )
-            raise
-        duration_ms = round((time.monotonic() - _t0) * 1000, 1)
-        logger.info(
-            f"[PERF] s3_download op=get_bytes "
-            f"storage_key={_short_key(storage_key)} "
-            f"size_bytes={len(data)} duration_ms={duration_ms}"
-        )
-        return data
-    except MemoryLimitExceededError:
-        # Oversize is the contract for the caller; do NOT swallow.
-        raise
-    except Exception as e:
-        duration_ms = round((time.monotonic() - _t0) * 1000, 1)
-        logger.error(
-            f"[FS-4] S3 download {_short_key(storage_key)} fallito "
-            f"(duration_ms={duration_ms}): {e}",
-            exc_info=True,
-        )
-        return None
+    return _download_object_storage_impl(
+        storage_key,
+        log_prefix="[FS-4]",
+        stage="result_blob_oversize",
+    )
 
 
 def _dispatch_by_id(

@@ -43,6 +43,7 @@ _RESOURCES_PKG = _BACKEND_ROOT / "app" / "core" / "resources"
 _TYPES_PY = _RESOURCES_PKG / "types.py"
 _REGISTRY_PY = _RESOURCES_PKG / "registry.py"
 _RESULT_BLOB_PY = _RESOURCES_PKG / "loaders" / "result_blob.py"
+_SHARED_LOADER_PY = _RESOURCES_PKG / "loaders" / "_shared.py"
 _RESULTS_DB_PY = _BACKEND_ROOT / "app" / "db" / "results_db_service.py"
 
 
@@ -256,8 +257,8 @@ def test_storage_key_dispatch_lives_in_exactly_one_module():
 
 def test_loader_owns_the_dispatch_tokens():
     """Symmetric assertion: the dispatch tokens MUST live in the
-    loader module post-migration. Removing them from the loader
-    silently re-introduces fallback paths in callers.
+    loader package post-migration. Removing them silently
+    re-introduces fallback paths in callers.
 
     BE-GO-READY-RESOURCE-ENGINE-007: SELECT includes
     `project_id` to support optional row-metadata project-level
@@ -269,9 +270,16 @@ def test_loader_owns_the_dispatch_tokens():
     cap). The fixed projection of `storage_key, project_id,
     length(data) AS data_size` is the stable contract; the WHERE
     is composed at runtime from optional filters.
+
+    BE-GO-READY-RESOURCE-ENGINE-026: `get_object_stream` was
+    extracted from the per-loader `_download_object_storage` bodies
+    into the shared private utility `_shared._download_object_storage_impl`.
+    It now lives in `_shared.py` (still inside the loaders package);
+    each loader retains a thin module-level adapter so existing
+    monkeypatch targets remain valid.
     """
     text = _RESULT_BLOB_PY.read_text(encoding="utf-8")
-    required = (
+    required_in_loader = (
         # SQL row metadata projection (RESOURCE-ENGINE-007 +
         # RESOURCE-ENGINE-013). storage_key and project_id are the
         # always-present row-metadata columns; data_size is the
@@ -284,19 +292,28 @@ def test_loader_owns_the_dispatch_tokens():
         "ELSE data",
         # BYTEA conversion path
         "isinstance(data, memoryview)",
-        # object storage download symbol
-        "get_object_stream",
         # the structured timing log shape that ops dashboards
         # already filter on (preserve verbatim)
         "[PERF] get_result_data op=fetch_blob",
     )
     code_full = text  # log strings live in f-strings; do NOT strip here
-    missing = [t for t in required if t not in code_full]
+    missing = [t for t in required_in_loader if t not in code_full]
     assert not missing, (
         f"ResultBlobLoader is missing canonical dispatch tokens: "
         f"{missing}. The pilot's de-duplication relies on these tokens "
         "living in the loader; restore them or extend this lock to "
         "match the new shape."
+    )
+
+    # BE-GO-READY-RESOURCE-ENGINE-026: object-storage GET lives in
+    # _shared.py after the download-helper extraction. Verify it
+    # has not been silently removed from the loaders package.
+    shared_text = _SHARED_LOADER_PY.read_text(encoding="utf-8")
+    assert "get_object_stream" in shared_text, (
+        "_shared.py is missing `get_object_stream`. The 026 extraction "
+        "placed the object-storage GET in `_download_object_storage_impl`; "
+        "restoring a per-loader copy without removing this assertion "
+        "would reintroduce duplication."
     )
 
 

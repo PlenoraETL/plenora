@@ -47,8 +47,9 @@ _KNOWN_VIOLATIONS: dict[str, set[str]] = {
 
 _KNOWN_VIOLATION_REASONS: dict[str, str] = {
     "validator.py": (
-        "TODO ADR-0023: move EsriTypeMapper to app/shared/; pass ArcGIS "
-        "client via explicit protocol instead of FeaturesService lookup."
+        "TODO ADR-0023: EsriTypeMapper moved to app/shared/esri_types (batch 056). "
+        "Remaining: create_client import (pass ArcGIS client via explicit protocol "
+        "instead of inline create_client()) + FeaturesService lookup."
     ),
     "arcgis_uploader.py": (
         "TODO ADR-0023: replace FeaturesService lookup with explicit ArcGIS "
