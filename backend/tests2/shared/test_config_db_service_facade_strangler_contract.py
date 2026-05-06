@@ -75,8 +75,14 @@ _FACADE_LEAF = "config_db_service"
 #   - `app/db/db_service.py`: cross-engine bulk re-export — KEEP_COMPAT.
 #   - `app/db/config/{users,projects,schedules,connections,datasources}.py`:
 #     lazy `_safe_set_clause` import — intentional cycle break.
-#   - `app/core/auth/auth.py`: heavy `cfg_db.*` usage spanning users,
-#     projects, groups; migration owned by future AUTH-ENGINE batch.
+#   - `app/core/auth/auth.py`: removed by
+#     BE-GO-READY-AUTH-ENGINE-012. The three remaining `cfg_db.*`
+#     calls (`get_project` / `get_schedule` / `get_file_source`)
+#     in the `require_*_owner` FastAPI dependencies migrated to
+#     direct lazy imports of the matching leaves
+#     (`app.db.config.projects` / `schedules` / `file_sources`).
+#     The `import app.db.config_db_service as cfg_db` module-edge
+#     import was deleted; auth.py is now facade-clean.
 #   - `app/services/project_service.py`: removed by
 #     BE-GO-READY-DB-ENGINE-007. The single remaining call
 #     (`update_project_canvas_key_atomic`) was migrated to the
@@ -139,7 +145,6 @@ _FACADE_PROD_ALLOWLIST: frozenset[str] = frozenset({
     "app/db/config/schedules.py",
     "app/db/config/connections.py",
     "app/db/config/datasources.py",
-    "app/core/auth/auth.py",
 })
 
 

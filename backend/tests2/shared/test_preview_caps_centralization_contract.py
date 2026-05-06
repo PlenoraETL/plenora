@@ -280,113 +280,107 @@ def test_artifact_reader_compat_alias_is_removed():
 # ---------------------------------------------------------------------------
 # 3. Resource cap and preview cap stay separate
 # ---------------------------------------------------------------------------
+#
+# TEST-ENGINE-001 slim: the prior 6 separation tests were collapsed
+# to 3 (one source-bound, one combined value/env identity, one
+# parametrized cross-driver matrix). The reverse-direction
+# `resource_caps.py` symmetry assertion was DELETED here because it
+# duplicates `test_artifact_preview_cap_is_not_collapsed_into_resource_max_bytes`
+# in the sibling `test_resource_caps_centralization_contract.py`
+# (already-locked invariant; one current guard remains).
 
 
-def test_preview_caps_does_not_reference_resource_max_bytes():
+def test_preview_caps_module_does_not_couple_to_resource_caps():
     """``preview_caps.py`` is the single owner of the preview cap
-    parsing surface. It MUST NOT reference ``RESOURCE_MAX_BYTES``
-    in executable code -- the two caps are siblings, not stacked.
-    A regression that routed the preview default through the
-    resource resolver would silently lift the preview budget from
-    25 MB to 200 MB."""
-    src = _PREVIEW_CAPS_PY.read_text(encoding="utf-8")
-    code_only = _python_code_only(src)
-    assert "RESOURCE_MAX_BYTES" not in code_only, (
-        "`preview_caps.py` must NOT reference `RESOURCE_MAX_BYTES`; "
-        "the resource cap is intentionally separate (sibling "
-        "module `resource_caps.py`)."
-    )
-
-
-def test_resource_caps_does_not_reference_preview_cap():
-    """Symmetric guard. ``resource_caps.py`` must NOT reference
-    ``ARTIFACT_PREVIEW_MAX_BYTES`` in executable code; the preview
-    cap lives in the sibling ``preview_caps.py``. The existing
-    ``test_resource_caps_centralization_contract.py`` already locks
-    this; we mirror it here so the preview-cap suite has end-to-end
-    coverage of the separation."""
-    src = _RESOURCE_CAPS_PY.read_text(encoding="utf-8")
-    code_only = _python_code_only(src)
-    assert "ARTIFACT_PREVIEW_MAX_BYTES" not in code_only, (
-        "`resource_caps.py` must NOT reference "
-        "`ARTIFACT_PREVIEW_MAX_BYTES`; the preview cap is "
-        "intentionally separate (sibling module "
-        "`preview_caps.py`)."
-    )
-
-
-def test_preview_caps_does_not_import_resource_caps():
-    """The two helpers are siblings. ``preview_caps.py`` MUST NOT
-    import ``resource_caps`` -- if it ever did, a future
-    consolidation could silently merge the two defaults."""
+    parsing surface. It MUST NOT reference ``RESOURCE_MAX_BYTES`` in
+    executable code AND MUST NOT import the sibling
+    ``resource_caps`` module. Either coupling would let a future
+    consolidation silently merge the two defaults (lifting the
+    preview budget from 25 MB to 200 MB)."""
     text = _PREVIEW_CAPS_PY.read_text(encoding="utf-8")
-    forbidden = (
+    code_only = _python_code_only(text)
+    assert "RESOURCE_MAX_BYTES" not in code_only, (
+        "`preview_caps.py` must NOT reference `RESOURCE_MAX_BYTES` "
+        "in executable code; the resource cap is intentionally "
+        "separate (sibling module `resource_caps.py`)."
+    )
+    forbidden_imports = (
         "from app.core.resources.resource_caps",
         "import app.core.resources.resource_caps",
         "from app.core.resources import resource_caps",
     )
-    offenders = [s for s in forbidden if s in text]
+    offenders = [s for s in forbidden_imports if s in text]
     assert not offenders, (
         "preview_caps.py must NOT import resource_caps -- the two "
         f"helpers are siblings, not stacked. Offenders: {offenders}"
     )
 
 
-def test_default_values_are_distinct_and_correct():
+def test_resource_and_preview_caps_have_distinct_values_and_env_names():
     """Behavioural lock: the two defaults MUST NOT collapse to the
-    same value. Resource cap = 200 MB; preview cap = 25 MB. A
-    regression that synced them silently would defeat the
-    concurrency-sensitive preview budget."""
+    same value AND the two env names MUST be distinct. Defaults
+    pinned: resource = 200 MB, preview = 25 MB (preview <
+    resource). Sharing either the value or the env would defeat
+    the concurrency-sensitive preview budget OR prevent ops from
+    tuning one cap without affecting the other."""
     from app.core.resources.preview_caps import (
         ARTIFACT_PREVIEW_MAX_BYTES_DEFAULT,
+        ARTIFACT_PREVIEW_MAX_BYTES_ENV,
     )
-    from app.core.resources.resource_caps import RESOURCE_MAX_BYTES_DEFAULT
+    from app.core.resources.resource_caps import (
+        RESOURCE_MAX_BYTES_DEFAULT,
+        RESOURCE_MAX_BYTES_ENV,
+    )
 
     assert ARTIFACT_PREVIEW_MAX_BYTES_DEFAULT == 25 * 1024 * 1024
     assert RESOURCE_MAX_BYTES_DEFAULT == 200 * 1024 * 1024
     assert ARTIFACT_PREVIEW_MAX_BYTES_DEFAULT < RESOURCE_MAX_BYTES_DEFAULT
-
-
-def test_env_names_are_distinct():
-    """Behavioural lock: the two env names MUST be distinct.
-    Sharing the env would mean ops cannot tune one cap without
-    accidentally tuning the other."""
-    from app.core.resources.preview_caps import (
-        ARTIFACT_PREVIEW_MAX_BYTES_ENV,
-    )
-    from app.core.resources.resource_caps import RESOURCE_MAX_BYTES_ENV
 
     assert ARTIFACT_PREVIEW_MAX_BYTES_ENV == "ARTIFACT_PREVIEW_MAX_BYTES"
     assert RESOURCE_MAX_BYTES_ENV == "RESOURCE_MAX_BYTES"
     assert ARTIFACT_PREVIEW_MAX_BYTES_ENV != RESOURCE_MAX_BYTES_ENV
 
 
-def test_resource_max_bytes_env_does_not_drive_preview(monkeypatch):
-    """End-to-end behavioural lock: setting ``RESOURCE_MAX_BYTES``
-    MUST NOT change the preview cap. Catches a regression where
-    the preview resolver accidentally consults the resource env."""
-    monkeypatch.delenv("ARTIFACT_PREVIEW_MAX_BYTES", raising=False)
-    monkeypatch.setenv("RESOURCE_MAX_BYTES", "1024")
-    from app.core.resources.preview_caps import (
-        ARTIFACT_PREVIEW_MAX_BYTES_DEFAULT,
-        resolve_artifact_preview_max_bytes,
-    )
+@pytest.mark.parametrize(
+    "set_env, set_value, resolver_module, default_attr, resolve_attr",
+    [
+        # Setting RESOURCE_MAX_BYTES must NOT change the preview cap.
+        (
+            "RESOURCE_MAX_BYTES", "1024",
+            "app.core.resources.preview_caps",
+            "ARTIFACT_PREVIEW_MAX_BYTES_DEFAULT",
+            "resolve_artifact_preview_max_bytes",
+        ),
+        # Setting ARTIFACT_PREVIEW_MAX_BYTES must NOT change the resource cap.
+        (
+            "ARTIFACT_PREVIEW_MAX_BYTES", "1024",
+            "app.core.resources.resource_caps",
+            "RESOURCE_MAX_BYTES_DEFAULT",
+            "resolve_resource_max_bytes",
+        ),
+    ],
+    ids=("resource-env-must-not-drive-preview", "preview-env-must-not-drive-resource"),
+)
+def test_each_cap_env_drives_only_its_own_resolver(
+    monkeypatch,
+    set_env: str,
+    set_value: str,
+    resolver_module: str,
+    default_attr: str,
+    resolve_attr: str,
+):
+    """End-to-end behavioural lock for the cross-driver invariant.
+    Setting one cap's env MUST NOT change the value the OTHER
+    resolver returns. Catches the regression where one resolver
+    accidentally consults the sibling env."""
+    import importlib
 
-    assert (
-        resolve_artifact_preview_max_bytes()
-        == ARTIFACT_PREVIEW_MAX_BYTES_DEFAULT
-    )
-
-
-def test_artifact_preview_env_does_not_drive_resource_cap(monkeypatch):
-    """Symmetric end-to-end behavioural lock: setting
-    ``ARTIFACT_PREVIEW_MAX_BYTES`` MUST NOT change the resource
-    cap."""
+    # Clear both envs so the inactive side falls back to its own default.
     monkeypatch.delenv("RESOURCE_MAX_BYTES", raising=False)
-    monkeypatch.setenv("ARTIFACT_PREVIEW_MAX_BYTES", "1024")
-    from app.core.resources.resource_caps import (
-        RESOURCE_MAX_BYTES_DEFAULT,
-        resolve_resource_max_bytes,
-    )
+    monkeypatch.delenv("ARTIFACT_PREVIEW_MAX_BYTES", raising=False)
+    monkeypatch.setenv(set_env, set_value)
 
-    assert resolve_resource_max_bytes() == RESOURCE_MAX_BYTES_DEFAULT
+    mod = importlib.import_module(resolver_module)
+    default = getattr(mod, default_attr)
+    resolve = getattr(mod, resolve_attr)
+    assert resolve() == default

@@ -139,20 +139,15 @@ def test_api_connection_service_execute_enrichment_is_thin_wrapper():
     assert "step_node_ids" not in src
 
 
-def test_api_connection_service_get_execution_order_is_thin_wrapper():
-    """`_get_execution_order` resta come metodo di istanza KEEP_COMPAT
-    perche' `executor.py` lo chiama via
-    `api_connection_service._get_execution_order(...)`. Deve delegare
-    alla pure function del modulo nuovo."""
-    import inspect
-
-    from app.core.arricchisci.api_connector import ApiConnectionService
-
-    src = inspect.getsource(ApiConnectionService._get_execution_order)
-    assert "get_execution_order" in src, (
-        "REGRESSIONE: `_get_execution_order` non delega piu' a "
-        "`canvas_orchestrator.get_execution_order`."
-    )
+# BE-GO-READY-CONNECTION-ENGINE-009-API-CONNECTOR-INSTANCE-WRAPPER-CUT:
+# rimosso `test_api_connection_service_get_execution_order_is_thin_wrapper`.
+# Il wrapper KEEP_COMPAT `ApiConnectionService._get_execution_order` e'
+# stato eliminato: l'ultimo callsite di produzione
+# (`workers/tasks/enrichment_task.py:306`) e' stato migrato alla pure
+# function `canvas_orchestrator.get_execution_order(...)`. Il lock
+# negativo (assenza del metodo dalla classe) vive ora in
+# `test_api_connection_service_no_longer_exposes_get_execution_order`
+# (vedi sezione "Pure-function behavior locks" sotto).
 
 
 # ---------------------------------------------------------------------------
@@ -234,24 +229,12 @@ def test_get_execution_order_disconnected_nodes_appear_first():
     assert order.index("A") < order.index("B")
 
 
-def test_get_execution_order_via_class_wrapper_matches_module_function():
-    """KEEP_COMPAT identita' di output: `svc._get_execution_order(...)`
-    e `canvas_orchestrator.get_execution_order(...)` devono
-    ritornare lo stesso risultato byte-per-byte."""
-    from app.core.arricchisci.api_connector import ApiConnectionService
-    from app.core.arricchisci.canvas_orchestrator import get_execution_order
-
-    svc = ApiConnectionService.__new__(ApiConnectionService)
-    nodes = [{"id": n} for n in ("a", "b", "c", "d")]
-    edges = [
-        {"source": "a", "target": "b"},
-        {"source": "a", "target": "c"},
-        {"source": "b", "target": "d"},
-        {"source": "c", "target": "d"},
-    ]
-    via_svc = svc._get_execution_order(nodes, edges)
-    via_module = get_execution_order(nodes, edges)
-    assert via_svc == via_module
+# BE-GO-READY-CONNECTION-ENGINE-009: rimosso
+# `test_get_execution_order_via_class_wrapper_matches_module_function`.
+# Il wrapper KEEP_COMPAT e' stato eliminato; l'identita' wrapper-vs-
+# function non e' piu' applicabile. Lock dell'assenza del wrapper:
+# `test_api_connection_service_no_longer_exposes_get_execution_order`
+# in `test_executor_orchestrator_callsite_contract.py`.
 
 
 def test_is_file_source_for_file_processor_pure_predicate():

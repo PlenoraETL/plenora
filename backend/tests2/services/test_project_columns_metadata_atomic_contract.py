@@ -14,8 +14,11 @@ db.update_project). Due writer concorrenti producevano lost update:
     update(p1, canvas)
                                   update(p1, canvas)  ← X perso!
 
-Fix: la nuova `config_db_service.update_project_canvas_key_atomic`
-wrappa SELECT FOR UPDATE + merge + UPDATE in una singola transaction.
+Fix: `app.db.config.projects.update_project_canvas_key_atomic`
+(post BE-GO-READY-DB-ENGINE-007: la funzione vive nel leaf canonico;
+il facade `config_db_service` re-esporta lo stesso simbolo per i test
+gia' agganciati via `cfg_db.update_*` patch path) wrappa SELECT FOR
+UPDATE + merge + UPDATE in una singola transaction.
 Il SELECT FOR UPDATE prende un row-level lock che serializza i writer
 sullo stesso progetto.
 

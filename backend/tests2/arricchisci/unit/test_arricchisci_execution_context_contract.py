@@ -188,14 +188,19 @@ def test_build_context_missing_project_yields_none_group(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# 6. init_execution_context returns the context (Phase 1 transition)
+# 6. init_execution_context returns the typed context (no singleton write)
 # ---------------------------------------------------------------------------
 
 
 def test_init_execution_context_returns_typed_context(api_service, monkeypatch):
-    """Phase 1: il caller (`canvas_orchestrator` o consumer esterno)
-    riceve il context tipato dal wrapper. Il singleton state e'
-    mirrorato per KEEP_COMPAT con i mixin legacy."""
+    """Post-OE011: `init_execution_context` returns the typed
+    `ArricchisciExecutionContext` and does NOT mutate
+    `svc._current_group_id` / `svc._preview_limit`. The
+    pre-OE011 KEEP_COMPAT mirror was retired -- production
+    mixin readers are all ctx-strict, so the singleton write was
+    dead-write. The standalone function `apply_to_legacy_state`
+    remains available for callers that explicitly want the
+    mirror (test surface only post-OE011)."""
     from app.core.arricchisci import canvas_orchestrator as co
     from app.core.arricchisci.execution_context import (
         ArricchisciExecutionContext,
@@ -212,9 +217,48 @@ def test_init_execution_context_returns_typed_context(api_service, monkeypatch):
     assert ctx.project_id == "proj-x"
     assert ctx.group_id == "grp-Z"
     assert ctx.preview_limit == 7
-    # KEEP_COMPAT mirroring sul singleton legacy.
-    assert api_service._current_group_id == "grp-Z"
-    assert api_service._preview_limit == 7
+
+
+def test_init_execution_context_does_not_write_singleton_state(
+    api_service, monkeypatch,
+):
+    """OE011 explicit cut lock: `init_execution_context` MUST
+    NOT mutate `svc._current_group_id` or `svc._preview_limit`.
+    Pre-OE011 the function called `apply_to_legacy_state(svc,
+    ctx)` to mirror values; post-OE011 production mixin readers
+    are ctx-strict, so the mirror was dead-write. This test
+    catches a regression where someone re-adds the mirror "for
+    safety" without checking that production reads are
+    ctx-strict.
+
+    We pre-set a STALE singleton value before calling
+    `init_execution_context` and assert the function did NOT
+    overwrite it -- the singleton is no longer the orchestrator's
+    concern."""
+    from app.core.arricchisci import canvas_orchestrator as co
+
+    monkeypatch.setattr(
+        co.db_svc,
+        "get_project",
+        lambda pid: {"id": pid, "group_id": "grp-FRESH", "name": "p"},
+    )
+
+    # Pre-set stale singleton state.
+    api_service._current_group_id = "grp-STALE"
+    api_service._preview_limit = 9999
+
+    ctx = co.init_execution_context(api_service, "proj-x", preview_limit=42)
+
+    # The typed ctx carries the FRESH binding.
+    assert ctx.group_id == "grp-FRESH"
+    assert ctx.preview_limit == 42
+    # The singleton is NOT touched -- stale value survives.
+    # That's the OE011 invariant: production mixin readers
+    # consume `ctx` exclusively, so the singleton state is
+    # irrelevant. A stale singleton cannot leak into the new
+    # run because no production reader consults it.
+    assert api_service._current_group_id == "grp-STALE"
+    assert api_service._preview_limit == 9999
 
 
 # ---------------------------------------------------------------------------

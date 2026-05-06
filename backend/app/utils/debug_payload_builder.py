@@ -2,9 +2,11 @@
 DebugPayloadBuilder — assembla il debug_payload per il Debug Agent.
 
 Viene invocato alla chiusura di una run in failure.
-Legge il canvas dal DB config (PostgreSQL via app.db.config_db_service)
-e combina tutto il contesto in un oggetto JSON strutturato, pronto per
-essere mandato all'agente AI.
+Legge il canvas dal DB config (PostgreSQL via i leaf canonici sotto
+``app.db.config.*``; il facade `app.db.config_db_service` non e' piu'
+nella catena di import dopo BE-GO-READY-DB-ENGINE-004) e combina tutto
+il contesto in un oggetto JSON strutturato, pronto per essere mandato
+all'agente AI.
 
 Struttura output:
     {

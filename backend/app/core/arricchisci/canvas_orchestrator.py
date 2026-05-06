@@ -64,9 +64,27 @@ import pandas as pd
 
 import app.db.db_service as db_svc  # noqa: F401  (test-monkeypatch surface preserved)
 from app.core.arricchisci._api_connection_helpers import _nd
+# BE-GO-READY-ORCHESTRATION-ENGINE-011-CANVAS-CTX-NO-LEGACY-STATE-CUT:
+# `apply_to_legacy_state` is no longer imported here -- the
+# orchestrator's `init_execution_context` no longer mirrors `ctx`
+# values onto `svc._current_group_id` / `svc._preview_limit`.
+# Production mixin readers
+# (`_extract_file_source_group_id` / `_extract_project_source_group_id`
+# in `api_connection_rest_file`; `_group_id_from_ctx` /
+# `_preview_limit_from_ctx` in `api_connection_source_loading`) are
+# all CTX-STRICT (verified by AST scan: zero production reads of
+# the legacy singleton attributes). The singleton-mutation in
+# `apply_to_legacy_state` was therefore dead-write in production
+# even before this cut.
+#
+# The function `apply_to_legacy_state` itself stays exported by
+# `execution_context.py` (test-only surface: the 2 standalone
+# mirror tests in `test_arricchisci_execution_context_contract.py`
+# still call it directly). Removing the function entirely is a
+# follow-up worker once those test guards are retired
+# (R-OE011.1, classified in the audit).
 from app.core.arricchisci.execution_context import (
     ArricchisciExecutionContext,
-    apply_to_legacy_state,
     build_execution_context,
 )
 from app.utils.logger import get_logger
@@ -164,49 +182,55 @@ def init_execution_context(
 ) -> ArricchisciExecutionContext:
     """Inizializza il contesto di esecuzione per `execute_canvas_enrichment`.
 
-    BE-GO-READY-TRANSFORMATION-ENGINE-015: l'implementazione e'
-    stata spezzata in due step espliciti:
+    Storia:
 
-    1. `build_execution_context(project_id, preview_limit)` —
-       costruisce un `ArricchisciExecutionContext` immutabile
-       (frozen dataclass) leggendo `db_svc.get_project(...)`.
-       Pure-ish: niente side effect su `svc`.
-    2. `apply_to_legacy_state(svc, ctx)` — KEEP_COMPAT phase 1:
-       rispecchia `ctx.group_id` / `ctx.preview_limit` su
-       `svc._current_group_id` / `svc._preview_limit` perche' i
-       mixin downstream (`api_connection_source_loading`,
-       `api_connection_rest_file`) leggono ancora gli attributi
-       sul singleton. Phase 2 (TE15-R1) migrera' i mixin a ricevere
-       `ctx` esplicitamente.
+    - **BE-GO-READY-TRANSFORMATION-ENGINE-015 (Phase 1)**:
+      l'implementazione era spezzata in due step espliciti:
+      `build_execution_context(...)` (costruzione del typed
+      immutabile) + `apply_to_legacy_state(svc, ctx)` (mirror
+      KEEP_COMPAT su `svc._current_group_id` /
+      `svc._preview_limit` per i mixin che ancora leggevano dal
+      singleton).
 
-    Fail-closed: errori `psycopg2.Error` propagati come
-    `ExecutionContextError` (chain preservata) dal builder
-    sopra. Il boundary di `execute_canvas_enrichment` cattura nel
-    ramo `except Exception` → response safe per il caller.
+    - **BE-GO-READY-TRANSFORMATION-ENGINE-019/020/023/024/025/
+      026/030B + ORCHESTRATION-ENGINE-009/010**: tutti i mixin
+      reader site sono stati migrati a CTX-STRICT
+      (`_extract_file_source_group_id`,
+      `_extract_project_source_group_id`,
+      `_group_id_from_ctx`, `_preview_limit_from_ctx`). Nessuna
+      funzione di produzione legge piu' `svc._current_group_id`
+      / `svc._preview_limit` (verificato da AST scan: zero read
+      sites in `app/core/arricchisci/`).
 
-    Su progetto inesistente (`_proj_row is None`):
-    `ctx.group_id = None` (ramo dati), `_current_group_id = None`
-    via mirror; i check downstream sollevano "Contesto di
-    sicurezza non determinabile".
+    - **BE-GO-READY-ORCHESTRATION-ENGINE-011 (this cut)**: il
+      mirror `apply_to_legacy_state(svc, ctx)` in questa
+      funzione era diventato dead-write: scriveva attributi che
+      nessuno leggeva. Removed. Il `svc` parametro non e' piu'
+      mutato; `init_execution_context` e' ora una thin wrapper
+      che delega a `build_execution_context` + ritorna il typed
+      ctx. La firma con `svc` resta per KEEP_COMPAT con il
+      wrapper `ApiConnectionService._init_execution_context` che
+      lo passa esplicitamente.
+
+    Behavior post-011:
+    - Pure delegation: nessun side effect su `svc`. Il typed
+      `ctx` e' l'unico veicolo del tenant binding per la chain
+      di mixin.
+    - Fail-closed identico: errori `psycopg2.Error` propagati
+      come `ExecutionContextError` dal builder (chain
+      preservata via `from e`).
+    - Stale singleton state: se `svc._current_group_id` era
+      pre-set da un run precedente, NON viene piu' azzerato qui.
+      E' irrilevante perche' i mixin readers sono ctx-strict; il
+      typed ctx fresco vince sempre. Il regression test
+      `test_init_execution_context_does_not_write_singleton_state`
+      lock-a questo invariant.
 
     Returns:
-        Il `ArricchisciExecutionContext` costruito. La chiave
-        e' che ogni esecuzione produce un context fresco
-        immutabile invece di mutare lo stato globale del
-        singleton in-place.
+        Il `ArricchisciExecutionContext` costruito. Ogni
+        esecuzione produce un context fresco immutabile.
     """
-    # Invariant lock-test (`test_init_execution_context_fail_closed::
-    # test_init_execution_context_resets_stale_group_id_before_db_call`):
-    # azzerare il group_id sul singleton PRIMA del path che puo'
-    # fallire (DB lookup). Se `build_execution_context` solleva
-    # `ExecutionContextError`, lo stato stale dal run precedente
-    # non sopravvive. Il preview_limit viene impostato subito per
-    # preservare il comportamento legacy anche sul path di errore.
-    svc._preview_limit = preview_limit
-    svc._current_group_id = None
-    ctx = build_execution_context(project_id, preview_limit)
-    apply_to_legacy_state(svc, ctx)
-    return ctx
+    return build_execution_context(project_id, preview_limit)
 
 
 def run_single_enricher(

@@ -301,9 +301,19 @@ def execute_enrichment_task(
                 api_connections[api["id"]] = full_api
         
         update_task_progress(self, 10, "API caricate, inizio elaborazione...", task_id=task_id)
-        
-        # Ordine esecuzione topologico
-        execution_order = api_connection_service._get_execution_order(nodes, edges)
+
+        # Ordine esecuzione topologico.
+        # BE-GO-READY-CONNECTION-ENGINE-009: callsite migrato dal
+        # wrapper KEEP_COMPAT `api_connection_service._get_execution_order`
+        # alla pure function modulo-level
+        # `canvas_orchestrator.get_execution_order(...)` (Kahn topo-sort
+        # deterministico). Mirror del callsite gia' migrato in
+        # `app/core/arricchisci/executor.py:172` dal batch
+        # TRANSFORMATION-ENGINE-014.
+        from app.core.arricchisci.canvas_orchestrator import (
+            get_execution_order,
+        )
+        execution_order = get_execution_order(nodes, edges)
         node_results = {}
         
         # ─── Raggruppamento nodi per esecuzione parallela ───

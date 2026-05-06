@@ -81,10 +81,17 @@ fails -- paste the output and report which probe failed.
 
 ### 2.3 guided installer (dry-run section 2.5)
 
+Run the full 7-var env shape verbatim (do NOT trim; missing
+any of these forces the script to prompt and the run hangs):
+
 ```
 $ PLENORA_INSTALL_ENVIRONMENT=development \
   PLENORA_INSTALL_DATABASE_URL='postgresql://plenora:plenora@127.0.0.1:5432/plenora' \
-  ... \
+  PLENORA_INSTALL_DB_SCHEMA=plenora \
+  PLENORA_INSTALL_REDIS_URL=redis://127.0.0.1:6379/0 \
+  PLENORA_INSTALL_STORAGE_POLICY=db \
+  PLENORA_INSTALL_BACKUP_BUCKET=plenora-pc-test-no-real-s3 \
+  PLENORA_INSTALL_BACKEND_PORT=5004 \
   bash scripts/install.sh --non-interactive
 <TBD>   (paste last ~20 lines: should end with [ok] Wrote backend/.env)
 ```
@@ -241,7 +248,32 @@ $ ls -l .env.docker
 Do NOT paste the `.env.docker` content (it has secrets).
 Just confirm `chmod 600` is applied.
 
-### 3.3 build + bring up (install-docker.md section 3)
+### 3.3 docker-validate.sh dry-run (preflight, no docker calls)
+
+Before any real `docker compose build`, run the dry-run to
+confirm the validation pack itself parses on this host:
+
+```
+$ bash scripts/docker-validate.sh --dry-run 2>&1 | tail -30
+<TBD>   (expected: every step prints "(dry-run: not executing)";
+       script exits 0)
+```
+
+If the dry-run exits non-zero, STOP HERE and paste the full
+output: the validation pack itself has a defect on this
+host. Do NOT proceed to the real run.
+
+### 3.4 build + bring up (install-docker.md section 3)
+
+Either via the validation pack wrapper:
+
+```
+$ bash scripts/docker-validate.sh 2>&1 | tee /tmp/docker-validate.log | tail -40
+<TBD>
+```
+
+OR via the raw compose commands (same shape, useful when
+isolating a single step):
 
 ```
 $ docker compose build backend 2>&1 | tail -20
@@ -259,14 +291,14 @@ on `libgdal-dev` (Debian bookworm package name moved). If
 that happens, paste the apt error. The scaffold flags this
 risk in install-docker.md "Known scaffold limitations".
 
-### 3.4 docker compose ps + healthchecks
+### 3.5 docker compose ps + healthchecks
 
 ```
 $ docker compose ps
 <TBD>   (paste full table; backend should be (healthy))
 ```
 
-### 3.5 /health + /ready from host (install-docker.md section 4)
+### 3.6 /health + /ready from host (install-docker.md section 4)
 
 ```
 $ curl -fsS http://127.0.0.1:5004/health
@@ -286,7 +318,7 @@ $ docker compose logs --tail 50 beat
 <TBD>
 ```
 
-### 3.6 Celery check via `docker compose exec` (install-docker.md section 5)
+### 3.7 Celery check via `docker compose exec` (install-docker.md section 5)
 
 ```
 $ docker compose exec worker python -c \
@@ -295,7 +327,7 @@ $ docker compose exec worker python -c \
 <TBD>   (expected: pong)
 ```
 
-### 3.7 memory caps visibility inside container (install-docker.md section 6)
+### 3.8 memory caps visibility inside container (install-docker.md section 6)
 
 ```
 $ docker compose exec backend python -c "
@@ -306,7 +338,7 @@ for k in ('LOAD_FILE_MAX_BYTES','WORKER_RSS_MAX_BYTES','RESOURCE_MAX_BYTES','ART
 <TBD>   (paste the 6 lines)
 ```
 
-### 3.8 non-destructive stop (install-docker.md section 7)
+### 3.9 non-destructive stop (install-docker.md section 7)
 
 ```
 $ docker compose stop
@@ -315,19 +347,20 @@ $ docker compose ps
 <TBD>   (all services Exited; volumes preserved)
 ```
 
-### 3.9 acceptance summary (Docker scaffold)
+### 3.10 acceptance summary (Docker scaffold)
 
 Mark each line YES / NO / PARTIAL:
 
 ```
 [3.1] docker compose config parses:        <TBD>
-[3.3] docker compose build backend:        <TBD>
-[3.3] backend (healthy):                   <TBD>
-[3.5] /health 200:                         <TBD>
-[3.5] /ready 200:                          <TBD>
-[3.6] cleanroom.ping in worker -> pong:    <TBD>
-[3.7] 6 memory caps printed inside cont.:  <TBD>
-[3.8] docker compose stop preserves vols:  <TBD>
+[3.3] docker-validate.sh --dry-run exits 0: <TBD>
+[3.4] docker compose build backend:        <TBD>
+[3.4] backend (healthy):                   <TBD>
+[3.6] /health 200:                         <TBD>
+[3.6] /ready 200:                          <TBD>
+[3.7] cleanroom.ping in worker -> pong:    <TBD>
+[3.8] 6 memory caps printed inside cont.:  <TBD>
+[3.9] docker compose stop preserves vols:  <TBD>
 ```
 
 If any are NO, paste the failing command output and STOP.

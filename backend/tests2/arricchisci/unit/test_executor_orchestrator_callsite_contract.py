@@ -174,16 +174,24 @@ def test_executor_preview_passes_ctx_to_source_loaders():
 # ---------------------------------------------------------------------------
 
 
-def test_get_execution_order_module_function_matches_singleton_wrapper():
-    """Smoke parity: la pure function modulo-level e il wrapper
-    KEEP_COMPAT sul singleton ritornano lo stesso ordering per un
-    DAG non-trivial. Lock di compatibilita' byte-per-byte."""
-    from app.core.arricchisci.api_connector import ApiConnectionService
+# BE-GO-READY-CONNECTION-ENGINE-009: rimosso
+# `test_get_execution_order_module_function_matches_singleton_wrapper`.
+# Il wrapper KEEP_COMPAT `ApiConnectionService._get_execution_order`
+# e' stato eliminato: non c'e' piu' un "singleton wrapper" da
+# parificare alla pure function. La parita' byte-per-byte e' ora
+# garantita dall'unica implementazione (la pure function modulo-
+# level), non da un test di equivalenza wrapper-vs-function.
+
+
+def test_get_execution_order_pure_function_topological_order():
+    """Smoke: la pure function modulo-level produce un ordering
+    topologicamente valido per un DAG non-trivial. Sostituisce
+    il pre-009 test di parita' wrapper-vs-function (il wrapper
+    e' stato eliminato dal CONNECTION-ENGINE-009)."""
     from app.core.arricchisci.canvas_orchestrator import (
         get_execution_order,
     )
 
-    svc = ApiConnectionService.__new__(ApiConnectionService)
     nodes = [{"id": n} for n in ("seed", "f1", "f2", "join", "result")]
     edges = [
         {"source": "seed", "target": "f1"},
@@ -192,12 +200,29 @@ def test_get_execution_order_module_function_matches_singleton_wrapper():
         {"source": "f2", "target": "join"},
         {"source": "join", "target": "result"},
     ]
-    via_module = get_execution_order(nodes, edges)
-    via_wrapper = svc._get_execution_order(nodes, edges)
-    assert via_module == via_wrapper
+    order = get_execution_order(nodes, edges)
     # Sanity: l'output e' un valido topological order
     # (seed precede f1/f2; f1+f2 precedono join; join precede result).
-    assert via_module[0] == "seed"
-    assert via_module.index("f1") < via_module.index("join")
-    assert via_module.index("f2") < via_module.index("join")
-    assert via_module.index("join") < via_module.index("result")
+    assert order[0] == "seed"
+    assert order.index("f1") < order.index("join")
+    assert order.index("f2") < order.index("join")
+    assert order.index("join") < order.index("result")
+
+
+def test_api_connection_service_no_longer_exposes_get_execution_order():
+    """CONNECTION-ENGINE-009 cut lock: `ApiConnectionService` non
+    deve piu' esporre il metodo di istanza `_get_execution_order`.
+    L'unico canonico e' la pure function
+    `canvas_orchestrator.get_execution_order(...)`. Ogni futura
+    re-introduzione del wrapper riapre la dipendenza dal singleton
+    e va rifiutata in review."""
+    from app.core.arricchisci.api_connector import ApiConnectionService
+
+    assert not hasattr(ApiConnectionService, "_get_execution_order"), (
+        "REGRESSIONE CONNECTION-ENGINE-009: "
+        "`ApiConnectionService._get_execution_order` e' stato "
+        "re-introdotto. Il wrapper KEEP_COMPAT e' stato eliminato; "
+        "tutti i call site devono usare la pure function "
+        "`canvas_orchestrator.get_execution_order(nodes, edges)` "
+        "direttamente."
+    )

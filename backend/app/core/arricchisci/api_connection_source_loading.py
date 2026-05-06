@@ -131,8 +131,10 @@ Coupling esterno
 - `app.config.settings` (top-level) — usato in
   `_recompute_upstream_project` per `settings.DATA_DIR`.
 - Lazy imports preservati bit-per-bit:
-  - `_assert_source_project_in_tenant`: `from app.db import
-    config_db_service as _cfg_db`.
+  - `_assert_source_project_in_tenant`: `from app.db.config.projects
+    import get_project as _get_project` (post BE-GO-READY-DB-ENGINE-005;
+    pre-005 the lazy import was `from app.db import config_db_service
+    as _cfg_db`).
   - `_recompute_upstream_project`: orchestrator stack (7 import lazy
     per circular import avoidance worker Celery).
   - `_filesystem_fallback_load_project`: `from app.utils.dataframe
@@ -161,8 +163,9 @@ Verificato pre-extraction (preflight B3-B.4 + cleanup B3-B.4a):
     costruzione.
   - `monkeypatch.setattr(api_connector_mod.db_svc, ...)` in
     `test_init_execution_context_fail_closed.py:88,115,142` → patch
-    su `db_svc` (NON su `_assert_source_project_in_tenant` che usa
-    `_cfg_db = config_db_service`, modulo distinto). Safe.
+    su `db_svc` (NON su `_assert_source_project_in_tenant` che dopo
+    DB-ENGINE-005 fa `from app.db.config.projects import get_project`,
+    modulo distinto). Safe.
   - 14 patch.object/monkeypatch.setattr instance-level (svc.<method>)
     sui 7 target → MRO trasparente. ✓
   - Riferimenti a `_load_*` in `executor.py:170,173,176` (instance-

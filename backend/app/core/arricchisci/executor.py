@@ -155,18 +155,16 @@ class EnrichExecutor:
             # TE-030B i loader non leggono piu' `_current_group_id` dal
             # singleton; senza ctx questo endpoint fail-chiuderebbe su
             # file_source/project_source. `init_execution_context`
-            # preserva anche il mirror legacy per i path non ancora
-            # migrati, ma i tre loader sotto ricevono `ctx=ctx`
-            # esplicitamente.
+            # ritorna un typed ctx senza scrivere il mirror legacy;
+            # i tre loader sotto ricevono `ctx=ctx` esplicitamente.
             ctx = init_execution_context(api_connection_service, project_id, limit)
 
             # Carica tutte le API connections con credenziali decifrate (1 query)
             api_connections = api_connection_service.list_api_connections_decrypted()
 
             # Ordine topologico
-            # BE-GO-READY-TRANSFORMATION-ENGINE-014: callsite migrato dal
-            # wrapper KEEP_COMPAT `api_connection_service._get_execution_order(...)`
-            # alla pure function modulo-level
+            # BE-GO-READY-TRANSFORMATION-ENGINE-014 / CONNECTION-ENGINE-009:
+            # callsite allineato alla pure function modulo-level
             # `canvas_orchestrator.get_execution_order(...)`. Behavior
             # byte-per-byte identico (Kahn topo-sort deterministico).
             execution_order = get_execution_order(nodes, edges)

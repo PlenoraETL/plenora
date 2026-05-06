@@ -102,8 +102,10 @@ Coupling esterno
 - `app.config.settings.DEFAULT_GROUP` (default group fallback in
   `create_api_connection`).
 - `app.db.db_service` (singleton `db_svc`) per CRUD.
-- `app.db.config_db_service` (lazy alias `_cfg_db`) per
-  `list_api_connections_decrypted` raw fetch.
+- `app.db.pg_connection.fetchall` (lazy import) per
+  `list_api_connections_decrypted` raw fetch (post BE-GO-READY-DB-
+  ENGINE-005; pre-005 il raw fetch passava per
+  `app.db.config_db_service` come alias `_cfg_db`).
 - `requests` (top-level) per `test_api_connection` HTTP exceptions.
 - `json`, `uuid`, `datetime`, `timezone`, `copy` (lazy in
   `_mask_credentials`).

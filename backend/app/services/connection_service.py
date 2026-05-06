@@ -1,7 +1,10 @@
 """
 Servizio CRUD per connessioni database.
-Storage: PostgreSQL tramite app.db.db_service (facade) e
-app.db.config_db_service (query dirette catalogo PLENORA).
+Storage: PostgreSQL tramite ``app.db.db_service`` (facade cross-engine)
+per i CRUD canonici. Le query dirette sul catalogo PLENORA (raw
+``fetchall`` per ``list_connections`` N+1 fix) usano
+``app.db.pg_connection.fetchall`` direttamente: post BE-GO-READY-DB-
+ENGINE-005 il file non importa piu' ``app.db.config_db_service``.
 
 Le password vengono cifrate con Fernet prima di essere salvate nel DB.
 La logica di cifratura è centralizzata in app.shared.crypto — qui si fa

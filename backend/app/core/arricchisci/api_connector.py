@@ -281,10 +281,15 @@ class ApiConnectionService(
     # `api_connection_service.execute_enrichment(...)` (executor.py,
     # router.py, eseguibili/scanner.py + lock test).
     #
-    # `_get_execution_order` e' anche re-esposto come metodo di istanza
-    # KEEP_COMPAT perche' `executor.py:153` lo chiama via
-    # `api_connection_service._get_execution_order(...)`. Rimossione di
-    # quel call site e' tracked in residuo R-011-A.
+    # BE-GO-READY-CONNECTION-ENGINE-009-API-CONNECTOR-INSTANCE-WRAPPER-CUT:
+    # `_get_execution_order` rimosso. R-011-A chiusa. I due call site di
+    # produzione (`executor.py` migrato in TRANSFORMATION-ENGINE-014;
+    # `workers/tasks/enrichment_task.py:306` migrato in CONNECTION-
+    # ENGINE-009) ora chiamano la pure function modulo-level
+    # `canvas_orchestrator.get_execution_order(nodes, edges)`
+    # direttamente. Lock negativo in
+    # `tests2/arricchisci/unit/test_executor_orchestrator_callsite_contract.py
+    # ::test_api_connection_service_no_longer_exposes_get_execution_order`.
     # =========================================================================
 
     def execute_enrichment(self, project_id: str, canvas: Dict, format: str = 'csv',
@@ -313,19 +318,15 @@ class ApiConnectionService(
             intermediate_mode_override=intermediate_mode_override,
         )
 
-    def _get_execution_order(self, nodes, edges):
-        """KEEP_COMPAT wrapper: delega a
-        `canvas_orchestrator.get_execution_order(...)`.
-
-        Mantenuto come metodo di istanza per compat con
-        `executor.py:153` (`api_connection_service._get_execution_order(...)`)
-        e con i lock test che non lo monkeypatch-ano (deterministic
-        Kahn pure function).
-        """
-        from app.core.arricchisci.canvas_orchestrator import (
-            get_execution_order,
-        )
-        return get_execution_order(nodes, edges)
+    # BE-GO-READY-CONNECTION-ENGINE-009-API-CONNECTOR-INSTANCE-WRAPPER-CUT:
+    # rimosso `_get_execution_order` (wrapper KEEP_COMPAT che delegava
+    # a `canvas_orchestrator.get_execution_order`). Tutti i call site di
+    # produzione (`executor.py:172` migrato in TRANSFORMATION-ENGINE-014;
+    # `workers/tasks/enrichment_task.py:306` migrato in questo batch)
+    # ora chiamano la pure function modulo-level direttamente. Lock
+    # negativo (assenza del metodo) in
+    # `tests2/arricchisci/unit/test_executor_orchestrator_callsite_contract.py
+    # ::test_api_connection_service_no_longer_exposes_get_execution_order`.
 
     def _init_execution_context(self, project_id: str,
                                 preview_limit: Optional[int]) -> None:

@@ -36,7 +36,6 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import app.config  # noqa: F401
 from app.config import settings as _settings
 import app.db.db_service as db
-import app.db.config_db_service as cfg_db
 from app.core.auth import disclosure as _disclosure
 from app.shared import error_codes
 from app.shared.audit_action import audit_action
@@ -353,8 +352,14 @@ def require_project_owner(
     project_id: str,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> CurrentUser:
-    """Owner check su projects. Da usare per update/delete/canvas/duplicate."""
-    project = cfg_db.get_project(project_id)
+    """Owner check su projects. Da usare per update/delete/canvas/duplicate.
+
+    BE-GO-READY-AUTH-ENGINE-012: lookup migrato dal facade
+    `config_db_service` al leaf `app.db.config.projects` (lazy
+    import per coerenza con gli altri due owner-check helper).
+    """
+    from app.db.config.projects import get_project as _get_project
+    project = _get_project(project_id)
     _check_ownership(project, "Progetto", current_user)
     return current_user
 
@@ -363,8 +368,13 @@ def require_schedule_owner(
     schedule_id: str,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> CurrentUser:
-    """Owner check su schedules. Da usare per update/delete/toggle/run."""
-    schedule = cfg_db.get_schedule(schedule_id)
+    """Owner check su schedules. Da usare per update/delete/toggle/run.
+
+    BE-GO-READY-AUTH-ENGINE-012: lookup migrato al leaf
+    `app.db.config.schedules`.
+    """
+    from app.db.config.schedules import get_schedule as _get_schedule
+    schedule = _get_schedule(schedule_id)
     _check_ownership(schedule, "Schedule", current_user)
     return current_user
 
@@ -373,8 +383,15 @@ def require_file_owner(
     file_id: str,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> CurrentUser:
-    """Owner check su file_sources. Da usare per delete."""
-    file_source = cfg_db.get_file_source(file_id)
+    """Owner check su file_sources. Da usare per delete.
+
+    BE-GO-READY-AUTH-ENGINE-012: lookup migrato al leaf
+    `app.db.config.file_sources`.
+    """
+    from app.db.config.file_sources import (
+        get_file_source as _get_file_source,
+    )
+    file_source = _get_file_source(file_id)
     _check_ownership(file_source, "File", current_user)
     return current_user
 
