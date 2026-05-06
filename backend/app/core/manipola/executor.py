@@ -26,7 +26,7 @@ from app.utils.dataframe import (
     load_dataframe_from_file, filter_visible_columns,
     sanitize_for_json, find_latest_output_file,
 )
-from app.utils.geo import detect_geometry_column, extract_srid_from_column_type
+from app.utils.geo import detect_geometry_column
 from app.utils.template_variables import process_static_fields
 from .plugin_executor import get_executor
 from .source_loading import load_file_sources
@@ -140,29 +140,36 @@ def _nf(node, key, default=None):
     return default
 
 
-def _applica_crs_da_colonne(df, node_columns):
+def _applica_crs_da_colonne(df, node_columns, meta=None):
     """
     Se il DataFrame contiene una colonna geometrica e node_columns ha il CRS
     (formato geometry:subtype:SRID), converte il DataFrame in GeoDataFrame
     con il CRS corretto. Evita che le trasformazioni spaziali downstream
     perdano il CRS perché il CSV non lo preserva.
+
+    ``meta`` (optional): pre-built ``ResourceMetadata`` produced by the
+    source-loading path.  When provided the internal construction from
+    ``node_columns`` is skipped — metadata travels from the loader rather
+    than being reconstructed here.  ``node_columns`` is still required for
+    the legacy fallback path (callers that do not supply ``meta``).
     """
     import geopandas as gpd
     from app.utils.geo import to_geodataframe
-    from app.shared.resource_metadata import ResourceMetadata
 
     if isinstance(df, gpd.GeoDataFrame):
         return df  # già GeoDataFrame, non toccare
 
-    # Normalise alias → name before building ResourceMetadata: after
-    # filter_visible_columns the DataFrame uses the alias as the actual
-    # column name, so the lookup must use the same key.
-    _meta_input = [
-        {"name": c.get("alias") or c.get("name", ""), "type": c.get("type", "")}
-        for c in (node_columns or [])
-        if c.get("alias") or c.get("name")
-    ]
-    meta = ResourceMetadata.from_columns_list(_meta_input, source_kind="file")
+    if meta is None:
+        from app.shared.resources.metadata import ResourceMetadata
+        # Normalise alias → name before building ResourceMetadata: after
+        # filter_visible_columns the DataFrame uses the alias as the actual
+        # column name, so the lookup must use the same key.
+        _meta_input = [
+            {"name": c.get("alias") or c.get("name", ""), "type": c.get("type", "")}
+            for c in (node_columns or [])
+            if c.get("alias") or c.get("name")
+        ]
+        meta = ResourceMetadata.from_columns_list(_meta_input, source_kind="file")
 
     # Apply CRS only when the geometry column is present in the DataFrame
     # and carries an explicit EPSG code in the type string.
@@ -1183,16 +1190,22 @@ class ManipolaExecutor:
             return {"success": False, "message": f"Errore salvataggio: {e}"}
 
     def _estrai_srid_da_canvas(self, canvas):
-        """Estrae primo SRID da tipi geometry nel canvas (es. geometry:point:4326)."""
+        """Estrae primo SRID da tipi geometry nel canvas via ResourceMetadata."""
+        from app.shared.resources.metadata import ResourceMetadata
         for node in canvas.nodes:
-            columns = getattr(node, 'columns', None) or (node.data.get('columns') if node.data else None)
-            if not columns:
+            raw = getattr(node, 'columns', None) or (node.data.get('columns') if node.data else None)
+            if not raw:
                 continue
-            for col in columns:
-                col_type = col.get('type', '') if isinstance(col, dict) else getattr(col, 'type', '')
-                srid = extract_srid_from_column_type(col_type)
-                if srid:
-                    return srid
+            cols_dicts = [
+                {
+                    "name": c.get("name") if isinstance(c, dict) else getattr(c, "name", None),
+                    "type": c.get("type", "") if isinstance(c, dict) else getattr(c, "type", ""),
+                }
+                for c in raw
+            ]
+            meta = ResourceMetadata.from_columns_list(cols_dicts, source_kind="file")
+            if meta.crs_epsg:
+                return meta.crs_epsg
         return None
 
     # =========================================================================

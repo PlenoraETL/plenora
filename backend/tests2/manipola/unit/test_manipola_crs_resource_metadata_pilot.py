@@ -149,3 +149,86 @@ def test_empty_node_columns_returns_plain_df(plain_df):
     fn = _func()
     assert type(fn(plain_df, [])) is pd.DataFrame
     assert type(fn(plain_df, None)) is pd.DataFrame
+
+
+# ---------------------------------------------------------------------------
+# _estrai_srid_da_canvas — BE-GO-READY-ARCH-057-W5
+# Verifies the migration from extract_srid_from_column_type loop to
+# ResourceMetadata.from_columns_list.
+# ---------------------------------------------------------------------------
+
+
+def _executor():
+    from app.core.manipola.executor import ManipolaExecutor
+    return ManipolaExecutor.__new__(ManipolaExecutor)
+
+
+class _Node:
+    """Minimal canvas node stub."""
+    def __init__(self, columns=None, data=None):
+        self.columns = columns
+        self.data = data
+
+
+class _Canvas:
+    def __init__(self, nodes):
+        self.nodes = nodes
+
+
+def test_estrai_srid_returns_epsg_from_dict_columns():
+    """Primary path: geometry column in a node's dict column list."""
+    ex = _executor()
+    canvas = _Canvas([
+        _Node(columns=[
+            {"name": "id", "type": "int"},
+            {"name": "geometry", "type": "geometry:polygon:4326"},
+        ])
+    ])
+    assert ex._estrai_srid_da_canvas(canvas) == 4326
+
+
+def test_estrai_srid_returns_none_when_no_geometry():
+    """No geometry column in any node -> None."""
+    ex = _executor()
+    canvas = _Canvas([
+        _Node(columns=[{"name": "id", "type": "int"}, {"name": "name", "type": "str"}])
+    ])
+    assert ex._estrai_srid_da_canvas(canvas) is None
+
+
+def test_estrai_srid_returns_none_when_no_epsg():
+    """Geometry column without EPSG component -> None."""
+    ex = _executor()
+    canvas = _Canvas([
+        _Node(columns=[{"name": "geom", "type": "geometry:polygon"}])
+    ])
+    assert ex._estrai_srid_da_canvas(canvas) is None
+
+
+def test_estrai_srid_returns_first_srid_across_nodes():
+    """Returns SRID from the first node that has one, ignoring later nodes."""
+    ex = _executor()
+    canvas = _Canvas([
+        _Node(columns=[{"name": "id", "type": "int"}]),
+        _Node(columns=[{"name": "geom", "type": "geometry:point:3857"}]),
+        _Node(columns=[{"name": "g2", "type": "geometry:polygon:4326"}]),
+    ])
+    assert ex._estrai_srid_da_canvas(canvas) == 3857
+
+
+def test_estrai_srid_handles_empty_canvas():
+    """No nodes -> None."""
+    ex = _executor()
+    assert ex._estrai_srid_da_canvas(_Canvas([])) is None
+
+
+def test_estrai_srid_from_node_data_columns():
+    """Columns supplied via node.data dict (CanvasNode-style fallback)."""
+    ex = _executor()
+
+    class _DataNode:
+        columns = None
+        data = {"columns": [{"name": "geom", "type": "geometry:point:32632"}]}
+
+    canvas = _Canvas([_DataNode()])
+    assert ex._estrai_srid_da_canvas(canvas) == 32632

@@ -80,6 +80,7 @@ def load_file_sources(
     *,
     group_id: Optional[str],
     logger=None,
+    metadata_map: Optional[Dict[str, Any]] = None,
 ) -> Optional[Dict[str, Any]]:
     """Carica DataFrame dai nodi ``file_source`` via ``SourceLoader``.
 
@@ -98,6 +99,12 @@ def load_file_sources(
         logger: optional logger; defaults to a module-level
             logger so test harnesses can inject a captured
             logger if needed.
+        metadata_map: optional caller-owned dict that receives
+            the ``ResourceMetadata`` produced for each file node
+            (keyed by ``node.id``). Populated when provided;
+            ignored when ``None``. Lets callers capture schema/
+            CRS metadata at load time rather than reconstructing
+            it later from legacy dicts.
 
     Returns:
         ``None`` on success (``dataframes`` populated in place).
@@ -125,6 +132,7 @@ def load_file_sources(
         _applica_crs_da_colonne,
         _nf,
     )
+    from app.shared.resources.metadata import ResourceMetadata
 
     # Tenant binding ctx-strict: explicit ``group_id`` only. No
     # singleton fallback (TE-005 contract); see module docstring.
@@ -162,7 +170,29 @@ def load_file_sources(
             return {"success": False, "message": f"Errore file '{fid}': {e}"}
 
         node_columns = _nf(node, 'columns', [])
-        data = filter_visible_columns(data, node_columns)
+        node_columns_normalized = []
+        for c in (node_columns or []):
+            if isinstance(c, dict):
+                node_columns_normalized.append(c)
+            else:
+                node_columns_normalized.append({
+                    "name": getattr(c, "name", ""),
+                    "alias": getattr(c, "alias", None),
+                    "type": getattr(c, "type", ""),
+                    "visible": getattr(c, "visible", True),
+                })
+        # Build ResourceMetadata at load time - alias-normalised so the
+        # resolved column names match those produced by filter_visible_columns.
+        # Passed directly to _applica_crs_da_colonne to avoid a second
+        # construction inside that helper (BE-GO-READY-ARCH-057-W4).
+        _meta_input = []
+        for c in node_columns_normalized:
+            name = c.get("alias") or c.get("name", "")
+            col_type = c.get("type", "")
+            if name:
+                _meta_input.append({"name": name, "type": col_type})
+        meta = ResourceMetadata.from_columns_list(_meta_input, source_kind="file")
+        data = filter_visible_columns(data, node_columns_normalized)
         # Preserve CRS: SourceLoader returns a GeoDataFrame when
         # ``file_source_service.load_dataframe`` produced one,
         # but for files where the CRS is reconstructed from the
@@ -171,7 +201,9 @@ def load_file_sources(
         # still has to run here. Mirrors the project_source
         # branch. Idempotent: no-op if ``data`` is already a
         # GeoDataFrame.
-        data = _applica_crs_da_colonne(data, node_columns)
+        data = _applica_crs_da_colonne(data, node_columns, meta=meta)
+        if metadata_map is not None:
+            metadata_map[node.id] = meta
         dataframes[node.id] = data
 
     return None

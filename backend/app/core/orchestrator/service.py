@@ -37,7 +37,7 @@ from app.core.estrai.query_generator import QueryGenerator
 from app.services.connection_service import ConnectionService
 from app.config import settings
 from app.shared import error_codes
-from app.shared.executor_protocol import CanvasExecutorProtocol
+from app.shared.execution.executor_protocol import CanvasExecutorProtocol, ExecutionResult
 from app.utils.logger import get_logger
 
 # Import dai moduli separati
@@ -185,24 +185,27 @@ class OrchestratorService:
         # we call through concrete attributes rather than the Protocol interface
         # whose execute() signature captures only the common surface.
         if metadata.project_type == "estrai":
-            result = self.estrai_executor.execute(
+            _raw = self.estrai_executor.execute(
                 project_id, canvas, run_id=run_id,
                 intermediate_mode_override=intermediate_mode_override,
             )
         elif metadata.project_type == "manipola":
-            result = self.manipola_executor.execute(
+            _raw = self.manipola_executor.execute(
                 project_id, canvas, force_recalculate, run_id=run_id,
                 intermediate_mode_override=intermediate_mode_override,
             )
         else:  # "arricchisci" — already validated by dispatch guard above
-            result = self.enrich_executor.execute(
+            _raw = self.enrich_executor.execute(
                 project_id, canvas, force_recalculate, run_id=run_id,
                 intermediate_mode_override=intermediate_mode_override,
             )
 
-        # Wrap il dict raw degli executor in PipelineArtifact (preserva
-        # tutti i campi originali, aggiunge le proprieta' tipizzate).
-        artifact = PipelineArtifact.from_executor_result(result, project_id=project_id)
+        # BE-GO-READY-ARCH-057-W3: typed boundary — normalise executor dict via
+        # ExecutionResult before handing off to PipelineArtifact.
+        # `exec_result.to_dict()` reconstructs the full backward-compat dict so
+        # PipelineArtifact.from_executor_result sees exactly the same shape.
+        exec_result = ExecutionResult.from_executor_dict(_raw)
+        artifact = PipelineArtifact.from_executor_result(exec_result.to_dict(), project_id=project_id)
 
         # Se la pipeline ha avuto successo, controlla se c'è un nodo CARICA
         # (skip se chiamato dal task CARICA stesso per evitare loop).

@@ -164,10 +164,10 @@ class DefaultHttpClient:
 # MAPPING TIPI ESRI → PLENORA
 # =============================================================================
 
-# EsriTypeMapper moved to app.shared.esri_types per ADR-0023.
+# EsriTypeMapper moved to app.shared.connections.esri_types per ADR-0023.
 # Re-exported here so existing callers continue to work without changes.
-# KEEP_COMPAT — canonical location is now app.shared.esri_types.
-from app.shared.esri_types import EsriTypeMapper  # noqa: F401
+# KEEP_COMPAT — canonical location is now app.shared.connections.esri_types.
+from app.shared.connections.esri_types import EsriTypeMapper  # noqa: F401
 
 # =============================================================================
 # CONVERSIONI ESRI JSON ↔ GEODATAFRAME

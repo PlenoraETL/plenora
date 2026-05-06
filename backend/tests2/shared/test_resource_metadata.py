@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.shared.resource_metadata import ColumnMeta, ResourceMetadata
+from app.shared.resources.metadata import ColumnMeta, ResourceMetadata
 
 
 pytestmark = [pytest.mark.unit]

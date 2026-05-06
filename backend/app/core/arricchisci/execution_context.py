@@ -12,7 +12,7 @@ direttamente il `ctx`, e il vecchio scaffold "mirror legacy"
 (`apply_to_legacy_state`) e' stato eliminato.
 
 KEEP_COMPAT: `ArricchisciExecutionContext` is now a thin frozen
-subclass of `app.shared.execution_context.CanvasExecutionContext`
+subclass of `app.shared.execution.context.CanvasExecutionContext`
 (W1, 056). The shared base carries the three fields; the Arricchisci
 class adds nothing — its only purpose is to preserve the
 `__name__ == "ArricchisciExecutionContext"` contract required by
@@ -70,7 +70,7 @@ import psycopg2
 
 from app.db.config.projects import get_project as _get_project
 from app.shared.exceptions import ExecutionContextError
-from app.shared.execution_context import CanvasExecutionContext
+from app.shared.execution.context import CanvasExecutionContext
 
 
 __all__ = [
@@ -88,7 +88,7 @@ class ArricchisciExecutionContext(CanvasExecutionContext):
     tests and call sites while the shared base type is used for
     typed dispatch and future Go rewrite mapping.
 
-    See `app.shared.execution_context.CanvasExecutionContext` for
+    See `app.shared.execution.context.CanvasExecutionContext` for
     field documentation.
     """
 

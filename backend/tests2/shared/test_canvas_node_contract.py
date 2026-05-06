@@ -4,7 +4,7 @@ BE-GO-READY-ARCH-055-W3: typed node accessor pilot.
 Verifies the two-level field lookup, typed properties, and TypeError guard.
 """
 import pytest
-from app.shared.canvas_node import CanvasNode
+from app.shared.execution.canvas_node import CanvasNode
 
 
 # ──────────────────────────────────────────────

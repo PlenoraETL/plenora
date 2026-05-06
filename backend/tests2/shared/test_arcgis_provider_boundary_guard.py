@@ -36,7 +36,7 @@ _FORBIDDEN_PREFIXES = ("app.core.features",)
 # -----------------------------------------------------------------
 _KNOWN_VIOLATIONS: dict[str, set[str]] = {
     "validator.py": {
-        "app.core.features.arcgis_client",
+        # create_client removed (batch 057-W6): validator now uses fs_svc._client.
         "app.core.features.features_service",
     },
     "arcgis_uploader.py": {
@@ -48,8 +48,9 @@ _KNOWN_VIOLATIONS: dict[str, set[str]] = {
 _KNOWN_VIOLATION_REASONS: dict[str, str] = {
     "validator.py": (
         "TODO ADR-0023: EsriTypeMapper moved to app/shared/esri_types (batch 056). "
-        "Remaining: create_client import (pass ArcGIS client via explicit protocol "
-        "instead of inline create_client()) + FeaturesService lookup."
+        "create_client cut (batch 057-W6): validator reuses fs_svc._client. "
+        "Remaining: FeaturesService connection lookup — replace with a shared "
+        "ArcGIS connection leaf that does not import the Features domain."
     ),
     "arcgis_uploader.py": (
         "TODO ADR-0023: replace FeaturesService lookup with explicit ArcGIS "

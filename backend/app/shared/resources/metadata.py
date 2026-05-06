@@ -1,4 +1,4 @@
-"""Resource metadata contract — typed envelope for schema and CRS.
+"""Resource metadata contract - typed envelope for schema and CRS.
 
 BE-GO-READY-ARCH-055-W4-SCHEMA-CRS-METADATA-STRATEGY.
 
@@ -17,7 +17,7 @@ in the project canvas.  Downstream stages that re-read a file (e.g.
 MANIPOLA reading a CSV produced by an upstream run) call
 ``_applica_crs_da_colonne()`` to recover the CRS by parsing those same
 type strings.  The EPSG code and the geometry column name are implicit
-— callers must split the type string on ``:`` every time instead of
+- callers must split the type string on ``:`` every time instead of
 reading an authoritative field.
 
 Target contract
@@ -25,8 +25,8 @@ Target contract
 ``ResourceMetadata`` is an immutable typed envelope that carries:
 
 - ``columns``: tuple of ``ColumnMeta`` (name + PLENORA canonical type).
-- ``geometry_column``: the name of the geometry column — explicit.
-- ``crs_epsg``: the EPSG code — explicit, not embedded in a type string.
+- ``geometry_column``: the name of the geometry column - explicit.
+- ``crs_epsg``: the EPSG code - explicit, not embedded in a type string.
 - ``source_kind``: where the data came from.
 - ``row_count``: approximate row count at capture time.
 - ``group_id`` / ``project_id``: tenant and project binding.
@@ -123,7 +123,7 @@ class ResourceMetadata:
     project_id: Optional[str] = None
 
     # ------------------------------------------------------------------
-    # Factory — interoperates with the existing wire format
+    # Factory - interoperates with the existing wire format
     # ------------------------------------------------------------------
 
     @classmethod
@@ -171,7 +171,7 @@ class ResourceMetadata:
         )
 
     # ------------------------------------------------------------------
-    # Serialisation — round-trips cleanly with the existing wire format
+    # Serialisation - round-trips cleanly with the existing wire format
     # ------------------------------------------------------------------
 
     def to_columns_list(self) -> list[dict]:

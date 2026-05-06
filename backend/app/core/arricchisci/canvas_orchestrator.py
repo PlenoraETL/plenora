@@ -62,7 +62,7 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 import pandas as pd
 
 import app.db.db_service as db_svc  # noqa: F401  (test-monkeypatch surface preserved)
-from app.shared.canvas_node import CanvasNode  # BE-GO-READY-ARCH-056-W3
+from app.shared.execution.canvas_node import CanvasNode  # BE-GO-READY-ARCH-056-W3
 from app.shared.graph import kahn_topological_order
 # BE-GO-READY-ORCHESTRATION-ENGINE-011-CANVAS-CTX-NO-LEGACY-STATE-CUT
 # + BE-GO-READY-ORCHESTRATION-ENGINE-012-KILL-APPLY-TO-LEGACY-STATE:
@@ -320,6 +320,10 @@ def execute_canvas_enrichment(
         logger.info(f"Gruppi di esecuzione: {[(t, len(ids)) for t, ids in groups]}")
 
         node_map = {n["id"]: n for n in nodes}
+        # BE-GO-READY-ARCH-057-W2: wrap every canvas node once at the entry
+        # boundary; the execution loop reads from this dict instead of calling
+        # CanvasNode(raw_dict) repeatedly for the same node on each iteration.
+        node_wrappers: Dict[str, CanvasNode] = {n["id"]: CanvasNode(n) for n in nodes}
         node_results: Dict[str, Any] = {}
 
         for step_type, step_node_ids in groups:
@@ -329,7 +333,7 @@ def execute_canvas_enrichment(
                 node = node_map.get(node_id)
                 if not node:
                     continue
-                node_type = CanvasNode(node).type
+                node_type = node_wrappers[node_id].type
                 node_data = node
                 logger.debug(f"Esecuzione nodo: {node_id} ({node_type})")
 
@@ -347,7 +351,7 @@ def execute_canvas_enrichment(
                     ):
                         node_results[node_id] = {
                             "_passthrough_file_source": True,
-                            "file_source_id": CanvasNode(node).get_field("file_source_id"),
+                            "file_source_id": node_wrappers[node_id].get_field("file_source_id"),
                         }
                     else:
                         # BE-GO-READY-TRANSFORMATION-ENGINE-019: typed ctx.
@@ -438,7 +442,7 @@ def execute_canvas_enrichment(
                 parallel_ids = []
                 for nid in step_node_ids:
                     nd = node_map.get(nid)
-                    api_id = CanvasNode(nd).get_field("api_id") if nd else None
+                    api_id = node_wrappers[nid].get_field("api_id") if nd else None
                     api_cfg = api_connections.get(api_id, {})
                     ctype = api_cfg.get("connection_type")
                     if ctype == "rest_file":
@@ -515,10 +519,10 @@ def execute_canvas_enrichment(
                         )
 
         result_node = next(
-            (n for n in nodes if CanvasNode(n).type == "result"), None
+            (n for n in nodes if node_wrappers[n["id"]].type == "result"), None
         )
         if result_node:
-            _rcn = CanvasNode(result_node)
+            _rcn = node_wrappers[result_node["id"]]
             output_format = _rcn.get_field("format", format) or format
             _fn = _rcn.get_field("fileName")
             output_name = _fn if _fn is not None else _rcn.get_field("name", "output")

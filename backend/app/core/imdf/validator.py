@@ -59,12 +59,12 @@ def _count_features_where_via_post(client, conn, layer_url: str, where: str) -> 
 # patchare `validator._coarse_type_*`) e per non cambiare il call site
 # di `validate_publish`.
 def _coarse_type_from_esri(esri_type: str) -> str:
-    from app.shared.esri_types import EsriTypeMapper  # ADR-0023: moved from features
+    from app.shared.connections.esri_types import EsriTypeMapper  # ADR-0023: moved from features
     return EsriTypeMapper.map_esri_field_to_schema_bucket(esri_type)
 
 
 def _coarse_type_from_dtype(dtype) -> str:
-    from app.shared.esri_types import EsriTypeMapper  # ADR-0023: moved from features
+    from app.shared.connections.esri_types import EsriTypeMapper  # ADR-0023: moved from features
     return EsriTypeMapper.map_pandas_dtype_to_schema_bucket(dtype)
 
 
@@ -97,7 +97,6 @@ def validate_publish(
     """
     from app.config import settings
     from app.core.features.features_service import FeaturesService
-    from app.core.features.arcgis_client import create_client
     from app.core.imdf.loader import load_imdf_layers
     from app.core.imdf.arcgis_uploader import (
         DEFAULT_MATCH_COLUMNS, LAYER_ORDER, PUBLISH_MODES,
@@ -197,7 +196,9 @@ def validate_publish(
                        f"Connessione ArcGIS '{connection_id}' non trovata")
         return report
     conn = fs_svc._to_connection_info(conn_pyd)
-    client = create_client()
+    # Reuse the ArcGISClient already held by FeaturesService (avoids a
+    # second create_client() call and shares the token cache).
+    client = fs_svc._client
 
     # ── 3. Cerca FS esistente globalmente ──────────────────────────
     try:

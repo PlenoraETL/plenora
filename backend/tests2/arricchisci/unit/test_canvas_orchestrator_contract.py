@@ -264,6 +264,48 @@ def test_is_file_source_for_file_processor_pure_predicate():
 # ---------------------------------------------------------------------------
 
 
+def test_node_wrappers_built_once_at_entry_boundary():
+    """BE-GO-READY-ARCH-057-W2: source-bound guard.
+
+    `execute_canvas_enrichment` must NOT call `CanvasNode(raw_dict)` inside
+    the execution loop body.  The comprehension that builds `node_wrappers`
+    at the entry boundary is the only allowed site.
+    """
+    import ast as _ast
+
+    src = (
+        _BACKEND_ROOT / "app" / "core" / "arricchisci" / "canvas_orchestrator.py"
+    ).read_text(encoding="utf-8")
+    tree = _ast.parse(src)
+
+    # Locate execute_canvas_enrichment function body in the AST.
+    exec_fn = next(
+        (
+            n
+            for n in _ast.walk(tree)
+            if isinstance(n, _ast.FunctionDef)
+            and n.name == "execute_canvas_enrichment"
+        ),
+        None,
+    )
+    assert exec_fn is not None, "execute_canvas_enrichment not found in AST"
+
+    # Count CanvasNode(...) calls *inside* the function body.
+    canvas_node_calls = [
+        n
+        for n in _ast.walk(exec_fn)
+        if isinstance(n, _ast.Call)
+        and isinstance(n.func, _ast.Name)
+        and n.func.id == "CanvasNode"
+    ]
+    # Exactly 1 allowed: the node_wrappers comprehension at entry.
+    assert len(canvas_node_calls) == 1, (
+        f"Expected exactly 1 CanvasNode(...) call in execute_canvas_enrichment "
+        f"(the node_wrappers comprehension); found {len(canvas_node_calls)}. "
+        f"In-loop churn has been reintroduced."
+    )
+
+
 def test_execute_canvas_enrichment_empty_canvas_returns_error_dict():
     """Smoke test: la funzione modulo-level orchestrator si chiama
     con `svc` esplicito e ritorna lo stesso shape errore del wrapper.
