@@ -36,10 +36,36 @@ e' garantito anche su eccezione interna.
 from __future__ import annotations
 
 import io
+import sys
 import tempfile
 import zipfile
 from pathlib import Path
 from typing import Any, Callable, Optional
+
+from app.shared.exceptions import MemoryLimitExceededError
+from app.core.resources.bounded_reader import read_stream_bounded
+
+# Default cap for the storage_key bounded read. Matches
+# `Settings.DEFAULTS["RESOURCE_MAX_BYTES"]`; kept local so settings
+# failures do not break fail-soft blob fetch.
+_DEFAULT_BLOB_READ_CAP_BYTES = 500 * 1024 * 1024
+
+
+def _read_blob_cap_bytes() -> int:
+    """Read the storage_key bounded-read cap from settings.
+
+    Best-effort: any failure (settings not loaded, type error)
+    falls back to the module default. The function NEVER raises;
+    a degraded settings layer must not break blob fetch.
+    """
+    try:
+        from app.config import settings
+        raw = settings.get(
+            "RESOURCE_MAX_BYTES", _DEFAULT_BLOB_READ_CAP_BYTES,
+        )
+        return int(raw) if raw is not None else _DEFAULT_BLOB_READ_CAP_BYTES
+    except Exception:
+        return _DEFAULT_BLOB_READ_CAP_BYTES
 
 
 def get_blob_from_db(
@@ -69,18 +95,42 @@ def get_blob_from_db(
     concatenazione dell'iterable di chunks in bytes in-memory. Questo
     elimina il roundtrip su disco (1 write + 1 read + 1 unlink),
     chiude il foot-gun di leak su crash mid-write, e si allinea alla
-    bytes-first policy. Il parametro `temp_dir` resta nella signature
-    KEEP_COMPAT per non rompere i caller (es. `temp_file_for` che
-    re-inietta lo stesso valore) ma non e' piu' consultato in questo
-    branch — Worker 2 / future cleanup stream puo' rimuoverlo dopo
-    audit dei caller.
+    bytes-first policy.
 
-    Object storage disabled / fetch failure: il comportamento e'
-    invariato. Quando `get_object_storage()` solleva
-    `ObjectStorageDisabledError` (object storage off) o
-    `get_object_stream` solleva un'eccezione network/auth, l'eccezione
-    viene catturata dal try/except esterno -> `logger.error` +
-    return None. Stesso contract pre-batch.
+    BE-GO-READY-RESOURCE-ENGINE-011-FILE-BLOB-MATERIALIZATION-BOUNDED:
+    la concatenazione e' ora **bounded** dal cap
+    `RESOURCE_MAX_BYTES` (default 500 MB). Su overflow l'accumulo
+    viene abortito (`MemoryLimitExceededError`) e la funzione applica il
+    contratto fail-soft esistente: log error + ritorno None. Stesso
+    cap che `load_dataframe_from_file` enforced sulla parse path
+    a valle: tunable singolo per il budget "blob-in-memoria". Cap
+    <=0 disabilita il guard (escape hatch ops, sconsigliato in
+    produzione).
+
+    Compatibilita' `temp_dir` (DEPRECATED in questo branch, KEEP_COMPAT
+    in signature):
+      Il parametro `temp_dir` resta nella signature per non rompere
+      i caller esistenti — `temp_file_for` re-inietta lo stesso
+      valore, e i wrapper `FileSourceService._get_blob_from_db`
+      passano `settings.TEMP_DIR`. NESSUNA scrittura su disco
+      avviene nel branch storage_key (R-005.1) e nessuna nel
+      branch BYTEA (sempre stato cosi'). `temp_dir` e' consultato
+      SOLO da `temp_file_for` per i write tempfile reali. Future
+      cleanup stream puo' rimuovere `temp_dir` dalla signature di
+      `get_blob_from_db` dopo audit dei caller (zero-blast-radius:
+      i caller passano gia' `temp_dir=` come kwarg e il rimuovere
+      richiede aggiornare la signature in tutti i 3 callsites
+      simultaneamente).
+
+    Object storage disabled / fetch failure / oversize: tutti
+    sotto lo stesso try/except. Quando:
+      - `get_object_storage()` solleva `ObjectStorageDisabledError`
+        (object storage off);
+      - `get_object_stream` solleva un'eccezione network/auth;
+      - `read_stream_bounded` solleva `MemoryLimitExceededError`;
+    il try/except esterno cattura -> `logger.error` + return None.
+    Stesso contract pre-batch (caller riceve `None` e branchera'
+    sul fail-soft).
     """
     assert_visible(file_id, expected_group_id or "")
     try:
@@ -94,15 +144,28 @@ def get_blob_from_db(
             storage = get_object_storage()
             # ObjectStorage Protocol espone `get_object_stream(key)`
             # che ritorna `{"body": Iterable[bytes], "size": int,
-            # "content_type": str}`. Concateniamo i chunks in memoria;
-            # il chunk size e' provider-tunable (S3 default 64KiB) ma
-            # il caller riceve bytes monolitici come l'API legacy.
-            # NB: contract bit-per-bit invariato lato chiamante; il
-            # vecchio path scriveva su disco per poi leggerlo
-            # interamente in memoria comunque, quindi nessun
-            # cambiamento di profilo memoria.
+            # "content_type": str}`. Concateniamo i chunks in memoria
+            # via `read_stream_bounded` con cap
+            # `RESOURCE_MAX_BYTES` (default 500 MB). Su overflow
+            # `MemoryLimitExceededError` viene catturato dal
+            # try/except esterno -> log error + return None.
             resp = storage.get_object_stream(storage_key)
-            return b"".join(resp["body"])
+            cap = _read_blob_cap_bytes()
+            return read_stream_bounded(
+                resp["body"],
+                max_bytes=cap if cap > 0 else sys.maxsize,
+                label=f"file_id={file_id}",
+                stage="file_blob_oversize",
+            )
+        return None
+    except MemoryLimitExceededError as e:
+        # Dedicated message: ops can grep for this signature to
+        # distinguish OOM-prevention from generic fetch failures.
+        logger.error(
+            f"[GESTITO] Blob {file_id} oversize su storage_key: {e}. "
+            f"Cap RESOURCE_MAX_BYTES limita la lettura. "
+            f"Aumenta il cap o usa una API path-mode (out of scope)."
+        )
         return None
     except Exception as e:
         logger.error(f"[GESTITO] Errore lettura blob {file_id}: {e}")

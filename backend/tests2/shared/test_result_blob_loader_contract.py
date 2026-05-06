@@ -24,6 +24,16 @@ from unittest.mock import patch
 
 import pytest
 
+# BE-GO-READY-TEST-INFRA-003: shared helpers extracted to a sibling
+# module. ResourceRef construction, fake_fetchone/dispatch capture
+# patterns, and Resource path cleanup are now deduplicated across
+# the four resource-loader contract suites without any change to
+# assertion semantics.
+from tests2.shared._resource_loader_helpers import (
+    fake_fetchone,
+    make_result_ref,
+)
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
@@ -34,18 +44,13 @@ pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 
 def test_load_rejects_wrong_kind():
-    from app.core.resources import ResourceRef
     from app.core.resources.loaders.result_blob import ResultBlobLoader
 
     # Construct a ref that's syntactically valid for ResourceRef
     # but whose `kind` is mismatched against the loader. We bypass
     # the Literal type check since the test is about runtime
     # enforcement at the loader, not at type construction.
-    ref = ResourceRef(
-        kind="result_blob",  # type: ignore[arg-type]
-        expected_group_id="g1",
-        result_id="r1",
-    )
+    ref = make_result_ref()
     object.__setattr__(ref, "kind", "file_source_blob")
 
     loader = ResultBlobLoader()
@@ -60,14 +65,9 @@ def test_load_rejects_missing_result_id():
     asserts it explicitly as defense-in-depth: an internal caller
     that constructed a degenerate ref via object.__setattr__
     (e.g. testing) should fail loudly."""
-    from app.core.resources import ResourceRef
     from app.core.resources.loaders.result_blob import ResultBlobLoader
 
-    ref = ResourceRef(
-        kind="result_blob",
-        expected_group_id="g1",
-        result_id="r1",
-    )
+    ref = make_result_ref()
     object.__setattr__(ref, "result_id", None)
 
     loader = ResultBlobLoader()
@@ -81,14 +81,9 @@ def test_load_rejects_unsupported_mode():
     fail-closed at construction time. The mode='path' support
     landed in BE-GO-READY-RESOURCE-ENGINE-004 and is locked by
     the dedicated path-mode contract test file."""
-    from app.core.resources import ResourceRef
     from app.core.resources.loaders.result_blob import ResultBlobLoader
 
-    ref = ResourceRef(
-        kind="result_blob",
-        expected_group_id="g1",
-        result_id="r1",
-    )
+    ref = make_result_ref()
 
     loader = ResultBlobLoader()
     for mode in ("stream", "json"):
@@ -105,23 +100,13 @@ def test_load_filters_by_group_id_when_not_superadmin():
     """SQL fail-closes on cross-tenant: the WHERE clause keyed on
     `id AND group_id` returns nothing for a row owned by another
     group, raising FileNotFoundError downstream."""
-    from app.core.resources import ResourceRef
     from app.core.resources.loaders.result_blob import ResultBlobLoader
 
-    captured = {}
+    captured, fake = fake_fetchone(row=None)  # simulate "not found" / cross-tenant
 
-    def _fake_fetchone(sql, params=()):
-        captured["sql"] = sql
-        captured["params"] = params
-        return None  # simulate "not found" / cross-tenant
-
-    ref = ResourceRef(
-        kind="result_blob",
-        expected_group_id="g1",
-        result_id="r1",
-    )
+    ref = make_result_ref()
     loader = ResultBlobLoader()
-    with patch("app.db.pg_connection.fetchone", _fake_fetchone):
+    with patch("app.db.pg_connection.fetchone", fake):
         with pytest.raises(FileNotFoundError, match="not found"):
             loader.load(ref, mode="bytes")
 
@@ -135,24 +120,15 @@ def test_load_filters_by_group_id_when_not_superadmin():
 def test_load_skips_group_filter_when_superadmin():
     """is_superadmin=True bypasses the group filter; the bypass is
     recorded in the audit log."""
-    from app.core.resources import ResourceRef
     from app.core.resources.loaders.result_blob import ResultBlobLoader
 
-    captured = {}
-
-    def _fake_fetchone(sql, params=()):
-        captured["sql"] = sql
-        captured["params"] = params
-        return {"data": b"payload", "storage_key": None}
-
-    ref = ResourceRef(
-        kind="result_blob",
-        expected_group_id="audit-group",
-        result_id="r1",
-        is_superadmin=True,
+    captured, fake = fake_fetchone(
+        row={"data": b"payload", "storage_key": None}
     )
+
+    ref = make_result_ref(group_id="audit-group", is_superadmin=True)
     loader = ResultBlobLoader()
-    with patch("app.db.pg_connection.fetchone", _fake_fetchone):
+    with patch("app.db.pg_connection.fetchone", fake):
         out = loader.load(ref, mode="bytes")
 
     assert "AND group_id" not in captured["sql"]
@@ -166,25 +142,20 @@ def test_load_skips_group_filter_when_superadmin():
 
 
 def test_load_dispatches_to_object_storage_when_storage_key_present():
-    from app.core.resources import ResourceRef
     from app.core.resources.loaders.result_blob import ResultBlobLoader
 
     download_calls = []
-
-    def _fake_fetchone(sql, params=()):
-        return {"data": None, "storage_key": "results/p/r.bin"}
+    _, fake_fetch = fake_fetchone(
+        row={"data": None, "storage_key": "results/p/r.bin"}
+    )
 
     def _fake_download(storage_key):
         download_calls.append(storage_key)
         return b"s3-payload"
 
-    ref = ResourceRef(
-        kind="result_blob",
-        expected_group_id="g1",
-        result_id="r1",
-    )
+    ref = make_result_ref()
     loader = ResultBlobLoader()
-    with patch("app.db.pg_connection.fetchone", _fake_fetchone), \
+    with patch("app.db.pg_connection.fetchone", fake_fetch), \
          patch(
              "app.core.resources.loaders.result_blob._download_object_storage",
              _fake_download,
@@ -197,25 +168,20 @@ def test_load_dispatches_to_object_storage_when_storage_key_present():
 
 
 def test_load_falls_back_to_bytea_when_storage_key_null():
-    from app.core.resources import ResourceRef
     from app.core.resources.loaders.result_blob import ResultBlobLoader
 
     download_calls = []
-
-    def _fake_fetchone(sql, params=()):
-        return {"data": b"bytea-legacy", "storage_key": None}
+    _, fake_fetch = fake_fetchone(
+        row={"data": b"bytea-legacy", "storage_key": None}
+    )
 
     def _fake_download(storage_key):
         download_calls.append(storage_key)
         return b"should-not-fire"
 
-    ref = ResourceRef(
-        kind="result_blob",
-        expected_group_id="g1",
-        result_id="r1",
-    )
+    ref = make_result_ref()
     loader = ResultBlobLoader()
-    with patch("app.db.pg_connection.fetchone", _fake_fetchone), \
+    with patch("app.db.pg_connection.fetchone", fake_fetch), \
          patch(
              "app.core.resources.loaders.result_blob._download_object_storage",
              _fake_download,
@@ -230,22 +196,15 @@ def test_load_falls_back_to_bytea_when_storage_key_null():
 def test_load_converts_memoryview_to_bytes():
     """psycopg2 returns BYTEA as memoryview; the loader normalizes
     to bytes (the legacy contract observable to all callers)."""
-    from app.core.resources import ResourceRef
     from app.core.resources.loaders.result_blob import ResultBlobLoader
 
     raw = b"\x00\x01\x02"
     mv = memoryview(raw)
+    _, fake = fake_fetchone(row={"data": mv, "storage_key": None})
 
-    def _fake_fetchone(sql, params=()):
-        return {"data": mv, "storage_key": None}
-
-    ref = ResourceRef(
-        kind="result_blob",
-        expected_group_id="g1",
-        result_id="r1",
-    )
+    ref = make_result_ref()
     loader = ResultBlobLoader()
-    with patch("app.db.pg_connection.fetchone", _fake_fetchone):
+    with patch("app.db.pg_connection.fetchone", fake):
         out = loader.load(ref, mode="bytes")
 
     assert isinstance(out.data, bytes)
@@ -255,19 +214,13 @@ def test_load_converts_memoryview_to_bytes():
 def test_load_raises_file_not_found_when_row_missing():
     """Row not found -> raise (NOT silent None). The whole point
     of the loader's fail-closed contract."""
-    from app.core.resources import ResourceRef
     from app.core.resources.loaders.result_blob import ResultBlobLoader
 
-    def _fake_fetchone(sql, params=()):
-        return None
+    _, fake = fake_fetchone(row=None)
 
-    ref = ResourceRef(
-        kind="result_blob",
-        expected_group_id="g1",
-        result_id="missing-id",
-    )
+    ref = make_result_ref(result_id="missing-id")
     loader = ResultBlobLoader()
-    with patch("app.db.pg_connection.fetchone", _fake_fetchone):
+    with patch("app.db.pg_connection.fetchone", fake):
         with pytest.raises(FileNotFoundError, match="not found"):
             loader.load(ref, mode="bytes")
 
@@ -277,22 +230,18 @@ def test_load_returns_size_bytes_zero_when_object_storage_disabled():
     is still returned with size_bytes=0. The caller can branch
     on `data is None` (capability off) vs `data == b""` (empty
     blob) vs `data` populated."""
-    from app.core.resources import ResourceRef
     from app.core.resources.loaders.result_blob import ResultBlobLoader
 
-    def _fake_fetchone(sql, params=()):
-        return {"data": None, "storage_key": "results/p/r.bin"}
+    _, fake_fetch = fake_fetchone(
+        row={"data": None, "storage_key": "results/p/r.bin"}
+    )
 
     def _fake_download(storage_key):
         return None  # capability disabled / download failed
 
-    ref = ResourceRef(
-        kind="result_blob",
-        expected_group_id="g1",
-        result_id="r1",
-    )
+    ref = make_result_ref()
     loader = ResultBlobLoader()
-    with patch("app.db.pg_connection.fetchone", _fake_fetchone), \
+    with patch("app.db.pg_connection.fetchone", fake_fetch), \
          patch(
              "app.core.resources.loaders.result_blob._download_object_storage",
              _fake_download,
@@ -313,14 +262,9 @@ def test_back_compat_shim_with_group_id_filters_sql():
     group_id_filter -> SQL filters on (id, group_id)."""
     from app.db import results_db_service
 
-    captured = {}
+    captured, fake = fake_fetchone(row={"data": b"x", "storage_key": None})
 
-    def _fake_fetchone(sql, params=()):
-        captured["sql"] = sql
-        captured["params"] = params
-        return {"data": b"x", "storage_key": None}
-
-    with patch("app.db.pg_connection.fetchone", _fake_fetchone):
+    with patch("app.db.pg_connection.fetchone", fake):
         out = results_db_service.get_result_data("r1", group_id="g1")
 
     assert out == b"x"
@@ -334,14 +278,9 @@ def test_back_compat_shim_without_group_id_skips_filter():
     (legacy fail-open path preserved)."""
     from app.db import results_db_service
 
-    captured = {}
+    captured, fake = fake_fetchone(row={"data": b"y", "storage_key": None})
 
-    def _fake_fetchone(sql, params=()):
-        captured["sql"] = sql
-        captured["params"] = params
-        return {"data": b"y", "storage_key": None}
-
-    with patch("app.db.pg_connection.fetchone", _fake_fetchone):
+    with patch("app.db.pg_connection.fetchone", fake):
         out = results_db_service.get_result_data("r1")
 
     assert out == b"y"
@@ -355,15 +294,15 @@ def test_back_compat_shim_dispatches_to_object_storage():
     from app.db import results_db_service
 
     download_calls = []
-
-    def _fake_fetchone(sql, params=()):
-        return {"data": None, "storage_key": "results/p/r.bin"}
+    _, fake_fetch = fake_fetchone(
+        row={"data": None, "storage_key": "results/p/r.bin"}
+    )
 
     def _fake_download(storage_key):
         download_calls.append(storage_key)
         return b"s3-data"
 
-    with patch("app.db.pg_connection.fetchone", _fake_fetchone), \
+    with patch("app.db.pg_connection.fetchone", fake_fetch), \
          patch(
              "app.core.resources.loaders.result_blob._download_object_storage",
              _fake_download,
@@ -380,10 +319,9 @@ def test_back_compat_shim_returns_none_when_row_missing():
     ResourceRef path)."""
     from app.db import results_db_service
 
-    def _fake_fetchone(sql, params=()):
-        return None
+    _, fake = fake_fetchone(row=None)
 
-    with patch("app.db.pg_connection.fetchone", _fake_fetchone):
+    with patch("app.db.pg_connection.fetchone", fake):
         out = results_db_service.get_result_data("missing")
 
     assert out is None

@@ -43,6 +43,15 @@ from unittest.mock import patch
 
 import pytest
 
+# BE-GO-READY-TEST-INFRA-003: shared helpers extracted to a sibling
+# module. ResourceRef construction and fake_dispatch_by_id capture
+# are now deduplicated across the four resource-loader contract
+# suites without any change to assertion semantics.
+from tests2.shared._resource_loader_helpers import (
+    fake_dispatch_by_id,
+    make_result_ref,
+)
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
@@ -63,22 +72,13 @@ _RESULT_BLOB_PY = (
 def test_resource_ref_accepts_optional_expected_project_id():
     """`ResourceRef(expected_project_id=...)` is constructible
     with or without the field. Default is None."""
-    from app.core.resources.types import ResourceRef
-
     # Without (back-compat)
-    ref_no_project = ResourceRef(
-        kind="result_blob",
-        expected_group_id="g-1",
-        result_id="r-1",
-    )
+    ref_no_project = make_result_ref(group_id="g-1", result_id="r-1")
     assert ref_no_project.expected_project_id is None
 
     # With non-empty string
-    ref_with_project = ResourceRef(
-        kind="result_blob",
-        expected_group_id="g-1",
-        result_id="r-1",
-        expected_project_id="p-42",
+    ref_with_project = make_result_ref(
+        group_id="g-1", result_id="r-1", project_id="p-42"
     )
     assert ref_with_project.expected_project_id == "p-42"
 
@@ -90,7 +90,8 @@ def test_resource_ref_expected_project_id_does_not_affect_id_mutual_exclusion():
     from app.core.resources.types import ResourceRef
 
     # Adding expected_project_id alone (with NO id field) must
-    # still raise the mutual-exclusion error.
+    # still raise the mutual-exclusion error. We bypass the helper
+    # here because the helper always sets a result_id default.
     with pytest.raises(ValueError, match="exactly one id"):
         ResourceRef(
             kind="result_blob",
@@ -199,26 +200,15 @@ def test_loader_load_no_project_filter_when_ref_omits_it():
     """When `ref.expected_project_id` is None, the loader MUST
     invoke `_dispatch_by_id` with `project_id_filter=None`."""
     from app.core.resources.loaders.result_blob import ResultBlobLoader
-    from app.core.resources.types import ResourceRef
 
-    captured: dict = {}
-
-    def _fake_dispatch(result_id, *, group_id_filter, project_id_filter=None):
-        captured["result_id"] = result_id
-        captured["group_id_filter"] = group_id_filter
-        captured["project_id_filter"] = project_id_filter
-        return b"x", "db_legacy"
+    captured, fake = fake_dispatch_by_id()
 
     loader = ResultBlobLoader()
-    ref = ResourceRef(
-        kind="result_blob",
-        expected_group_id="g-1",
-        result_id="r-1",
-    )
+    ref = make_result_ref(group_id="g-1", result_id="r-1")
 
     with patch(
         "app.core.resources.loaders.result_blob._dispatch_by_id",
-        _fake_dispatch,
+        fake,
     ):
         loader.load(ref, mode="bytes")
 
@@ -231,27 +221,15 @@ def test_loader_load_passes_project_filter_when_set():
     """When `ref.expected_project_id='p-42'`, the loader MUST
     invoke `_dispatch_by_id` with `project_id_filter='p-42'`."""
     from app.core.resources.loaders.result_blob import ResultBlobLoader
-    from app.core.resources.types import ResourceRef
 
-    captured: dict = {}
-
-    def _fake_dispatch(result_id, *, group_id_filter, project_id_filter=None):
-        captured["result_id"] = result_id
-        captured["group_id_filter"] = group_id_filter
-        captured["project_id_filter"] = project_id_filter
-        return b"x", "db_legacy"
+    captured, fake = fake_dispatch_by_id()
 
     loader = ResultBlobLoader()
-    ref = ResourceRef(
-        kind="result_blob",
-        expected_group_id="g-1",
-        result_id="r-1",
-        expected_project_id="p-42",
-    )
+    ref = make_result_ref(group_id="g-1", result_id="r-1", project_id="p-42")
 
     with patch(
         "app.core.resources.loaders.result_blob._dispatch_by_id",
-        _fake_dispatch,
+        fake,
     ):
         loader.load(ref, mode="bytes")
 
@@ -266,22 +244,15 @@ def test_loader_load_project_mismatch_raises_filenotfound():
     null result was caused by group mismatch, project mismatch,
     or both. The error message includes the project_id when set."""
     from app.core.resources.loaders.result_blob import ResultBlobLoader
-    from app.core.resources.types import ResourceRef
 
-    def _fake_dispatch(result_id, *, group_id_filter, project_id_filter=None):
-        return None, "none"
+    _, fake = fake_dispatch_by_id(payload=None, backend="none")
 
     loader = ResultBlobLoader()
-    ref = ResourceRef(
-        kind="result_blob",
-        expected_group_id="g-1",
-        result_id="r-1",
-        expected_project_id="p-42",
-    )
+    ref = make_result_ref(group_id="g-1", result_id="r-1", project_id="p-42")
 
     with patch(
         "app.core.resources.loaders.result_blob._dispatch_by_id",
-        _fake_dispatch,
+        fake,
     ):
         with pytest.raises(FileNotFoundError) as exc:
             loader.load(ref, mode="bytes")
@@ -301,21 +272,15 @@ def test_loader_load_no_project_in_error_message_when_unset():
     a None / empty project context into the operator-visible
     string)."""
     from app.core.resources.loaders.result_blob import ResultBlobLoader
-    from app.core.resources.types import ResourceRef
 
-    def _fake_dispatch(result_id, *, group_id_filter, project_id_filter=None):
-        return None, "none"
+    _, fake = fake_dispatch_by_id(payload=None, backend="none")
 
     loader = ResultBlobLoader()
-    ref = ResourceRef(
-        kind="result_blob",
-        expected_group_id="g-1",
-        result_id="r-1",
-    )
+    ref = make_result_ref(group_id="g-1", result_id="r-1")
 
     with patch(
         "app.core.resources.loaders.result_blob._dispatch_by_id",
-        _fake_dispatch,
+        fake,
     ):
         with pytest.raises(FileNotFoundError) as exc:
             loader.load(ref, mode="bytes")
@@ -335,27 +300,20 @@ def test_is_superadmin_bypasses_group_filter_only_not_project_filter():
     is_superadmin still passes the project filter through —
     project binding is a caller-driven row-level invariant."""
     from app.core.resources.loaders.result_blob import ResultBlobLoader
-    from app.core.resources.types import ResourceRef
 
-    captured: dict = {}
-
-    def _fake_dispatch(result_id, *, group_id_filter, project_id_filter=None):
-        captured["group_id_filter"] = group_id_filter
-        captured["project_id_filter"] = project_id_filter
-        return b"x", "db_legacy"
+    captured, fake = fake_dispatch_by_id()
 
     loader = ResultBlobLoader()
-    ref = ResourceRef(
-        kind="result_blob",
-        expected_group_id="g-1",
+    ref = make_result_ref(
+        group_id="g-1",
         result_id="r-1",
-        expected_project_id="p-42",
+        project_id="p-42",
         is_superadmin=True,
     )
 
     with patch(
         "app.core.resources.loaders.result_blob._dispatch_by_id",
-        _fake_dispatch,
+        fake,
     ):
         loader.load(ref, mode="bytes")
 

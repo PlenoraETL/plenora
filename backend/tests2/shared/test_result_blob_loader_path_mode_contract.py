@@ -24,12 +24,20 @@ the engine. Source-bound check.
 
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+
+# BE-GO-READY-TEST-INFRA-003: shared helpers extracted to a sibling
+# module. ResourceRef construction and Resource path cleanup are
+# now deduplicated across the four resource-loader contract suites.
+from tests2.shared._resource_loader_helpers import (
+    cleanup_resource_path,
+    fake_dispatch_by_id,
+    make_result_ref,
+)
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
@@ -50,24 +58,14 @@ _RESULT_BLOB_PY = (
 def test_path_mode_is_now_supported():
     """``ResultBlobLoader.load(..., mode='path')`` MUST NOT raise the
     'not supported' guard (it raised in 002; 004 lifted it)."""
-    from app.core.resources import ResourceRef
     from app.core.resources.loaders import result_blob as loader_mod
 
-    ref = ResourceRef(
-        kind="result_blob",
-        expected_group_id="g1",
-        result_id="r1",
-    )
+    ref = make_result_ref()
 
     payload = b"hello-path-mode"
-    captured = {}
+    captured, fake = fake_dispatch_by_id(payload=payload, backend="db_legacy")
 
-    def _fake_dispatch(result_id, *, group_id_filter, project_id_filter=None):
-        captured["result_id"] = result_id
-        captured["group_id_filter"] = group_id_filter
-        return payload, "db_legacy"
-
-    with patch.object(loader_mod, "_dispatch_by_id", _fake_dispatch):
+    with patch.object(loader_mod, "_dispatch_by_id", fake):
         out = loader_mod.ResultBlobLoader().load(ref, mode="path")
 
     try:
@@ -84,20 +82,14 @@ def test_path_mode_is_now_supported():
         # The materialized file MUST contain exactly the dispatched bytes.
         assert out.path.read_bytes() == payload
     finally:
-        if out.path and out.path.exists():
-            out.path.unlink()
+        cleanup_resource_path(out)
 
 
 def test_stream_mode_remains_unsupported():
     """Defense against a future drift: ``stream`` MUST still raise."""
-    from app.core.resources import ResourceRef
     from app.core.resources.loaders.result_blob import ResultBlobLoader
 
-    ref = ResourceRef(
-        kind="result_blob",
-        expected_group_id="g1",
-        result_id="r1",
-    )
+    ref = make_result_ref()
     with pytest.raises(ValueError, match="not supported"):
         ResultBlobLoader().load(ref, mode="stream")  # type: ignore[arg-type]
 
@@ -112,14 +104,9 @@ def test_path_mode_uses_same_dispatch_function_as_bytes_mode():
     second SQL query, no second tenant check, no parallel dispatch
     path for path mode -- the mode only affects materialization.
     """
-    from app.core.resources import ResourceRef
     from app.core.resources.loaders import result_blob as loader_mod
 
-    ref = ResourceRef(
-        kind="result_blob",
-        expected_group_id="g1",
-        result_id="r1",
-    )
+    ref = make_result_ref()
 
     calls: list[tuple] = []
 
@@ -138,41 +125,29 @@ def test_path_mode_uses_same_dispatch_function_as_bytes_mode():
         )
         assert calls[0] == ("r1", "g1")
     finally:
-        if out.path and out.path.exists():
-            out.path.unlink()
+        cleanup_resource_path(out)
 
 
 def test_path_mode_honors_superadmin_filter_skip(monkeypatch):
     """``is_superadmin=True`` skips the SQL group_id filter for path
     mode exactly as for bytes mode (group_id_filter=None).
     """
-    from app.core.resources import ResourceRef
     from app.core.resources.loaders import result_blob as loader_mod
 
-    ref = ResourceRef(
-        kind="result_blob",
-        expected_group_id="g1",
-        result_id="r1",
-        is_superadmin=True,
-    )
+    ref = make_result_ref(is_superadmin=True)
 
-    seen_filter = {}
+    captured, fake = fake_dispatch_by_id()
 
-    def _spy_dispatch(result_id, *, group_id_filter, project_id_filter=None):
-        seen_filter["filter"] = group_id_filter
-        return b"x", "db_legacy"
-
-    monkeypatch.setattr(loader_mod, "_dispatch_by_id", _spy_dispatch)
+    monkeypatch.setattr(loader_mod, "_dispatch_by_id", fake)
     out = loader_mod.ResultBlobLoader().load(ref, mode="path")
 
     try:
-        assert seen_filter["filter"] is None, (
+        assert captured["group_id_filter"] is None, (
             "is_superadmin=True must skip the SQL group_id filter "
             "for path mode (parity with bytes mode)"
         )
     finally:
-        if out.path and out.path.exists():
-            out.path.unlink()
+        cleanup_resource_path(out)
 
 
 def test_path_mode_passes_group_id_filter_when_not_superadmin(monkeypatch):
@@ -181,32 +156,22 @@ def test_path_mode_passes_group_id_filter_when_not_superadmin(monkeypatch):
     path mode then raises FileNotFoundError downstream (covered
     separately).
     """
-    from app.core.resources import ResourceRef
     from app.core.resources.loaders import result_blob as loader_mod
 
-    ref = ResourceRef(
-        kind="result_blob",
-        expected_group_id="alpha",
-        result_id="r1",
-    )
+    ref = make_result_ref(group_id="alpha")
 
-    seen_filter = {}
+    captured, fake = fake_dispatch_by_id(backend="object_storage")
 
-    def _spy_dispatch(result_id, *, group_id_filter, project_id_filter=None):
-        seen_filter["filter"] = group_id_filter
-        return b"x", "object_storage"
-
-    monkeypatch.setattr(loader_mod, "_dispatch_by_id", _spy_dispatch)
+    monkeypatch.setattr(loader_mod, "_dispatch_by_id", fake)
     out = loader_mod.ResultBlobLoader().load(ref, mode="path")
 
     try:
-        assert seen_filter["filter"] == "alpha", (
+        assert captured["group_id_filter"] == "alpha", (
             "non-superadmin path mode must pass expected_group_id "
             "as the SQL filter (parity with bytes mode tenant binding)"
         )
     finally:
-        if out.path and out.path.exists():
-            out.path.unlink()
+        cleanup_resource_path(out)
 
 
 # ---------------------------------------------------------------------------
@@ -218,19 +183,13 @@ def test_path_mode_raises_file_not_found_on_missing_row():
     """A row that does not exist (or is not visible to the group)
     surfaces as ``FileNotFoundError`` -- NOT as a zero-byte tempfile.
     """
-    from app.core.resources import ResourceRef
     from app.core.resources.loaders import result_blob as loader_mod
 
-    ref = ResourceRef(
-        kind="result_blob",
-        expected_group_id="g1",
-        result_id="r1",
-    )
+    ref = make_result_ref()
 
-    def _no_row_dispatch(result_id, *, group_id_filter, project_id_filter=None):
-        return None, "none"
+    _, fake = fake_dispatch_by_id(payload=None, backend="none")
 
-    with patch.object(loader_mod, "_dispatch_by_id", _no_row_dispatch):
+    with patch.object(loader_mod, "_dispatch_by_id", fake):
         with pytest.raises(FileNotFoundError, match="not found"):
             loader_mod.ResultBlobLoader().load(ref, mode="path")
 
@@ -241,21 +200,15 @@ def test_path_mode_raises_file_not_found_when_blob_data_is_none():
     ``FileNotFoundError`` rather than materialize a zero-byte
     tempfile that hides an outage from the caller.
     """
-    from app.core.resources import ResourceRef
     from app.core.resources.loaders import result_blob as loader_mod
 
-    ref = ResourceRef(
-        kind="result_blob",
-        expected_group_id="g1",
-        result_id="r1",
-    )
+    ref = make_result_ref()
 
-    def _row_but_no_data(result_id, *, group_id_filter, project_id_filter=None):
-        # Row exists (storage_key returned object_storage backend),
-        # but the download failed (None bytes).
-        return None, "object_storage"
+    # Row exists (storage_key returned object_storage backend),
+    # but the download failed (None bytes).
+    _, fake = fake_dispatch_by_id(payload=None, backend="object_storage")
 
-    with patch.object(loader_mod, "_dispatch_by_id", _row_but_no_data):
+    with patch.object(loader_mod, "_dispatch_by_id", fake):
         with pytest.raises(FileNotFoundError, match="blob data unavailable"):
             loader_mod.ResultBlobLoader().load(ref, mode="path")
 
@@ -376,19 +329,13 @@ def test_path_mode_resource_envelope_has_path_only_no_data_no_stream():
     be None in path mode. ``Resource.path`` MUST be set. Mixing
     populated outputs would let callers consume the same payload
     twice in different shapes (size_bytes invariant breaks)."""
-    from app.core.resources import ResourceRef
     from app.core.resources.loaders import result_blob as loader_mod
 
-    ref = ResourceRef(
-        kind="result_blob",
-        expected_group_id="g1",
-        result_id="r1",
-    )
+    ref = make_result_ref()
 
-    def _ok_dispatch(result_id, *, group_id_filter, project_id_filter=None):
-        return b"abc", "db_legacy"
+    _, fake = fake_dispatch_by_id(payload=b"abc", backend="db_legacy")
 
-    with patch.object(loader_mod, "_dispatch_by_id", _ok_dispatch):
+    with patch.object(loader_mod, "_dispatch_by_id", fake):
         out = loader_mod.ResultBlobLoader().load(ref, mode="path")
 
     try:
@@ -399,22 +346,16 @@ def test_path_mode_resource_envelope_has_path_only_no_data_no_stream():
         assert out.size_bytes == 3
         assert out.format_hint is None  # engine does not parse format
     finally:
-        if out.path and out.path.exists():
-            out.path.unlink()
+        cleanup_resource_path(out)
 
 
 def test_path_mode_writes_distinct_tempfiles_per_call(monkeypatch):
     """Each ``load(..., mode='path')`` call writes a fresh tempfile;
     callers MUST NOT see the same path returned twice (would violate
     is_temporary=True ownership)."""
-    from app.core.resources import ResourceRef
     from app.core.resources.loaders import result_blob as loader_mod
 
-    ref = ResourceRef(
-        kind="result_blob",
-        expected_group_id="g1",
-        result_id="r1",
-    )
+    ref = make_result_ref()
 
     monkeypatch.setattr(
         loader_mod,
@@ -435,6 +376,5 @@ def test_path_mode_writes_distinct_tempfiles_per_call(monkeypatch):
         assert out1.path.is_file()
         assert out2.path.is_file()
     finally:
-        for p in (out1.path, out2.path):
-            if p and p.exists():
-                p.unlink()
+        cleanup_resource_path(out1)
+        cleanup_resource_path(out2)

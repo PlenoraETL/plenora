@@ -281,10 +281,26 @@ Pool sizing (`DB_POOL_MIN`, `DB_POOL_MAX`,
 (`JWT_EXPIRE_HOURS`), login throttle (`LOGIN_*`), retention
 (`LOG_RETENTION_DAYS`, `SCHEDULE_LOGS_RETENTION_DAYS`,
 `AUDIT_RETENTION_DAYS`), feature flags (`ENABLE_ASYNC_ENRICHMENT`,
-`MSSQL_FAST_EXECUTEMANY`, `CARICA_BULK_INSERT`), and storage
-thresholds all have sensible defaults in `Settings.DEFAULTS` and do
-not need to be set for a clean install. Override only when ops needs
-require it.
+`MSSQL_FAST_EXECUTEMANY`, `CARICA_BULK_INSERT`), memory caps
+(`LOAD_FILE_MAX_BYTES`, `WORKER_RSS_MAX_BYTES`, `RESOURCE_MAX_BYTES`,
+`CROSS_JOIN_MAX_OUTPUT_ROWS`, `MULTI_JOIN_MAX_OUTPUT_ROWS`), and
+storage thresholds all have sensible defaults in `Settings.DEFAULTS`
+and do not need to be set for a clean install. Override only when
+ops needs require it.
+
+### 6.2 Memory caps (recommended values)
+
+| Variable | Default | Small single-machine (≤4 GB RAM) | Docker / standard server (8–16 GB) |
+|---|---|---|---|
+| `LOAD_FILE_MAX_BYTES` | 200 MB | 100 MB | 200–500 MB |
+| `WORKER_RSS_MAX_BYTES` | 1.5 GB | 800 MB | 1.5–3 GB |
+| `RESOURCE_MAX_BYTES` | 500 MB | 200 MB | 500 MB–1 GB |
+
+Cap `<= 0` disables the corresponding guard (escape hatch). The
+`RESOURCE_MAX_BYTES` consumer-side wiring is currently a config
+default only — the Resource Engine loaders cannot import
+`app.config` (anti-god-engine). Caller-level enforcement is tracked
+in `BE_INSTALLATION_AUDIT.md` (BE-INSTALL-006).
 
 For full classification per ADR-0021, see audit
 `BE_INSTALLATION_AUDIT.md` §3.

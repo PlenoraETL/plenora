@@ -197,6 +197,158 @@ def test_get_blob_returns_none_and_logs_when_get_object_stream_fails(
     fake_logger.error.assert_called_once()
 
 
+# ---------------------------------------------------------------------------
+# BE-GO-READY-RESOURCE-ENGINE-011-FILE-BLOB-MATERIALIZATION-BOUNDED
+# ---------------------------------------------------------------------------
+#
+# Locks the bounded-read invariant on the storage_key branch.
+# Pre-batch the implementation used `b"".join(resp["body"])` which
+# was unbounded (multi-GB objects would fully accumulate in worker
+# memory; only kernel SIGKILL stopped them). Post-batch
+# `read_stream_bounded` aborts when running total > cap and the
+# function applies its standard fail-soft contract (log + None).
+
+
+def test_get_blob_storage_key_normal_stream_returns_bytes_under_cap(
+    fake_logger, assert_visible_ok, tmp_path, monkeypatch,
+):
+    """Normal-size payload (well below cap) returns bytes.
+    Multi-chunk iterable is concatenated in order; cap reads from
+    `RESOURCE_MAX_BYTES` via `app.config.settings`."""
+    from app.services.file_blob_materialization import get_blob_from_db
+    import app.services.file_blob_materialization as mod
+
+    # Pin a small cap (1 KiB) for the test; multi-chunk payload
+    # well under cap.
+    monkeypatch.setattr(mod, "_read_blob_cap_bytes", lambda: 1024)
+
+    db_get = MagicMock(return_value={"data": None, "storage_key": "file-sources/p/q.bin"})
+    storage = MagicMock()
+    storage.get_object_stream = MagicMock(return_value={
+        "body": iter([b"part-1-", b"part-2-", b"part-3"]),
+        "size": 20,
+        "content_type": "application/octet-stream",
+    })
+    get_storage = MagicMock(return_value=storage)
+
+    out = get_blob_from_db(
+        "file_norm", "grp1",
+        assert_visible=assert_visible_ok,
+        db_get_file_source=db_get,
+        get_object_storage=get_storage,
+        temp_dir=str(tmp_path),
+        logger=fake_logger,
+    )
+
+    assert out == b"part-1-part-2-part-3"
+    # No tempfile must be created in this branch.
+    assert sorted(p.name for p in Path(tmp_path).iterdir()) == []
+    # No error logged on the happy path.
+    fake_logger.error.assert_not_called()
+
+
+def test_get_blob_storage_key_oversize_stream_returns_none_with_explicit_log(
+    fake_logger, assert_visible_ok, tmp_path, monkeypatch,
+):
+    """Oversize payload: bounded read aborts when running total
+    crosses cap. Per the existing fail-soft contract the function
+    returns None and logs an error. The error message MUST mention
+    'oversize' so ops can grep for OOM-prevention vs generic fetch
+    failures."""
+    from app.services.file_blob_materialization import get_blob_from_db
+    import app.services.file_blob_materialization as mod
+
+    # Tiny cap: 8 bytes. Stream produces 30 bytes -> aborts on 2nd chunk.
+    monkeypatch.setattr(mod, "_read_blob_cap_bytes", lambda: 8)
+
+    db_get = MagicMock(return_value={"data": None, "storage_key": "file-sources/big/x.bin"})
+
+    # Sentinel iterator: counts how many chunks were consumed before abort.
+    consumed = []
+
+    def _gen():
+        for n in range(10):
+            chunk = bytes([0x41 + n]) * 5  # 5 bytes each
+            consumed.append(n)
+            yield chunk
+
+    storage = MagicMock()
+    storage.get_object_stream = MagicMock(return_value={
+        "body": _gen(),
+        "size": 50,
+        "content_type": "application/octet-stream",
+    })
+    get_storage = MagicMock(return_value=storage)
+
+    out = get_blob_from_db(
+        "file_big", "grp1",
+        assert_visible=assert_visible_ok,
+        db_get_file_source=db_get,
+        get_object_storage=get_storage,
+        temp_dir=str(tmp_path),
+        logger=fake_logger,
+    )
+
+    # Fail-soft contract: bytes are NOT returned on overrun.
+    assert out is None
+    # Logger.error called with the dedicated oversize message.
+    fake_logger.error.assert_called_once()
+    log_msg = fake_logger.error.call_args[0][0]
+    assert "oversize" in log_msg.lower(), (
+        f"Expected oversize signal in log message; got {log_msg!r}"
+    )
+    # The bounded read aborted EARLY: consumed at most 2 chunks
+    # (5 bytes ok, 10 bytes >8 -> abort) — not the full 10-chunk
+    # stream. This proves the cap is enforced chunk-by-chunk and
+    # not retroactively after a full join.
+    assert len(consumed) <= 2, (
+        f"Bounded read did not abort early; consumed={len(consumed)} chunks "
+        "(expected at most 2 before crossing the 8-byte cap)."
+    )
+
+
+def test_get_blob_storage_key_oversize_does_not_create_tempfile(
+    fake_logger, assert_visible_ok, tmp_path, monkeypatch,
+):
+    """Defense-in-depth: even on the oversize-abort path, the
+    function MUST NOT fall back to a download-to-path strategy.
+    The bytes-first invariant from RESOURCE-ENGINE-006 holds in
+    all branches of `get_blob_from_db`."""
+    from app.services.file_blob_materialization import get_blob_from_db
+    import app.services.file_blob_materialization as mod
+
+    monkeypatch.setattr(mod, "_read_blob_cap_bytes", lambda: 4)
+
+    db_get = MagicMock(return_value={"data": None, "storage_key": "file-sources/big/over.bin"})
+    storage = MagicMock()
+    storage.get_object_stream = MagicMock(return_value={
+        "body": iter([b"AAAA", b"BBBB", b"CCCC"]),  # 12 bytes total > 4
+        "size": 12,
+        "content_type": "application/octet-stream",
+    })
+    storage.download = MagicMock()
+    get_storage = MagicMock(return_value=storage)
+
+    pre_files = sorted(p.name for p in Path(tmp_path).iterdir())
+    out = get_blob_from_db(
+        "file_big2", "grp1",
+        assert_visible=assert_visible_ok,
+        db_get_file_source=db_get,
+        get_object_storage=get_storage,
+        temp_dir=str(tmp_path),
+        logger=fake_logger,
+    )
+    post_files = sorted(p.name for p in Path(tmp_path).iterdir())
+
+    assert out is None
+    assert post_files == pre_files, (
+        "Regressione: il branch oversize ha materializzato un tempfile. "
+        f"new files: {set(post_files) - set(pre_files)}. La policy "
+        "bytes-first deve restare valida anche sul fail path."
+    )
+    storage.download.assert_not_called()
+
+
 def test_get_blob_returns_none_when_row_missing(
     fake_logger, assert_visible_ok, get_storage_mock, tmp_path,
 ):

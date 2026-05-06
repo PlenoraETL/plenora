@@ -254,7 +254,7 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
     # The line is no longer a tempfile call site; the inventory
     # ratchet (`test_temp_materialization_inventory_is_complete`)
     # confirms it is no longer in the AST scan.
-    ("app/services/file_blob_materialization.py", 187): (
+    ("app/services/file_blob_materialization.py", 319): (
         "PATH_REQUIRED_FILE",
         "temp_file_for caller contract returns Path for SHP/GDB "
         "downstream consumers (fiona/geopandas read_file). Bytes "
@@ -307,7 +307,7 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
         "DIR_MULTIFILE",
         "IMDF bundle re-cache fallback: same multi-file pattern.",
     ),
-    ("app/core/resources/loaders/result_blob.py", 297): (
+    ("app/core/resources/loaders/result_blob.py", 438): (
         "PATH_REQUIRED_FILE",
         "ResultBlobLoader._materialize_to_temp_path (mode='path'): "
         "the ENGINE'S OWN path-mode tempfile. Caller-owned "
@@ -355,7 +355,7 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
     ),
 
     # ---- mkdtemp ----
-    ("app/services/file_blob_materialization.py", 165): (
+    ("app/services/file_blob_materialization.py", 297): (
         "DIR_MULTIFILE",
         "SHP/GDB blob extraction destination: zip from BYTEA "
         "extracted into mkdtemp; caller cleans the dir parent "

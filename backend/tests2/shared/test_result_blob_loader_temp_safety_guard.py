@@ -43,6 +43,16 @@ from unittest.mock import patch
 
 import pytest
 
+# BE-GO-READY-TEST-INFRA-003: shared helpers extracted to a sibling
+# module. Only ResourceRef construction is shared here - the
+# tempfile-cleanup helpers are local to this file (they exercise the
+# loader's own cleanup_temp_path symbol, not a generic Resource path
+# unlink).
+from tests2.shared._resource_loader_helpers import (
+    fake_dispatch_by_id,
+    make_result_ref,
+)
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
@@ -301,27 +311,20 @@ def test_loader_path_mode_returns_is_temporary_true():
         ResultBlobLoader,
         cleanup_temp_path,
     )
-    from app.core.resources.types import ResourceRef
 
     loader = ResultBlobLoader()
-    ref = ResourceRef(
-        kind="result_blob",
-        result_id="r-1",
-        expected_group_id="g-1",
-    )
+    ref = make_result_ref(group_id="g-1", result_id="r-1")
 
     # Mock the dispatch to short-circuit the DB / object-storage
     # path; we want to test ONLY the materialization + Resource
     # shape contract.
-    captured: list = []
-
-    def _fake_dispatch(result_id, *, group_id_filter, project_id_filter=None):
-        captured.append((result_id, group_id_filter))
-        return b"engine-owned-bytes", "db_legacy"
+    captured, fake = fake_dispatch_by_id(
+        payload=b"engine-owned-bytes", backend="db_legacy"
+    )
 
     with patch(
         "app.core.resources.loaders.result_blob._dispatch_by_id",
-        _fake_dispatch,
+        fake,
     ):
         resource = loader.load(ref, mode="path")
 

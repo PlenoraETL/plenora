@@ -2,6 +2,7 @@
 
 BE-GO-READY-RESOURCE-ENGINE-002-RESULT-BLOB-LOADER-PILOT.
 BE-GO-READY-RESOURCE-ENGINE-004-RESULT-BLOB-PATH-MODE.
+BE-GO-READY-RESOURCE-ENGINE-010-RESULT-BLOB-BOUNDED-BYTES.
 
 Closes the duplication between
 ``app/db/results_db_service.py::get_result_data`` and
@@ -74,12 +75,62 @@ import time
 from pathlib import Path
 from typing import Optional, Tuple
 
+from app.shared.exceptions import MemoryLimitExceededError
+
+from app.core.resources.bounded_reader import read_stream_bounded
 from app.core.resources.types import (
     OutputMode,
     Resource,
     ResourceKind,
     ResourceRef,
 )
+
+
+# ---------------------------------------------------------------------------
+# BE-GO-READY-RESOURCE-ENGINE-010-RESULT-BLOB-BOUNDED-BYTES:
+# bound the previously unbounded `b"".join(list(stream["body"]))` read.
+#
+# The pre-010 path materialized the entire object-storage iterator into
+# memory before the loader knew whether the blob was 100 KB or 100 GB.
+# That made the engine an OOM amplifier: any caller of
+# ``mode='bytes'`` / ``mode='path'`` could be DoS'd by an oversized
+# result row.
+#
+# 010 inverts the read: chunks are accumulated into a `bytearray` with
+# a per-chunk pre-check; the iterator is aborted as soon as the cap
+# would be exceeded. The cap is read from
+# ``RESOURCE_MAX_BYTES`` env (stdlib ``os.environ``); if unset /
+# invalid, falls back to ``_DEFAULT_RESULT_BLOB_MAX_BYTES`` (500 MB,
+# mirroring ``settings.RESOURCE_MAX_BYTES`` without importing
+# ``app.config``).
+#
+# Anti-god-engine note: NO ``app.config`` import. Stdlib only.
+# Worker 6 added the matching Settings default and install docs.
+# The loader intentionally reads the env directly so the anti-god-
+# engine boundary (no ``app.config`` import) stays intact.
+# ---------------------------------------------------------------------------
+
+_DEFAULT_RESULT_BLOB_MAX_BYTES = 500 * 1024 * 1024  # 500 MB
+
+_RESULT_BLOB_MAX_BYTES_ENV = "RESOURCE_MAX_BYTES"
+
+
+def _resolve_max_bytes() -> int:
+    """Resolve the result-blob byte cap.
+
+    Override via the ``RESOURCE_MAX_BYTES`` env var.
+    Invalid / non-positive values fall back to the default. Read at
+    each call so monkeypatch / runtime override (env mutation) takes
+    effect without a process restart.
+    """
+    raw = _os.environ.get(_RESULT_BLOB_MAX_BYTES_ENV)
+    if not raw:
+        return _DEFAULT_RESULT_BLOB_MAX_BYTES
+    try:
+        v = int(raw)
+    except (TypeError, ValueError):
+        return _DEFAULT_RESULT_BLOB_MAX_BYTES
+    return v if v > 0 else _DEFAULT_RESULT_BLOB_MAX_BYTES
 
 
 # ---------------------------------------------------------------------------
@@ -139,13 +190,26 @@ def _fetch_row(
 
 
 def _download_object_storage(storage_key: str) -> Optional[bytes]:
-    """Object storage GET. Returns None on disabled capability or
-    download failure (best-effort logging; mirrors pre-pilot
-    ``_s3_download_bytes`` behavior bit-for-bit)."""
+    """Object storage GET, bounded by ``_resolve_max_bytes()``.
+
+    Returns ``None`` on disabled capability or download failure
+    (best-effort logging; mirrors pre-010 connectivity-error
+    semantics bit-for-bit). Raises :class:`MemoryLimitExceededError`
+    on cap exceeded -- this is NOT swallowed by the broad-except
+    below because oversize is a security/resource cap signal, not
+    a connectivity issue, and the caller MUST learn about it.
+
+    The bounded read aborts iteration as soon as a chunk would push
+    the running size over the cap; subsequent chunks are NOT
+    consumed. This is the entire point of 010: pre-010 the iterator
+    was fully drained via ``list(stream["body"])`` before any size
+    check, so the OOM had already happened by the time we'd ask.
+    """
     from app.utils.logger import get_logger
 
     logger = get_logger(__name__)
     _t0 = time.monotonic()
+    max_bytes = _resolve_max_bytes()
     try:
         from app.shared.cloud_backends import (
             ObjectStorageDisabledError,
@@ -163,8 +227,26 @@ def _download_object_storage(storage_key: str) -> Optional[bytes]:
             )
             return None
         stream = storage.get_object_stream(storage_key)
-        chunks = list(stream["body"])
-        data = b"".join(chunks)
+        # Bounded read: aborts iteration on first cap-exceeding chunk.
+        # MemoryLimitExceededError propagates past the broad-except
+        # below (oversize is a security/resource signal, not a
+        # connectivity error).
+        try:
+            data = read_stream_bounded(
+                stream["body"],
+                max_bytes=max_bytes,
+                label=_short_key(storage_key),
+                stage="result_blob_oversize",
+            )
+        except MemoryLimitExceededError as oversize:
+            duration_ms = round((time.monotonic() - _t0) * 1000, 1)
+            logger.error(
+                f"[FS-4] S3 download {_short_key(storage_key)} ABORTED "
+                f"oversize: observed_bytes={oversize.observed_bytes} "
+                f"limit_bytes={oversize.limit_bytes} "
+                f"duration_ms={duration_ms}"
+            )
+            raise
         duration_ms = round((time.monotonic() - _t0) * 1000, 1)
         logger.info(
             f"[PERF] s3_download op=get_bytes "
@@ -172,6 +254,9 @@ def _download_object_storage(storage_key: str) -> Optional[bytes]:
             f"size_bytes={len(data)} duration_ms={duration_ms}"
         )
         return data
+    except MemoryLimitExceededError:
+        # Oversize is the contract for the caller; do NOT swallow.
+        raise
     except Exception as e:
         duration_ms = round((time.monotonic() - _t0) * 1000, 1)
         logger.error(
@@ -232,6 +317,30 @@ def _dispatch_by_id(
     data = row.get("data")
     if isinstance(data, memoryview):
         data = bytes(data)
+    # BE-GO-READY-RESOURCE-ENGINE-010: post-fetch cap check on
+    # BYTEA. The PG driver has already loaded the row into memory by
+    # this point (single fetchone result), so the cap here is
+    # post-facto -- it cannot prevent the initial allocation. It
+    # still serves as a strict downstream contract: callers will
+    # never see a Resource larger than the cap, regardless of
+    # backend. Documented as residual R-010.1 (PG-side row-size
+    # check would require a SELECT length(data) preflight; deferred
+    # to Worker 6 and the planned Settings consolidation).
+    if data is not None and len(data) > _resolve_max_bytes():
+        max_bytes = _resolve_max_bytes()
+        duration_ms = round((time.monotonic() - _t0) * 1000, 1)
+        logger.error(
+            f"[PERF] get_result_data op=fetch_blob backend=db_legacy "
+            f"result_id={result_id} ABORTED oversize: "
+            f"observed_bytes={len(data)} limit_bytes={max_bytes} "
+            f"duration_ms={duration_ms}"
+        )
+        raise MemoryLimitExceededError(
+            observed_bytes=len(data),
+            limit_bytes=max_bytes,
+            path_basename=f"result_id={result_id}",
+            stage="result_blob_oversize",
+        )
     duration_ms = round((time.monotonic() - _t0) * 1000, 1)
     size = len(data) if data else 0
     logger.info(

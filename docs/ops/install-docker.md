@@ -118,6 +118,10 @@ CELERY_RESULT_BACKEND=redis://redis:6379/0
 STORAGE_POLICY=db
 BACKUP_BUCKET=plenora-docker-no-real-s3
 DATA_DIR=/data
+# Memory caps (override in compose if container memory differs):
+# LOAD_FILE_MAX_BYTES=209715200   # 200 MB upload cap
+# WORKER_RSS_MAX_BYTES=1500000000 # 1.5 GB worker RSS
+# RESOURCE_MAX_BYTES=524288000    # 500 MB single-blob read cap
 # Generate before first up:
 # PLENORA_ENCRYPTION_KEY=
 # JWT_SECRET_KEY=

@@ -310,6 +310,21 @@ class Settings:
         # il primo merge esploda in memoria.
         # Override via env `MULTI_JOIN_MAX_OUTPUT_ROWS`.
         "MULTI_JOIN_MAX_OUTPUT_ROWS": 50_000_000,
+        # BE-GO-READY-INSTALL-006-RESOURCE-MEMORY-LIMIT-CONFIG: cap
+        # massimo (byte) per un singolo blob letto via Resource Engine
+        # (`ResultBlobLoader` mode='bytes'/'path' + future kinds:
+        # file_source_blob, intermediate_artifact, eseguibili_output).
+        # Default 500 MB: ricoperchio sopra `LOAD_FILE_MAX_BYTES`
+        # (200 MB upload sincrono) e sotto `WORKER_RSS_MAX_BYTES`
+        # (1.5 GB) — un singolo result/file scaricato non puo' da solo
+        # consumare l'intero budget RSS del worker. Cap <= 0 disabilita
+        # il guard. Override via env `RESOURCE_MAX_BYTES`. La wiring
+        # consumer-side (cap pre-return in `get_result_data` /
+        # `_dispatch_by_id`) e' deferita: il loader stesso non importa
+        # `app.config` per anti-god-engine; il guard vivra' a livello
+        # caller (es. `results_db_service` o `cloud_backends`). Vedi
+        # `.agent-temp/BE_INSTALLATION_AUDIT.md` (BE-INSTALL-006).
+        "RESOURCE_MAX_BYTES": 500 * 1024 * 1024,
 
         # BE-GO-READY-STORAGE-ENGINE-006-RECONCILIATION-BEAT-HOOK:
         # Tunables del reconciler beat hook che processa le entry
