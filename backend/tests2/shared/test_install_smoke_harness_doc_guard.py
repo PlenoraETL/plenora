@@ -264,14 +264,20 @@ def test_harness_5_4_documents_docker_deltas(harness_section: str):
     )
     # The Docker honesty disclaimer MUST stay in the deltas
     # section - removing it would let a reader infer the Docker
-    # path is real today.
+    # path is validated today. INSTALL-011 flipped the canonical
+    # honesty marker from "NOT IMPLEMENTED" / "NO Dockerfile" to
+    # "FIRST SCAFFOLD" + "NOT YET VALIDATED"; either form keeps
+    # the disclaimer.
     assert (
-        "NO `Dockerfile`" in harness_section
+        "FIRST SCAFFOLD" in harness_section
+        or "NOT YET VALIDATED" in harness_section
+        or "NO `Dockerfile`" in harness_section
         or "NOT IMPLEMENTED" in harness_section
         or "no `Dockerfile`" in harness_section.lower()
     ), (
         "Section 5.4 must keep the honesty disclaimer that the "
-        "Docker path is NOT IMPLEMENTED at this commit. Without "
+        "Docker path is FIRST SCAFFOLD / NOT YET VALIDATED. "
+        "Without "
         "it the delta table reads as if both paths exist today."
     )
 
@@ -316,6 +322,7 @@ def test_section_ordering_unchanged(doc_text: str):
     # rename surfaces here, not as a cryptic failure in the
     # native-deps test.
     expected_in_order = (
+        "## 0. First-PC handoff pack (entry point)",
         "## 1. Manual choices",
         "## 2. Exact command sequence",
         "## 3. Native dependency verification",

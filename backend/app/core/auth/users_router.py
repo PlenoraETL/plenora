@@ -57,12 +57,18 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.core.auth import disclosure as _disclosure
+# BE-GO-READY-AUTH-ENGINE-011-SHARED-CURRENT-USER-CONTRACT:
+# `CurrentUser` consumed from the shared contract module
+# (mirror of `groups_router.py` / Phase-7 routers). The three
+# request/response DTOs (`ResetPasswordRequest`, `UserCreate`,
+# `UserResponse`) stay on the models leaf for now; W-011 owns
+# only the `CurrentUser` migration.
 from app.core.auth.models import (
-    CurrentUser,
     ResetPasswordRequest,
     UserCreate,
     UserResponse,
 )
+from app.shared.contracts.auth import CurrentUser
 from app.core.auth.roles import ROLES_ADMIN_OR_ABOVE, VALID_ROLES
 from app.shared.audit_action import audit_action
 from app.shared.password_hashing import hash_password

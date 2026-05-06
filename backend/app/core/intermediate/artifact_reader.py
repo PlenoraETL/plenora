@@ -9,15 +9,18 @@ Vincoli:
 - Niente download su disco: stream bytes bounded -> preview parser leaf.
 - Lettura bytes-first BOUNDED via
   ``app.core.resources.bounded_reader.read_stream_bounded`` con cap
-  DEDICATO ``ARTIFACT_PREVIEW_MAX_BYTES`` (env, default 25 MB —
-  mirror della Settings.DEFAULTS senza importare ``app.config``:
-  stesso boundary pattern di ``result_blob.py``). La preview ha un
-  cap molto piu' basso del generico ``RESOURCE_MAX_BYTES``
-  (default 200 MB post BE-GO-READY-MEMORY-ENGINE-005) perche' la
-  preview vive sul thread-pool dell'API ed e' concorrente per
-  definizione: N tab/utenti che fanno refresh di N nodi non
-  possono sommare 200 MB ciascuno o l'API satura la RAM del
-  processo prima di un OOM kill. Oversize NON viene degradato a errore
+  DEDICATO ``ARTIFACT_PREVIEW_MAX_BYTES`` (env, default 25 MB).
+  BE-GO-READY-RUNTIME-002-CENTRALIZE-PREVIEW-CAP-RESOLVER: il
+  parsing dell'env vive nel canonico
+  ``app.core.resources.preview_caps.resolve_artifact_preview_max_bytes``
+  (gemello sibling di ``resource_caps.resolve_resource_max_bytes``,
+  shape identica ma cap/env distinti). La preview ha un cap molto
+  piu' basso del generico ``RESOURCE_MAX_BYTES`` (default 200 MB
+  post BE-GO-READY-MEMORY-ENGINE-005) perche' la preview vive sul
+  thread-pool dell'API ed e' concorrente per definizione: N
+  tab/utenti che fanno refresh di N nodi non possono sommare
+  200 MB ciascuno o l'API satura la RAM del processo prima di
+  un OOM kill. Oversize NON viene degradato a errore
   best-effort: la ``MemoryLimitExceededError`` propaga al boundary
   FastAPI (handler ``app/main.py``) che mappa a HTTP 413 con stage
   ``intermediate_artifact_preview``. Questo evita che un artifact
@@ -34,13 +37,14 @@ Vedi anche `app/core/intermediate/artifact_writer.py` per il counterpart
 write-side e per il layout key.
 
 Anti-god-engine note:
-``app.core.resources.bounded_reader`` is stdlib-only (no FastAPI/DB/
-config); importing it from this leaf reader does not violate the
-existing import boundary. The cap is read directly from
-``os.environ['ARTIFACT_PREVIEW_MAX_BYTES']`` (mirror of
-``Settings.DEFAULTS``) so the reader stays free of an
-``app.config`` dependency, matching the result-blob loader's
-pattern.
+``app.core.resources.bounded_reader`` and
+``app.core.resources.preview_caps`` are stdlib-only (no
+FastAPI/DB/config); importing them from this leaf reader does
+not violate the existing import boundary. The cap is read via
+``preview_caps.resolve_artifact_preview_max_bytes`` (canonical
+parsing surface mirroring ``resource_caps.resolve_resource_max_bytes``),
+so the reader stays free of an ``app.config`` dependency and of
+duplicated env-parsing code.
 
 BE-GO-READY-RESOURCE-ENGINE-016 (parser-boundary split): the
 pandas-bound parsing of the downloaded byte buffer is delegated
@@ -59,7 +63,6 @@ edge.
 from __future__ import annotations
 
 import logging
-import os as _os
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -68,38 +71,12 @@ from app.core.intermediate.preview_parser import (
     parse_parquet_preview,
 )
 from app.core.resources.bounded_reader import read_stream_bounded
+from app.core.resources.preview_caps import (
+    resolve_artifact_preview_max_bytes,
+)
 from app.shared.exceptions import MemoryLimitExceededError
 
 logger = logging.getLogger(__name__)
-
-
-_DEFAULT_ARTIFACT_PREVIEW_MAX_BYTES = 25 * 1024 * 1024  # 25 MB
-_ARTIFACT_PREVIEW_MAX_BYTES_ENV = "ARTIFACT_PREVIEW_MAX_BYTES"
-
-
-def _resolve_max_bytes() -> int:
-    """Resolve the artifact-preview read cap.
-
-    Mirror of ``app.core.resources.loaders.result_blob._resolve_max_bytes``
-    but PREVIEW-specific: reads ``ARTIFACT_PREVIEW_MAX_BYTES`` from
-    ``os.environ`` at each call (monkeypatch / runtime env override
-    takes effect without restart). Default 25 MB matches
-    ``Settings.DEFAULTS["ARTIFACT_PREVIEW_MAX_BYTES"]`` (BE-GO-READY-
-    RUNTIME-001-PREVIEW-MAX-BYTES-CAP). Separate from
-    ``RESOURCE_MAX_BYTES`` (default 200 MB post MEMORY-005) on purpose:
-    the preview is concurrency-sensitive (N concurrent API requests) and
-    the parser returns at most ``limit`` rows, so the byte budget is much
-    tighter.
-    Invalid / non-positive values fall back to the 25 MB default.
-    """
-    raw = _os.environ.get(_ARTIFACT_PREVIEW_MAX_BYTES_ENV)
-    if not raw:
-        return _DEFAULT_ARTIFACT_PREVIEW_MAX_BYTES
-    try:
-        v = int(raw)
-    except (TypeError, ValueError):
-        return _DEFAULT_ARTIFACT_PREVIEW_MAX_BYTES
-    return v if v > 0 else _DEFAULT_ARTIFACT_PREVIEW_MAX_BYTES
 
 
 def _short_label(artifact_uri: str, max_len: int = 60) -> str:
@@ -194,7 +171,7 @@ def load_preview_from_artifact(
     # ``RESOURCE_MAX_BYTES``). Oversize NON viene mascherato da error
     # best-effort: ``MemoryLimitExceededError`` propaga al boundary
     # handler (HTTP 413 con stage ``intermediate_artifact_preview``).
-    max_bytes = _resolve_max_bytes()
+    max_bytes = resolve_artifact_preview_max_bytes()
     try:
         stream = storage.get_object_stream(artifact_uri)
     except Exception as e:

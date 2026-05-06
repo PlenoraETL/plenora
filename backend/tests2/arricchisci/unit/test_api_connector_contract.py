@@ -1,6 +1,6 @@
 import pytest
 
-from app.core.arricchisci.api_connector import _nd
+from app.core.arricchisci._api_connection_helpers import _nd
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.arricchisci, pytest.mark.contract]

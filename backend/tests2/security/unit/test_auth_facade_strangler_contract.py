@@ -918,22 +918,27 @@ def test_phase9_does_not_import_currentuser_from_models_leaf(path: Path):
 # Files that legitimately keep `from app.core.auth.models import
 # CurrentUser` post-Phase-9. Three categories:
 #
-# A) Siblings within the `app.core.auth` package: routing
-#    through `app.shared.contracts.auth` would create an
-#    unnecessary round-trip (the contract re-exports FROM
-#    auth.models). Cycle-neutral but architecturally noisy —
-#    KEEP direct import. Includes the facade itself
-#    (`auth.auth`), the extracted handler modules
-#    (`auth.users_router`, `auth.groups_router`), and the
-#    ownership leaf (`auth.ownership`).
+# A) The auth facade itself (`app.core.auth.auth`): re-exports
+#    `CurrentUser` for KEEP_COMPAT (`from app.core.auth.auth
+#    import CurrentUser` keeps working for any external caller
+#    not yet migrated to the contract).
 # B) The contract module IS the canonical re-export site
 #    (`shared/contracts/auth.py`) — it MUST consume
 #    `auth.models` directly to provide the contract surface.
+#
+# BE-GO-READY-AUTH-ENGINE-011-SHARED-CURRENT-USER-CONTRACT:
+# `auth.ownership`, `auth.users_router`, and `auth.groups_router`
+# were trimmed from this allowlist. The "siblings keep direct
+# import to avoid round-trip noise" reasoning was overridden by
+# the W-011 brief: the round-trip is one extra import edge but
+# yields a cleaner architectural shape (auth-package internals
+# go through the same contract surface that external routers
+# use, so a future contributor cannot tell `auth/` siblings from
+# any other consumer by their import shape). The contract
+# re-exports the same `CurrentUser` class (identity preserved),
+# so behavior is unchanged.
 _PHASE9_MODELS_LEAF_ALLOWLIST = frozenset({
     str((_APP / "core" / "auth" / "auth.py").relative_to(_BACKEND_ROOT)).replace("\\", "/"),
-    str((_APP / "core" / "auth" / "ownership.py").relative_to(_BACKEND_ROOT)).replace("\\", "/"),
-    str((_APP / "core" / "auth" / "users_router.py").relative_to(_BACKEND_ROOT)).replace("\\", "/"),
-    str((_APP / "core" / "auth" / "groups_router.py").relative_to(_BACKEND_ROOT)).replace("\\", "/"),
     str((_APP / "shared" / "contracts" / "auth.py").relative_to(_BACKEND_ROOT)).replace("\\", "/"),
 })
 
@@ -980,6 +985,101 @@ def test_phase9_models_leaf_currentuser_consumers_locked_to_allowlist():
         "Phase-9 allowlist names files that no longer import "
         "CurrentUser from auth.models. Trim the allowlist:\n"
         + "\n".join(f"  {p}" for p in sorted(missing))
+    )
+
+
+# ---------------------------------------------------------------------------
+# BE-GO-READY-AUTH-ENGINE-011-SHARED-CURRENT-USER-CONTRACT
+# ---------------------------------------------------------------------------
+#
+# W-011 migrated the three remaining `app.core.auth/` consumers
+# (`ownership.py`, `users_router.py`, `groups_router.py`) to
+# import `CurrentUser` from `app.shared.contracts.auth` instead
+# of `app.core.auth.models`. The Phase-9 allowlist trimmed those
+# three files (above). This block adds the POSITIVE lock: each
+# of the three migrated files MUST now import `CurrentUser`
+# from the shared contract.
+#
+# Distinct from the Phase-7 router lock in
+# `test_auth_shared_contract_module_contract.py` (which covers
+# `logs/intermediate/projects/scheduler` non-auth routers): the
+# files locked here are auth-package internals that previously
+# stayed on the models leaf for "round-trip noise" reasoning.
+# W-011 reverses that decision -- one consistent contract
+# boundary across all consumers.
+
+_AUTH_ENGINE_011_MIGRATED = (
+    _APP / "core" / "auth" / "ownership.py",
+    _APP / "core" / "auth" / "users_router.py",
+    _APP / "core" / "auth" / "groups_router.py",
+)
+
+
+def _imports_named_from(path: Path, module: str, name: str) -> bool:
+    """Return True iff ``path`` has a top-level
+    ``from <module> import ... <name> ...`` ImportFrom node."""
+    text = path.read_text(encoding="utf-8")
+    tree = ast.parse(text, filename=str(path))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == module:
+            if any(a.name == name for a in node.names):
+                return True
+    return False
+
+
+@pytest.mark.parametrize(
+    "path",
+    _AUTH_ENGINE_011_MIGRATED,
+    ids=lambda p: str(p.relative_to(_BACKEND_ROOT)).replace("\\", "/"),
+)
+def test_auth_engine_011_migrated_imports_current_user_from_contract(
+    path: Path,
+):
+    """W-011 contract: the three migrated `app.core.auth/`
+    consumers MUST import `CurrentUser` from the shared contract
+    module. Reverting the import edge to `app.core.auth.models`
+    re-introduces the auth-package coupling W-011 closed.
+
+    Identity is preserved (`contracts.auth.CurrentUser is
+    auth.models.CurrentUser` -- locked separately by
+    `test_contract_current_user_is_leaf_identity`), so behavior
+    is unchanged; only the import shape is."""
+    assert path.exists(), f"W-011 migrated file missing: {path}"
+    assert _imports_named_from(
+        path, "app.shared.contracts.auth", "CurrentUser",
+    ), (
+        f"{path.relative_to(_BACKEND_ROOT)} must import "
+        "`CurrentUser` from `app.shared.contracts.auth` "
+        "(BE-GO-READY-AUTH-ENGINE-011). The contract re-exports "
+        "the same class from `app.core.auth.models`; behavior "
+        "is unchanged but the consumer-side import edge moves to "
+        "the shared boundary."
+    )
+
+
+@pytest.mark.parametrize(
+    "path",
+    _AUTH_ENGINE_011_MIGRATED,
+    ids=lambda p: str(p.relative_to(_BACKEND_ROOT)).replace("\\", "/"),
+)
+def test_auth_engine_011_migrated_does_not_import_current_user_from_models(
+    path: Path,
+):
+    """W-011 contract negative: the three migrated files MUST
+    NOT pull `CurrentUser` directly from `app.core.auth.models`.
+    Defense-in-depth alongside the Phase-9 allowlist trim --
+    catches a regression where a contributor adds `CurrentUser`
+    BACK to a `from app.core.auth.models import (...)` block."""
+    assert path.exists(), f"W-011 migrated file missing: {path}"
+    assert not _imports_named_from(
+        path, "app.core.auth.models", "CurrentUser",
+    ), (
+        f"{path.relative_to(_BACKEND_ROOT)} pulls `CurrentUser` "
+        "from `app.core.auth.models` directly. W-011 contract: "
+        "router/ownership code consumes `CurrentUser` from "
+        "`app.shared.contracts.auth` (which re-exports from the "
+        "models leaf -- identity preserved). The other DTOs that "
+        "remain on the models leaf are out of W-011 scope."
     )
 
 

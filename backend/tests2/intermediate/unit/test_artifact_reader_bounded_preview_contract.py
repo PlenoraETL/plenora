@@ -1,11 +1,18 @@
 """Bounded-preview contract for ``app.core.intermediate.artifact_reader``.
 
 BE-GO-READY-RESOURCE-ENGINE-012-INTERMEDIATE-ARTIFACT-BOUNDED-READ.
+BE-GO-READY-RUNTIME-002-CENTRALIZE-PREVIEW-CAP-RESOLVER:
+the reader's private ``_resolve_max_bytes`` and
+``_DEFAULT_ARTIFACT_PREVIEW_MAX_BYTES`` symbols are gone; the
+canonical resolver lives in
+``app.core.resources.preview_caps`` (sibling of
+``resource_caps`` — same shape, separate cap/env).
 
 Locks the intermediate artifact preview cap:
 
-  - object-storage reads are bounded by ``_resolve_max_bytes()``;
-    iteration stops AT the first cap-exceeding chunk (no
+  - object-storage reads are bounded by
+    ``resolve_artifact_preview_max_bytes()``; iteration stops
+    AT the first cap-exceeding chunk (no
     ``b"".join(stream["body"])`` materialization);
   - exceeding the cap raises :class:`MemoryLimitExceededError`
     rather than returning ``ArtifactPreviewResult(error=...)`` —
@@ -57,57 +64,67 @@ def test_default_cap_is_25_mib(monkeypatch):
     unset. The preview cap is intentionally MUCH lower than
     ``RESOURCE_MAX_BYTES`` (200 MiB post MEMORY-005) because the preview vive sul
     thread-pool API ed e' concorrenza-sensibile."""
-    from app.core.intermediate import artifact_reader as ar
+    from app.core.resources.preview_caps import (
+        resolve_artifact_preview_max_bytes,
+    )
 
     monkeypatch.delenv("ARTIFACT_PREVIEW_MAX_BYTES", raising=False)
-    assert ar._resolve_max_bytes() == 25 * 1024 * 1024
+    assert resolve_artifact_preview_max_bytes() == 25 * 1024 * 1024
 
 
 def test_env_override_is_honored(monkeypatch):
     """Setting ``ARTIFACT_PREVIEW_MAX_BYTES`` overrides the default."""
-    from app.core.intermediate import artifact_reader as ar
+    from app.core.resources.preview_caps import (
+        resolve_artifact_preview_max_bytes,
+    )
 
     monkeypatch.setenv("ARTIFACT_PREVIEW_MAX_BYTES", str(1024))
-    assert ar._resolve_max_bytes() == 1024
+    assert resolve_artifact_preview_max_bytes() == 1024
 
 
 def test_invalid_env_falls_back_to_default(monkeypatch):
     """Garbage / non-positive env values fall back to the 25 MiB default."""
-    from app.core.intermediate import artifact_reader as ar
+    from app.core.resources.preview_caps import (
+        resolve_artifact_preview_max_bytes,
+    )
 
     monkeypatch.setenv("ARTIFACT_PREVIEW_MAX_BYTES", "not-an-int")
-    assert ar._resolve_max_bytes() == 25 * 1024 * 1024
+    assert resolve_artifact_preview_max_bytes() == 25 * 1024 * 1024
     monkeypatch.setenv("ARTIFACT_PREVIEW_MAX_BYTES", "0")
-    assert ar._resolve_max_bytes() == 25 * 1024 * 1024
+    assert resolve_artifact_preview_max_bytes() == 25 * 1024 * 1024
     monkeypatch.setenv("ARTIFACT_PREVIEW_MAX_BYTES", "-1")
-    assert ar._resolve_max_bytes() == 25 * 1024 * 1024
+    assert resolve_artifact_preview_max_bytes() == 25 * 1024 * 1024
 
 
 def test_resource_max_bytes_does_not_drive_preview(monkeypatch):
     """``RESOURCE_MAX_BYTES`` MUST NOT be the env that drives the
     preview cap (that would re-couple the generic blob cap to the
     25 MB preview budget). Setting it should NOT change
-    ``_resolve_max_bytes()``."""
-    from app.core.intermediate import artifact_reader as ar
+    ``resolve_artifact_preview_max_bytes()``."""
+    from app.core.resources.preview_caps import (
+        resolve_artifact_preview_max_bytes,
+    )
 
     monkeypatch.delenv("ARTIFACT_PREVIEW_MAX_BYTES", raising=False)
     monkeypatch.setenv("RESOURCE_MAX_BYTES", str(1024))
     # Preview cap stays at the dedicated default; RESOURCE_MAX_BYTES
     # is for resource engine blob loaders (result_blob etc.).
-    assert ar._resolve_max_bytes() == 25 * 1024 * 1024
+    assert resolve_artifact_preview_max_bytes() == 25 * 1024 * 1024
 
 
 def test_settings_default_matches_module_default():
     """``Settings.DEFAULTS["ARTIFACT_PREVIEW_MAX_BYTES"]`` MUST match
-    the reader module's ``_DEFAULT_ARTIFACT_PREVIEW_MAX_BYTES``.
-    Drift here means the reader and the settings layer disagree
+    the canonical resolver default (``preview_caps.ARTIFACT_PREVIEW_MAX_BYTES_DEFAULT``).
+    Drift here means the resolver and the settings layer disagree
     about the cap, which would surprise operators tuning via env."""
     from app.config import Settings
-    from app.core.intermediate import artifact_reader as ar
+    from app.core.resources.preview_caps import (
+        ARTIFACT_PREVIEW_MAX_BYTES_DEFAULT,
+    )
 
     assert (
         Settings.DEFAULTS["ARTIFACT_PREVIEW_MAX_BYTES"]
-        == ar._DEFAULT_ARTIFACT_PREVIEW_MAX_BYTES
+        == ARTIFACT_PREVIEW_MAX_BYTES_DEFAULT
         == 25 * 1024 * 1024
     )
 

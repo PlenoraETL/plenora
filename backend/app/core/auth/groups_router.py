@@ -65,11 +65,22 @@ from fastapi import APIRouter, Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.core.auth import disclosure as _disclosure
+# BE-GO-READY-AUTH-ENGINE-011-SHARED-CURRENT-USER-CONTRACT:
+# `CurrentUser` consumed from the shared contract module
+# (`app.shared.contracts.auth`) instead of the auth-owned
+# `app.core.auth.models` leaf. The contract is the canonical
+# consumer-facing source: it re-exports the same `CurrentUser`
+# class (identity preserved -- locked by
+# `test_contract_current_user_is_leaf_identity`), but importing
+# it from the shared boundary breaks the auth-package coupling
+# at the call site. The two response/request DTOs (`GroupCreate`,
+# `GroupResponse`) stay on the models leaf for now; W-011's
+# explicit scope is `CurrentUser` only.
 from app.core.auth.models import (
-    CurrentUser,
     GroupCreate,
     GroupResponse,
 )
+from app.shared.contracts.auth import CurrentUser
 from app.shared import error_codes
 from app.shared.audit_action import audit_action
 from app.shared.error_envelope import raise_typed_http

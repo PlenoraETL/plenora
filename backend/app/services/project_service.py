@@ -537,8 +537,13 @@ class ProjectService:
         Tutti i call-site (estrai/manipola/arricchisci/enrichment_task)
         passano dall'helper condiviso — niente try/except locali.
         """
-        import app.db.config_db_service as _cfg_db
-        return _cfg_db.update_project_canvas_key_atomic(
+        # BE-GO-READY-DB-ENGINE-007: facade cut — the helper now lives
+        # in the projects leaf. Tests that injected failures here used
+        # to monkeypatch `app.db.config_db_service.update_project_canvas_key_atomic`;
+        # post-007 they patch the leaf symbol
+        # `app.db.config.projects.update_project_canvas_key_atomic`.
+        from app.db.config.projects import update_project_canvas_key_atomic
+        return update_project_canvas_key_atomic(
             project_id, "columns_metadata", columns_metadata
         )
 

@@ -26,7 +26,7 @@ zero-call-site-touched sugli altri cluster che lo condividono (users/schedules
 import json
 from typing import Dict, Iterable, List, Optional, Set
 
-from app.db.pg_connection import fetchone, fetchall, execute
+from app.db.pg_connection import fetchone, fetchall, execute, transaction
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -203,3 +203,78 @@ def list_project_ids_for_group(group_id: str) -> Set[str]:
         (group_id,),
     )
     return {r["id"] for r in rows}
+
+
+# ============================================================
+# ATOMIC CANVAS-KEY UPDATE (BE-GO-READY-DB-ENGINE-007)
+# ============================================================
+#
+# Moved verbatim from `app.db.config_db_service` (the 7th projects-cluster
+# function the original scope-split kept in the facade). Production callers
+# now import from this leaf directly (`app.services.project_service`); the
+# facade keeps a re-export for back-compat with the 8 dedicated test files
+# that still patch via `cfg_db.<name>` for non-production-path scenarios.
+
+
+def update_project_canvas_key_atomic(project_id: str, key: str, value) -> bool:
+    """Aggiorna una singola chiave del canvas JSON in maniera atomica.
+
+    Pattern: BEGIN; SELECT ... FOR UPDATE; merge; UPDATE; COMMIT.
+    Il SELECT FOR UPDATE blocca il row dal momento del check fino al
+    COMMIT, serializzando scritture concorrenti sullo stesso progetto
+    (cross-process: worker Celery + uvicorn handler + altri worker).
+
+    Senza questo, due write concorrenti facevano lost-update:
+      - A: canvas = get(); canvas["columns_metadata"] = X; update()
+      - B: canvas = get(); canvas["nodes"] = Y;            update()
+    Se B lo pone dopo A ma legge prima, X va perso. Ora il 2°
+    SELECT FOR UPDATE aspetta il 1° COMMIT → vede il canvas gia'
+    aggiornato e fa merge sopra.
+
+    Nota: `canvas` in DB e' TEXT (JSON serializzato), non jsonb → non
+    possiamo usare `jsonb_set` nativo. Il lock pessimistico e' la
+    strategia piu' semplice che funziona sulla colonna attuale senza
+    migration di schema.
+
+    Ritorna True se aggiornato, False se progetto inesistente.
+    Solleva sulle altre eccezioni (rollback automatico via transaction).
+    """
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
+    with transaction() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT canvas FROM projects WHERE id = %s FOR UPDATE",
+                (project_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return False
+            canvas_raw = row["canvas"] if isinstance(row, dict) else row[0]
+            if isinstance(canvas_raw, str):
+                try:
+                    canvas_obj = json.loads(canvas_raw) if canvas_raw else {}
+                except json.JSONDecodeError:
+                    # Canvas corrotto: non vogliamo sovrascriverlo silent
+                    # (come documentato in project_service.get_project_canvas).
+                    # Solleva → rollback automatico del lock.
+                    raise ValueError(
+                        f"Canvas corrotto per progetto {project_id}: JSON non parsabile. "
+                        f"Rifiuto di sovrascrivere — ripristinare da backup."
+                    )
+            elif canvas_raw is None:
+                canvas_obj = {}
+            elif isinstance(canvas_raw, dict):
+                canvas_obj = canvas_raw
+            else:
+                raise ValueError(
+                    f"Canvas di tipo inatteso per progetto {project_id}: "
+                    f"{type(canvas_raw).__name__}"
+                )
+
+            canvas_obj[key] = value
+            cur.execute(
+                "UPDATE projects SET canvas = %s, updated_at = %s WHERE id = %s",
+                (json.dumps(canvas_obj), now, project_id),
+            )
+    return True

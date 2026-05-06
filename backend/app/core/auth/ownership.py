@@ -35,8 +35,18 @@ from fastapi import HTTPException
 
 import app.db.db_service as db
 from app.core.auth import disclosure as _disclosure
-from app.core.auth.models import CurrentUser
+# BE-GO-READY-AUTH-ENGINE-011-SHARED-CURRENT-USER-CONTRACT:
+# `CurrentUser` consumed from the shared contract module
+# (`app.shared.contracts.auth`). Identity preserved -- the
+# contract re-exports the same class object from
+# `app.core.auth.models` (locked by
+# `test_contract_current_user_is_leaf_identity`). Migrating the
+# import edge here removes the last `app.core.auth/` consumer
+# that was still pulling `CurrentUser` from the models leaf
+# directly; the auth implementation package no longer carries
+# router-style models-leaf coupling for the type symbol.
 from app.core.auth.roles import ROLES_ADMIN_OR_ABOVE
+from app.shared.contracts.auth import CurrentUser
 
 
 def _extract_group_and_id(resource):

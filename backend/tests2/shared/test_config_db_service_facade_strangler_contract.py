@@ -77,9 +77,12 @@ _FACADE_LEAF = "config_db_service"
 #     lazy `_safe_set_clause` import — intentional cycle break.
 #   - `app/core/auth/auth.py`: heavy `cfg_db.*` usage spanning users,
 #     projects, groups; migration owned by future AUTH-ENGINE batch.
-#   - `app/services/project_service.py`: only uses
-#     `update_project_canvas_key_atomic` — kept verbatim in facade.
-#     (groups callsites migrated by DB-ENGINE-003.)
+#   - `app/services/project_service.py`: removed by
+#     BE-GO-READY-DB-ENGINE-007. The single remaining call
+#     (`update_project_canvas_key_atomic`) was migrated to the
+#     `app.db.config.projects` leaf (the function moved there
+#     verbatim; the facade now re-exports it for back-compat
+#     with the dedicated test patch points).
 #   - Remaining entries: pending migration chunks listed in the death
 #     map (BE-GO-READY-DB-ENGINE-001 report).
 #
@@ -137,7 +140,6 @@ _FACADE_PROD_ALLOWLIST: frozenset[str] = frozenset({
     "app/db/config/connections.py",
     "app/db/config/datasources.py",
     "app/core/auth/auth.py",
-    "app/services/project_service.py",
 })
 
 

@@ -109,7 +109,9 @@ def test_update_columns_metadata_writes_to_canvas(monkeypatch):
     su payload intero. L'invariante osservabile e' la stessa: la chiave
     "columns_metadata" dentro il canvas JSON."""
     from app.services.project_service import ProjectService
-    import app.db.config_db_service as _cfg_db
+    # BE-GO-READY-DB-ENGINE-007: patch on the projects leaf where
+    # the atomic helper now lives + where project_service imports it.
+    from app.db.config import projects as _projects_leaf
 
     captured_calls = []
 
@@ -117,7 +119,7 @@ def test_update_columns_metadata_writes_to_canvas(monkeypatch):
         captured_calls.append({"project_id": project_id, "key": key, "value": value})
         return True
 
-    monkeypatch.setattr(_cfg_db, "update_project_canvas_key_atomic", fake_atomic)
+    monkeypatch.setattr(_projects_leaf, "update_project_canvas_key_atomic", fake_atomic)
 
     new_meta = [{"name": "id", "type": "int"}]
     ok = ProjectService().update_project_columns_metadata("p1", new_meta)
@@ -142,11 +144,11 @@ def test_update_columns_metadata_preserves_other_canvas_fields(monkeypatch):
     "columns_metadata" — scenari dove una regressione ri-serializza il
     canvas intero e droppa nodi/edge."""
     from app.services.project_service import ProjectService
-    import app.db.config_db_service as _cfg_db
+    from app.db.config import projects as _projects_leaf
 
     captured_calls = []
     monkeypatch.setattr(
-        _cfg_db,
+        _projects_leaf,
         "update_project_canvas_key_atomic",
         lambda pid, key, value: captured_calls.append({"pid": pid, "key": key, "value": value}) or True,
     )

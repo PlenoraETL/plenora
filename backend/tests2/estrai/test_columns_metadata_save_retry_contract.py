@@ -334,7 +334,7 @@ def test_fullstack_transient_db_error_triggers_retry(monkeypatch):
     OK al 2°. Verifica retry + salvataggio res dopo recovery."""
     from app.core.estrai.executor import EstraiExecutor
     from app.services.project_service import ProjectService
-    import app.db.config_db_service as cfg_db
+    from app.db.config import projects as projects_leaf
     import psycopg2
 
     call_count = {"n": 0}
@@ -345,7 +345,10 @@ def test_fullstack_transient_db_error_triggers_retry(monkeypatch):
             raise psycopg2.OperationalError("pool exhausted (1/2)")
         return True
 
-    monkeypatch.setattr(cfg_db, "update_project_canvas_key_atomic", flaky_atomic)
+    # BE-GO-READY-DB-ENGINE-007: project_service imports the
+    # atomic helper from `app.db.config.projects` directly; patch
+    # the leaf symbol to intercept the production retry path.
+    monkeypatch.setattr(projects_leaf, "update_project_canvas_key_atomic", flaky_atomic)
 
     # Accelera i backoff
     executor = EstraiExecutor(
@@ -425,10 +428,10 @@ def test_fullstack_project_deleted_during_run_raises(monkeypatch):
     from app.core.estrai.executor import EstraiExecutor
     from app.services.project_service import ProjectService
     from app.shared.exceptions import ColumnsMetadataSaveError
-    import app.db.config_db_service as cfg_db
+    from app.db.config import projects as projects_leaf
 
     monkeypatch.setattr(
-        cfg_db, "update_project_canvas_key_atomic",
+        projects_leaf, "update_project_canvas_key_atomic",
         lambda project_id, key, value: False,  # progetto inesistente
     )
 
@@ -460,7 +463,7 @@ def test_fullstack_non_transient_error_no_retry(monkeypatch):
     from app.core.estrai.executor import EstraiExecutor
     from app.services.project_service import ProjectService
     from app.shared.exceptions import ColumnsMetadataSaveError
-    import app.db.config_db_service as cfg_db
+    from app.db.config import projects as projects_leaf
 
     call_count = {"n": 0}
 
@@ -468,7 +471,7 @@ def test_fullstack_non_transient_error_no_retry(monkeypatch):
         call_count["n"] += 1
         raise ValueError(f"Canvas corrotto per progetto {project_id}")
 
-    monkeypatch.setattr(cfg_db, "update_project_canvas_key_atomic", corrupted)
+    monkeypatch.setattr(projects_leaf, "update_project_canvas_key_atomic", corrupted)
 
     executor = EstraiExecutor(
         project_service=ProjectService(),

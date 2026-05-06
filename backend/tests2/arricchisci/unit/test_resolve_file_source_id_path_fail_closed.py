@@ -41,7 +41,21 @@ import pytest
 import app.config as config_mod
 import app.db.db_service as db_service_mod
 import app.shared.sharing as sharing_mod
+from app.core.arricchisci.execution_context import ArricchisciExecutionContext
 from app.shared.exceptions import FileSourceResolutionError
+
+
+# BE-GO-READY-ORCHESTRATION-ENGINE-010: il fallback singleton
+# `_current_group_id` per la catena `file_source` e' stato rimosso
+# da `_extract_file_source_group_id`. Questi test ora propagano un
+# ctx tipato come fa il codice di produzione
+# (`_build_rest_file_multipart` linea 536 e
+# `_resolve_file_source_path` linea 1144 → `ctx=ctx`).
+_TEST_CTX = ArricchisciExecutionContext(
+    project_id="p-test",
+    group_id="grp-test",
+    preview_limit=None,
+)
 
 
 pytestmark = [
@@ -55,13 +69,15 @@ def _bypass_security(monkeypatch, api_service, tmp_path):
     """Allinea il pre-check security per lasciar entrare l'esecuzione
     nel corpo di `_resolve_file_source_id_path`:
 
-    - `_current_group_id` settato (altrimenti
-      `_assert_file_source_group_access` solleva subito).
     - `is_resource_visible` mockato a True (cross-tenant check ok).
     - `settings.get_file_source_dir` ritorna una dir sotto `tmp_path`
       per-test, isolata.
+
+    BE-GO-READY-ORCHESTRATION-ENGINE-010: i test ora passano `ctx`
+    esplicito alle chiamate `_resolve_file_source_id_path(...,
+    ctx=_TEST_CTX)` invece di settare `api_service._current_group_id`.
+    Il fallback singleton e' stato rimosso dalla catena file_source.
     """
-    api_service._current_group_id = "grp-test"
     monkeypatch.setattr(sharing_mod, "is_resource_visible", lambda *a, **kw: True)
     monkeypatch.setattr(
         config_mod,
@@ -86,7 +102,7 @@ def test_returns_none_on_missing_metadata(api_service, monkeypatch, tmp_path):
     _bypass_security(monkeypatch, api_service, tmp_path)
     monkeypatch.setattr(db_service_mod, "get_file_source", lambda *a, **kw: None)
 
-    result = api_service._resolve_file_source_id_path("fs-absent")
+    result = api_service._resolve_file_source_id_path("fs-absent", ctx=_TEST_CTX)
 
     assert result is None
 
@@ -110,7 +126,7 @@ def test_returns_none_on_empty_blob(api_service, monkeypatch, tmp_path):
 
     monkeypatch.setattr(db_service_mod, "get_file_source", _get)
 
-    result = api_service._resolve_file_source_id_path("fs-empty")
+    result = api_service._resolve_file_source_id_path("fs-empty", ctx=_TEST_CTX)
 
     assert result is None
     assert calls["n"] == 2, "seconda query (blob) deve essere invocata"
@@ -131,7 +147,7 @@ def test_raises_on_metadata_lookup_db_error(api_service, monkeypatch, tmp_path):
     monkeypatch.setattr(db_service_mod, "get_file_source", _boom)
 
     with pytest.raises(FileSourceResolutionError) as exc_info:
-        api_service._resolve_file_source_id_path("fs-1")
+        api_service._resolve_file_source_id_path("fs-1", ctx=_TEST_CTX)
 
     err = exc_info.value
     assert err.file_source_id == "fs-1"
@@ -159,7 +175,7 @@ def test_raises_on_blob_lookup_db_error(api_service, monkeypatch, tmp_path):
     monkeypatch.setattr(db_service_mod, "get_file_source", _get)
 
     with pytest.raises(FileSourceResolutionError) as exc_info:
-        api_service._resolve_file_source_id_path("fs-1")
+        api_service._resolve_file_source_id_path("fs-1", ctx=_TEST_CTX)
 
     err = exc_info.value
     assert err.file_source_id == "fs-1"
@@ -197,7 +213,7 @@ def test_raises_on_filesystem_materialization_error(
     monkeypatch.setattr(type(tmp_path), "mkdir", _boom_mkdir)
 
     with pytest.raises(FileSourceResolutionError) as exc_info:
-        api_service._resolve_file_source_id_path("fs-1")
+        api_service._resolve_file_source_id_path("fs-1", ctx=_TEST_CTX)
 
     err = exc_info.value
     assert err.file_source_id == "fs-1"

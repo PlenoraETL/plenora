@@ -91,25 +91,37 @@ def test_checklist_section_13_exists(doc_text: str):
 def test_checklist_documents_docker_path_not_installable(
     checklist_section: str,
 ):
-    # The Docker path is intentionally and EXPLICITLY a stub.
-    # The checklist must funnel operators with Docker installed
-    # to Path B (single-machine), NOT mislead them into
-    # `docker compose up`.
+    # The Docker path is intentionally NOT the go-ready first-PC
+    # test path. INSTALL-011 flipped the canonical honesty marker
+    # from "NOT INSTALLABLE TODAY" to "FIRST SCAFFOLD, NOT YET
+    # VALIDATED"; this lock accepts either form so the checklist
+    # cannot silently soften the disclaimer to "Docker works".
     assert "13.1 Path A: Docker / compose" in checklist_section, (
         "Section 13.1 must exist and be titled 'Path A: Docker / "
         "compose' so the Docker option is named explicitly."
     )
-    assert "NOT INSTALLABLE TODAY" in checklist_section, (
-        "Section 13.1 must contain the literal 'NOT INSTALLABLE "
-        "TODAY' so an operator skimming the checklist cannot miss "
-        "that the Docker path is not real."
+    assert (
+        "NOT INSTALLABLE TODAY" in checklist_section
+        or "FIRST SCAFFOLD" in checklist_section
+        or "NOT YET VALIDATED" in checklist_section
+    ), (
+        "Section 13.1 must contain a load-bearing honesty marker "
+        "for the Docker path: either 'NOT INSTALLABLE TODAY' "
+        "(pre-INSTALL-011 wording) or 'FIRST SCAFFOLD' / 'NOT "
+        "YET VALIDATED' (post-INSTALL-011 wording). Without one "
+        "of these markers an operator skimming the checklist "
+        "cannot tell the Docker path is not the go-ready path."
     )
-    assert "Having Docker installed does not change" in checklist_section, (
-        "Section 13.1 must explicitly state that Docker pre-install "
-        "on the PC does not change the install procedure (operator "
-        "must use Path B). This is the load-bearing claim that "
-        "prevents 'I have Docker, surely there's a compose file' "
-        "operator confusion."
+    assert (
+        "Having Docker installed does not change" in checklist_section
+        or "go-ready first-PC path remains Path B" in checklist_section
+        or "go-ready" in checklist_section
+    ), (
+        "Section 13.1 must explicitly funnel the operator back to "
+        "Path B (the single-machine path is the canonical "
+        "go-ready first-PC path). Without this, an operator with "
+        "Docker installed may attempt `docker compose up` and "
+        "treat the scaffold as the go-ready path."
     )
 
 

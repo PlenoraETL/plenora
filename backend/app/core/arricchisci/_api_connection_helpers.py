@@ -37,13 +37,7 @@ Pattern: standalone module
 NON e' un mixin (a differenza dei cluster B3-B.2+ che saranno mixin via
 MRO eredita B3-A). Sono utility module-level pure (zero `self`).
 
-`api_connector.py` re-exporta i 3 simboli + la costante per preservare
-back-compat con i caller esterni che importano direttamente:
-
-    from app.core.arricchisci.api_connector import _decrypt_auth_in_config  # tests
-    from app.core.arricchisci.api_connector import _nd                       # tests
-
-Re-export via:
+Canonical import path:
 
     from app.core.arricchisci._api_connection_helpers import (
         _AUTH_SENSITIVE_FIELDS,
@@ -51,6 +45,14 @@ Re-export via:
         _decrypt_auth_in_config,
         _nd,
     )
+
+Pre-`BE-GO-READY-CONNECTION-ENGINE-008-API-CONNECTOR-ALIAS-CLUSTER-CUT`
+`api_connector.py` ri-esportava i 4 simboli per preservare un
+back-compat shim con due test contract che importavano da
+`api_connector` direttamente. Quei due test sono stati migrati al
+canonical path qui sotto e il re-export e' stato rimosso (zero
+production caller); nuovo codice deve importare direttamente da
+questo modulo. Cluster owner: `_api_connection_helpers`.
 
 Coupling esterno
 ================
@@ -75,15 +77,20 @@ Coupling test contract
 Verificato pre-extraction (preflight B3-B.1):
   - 0 `inspect.getsource` o AST scan su questi simboli.
   - 0 `monkeypatch.setattr(<*>_module, "logger", ...)` riguardanti.
-  - **Direct import contract** (back-compat):
+  - **Direct import contract** (post `BE-GO-READY-CONNECTION-ENGINE-008-API-CONNECTOR-ALIAS-CLUSTER-CUT`):
     - `tests2/arricchisci/unit/test_api_connection_decrypt_policy.py`
       importa `_decrypt_auth_in_config` direttamente da
-      `app.core.arricchisci.api_connector`.
+      `app.core.arricchisci._api_connection_helpers` (canonical path).
     - `tests2/arricchisci/unit/test_api_connector_contract.py` importa
-      `_nd` direttamente da `app.core.arricchisci.api_connector`.
-  - Re-export in `api_connector.py` preserva entrambi i path direct
-    import (verificato per identita' simbolica: `api_connector._nd is
-    _api_connection_helpers._nd` post-extraction).
+      `_nd` direttamente da
+      `app.core.arricchisci._api_connection_helpers` (canonical path).
+  - Il back-compat re-export in `api_connector.py` e' stato rimosso
+    in CONNECTION-ENGINE-008 dopo la migrazione dei due test al
+    canonical path (zero production caller; i mixin che consumano
+    questi helper -- `api_connection_management`,
+    `api_connection_rest_file`, `api_connection_source_loading`,
+    `canvas_orchestrator` -- importavano gia' direttamente dal
+    modulo canonico).
 
 Behavior-preserving
 ===================

@@ -283,44 +283,58 @@ def _extract_file_source_group_id(
     self_obj,
     ctx: Optional[ArricchisciExecutionContext],
 ) -> Optional[str]:
-    """BE-GO-READY-TRANSFORMATION-ENGINE-024: variante ctx-strict
+    """BE-GO-READY-TRANSFORMATION-ENGINE-024 +
+    BE-GO-READY-ORCHESTRATION-ENGINE-010: variante ctx-strict
     per la catena di risoluzione `file_source` (chiamata da
     `_assert_file_source_group_access` → `_resolve_file_source_id_path`).
 
-    Storia: in batch -019 esisteva un primo helper
-    `_resolve_rest_file_group_id` (legacy fallback uniforme:
-    ctx.group_id se ctx, altrimenti singleton). In -024 lo strict
-    `_extract_file_source_group_id` ha sostituito il legacy helper
-    nei 2 path file_source/project_source. In -027 il helper
-    legacy `_resolve_rest_file_group_id` e' stato **rimosso come
-    dead code** (zero callsite attivi, verificato source-bound).
-    Lock di prevenzione re-introduzione vive in
-    `tests2/arricchisci/unit/test_mixin_ctx_migration_contract.py`
-    (vedi sezione "rest_file legacy helper removal").
+    Storia:
+      - batch -019: helper `_resolve_rest_file_group_id` (legacy
+        uniforme: ctx.group_id se ctx, altrimenti singleton).
+      - batch -024: `_extract_file_source_group_id` ctx-strict
+        sostituisce il legacy helper nei 2 path
+        file_source/project_source.
+      - batch -027: `_resolve_rest_file_group_id` rimosso come
+        dead code (zero callsite attivi).
+      - batch ORCHESTRATION-ENGINE-009: `_extract_project_source_group_id`
+        cut del fallback singleton (ctx None → ritorno None,
+        fail-closed esplicito) — gemella di questa funzione.
+      - **batch ORCHESTRATION-ENGINE-010 (questa modifica)**: cut
+        del fallback singleton anche qui. I 2 callsite di
+        produzione (`_build_rest_file_multipart` linea 536,
+        `_resolve_file_source_path` linea 1144) propagano sempre
+        `ctx=ctx` attraverso `_resolve_file_source_id_path` →
+        `_assert_file_source_group_access`. Il ramo "ctx None
+        → singleton" era dead code in produzione AND apriva un
+        canale cross-tenant teorico (singleton stale di una run
+        precedente nello stesso processo worker autorizzava una
+        risorsa di un'altra run).
 
-    Behavior:
+    Behavior (post-010):
       - **Ctx fornito**: ritorna `ctx.group_id` esclusivamente.
-        Se il caller passa `ctx`, lo stato singleton legacy NON
-        viene mai consultato — anche se `ctx.group_id is None`
-        (intent: ctx vince sempre, fail-closed esplicito a valle).
-      - **Ctx assente**: KEEP_COMPAT — fallback su
-        `getattr(self_obj, "_current_group_id", None)` per i
-        callsite legacy non ancora migrati e per il lock test
-        `test_resolve_file_source_id_path_fails_closed_without_security_context`
-        che NON setta il ctx.
+        Se `ctx.group_id is None` ritorna `None` (fail-closed
+        esplicito a valle).
+      - **Ctx assente**: ritorna `None` (fail-closed). Il
+        singleton legacy NON e' piu' consultato.
+
+    Il parametro `self_obj` resta nella firma per simmetria con
+    `_extract_project_source_group_id` (uguale signature
+    post-009/-010) e perche' il lock test
+    `test_rest_file_strict_helpers_still_present` scansiona per
+    nome funzione + arity. Nel corpo non e' piu' letto.
 
     Razionale: la catena `file_source` (visibility check + blob
     materialization) e' un boundary di security ad alto rischio
-    cross-tenant. Quando il caller dichiara esplicitamente il
-    context tipato, qualsiasi stato singleton stale (race window
-    da execution precedente, leak fra worker pickup) DEVE essere
-    ignorato — altrimenti un `ctx.group_id=None` esplicito
-    cadrebbe in fallback su `_current_group_id` di un'altra run,
-    aprendo un canale cross-tenant.
+    cross-tenant. Eliminare il fallback singleton chiude la
+    superficie residua: qualsiasi caller che dimentica di
+    passare `ctx=` riceve un fail-closed pulito invece di un
+    silent fallback su stato di un'altra run.
     """
-    if ctx is not None:
-        return ctx.group_id
-    return getattr(self_obj, "_current_group_id", None)
+    # `self_obj` intenzionalmente non letto post-010: KEEP_COMPAT
+    # con `_extract_project_source_group_id` signature (gemella).
+    if ctx is None:
+        return None
+    return ctx.group_id
 
 
 def _extract_project_source_group_id(
@@ -956,14 +970,19 @@ class ApiConnectionRestFileMixin:
         BE-GO-READY-TRANSFORMATION-ENGINE-019: accetta `ctx` come
         kwarg opzionale.
 
-        BE-GO-READY-TRANSFORMATION-ENGINE-024: la catena di
+        BE-GO-READY-TRANSFORMATION-ENGINE-024 +
+        BE-GO-READY-ORCHESTRATION-ENGINE-010: la catena di
         risoluzione `file_source` usa `_extract_file_source_group_id`
-        (ctx-strict): se `ctx` e' fornito, `ctx.group_id` vince in
-        modo assoluto e lo stato singleton legacy NON e' consultato
-        — anche se `ctx.group_id is None` (in quel caso fail-closed
-        esplicito sotto). Solo quando `ctx is None` (legacy
-        callsite) si applica il KEEP_COMPAT fallback su
-        `_current_group_id`.
+        (ctx-strict, NO fallback singleton). Se `ctx` e' fornito,
+        `ctx.group_id` vince in modo assoluto. Se `ctx is None`
+        (o `ctx.group_id is None`), la funzione fail-closed
+        esplicito SOTTO con `ValueError("Contesto di sicurezza
+        non determinabile")` — il singleton legacy
+        `self._current_group_id` NON e' piu' consultato a partire
+        da -010 (era dead code in produzione: i 2 callsite
+        `_build_rest_file_multipart` linea 536 e
+        `_resolve_file_source_path` linea 1144 propagano sempre
+        `ctx=ctx`).
 
         Raises:
             ValueError con 403-like message se cross-tenant.

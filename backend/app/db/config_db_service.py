@@ -127,10 +127,14 @@ from app.db.config.users import (  # noqa: F401,E402
 # call site touched (consumer: db_service.py:18 re-export 5 + 20+ file tra
 # services/workers/utils + 14+ file test).
 #
-# SCOPE-SPLIT TRANSAZIONALE: `update_project_canvas_key_atomic` (62 LOC,
-# transaction + SELECT FOR UPDATE + merge JSON) resta **verbatim qui sotto**
-# per preservare contract atomic e 8 file test dedicati (patch target
-# `cfg_db.update_project_canvas_key_atomic` invariati per costruzione).
+# BE-GO-READY-DB-ENGINE-007 (PROJECT-SERVICE-FACADE-CUT):
+# `update_project_canvas_key_atomic` is now hosted in the projects
+# leaf alongside the other 6 cluster functions. The re-export below
+# keeps the facade attribute (`cfg_db.update_project_canvas_key_atomic`)
+# available for tests / integrations that bind to the facade module
+# (8 dedicated test files patch via `cfg_db.<name>`); production
+# callers (project_service) now import from
+# `app.db.config.projects` directly.
 #
 # `_safe_set_clause` e `_ALLOWED_UPDATE_FIELDS["projects"]` restano nel facade
 # (cross-cluster shared — lazy import in `config/projects.update_project`).
@@ -141,71 +145,8 @@ from app.db.config.projects import (  # noqa: F401,E402
     update_project,
     delete_project,
     get_project_retention_n,
+    update_project_canvas_key_atomic,
 )
-
-
-def update_project_canvas_key_atomic(project_id: str, key: str, value) -> bool:
-    """Aggiorna una singola chiave del canvas JSON in maniera atomica.
-
-    Pattern: BEGIN; SELECT ... FOR UPDATE; merge; UPDATE; COMMIT.
-    Il SELECT FOR UPDATE blocca il row dal momento del check fino al
-    COMMIT, serializzando scritture concorrenti sullo stesso progetto
-    (cross-process: worker Celery + uvicorn handler + altri worker).
-
-    Senza questo, due write concorrenti facevano lost-update:
-      - A: canvas = get(); canvas["columns_metadata"] = X; update()
-      - B: canvas = get(); canvas["nodes"] = Y;            update()
-    Se B lo pone dopo A ma legge prima, X va perso. Ora il 2°
-    SELECT FOR UPDATE aspetta il 1° COMMIT → vede il canvas gia'
-    aggiornato e fa merge sopra.
-
-    Nota: `canvas` in DB e' TEXT (JSON serializzato), non jsonb → non
-    possiamo usare `jsonb_set` nativo. Il lock pessimistico e' la
-    strategia piu' semplice che funziona sulla colonna attuale senza
-    migration di schema.
-
-    Ritorna True se aggiornato, False se progetto inesistente.
-    Solleva sulle altre eccezioni (rollback automatico via transaction).
-    """
-    from datetime import datetime, timezone
-    now = datetime.now(timezone.utc).isoformat()
-    with transaction() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT canvas FROM projects WHERE id = %s FOR UPDATE",
-                (project_id,),
-            )
-            row = cur.fetchone()
-            if not row:
-                return False
-            canvas_raw = row["canvas"] if isinstance(row, dict) else row[0]
-            if isinstance(canvas_raw, str):
-                try:
-                    canvas_obj = json.loads(canvas_raw) if canvas_raw else {}
-                except json.JSONDecodeError:
-                    # Canvas corrotto: non vogliamo sovrascriverlo silent
-                    # (come documentato in project_service.get_project_canvas).
-                    # Solleva → rollback automatico del lock.
-                    raise ValueError(
-                        f"Canvas corrotto per progetto {project_id}: JSON non parsabile. "
-                        f"Rifiuto di sovrascrivere — ripristinare da backup."
-                    )
-            elif canvas_raw is None:
-                canvas_obj = {}
-            elif isinstance(canvas_raw, dict):
-                canvas_obj = canvas_raw
-            else:
-                raise ValueError(
-                    f"Canvas di tipo inatteso per progetto {project_id}: "
-                    f"{type(canvas_raw).__name__}"
-                )
-
-            canvas_obj[key] = value
-            cur.execute(
-                "UPDATE projects SET canvas = %s, updated_at = %s WHERE id = %s",
-                (json.dumps(canvas_obj), now, project_id),
-            )
-    return True
 
 
 # ============================================================

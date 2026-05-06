@@ -70,29 +70,11 @@ import app.db.db_service as db_svc  # noqa: F401  (test-monkeypatch surface)
 # Phase 5 B3-B.1 cutover: cluster MODULE-LEVEL HELPERS
 # (`_AUTH_SENSITIVE_FIELDS` constant + `_encrypt_auth_in_config` +
 # `_decrypt_auth_in_config` + `_nd` node-data accessor) spostato in
-# `app.core.arricchisci._api_connection_helpers`. Re-import in testa
-# al file per preservare i path symbolici esistenti — il direct import
-# di test contract:
-#   - tests2/arricchisci/unit/test_api_connection_decrypt_policy.py
-#     usa `from api_connector import _decrypt_auth_in_config`
-#   - tests2/arricchisci/unit/test_api_connector_contract.py
-#     usa `from api_connector import _nd`
-# continua a funzionare via questo re-import (back-compat). Vedi
-# `orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B3-B.
-from app.core.arricchisci._api_connection_helpers import (  # noqa: F401  (re-export)
-    _AUTH_SENSITIVE_FIELDS,
-    _encrypt_auth_in_config,
-    _decrypt_auth_in_config,
-    _nd,
-)
-
-
-# Phase 5 B3-B.1 cutover: cluster MODULE-LEVEL HELPERS
-# (`_AUTH_SENSITIVE_FIELDS` + `_encrypt_auth_in_config` +
-# `_decrypt_auth_in_config` + `_nd`) spostato in
-# `app.core.arricchisci._api_connection_helpers`. I 4 simboli sono
-# re-imported in testa al file (vedi block sopra) per preservare i
-# path symbolici esistenti (test direct imports + back-compat).
+# `app.core.arricchisci._api_connection_helpers`. Direct callers
+# import dal modulo canonico; il back-compat re-export e' stato
+# rimosso da `BE-GO-READY-CONNECTION-ENGINE-008-API-CONNECTOR-ALIAS-CLUSTER-CUT`
+# dopo aver migrato i 2 test contract diretti (decrypt_policy, contract)
+# al canonical path. Vedi `orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B3-B.
 
 
 # Phase 5 B3-B.2b cutover: cluster API_CONNECTION_MANAGEMENT

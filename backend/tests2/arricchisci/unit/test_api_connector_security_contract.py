@@ -65,14 +65,50 @@ def test_assert_file_source_group_access_wraps_visibility_backend_errors(api_ser
 
 
 def test_resolve_file_source_id_path_fails_closed_without_security_context(api_service):
-    # KEEP_AS_LEGACY_LOCK (batch -021 audit): coverage del fallback
-    # `ctx=None → getattr(self, "_current_group_id", None) → None`.
-    # NON migriamo: senza questo lock la rimozione accidentale dei
-    # 3 helper di transizione non sarebbe rilevata.
+    """BE-GO-READY-ORCHESTRATION-ENGINE-010: post-cut del fallback
+    singleton, una chiamata senza `ctx` con `_current_group_id=None`
+    fail-closed perche' `_extract_file_source_group_id` ritorna
+    `None` direttamente (non legge piu' lo stato singleton)."""
     api_service._current_group_id = None
 
     with pytest.raises(ValueError, match="Contesto di sicurezza non determinabile"):
         api_service._resolve_file_source_id_path("fs-1")
+
+
+def test_resolve_file_source_id_path_no_longer_falls_back_to_current_group_id(api_service):
+    """BE-GO-READY-ORCHESTRATION-ENGINE-010 (cut lock): post-batch
+    il fallback `ctx=None → getattr(self, "_current_group_id",
+    None)` e' rimosso. Anche se `_current_group_id` e' settato a
+    un valore non vuoto (es. residuo di una run precedente nello
+    stesso processo worker), una chiamata SENZA `ctx` DEVE
+    fail-closed — il singleton stale non puo' piu' autorizzare
+    una risorsa.
+
+    Pre-010 questo stesso input avrebbe propagato `"stale-leak"`
+    a `is_resource_visible` e — se `is_resource_visible` avesse
+    ritornato True per quel gruppo — autorizzato la materializzazione
+    del blob. Post-010 il singleton e' invisibile alla catena
+    file_source."""
+    # Singleton stale che NON deve essere consultato.
+    api_service._current_group_id = "stale-leak-grp"
+
+    visibility_called = {"count": 0}
+
+    def _spy(*_args, **_kwargs):
+        visibility_called["count"] += 1
+        return True  # se mai chiamata, autorizzerebbe — ma non DEVE essere chiamata.
+
+    with patch("app.shared.sharing.is_resource_visible", side_effect=_spy):
+        with pytest.raises(ValueError, match="Contesto di sicurezza non determinabile"):
+            api_service._resolve_file_source_id_path("fs-1")
+
+    assert visibility_called["count"] == 0, (
+        "is_resource_visible NON deve essere chiamata: il fail-closed "
+        "deve scattare a monte, prima che il singleton stale possa "
+        "raggiungere la visibility check. Pre-010 la chiamata sarebbe "
+        f"arrivata con group_id='stale-leak-grp' (count "
+        f"{visibility_called['count']})."
+    )
 
 
 # ---------------------------------------------------------------------------

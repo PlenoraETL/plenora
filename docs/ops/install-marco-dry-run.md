@@ -24,6 +24,59 @@ on a fresh Ubuntu/Linux host with Docker already installed**.
 
 ---
 
+## 0. First-PC handoff pack (entry point)
+
+`BE-GO-READY-INSTALL-015-FIRST-PC-EXECUTION-PACK`.
+
+This is the canonical handoff Marco follows on the real Linux
+PC. The order matters: the non-Docker path (sections 1-5) is
+the **go-ready** signal; the Docker path
+([install-docker.md](install-docker.md)) is a **FIRST SCAFFOLD
+validation run** and is expected to surface real bugs.
+
+1. **Clean clone + pinned commit hash** -- `git clone
+   <repo-url> ~/plenora-etl && cd ~/plenora-etl && git
+   rev-parse HEAD`. Paste the full commit hash into the
+   report (template below).
+2. **Non-Docker path (go-ready)** -- follow sections 2.1-2.9
+   here. The 8-item smoke harness in section 5 is the
+   acceptance gate.
+3. **Docker validation path** (FIRST SCAFFOLD; NOT YET VALIDATED)
+   -- after the non-Docker path is GREEN, also run
+   [`install-docker.md`](install-docker.md) sections 1-7.
+   Honest failure reports here are MORE valuable than partial
+   green claims.
+4. **Report template** -- copy
+   [`first-pc-validation-report-template.md`](first-pc-validation-report-template.md),
+   fill every `<TBD>`, paste back.
+5. **Stop on failure** -- the report template lists the
+   canonical stop conditions. When `--check` fails, when
+   `/ready` returns 503, when `cleanroom.ping` does not
+   return `pong`, STOP, paste the output, do not retry
+   blindly.
+
+What goes in the pasted-back report:
+
+- the commit hash from step 1 (so reviewers can reproduce);
+- the verbatim output of `--check`, `/health`, `/ready`,
+  the memory-caps probe, and `cleanroom.ping`;
+- for the Docker path: `docker compose config`, `docker
+  compose ps`, `docker compose logs --tail 100 backend` if
+  `/ready` is 503, and the `cleanroom.ping` round-trip
+  inside the worker container;
+- the acceptance summaries (sections 2.10 and 3.9 of the
+  template).
+
+**"Validated install" criterion.** The non-Docker path is
+"validated" when the report comes back with sections
+2.1-2.10 all YES on the target host. The Docker path is
+"validated" only when sections 3.1-3.9 also come back all
+YES. Until both are green for at least one merge-reviewed
+report, the production claim "Plenora-ETL installs cleanly
+on a fresh Ubuntu 24.04 PC" remains an assumption.
+
+---
+
 ## 1. Manual choices Marco must make BEFORE running anything
 
 Resolve each one. Defaults in **bold** are the recommended
@@ -833,6 +886,9 @@ not needed":
   pass.
 - [install-docker.md](install-docker.md) - Docker first scaffold
   and Linux validation pack, NOT YET VALIDATED.
+- [first-pc-validation-report-template.md](first-pc-validation-report-template.md)
+  - fill-in template Marco copies and pastes back after the
+  first-PC run (sections 0-6 + stop conditions).
 - [runtime-prereqs.md](runtime-prereqs.md) - runtime
   contract (env, IAM, dependencies).
 - [runbook.md](runbook.md) and

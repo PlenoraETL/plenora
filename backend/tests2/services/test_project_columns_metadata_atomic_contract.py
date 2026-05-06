@@ -47,8 +47,12 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 @pytest.fixture
 def mock_pg_conn(monkeypatch):
     """Sostituisce `transaction()` con un mock che registra l'ordine
-    delle SQL eseguite sul cursor."""
-    from app.db import config_db_service as cfg_db
+    delle SQL eseguite sul cursor.
+
+    BE-GO-READY-DB-ENGINE-007: la funzione atomica vive ora nel leaf
+    `app.db.config.projects`, quindi patch `transaction` sul leaf
+    (non piu' sul facade `config_db_service`)."""
+    from app.db.config import projects as projects_leaf
     from contextlib import contextmanager
 
     executed: list[tuple[str, tuple]] = []
@@ -92,7 +96,7 @@ def mock_pg_conn(monkeypatch):
     def fake_transaction():
         yield FakeConn()
 
-    monkeypatch.setattr(cfg_db, "transaction", fake_transaction)
+    monkeypatch.setattr(projects_leaf, "transaction", fake_transaction)
 
     return {"executed": executed, "state": state}
 
@@ -235,8 +239,12 @@ def test_canvas_null_treated_as_empty_dict(mock_pg_conn):
 
 
 def test_project_service_delegates_to_atomic_helper(monkeypatch):
+    """BE-GO-READY-DB-ENGINE-007: project_service now imports
+    `update_project_canvas_key_atomic` from the projects leaf
+    directly (lazy), so the patch target is the leaf module
+    rather than the `config_db_service` facade."""
     from app.services.project_service import ProjectService
-    import app.db.config_db_service as cfg_db
+    from app.db.config import projects as projects_leaf
 
     captured = {}
 
@@ -246,7 +254,7 @@ def test_project_service_delegates_to_atomic_helper(monkeypatch):
         captured["value"] = value
         return True
 
-    monkeypatch.setattr(cfg_db, "update_project_canvas_key_atomic", fake_atomic)
+    monkeypatch.setattr(projects_leaf, "update_project_canvas_key_atomic", fake_atomic)
 
     svc = ProjectService()
     meta = [{"name": "c1", "type": "int"}]
@@ -272,12 +280,12 @@ def test_project_service_propagates_atomic_exception(monkeypatch):
     oppure altri caller con try/except locale) decidono cosa fare.
     """
     from app.services.project_service import ProjectService
-    import app.db.config_db_service as cfg_db
+    from app.db.config import projects as projects_leaf
 
     def raising_atomic(*args, **kwargs):
         raise ValueError("Canvas corrotto per progetto xyz")
 
-    monkeypatch.setattr(cfg_db, "update_project_canvas_key_atomic", raising_atomic)
+    monkeypatch.setattr(projects_leaf, "update_project_canvas_key_atomic", raising_atomic)
 
     svc = ProjectService()
     # DEVE propagare, NON tornare False silenziosamente
@@ -289,13 +297,13 @@ def test_project_service_propagates_transient_db_error(monkeypatch):
     """OperationalError (transient) propagato al caller → il retry
     dell'executor ESTRAI puo' agire. Pre-fix veniva ingoiato."""
     from app.services.project_service import ProjectService
-    import app.db.config_db_service as cfg_db
+    from app.db.config import projects as projects_leaf
     import psycopg2
 
     def transient_fail(*args, **kwargs):
         raise psycopg2.OperationalError("pool exhausted")
 
-    monkeypatch.setattr(cfg_db, "update_project_canvas_key_atomic", transient_fail)
+    monkeypatch.setattr(projects_leaf, "update_project_canvas_key_atomic", transient_fail)
 
     svc = ProjectService()
     with pytest.raises(psycopg2.OperationalError):
@@ -307,10 +315,10 @@ def test_project_service_returns_false_when_project_missing(monkeypatch):
     la funzione atomica ha ritornato False (progetto inesistente).
     Questo NON e' un errore, e' un segnale pulito al caller."""
     from app.services.project_service import ProjectService
-    import app.db.config_db_service as cfg_db
+    from app.db.config import projects as projects_leaf
 
     monkeypatch.setattr(
-        cfg_db, "update_project_canvas_key_atomic",
+        projects_leaf, "update_project_canvas_key_atomic",
         lambda *a, **kw: False,  # progetto non trovato
     )
 
@@ -321,10 +329,10 @@ def test_project_service_returns_false_when_project_missing(monkeypatch):
 
 def test_project_service_returns_true_on_success(monkeypatch):
     from app.services.project_service import ProjectService
-    import app.db.config_db_service as cfg_db
+    from app.db.config import projects as projects_leaf
 
     monkeypatch.setattr(
-        cfg_db, "update_project_canvas_key_atomic",
+        projects_leaf, "update_project_canvas_key_atomic",
         lambda *a, **kw: True,
     )
 
