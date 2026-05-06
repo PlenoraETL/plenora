@@ -1,26 +1,23 @@
 """
-Projects DAL pure — estratto da `config_db_service.py` (scope micro Batch G #9
-ottava riapertura — governance autonoma scope-split transazionale, invariants
-§6 commit `7a00c1f`).
+Projects DAL - canonical leaf for the `projects` table.
 
-Cluster `projects` (6 funzioni pure DAL): CRUD sulla tabella `projects` senza
-contract transazionale/atomic. La 7° funzione del cluster originale,
-`update_project_canvas_key_atomic` (62 LOC, `transaction()` + SELECT FOR UPDATE
-+ merge JSON), resta **verbatim nel facade** `config_db_service` per
-preservare contract atomic e 8 file test dedicati (unit/contract/integration DB
-reale/shared) — vedi invariants §6 commit `7a00c1f`.
+This module owns the 6 pure-DAL CRUD operations on `projects`
+(`get_project`, `list_projects`, `create_project`, `update_project`,
+`delete_project`, plus the `Iterable` / `Set` typed helpers used by
+the orchestrator). All run on `pg_connection` (PostgreSQL).
 
-Consumer principali (tutti invariati per costruzione via re-export 1:1):
-`app/services/project_service.py` (10+ usi `db.*`), `workers/tasks/
-{carica,pipeline}_task.py`, `app/utils/{result_store,debug_payload_builder}.py`,
-`app/services/schema_inference.py`. Test patch-target via `real_db.get_project`,
-`cfg_db.get_project`, `app.services.project_service.db.get_project` —
-preservati per identità attributo modulo.
+Atomic helper: `update_project_canvas_key_atomic` now lives in this
+leaf as well. The compatibility facade `config_db_service` re-exports
+it for legacy tests/integrations that still patch `cfg_db.<name>`.
 
-Helper `_safe_set_clause` importato lazy dal facade in `update_project` per
-rompere ciclo `config_db_service` ↔ `config/projects` e preservare
-zero-call-site-touched sugli altri cluster che lo condividono (users/schedules
-+ datasources/connections via lazy — pattern 7° uso).
+Compat re-exports: `config_db_service` re-exports the 6 names from
+this leaf so legacy callers (`db.*`, `cfg_db.*`) and existing
+monkeypatch targets keep working until they migrate to import this
+leaf directly.
+
+Helper `_safe_set_clause` is imported lazily from the facade inside
+`update_project` to break the `config_db_service` <-> `config/projects`
+cycle without retouching every cluster that still shares the helper.
 """
 
 import json

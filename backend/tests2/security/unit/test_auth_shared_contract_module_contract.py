@@ -315,21 +315,25 @@ def test_contract_role_tuples_are_leaf_identity():
 
 def test_contract_group_filter_identity_chain():
     """Phase-7: the canonical home moved to the contract.
-    `app.core.auth.ownership.group_filter` and
-    `app.core.auth.auth.group_filter` are KEEP_COMPAT re-exports.
-    All three names must resolve to the SAME callable object."""
-    from app.core.auth.auth import group_filter as facade_gf
+    `app.core.auth.ownership.group_filter` re-exports from the
+    contract module. Both names must resolve to the SAME callable
+    object.
+
+    BE-GO-READY-AUTH-ENGINE-014: the `app.core.auth.auth` facade
+    leg of the chain (`facade_gf is ownership_gf`) was deleted —
+    zero production callers, the 2 test callers were both lock
+    tests of the re-export itself. The negative lock asserting the
+    facade cut lives in
+    `test_auth_models_and_ownership_module_contract.py
+    ::test_auth_no_longer_reexports_group_filter`. Here we keep
+    only the contract <-> ownership leg.
+    """
     from app.core.auth.ownership import group_filter as ownership_gf
     from app.shared.contracts.auth import group_filter as contract_gf
 
     assert contract_gf is ownership_gf, (
         "Phase-7 chain broken: ownership must re-export "
         "`group_filter` from the contract module."
-    )
-    assert ownership_gf is facade_gf, (
-        "Phase-6 chain broken: auth.py facade must re-export "
-        "`group_filter` from ownership (which re-exports from the "
-        "contract)."
     )
 
 

@@ -1,17 +1,13 @@
 """
-pg_connection.py — Connection pool PostgreSQL per PLENORA-ETL.
+pg_connection.py — PostgreSQL connection pool per PLENORA-ETL.
 
-Rimpiazza il layer sqlite3 thread-local con un connection pool psycopg2.
-Espone la STESSA interfaccia di config_db_service/results_db_service:
+Canonical entry point per i query helper DAL (`fetchone`, `fetchall`,
+`execute`, `executemany`, `transaction`) consumati dai leaf
+`app/db/config/*.py`, `results_db_service.py` e dagli altri servizi
+DB. Backed da `psycopg2.pool.ThreadedConnectionPool` (per-processo,
+non thread-local).
 
     from app.db.pg_connection import fetchone, fetchall, execute, transaction
-
-Vantaggi rispetto a SQLite:
-  - Connection pool (non thread-local): gestito da psycopg2.pool
-  - FK realmente enforced
-  - JSONB nativo (no json.loads/dumps manuale)
-  - Concurrency reale (no single-writer)
-  - BYTEA per blob (no workaround)
 
 Configurazione via env var:
   DATABASE_URL=postgresql://user:pass@host:port/dbname
@@ -323,17 +319,18 @@ def get_pool_headroom() -> PoolHeadroom:
     return PoolHeadroom(max=_POOL_MAX, in_use=in_use, free=free)
 
 
-# ── Query helpers (stessa interfaccia di config_db_service) ─────────────────
+# ── Query helpers (canonical DAL surface) ────────────────────────────────────
 
 def _adapt_params(sql: str, params: tuple) -> Tuple[str, tuple]:
-    """Converte placeholder da SQLite (?) a psycopg2 (%s).
+    """Adatta i placeholder `?` storici al `%s` di psycopg2.
 
-    SQLite usa `?` come placeholder, PostgreSQL/psycopg2 usa `%s`.
-    Questa funzione fa la conversione automatica così il codice esistente
-    che usa `?` continua a funzionare senza modifiche.
+    Il backend canonico è PostgreSQL/psycopg2 (placeholder `%s`); i
+    callsite legacy che ancora usano `?` continuano a funzionare
+    grazie a questa conversione automatica.
 
-    NOTA: non converte `?` dentro stringhe quotate (es. in LIKE patterns).
-    Per query complesse, usare direttamente `%s`.
+    NOTA: non converte `?` dentro stringhe quotate (es. LIKE
+    patterns con literal `?`). Per query complesse usare direttamente
+    `%s`.
     """
     # Semplice sostituzione: ogni ? non dentro apici diventa %s
     # Per il 99% dei casi è sufficiente
@@ -383,7 +380,9 @@ def execute(sql: str, params: tuple = ()):
         with conn.cursor() as cur:
             cur.execute(sql, params)
             conn.commit()
-            # Simula il rowcount di sqlite3
+            # Wrapper minimale che espone solo `rowcount` + `fetchone()`
+            # ai chiamanti che storicamente usavano un cursor
+            # post-commit. La connessione viene rilasciata dal `finally`.
             class _Result:
                 def __init__(self, rc):
                     self.rowcount = rc
@@ -438,11 +437,12 @@ def transaction():
 def init_db():
     """Verifica che le tabelle esistano su PostgreSQL.
 
-    A differenza di SQLite, non esegue lo schema SQL: le tabelle
-    sono create dalle migrations in `backend/migrations/`
-    (entry-point `0000_bootstrap_base_tables.sql` + add-on
-    `2026-XX-XX_*.sql`). Questo init verifica solo la connessione
-    e logga il numero di tabelle trovate nello schema applicativo.
+    Non esegue schema SQL inline: le tabelle sono create dalle
+    migrations in `backend/migrations/` (entry-point
+    `0000_bootstrap_base_tables.sql` + add-on `2026-XX-XX_*.sql`,
+    eseguite da `migrations_runner.apply_pending_migrations`).
+    Questo init verifica solo la connessione e logga il numero di
+    tabelle trovate nello schema applicativo.
     """
     conn = get_connection()
     try:

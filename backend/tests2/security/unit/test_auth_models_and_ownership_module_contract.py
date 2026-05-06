@@ -274,6 +274,43 @@ def test_auth_no_longer_reexports_removed_handlers_via_import():
         )
 
 
+# ---------------------------------------------------------------------------
+# AUTH-ENGINE-014 removal lock
+# ---------------------------------------------------------------------------
+
+
+def test_auth_no_longer_reexports_group_filter():
+    """BE-GO-READY-AUTH-ENGINE-014-AUTH-FACADE-REEXPORT-DEATHMAP-DTO-CUT:
+    the `group_filter` KEEP_COMPAT re-export was deleted from
+    `app.core.auth.auth`. The 9 app routers already consume the
+    leaf `app.core.auth.ownership` directly (Phase-6 strangler
+    ban, AUTH-ENGINE-011). Production callers via the facade: ZERO.
+
+    Re-introducing `from app.core.auth.ownership import group_filter`
+    (or any other re-export of `group_filter`) at the top of
+    `auth.py` widens the facade surface and reverses AUTH-ENGINE-014.
+
+    Symmetric to `test_auth_no_longer_reexports_removed_dtos` /
+    `test_auth_no_longer_reexports_removed_handlers`: hasattr +
+    __dict__ both checked.
+    """
+    import importlib
+
+    auth_mod = importlib.import_module("app.core.auth.auth")
+    assert not hasattr(auth_mod, "group_filter"), (
+        "app.core.auth.auth.group_filter was removed by "
+        "BE-GO-READY-AUTH-ENGINE-014. If this assertion fails, "
+        "someone re-introduced the re-export. Import from "
+        "`app.core.auth.ownership` instead (canonical home), or "
+        "`app.shared.contracts.auth` (Phase-7 fan-out)."
+    )
+    assert "group_filter" not in auth_mod.__dict__, (
+        "`from app.core.auth.auth import group_filter` is no "
+        "longer supported after BE-GO-READY-AUTH-ENGINE-014. "
+        "Import from `app.core.auth.ownership` instead."
+    )
+
+
 def test_users_router_module_exposes_handlers():
     """Positive lock: the 5 users handler functions live on
     `app.core.auth.users_router` (canonical home post-extraction)."""

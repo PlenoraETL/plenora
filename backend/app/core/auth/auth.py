@@ -239,78 +239,50 @@ from app.shared.password_hashing import (  # noqa: F401  (re-export pubblico)
 # ============================================================
 # DEPENDENCIES FASTAPI
 # ============================================================
+#
+# BE-GO-READY-AUTH-ENGINE-013-ROUTER-IMPORTS-OFF-AUTH-FACADE:
+# the five FastAPI dependency functions
+# (`get_current_user`, `require_user_or_above`,
+# `require_not_esecutore`, `require_admin`, `require_superadmin`)
+# now live in the canonical leaf
+# `app.core.auth.dependencies`. They are re-exported here for
+# KEEP_COMPAT so any router / test still doing
+# `from app.core.auth.auth import get_current_user, ...`
+# continues to resolve the same callables byte-for-byte
+# (identity preserved -- locked by source-bound test in
+# `tests2/security/unit/test_auth_facade_strangler_contract.py`).
+#
+# New routers should import from
+# `app.core.auth.dependencies` directly. The shared contract
+# `app.shared.contracts.auth` keeps owning `CurrentUser` and
+# `group_filter`; the dependencies leaf keeps owning the
+# Depends callables.
 
-_bearer_scheme = HTTPBearer(auto_error=False)
+from app.core.auth.dependencies import (  # noqa: F401  (re-export pubblico)
+    _bearer_scheme,
+    get_current_user,
+    require_admin,
+    require_not_esecutore,
+    require_superadmin,
+    require_user_or_above,
+)
 
-def get_current_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer_scheme),
-) -> CurrentUser:
-    """Inietta l'utente autenticato. 401 se token mancante o invalido."""
-    if credentials is None:
-        _disclosure.raise_disclosure(_disclosure.token_missing())
-    payload = decode_token(credentials.credentials)
-    if payload is None:
-        _disclosure.raise_disclosure(_disclosure.token_invalid())
-    # Blacklist check: se il jti e' stato revocato via /auth/logout,
-    # rifiuta anche se la signature+exp sarebbero valide. Precede la
-    # query DB (piu' economico di un SELECT users).
-    # Backward compat: token pre-rollout jti non hanno la claim → None
-    # → `is_jti_blacklisted(None)` False → passa, come prima.
-    from app.shared.token_blacklist import is_jti_blacklisted
-    if is_jti_blacklisted(payload.get("jti")):
-        _disclosure.raise_disclosure(_disclosure.token_revoked())
-    user = db.get_user(payload["sub"])
-    if not user or not user.get("is_active"):
-        _disclosure.raise_disclosure(_disclosure.user_not_found_or_disabled())
-    return CurrentUser(
-        user_id=payload["sub"],
-        username=payload["username"],
-        group_id=payload["group_id"],
-        role=payload["role"],
-    )
-
-def require_user_or_above(current_user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
-    """
-    Richiede ruolo user, admin o superadmin (esclude viewer ed esecutore).
-    Da usare per endpoint di creazione/modifica risorse: viewer è sola lettura,
-    esecutore non vede nemmeno la UI di gestione risorse.
-    """
-    if current_user.role not in ROLES_ABOVE_VIEWER:
-        _disclosure.raise_disclosure(_disclosure.role_insufficient_for_write())
-    return current_user
-
-def require_not_esecutore(current_user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
-    """
-    Esclude SOLO il ruolo esecutore. Usato sugli endpoint di lettura "generale"
-    (list_projects, list_connections, list_files, list_schedules, ecc.) che
-    devono restare accessibili a viewer/user/admin/superadmin ma non al
-    ruolo kiosk esecutore (che vede SOLO gli eseguibili del proprio gruppo).
-    """
-    if current_user.role in ROLES_KIOSK_ONLY:
-        _disclosure.raise_disclosure(_disclosure.role_kiosk_only())
-    return current_user
-
-def require_admin(current_user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
-    """Richiede ruolo admin o superadmin."""
-    if current_user.role not in ROLES_ADMIN_OR_ABOVE:
-        _disclosure.raise_disclosure(_disclosure.role_admin_required())
-    return current_user
-
-def require_superadmin(current_user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
-    """Richiede ruolo superadmin."""
-    if current_user.role != "superadmin":
-        _disclosure.raise_disclosure(_disclosure.role_superadmin_required())
-    return current_user
-
-# BE-GO-READY-AUTH-ENGINE-011-GROUP-FILTER-LEAF-EXTRACTION:
-# `group_filter` canonical home is now `app.core.auth.ownership`
-# (pure policy helper, zero side effects). Re-export preserved as
-# `KEEP_COMPAT` so any test/code that still does
-# `from app.core.auth.auth import group_filter` (or
-# `auth_mod.group_filter`) continues to resolve to the same object.
-# App routers (9) consume the leaf directly per Phase-6 strangler
-# ban (`tests2/security/unit/test_auth_facade_strangler_contract.py`).
-from app.core.auth.ownership import group_filter  # noqa: F401
+# BE-GO-READY-AUTH-ENGINE-011-GROUP-FILTER-LEAF-EXTRACTION +
+# BE-GO-READY-AUTH-ENGINE-014-AUTH-FACADE-REEXPORT-DEATHMAP-DTO-CUT:
+# `group_filter` canonical home is `app.core.auth.ownership` (pure
+# policy helper, zero side effects). The 9 app routers using it
+# already consume the leaf directly per the Phase-6 strangler ban
+# (`tests2/security/unit/test_auth_facade_strangler_contract.py`).
+#
+# AUTH-ENGINE-014 cut: the KEEP_COMPAT re-export
+# (`from app.core.auth.ownership import group_filter`) was deleted
+# from this module. There are zero production `from app.core.auth.auth
+# import group_filter` callers in `backend/app/+workers/`; the only
+# 2 callers were facade-identity lock tests, which have been
+# migrated to either drop the facade leg or assert the cut
+# (negative lock at
+# `tests2/security/unit/test_auth_models_and_ownership_module_contract.py
+# ::test_auth_no_longer_reexports_group_filter`).
 
 
 # ============================================================

@@ -221,8 +221,14 @@ class ManipolaExecutor:
         """
         resolved: Optional[str]
         try:
-            import app.db.db_service as _db
-            _proj_row = _db.get_project(project_id)
+            # BE-GO-READY-DB-ENGINE-009: lookup migrato dal facade
+            # `app.db.db_service` al leaf canonico
+            # `app.db.config.projects.get_project`. La chiamata era
+            # l'unico simbolo `db_service` di questo file (lazy
+            # import + single call), quindi il file e' ora
+            # facade-clean.
+            from app.db.config.projects import get_project as _get_project
+            _proj_row = _get_project(project_id)
             resolved = _proj_row.get("group_id") if _proj_row else None
         except Exception as e:
             logger.error(f"[GESTITO] Impossibile determinare group_id per {project_id}: {e}", exc_info=True)
@@ -725,8 +731,23 @@ class ManipolaExecutor:
         inline.
 
         BE-GO-READY-TRANSFORMATION-ENGINE-004: ``group_id`` esplicito
-        prevale su `_current_group_id` (vedi
-        ``_resolve_executing_group_id``).
+        e' il canale primario di tenant binding (production:
+        ``execute``/``preview`` lo passano sempre dopo
+        ``_init_security_context``).
+
+        BE-GO-READY-TRANSFORMATION-ENGINE-005 (chain-local cut):
+        questa catena NON cade piu' su ``self._current_group_id`` se
+        il caller non passa ``group_id`` esplicito. Il fallback
+        singleton sopravvive in ``_resolve_executing_group_id``
+        per le altre 2 catene (``_carica_sorgenti_progetto`` /
+        ``_carica_sorgenti_statiche``) e per i test legacy che
+        ancora dipendono da quell'attributo, ma il branch
+        ``file_source`` e' ora ``ctx-strict``: una stale
+        ``_current_group_id`` (race window cross-run, residuo da
+        un'esecuzione precedente nello stesso processo worker) NON
+        puo' piu' autorizzare un ``file_source``. Mirror della
+        cut equivalente fatta sul lato arricchisci da
+        ``BE-GO-READY-ORCHESTRATION-ENGINE-010``.
         """
         file_nodes = [n for n in canvas.nodes if n.type == "file_source"]
         if not file_nodes:
@@ -738,11 +759,18 @@ class ManipolaExecutor:
             SourceRef,
         )
 
-        current_group_id = self._resolve_executing_group_id(group_id)
+        # Tenant binding ctx-strict: NON consultiamo
+        # ``_resolve_executing_group_id`` cosi' lo stale singleton
+        # non entra nemmeno come fallback. Production callers
+        # passano sempre ``group_id`` esplicito (TE-004); i test
+        # che esercitano questa catena passano l'argomento
+        # esplicitamente.
+        current_group_id = group_id
         if not current_group_id:
             logger.error(
-                "[SECURITY] group_id corrente sconosciuto, rifiuto "
-                "caricamento file_source (fail-closed)"
+                "[SECURITY] manipola._carica_sorgenti_file: explicit "
+                "group_id required (post TRANSFORMATION-ENGINE-005, "
+                "no singleton fallback), fail-closed"
             )
             return {
                 "success": False,

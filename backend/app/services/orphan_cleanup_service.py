@@ -3,8 +3,8 @@ Servizio di cleanup degli orfani cross-DB di PLENORA-ETL.
 
 Contesto
 ========
-PLENORA-ETL usa PostgreSQL (ex 3 SQLite separati — vedi config_db_service
-per la storia di migrazione). Le tabelle principali:
+PLENORA-ETL usa PostgreSQL canonico (single DB, schema `plenora`).
+Le tre famiglie di tabelle che questo cleanup attraversa:
   - config tables   (progetti, utenti, ecc.)
   - results tables  (output finali pipeline)
   - intermediate tables (run intermedie + tabelle dinamiche)

@@ -11,13 +11,19 @@ pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.regression]
 
 
 def _manipola_file_source_denied():
+    """BE-GO-READY-TRANSFORMATION-ENGINE-005: chain-local cut on the
+    file_source branch. The ``group_id`` is now passed explicitly
+    (mirroring the production call shape from ``execute``/``preview``);
+    the singleton ``_current_group_id`` no longer participates in this
+    chain even if it carries a value."""
     executor = ManipolaExecutor(project_service=object())
-    executor._current_group_id = "grp-1"
     canvas = build_canvas(build_node("file_source", file_source_id="fs-99", columns=[]))
     dataframes = {}
 
     with patch("app.shared.sharing.is_resource_visible", return_value=False):
-        result = executor._carica_sorgenti_file(canvas, dataframes)
+        result = executor._carica_sorgenti_file(
+            canvas, dataframes, group_id="grp-1",
+        )
 
     assert result == {
         "success": False,
@@ -42,16 +48,28 @@ def _manipola_project_source_denied():
 
 
 def _arricchisci_file_source_denied():
+    """Arricchisci file_source is ctx-strict after
+    ORCHESTRATION-ENGINE-010: pass typed ctx explicitly to exercise
+    the cross-tenant denial path. Without ctx this chain fail-closes
+    earlier with "Contesto di sicurezza non determinabile", which is
+    covered by the dedicated fail-closed tests."""
+    from app.core.arricchisci.execution_context import (
+        ArricchisciExecutionContext,
+    )
+
     service = ApiConnectionService.__new__(ApiConnectionService)
-    service._current_group_id = "grp-1"
+    service._current_group_id = "stale-grp-LEAK"
+    ctx = ArricchisciExecutionContext(
+        project_id="p-1", group_id="grp-1", preview_limit=None,
+    )
 
     with patch("app.shared.sharing.is_resource_visible", return_value=False):
         with pytest.raises(ValueError, match="Accesso negato"):
-            service._assert_file_source_group_access("fs-99")
+            service._assert_file_source_group_access("fs-99", ctx=ctx)
 
 
 def _arricchisci_project_source_denied():
-    """BE-GO-READY-TRANSFORMATION-ENGINE-030B: ctx-strict — il
+    """BE-GO-READY-TRANSFORMATION-ENGINE-030B: ctx-strict; il
     callsite arricchisci usa `_group_id_from_ctx(ctx)` (no singleton
     fallback). Stale singleton 'stale-grp-LEAK' come decoy: il
     cross-tenant denial e' calcolato sul `ctx.group_id`."""

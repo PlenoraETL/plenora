@@ -1,15 +1,16 @@
 """
-Database Service — facade di compatibilità per PLENORA-ETL.
+Database Service — compatibility / deathmap facade.
 
-Migrato da 3 SQLite separati a un singolo PostgreSQL.
-Questo modulo mantiene la stessa API pubblica delegando ai service
-specifici che ora usano tutti pg_connection come backend.
-
-Il codice esistente che importa da app.db.db_service continua
-a funzionare senza modifiche.
+PostgreSQL-only at runtime. Canonical owners: leaves under
+`app/db/config/*.py` and per-domain services (`results_db_service.py`,
+`tickets_db_service.py`, etc.). This module re-exports those names
+for legacy `from app.db.db_service import ...` callers; new code
+MUST import from the canonical leaves. Strangler progress tracked
+in `BE_CODEBASE_AUDIT.md` C-DB-1; new imports locked by
+`tests2/shared/test_config_db_service_facade_strangler_contract.py`.
 """
 
-# Re-export completo da config_db_service (SQLite #1)
+# Re-export of the config-cluster DALs (canonical home: `app/db/config/*.py`).
 from app.db.config_db_service import (
     get_connection, init_db, transaction, fetchone, fetchall, execute, executemany,
     get_group, list_groups, create_group, delete_group,
@@ -29,7 +30,7 @@ from app.db.config_db_service import (
     get_schedule, list_schedules, save_schedule, update_schedule, delete_schedule,
 )
 
-# Re-export da results_db_service (SQLite #2)
+# Re-export of the results / log-execution DAL (canonical home: `app/db/results_db_service.py`).
 from app.db.results_db_service import (
     save_result, get_result, get_result_data, get_latest_result,
     list_results, delete_result,

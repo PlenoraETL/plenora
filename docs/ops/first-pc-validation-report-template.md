@@ -20,6 +20,10 @@ Companion docs:
   reference runbook.
 - [`install-docker.md`](install-docker.md) -- Docker scaffold
   runbook (FIRST SCAFFOLD / NOT YET VALIDATED).
+- [`first-pc-report-review-checklist.md`](first-pc-report-review-checklist.md)
+  -- reviewer-side intake checklist that maps each acceptance
+  line in this report to a pass/fail decision and a follow-up
+  BE task title (used after the report is pasted back).
 
 Replace every `<TBD>` with the real output. Leave the section
 headings; they are the contract surface. Do NOT redact
