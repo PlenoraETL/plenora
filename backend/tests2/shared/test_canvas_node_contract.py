@@ -1,15 +1,18 @@
-"""Contract tests for CanvasNode typed accessor.
+"""Contract tests for CanvasNode typed accessor and CanvasGraph intake.
 
 BE-GO-READY-ARCH-055-W3: typed node accessor pilot.
-Verifies the two-level field lookup, typed properties, and TypeError guard.
+BE-GO-READY-ARCH-058-W3: CanvasGraph intake replaces parallel local dicts.
+Verifies the two-level field lookup, typed properties, TypeError guard,
+and CanvasGraph from_nodes_edges / lookup / result_node contract.
 """
 import pytest
 from app.shared.execution.canvas_node import CanvasNode
+from app.shared.execution.canvas_graph import CanvasGraph
 
 
-# ──────────────────────────────────────────────
+# ------------------------------------------------------------
 # Properties
-# ──────────────────────────────────────────────
+# ------------------------------------------------------------
 
 def test_id_from_root():
     assert CanvasNode({"id": "n1", "type": "api_enrich"}).id == "n1"
@@ -33,9 +36,9 @@ def test_data_property_non_dict_returns_empty_dict():
     assert CanvasNode({"data": "bad"}).data == {}
 
 
-# ──────────────────────────────────────────────
+# ------------------------------------------------------------
 # get_field two-level lookup
-# ──────────────────────────────────────────────
+# ------------------------------------------------------------
 
 def test_get_field_top_level_wins():
     node = {"api_id": "top", "data": {"api_id": "nested"}}
@@ -62,18 +65,18 @@ def test_get_field_zero_is_truthy_value_returned():
     assert CanvasNode(node).get_field("count") == 0
 
 
-# ──────────────────────────────────────────────
+# ------------------------------------------------------------
 # TypeError guard
-# ──────────────────────────────────────────────
+# ------------------------------------------------------------
 
 def test_non_dict_raises_type_error():
     with pytest.raises(TypeError, match="CanvasNode expects a dict"):
         CanvasNode("not-a-dict")
 
 
-# ──────────────────────────────────────────────
+# ------------------------------------------------------------
 # Integration: parallel.py helpers via CanvasNode
-# ──────────────────────────────────────────────
+# ------------------------------------------------------------
 
 def test_parallel_extract_consumed_uses_canvas_node():
     """_extract_consumed_columns reads param_mapping via CanvasNode."""
@@ -95,3 +98,94 @@ def test_parallel_may_explode_cardinality_path_marker():
     from app.core.arricchisci.parallel import _node_may_explode_cardinality
     node = {"type": "api_enrich", "output_mapping": [{"path": "items[]", "column": "c"}]}
     assert _node_may_explode_cardinality(node) is True
+
+
+# ------------------------------------------------------------
+# CanvasGraph contract (BE-GO-READY-ARCH-058-W3)
+# ------------------------------------------------------------
+
+_NODES = [
+    {"id": "n1", "type": "file_source", "data": {"file_source_id": "fs-1"}},
+    {"id": "n2", "type": "api_enrich", "api_id": "api-x"},
+    {"id": "n3", "type": "result", "data": {"format": "csv", "fileName": "out"}},
+]
+_EDGES = [
+    {"source": "n1", "target": "n2"},
+    {"source": "n2", "target": "n3"},
+]
+
+
+def test_canvas_graph_from_nodes_edges_builds():
+    g = CanvasGraph.from_nodes_edges(_NODES, _EDGES)
+    assert g is not None
+
+
+def test_canvas_graph_raw_returns_dict():
+    g = CanvasGraph.from_nodes_edges(_NODES, _EDGES)
+    assert g.raw("n1") == _NODES[0]
+    assert g.raw("missing") is None
+
+
+def test_canvas_graph_get_returns_canvas_node():
+    g = CanvasGraph.from_nodes_edges(_NODES, _EDGES)
+    cn = g.get("n1")
+    assert isinstance(cn, CanvasNode)
+    assert cn.type == "file_source"
+    assert g.get("missing") is None
+
+
+def test_canvas_graph_typed_field_access():
+    g = CanvasGraph.from_nodes_edges(_NODES, _EDGES)
+    assert g.get("n1").get_field("file_source_id") == "fs-1"
+    assert g.get("n2").get_field("api_id") == "api-x"
+
+
+def test_canvas_graph_result_node_found():
+    g = CanvasGraph.from_nodes_edges(_NODES, _EDGES)
+    rn = g.result_node()
+    assert rn is not None
+    assert rn.type == "result"
+    assert rn.get_field("format") == "csv"
+
+
+def test_canvas_graph_result_node_none_when_absent():
+    g = CanvasGraph.from_nodes_edges(
+        [{"id": "n1", "type": "file_source"}], []
+    )
+    assert g.result_node() is None
+
+
+def test_canvas_graph_raw_map_property():
+    g = CanvasGraph.from_nodes_edges(_NODES, _EDGES)
+    rm = g.raw_map
+    assert set(rm.keys()) == {"n1", "n2", "n3"}
+    assert rm["n2"] == _NODES[1]
+
+
+def test_canvas_graph_edges_property():
+    g = CanvasGraph.from_nodes_edges(_NODES, _EDGES)
+    assert g.edges == _EDGES
+
+
+def test_canvas_graph_raw_map_usable_by_legacy_callers():
+    """raw_map can be passed directly to is_file_source_for_file_processor."""
+    from app.core.arricchisci.canvas_orchestrator import is_file_source_for_file_processor
+    api_connections = {"api-x": {"connection_type": "rest_file"}}
+    g = CanvasGraph.from_nodes_edges(_NODES, _EDGES)
+    result = is_file_source_for_file_processor(
+        "n1", _EDGES, g.raw_map, api_connections
+    )
+    assert result is True
+
+
+def test_canvas_graph_skips_non_dict_nodes():
+    nodes = [{"id": "n1", "type": "file_source"}, "bad", None]
+    g = CanvasGraph.from_nodes_edges(nodes, [])
+    assert set(g.raw_map.keys()) == {"n1"}
+
+
+def test_canvas_graph_empty_inputs():
+    g = CanvasGraph.from_nodes_edges([], [])
+    assert g.raw_map == {}
+    assert g.edges == []
+    assert g.result_node() is None

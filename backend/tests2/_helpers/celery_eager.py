@@ -115,10 +115,6 @@ class FakeApiConnectionService:
         self._call_log.append(("get_api_connection", args, kwargs))
         return None
 
-    def _get_execution_order(self, nodes, edges):
-        self._call_log.append(("_get_execution_order",))
-        return [n["id"] for n in nodes]
-
     def _load_source_project(self, *args, **kwargs):
         self._call_log.append(("_load_source_project", args, kwargs))
         raise _HarnessAbort("loader-invoked", marker="_load_source_project")

@@ -24,11 +24,18 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.utils.logger import get_logger
+from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
+from app.shared.connections.arcgis_provider import ArcGISProviderProtocol
 
 logger = get_logger(__name__)
 
 
-def _count_features_where_via_post(client, conn, layer_url: str, where: str) -> int:
+def _count_features_where_via_post(
+    client: ArcGISProviderProtocol,
+    conn: ArcGISConnectionInfo,
+    layer_url: str,
+    where: str,
+) -> int:
     """POST /query diretto con `returnCountOnly=true`. Bypassa la pipeline
     standard di `client.query_features` che fa GET (sensibile a URL length,
     content-type negotiation proxy, ecc.) e al JSON decode.
@@ -195,10 +202,14 @@ def validate_publish(
         _add_top_issue("error", "CONNECTION_NOT_FOUND",
                        f"Connessione ArcGIS '{connection_id}' non trovata")
         return report
-    conn = fs_svc._to_connection_info(conn_pyd)
+    conn: ArcGISConnectionInfo = fs_svc._to_connection_info(conn_pyd)
     # Reuse the ArcGISClient already held by FeaturesService (avoids a
     # second create_client() call and shares the token cache).
-    client = fs_svc._client
+    # ADR-0023 / BE-GO-READY-ARCH-058-W5: typed against ArcGISProviderProtocol
+    # so the validator is decoupled from the concrete client class.
+    # FeaturesService import remains (see KNOWN_VIOLATIONS): it is the only
+    # way to do the connection DB lookup without duplicating that logic.
+    client: ArcGISProviderProtocol = fs_svc._client
 
     # ── 3. Cerca FS esistente globalmente ──────────────────────────
     try:

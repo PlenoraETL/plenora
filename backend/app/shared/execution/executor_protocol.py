@@ -57,6 +57,38 @@ if TYPE_CHECKING:
 __all__ = ["CanvasExecutorProtocol", "ExecutionResult"]
 
 
+# Modules whose top-level package name indicates a heavy DataFrame runtime.
+# Checked by string comparison - no import of these libraries.
+_UNSAFE_PAYLOAD_MODULES = frozenset({"pandas", "geopandas", "polars"})
+
+
+def _check_payload_safe(payload: Dict[str, Any]) -> None:
+    """Raise ValueError if any top-level payload value is a DataFrame, bytes, or file-like.
+
+    Uses type.__module__ string inspection - never imports Pandas/GeoPandas.
+    Called from ExecutionResult.__post_init__ so it guards all construction paths.
+    """
+    for key, value in payload.items():
+        t = type(value)
+        base_module = (getattr(t, "__module__", None) or "").split(".")[0]
+        if base_module in _UNSAFE_PAYLOAD_MODULES:
+            raise ValueError(
+                f"ExecutionResult.payload[{key!r}] carries {t.__qualname__!r} "
+                f"from {base_module!r} - DataFrames are forbidden in payload. "
+                "Store row counts, paths, or result_ids instead."
+            )
+        if isinstance(value, (bytes, bytearray)):
+            raise ValueError(
+                f"ExecutionResult.payload[{key!r}] carries raw "
+                f"{t.__name__!r} - binary blobs are forbidden in payload."
+            )
+        if callable(getattr(value, "read", None)) and not isinstance(value, (str, bytes)):
+            raise ValueError(
+                f"ExecutionResult.payload[{key!r}] is a file-like stream "
+                f"({t.__name__!r}) - forbidden in payload."
+            )
+
+
 @dataclass(frozen=True)
 class ExecutionResult:
     """Typed return value for canvas executor results.
@@ -88,6 +120,9 @@ class ExecutionResult:
     message: Optional[str] = None
     error: Optional[str] = None
     payload: Dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        _check_payload_safe(self.payload)
 
     # -- factory -----------------------------------------------------------------
 

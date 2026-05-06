@@ -31,6 +31,8 @@ from app.utils.template_variables import process_static_fields
 from .plugin_executor import get_executor
 from .source_loading import load_file_sources
 
+from app.shared.graph import kahn_topological_order, GraphCycleError  # BE-GO-READY-ARCH-058-W6
+
 logger = get_logger(__name__)
 
 # BE-GO-READY-TRANSFORMATION-ENGINE-002-MULTI-JOIN-ROW-ESTIMATE:
@@ -796,7 +798,7 @@ class ManipolaExecutor:
             return self._gestisci_join_default(dataframes)
         
         # Ordina topologicamente i nodi
-        sorted_nodes = self._ordina_topologicamente(process_nodes, canvas.edges, dataframes)
+        sorted_nodes = self._ordina_topologicamente(process_nodes, canvas.edges)
         
         current_df = None
         # Mappa nodi per accedere alle posizioni
@@ -887,7 +889,7 @@ class ManipolaExecutor:
 
         return current_df
     
-    def _ordina_topologicamente(self, nodes, edges, dataframes):
+    def _ordina_topologicamente(self, nodes, edges):
         """Ordina i nodi in ordine topologico (Kahn's algorithm). Rileva cicli.
 
         BE-GO-READY-GRAPH-ENGINE-001-SHARED-TOPOLOGICAL-SORT: the
@@ -901,9 +903,10 @@ class ManipolaExecutor:
         :class:`GraphCycleError` subclasses ``ValueError`` so any
         existing caller that catches ``ValueError`` keeps working
         and the message text is preserved verbatim.
-        """
-        from app.shared.graph import kahn_topological_order
 
+        BE-GO-READY-ARCH-058-W6: removed dead ``dataframes`` param.
+        Import moved to module level.
+        """
         node_ids = [n.id for n in nodes]
         node_map = {n.id: n for n in nodes}
         edge_pairs = [(edge.source, edge.target) for edge in edges]

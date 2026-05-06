@@ -194,3 +194,82 @@ def test_orchestrator_execute_pipeline_error_key_preserved():
     assert artifact.success is False
     assert artifact["error"] == "Errore chiamata API upstream: timeout"
     assert artifact["user_error"] is True
+
+
+# ---------------------------------------------------------------------------
+# Payload guard - BE-GO-READY-ARCH-058-W4
+# ---------------------------------------------------------------------------
+
+
+def test_payload_guard_rejects_pandas_dataframe():
+    """DataFrame in payload raises ValueError without importing pandas at module level."""
+    import pandas as pd
+    df = pd.DataFrame({"a": [1, 2]})
+    with pytest.raises(ValueError, match="DataFrame"):
+        ExecutionResult(success=True, payload={"df": df})
+
+
+def test_payload_guard_rejects_geopandas_geodataframe():
+    """GeoDataFrame in payload raises ValueError (geopandas module detected)."""
+    import geopandas as gpd
+    from shapely.geometry import Point
+    gdf = gpd.GeoDataFrame({"id": [1]}, geometry=[Point(0, 0)])
+    with pytest.raises(ValueError, match="GeoDataFrame"):
+        ExecutionResult(success=True, payload={"gdf": gdf})
+
+
+def test_payload_guard_rejects_bytes():
+    """Raw bytes in payload raises ValueError."""
+    with pytest.raises(ValueError, match="bytes"):
+        ExecutionResult(success=True, payload={"blob": b"raw data"})
+
+
+def test_payload_guard_rejects_bytearray():
+    """Bytearray in payload raises ValueError."""
+    with pytest.raises(ValueError, match="bytearray"):
+        ExecutionResult(success=True, payload={"blob": bytearray(b"raw")})
+
+
+def test_payload_guard_rejects_file_like_stream():
+    """File-like stream (with read()) in payload raises ValueError."""
+    import io
+    buf = io.BytesIO(b"data")
+    with pytest.raises(ValueError, match="file-like"):
+        ExecutionResult(success=True, payload={"stream": buf})
+
+
+def test_payload_guard_rejects_via_from_executor_dict():
+    """from_executor_dict also triggers the guard (goes through __post_init__)."""
+    import pandas as pd
+    df = pd.DataFrame({"x": [1]})
+    d = {"success": True, "dataframe": df}
+    with pytest.raises(ValueError, match="DataFrame"):
+        ExecutionResult.from_executor_dict(d)
+
+
+def test_payload_guard_allows_safe_scalars():
+    """Safe scalar payloads pass: str, int, float, bool, None, list, dict."""
+    r = ExecutionResult(
+        success=True,
+        payload={
+            "result_id": "r-1",
+            "output_path": "/results/out.csv",
+            "filename": "out.csv",
+            "format": "csv",
+            "rows_count": 42,
+            "run_id": "run-abc",
+            "tags": ["a", "b"],
+            "meta": {"crs": 4326},
+            "flag": True,
+            "ratio": 0.95,
+            "empty": None,
+        },
+    )
+    assert r.payload["result_id"] == "r-1"
+    assert r.payload["rows_count"] == 42
+
+
+def test_payload_guard_empty_payload_allowed():
+    """Empty payload dict must not raise."""
+    r = ExecutionResult(success=True)
+    assert r.payload == {}

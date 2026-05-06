@@ -59,7 +59,7 @@ Uso:
 import time
 import json
 from typing import List, Dict, Any, Optional, Tuple, Protocol
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import requests
 import pandas as pd
@@ -81,22 +81,9 @@ def _mask_secret(value: str, visible: int = 4) -> str:
 # =============================================================================
 
 
-@dataclass
-class ArcGISConnectionInfo:
-    """
-    Configurazione minima per una connessione ArcGIS.
-
-    Versione leggera usata dal client (senza metadati come nome, date).
-    Analogo a DatabaseConnection nel query_executor.py.
-    """
-    server_url: str         # URL base (es. https://services.arcgis.com/xxx)
-    server_type: str        # arcgis_online, arcgis_enterprise, arcgis_server
-    auth_type: str          # token, oauth2, public
-    username: str = ""
-    password: str = ""
-    client_id: str = ""
-    client_secret: str = ""
-    token_url: str = ""     # URL custom per generazione token
+# ArcGISConnectionInfo moved to app.shared.connections.arcgis_connection per
+# ADR-0023 (BE-GO-READY-ARCH-058-W5). Re-exported here for backward compat.
+from app.shared.connections.arcgis_connection import ArcGISConnectionInfo  # noqa: F401
 
 
 @dataclass(frozen=True)

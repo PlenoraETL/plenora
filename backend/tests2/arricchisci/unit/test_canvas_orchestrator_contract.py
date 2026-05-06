@@ -265,11 +265,17 @@ def test_is_file_source_for_file_processor_pure_predicate():
 
 
 def test_node_wrappers_built_once_at_entry_boundary():
-    """BE-GO-READY-ARCH-057-W2: source-bound guard.
+    """BE-GO-READY-ARCH-057-W2 / 058-W3: source-bound guard.
 
-    `execute_canvas_enrichment` must NOT call `CanvasNode(raw_dict)` inside
-    the execution loop body.  The comprehension that builds `node_wrappers`
-    at the entry boundary is the only allowed site.
+    `execute_canvas_enrichment` must parse the canvas graph exactly once at
+    the entry boundary via ``CanvasGraph.from_nodes_edges(...)``.  No raw
+    ``CanvasNode(...)`` calls may appear inside the function body — they all
+    live inside ``CanvasGraph.from_nodes_edges``.
+
+    Updated in BE-GO-READY-ARCH-058-W6: W3 replaced the ``node_wrappers``
+    comprehension (1 × CanvasNode call) with ``CanvasGraph.from_nodes_edges``
+    (0 × direct CanvasNode call in execute_canvas_enrichment).  The invariant
+    — no per-iteration node re-wrapping — is still enforced here.
     """
     import ast as _ast
 
@@ -290,7 +296,7 @@ def test_node_wrappers_built_once_at_entry_boundary():
     )
     assert exec_fn is not None, "execute_canvas_enrichment not found in AST"
 
-    # Count CanvasNode(...) calls *inside* the function body.
+    # No bare CanvasNode(...) calls allowed — they moved inside CanvasGraph.
     canvas_node_calls = [
         n
         for n in _ast.walk(exec_fn)
@@ -298,11 +304,24 @@ def test_node_wrappers_built_once_at_entry_boundary():
         and isinstance(n.func, _ast.Name)
         and n.func.id == "CanvasNode"
     ]
-    # Exactly 1 allowed: the node_wrappers comprehension at entry.
-    assert len(canvas_node_calls) == 1, (
-        f"Expected exactly 1 CanvasNode(...) call in execute_canvas_enrichment "
-        f"(the node_wrappers comprehension); found {len(canvas_node_calls)}. "
-        f"In-loop churn has been reintroduced."
+    assert len(canvas_node_calls) == 0, (
+        f"Bare CanvasNode(...) call reintroduced in execute_canvas_enrichment "
+        f"(found {len(canvas_node_calls)}). Use CanvasGraph.from_nodes_edges "
+        f"at the entry boundary instead."
+    )
+
+    # Exactly 1 CanvasGraph.from_nodes_edges call at the entry boundary.
+    graph_intake_calls = [
+        n
+        for n in _ast.walk(exec_fn)
+        if isinstance(n, _ast.Call)
+        and isinstance(n.func, _ast.Attribute)
+        and n.func.attr == "from_nodes_edges"
+    ]
+    assert len(graph_intake_calls) == 1, (
+        f"Expected exactly 1 CanvasGraph.from_nodes_edges(...) call in "
+        f"execute_canvas_enrichment; found {len(graph_intake_calls)}. "
+        f"The canvas graph must be parsed once at the entry boundary."
     )
 
 

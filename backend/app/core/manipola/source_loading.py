@@ -132,7 +132,6 @@ def load_file_sources(
         _applica_crs_da_colonne,
         _nf,
     )
-    from app.shared.resources.metadata import ResourceMetadata
 
     # Tenant binding ctx-strict: explicit ``group_id`` only. No
     # singleton fallback (TE-005 contract); see module docstring.
@@ -158,17 +157,13 @@ def load_file_sources(
             'file_source',
             {'file_source_id': fid},
         )
-        try:
-            data = loader.load(ref, expected_group_id=group_id)
-        except SourceLoadingError as e:
-            # Visibility block or materialization error: the
-            # loader already produces a message in the expected
-            # format ("Accesso negato: il file sorgente '...'"),
-            # propagated as-is in the error dict.
-            return {"success": False, "message": str(e)}
-        except Exception as e:
-            return {"success": False, "message": f"Errore file '{fid}': {e}"}
 
+        # Normalise columns from the canvas node before the load call so
+        # alias-resolved names can be forwarded to load_with_metadata as
+        # columns_metadata.  ResourceMetadata construction is delegated to
+        # SourceLoader.load_with_metadata (BE-GO-READY-ARCH-058-W1 API);
+        # the metadata travels out in LoadedResource.metadata rather than
+        # being reconstructed post-load from node_columns.
         node_columns = _nf(node, 'columns', [])
         node_columns_normalized = []
         for c in (node_columns or []):
@@ -181,17 +176,30 @@ def load_file_sources(
                     "type": getattr(c, "type", ""),
                     "visible": getattr(c, "visible", True),
                 })
-        # Build ResourceMetadata at load time - alias-normalised so the
-        # resolved column names match those produced by filter_visible_columns.
-        # Passed directly to _applica_crs_da_colonne to avoid a second
-        # construction inside that helper (BE-GO-READY-ARCH-057-W4).
-        _meta_input = []
-        for c in node_columns_normalized:
-            name = c.get("alias") or c.get("name", "")
-            col_type = c.get("type", "")
-            if name:
-                _meta_input.append({"name": name, "type": col_type})
-        meta = ResourceMetadata.from_columns_list(_meta_input, source_kind="file")
+        _meta_input = [
+            {"name": c.get("alias") or c.get("name", ""), "type": c.get("type", "")}
+            for c in node_columns_normalized
+            if c.get("alias") or c.get("name")
+        ]
+
+        try:
+            loaded = loader.load_with_metadata(
+                ref,
+                expected_group_id=group_id,
+                columns_metadata=_meta_input,
+            )
+        except SourceLoadingError as e:
+            # Visibility block or materialization error: the
+            # loader already produces a message in the expected
+            # format ("Accesso negato: il file sorgente '...'"),
+            # propagated as-is in the error dict.
+            return {"success": False, "message": str(e)}
+        except Exception as e:
+            return {"success": False, "message": f"Errore file '{fid}': {e}"}
+
+        data = loaded.data
+        meta = loaded.metadata  # ResourceMetadata built by SourceLoader; None if no columns
+
         data = filter_visible_columns(data, node_columns_normalized)
         # Preserve CRS: SourceLoader returns a GeoDataFrame when
         # ``file_source_service.load_dataframe`` produced one,

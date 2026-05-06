@@ -107,3 +107,57 @@ def test_imdf_does_not_import_from_features_domain(src_file: Path) -> None:
             f"Known ADR-0023 violation remains in {src_file.name}: "
             f"{sorted(seen_known)}. {_KNOWN_VIOLATION_REASONS[src_file.name]}"
         )
+
+
+# -----------------------------------------------------------------
+# Protocol shape contracts — BE-GO-READY-ARCH-058-W5
+# -----------------------------------------------------------------
+
+
+def test_arcgis_provider_protocol_importable_from_shared():
+    """ArcGISProviderProtocol must be importable from the shared contracts
+    package (not from app.core.features).  Moving it to shared is the first
+    step toward removing the concrete client import from validator.py."""
+    from app.shared.connections.arcgis_provider import ArcGISProviderProtocol
+    assert callable(ArcGISProviderProtocol)
+
+
+def test_arcgis_provider_protocol_has_required_methods():
+    """The protocol must expose the three methods validator.py calls on client."""
+    from app.shared.connections.arcgis_provider import ArcGISProviderProtocol
+    for method in ("count_features_where", "list_layers", "get_layer_schema"):
+        assert hasattr(ArcGISProviderProtocol, method), (
+            f"ArcGISProviderProtocol missing method {method!r}. "
+            "validator.py calls this method on the ArcGIS client."
+        )
+
+
+def test_arcgis_connection_info_importable_from_shared():
+    """ArcGISConnectionInfo must be importable from app.shared.connections
+    (not only from app.core.features.arcgis_client)."""
+    from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
+    assert callable(ArcGISConnectionInfo)
+
+
+def test_arcgis_connection_info_backward_compat_via_arcgis_client():
+    """arcgis_client.py must re-export ArcGISConnectionInfo so existing
+    callers (features_service, test fixtures) are unaffected."""
+    from app.core.features.arcgis_client import ArcGISConnectionInfo as FromClient
+    from app.shared.connections.arcgis_connection import ArcGISConnectionInfo as FromShared
+    assert FromClient is FromShared, (
+        "arcgis_client.ArcGISConnectionInfo must be the same object as "
+        "app.shared.connections.arcgis_connection.ArcGISConnectionInfo. "
+        "The re-export in arcgis_client.py is missing or points to a copy."
+    )
+
+
+def test_arcgis_client_satisfies_provider_protocol():
+    """ArcGISClient must satisfy ArcGISProviderProtocol structurally
+    (runtime_checkable isinstance check).  This verifies the protocol
+    accurately describes the concrete client's interface."""
+    from app.core.features.arcgis_client import ArcGISClient
+    from app.shared.connections.arcgis_provider import ArcGISProviderProtocol
+    assert isinstance(ArcGISClient(), ArcGISProviderProtocol), (
+        "ArcGISClient does not satisfy ArcGISProviderProtocol. "
+        "The protocol must match the concrete client's method signatures."
+    )

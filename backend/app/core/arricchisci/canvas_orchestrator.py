@@ -63,6 +63,7 @@ import pandas as pd
 
 import app.db.db_service as db_svc  # noqa: F401  (test-monkeypatch surface preserved)
 from app.shared.execution.canvas_node import CanvasNode  # BE-GO-READY-ARCH-056-W3
+from app.shared.execution.canvas_graph import CanvasGraph  # BE-GO-READY-ARCH-058-W3
 from app.shared.graph import kahn_topological_order
 # BE-GO-READY-ORCHESTRATION-ENGINE-011-CANVAS-CTX-NO-LEGACY-STATE-CUT
 # + BE-GO-READY-ORCHESTRATION-ENGINE-012-KILL-APPLY-TO-LEGACY-STATE:
@@ -319,21 +320,20 @@ def execute_canvas_enrichment(
         )
         logger.info(f"Gruppi di esecuzione: {[(t, len(ids)) for t, ids in groups]}")
 
-        node_map = {n["id"]: n for n in nodes}
-        # BE-GO-READY-ARCH-057-W2: wrap every canvas node once at the entry
-        # boundary; the execution loop reads from this dict instead of calling
-        # CanvasNode(raw_dict) repeatedly for the same node on each iteration.
-        node_wrappers: Dict[str, CanvasNode] = {n["id"]: CanvasNode(n) for n in nodes}
+        # BE-GO-READY-ARCH-058-W3: single parsed intake replaces two parallel
+        # dicts (node_map + node_wrappers). raw_map still available for legacy
+        # callers (execute_parallel_enrichers, _find_final_result).
+        graph = CanvasGraph.from_nodes_edges(nodes, edges)
         node_results: Dict[str, Any] = {}
 
         for step_type, step_node_ids in groups:
             if step_type == "single":
                 # ── Nodo singolo (sorgente, result, o enricher isolato) ──
                 node_id = step_node_ids[0]
-                node = node_map.get(node_id)
+                node = graph.raw(node_id)
                 if not node:
                     continue
-                node_type = node_wrappers[node_id].type
+                node_type = graph.get(node_id).type
                 node_data = node
                 logger.debug(f"Esecuzione nodo: {node_id} ({node_type})")
 
@@ -347,11 +347,11 @@ def execute_canvas_enrichment(
 
                 elif node_type == "file_source":
                     if is_file_source_for_file_processor(
-                        node_id, edges, node_map, api_connections
+                        node_id, edges, graph.raw_map, api_connections
                     ):
                         node_results[node_id] = {
                             "_passthrough_file_source": True,
-                            "file_source_id": node_wrappers[node_id].get_field("file_source_id"),
+                            "file_source_id": graph.get(node_id).get_field("file_source_id"),
                         }
                     else:
                         # BE-GO-READY-TRANSFORMATION-ENGINE-019: typed ctx.
@@ -441,8 +441,8 @@ def execute_canvas_enrichment(
                 # non sono parallelizzabili col meccanismo degli enricher.
                 parallel_ids = []
                 for nid in step_node_ids:
-                    nd = node_map.get(nid)
-                    api_id = node_wrappers[nid].get_field("api_id") if nd else None
+                    nd = graph.raw(nid)
+                    api_id = graph.get(nid).get_field("api_id") if nd else None
                     api_cfg = api_connections.get(api_id, {})
                     ctype = api_cfg.get("connection_type")
                     if ctype == "rest_file":
@@ -477,7 +477,7 @@ def execute_canvas_enrichment(
                     group_results, group_error = execute_parallel_enrichers(
                         node_ids=parallel_ids,
                         input_df=input_df,
-                        node_map=node_map,
+                        node_map=graph.raw_map,
                         api_connections=api_connections,
                         execute_single_fn=_execute_single,
                     )
@@ -518,20 +518,18 @@ def execute_canvas_enrichment(
                             mode_override=intermediate_mode_override,
                         )
 
-        result_node = next(
-            (n for n in nodes if node_wrappers[n["id"]].type == "result"), None
-        )
-        if result_node:
-            _rcn = node_wrappers[result_node["id"]]
-            output_format = _rcn.get_field("format", format) or format
-            _fn = _rcn.get_field("fileName")
-            output_name = _fn if _fn is not None else _rcn.get_field("name", "output")
+        _result_cn = graph.result_node()
+        if _result_cn:
+            output_format = _result_cn.get_field("format", format) or format
+            _fn = _result_cn.get_field("fileName")
+            output_name = _fn if _fn is not None else _result_cn.get_field("name", "output")
         else:
             output_format = format
             output_name = "output"
 
+        result_node_raw = graph.raw(_result_cn.id) if _result_cn else None
         final_result = svc._find_final_result(
-            node_results, result_node, execution_order
+            node_results, result_node_raw, execution_order
         )
         if final_result is None:
             return {"success": False, "error": "Nessun risultato generato"}

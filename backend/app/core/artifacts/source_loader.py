@@ -259,3 +259,58 @@ class SourceLoader:
             if m.df is not None:
                 return m.df
             return load_dataframe_from_file(m.path)
+
+    # ------------------------------------------------------------------
+    # load_with_metadata: typed envelope path (BE-GO-READY-ARCH-058-W1)
+    # ------------------------------------------------------------------
+
+    def load_with_metadata(
+        self,
+        ref: SourceRef,
+        *,
+        expected_group_id: str,
+        columns_metadata: Optional[list] = None,
+        is_superadmin: bool = False,
+    ) -> "LoadedResource":
+        """Load ``ref`` and return a typed ``LoadedResource`` envelope.
+
+        Delegates to ``load()`` for the actual data fetch (all existing
+        cross-tenant and visibility guarantees apply). When
+        ``columns_metadata`` is supplied, constructs a ``ResourceMetadata``
+        envelope from it at load time - producers no longer need to
+        reconstruct it downstream from legacy ``node_columns`` dicts.
+
+        Args:
+            ref: source reference (file / project / static).
+            expected_group_id: tenant binding, forwarded verbatim to
+                ``load()``.
+            columns_metadata: optional ``[{"name": str, "type": str}]``
+                list. When present, ``LoadedResource.metadata`` is
+                populated. When absent, ``metadata`` is ``None``.
+            is_superadmin: bypass visibility check, forwarded to
+                ``load()``.
+
+        Returns:
+            ``LoadedResource(data=..., metadata=...)`` - data is the
+            same object ``load()`` would have returned; metadata is a
+            ``ResourceMetadata`` built from ``columns_metadata`` or
+            ``None``.
+        """
+        from app.shared.resources.metadata import LoadedResource, ResourceMetadata
+
+        data = self.load(
+            ref,
+            expected_group_id=expected_group_id,
+            is_superadmin=is_superadmin,
+        )
+
+        metadata: Optional[ResourceMetadata] = None
+        if columns_metadata is not None:
+            _kind_map = {"file": "file", "project": "project", "static": "file"}
+            source_kind = _kind_map.get(ref.kind(), "file")
+            metadata = ResourceMetadata.from_columns_list(
+                columns_metadata,
+                source_kind=source_kind,
+            )
+
+        return LoadedResource(data=data, metadata=metadata)

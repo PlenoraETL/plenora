@@ -50,7 +50,7 @@ makes CRS lookup a plain attribute read instead of a loop + string parse.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal, Optional, Sequence
+from typing import Any, Literal, Optional, Sequence
 
 SourceKind = Literal["file", "db", "project", "api"]
 
@@ -200,3 +200,17 @@ class ResourceMetadata:
 
     def column_names(self) -> tuple[str, ...]:
         return tuple(col.name for col in self.columns)
+
+
+@dataclass(frozen=True)
+class LoadedResource:
+    """Typed envelope pairing loaded data with its schema/CRS metadata.
+
+    ``data`` is typed ``Any`` to keep this leaf module free of pandas/
+    geopandas imports. In practice it is always a DataFrame or GeoDataFrame
+    at runtime. ``metadata`` is ``None`` when the caller did not supply
+    column definitions (e.g. static-source branch).
+    """
+
+    data: Any
+    metadata: Optional[ResourceMetadata] = None
