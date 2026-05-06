@@ -1879,29 +1879,28 @@ def test_auth_engine_016_migrated_router_does_not_import_dependencies_from_facad
     )
 
 
-def test_phase13_facade_still_exposes_residual_ownership_names():
-    """Symmetric positive lock for the ownership name(s) that REMAIN
-    on the facade. After AUTH-ENGINE-020 closed R-019.1, the only
-    remaining re-export is `_check_ownership` (internal use by the
-    3 `require_*_owner` wrappers — not a public API). If it
-    disappears, the require_*_owner wrappers break.
+def test_phase13_facade_no_longer_exposes_check_ownership():
+    """BE-GO-READY-AUTH-ENGINE-018 completion lock: after extracting
+    the three ``require_*_owner`` wrappers to
+    ``app.core.auth.owner_dependencies``, ``auth.py`` no longer
+    imports ``_check_ownership`` from ``ownership.py``. The attribute
+    MUST NOT appear on the facade module.
+
+    Pre-018 the positive lock was: ``_check_ownership`` must be on the
+    facade (internal use by the three wrappers). Post-018 the wrappers
+    moved to the owner_dependencies leaf, which imports directly from
+    ``app.core.auth.ownership``. The facade re-import was removed.
     """
     import importlib
 
     auth_mod = importlib.import_module("app.core.auth.auth")
-    ownership_mod = importlib.import_module("app.core.auth.ownership")
-
-    for name in ("_check_ownership",):
-        facade_obj = getattr(auth_mod, name, None)
-        leaf_obj = getattr(ownership_mod, name, None)
-        assert facade_obj is not None, (
-            f"app.core.auth.auth.{name} disappeared. This breaks "
-            "`require_*_owner` internal wiring."
-        )
-        assert facade_obj is leaf_obj, (
-            f"app.core.auth.auth.{name} drifted from "
-            f"app.core.auth.ownership.{name} (identity invariant lost)."
-        )
+    assert not hasattr(auth_mod, "_check_ownership"), (
+        "app.core.auth.auth._check_ownership must NOT be present on the "
+        "facade after AUTH-ENGINE-018. The three require_*_owner wrappers "
+        "moved to app.core.auth.owner_dependencies which imports directly "
+        "from app.core.auth.ownership. Re-introducing the facade import "
+        "would regress the cut."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1912,11 +1911,10 @@ def test_phase13_facade_still_exposes_residual_ownership_names():
 # from `app.core.auth.dependencies` (the canonical leaf) instead of
 # the facade `app.core.auth.auth`.
 #
-# Two routers in this slice retain a single facade import for a
-# domain-specific `require_*_owner` callable not yet extracted to
-# the leaf (these are DB-bound and not among the five standard deps):
-#   - `scheduler/router.py`:  keeps `require_schedule_owner`
-#   - `files/router.py`:      keeps `require_file_owner`
+# Post AUTH-ENGINE-018: scheduler/router.py and files/router.py no
+# longer retain a facade import for require_*_owner either; those
+# callables are now in app.core.auth.owner_dependencies. The
+# positive/negative locks below still hold (standard deps from leaf).
 #
 # Positive lock: each router must import at least one dep callable
 # from the leaf.  Negative lock: none of the five standard callables
@@ -1993,4 +1991,313 @@ def test_auth_engine_017_migrated_router_does_not_import_dependencies_from_facad
         "`app.core.auth.dependencies` (canonical leaf). Identity is "
         "preserved across the facade re-export, but the migrated router "
         "must point at the leaf."
+    )
+
+
+# ---------------------------------------------------------------------------
+# BE-GO-READY-AUTH-ENGINE-018 — owner dependency leaf extraction
+# ---------------------------------------------------------------------------
+#
+# AUTH-ENGINE-018 extracted the three DB-bound owner FastAPI Depends
+# callables from ``app.core.auth.auth`` into the new canonical leaf
+# ``app.core.auth.owner_dependencies``:
+#
+#   - ``require_project_owner``   (projects/router.py)
+#   - ``require_schedule_owner``  (scheduler/router.py)
+#   - ``require_file_owner``      (files/router.py)
+#
+# Cycle concern resolved: ``app.core.auth.ownership`` no longer imports
+# from ``auth.py`` (AUTH-ENGINE-005), so the new leaf can safely import
+# ``get_current_user`` from ``app.core.auth.dependencies`` and
+# ``_check_ownership`` from ``app.core.auth.ownership`` without cycles.
+#
+# ``auth.py`` keeps KEEP_COMPAT re-exports for all three callables so
+# that any remaining legacy ``from app.core.auth.auth import
+# require_project_owner`` keeps working with identity preserved.
+#
+# ``projects/router.py`` was also migrated off all five standard facade
+# deps to ``app.core.auth.dependencies`` in this same batch.
+#
+# The three migrated routers must:
+#   1. Import require_*_owner from the owner_dependencies leaf.
+#   2. NOT import require_*_owner from the auth facade.
+# ``projects/router.py`` additionally:
+#   3. Must import standard deps from ``app.core.auth.dependencies``.
+#   4. Must NOT import them from the facade.
+
+_AUTH_ENGINE_018_OWNER_LEAF = "app.core.auth.owner_dependencies"
+_AUTH_ENGINE_018_OWNER_SYMBOLS = frozenset({
+    "require_project_owner",
+    "require_schedule_owner",
+    "require_file_owner",
+})
+_AUTH_ENGINE_018_MIGRATED_ROUTERS = (
+    _APP / "core" / "projects" / "router.py",
+    _APP / "core" / "scheduler" / "router.py",
+    _APP / "core" / "files" / "router.py",
+)
+
+
+@pytest.mark.parametrize(
+    "path",
+    _AUTH_ENGINE_018_MIGRATED_ROUTERS,
+    ids=lambda p: str(p.relative_to(_BACKEND_ROOT)).replace("\\", "/"),
+)
+def test_auth_engine_018_migrated_router_imports_owner_deps_from_leaf(
+    path: Path,
+):
+    """AUTH-ENGINE-018 positive lock: each migrated router MUST import
+    any ``require_*_owner`` callable it uses from the canonical leaf
+    ``app.core.auth.owner_dependencies``. Reverting to the facade
+    re-import re-introduces the coupling AUTH-ENGINE-018 closed."""
+    assert path.exists(), f"AUTH-ENGINE-018 migrated router missing: {path}"
+    text = path.read_text(encoding="utf-8")
+    tree = ast.parse(text, filename=str(path))
+    imported_from_leaf: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == _AUTH_ENGINE_018_OWNER_LEAF:
+            for alias in node.names:
+                imported_from_leaf.add(alias.name)
+    leaf_intersect = imported_from_leaf & _AUTH_ENGINE_018_OWNER_SYMBOLS
+    assert leaf_intersect, (
+        f"{path.relative_to(_BACKEND_ROOT)} must import at least one of "
+        f"{sorted(_AUTH_ENGINE_018_OWNER_SYMBOLS)} from "
+        f"`{_AUTH_ENGINE_018_OWNER_LEAF}`. "
+        "AUTH-ENGINE-018: owner dependency callables must come from the "
+        "canonical leaf, not the facade."
+    )
+
+
+@pytest.mark.parametrize(
+    "path",
+    _AUTH_ENGINE_018_MIGRATED_ROUTERS,
+    ids=lambda p: str(p.relative_to(_BACKEND_ROOT)).replace("\\", "/"),
+)
+def test_auth_engine_018_migrated_router_does_not_import_owner_deps_from_facade(
+    path: Path,
+):
+    """AUTH-ENGINE-018 negative lock: the three migrated routers MUST
+    NOT pull any ``require_*_owner`` callable from ``app.core.auth.auth``
+    (the facade). Catches a regression where a router adds back the
+    facade import alongside or instead of the leaf import."""
+    assert path.exists(), f"AUTH-ENGINE-018 migrated router missing: {path}"
+    text = path.read_text(encoding="utf-8")
+    tree = ast.parse(text, filename=str(path))
+    imported_from_facade: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == _FACADE_MODULE:
+            for alias in node.names:
+                imported_from_facade.add(alias.name)
+    facade_intersect = imported_from_facade & _AUTH_ENGINE_018_OWNER_SYMBOLS
+    assert not facade_intersect, (
+        f"{path.relative_to(_BACKEND_ROOT)} pulls "
+        f"{sorted(facade_intersect)} from `app.core.auth.auth` (the facade). "
+        "AUTH-ENGINE-018: owner dependency callables must be consumed from "
+        "`app.core.auth.owner_dependencies` (canonical leaf). Identity is "
+        "preserved across the facade re-export, but the migrated router "
+        "must point at the leaf."
+    )
+
+
+def test_auth_engine_018_owner_deps_leaf_exports_all_three_callables():
+    """AUTH-ENGINE-018 contract: the canonical leaf
+    ``app.core.auth.owner_dependencies`` MUST expose all three
+    owner dependency callables in ``__all__``. Drift here would let
+    a future contributor add a private helper without an explicit
+    public-surface declaration."""
+    import app.core.auth.owner_dependencies as owner_deps
+
+    expected = _AUTH_ENGINE_018_OWNER_SYMBOLS
+    assert hasattr(owner_deps, "__all__"), (
+        "app.core.auth.owner_dependencies must declare `__all__` so the "
+        "public dependency surface is explicit."
+    )
+    actual = set(owner_deps.__all__)
+    assert actual == expected, (
+        f"app.core.auth.owner_dependencies `__all__` drift:\n"
+        f"  expected: {sorted(expected)}\n"
+        f"  actual:   {sorted(actual)}"
+    )
+    for name in expected:
+        assert hasattr(owner_deps, name), (
+            f"app.core.auth.owner_dependencies missing documented "
+            f"owner dependency callable: {name}"
+        )
+
+
+def test_auth_engine_018_facade_reexports_share_identity_with_leaf():
+    """AUTH-ENGINE-018 contract: the facade re-export of each owner
+    dependency callable MUST be the SAME Python object as the leaf
+    definition. Without this property, FastAPI ``Depends(...)``
+    resolutions through the two import paths would diverge, breaking
+    caching keyed on the callable identity."""
+    import app.core.auth.auth as facade
+    import app.core.auth.owner_dependencies as owner_deps
+
+    for name in _AUTH_ENGINE_018_OWNER_SYMBOLS:
+        leaf_obj = getattr(owner_deps, name)
+        facade_obj = getattr(facade, name)
+        assert leaf_obj is facade_obj, (
+            f"Identity broken for `{name}`: "
+            f"`app.core.auth.auth.{name}` is NOT "
+            f"`app.core.auth.owner_dependencies.{name}`. The facade "
+            "must re-export the leaf's callable as the same "
+            "Python object; FastAPI Depends resolution depends on it."
+        )
+
+
+def test_auth_engine_018_projects_router_imports_standard_deps_from_leaf():
+    """AUTH-ENGINE-018: ``projects/router.py`` also migrated all five
+    standard dependency callables off the facade. Positive lock."""
+    path = _APP / "core" / "projects" / "router.py"
+    assert path.exists()
+    text = path.read_text(encoding="utf-8")
+    tree = ast.parse(text, filename=str(path))
+    imported_from_leaf: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == _AUTH_ENGINE_013_DEPENDENCY_LEAF:
+            for alias in node.names:
+                imported_from_leaf.add(alias.name)
+    leaf_intersect = imported_from_leaf & set(_AUTH_ENGINE_013_LEAF_SYMBOLS)
+    assert leaf_intersect, (
+        "projects/router.py must import at least one standard dep callable "
+        f"from `{_AUTH_ENGINE_013_DEPENDENCY_LEAF}` (AUTH-ENGINE-018)."
+    )
+
+
+def test_auth_engine_018_projects_router_no_standard_deps_from_facade():
+    """AUTH-ENGINE-018 negative lock: ``projects/router.py`` must NOT
+    pull any of the five standard dependency callables from the facade."""
+    path = _APP / "core" / "projects" / "router.py"
+    assert path.exists()
+    text = path.read_text(encoding="utf-8")
+    tree = ast.parse(text, filename=str(path))
+    imported_from_facade: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == _FACADE_MODULE:
+            for alias in node.names:
+                imported_from_facade.add(alias.name)
+    facade_intersect = imported_from_facade & set(_AUTH_ENGINE_013_LEAF_SYMBOLS)
+    assert not facade_intersect, (
+        f"projects/router.py pulls {sorted(facade_intersect)} from the facade. "
+        "AUTH-ENGINE-018: standard deps must come from "
+        "`app.core.auth.dependencies`."
+    )
+
+
+# ---------------------------------------------------------------------------
+# BE-GO-READY-AUTH-ENGINE-019 — dep-import sweep, wider slice
+# ---------------------------------------------------------------------------
+#
+# Migrated 7 files + cleaned main.py:
+#
+#   Routers (top-level import moved to leaf):
+#   - app/core/orchestrator/router.py  get_current_user, require_not_esecutore
+#   - app/core/imdf/router.py          get_current_user
+#   - app/core/datasources/router.py   get_current_user, require_not_esecutore,
+#                                       require_user_or_above, require_admin
+#   - app/core/arricchisci/router.py   require_not_esecutore, require_admin
+#   - app/core/auth/shares_router.py   require_superadmin
+#
+#   Auth-package internals (lazy proxy bodies migrated to leaf):
+#   - app/core/auth/groups_router.py   lazy get_current_user, require_admin,
+#                                       require_superadmin inside proxy fns
+#   - app/core/auth/users_router.py    lazy get_current_user, require_admin
+#                                       inside proxy fns
+#
+#   main.py: removed unused get_current_user import; only
+#   `router as auth_router` stays on the facade.
+#
+# ast.walk catches body-local lazy imports as well as top-level ones.
+
+_AUTH_ENGINE_019_MIGRATED_FILES = (
+    _APP / "core" / "orchestrator" / "router.py",
+    _APP / "core" / "imdf" / "router.py",
+    _APP / "core" / "datasources" / "router.py",
+    _APP / "core" / "arricchisci" / "router.py",
+    _APP / "core" / "auth" / "shares_router.py",
+    _APP / "core" / "auth" / "groups_router.py",
+    _APP / "core" / "auth" / "users_router.py",
+)
+
+
+@pytest.mark.parametrize(
+    "path",
+    _AUTH_ENGINE_019_MIGRATED_FILES,
+    ids=lambda p: str(p.relative_to(_BACKEND_ROOT)).replace("\\", "/"),
+)
+def test_auth_engine_019_migrated_file_imports_dependencies_from_leaf(
+    path: Path,
+):
+    """AUTH-ENGINE-019 positive lock: each migrated file MUST import
+    at least one standard dependency callable from the canonical leaf
+    `app.core.auth.dependencies`. Body-local (lazy) imports are also
+    caught via ast.walk. Reverting to the facade re-introduces the
+    coupling AUTH-ENGINE-019 closed."""
+    assert path.exists(), f"AUTH-ENGINE-019 migrated file missing: {path}"
+    text = path.read_text(encoding="utf-8")
+    tree = ast.parse(text, filename=str(path))
+    imported_from_leaf: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == _AUTH_ENGINE_013_DEPENDENCY_LEAF:
+            for alias in node.names:
+                imported_from_leaf.add(alias.name)
+    leaf_intersect = imported_from_leaf & set(_AUTH_ENGINE_013_LEAF_SYMBOLS)
+    assert leaf_intersect, (
+        f"{path.relative_to(_BACKEND_ROOT)} must import at least one of "
+        f"{_AUTH_ENGINE_013_LEAF_SYMBOLS} from "
+        f"`{_AUTH_ENGINE_013_DEPENDENCY_LEAF}`. "
+        "AUTH-ENGINE-019: dependency callables must come from the "
+        "canonical leaf, not the facade."
+    )
+
+
+@pytest.mark.parametrize(
+    "path",
+    _AUTH_ENGINE_019_MIGRATED_FILES,
+    ids=lambda p: str(p.relative_to(_BACKEND_ROOT)).replace("\\", "/"),
+)
+def test_auth_engine_019_migrated_file_does_not_import_dependencies_from_facade(
+    path: Path,
+):
+    """AUTH-ENGINE-019 negative lock: the 7 migrated files MUST NOT
+    pull any standard dependency callable from `app.core.auth.auth`.
+    ast.walk catches body-local lazy imports as well as top-level ones."""
+    assert path.exists(), f"AUTH-ENGINE-019 migrated file missing: {path}"
+    text = path.read_text(encoding="utf-8")
+    tree = ast.parse(text, filename=str(path))
+    imported_from_facade: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == "app.core.auth.auth":
+            for alias in node.names:
+                imported_from_facade.add(alias.name)
+    facade_intersect = imported_from_facade & set(_AUTH_ENGINE_013_LEAF_SYMBOLS)
+    assert not facade_intersect, (
+        f"{path.relative_to(_BACKEND_ROOT)} pulls "
+        f"{sorted(facade_intersect)} from `app.core.auth.auth` (the facade). "
+        "AUTH-ENGINE-019: standard dependency callables must be consumed from "
+        "`app.core.auth.dependencies` (canonical leaf)."
+    )
+
+
+def test_auth_engine_019_main_does_not_import_dep_callables_from_facade():
+    """AUTH-ENGINE-019 negative lock for main.py: the only remaining
+    facade import in main.py is `router as auth_router` (the auth
+    router object). The previously unused `get_current_user` import
+    was removed. This lock prevents any of the five standard dep
+    callables from re-appearing in main.py's facade import."""
+    path = _APP / "main.py"
+    assert path.exists(), f"main.py missing at {path}"
+    text = path.read_text(encoding="utf-8")
+    tree = ast.parse(text, filename=str(path))
+    imported_from_facade: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == "app.core.auth.auth":
+            for alias in node.names:
+                imported_from_facade.add(alias.name)
+    facade_intersect = imported_from_facade & set(_AUTH_ENGINE_013_LEAF_SYMBOLS)
+    assert not facade_intersect, (
+        f"main.py pulls {sorted(facade_intersect)} from `app.core.auth.auth`. "
+        "AUTH-ENGINE-019: standard dep callables must not appear in main.py's "
+        "facade import. `router as auth_router` is the only permitted name."
     )

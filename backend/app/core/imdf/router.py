@@ -19,7 +19,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.config import settings
-from app.core.auth.auth import get_current_user
+# BE-GO-READY-AUTH-ENGINE-019 dep-import off facade.
+from app.core.auth.dependencies import get_current_user
 # BE-GO-READY-AUTH-ENGINE-015 Phase-9 contract fan-out.
 from app.shared.contracts.auth import CurrentUser
 # BE-GO-READY-AUTH-ENGINE-020-IMDF-OWNERSHIP-MIGRATION:
@@ -144,8 +145,8 @@ def _assert_bundle_group_access(bundle_dir: Path, current_user: CurrentUser) -> 
         )
 
     try:
-        import app.db.db_service as db_svc
-        project = db_svc.get_project(bundle_project_id)
+        from app.db.config.projects import get_project as _get_project
+        project = _get_project(bundle_project_id)
         if not project:
             raise HTTPException(
                 status_code=404,

@@ -45,7 +45,8 @@ from app.bootstrap import bootstrap as _bootstrap, teardown as _teardown
 _bootstrap()
 
 # Auth JWT
-from app.core.auth.auth import router as auth_router, get_current_user
+# BE-GO-READY-AUTH-ENGINE-019: removed unused `get_current_user` dep-import.
+from app.core.auth.auth import router as auth_router
 from app.core.auth.users_router import users_router
 from app.core.auth.groups_router import groups_router
 from app.core.auth.auth_middleware import JWTMiddleware

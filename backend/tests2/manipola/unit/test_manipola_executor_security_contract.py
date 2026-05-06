@@ -19,11 +19,9 @@ def test_load_file_sources_fails_closed_when_current_group_is_unknown():
     longer consulted for this chain; absent an explicit ``group_id``
     kwarg the loader fail-closes regardless of the legacy attribute."""
     executor = ManipolaExecutor(project_service=object())
-    executor._current_group_id = None
     dataframes = {}
 
-    # Post-005: omitting `group_id=` is enough to fail-close;
-    # `_current_group_id` no longer participates in the file chain.
+    # Post-005: omitting `group_id=` is enough to fail-close.
     result = executor._carica_sorgenti_file(_canvas_with_file_source(), dataframes)
 
     assert result == {
@@ -67,8 +65,6 @@ def test_load_file_sources_ignores_stale_singleton_post_005():
     ``test_resolve_file_source_id_path_no_longer_falls_back_to_current_group_id``
     on the arricchisci side (ORCHESTRATION-ENGINE-010)."""
     executor = ManipolaExecutor(project_service=object())
-    # Stale singleton that MUST NOT be consulted.
-    executor._current_group_id = "stale-grp-LEAK"
     dataframes = {}
 
     visibility_called = {"count": 0}
@@ -100,14 +96,13 @@ def test_load_file_sources_ignores_stale_singleton_post_005():
 
 def test_load_project_sources_blocks_cross_tenant_source_project():
     executor = ManipolaExecutor(project_service=object())
-    executor._current_group_id = "stale-grp-DECOY"  # must not be consulted (TE-007 ctx-strict)
     executor.results_base_dir = None
     dataframes = {}
     canvas = build_canvas(
         build_node("project_source", source_project_id="proj-99", columns=[]),
     )
 
-    with patch("app.db.db_service.get_project", return_value={"id": "proj-99", "group_id": "grp-2"}):
+    with patch("app.db.config.projects.get_project", return_value={"id": "proj-99", "group_id": "grp-2"}):
         result = executor._carica_sorgenti_progetto(
             canvas, dataframes, force_recalculate=False, group_id="grp-1",
         )
@@ -120,35 +115,27 @@ def test_load_project_sources_blocks_cross_tenant_source_project():
 
 
 # =============================================================================
-# F1: preview() deve inizializzare _current_group_id come execute()
+# F1: preview() deve passare group_id esplicito ai source loader (TE-009)
 # =============================================================================
 
 
-def test_preview_initializes_current_group_id_like_execute():
-    """Regression guard F1: senza inizializzare `_current_group_id`,
-    `_carica_sorgenti_progetto` / `_carica_sorgenti_file` fail-closed
-    (vedi i due test sopra). Quei fail-closed ritornano un error dict
-    che `preview()` ignora silenziosamente, finendo con il messaggio
-    fuorviante "Nessun dato sorgente disponibile" anche quando il
-    canvas era valido. Il preview deve usare lo stesso lookup tenant
-    di execute() prima di invocare i loader."""
+def test_preview_passes_group_id_explicitly_to_source_loaders():
+    """TE-009 regression guard: preview() must resolve group_id via
+    `_init_security_context` and pass it as an explicit kwarg to each
+    source loader. No instance attribute is used; the kwarg is the only
+    tenant channel."""
     executor = ManipolaExecutor(project_service=object())
     canvas = build_canvas(
         build_node("project_source", source_project_id="proj-up", columns=[]),
         build_node("result"),
     )
 
-    # Mock i loader per terminare presto: ci interessa solo che
-    # `_current_group_id` sia stato settato PRIMA di chiamarli.
     captured = {"group_id": "<unset>"}
 
     def _capture_group_id_then_skip(*args, **kwargs):
-        captured["group_id"] = getattr(executor, "_current_group_id", None)
-        return None  # success path nei loader
+        captured["group_id"] = kwargs.get("group_id")
+        return None
 
-    # BE-GO-READY-DB-ENGINE-009: il lookup `_resolve_group_id_for_project_id`
-    # e' stato migrato al leaf `app.db.config.projects.get_project`;
-    # patch sul nuovo simbolo canonico.
     with patch(
         "app.db.config.projects.get_project",
         return_value={"id": "proj-cur", "group_id": "grp-A"},
@@ -163,7 +150,7 @@ def test_preview_initializes_current_group_id_like_execute():
         executor.preview("proj-cur", canvas, limit=10)
 
     assert captured["group_id"] == "grp-A", (
-        "preview() deve settare _current_group_id PRIMA di chiamare i "
-        "source loader; altrimenti questi fail-closed e preview ritorna "
-        "'Nessun dato sorgente disponibile' anche su canvas validi"
+        "preview() must pass the resolved group_id as an explicit kwarg "
+        "to _carica_sorgenti_progetto (TE-009 ctx-strict). "
+        f"Got: {captured['group_id']!r}"
     )

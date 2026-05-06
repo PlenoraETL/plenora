@@ -162,8 +162,6 @@ def test_executor_delegator_does_not_pass_singleton_group_id():
         return None
 
     executor = ManipolaExecutor(project_service=object())
-    # Stale singleton that MUST NOT be forwarded.
-    executor._current_group_id = "stale-grp-LEAK"
 
     canvas = build_canvas(
         build_node("file_source", file_source_id="fs-1", columns=[]),

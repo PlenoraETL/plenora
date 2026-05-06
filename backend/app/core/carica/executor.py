@@ -383,7 +383,7 @@ class CaricaExecutor:
             raise ValueError(f"Connessione '{connection_id}' non trovata")
 
         # Fallback: leggi dal DB PostgreSQL con decriptazione password
-        import app.db.db_service as db_svc
+        import app.db.pg_connection as db_svc
         from app.services.connection_service import _decrypt_password
         row = db_svc.fetchone("SELECT * FROM connections WHERE id = ?", (connection_id,))
         if row:

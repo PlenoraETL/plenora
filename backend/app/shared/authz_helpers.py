@@ -21,7 +21,7 @@ from app.core.auth.ownership import (
     assert_resource_visible,
 )
 from app.services.project_service import ProjectService
-import app.db.db_service as db_svc
+from app.db.config.file_sources import get_file_source as _get_file_source
 
 
 def assert_project_access(project_id: str, current_user: CurrentUser) -> dict:
@@ -63,7 +63,7 @@ def assert_file_source_access(file_source_id: str, current_user: CurrentUser) ->
     """
     if not file_source_id:
         raise HTTPException(status_code=400, detail="file_source_id mancante")
-    row = db_svc.get_file_source(file_source_id)
+    row = _get_file_source(file_source_id)
     if not row:
         raise HTTPException(status_code=404, detail=f"File source '{file_source_id}' non trovato")
     assert_resource_visible(row, "file_sources", current_user, f"File source '{file_source_id}'")

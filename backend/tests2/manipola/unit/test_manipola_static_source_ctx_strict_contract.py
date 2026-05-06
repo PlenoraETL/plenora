@@ -45,12 +45,9 @@ class _StubLoader:
 
 
 def test_static_source_does_not_read_stale_singleton():
-    """TE-008: stale ``_current_group_id`` MUST NOT reach SourceLoader.load.
-
-    Pre-008 the singleton leaked via ``_resolve_executing_group_id``.
-    Post-008 the sentinel ``"_static_"`` is used instead."""
+    """TE-008/009: absent an explicit group_id the sentinel ``"_static_"``
+    is used. No instance attribute is consulted."""
     executor = ManipolaExecutor(project_service=object())
-    executor._current_group_id = "stale-grp-LEAK"
 
     stub = _StubLoader()
     with patch("app.core.artifacts.SourceLoader", lambda: stub):
@@ -100,12 +97,10 @@ def test_static_source_uses_sentinel_when_no_group_id_and_no_singleton():
     )
 
 
-def test_static_source_uses_sentinel_not_none_when_singleton_is_none():
-    """TE-008: even when ``_current_group_id`` is explicitly set to None,
-    the sentinel ``'_static_'`` is used (not None, which would fail the
-    SourceLoader non-empty guard)."""
+def test_static_source_uses_sentinel_not_none_when_group_id_absent():
+    """TE-009: absent group_id kwarg the sentinel ``'_static_'`` is used
+    (not None, which would fail the SourceLoader non-empty guard)."""
     executor = ManipolaExecutor(project_service=object())
-    executor._current_group_id = None
 
     stub = _StubLoader()
     with patch("app.core.artifacts.SourceLoader", lambda: stub):

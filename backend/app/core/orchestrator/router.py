@@ -27,7 +27,8 @@ from app.shared.models import ExecuteRequest
 from app.services.task_service import TaskType
 from app.utils.router_utils import require_service
 from app.shared.audit_action import audit_action
-from app.core.auth.auth import get_current_user, require_not_esecutore
+# BE-GO-READY-AUTH-ENGINE-019 dep-import off facade.
+from app.core.auth.dependencies import get_current_user, require_not_esecutore
 # BE-GO-READY-AUTH-ENGINE-015 Phase-9 contract fan-out.
 from app.shared.contracts.auth import CurrentUser
 from app.core.auth.ownership import assert_group_access
@@ -731,7 +732,6 @@ def download_task_result(
         FileResponse,
         StreamingResponse as _StreamingResponse,
     )
-    import app.db.db_service as _db
     from app.config import settings as _settings
 
     try:

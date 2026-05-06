@@ -32,13 +32,13 @@ from app.shared.exceptions import (
     ProjectCleanupPartialError,
 )
 from app.services.project_lineage import ProjectLineageCycleError
-from app.core.auth.auth import (
+from app.core.auth.dependencies import (
     get_current_user,
     require_not_esecutore,
     require_user_or_above,
-    require_project_owner,
     require_superadmin,
 )
+from app.core.auth.owner_dependencies import require_project_owner
 # BE-GO-READY-AUTH-ENGINE-012: pure-contract symbols
 # (`CurrentUser`, `group_filter`) consumed from
 # `app.shared.contracts.auth`. DB-bound `assert_group_access`

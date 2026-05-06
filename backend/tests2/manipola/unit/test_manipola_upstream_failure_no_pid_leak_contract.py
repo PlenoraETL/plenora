@@ -52,14 +52,12 @@ _EXECUTOR_GROUP_ID = "g1"
 
 
 def _executor_with_callback(callback) -> ManipolaExecutor:
-    """ManipolaExecutor con orchestrator_callback iniettato + tenant
-    binding fittizio. TE-007: group_id non viene piu' letto dal
-    singleton; i test passano group_id=_EXECUTOR_GROUP_ID esplicitamente."""
+    """ManipolaExecutor con orchestrator_callback iniettato.
+    TE-009: group_id viene passato esplicitamente ad ogni chiamata."""
     executor = ManipolaExecutor(
         project_service=object(),
         orchestrator_callback=callback,
     )
-    executor._current_group_id = _EXECUTOR_GROUP_ID  # kept for compat, not consulted
     return executor
 
 

@@ -25,7 +25,8 @@ from app.utils.logger import get_logger
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 from app.shared.audit_action import audit_action
-from app.core.auth.auth import (
+# BE-GO-READY-AUTH-ENGINE-019 dep-import off facade.
+from app.core.auth.dependencies import (
     get_current_user,
     require_not_esecutore,
     require_user_or_above,
@@ -256,7 +257,7 @@ def _find_projects_using_datasource(ds_id: str) -> List[Dict[str, str]]:
     dipendenze. Sollevamento intenzionale con built-in: sentinel interno
     al batch, non va esteso oltre questo scope.
     """
-    import app.db.db_service as _db
+    import app.db.pg_connection as _db
     # PR-δ: includere group_id nella SELECT per consentire al caller di
     # filtrare le dipendenze visibili al chiamante (no leak nomi
     # cross-tenant nell'errore 409).

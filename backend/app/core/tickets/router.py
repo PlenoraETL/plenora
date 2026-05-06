@@ -415,8 +415,8 @@ def download_attachment_endpoint(
         raise HTTPException(404, "Blob allegato non disponibile")
 
     # Recupera metadata del file_source per filename + format
-    import app.db.db_service as db
-    fs_row = db.get_file_source(attachment["file_source_id"], include_data=False)
+    from app.db.config.file_sources import get_file_source as _get_file_source
+    fs_row = _get_file_source(attachment["file_source_id"], include_data=False)
     if not fs_row:
         raise HTTPException(404, "File source non trovato")
 

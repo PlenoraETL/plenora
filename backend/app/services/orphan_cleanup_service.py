@@ -35,7 +35,7 @@ Quando usarlo
 
 from typing import List, Dict, Any
 
-import app.db.db_service as db
+import app.db.pg_connection as db
 import app.db.results_db_service as results_db
 from app.utils.logger import get_logger
 

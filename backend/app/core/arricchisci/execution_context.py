@@ -59,7 +59,7 @@ from typing import Optional
 
 import psycopg2
 
-import app.db.db_service as db_svc
+from app.db.config.projects import get_project as _get_project
 from app.shared.exceptions import ExecutionContextError
 
 
@@ -131,7 +131,7 @@ def build_execution_context(
         `ArricchisciExecutionContext` immutabile.
     """
     try:
-        _proj_row = db_svc.get_project(project_id)
+        _proj_row = _get_project(project_id)
     except psycopg2.Error as e:
         raise ExecutionContextError(
             project_id,

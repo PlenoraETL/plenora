@@ -16,7 +16,8 @@ Sub-router:
 import json
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Depends, Query
-from app.core.auth.auth import (
+# BE-GO-READY-AUTH-ENGINE-019 dep-import off facade.
+from app.core.auth.dependencies import (
     require_not_esecutore,
     require_admin,
 )

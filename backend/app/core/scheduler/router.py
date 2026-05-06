@@ -34,7 +34,7 @@ from app.core.auth.dependencies import (
     require_not_esecutore,
     require_admin,
 )
-from app.core.auth.auth import require_schedule_owner
+from app.core.auth.owner_dependencies import require_schedule_owner
 # BE-GO-READY-AUTH-ENGINE-012: pure-contract symbols
 # (`CurrentUser`, `group_filter`) consumed from
 # `app.shared.contracts.auth`. DB-bound `assert_group_access`

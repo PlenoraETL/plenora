@@ -114,7 +114,7 @@ from app.core.auth.dependencies import (
     require_not_esecutore,
     require_user_or_above,
 )
-from app.core.auth.auth import require_file_owner
+from app.core.auth.owner_dependencies import require_file_owner
 # BE-GO-READY-AUTH-ENGINE-013 Phase-7 contract fan-out: pure
 # contract symbols (`CurrentUser`, `group_filter`) consumed from
 # the shared contract module. DB-bound ownership helpers stay on
@@ -140,14 +140,14 @@ from .models import (
 
 logger = get_logger(__name__)
 
-import app.db.db_service as _db_files
+from app.db.config.file_sources import get_file_source as _get_file_source
 
 
 def _check_file_ownership(file_id: str, group_id: str, is_superadmin: bool = False):
     """Verifica che il file appartenga al gruppo. Solleva 404 o 403 altrimenti."""
     if is_superadmin:
         return
-    row = _db_files.get_file_source(file_id, include_data=False)
+    row = _get_file_source(file_id, include_data=False)
     if not row:
         raise HTTPException(
             status_code=404,

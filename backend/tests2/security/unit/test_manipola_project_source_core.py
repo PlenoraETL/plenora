@@ -1,29 +1,11 @@
-"""Core-level contract test per Refactor #2 invariante A
-(project_source / cross-tenant in manipola).
+"""Core-level contract tests for `_carica_sorgenti_progetto` (project_source
+cross-tenant isolation).
 
-Pre-Refactor #2 il check cross-tenant in
-`manipola.executor._carica_sorgenti_progetto` aveva tre fail-OPEN:
-
-1. `if _executing_project_group:` — se il group_id corrente non era
-   determinabile, il check veniva SALTATO interamente.
-2. `if _source_row:` — se `get_project(source_project_id)` ritornava
-   None (errore DB / progetto inesistente), il check era saltato.
-3. `except Exception` → `logger.warning("Cross-tenant check fallito
-   (degradato a warning)")` + continue: qualsiasi errore durante il check
-   veniva swallowato e l'esecuzione proseguiva.
-
-In piu', il successivo `materialize_latest(...)` veniva chiamato
-SENZA `expected_group_id`, quindi anche il check del resolver era
-disabilitato — fail-OPEN totale.
-
-Post-Refactor #2 il check e' delegato a
-`ArtifactResolver.materialize_latest(..., expected_group_id=...)`
-con `expected_group_id` derivato da `self._current_group_id` (che
-`manipola.execute()` garantisce non-None). Tutti e tre i path di
-errore producono fail-closed esplicito.
-
-Questi test girano DIRETTAMENTE su `_carica_sorgenti_progetto` —
-nessun TestClient HTTP, nessun CurrentUser.
+Post-TE-007/008/009: all three source loaders are ctx-strict. The
+`_current_group_id` instance attribute and the `_resolve_executing_group_id`
+helper have been removed. The `group_id` kwarg (resolved by
+`_init_security_context` in execute/preview and forwarded explicitly) is the
+only tenant channel. Absent an explicit kwarg, the loader fails closed.
 """
 
 from unittest.mock import patch
@@ -42,9 +24,8 @@ pytestmark = [
 ]
 
 
-def _make_executor(group_id):
+def _make_executor():
     executor = ManipolaExecutor(project_service=object())
-    executor._current_group_id = group_id
     executor.results_base_dir = None
     return executor
 
@@ -56,14 +37,14 @@ def _canvas_with_project_source(source_project_id="proj-99"):
 
 
 # ---------------------------------------------------------------------------
-# Fail-closed quando _current_group_id non e' determinabile
+# Fail-closed quando group_id esplicito e' assente o vuoto
 # ---------------------------------------------------------------------------
 
 
-def test_load_project_sources_fail_closed_when_current_group_is_none():
-    """Pre-Refactor #2 il check era `if _executing_project_group:` →
-    None bypassava interamente. Ora hard fail."""
-    executor = _make_executor(group_id=None)
+def test_load_project_sources_fail_closed_without_explicit_group_id():
+    """Missing group_id kwarg → ctx-strict fail-closed. The loader
+    must not fall back to any instance state."""
+    executor = _make_executor()
     dataframes = {}
 
     result = executor._carica_sorgenti_progetto(
@@ -76,12 +57,14 @@ def test_load_project_sources_fail_closed_when_current_group_is_none():
     assert dataframes == {}
 
 
-def test_load_project_sources_fail_closed_when_current_group_is_empty_string():
-    executor = _make_executor(group_id="")
+def test_load_project_sources_fail_closed_when_kwarg_is_empty_string():
+    """Empty-string kwarg is falsey → ctx-strict fail-closed."""
+    executor = _make_executor()
     dataframes = {}
 
     result = executor._carica_sorgenti_progetto(
-        _canvas_with_project_source(), dataframes, force_recalculate=False
+        _canvas_with_project_source(), dataframes,
+        force_recalculate=False, group_id="",
     )
 
     assert result is not None
@@ -99,10 +82,10 @@ def test_load_project_sources_blocks_cross_tenant_via_resolver():
     """Verifica che il check sia delegato al resolver con
     expected_group_id corretto, non a una logica inline che salta
     sul primo errore."""
-    executor = _make_executor(group_id="grp-1")
+    executor = _make_executor()
     dataframes = {}
 
-    with patch("app.db.db_service.get_project",
+    with patch("app.db.config.projects.get_project",
                return_value={"id": "proj-99", "group_id": "grp-2"}):
         result = executor._carica_sorgenti_progetto(
             _canvas_with_project_source("proj-99"), dataframes,
@@ -126,10 +109,10 @@ def test_load_project_sources_fail_closed_when_source_project_missing():
     e il flusso proseguiva al load. Ora il resolver solleva
     ArtifactResolutionError (progetto non trovato) e il caller
     fa fail-closed."""
-    executor = _make_executor(group_id="grp-1")
+    executor = _make_executor()
     dataframes = {}
 
-    with patch("app.db.db_service.get_project", return_value=None):
+    with patch("app.db.config.projects.get_project", return_value=None):
         result = executor._carica_sorgenti_progetto(
             _canvas_with_project_source("proj-ghost"), dataframes,
             force_recalculate=False,
@@ -164,7 +147,6 @@ def test_load_file_sources_reapplies_crs_from_node_columns_metadata():
     import pandas as pd
 
     executor = ManipolaExecutor(project_service=object())
-    executor._current_group_id = "grp-1"
     dataframes = {}
 
     canvas = build_canvas(
@@ -212,30 +194,19 @@ def test_load_file_sources_reapplies_crs_from_node_columns_metadata():
 
 
 # ---------------------------------------------------------------------------
-# BE-GO-READY-TRANSFORMATION-ENGINE-004 — explicit tenant boundary
+# TE-007/008/009 — ctx-strict: explicit group_id is the only channel
 # ---------------------------------------------------------------------------
 #
-# Pre-004 the three `_carica_sorgenti_*` methods read `group_id`
-# directly from `self._current_group_id`. A stale or wrong
-# attribute value silently authorized cross-tenant source loads.
-#
-# Post-004 the methods accept `group_id` as a kwarg; production
-# callers (`execute()` / `preview()`) pass the value resolved by
-# `_init_security_context`. The legacy attribute is consulted only
-# as a fallback when the kwarg is None / empty (back-compat for
-# tests that set `executor._current_group_id = X` directly).
-#
-# These tests lock the precedence: an explicit `group_id` MUST
-# override a stale `_current_group_id`.
+# The `_current_group_id` attribute and `_resolve_executing_group_id` helper
+# are gone. All three `_carica_sorgenti_*` methods are ctx-strict: they use
+# only the explicit `group_id` kwarg. Tests below lock these invariants.
 
 
-def test_explicit_group_id_overrides_stale_current_group_id():
-    """If `_current_group_id` says "grp-attacker" but the caller
-    passes `group_id="grp-victim"`, the resolver MUST be invoked
-    with `expected_group_id="grp-victim"` — the explicit value
-    wins. This protects against a stale instance attribute
-    silently authorizing the wrong tenant's data."""
-    executor = _make_executor(group_id="grp-attacker")  # stale
+def test_explicit_group_id_is_forwarded_to_resolver():
+    """The explicit `group_id` kwarg is what reaches the resolver's
+    `expected_group_id`. There is no fallback: whatever is passed in
+    is what determines tenant authorization."""
+    executor = _make_executor()
     dataframes = {}
 
     captured = {}
@@ -269,19 +240,16 @@ def test_explicit_group_id_overrides_stale_current_group_id():
 
     assert captured.get("expected_group_id") == "grp-victim", (
         f"Resolver must be called with the EXPLICIT group_id "
-        f"('grp-victim'), not the stale instance attribute "
-        f"('grp-attacker'). Got: {captured.get('expected_group_id')!r}. "
-        "BE-GO-READY-TRANSFORMATION-ENGINE-004 pins the precedence."
+        f"('grp-victim'). Got: {captured.get('expected_group_id')!r}. "
+        "TE-007/009: explicit kwarg is the only tenant channel."
     )
 
 
 def test_stale_current_group_id_ignored_when_kwarg_missing():
-    """BE-GO-READY-TRANSFORMATION-ENGINE-007: the singleton
-    `_current_group_id` is NO LONGER consulted when the explicit
-    `group_id` kwarg is absent. Calling without the kwarg must
-    fail-closed immediately, even if the attribute carries a value.
+    """TE-009: no `_current_group_id` attribute exists. Calling without
+    the explicit `group_id` kwarg must fail-closed immediately.
     The resolver must not be invoked at all."""
-    executor = _make_executor(group_id="grp-legacy")  # stale attribute
+    executor = _make_executor()
     dataframes = {}
 
     resolver_called = {"count": 0}
@@ -318,11 +286,10 @@ def test_stale_current_group_id_ignored_when_kwarg_missing():
 
 
 def test_empty_explicit_kwarg_fails_closed_not_fallback():
-    """BE-GO-READY-TRANSFORMATION-ENGINE-007: an empty-string explicit
-    kwarg is falsey and MUST NOT fall back to `_current_group_id` —
-    the project-source chain is ctx-strict. An empty kwarg must
-    fail-closed the same way as a missing kwarg."""
-    executor = _make_executor(group_id="grp-1")  # stale attribute
+    """TE-009: an empty-string explicit kwarg is falsey. No fallback
+    attribute exists. The project-source chain is ctx-strict: an empty
+    kwarg must fail-closed the same way as a missing kwarg."""
+    executor = _make_executor()
     dataframes = {}
 
     resolver_called = {"count": 0}
@@ -349,49 +316,11 @@ def test_empty_explicit_kwarg_fails_closed_not_fallback():
     assert result["success"] is False
     assert "Contesto di sicurezza" in result["message"], (
         f"Expected ctx-strict fail-closed, got: {result['message']!r}. "
-        "TE-007: empty-string group_id must not fall back to stale "
-        "_current_group_id."
+        "TE-009: empty-string group_id → fail-closed (no fallback)."
     )
     assert resolver_called["count"] == 0
     assert dataframes == {}
 
-
-def test_explicit_group_id_none_with_no_attribute_is_fail_closed():
-    """If the explicit kwarg is None AND `_current_group_id` is
-    unset, the loader must fail-closed (no silent pass-through to
-    the resolver with an empty tenant binding)."""
-    executor = ManipolaExecutor(project_service=object())
-    # No `_current_group_id` attribute set on the instance.
-    executor.results_base_dir = None
-    dataframes = {}
-
-    result = executor._carica_sorgenti_progetto(
-        _canvas_with_project_source("proj-99"), dataframes,
-        force_recalculate=False,
-        # group_id omitted -> None
-    )
-
-    assert result is not None
-    assert result["success"] is False
-    assert "Contesto di sicurezza" in result["message"]
-
-
-def test_resolve_executing_group_id_helper_precedence():
-    """Source-bound unit test for the new helper: explicit value
-    wins, falsey explicit falls back, both empty -> None."""
-    executor = ManipolaExecutor(project_service=object())
-    executor._current_group_id = "grp-attribute"
-
-    # Explicit non-empty wins
-    assert executor._resolve_executing_group_id("grp-explicit") == "grp-explicit"
-    # Falsey (None / empty / 0) falls back
-    assert executor._resolve_executing_group_id(None) == "grp-attribute"
-    assert executor._resolve_executing_group_id("") == "grp-attribute"
-
-    # No attribute at all -> None
-    executor2 = ManipolaExecutor(project_service=object())
-    assert executor2._resolve_executing_group_id(None) is None
-    assert executor2._resolve_executing_group_id("grp-explicit") == "grp-explicit"
 
 
 def test_load_project_sources_fail_closed_when_check_raises_unexpectedly():
@@ -399,7 +328,7 @@ def test_load_project_sources_fail_closed_when_check_raises_unexpectedly():
     errore durante il check degradandolo a warning e proseguiva.
     Ora gli errori del resolver vengono lasciati propagare al caller
     (manipola.execute), che li traduce in failure dello step."""
-    executor = _make_executor(group_id="grp-1")
+    executor = _make_executor()
     dataframes = {}
 
     def _boom(*_a, **_k):

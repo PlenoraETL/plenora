@@ -65,7 +65,7 @@ logger = get_logger(__name__)
 # pubbliche *_db e i 3 helper privati sono mantenuti come module-level
 # per preservare la superficie importata dai test.
 
-import app.db.db_service as db
+import app.db.pg_connection as db
 from app.shared.crypto import encrypt as _encrypt, decrypt as _decrypt
 
 DEFAULT_GROUP = "default"

@@ -197,37 +197,24 @@ class ManipolaExecutor:
     # =========================================================================
 
     def _init_security_context(self, project_id: str, *, strict: bool) -> Optional[str]:
-        """Risolve il `group_id` del progetto corrente per i check
-        cross-tenant in `_carica_sorgenti_progetto` /
-        `_carica_sorgenti_file` / `_carica_sorgenti_statiche`.
+        """Risolve il `group_id` del progetto corrente e lo ritorna.
 
-        BE-GO-READY-TRANSFORMATION-ENGINE-004 (tenant-context boundary):
-        questa funzione **ritorna** il `group_id` risolto cosi' i caller
-        (execute / preview) lo possono propagare esplicitamente ai
-        loader di sorgenti come kwarg. L'attributo legacy
-        `self._current_group_id` resta scritto per back-compat — i
-        loader cadono su quello solo se il chiamante non passa il
-        parametro esplicito (back-compat con i test esistenti). Il
-        valore esplicito SEMPRE prevale sull'attributo: una stale
-        `_current_group_id` non puo' autorizzare una sorgente quando
-        il caller passa un group_id diverso.
+        I caller (execute / preview) propagano il valore ritornato come
+        kwarg esplicito ai source loader. Tutti e tre i loader sono
+        ctx-strict (TE-007/008): il group_id deve venire da qui, non da
+        stato di istanza.
 
-        - `strict=True` (execute): se il group_id non e' determinabile
-          solleva ValueError fail-closed (l'esecuzione persiste output
-          e va legata a un tenant).
-        - `strict=False` (preview): in caso di lookup fallito ritorna
-          None e prosegue. Senza questa init, i source loader
-          fail-closed silently e il preview ritorna "Nessun dato
-          sorgente disponibile" anche su canvas validi.
+        - `strict=True` (execute): ValueError fail-closed se il group_id
+          non e' determinabile (l'esecuzione persiste output e va legata
+          a un tenant).
+        - `strict=False` (preview): ritorna None in caso di lookup fallito;
+          i loader fail-closed e il preview torna "Nessun dato sorgente
+          disponibile" — comportamento corretto per canvas con sorgenti
+          inaccessibili.
         """
         resolved: Optional[str]
         try:
-            # BE-GO-READY-DB-ENGINE-009: lookup migrato dal facade
-            # `app.db.db_service` al leaf canonico
-            # `app.db.config.projects.get_project`. La chiamata era
-            # l'unico simbolo `db_service` di questo file (lazy
-            # import + single call), quindi il file e' ora
-            # facade-clean.
+            # BE-GO-READY-DB-ENGINE-009: leaf canonico invece del facade.
             from app.db.config.projects import get_project as _get_project
             _proj_row = _get_project(project_id)
             resolved = _proj_row.get("group_id") if _proj_row else None
@@ -235,40 +222,9 @@ class ManipolaExecutor:
             logger.error(f"[GESTITO] Impossibile determinare group_id per {project_id}: {e}", exc_info=True)
             resolved = None
 
-        # Back-compat: scriviamo l'attributo cosi' i test storici che
-        # fanno `executor._current_group_id = X` continuano a vedere
-        # un valore coerente quando ispezionano lo stato dell'istanza
-        # dopo `execute()`/`preview()`. La produzione legge dal
-        # parametro esplicito.
-        self._current_group_id = resolved
-
         if strict and resolved is None:
             raise ValueError(f"group_id non determinabile per progetto {project_id}")
         return resolved
-
-    def _resolve_executing_group_id(self, explicit: Optional[str]) -> Optional[str]:
-        """Tenant-context boundary helper.
-
-        Restituisce il `group_id` da usare per il check cross-tenant
-        nelle 3 funzioni `_carica_sorgenti_*`. Regola:
-
-          1. se `explicit` e' un valore non vuoto -> ritorna quello
-             (production path: `execute()`/`preview()` lo passano
-             dopo aver risolto il progetto via
-             `_init_security_context`);
-          2. altrimenti ritorna `getattr(self, "_current_group_id",
-             None)` (back-compat per i test che settano l'attributo
-             direttamente senza chiamare `execute()`/`preview()`).
-
-        L'`explicit` arg vince **sempre** sull'attributo legacy: una
-        stale `_current_group_id` non puo' autorizzare una sorgente
-        quando il caller passa un group_id diverso. Mantiene il
-        contratto fail-closed (caller riceve `None` se nessuna fonte
-        ha un valore non vuoto).
-        """
-        if explicit:
-            return explicit
-        return getattr(self, "_current_group_id", None)
 
     def execute(
         self,
@@ -301,12 +257,9 @@ class ManipolaExecutor:
         dataframes = {}
 
         try:
-            # BE-GO-READY-TRANSFORMATION-ENGINE-004: tenant boundary
-            # esplicito. `executing_group_id` viene risolto dal progetto
-            # corrente e propagato come kwarg ai 3 source loader: il
-            # check cross-tenant si basa sul valore esplicito, non su
-            # `self._current_group_id` (che resta scritto solo per
-            # back-compat con i test legacy).
+            # TE-007/008/009: tutti e 3 i loader sono ctx-strict;
+            # `executing_group_id` (da `_init_security_context`) e' l'unico
+            # canale tenant — nessuno stato di istanza coinvolto.
             for loader in [
                 lambda: self._carica_sorgenti_progetto(canvas, dataframes, force_recalculate, run_id=run_id, group_id=executing_group_id),
                 lambda: self._carica_sorgenti_file(canvas, dataframes, group_id=executing_group_id),
@@ -759,9 +712,9 @@ class ManipolaExecutor:
         helper: l'argomento ``group_id`` del helper e' l'**unico**
         canale tenant per questa catena.
         ``_carica_sorgenti_progetto`` e' ctx-strict (TE-007 cut: nessun
-        fallback singleton). ``_carica_sorgenti_statiche`` delega a
-        ``_resolve_executing_group_id`` con sentinel ``"_static_"``
-        non-autorizzante (TE-008).
+        fallback singleton). ``_carica_sorgenti_statiche`` usa
+        l'argomento esplicito ``group_id`` o il sentinel
+        ``"_static_"`` non-autorizzante (TE-008).
         """
         return load_file_sources(
             canvas,

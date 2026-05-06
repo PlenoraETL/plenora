@@ -86,8 +86,10 @@ _security = HTTPBearer(auto_error=False)
 def _get_current_user_proxy(
     credentials: HTTPAuthorizationCredentials | None = Depends(_security),
 ) -> CurrentUser:
-    """Lazy proxy to avoid `users_router -> auth.py -> users_router` cycle."""
-    from app.core.auth.auth import get_current_user
+    """Lazy proxy to avoid `users_router -> auth.py -> users_router` cycle.
+    BE-GO-READY-AUTH-ENGINE-019: import moved to `dependencies` leaf.
+    """
+    from app.core.auth.dependencies import get_current_user
 
     return get_current_user(credentials)
 
@@ -96,7 +98,7 @@ def require_admin(
     current_user: CurrentUser = Depends(_get_current_user_proxy),
 ) -> CurrentUser:
     """Lazy proxy preserving the existing `auth.require_admin` behavior."""
-    from app.core.auth.auth import require_admin as _require_admin
+    from app.core.auth.dependencies import require_admin as _require_admin
 
     return _require_admin(current_user)
 

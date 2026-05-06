@@ -595,3 +595,78 @@ def test_smoke_branch_only_reads_smoke_env_vars(install_sh_text: str):
             "usage header and in docs/ops/install-marco-dry-run.md "
             "section 5.0)."
         )
+
+
+# =====================================================================
+# 15. --check reports env file + venv status (BE-GO-READY-INSTALL-020)
+# =====================================================================
+
+
+def test_check_env_status_function_defined(install_sh_text: str):
+    """BE-GO-READY-INSTALL-020: step_check_env_status must be defined
+    in scripts/install.sh so --check reports backend/.env and
+    backend/venv existence as part of its informational preflight
+    output without reading secrets or writing anything."""
+    assert "step_check_env_status() {" in install_sh_text, (
+        "step_check_env_status function must be defined in "
+        "scripts/install.sh (BE-GO-READY-INSTALL-020). It reports "
+        "backend/.env and backend/venv existence in --check mode "
+        "without reading secrets or writing anything."
+    )
+
+
+def test_check_env_status_reports_env_file_and_venv(install_sh_text: str):
+    """The function body must reference ENV_FILE (for .env presence
+    check) and 'venv' (for virtual-environment check), and emit
+    'EXISTS' as the positive signal when backend/.env is found."""
+    fn_start = install_sh_text.index("step_check_env_status() {")
+    # Slice up to the next comment section marker so we don't bleed
+    # into adjacent functions.
+    next_section = install_sh_text.index(
+        "# Step 2 - Gather configuration", fn_start
+    )
+    fn_text = install_sh_text[fn_start:next_section]
+    assert "ENV_FILE" in fn_text, (
+        "step_check_env_status must reference ENV_FILE to check "
+        "whether backend/.env exists (BE-GO-READY-INSTALL-020). "
+        "Reading only the path, not any secret values."
+    )
+    assert "venv" in fn_text, (
+        "step_check_env_status must reference 'venv' to check "
+        "whether backend/venv exists (BE-GO-READY-INSTALL-020). "
+        "The venv path is the operator's indicator that step 6 "
+        "of the install runbook has been completed."
+    )
+    assert "EXISTS" in fn_text, (
+        "step_check_env_status must emit 'EXISTS' when backend/.env "
+        "is present so the operator gets a clear positive signal "
+        "in the --check transcript (BE-GO-READY-INSTALL-020)."
+    )
+
+
+def test_check_env_status_called_in_check_only_branch(install_sh_text: str):
+    """step_check_env_status must be called inside the CHECK_ONLY
+    branch of main(), before step_gather_config (which prompts) and
+    before step_check_only_summary (so the env/venv status appears
+    before the final PASS/FAIL line)."""
+    main_start = install_sh_text.index("\nmain() {")
+    main_end = install_sh_text.index("\n}\n", main_start)
+    main_body = install_sh_text[main_start:main_end]
+    assert "step_check_env_status" in main_body, (
+        "step_check_env_status must be called inside main() "
+        "(BE-GO-READY-INSTALL-020). Currently absent from main."
+    )
+    env_pos = main_body.index("step_check_env_status")
+    gather_pos = main_body.index("step_gather_config")
+    summary_pos = main_body.index("step_check_only_summary")
+    assert env_pos < gather_pos, (
+        "step_check_env_status must be called BEFORE "
+        "step_gather_config so --check stays prompt-free "
+        "(BE-GO-READY-INSTALL-020)."
+    )
+    assert env_pos < summary_pos, (
+        "step_check_env_status must be called BEFORE "
+        "step_check_only_summary so the env/venv status appears "
+        "in the --check transcript before the final PASS/FAIL "
+        "verdict (BE-GO-READY-INSTALL-020)."
+    )

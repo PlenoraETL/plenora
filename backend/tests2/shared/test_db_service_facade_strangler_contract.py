@@ -142,38 +142,46 @@ _FACADE_FILE = "app/db/db_service.py"
 #     them transitively). Zero monkeypatch coupling on
 #     `eseguibili.db.db.<name>`. Allowlist row removed.
 _DB_SERVICE_PROD_ALLOWLIST: frozenset[str] = frozenset({
+    # Bootstrap orchestrator — `init_all_dbs` lives on the facade.
     "app/bootstrap.py",
+    # Arricchisci: test-monkeypatch surface (noqa: F401 preserved).
     "app/core/arricchisci/api_connection_management.py",
     "app/core/arricchisci/api_connection_rest_file.py",
     "app/core/arricchisci/api_connector.py",
     "app/core/arricchisci/canvas_orchestrator.py",
-    "app/core/arricchisci/execution_context.py",
-    "app/core/artifacts/resolver.py",
+    # Auth surface — Worker 2 owns extraction.
     "app/core/auth/auth.py",
     "app/core/auth/ownership.py",
     "app/core/auth/shares_router.py",
     "app/core/auth/users_router.py",
-    "app/core/carica/executor.py",
-    "app/core/datasources/router.py",
+    # Datasources service — many cluster-specific calls; deferred.
     "app/core/datasources/service.py",
-    "app/core/features/features_service.py",
-    "app/core/files/router.py",
-    "app/core/imdf/router.py",
-    "app/core/orchestrator/router.py",
+    # Scheduler cluster — complex orchestration; deferred.
     "app/core/scheduler/concurrency_manager.py",
     "app/core/scheduler/execution_manager.py",
     "app/core/scheduler/router.py",
     "app/core/scheduler/schedule_service.py",
-    "app/core/tickets/router.py",
+    # Services with many mixed usages; deferred.
     "app/services/connection_service.py",
     "app/services/file_service.py",
-    "app/services/orphan_cleanup_service.py",
     "app/services/project_service.py",
-    "app/shared/authz_helpers.py",
     "app/utils/result_store.py",
+    # Worker cluster — deferred.
     "workers/beat_scheduler.py",
     "workers/tasks/carica_task.py",
     "workers/tasks/schedule_task.py",
+    #
+    # Removed by BE-GO-READY-DB-ENGINE-013 (this batch):
+    #   app/core/arricchisci/execution_context.py → app.db.config.projects.get_project
+    #   app/core/carica/executor.py               → app.db.pg_connection.fetchone
+    #   app/core/datasources/router.py            → app.db.pg_connection.fetchall
+    #   app/core/features/features_service.py     → app.db.pg_connection (execute/fetchone/fetchall)
+    #   app/core/files/router.py                  → app.db.config.file_sources.get_file_source
+    #   app/core/imdf/router.py                   → app.db.config.projects.get_project
+    #   app/core/orchestrator/router.py           → dead import deleted
+    #   app/core/tickets/router.py                → app.db.config.file_sources.get_file_source
+    #   app/services/orphan_cleanup_service.py    → app.db.pg_connection.fetchall
+    #   app/shared/authz_helpers.py               → app.db.config.file_sources.get_file_source
 })
 
 

@@ -127,10 +127,11 @@ class ArtifactResolver:
         - altri fault -> wrap in ``ArtifactResolutionError(lettura
           latest blob ... fallita)`` con ``[GESTITO]`` log + chain.
         """
-        import app.db.db_service as db_service
+        from app.db.config.projects import get_project as _get_project
+        from app.db.results_db_service import get_latest_result as _get_latest_result
 
         if expected_group_id is not None:
-            project = db_service.get_project(ref.project_id)
+            project = _get_project(ref.project_id)
             if not project:
                 raise ArtifactResolutionError(
                     f"Progetto {ref.project_id} non trovato"
@@ -142,7 +143,7 @@ class ArtifactResolver:
                     f"group={actual_group}, atteso group={expected_group_id}"
                 )
 
-        row = db_service.get_latest_result(ref.project_id)
+        row = _get_latest_result(ref.project_id)
         if not row:
             return None
 
@@ -230,11 +231,11 @@ class ArtifactResolver:
           `mode="bytes"` (no tempfile) — il caller HTTP fa
           `StreamingResponse(blob.data)` direttamente.
         """
-        import app.db.db_service as db_service
+        from app.db.results_db_service import get_result as _get_result
 
         # intent: boundary / outcome: fail-closed (broad→domain con chain preservata)
         try:
-            row = db_service.get_result(result_id)
+            row = _get_result(result_id)
         except Exception as e:
             logger.error(
                 "[GESTITO] resolver lookup result_id '%s' fallito: %s",
@@ -342,7 +343,7 @@ class ArtifactResolver:
         Italian operator error string the rest of the system
         depends on).
         """
-        import app.db.db_service as db_service
+        from app.db.results_db_service import get_result as _get_result
 
         # ResourceRef + default_registry are top-level imports on
         # this module (see header). That makes the symbols
@@ -352,7 +353,7 @@ class ArtifactResolver:
 
         # intent: boundary / outcome: fail-closed (broad→domain con chain preservata)
         try:
-            row = db_service.get_result(result_id)
+            row = _get_result(result_id)
         except Exception as e:
             logger.error(
                 "[GESTITO] resolver lookup result_id '%s' fallito: %s",

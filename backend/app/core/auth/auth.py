@@ -305,67 +305,20 @@ from app.core.auth.dependencies import (  # noqa: F401  (re-export pubblico)
 # `app.core.imdf.router.assert_resource_visible`. Il re-export
 # `assert_resource_visible` dal facade e' rimosso.
 #
-# Resta UN solo re-export, esplicitamente interno:
-#
-#   - `_check_ownership`: usato INTERNAMENTE dai 3 wrapper
-#     `require_*_owner` qui sotto. Non e' superficie pubblica, ma
-#     l'import deve esserci perche' i wrapper lo chiamano.
-#
-# Le 3 dependency FastAPI `require_*_owner` restano in questo
-# modulo perche' usano `Depends(get_current_user)`: spostarle in
-# ownership.py creerebbe un cycle `auth.py ↔ ownership.py`. Sono
-# thin wrapper che chiamano `_check_ownership`.
+# BE-GO-READY-AUTH-ENGINE-018: le 3 dependency FastAPI
+# `require_*_owner` estratte nel leaf canonico
+# `app.core.auth.owner_dependencies`. Il cycle concern
+# `auth.py ↔ ownership.py` e' risolto da AUTH-ENGINE-005
+# (ownership.py non importa piu' da auth.py). Il re-export qui
+# preserva l'identita' per i caller legacy e per FastAPI Depends.
+# `_check_ownership` non e' piu' usato internamente in questo
+# modulo; il suo import e' rimosso.
 
-# Internal-only: usato dai 3 require_*_owner sotto.
-from app.core.auth.ownership import _check_ownership  # noqa: F401
-
-
-def require_project_owner(
-    project_id: str,
-    current_user: CurrentUser = Depends(get_current_user),
-) -> CurrentUser:
-    """Owner check su projects. Da usare per update/delete/canvas/duplicate.
-
-    BE-GO-READY-AUTH-ENGINE-012: lookup migrato dal facade
-    `config_db_service` al leaf `app.db.config.projects` (lazy
-    import per coerenza con gli altri due owner-check helper).
-    """
-    from app.db.config.projects import get_project as _get_project
-    project = _get_project(project_id)
-    _check_ownership(project, "Progetto", current_user)
-    return current_user
-
-
-def require_schedule_owner(
-    schedule_id: str,
-    current_user: CurrentUser = Depends(get_current_user),
-) -> CurrentUser:
-    """Owner check su schedules. Da usare per update/delete/toggle/run.
-
-    BE-GO-READY-AUTH-ENGINE-012: lookup migrato al leaf
-    `app.db.config.schedules`.
-    """
-    from app.db.config.schedules import get_schedule as _get_schedule
-    schedule = _get_schedule(schedule_id)
-    _check_ownership(schedule, "Schedule", current_user)
-    return current_user
-
-
-def require_file_owner(
-    file_id: str,
-    current_user: CurrentUser = Depends(get_current_user),
-) -> CurrentUser:
-    """Owner check su file_sources. Da usare per delete.
-
-    BE-GO-READY-AUTH-ENGINE-012: lookup migrato al leaf
-    `app.db.config.file_sources`.
-    """
-    from app.db.config.file_sources import (
-        get_file_source as _get_file_source,
-    )
-    file_source = _get_file_source(file_id)
-    _check_ownership(file_source, "File", current_user)
-    return current_user
+from app.core.auth.owner_dependencies import (  # noqa: F401  (re-export KEEP_COMPAT)
+    require_file_owner,
+    require_project_owner,
+    require_schedule_owner,
+)
 
 # ============================================================
 # ROUTER AUTH

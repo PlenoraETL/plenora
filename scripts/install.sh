@@ -521,6 +521,28 @@ step_check_only_summary() {
 }
 
 # ---------------------------------------------------------------------------
+# Step 1c - Env file + venv status (--check informational, BE-GO-READY-INSTALL-020)
+# ---------------------------------------------------------------------------
+# Reports whether backend/.env and backend/venv already exist.
+# Called only in --check mode; never reads secret values, never writes.
+# Does not affect the PASS/FAIL verdict from step_check_only_summary.
+step_check_env_status() {
+    log_step "Check 1c: env file + venv status"
+    if [[ -f "${ENV_FILE}" ]]; then
+        log_ok "backend/.env: EXISTS (run --smoke to verify values)."
+    else
+        log_warn "backend/.env: NOT FOUND (created by the full install run)."
+    fi
+    if [[ -x "${BACKEND_DIR}/venv/bin/python" ]]; then
+        local py
+        py="$("${BACKEND_DIR}/venv/bin/python" --version 2>&1)"
+        log_ok "backend/venv: EXISTS (${py})."
+    else
+        log_info "backend/venv: NOT FOUND (created at install runbook step 6)."
+    fi
+}
+
+# ---------------------------------------------------------------------------
 # Step 2 - Gather configuration
 # ---------------------------------------------------------------------------
 
@@ -995,6 +1017,7 @@ main() {
         local prereq_rc=0 packaging_rc=0
         step_validate_prereqs || prereq_rc=$?
         step_validate_packaging || packaging_rc=$?
+        step_check_env_status
         step_check_only_summary "$prereq_rc" "$packaging_rc"
     fi
 
