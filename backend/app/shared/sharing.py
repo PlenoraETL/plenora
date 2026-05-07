@@ -6,7 +6,7 @@ Centralizza la logica per le risorse "shareable":
 
 from __future__ import annotations
 
-from typing import Iterable, Optional
+from typing import Iterable, Optional, TypedDict, cast
 
 from app.db.pg_connection import (
     fetchone as _pg_fetchone,
@@ -30,6 +30,11 @@ _SHAREABLE: dict[str, tuple[str, str]] = {
     "arcgis_connections": ("arcgis_connection_shares",  "arcgis_connection_id"),
     "file_sources":       ("file_source_shares",        "file_source_id"),
 }
+
+
+class ShareableResourceOwner(TypedDict):
+    id: str
+    group_id: str | None
 
 
 # UTILS
@@ -63,6 +68,19 @@ def is_shareable(resource_table: str) -> bool:
 
 
 # QUERY DI VISIBILITÀ
+
+def load_shareable_resource_owner(
+    resource_table: str,
+    resource_id: str,
+) -> ShareableResourceOwner | None:
+    """Load the owner group row for a shareable resource."""
+    _validate_table(resource_table)
+    row = _pg_fetchone(
+        f"SELECT id, group_id FROM {resource_table} WHERE id = ?",
+        (resource_id,),
+    )
+    return cast(ShareableResourceOwner, dict(row)) if row else None
+
 
 def build_visible_where_clause(
     resource_table: str,

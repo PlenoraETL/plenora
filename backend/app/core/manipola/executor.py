@@ -217,7 +217,7 @@ class ManipolaExecutor:
         """
         resolved: Optional[str]
         try:
-            from app.db.config.projects import get_project as _get_project
+            from app.core.projects.db import get_project as _get_project
             _proj_row = _get_project(project_id)
             resolved = _proj_row.get("group_id") if _proj_row else None
         except Exception as e:
@@ -565,7 +565,7 @@ class ManipolaExecutor:
             try:
                 from app.utils.logger import open_run
                 from app.core.intermediate import db as idb
-                from app.db.config.projects import get_project as _get_project
+                from app.core.projects.db import get_project as _get_project
                 upstream_meta = _get_project(source_project_id) or {}
                 open_run(
                     run_id=upstream_run_id,

@@ -127,7 +127,7 @@ def _assert_bundle_group_access(bundle_dir: Path, current_user: CurrentUser) -> 
         )
 
     try:
-        from app.db.config.projects import get_project as _get_project
+        from app.core.projects.db import get_project as _get_project
         project = _get_project(bundle_project_id)
         if not project:
             raise HTTPException(
@@ -459,7 +459,7 @@ def list_bundles(
     visible_project_ids: Optional[set] = None
     if current_user.role != "superadmin":
         try:
-            from app.db.config.projects import list_project_ids_for_group
+            from app.core.projects.db import list_project_ids_for_group
             visible_project_ids = list_project_ids_for_group(
                 current_user.group_id,
             )

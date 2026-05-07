@@ -24,7 +24,7 @@ def service_with_fake_db(monkeypatch):
     Il fake restituisce `_canvas_fixture` (var dict) cosi' ogni test
     setta il valore di canvas e chiama get_project_canvas."""
     from app.db.config import projects as project_db
-    from app.services.project_service import ProjectService
+    from app.core.projects.service import ProjectService
 
     state = {"canvas": None, "project_exists": True}
 

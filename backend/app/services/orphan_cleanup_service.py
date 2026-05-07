@@ -7,7 +7,7 @@ Keeps this module's responsibility explicit and isolated from adjacent code.
 from typing import List, Dict, Any
 
 import app.db.pg_connection as db
-import app.db.results_db_service as results_db
+from app.core.results.cleanup import delete_results_for_project
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -26,7 +26,7 @@ def find_orphan_result_project_ids() -> List[str]:
     associate, viene riportato una sola volta).
     """
     existing = _get_existing_project_ids()
-    distinct_in_results = results_db.fetchall(
+    distinct_in_results = db.fetchall(
         "SELECT DISTINCT project_id FROM results"
     )
     orphans = []
@@ -105,7 +105,7 @@ def cleanup_orphans(dry_run: bool = False) -> Dict[str, Any]:
         if not dry_run:
             for pid in orphan_result_ids:
                 try:
-                    n = results_db.delete_results_for_project(pid)
+                    n = delete_results_for_project(pid)
                     report["orphan_results"]["rows_deleted"] += n
                 except Exception as e:
                     err = f"delete_results_for_project({pid}): {e}"

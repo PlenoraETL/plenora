@@ -9,7 +9,6 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 import pandas as pd
 
-import app.db.db_service as db_svc  # noqa: F401 (test-monkeypatch surface preserved
 from app.core.arricchisci.execution_context import (
     ArricchisciExecutionContext,
     build_execution_context,

@@ -292,18 +292,13 @@ def test_execute_canvas_enrichment_empty_canvas_returns_error_dict():
     """Smoke test: la funzione modulo-level orchestrator si chiama
     con `svc` esplicito e ritorna lo stesso shape errore del wrapper.
     """
-    from unittest.mock import patch
-
     from app.core.arricchisci.api_connector import ApiConnectionService
     from app.core.arricchisci.canvas_orchestrator import (
         execute_canvas_enrichment,
     )
 
     svc = ApiConnectionService.__new__(ApiConnectionService)
-    with patch(
-        "app.db.db_service.get_project", return_value={"group_id": "grp-1"}
-    ):
-        result = execute_canvas_enrichment(
-            svc, project_id="proj-1", canvas={"nodes": [], "edges": []},
-        )
+    result = execute_canvas_enrichment(
+        svc, project_id="proj-1", canvas={"nodes": [], "edges": []},
+    )
     assert result == {"success": False, "error": "Nessun nodo nel canvas"}

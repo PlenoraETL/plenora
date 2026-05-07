@@ -1,7 +1,7 @@
 """
 Architecture ledger for remaining legacy import containers.
 
-Batch 080 Worker 6: keep `app.services`, `app.db.db_service`, and
+Batch 081 Worker 6: keep `app.services`, `app.db.db_service`, and
 `app.db.config` production import debt measurable by domain. These
 baselines are intentionally exact: new import edges fail, and removed
 edges fail until the baseline is trimmed.
@@ -61,9 +61,7 @@ _LEGACY_IMPORT_BASELINES: dict[str, dict[str, frozenset[str]]] = {
         "auth_datasources_other": frozenset(),
     },
     "app.db.db_service": {
-        "projects": frozenset({
-            "app/core/arricchisci/canvas_orchestrator.py -> app.db.db_service",
-        }),
+        "projects": frozenset(),
         "connections": frozenset(),
         "files_storage": frozenset(),
         "tasks_orchestration": frozenset({
@@ -73,19 +71,12 @@ _LEGACY_IMPORT_BASELINES: dict[str, dict[str, frozenset[str]]] = {
         }),
         "auth_datasources_other": frozenset({
             "app/bootstrap.py -> app.db.db_service",
-            "app/core/arricchisci/api_connector.py -> app.db.db_service",
-            "app/core/auth/shares_router.py -> app.db.db_service",
         }),
     },
     "app.db.config": {
         "projects": frozenset({
-            "app/core/arricchisci/execution_context.py -> app.db.config.projects",
-            "app/core/auth/owner_dependencies.py -> app.db.config.projects",
             "app/core/connections/router.py -> app.db.config.projects",
-            "app/core/datasources/router.py -> app.db.config.projects",
-            "app/core/imdf/router.py -> app.db.config.projects",
             "app/core/intermediate/db.py -> app.db.config.projects",
-            "app/core/manipola/executor.py -> app.db.config.projects",
             "app/core/projects/db.py -> app.db.config.projects",
             "app/core/projects/repository.py -> app.db.config.projects",
             "app/core/projects/service.py -> app.db.config.comparison_keys",
@@ -241,7 +232,7 @@ def test_legacy_container_import_ledger_by_domain(prefix: str):
 
 
 def test_legacy_container_import_ledger_current_counts_are_locked():
-    """Exact count snapshot for Batch 080 residual reporting."""
+    """Exact count snapshot for Batch 081 residual reporting."""
     counts = {
         prefix: {
             domain: len(edges)

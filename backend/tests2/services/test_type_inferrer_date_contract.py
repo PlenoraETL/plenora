@@ -11,7 +11,7 @@ import warnings
 import pandas as pd
 import pytest
 
-from app.services.file_service import TypeInferrer
+from app.core.files.service import TypeInferrer
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]

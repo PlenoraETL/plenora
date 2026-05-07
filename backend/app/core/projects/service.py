@@ -482,7 +482,7 @@ class ProjectService:
         # utente esportati (GDPR-sensitive
         # outcome: fail-closed via aggregazione
         try:
-            from app.db.results_db_service import delete_results_for_project
+            from app.core.results.cleanup import delete_results_for_project
             deleted_results = delete_results_for_project(project_id)
             if deleted_results:
                 logger.info(

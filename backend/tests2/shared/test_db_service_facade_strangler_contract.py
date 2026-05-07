@@ -50,8 +50,10 @@ _FACADE_FILE = "app/db/db_service.py"
 #       `workers/tasks/schedule_task.py`,
 #       `workers/tasks/carica_task.py`.
 #
-#   - Auth surface (1 file):
-#       `app/core/auth/shares_router.py`,
+#   - Auth surface:
+#       none; `app/core/auth/shares_router.py` was migrated by
+#       BE Parallel Batch 081 Worker 4 to the sharing domain
+#       boundary `app.shared.sharing.load_shareable_resource_owner`.
 #     `app/core/auth/auth.py`, `app/core/auth/ownership.py`, and
 #     `app/core/auth/users_router.py` were migrated by BE-ARCH-068-W5
 #     to the narrow `app.db.config.users` / `app.db.config.groups`
@@ -61,11 +63,10 @@ _FACADE_FILE = "app/db/db_service.py"
 #     Off db_service"); the AST scan confirms zero remaining
 #     facade imports there. Allowlist row NOT included.
 #
-#   - Test-monkeypatch surfaces (2 files; preserved per the
-#     `noqa: F401  (test-monkeypatch surface preserved)` comment
-#     attached to each `import`):
-#       `app/core/arricchisci/api_connector.py`,
-#       `app/core/arricchisci/canvas_orchestrator.py`.
+#   - Test-monkeypatch surfaces:
+#       none; BE Parallel Batch 081 Worker 4 removed the stale
+#       Arricchisci facade imports after confirming tests no longer
+#       patch `api_connector.db_svc` / `canvas_orchestrator.db_svc`.
 #
 #   - Cluster-CRUD callers via `db.get_*` / `db.list_*` /
 #     `db.save_*` / `db.delete_*`:
@@ -118,14 +119,18 @@ _FACADE_FILE = "app/db/db_service.py"
 # Removed by Batch 080 Worker 4:
 #   - `app/core/arricchisci/api_connection_rest_file.py` migrated
 #     file-source blob lookups to `app.db.config.file_sources`.
+#
+# Removed by BE Parallel Batch 081 Worker 4:
+#   - `app/core/auth/shares_router.py` migrated generic owner
+#     existence lookup to
+#     `app.shared.sharing.load_shareable_resource_owner`.
+#   - `app/core/arricchisci/api_connector.py` and
+#     `app/core/arricchisci/canvas_orchestrator.py` dropped stale
+#     test-monkeypatch-only facade imports; tests now patch canonical
+#     execution-context leaves or need no patch for the empty-canvas path.
 _DB_SERVICE_PROD_ALLOWLIST: frozenset[str] = frozenset({
     # Bootstrap orchestrator — `init_all_dbs` lives on the facade.
     "app/bootstrap.py",
-    # Arricchisci: test-monkeypatch surface (noqa: F401 preserved).
-    "app/core/arricchisci/api_connector.py",
-    "app/core/arricchisci/canvas_orchestrator.py",
-    # Auth sharing surface: generic shareable-resource lookup via raw SQL.
-    "app/core/auth/shares_router.py",
     # Worker cluster — deferred.
     "workers/beat_scheduler.py",
     "workers/tasks/carica_task.py",

@@ -8,12 +8,13 @@ from typing import List
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 
-import app.db.db_service as db
 from app.core.auth.dependencies import require_superadmin
 from app.shared.contracts.auth import CurrentUser
 from app.shared.audit_action import audit_action
 from app.shared.sharing import (
     _SHAREABLE,
+    ShareableResourceOwner,
+    load_shareable_resource_owner,
     list_resource_shares,
     set_resource_shares,
     add_resource_share,
@@ -36,23 +37,23 @@ def _validate_resource_type(resource_type: str) -> None:
         )
 
 
-def _load_resource_owner_group(resource_type: str, resource_id: str) -> dict:
+def _load_resource_owner_group(
+    resource_type: str,
+    resource_id: str,
+) -> ShareableResourceOwner:
     """
     Carica la riga della risorsa per ottenere il group_id proprietario.
     Solleva 404 se non esiste.
 
     NB: usa una query SELECT diretta per indipendenza dai vari service.
     """
-    row = db.fetchone(
-        f"SELECT id, group_id FROM {resource_type} WHERE id = ?",
-        (resource_id,),
-    )
+    row = load_shareable_resource_owner(resource_type, resource_id)
     if not row:
         raise HTTPException(
             status_code=404,
             detail=f"{resource_type[:-1].capitalize()} '{resource_id}' non trovata",
         )
-    return dict(row)
+    return row
 
 
 def _check_owner_access(resource_type: str, resource_id: str, current_user: CurrentUser) -> None:

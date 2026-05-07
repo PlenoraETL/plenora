@@ -35,7 +35,8 @@ def _apply_results_retention(project_id: str) -> None:
     """
     try:
         from app.db.config.projects import get_project_retention_n
-        import app.db.results_db_service as res_db
+        from app.core.results import db as results_db
+        from app.db.results_db_service import delete_result
 
         # Legge retention_n dal progetto (config tables
         retention_n = get_project_retention_n(project_id)
@@ -43,7 +44,7 @@ def _apply_results_retention(project_id: str) -> None:
             retention_n = DEFAULT_RESULTS_RETENTION
 
         # Lista risultati ordinati dal più recente (results tables
-        all_results = res_db.list_results(project_id)
+        all_results = results_db.list_results(project_id)
 
         if len(all_results) <= retention_n:
             return  # Nulla da eliminare
@@ -51,7 +52,7 @@ def _apply_results_retention(project_id: str) -> None:
         # Elimina i risultati oltre retention_n (i più vecchi sono in fondo
         to_delete = all_results[retention_n:]
         for r in to_delete:
-            res_db.delete_result(r["id"])
+            delete_result(r["id"])
             logger.debug(
                 f"Retention: eliminato risultato {r['id']} del progetto {project_id}",
                 op="retention"
@@ -217,7 +218,7 @@ def save_result_blob(project_id: str, path: Path, fmt: str,
     _saved = False
     try:
         from app.db.config.projects import get_project
-        from app.db.results_db_service import save_result
+        from app.core.results.db import save_result
         from app.config import settings
 
         # Risolvi group_id
@@ -381,7 +382,7 @@ def save_result_blob_from_bytes(
     """
     try:
         from app.db.config.projects import get_project
-        from app.db.results_db_service import save_result
+        from app.core.results.db import save_result
         from app.config import settings
 
         size = len(data)
@@ -603,7 +604,8 @@ def get_result_as_bytes(project_id: str) -> Optional[bytes]:
     (o se il download S3 fallisce — log warning in quel caso).
     """
     try:
-        from app.db.results_db_service import get_latest_result, get_result_data
+        from app.core.results.db import get_latest_result
+        from app.db.results_db_service import get_result_data
         row = get_latest_result(project_id)
         if not row:
             return None
@@ -621,7 +623,8 @@ def get_result_as_tempfile(project_id: str) -> Optional[Path]:
     Returns: Path del file temp, o None se non trovato
     """
     try:
-        from app.db.results_db_service import get_latest_result, get_result_data
+        from app.core.results.db import get_latest_result
+        from app.db.results_db_service import get_result_data
 
         row = get_latest_result(project_id)
         if not row:
@@ -646,7 +649,7 @@ def get_result_as_tempfile(project_id: str) -> Optional[Path]:
 def get_result_info(project_id: str) -> Optional[dict]:
     """Ritorna metadata dell'ultimo risultato (senza blob)."""
     try:
-        from app.db.results_db_service import get_latest_result
+        from app.core.results.db import get_latest_result
         return get_latest_result(project_id)
     except Exception as e:
         logger.warning("get_result_info fallito per %s: %s", project_id, e)

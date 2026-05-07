@@ -9,7 +9,7 @@ import zipfile
 
 import pytest
 
-from app.services.file_service import DefaultFileSystem
+from app.core.files.service import DefaultFileSystem
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract, pytest.mark.regression]

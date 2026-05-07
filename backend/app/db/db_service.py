@@ -26,6 +26,8 @@ from app.db.config_db_service import (
 from app.db.results_db_service import (
     save_result, get_result, get_result_data, get_latest_result,
     list_results, delete_result,
+)
+from app.core.orchestrator.execution_logs import (
     log_execution, update_log, list_logs,
 )
 

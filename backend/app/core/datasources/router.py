@@ -237,7 +237,7 @@ def _find_projects_using_datasource(ds_id: str) -> List[Dict[str, str]]:
     dipendenze. Sollevamento intenzionale con built-in: sentinel interno
     al batch, non va esteso oltre questo scope.
     """
-    from app.db.config.projects import list_projects_with_canvas_for_datasource_check
+    from app.core.projects.db import list_projects_with_canvas_for_datasource_check
     # PR-δ: includere group_id nella SELECT per consentire al caller di
     # filtrare le dipendenze visibili al chiamante (no leak nomi
     # cross-tenant nell'errore 409

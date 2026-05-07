@@ -10,7 +10,7 @@ from typing import Optional
 
 import psycopg2
 
-from app.db.config.projects import get_project as _get_project
+from app.core.projects.db import get_project as _get_project
 from app.shared.exceptions import ExecutionContextError
 from app.shared.execution.context import CanvasExecutionContext
 

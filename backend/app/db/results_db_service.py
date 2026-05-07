@@ -1,10 +1,16 @@
 """
 Results DB Service — accesso a PostgreSQL (ex SQLite results.db).
 
-Contiene: results (output pipeline), execution_logs.
+Contiene: results (output pipeline). Execution-log names are compatibility
+re-exports from app.core.orchestrator.execution_logs.
 """
 
 from typing import Dict, List, Optional
+from app.core.orchestrator.execution_logs import (
+    list_logs,
+    log_execution,
+    update_log,
+)
 from app.utils.logger import get_logger
 
 
@@ -289,48 +295,5 @@ def delete_results_for_project(project_id: str) -> int:
     return deleted_count
 
 
-# EXECUTION LOGS
-
-def log_execution(log_id: str, group_id: str, project_id: str = None,
-                  schedule_id: str = None, status: str = "running",
-                  message: str = None, triggered_by: str = None) -> Dict:
-    from datetime import datetime, timezone
-    now = datetime.now(timezone.utc).isoformat()
-    execute(
-        "INSERT INTO execution_logs (id, group_id, project_id, schedule_id, status, "
-        "started_at, message, triggered_by) VALUES (?,?,?,?,?,?,?,?)",
-        (log_id, group_id, project_id, schedule_id, status, now, message, triggered_by)
-    )
-    return {"id": log_id, "status": status}
-
-
-def update_log(log_id: str, status: str, finished_at: str = None,
-               duration_s: float = None, rows_count: int = None,
-               message: str = None, error: str = None) -> None:
-    from datetime import datetime, timezone
-    finished = finished_at or datetime.now(timezone.utc).isoformat()
-    execute(
-        "UPDATE execution_logs SET status=?, finished_at=?, duration_s=?, "
-        "rows_count=?, message=?, error=? WHERE id=?",
-        (status, finished, duration_s, rows_count, message, error, log_id)
-    )
-
-
-def list_logs(project_id: str = None, group_id: str = None,
-              limit: int = 50, offset: int = 0) -> List[Dict]:
-    # Hard cap per evitare full scan/OOM se il caller non passa un limite sensato
-    limit = max(1, min(int(limit or 50), 500))
-    offset = max(0, int(offset or 0))
-    conditions = []
-    params = []
-    if project_id:
-        conditions.append("project_id = ?")
-        params.append(project_id)
-    if group_id:
-        conditions.append("group_id = ?")
-        params.append(group_id)
-    where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
-    return fetchall(
-        f"SELECT * FROM execution_logs {where} ORDER BY started_at DESC LIMIT ? OFFSET ?",
-        tuple(params) + (limit, offset)
-    )
+# EXECUTION LOGS: KEEP_COMPAT re-exports from
+# app.core.orchestrator.execution_logs. Do not add new log DB behavior here.

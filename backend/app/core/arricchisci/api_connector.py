@@ -12,8 +12,6 @@ from app.shared.api_utils import (
     prepare_headers as _shared_prepare_headers,
 )
 
-import app.db.db_service as db_svc  # noqa: F401 (test-monkeypatch surface
-
 # B3-B.9 cleanup (2026-04-27): rimossi 3 import back-compat fragili
 # `save_dataframe`, `save_result_blob`, `get_temp_output_path`) dopo
 # modernization delle 3 patch dead in

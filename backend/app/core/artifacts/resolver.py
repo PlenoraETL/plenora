@@ -119,7 +119,7 @@ class ArtifactResolver:
           latest blob ... fallita)`` con ``[GESTITO]`` log + chain.
         """
         from app.core.projects.db import get_project as _get_project
-        from app.db.results_db_service import get_latest_result as _get_latest_result
+        from app.core.results.db import get_latest_result as _get_latest_result
 
         if expected_group_id is not None:
             project = (
@@ -219,7 +219,7 @@ class ArtifactResolver:
           `mode="bytes"` (no tempfile) — il caller HTTP fa
           `StreamingResponse(blob.data)` direttamente.
         """
-        from app.db.results_db_service import get_result as _get_result
+        from app.core.results.db import get_result as _get_result
 
         # intent: boundary / outcome: fail-closed (broad→domain con chain preservata
         try:
@@ -329,7 +329,7 @@ class ArtifactResolver:
         Italian operator error string the rest of the system
         depends on).
         """
-        from app.db.results_db_service import get_result as _get_result
+        from app.core.results.db import get_result as _get_result
 
         # ResourceRef + default_registry are top-level imports on
         # this module (see header). That makes the symbols

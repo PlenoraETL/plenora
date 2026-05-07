@@ -101,8 +101,8 @@ def delete_group_cascade(group_id: str) -> dict:
         # Results + intermediate runs: loop perche toccano DB logici diversi
         for pid in project_ids:
             try:
-                import app.db.results_db_service as res_db
-                deleted = res_db.delete_results_for_project(pid)
+                from app.core.results.cleanup import delete_results_for_project
+                deleted = delete_results_for_project(pid)
                 report["results"] += deleted
             except Exception as e:
                 _log.warning(f"Cascade delete results progetto {pid}: {e}")
