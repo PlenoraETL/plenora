@@ -1,0 +1,38 @@
+# Non-secret provider profile for integration tests.
+# Secrets stay in environment variables named by password_env.
+
+[mysql]
+enabled = false
+host = "127.0.0.1"
+port = 3306
+database = "dataflow_test"
+username = "dataflow"
+password_env = "PLENORA_TEST_MYSQL_PASSWORD"
+
+[mariadb]
+enabled = false
+host = "127.0.0.1"
+port = 3307
+database = "dataflow_test"
+username = "dataflow"
+password_env = "PLENORA_TEST_MARIADB_PASSWORD"
+
+[oracle]
+enabled = false
+host = "127.0.0.1"
+port = 1521
+database = "FREEPDB1"
+service = "FREEPDB1"
+username = "dataflow"
+password_env = "PLENORA_TEST_ORACLE_PASSWORD"
+
+[sqlserver]
+enabled = false
+host = "127.0.0.1"
+port = 1433
+database = "dataflow_test"
+schema = "dbo"
+username = "sa"
+password_env = "PLENORA_TEST_SQLSERVER_PASSWORD"
+driver = "ODBC Driver 18 for SQL Server"
+fallback_driver = "ODBC Driver 17 for SQL Server"

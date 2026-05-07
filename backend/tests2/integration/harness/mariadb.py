@@ -18,30 +18,30 @@ pytest.importorskip("pymysql")
 import pymysql  # noqa: E402
 
 from tests2.integration.harness.db import make_it_id
+from tests2.integration.provider_config import provider_config, require_provider_enabled
 
 
-MARIADB_HOST = "127.0.0.1"
-MARIADB_PORT = 3307
-MARIADB_DATABASE = "dataflow_test"
-MARIADB_USER = "dataflow"
-MARIADB_PASSWORD = "dataflow_test_2026"
+_MARIADB_CONFIG = provider_config("mariadb", default_password="dataflow_test_2026")
+MARIADB_HOST = _MARIADB_CONFIG.host
+MARIADB_PORT = _MARIADB_CONFIG.port
+MARIADB_DATABASE = _MARIADB_CONFIG.database
+MARIADB_USER = _MARIADB_CONFIG.username
+MARIADB_PASSWORD = _MARIADB_CONFIG.password
 
 
 @contextmanager
 def mariadb_conn() -> Iterator[pymysql.connections.Connection]:
-    try:
-        conn = pymysql.connect(
-            host=MARIADB_HOST,
-            port=MARIADB_PORT,
-            database=MARIADB_DATABASE,
-            user=MARIADB_USER,
-            password=MARIADB_PASSWORD,
-            autocommit=False,
-            charset="utf8mb4",
-            cursorclass=pymysql.cursors.DictCursor,
-        )
-    except pymysql.err.OperationalError as exc:
-        pytest.skip(f"MariaDB non raggiungibile: {exc}")
+    require_provider_enabled("MariaDB", _MARIADB_CONFIG)
+    conn = pymysql.connect(
+        host=MARIADB_HOST,
+        port=MARIADB_PORT,
+        database=MARIADB_DATABASE,
+        user=MARIADB_USER,
+        password=MARIADB_PASSWORD,
+        autocommit=False,
+        charset="utf8mb4",
+        cursorclass=pymysql.cursors.DictCursor,
+    )
     try:
         yield conn
         conn.commit()
@@ -50,6 +50,10 @@ def mariadb_conn() -> Iterator[pymysql.connections.Connection]:
         raise
     finally:
         conn.close()
+
+
+def require_mariadb_enabled() -> None:
+    require_provider_enabled("MariaDB", _MARIADB_CONFIG)
 
 
 @contextmanager

@@ -3,21 +3,30 @@
 from __future__ import annotations
 
 from tests2.functional.harness.http import http_json_response, poll_json_until
-from tests2.integration.harness.mysql import seeded_mysql_table
+from tests2.integration.harness.mysql import (
+    MYSQL_DATABASE,
+    MYSQL_HOST,
+    MYSQL_PASSWORD,
+    MYSQL_PORT,
+    MYSQL_USER,
+    require_mysql_enabled,
+    seeded_mysql_table,
+)
 from tests2.integration.harness.projects import managed_project
 
 
 def _create_mysql_connection(base_url: str, auth_headers: dict) -> dict:
+    require_mysql_enabled()
     payload = {
         "name": "Integration MySQL Connection",
         "description": "tests2 mysql integration",
         "type": "mysql",
-        "host": "127.0.0.1",
-        "port": 3306,
-        "database": "dataflow_test",
+        "host": MYSQL_HOST,
+        "port": MYSQL_PORT,
+        "database": MYSQL_DATABASE,
         "db_schema": None,
-        "username": "dataflow",
-        "password": "dataflow_test_2026",
+        "username": MYSQL_USER,
+        "password": MYSQL_PASSWORD,
     }
     status, created, _ = http_json_response(
         f"{base_url}/api/connections",

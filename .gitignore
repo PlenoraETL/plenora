@@ -61,6 +61,7 @@ cover/
 .env
 .env.local
 .env.production
+backend/tests2/integration/provider_config.local.toml
 .venv/
 venv/
 env/

@@ -3,21 +3,30 @@
 from __future__ import annotations
 
 from tests2.functional.harness.http import http_json_response, poll_json_until
-from tests2.integration.harness.oracle import seeded_oracle_table
+from tests2.integration.harness.oracle import (
+    ORACLE_HOST,
+    ORACLE_PASSWORD,
+    ORACLE_PORT,
+    ORACLE_SERVICE,
+    ORACLE_USER,
+    require_oracle_enabled,
+    seeded_oracle_table,
+)
 from tests2.integration.harness.projects import managed_project
 
 
 def _create_oracle_connection(base_url: str, auth_headers: dict) -> dict:
+    require_oracle_enabled()
     payload = {
         "name": "Integration Oracle Connection",
         "description": "tests2 oracle integration",
         "type": "oracle",
-        "host": "127.0.0.1",
-        "port": 1521,
-        "database": "FREEPDB1",
+        "host": ORACLE_HOST,
+        "port": ORACLE_PORT,
+        "database": ORACLE_SERVICE,
         "db_schema": None,
-        "username": "dataflow",
-        "password": "dataflow_test_2026",
+        "username": ORACLE_USER,
+        "password": ORACLE_PASSWORD,
     }
     status, created, _ = http_json_response(
         f"{base_url}/api/connections",

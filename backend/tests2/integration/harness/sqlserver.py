@@ -18,15 +18,18 @@ pytest.importorskip("pyodbc")
 import pyodbc  # noqa: E402
 
 from tests2.integration.harness.db import make_it_id
+from tests2.integration.provider_config import provider_config, require_provider_enabled
 
 
-SQLSERVER_HOST = "127.0.0.1"
-SQLSERVER_PORT = 1433
-SQLSERVER_DATABASE = "dataflow_test"
-SQLSERVER_USER = "sa"
-SQLSERVER_PASSWORD = "DataFlow_Test_2026!"
-SQLSERVER_DRIVER = "ODBC Driver 18 for SQL Server"
-SQLSERVER_DRIVER_FALLBACK = "ODBC Driver 17 for SQL Server"
+_SQLSERVER_CONFIG = provider_config("sqlserver", default_password="DataFlow_Test_2026!")
+SQLSERVER_HOST = _SQLSERVER_CONFIG.host
+SQLSERVER_PORT = _SQLSERVER_CONFIG.port
+SQLSERVER_DATABASE = _SQLSERVER_CONFIG.database
+SQLSERVER_SCHEMA = _SQLSERVER_CONFIG.schema or "dbo"
+SQLSERVER_USER = _SQLSERVER_CONFIG.username
+SQLSERVER_PASSWORD = _SQLSERVER_CONFIG.password
+SQLSERVER_DRIVER = _SQLSERVER_CONFIG.driver or "ODBC Driver 18 for SQL Server"
+SQLSERVER_DRIVER_FALLBACK = _SQLSERVER_CONFIG.fallback_driver or "ODBC Driver 17 for SQL Server"
 
 def _conn_str_candidates(database: str = SQLSERVER_DATABASE) -> list[str]:
     base = (
@@ -55,6 +58,7 @@ def sqlalchemy_conn_url_candidates(database: str = SQLSERVER_DATABASE) -> list[s
 
 @contextmanager
 def sqlserver_conn() -> Iterator[pyodbc.Connection]:
+    require_provider_enabled("SQL Server", _SQLSERVER_CONFIG)
     last_error = None
     conn = None
     for conn_str in _conn_str_candidates():
@@ -66,10 +70,7 @@ def sqlserver_conn() -> Iterator[pyodbc.Connection]:
             conn = None
 
     if conn is None:
-        pytest.skip(
-            f"SQL Server non raggiungibile o driver non compatibile: {last_error}",
-            allow_module_level=True,
-        )
+        raise last_error
     try:
         yield conn
         conn.commit()
@@ -80,6 +81,10 @@ def sqlserver_conn() -> Iterator[pyodbc.Connection]:
         conn.close()
 
 
+def require_sqlserver_enabled() -> None:
+    require_provider_enabled("SQL Server", _SQLSERVER_CONFIG)
+
+
 @contextmanager
 def seeded_sqlserver_table() -> Iterator[dict]:
     """Crea una tabella SQL Server temporanea con due righe e la elimina a fine test."""
@@ -88,7 +93,7 @@ def seeded_sqlserver_table() -> Iterator[dict]:
         cur = conn.cursor()
         cur.execute(
             f"""
-            CREATE TABLE dbo.[{table_name}] (
+            CREATE TABLE {SQLSERVER_SCHEMA}.[{table_name}] (
                 id INT PRIMARY KEY,
                 city NVARCHAR(255) NOT NULL,
                 score INT NOT NULL
@@ -97,7 +102,7 @@ def seeded_sqlserver_table() -> Iterator[dict]:
         )
         cur.execute(
             f"""
-            INSERT INTO dbo.[{table_name}] (id, city, score)
+            INSERT INTO {SQLSERVER_SCHEMA}.[{table_name}] (id, city, score)
             VALUES (?, ?, ?), (?, ?, ?)
             """,
             (1, "Rome", 10, 2, "Milan", 20),
@@ -114,7 +119,10 @@ def seeded_sqlserver_table() -> Iterator[dict]:
     finally:
         with sqlserver_conn() as conn:
             cur = conn.cursor()
-            cur.execute(f"IF OBJECT_ID('dbo.[{table_name}]', 'U') IS NOT NULL DROP TABLE dbo.[{table_name}]")
+            cur.execute(
+                f"IF OBJECT_ID('{SQLSERVER_SCHEMA}.[{table_name}]', 'U') "
+                f"IS NOT NULL DROP TABLE {SQLSERVER_SCHEMA}.[{table_name}]"
+            )
             cur.close()
 
 

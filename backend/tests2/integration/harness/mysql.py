@@ -18,30 +18,30 @@ pytest.importorskip("pymysql")
 import pymysql  # noqa: E402
 
 from tests2.integration.harness.db import make_it_id
+from tests2.integration.provider_config import provider_config, require_provider_enabled
 
 
-MYSQL_HOST = "127.0.0.1"
-MYSQL_PORT = 3306
-MYSQL_DATABASE = "dataflow_test"
-MYSQL_USER = "dataflow"
-MYSQL_PASSWORD = "dataflow_test_2026"
+_MYSQL_CONFIG = provider_config("mysql", default_password="dataflow_test_2026")
+MYSQL_HOST = _MYSQL_CONFIG.host
+MYSQL_PORT = _MYSQL_CONFIG.port
+MYSQL_DATABASE = _MYSQL_CONFIG.database
+MYSQL_USER = _MYSQL_CONFIG.username
+MYSQL_PASSWORD = _MYSQL_CONFIG.password
 
 
 @contextmanager
 def mysql_conn() -> Iterator[pymysql.connections.Connection]:
-    try:
-        conn = pymysql.connect(
-            host=MYSQL_HOST,
-            port=MYSQL_PORT,
-            database=MYSQL_DATABASE,
-            user=MYSQL_USER,
-            password=MYSQL_PASSWORD,
-            autocommit=False,
-            charset="utf8mb4",
-            cursorclass=pymysql.cursors.DictCursor,
-        )
-    except pymysql.err.OperationalError as exc:
-        pytest.skip(f"MySQL non raggiungibile: {exc}")
+    require_provider_enabled("MySQL", _MYSQL_CONFIG)
+    conn = pymysql.connect(
+        host=MYSQL_HOST,
+        port=MYSQL_PORT,
+        database=MYSQL_DATABASE,
+        user=MYSQL_USER,
+        password=MYSQL_PASSWORD,
+        autocommit=False,
+        charset="utf8mb4",
+        cursorclass=pymysql.cursors.DictCursor,
+    )
     try:
         yield conn
         conn.commit()
@@ -50,6 +50,10 @@ def mysql_conn() -> Iterator[pymysql.connections.Connection]:
         raise
     finally:
         conn.close()
+
+
+def require_mysql_enabled() -> None:
+    require_provider_enabled("MySQL", _MYSQL_CONFIG)
 
 
 @contextmanager

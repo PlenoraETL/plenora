@@ -19,16 +19,18 @@ pytest.importorskip("oracledb")
 import oracledb  # noqa: E402
 
 from tests2.integration.harness.db import make_it_id
+from tests2.integration.provider_config import provider_config, require_provider_enabled
 
 
 T = TypeVar("T")
 
 
-ORACLE_HOST = "127.0.0.1"
-ORACLE_PORT = 1521
-ORACLE_SERVICE = "FREEPDB1"
-ORACLE_USER = "dataflow"
-ORACLE_PASSWORD = "dataflow_test_2026"
+_ORACLE_CONFIG = provider_config("oracle", default_password="dataflow_test_2026")
+ORACLE_HOST = _ORACLE_CONFIG.host
+ORACLE_PORT = _ORACLE_CONFIG.port
+ORACLE_SERVICE = _ORACLE_CONFIG.service or _ORACLE_CONFIG.database
+ORACLE_USER = _ORACLE_CONFIG.username
+ORACLE_PASSWORD = _ORACLE_CONFIG.password
 
 # DPY-4011: il server Oracle chiude la connessione durante l'handshake/query.
 # Succede sotto pressione di rapid-connect (integration suite che apre/chiude
@@ -40,6 +42,7 @@ _CONNECT_BACKOFF_S = 1.0
 
 
 def _connect_with_retry() -> oracledb.Connection:
+    require_provider_enabled("Oracle", _ORACLE_CONFIG)
     last_err: Exception | None = None
     for attempt in range(_CONNECT_RETRIES):
         try:
@@ -54,9 +57,11 @@ def _connect_with_retry() -> oracledb.Connection:
                 raise
             time.sleep(_CONNECT_BACKOFF_S * (2 ** attempt))
     assert last_err is not None
-    if "DPY-6005" in str(last_err):
-        pytest.skip(f"Oracle non raggiungibile: {last_err}")
     raise last_err
+
+
+def require_oracle_enabled() -> None:
+    require_provider_enabled("Oracle", _ORACLE_CONFIG)
 
 
 @contextmanager

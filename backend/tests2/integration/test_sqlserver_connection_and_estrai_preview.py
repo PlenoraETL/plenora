@@ -6,20 +6,30 @@ import pytest
 
 from tests2.functional.harness.http import http_json_response, poll_json_until
 from tests2.integration.harness.projects import managed_project
-from tests2.integration.harness.sqlserver import seeded_sqlserver_table
+from tests2.integration.harness.sqlserver import (
+    SQLSERVER_DATABASE,
+    SQLSERVER_HOST,
+    SQLSERVER_PASSWORD,
+    SQLSERVER_PORT,
+    SQLSERVER_SCHEMA,
+    SQLSERVER_USER,
+    require_sqlserver_enabled,
+    seeded_sqlserver_table,
+)
 
 
 def _create_sqlserver_connection(base_url: str, auth_headers: dict) -> dict:
+    require_sqlserver_enabled()
     payload = {
         "name": "Integration SQL Server Connection",
         "description": "tests2 sqlserver integration",
         "type": "mssql",
-        "host": "127.0.0.1",
-        "port": 1433,
-        "database": "dataflow_test",
-        "db_schema": "dbo",
-        "username": "sa",
-        "password": "DataFlow_Test_2026!",
+        "host": SQLSERVER_HOST,
+        "port": SQLSERVER_PORT,
+        "database": SQLSERVER_DATABASE,
+        "db_schema": SQLSERVER_SCHEMA,
+        "username": SQLSERVER_USER,
+        "password": SQLSERVER_PASSWORD,
     }
     status, created, _ = http_json_response(
         f"{base_url}/api/connections",

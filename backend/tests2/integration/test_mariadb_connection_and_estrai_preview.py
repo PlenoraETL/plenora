@@ -3,21 +3,30 @@
 from __future__ import annotations
 
 from tests2.functional.harness.http import http_json_response, poll_json_until
-from tests2.integration.harness.mariadb import seeded_mariadb_table
+from tests2.integration.harness.mariadb import (
+    MARIADB_DATABASE,
+    MARIADB_HOST,
+    MARIADB_PASSWORD,
+    MARIADB_PORT,
+    MARIADB_USER,
+    require_mariadb_enabled,
+    seeded_mariadb_table,
+)
 from tests2.integration.harness.projects import managed_project
 
 
 def _create_mariadb_connection(base_url: str, auth_headers: dict) -> dict:
+    require_mariadb_enabled()
     payload = {
         "name": "Integration MariaDB Connection",
         "description": "tests2 mariadb integration",
         "type": "mysql",
-        "host": "127.0.0.1",
-        "port": 3307,
-        "database": "dataflow_test",
+        "host": MARIADB_HOST,
+        "port": MARIADB_PORT,
+        "database": MARIADB_DATABASE,
         "db_schema": None,
-        "username": "dataflow",
-        "password": "dataflow_test_2026",
+        "username": MARIADB_USER,
+        "password": MARIADB_PASSWORD,
     }
     status, created, _ = http_json_response(
         f"{base_url}/api/connections",
