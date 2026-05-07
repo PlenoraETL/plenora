@@ -27,12 +27,12 @@ def _build_client():
 
 def test_list_bundles_raises_500_when_visible_project_ids_lookup_fails(tmp_path):
     """RB.4.A.16: list_bundles non passa piu' per visible_resource_ids per
-    "projects" (non shareable), ma legge direttamente da `pg_connection.fetchall`.
+    "projects" (non shareable), ma legge tramite `list_project_ids_for_group`.
     Il fail-closed deve restare se la query DB fallisce."""
     client = _build_client()
 
     with patch("app.core.imdf.router.settings", type("S", (), {"IMDF_BUNDLES_DIR": tmp_path})()), \
-         patch("app.db.pg_connection.fetchall", side_effect=RuntimeError("db down")):
+         patch("app.db.config.projects.list_project_ids_for_group", side_effect=RuntimeError("db down")):
         response = client.get("/api/imdf/bundles")
 
     assert response.status_code == 500

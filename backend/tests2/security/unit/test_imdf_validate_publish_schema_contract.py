@@ -81,8 +81,7 @@ def stub_externals_with_fs_schema(monkeypatch):
     """Stub con FS esistente + schema esteso per testare la logica
     schema-compat."""
     import app.core.imdf.loader as loader_mod
-    import app.core.features.features_service as fs_mod
-    import app.core.features.arcgis_client as client_mod
+    import app.core.features.arcgis_connection_adapter as adapter_mod
     import app.core.imdf.arcgis_uploader as uploader_mod
 
     # Bundle con un layer 'Locale' che ha alcuni campi
@@ -96,12 +95,6 @@ def stub_externals_with_fs_schema(monkeypatch):
         loader_mod, "load_imdf_layers",
         lambda gdb: {"Locale": fake_gdf},
     )
-
-    class _FakeFS:
-        def get_connection(self, cid): return {"id": cid}
-        def _to_connection_info(self, pyd): return _FakeConnInfo()
-
-    monkeypatch.setattr(fs_mod, "FeaturesService", _FakeFS)
 
     class _FakeArcgisClient:
         def list_layers(self, conn, url):
@@ -126,7 +119,12 @@ def stub_externals_with_fs_schema(monkeypatch):
                 ],
             }
 
-    monkeypatch.setattr(client_mod, "create_client", lambda: _FakeArcgisClient())
+    fake_client = _FakeArcgisClient()
+    monkeypatch.setattr(
+        adapter_mod,
+        "resolve_arcgis_connection",
+        lambda connection_id: (_FakeConnInfo(), fake_client),
+    )
 
     monkeypatch.setattr(
         uploader_mod, "_find_existing_service",
@@ -228,8 +226,7 @@ def test_append_detects_duplicate_business_keys(fake_bundle, monkeypatch):
     business che gia' esistono sul FS, dopo il publish ci sono feature
     duplicate. Il validator deve emettere un warning quantitativo."""
     import app.core.imdf.loader as loader_mod
-    import app.core.features.features_service as fs_mod
-    import app.core.features.arcgis_client as client_mod
+    import app.core.features.arcgis_connection_adapter as adapter_mod
     import app.core.imdf.arcgis_uploader as uploader_mod
 
     # Bundle con colonna UNIT_ID (default match_col per 'Locale') e 3 valori
@@ -263,11 +260,6 @@ def test_append_detects_duplicate_business_keys(fake_bundle, monkeypatch):
         lambda gdb: {"Locale": _GDFAppend()},
     )
 
-    class _FakeFS:
-        def get_connection(self, cid): return {"id": cid}
-        def _to_connection_info(self, pyd): return _FakeConnInfo()
-    monkeypatch.setattr(fs_mod, "FeaturesService", _FakeFS)
-
     class _FakeArcgisClient:
         def list_layers(self, conn, url):
             return [{"name": "Locale", "url": "https://x/Locale", "id": 0, "feature_count": 100}]
@@ -276,7 +268,12 @@ def test_append_detects_duplicate_business_keys(fake_bundle, monkeypatch):
                 {"name": "UNIT_ID", "type": "esriFieldTypeString"},
             ]}
 
-    monkeypatch.setattr(client_mod, "create_client", lambda: _FakeArcgisClient())
+    fake_client = _FakeArcgisClient()
+    monkeypatch.setattr(
+        adapter_mod,
+        "resolve_arcgis_connection",
+        lambda connection_id: (_FakeConnInfo(), fake_client),
+    )
     # Il validator ora usa _count_features_where_via_post (POST /query)
     import app.core.imdf.validator as validator_mod
     monkeypatch.setattr(
@@ -324,8 +321,7 @@ def test_append_no_duplicates_no_warning(fake_bundle, monkeypatch):
     """Se tutte le chiavi bundle sono nuove (nessun overlap con FS),
     append non deve emettere warning duplicati."""
     import app.core.imdf.loader as loader_mod
-    import app.core.features.features_service as fs_mod
-    import app.core.features.arcgis_client as client_mod
+    import app.core.features.arcgis_connection_adapter as adapter_mod
     import app.core.imdf.arcgis_uploader as uploader_mod
 
     class _UnitIdSeries:
@@ -355,18 +351,18 @@ def test_append_no_duplicates_no_warning(fake_bundle, monkeypatch):
 
     monkeypatch.setattr(loader_mod, "load_imdf_layers", lambda gdb: {"Locale": _GDFFresh()})
 
-    class _FakeFS:
-        def get_connection(self, cid): return {"id": cid}
-        def _to_connection_info(self, pyd): return _FakeConnInfo()
-    monkeypatch.setattr(fs_mod, "FeaturesService", _FakeFS)
-
     class _FakeArcgisClient:
         def list_layers(self, conn, url):
             return [{"name": "Locale", "url": "https://x/Locale", "id": 0, "feature_count": 10}]
         def get_layer_schema(self, conn, url):
             return {"fields": [{"name": "UNIT_ID", "type": "esriFieldTypeString"}]}
 
-    monkeypatch.setattr(client_mod, "create_client", lambda: _FakeArcgisClient())
+    fake_client = _FakeArcgisClient()
+    monkeypatch.setattr(
+        adapter_mod,
+        "resolve_arcgis_connection",
+        lambda connection_id: (_FakeConnInfo(), fake_client),
+    )
     import app.core.imdf.validator as validator_mod
     monkeypatch.setattr(
         validator_mod, "_count_features_where_via_post",

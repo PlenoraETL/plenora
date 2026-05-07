@@ -134,7 +134,7 @@ def env(api_service):
                 return_value=b"stub-bytes",
             ),
             db_get_project=_p(
-                "app.db.db_service.get_project",
+                "app.core.arricchisci.execution_context._get_project",
                 return_value={"group_id": "grp-1"},
             ),
         )
@@ -183,7 +183,7 @@ class TestExecuteEnrichmentBasics:
         assert result["user_error"] is True
         assert "Accesso negato: gruppo X" in result["error"]
 
-    def test_tenant_group_id_memorized_from_project(self, env):
+    def test_tenant_group_id_threads_through_execution_context(self, env):
         env.db_get_project.return_value = {"group_id": "grp-xyz"}
 
         env.svc.execute_enrichment(
@@ -194,7 +194,9 @@ class TestExecuteEnrichmentBasics:
             ),
         )
 
-        assert env.svc._current_group_id == "grp-xyz"
+        _, kwargs = env.load_proj.call_args
+        assert kwargs["ctx"].group_id == "grp-xyz"
+        assert env.svc._current_group_id == "grp-1"
 
 
 # Section 2: loading dei nodi sorgente

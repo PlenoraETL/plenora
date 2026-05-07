@@ -60,6 +60,9 @@ def doc_section_12_7(doc_text: str) -> str:
 # Group A - Design section present (today: must PASS)
 
 
+@pytest.mark.architecture
+@pytest.mark.docs_guard
+@pytest.mark.cleanroom_excluded
 def test_design_section_12_7_exists(doc_text: str):
     assert _DESIGN_SECTION_HEADER in doc_text, (
         f"docs/ops/install-non-docker.md must contain section 12.7 "
@@ -71,7 +74,12 @@ def test_design_section_12_7_exists(doc_text: str):
     )
 
 
-def test_design_section_names_canonical_primitive(doc_section_12_7: str):
+@pytest.mark.architecture
+@pytest.mark.docs_guard
+@pytest.mark.cleanroom_excluded
+def test_design_section_names_canonical_primitive(
+    doc_section_12_7: str,
+):
     assert _CANONICAL_TASK_NAME in doc_section_12_7, (
         f"Section 12.7 must name the canonical primitive "
         f"{_CANONICAL_TASK_NAME!r}. The future CI workflow step "
@@ -81,6 +89,9 @@ def test_design_section_names_canonical_primitive(doc_section_12_7: str):
     )
 
 
+@pytest.mark.architecture
+@pytest.mark.docs_guard
+@pytest.mark.cleanroom_excluded
 def test_design_section_calls_out_in_process_heartbeat_finding(
     doc_section_12_7: str,
 ):
@@ -104,6 +115,9 @@ def test_design_section_calls_out_in_process_heartbeat_finding(
     )
 
 
+@pytest.mark.architecture
+@pytest.mark.docs_guard
+@pytest.mark.cleanroom_excluded
 def test_design_section_documents_bounded_smoke_pattern(
     doc_section_12_7: str,
 ):
@@ -126,6 +140,9 @@ def test_design_section_documents_bounded_smoke_pattern(
         assert needle in doc_section_12_7, message
 
 
+@pytest.mark.architecture
+@pytest.mark.docs_guard
+@pytest.mark.cleanroom_excluded
 def test_design_section_explains_why_separate_stream(
     doc_section_12_7: str,
 ):
@@ -139,6 +156,9 @@ def test_design_section_explains_why_separate_stream(
     )
 
 
+@pytest.mark.architecture
+@pytest.mark.docs_guard
+@pytest.mark.cleanroom_excluded
 def test_design_section_points_at_next_implementation_stream(
     doc_section_12_7: str,
 ):
@@ -149,6 +169,9 @@ def test_design_section_points_at_next_implementation_stream(
     )
 
 
+@pytest.mark.architecture
+@pytest.mark.docs_guard
+@pytest.mark.cleanroom_excluded
 def test_design_section_is_ascii_only(doc_section_12_7: str):
     non_ascii = [
         (i, ch)

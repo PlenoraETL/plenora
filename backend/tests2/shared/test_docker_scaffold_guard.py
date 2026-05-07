@@ -337,6 +337,9 @@ def test_env_docker_real_file_is_gitignored():
 # install-docker.md scaffold runbook contract
 
 
+@pytest.mark.architecture
+@pytest.mark.docs_guard
+@pytest.mark.cleanroom_excluded
 def test_install_docker_doc_advertises_first_scaffold_status():
     text = _INSTALL_DOCKER.read_text(encoding="utf-8")
     assert "FIRST SCAFFOLD" in text, (
@@ -356,6 +359,9 @@ def test_install_docker_doc_advertises_first_scaffold_status():
     )
 
 
+@pytest.mark.architecture
+@pytest.mark.docs_guard
+@pytest.mark.cleanroom_excluded
 def test_install_docker_doc_lists_executable_runbook_steps():
     text = _INSTALL_DOCKER.read_text(encoding="utf-8")
     expected_commands = (
@@ -377,6 +383,9 @@ def test_install_docker_doc_lists_executable_runbook_steps():
         )
 
 
+@pytest.mark.architecture
+@pytest.mark.docs_guard
+@pytest.mark.cleanroom_excluded
 def test_install_docker_doc_documents_validation_gaps():
     text = _INSTALL_DOCKER.read_text(encoding="utf-8")
     assert "Known scaffold limitations" in text, (

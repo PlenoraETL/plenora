@@ -55,7 +55,7 @@ def test_assert_bundle_group_access_requires_visible_project(tmp_path, current_u
         encoding="utf-8",
     )
 
-    import app.db.db_service as db_service
+    import app.db.config.projects as projects_repo
     # BE-GO-READY-AUTH-ENGINE-020: monkeypatch via consuming
     # router-module surface (mirrors connections/datasources/
     # eseguibili pattern). The IMDF router now imports
@@ -63,7 +63,7 @@ def test_assert_bundle_group_access_requires_visible_project(tmp_path, current_u
     # patching the facade no longer reaches the call site.
     import app.core.imdf.router as imdf_router_mod
 
-    monkeypatch.setattr(db_service, "get_project", lambda project_id: {"id": project_id, "group_id": "grp-1"})
+    monkeypatch.setattr(projects_repo, "get_project", lambda project_id: {"id": project_id, "group_id": "grp-1"})
 
     def _deny(*args, **kwargs):
         raise HTTPException(status_code=403, detail="Accesso negato")

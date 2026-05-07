@@ -521,8 +521,6 @@ def test_router_constant_refs_find_baseline():
         "AWS_CRT_MISSING",
         "AWS_CREDENTIALS_EXPIRED",
         "CARICA_LAUNCH_FAILED",
-        "CARICA_SCHEDULER_FAILED",
-        "SCHEDULE_EXECUTION_FATAL",
         # batch 009 (not-found family)
         "PROJECT_NOT_FOUND",
         "TASK_NOT_FOUND",

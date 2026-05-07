@@ -11,7 +11,14 @@ from pathlib import Path
 import pytest
 
 
-pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
+pytestmark = [
+    pytest.mark.unit,
+    pytest.mark.shared,
+    pytest.mark.contract,
+    pytest.mark.architecture,
+    pytest.mark.docs_guard,
+    pytest.mark.cleanroom_excluded,
+]
 
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]

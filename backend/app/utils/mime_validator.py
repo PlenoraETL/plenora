@@ -77,7 +77,7 @@ _BLOCKED_SIGNATURES = (
     b"\xca\xfe\xba\xbe",   # Mach-O fat binary
     b"\xcf\xfa\xed\xfe",   # Mach-O 64-bit
     b"\xce\xfa\xed\xfe",   # Mach-O 32-bit
-    b"# !", # shebang (bash, python, perl
+    b"#!",  # shebang (bash, python, perl)
 )
 
 

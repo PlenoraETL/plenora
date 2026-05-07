@@ -152,6 +152,9 @@ def _read(p: Path) -> str:
     return p.read_text(encoding="utf-8") if p.is_file() else ""
 
 
+@pytest.mark.architecture
+@pytest.mark.docs_guard
+@pytest.mark.cleanroom_excluded
 def test_install_docker_doc_does_not_claim_full_stack_validation():
     """`docs/ops/install-docker.md` MUST NOT contain any phrase
     that asserts the Docker path is validated. The brief is
@@ -168,7 +171,11 @@ def test_install_docker_doc_does_not_claim_full_stack_validation():
         )
 
 
-def test_install_marco_dry_run_does_not_claim_full_stack_validation():
+@pytest.mark.architecture
+@pytest.mark.docs_guard
+@pytest.mark.cleanroom_excluded
+def test_install_marco_dry_run_does_not_claim_full_stack_validation(
+):
     """The dry-run pack must not regress to claiming Docker is
     validated either. Mirror lock so a future doc edit cannot
     silently sneak the claim in via the operator-facing one-pager."""
@@ -183,6 +190,9 @@ def test_install_marco_dry_run_does_not_claim_full_stack_validation():
         )
 
 
+@pytest.mark.architecture
+@pytest.mark.docs_guard
+@pytest.mark.cleanroom_excluded
 def test_install_docker_doc_keeps_first_scaffold_markers():
     """Positive lock: the literal FIRST SCAFFOLD and NOT YET
     VALIDATED markers must remain in `install-docker.md`. They
@@ -202,6 +212,9 @@ def test_install_docker_doc_keeps_first_scaffold_markers():
 # 3. FE-gap subsection present in install-docker.md
 
 
+@pytest.mark.architecture
+@pytest.mark.docs_guard
+@pytest.mark.cleanroom_excluded
 def test_install_docker_has_fe_gap_audit_subsection():
     """The FE/CI gap audit subsection added by INSTALL-018 must
     survive future edits. It is the single source of truth for

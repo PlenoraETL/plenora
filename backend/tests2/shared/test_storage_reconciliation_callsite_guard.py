@@ -108,16 +108,6 @@ _CALLSITE_CLASSIFICATION: dict[str, tuple[Classification, str]] = {
         "True -> mark_done, False -> compensating_delete + "
         "mark_orphan_deleted, None -> mark_failed_attempt (retry).",
     ),
-    "app/shared/cloud_backends.py": (
-        "intentionally_excluded",
-        "ObjectStorage Protocol implementation + docstring "
-        "narrative. The `def upload(self, ...)` / `def upload_bytes(...)` "
-        "/ `def delete(...)` definitions ARE the Protocol surface "
-        "consumed by every other classified callsite; the file also "
-        "documents the API in module/class docstrings (e.g. "
-        "`ObjectStorage.upload(path, key)`). NOT a business "
-        "callsite. Internal SDK boundary.",
-    ),
 }
 
 

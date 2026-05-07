@@ -260,6 +260,11 @@ def _settings_stub(**kwargs):
         "STORAGE_RECONCILE_BATCH_SIZE": 50,
         "STORAGE_RECONCILE_MAX_ATTEMPTS": 5,
         "STORAGE_RECONCILE_BACKOFF_BASE_SECONDS": 60,
+        # These tests exercise the delete-reconciliation branch. Keep
+        # upload-intent reconciliation disabled so stale DB rows created by
+        # earlier tests cannot leak into the mocked mark_* call assertions.
+        "STORAGE_RECONCILE_UPLOAD_INTENT_GRACE_SECONDS": 0,
+        "STORAGE_RECONCILE_UPLOAD_INTENT_BATCH_SIZE": 0,
     }
     defaults.update(kwargs)
     ns = SimpleNamespace(**defaults)

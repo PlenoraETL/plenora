@@ -7,7 +7,7 @@ Batch 3 Fix-B (audit `arricchisci/api_connector` §7.2 + checkpoint C3).
 import psycopg2
 import pytest
 
-from app.core.arricchisci import api_connector as api_connector_mod
+from app.core.arricchisci import execution_context as execution_context_mod
 from app.core.arricchisci import canvas_orchestrator as canvas_orchestrator_mod
 from app.shared.exceptions import ExecutionContextError
 
@@ -31,8 +31,8 @@ def test_init_execution_context_returns_ctx_with_group_id_on_happy_path(
     it via explicit `ctx=ctx` kwargs (locked elsewhere).
     """
     monkeypatch.setattr(
-        api_connector_mod.db_svc,
-        "get_project",
+        execution_context_mod,
+        "_get_project",
         lambda project_id: {"id": project_id, "group_id": "grp-A", "name": "p1"},
     )
 
@@ -58,11 +58,7 @@ def test_init_execution_context_returns_ctx_with_null_group_on_missing_project(
     Post-OE011: assertion moved from `svc._current_group_id` to
     `ctx.group_id` (the typed boundary).
     """
-    monkeypatch.setattr(
-        api_connector_mod.db_svc,
-        "get_project",
-        lambda project_id: None,
-    )
+    monkeypatch.setattr(execution_context_mod, "_get_project", lambda project_id: None)
 
     ctx = canvas_orchestrator_mod.init_execution_context(
         api_service, "proj-unknown", preview_limit=None,
@@ -86,7 +82,7 @@ def test_init_execution_context_raises_execution_context_error_on_db_error(
     def _boom(project_id):
         raise original
 
-    monkeypatch.setattr(api_connector_mod.db_svc, "get_project", _boom)
+    monkeypatch.setattr(execution_context_mod, "_get_project", _boom)
 
     with pytest.raises(ExecutionContextError) as exc_info:
         api_service._init_execution_context("proj-1", preview_limit=None)
@@ -124,7 +120,7 @@ def test_init_execution_context_does_not_write_singleton_state_on_db_error(
     def _boom(project_id):
         raise psycopg2.OperationalError("connection lost")
 
-    monkeypatch.setattr(api_connector_mod.db_svc, "get_project", _boom)
+    monkeypatch.setattr(execution_context_mod, "_get_project", _boom)
 
     with pytest.raises(ExecutionContextError):
         canvas_orchestrator_mod.init_execution_context(
@@ -156,11 +152,11 @@ def test_execute_enrichment_routes_db_error_to_safe_boundary_response(
     def _boom(project_id):
         raise psycopg2.OperationalError("db down")
 
-    monkeypatch.setattr(api_connector_mod.db_svc, "get_project", _boom)
+    monkeypatch.setattr(execution_context_mod, "_get_project", _boom)
 
     result = api_service.execute_enrichment(
         project_id="proj-1",
-        canvas={"nodes": [], "edges": []},
+        canvas={"nodes": [{"id": "src-1", "type": "project_source"}], "edges": []},
     )
 
     assert result == {

@@ -86,6 +86,9 @@ def test_default_registry_singleton_has_graduation_loaders():
 # Audit documentation contract
 
 
+@pytest.mark.architecture
+@pytest.mark.docs_guard
+@pytest.mark.cleanroom_excluded
 def test_audit_doc_contains_pilot_exit_criteria_section():
     """The audit MUST contain the canonical PILOT-EXIT-CRITERIA
     section. The section is the load-bearing record of: how to
@@ -101,6 +104,9 @@ def test_audit_doc_contains_pilot_exit_criteria_section():
     )
 
 
+@pytest.mark.architecture
+@pytest.mark.docs_guard
+@pytest.mark.cleanroom_excluded
 def test_audit_doc_documents_keep_kill_criteria():
     """The audit must explicitly enumerate KEEP and KILL
     conditions. Drift mode: a future audit edit drops the
@@ -125,6 +131,9 @@ def test_audit_doc_documents_keep_kill_criteria():
         assert needle in section, message
 
 
+@pytest.mark.architecture
+@pytest.mark.docs_guard
+@pytest.mark.cleanroom_excluded
 def test_audit_doc_records_kill_deadline_date():
     """The KILL condition must be tied to an explicit ISO date
     so the pilot does not age silently. Without a date, "kill if

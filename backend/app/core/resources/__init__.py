@@ -1,6 +1,12 @@
 """
 Resource Engine — capability registry, NOT god-engine.
 
+Canonical usage:
+
+    resource = default_registry.get(ref, mode="bytes")
+
+Bytes mode is the default for new consumers. Path mode is reserved for
+downstream libraries that structurally require a filesystem path.
 """
 
 from app.core.resources.types import (

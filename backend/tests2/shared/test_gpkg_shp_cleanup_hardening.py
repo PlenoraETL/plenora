@@ -18,6 +18,30 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 
+@pytest.fixture(autouse=True)
+def _route_stdlib_temp_to_tmp_path(monkeypatch, tmp_path):
+    import shutil
+    from contextlib import AbstractContextManager
+
+    root = tmp_path / "stdlib-temp"
+    root.mkdir(parents=True, exist_ok=True)
+
+    class _WritableTemporaryDirectory(AbstractContextManager):
+        def __init__(self, prefix=None, ignore_cleanup_errors=False, **_kwargs):
+            self.name = root / f"{prefix or 'tmp'}{len(list(root.iterdir()))}"
+            self._ignore_cleanup_errors = ignore_cleanup_errors
+
+        def __enter__(self):
+            self.name.mkdir(parents=True, exist_ok=False)
+            return str(self.name)
+
+        def __exit__(self, exc_type, exc, tb):
+            shutil.rmtree(self.name, ignore_errors=self._ignore_cleanup_errors)
+            return False
+
+    monkeypatch.setattr(tempfile, "TemporaryDirectory", _WritableTemporaryDirectory)
+
+
 # save_pipeline_result gpkg/shp branch
 
 

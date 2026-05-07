@@ -174,13 +174,15 @@ def test_compute_result_columns_includes_api_enrich_added_columns():
 # Test 4 — project_source preferisce result_node.columns quando presente
 
 
-def test_infer_project_source_schema_prefers_result_node_columns_over_metadata():
+def test_infer_project_source_schema_prefers_result_node_columns_over_metadata(
+    monkeypatch,
+):
     """Quando il canvas del progetto sorgente ha
     `nodes[result].columns` popolato (post-C9), questo prevale su
     `canvas.columns_metadata` (anche se lo metadata e' stale)."""
     svc = _svc()
 
-    # Stub db_service.get_project: il source progetto ha result.columns
+    # Stub the current project metadata DB boundary: il source progetto ha result.columns
     # corrette (4 col) e columns_metadata stale (2 col legacy).
     fake_canvas = {
         "nodes": [
@@ -207,14 +209,12 @@ def test_infer_project_source_schema_prefers_result_node_columns_over_metadata()
         ],
     }
 
-    import app.db.db_service as _db
-    orig_get = _db.get_project
-    _db.get_project = lambda pid: {"canvas": fake_canvas}
-    try:
-        ps_node = _node("ps1", "project_source", source_project_id="src-proj-1")
-        schema = svc._infer_project_source_schema(ps_node)
-    finally:
-        _db.get_project = orig_get
+    monkeypatch.setattr(
+        "app.db.config.projects.get_project",
+        lambda pid: {"canvas": fake_canvas},
+    )
+    ps_node = _node("ps1", "project_source", source_project_id="src-proj-1")
+    schema = svc._infer_project_source_schema(ps_node)
 
     names = [c.name for c in schema]
     # Deve restituire le 4 col del result_node, non le 2 stale di metadata
@@ -224,7 +224,9 @@ def test_infer_project_source_schema_prefers_result_node_columns_over_metadata()
 # Test 5 — project_source fallback su columns_metadata se result.columns vuoto
 
 
-def test_infer_project_source_schema_fallback_to_columns_metadata_when_result_empty():
+def test_infer_project_source_schema_fallback_to_columns_metadata_when_result_empty(
+    monkeypatch,
+):
     """Compat legacy: progetti pre-C9 / canvas mai salvati hanno
     `result_node.columns = []` ma `columns_metadata` popolato. Il
     reader cade su metadata."""
@@ -244,14 +246,12 @@ def test_infer_project_source_schema_fallback_to_columns_metadata_when_result_em
         ],
     }
 
-    import app.db.db_service as _db
-    orig_get = _db.get_project
-    _db.get_project = lambda pid: {"canvas": fake_canvas}
-    try:
-        ps_node = _node("ps1", "project_source", source_project_id="src-proj-1")
-        schema = svc._infer_project_source_schema(ps_node)
-    finally:
-        _db.get_project = orig_get
+    monkeypatch.setattr(
+        "app.db.config.projects.get_project",
+        lambda pid: {"canvas": fake_canvas},
+    )
+    ps_node = _node("ps1", "project_source", source_project_id="src-proj-1")
+    schema = svc._infer_project_source_schema(ps_node)
 
     names = [c.name for c in schema]
     assert names == ["id", "value"], names
@@ -265,7 +265,9 @@ def test_infer_project_source_schema_fallback_to_columns_metadata_when_result_em
 # 2c0a071 ripristina la semantica 1:1 con pre-fix.
 
 
-def test_infer_project_source_schema_does_not_rename_columns_via_alias():
+def test_infer_project_source_schema_does_not_rename_columns_via_alias(
+    monkeypatch,
+):
     """Anche se result_node.columns ha `alias`, il consumer riceve
     `name` (compat 1:1 con pre-fix che leggeva da columns_metadata)."""
     svc = _svc()
@@ -285,14 +287,12 @@ def test_infer_project_source_schema_does_not_rename_columns_via_alias():
         "columns_metadata": [],
     }
 
-    import app.db.db_service as _db
-    orig_get = _db.get_project
-    _db.get_project = lambda pid: {"canvas": fake_canvas}
-    try:
-        ps_node = _node("ps1", "project_source", source_project_id="src-proj-1")
-        schema = svc._infer_project_source_schema(ps_node)
-    finally:
-        _db.get_project = orig_get
+    monkeypatch.setattr(
+        "app.db.config.projects.get_project",
+        lambda pid: {"canvas": fake_canvas},
+    )
+    ps_node = _node("ps1", "project_source", source_project_id="src-proj-1")
+    schema = svc._infer_project_source_schema(ps_node)
 
     names = [c.name for c in schema]
     assert names == ["x", "y"], names
@@ -308,7 +308,9 @@ def test_infer_project_source_schema_does_not_rename_columns_via_alias():
 # project_source), non via campo intrinseco della colonna source.
 
 
-def test_infer_project_source_schema_does_not_filter_by_intrinsic_visible_flag():
+def test_infer_project_source_schema_does_not_filter_by_intrinsic_visible_flag(
+    monkeypatch,
+):
     """Una colonna con `visible: False` in result_node.columns deve
     comunque essere emessa, perche' pre-fix (lettura da metadata senza
     campo visible) la includeva sempre. Il filtraggio visibility
@@ -330,16 +332,14 @@ def test_infer_project_source_schema_does_not_filter_by_intrinsic_visible_flag()
         "columns_metadata": [],
     }
 
-    import app.db.db_service as _db
-    orig_get = _db.get_project
-    _db.get_project = lambda pid: {"canvas": fake_canvas}
-    try:
-        # Consumer node senza filtro proprio (node.columns vuoto): tutte
-        # le colonne del source devono passare.
-        ps_node = _node("ps1", "project_source", source_project_id="src-proj-1")
-        schema = svc._infer_project_source_schema(ps_node)
-    finally:
-        _db.get_project = orig_get
+    monkeypatch.setattr(
+        "app.db.config.projects.get_project",
+        lambda pid: {"canvas": fake_canvas},
+    )
+    # Consumer node senza filtro proprio (node.columns vuoto): tutte
+    # le colonne del source devono passare.
+    ps_node = _node("ps1", "project_source", source_project_id="src-proj-1")
+    schema = svc._infer_project_source_schema(ps_node)
 
     names = [c.name for c in schema]
     assert names == ["shown", "hidden_in_source"], names

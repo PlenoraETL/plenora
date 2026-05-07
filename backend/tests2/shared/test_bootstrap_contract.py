@@ -7,6 +7,7 @@ Source-bound + behavioural test for `app.bootstrap.bootstrap()` and
 from __future__ import annotations
 
 import os
+import importlib
 
 # Ensure DATABASE_URL is set before any import that may load
 # `app.db.pg_connection` (raises RuntimeError at module-level if missing).
@@ -27,6 +28,13 @@ import app.bootstrap as bootstrap_module
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
+@pytest.fixture(autouse=True)
+def _restore_real_bootstrap_module():
+    importlib.reload(bootstrap_module)
+    yield
+    importlib.reload(bootstrap_module)
+
+
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _BOOTSTRAP_PY = _BACKEND_ROOT / "app" / "bootstrap.py"
 _MAIN_PY = _BACKEND_ROOT / "app" / "main.py"
@@ -40,22 +48,12 @@ def _read(p: Path) -> str:
 
 
 def _real_bootstrap():
-    """Resolve the un-stubbed bootstrap (conftest no-ops it for tests).
-
-    The session-level conftest replaces `app.bootstrap.bootstrap` with
-    a no-op so importing `app.main` doesn't try to touch DB/Redis.
-    These tests need the *real* function. The original is stashed at
-    `_original_bootstrap` per the conftest contract.
-    """
-    return getattr(
-        bootstrap_module, "_original_bootstrap", bootstrap_module.bootstrap
-    )
+    """Return the real bootstrap from the reloaded module."""
+    return bootstrap_module.bootstrap
 
 
 def _real_teardown():
-    return getattr(
-        bootstrap_module, "_original_teardown", bootstrap_module.teardown
-    )
+    return bootstrap_module.teardown
 
 
 def test_bootstrap_invokes_four_steps_in_canonical_order(monkeypatch):

@@ -107,10 +107,13 @@ def test_assert_project_visible_uses_visibility_check(monkeypatch, current_user)
 
 
 def test_assert_file_source_access_rejects_invisible_resource(monkeypatch, current_user):
-    import app.db.db_service as db_service
     import app.shared.authz_helpers as authz
 
-    monkeypatch.setattr(db_service, "get_file_source", lambda file_source_id: {"id": file_source_id, "group_id": "grp-2"})
+    monkeypatch.setattr(
+        authz,
+        "_get_file_source",
+        lambda file_source_id: {"id": file_source_id, "group_id": "grp-2"},
+    )
 
     def _deny(*args, **kwargs):
         raise HTTPException(status_code=403, detail="Accesso negato")

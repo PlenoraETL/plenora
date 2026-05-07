@@ -61,6 +61,9 @@ def doc_section_12_6(doc_text: str) -> str:
 # Group A - Doc section 12.6 documents the bounded smoke (must PASS)
 
 
+@pytest.mark.architecture
+@pytest.mark.docs_guard
+@pytest.mark.cleanroom_excluded
 def test_design_section_12_6_exists(doc_text: str):
     assert _DESIGN_SECTION_HEADER in doc_text, (
         f"docs/ops/install-non-docker.md must contain section 12.6 "
@@ -71,7 +74,12 @@ def test_design_section_12_6_exists(doc_text: str):
     )
 
 
-def test_design_section_names_canonical_primitive(doc_section_12_6: str):
+@pytest.mark.architecture
+@pytest.mark.docs_guard
+@pytest.mark.cleanroom_excluded
+def test_design_section_names_canonical_primitive(
+    doc_section_12_6: str,
+):
     assert _CANONICAL_TASK_NAME in doc_section_12_6, (
         f"Section 12.6 must name the canonical primitive "
         f"{_CANONICAL_TASK_NAME!r}. The CI workflow step sends to "
@@ -79,6 +87,9 @@ def test_design_section_names_canonical_primitive(doc_section_12_6: str):
     )
 
 
+@pytest.mark.architecture
+@pytest.mark.docs_guard
+@pytest.mark.cleanroom_excluded
 def test_design_section_documents_bounded_smoke_pattern(
     doc_section_12_6: str,
 ):
@@ -97,6 +108,9 @@ def test_design_section_documents_bounded_smoke_pattern(
         assert needle in doc_section_12_6, message
 
 
+@pytest.mark.architecture
+@pytest.mark.docs_guard
+@pytest.mark.cleanroom_excluded
 def test_design_section_records_implementation_stream(
     doc_section_12_6: str,
 ):
@@ -107,6 +121,9 @@ def test_design_section_records_implementation_stream(
     )
 
 
+@pytest.mark.architecture
+@pytest.mark.docs_guard
+@pytest.mark.cleanroom_excluded
 def test_design_section_is_ascii_only(doc_section_12_6: str):
     non_ascii = [
         (i, ch) for i, ch in enumerate(doc_section_12_6)

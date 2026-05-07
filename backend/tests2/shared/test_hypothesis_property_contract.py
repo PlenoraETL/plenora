@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from pathlib import Path
-from tempfile import TemporaryDirectory
+import shutil
+import uuid
 from types import SimpleNamespace
 
 import pytest
@@ -70,21 +71,21 @@ def test_safe_bundle_dir_random_input_either_rejects_or_stays_within_root(
     value: str,
 ):
     original_settings = imdf_router.settings
-    with TemporaryDirectory() as tmp:
-        root = Path(tmp) / "bundles"
-        root.mkdir()
-        imdf_router.settings = SimpleNamespace(
-            IMDF_BUNDLES_DIR=root,
-            IMDF_BUNDLE_TTL_HOURS=24,
-        )
+    root = Path.cwd() / ".pytest-run" / "hypothesis-bundles" / uuid.uuid4().hex
+    root.mkdir(parents=True, exist_ok=False)
+    imdf_router.settings = SimpleNamespace(
+        IMDF_BUNDLES_DIR=root,
+        IMDF_BUNDLE_TTL_HOURS=24,
+    )
+    try:
         try:
-            try:
-                resolved = _safe_bundle_dir(value)
-            except HTTPException as exc:
-                assert exc.status_code == 400
-                return
+            resolved = _safe_bundle_dir(value)
+        except HTTPException as exc:
+            assert exc.status_code == 400
+            return
 
-            assert resolved.is_absolute()
-            assert resolved.relative_to(root.resolve()) is not None
-        finally:
-            imdf_router.settings = original_settings
+        assert resolved.is_absolute()
+        assert resolved.relative_to(root.resolve()) is not None
+    finally:
+        imdf_router.settings = original_settings
+        shutil.rmtree(root.parent, ignore_errors=True)

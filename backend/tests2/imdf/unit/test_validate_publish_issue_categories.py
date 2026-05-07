@@ -74,23 +74,8 @@ def patch_collaborators(monkeypatch):
         service_available=True,
     )
 
-    # FeaturesService stub
-    fake_conn_pyd = SimpleNamespace(id="conn-1", server_url="https://arc.test")
     fake_conn_info = SimpleNamespace(server_url="https://arc.test", username="u")
 
-    class FakeFeaturesService:
-        def get_connection(self, conn_id):
-            return fake_conn_pyd
-
-        def _to_connection_info(self, conn):
-            return fake_conn_info
-
-    monkeypatch.setattr(
-        "app.core.features.features_service.FeaturesService",
-        FakeFeaturesService,
-    )
-
-    # arcgis_client.create_client stub
     fake_client = MagicMock(name="ArcGISClient")
     fake_client.list_layers.side_effect = (
         lambda conn, url: knobs.list_layers_return or []
@@ -99,8 +84,8 @@ def patch_collaborators(monkeypatch):
         lambda conn, url: knobs.layer_schema_return.get(_layer_name_from_url(url), {})
     )
     monkeypatch.setattr(
-        "app.core.features.arcgis_client.create_client",
-        lambda *a, **kw: fake_client,
+        "app.core.features.arcgis_connection_adapter.resolve_arcgis_connection",
+        lambda conn_id: (fake_conn_info, fake_client),
     )
 
     # loader.load_imdf_layers stub

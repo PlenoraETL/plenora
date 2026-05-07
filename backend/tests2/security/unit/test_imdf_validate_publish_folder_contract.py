@@ -69,11 +69,10 @@ def fake_bundle(tmp_path, monkeypatch):
 @pytest.fixture
 def stub_externals(monkeypatch):
     """Monkeypatcha tutte le dipendenze esterne di validate_publish:
-    loader, FeaturesService, create_client, _find_existing_service,
+    loader, resolve_arcgis_connection, _find_existing_service,
     _is_service_name_available."""
     import app.core.imdf.loader as loader_mod
-    import app.core.features.features_service as fs_mod
-    import app.core.features.arcgis_client as client_mod
+    import app.core.features.arcgis_connection_adapter as adapter_mod
     import app.core.imdf.arcgis_uploader as uploader_mod
 
     # Layer finti (solo Locale per avere un layer presente)
@@ -82,15 +81,6 @@ def stub_externals(monkeypatch):
         lambda gdb: {"Locale": _FakeGDF(3)},
     )
 
-    class _FakeFS:
-        def get_connection(self, cid):
-            return {"id": cid}
-
-        def _to_connection_info(self, pyd):
-            return _FakeConnInfo()
-
-    monkeypatch.setattr(fs_mod, "FeaturesService", _FakeFS)
-
     class _FakeArcgisClient:
         def list_layers(self, conn, url):
             return []
@@ -98,7 +88,12 @@ def stub_externals(monkeypatch):
         def get_layer_schema(self, conn, url):
             return {"fields": []}
 
-    monkeypatch.setattr(client_mod, "create_client", lambda: _FakeArcgisClient())
+    fake_client = _FakeArcgisClient()
+    monkeypatch.setattr(
+        adapter_mod,
+        "resolve_arcgis_connection",
+        lambda connection_id: (_FakeConnInfo(), fake_client),
+    )
 
     # Default: nessun service esistente (override nei test che servono)
     monkeypatch.setattr(

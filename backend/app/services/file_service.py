@@ -400,10 +400,9 @@ class FileSourceService:
           - **Shared case** (cross-group fetch authorized via
             ``*_shares``): the SQL filter excludes the row, the
             engine raises ``FileNotFoundError``, and we retry
-            with ``is_superadmin=True``. The retry path produces
-            a single ``[AUDIT] FileSourceBlobLoader.load
-            is_superadmin=True`` log line which is exactly the
-            artifact ops want for cross-group fetches.
+            with the audited loader bypass enabled. The retry path
+            produces the loader's audit log line, which is exactly
+            the artifact ops want for cross-group fetches.
           - **Superadmin caller** (``expected_group_id == "*"``):
             the first-shot ref already carries
             ``is_superadmin=True`` so no retry is required.
@@ -418,7 +417,9 @@ class FileSourceService:
             ``get_blob_bytes`` callers continue to see the
             pre-020 ``Optional[bytes]`` surface).
         """
-        from app.core.resources import ResourceRef, default_registry
+        from app.core.resources.file_source_blob_access import (
+            load_file_source_blob_bytes,
+        )
         from app.shared.exceptions import MemoryLimitExceededError
 
         # `_assert_visible` re-raises PermissionError to the caller
@@ -429,15 +430,12 @@ class FileSourceService:
         is_superadmin_caller = expected_group_id == self.SUPERADMIN_BYPASS
 
         def _fetch(is_superadmin: bool) -> Optional[bytes]:
-            ref = ResourceRef(
-                kind="file_source_blob",
+            return load_file_source_blob_bytes(
                 file_source_id=file_id,
                 expected_group_id=(expected_group_id or "").strip()
                 or self.SUPERADMIN_BYPASS,
                 is_superadmin=is_superadmin,
             )
-            resource = default_registry().get(ref, mode="bytes")
-            return resource.data
 
         try:
             return _fetch(is_superadmin=is_superadmin_caller)
@@ -450,13 +448,14 @@ class FileSourceService:
                 # First shot already had bypass; no further retry
                 return None
             try:
-                return _fetch(is_superadmin=True)
+                bypass_shared_fetch = not is_superadmin_caller
+                return _fetch(is_superadmin=bypass_shared_fetch)
             except FileNotFoundError:
                 return None
             except MemoryLimitExceededError as e:
                 self._logger.error(
                     f"[GESTITO] Blob {file_id} oversize su retry "
-                    f"is_superadmin=True: {e}. "
+                    f"con bypass loader: {e}. "
                     f"Cap RESOURCE_MAX_BYTES limita la lettura."
                 )
                 return None

@@ -59,16 +59,10 @@ def fake_bundle(tmp_path, monkeypatch):
 
 def _install_stubs(monkeypatch, gdf, get_layer_schema_ret, capabilities="Query,Create,Update,Delete"):
     import app.core.imdf.loader as loader_mod
-    import app.core.features.features_service as fs_mod
-    import app.core.features.arcgis_client as client_mod
+    import app.core.features.arcgis_connection_adapter as adapter_mod
     import app.core.imdf.arcgis_uploader as uploader_mod
 
     monkeypatch.setattr(loader_mod, "load_imdf_layers", lambda gdb: {"Locale": gdf})
-
-    class _FakeFS:
-        def get_connection(self, cid): return {"id": cid}
-        def _to_connection_info(self, pyd): return _FakeConnInfo()
-    monkeypatch.setattr(fs_mod, "FeaturesService", _FakeFS)
 
     class _FakeArcgisClient:
         def list_layers(self, conn, url):
@@ -80,7 +74,12 @@ def _install_stubs(monkeypatch, gdf, get_layer_schema_ret, capabilities="Query,C
         def query_features(self, conn, layer_url, where, out_fields, return_geometry):
             return [], ["OBJECTID"]
 
-    monkeypatch.setattr(client_mod, "create_client", lambda: _FakeArcgisClient())
+    fake_client = _FakeArcgisClient()
+    monkeypatch.setattr(
+        adapter_mod,
+        "resolve_arcgis_connection",
+        lambda connection_id: (_FakeConnInfo(), fake_client),
+    )
     monkeypatch.setattr(
         uploader_mod, "_find_existing_service",
         lambda *a, **kw: ("https://example.com/svc", "item-1", None),

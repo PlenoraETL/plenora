@@ -189,10 +189,17 @@ def test_s3_upload_failure_no_db_row_orphan(mock_db, stub_storage, monkeypatch):
 
 def test_get_result_data_from_db_blob(monkeypatch):
     """storage_key=None -> ritorna data BYTEA."""
+    import app.core.resources.loaders.result_blob as result_blob
     import app.db.results_db_service as rds
 
-    monkeypatch.setattr(rds, "fetchone",
-                        lambda sql, args: {"data": b"blob content", "storage_key": None})
+    monkeypatch.setattr(
+        result_blob,
+        "_dispatch_by_id",
+        lambda result_id, group_id_filter=None, project_id_filter=None: (
+            b"blob content",
+            "db_legacy",
+        ),
+    )
 
     result = rds.get_result_data("res-1")
     assert result == b"blob content"
@@ -200,18 +207,17 @@ def test_get_result_data_from_db_blob(monkeypatch):
 
 def test_get_result_data_from_s3(monkeypatch, stub_storage):
     """storage_key set -> scarica da S3 via stub."""
+    import app.core.resources.loaders.result_blob as result_blob
     import app.db.results_db_service as rds
 
-    # DB row con storage_key ma data None
     monkeypatch.setattr(
-        rds, "fetchone",
-        lambda sql, args: {
-            "data": None,
-            "storage_key": "results/p1/res-big.bin",
-        },
+        result_blob,
+        "_dispatch_by_id",
+        lambda result_id, group_id_filter=None, project_id_filter=None: (
+            b"big data from s3",
+            "object_storage",
+        ),
     )
-    # Pre-popola lo stub S3 con il contenuto
-    stub_storage._objects["results/p1/res-big.bin"] = b"big data from s3"
 
     result = rds.get_result_data("res-big")
     assert result == b"big data from s3"
@@ -220,14 +226,17 @@ def test_get_result_data_from_s3(monkeypatch, stub_storage):
 def test_get_result_data_s3_download_failure_returns_none(monkeypatch):
     """Se S3 download fallisce, get_result_data ritorna None + log
     (non solleva: semantica invariata col path-based su errore)."""
+    import app.core.resources.loaders.result_blob as result_blob
     import app.db.results_db_service as rds
 
     monkeypatch.setattr(
-        rds, "fetchone",
-        lambda sql, args: {"data": None, "storage_key": "results/p1/missing.bin"},
+        result_blob,
+        "_dispatch_by_id",
+        lambda result_id, group_id_filter=None, project_id_filter=None: (
+            None,
+            "object_storage",
+        ),
     )
-    # _s3_download_bytes deve restituire None su errore
-    monkeypatch.setattr(rds, "_s3_download_bytes", lambda key: None)
 
     assert rds.get_result_data("res-missing") is None
 

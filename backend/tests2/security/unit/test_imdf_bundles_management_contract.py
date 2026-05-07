@@ -149,14 +149,14 @@ def test_delete_bundle_returns_404_when_missing(bundles_dir, superadmin):
 
 def test_delete_bundle_blocks_cross_group(bundles_dir, normal_user, monkeypatch):
     """Il normal_user di gruppo g-1 NON ha project proj-1 visibile → 403."""
-    import app.db.db_service as db_svc
+    import app.db.config.projects as projects_repo
     # BE-GO-READY-AUTH-ENGINE-020: patch via consuming router-module
     # surface; IMDF router imports `assert_resource_visible` from the
     # ownership leaf at module top, the facade is no longer the
     # monkeypatch target.
     import app.core.imdf.router as imdf_router_mod
     # Il progetto del bundle esiste, ma NON è visibile all'utente
-    monkeypatch.setattr(db_svc, "get_project",
+    monkeypatch.setattr(projects_repo, "get_project",
                         lambda pid: {"id": pid, "group_id": "g-OTHER"})
 
     def _deny(*a, **kw):
