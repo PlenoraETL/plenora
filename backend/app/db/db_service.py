@@ -1,7 +1,7 @@
 """
-Database Service — compatibility / deathmap facade.
+Db Service module.
 
-PostgreSQL-only at runtime. Canonical owners: leaves under
+Keeps this module's responsibility explicit and isolated from adjacent code.
 """
 
 from app.db.config_db_service import (
@@ -40,6 +40,6 @@ def init_all_dbs():
     # C8-nit: runner migration — applica i file in migrations/ non ancora
     # registrati in <DB_SCHEMA>.schema_migrations. I file esistenti usano
     # IF NOT EXISTS (idempotenti) quindi il primo run post-C8 li registra
-    # semplicemente come applicate senza side-effect.
+    # semplicemente come applicate senza side-effect
     from app.db.migrations_runner import apply_pending_migrations
     apply_pending_migrations()

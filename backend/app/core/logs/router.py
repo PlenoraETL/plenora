@@ -7,15 +7,14 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 from app.config import settings
-# BE-GO-READY-AUTH-ENGINE-013-ROUTER-IMPORTS-OFF-AUTH-FACADE:
-# the FastAPI auth dependency callables (`get_current_user`,
+# the FastAPI auth dependency callables (`get_current_user`
 # `require_not_esecutore`) are consumed from the canonical
 # leaf `app.core.auth.dependencies` instead of the
-# `app.core.auth.auth` facade. Identity preserved (the facade
+# `app.core.auth.auth` compatibility module. Identity preserved (the compatibility module
 # now re-exports from this leaf), but the import edge moves
 # to the canonical owner so future contributors can trace the
 # dependency without dragging the whole login + MFA + JWT
-# omnibus.
+# omnibus
 from app.core.auth.dependencies import (
     get_current_user,
     require_not_esecutore,
@@ -33,7 +32,7 @@ router = APIRouter(prefix="/logs", tags=["logs"])
 def _row_to_dict(row: dict) -> dict:
     d = dict(row) if row else {}
     # Deserializza details JSON. Se il campo non e' JSON valido lasciamolo
-    # come stringa: log di sistema legacy possono avere `details` testuali.
+    # come stringa: log di sistema legacy possono avere `details` testuali
     if d.get("details"):
         try:
             d["details"] = json.loads(d["details"])
@@ -91,17 +90,17 @@ def get_logs(
         # di sistema con group_id='' erano leak-able da utenti cross-tenant
         # che conoscevano un project_id di un altro gruppo. Ora rifiutiamo
         # esplicitamente l'accesso a project altrui (superadmin bypassa
-        # via assert_project_visible che accetta anche progetti condivisi).
+        # via assert_project_visible che accetta anche progetti condivisi
         if current_user.role != "superadmin":
             assert_project_visible(project_id, current_user)
         conditions.append("project_id = ?")
         params.append(project_id)
 
     if search:
-        # Escape dei metacaratteri LIKE (% e _) e del backslash stesso.
+        # Escape dei metacaratteri LIKE (% e _) e del backslash stesso
         # Senza escape, un utente potrebbe usare `%` o `_` per costruire
-        # pattern wildcard arbitrari (es. cercare `%password%` per discovery).
-        # PostgreSQL supporta `ESCAPE '\'` per l'escape esplicito.
+        # pattern wildcard arbitrari (es. cercare `%password%` per discovery
+        # PostgreSQL supporta `ESCAPE '\'` per l'escape esplicito
         escaped = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         conditions.append("msg LIKE ? ESCAPE '\\'")
         params.append(f"%{escaped}%")
@@ -114,7 +113,7 @@ def get_logs(
         conditions.append("ts <= ?")
         params.append(before)
 
-    # Filtro per gruppo (superadmin vede tutto, altri solo il proprio gruppo)
+    # Filtro per gruppo (superadmin vede tutto, altri solo il proprio gruppo
     if current_user.role != "superadmin":
         conditions.append("(group_id = ? OR group_id = '')")
         params.append(current_user.group_id)

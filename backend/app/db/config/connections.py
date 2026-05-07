@@ -1,7 +1,7 @@
 """
-Connections DAL — estratto da `config_db_service.py` (scope micro Batch G #9,
+Connections DAL helpers.
 
-invariants §6 commit `2dee7da`).
+Keeps config-table persistence isolated behind a narrow database module.
 """
 
 import json

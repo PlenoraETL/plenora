@@ -116,7 +116,7 @@ class SharePointDataSource(DataSourceInterface):
             if tenant_id:
                 ctx.authentication_context.tenant = tenant_id
 
-            # Test connessione (stesso pattern del tuo uploader)
+            # Test connessione (stesso pattern del tuo uploader
             web = ctx.web
             ctx.load(web)
             ctx.execute_query()
@@ -151,8 +151,8 @@ class SharePointDataSource(DataSourceInterface):
             }
         except DataSourceConnectionError as e:
             # F5-B4: `e` e' il nostro wrapper con messaggio gia' canonico
-            # (vedi connect() + _sanitize_sharepoint_error), quindi str(e)
-            # e' safe.
+            # vedi connect + _sanitize_sharepoint_error), quindi str(e
+            # e' safe
             logger.warning(
                 f"[GESTITO] SharePoint test_connection fallita: {type(e).__name__}: {e} "
                 f"(cause: {type(e.__cause__).__name__ if e.__cause__ else 'none'})",
@@ -160,8 +160,8 @@ class SharePointDataSource(DataSourceInterface):
             )
             return {"ok": False, "message": str(e), "details": {}}
         except Exception as e:
-            # F5-B4: eccezione inattesa fuori dal wrap di connect() —
-            # sanitize via helper invece di f"Errore inatteso: {e}".
+            # F5-B4: eccezione inattesa fuori dal wrap di connect —
+            # sanitize via helper invece di f"Errore inatteso: {e}"
             logger.warning(
                 f"[GESTITO] SharePoint test_connection eccezione inattesa: "
                 f"{type(e).__name__}: {e}",
@@ -215,7 +215,7 @@ class SharePointDataSource(DataSourceInterface):
 
         results = []
 
-        # Aggiungi cartelle (type="folder" per distinguerle)
+        # Aggiungi cartelle (type="folder" per distinguerle
         for sf in subfolders:
             name = sf.properties.get("Name", "")
             if not name or name.startswith("_"):
@@ -240,7 +240,7 @@ class SharePointDataSource(DataSourceInterface):
                         include_hash=include_hash,
                         recursive=True,
                     )
-                    # Aggiungi solo i file (non le sottocartelle ricorsive per evitare duplicati)
+                    # Aggiungi solo i file (non le sottocartelle ricorsive per evitare duplicati
                     results.extend([r for r in sub_results if r.type != "folder"])
                 except Exception as e:
                     logger.warning(f"Errore ricorsione cartella {folder_path}: {e}")
@@ -339,12 +339,12 @@ class SharePointDataSource(DataSourceInterface):
                 f"Errore read_file SharePoint: {_sanitize_sharepoint_error(e)}"
             ) from e
 
-    # Soglia per upload a chunk (10 MB)
+    # Soglia per upload a chunk (10 MB
     _CHUNK_SIZE = 10 * 1024 * 1024
 
     def write_file(self, path: str, content: bytes) -> None:
         self._check()
-        # Applica base_path dalla config (stessa logica di list_files)
+        # Applica base_path dalla config (stessa logica di list_files
         effective_path = self._join_path(self._base_path(), path)
         parts = effective_path.split("/")
         name = parts[-1]
@@ -482,7 +482,7 @@ class SharePointDataSource(DataSourceInterface):
     def _base_path(self) -> str:
         """Sottocartella di partenza ricavata dal resto di root_path dopo la library.
         es. root_path="gisrepo/test/dati" → "test/dati"
-            root_path="gisrepo"           → ""
+            root_path="gisrepo" → ""
         """
         parts = self.config.root_path.strip("/").split("/")
         return "/".join(parts[1:])
@@ -543,7 +543,7 @@ class SharePointDataSource(DataSourceInterface):
     def _get_or_create_folder(self, relative_path: str):
         """
         Naviga/crea la struttura di cartelle.
-        Replica _naviga_crea_cartella() dal tuo sharepoint_uploader.py.
+        Replica _naviga_crea_cartella dal tuo sharepoint_uploader.py.
         """
         if not relative_path:
             # Ritorna la root della library

@@ -1,7 +1,6 @@
 """
 Health / readiness boundary.
 
-BE-GO-READY-BOOTSTRAP-ENGINE-009-HEALTH-EXTRACTION.
 """
 
 from __future__ import annotations
@@ -48,7 +47,7 @@ class HealthPayload:
 def check_postgres() -> CheckOutcome:
     """SELECT 1 sul pool PG con statement_timeout bounded.
 
-    BE-GO-READY-OPS-002-READINESS-PG-OBJECTSTORE-TIMEOUTS: il timeout e'
+     il timeout e'
     applicato a livello di statement via `SET LOCAL statement_timeout`.
     Senza questo bound, una PG che accetta la connessione TCP ma stalla
     nell'esecuzione (lock, backend esauriti, query plan stuck) farebbe
@@ -79,9 +78,8 @@ def check_postgres() -> CheckOutcome:
         timeout_ms = timeout * 1000
         # Build the SET LOCAL statement via concatenation (timeout_ms is
         # an int, so no SQL injection surface). f-string interpolation
-        # would push the literal into a tokenizer FSTRING_MIDDLE token,
-        # which the source-bound guard test strips before scanning —
-        # keeping it as a plain string keeps the lock honest.
+        # would push the literal into a tokenizer FSTRING_MIDDLE token
+        # keeping it as a plain string keeps the lock honest
         set_local_sql = "SET LOCAL statement_timeout = " + str(timeout_ms)
         conn = get_connection()
         try:
@@ -108,7 +106,7 @@ def check_postgres() -> CheckOutcome:
 def check_redis() -> CheckOutcome:
     """PING su Redis broker Celery.
 
-    BE-GO-READY-OPS-001-READINESS-COST-BOUNDEDNESS: il timeout e'
+     il timeout e'
     applicato sia al TCP handshake (`socket_connect_timeout`) sia
     all'operazione PING (`socket_timeout`). Senza socket_timeout
     una Redis che accetta la connessione ma stalla bloccherebbe
@@ -153,15 +151,15 @@ def check_migrations_aligned() -> CheckOutcome:
         return True, "aligned"
     except Exception as e:
         # Non falliamo /ready per un problema di introspection stessa —
-        # un check PG/Redis a monte ha gia' validato la raggiungibilita'.
+        # un check PG/Redis a monte ha gia' validato la raggiungibilita'
         return True, f"check skipped: {type(e).__name__}"
 
 
 def check_pool_headroom() -> CheckOutcome:
     """Verifica che il pool PG non sia saturo: almeno 1 slot libero.
 
-    BE-GO-READY-BOOTSTRAP-ENGINE-010: consume del helper public
-    `pg_connection.get_pool_headroom()` (typed `PoolHeadroom`).
+     consume del helper public
+    `pg_connection.get_pool_headroom` (typed `PoolHeadroom`).
     L'accesso ai simboli privati `_get_pool` / `_POOL_MAX` e'
     incapsulato dentro `pg_connection`; questo modulo resta agnostico
     rispetto agli internals di psycopg2.
@@ -182,26 +180,25 @@ def check_pool_headroom() -> CheckOutcome:
     except Exception as e:
         # Se non riusciamo a ispezionare, non falliamo /ready —
         # un SELECT 1 e' gia' successo sopra. Behavior pre-batch-010
-        # preservato byte-per-byte.
+        # preservato byte-per-byte
         return True, f"introspection skipped: {type(e).__name__}"
 
 
 def check_object_storage() -> CheckOutcome:
     """Verifica raggiungibilita' object storage runtime.
 
-    BE-GO-READY-BOOTSTRAP-ENGINE-011-OBSERVABILITY-OBJECT-STORAGE-HEALTH:
     consumer dei boundary capability + factory esistenti in
     `app.shared.cloud_backends`. NON importa boto3 / S3 SDK
     direttamente; la SDK e' incapsulata dentro `cloud_backends`.
 
     Strategia (in ordine):
-    1. Se `object_storage_enabled()` e' False (policy:
+    1. Se `object_storage_enabled` e' False (policy:
        `STORAGE_POLICY=db` o capability disabilitata) -> outcome
        `(True, "skipped: capability disabled")`. Modalita'
        on-prem/local senza object storage e' configurazione
        legittima, NON deve far fallire /ready.
     2. Altrimenti,
-       `get_runtime_object_storage().list_objects(prefix=".plenora-readiness-probe/")`
+       `get_runtime_object_storage.list_objects(prefix=".plenora-readiness-probe/")`
        con un dry-run leggero su prefisso dedicato normalmente vuoto.
        Bucket assente, credenziali scadute, network unreachable ->
        exception -> outcome `(False, "<ExcType>: <msg>")`.
@@ -210,7 +207,7 @@ def check_object_storage() -> CheckOutcome:
        disabled (race)")`.
 
     Esposto in `gather_readiness` come quinto check `object_storage`.
-    NON e' integrato in `gather_liveness` per scelta:  /health resta
+    NON e' integrato in `gather_liveness` per scelta: /health resta
     "load balancer-friendly" e non deve dipendere da provider di
     storage cloud (latenza variabile, regional outages,
     credentials).
@@ -226,32 +223,30 @@ def check_object_storage() -> CheckOutcome:
         # diagnostic, parallelo a `check_pool_headroom` /
         # `check_migrations_aligned`. Un broken import del modulo
         # cloud_backends sarebbe gia' stato catturato dal boot
-        # validate (`validate_storage_config`) o dai test.
+        # validate (`validate_storage_config`) o dai test
         return True, f"check skipped: {type(e).__name__}"
 
     if not object_storage_enabled():
         # Modalita' DB-only / on-prem: capability disabilitata e'
-        # configurazione legittima, non un errore.
+        # configurazione legittima, non un errore
         return True, "skipped: capability disabled"
 
     try:
         storage = get_runtime_object_storage()
     except ObjectStorageDisabledError:
-        # Race teorica: capability ON al check, OFF qui.
+        # Race teorica: capability ON al check, OFF qui
         return True, "skipped: capability disabled (race)"
     except Exception as e:
         return False, f"{type(e).__name__}: {e}"
 
-    # BE-GO-READY-OPS-002-READINESS-PG-OBJECTSTORE-TIMEOUTS: la probe
     # passa per `readiness_probe(timeout_seconds=...)` che costruisce
     # un client boto3 one-shot con `connect_timeout`+`read_timeout`+
     # `retries.max_attempts=1`. Senza bound, list_objects userebbe i
     # default boto3 (60s+60s con 3 retry = ~360s worst case), ben
-    # oltre la finestra "load-balancer-friendly" di /ready.
-    #
+    # oltre la finestra "load-balancer-friendly" di /ready
     # Cap <= 0 ricade sul fallback hardcoded di 3s (parallelo al
     # `READINESS_REDIS_TIMEOUT_SECONDS`/`READINESS_PG_TIMEOUT_SECONDS`
-    # 2s; +1s per assorbire la latenza S3 regionale).
+    # 2s; +1s per assorbire la latenza S3 regionale
     from app.config import settings
     try:
         timeout = int(
@@ -273,15 +268,13 @@ def check_reconciliation_backlog() -> CheckOutcome:
     """Verifica che il backlog di `plenora.storage_reconciliation_log`
     non abbia accumulato troppi `pending` o `lost`.
 
-    BE-GO-READY-STORAGE-ENGINE-015-RECONCILIATION-READINESS-CHECK:
-    consumer di `count_active_by_state_domain()` (gia' bounded da
+    consumer di `count_active_by_state_domain` (gia' bounded da
     SQL filter `state IN ('pending','lost')`). Threshold-based:
       - `pending_total > STORAGE_RECONCILE_BACKLOG_PENDING_503_THRESHOLD`
         oppure
       - `lost_total > STORAGE_RECONCILE_BACKLOG_LOST_503_THRESHOLD`
     -> outcome `(False, "<state>=<count> over <thr>: ...")`.
 
-    BE-GO-READY-STORAGE-ENGINE-023-UPLOAD-INTENT-READINESS-GUARD:
     additivo, due cambi:
       1. il detail string ora include il breakdown per-operation
          (es. `"pending=15 (delete=12 upload_intent=3) lost=0"`) cosi'
@@ -316,7 +309,7 @@ def check_reconciliation_backlog() -> CheckOutcome:
             count_pending_by_operation,
         )
     except Exception as e:
-        # Modulo rotto / cycle: fail-OPEN diagnostic.
+        # Modulo rotto / cycle: fail-OPEN diagnostic
         return True, f"check skipped: {type(e).__name__}"
 
     try:
@@ -339,13 +332,13 @@ def check_reconciliation_backlog() -> CheckOutcome:
     try:
         counts = count_active_by_state_domain()
     except Exception as e:
-        # `count_active_by_state_domain` gia' swallow internamente,
-        # ma defense-in-depth.
+        # `count_active_by_state_domain` gia' swallow internamente
+        # ma defense-in-depth
         return True, f"check skipped: {type(e).__name__}"
 
     # Per-operation breakdown: best-effort, errors degrade to empty
     # dict (no per-operation visibility but the global
-    # state-domain numbers still drive the 503 logic).
+    # state-domain numbers still drive the 503 logic
     try:
         per_op = count_pending_by_operation()
     except Exception:
@@ -382,11 +375,10 @@ def check_beat_heartbeat() -> CheckOutcome:
     """Verifica che il beat scheduler abbia scritto un heartbeat
     recente in `plenora.beat_heartbeat`.
 
-    BE-GO-READY-OBSERVABILITY-ENGINE-024-BEAT-HEARTBEAT-READINESS:
     chiude la R-023.1 (silent accumulation gap su upload_intent
     backlog quando il reconciler beat non gira). Lo heartbeat
     e' gia' scritto ad ogni tick da
-    `PlenoraBeatScheduler._write_heartbeat()` (INSERT ... ON
+    `PlenoraBeatScheduler._write_heartbeat` (INSERT ... ON
     CONFLICT su `plenora.beat_heartbeat WHERE id='beat'`); questo
     helper lo legge e verifica che `now - ts` non superi un
     threshold.
@@ -429,7 +421,7 @@ def check_beat_heartbeat() -> CheckOutcome:
     if max_age <= 0:
         # Default disabled: dev / test / CLI environments without a
         # running beat process never trigger 503. Operators opt in
-        # via env override.
+        # via env override
         return True, "skipped: disabled (threshold=0)"
 
     try:
@@ -440,7 +432,7 @@ def check_beat_heartbeat() -> CheckOutcome:
     except Exception as e:
         # Table missing (fresh dev DB) / DB unreachable / SQL syntax
         # error: fail-OPEN diagnostic. The PG check upstream already
-        # validates DB reachability.
+        # validates DB reachability
         return True, f"check skipped: {type(e).__name__}"
 
     if not row or not row.get("ts"):
@@ -458,9 +450,9 @@ def check_beat_heartbeat() -> CheckOutcome:
         age_seconds = (datetime.now(timezone.utc) - beat_time).total_seconds()
     except Exception as e:
         # Malformed timestamp: fail-OPEN. A consistent ts shape would
-        # have come from `_write_heartbeat` which uses isoformat;
+        # have come from `_write_heartbeat` which uses isoformat
         # anything else is a corruption that the readiness probe
-        # cannot diagnose.
+        # cannot diagnose
         return True, f"check skipped: {type(e).__name__}"
 
     if age_seconds > max_age:
@@ -475,23 +467,22 @@ def check_bootstrap_complete() -> CheckOutcome:
     """Verifica che il boundary canonico `app.bootstrap.bootstrap()`
     sia stato attraversato dal processo web.
 
-    BE-GO-READY-BOOTSTRAP-ENGINE-015-READY-CONSUMES-IS-BOOTSTRAPPED:
-    consumer del flag tipato `app.bootstrap.is_bootstrapped()`
-    introdotto nel batch 026 (BOOTSTRAP-ENGINE-013). Il flag flippa a
+    consumer del flag tipato `app.bootstrap.is_bootstrapped`
+    introdotto nel . Il flag flippa a
     True solo dopo che i 4 step canonici (`validate_startup`,
     `validate_storage_config`, `init_all_dbs`,
     `_repair_psycopg2_ssl_env`) sono completati senza eccezioni.
 
     Outcome:
-      - True quando `is_bootstrapped()` ritorna True;
-      - False quando `is_bootstrapped()` ritorna False (slow-boot
+      - True quando `is_bootstrapped` ritorna True;
+      - False quando `is_bootstrapped` ritorna False (slow-boot
         window, partial bootstrap dopo crash mid-step, oppure boot
         non ancora avvenuto in setup CLI/test che importano `app`
-        senza chiamare `bootstrap()`).
+        senza chiamare `bootstrap`).
 
     Rationale del fail-fast esplicito:
       Senza questo check, durante la finestra "FastAPI app esiste,
-      uvicorn ascolta, ma `bootstrap()` sta ancora eseguendo lo
+      uvicorn ascolta, ma `bootstrap` sta ancora eseguendo lo
       step 3 (`init_all_dbs` con migration pesanti)" il `/ready`
       restituirebbe 503 perche' i singoli check (PG / Redis /
       migrations) gia' falliscono — ma il messaggio sarebbe meno
@@ -519,7 +510,7 @@ def check_bootstrap_complete() -> CheckOutcome:
         bootstrap valido).
 
     Test harness considerations:
-      Il conftest in `tests2/conftest.py` no-op `bootstrap()`. I
+      Il conftest in `tests2/conftest.py` no-op `bootstrap`. I
       test che esercitano `gather_readiness` end-to-end devono
       monkeypatchare `app.bootstrap.is_bootstrapped` o `_BOOT_COMPLETE`
       al valore desiderato — gli stessi test esistenti per gli
@@ -531,7 +522,7 @@ def check_bootstrap_complete() -> CheckOutcome:
     except Exception as e:
         # Import error: il modulo bootstrap e' rotto. Fail-CLOSED
         # — non possiamo confermare un bootstrap che non sappiamo
-        # nemmeno verificare.
+        # nemmeno verificare
         return False, f"{type(e).__name__}: {e}"
 
     if is_bootstrapped():
@@ -577,12 +568,12 @@ def gather_readiness() -> HealthPayload:
     capability/threshold), 503 altrimenti. Body shape:
     `{"status": "ready"|"not_ready", "checks": {...8 keys...}}`.
 
-    BE-GO-READY-BOOTSTRAP-ENGINE-011: aggiunto check `object_storage`
+     aggiunto check `object_storage`
     come additivo.
-    BE-GO-READY-STORAGE-ENGINE-015: aggiunto `reconciliation_backlog`.
-    BE-GO-READY-BOOTSTRAP-ENGINE-015: aggiunto `bootstrap_complete`
+     aggiunto `reconciliation_backlog`.
+     aggiunto `bootstrap_complete`
     come additivo.
-    BE-GO-READY-OBSERVABILITY-ENGINE-024: aggiunto `beat_heartbeat`.
+     aggiunto `beat_heartbeat`.
     Default opt-in disabled (`READINESS_BEAT_HEARTBEAT_MAX_AGE_SECONDS=0`)
     cosi' dev/test senza beat scheduler attivo NON triggerano 503.
 

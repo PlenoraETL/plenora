@@ -17,7 +17,7 @@ from app.core.carica.models import (
     ColumnMapping,
     ConflictReport,
     TransactionMode,
-    WriteConfig,  # noqa: F401  (used in type docs)
+    WriteConfig,  # noqa: F401 (used in type docs
     WriteMode,
     WriteResult,
 )
@@ -26,9 +26,9 @@ from app.utils.logger import get_logger
 # Stesso logger name di `database_writer.py`: i record sono
 # indistinguibili dai consumer che attaccano handler / filtrano per
 # "app.core.carica.writer". Il `StructuredLogger` wrapper delega a
-# `_logger.log(...)` sul logger stdlib omonimo (singleton per nome),
+# `_logger.log(...)` sul logger stdlib omonimo (singleton per nome
 # quindi handler agganciati nei test (B2.0/B2.5a) catturano gli emit
-# dal mixin.
+# dal mixin
 logger = get_logger("app.core.carica.writer")
 
 
@@ -85,14 +85,14 @@ class WriterPreflightLifecycleMixin:
                     f"almeno una colonna match (chiave primaria)."
                 )
 
-        # 4. Verifica permessi (tentativo CREATE TABLE temporanea)
+        # 4. Verifica permessi (tentativo CREATE TABLE temporanea
         if self.config.write_mode in (WriteMode.CREATE, WriteMode.REPLACE):
             ok, err = self._check_create_permission()
             if not ok:
                 return False, err
 
         # 5. Verifica che i dest_column del mapping esistano nella tabella destinazione
-        #    (solo per modalità che scrivono su tabella esistente)
+        # solo per modalità che scrivono su tabella esistente
         if self.config.write_mode in (
             WriteMode.APPEND, WriteMode.UPDATE,
             WriteMode.UPSERT, WriteMode.TRUNCATE_INSERT
@@ -142,12 +142,12 @@ class WriterPreflightLifecycleMixin:
                     f"Permessi insufficienti per CREATE TABLE nello schema "
                     f"'{self.config.schema_name}': {str(e)}"
                 )
-            # Errore non classificato come permission: fail-closed.
-            # Pre-fix: logger.warning + return True ("logga ma non blocca")
+            # Errore non classificato come permission: fail-closed
+            # Pre-fix: logger.warning + return True ("logga ma non blocca"
             # lasciava passare errori transient/DDL sconosciuti come se i
             # permessi fossero ok, poi CREATE TABLE vero falliva senza
             # diagnostica utile. Ora la verifica segnala esplicitamente
-            # il fallimento al chiamante.
+            # il fallimento al chiamante
             logger.error(
                 f"[CRASH] Verifica permessi CREATE fallita su schema "
                 f"'{self.config.schema_name}': {e}",
@@ -158,7 +158,7 @@ class WriterPreflightLifecycleMixin:
                 f"'{self.config.schema_name}' fallita: {str(e)}"
             )
 
-    # GESTIONE TABELLA (DDL lifecycle)
+    # GESTIONE TABELLA (DDL lifecycle
 
     def create_table(
         self,
@@ -204,7 +204,7 @@ class WriterPreflightLifecycleMixin:
                             logger.info(f"SPATIAL INDEX: {idx_sql[:200]}...")
                             conn.execute(text(idx_sql))
 
-                # Indice univoco (per supporto UPSERT futuro)
+                # Indice univoco (per supporto UPSERT futuro
                 # B-BE-61: se configurato, crea UNIQUE constraint sulla colonna chiave
                 unique_col = getattr(self.config, 'unique_key_column', None)
                 if unique_col and self.db_type == 'postgres':
@@ -250,9 +250,9 @@ class WriterPreflightLifecycleMixin:
 
         Solleva l'eccezione sottostante se TRUNCATE non e' eseguibile
         (permessi, lock, DDL). Pre-fix: ritornava False silenziosamente,
-        e il caller in write() PER_BATCH (TRUNCATE_INSERT) procedeva
+        e il caller in write PER_BATCH (TRUNCATE_INSERT) procedeva
         comunque con l'INSERT appendendo anziche' truncate-inserting —
-        correttezza dati compromessa. Ora il boundary in write() cattura
+        correttezza dati compromessa. Ora il boundary in write cattura
         e segnala WRITE_ERROR.
         """
         trunc_sql = self.ddl.generate_truncate(
@@ -277,7 +277,7 @@ class WriterPreflightLifecycleMixin:
     ) -> ConflictReport:
         """Pre-check conflitti per APPEND.
 
-        BE-GO-READY-TRANSFORMATION-ENGINE-013: passa esplicitamente
+         passa esplicitamente
         `self.ddl` al ConflictChecker per riutilizzare la boundary
         SQL/dialetto del writer (closure di TE11-R4: niente piu'
         duplicazione di `_qualified_name`/`_quote_col` lato
@@ -298,7 +298,7 @@ class WriterPreflightLifecycleMixin:
     ) -> WriteResult:
         """Costruisce lo skeleton del WriteResult prima dell'esecuzione.
 
-        Estratto da `write()` (C4.1 Phase 4) come pura factory: nessuna
+        Estratto da `write` (C4.1 ) come pura factory: nessuna
         logica di business, nessun side-effect. Mantiene unique-source-of-
         truth per i campi `table_name` e `write_mode` derivati da
         `self.config`, evitando duplicazioni inline nei branch di write.
@@ -313,7 +313,7 @@ class WriterPreflightLifecycleMixin:
     def _assert_safe_write_config(self) -> None:
         """F-DATA-08 / P1-05: gate fail-loud sulla combo rischiosa.
 
-        Se il write fallisce a meta' con batch gia' committati (PER_BATCH)
+        Se il write fallisce a meta' con ' committati (PER_BATCH)
         + write_mode=APPEND + nessun match_columns per conflict detection,
         un rilancio manuale duplicherebbe le righe gia' scritte.
         Pre-fix la combo era solo "warning"-livel: in produzione il
@@ -323,7 +323,7 @@ class WriterPreflightLifecycleMixin:
         consapevolmente il rischio (es. tabelle append-only con
         lineage esterno che gestisce dedup downstream).
 
-        Estratto da `write()` (C4.1 Phase 4) come helper privato.
+        Estratto da `write` (C4.1 ) come helper privato.
         Comportamento bit-per-bit invariato: stessa condizione, stesso
         messaggio di errore, stesso warning su opt-in.
         """
@@ -348,7 +348,7 @@ class WriterPreflightLifecycleMixin:
                 f"(3) settare allow_unsafe_append=true consapevolmente "
                 f"se la tabella e' append-only con lineage esterno."
             )
-        # Opt-in: warning informativo per l'operatore, write procede.
+        # Opt-in: warning informativo per l'operatore, write procede
         logger.warning(
             f"[UNSAFE WRITE CONFIG opt-in] Tabella "
             f"{self.config.schema_name}.{self.config.table_name}: "

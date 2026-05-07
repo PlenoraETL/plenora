@@ -1,7 +1,7 @@
 """
-Users DAL — estratto da `config_db_service.py` (scope micro Batch G #9 settima
+Users DAL helpers.
 
-riapertura — governance autonoma auth-critical, invariants §6 commit `16bebfa`).
+Keeps config-table persistence isolated behind a narrow database module.
 """
 
 from typing import Dict, List, Optional

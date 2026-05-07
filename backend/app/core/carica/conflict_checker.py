@@ -26,7 +26,7 @@ class ConflictChecker:
         engine: SQLAlchemy engine per la connessione al DB destinazione
         db_type: tipo database ("postgres", "oracle", "mssql", "mysql")
         ddl: `DDLGenerator` boundary per quoting/qualified-name SQL.
-            BE-GO-READY-TRANSFORMATION-ENGINE-013: il caller di solito
+             il caller di solito
             inietta `self.ddl` del writer (gia' istanziato in
             `DatabaseWriter.__init__`) per evitare doppia istanza +
             duplicazione delle policy di quoting/qualified-name.
@@ -49,10 +49,9 @@ class ConflictChecker:
     ):
         self.engine = engine
         self.db_type = db_type.lower()
-        # BE-GO-READY-TRANSFORMATION-ENGINE-013-CONFLICT-CHECKER-DDL-DEPENDENCY-INJECTION:
         # consume `DDLGenerator` come boundary SQL/dialetto. La fallback
         # locale al ddl=None preserva backward-compat per callsite
-        # esistenti che non passano `ddl=...`.
+        # esistenti che non passano `ddl=...`
         self.ddl = ddl if ddl is not None else DDLGenerator(self.db_type)
 
     def check(
@@ -138,7 +137,7 @@ class ConflictChecker:
     ) -> tuple:
         """Passaggio 2: cerca conflitti con record già nel DB.
 
-        Usa query IN(...) in batch per verificare l'esistenza dei valori.
+        Usa query IN(...) in verificare l'esistenza dei valori.
         Per match su singola colonna: SELECT col FROM tab WHERE col IN (...)
         Per match multi-colonna: usa confronto tupla o query EXISTS
 
@@ -238,8 +237,8 @@ class ConflictChecker:
             logger.error(f"[CRASH] Errore query multi-column destinazione: {e}", exc_info=True)
             return 0, []
 
-        # Converte in set di tuple per lookup O(1).
-        # Sentinel per NaN (None non è hashable in tuple con NaN reali)
+        # Converte in set di tuple per lookup O(1
+        # Sentinel per NaN (None non è hashable in tuple con NaN reali
         _NAN_SENTINEL = "__NAN__"
 
         def _normalize(v):

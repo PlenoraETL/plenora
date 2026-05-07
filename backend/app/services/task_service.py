@@ -60,9 +60,9 @@ class TaskService:
     """Servizio per gestione task asincroni."""
 
     # Cache locale task_id → project_id per risolvere il project_id
-    # anche quando il task è in stato PENDING (Celery non ha ancora metadata).
+    # anche quando il task è in stato PENDING (Celery non ha ancora metadata
     # Risolve la race condition: frontend fa polling subito dopo la creazione
-    # ma il worker non ha ancora scritto project_id nel result backend.
+    # ma il worker non ha ancora scritto project_id nel result backend
     _task_project_cache: Dict[str, str] = {}
     _CACHE_MAX_SIZE = 500
 
@@ -126,7 +126,7 @@ class TaskService:
 
         logger.info(f"Creato task enrichment: {result.id} per progetto {project_id}")
 
-        # Cache per risolvere project_id durante PENDING (prima che il worker scriva metadata)
+        # Cache per risolvere project_id durante PENDING (prima che il worker scriva metadata
         self._task_project_cache[result.id] = project_id
         self._prune_cache()
 
@@ -289,8 +289,8 @@ class TaskService:
         # Se è un dict con i nostri dati custom
         if isinstance(meta, dict):
             # "progress" è la chiave standard (round 4+). "percent" è il fallback
-            # per task avviati prima della normalizzazione e ancora in Redis.
-            # Cast esplicito a int: il worker può salvare float (es. 5.0 da processed/total*100)
+            # per task avviati prima della normalizzazione e ancora in Redis
+            # Cast esplicito a int: il worker può salvare float (es. 5.0 da processed/total*100
             progress = int(meta.get("progress", meta.get("percent", 0)))
             message = meta.get("message", "")
             is_error = meta.get("is_error", False)
@@ -329,7 +329,7 @@ class TaskService:
         project_id = ""
         if isinstance(task_result, dict):
             project_id = task_result.get("project_id", "")
-        # Fallback alla cache locale (risolve PENDING prima che il worker scriva metadata)
+        # Fallback alla cache locale (risolve PENDING prima che il worker scriva metadata
         if not project_id:
             project_id = self._task_project_cache.get(task_id, "")
         

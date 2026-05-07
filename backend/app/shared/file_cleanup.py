@@ -1,7 +1,7 @@
 """
-Filesystem cleanup helpers (STRUCT-001 Seam D-C).
+Filesystem cleanup helpers (STRUCT-001 Seam D-C
 
-Estratto da `app.services.file_service._rmtree_safe` + duplicato di
+Keeps this module's responsibility explicit and isolated from adjacent code.
 """
 
 from __future__ import annotations
@@ -28,9 +28,9 @@ def rmtree_safe(
     """Rimuove file o directory con retry per handle locked.
 
     Args:
-        path:    str o Path del file/dir da rimuovere.
+        path: str o Path del file/dir da rimuovere.
         retries: numero di tentativi prima di rinunciare (default 3).
-        logger:  LoggerProtocol-like opzionale; se fornito, riceve
+        logger: LoggerProtocol-like opzionale; se fornito, riceve
                  messaggi `debug` su:
                    - chmod onerror fallito (per-file durante rmtree),
                    - cleanup definitivamente fallito dopo i retry.
@@ -41,12 +41,12 @@ def rmtree_safe(
         None. Best-effort: non solleva se il cleanup fallisce.
 
     Note:
-        - File: tenta `Path.unlink()`, ritorna immediatamente al successo.
+        - File: tenta `Path.unlink`, ritorna immediatamente al successo.
         - Directory: usa `shutil.rmtree(p, onerror=...)`. La callback
           onerror fa `chmod +write` sul file e ritenta `func(fpath)`.
           Se anche il chmod fallisce, logga debug (la callback NON
           deve raisare per contratto API di shutil).
-        - Tra un retry e l'altro: `gc.collect()` per rilasciare handle
+        - Tra un retry e l'altro: `gc.collect` per rilasciare handle
           Python pendenti, poi sleep 0.3s.
     """
     log = logger if logger is not None else _logger_module
@@ -65,7 +65,7 @@ def rmtree_safe(
                         func(fpath)
                     except Exception as e:
                         # Callback onerror di shutil.rmtree: non deve raisare
-                        # (contratto API). Debug log per visibilita' su permessi.
+                        # contratto API). Debug log per visibilita' su permessi
                         log.debug(
                             f"rmtree_safe onerror chmod fallito per {fpath}: {e}"
                         )

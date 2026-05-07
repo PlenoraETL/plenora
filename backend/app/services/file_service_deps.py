@@ -16,12 +16,12 @@ import pandas as pd
 
 # Logger stdlib: file_service_deps e' un leaf module e non deve dipendere
 # da `app.utils.logger`. Usato solo per debug-log non critico in
-# `DefaultDataLoader.list_layers`/`list_sheets`.
+# `DefaultDataLoader.list_layers`/`list_sheets`
 _logger = logging.getLogger(__name__)
 
 
-# Interfacce astratte per disaccoppiare il servizio dall'implementazione concreta.
-# In produzione: filesystem reale + GeoPandas. In test: mock in-memory.
+# Interfacce astratte per disaccoppiare il servizio dall'implementazione concreta
+# In produzione: filesystem reale + GeoPandas. In test: mock in-memory
 
 
 class LoggerProtocol(Protocol):
@@ -69,7 +69,7 @@ class TimeProviderProtocol(Protocol):
     def generate_uuid(self) -> str: ...
 
 
-# Implementazioni concrete dei protocolli per uso in produzione e testing.
+# Implementazioni concrete dei protocolli per uso in produzione e testing
 
 
 class NullLogger:
@@ -88,7 +88,7 @@ class DefaultTimeProvider:
     def generate_uuid(self) -> str:
         # N1: full 32-hex UUID (pre-fix solo i primi 8 char = ~10^9
         # combinazioni -> brute-force fattibile se il nome + timestamp
-        # sono noti). 32-hex = 2^128 = infeasible.
+        # sono noti). 32-hex = 2^128 = infeasible
         import uuid
         return uuid.uuid4().hex
 
@@ -174,7 +174,7 @@ class DefaultDataLoader:
             try:
                 sep = _detect_sep(path, encoding)
                 df = pd.read_csv(path, sep=sep, encoding=encoding)
-                # Sanity check: se una sola colonna e contiene il delimitatore, riprova con ;
+                # Sanity check: se una sola colonna e contiene il delimitatore, riprova con
                 if len(df.columns) == 1 and (';' in str(df.columns[0]) or ',' in str(df.columns[0])):
                     for alt_sep in [';', ',', '\t']:
                         try:
@@ -201,9 +201,9 @@ class DefaultDataLoader:
         try:
             return pd.read_json(path, orient='records')
         except (ValueError, TypeError):
-            # orient='records' fallisce se il JSON e' un dict top-level (es.
+            # orient='records' fallisce se il JSON e' un dict top-level (es
             # {"key": [...]}) o ha schema non tabulare. Retry senza orient
-            # per lasciare a pandas l'inferenza.
+            # per lasciare a pandas l'inferenza
             return pd.read_json(path)
 
     def load_geospatial(self, path: Path, layer: Optional[str] = None) -> Any:
@@ -217,9 +217,9 @@ class DefaultDataLoader:
             import fiona
             return fiona.listlayers(str(path))
         except Exception as e:
-            # Probe fiona: in formati non multi-layer ritorna [] (contratto).
-            # Debug log preserva visibilita' su fallimenti reali (file corrotto,
-            # permessi) che oggi si perdevano.
+            # Probe fiona: in formati non multi-layer ritorna [] (contratto
+            # Debug log preserva visibilita' su fallimenti reali (file corrotto
+            # permessi) che oggi si perdevano
             _logger.debug(f"list_layers probe fiona fallita per {path}: {e}")
             return []
 
@@ -232,7 +232,7 @@ class DefaultDataLoader:
             return []
 
     def save_csv(self, df: pd.DataFrame, path: Path) -> None:
-        # UTF-8 esplicito: contratto leggibile, no ambiguita' su locale server.
+        # UTF-8 esplicito: contratto leggibile, no ambiguita' su locale server
         df.to_csv(path, index=False, encoding="utf-8")
 
     def save_excel(self, df: pd.DataFrame, path: Path, sheet: str) -> None:

@@ -16,7 +16,7 @@ DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
 
 
 # FILTRO RIGHE
-# Applica condizioni su colonne con operatori: =, !=, >, <, >=, <=, LIKE, IN, IS NULL.
+# Applica condizioni su colonne con operatori: =, !=, >, <, >=, <=, LIKE, IN, IS NULL
 
 def op_filter(
     df: DataFrame,
@@ -38,7 +38,7 @@ def op_filter(
     """
     if column not in df.columns:
         # Fail-fast: un filtro che non filtra e' un bug grave. Silent return
-        # df invariato nascondeva l'errore e i conteggi a valle erano sballati.
+        # df invariato nascondeva l'errore e i conteggi a valle erano sballati
         available = list(df.columns)
         raise ValueError(
             f"Filter: colonna '{column}' non trovata. "
@@ -75,9 +75,9 @@ def op_filter(
         elif operator == '<=':
             mask = col <= value
         elif operator == 'contains':
-            # SECURITY: regex=False tratta il valore come stringa letterale.
+            # SECURITY: regex=False tratta il valore come stringa letterale
             # Prima: regex=True (default) → un utente poteva iniettare pattern
-            # catastrofici come ((a+)+)+b causando ReDoS (CPU hang sul worker).
+            # catastrofici come ((a+)+)+b causando ReDoS (CPU hang sul worker
             mask = col.astype(str).str.contains(str(value), case=False, na=False, regex=False)
         elif operator == 'startswith':
             mask = col.astype(str).str.startswith(str(value), na=False)
@@ -98,7 +98,7 @@ def op_filter(
     # intent: fail-closed — input utente invalido (operatore/valore
     # incompatibile con tipo colonna, runtime error pandas) solleva
     # ValueError con messaggio safe. str(e) tecnico preservato solo
-    # nel logger.warning server-side per postmortem admin.
+    # nel logger.warning server-side per postmortem admin
     except Exception as e:
         logger.warning(f"[GESTITO] Errore Filter '{operator}' su colonna '{column}': {e}")
         raise ValueError(
@@ -107,8 +107,8 @@ def op_filter(
         ) from e
 
 
-# CONDIZIONALE (CASE WHEN)
-# Crea colonna con valore dipendente da condizioni (simile a SQL CASE WHEN).
+# CONDIZIONALE (CASE WHEN
+# Crea colonna con valore dipendente da condizioni (simile a SQL CASE WHEN
 
 def op_conditional(
     df: DataFrame,
@@ -153,7 +153,7 @@ def op_conditional(
 
         col_values = result[column]
 
-        # Applica condizioni in ordine inverso (la prima ha priorità)
+        # Applica condizioni in ordine inverso (la prima ha priorità
         total_matched = 0
         for cond in reversed(conditions):
             op = cond.get('operator', '==')
@@ -172,7 +172,7 @@ def op_conditional(
 
         logger.info(f"Conditional: totale matchate={total_matched}, non matchate={len(result) - total_matched} (default='{default_value}')")
 
-        # Auto-detect tipo numerico: se tutti i result values (e default)
+        # Auto-detect tipo numerico: se tutti i result values (e default
         # sono numerici, converti la colonna a numerico
         all_values = [cond.get('result', '') for cond in conditions] + [default_value]
         all_numeric = True
@@ -236,7 +236,7 @@ def _evaluate_condition(col_values, operator: str, value: str):
             return num_col <= numeric_val
 
     elif operator == 'contains':
-        # SECURITY: regex=False (anti-ReDoS). Vedi commento in op_filter.
+        # SECURITY: regex=False (anti-ReDoS). Vedi commento in op_filter
         return col_values.astype(str).str.contains(str(value), case=False, na=False, regex=False)
 
     elif operator == 'startswith':

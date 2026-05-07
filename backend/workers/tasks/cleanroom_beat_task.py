@@ -1,7 +1,6 @@
 """
 Pure no-op cleanroom beat tick smoke task.
 
-BE-GO-READY-INSTALLATION-021-CELERY-BEAT-TICK-SMOKE-IMPL.
 """
 
 from workers.celery_app import celery_app

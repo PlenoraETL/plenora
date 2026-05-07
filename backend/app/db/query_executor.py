@@ -101,7 +101,7 @@ class NullLogger:
     def warning(self, msg: str) -> None: pass
 
 
-# ENGINE FACTORY (default)
+# ENGINE FACTORY (default
 
 class DefaultEngineFactory:
     """
@@ -225,7 +225,7 @@ class DefaultEngineFactory:
         Questo trasforma l'executemany standard (1 INSERT per riga, ~100
         round-trip per 1000 righe) in una chiamata `SQLBulkOperations`
         ODBC con array binding nativo. Speedup tipico **10-50x** su
-        INSERT batch sopra le ~500 righe.
+        INSERT le ~500 righe.
 
         Edge case noti di `fast_executemany`:
           - DECIMAL con precisione molto alta (>15) puo' perdere
@@ -245,8 +245,8 @@ class DefaultEngineFactory:
         Returns:
             Engine SQLAlchemy funzionante.
         """
-        # BE-CONFIG-001D: default tipato in `Settings.DEFAULTS["MSSQL_FAST_EXECUTEMANY"]="on"`.
-        # Override env continua a funzionare via Settings.
+        # BE-CONFIG-001D: default tipato in `Settings.DEFAULTS["MSSQL_FAST_EXECUTEMANY"]="on"`
+        # Override env continua a funzionare via Settings
         from app.config import settings as _settings
         fast_em = (_settings.get("MSSQL_FAST_EXECUTEMANY") or "on").lower()
         engine_kwargs = {}
@@ -282,9 +282,9 @@ class DefaultEngineFactory:
             Connection string SQLAlchemy completa.
         """
         # SECURITY: URL-encode username E password. Prima solo la password era
-        # encodata. Se username contiene '@', ':', '/' (es. email-based auth),
-        # la URL SQLAlchemy risulta malformata:
-        #   postgresql://user@domain:pass@host → il primo @ chiude la sezione auth.
+        # encodata. Se username contiene '@', ':', '/' (es. email-based auth
+        # la URL SQLAlchemy risulta malformata
+        # postgresql://user@domain:pass@host → il primo @ chiude la sezione auth
         usr = quote_plus(conn.username)
         pwd = quote_plus(conn.password)
 
@@ -299,9 +299,9 @@ class DefaultEngineFactory:
                 f"@{conn.host}:{conn.port}/{conn.database}"
             )
         elif conn.type == "mssql":
-            # Encrypt=Optional: ODBC Driver 18 di default richiede TLS valido,
+            # Encrypt=Optional: ODBC Driver 18 di default richiede TLS valido
             # con Optional accetta sia server con TLS che senza, e con
-            # TrustServerCertificate=yes accetta self-signed.
+            # TrustServerCertificate=yes accetta self-signed
             return (
                 f"mssql+pyodbc://{usr}:{pwd}"
                 f"@{conn.host}:{conn.port}/{conn.database}"
@@ -337,7 +337,7 @@ class DefaultEngineFactory:
         return args_per_tipo.get(conn.type, {})
 
 
-# BUILDER PER RISULTATI (funzioni pure)
+# BUILDER PER RISULTATI (funzioni pure
 
 class ResultBuilder:
     """Costruttore di QueryResult — funzioni pure senza stato."""
@@ -419,8 +419,8 @@ class QueryExecutor:
     per facilitare il testing (engine factory, funzione salvataggio, logger).
 
     Metodi principali:
-        - execute_raw(): esegue query e restituisce risultati grezzi (righe, colonne)
-        - execute_query(): esegue query, salva su file, restituisce metadata
+        - execute_raw: esegue query e restituisce risultati grezzi (righe, colonne)
+        - execute_query: esegue query, salva su file, restituisce metadata
 
     Dependency Injection:
         - engine_factory: creazione engine SQLAlchemy (mockabile per test)
@@ -453,7 +453,7 @@ class QueryExecutor:
         self._logger = logger or NullLogger()
         self._results_dir = results_dir or Path("/tmp/results")
 
-        # Componenti interni (funzioni pure senza stato)
+        # Componenti interni (funzioni pure senza stato
         self._result_builder = ResultBuilder
         self._df_builder = DataFrameBuilder
 
@@ -488,7 +488,7 @@ class QueryExecutor:
         """Directory risultati (per compatibilità con codice esistente)."""
         return self._results_dir
 
-    # ESECUZIONE RAW (metodo unificato)
+    # ESECUZIONE RAW (metodo unificato
 
     def execute_raw(
         self,
@@ -525,7 +525,7 @@ class QueryExecutor:
             # Propaga DB_QUERY_TIMEOUT come statement_timeout per ogni DB che lo supporta
             try:
                 from app.config import settings
-                timeout_s  = settings.DB_QUERY_TIMEOUT          # secondi (es. 30)
+                timeout_s  = settings.DB_QUERY_TIMEOUT          # secondi (es. 30
                 # SECURITY: cast a int per prevenire injection se config contaminata
                 timeout_ms = int(timeout_s) * 1000
 
@@ -544,7 +544,7 @@ class QueryExecutor:
                         raw.callTimeout = timeout_ms
 
             except Exception as e:
-                # Non bloccante — il timeout di default di Celery fa da fallback.
+                # Non bloccante — il timeout di default di Celery fa da fallback
                 logger.debug(
                     "set timeout di sessione fallito (db=%s), uso fallback Celery: %s: %s",
                     connection.type,
@@ -557,14 +557,14 @@ class QueryExecutor:
                 try:
                     conn.execute(text("ALTER SESSION SET OPEN_CURSORS = 32767"))
                 except Exception as e:
-                    # Prosegui con il default se non ha i permessi.
+                    # Prosegui con il default se non ha i permessi
                     logger.debug(
                         "ALTER SESSION OPEN_CURSORS fallito (probabili permessi), uso default: %s: %s",
                         type(e).__name__,
                         e,
                     )
 
-            # Esecuzione query con parametri preparati (sicurezza SQL injection)
+            # Esecuzione query con parametri preparati (sicurezza SQL injection
             result = conn.execute(text(sql), params or {})
 
             # Estrazione nomi colonne dal cursor nativo del database
@@ -574,12 +574,12 @@ class QueryExecutor:
             if connection.type == "oracle":
                 columns = [c.lower() for c in columns]
 
-            # Materializza righe in blocchi.
+            # Materializza righe in blocchi
             # C11: hard cap (ESTRAI_MAX_ROWS) per evitare OOM. Pre-fix il
             # chunking era cosmetico (fetchmany ma accumulo totale in
             # memoria), quindi una query mal filtrata da 100M righe
             # crashava il worker. Ora se il cumulativo supera il cap la
-            # query fallisce loud con suggerimento operativo.
+            # query fallisce loud con suggerimento operativo
             from app.config import settings as _s
             _max_rows = int(getattr(_s, "ESTRAI_MAX_ROWS", 5_000_000) or 0)
             CHUNK_SIZE = 10_000
@@ -600,7 +600,7 @@ class QueryExecutor:
 
             return rows, columns
 
-    # C11: STREAMING CSV / PARQUET (zero full-materialization)
+    # C11: STREAMING CSV / PARQUET (zero full-materialization
 
     def _execute_streaming_to_file(
         self,
@@ -636,7 +636,7 @@ class QueryExecutor:
         with engine.connect() as conn:
             # Stesso setup timeout di execute_raw (duplicato qui per
             # mantenere boundary chiari; factor-out sarebbe refactor fuori
-            # scope C11).
+            # scope C11
             try:
                 timeout_s = _s.DB_QUERY_TIMEOUT
                 timeout_ms = int(timeout_s) * 1000
@@ -649,7 +649,7 @@ class QueryExecutor:
                     if hasattr(raw, "callTimeout"):
                         raw.callTimeout = timeout_ms
             except Exception as e:
-                # Non bloccante — il timeout di default di Celery fa da fallback.
+                # Non bloccante — il timeout di default di Celery fa da fallback
                 logger.debug(
                     "set timeout di sessione fallito (db=%s), uso fallback Celery: %s: %s",
                     connection.type,
@@ -661,7 +661,7 @@ class QueryExecutor:
                 try:
                     conn.execute(text("ALTER SESSION SET OPEN_CURSORS = 32767"))
                 except Exception as e:
-                    # Prosegui con il default se non ha i permessi.
+                    # Prosegui con il default se non ha i permessi
                     logger.debug(
                         "ALTER SESSION OPEN_CURSORS fallito (probabili permessi), uso default: %s: %s",
                         type(e).__name__,
@@ -722,7 +722,7 @@ class QueryExecutor:
 
         return total_rows, columns
 
-    # ESECUZIONE COMPLETA (con salvataggio file)
+    # ESECUZIONE COMPLETA (con salvataggio file
 
     def execute_query(
         self,
@@ -771,19 +771,19 @@ class QueryExecutor:
         timings = {}
         inizio_totale = time.time()
 
-        # C11: path streaming per CSV/Parquet (zero full-materialization).
+        # C11: path streaming per CSV/Parquet (zero full-materialization
         # Attivato solo se non c'e' geometria (export geospaziale richiede
         # trasformazioni WKT/WKB sulla colonna geom che non si prestano al
-        # chunk-write minimal). Per gli altri formati (xlsx, geojson, gpkg,
+        # chunk-write minimal). Per gli altri formati (xlsx, geojson, gpkg
         # shp, json): path legacy in-memory coperto dal cap
-        # ESTRAI_MAX_ROWS.
+        # ESTRAI_MAX_ROWS
         _streamable = output_format in ("csv", "parquet") and not geom_column
 
         try:
             self._logger.info(f"Esecuzione query per progetto {project_id}")
 
             if _streamable:
-                # STREAMING PATH (CSV / Parquet senza geometria)
+                # STREAMING PATH (CSV / Parquet senza geometria
                 t_query = time.time()
                 output_path = get_temp_output_path(output_filename)
                 output_path = output_path.with_suffix(f".{output_format}")
@@ -796,7 +796,7 @@ class QueryExecutor:
                 )
                 saved_path = output_path
                 # df resta None: in streaming non costruiamo DataFrame
-                # (risparmia un'intera pass di memoria pari al result set).
+                # risparmia un'intera pass di memoria pari al result set
                 df = None
                 timings["query_total"] = time.time() - t_query
                 timings["dataframe"] = 0.0
@@ -807,7 +807,7 @@ class QueryExecutor:
                     f"(peak memory ~= 1 chunk, non il result set intero)"
                 )
             else:
-                # NOTE: legacy path (fetch → DataFrame → save, capped da ESTRAI_MAX_ROWS)
+                # NOTE: fallback fetch -> DataFrame -> save, capped da ESTRAI_MAX_ROWS.
                 t_query = time.time()
                 rows, columns = self.execute_raw(connection, sql, params)
                 timings["query_total"] = time.time() - t_query
@@ -823,12 +823,12 @@ class QueryExecutor:
 
                 row_count = len(rows)
 
-            # Salva risultato.
-            # - Streaming path: il file esiste gia' su disco, usiamo
-            #   save_result_blob (path-based) che lo legge e lo cancella.
-            # - Legacy path: delegamo a save_pipeline_result (single
-            #   entry-point che fa in-memory per formati serializzabili
-            #   e fallback FS trasparente per gpkg/shp).
+            # Salva risultato
+            # Streaming path: il file esiste gia' su disco, usiamo
+            # save_result_blob (path-based) che lo legge e lo cancella
+            # Fallback path: delegamo a save_pipeline_result (single
+            # entry-point che fa in-memory per formati serializzabili
+            # e fallback FS trasparente per gpkg/shp
             t_save = time.time()
             if _streamable:
                 result_id = save_result_blob(
@@ -854,26 +854,25 @@ class QueryExecutor:
             timings["total"] = time.time() - inizio_totale
             self._logger.info(f"TOTALE: {timings['total']:.2f}s")
 
-            # Snapshot intermediate (non bloccante).
-            # Phase 6 Batch 3A (2026-04-28): passa per `record_final_snapshot`
+            # Snapshot intermediate (non bloccante
+            # passa per `record_final_snapshot`
             # con module="estrai". La policy globale
-            # `INTERMEDIATE_PERSISTENCE_MODE` decide il comportamento:
-            #   - metadata_only -> solo node_meta + node_hash, zero righe
-            #   - preview_only  -> meta + hash + prime N righe (default 500)
-            #   - full_pg       -> tutte le righe (legacy)
-            # Niente cap custom legacy (`INTERMEDIATE_SNAPSHOT_MAX_ROWS`):
-            # la policy centrale gestisce il dimensionamento.
-            #
+            # `INTERMEDIATE_PERSISTENCE_MODE` decide il comportamento
+            # metadata_only -> solo node_meta + node_hash, zero righe
+            # preview_only -> meta + hash + prime N righe (default 500
+            # full_pg -> tutte le righe (legacy
+            # Niente cap custom legacy (`INTERMEDIATE_SNAPSHOT_MAX_ROWS`
+            # la policy centrale gestisce il dimensionamento
             # Streaming (df=None): conserviamo lo status "ok_streamed" via
             # write_node legacy perche' qui non c'e' un DataFrame da
             # fingerprintare; il record_final_snapshot policy-based richiede
             # un DataFrame. Lo streaming era gia' un branch dedicato e
             # rimane tale fino all'introduzione di un fingerprint streaming
-            # (out of scope Batch 3).
+            # out of scope
             if run_id and node_id:
                 try:
                     if df is None:
-                        # Streaming branch: niente DataFrame -> meta-only legacy.
+                        # Streaming branch: niente DataFrame -> meta-only legacy
                         from app.core.intermediate.writer import write_node
                         write_node(
                             run_id=run_id,

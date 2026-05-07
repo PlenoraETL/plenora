@@ -142,13 +142,13 @@ def delete_connection(
         raise HTTPException(status_code=422, detail=str(e))
     assert_can_modify(existing, current_user, "Connessione")
 
-    # Check dipendenze: progetti che usano questa connessione.
+    # Check dipendenze: progetti che usano questa connessione
     # PR-δ: filtrare `dependencies` per visibility lato chiamante per non
     # leakare nomi di progetti cross-tenant nell'errore 409 (la connessione
     # puo' essere shared con altri gruppi via allowed_groups: i loro
     # progetti che la usano restano dipendenze legittime, ma admin del
     # gruppo proprietario non deve vederne i nomi). Superadmin: nessun
-    # filtro.
+    # filtro
     from app.db.pg_connection import fetchall as _fetchall
     using_projects = _fetchall(
         "SELECT id, name, project_type, group_id FROM projects WHERE connection_id = ?",
@@ -163,9 +163,9 @@ def delete_connection(
             visible = [p for p in using_projects if p.get("group_id") == current_user.group_id]
             hidden_count = len(using_projects) - len(visible)
 
-        # Shape 409 cascade canonica (Batch Fix 6.1): dependencies con kind.
+        # Shape 409 cascade canonica (6.1): dependencies con kind
         # PR-δ: aggiunto `hidden_count` opzionale (0 di default, FE
-        # backward-compatible: se 0 o assente, formatter ignora).
+        # backward-compatible: se 0 o assente, formatter ignora
         raise HTTPException(
             status_code=409,
             detail={
@@ -188,9 +188,9 @@ def delete_connection(
         )
 
     _connection_service.delete_connection(connection_id)
-    # F2-B1 (2026-04-24): DELETE risponde 204 No Content, body vuoto.
+    # F2-B1 (2026-04-24): DELETE risponde 204 No Content, body vuoto
     # FastAPI ignora il return quando status_code=204; return esplicito
-    # rimosso per coerenza col contract.
+    # rimosso per coerenza col contract
 
 
 @router.post("/connections/{connection_id}/test", response_model=ConnectionTestResult)
@@ -201,8 +201,8 @@ def test_connection(
 ):
     """Testa una connessione database. Visibile a chi vede la risorsa (owned + shared)."""
     require_service(_connection_service, "ConnectionService")
-    # FIXME: #1 (2026-04-23): password=None o decrypt-fail → 422 esplicito,
-    # non 500 da Pydantic ValidationError.
+    # FIXME: #1 (2026-04-23): password=None o decrypt-fail → 422 esplicito
+    # non 500 da Pydantic ValidationError
     from app.shared.crypto import CredentialUnavailableError
     try:
         existing = _connection_service.get_connection(connection_id)

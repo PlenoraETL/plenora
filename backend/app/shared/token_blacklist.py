@@ -18,40 +18,38 @@ logger = get_logger(__name__)
 _BLACKLIST_KEY_PREFIX = "plenora:jwt_blacklist:"
 # Chiave di healthcheck: un EXISTS su questa chiave costa O(1) e non
 # scrive nulla (no side effect). Usata da `get_blacklist_status` per
-# sondare connettivita' + autorizzazioni Redis.
+# sondare connettivita' + autorizzazioni Redis
 _HEALTHCHECK_KEY = f"{_BLACKLIST_KEY_PREFIX}healthcheck"
 
 _client_lock = threading.Lock()
 _client: Optional[Any] = None  # redis.Redis-like instance
-# Se True, `_get_client()` ritorna `_client` cosi' com'e' senza tentare
+# Se True, `_get_client` ritorna `_client` cosi' com'e' senza tentare
 # il lazy-init. Usato dai test per iniettare fakeredis oppure forzare
 # `None` (simulazione Redis down) senza che il codice provi a ricollegarsi
-# al Redis locale.
+# al Redis locale
 _client_explicit: bool = False
 
-# METRICHE (contatori in-process)
-#
-# Contatori sincroni protetti da lock. Esposti via get_metrics() →
-# admin_system_status.get_blacklist_status → dashboard admin.
-#
-# Scelta in-process vs. Redis INCR:
-#   - in-process: zero overhead sulla hot path, azzerato a ogni restart
-#     del backend. Ok per "health at a glance" nella dashboard.
-#   - Redis INCR: persistente cross-restart ma aggiunge 1 round-trip
-#     per ogni check di blacklist (raddoppia la latenza dell'auth hot
-#     path). Non vale la pena: se serve storia persistente, meglio log
-#     aggregation (Grafana/Loki) sui warning.
+# METRICHE (contatori in-process
+# Contatori sincroni protetti da lock. Esposti via get_metrics →
+# admin_system_status.get_blacklist_status → dashboard admin
+# Scelta in-process vs. Redis INCR
+# in-process: zero overhead sulla hot path, azzerato a ogni restart
+# del backend. Ok per "health at a glance" nella dashboard
+# Redis INCR: persistente cross-restart ma aggiunge 1 round-trip
+# per ogni check di blacklist (raddoppia la latenza dell'auth hot
+# path). Non vale la pena: se serve storia persistente, meglio log
+# aggregation (Grafana/Loki) sui warning
 _metrics_lock = threading.Lock()
 _metrics: Dict[str, int] = {
     "write_ok":       0,  # blacklist_jti ha scritto in Redis
-    "write_fail":     0,  # blacklist_jti ha fallito (Redis down/error)
-    "read_ok":        0,  # is_jti_blacklisted ha completato (qualunque risultato)
-    "read_fail":      0,  # is_jti_blacklisted ha fallito (exception catturata)
-    "client_missing": 0,  # _get_client() ha restituito None (redis-py o server)
+    "write_fail":     0,  # blacklist_jti ha fallito (Redis down/error
+    "read_ok":        0,  # is_jti_blacklisted ha completato (qualunque risultato
+    "read_fail":      0,  # is_jti_blacklisted ha fallito (exception catturata
+    "client_missing": 0,  # _get_client ha restituito None (redis-py o server
 }
-# Timestamp dell'ultima operazione andata a buon fine (write OR read).
+# Timestamp dell'ultima operazione andata a buon fine (write OR read
 # Serve per l'alert "blacklist inoperante da X minuti": se ora - last_ok
-# supera la soglia, la dashboard mostra warning. Epoch seconds UTC.
+# supera la soglia, la dashboard mostra warning. Epoch seconds UTC
 _last_ok_epoch: Optional[float] = None
 
 
@@ -88,15 +86,15 @@ def _get_client() -> Optional[Any]:
             return None
         try:
             # Import locale: evita import circolare all'import di
-            # app.shared (config potrebbe a sua volta importare shared).
+            # app.shared (config potrebbe a sua volta importare shared
             from app.config import settings
             # Timeout configurabile via env (default 1s). Alzarlo in deploy
             # con Redis remoto / network latente; mantenerlo basso in
             # single-host per non bloccare il request handler se Redis
-            # va giu' (fail-open kicks in dopo il timeout).
+            # va giu' (fail-open kicks in dopo il timeout
             # BE-CONFIG-001C: default tipato in `Settings.DEFAULTS`
-            # (`JWT_BLACKLIST_REDIS_TIMEOUT_SEC=1`). Guard `<= 0` resta
-            # safety per valori legali ma non sensati.
+            # `JWT_BLACKLIST_REDIS_TIMEOUT_SEC=1`). Guard `<= 0` resta
+            # safety per valori legali ma non sensati
             try:
                 timeout = int(settings.get("JWT_BLACKLIST_REDIS_TIMEOUT_SEC"))
                 if timeout <= 0:
@@ -132,7 +130,7 @@ def blacklist_jti(jti: str, ttl_seconds: int) -> bool:
     """
     if not jti or ttl_seconds <= 0:
         # Input invalido: non lo contiamo come write_fail (non e' colpa
-        # di Redis), torniamo False silenziosamente.
+        # di Redis), torniamo False silenziosamente
         return False
     client = _get_client()
     if client is None:
@@ -153,7 +151,7 @@ def is_jti_blacklisted(jti: Optional[str]) -> bool:
     """True se `jti` e' presente in blacklist. Fail-open su Redis giu'."""
     if not jti:
         # jti vuoto = token legacy: non incrementiamo metriche (non e'
-        # un'operazione vera).
+        # un'operazione vera
         return False
     client = _get_client()
     if client is None:
@@ -176,7 +174,7 @@ def is_jti_blacklisted(jti: Optional[str]) -> bool:
 def get_metrics() -> Dict[str, Any]:
     """Snapshot dei contatori in-process + timestamp last_ok.
 
-    Esposto via `admin_system_status.get_blacklist_status()` alla
+    Esposto via `admin_system_status.get_blacklist_status` alla
     dashboard admin. Azzerato a ogni restart del backend (in-process,
     non persistente — per lo storico serve log aggregation).
     """
@@ -212,7 +210,7 @@ def get_blacklist_status(stale_threshold_seconds: int = 1800) -> Dict[str, Any]:
     client = _get_client()
     if client is None:
         try:
-            import redis  # type: ignore  # noqa: F401
+            import redis  # type: ignore # noqa: F401
             message = "Client Redis non inizializzato"
         except ImportError:
             message = "redis-py non installato — blacklist disabilitata"
@@ -224,7 +222,7 @@ def get_blacklist_status(stale_threshold_seconds: int = 1800) -> Dict[str, Any]:
             "minutes_since_last_ok": None,
         }
 
-    # Sentinel EXISTS: non crea la chiave, non modifica stato.
+    # Sentinel EXISTS: non crea la chiave, non modifica stato
     try:
         client.exists(_HEALTHCHECK_KEY)
         check_ok = True

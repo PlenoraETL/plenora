@@ -40,8 +40,8 @@ from app.config import settings
 
 logger = get_logger("app.core.carica.writer")
 # Telemetry emits (event=stage_swap.dispatched, ecc.) vanno via stdlib
-# logger con stesso name: i campi `extra` diventano attributi del LogRecord,
-# cosa che StructuredLogger (wrapper) non supporta di default.
+# logger con stesso name: i campi `extra` diventano attributi del LogRecord
+# cosa che StructuredLogger (wrapper) non supporta di default
 _telemetry_logger = logging.getLogger("app.core.carica.writer")
 
 
@@ -61,7 +61,7 @@ class DatabaseWriter(
         db_type: tipo database (postgres, oracle, mssql, mysql, mariadb)
         ddl: generatore DDL per il dialetto corrente
 
-    Mixin pattern (Phase 5 B2.x):
+    Mixin pattern (B2.x):
       - `DataPrepMixin` (`writer_data_prep.py`, B2.1) fornisce i 4 metodi
         data-prep: `_prepare_dataframe`, `_fix_mixed_type_columns`,
         `_geometry_to_wkt`, `_build_params`.
@@ -70,12 +70,12 @@ class DatabaseWriter(
         `get_existing_columns`, `get_schemas`, `get_tables`,
         `_table_exists_for`, `_compute_schema_hints`.
       - `TransactionExecutionMixin` (`writer_transaction_exec.py`, B2.3)
-        fornisce i 4 metodi batch execution con strategia transazionale:
+        fornisce i 4 metodi con strategia transazionale:
         `_execute_in_batches` (dispatcher), `_execute_all_or_nothing`
-        (single tx via `engine.begin()`), `_execute_per_batch` (commit
-        per batch via `engine.connect()`), `_execute_batch` (core
+        (single tx via `engine.begin`), `_execute_per_batch` (commit
+        per `engine.connect`), `_execute_batch` (core
         executor transaction-agnostic). Le transaction boundaries restano
-        identiche al pre-extraction.
+        identiche al previous implementation.
       - `ReplaceStrategiesMixin` (`writer_replace_strategies.py`, B2.4b)
         fornisce i 6 metodi replace/truncate strategies:
         `_truncate_insert_atomic`, `_truncate_insert_stage_swap`,
@@ -94,7 +94,7 @@ class DatabaseWriter(
         da test contract modernizzato B2.5a via handler stdlib
         agganciato al logger canonico per nome.
       - `BatchDispatchMixin` (`writer_batch_dispatch.py`, B2.6) fornisce
-        i 3 metodi batch dispatch: `_batch_insert`, `_batch_update`,
+        i 3 metodi `_batch_insert`, `_batch_update`,
         `_batch_upsert`. Pattern unico "build SQL template per write
         mode + delegate a `_execute_in_batches`". `_batch_upsert` ha
         SAVEPOINT scope-limitato (PG-only auto-create UNIQUE INDEX
@@ -131,14 +131,14 @@ class DatabaseWriter(
     ) -> Tuple[WriteResult, bool]:
         """Esegue il branch di write per `self.config.write_mode`.
 
-        Estratto da `write()` (C4.3 Phase 4). Pure routing: nessuna
+        Estratto da `write` (C4.3 ). Pure routing: nessuna
         modifica di algoritmo, nessun cambio di transaction boundary,
         nessuna riscrittura dei lower-level helper (`_batch_insert`,
         `_batch_update`, `_batch_upsert`, `_replace_atomic`,
         `_truncate_insert_*`).
 
         Ritorna `(result, early_return)`:
-          - `early_return=True` -> il caller `write()` deve restituire
+          - `early_return=True` -> il caller `write` deve restituire
             `result` cosi' com'e', SENZA assegnare `completed_at` finale.
             Tre branch usano questo flag per preservare il comportamento
             bit-per-bit pre-C4.3:
@@ -146,10 +146,10 @@ class DatabaseWriter(
               * APPEND ABORT: NON assegna `completed_at` (preservato).
               * APPEND SKIP con DataFrame vuoto: assegna `completed_at` qui.
           - `early_return=False` -> il caller esegue il finalize standard
-            (`completed_at = now()`).
+            (`completed_at = now`).
 
         Eccezioni si propagano fuori dal helper per essere catturate dal
-        try/except di `write()` con stesso effetto di pre-C4.3 (set
+        try/except di `write` con stesso effetto di pre-C4.3 (set
         `WriteStatus.WRITE_ERROR`, `error_message`, `error_details`,
         log `[CRASH]`).
         """
@@ -166,7 +166,7 @@ class DatabaseWriter(
                 result = self._replace_atomic(
                     prepared_df, columns, result, real_dtypes, max_lengths
                 )
-                # Skip il path non-atomic originale (drop+create+insert)
+                # Skip il path non-atomic originale (drop+create+insert
                 result.completed_at = datetime.now(timezone.utc).isoformat()
                 return result, True
             real_dtypes, max_lengths = self._compute_schema_hints(
@@ -190,10 +190,10 @@ class DatabaseWriter(
                     policy = self.config.conflict_policy
 
                     if policy == ConflictPolicy.ABORT:
-                        # Blocca l'intera operazione.
+                        # Blocca l'intera operazione
                         # Pre-C4.3: completed_at NON viene assegnato qui
-                        # ne' dal caller (early-return prima del trailing).
-                        # Preserviamo il comportamento bit-per-bit.
+                        # ne' dal caller (early-return prima del trailing
+                        # Preserviamo il comportamento bit-per-bit
                         result.status = WriteStatus.CONFLICT
                         result.error_message = (
                             f"Operazione annullata: {conflict_report.total_conflicts} "
@@ -223,7 +223,7 @@ class DatabaseWriter(
                             ).isoformat()
                             return result, True
 
-                    # FORCE: inserisce tutto senza filtri (comportamento default)
+                    # FORCE: inserisce tutto senza filtri (comportamento default
                     else:
                         logger.info(
                             f"APPEND FORCE: {conflict_report.total_conflicts} conflitti "
@@ -243,15 +243,15 @@ class DatabaseWriter(
 
         if mode == WriteMode.TRUNCATE_INSERT:
             # C5 fix 1/3: per ALL_OR_NOTHING scegliamo la strategia
-            # in base al volume:
-            # - sotto CARICA_STAGE_SWAP_THRESHOLD: atomic DELETE+INSERT
-            #   in UNA transazione (safe fino a ~500k righe su
-            #   qualunque DBMS con UNDO/log ragionevole; no privilegi
-            #   DDL richiesti)
-            # - sopra soglia: stage+swap (CREATE shadow, INSERT
-            #   batch nella shadow, RENAME atomico) — richiede
-            #   CREATE TABLE, fallback a atomic con WARNING se i
-            #   grant mancano
+            # in base al volume
+            # sotto CARICA_STAGE_SWAP_THRESHOLD: atomic DELETE+INSERT
+            # in UNA transazione (safe fino a ~500k righe su
+            # qualunque DBMS con UNDO/log ragionevole; no privilegi
+            # DDL richiesti
+            # sopra soglia: stage+swap (CREATE shadow, INSERT
+            # shadow, RENAME atomico) — richiede
+            # CREATE TABLE, fallback a atomic con WARNING se i
+            # grant mancano
             if self.config.transaction_mode == TransactionMode.ALL_OR_NOTHING:
                 threshold = int(settings.CARICA_STAGE_SWAP_THRESHOLD or 0)
                 if threshold > 0 and len(prepared_df) >= threshold:
@@ -259,7 +259,7 @@ class DatabaseWriter(
                     # schema preservato). Postgres/MySQL/MSSQL
                     # usano stage+swap standard (Postgres/MySQL
                     # preservano schema nativamente; MSSQL ha
-                    # schema replication via introspection).
+                    # schema replication via introspection
                     if self.db_type == "oracle":
                         logger.info(
                             f"[TRUNCATE_INSERT] {len(prepared_df)} >= "
@@ -283,16 +283,16 @@ class DatabaseWriter(
             else:
                 # PER_BATCH: semantica "fire-and-commit" dichiarata dal
                 # caller. Accettiamo lo stesso trade-off del flow APPEND
-                # per_batch (vedi WARNING difensivo in write() per la
-                # combo rischiosa).
+                # per_batch (vedi WARNING difensivo in write per la
+                # combo rischiosa
                 self.truncate_table()
                 result = self._batch_insert(prepared_df, columns, result)
             return result, False
 
         # Mode non riconosciuto (defensive): pre-C4.3 il flow cadeva fuori
-        # dal blocco if/elif e arrivava al trailing `completed_at = now()`
+        # dal blocco if/elif e arrivava al trailing `completed_at = now`
         # senza modifiche al result. Preserviamo identico ritornando
-        # early_return=False.
+        # early_return=False
         return result, False
 
     def write(self, df: pd.DataFrame) -> WriteResult:
@@ -302,8 +302,8 @@ class DatabaseWriter(
         - CREATE: drop (se replace) + create_table + insert batch
         - APPEND: insert batch (con pre-check conflitti opzionale)
         - REPLACE: drop + create + insert
-        - UPDATE: update batch con match columns
-        - UPSERT: upsert batch con match columns
+        - UPDATE: update match columns
+        - UPSERT: upsert match columns
         - TRUNCATE_INSERT: truncate + insert batch
         """
         started_at = datetime.now(timezone.utc).isoformat()
@@ -320,7 +320,7 @@ class DatabaseWriter(
         self._assert_safe_write_config()
 
         try:
-            # Prepara il DataFrame (conversione geometrie, ecc.)
+            # Prepara il DataFrame (conversione geometrie, ecc
             prepared_df = self._prepare_dataframe(df)
             columns = self.config.column_mappings
 
@@ -340,16 +340,15 @@ class DatabaseWriter(
         return result
 
 
-    # MOTORE BATCH GENERICO
+    # MOTORE
 
-    # Phase 5 B2.3 cutover: cluster TRANSACTION_EXECUTION
-    # (`_execute_in_batches`, `_execute_all_or_nothing`,
+    # B2.3 boundary: cluster TRANSACTION_EXECUTION
+    # `_execute_in_batches`, `_execute_all_or_nothing`
     # `_execute_per_batch`, `_execute_batch`) spostato in
-    # `app.core.carica.writer_transaction_exec.TransactionExecutionMixin`.
-    # `DatabaseWriter` eredita dal mixin (vedi class declaration sopra).
-    # Le transaction boundaries (`engine.begin()` / `engine.connect()` +
+    # `app.core.carica.writer_transaction_exec.TransactionExecutionMixin`
+    # `DatabaseWriter` eredita dal mixin (vedi class declaration sopra
+    # Le transaction boundaries (`engine.begin` / `engine.connect` +
     # commit/rollback timing) sono incapsulate nel mixin IDENTICHE al
-    # pre-extraction. Vedi `orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B2.
 
 
     # HELPER DATABASE-SPECIFICI

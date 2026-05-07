@@ -91,7 +91,7 @@ def list_eseguibili(group_id: Optional[str] = None) -> List[Dict[str, Any]]:
     """Lista eseguibili, opzionalmente filtrati per gruppo.
 
     Non carica canvas/expected_columns per la summary (prestazioni).
-    Usa get_eseguibile() per i dettagli completi.
+    Usa get_eseguibile per i dettagli completi.
     """
     if group_id:
         rows = db.fetchall(

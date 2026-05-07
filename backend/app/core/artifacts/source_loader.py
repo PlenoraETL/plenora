@@ -27,9 +27,9 @@ def _source_kind_for_ref(ref: SourceRef) -> str:
     Extracted so callers and tests can verify the mapping independently of
     the full ``load_with_metadata`` call.
 
-    - ``"file"``    -> ``"file"``
+    - ``"file"`` -> ``"file"``
     - ``"project"`` -> ``"project"``
-    - ``"static"``  -> ``"static"`` (single-row key-value DataFrame; typically
+    - ``"static"`` -> ``"static"`` (single-row key-value DataFrame; typically
       no canvas column definitions are available, so metadata will be ``None``
       in practice unless the caller explicitly supplies ``columns_metadata``).
     - any future kind falls back to ``"file"`` (safe default until extended).
@@ -127,7 +127,7 @@ class SourceLoader:
     ) -> Any:
         # Visibility check (owned/shared/superadmin) eseguito qui dentro
         # prima di qualsiasi accesso al blob: il contratto del loader e'
-        # fail-closed senza delegare al caller.
+        # fail-closed senza delegare al caller
         from app.shared.sharing import is_resource_visible
 
         try:
@@ -164,7 +164,7 @@ class SourceLoader:
         try:
             # N1: propaga expected_group_id al service per il fail-closed
             # interno. Se is_superadmin, usa il sentinel di bypass — altrimenti
-            # il group_id gia' validato sopra.
+            # il group_id gia' validato sopra
             _svc_group = (
                 FileSourceService.SUPERADMIN_BYPASS
                 if is_superadmin
@@ -184,7 +184,7 @@ class SourceLoader:
 
         # Preferenza al GeoDataFrame quando presente: preserva il CRS
         # lungo le trasformazioni downstream (un DataFrame piatto
-        # perderebbe `geometry.crs` al primo cast).
+        # perderebbe `geometry.crs` al primo cast
         return gdf if gdf is not None else df
 
     # branch: project
@@ -249,7 +249,7 @@ class SourceLoader:
             )
         except ArtifactResolutionError as e:
             # Cross-tenant block o progetto inesistente: uniformiamo
-            # come `SourceLoadingError` per il caller HTTP (→ 403/404).
+            # come `SourceLoadingError` per il caller HTTP (→ 403/404
             logger.error(
                 f"[SECURITY] project_source {project_ref.project_id} non "
                 f"risolvibile per group={expected_group_id}: {e}",
@@ -260,7 +260,7 @@ class SourceLoader:
         if materialized is None:
             # Nessun blob disponibile per il progetto: ritorna None
             # invece di sollevare. Il caller decide se ricalcolare
-            # upstream o trattarlo come errore.
+            # upstream o trattarlo come errore
             return None
 
         with materialized as m:
@@ -279,7 +279,7 @@ class SourceLoader:
     ) -> "LoadedResource":
         """Load ``ref`` and return a typed ``LoadedResource`` envelope.
 
-        Delegates to ``load()`` for the actual data fetch (all existing
+        Delegates to ``load`` for the actual data fetch (all existing
         cross-tenant and visibility guarantees apply). When
         ``columns_metadata`` is supplied, constructs a ``ResourceMetadata``
         envelope from it at load time - producers no longer need to
@@ -288,7 +288,7 @@ class SourceLoader:
         Args:
             ref: source reference (file / project / static).
             expected_group_id: tenant binding, forwarded verbatim to
-                ``load()``.
+                ``load``.
             columns_metadata: optional ``[{"name": str, "type": str}]``
                 list. When present, ``LoadedResource.metadata`` is
                 populated. When absent, ``metadata`` is ``None``.
@@ -296,11 +296,11 @@ class SourceLoader:
                 static values carry their schema in ``static_fields``,
                 not in canvas column definitions.
             is_superadmin: bypass visibility check, forwarded to
-                ``load()``.
+                ``load``.
 
         Returns:
             ``LoadedResource(data=..., metadata=...)`` - data is the
-            same object ``load()`` would have returned; metadata is a
+            same object ``load`` would have returned; metadata is a
             ``ResourceMetadata`` built from ``columns_metadata`` or
             ``None``.
         """

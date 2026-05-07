@@ -1,7 +1,7 @@
 """
 Shared protocol per il pattern task-scoped blob storage.
 
-Source-of-truth go-ready per il pattern "blob persistito su object
+Source-of-truth portable per il pattern "blob persistito su object
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ class TaskScopedBlobStore(Protocol):
     NON cattura le specializzazioni:
     - IMDF: `ensure_local_bundle(task_id) -> Path` (cache lazy),
       `get_meta_only(task_id) -> dict | None` (sidecar accessor),
-      `list_task_ids() -> list[str]` (enumeration globale).
+      `list_task_ids -> list[str]` (enumeration globale).
     - Eseguibili: `open_stream(key) -> dict` (streaming download).
 
     Quando un terzo consumer richiedera' una di queste capabilities

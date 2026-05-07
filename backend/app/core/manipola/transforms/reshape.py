@@ -17,14 +17,13 @@ DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
 
 # PIVOT TABLE
 # Trasforma righe in colonne: la colonna pivot_col viene "spalmata"
-# orizzontalmente, i valori di value_col diventano i contenuti,
-# e index_col diventa la chiave primaria del risultato.
-#
-# Esempio classico ICSC:
-#   immobile | tipo_valore | importo       immobile | canone | rendita
-#   A        | canone      | 1000         A        | 1000   | 500
-#   A        | rendita     | 500          B        | 2000   | NULL
-#   B        | canone      | 2000
+# orizzontalmente, i valori di value_col diventano i contenuti
+# e index_col diventa la chiave primaria del risultato
+# Esempio classico ICSC
+# immobile | tipo_valore | importo immobile | canone | rendita
+# A | canone | 1000 A | 1000 | 500
+# A | rendita | 500 B | 2000 | NULL
+# B | canone | 2000
 
 def op_pivot(
     df: DataFrame,
@@ -61,10 +60,10 @@ def op_pivot(
 
     Example:
         # Input:
-        #   immobile | tipo    | importo
-        #   A        | canone  | 1000
-        #   A        | rendita | 500
-        #   B        | canone  | 2000
+        # immobile | tipo | importo
+        # A | canone | 1000
+        # A | rendita | 500
+        # B | canone | 2000
 
         result = op_pivot(
             df,
@@ -75,15 +74,15 @@ def op_pivot(
             mapping={"canone": "val_canone", "rendita": "val_rendita"}
         )
         # Output:
-        #   immobile | val_canone | val_rendita
-        #   A        | 1000       | 500
-        #   B        | 2000       | NaN
+        # immobile | val_canone | val_rendita
+        # A | 1000 | 500
+        # B | 2000 | NaN
     """
     if not index_col or not pivot_col or not value_col:
         logger.warning("Pivot: parametri obbligatori mancanti (index_col, pivot_col, value_col)")
         return df
 
-    # Supporto multi-index: "col1, col2" → ["col1", "col2"]
+    # Supporto multi-index: "col1, col2" → ["col1", "col2"
     if isinstance(index_col, str) and ',' in index_col:
         index_cols = [c.strip() for c in index_col.split(',') if c.strip()]
     elif isinstance(index_col, list):
@@ -139,7 +138,7 @@ def op_pivot(
         else:
             pivoted.columns = [str(c) for c in pivoted.columns]
 
-        # Rimuovi nome asse colonne (metadata pandas)
+        # Rimuovi nome asse colonne (metadata pandas
         pivoted.columns.name = None
 
         # Riporta index_cols come colonne normali
@@ -178,7 +177,7 @@ def op_pivot(
         raise
 
 
-# TABLE DIFF (Confronta Tabelle)
+# TABLE DIFF (Confronta Tabelle
 
 def op_table_diff(
     inputs: List[DataFrame],
@@ -251,7 +250,7 @@ def op_table_diff(
     if key_rename:
         new_df = new_df.rename(columns=key_rename)
 
-    # Le chiavi unificate (nomi SX)
+    # Le chiavi unificate (nomi SX
     key_cols = list(left_keys)
 
     for k in key_cols:
@@ -278,22 +277,22 @@ def op_table_diff(
         indicator=True
     )
 
-    # Prima: iterrows su ogni riga con confronto cella-per-cella Python.
-    # Su 1M righe -> timeout garantito.
+    # Prima: iterrows su ogni riga con confronto cella-per-cella Python
+    # Su 1M righe -> timeout garantito
     # Ora: boolean masks pandas + 1 pass per raccogliere le colonne cambiate
-    # (costretto ad iterare, ma su un DataFrame piccolo di boolean).
+    # costretto ad iterare, ma su un DataFrame piccolo di boolean
 
     merge_type = merged['_merge']
     mask_deleted = merge_type == 'left_only'
     mask_added = merge_type == 'right_only'
     mask_both = merge_type == 'both'
 
-    # Per ogni common_value_col, calcola maschera "e' cambiato" vectorized.
-    # Regole (preservate dal comportamento precedente):
-    #   - entrambi NaN -> uguali (non changed)
-    #   - uno NaN e l'altro no -> changed
-    #   - entrambi numerici -> abs(diff) > 1e-9
-    #   - altrimenti -> str(old) != str(new)
+    # Per ogni common_value_col, calcola maschera "e' cambiato" vectorized
+    # Regole (preservate dal comportamento precedente
+    # entrambi NaN -> uguali (non changed
+    # uno NaN e l'altro no -> changed
+    # entrambi numerici -> abs(diff) > 1e-9
+    # altrimenti -> str(old) != str(new
     changed_masks = {}
     for c in common_value_cols:
         old_s = merged[f'{c}_OLD']
@@ -306,7 +305,7 @@ def op_table_diff(
             # Se uno solo e' NaN -> changed (one_nan), altrimenti solo se diff > tol
             col_changed = one_nan | (numeric_diff & ~both_nan)
         else:
-            # Confronto stringa (fallback generico)
+            # Confronto stringa (fallback generico
             str_diff = old_s.astype(str) != new_s.astype(str)
             col_changed = one_nan | (str_diff & ~both_nan & ~one_nan)
         changed_masks[c] = col_changed
@@ -338,8 +337,8 @@ def op_table_diff(
     for k in key_cols:
         result_df[k] = merged[k]
 
-    # Per ADDED e MODIFIED prendi _NEW; per DELETED prendi _OLD.
-    # Uso np.where per selezione vectorized.
+    # Per ADDED e MODIFIED prendi _NEW; per DELETED prendi _OLD
+    # Uso np.where per selezione vectorized
     import numpy as np
     is_deleted = (status == 'DELETED').values
     for c in common_value_cols:
@@ -354,16 +353,16 @@ def op_table_diff(
             result_df[c] = merged[c]
 
     # _diff_columns e _diff_old_values solo per MODIFIED — vectorized
-    # via stack+groupby.agg(join). Niente loop Python (pandas internals in C).
+    # via stack+groupby.agg(join). Niente loop Python (pandas internals in C
     diff_columns_col = pd.Series([None] * len(merged), index=merged.index, dtype=object)
     diff_old_values_col = pd.Series([None] * len(merged), index=merged.index, dtype=object)
 
     modified_mask = status == 'MODIFIED'
     if modified_mask.any() and common_value_cols:
-        cd_mod = changed_df.loc[modified_mask]  # (n_mod, n_cols) bool
+        cd_mod = changed_df.loc[modified_mask]  # n_mod, n_cols) bool
 
         # ── _diff_columns ──────────────────────────────────────────────
-        # Stack: (row, col) -> bool. Filtra True, groupby row e join level 1.
+        # Stack: (row, col) -> bool. Filtra True, groupby row e join level 1
         stacked = cd_mod.stack()
         trues = stacked[stacked]
         if len(trues) > 0:
@@ -376,14 +375,14 @@ def op_table_diff(
             diff_columns_col.loc[modified_mask] = diff_cols_per_row.values
 
         # ── _diff_old_values ───────────────────────────────────────────
-        # DataFrame parallelo di old values stringificati, stessa shape di cd_mod.
+        # DataFrame parallelo di old values stringificati, stessa shape di cd_mod
         old_df = pd.DataFrame(index=cd_mod.index)
         for c in common_value_cols:
             ov = merged.loc[modified_mask, f'{c}_OLD']
-            # Vectorized: NaN -> '', altrimenti str()
+            # Vectorized: NaN -> '', altrimenti str
             old_df[c] = ov.where(ov.notna(), '').astype(str)
             # Rimuovi le occorrenze di 'nan' che astype(str) su float puo' produrre
-            # (solo dove ov era effettivamente NaN — gia' gestito da where).
+            # solo dove ov era effettivamente NaN — gia' gestito da where
 
         if len(trues) > 0:
             # Allinea old values con le posizioni True usando stesso MultiIndex
@@ -399,7 +398,7 @@ def op_table_diff(
     result_df['_diff_status'] = status.values
     result_df['_diff_columns'] = diff_columns_col.values
     result_df['_diff_old_values'] = diff_old_values_col.values
-    # Ripulisci l'index (merged ha index ereditato, non serve al consumer)
+    # Ripulisci l'index (merged ha index ereditato, non serve al consumer
     result_df = result_df.reset_index(drop=True)
 
     # Statistiche
@@ -415,8 +414,8 @@ def op_table_diff(
     return result_df
 
 
-# MELT (UNPIVOT)
-# Trasforma colonne in righe: da formato wide a formato long.
+# MELT (UNPIVOT
+# Trasforma colonne in righe: da formato wide a formato long
 
 def op_melt(
     df: DataFrame,
@@ -466,7 +465,7 @@ def op_melt(
 
 
 # TRANSPOSE — Trasponi righe e colonne
-# Scambia righe e colonne del DataFrame.
+# Scambia righe e colonne del DataFrame
 
 def op_transpose(
     df: DataFrame,

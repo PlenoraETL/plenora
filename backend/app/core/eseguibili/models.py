@@ -8,10 +8,10 @@ from pydantic import BaseModel, Field
 
 class ExpectedColumn(BaseModel):
     """Una colonna che la catena si aspetta nel file di input."""
-    name: str                              # nome colonna atteso (es. "cod_comune")
-    type: Optional[str] = "str"            # tipo inferito (str, int, float, ecc.)
+    name: str                              # nome colonna atteso (es. "cod_comune"
+    type: Optional[str] = "str"            # tipo inferito (str, int, float, ecc
     required: bool = True                  # obbligatoria per l'esecuzione?
-    used_by: Optional[str] = None          # id del nodo che la utilizza (debug/info)
+    used_by: Optional[str] = None          # id del nodo che la utilizza (debug/info
     description: Optional[str] = None      # opzionale: descrizione per UI
 
 
@@ -20,9 +20,9 @@ class EseguibileCreate(BaseModel):
     source_project_id: str                 # id del progetto arricchisci da clonare
     name: str                              # nome pubblico dell'eseguibile
     description: Optional[str] = ""
-    default_output_format: str = "xlsx"    # xlsx, csv, json, geojson, ecc.
+    default_output_format: str = "xlsx"    # xlsx, csv, json, geojson, ecc
     default_output_name: Optional[str] = None  # se None → "{name}_{timestamp}"
-    icon: Optional[str] = None             # emoji/carattere mostrato sulla card (fallback: ▶)
+    icon: Optional[str] = None             # emoji/carattere mostrato sulla card (fallback: ▶
 
 
 class EseguibileUpdate(BaseModel):
@@ -64,9 +64,9 @@ class EseguibileDetails(BaseModel):
     created_at: str
     updated_at: str
     can_edit: Optional[bool] = None  # calcolato per l'utente corrente
-    # Flusso file-based (rest_file come ultimo nodo api_enrich):
+    # Flusso file-based (rest_file come ultimo nodo api_enrich
     # il wizard di esecuzione deve disabilitare il selettore di output_format
-    # perche' l'estensione e' determinata dal connettore, non dall'utente.
+    # perche' l'estensione e' determinata dal connettore, non dall'utente
     output_is_file_based: bool = False
     inferred_output_extension: Optional[str] = None  # senza punto, es. "zip"
 
@@ -88,7 +88,7 @@ class ExecuteRequest(BaseModel):
 class AnalyzeUploadResponse(BaseModel):
     """Risposta all'upload di un file per analisi."""
     file_id: str                           # id del FileSource temp
-    detected_columns: List[Dict[str, Any]] # [{name, type, sample_values}]
+    detected_columns: List[Dict[str, Any]] # {name, type, sample_values}
     row_count: int
     auto_mapping: Dict[str, str] = {}      # {chain_col: file_col} — suggerimento euristico
     preview_rows: List[Dict[str, Any]] = []  # prime 10 righe

@@ -1,7 +1,6 @@
 """
-Manipola source-loading helpers — extraction slice.
+Manipola source-loading helpers — separation slice.
 
-BE-GO-READY-TRANSFORMATION-ENGINE-006-MANIPOLA-SOURCE-LOADING-SLICE.
 """
 
 from __future__ import annotations
@@ -28,7 +27,7 @@ def load_file_sources(
 ) -> Optional[Dict[str, Any]]:
     """Carica DataFrame dai nodi ``file_source`` via ``SourceLoader``.
 
-    Behaviour-preserving extraction of the body previously
+    Behaviour-preserving separation of the body previously
     inlined in ``ManipolaExecutor._carica_sorgenti_file``.
 
     Args:
@@ -63,10 +62,10 @@ def load_file_sources(
     if not file_nodes:
         return None
 
-    # Lazy imports to avoid an executor ↔ source_loading cycle:
+    # Lazy imports to avoid an executor ↔ source_loading cycle
     # ``executor.py`` imports this module at top-level for the
     # delegator; reaching back into it here happens only at call
-    # time, after ``executor.py`` is fully initialized.
+    # time, after ``executor.py`` is fully initialized
     from app.core.artifacts import (
         SourceLoader,
         SourceLoadingError,
@@ -78,7 +77,7 @@ def load_file_sources(
     )
 
     # Tenant binding ctx-strict: explicit ``group_id`` only. No
-    # singleton fallback (TE-005 contract); see module docstring.
+    # singleton fallback (TE-005 contract); see module docstring
     if not group_id:
         log.error(
             "[SECURITY] manipola.load_file_sources: explicit "
@@ -129,8 +128,8 @@ def load_file_sources(
         except SourceLoadingError as e:
             # Visibility block or materialization error: the
             # loader already produces a message in the expected
-            # format ("Accesso negato: il file sorgente '...'"),
-            # propagated as-is in the error dict.
+            # format ("Accesso negato: il file sorgente '...'"
+            # propagated as-is in the error dict
             return {"success": False, "message": str(e)}
         except Exception as e:
             return {"success": False, "message": f"Errore file '{fid}': {e}"}
@@ -140,13 +139,13 @@ def load_file_sources(
 
         data = filter_visible_columns(data, node_columns_normalized)
         # Preserve CRS: SourceLoader returns a GeoDataFrame when
-        # ``file_source_service.load_dataframe`` produced one,
+        # ``file_source_service.load_dataframe`` produced one
         # but for files where the CRS is reconstructed from the
         # node metadata (geometry:subtype:SRID in the column
         # definitions) the DataFrame -> GeoDataFrame upgrade
         # still has to run here. Mirrors the project_source
         # branch. Idempotent: no-op if ``data`` is already a
-        # GeoDataFrame.
+        # GeoDataFrame
         data = _applica_crs_da_colonne(data, node_columns, meta=meta)
         if metadata_map is not None:
             metadata_map[node.id] = meta

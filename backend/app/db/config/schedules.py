@@ -1,7 +1,7 @@
 """
-Schedules DAL — estratto da `config_db_service.py` (scope micro Batch G #9,
+Schedules DAL helpers.
 
-invariants §6 commit `61b5058`).
+Keeps config-table persistence isolated behind a narrow database module.
 """
 
 import json

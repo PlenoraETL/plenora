@@ -1,7 +1,6 @@
 """
 Shared typed execution context contract.
 
-BE-GO-READY-ARCH-056-W1-SHARED-CANVAS-EXECUTION-CONTEXT
 """
 
 from __future__ import annotations

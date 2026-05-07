@@ -1,7 +1,6 @@
 """
 Bootstrap boundary — single explicit init for the FastAPI app.
 
-BE-GO-READY-BOOTSTRAP-ENGINE-002-EXPLICIT-BOOTSTRAP-FUNCTION.
 """
 
 from __future__ import annotations
@@ -22,10 +21,10 @@ _BOOT_COMPLETE: bool = False
 def is_bootstrapped() -> bool:
     """Return True iff `bootstrap()` has completed successfully.
 
-    Read-only boundary. Writers MUST go through `bootstrap()` /
-    `teardown()`; consumers should treat the value as a transient
+    Read-only boundary. Writers MUST go through `bootstrap` /
+    `teardown`; consumers should treat the value as a transient
     process-local fact (process restart resets to False, then the
-    next `bootstrap()` flips it).
+    next `bootstrap` flips it).
 
     Use cases:
       - observability probes (e.g. `/ready` can refuse traffic until
@@ -36,7 +35,7 @@ def is_bootstrapped() -> bool:
 
     The flag does NOT replace the underlying steps' own readiness
     semantics: PG pool init / Redis ping / storage config validity
-    each have their own observability surface. `is_bootstrapped()`
+    each have their own observability surface. `is_bootstrapped`
     is the single source of truth for "the four-step boundary has
     been crossed at least once in this process".
     """
@@ -46,7 +45,7 @@ def is_bootstrapped() -> bool:
 def _repair_psycopg2_ssl_env() -> None:
     """Pop the three SSL env vars that psycopg2 tends to set.
 
-    Must run AFTER `init_all_dbs()`. Pre-init the pop is a no-op:
+    Must run AFTER `init_all_dbs`. Pre-init the pop is a no-op:
     nothing has set those vars yet. Post-init the env may carry
     stale CA paths that break `requests`/`urllib3` in unrelated code.
 
@@ -61,8 +60,8 @@ def bootstrap() -> None:
 
     See module docstring for contract details.
 
-    BE-GO-READY-BOOTSTRAP-ENGINE-013: on successful completion,
-    flips `_BOOT_COMPLETE` to True (read via `is_bootstrapped()`).
+     on successful completion,
+    flips `_BOOT_COMPLETE` to True (read via `is_bootstrapped`).
     On exception from any step the flag stays at its current value —
     a partial bootstrap is NOT marked complete, and a re-run after
     a transient failure can still flip it on success.
@@ -73,46 +72,46 @@ def bootstrap() -> None:
     # `app.config` / `app.shared.cloud_backends` / `app.db.db_service`
     # work until the function is actually invoked). Important for
     # test ergonomics: tests can `import app.bootstrap` without
-    # paying for the full settings/storage/db graph.
+    # paying for the full settings/storage/db graph
     from app.config import settings
     from app.db.db_service import init_all_dbs
     from app.shared.cloud_backends import validate_storage_config
 
-    # 1. Verifica prerequisiti di sistema (DATA_DIR scrivibile, ecc.).
+    # 1. Verifica prerequisiti di sistema (DATA_DIR scrivibile, ecc
     # Interrompe l'avvio con messaggio chiaro se la configurazione e'
-    # incompleta.
+    # incompleta
     settings.validate_startup()
 
-    # 2. Coerenza STORAGE_POLICY + provider + bucket + soglie.
+    # 2. Coerenza STORAGE_POLICY + provider + bucket + soglie
     # Fail-fast qui evita che un task Celery scopra al primo upload
     # oltre soglia che il bucket non esiste o che il provider non e'
-    # implementato.
+    # implementato
     validate_storage_config()
 
-    # 3. Inizializza database PostgreSQL (pool + tabelle).
+    # 3. Inizializza database PostgreSQL (pool + tabelle
     init_all_dbs()
 
-    # 4. Fix SSL certificate issue caused by PostgreSQL.
-    # Deve girare DOPO `init_all_dbs()` perche' la pollution dell'env
-    # avviene quando psycopg2 apre la prima connessione.
+    # 4. Fix SSL certificate issue caused by PostgreSQL
+    # Deve girare DOPO `init_all_dbs` perche' la pollution dell'env
+    # avviene quando psycopg2 apre la prima connessione
     _repair_psycopg2_ssl_env()
 
     # 5. Mark boundary crossed. Set LAST so any exception from
     # steps 1-4 leaves the flag at its prior value — there is no
-    # path that can flip the flag with an incomplete bootstrap.
+    # path that can flip the flag with an incomplete bootstrap
     _BOOT_COMPLETE = True
 
 
 def teardown() -> None:
     """Run shutdown side effects in their canonical order.
 
-    BE-GO-READY-BOOTSTRAP-ENGINE-006 keeps this deliberately narrow:
-    it preserves the current `main.lifespan()` behavior by closing only
+     keeps this deliberately narrow:
+    it preserves the current `main.lifespan` behavior by closing only
     the PostgreSQL pool. Do not add new shutdown side effects here
     without a dedicated audit/contract update.
 
-    BE-GO-READY-BOOTSTRAP-ENGINE-013: resets `_BOOT_COMPLETE` so
-    `is_bootstrapped()` correctly reflects "post-shutdown" state.
+     resets `_BOOT_COMPLETE` so
+    `is_bootstrapped` correctly reflects "post-shutdown" state.
     Test harnesses that exercise the full lifecycle can therefore
     observe the flag transitions False → True → False.
     """

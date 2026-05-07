@@ -71,14 +71,14 @@ def cleanup_orphans(dry_run: bool = False) -> Dict[str, Any]:
         dict con il report:
         {
             "dry_run": bool,
-            "status": "clean" | "partial",  # "partial" se `errors` non vuoto
+            "status": "clean" | "partial", # "partial" se `errors` non vuoto
             "orphan_results": {
                 "project_ids": [...],
-                "rows_deleted": int      # 0 in dry_run
+                "rows_deleted": int # 0 in dry_run
             },
             "orphan_runs": {
                 "canvas_ids": [...],
-                "runs_deleted": int      # 0 in dry_run
+                "runs_deleted": int # 0 in dry_run
             },
             "errors": [...]
         }
@@ -136,7 +136,7 @@ def cleanup_orphans(dry_run: bool = False) -> Dict[str, Any]:
         report["errors"].append(err)
 
     # Finalizza status: "partial" se almeno un errore (outer scan fail o
-    # per-pid delete fail). Distinzione utile al caller admin/automation.
+    # per-pid delete fail). Distinzione utile al caller admin/automation
     if report["errors"]:
         report["status"] = "partial"
 
@@ -149,7 +149,7 @@ def cleanup_orphans(dry_run: bool = False) -> Dict[str, Any]:
     else:
         # Log level riflette lo status: partial merita visibilita' maggiore
         # per alerting admin (un cleanup silenziosamente fallito non deve
-        # passare inosservato come "info").
+        # passare inosservato come "info"
         _log = logger.warning if report["status"] == "partial" else logger.info
         _log(
             f"orphan_cleanup: status={report['status']} "

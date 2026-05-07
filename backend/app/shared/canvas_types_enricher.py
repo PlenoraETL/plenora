@@ -49,7 +49,7 @@ def enrich_canvas_types_from_metadata(
         )
 
     # Merge: project fornisce il default, node_data sovrascrive
-    # (frontend autorevole se ha settato canvas_types espliciti).
+    # frontend autorevole se ha settato canvas_types espliciti
     merged = {**project_column_types, **node_column_types}
     if merged:
         carica_node_data["canvas_types"] = merged

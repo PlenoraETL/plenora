@@ -66,7 +66,7 @@ class ConnectionFactoryProtocol(Protocol):
     def create_connection(self, conn: DatabaseConnection) -> DatabaseConnectorProtocol: ...
 
 
-# FACTORY DI CONNESSIONE (PRODUZIONE)
+# FACTORY DI CONNESSIONE (PRODUZIONE
 
 class DefaultConnectionFactory:
     """
@@ -195,9 +195,9 @@ class SQLQueries:
     separatamente dalla logica di esecuzione.
     """
 
-    # Usa information_schema.columns + geometry_columns per PostGIS.
+    # Usa information_schema.columns + geometry_columns per PostGIS
     # I COALESCE con subquery estraggono tipo geometria e SRID dalla
-    # tabella geometry_columns (presente solo con estensione PostGIS).
+    # tabella geometry_columns (presente solo con estensione PostGIS
     POSTGRES_COLUMNS = """
         SELECT 
             c.table_name, 
@@ -226,7 +226,7 @@ class SQLQueries:
     """
 
     # Stessa struttura della query tabelle, ma filtrata sulle viste tramite
-    # information_schema.views (che contiene solo le viste, non le tabelle).
+    # information_schema.views (che contiene solo le viste, non le tabelle
     POSTGRES_VIEW_COLUMNS = """
         SELECT 
             c.table_name, 
@@ -257,8 +257,8 @@ class SQLQueries:
         ORDER BY c.table_name, c.ordinal_position;
     """
 
-    # Usa sys.tables + sys.columns + sys.types.
-    # Il tipo geometry/geography è direttamente nel nome del tipo.
+    # Usa sys.tables + sys.columns + sys.types
+    # Il tipo geometry/geography è direttamente nel nome del tipo
     MSSQL_COLUMNS = """
         SELECT 
             t.name AS table_name,
@@ -271,7 +271,7 @@ class SQLQueries:
         ORDER BY t.name, c.column_id;
     """
 
-    # Usa sys.views invece di sys.tables per ottenere solo le viste.
+    # Usa sys.views invece di sys.tables per ottenere solo le viste
     MSSQL_VIEW_COLUMNS = """
         SELECT 
             v.name AS table_name,
@@ -284,10 +284,10 @@ class SQLQueries:
         ORDER BY v.name, c.column_id;
     """
 
-    # Versione con SRID: usa JOIN su ST_GEOMETRY_COLUMNS (disponibile in MySQL 8+).
-    # La versione semplice viene usata come fallback per MariaDB e MySQL < 8.
+    # Versione con SRID: usa JOIN su ST_GEOMETRY_COLUMNS (disponibile in MySQL 8+
+    # La versione semplice viene usata come fallback per MariaDB e MySQL < 8
     # NB: alias `c` e `g` per evitare ambiguità sulle colonne TABLE_NAME/COLUMN_NAME
-    # presenti in entrambe le tabelle (l'errore ER_NON_UNIQ_ERROR 1052).
+    # presenti in entrambe le tabelle (l'errore ER_NON_UNIQ_ERROR 1052
     MYSQL_COLUMNS_WITH_SRID = """
         SELECT
             c.TABLE_NAME,
@@ -316,7 +316,7 @@ class SQLQueries:
         ORDER BY TABLE_NAME, ORDINAL_POSITION;
     """
 
-    # Filtra INFORMATION_SCHEMA.COLUMNS solo per le viste presenti in INFORMATION_SCHEMA.VIEWS.
+    # Filtra INFORMATION_SCHEMA.COLUMNS solo per le viste presenti in INFORMATION_SCHEMA.VIEWS
     MYSQL_VIEW_COLUMNS_WITH_SRID = """
         SELECT 
             c.TABLE_NAME, 
@@ -352,7 +352,7 @@ class SQLQueries:
     """
 
     # Usa USER_TAB_COLUMNS. Il tipo NUMBER viene disambiguato tramite
-    # precision e scale (es. NUMBER(1) = bool, NUMBER(*,0) = int).
+    # precision e scale (es. NUMBER(1) = bool, NUMBER(*,0) = int
     ORACLE_COLUMNS = """
         SELECT 
             TABLE_NAME, 
@@ -364,7 +364,7 @@ class SQLQueries:
         ORDER BY TABLE_NAME, COLUMN_ID
     """
 
-    # Filtra USER_TAB_COLUMNS solo per le viste presenti in USER_VIEWS.
+    # Filtra USER_TAB_COLUMNS solo per le viste presenti in USER_VIEWS
     ORACLE_VIEW_COLUMNS = """
         SELECT 
             utc.TABLE_NAME, 
@@ -378,7 +378,7 @@ class SQLQueries:
     """
 
     # Non ha information_schema: si usa sqlite_master per l'elenco tabelle
-    # e PRAGMA table_info(nome) per le colonne di ogni tabella.
+    # e PRAGMA table_info(nome) per le colonne di ogni tabella
     SQLITE_TABLES = "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';"
 
     SQLITE_VIEWS = "SELECT name FROM sqlite_master WHERE type='view';"
@@ -389,7 +389,7 @@ class SQLQueries:
         return f"PRAGMA table_info({table_name});"
 
 
-# MAPPER DEI TIPI (FUNZIONI PURE)
+# MAPPER DEI TIPI (FUNZIONI PURE
 # Converte i tipi nativi di ogni DBMS nel formato interno PLENORA
 
 class TypeMapper:
@@ -430,7 +430,7 @@ class TypeMapper:
         'time without time zone': 'date', 'time': 'date',
         'time with time zone': 'date', 'timetz': 'date',
         'interval': 'date',
-        # Tipi definiti dall'utente (PostGIS geometry)
+        # Tipi definiti dall'utente (PostGIS geometry
         'user-defined': 'geometry',
     }
 
@@ -559,9 +559,9 @@ class TypeMapper:
         Mappa tipo Oracle → tipo interno.
 
         Logica speciale per NUMBER:
-        - NUMBER(1)    → bool (flag booleano)
-        - NUMBER(*,0)  → int  (intero, scale=0 = nessun decimale)
-        - NUMBER(p,s)  → real (decimale)
+        - NUMBER(1) → bool (flag booleano)
+        - NUMBER(*,0) → int (intero, scale=0 = nessun decimale)
+        - NUMBER(p,s) → real (decimale)
         """
         data_type_upper = data_type.upper()
 
@@ -585,7 +585,7 @@ class TypeMapper:
         """
         type_lower = type_str.lower().strip()
 
-        # Rimuovi parametri di tipo (es. "VARCHAR(255)" → "varchar")
+        # Rimuovi parametri di tipo (es. "VARCHAR(255)" → "varchar"
         if '(' in type_lower:
             type_lower = type_lower.split('(')[0].strip()
 
@@ -606,8 +606,8 @@ class TypeMapper:
         return 'str'
 
 
-# PROCESSORI DI RISULTATI (FUNZIONI PURE)
-# Trasformano righe SQL grezze → Dict[tabella → lista colonne]
+# PROCESSORI DI RISULTATI (FUNZIONI PURE
+# Trasformano righe SQL grezze → Dict[tabella → lista colonne
 
 class ResultProcessor:
     """
@@ -707,11 +707,11 @@ class DatabaseInspector:
     - result_processor: sostituibile per elaborazioni custom
 
     Uso tipico in produzione:
-        inspector = DatabaseInspector()
+        inspector = DatabaseInspector
         schema = inspector.get_tables_and_columns(connection)
 
     Uso nei test:
-        mock_factory = MockConnectionFactory()
+        mock_factory = MockConnectionFactory
         inspector = DatabaseInspector(connection_factory=mock_factory)
     """
 
@@ -838,7 +838,7 @@ class DatabaseInspector:
             try:
                 cursor = connection.cursor()
                 try:
-                    # Rileva se è MariaDB dalla stringa VERSION()
+                    # Rileva se è MariaDB dalla stringa VERSION
                     cursor.execute("SELECT VERSION()")
                     version = cursor.fetchone()[0].lower()
                     is_mariadb = 'mariadb' in version

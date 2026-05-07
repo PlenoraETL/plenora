@@ -21,10 +21,10 @@ def assert_path_within(
 
     Steps:
     1. Reject UNC paths (`\\\\server\\share`, `//server/share`) prima
-       di qualsiasi `resolve()`: su Windows resolve() puo' tentare
+       di qualsiasi `resolve`: su Windows resolve puo' tentare
        il lookup SMB introducendo latenze di rete e side-channel
        temporali.
-    2. `Path.resolve()` su candidate e su ogni trusted root.
+    2. `Path.resolve` su candidate e su ogni trusted root.
     3. Verifica che il candidate resolved sia dentro almeno un root
        resolved (via `relative_to`).
     4. Se `must_exist=True`, verifica che il file esista.
@@ -34,7 +34,7 @@ def assert_path_within(
     specifico catturano e re-raise con il loro messaggio.
 
     Ritorna il `Path` resolved (utile al caller per evitare un
-    secondo `resolve()`).
+    secondo `resolve`).
 
     Args:
         candidate: path da validare (stringa o Path)
@@ -88,8 +88,8 @@ def assert_path_within(
 # Regex whitelist per `bundle_task_id` IMDF. I task_id generati da Celery
 # sono UUID v4; qualche task legacy puo' avere formato leggermente diverso
 # quindi accettiamo alfanumerico + dash/underscore. Primo char alfanumerico
-# (no `-`/`_` iniziale). Esclude `.`, `/`, `\`, spazi, null bytes e caratteri
-# di controllo — sufficiente per bloccare path traversal.
+# no `-`/`_` iniziale). Esclude `.`, `/`, `\`, spazi, null bytes e caratteri
+# di controllo — sufficiente per bloccare path traversal
 _IMDF_TASK_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
 
 
@@ -103,7 +103,7 @@ def validate_imdf_task_id(bundle_task_id: str, root: Path) -> Path:
          net — se nonostante la regex l'input sfugge, solleva `ValueError`.
 
     Ritorna il `Path` resolved del bundle dir (utile al caller per evitare
-    un secondo `resolve()`). NON verifica che la dir esista — quello e'
+    un secondo `resolve`). NON verifica che la dir esista — quello e'
     responsabilita' del caller (check `BUNDLE_MISSING` o simile).
 
     Args:

@@ -15,29 +15,29 @@ def _quote_sql_value(v) -> str:
     """Quote un valore per una clausola WHERE SQL.
 
     Gestisce:
-      - None / pd.NA / np.nan / pd.NaT   → 'NULL'
-      - bool                              → 1 / 0 (ArcGIS non accetta True/False)
+      - None / pd.NA / np.nan / pd.NaT → 'NULL'
+      - bool → 1 / 0 (ArcGIS non accetta True/False)
       - int / float / numpy int64/float64 → as-is, convertito a Python native
-      - str (incluso numpy str)           → single-quoted, apici raddoppiati
-      - altri tipi                        → str(v) + quoting
+      - str (incluso numpy str) → single-quoted, apici raddoppiati
+      - altri tipi → str(v) + quoting
 
     La conversione a Python native e' necessaria perche' i GeoDataFrame
     caricati da pyogrio possono avere dtype numpy (int64, float64) che
     `isinstance(v, (int, float))` NON riconosce, con il risultato di passarli
     per il branch string producendo letterali tipo 'np.int64(123)'.
     """
-    # NULL (incluso pd.NA / np.nan / pd.NaT)
+    # NULL (incluso pd.NA / np.nan / pd.NaT
     try:
         import pandas as _pd
         if v is None or _pd.isna(v):
             return "NULL"
     except (TypeError, ValueError):
-        # pd.isna solleva su tipi non comparabili (es. tuple). Fallback:
+        # pd.isna solleva su tipi non comparabili (es. tuple). Fallback
         if v is None:
             return "NULL"
 
-    # bool (prima di int, perche' True/False sono int in Python)
-    # Gestisce anche numpy.bool_ che NON e' sottoclasse di Python bool.
+    # bool (prima di int, perche' True/False sono int in Python
+    # Gestisce anche numpy.bool_ che NON e' sottoclasse di Python bool
     try:
         import numpy as _np
         if isinstance(v, (bool, _np.bool_)):
@@ -89,7 +89,7 @@ def _query_oid_by_key(
     """Costruisce un dict {str(match_val): OBJECTID} interrogando il FS per
     le features con `match_col IN (values)`. Batcha la query su WHERE da 200.
 
-    Se una o piu' batch falliscono, `oid_by_key` ritorna PARZIALE: il caller
+    Se una o piu' , `oid_by_key` ritorna PARZIALE: il caller
     deve controllare `errors` (non-vuoto → parziale) e decidere se abortire
     o procedere. In caso di parziale viene loggato un warning con il conteggio.
 

@@ -7,12 +7,11 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, HTTPException
 from app.config import settings
-# BE-GO-READY-AUTH-ENGINE-013-ROUTER-IMPORTS-OFF-AUTH-FACADE:
 # auth dependency callables sourced from the canonical leaf
 # `app.core.auth.dependencies`. Identity preserved with the
-# facade re-export; this router no longer co-depends on the
-# login + MFA + JWT facade just to consume the FastAPI Depends
-# callables.
+# compatibility module compatibility export; this router no longer co-depends on the
+# login + MFA + JWT compatibility module just to consume the FastAPI Depends
+# callables
 from app.core.auth.dependencies import (
     get_current_user,
     require_not_esecutore,

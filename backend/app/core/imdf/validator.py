@@ -39,16 +39,15 @@ def _count_features_where_via_post(
 
 
 # Mapping dei tipi Esri verso una rappresentazione "coarse" per il
-# confronto schema. Esri usa nomi come esriFieldTypeString/Integer/Double.
-# Il GeoDataFrame ha dtype numpy. Normalizziamo entrambi a un set ridotto.
-#
+# confronto schema. Esri usa nomi come esriFieldTypeString/Integer/Double
+# Il GeoDataFrame ha dtype numpy. Normalizziamo entrambi a un set ridotto
 # BE-IMDF-003: implementazione consolidata in
 # `app.core.features.arcgis_client.EsriTypeMapper.map_esri_field_to_schema_bucket`
 # / `map_pandas_dtype_to_schema_bucket`. Questi due simboli modulo-level
 # restano come thin wrapper per preservare il path di monkeypatch dei
 # test (es. `tests2/imdf/unit/test_validate_publish_*` che possono
 # patchare `validator._coarse_type_*`) e per non cambiare il call site
-# di `validate_publish`.
+# di `validate_publish`
 def _coarse_type_from_esri(esri_type: str) -> str:
     from app.shared.connections.esri_types import EsriTypeMapper  # ADR-0023: moved from features
     return EsriTypeMapper.map_esri_field_to_schema_bucket(esri_type)
@@ -71,11 +70,11 @@ def validate_publish(
 
     Args:
         bundle_task_id: task_id del bundle persistito in IMDF_BUNDLES_DIR
-        connection_id:  id connessione ArcGIS in cui pubblicheremo
-        fs_name:        nome Feature Service target
-        mode:           'replace' | 'append' | 'upsert'
-        match_columns:  override per-layer dei default
-        folder:         folder ArcGIS scelta dall'utente. Se fornita e
+        connection_id: id connessione ArcGIS in cui pubblicheremo
+        fs_name: nome Feature Service target
+        mode: 'replace' | 'append' | 'upsert'
+        match_columns: override per-layer dei default
+        folder: folder ArcGIS scelta dall'utente. Se fornita e
                         diversa dalla folder effettiva dell'FS esistente,
                         emette un warning FOLDER_MISMATCH (informativo:
                         il publish funzionerà comunque, ma in replace
@@ -129,10 +128,10 @@ def validate_publish(
         return report
 
     # Validazione bundle_task_id contro path traversal. Il router chiama gia'
-    # `_safe_bundle_dir`, ma difesa in profondita' nel modulo validator.
+    # `_safe_bundle_dir`, ma difesa in profondita' nel modulo validator
     # Utility condivisa in app.shared.path_policy (D3 commit 1): regex +
     # path-traversal guard centralizzati. Il validator traduce ValueError
-    # in un issue con code INVALID_BUNDLE_ID (shape report preservata).
+    # in un issue con code INVALID_BUNDLE_ID (shape report preservata
     from app.shared.path_policy import validate_imdf_task_id
     _root = settings.IMDF_BUNDLES_DIR.resolve()
     try:
@@ -204,11 +203,10 @@ def validate_publish(
     # Mismatch folder: l'utente ha scelto una folder diversa da quella in
     # cui vive l'FS esistente. Non è bloccante: è un'informazione utile
     # soprattutto in mode=replace (il nuovo FS sarà creato nella folder
-    # richiesta, spostando di fatto il servizio).
-    #
+    # richiesta, spostando di fatto il servizio
     # L'API ArcGIS ritorna `ownerFolder` come folder ID (hash) mentre il
     # frontend invia la folder come `title`. Prima di confrontare, risolviamo
-    # l'id → title via _list_user_folders, così evitiamo falsi positivi.
+    # l'id → title via _list_user_folders, così evitiamo falsi positivi
     if existing_url and folder:
         _req = (folder or "").strip() or None
         _cur_id = (existing_folder or "").strip() or None
@@ -220,10 +218,10 @@ def validate_publish(
                 _cur_title = _by_id.get(_cur_id)
             except Exception as e:
                 logger.warning(f"_list_user_folders fallita nel validator: {e}")
-        # Rappresentazione user-friendly: preferiamo il title se disponibile.
+        # Rappresentazione user-friendly: preferiamo il title se disponibile
         _cur_display = _cur_title or _cur_id
-        # Confronto: se il title risolto coincide con la request → match.
-        # Altrimenti fallback al confronto con l'id raw (retrocompat).
+        # Confronto: se il title risolto coincide con la request → match
+        # Altrimenti fallback al confronto con l'id raw (retrocompat
         _match = (_cur_title is not None and _cur_title == _req) or (_cur_id == _req)
         if not _match:
             _add_top_issue(
@@ -246,8 +244,8 @@ def validate_publish(
         )
 
     # Controllo "zombie service": per mode=replace, se NON vediamo il portal
-    # item come utente corrente ma il nome e' gia' riservato sul hosted server,
-    # createService fallira'. Rileviamolo ora cosi' l'utente lo sa subito.
+    # item come utente corrente ma il nome e' gia' riservato sul hosted server
+    # createService fallira'. Rileviamolo ora cosi' l'utente lo sa subito
     if mode == "replace" and not existing_url:
         try:
             available, _err = _is_service_name_available(client, conn, fs_name)
@@ -264,10 +262,10 @@ def validate_publish(
         except Exception as e:
             logger.warning(f"isServiceNameAvailable check fallita: {e}")
 
-    # Carica i layer del FS esistente (se presente) → mapping name → info.
+    # Carica i layer del FS esistente (se presente) → mapping name → info
     # `existing_schema_by_layer[name]` = {field_name: FieldInfo dict} dove
     # FieldInfo contiene {coarse, length, nullable}. `existing_layer_meta`
-    # tiene info per-layer (capabilities, spatial ref wkid).
+    # tiene info per-layer (capabilities, spatial ref wkid
     existing_layers: Dict[str, dict] = {}
     existing_schema_by_layer: Dict[str, Dict[str, Dict[str, Any]]] = {}
     existing_layer_meta: Dict[str, Dict[str, Any]] = {}
@@ -282,13 +280,13 @@ def validate_publish(
                            f"Impossibile listare i layer del FS esistente: {e}")
 
         # Per ogni layer trovato, estrai schema dettagliato (type + length +
-        # nullable) + meta (capabilities, wkid) per i check a valle.
+        # nullable) + meta (capabilities, wkid) per i check a valle
         for name, lyr in existing_layers.items():
             try:
                 schema = client.get_layer_schema(conn, lyr["url"])
                 fields = schema.get("fields", []) or []
-                # NOTA: il client usa la chiave "field_type" (non "type"),
-                # ma per retrocompat leggiamo entrambe.
+                # NOTA: il client usa la chiave "field_type" (non "type"
+                # ma per retrocompat leggiamo entrambe
                 existing_schema_by_layer[name] = {
                     f["name"]: {
                         "coarse":   _coarse_type_from_esri(
@@ -309,10 +307,10 @@ def validate_publish(
                 existing_schema_by_layer[name] = {}
                 existing_layer_meta[name] = {"capabilities": "", "wkid": None}
 
-    # ── CRS check: bundle è già in EPSG:4326 dopo load_imdf_layers.
+    # ── CRS check: bundle è già in EPSG:4326 dopo load_imdf_layers
     # Se il FS è in un SRS diverso, ArcGIS fa una reprojezione server-side
-    # al publish. Di solito fila, ma per sistemi molto anisotropi (es.
-    # proiezioni locali) può causare shift visibili. Warning informativo.
+    # al publish. Di solito fila, ma per sistemi molto anisotropi (es
+    # proiezioni locali) può causare shift visibili. Warning informativo
     try:
         _sample_gdf = next(iter(bundle_layers.values()), None)
         _bundle_wkid = None
@@ -321,7 +319,7 @@ def validate_publish(
                 _bundle_wkid = _sample_gdf.crs.to_epsg()
             except Exception:
                 _bundle_wkid = None
-        # Se il bundle ha wkid e il FS ha wkid, confronta (primo layer FS)
+        # Se il bundle ha wkid e il FS ha wkid, confronta (primo layer FS
         if _bundle_wkid and existing_layer_meta:
             _fs_wkid = next(
                 (m.get("wkid") for m in existing_layer_meta.values() if m.get("wkid")),
@@ -338,7 +336,7 @@ def validate_publish(
         logger.warning(f"CRS check fallito: {e}")
 
     # ── Capabilities check: per mode che modificano FS esistente serve
-    # il capability corrispondente. Se manca è un errore bloccante.
+    # il capability corrispondente. Se manca è un errore bloccante
     if existing_url and mode in ("append", "upsert", "update") and existing_layer_meta:
         _caps_sample = next(iter(existing_layer_meta.values())).get("capabilities", "")
         _caps_set = {c.strip().lower() for c in _caps_sample.split(",") if c.strip()}
@@ -379,7 +377,7 @@ def validate_publish(
             "data_issues": [],
         }
 
-        # Info layer esistente (se FS c'e')
+        # Info layer esistente (se FS c'e'
         existing_info = existing_layers.get(name)
         if existing_info:
             layer_report["fs_layer_id"] = existing_info.get("id")
@@ -415,15 +413,14 @@ def validate_publish(
                 layer_report["will_add"] = bundle_count
                 layer_report["delta"] = f"+{bundle_count}"
 
-                # Check duplicati business key: ArcGIS append NON de-duplica,
+                # Check duplicati business key: ArcGIS append NON de-duplica
                 # quindi se il bundle contiene chiavi già presenti sul FS il
                 # risultato sono feature duplicate (stessa business key, diversi
                 # OBJECTID). Emettiamo un warning quantitativo così l'utente sa
-                # che sta creando duplicati consapevoli o deve usare upsert.
-                #
+                # che sta creando duplicati consapevoli o deve usare upsert
                 # Chunk più piccolo (50 vs 200 dell'upsert/update) per evitare
                 # URL troppo lunghi: il controllo e' best-effort, se fallisce
-                # il publish procede comunque.
+                # il publish procede comunque
                 match_col = layer_report["match_column"]
                 if match_col and match_col in gdf.columns:
                     vals_series = gdf[match_col].dropna()
@@ -433,7 +430,7 @@ def validate_publish(
                         check_failed_msg = None
                         try:
                             # POST /query con returnCountOnly: più robusto di
-                            # GET (URL length, content negotiation). Chunk 100.
+                            # GET (URL length, content negotiation). Chunk 100
                             for batch in _chunked(vals_unique, 100):
                                 where = (
                                     f"{match_col} IN ("
@@ -490,9 +487,9 @@ def validate_publish(
                     })
                 else:
                     # Query live su FS per contare quante feature matchano
-                    # (usato sia per upsert.will_delete sia per update.will_update).
-                    # Usiamo POST /query con returnCountOnly (_count_features_where_via_post)
-                    # per evitare il bug GET/JSONDecodeError.
+                    # usato sia per upsert.will_delete sia per update.will_update
+                    # Usiamo POST /query con returnCountOnly (_count_features_where_via_post
+                    # per evitare il bug GET/JSONDecodeError
                     vals_series = gdf[match_col].dropna()
                     vals_unique = vals_series.unique().tolist()
                     total_match_hits = 0
@@ -532,18 +529,18 @@ def validate_publish(
                     else:  # update — modalita' STRICT
                         # In update non tolleriamo ambiguita': qualunque
                         # match-key NULL, duplicato o riga senza match sul FS
-                        # e' un errore bloccante (non silent-skip).
+                        # e' un errore bloccante (non silent-skip
                         # Le altre regole (NULL/duplicati sul match_col) sono
                         # gia' state aggiunte piu' sotto nella sezione "data
                         # quality" — qui promuoviamo eventuali warning a error
-                        # per la mode update.
+                        # per la mode update
 
-                        # will_update = min(uniq_match_hits, bundle_count)
-                        # Se bundle ha duplicati, matched_bundle_rows >= uniq_hits.
+                        # will_update = min(uniq_match_hits, bundle_count
+                        # Se bundle ha duplicati, matched_bundle_rows >= uniq_hits
                         matched_unique_keys = total_match_hits
                         # righe del bundle che hanno un valore nel dict degli hit
-                        # (qui assumiamo bundle_count ~= righe, eventuali NULL
-                        # verranno contati dai check sotto)
+                        # qui assumiamo bundle_count ~= righe, eventuali NULL
+                        # verranno contati dai check sotto
                         unmatched_unique_keys = max(0, len(vals_unique) - total_match_hits)
                         layer_report["action"] = "update"
                         layer_report["will_update"] = min(bundle_count, total_match_hits)
@@ -552,7 +549,7 @@ def validate_publish(
 
                         # Non emettere UNMATCHED_BUNDLE_FEATURES se la query
                         # di match è fallita: il conteggio è inaffidabile e
-                        # emetterebbe un falso positivo cascading.
+                        # emetterebbe un falso positivo cascading
                         if unmatched_unique_keys > 0 and not match_query_failed:
                             layer_report["data_issues"].append({
                                 "severity": "error",
@@ -568,7 +565,7 @@ def validate_publish(
         if existing_info and existing_schema_by_layer.get(name):
             fs_schema = existing_schema_by_layer[name]
             # Campi bundle (esclusa geometry). Per ogni campo raccogliamo
-            # anche max_len (per stringhe) e null_count (per nullable check).
+            # anche max_len (per stringhe) e null_count (per nullable check
             bundle_fields_info: Dict[str, Dict[str, Any]] = {}
             for col in gdf.columns:
                 if col in ("geometry", "OBJECTID", "objectid"):
@@ -593,17 +590,17 @@ def validate_publish(
             # Campi sul FS esistente (esclusi system). Normalizziamo il
             # nome in uppercase e togliamo separatori per matchare sia le
             # varianti Esri classiche (Shape_Area) sia quelle del nuovo
-            # hosted FS (Shape__Area con doppio underscore).
+            # hosted FS (Shape__Area con doppio underscore
             # BE-IMDF-001: helper canonico in
-            # `app.shared.esri_system_fields.is_esri_system_field`.
+            # `app.shared.esri_system_fields.is_esri_system_field`
             # Pattern di normalizzazione bit-per-bit invariato
-            # (`name.upper().replace("_", "")`).
+            # `name.upper.replace("_", "")`
             from app.shared.esri_system_fields import is_esri_system_field as _is_system_field
 
             fs_fields_info = {k: v for k, v in fs_schema.items() if not _is_system_field(k)}
             # Alias: i check "presenza" devono essere case-insensitive
-            # (ArcGIS ignora il case sui nomi campo). Manteniamo però i
-            # nomi originali per i messaggi all'utente.
+            # ArcGIS ignora il case sui nomi campo). Manteniamo però i
+            # nomi originali per i messaggi all'utente
             fs_fields_lower = {k.lower(): k for k in fs_fields_info}
             bundle_fields_lower = {k.lower(): k for k in bundle_fields_info}
 
@@ -612,7 +609,7 @@ def validate_publish(
 
             strict_mode = (mode == "update")
 
-            # 1. Campi nel bundle NON nel FS (match case-insensitive)
+            # 1. Campi nel bundle NON nel FS (match case-insensitive
             for fname, ftype in bundle_fields.items():
                 if fname.lower() not in fs_fields_lower:
                     layer_report["schema_issues"].append({
@@ -624,7 +621,7 @@ def validate_publish(
                                if strict_mode else " (sara' droppato)")
                         )
                     })
-            # 2. Campi nel FS NON nel bundle (match case-insensitive)
+            # 2. Campi nel FS NON nel bundle (match case-insensitive
             for fname in fs_fields:
                 if fname.lower() not in bundle_fields_lower:
                     layer_report["schema_issues"].append({
@@ -636,8 +633,8 @@ def validate_publish(
                         )
                     })
             # 2b. String truncation: per ogni campo string in comune, se
-            # il bundle ha valori più lunghi del `length` del campo FS,
-            # ArcGIS tronca in silenzio. Warning quantitativo.
+            # il bundle ha valori più lunghi del `length` del campo FS
+            # ArcGIS tronca in silenzio. Warning quantitativo
             match_col_for_layer = layer_report.get("match_column")
             common_lower = set(bundle_fields_lower) & set(fs_fields_lower)
             for key in common_lower:
@@ -666,7 +663,7 @@ def validate_publish(
             # 2c. NULL su campi FS non-nullable: se il bundle contiene NULL
             # in un campo che sul FS è `nullable=False`, il publish può
             # rifiutare la riga (append/upsert) o fallire lo schema check
-            # (update). Error in append/upsert/update, warning in replace.
+            # update). Error in append/upsert/update, warning in replace
             for key in common_lower:
                 bname = bundle_fields_lower[key]
                 fname = fs_fields_lower[key]
@@ -685,7 +682,7 @@ def validate_publish(
                             ),
                         })
 
-            # 3. Type mismatch (su campi in comune, match case-insensitive)
+            # 3. Type mismatch (su campi in comune, match case-insensitive
             for key in common_lower:
                 bname = bundle_fields_lower[key]
                 fname = fs_fields_lower[key]
@@ -697,9 +694,9 @@ def validate_publish(
                     other_involved = (bt == "other" or ft == "other")
                     if other_involved:
                         # Tipo non mappabile: è rumore fuorché sulla match
-                        # column (dove il rischio di key mismatch è reale).
+                        # column (dove il rischio di key mismatch è reale
                         # Sui campi normali silenziamo del tutto — l'utente
-                        # non può fare nulla con un "tipo non riconosciuto".
+                        # non può fare nulla con un "tipo non riconosciuto"
                         if not is_match_col:
                             continue
                         sev = "error"
@@ -736,7 +733,7 @@ def validate_publish(
                             - gdf[match_col].isna().sum())
             if dup_count > 0:
                 if mode == "update":
-                    # Strict: duplicati → errore (race condition in updateFeatures)
+                    # Strict: duplicati → errore (race condition in updateFeatures
                     layer_report["data_issues"].append({
                         "severity": "error", "code": "DUPLICATE_MATCH_KEY",
                         "message": (

@@ -26,8 +26,8 @@ def enforce_upload_size_limit(
     """Rifiuta con 413 gli upload che superano `max_bytes`.
 
     Determina la dimensione **senza leggere il contenuto in RAM**: usa
-    `seek(end) -> tell() -> seek(0)`, lasciando il cursore a 0 per il
-    caller. Questo evita il pattern fragile "MIME validate via `read()`
+    `seek(end) -> tell -> seek(0)`, lasciando il cursore a 0 per il
+    caller. Questo evita il pattern fragile "MIME validate via `read`
     poi enforce size dopo": un attaccante autenticato puo' altrimenti
     forzare la lettura di N GB in RAM (DoS interno credenziato) prima
     del rifiuto.

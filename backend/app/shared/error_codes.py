@@ -1,7 +1,6 @@
 """
 PLENORA-ETL — Catalog dei codici stringa per error envelope
 
-(BE-GO-READY-ERROR-CONTRACT-002).
 """
 
 from __future__ import annotations
@@ -31,7 +30,7 @@ def http_status_code(status_code: int) -> str:
     return f"http_{status_code}"
 
 
-# Domain-specific (codici gia' lockati nei test esistenti)
+# Domain-specific (codici gia' lockati nei test esistenti
 
 CONNECTION_IN_USE = "connection_in_use"
 """409: tentativo di delete di una connection referenziata."""
@@ -100,13 +99,12 @@ TICKET_NOT_FOUND = "ticket_not_found"
 
 
 # Domain-specific — External-Service family
-# (BE-GO-READY-ERROR-CODES-010-EXTERNAL-SERVICE)
 # Promozione mirata della famiglia 502 "upstream/external service
 # unreachable" da `http_502` generico a codice domain. Permette al
 # FE di distinguere "errore di rete su servizio esterno" (retry
-# suggestion, contact admin) da "errore interno BE".
+# suggestion, contact admin) da "errore interno BE"
 # Status code resta 502. Nessuna esposizione di dettagli upstream
-# sensibili (URL, token, response body) — solo il flag semantico.
+# sensibili (URL, token, response body) — solo il flag semantico
 
 EXTERNAL_SERVICE_UNREACHABLE = "external_service_unreachable"
 """502: servizio esterno non raggiungibile (features/ArcGIS,
@@ -115,14 +113,13 @@ notifica admin."""
 
 
 # Domain-specific — Memory/OOM family
-# (BE-GO-READY-MEMORY-OOM-001-LOAD-FILE-PREFLIGHT-GUARD)
 # Promozione mirata della famiglia 413 "memory limit exceeded"
 # emessa dai preflight guard di OOM-prevention. Permette al FE di
 # distinguere "input troppo grande" (suggerire chunking, formato
 # alternativo, contact admin) da generic 4xx. Status code 413
-# (Payload Too Large): semantico HTTP corretto perche' il client
+# Payload Too Large): semantico HTTP corretto perche' il client
 # inviato una richiesta che e' troppo grande per essere
-# materializzata in memoria.
+# materializzata in memoria
 
 MEMORY_LIMIT_EXCEEDED = "memory_limit_exceeded"
 """413: input/payload supera il limite di memoria configurato per
@@ -148,18 +145,13 @@ autorizzato"; NON usare per autenticazione mancante (401)."""
 
 
 # Domain-specific — Auth family
-# (BE-GO-READY-AUTH-DOMAIN-PROMOTION-001, ADR-0022)
 # Promozione dei call site auth-domain (auth.py + ownership.py) da
-# literal HTTPException a raise_typed_http preservando status code,
-# messaggio italiano user-facing e headers (`WWW-Authenticate`,
+# literal HTTPException a raise_typed_http preservando status code
+# messaggio italiano user-facing e headers (`WWW-Authenticate`
 # `Retry-After`). Nessun cambiamento comportamentale, nessuna nuova
-# disclosure.
-#
-# Disclosure policy: vedi ADR-0022 (auth disclosure policy).
-# Anti-enumeration invariants: ADR-0018 + ADR-0022 §"Anti-enumeration
-# invariants". I 4 invariants storici (login uniform-401, post-token
+# disclosure
+# Disclosure policy: vedi ADR-0022 (auth disclosure policy
 # uniform-401, admin reset/delete uniform-403, path-traversal
-# uniform-403) restano source-bound nei test esistenti.
 
 AUTH_TOKEN_MISSING = "auth_token_missing"
 """401 + WWW-Authenticate: Bearer. Token Bearer assente nella
@@ -280,16 +272,15 @@ AUTH_REVOCATION_UNAVAILABLE = "auth_revocation_unavailable"
 
 # Catalog set — drift detection
 # `KNOWN_DOMAIN_CODES` espone l'intero catalog domain-specific
-# (codici NON globali) come `frozenset[str]`. Usato dal test
+# codici NON globali) come `frozenset[str]`. Usato dal test
 # contract `test_error_codes_catalog.py` per il drift detection
 # source-bound: ogni `"error":\s*"<x>"` literal nei file
 # `app/core/**/*.py` deve essere in questo set o tra i codici
-# globali (`internal_error`, `canvas_corrupted`,
-# `validation_error`, `http_<status>`).
-#
+# globali (`internal_error`, `canvas_corrupted`
+# `validation_error`, `http_<status>`
 # Ricostruito automaticamente dalle costanti dichiarate sopra
 # per evitare drift fra costante e set. Frozen per immutabilita'
-# (non modificabile a runtime).
+# non modificabile a runtime
 KNOWN_DOMAIN_CODES: frozenset[str] = frozenset({
     CONNECTION_IN_USE,
     API_CONNECTION_IN_USE,
@@ -313,7 +304,7 @@ KNOWN_DOMAIN_CODES: frozenset[str] = frozenset({
     DATASOURCE_NOT_FOUND,
     TICKET_NOT_FOUND,
     EXTERNAL_SERVICE_UNREACHABLE,
-    # Memory/OOM family (BE-GO-READY-MEMORY-OOM-001)
+    # Memory/OOM family
     MEMORY_LIMIT_EXCEEDED,
     SERVICE_NOT_INITIALIZED,
     ACCESS_DENIED,
@@ -352,9 +343,9 @@ KNOWN_DOMAIN_CODES: frozenset[str] = frozenset({
     AUTH_REVOCATION_UNAVAILABLE,
 })
 
-# Codici globali (envelope-level): NON domain-specific.
+# Codici globali (envelope-level): NON domain-specific
 # Mantenuto separato perche' il drift detection deve permettere
-# entrambi (`error` puo' essere globale o domain).
+# entrambi (`error` puo' essere globale o domain
 KNOWN_GLOBAL_CODES: frozenset[str] = frozenset({
     INTERNAL_ERROR,
     CANVAS_CORRUPTED,
@@ -363,68 +354,60 @@ KNOWN_GLOBAL_CODES: frozenset[str] = frozenset({
 
 
 # Pattern accettati come `http_<status>` fallback intenzionale
-# (BE-GO-READY-ERROR-CODES-009-NOT-FOUND-PROMOTION)
 # Questi pattern di `raise HTTPException(<n>, "<msg>")` NON sono
 # residui da promuovere a codici domain. Sono stringhe locali
-# stabili gia' coperte semanticamente da:
-#   - `internal_error` (500 catch-all globale);
-#   - `http_<status>` per i casi senza valore di branching FE.
-#
+# stabili gia' coperte semanticamente da
+# `internal_error` (500 catch-all globale
+# `http_<status>` per i casi senza valore di branching FE
 # Documentati esplicitamente per evitare che il drift detection
-# li riconti come residui.
-#
+# li riconti come residui
 # Riferimento: classification audit
-# `BE-GO-READY-ERROR-CODES-008-STRING-DETAIL-CLASSIFICATION`,
-# sezione "B. ACCEPT_HTTP_STATUS_FALLBACK".
+# sezione "B. ACCEPT_HTTP_STATUS_FALLBACK"
 ACCEPTED_HTTP_FALLBACK_PATTERNS: frozenset[str] = frozenset({
-    # "internal_error_generic" promoted to raise_typed_http(INTERNAL_ERROR)
-    # in BE-GO-READY-ERROR-CODES-011. Zero residuals remain.
-    #
+    # "internal_error_generic" promoted to raise_typed_http(INTERNAL_ERROR
+    # in Zero residuals remain
     # `value_error_str_e` — translation di eccezioni dynamic-validation
     # in `HTTPException(detail=str(e))` o
-    # `detail=sanitize_http_detail(str(e))` (eseguibili).
-    #
-    # AUDIT BE-GO-READY-ERROR-CODES-015 (closure):
-    # ~40 call site in `app/core/<domain>/router*.py` (eseguibili,
-    # connections, datasources, tickets, features, projects, carica,
+    # `detail=sanitize_http_detail(str(e))` (eseguibili
+    # AUDIT (closure
+    # ~40 call site in `app/core/<domain>/router*.py` (eseguibili
+    # connections, datasources, tickets, features, projects, carica
     # arricchisci, files, estrai). Pattern unico: catturare un
-    # `ValueError`/sub-classe (`MimeMismatchError`,
+    # `ValueError`/sub-classe (`MimeMismatchError`
     # `SourceLoadingError`, `ProjectLineageCycleError`, builtin
     # `PermissionError`, `FileNotFoundError`, `JSONDecodeError`) e
-    # rilanciare 400/422/404/403 con il messaggio originale dinamico.
-    # Decisione: KEEP_DYNAMIC_VALIDATION_COMPAT.
-    #
-    # Razionale di chiusura:
+    # rilanciare 400/422/404/403 con il messaggio originale dinamico
+    # Decisione: KEEP_DYNAMIC_VALIDATION_COMPAT
+    # Razionale di chiusura
     # 1. Messaggio user-facing intrinsecamente dinamico (carica il
-    #    dettaglio della validazione: nome colonna mancante, formato
-    #    file non supportato, MIME mismatch, ciclo di lineage, path
-    #    fuori sandbox, ecc.). Un codice domain `validation_error_*`
-    #    per ogni variante non aggiunge branching FE: il FE mostra
-    #    sempre il messaggio italiano grezzo all'utente.
+    # dettaglio della validazione: nome colonna mancante, formato
+    # file non supportato, MIME mismatch, ciclo di lineage, path
+    # fuori sandbox, ecc.). Un codice domain `validation_error_*`
+    # per ogni variante non aggiunge branching FE: il FE mostra
+    # sempre il messaggio italiano grezzo all'utente
     # 2. Status code (400, 422) e' gia' sufficiente come hint di
-    #    famiglia per il FE (input non valido / payload non
-    #    processabile).
-    # 3. Codici granulari (es. `mime_mismatch`, `source_loading_failed`)
-    #    sarebbero ~10 codici aggiuntivi al catalog senza un caso
-    #    d'uso FE concreto: noise, non valore.
+    # famiglia per il FE (input non valido / payload non
+    # processabile
+    # 3. Codici granulari (es. `mime_mismatch`, `source_loading_failed`
+    # sarebbero ~10 codici aggiuntivi al catalog senza un caso
+    # d'uso FE concreto: noise, non valore
     # 4. Stable-error candidates esplicitamente tracciati (NOT in
-    #    questo batch — vedi follow-up):
-    #       a. `CredentialUnavailableError` -> 422 (8 sites: 5
-    #          connections, 1 datasources/test, 2 arricchisci/test).
-    #          Candidato a `credential_unavailable` se il FE deve
-    #          guidare l'admin a reinserire la password decrypt-fail.
-    #       b. `_ds_error_to_http` translator (3 sites: datasources
-    #          file ops). 404/403/502 con dynamic msg da
-    #          `DataSourceFileNotFoundError`/`DataSourcePermissionError`/
-    #          `DataSourceConnectionError`. Da valutare in batch
-    #          dedicato CONNECTION_ENGINE.
-    #       c. `SourceLoadingError` -> 403 in carica/router.py:394
-    #          (defense-in-depth cross-tenant). Possibile promotion a
-    #          `ACCESS_DENIED` in batch AUTH_DOMAIN_ADR-001.
-    # 5. Source-bound coverage:
-    #    `tests2/shared/test_error_codes_catalog.py::test_value_error_str_e_callsite_lock`
-    #    blocca il count per file per evitare drift silente. Aggiunte
-    #    o rimozioni richiedono aggiornamento esplicito del lock e
-    #    classificazione del nuovo sito.
+    # questo batch — vedi follow-up
+    # a. `CredentialUnavailableError` -> 422 (8 sites: 5
+    # connections, 1 datasources/test, 2 arricchisci/test
+    # Candidato a `credential_unavailable` se il FE deve
+    # guidare l'admin a reinserire la password decrypt-fail
+    # b. `_ds_error_to_http` translator (3 sites: datasources
+    # file ops). 404/403/502 con dynamic msg da
+    # `DataSourceFileNotFoundError`/`DataSourcePermissionError`/
+    # `DataSourceConnectionError`. Da valutare in batch
+    # dedicato CONNECTION_ENGINE
+    # c. `SourceLoadingError` -> 403 in carica/router.py:394
+    # defense-in-depth cross-tenant). Possibile promotion a
+    # `ACCESS_DENIED` in
+    # `tests2/shared/test_error_codes_catalog.py::test_value_error_str_e_callsite_lock`
+    # blocca il count per file per evitare drift silente. Aggiunte
+    # o rimozioni richiedono aggiornamento esplicito del lock e
+    # classificazione del nuovo sito
     "value_error_str_e",
 })

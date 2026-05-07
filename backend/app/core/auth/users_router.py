@@ -1,7 +1,6 @@
 """
 Auth users admin CRUD router — typed boundary.
 
-BE-GO-READY-AUTH-ENGINE-003-USERS-ROUTER-EXTRACTION.
 """
 
 from __future__ import annotations
@@ -36,7 +35,7 @@ def _get_current_user_proxy(
     credentials: HTTPAuthorizationCredentials | None = Depends(_security),
 ) -> CurrentUser:
     """Lazy proxy to avoid `users_router -> auth.py -> users_router` cycle.
-    BE-GO-READY-AUTH-ENGINE-019: import moved to `dependencies` leaf.
+     import moved to `dependencies` leaf.
     """
     from app.core.auth.dependencies import get_current_user
 
@@ -57,7 +56,7 @@ def list_users(current_user: CurrentUser = Depends(require_admin)):
     """
     Lista utenti.
     superadmin → tutti gli utenti di tutti i gruppi
-    admin      → solo utenti del proprio gruppo
+    admin → solo utenti del proprio gruppo
     """
     if current_user.role == "superadmin":
         from app.db.config.users import list_all_users
@@ -73,7 +72,7 @@ def create_user(data: UserCreate, current_user: CurrentUser = Depends(require_ad
     """
     Crea nuovo utente.
     superadmin → qualsiasi gruppo, qualsiasi ruolo (viewer/user/admin/superadmin)
-    admin      → solo nel proprio gruppo, solo ruolo viewer o user
+    admin → solo nel proprio gruppo, solo ruolo viewer o user
     """
     if data.role not in VALID_ROLES:
         raise HTTPException(
@@ -112,7 +111,7 @@ def update_user(user_id: str, data: dict,
     """
     Aggiorna utente.
     superadmin → può cambiare role e group_id
-    admin      → solo email e is_active, solo nel proprio gruppo
+    admin → solo email e is_active, solo nel proprio gruppo
 
     SECURITY hardening:
       - Whitelist dei campi consentiti per ruolo
@@ -131,14 +130,14 @@ def update_user(user_id: str, data: dict,
     # Fail-fast sui campi sensibili non gestiti qui: meglio errore esplicito
     # del drop silenzioso. Storicamente il frontend mandava `password` nel
     # payload di PUT e il backend lo scartava senza segnalare: l'utente
-    # credeva di aver cambiato password mentre restava la vecchia.
+    # credeva di aver cambiato password mentre restava la vecchia
     if "password" in data:
         raise HTTPException(
             status_code=400,
             detail="Per cambiare password usa POST /users/{id}/reset-password",
         )
     # group_id non e' aggiornabile qui: spostare un utente tra gruppi
-    # e' operazione separata (nessun endpoint implementato oggi).
+    # e' operazione separata (nessun endpoint implementato oggi
     if "group_id" in data and current_user.role != "superadmin":
         _disclosure.raise_disclosure(_disclosure.field_role_restricted_group_id())
 
@@ -150,7 +149,7 @@ def update_user(user_id: str, data: dict,
     if not fields:
         raise HTTPException(status_code=400, detail="Nessun campo aggiornabile fornito")
 
-    # Type checking strict (no coercion automatica)
+    # Type checking strict (no coercion automatica
     if "email" in fields:
         if not isinstance(fields["email"], str) or not fields["email"]:
             raise HTTPException(status_code=400, detail="email deve essere una stringa non vuota")
@@ -195,7 +194,7 @@ def reset_password(user_id: str, data: ResetPasswordRequest,
     """
     Reset password di un utente (senza richiedere la vecchia).
     superadmin → qualsiasi utente
-    admin      → solo utenti del proprio gruppo
+    admin → solo utenti del proprio gruppo
     """
     target = db.get_user(user_id)
     # C10: response uniforme 403 per admin non-superadmin, sia che
@@ -203,13 +202,13 @@ def reset_password(user_id: str, data: ResetPasswordRequest,
     # user enumeration (admin malevolo non puo' distinguere i due
     # casi per mappare gli utenti di altri gruppi). Superadmin
     # mantiene 404 perche' ha visibilita' totale e la distinzione
-    # e' informazione gia' accessibile per loro.
+    # e' informazione gia' accessibile per loro
     if not target or (
         current_user.role != "superadmin"
         and target.get("group_id") != current_user.group_id
     ):
-        # Anti-enum #3 — invariante encoded in disclosure.admin_target_not_visible:
-        # superadmin sees 404 USER_NOT_FOUND, admin sees uniform 403 ACCESS_DENIED.
+        # Anti-enum #3 — invariante encoded in disclosure.admin_target_not_visible
+        # superadmin sees 404 USER_NOT_FOUND, admin sees uniform 403 ACCESS_DENIED
         _disclosure.raise_disclosure(
             _disclosure.admin_target_not_visible(
                 is_superadmin=(current_user.role == "superadmin")
@@ -229,13 +228,13 @@ def delete_user(user_id: str, current_user: CurrentUser = Depends(require_admin)
     """
     Elimina utente.
     superadmin → qualsiasi utente
-    admin      → solo nel proprio gruppo, non se stesso
+    admin → solo nel proprio gruppo, non se stesso
     """
     if user_id == current_user.user_id:
         _disclosure.raise_disclosure(_disclosure.self_delete_denied())
 
     target = db.get_user(user_id)
-    # C10: stesso pattern di reset-password — anti-enum #3 invariant.
+    # C10: stesso pattern di reset-password — anti-enum #3 invariant
     if not target or (
         current_user.role != "superadmin"
         and target.get("group_id") != current_user.group_id

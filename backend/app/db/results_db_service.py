@@ -36,7 +36,7 @@ def save_result(result_id: str, project_id: str, group_id: str,
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc).isoformat()
 
-    # size_bytes: esplicito se S3 (caller lo conosce), altrimenti da len(data)
+    # size_bytes: esplicito se S3 (caller lo conosce), altrimenti da len(data
     if size_bytes is None:
         size_bytes = len(data) if data else 0
 
@@ -65,7 +65,7 @@ def get_result(result_id: str) -> Optional[Dict]:
 def _s3_download_bytes(storage_key: str) -> Optional[bytes]:
     """Scarica un oggetto S3-backed come bytes. None su errore loggato.
 
-    BE-GO-READY-RESOURCE-ENGINE-002: thin back-compat wrapper su
+     thin back-compat wrapper su
     ``app.core.resources.loaders.result_blob._download_object_storage``.
     Le firma e la semantica observable sono invariate (gli stessi log
     "[PERF] s3_download op=get_bytes" + "[FS-4] S3 download skip"
@@ -79,24 +79,11 @@ def _s3_download_bytes(storage_key: str) -> Optional[bytes]:
 
 
 def get_result_data(result_id: str, group_id: str = None) -> Optional[bytes]:
-    """Recupera blob risultato. group_id=None → no filter (backward compat).
+    """Recupera un blob risultato tramite il Resource Engine.
 
-    FS-4: se `storage_key` e' presente sulla row, scarica da S3 invece
-    che leggere BYTEA. Semantica caller-side invariata (bytes in memory).
-
-    BE-GO-READY-RESOURCE-ENGINE-002: thin back-compat shim sopra
-    ``ResultBlobLoader``. Quando un caller fornisce ``group_id``, il
-    filtro SQL fail-closes esattamente come pre-pilot. Quando
-    ``group_id=None`` (legacy router/orchestrator path) la semantica
-    fail-open di prima e' preservata, instradata pero' attraverso la
-    SAME dispatch dello shim consolidato. La duplicazione tra
-    ``get_result_data`` e ``_s3_download_bytes`` (storage_key
-    branching) e' chiusa da questo shim.
-
-    Nuovi caller dovrebbero costruire un ``ResourceRef`` ed invocare
-    il registry direttamente; i 2 caller esistenti
-    (``project_service.get_result_data`` wrapper, router orchestrator)
-    continuano a funzionare senza migrazione atomica.
+    Se `group_id` e' valorizzato, il loader applica il filtro tenant.
+    Se manca, mantiene la semantica dei caller interni che risolvono
+    l'autorizzazione a monte.
     """
     from app.core.resources.loaders.result_blob import _dispatch_by_id
 
@@ -130,9 +117,9 @@ def list_results(project_id: str) -> List[Dict]:
 def delete_result(result_id: str) -> bool:
     """Elimina result. Se S3-backed, pulisce anche l'oggetto S3 (best-effort).
 
-    Flow (BE-GO-READY-STORAGE-ENGINE-007 — W1 race coverage):
+    Flow ( — W1 race coverage):
 
-      1. `transaction()`: SELECT storage_key + DELETE row + (se
+      1. `transaction`: SELECT storage_key + DELETE row + (se
          S3-backed) `record_pending` ⇒ tutto atomico.
       2. Commit (uscita CM): row DB sparita + entry pending nel
          reconciliation log.
@@ -140,11 +127,11 @@ def delete_result(result_id: str) -> bool:
       4. Outcome:
          - `ok`/`skipped` ⇒ `mark_done(reconciliation_ref.id)`;
          - `failed` ⇒ `mark_failed_attempt(...)` ⇒ il reconciler
-           beat hook (BE-GO-READY-STORAGE-ENGINE-006) re-tenterà
+           beat hook  re-tenterà
            secondo backoff esponenziale, fino a `mark_lost`.
 
     ADR-0011 contract preservato: storage failure NON propaga; la
-    row DB resta cancellata. La differenza vs pre-batch 007 e' che
+    row DB resta cancellata. La differenza vs pre-e' che
     l'orphan e' ora **tracked** + retry-able.
 
     Backward-compat: row con `storage_key=None` (BYTEA legacy) salta
@@ -166,13 +153,13 @@ def delete_result(result_id: str) -> bool:
 
             if storage_key:
                 storage_key_to_clean = storage_key
-                # BE-GO-READY-STORAGE-ENGINE-007: record cleanup intent
+                # record cleanup intent
                 # inside the same transaction as the DELETE. Commit
                 # advances both atomically; if a process death follows
                 # the commit before the post-commit storage call, the
                 # pending row is the only application-side trace of
                 # the orphan. Order canonical W1 (allineato a
-                # `delete_file_source`): record_pending PRECEDE DELETE.
+                # `delete_file_source`): record_pending PRECEDE DELETE
                 from app.shared.storage_reconciliation import (
                     record_pending,
                 )
@@ -217,9 +204,9 @@ def delete_results_for_project(project_id: str) -> int:
     """Elimina tutti i risultati di un progetto. Ritorna il numero di
     righe eliminate.
 
-    Flow (BE-GO-READY-STORAGE-ENGINE-007): pattern bulk W1.
+    Flow : pattern bulk W1.
       1. Pre-fetch `(id, storage_key)` di tutti gli S3-backed.
-      2. `transaction()`: per ognuno `record_pending` + DELETE row.
+      2. `transaction`: per ognuno `record_pending` + DELETE row.
       3. Post-commit: per ogni reconciliation_ref, `compensating_delete`
          + `mark_done`/`mark_failed_attempt` per outcome.
 
@@ -232,7 +219,7 @@ def delete_results_for_project(project_id: str) -> int:
     ADR-0011 preservato: storage failure NON propaga. Il caller
     riceve sempre il `rowcount` finale.
     """
-    # Pre-fetch storage_keys + result_id prima del DELETE cascata.
+    # Pre-fetch storage_keys + result_id prima del DELETE cascata
     rows = [
         r for r in fetchall(
             "SELECT id, storage_key FROM results "
@@ -243,7 +230,7 @@ def delete_results_for_project(project_id: str) -> int:
     ]
 
     deleted_count = 0
-    # (storage_key, result_id, reconciliation_id) per il post-commit.
+    # storage_key, result_id, reconciliation_id) per il post-commit
     pending_cleanups: List[tuple] = []
 
     with transaction() as conn:
@@ -273,7 +260,7 @@ def delete_results_for_project(project_id: str) -> int:
             )
             deleted_count = cur.rowcount
 
-    # Cleanup S3 dopo DELETE ok (anche se uno fallisce, altri provano).
+    # Cleanup S3 dopo DELETE ok (anche se uno fallisce, altri provano
     if pending_cleanups:
         from app.shared.storage_compensation import compensating_delete
         from app.shared.storage_reconciliation import (

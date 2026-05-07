@@ -1,7 +1,6 @@
 """
 Shared micro-utilities for Resource Engine loaders.
 
-BE-GO-READY-ARCH-055-W5-RESOURCE-CONTRACT-SIMPLIFICATION.
 """
 
 from __future__ import annotations
@@ -88,10 +87,10 @@ def _download_object_storage_impl(
             )
             return None
         stream = storage.get_object_stream(storage_key)
-        # Bounded read: aborts iteration on first cap-exceeding chunk.
+        # Bounded read: aborts iteration on first cap-exceeding chunk
         # MemoryLimitExceededError propagates past the broad-except
         # below (oversize is a security/resource signal, not a
-        # connectivity error).
+        # connectivity error
         try:
             data = read_stream_bounded(
                 stream["body"],
@@ -116,7 +115,7 @@ def _download_object_storage_impl(
         )
         return data
     except MemoryLimitExceededError:
-        # Oversize is the contract for the caller; do NOT swallow.
+        # Oversize is the contract for the caller; do NOT swallow
         raise
     except Exception as e:
         duration_ms = round((time.monotonic() - _t0) * 1000, 1)

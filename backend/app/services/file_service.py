@@ -21,9 +21,9 @@ import pandas as pd
 # Non bloccante — i file vengono letti correttamente nonostante il warning
 warnings.filterwarnings("ignore", message=".*GeoPackage user_version.*may only be partially supported.*")
 
-# Logger module-level per helper senza accesso a self._logger (es. _rmtree_safe,
+# Logger module-level per helper senza accesso a self._logger (es. _rmtree_safe
 # DefaultDataLoader): gli altri percorsi del service usano self._logger iniettato
-# via LoggerProtocol. Fallback stdlib per esecuzione standalone di test.
+# via LoggerProtocol. Fallback stdlib per esecuzione standalone di test
 try:
     from app.utils.logger import get_logger as _get_logger
     _logger = _get_logger(__name__)
@@ -48,7 +48,7 @@ except ImportError:
     _USE_APP_MODELS = False
 
 
-# Usate solo quando app.models non è disponibile (test standalone)
+# Usate solo quando app.models non è disponibile (test standalone
 
 if not _USE_APP_MODELS:
     @dataclass
@@ -108,17 +108,16 @@ if not _USE_APP_MODELS:
             return cls(**data)
 
 
-#
-# STRUCT-001 Seam B: i 4 Protocols (Logger/FileSystem/DataLoader/TimeProvider)
+# STRUCT-001 Seam B: i 4 Protocols (Logger/FileSystem/DataLoader/TimeProvider
 # e le 4 Default impls (NullLogger/DefaultTimeProvider/DefaultFileSystem/
-# DefaultDataLoader) vivono in `app.services.file_service_deps`.
-# Re-export per backward-compat coi test che importano direttamente
-# (test_file_service_filesystem_contract usa DefaultFileSystem,
+# DefaultDataLoader) vivono in `app.services.file_service_deps`
+# compatibility export per backward-compat coi test che importano direttamente
+# test_file_service_filesystem_contract usa DefaultFileSystem
 # test_n1_file_service_cross_tenant_contract usa DefaultTimeProvider) e
 # per `FileSourceService.__init__` che continua a istanziare i Default
-# come fallback (`self._fs = filesystem or DefaultFileSystem()`).
+# come fallback (`self._fs = filesystem or DefaultFileSystem`
 
-from app.services.file_service_deps import (  # noqa: F401  (re-export pubblico)
+from app.services.file_service_deps import (  # noqa: F401 (compatibility export pubblico
     LoggerProtocol,
     FileSystemProtocol,
     DataLoaderProtocol,
@@ -130,7 +129,7 @@ from app.services.file_service_deps import (  # noqa: F401  (re-export pubblico)
 )
 
 
-from app.shared.file_helpers import (  # noqa: F401  (re-export pubblico)
+from app.shared.file_helpers import (  # noqa: F401 (compatibility export pubblico
     FormatDetector,
     TypeInferrer,
     FileIdGenerator,
@@ -138,17 +137,17 @@ from app.shared.file_helpers import (  # noqa: F401  (re-export pubblico)
 )
 
 
-# Classe FileService: CRUD completo per file source con DI.
-# Gestisce il ciclo di vita dei file caricati dall'utente come sorgenti dati.
-# Usa Dependency Injection per testabilità: ogni dipendenza esterna (filesystem,
-# data loader, logger, time) è iniettabile con un mock nei test.
+# Classe FileService: CRUD completo per file source con DI
+# Gestisce il ciclo di vita dei file caricati dall'utente come sorgenti dati
+# Usa Dependency Injection per testabilità: ogni dipendenza esterna (filesystem
+# data loader, logger, time) è iniettabile con un mock nei test
 
 
-# STRUCT-001 Seam D-C: la logica vive in `app.shared.file_cleanup.rmtree_safe`.
+# STRUCT-001 Seam D-C: la logica vive in `app.shared.file_cleanup.rmtree_safe`
 # Wrapper compat per i call site interni che usano `_rmtree_safe(path)` senza
 # passare logger esplicito. La funzione condivisa accetta `logger=None` e usa
 # il logger del modulo come fallback (best-effort silenzioso); qui passiamo
-# `_logger` del modulo file_service per preservare il naming dei log.
+# `_logger` del modulo file_service per preservare il naming dei log
 
 def _rmtree_safe(path, _retries: int = 3) -> None:
     """Wrapper compat: delega a `app.shared.file_cleanup.rmtree_safe`."""
@@ -206,7 +205,7 @@ class FileSourceService:
     def _detect_format(self, filename: str) -> str:
         return self._format_detector.detect(filename)
     
-    # Per file multi-layer (GPKG, XLSX, SHP in directory, FileGDB).
+    # Per file multi-layer (GPKG, XLSX, SHP in directory, FileGDB
     
     def list_layers(self, file_path: Path) -> List[str]:
         """Lista layer in un file GDB o GPKG"""
@@ -227,7 +226,7 @@ class FileSourceService:
 
     # Sentinel per bypass esplicito superadmin. L'uso di questo valore
     # scrive un log INFO (audit trail); pass-through di un group_id
-    # valido e' lo scenario normale.
+    # valido e' lo scenario normale
     SUPERADMIN_BYPASS: str = "*"
 
     def _assert_visible(self, file_id: str, expected_group_id: str) -> None:
@@ -292,7 +291,7 @@ class FileSourceService:
                 return
         except Exception as e:
             # In caso di fallimento del check shared (es. tabella share
-            # non esistente o DB glitch), FAIL-CLOSED: nega accesso.
+            # non esistente o DB glitch), FAIL-CLOSED: nega accesso
             self._logger.warning(
                 f"[N1] check sharing fallito per {file_id}, nego accesso: {e}"
             )
@@ -307,11 +306,11 @@ class FileSourceService:
             f"'{expected_group_id}'"
         )
 
-    # Carica DataFrame da file con gestione automatica formato e layer.
+    # Carica DataFrame da file con gestione automatica formato e layer
     # La definizione canonica di `load_dataframe` e' piu' in basso
-    # (~riga 1200): estrae blob dal DB in temp file, carica via parser,
+    # ~riga 1200): estrae blob dal DB in temp file, carica via parser
     # cleanup garantito con cleanup robusto (SHP/GDB necessitano rmtree
-    # della temp dir parent, non solo unlink del file).
+    # della temp dir parent, non solo unlink del file
 
     def _load_by_format(
         self,
@@ -334,17 +333,16 @@ class FileSourceService:
             logger=self._logger,
         )
     
-    # Upload, lista, preview, aggiornamento, eliminazione file source.
-    # Lettura, creazione, aggiornamento, eliminazione file source.
-    # Tutti i metodi usano il Protocol filesystem per I/O,
-    # permettendo mock completi nei test unitari.
+    # Upload, lista, preview, aggiornamento, eliminazione file source
+    # Lettura, creazione, aggiornamento, eliminazione file source
+    # Tutti i metodi usano il Protocol filesystem per I/O
+    # permettendo mock completi nei test unitari
     
-    #
     # STRUCT-001 Seam C: la logica policy-aware (db/object_storage/hybrid +
-    # threshold) vive in `app.services.file_storage_dispatch.dispatch_blob_storage`.
+    # threshold) vive in `app.services.file_storage_dispatch.dispatch_blob_storage`
     # Qui resta un thin wrapper che inietta `self._logger`. I 3 call site
     # interni (`self._dispatch_blob_storage(...)` in upload methods) restano
-    # invariati. Behavior byte-per-byte preservato.
+    # invariati. Behavior byte-per-byte preservato
 
     def _dispatch_blob_storage(
         self, file_id: str, raw_data: bytes, filename: str, **kwargs,
@@ -384,7 +382,6 @@ class FileSourceService:
     ) -> Optional[bytes]:
         """Read the file_source blob, fail-soft.
 
-        BE-GO-READY-RESOURCE-ENGINE-020-FILE-SOURCE-BLOB-LOADER:
         the storage-read primitive lives in
         ``app.core.resources.loaders.file_source_blob.FileSourceBlobLoader``.
         This wrapper:
@@ -426,8 +423,8 @@ class FileSourceService:
         from app.shared.exceptions import MemoryLimitExceededError
 
         # `_assert_visible` re-raises PermissionError to the caller
-        # (kept identical to pre-020 behavior). After it returns,
-        # the caller has been authorized for this file_source.
+        # kept identical to pre-020 behavior). After it returns
+        # the caller has been authorized for this file_source
         self._assert_visible(file_id, expected_group_id or "")
 
         is_superadmin_caller = expected_group_id == self.SUPERADMIN_BYPASS
@@ -449,9 +446,9 @@ class FileSourceService:
             # Owned-path SQL filter excluded the row. Either the
             # file genuinely does not exist OR `_assert_visible`
             # authorized via *_shares. Retry with bypass: the
-            # engine's audit log records the cross-group fetch.
+            # engine's audit log records the cross-group fetch
             if is_superadmin_caller:
-                # First shot already had bypass; no further retry.
+                # First shot already had bypass; no further retry
                 return None
             try:
                 return _fetch(is_superadmin=True)
@@ -488,11 +485,11 @@ class FileSourceService:
         the on-disk path (for SHP/GDB: returns the path of the .shp
         / .gdb inside an extracted tempdir; caller cleans the parent).
 
-        BE-GO-READY-RESOURCE-ENGINE-024 (legacy helper retired):
+         (legacy helper retired):
         the bytes fetch routes through ``self._get_blob_from_db``
         (which itself goes through the Resource Engine via
         ``FileSourceBlobLoader`` since RESOURCE-ENGINE-020). The
-        SHP/GDB ZIP extraction + single-file tempfile materialization
+        SHP/GDB ZIP separation + single-file tempfile materialization
         live INLINE here -- the previously-shared
         ``app.services.file_blob_materialization.temp_file_for``
         wrapper has been deleted, eliminating the legacy duplicate
@@ -504,7 +501,7 @@ class FileSourceService:
         cross-tenant access not authorized by ownership OR shared-
         via-table. SHP/GDB cleanup is preserved verbatim from the
         pre-024 helper: the tmpdir is rmtree'd on every error path
-        (zip-extraction failure, no .shp/.gdb found inside).
+        (zip-separation failure, no .shp/.gdb found inside).
 
         N1: ``expected_group_id`` obbligatorio (fail-closed via
         ``_assert_visible`` invocato da ``_get_blob_from_db``).
@@ -518,7 +515,7 @@ class FileSourceService:
         import app.db.db_service as db
 
         # Metadata fetch (no blob): we need ``format`` +
-        # ``original_filename`` to choose extension / extraction mode.
+        # ``original_filename`` to choose extension / separation mode
         try:
             row_meta = db.get_file_source(file_id, include_data=False)
         except Exception as e:
@@ -534,7 +531,7 @@ class FileSourceService:
         # fail-soft contract (returns None on missing row /
         # capability disabled / oversize / fetch failure). Pre-024
         # the legacy helper duplicated those checks via injected
-        # callbacks; post-024 they live in exactly one place.
+        # callbacks; post-024 they live in exactly one place
         blob = self._get_blob_from_db(file_id, expected_group_id)
         if not blob:
             return None
@@ -544,9 +541,9 @@ class FileSourceService:
 
         # SHP / GDB: blob is a ZIP - extract into a tempdir and return
         # the .shp / .gdb path. Caller cleans up the tempdir parent
-        # after use. We clean up ONLY error paths here (extraction
+        # after use. We clean up ONLY error paths here (separation
         # failure or zip valid but no .shp/.gdb inside): without it
-        # every malformed shapefile would leak a tempdir per worker.
+        # every malformed shapefile would leak a tempdir per worker
         if fmt in ("shp", "gdb"):
             tmp_dir = Path(tempfile.mkdtemp(dir=settings.TEMP_DIR))
             try:
@@ -570,15 +567,15 @@ class FileSourceService:
                 self._logger.error(
                     f"[GESTITO] Errore estrazione {fmt.upper()} zip {file_id}: {e}"
                 )
-            # Cleanup tmp_dir on both error paths (extraction
+            # Cleanup tmp_dir on both error paths (separation
             # exception OR valid zip without .shp/.gdb): the
-            # alternative leaks a tempdir per malformed shapefile.
+            # alternative leaks a tempdir per malformed shapefile
             rmtree_safe(tmp_dir)
             return None
 
         # Single-file format: materialize the blob with the
         # original filename's suffix so downstream readers can
-        # dispatch by extension.
+        # dispatch by extension
         suffix = Path(original_filename).suffix or ".bin"
         tmp = tempfile.NamedTemporaryFile(
             delete=False, suffix=suffix, dir=settings.TEMP_DIR,
@@ -599,7 +596,7 @@ class FileSourceService:
             metadata = row.get("metadata") or {}
             if isinstance(metadata, str):
                 metadata = json.loads(metadata)
-            # Inietta group_id e created_by dal record DB (colonne separate)
+            # Inietta group_id e created_by dal record DB (colonne separate
             metadata["group_id"] = row.get("group_id", "")
             metadata["created_by"] = row.get("created_by")
             if _USE_APP_MODELS:
@@ -627,13 +624,13 @@ class FileSourceService:
         """Lista file source dal DB.
 
         - group_id=None → no filter (usato dal superadmin per vedere tutti i gruppi)
-        - group_id="X"  → solo file del gruppo X
+        - group_id="X" → solo file del gruppo X
         """
         try:
             import app.db.db_service as db
-            # NB: NON applicare DEFAULT_GROUP come fallback. Se group_id è None,
+            # NB: NON applicare DEFAULT_GROUP come fallback. Se group_id è None
             # significa "no filter" (superadmin); altrimenti il superadmin vedrebbe
-            # solo i file del gruppo default invece di tutti.
+            # solo i file del gruppo default invece di tutti
             rows = db.list_file_sources(group_id)
             files = []
             for row in rows:
@@ -752,7 +749,7 @@ class FileSourceService:
         `app.services.file_multi_layer_upload.create_multi_layer_from_upload`
         con collaborator espliciti. Behavior byte-per-byte preservato:
         MIME defense-in-depth sempre attiva, ZIP unwrap solo `.gpkg`/`.gdb`,
-        loop per-layer best-effort, batch save atomico (E3 transactional
+        loop per-layer best-effort, atomico (E3 transactional
         all-or-nothing) con cleanup compensativo del shared storage_key
         su rollback, cleanup asimmetrico (os.unlink per file + rmtree_safe
         per dir).
@@ -767,19 +764,18 @@ class FileSourceService:
         import app.db.db_service as db
 
         # BE-HARDEN-001C E3: callback `delete_blob` per cleanup compensativo
-        # del shared storage_key se la transazione batch fallisce. Lazy
+        # del shared storage_key se la transazione Lazy
         # binding sul cloud backend: in BYTEA mode il caller non chiamera'
-        # mai questa fn (storage_key is None).
-        #
-        # BE-GO-READY-STORAGE-ENGINE-002: delegato all'helper unificato
+        # mai questa fn (storage_key is None
+        # delegato all'helper unificato
         # `app.shared.storage_compensation.compensating_delete`. L'helper
         # gestisce capability-disabled (skip silente) e delete failure
-        # (log strutturato, mai solleva). Il wrapper-side
+        # log strutturato, mai solleva). Il wrapper-side
         # `event=orphan_blob_cleanup_failed` log in
         # `file_multi_layer_upload` non scatta piu' (delete_blob non
         # solleva); l'evento ora canonico e'
         # `event=storage_compensating_delete_failed` con
-        # `domain=file_source_multi_layer`.
+        # `domain=file_source_multi_layer`
         def _delete_blob(storage_key: str) -> None:
             from app.shared.storage_compensation import compensating_delete
             compensating_delete(
@@ -844,9 +840,9 @@ class FileSourceService:
         if 'layer' in update_data or 'sheet' in update_data:
             try:
                 # N1: update interno — il file e' appena stato recuperato
-                # e il caller (router) ha gia' validato l'ownership.
+                # e il caller (router) ha gia' validato l'ownership
                 # Passiamo il group_id reale del file come "expected" per
-                # il fail-closed del helper.
+                # il fail-closed del helper
                 df, gdf = self.load_dataframe(
                     file_id, expected_group_id=file_source.group_id,
                 )
@@ -863,8 +859,8 @@ class FileSourceService:
         try:
             db.update_file_source_metadata(file_id, metadata)
         except Exception:
-            # Fallback: riscrivi il record completo.
-            # Recupera il group_id originale dal DB invece di usare "default".
+            # Fallback: riscrivi il record completo
+            # Recupera il group_id originale dal DB invece di usare "default"
             from app.config import settings
             existing_row = db.get_file_source(file_id, include_data=False) or {}
             db.save_file_source(
@@ -925,7 +921,7 @@ class FileSourceService:
 
         STRUCT-001 Seam D-A: la logica vive in
         `app.services.file_preview_temp.preview_file_temp` come
-        funzione standalone go-ready (collaborator espliciti via kwargs,
+        funzione standalone portable (collaborator espliciti via kwargs,
         no DB, no auth). Qui passiamo i collaborator del service.
         """
         from app.services.file_preview_temp import preview_file_temp as _preview
@@ -942,8 +938,8 @@ class FileSourceService:
         )
 
 
-# Costruisce FileService con tutte le dipendenze di produzione.
-# Per creare istanze con dependency injection personalizzata (test, ambienti custom)
+# Costruisce FileService con tutte le dipendenze di produzione
+# Per creare istanze con dependency injection personalizzata (test, ambienti custom
 
 def create_file_service(
     filesystem: FileSystemProtocol = None,
@@ -956,8 +952,8 @@ def create_file_service(
     )
 
 
-# Istanza globale per uso da router FastAPI (evita ri-creazione ad ogni richiesta).
-# Per test, usare create_file_service() con mock iniettati.
+# Istanza globale per uso da router FastAPI (evita ri-creazione ad ogni richiesta
+# Per test, usare create_file_service con mock iniettati
 def _create_production_service() -> FileSourceService:
     """Crea service con configurazione di produzione"""
     try:

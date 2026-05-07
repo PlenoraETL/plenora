@@ -12,7 +12,7 @@ class CanvasNode:
 
     Properties
     ----------
-    id:   node identifier (empty string if absent)
+    id: node identifier (empty string if absent)
     type: node type string, e.g. ``"api_enrich"``, ``"file_source"``
     data: the nested config dict at ``node['data']`` (always a dict)
     """

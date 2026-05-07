@@ -21,10 +21,10 @@ class LockHeartbeat:
 
     Uso (wrapper compat — pattern attuale):
         hb = LockHeartbeat(concurrency, schedule_id, interval)
-        hb.start()
-        state = hb.get_state_dict()  # reference live, NON copia
+        hb.start
+        state = hb.get_state_dict # reference live, NON copia
         ...
-        hb.stop()  # set stop_event + join(timeout=5s)
+        hb.stop # set stop_event + join(timeout=5s)
     """
 
     def __init__(
@@ -39,7 +39,7 @@ class LockHeartbeat:
         self._interval = interval
         self._stop_event = threading.Event()
         # R-05 seam: in produzione usa WALL_CLOCK (stop_event.wait); i test
-        # iniettano FakeClock per avanzare il tempo deterministicamente.
+        # iniettano FakeClock per avanzare il tempo deterministicamente
         self._clock: Clock = clock if clock is not None else WALL_CLOCK
         self._state: Dict[str, Any] = {
             "stop_event": self._stop_event,
@@ -81,13 +81,13 @@ class LockHeartbeat:
         `_state["_hb"] = self`. E' una leaky abstraction documentata,
         non un bug: l'unica alternativa (dict copia) perderebbe la
         reference live su `lock_lost` e romperebbe il contract verso
-        `execute()`. Risoluzione completa richiede c2 (uso del context
-        manager direttamente in `execute()`), che e' deferred.
+        `execute`. Risoluzione completa richiede c2 (uso del context
+        manager direttamente in `execute`), che e' deferred.
 
         Effetti collaterali del ciclo `_state["_hb"] = self`:
           - GC: Python gestisce cicli, no leak reale
           - lettori del dict: vedono una chiave extra `_hb` oltre a
-            `stop_event`, `thread`, `lock_lost`. `execute()` legge solo
+            `stop_event`, `thread`, `lock_lost`. `execute` legge solo
             `lock_lost`, ignora il resto: safe
           - test che assert su shape esatta del dict devono prevedere
             `_hb` se istanziato via wrapper, NON se istanziato diretto
@@ -101,19 +101,19 @@ class LockHeartbeat:
         return bool(self._state.get("lock_lost", False))
 
     # Internal loop — copiato 1:1 da execution_manager._start_lock_heartbeat
-    # (line 152-200 pre-refactor). Niente behavior change.
+    # line 152-200 pre-refactor). Niente behavior change
 
     def _heartbeat_loop(self) -> None:
         # Usa clock.wait(stop_event, timeout): in produzione e' equivalente
         # a stop_event.wait(timeout) (singleton WALL_CLOCK), nei test e'
-        # FakeClock che avanza il tempo virtuale via advance(). Lo stop
-        # resta deterministico (set() del stop_event sblocca subito).
+        # FakeClock che avanza il tempo virtuale via advance. Lo stop
+        # resta deterministico (set del stop_event sblocca subito
         while not self._clock.wait(self._stop_event, self._interval):
             try:
                 ok = self._concurrency.refresh_lock(self._schedule_id)
             except Exception as e:
                 # Transient DB blip: logga warning ma continua
-                # (il prossimo tick riprovera').
+                # il prossimo tick riprovera'
                 logger.warning(
                     f"[HEARTBEAT] refresh_lock exception per "
                     f"{self._schedule_id}: {e}"
@@ -126,7 +126,7 @@ class LockHeartbeat:
             # refresh_lock ritornato False: il lock e' scaduto o
             # rilasciato. Tenta re-acquire — se riesce, nessuno ha
             # ripreso nel frattempo; se fallisce, un altro processo
-            # sta potenzialmente eseguendo lo stesso schedule.
+            # sta potenzialmente eseguendo lo stesso schedule
             try:
                 reacquired = self._concurrency.try_acquire(self._schedule_id)
             except Exception as e:
@@ -144,8 +144,8 @@ class LockHeartbeat:
                 )
             else:
                 # Un altro processo detiene il lock. Segnaliamo
-                # nello state cosi' execute() puo' portarlo nel
-                # result come warning di esecuzione non piu' protetta.
+                # nello state cosi' execute puo' portarlo nel
+                # result come warning di esecuzione non piu' protetta
                 self._state["lock_lost"] = True
                 logger.error(
                     f"[HEARTBEAT] Lock {self._schedule_id} perso e non "

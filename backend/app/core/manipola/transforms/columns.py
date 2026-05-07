@@ -17,7 +17,7 @@ DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
 
 
 # RIMOZIONE COLONNE
-# Rimuove colonne selezionate dal DataFrame.
+# Rimuove colonne selezionate dal DataFrame
 
 def op_drop_columns(
     df: DataFrame,
@@ -51,7 +51,7 @@ def op_drop_columns(
 
 
 # RINOMINA COLONNE
-# Rinomina colonne secondo mapping {vecchio_nome: nuovo_nome}.
+# Rinomina colonne secondo mapping {vecchio_nome: nuovo_nome}
 
 def op_rename(
     df: DataFrame,
@@ -81,7 +81,7 @@ def op_rename(
             if old and new and old in df.columns:
                 rename_map[old] = new
 
-    # Supporto singola rinominazione (retrocompatibilità)
+    # Supporto singola rinominazione (retrocompatibilità
     elif old_name and new_name:
         if old_name in df.columns:
             rename_map[old_name] = new_name
@@ -100,7 +100,7 @@ def op_rename(
 
 
 # REORDER COLUMNS — Riordina le colonne del DataFrame
-# Permette di specificare un ordine personalizzato o alfabetico.
+# Permette di specificare un ordine personalizzato o alfabetico
 
 def op_reorder_columns(
     df: DataFrame,
@@ -145,7 +145,7 @@ def op_reorder_columns(
 
 
 # CONCATENAZIONE COLONNE
-# Unisce più colonne in una nuova colonna con separatore.
+# Unisce più colonne in una nuova colonna con separatore
 
 def op_concat_columns(
     df: DataFrame,
@@ -187,28 +187,28 @@ def op_concat_columns(
 
         if skip_null:
             # Vera vettorizzazione: estrazione numpy arrays per colonna
-            # + Python list-comp con itertools.compress per riga.
+            # + Python list-comp con itertools.compress per riga
             # Il path precedente `.agg(lambda parts: ..., axis=1)` era
             # Python row-iter mascherata dentro pandas agg: ~7x piu' lento
-            # del naive apply. compress() e' C-implemented e lavora su
-            # valori numpy direttamente, senza costruire una Series-per-riga.
+            # del naive apply. compress e' C-implemented e lavora su
+            # valori numpy direttamente, senza costruire una Series-per-riga
             n = len(subset)
             if n == 0:
                 result[output_column] = pd.Series([], dtype=object)
                 return result
 
-            # numpy str arrays + notna masks, una volta per colonna.
+            # numpy str arrays + notna masks, una volta per colonna
             # subset.reset_index(drop=True) non necessario: lavoriamo
-            # direttamente sugli ndarray, insensibili all'indice.
+            # direttamente sugli ndarray, insensibili all'indice
             str_arrs = [
                 subset[c].astype(str).to_numpy() for c in valid_cols
             ]
             mask_arrs = [subset[c].notna().to_numpy() for c in valid_cols]
 
             # Per-row join: compress(values, mask) filtra in C le posizioni
-            # dove mask=True; separator.join lavora solo su stringhe.
+            # dove mask=True; separator.join lavora solo su stringhe
             # Semantica legacy preservata: join "" → None (copre sia riga
-            # all-NaN che join di un unico "").
+            # all-NaN che join di un unico ""
             from itertools import compress  # import locale: hot path
             out = [None] * n
             for i, (row_vals, row_mask) in enumerate(
@@ -224,9 +224,9 @@ def op_concat_columns(
             # `fillna("")` o `where(notna, "")` perche' la coercion
             # implicita a object dtype e' stata rimossa: i sostitutivi
             # stringa vengono silenziosamente non-applicati e il
-            # successivo `astype(str)` non converte affidabilmente NaN.
+            # successivo `astype(str)` non converte affidabilmente NaN
             # Fix bulletproof: conversione per-cella che bypassa la
-            # type-coercion DataFrame e gestisce esplicitamente NaN/NaT.
+            # type-coercion DataFrame e gestisce esplicitamente NaN/NaT
             def _cell_to_str(x):
                 return "" if pd.isna(x) else str(x)
 
@@ -242,7 +242,7 @@ def op_concat_columns(
 
 
 # DIVISIONE COLONNA
-# Divide colonna su separatore e crea N nuove colonne.
+# Divide colonna su separatore e crea N nuove colonne
 
 def op_split_column(
     df: DataFrame,

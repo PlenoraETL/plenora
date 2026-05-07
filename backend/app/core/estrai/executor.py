@@ -107,7 +107,7 @@ def _dedup_column_names(columns: List[str]) -> Tuple[List[str], List[Tuple[str, 
             new_columns.append(col)
             continue
         # Duplicato: incrementa il counter finche' il nuovo nome e' libero
-        # (necessario quando un suffisso candidato e' gia' un altro nome)
+        # necessario quando un suffisso candidato e' gia' un altro nome
         candidate = None
         while candidate is None or candidate in seen:
             seen[col] += 1
@@ -139,7 +139,7 @@ def _dedup_dataframe_columns_for_serialization(
         return df, []
 
     # Rinomina posizionale: pd.DataFrame(rows, columns=...) col costruttore
-    # attuale conserva l'ordine; assegniamo direttamente la nuova lista.
+    # attuale conserva l'ordine; assegniamo direttamente la nuova lista
     df_renamed = df.copy()
     df_renamed.columns = new_columns
 
@@ -177,7 +177,7 @@ class EstraiExecutor:
         self.connection_service = connection_service
         self.features_service = features_service
 
-    # RISOLUZIONE CONNESSIONE (DB o ArcGIS)
+    # RISOLUZIONE CONNESSIONE (DB o ArcGIS
 
     def _resolve_connection(self, connection_id: str) -> Tuple[Any, str]:
         """
@@ -233,7 +233,7 @@ class EstraiExecutor:
         except CredentialUnavailableError as e:
             # Policy uniforme con /test endpoints (fd35cf4): credenziale
             # cifrata non disponibile o non decriptabile → user_error invece
-            # di [CRASH] worker.
+            # di [CRASH] worker
             return {
                 "success": False,
                 "message": f"credenziale non disponibile o non decriptabile: {e}",
@@ -318,12 +318,12 @@ class EstraiExecutor:
         if not feature_nodes:
             return {"success": False, "message": "Nessun nodo Feature Source trovato nel canvas"}
 
-        # Per ora supporta un singolo feature_source (no JOIN tra layer)
+        # Per ora supporta un singolo feature_source (no JOIN tra layer
         node = feature_nodes[0]
         layer_url = node.layer_url or (node.data or {}).get('layer_url', '')
         where = node.where or (node.data or {}).get('where', '') or '1=1'
         
-        # Colonne visibili (escludi geometry che è gestito da return_geometry)
+        # Colonne visibili (escludi geometry che è gestito da return_geometry
         visible_cols = [c for c in self._get_visible_columns(node) if c != 'geometry']
         out_fields = ','.join(visible_cols) if visible_cols else '*'
         
@@ -360,7 +360,7 @@ class EstraiExecutor:
             logger.error(f"[GESTITO] Errore esecuzione Feature Service: {e}", op="execute", exc_info=True)
             return {"success": False, "message": str(e)}
 
-    # ANTEPRIMA (PREVIEW)
+    # ANTEPRIMA (PREVIEW
 
     def preview(self, project_id: str, canvas: CanvasState, limit: int) -> Dict[str, Any]:
         """
@@ -382,7 +382,7 @@ class EstraiExecutor:
         except CredentialUnavailableError as e:
             # Policy uniforme con /test endpoints (fd35cf4): credenziale
             # cifrata non disponibile o non decriptabile → user_error invece
-            # di [CRASH] worker.
+            # di [CRASH] worker
             return {
                 "success": False,
                 "message": f"credenziale non disponibile o non decriptabile: {e}",
@@ -425,7 +425,7 @@ class EstraiExecutor:
 
             # FIXME(BUG.md #6): dedup colonne duplicate PRIMA di costruire columns_info
             # e PRIMA di to_dict, altrimenti pandas le scarta silenziosamente
-            # e l'utente non se ne accorge.
+            # e l'utente non se ne accorge
             df, dedup_warnings = _dedup_dataframe_columns_for_serialization(df)
 
             canvas_type_map = self._build_canvas_type_map(canvas)
@@ -453,7 +453,7 @@ class EstraiExecutor:
                 logger.warning(f"[GESTITO] Filtro incompatibile con il tipo DB: {msg[:200]}", op="preview")
                 return {"success": False, "message": msg, "user_error": True}
             if SqlAlchemyProgrammingError and isinstance(e, SqlAlchemyProgrammingError):
-                # Errore di programmazione SQL lato utente (es. TRIM su bigint, funzione inesistente)
+                # Errore di programmazione SQL lato utente (es. TRIM su bigint, funzione inesistente
                 msg = _traduci_errore_sql(str(e))
                 logger.warning(f"[GESTITO] Configurazione query non valida: {msg[:200]}", op="preview")
                 return {"success": False, "message": msg, "user_error": True}
@@ -475,7 +475,7 @@ class EstraiExecutor:
         layer_url = node.layer_url or (node.data or {}).get('layer_url', '')
         where = node.where or (node.data or {}).get('where', '') or '1=1'
         
-        # Colonne visibili (escludi geometry che è gestito da return_geometry)
+        # Colonne visibili (escludi geometry che è gestito da return_geometry
         visible_cols = [c for c in self._get_visible_columns(node) if c != 'geometry']
         out_fields = ','.join(visible_cols) if visible_cols else '*'
         
@@ -485,7 +485,7 @@ class EstraiExecutor:
         return_geometry = has_geom and geom_visible
 
         try:
-            # Query con limit+1 per detect troncamento (stessa logica del DB)
+            # Query con limit+1 per detect troncamento (stessa logica del DB
             rows, columns = self.features_service.query_layer(
                 connection_id=connection.id,
                 layer_url=layer_url,
@@ -503,7 +503,7 @@ class EstraiExecutor:
             df = pd.DataFrame(rows, columns=columns)
 
             # FIXME(BUG.md #6): dedup colonne duplicate PRIMA di columns_info e to_dict
-            # (vedi _preview_database per il razionale).
+            # vedi _preview_database per il razionale
             df, dedup_warnings = _dedup_dataframe_columns_for_serialization(df)
 
             canvas_type_map = self._build_canvas_type_map(canvas)
@@ -539,7 +539,7 @@ class EstraiExecutor:
         """
         columns = []
         
-        # Prova prima node.columns (modello Pydantic)
+        # Prova prima node.columns (modello Pydantic
         if hasattr(node, 'columns') and node.columns:
             columns = node.columns
         elif node.data and isinstance(node.data, dict) and 'columns' in node.data:
@@ -624,7 +624,7 @@ class EstraiExecutor:
         )
         res['columns_metadata'] = columns_metadata
 
-    # SQL HELPERS (per percorso database)
+    # SQL HELPERS (per percorso database
 
     def _rimuovi_limit(self, sql: str) -> str:
         """Rimuove clausole LIMIT/TOP/FETCH FIRST esistenti dalla query SQL."""

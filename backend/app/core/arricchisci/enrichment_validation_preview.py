@@ -20,7 +20,6 @@ from app.core.arricchisci.models import (
 class EnrichmentValidationPreviewMixin:
     """Mixin per `EnrichmentExecutor`: entry point pubblici
     `validate_input` + `preview`. Pure pre-execute preparation +
-    sampling. Zero log calls (verificato pre-extraction).
     """
 
     def validate_input(self, df: pd.DataFrame) -> EnrichmentValidationResult:
@@ -42,15 +41,15 @@ class EnrichmentValidationPreviewMixin:
         warnings = []
 
         # Helper: True se il parametro deve essere considerato bloccante
-        # (required oppure abbiamo fallback legacy senza definizioni).
+        # required oppure abbiamo fallback legacy senza definizioni
         def _is_blocking(api_param: str) -> bool:
             if not self._has_param_definitions:
                 return True  # NOTE: tratta tutto come required
             return api_param in self._required_param_names
 
-        # Helper: ritorna l'elenco delle colonne richieste da un mapping value.
-        # - Mapping classico ("nome_col") → ["nome_col"]
-        # - Template ("{X},{Y}")          → ["X", "Y"]
+        # Helper: ritorna l'elenco delle colonne richieste da un mapping value
+        # Mapping classico ("nome_col") → ["nome_col"
+        # Template ("{X},{Y}") → ["X", "Y"
         def _required_columns(mapping_value: Any) -> List[str]:
             if not mapping_value:
                 return []
@@ -58,9 +57,9 @@ class EnrichmentValidationPreviewMixin:
                 return self._template_columns(mapping_value)
             return [mapping_value]
 
-        # Controlla colonne richieste — solo per parametri required.
+        # Controlla colonne richieste — solo per parametri required
         # Le colonne mancanti per parametri opzionali sono ignorate (il param
-        # verrà semplicemente omesso dalla chiamata API).
+        # verrà semplicemente omesso dalla chiamata API
         for api_param, mapping_value in self.param_mapping.items():
             cols = _required_columns(mapping_value)
             for col in cols:
@@ -78,7 +77,7 @@ class EnrichmentValidationPreviewMixin:
                 warnings=[f"Colonne mancanti: {', '.join(missing_columns)}"]
             )
 
-        # Controlla valori nulli — solo sui parametri required (vectorized)
+        # Controlla valori nulli — solo sui parametri required (vectorized
         # Raccogli tutte le colonne required prima
         required_cols_set = set()
         for api_param, mapping_value in self.param_mapping.items():
@@ -153,7 +152,7 @@ class EnrichmentValidationPreviewMixin:
         # Stima tempo totale considerando deduplicazione e parallelismo
         unique_in_sample = self._count_unique_combinations(sample_df)
 
-        # Tempo stimato = chiamate uniche / (rate_limit * min(parallel_workers, chiamate))
+        # Tempo stimato = chiamate uniche / (rate_limit * min(parallel_workers, chiamate
         estimated_api_calls = unique_combinations
         effective_parallelism = min(self.options.parallel_workers, estimated_api_calls)
 

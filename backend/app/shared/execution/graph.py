@@ -1,7 +1,6 @@
 """
 Domain-agnostic graph utilities.
 
-BE-GO-READY-GRAPH-ENGINE-001-SHARED-TOPOLOGICAL-SORT.
 """
 
 from __future__ import annotations
@@ -88,19 +87,19 @@ def kahn_topological_order(
     in_degree: dict[str, int] = {nid: 0 for nid in ids}
     # ``out_edges`` is keyed on every node so the inner loop
     # never has to handle KeyError; nodes with zero outgoing
-    # edges keep an empty list.
+    # edges keep an empty list
     out_edges: dict[str, List[str]] = {nid: [] for nid in ids}
     for source, target in edges:
-        # Edge filter: both endpoints must exist in node_ids.
+        # Edge filter: both endpoints must exist in node_ids
         # Drops "dangling" edges that point at deleted nodes
-        # (the legacy Arricchisci / Manipola implementations
-        # both did this implicitly through their dict lookups).
+        # the legacy Arricchisci / Manipola implementations
+        # both did this implicitly through their dict lookups
         if source in id_set and target in id_set:
             out_edges[source].append(target)
             in_degree[target] += 1
 
-    # Seed queue with all in-degree-0 nodes in input order.
-    # Using a deque (not list) so popleft() is O(1).
+    # Seed queue with all in-degree-0 nodes in input order
+    # Using a deque (not list) so popleft is O(1
     queue: deque[str] = deque(nid for nid in ids if in_degree[nid] == 0)
     order: List[str] = []
     while queue:
@@ -117,5 +116,5 @@ def kahn_topological_order(
             cycle_nodes = [nid for nid in ids if nid not in ordered_set]
             raise GraphCycleError(cycle_nodes)
         # on_cycle == "truncate": cycle nodes are silently
-        # omitted (legacy Arricchisci shape).
+        # omitted (legacy Arricchisci shape
     return order

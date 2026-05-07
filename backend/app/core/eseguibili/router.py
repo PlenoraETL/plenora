@@ -80,13 +80,13 @@ def list_eseguibili(current_user: CurrentUser = Depends(get_current_user)):
         )
         rows = [r for r in rows if r["id"] in visible_ids]
 
-    # Inietta can_edit in ogni dict (il response_model lo serializza)
+    # Inietta can_edit in ogni dict (il response_model lo serializza
     for r in rows:
         r["can_edit"] = compute_can_edit(r, current_user)
     return rows
 
 
-# CREATE (solo admin)
+# CREATE (solo admin
 
 @router.post("", response_model=EseguibileDetails, status_code=201)
 @audit_action(action="eseguibile.create")
@@ -134,7 +134,7 @@ def get_eseguibile(
     return _to_details(record)
 
 
-# UPDATE (solo admin)
+# UPDATE (solo admin
 
 @router.put("/{eseguibile_id}", response_model=EseguibileDetails)
 @audit_action(action="eseguibile.update", target_param="eseguibile_id")
@@ -158,7 +158,7 @@ def update_eseguibile(
     return _to_details(updated)
 
 
-# DELETE (solo admin)
+# DELETE (solo admin
 
 @router.delete("/{eseguibile_id}", status_code=204)
 @audit_action(action="eseguibile.delete", target_param="eseguibile_id")
@@ -170,19 +170,19 @@ def delete_eseguibile(
     _check_group_access(record, current_user)
 
     eseguibili_db.delete_eseguibile(eseguibile_id)
-    # F2-B2 (2026-04-24): DELETE risponde 204 No Content, body vuoto.
+    # F2-B2 (2026-04-24): DELETE risponde 204 No Content, body vuoto
     # NB: il ritorno `ok` boolean di delete_eseguibile era gia' ignorato
     # dal FE pre-fix. Debito semantico `ok=False -> 404` esplicito e'
-    # scope separato, NON toccato qui.
+    # scope separato, NON toccato qui
 
 
 # ANALYZE UPLOAD
 
-# Upload metadata store (su disco, multi-worker safe)
-# Era in-memory (_UPLOAD_CACHE) ma non funzionava con piu worker uvicorn:
+# Upload metadata store (su disco, multi-worker safe
+# Era in-memory (_UPLOAD_CACHE) ma non funzionava con piu worker uvicorn
 # il dict non era condiviso tra processi → analyze e execute potevano
-# finire su worker diversi e il secondo non trovava l'entry.
-# Soluzione: salva i metadata come file .meta.json accanto al file temp.
+# finire su worker diversi e il secondo non trovava l'entry
+# Soluzione: salva i metadata come file .meta.json accanto al file temp
 
 def _upload_meta_path(file_id: str) -> Path:
     """Percorso del file metadata per un upload."""
@@ -231,8 +231,8 @@ def _delete_upload_meta(file_id: str) -> None:
 
 
 # ─ Task ownership metadata ──────────────────────────────────────────────
-# Tracking task_id → (eseguibile_id, user_id) per autorizzare il download.
-# Scritto al momento dell'execute, letto al download, cancellato al cleanup.
+# Tracking task_id → (eseguibile_id, user_id) per autorizzare il download
+# Scritto al momento dell'execute, letto al download, cancellato al cleanup
 def _task_owner_path(task_id: str) -> Path:
     safe_id = "".join(c for c in task_id if c.isalnum() or c in "-_")
     return settings.ESEGUIBILI_OUTPUTS_DIR / ".owners" / f"{safe_id}.json"
@@ -295,9 +295,9 @@ async def analyze_upload(
     record = eseguibili_db.get_eseguibile(eseguibile_id)
     _check_visible(record, current_user)
 
-    # Size cap pre-read (helper centralizzato, vedi `app.shared.upload_guards`).
+    # Size cap pre-read (helper centralizzato, vedi `app.shared.upload_guards`
     # Coerente con `files/router.py`: rifiuta con 413 prima di leggere il
-    # contenuto in RAM, evitando DoS interno credenziato via upload N GB.
+    # contenuto in RAM, evitando DoS interno credenziato via upload N GB
     enforce_upload_size_limit(file)
 
     # Salva in temp dir
@@ -313,7 +313,7 @@ async def analyze_upload(
         # Block-only mode: il file viene salvato su disk e parsato dal
         # workflow eseguibile. Bloccare eseguibili reali e' la difesa
         # primaria (un binary su disk poi eseguito sarebbe RCE). Allowlist
-        # stretta romperebbe i formati custom degli eseguibili (.dxf, .geojson, ...).
+        # stretta romperebbe i formati custom degli eseguibili (.dxf, .geojson
         from app.utils.mime_validator import (
             MimeMismatchError, validate_no_executable,
         )
@@ -334,7 +334,7 @@ async def analyze_upload(
                     f"analyze_upload: cleanup tmp post-MIME-reject best-effort "
                     f"fallito per {tmp_file.name}: {_unlink_err}"
                 )
-            # Batch Fix 6.2: sanitize detail prima di esporlo al client.
+            # 6.2: sanitize detail prima di esporlo al client
             raise HTTPException(
                 status_code=400, detail=sanitize_http_detail(str(e)),
             )
@@ -359,13 +359,13 @@ async def analyze_upload(
                     f"analyze_upload: cleanup tmp post-ValueError best-effort "
                     f"fallito per {tmp_path}: {_unlink_err}"
                 )
-            # Batch Fix 6.2: sanitize detail (analyze_file_upload puo'
-            # includere path temp + output pyproj/gdal).
+            # 6.2: sanitize detail (analyze_file_upload puo'
+            # includere path temp + output pyproj/gdal
             raise HTTPException(
                 status_code=400, detail=sanitize_http_detail(str(e)),
             )
 
-        # Salva metadata su disco (multi-worker safe: visibile a tutti i worker uvicorn)
+        # Salva metadata su disco (multi-worker safe: visibile a tutti i worker uvicorn
         _save_upload_meta(result["file_id"], {
             "path": result["file_path"],
             "filename": result["filename"],
@@ -373,7 +373,7 @@ async def analyze_upload(
             "user_id": current_user.user_id,
         })
 
-        # Rimuovi il file_path dal response (non serve al frontend)
+        # Rimuovi il file_path dal response (non serve al frontend
         result.pop("file_path", None)
         return result
 
@@ -400,7 +400,7 @@ def execute_eseguibile(
     record = eseguibili_db.get_eseguibile(eseguibile_id)
     _check_visible(record, current_user)
 
-    # Recupera metadata upload da disco (multi-worker safe)
+    # Recupera metadata upload da disco (multi-worker safe
     upload = _load_upload_meta(payload.file_id)
     if not upload:
         raise HTTPException(
@@ -409,9 +409,9 @@ def execute_eseguibile(
         )
     if upload["eseguibile_id"] != eseguibile_id:
         raise HTTPException(status_code=400, detail="File upload non corrisponde all'eseguibile")
-    # Authz: il file_id deve appartenere allo stesso utente che l'ha caricato.
+    # Authz: il file_id deve appartenere allo stesso utente che l'ha caricato
     # Senza questo check, se un attacker conosce un file_id valido di un altro
-    # utente puo' eseguire l'eseguibile con i suoi dati (data exfil / abuso).
+    # utente puo' eseguire l'eseguibile con i suoi dati (data exfil / abuso
     upload_user = upload.get("user_id")
     if upload_user and upload_user != current_user.user_id:
         raise HTTPException(
@@ -429,7 +429,7 @@ def execute_eseguibile(
         )
         # Persist ownership del task per il download endpoint: senza
         # questo file un attacker che indovina un task_id valido puo'
-        # scaricare l'output di un'esecuzione non sua.
+        # scaricare l'output di un'esecuzione non sua
         try:
             _task_id = None
             if isinstance(result, dict):
@@ -486,11 +486,11 @@ def download_eseguibile_output(
     # Authz: verifica che il task_id sia stato effettivamente generato da
     # QUESTO eseguibile e da QUESTO utente. Senza questo check, chiunque
     # veda un eseguibile condiviso e conosca/indovini un task_id valido
-    # puo' scaricare l'output di un'esecuzione altrui.
+    # puo' scaricare l'output di un'esecuzione altrui
     owner_meta = _load_task_owner(safe_task_id)
     if owner_meta is None:
-        # Metadata assente: task vecchio o cleanup gia' fatto.
-        # Fail-closed: non consentire l'accesso se non siamo sicuri.
+        # Metadata assente: task vecchio o cleanup gia' fatto
+        # Fail-closed: non consentire l'accesso se non siamo sicuri
         if current_user.role != "superadmin":
             raise HTTPException(
                 status_code=404,
@@ -505,8 +505,8 @@ def download_eseguibile_output(
                 detail="Output non accessibile (task eseguito da un altro utente)"
             )
 
-    # Lookup dell'output su object storage (S3 via cloud_backends).
-    # Multi-host safe: backend e worker possono essere su macchine diverse.
+    # Lookup dell'output su object storage (S3 via cloud_backends
+    # Multi-host safe: backend e worker possono essere su macchine diverse
     from app.core.eseguibili import storage as _eseg_storage
     try:
         keys = _eseg_storage.find_keys(safe_task_id)
@@ -520,7 +520,7 @@ def download_eseguibile_output(
             detail="Output non trovato. Il file potrebbe essere scaduto o il task non ancora completato.",
         )
 
-    # Tipicamente 1 file per task (convention).
+    # Tipicamente 1 file per task (convention
     key = keys[0]
     filename = key.rsplit("/", 1)[-1]
 
@@ -593,7 +593,7 @@ def _detect_file_based_output(canvas: dict) -> tuple:
             candidate = next((n for n in nodes if n.get("id") == src_id), None)
 
     if not candidate:
-        # Fallback: api_enrich sink (nessun outgoing edge)
+        # Fallback: api_enrich sink (nessun outgoing edge
         has_outgoing = {e.get("source") for e in edges}
         sinks = [
             n for n in nodes

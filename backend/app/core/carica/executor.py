@@ -144,7 +144,7 @@ class CaricaExecutor:
         Returns:
             WriteResult con esito dell'operazione.
         """
-        # N15: idempotency guard (self-defense per sync caller).
+        # N15: idempotency guard (self-defense per sync caller
         if run_id:
             try:
                 from app.shared.idempotency import is_already_completed
@@ -160,9 +160,9 @@ class CaricaExecutor:
                         error_message=f"Run {run_id} gia' completato",
                     )
             except Exception as _idem_err:
-                # Fail-open: se il check idempotency esplode, NON blocchiamo.
+                # Fail-open: se il check idempotency esplode, NON blocchiamo
                 # Meglio un possibile duplicato che bloccare la run su un
-                # errore di lettura intermediate.db.
+                # errore di lettura intermediate.db
                 logger.warning(
                     f"[IDEMPOTENCY] check fallito per run_id={run_id}: {_idem_err}. "
                     f"Proseguo senza guard (fail-open).",
@@ -215,10 +215,10 @@ class CaricaExecutor:
                 srid=config.geometry_srid,
             )
 
-        # N13: resolve alias -> original name in dest_column.
-        # Applicato a ENTRAMBI i path (auto-map e mapping esplicito dal canvas):
-        # in entrambi i casi la tabella destinazione ha il nome originale,
-        # mai l'alias. Fix idempotente se dest_column e' gia' corretto.
+        # N13: resolve alias -> original name in dest_column
+        # Applicato a ENTRAMBI i path (auto-map e mapping esplicito dal canvas
+        # in entrambi i casi la tabella destinazione ha il nome originale
+        # mai l'alias. Fix idempotente se dest_column e' gia' corretto
         _resolve_aliases_in_mappings(
             config.column_mappings,
             node_data.get('availableColumns', []),

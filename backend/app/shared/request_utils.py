@@ -16,12 +16,12 @@ if TYPE_CHECKING:
 
 
 # Allowlist di peer TCP che possono scrivere X-Forwarded-For di cui ci
-# fidiamo. Override via env `TRUSTED_PROXIES` con CSV. Supporta:
-#   - IP singoli:  "127.0.0.1,::1,10.0.0.5"
-#   - CIDR ranges: "10.0.0.0/8,172.16.0.0/12"
-#   - Mix:         "127.0.0.1,10.0.0.0/8,::1"
+# fidiamo. Override via env `TRUSTED_PROXIES` con CSV. Supporta
+# IP singoli: "127.0.0.1,::1,10.0.0.5"
+# CIDR ranges: "10.0.0.0/8,172.16.0.0/12"
+# Mix: "127.0.0.1,10.0.0.0/8,::1"
 # Default coerente con setup single-host nginx -> uvicorn sullo stesso box
-# (lab.plenora.it today).
+# lab.plenora.it today
 _DEFAULT_TRUSTED_PROXIES = "127.0.0.1,::1"
 
 
@@ -44,13 +44,13 @@ def _parse_trusted_proxies_cached(raw: str) -> tuple:
             try:
                 networks.append(ipaddress.ip_network(entry, strict=False))
             except ValueError:
-                # CIDR malformato → ignora silenzioso (no crash al boot)
+                # CIDR malformato → ignora silenzioso (no crash al boot
                 continue
         else:
             try:
                 # Normalizza via ipaddress per uniformare IPv6 equivalenti
-                # (es. "::1" vs "0:0:0:0:0:0:0:1") — il set lookup diventa
-                # sulla forma canonica.
+                # es. "::1" vs "0:0:0:0:0:0:0:1") — il set lookup diventa
+                # sulla forma canonica
                 exact.add(str(ipaddress.ip_address(entry)))
             except ValueError:
                 continue
@@ -60,7 +60,7 @@ def _parse_trusted_proxies_cached(raw: str) -> tuple:
 def _parse_trusted_proxies() -> tuple[set[str], list]:
     """Entry point: legge env e delega al parse cached.
 
-    Il cache e' lru_cache su `raw`, non su os.getenv() — se qualcuno cambia
+    Il cache e' lru_cache su `raw`, non su os.getenv — se qualcuno cambia
     l'env a runtime tramite monkeypatch, la chiave del cache cambia
     automaticamente e il parse viene rifatto.
     """
@@ -119,7 +119,7 @@ def _parse_client_ip_from_xff(xff: str) -> Optional[str]:
         return None
     try:
         # Normalizza via ipaddress → rifiuta tutto quello che non e'
-        # un IP. Ritorna la forma canonica (compressa per IPv6).
+        # un IP. Ritorna la forma canonica (compressa per IPv6
         return str(ipaddress.ip_address(first))
     except ValueError:
         return None

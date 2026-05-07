@@ -1,7 +1,6 @@
 """
 FastAPI owner dependencies - canonical leaf.
 
-BE-GO-READY-AUTH-ENGINE-018-OWNER-DEPENDENCIES-LEAF.
 """
 
 from __future__ import annotations
@@ -24,12 +23,7 @@ def require_project_owner(
     project_id: str,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> CurrentUser:
-    """Owner check su projects. Da usare per update/delete/canvas/duplicate.
-
-    BE-GO-READY-AUTH-ENGINE-012: lookup migrato al leaf
-    ``app.db.config.projects``.
-    BE-GO-READY-AUTH-ENGINE-018: estratto da ``auth.py`` al leaf canonico.
-    """
+    """Owner check su projects per update, delete, canvas e duplicate."""
     from app.db.config.projects import get_project as _get_project
     project = _get_project(project_id)
     _check_ownership(project, "Progetto", current_user)
@@ -40,12 +34,7 @@ def require_schedule_owner(
     schedule_id: str,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> CurrentUser:
-    """Owner check su schedules. Da usare per update/delete/toggle/run.
-
-    BE-GO-READY-AUTH-ENGINE-012: lookup migrato al leaf
-    ``app.db.config.schedules``.
-    BE-GO-READY-AUTH-ENGINE-018: estratto da ``auth.py`` al leaf canonico.
-    """
+    """Owner check su schedules per update, delete, toggle e run."""
     from app.db.config.schedules import get_schedule as _get_schedule
     schedule = _get_schedule(schedule_id)
     _check_ownership(schedule, "Schedule", current_user)
@@ -56,12 +45,7 @@ def require_file_owner(
     file_id: str,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> CurrentUser:
-    """Owner check su file_sources. Da usare per delete.
-
-    BE-GO-READY-AUTH-ENGINE-012: lookup migrato al leaf
-    ``app.db.config.file_sources``.
-    BE-GO-READY-AUTH-ENGINE-018: estratto da ``auth.py`` al leaf canonico.
-    """
+    """Owner check su file_sources per delete."""
     from app.db.config.file_sources import get_file_source as _get_file_source
     file_source = _get_file_source(file_id)
     _check_ownership(file_source, "File", current_user)

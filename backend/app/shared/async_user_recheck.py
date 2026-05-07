@@ -55,10 +55,10 @@ def recheck_user_authorized(
                 "message": "Utente non autorizzato (disabilitato o rimosso)",
             }
 
-        # Snapshot live: costruiamo CurrentUser dallo stato del DB ORA,
+        # Snapshot live: costruiamo CurrentUser dallo stato del DB ORA
         # non dallo stato al submit. assert_project_access alza HTTP 403
         # cross-group, HTTP 404 inesistente (gestito come revoked anche
-        # quello — un project sparito durante la coda e' comunque no-go).
+        # quello — un project sparito durante la coda e' comunque no-go
         live_user = CurrentUser(
             user_id=user["id"],
             username=user.get("username", ""),

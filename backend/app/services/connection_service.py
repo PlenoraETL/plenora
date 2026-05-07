@@ -1,7 +1,7 @@
 """
-Servizio CRUD per connessioni database.
+Servizio CRUD per connessioni database
 
-Storage: PostgreSQL tramite ``app.db.db_service`` (facade cross-engine)
+Keeps this module's responsibility explicit and isolated from adjacent code.
 """
 
 import uuid
@@ -39,7 +39,7 @@ def _sanitize_mssql_error(e: Exception) -> str:
     msg = str(e)
     msg_l = msg.lower()
     # SQLSTATE prima (piu' deterministico dei text match; un messaggio
-    # pyodbc puo' contenere sia SQLSTATE che testo ambiguo).
+    # pyodbc puo' contenere sia SQLSTATE che testo ambiguo
     if "[08001]" in msg:
         return "Connessione MS SQL rifiutata o host irraggiungibile"
     if "[08004]" in msg:
@@ -48,7 +48,7 @@ def _sanitize_mssql_error(e: Exception) -> str:
         return "Autenticazione MS SQL fallita: credenziali non valide"
     if "[42s02]" in msg_l:
         return "Database MS SQL non trovato o accesso negato"
-    # Text patterns (fallback se SQLSTATE non presente, es. pymssql / socket)
+    # Text patterns (fallback se SQLSTATE non presente, es. pymssql / socket
     if "cannot open server" in msg_l or "cannot connect" in msg_l:
         return "Connessione MS SQL rifiutata o host irraggiungibile"
     if "login timeout" in msg_l or "timeout expired" in msg_l:
@@ -89,12 +89,12 @@ class ConnectionService:
             display_password = "***"
         else:
             # FIXME: #1 (2026-04-23): raise esplicito invece di propagare None
-            # a Pydantic (DatabaseConnection.password: str) → ValidationError → 500.
-            # Due casi distinti, stessa classe CredentialUnavailableError:
-            #   - password NULL nel DB (mai configurata / record legacy invalido)
-            #   - prefisso enc: presente ma decrypt ritorna None (chiave
-            #     mancante/sbagliata o token Fernet corrotto)
-            # Il router traduce in HTTP 422.
+            # a Pydantic (DatabaseConnection.password: str) → ValidationError → 500
+            # Due casi distinti, stessa classe CredentialUnavailableError
+            # password NULL nel DB (mai configurata / record legacy invalido
+            # prefisso enc: presente ma decrypt ritorna None (chiave
+            # mancante/sbagliata o token Fernet corrotto
+            # Il router traduce in HTTP 422
             if raw_password is None:
                 raise CredentialUnavailableError(
                     f"connection '{row.get('id')}': password non configurata"
@@ -145,10 +145,9 @@ class ConnectionService:
         return self._row_to_connection(row)
 
     def list_connections(self, group_id: str = None) -> ConnectionList:
-        # group_id=None → no filter (usato da superadmin e dalla path allowed_groups)
+        # group_id=None → no filter (usato da superadmin e dalla path allowed_groups
         # Fix N+1: fetch tutte le righe complete in una query, no loop di get_connection_config
-        # BE-GO-READY-DB-ENGINE-005: migrato off facade
-        # `config_db_service.fetchall` (re-export di pg_connection).
+        # Usa il helper DB canonico invece della superficie aggregata.
         from app.db.pg_connection import fetchall as _fetchall
         if group_id is None:
             rows = _fetchall(
@@ -183,7 +182,7 @@ class ConnectionService:
         db_fields = {field_map[k]: v for k, v in update_fields.items() if k in field_map}
         # Bugfix: il frontend riceve la password mascherata "***" nelle list/get
         # e la rispedisce inalterata se l'utente non la modifica. Skipparla per
-        # non sovrascrivere la vera password salvata.
+        # non sovrascrivere la vera password salvata
         if "password" in db_fields:
             pwd = db_fields["password"]
             if pwd is None or pwd == "" or pwd == "***":
@@ -253,7 +252,7 @@ class ConnectionService:
         Test connessione SQL Server.
 
         Strategia:
-        - Filtra i driver disponibili sul sistema (`pyodbc.drivers()`).
+        - Filtra i driver disponibili sul sistema (`pyodbc.drivers`).
         - Per ogni driver disponibile prova varianti di Encrypt:
           * Driver 18: Encrypt=Optional (Default ora è Mandatory che vuole TLS)
           * Driver 18: Encrypt=No (server senza TLS)
@@ -276,10 +275,10 @@ class ConnectionService:
                 ),
             )
 
-        # SECURITY: escape dei separatori ODBC (`;`, `{`, `}`) nei valori utente.
+        # SECURITY: escape dei separatori ODBC (`;`, `{`, `}`) nei valori utente
         # Senza escape, un username come "admin;Encrypt=No" inietta parametri
-        # arbitrari nella connection string, bypassando Encrypt/TrustServerCertificate.
-        # ODBC usa `{` `}` per delimitare valori che contengono `;`.
+        # arbitrari nella connection string, bypassando Encrypt/TrustServerCertificate
+        # ODBC usa `{` `}` per delimitare valori che contengono `;`
         def _odbc_escape(val: str) -> str:
             if not val:
                 return val
@@ -341,7 +340,7 @@ class ConnectionService:
                     continue
 
             # Fallback finale: pymssql (usa FreeTDS, più tollerante con server vecchi
-            # che hanno problemi di handshake TLS/TDS con i driver Microsoft moderni).
+            # che hanno problemi di handshake TLS/TDS con i driver Microsoft moderni
             try:
                 import pymssql
                 try:
@@ -387,7 +386,7 @@ class ConnectionService:
                 details={"errors": errors},
             )
         except Exception as e:
-            # F5-B3: catch-all outer — sanitize invece di str(e) raw.
+            # F5-B3: catch-all outer — sanitize invece di str(e) raw
             logger.error(
                 f"[GESTITO] MS SQL _test_mssql safety-net: "
                 f"{type(e).__name__}: {e}",

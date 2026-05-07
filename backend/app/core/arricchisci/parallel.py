@@ -10,7 +10,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import pandas as pd
 
 from app.utils.logger import get_logger
-from app.shared.execution.canvas_node import CanvasNode  # BE-GO-READY-ARCH-055-W3
 
 logger = get_logger(__name__)
 
@@ -62,11 +61,11 @@ def should_execute_node(node_data: Dict, input_df: Any) -> bool:
     """Valuta la condizione `execute_if` di un nodo api_enrich.
 
     Sintassi di execute_if:
-      - "colonna=valore"   → True se input_df[colonna].iloc[0] == valore
-      - "colonna!=valore"  → True se input_df[colonna].iloc[0] != valore
-      - None / assente     → True (sempre eseguire)
+      - "colonna=valore" → True se input_df[colonna].iloc[0] == valore
+      - "colonna!=valore" → True se input_df[colonna].iloc[0] != valore
+      - None / assente → True (sempre eseguire)
 
-    Per decisione per-riga usare `get_execute_mask()` che ritorna un
+    Per decisione per-riga usare `get_execute_mask` che ritorna un
     pd.Series booleano. Questa funzione controlla solo la prima riga
     (backward compat per preview e Celery task dove il check e globale).
     """
@@ -77,7 +76,7 @@ def should_execute_node(node_data: Dict, input_df: Any) -> bool:
     col, expected, negate = parsed
 
     if not isinstance(input_df, pd.DataFrame) or col not in input_df.columns or len(input_df) == 0:
-        return negate  # colonna assente o df vuoto: condizione = falsa (o vera se negata)
+        return negate  # colonna assente o df vuoto: condizione = falsa (o vera se negata
 
     actual = str(input_df[col].iloc[0]).strip().lower()
     match = actual == expected
@@ -90,7 +89,7 @@ def _extract_consumed_columns(node_data: Dict) -> Set[str]:
     """Estrae le colonne del DataFrame che un nodo api_enrich effettivamente legge.
 
     Analizza param_mapping:
-      - "X"       → colonna "X"
+      - "X" → colonna "X"
       - "{X},{Y}" → colonne "X", "Y" (template syntax)
     """
     pm = CanvasNode(node_data).get_field("param_mapping") or {}
@@ -142,7 +141,7 @@ def _node_may_explode_cardinality(
     dichiarativo `api_config.may_explode_cardinality=false`.
 
     Used by `compute_parallel_groups` per escludere i nodi cardinality-
-    changing dai batch paralleli column-by-column merge.
+    changing dai column-by-column merge.
     """
     cn = CanvasNode(node)
     if cn.type != "api_enrich":
@@ -169,10 +168,10 @@ def compute_parallel_groups(
     """Raggruppa i nodi dell'execution_order in step sequenziali o paralleli.
 
     Ritorna una lista di (step_type, [node_ids]):
-      - ("single", [node_id])      → nodo sorgente/result, eseguire singolarmente
-      - ("parallel", [node_ids])   → gruppo di api_enrich eseguibili in parallelo
+      - ("single", [node_id]) → nodo sorgente/result, eseguire singolarmente
+      - ("parallel", [node_ids]) → gruppo di api_enrich eseguibili in parallelo
 
-    **Check di raggruppamento**: un nodo api_enrich B va nel batch corrente
+    **Check di raggruppamento**: un nodo api_enrich B va nel
     se NESSUNA delle sue colonne lette (param_mapping) e' prodotta da un
     nodo gia' nel batch. Il check e' solo sulle COLONNE, non sul grafo.
 
@@ -180,8 +179,8 @@ def compute_parallel_groups(
     (static → A → B → C → ...) anche quando logicamente i nodi api_enrich
     sono indipendenti — ciascuno aggiunge colonne disgiunte leggendo sempre
     dallo stesso set iniziale (es. X, Y dal catasto). Se rispettassimo il
-    DAG, questi pattern finirebbero in batch da 1 e perderemmo qualunque
-    parallelismo. La semantica "tutti i nodi del batch condividono lo
+    DAG, questi pattern finirebbero in 1 e perderemmo qualunque
+    parallelismo. La semantica "tutti i nodi del lo
     stesso input_df" e' implementata dal caller (vedi task Celery:
     _run_single_node con input_override).
 
@@ -189,10 +188,10 @@ def compute_parallel_groups(
     non parallelizzabili col modello fan-out degli enricher. Quando
     `api_connections` e' fornito, i nodi `api_enrich` con connector di tipo
     file-processor vengono emessi come step ("single", [nid]) separato:
-    flush del batch corrente, emissione del nodo singolo, ripartenza
-    eventuale di un nuovo batch dopo. Questo garantisce che il
+    flush del , emissione del nodo singolo, ripartenza
+    eventuale di un nuovo Questo garantisce che il
     file-processor veda il `node_results[upstream]` gia' popolato col
-    DataFrame mergiato del batch precedente — condizione necessaria per
+    DataFrame mergiato del — condizione necessaria per
     la materializzazione upstream DataFrame→file fatta in
     `_resolve_input_path_for_file_processor` (api_connector.py).
 
@@ -243,9 +242,9 @@ def compute_parallel_groups(
             continue
         ntype = CanvasNode(node).type
 
-        # File-processor: non batchabile. Flush del batch corrente e
+        # File-processor: non batchabile. Flush del e
         # emissione come single, cosi' a runtime riceve il DataFrame
-        # mergiato del batch precedente via node_results[upstream].
+        # mergiato del via node_results[upstream
         if _is_file_processor(node):
             if current_batch:
                 groups.append(("parallel", list(current_batch)))
@@ -255,16 +254,16 @@ def compute_parallel_groups(
             continue
 
         # RB.#15 (2026-04-28): nodi cardinality-changing (esplosione
-        # FeatureCollection / multi-row via `output_mapping` con `[]`/`[*]`)
-        # non possono stare nello stesso batch parallel di nodi
+        # FeatureCollection / multi-row via `output_mapping` con `[]`/`[*]`
+        # non possono stare nello stesso di nodi
         # cardinality-preserving: il merge column-by-column post-batch
-        # (`enrichment_task._merge_batch_parallel_node_results`) violerebbe
-        # l'invariante cardinality e fallirebbe fail-hard (RB.#14).
-        # Flush del batch corrente + emissione come single -> il nodo
-        # esegue sequenzialmente DOPO i batch cardinality-preserving
+        # `enrichment_task._merge_batch_parallel_node_results`) violerebbe
+        # l'invariante cardinality e fallirebbe fail-hard (RB.#14
+        # Flush del + emissione come single -> il nodo
+        # esegue sequenzialmente DOPO i
         # gia' emessi, e propaga la sua cardinality esplosa ai nodi
-        # downstream nel DAG.
-        # Pattern simmetrico a `_is_file_processor` flush.
+        # downstream nel DAG
+        # Pattern simmetrico a `_is_file_processor` flush
         if _node_may_explode_cardinality(node, api_connections):
             if current_batch:
                 groups.append(("parallel", list(current_batch)))
@@ -274,14 +273,14 @@ def compute_parallel_groups(
             continue
 
         if ntype != "api_enrich":
-            # Flush batch corrente
+            # Flush
             if current_batch:
                 groups.append(("parallel", list(current_batch)))
                 current_batch = []
                 current_batch_produces = set()
             groups.append(("single", [node_id]))
         else:
-            # api_enrich: check solo su colonne prodotte dal batch corrente
+            # api_enrich: check solo su colonne prodotte dal
             node_consumes = consumed.get(node_id, set())
             depends_on_batch = bool(node_consumes & current_batch_produces)
 
@@ -340,14 +339,14 @@ def execute_parallel_enrichers(
 
         try:
             if all_exec:
-                # Tutte le righe matchano → esecuzione normale (no split)
+                # Tutte le righe matchano → esecuzione normale (no split
                 result_df = execute_single_fn(node, api_connections, input_df)
             else:
                 # Split: esegui solo le righe che matchano, le altre passthrough
                 df_exec = input_df[mask].copy()
                 df_skip = input_df[~mask].copy()
                 result_exec = execute_single_fn(node, api_connections, df_exec)
-                # Aggiungi colonne mancanti alle righe skippate (None)
+                # Aggiungi colonne mancanti alle righe skippate (None
                 if isinstance(result_exec, pd.DataFrame):
                     new_cols = [c for c in result_exec.columns if c not in df_skip.columns]
                     for c in new_cols:
@@ -387,26 +386,24 @@ def execute_parallel_enrichers(
                     node_results[nid] = res
 
     # Non bloccare su errori singoli se continue_on_error e attivo
-    # (il caller decide come gestire)
+    # il caller decide come gestire
 
-    # Merge: input_df + colonne nuove da ciascun nodo.
-    #
+    # Merge: input_df + colonne nuove da ciascun nodo
     # F-DATA-07 / P1-06: il merge usa positional alignment (`.values` bypassa
     # l'index pandas). Sicuro oggi perche' tutti i path attuali di
     # `EnrichmentExecutor` preservano cardinalita' E ordine dell'input_df
-    # (vedi branch `all_exec=True` e `all_exec=False` con `sort_index`).
+    # vedi branch `all_exec=True` e `all_exec=False` con `sort_index`
     # Se un futuro executor dedupplica internamente, riordina o cambia
     # cardinalita', il positional align diventa silent corruption per riga
-    # (valori API associati alla riga sbagliata).
-    #
+    # valori API associati alla riga sbagliata
     # Guard fail-loud: prima del merge richiediamo che ogni `result_df`
-    # abbia lo stesso index del `merged` (preserva ordine + cardinalita').
+    # abbia lo stesso index del `merged` (preserva ordine + cardinalita'
     # Fallback ristretto: se entrambi gli index sono il RangeIndex default
     # `RangeIndex(0, N)` (caso post-`reset_index(drop=True)` su input
     # gia' default), il positional align e' ancora ben definito. RangeIndex
     # con start != 0 (es. RangeIndex(10, 13)) NON sono accettati: l'identita'
-    # dell'index e' stata persa e il positional merge resta ambiguo.
-    # Tutto il resto -> RuntimeError diagnostico.
+    # dell'index e' stata persa e il positional merge resta ambiguo
+    # Tutto il resto -> RuntimeError diagnostico
     merged = input_df.copy()
     for nid in node_ids:
         result_df = node_results.get(nid)
@@ -438,7 +435,7 @@ def execute_parallel_enrichers(
 
     # Tutti i nodi del gruppo puntano al merged (cosi il nodo successivo
     # nel DAG, che ha input_edge verso l'ultimo nodo del gruppo, trova
-    # tutte le colonne accumulate)
+    # tutte le colonne accumulate
     final_results = {nid: merged for nid in node_ids}
 
     return final_results, first_error

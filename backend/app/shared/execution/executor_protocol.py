@@ -1,7 +1,6 @@
 """
 Canvas executor protocol - shared execution contract.
 
-BE-GO-READY-ARCH-055-W2-EXECUTION-ENGINE-DUPLICATION-SEAM.
 """
 
 from __future__ import annotations
@@ -35,12 +34,12 @@ class ExecutionResult:
 
     Boundary: leaf contract - no Pandas, DB, FastAPI, or ArcGIS imports.
 
-    Go-ready mapping::
+    portable mapping::
 
         type ExecutionResult struct {
             Success bool
             Message *string
-            Error   *string
+            Error *string
             Payload map[string]any
         }
     """
@@ -53,7 +52,7 @@ class ExecutionResult:
     def __post_init__(self) -> None:
         _check_payload_safe(self.payload)
 
-    # -- factory -----------------------------------------------------------------
+    # factory
 
     @classmethod
     def from_executor_dict(cls, d: Any) -> "ExecutionResult":
@@ -71,7 +70,7 @@ class ExecutionResult:
             payload={k: v for k, v in d.items() if k not in ("success", "message", "error")},
         )
 
-    # -- converter ---------------------------------------------------------------
+    # converter
 
     def to_dict(self) -> Dict[str, Any]:
         """Reconstruct a backward-compatible dict for downstream consumers.
@@ -99,7 +98,7 @@ class ExecutionResult:
         Extra payload keys not covered by ``ArtifactPayload`` (e.g.
         ``user_error``, ``error_node_id``) remain in ``self.payload``
         and are not surfaced by this accessor; use ``self.payload`` or
-        ``to_dict()`` to access them.
+        ``to_dict`` to access them.
         """
         if not self.success:
             return None
@@ -119,19 +118,18 @@ class CanvasExecutorProtocol(Protocol):
     Usage - typed dispatch table in OrchestratorService::
 
         executors: Dict[str, CanvasExecutorProtocol] = {
-            "estrai":      self.estrai_executor,
-            "manipola":    self.manipola_executor,
+            "estrai": self.estrai_executor,
+            "manipola": self.manipola_executor,
             "arricchisci": self.enrich_executor,
         }
         result = executors[module_type].execute(project_id, canvas)
 
-    Invariants:
 
-    - ``execute()`` returns ``{"success": bool, ...}`` dict and never
+    - ``execute`` returns ``{"success": bool, ...}`` dict and never
       raises for domain failures (auth, validation, empty data). Only
       infrastructure errors (OOM, unhandled crash) propagate as
       exceptions.
-    - ``preview()`` never persists output; always truncates to
+    - ``preview`` never persists output; always truncates to
       ``limit`` rows.
     - Both methods are synchronous (Celery worker context).
     - Return dict shape: ``success``, ``message`` / ``error`` keys

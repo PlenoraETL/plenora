@@ -19,7 +19,7 @@ from typing import Dict, Any, Optional, List, Tuple, Callable
 from datetime import datetime, timezone
 from collections import defaultdict, deque
 
-# Disabilita SSL warnings (fix Windows)
+# Disabilita SSL warnings (fix Windows
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from app.core.arricchisci.models import (
@@ -38,15 +38,14 @@ from app.shared.api_utils import (
     sanitize_url_for_log,
 )
 
-# Phase 5 B3-A.1 cutover: `RateLimiter` (token bucket thread-safe
-# in-memory) spostato in `app.core.arricchisci._rate_limiter`.
+# B3-A.1 boundary: `RateLimiter` (token bucket thread-safe
+# in-memory) spostato in `app.core.arricchisci._rate_limiter`
 # `EnrichmentExecutor.__init__` continua a usare
 # `RateLimiter(self.options.rate_limit)` via l'import sotto; le 4
-# callsite `self._rate_limiter.acquire()` sono invariate (instance
+# callsite `self._rate_limiter.acquire` sono invariate (instance
 # attribute). Re-import per preservare retrocompat di eventuali
 # consumer storici di `RateLimiter` da `enrichment_service` direct
-# (verificato pre-extraction: zero consumer esterni, ma cheap insurance).
-from app.core.arricchisci._rate_limiter import RateLimiter  # noqa: F401  (re-export)
+from app.core.arricchisci._rate_limiter import RateLimiter  # noqa: F401 (compatibility export
 
 from app.core.arricchisci.enrichment_template_params import (
     EnrichmentTemplateParamsMixin,
@@ -64,17 +63,16 @@ from app.core.arricchisci.enrichment_validation_preview import (
     EnrichmentValidationPreviewMixin,
 )
 
-# Phase 5 B3-A.6 cutover: `_call_api_with_retry` (HTTP per-row retry
+# B3-A.6 boundary: `_call_api_with_retry` (HTTP per-row retry
 # chain con 429+Retry-After + exponential backoff + path params URL
 # substitution + ArcGIS token injection) spostato in
-# `app.core.arricchisci.enrichment_retry_http.EnrichmentRetryHttpMixin`.
-# `EnrichmentExecutor` eredita dal mixin (vedi class declaration sotto).
-# I 3 auth helper (`_prepare_headers`, `_get_oauth2_token`,
+# `app.core.arricchisci.enrichment_retry_http.EnrichmentRetryHttpMixin`
+# `EnrichmentExecutor` eredita dal mixin (vedi class declaration sotto
+# I 3 auth helper (`_prepare_headers`, `_get_oauth2_token`
 # `_get_oauth2_client_credentials_token`) restano qui core (3-line
-# stub di delega, non chiamati dal retry path).
+# stub di delega, non chiamati dal retry path
 # Le call-site `self._call_api_with_retry` da `_execute_internal` /
-# `_execute_parallel` continuano a risolvere via MRO senza modifiche.
-# Vedi `orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B3-A.
+# `_execute_parallel` continuano a risolvere via MRO senza modifiche
 from app.core.arricchisci.enrichment_retry_http import (
     EnrichmentRetryHttpMixin,
 )
@@ -130,7 +128,7 @@ class EnrichmentExecutor(
         self.options = options or EnrichmentOptions()
         self.progress_callback = progress_callback
         
-        # Cache per deduplicazione (thread-safe, bounded LRU-style)
+        # Cache per deduplicazione (thread-safe, bounded LRU-style
         self._cache: Dict[str, Dict] = {}
         self._cache_lock = threading.Lock()
         self._cache_hits = 0
@@ -139,7 +137,7 @@ class EnrichmentExecutor(
         # Statistiche (thread-safe). deque(maxlen=1000) auto-trunca i
         # response times piu' vecchi invece di accumulare indefinitamente
         # tra arricchimenti successivi eseguiti dalla stessa istanza (memory
-        # leak lento con executor pool riusato dai worker Celery).
+        # leak lento con executor pool riusato dai worker Celery
         self._response_times: deque = deque(maxlen=1000)
         self._stats_lock = threading.Lock()
         
@@ -153,9 +151,9 @@ class EnrichmentExecutor(
 
         # Set di parametri "required": serve a _has_null_params per skippare
         # solo quando manca un parametro davvero obbligatorio (gli opzionali null
-        # vengono semplicemente omessi dalla chiamata).
+        # vengono semplicemente omessi dalla chiamata
         # Se l'info non è disponibile (parameters vuoto), fallback al comportamento
-        # NOTE: tutti i parametri sono trattati come required.
+        # NOTE: tutti i parametri sono trattati come required
         params_def = api_config.get("parameters") or []
         self._required_param_names = {
             p.get("name") for p in params_def
@@ -166,19 +164,18 @@ class EnrichmentExecutor(
         # Headers preparati
         self._headers = self._prepare_headers()
 
-        # Tipi colonna rilevati durante auto-flatten (usato per aggiornare schema_fields)
+        # Tipi colonna rilevati durante auto-flatten (usato per aggiornare schema_fields
         self.detected_column_types: Dict[str, str] = {}
         
         # Rate limiter
         self._rate_limiter = RateLimiter(self.options.rate_limit)
         
-        # Batch config (per API che supportano batch nativo)
         batch_data = api_config.get("batch", {})
         self.batch_config = BatchConfig.from_dict(batch_data)
     
     # API PUBBLICA
-    # Metodi chiamabili dall'esterno: validate_input(), preview(), execute().
-    # L'ordine tipico è: validate -> preview (opzionale) -> execute.
+    # Metodi chiamabili dall'esterno: validate_input, preview, execute
+    # L'ordine tipico è: validate -> preview (opzionale) -> execute
     
 
     def execute(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, EnrichmentResult]:
@@ -205,16 +202,16 @@ class EnrichmentExecutor(
                     completed_at=datetime.now(timezone.utc).isoformat()
                 )
 
-        # Feature flag: routing tra sync legacy e async nuovo path.
+        # Feature flag: routing tra sync legacy e async nuovo path
         # BE-CONFIG-001D: default tipato `bool` in
         # `Settings.DEFAULTS["ENABLE_ASYNC_ENRICHMENT"]=False`. Override
         # env via `Settings._converti_tipo_env` (coercion bool su
-        # `1/true/yes`).
+        # `1/true/yes`
         from app.config import settings as _settings
         _async_enabled = bool(_settings.get("ENABLE_ASYNC_ENRICHMENT"))
         _can_use_async = (
             _async_enabled
-            and not self.batch_config.enabled  # batch native usa path dedicato
+            and not self.batch_config.enabled  # usa path dedicato
             and len(df) > 1  # async ha senso solo con piu di 1 riga
         )
 
@@ -287,7 +284,7 @@ def generate_error_report(
     messaggio, HTTP status, numero retry, parametri input, timestamp.
     Il file viene salvato accanto all'output con suffisso '_errors.csv'.
 
-    Phase 4 (P0-01): `input_params` viene redatto via `sanitize_for_log`
+    `input_params` viene redatto via `sanitize_for_log`
     prima della serializzazione. La path CSV pre-fix scriveva in chiaro
     api_key/token/password presenti in `params` (es. api_key in query
     string materializzata da `_build_params`), causando credential leak

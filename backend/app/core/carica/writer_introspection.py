@@ -17,8 +17,8 @@ from app.utils.logger import get_logger
 # Stesso logger name di `database_writer.py`: i record sono
 # indistinguibili dai consumer che attaccano handler / filtrano per
 # "app.core.carica.writer". Il `StructuredLogger` wrapper delega a
-# `_logger.log(...)` sul logger stdlib omonimo (singleton per nome),
-# quindi handler agganciati nei test B2.0 catturano gli emit dal mixin.
+# `_logger.log(...)` sul logger stdlib omonimo (singleton per nome
+# quindi handler agganciati nei test B2.0 catturano gli emit dal mixin
 logger = get_logger("app.core.carica.writer")
 
 
@@ -47,11 +47,11 @@ class SchemaIntrospectionMixin:
                 if count is None:
                     return False
                 # Type guard: alcuni driver DB ritornano stringa ("1") o
-                # bool. Tentativo di conversione protetta da try/except.
+                # bool. Tentativo di conversione protetta da try/except
                 try:
                     return int(count) > 0
                 except (ValueError, TypeError):
-                    # Fallback: truthy check (es. "true", "yes", non-empty)
+                    # Fallback: truthy check (es. "true", "yes", non-empty
                     return bool(count)
         except Exception as e:
             logger.error(f"[CRASH] Errore verifica esistenza tabella: {e}", exc_info=True)
@@ -137,7 +137,7 @@ class SchemaIntrospectionMixin:
             )
             raise
 
-    # INTROSPECTION DATAFRAME-SIDE (DDL planning)
+    # INTROSPECTION DATAFRAME-SIDE (DDL planning
 
     def _compute_schema_hints(
         self,
@@ -146,7 +146,7 @@ class SchemaIntrospectionMixin:
     ) -> Tuple[Dict[str, str], Dict[str, int]]:
         """Calcola `(real_dtypes, max_lengths)` per `generate_create_table`.
 
-        Estratto da `write()` (C4.2 Phase 4). Pre-extraction la stessa
+        Estratto da `write` (C4.2 ). previous implementation la stessa
         logica era duplicata bit-per-bit nei branch CREATE puro e
         CREATE-via-REPLACE atomic. Helper privato, pura computazione,
         nessun side-effect, nessuna chiamata DB.

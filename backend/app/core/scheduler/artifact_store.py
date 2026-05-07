@@ -19,8 +19,8 @@ class ScheduleArtifactStore:
     """Archivia gli output di una run schedulata in cartelle timestamped.
 
     Layout su disco:
-        results/{project_id}/                          ← l'orchestrator scrive qui
-        results/{project_id}/runs/{schedule_short}/{YYYYMMDD_HHMMSS}/  ← noi copiamo qui
+        results/{project_id}/ ← l'orchestrator scrive qui
+        results/{project_id}/runs/{schedule_short}/{YYYYMMDD_HHMMSS}/ ← noi copiamo qui
     """
 
     def __init__(self, results_dir: Optional[Path] = None) -> None:
@@ -93,7 +93,7 @@ class ScheduleArtifactStore:
     ) -> List[Path]:
         if output_file and (project_output_dir / output_file).is_file():
             return [project_output_dir / output_file]
-        # Copia tutti i file nella root (escludi sottocartelle come runs/)
+        # Copia tutti i file nella root (escludi sottocartelle come runs/
         return [f for f in project_output_dir.iterdir() if f.is_file()]
 
     def _build_archive_dir(self, project_output_dir: Path, schedule_id: str) -> Path:

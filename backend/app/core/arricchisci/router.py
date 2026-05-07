@@ -134,7 +134,7 @@ def _check_project_ownership(project_id: str, current_user: CurrentUser):
     return metadata
 
 
-# PROXY — Fetch OpenAPI schema da URL esterni (evita blocco CORS nel browser)
+# PROXY — Fetch OpenAPI schema da URL esterni (evita blocco CORS nel browser
 
 class FetchSchemaRequest(BaseModel):
     url: str
@@ -165,7 +165,7 @@ async def fetch_openapi_schema(body: FetchSchemaRequest, user: CurrentUser = Dep
     _validate_external_url(body.url)
 
     try:
-        # verify=True (default) — niente più MITM via certificati invalidi.
+        # verify=True (default) — niente più MITM via certificati invalidi
         async with httpx.AsyncClient(timeout=15, follow_redirects=False) as client:
             r = await client.get(body.url, headers={"Accept": "application/json"})
             r.raise_for_status()
@@ -234,23 +234,23 @@ async def validate_enrichment(
         )
 
         api_conn = api_connection_service.get_api_connection(request.api_id)
-        # Visibility check (read-only): owned + condivise via allowed_groups.
-        # Senza, un utente del tenant A potrebbe sondare api_id del tenant B.
+        # Visibility check (read-only): owned + condivise via allowed_groups
+        # Senza, un utente del tenant A potrebbe sondare api_id del tenant B
         assert_resource_visible(api_conn, "api_connections", current_user, f"API {request.api_id}")
 
-        # Authz sulle risorse che verranno caricate da `_load_data`:
+        # Authz sulle risorse che verranno caricate da `_load_data`
         # senza questi check un utente con accesso a una API connection
-        # (possibilmente condivisa) potrebbe leakare canvas/file_source di
-        # altri tenant passando project_id / file_source_id arbitrari.
+        # possibilmente condivisa) potrebbe leakare canvas/file_source di
+        # altri tenant passando project_id / file_source_id arbitrari
         if request.project_id:
             assert_project_visible(request.project_id, current_user)
         if request.file_source_id:
             assert_file_source_access(request.file_source_id, current_user)
 
-        # Verifica che tutti i parametri required dell'API abbiano un mapping non vuoto.
+        # Verifica che tutti i parametri required dell'API abbiano un mapping non vuoto
         # Quando l'utente lascia "-- colonna --" nel dropdown, il frontend omette
         # la chiave dal JSON (undefined → dropped by JSON.stringify), quindi il
-        # param_mapping arriva incompleto senza che il backend se ne accorga.
+        # param_mapping arriva incompleto senza che il backend se ne accorga
         required_params = [
             p["name"] for p in (api_conn.get("parameters") or [])
             if p.get("required", False)
@@ -282,8 +282,8 @@ async def validate_enrichment(
             all_static = all(col in static_cols for col in request.param_mapping.values())
 
             # B-BE-58: se df è vuoto ma esiste (0 righe), le colonne mappate potrebbero
-            # comunque esistere nell'header — non segnalarle come mancanti.
-            # Distingui df=None (sorgente non trovata) da df.empty (file con 0 righe).
+            # comunque esistere nell'header — non segnalarle come mancanti
+            # Distingui df=None (sorgente non trovata) da df.empty (file con 0 righe
             if df is not None and df.empty:
                 # File caricato con 0 righe: verifica colonne dall'header
                 missing = [col for col in request.param_mapping.values()
@@ -369,9 +369,9 @@ async def estimate_enrichment(
         from app.core.arricchisci.models import EnrichmentOptions
 
         # include_token=True: codice backend interno, le credenziali non vanno mascherate
-        # (anche se estimate non chiama l'API, EnrichmentExecutor le legge nel costruttore)
+        # anche se estimate non chiama l'API, EnrichmentExecutor le legge nel costruttore
         api_config = api_connection_service.get_api_connection(request.api_id, include_token=True)
-        # Visibility check (read-only stima): owned + condivise.
+        # Visibility check (read-only stima): owned + condivise
         assert_resource_visible(api_config, "api_connections", current_user, f"API {request.api_id}")
 
         # Authz sulle risorse che verranno caricate da _load_request_data
@@ -512,12 +512,12 @@ def update_api_connection(api_id: str, data: dict, current_user: CurrentUser = D
             "Usa 'rest_file' per processori file→file esposti via HTTP."
         )
     try:
-        # Ownership check: 404 se non esiste, 403 se appartiene ad altro gruppo.
+        # Ownership check: 404 se non esiste, 403 se appartiene ad altro gruppo
         # Senza questo check, qualunque utente autenticato potrebbe modificare
-        # le API connections di altri tenant indovinando l'api_id.
+        # le API connections di altri tenant indovinando l'api_id
         _check_api_connection_ownership(api_id, current_user)
         # Difesa in profondità: impedisci al client di trasferire la connection
-        # a un altro gruppo/owner via payload (escalation cross-tenant).
+        # a un altro gruppo/owner via payload (escalation cross-tenant
         data.pop("group_id", None)
         data.pop("created_by", None)
         result = _api_connection_service.update_api_connection(api_id, data)
@@ -545,15 +545,15 @@ def delete_api_connection(api_id: str, current_user: CurrentUser = Depends(requi
     """Elimina una API connection, con check se è in uso in qualche canvas. Solo admin/superadmin."""
     # Ownership check PRIMA di qualunque altra cosa: 404/403 se non sei
     # autorizzato. Senza questo, l'attacker potrebbe almeno sondare quali
-    # api_id esistono via il messaggio "in_use_by" o "non trovata".
+    # api_id esistono via il messaggio "in_use_by" o "non trovata"
     _check_api_connection_ownership(api_id, current_user)
 
-    # Controlla se l'api_id è referenziata in canvas di progetti arricchisci.
-    # Batch Fix 6.3: il try *interno* per-canvas resta fail-open legittimo
-    # (un canvas corrotto di UN altro progetto non deve bloccare la delete).
-    # Il try *esterno* invece promuove a fail-closed: se list_projects() o
+    # Controlla se l'api_id è referenziata in canvas di progetti arricchisci
+    # 6.3: il try *interno* per-canvas resta fail-open legittimo
+    # un canvas corrotto di UN altro progetto non deve bloccare la delete
+    # Il try *esterno* invece promuove a fail-closed: se list_projects o
     # il loop stesso falliscono globalmente (DB down, pool exhausted), non
-    # possiamo escludere dipendenze -> 500, non silent-proceed.
+    # possiamo escludere dipendenze -> 500, non silent-proceed
     in_use_by = []
     check_failed = False
     try:
@@ -570,10 +570,10 @@ def delete_api_connection(api_id: str, current_user: CurrentUser = Depends(requi
                 try:
                     canvas = _project_service.get_project_canvas(proj_id)
                 except CanvasCorruptedError as _canvas_err:
-                    # Batch Fix 6.4: narrow catch tipizzato (era isinstance
+                    # 6.4: narrow catch tipizzato (era isinstance
                     # inside broad). Canvas corrotto di un progetto != della
                     # api connection che stiamo cancellando → non blocchiamo
-                    # la delete, ma logghiamo per triage.
+                    # la delete, ma logghiamo per triage
                     logger.warning(
                         f"delete_api_connection: canvas corrotto "
                         f"per progetto {proj_id} skippato "
@@ -583,7 +583,7 @@ def delete_api_connection(api_id: str, current_user: CurrentUser = Depends(requi
                 except Exception as _canvas_err:
                     # Altre eccezioni di lettura canvas: comportamento
                     # invariato (per-consumer fail-open), messaggio log
-                    # generico per triage.
+                    # generico per triage
                     logger.warning(
                         f"delete_api_connection: errore lettura canvas "
                         f"{proj_id}: {_canvas_err}"
@@ -602,9 +602,9 @@ def delete_api_connection(api_id: str, current_user: CurrentUser = Depends(requi
                     if node_api_id == api_id:
                         proj_name = proj_dict.get('name', proj_id)
                         # F1-B1 (2026-04-24): aggiunto project_type alla shape
-                        # cascade per uniformare con connection/datasource 409.
+                        # cascade per uniformare con connection/datasource 409
                         # PR-δ: aggiunto group_id per consentire filtro
-                        # cross-tenant in fase di costruzione 409 detail.
+                        # cross-tenant in fase di costruzione 409 detail
                         in_use_by.append({
                             'project_id': proj_id,
                             'project_name': proj_name,
@@ -629,7 +629,7 @@ def delete_api_connection(api_id: str, current_user: CurrentUser = Depends(requi
     if in_use_by:
         # PR-δ: filtrare dependencies per visibility lato chiamante per non
         # leakare nomi di progetti cross-tenant nell'errore 409 (la api
-        # connection puo' essere shared con altri gruppi via allowed_groups).
+        # connection puo' essere shared con altri gruppi via allowed_groups
         is_super = current_user.role == "superadmin"
         if is_super:
             visible = list(in_use_by)
@@ -638,12 +638,12 @@ def delete_api_connection(api_id: str, current_user: CurrentUser = Depends(requi
             visible = [p for p in in_use_by if p.get("group_id") == current_user.group_id]
             hidden_count = len(in_use_by) - len(visible)
 
-        # Shape 409 cascade canonica (Batch Fix 6.1): error + dependencies
+        # Shape 409 cascade canonica (6.1): error + dependencies
         # con kind. Pre-fix questa shape non aveva la chiave "error" e
         # usava "in_use_by" con {project_id, project_name}: il FE non
         # poteva scrivere un handler unificato. Ora allineata a projects/
-        # connections/datasources: kind="project", id, name.
-        # PR-δ: aggiunto `hidden_count` opzionale (FE backward-compatible).
+        # connections/datasources: kind="project", id, name
+        # PR-δ: aggiunto `hidden_count` opzionale (FE backward-compatible
         raise HTTPException(
             status_code=409,
             detail={
@@ -658,7 +658,7 @@ def delete_api_connection(api_id: str, current_user: CurrentUser = Depends(requi
                         "id": p["project_id"],
                         "name": p["project_name"],
                         # F1-B1: project_type ora presente per uniformare
-                        # shape con connection/datasource 409 cascade.
+                        # shape con connection/datasource 409 cascade
                         "project_type": p.get("project_type", ""),
                     }
                     for p in visible
@@ -675,7 +675,7 @@ def delete_api_connection(api_id: str, current_user: CurrentUser = Depends(requi
                 "message": f"API connection '{api_id}' non trovata",
             },
         )
-    # F2-B1 (2026-04-24): DELETE risponde 204 No Content, body vuoto.
+    # F2-B1 (2026-04-24): DELETE risponde 204 No Content, body vuoto
 
 
 @api_connections_router.post("/api-connections/test")
@@ -775,7 +775,7 @@ def get_templates(current_user: CurrentUser = Depends(require_not_esecutore)):
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
-# ENDPOINT: ESECUZIONE ARRICCHIMENTO (sincrono/asincrono)
+# ENDPOINT: ESECUZIONE ARRICCHIMENTO (sincrono/asincrono
 
 enrich_router = APIRouter(prefix="/projects", tags=["arricchisci"])
 
@@ -818,7 +818,7 @@ def execute_enrichment_async(
     # Auth + ownership: stesso ragionamento di /enrich sincrono
     _check_project_ownership(project_id, current_user)
 
-    # Auth gate addizionale solo se intermediate_mode e' valorizzato.
+    # Auth gate addizionale solo se intermediate_mode e' valorizzato
     if intermediate_mode is not None and current_user.role != "superadmin":
         raise HTTPException(
             status_code=403,
@@ -848,7 +848,7 @@ def execute_enrichment_async(
         if not canvas:
             raise HTTPException(400, "Canvas non trovato")
 
-        # Formato: usa il valore dal body se specificato,
+        # Formato: usa il valore dal body se specificato
         # altrimenti tenta di leggerlo dal result_node del canvas
         output_format = request.format
         if not output_format or output_format == "csv":

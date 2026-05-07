@@ -1,5 +1,5 @@
 """
-Mixin TRANSACTION_EXECUTION — batch execution con strategia transazionale
+Mixin TRANSACTION_EXECUTION — con strategia transazionale
 
 configurata per DatabaseWriter.
 """
@@ -26,15 +26,15 @@ from app.utils.logger import get_logger
 # Stesso logger name di `database_writer.py`: i record sono
 # indistinguibili dai consumer che attaccano handler / filtrano per
 # "app.core.carica.writer". Il `StructuredLogger` wrapper delega a
-# `_logger.log(...)` sul logger stdlib omonimo (singleton per nome),
-# quindi handler agganciati nei test B2.0 catturano gli emit dal mixin.
+# `_logger.log(...)` sul logger stdlib omonimo (singleton per nome
+# quindi handler agganciati nei test B2.0 catturano gli emit dal mixin
 logger = get_logger("app.core.carica.writer")
 
 
 class TransactionExecutionMixin:
     """Mixin per `DatabaseWriter`: batch execution con strategia
     transazionale configurata. Le transaction boundaries
-    (`engine.begin()` per ALL_OR_NOTHING, `engine.connect()` +
+    (`engine.begin` per ALL_OR_NOTHING, `engine.connect` +
     commit/rollback manuali per PER_BATCH) sono incapsulate qui;
     il core executor (`_execute_batch`) e' transaction-agnostic.
     """
@@ -51,7 +51,7 @@ class TransactionExecutionMixin:
 
         Supporta due strategie transazionali:
         - ALL_OR_NOTHING: unica transazione, rollback totale su errore
-        - PER_BATCH: commit ogni batch, i batch già committati rimangono
+        - PER_BATCH: commit ogni batch, i à committati rimangono
 
         Args:
             df: DataFrame preparato
@@ -96,7 +96,7 @@ class TransactionExecutionMixin:
     ) -> WriteResult:
         """Esecuzione con unica transazione — commit totale o rollback totale.
 
-        Usa `engine.begin()` (idiomatic SQLAlchemy 2.x): context manager
+        Usa `engine.begin` (idiomatic SQLAlchemy 2.x): context manager
         che committa al normal exit e rollbacka automatic su Exception.
         Coerente col pattern di `_truncate_insert_atomic` /
         `_replace_atomic` — intent di atomicita' esplicito.
@@ -124,7 +124,7 @@ class TransactionExecutionMixin:
                     report_progress=self.report_progress,
                 )
 
-            # engine.begin() ha gia' committato all'exit normale del with
+            # engine.begin ha gia' committato all'exit normale del with
             result.status = WriteStatus.SUCCESS
             logger.info(
                 f"{operation} completato: {result.rows_written}/{result.total_rows} "
@@ -132,7 +132,7 @@ class TransactionExecutionMixin:
             )
 
         except Exception as e:
-            # engine.begin() ha gia' rollbackato automaticamente
+            # engine.begin ha gia' rollbackato automaticamente
             result.status = WriteStatus.WRITE_ERROR
             result.error_message = f"Errore durante {operation}: {str(e)}"
             result.error_details = repr(e)
@@ -148,14 +148,14 @@ class TransactionExecutionMixin:
         """Esecuzione con commit per batch.
 
         Prima: apriva una nuova connessione ad ogni batch → pool exhaustion
-        con molti batch. Ora riusa UNA connessione e fa commit() dopo ogni
-        batch. Se un batch fallisce, fa rollback e continua sul successivo
+        con molti batch. Ora riusa UNA connessione e fa commit dopo ogni
+        batch. Se un , fa rollback e continua sul successivo
         con una connessione fresca.
         """
         # Mutable holder: la connection viene chiusa+riaperta dopo
-        # ogni batch fallito (vedi `_process_batch` qui sotto).
+        # ogni
         # Lista a 1 elemento per consentire mutation dal closure
-        # senza `nonlocal` esplicito.
+        # senza `nonlocal` esplicito
         conn_holder = [self.engine.connect()]
         try:
             if self.db_type == "oracle":
@@ -183,7 +183,7 @@ class TransactionExecutionMixin:
                         conn_holder[0].close()
                     except Exception as cl_err:
                         logger.debug(
-                            "[BATCH] conn.close() pre-riapertura fallito, ignoro: %s: %s",
+                            "[BULK] conn.close() durante retry fallito, ignoro: %s: %s",
                             type(cl_err).__name__,
                             cl_err,
                         )
@@ -244,7 +244,7 @@ class TransactionExecutionMixin:
 
         Strategia post-rimozione bulk native paths (2026-04-23):
         1. **Dispatcher bulk** (`bulk_insert` scaffolding): invocato se
-           `is_bulk_enabled()` e' True. Post-rimozione COPY Postgres
+           `is_bulk_enabled` e' True. Post-rimozione COPY Postgres
            (kickoff.md §9.6) + LOAD DATA MySQL (§9.5), il dispatcher
            raise sempre `BulkInsertNotSupportedError(reason=
            "dialect_not_supported")` per ogni dialect. Utile solo come
@@ -260,7 +260,7 @@ class TransactionExecutionMixin:
         scaffolding (funzionalmente equivalente post-rimozione: entrambi
         i valori producono executemany).
 
-        2. **executemany** (default): unico `execute()` con lista params.
+        2. **executemany** (default): unico `execute` con lista params.
            SQLAlchemy mappa a driver-native batching. Errori per-riga
            interpretabili (utile su update/upsert con vincoli unique).
 
@@ -293,7 +293,7 @@ class TransactionExecutionMixin:
                 # Risolvi tabella reale: se il caller ha passato
                 # target_table esplicito (stage+swap su shadow), usa
                 # quello. Altrimenti il SQL e' direttamente sul
-                # target finale → config.table_name e' corretto.
+                # target finale → config.table_name e' corretto
                 effective_table = target_table or self.config.table_name
                 effective_schema = (
                     target_schema if target_schema is not None
@@ -311,7 +311,7 @@ class TransactionExecutionMixin:
                 except BulkInsertNotSupportedError as e:
                     # Fallback voluto: il bulk path non e' applicabile a
                     # questa chiamata. Log a debug per non rumoreggiare
-                    # in caso di geometry-always (es. catene RFI).
+                    # in caso di geometry-always (es. catene RFI
                     logger.debug(
                         f"Bulk insert non applicabile ({e}); "
                         f"fallback a executemany"

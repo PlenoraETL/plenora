@@ -50,14 +50,14 @@ def schedule_pipeline_task(
     Returns:
         Dict con risultato esecuzione
     """
-    # N15b: se il caller non ha valorizzato scheduled_for (cron normali,
+    # N15b: se il caller non ha valorizzato scheduled_for (cron normali
     # manual "Esegui Ora"), lo computiamo qui al task entry. Questo
     # garantisce che la chiave idempotency di CARICA sia sempre stabile
     # attraverso retry dello stesso tick — il retry propaga scheduled_for
-    # via _handle_failure (cfr. execution_manager N15).
-    # Invocazioni distinte (tick cron diversi, click Esegui Ora multipli)
+    # via _handle_failure (cfr. execution_manager N15
+    # Invocazioni distinte (tick cron diversi, click Esegui Ora multipli
     # producono ISO diversi (microsecondi) -> run_id distinti -> ognuna
-    # eseguita separatamente come intended.
+    # eseguita separatamente come intended
     if scheduled_for is None:
         from datetime import datetime, timezone
         scheduled_for = datetime.now(timezone.utc).isoformat()
@@ -104,7 +104,7 @@ def schedule_pipeline_task(
         # intent: boundary top-level task Celery / outcome: fail-closed sanitizzato
         # Il dettaglio tecnico resta solo nel logger.error([CRASH]) + nel log_entry
         # schedule_logs (canale admin diagnostics). Il return dict finisce in Redis
-        # via AsyncResult e viene esposto via get_task_status al FE: niente str(e).
+        # via AsyncResult e viene esposto via get_task_status al FE: niente str(e
         return {
             "success": False,
             "status": "failed",
@@ -136,7 +136,7 @@ def beat_heartbeat():
         # Breadcrumb obbligatorio: la tabella beat_heartbeat e' letta
         # dall'healthcheck — un silent swallow qui nasconde un DB down
         # dietro un beat apparentemente sano. Non re-raise: il task e'
-        # `ignore_result=True` e non deve rompere il tick beat.
+        # `ignore_result=True` e non deve rompere il tick beat
         logger.warning(
             f"[HEARTBEAT] INSERT beat_heartbeat fallito "
             f"(healthcheck vedra' beat stale): {e}"

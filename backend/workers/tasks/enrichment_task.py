@@ -29,7 +29,7 @@ def _merge_batch_parallel_node_results(
 ):
     """Merge dei DataFrame prodotti da un batch parallel di nodi enrichment.
 
-    Invariante: ogni nodo del batch deve ritornare un DataFrame della stessa
+    Invariante: ogni nodo del ritornare un DataFrame della stessa
     cardinalita' del `common_input_df`. Se un nodo riduce o aumenta le righe
     (es. esplosione FeatureCollection in via sequenziale, dedup interna),
     il merge column-by-column non e' applicabile e produrrebbe corruption
@@ -47,7 +47,7 @@ def _merge_batch_parallel_node_results(
     Args:
         common_input_df: DataFrame di input condiviso dai nodi del batch.
         node_results: dict {node_id: DataFrame|other} con i risultati dei nodi.
-        node_ids: lista degli id dei nodi del batch da mergiare.
+        node_ids: lista degli id dei nodi del mergiare.
         task_id: id del task Celery, usato nel messaggio diagnostico.
 
     Side effects:
@@ -133,8 +133,8 @@ def execute_enrichment_task(
     task_id = self.request.id
 
     # C4 round 3: idempotency guard. Se run_id e' passato dall'esterno
-    # (scheduler con schedule_run_id, UI retry-handler) ed e' gia'
-    # completato in intermediate.runs, skip senza ri-eseguire.
+    # scheduler con schedule_run_id, UI retry-handler) ed e' gia'
+    # completato in intermediate.runs, skip senza ri-eseguire
     if run_id is not None:
         from app.shared.idempotency import is_already_completed
         if is_already_completed(run_id):
@@ -152,9 +152,9 @@ def execute_enrichment_task(
 
     start_time = time.time()
 
-    # N9: re-check permessi user al pickup (helper condiviso).
+    # N9: re-check permessi user al pickup (helper condiviso
     # Per is_eseguibile, skip: gli eseguibili hanno flusso di auth
-    # separato (token eseguibile) e non passano per user_id interattivo.
+    # separato (token eseguibile) e non passano per user_id interattivo
     if not is_eseguibile:
         from app.shared.async_user_recheck import recheck_user_authorized
         _revoked = recheck_user_authorized(
@@ -167,7 +167,7 @@ def execute_enrichment_task(
 
     # Per gli eseguibili non propaghiamo project_id ai logger: il PostgresLogHandler
     # lo userebbe come colonna `logs.project_id` creando tracce persistenti che
-    # vogliamo evitare.
+    # vogliamo evitare
     _log_pid = "" if is_eseguibile else project_id
 
     logger.info(f"[Task {task_id}] Avvio enrichment per progetto {project_id}", project_id=_log_pid)
@@ -179,14 +179,14 @@ def execute_enrichment_task(
     enrichment_stats = None
     error_report_file = None
 
-    # Apre run in intermediate.db (non bloccante).
+    # Apre run in intermediate.db (non bloccante
     # Per gli eseguibili saltiamo `intermediate.create_run` perche' l'eseguibile
     # non e' un progetto in `projects`, quindi un record runs con
     # canvas_id="exec_..." sarebbe orfano. MA il `_group_id` deve comunque
     # essere recuperato (dalla tabella `eseguibili`) per propagarlo al
-    # tenant binding di `api_connection_service` piu' sotto: senza,
+    # tenant binding di `api_connection_service` piu' sotto: senza
     # `_load_*` / `_execute_rest_file` falliscono fail-closed con
-    # "Contesto di sicurezza non determinabile (group_id mancante)".
+    # "Contesto di sicurezza non determinabile (group_id mancante)"
     import uuid as _uuid
     _run_start = time.time()
     _group_id = ""
@@ -213,7 +213,7 @@ def execute_enrichment_task(
             logger.warning(f"[Task {task_id}] Intermediate: apertura run fallita (non bloccante): {_rie}")
             _run_id = None
 
-    # Per eseguibili: niente log_runs/logs su DB.
+    # Per eseguibili: niente log_runs/logs su DB
     if not is_eseguibile:
         open_run(
             run_id=_run_id or task_id,
@@ -226,29 +226,27 @@ def execute_enrichment_task(
         set_run_context(run_id=_run_id or task_id, project_id=project_id)
 
     try:
-        # Import qui per evitare circular imports.
+        # Import qui per evitare circular imports
         # NOTE: istanziamo una NUOVA `ApiConnectionService` invece di
         # usare il singleton modulo-level. Il singleton ha stato per-execution
         # che e' soggetto a race condition cross-tenant fra task paralleli
-        # sullo stesso worker process (Celery prefork riusa i fork).
+        # sullo stesso worker process (Celery prefork riusa i fork
         # Un'istanza locale per task garantisce isolamento totale del tenant
-        # binding.
+        # binding
         from app.core.arricchisci.api_connector import ApiConnectionService
         api_connection_service = ApiConnectionService()
-        # BE-GO-READY-TRANSFORMATION-ENGINE-020: Phase 3 — costruisci un
+        # — costruisci un
         # `ArricchisciExecutionContext` tipato esplicito; il context
         # viene threadato esplicitamente ai 4 mixin callsite
-        # (`_load_source_project`, `_load_file_source`,
-        # `_load_static_values`, `_execute_rest_file`) tramite `ctx=ctx`.
-        #
-        # BE-GO-READY-TRANSFORMATION-ENGINE-030A + OE012: il worker NON
+        # `_load_source_project`, `_load_file_source`
+        # `_load_static_values`, `_execute_rest_file`) tramite `ctx=ctx`
+        # + OE012: il worker NON
         # muta `svc._current_group_id` / `svc._preview_limit`. I 4
         # mixin reader site sono ctx-aware da TE-019/-020/-024/-026: il
         # ctx tipato e' l'unica via di tenant binding nel path del
         # worker. Post-OE012 la funzione legacy `apply_to_legacy_state`
-        # e' stata cancellata; il negative source-bound lock in
         # `tests2/arricchisci/unit/test_external_consumers_ctx_migration_contract.py`
-        # protegge contro re-introduzione.
+        # protegge contro re-introduzione
         from app.core.arricchisci.execution_context import (
             ArricchisciExecutionContext,
         )
@@ -287,7 +285,7 @@ def execute_enrichment_task(
         # dipendono l'uno dall'output dell'altro (leggono solo colonne gia'
         # presenti nel DataFrame al momento del gruppo) → possono girare
         # concorrentemente. I nodi di tipo source/static/result restano
-        # "single" (eseguiti uno alla volta).
+        # "single" (eseguiti uno alla volta
         from app.core.arricchisci.parallel import compute_parallel_groups, should_execute_node
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -322,8 +320,8 @@ def execute_enrichment_task(
             Parametri:
                 input_override: se non None, il nodo api_enrich lo usa come
                     input_df invece di leggere node_results[input_edge.source].
-                    Serve nel caso dei batch paralleli dove tutti i nodi del
-                    batch condividono lo stesso input (il predecessore comune
+                    Serve nel caso dei dove tutti i nodi del
+                    lo stesso input (il predecessore comune
                     del batch), anche se topologicamente nel canvas sono
                     concatenati (pattern pass-through).
 
@@ -338,9 +336,9 @@ def execute_enrichment_task(
                 return
 
             node_type = node.get("type")
-            # Merge: campi flat del nodo + node['data'] (priorita' ai campi flat? no,
+            # Merge: campi flat del nodo + node['data'] (priorita' ai campi flat? no
             # a data — vedi commento vecchio codice). Stesso comportamento del loop
-            # originale.
+            # originale
             node_flat = {k: v for k, v in node.items() if k not in ("id", "type", "position", "data", "config")}
             node_data = {**node_flat, **(node.get("data") or {})}
 
@@ -355,14 +353,14 @@ def execute_enrichment_task(
             if node_type == "file_source":
                 # Se il downstream e' un file-processor (rest_file) il file
                 # non va letto come DataFrame: resta un marker passthrough
-                # e il file vero viene risolto dal processor via file_source_id.
+                # e il file vero viene risolto dal processor via file_source_id
                 downstream_edges = [e for e in edges if e["source"] == node_id]
                 is_for_file_processor = False
                 for de in downstream_edges:
                     target_node = next((n for n in nodes if n["id"] == de["target"]), None)
                     if target_node and target_node.get("type") == "api_enrich":
-                        # Pydantic Node serializza tutti i campi al root del nodo;
-                        # `data` resta vuoto. Cerco prima al root, fallback dentro data.
+                        # Pydantic Node serializza tutti i campi al root del nodo
+                        # `data` resta vuoto. Cerco prima al root, fallback dentro data
                         target_api_id = target_node.get("api_id") or (target_node.get("data") or {}).get("api_id")
                         target_api_config = api_connections.get(target_api_id, {})
                         if target_api_config.get("connection_type") == "rest_file":
@@ -393,7 +391,7 @@ def execute_enrichment_task(
 
             if node_type == "result":
                 # Il nodo result non produce output: prende l'input dall'edge
-                # (il salvataggio del risultato finale avviene dopo il loop).
+                # il salvataggio del risultato finale avviene dopo il loop
                 input_edge = next((e for e in edges if e["target"] == node_id), None)
                 if input_edge:
                     input_df = node_results.get(input_edge["source"])
@@ -406,14 +404,14 @@ def execute_enrichment_task(
                 # nel blocco post-processing api_enrich (dove il bundle IMDF e'
                 # gia' estratto dallo zip). Qui propaghiamo solo il risultato
                 # del predecessore perche' non romperemo l'execution order e
-                # perche' cosi' un eventuale result downstream riceve l'input.
+                # perche' cosi' un eventuale result downstream riceve l'input
                 input_edge = next((e for e in edges if e["target"] == node_id), None)
                 if input_edge:
                     node_results[node_id] = node_results.get(input_edge["source"])
                 return
 
             if node_type != "api_enrich":
-                return  # tipo sconosciuto → skip silente (era il comportamento del vecchio loop)
+                return  # tipo sconosciuto → skip silente (era il comportamento del vecchio loop
 
             api_id = node_data.get("api_id")
             api_config = api_connections.get(api_id)
@@ -447,9 +445,8 @@ def execute_enrichment_task(
                 api_name = api_config.get("name", api_id)
                 update_task_progress(self, node_progress, f"Esecuzione {api_name} (REST file)...", task_id=task_id)
 
-                # BE-GO-READY-TRANSFORMATION-ENGINE-020: typed ctx
                 # threadato per il rest_file pipeline (group_id letto
-                # da `ctx` invece di singleton state).
+                # da `ctx` invece di singleton state
                 result = api_connection_service._execute_rest_file(
                     node_data, api_config, nodes, edges, node_id, project_id,
                     node_results=node_results, ctx=ctx,
@@ -485,11 +482,11 @@ def execute_enrichment_task(
                         raise ValueError(f"Nodo {node_id} non ha input")
 
                     # Se il chiamante ha fornito un input_override (esecuzione
-                    # in batch parallelo), lo usiamo come input del nodo
-                    # invece di leggere da node_results[input_edge.source].
+                    # in ), lo usiamo come input del nodo
+                    # invece di leggere da node_results[input_edge.source
                     # Questo e' il meccanismo con cui i nodi di un batch
                     # condividono lo stesso DataFrame di partenza anche quando
-                    # topologicamente nel canvas sono concatenati.
+                    # topologicamente nel canvas sono concatenati
                     if input_override is not None:
                         input_df = input_override
                     else:
@@ -509,7 +506,7 @@ def execute_enrichment_task(
                             deduped.append(m)
                     batch_from_node = node_data.get("batch", {})
                     # NOTE: non riassegnare api_config (variabile closure condivisa
-                    # tra thread). Usa una copia locale api_config_local.
+                    # tra thread). Usa una copia locale api_config_local
                     api_config_local = {
                         **api_config,
                         "output_mapping": deduped,
@@ -529,7 +526,7 @@ def execute_enrichment_task(
                     )
 
                     # Progress callback: usa default argument per catturare node_progress
-                    # al momento della creazione (non riferimento mutabile).
+                    # al momento della creazione (non riferimento mutabile
                     progress_range = 20
                     def progress_callback(percent: int, message: str, _base=node_progress, _range=progress_range):
                         mapped_progress = _base + int((percent / 100) * _range)
@@ -650,14 +647,13 @@ def execute_enrichment_task(
                 _run_single_node(node_ids[0], base_progress)
                 continue
 
-            # Parallel: N nodi api_enrich indipendenti.
-            #
+            # Parallel: N nodi api_enrich indipendenti
             # Modello "fan-out artificiale": anche se topologicamente nel
-            # canvas i nodi del batch possono essere concatenati (es.
+            # canvas i nodi del essere concatenati (es
             # A→B→C pass-through), logicamente consumano colonne gia'
-            # prodotte *prima* del batch e aggiungono colonne disgiunte.
+            # prodotte *prima* del aggiungono colonne disgiunte
             # Per eseguirli in parallelo devono tutti vedere lo stesso
-            # input_df: quello del predecessore del PRIMO nodo del batch.
+            # input_df: quello del predecessore del PRIMO nodo del batch
             first_node_id = node_ids[0]
             first_input_edge = next(
                 (e for e in edges if e["target"] == first_node_id), None
@@ -668,7 +664,7 @@ def execute_enrichment_task(
             if common_input_df is None:
                 # Fallback difensivo: se per qualche motivo non troviamo
                 # l'input comune, ripiega su esecuzione sequenziale (il
-                # vecchio comportamento, che usa input_edge per-nodo).
+                # vecchio comportamento, che usa input_edge per-nodo
                 logger.warning(
                     f"[Task {task_id}] Batch parallelo senza input comune, "
                     f"fallback a esecuzione sequenziale per {len(node_ids)} nodi"
@@ -695,16 +691,16 @@ def execute_enrichment_task(
                     for nid in node_ids
                 }
                 for future in as_completed(futures):
-                    # future.result() risolleva eventuali _EarlyTaskReturn o
+                    # future.result risolleva eventuali _EarlyTaskReturn o
                     # altre eccezioni → propagate al global handler del task
                     future.result()
 
-            # Merge batch parallel: helper module-level con guard fail-hard
+            # Merge helper module-level con guard fail-hard
             # su cardinality mismatch (RB.#14). Side-effect: sovrascrive
-            # node_results[nid] di ogni nodo del batch con il merged DataFrame,
+            # node_results[nid] di ogni nodo del il merged DataFrame
             # cosi' i nodi a valle nel DAG leggono tutte le colonne. Solleva
-            # RuntimeError se un nodo ritorna len diverso da common_input_df:
-            # bubble-up al global handler -> close_run(success=False).
+            # RuntimeError se un nodo ritorna len diverso da common_input_df
+            # bubble-up al global handler -> close_run(success=False
             _merge_batch_parallel_node_results(
                 common_input_df=common_input_df,
                 node_results=node_results,
@@ -716,7 +712,7 @@ def execute_enrichment_task(
         
         # Trova output finale
         result_node = next((n for n in nodes if n.get("type") == "result"), None)
-        # Merge flat + data (stesso pattern usato per gli altri nodi)
+        # Merge flat + data (stesso pattern usato per gli altri nodi
         if result_node:
             result_flat = {k: v for k, v in result_node.items() if k not in ("id", "type", "position", "data", "config")}
             result_data = {**result_flat, **(result_node.get("data") or {})}
@@ -752,7 +748,7 @@ def execute_enrichment_task(
             elapsed_time = time.time() - start_time
             update_task_progress(self, 100, "Completato!", task_id=task_id)
 
-            # Rinomina il file con il nome dal nodo result (se specificato)
+            # Rinomina il file con il nome dal nodo result (se specificato
             src_ext = src_path.suffix  # es. .csv
             if output_filename and output_filename != "output":
                 # Assicura che l'estensione sia coerente
@@ -798,7 +794,7 @@ def execute_enrichment_task(
                     features = data.get('features', []) if isinstance(data, dict) else []
                     rows_count = len(features)
 
-                # Per zip, bin, altri: solo controllo dimensione (già fatto sopra)
+                # Per zip, bin, altri: solo controllo dimensione (già fatto sopra
 
             except (UnicodeDecodeError, ValueError, Exception) as val_err:
                 src_path.unlink(missing_ok=True)
@@ -808,16 +804,16 @@ def execute_enrichment_task(
             # upload_imdf_layers dal modulo `app.core.imdf`) qui era stata
             # cablata in modo provvisorio leggendo i campi `imdf_*` dal nodo
             # result. E' stata rimossa: la pubblicazione su ArcGIS sara'
-            # gestita da un nodo dedicato (publisher) in una fase futura.
-            # Il modulo `app.core.imdf` resta disponibile per quel reuse.
+            # gestita da un nodo dedicato (publisher) in una fase futura
+            # Il modulo `app.core.imdf` resta disponibile per quel reuse
 
             # ── ESTRAZIONE METADATI IMDF ─────────────────────────────────
             # Se nel canvas c'e' almeno un nodo api_enrich con
             # output_kind='imdf', il file zip prodotto e' un IMDF: estraiamo
             # manifest.json + validation.json e li includiamo inline nel task
             # result come `result['imdf']`. Il frontend li mostra nei modali
-            # del nodo Result senza dover rifetchare il file.
-            # Sono piccoli (manifest ~10KB, validation ~6KB), inline e' OK.
+            # del nodo Result senza dover rifetchare il file
+            # Sono piccoli (manifest ~10KB, validation ~6KB), inline e' OK
             imdf_metadata: Optional[Dict[str, Any]] = None
             has_imdf_upstream = any(
                 (n.get("output_kind") == "imdf" or (n.get("data") or {}).get("output_kind") == "imdf")
@@ -834,11 +830,10 @@ def execute_enrichment_task(
                     # NON serializziamo piu' geojson/manifest/validation/renderers
                     # nel task result: restano tutti sul filesystem in
                     # IMDF_BUNDLES_DIR/{task_id}/, il frontend li carica
-                    # on-demand via GET /api/imdf/bundles/{task_id}.
-                    #
+                    # on-demand via GET /api/imdf/bundles/{task_id}
                     # `persist_imdf_bundle_to_disk` garantisce in try/finally
                     # il cleanup di `bundle.tmp_dir` in OGNI caso (anche
-                    # su errore di move), prevenendo orfani `/tmp/imdf_XXXX/`.
+                    # su errore di move), prevenendo orfani `/tmp/imdf_XXXX/`
                     bundle_persisted_path = None
                     try:
                         _res = persist_imdf_bundle_to_disk(
@@ -854,11 +849,11 @@ def execute_enrichment_task(
                     # ── Push S3 (R2 multi-host) ──────────────────────────
                     # D3 commit 4 (R2): orchestrazione esplicita persist ->
                     # storage. Pre-commit la chiamata viveva inline dentro
-                    # persist (inversione di dep loader/persist <- storage).
+                    # persist (inversione di dep loader/persist <- storage
                     # Post-commit il worker e' l'orchestratore. Best-effort
                     # identico al pre-commit: failure logga warning ma non
                     # blocca il task (il bundle e' comunque servibile dal
-                    # nodo corrente via local cache fino a TTL).
+                    # nodo corrente via local cache fino a TTL
                     if bundle_persisted_path:
                         try:
                             from app.core.imdf import storage as _imdf_storage
@@ -874,7 +869,7 @@ def execute_enrichment_task(
                     # ── Task result SLIM ──────────────────────────────
                     # Solo informazioni minime che servono al frontend
                     # per sapere "esiste un bundle IMDF" + link per fetch
-                    # lazy. I dettagli vengono da GET /api/imdf/bundles/{id}.
+                    # lazy. I dettagli vengono da GET /api/imdf/bundles/{id}
                     imdf_metadata = {
                         "site_id":        bundle.site_id,
                         "has_gdb":        bundle.gdb_path is not None,
@@ -894,21 +889,21 @@ def execute_enrichment_task(
                     imdf_metadata = {"error": str(_imdf_e)}
 
             # `result_id` viene generato solo nel ramo arricchisci standard
-            # (save su DB). Per gli eseguibili pubblicati il file vive su
+            # save su DB). Per gli eseguibili pubblicati il file vive su
             # disco e si scarica via /api/eseguibili/.../download, quindi
-            # non c'e' result_id da propagare.
+            # non c'e' result_id da propagare
             result_id: Optional[str] = None
 
             if is_eseguibile:
                 # Upload su object storage (S3 via cloud_backends). Niente FS
                 # locale persistente: backend+worker multi-host safe. Il
                 # frontend scarica via GET /api/eseguibili/{id}/download/{task_id}
-                # che streamma da S3 e cancella l'oggetto dopo l'invio.
+                # che streamma da S3 e cancella l'oggetto dopo l'invio
                 import shutil as _shutil
                 from app.core.eseguibili import storage as _eseg_storage
                 _output_filename = src_path.name
                 _eseg_storage.save(task_id, src_path)
-                # Cleanup directory temporanea dell'executable (plenora_exec_*)
+                # Cleanup directory temporanea dell'executable (plenora_exec_*
                 try:
                     tmp_parent = src_path.parent
                     if tmp_parent.name.startswith("plenora_exec_") and tmp_parent.exists():
@@ -916,7 +911,7 @@ def execute_enrichment_task(
                 except Exception as e:
                     logger.debug(f"cleanup temp dir fallito: {type(e).__name__}: {e}")
                 # src_path non punta piu' a un file locale; conserviamo il nome
-                # per il payload del task result (usato come metadata).
+                # per il payload del task result (usato come metadata
                 src_path = Path(_output_filename)
                 logger.info(f"[Task {task_id}] Output eseguibile su storage: eseguibili-outputs/{task_id}/{_output_filename}")
             else:
@@ -937,7 +932,7 @@ def execute_enrichment_task(
                 # `result_id` propagato per il download via
                 # `/api/tasks/{task_id}/download` che usa
                 # `task_info.result["result_id"]` (vedi
-                # orchestrator/router.py:580). Senza, 410 Gone.
+                # orchestrator/router.py:580). Senza, 410 Gone
                 "result_id": result_id,
                 "output_type": "file",
                 "output_file": src_path.name,
@@ -956,7 +951,7 @@ def execute_enrichment_task(
             if imdf_metadata is not None:
                 result["imdf"] = imdf_metadata
             if is_eseguibile:
-                # URL relativo; il frontend lo compone con il base host.
+                # URL relativo; il frontend lo compone con il base host
                 result["download_url"] = f"/api/eseguibili/{project_id}/download/{task_id}"
             
             logger.info(f"[Task {task_id}] Executable completato in {elapsed_time:.2f}s - {src_path.name}")
@@ -985,25 +980,25 @@ def execute_enrichment_task(
         
         if final_df is None:
             raise ValueError("Nessun risultato finale")
-        # N14: df vuoto (0 righe) è un risultato valido — non crashare,
-        # salva un file con solo l'header.
+        # N14: df vuoto (0 righe) è un risultato valido — non crashare
+        # salva un file con solo l'header
         if hasattr(final_df, "empty") and final_df.empty:
             logger.info(f"[Task {task_id}] DataFrame vuoto (0 righe) — salvo output con solo header")
         
-        # Salva DataFrame come bytes/object su destinazione finale.
+        # Salva DataFrame come bytes/object su destinazione finale
         # Niente DATA_DIR/temp staging (save_pipeline_result e la variante
-        # S3 per eseguibili gestiscono il dispatch internamente).
+        # S3 per eseguibili gestiscono il dispatch internamente
         final_filename = f"{output_filename}.{final_format}"
         elapsed_time = time.time() - start_time
         result_id: Optional[str] = None
 
         if is_eseguibile:
-            # Eseguibile con output DataFrame → S3 via storage module.
+            # Eseguibile con output DataFrame → S3 via storage module
             # save_bytes fa put_object diretto (zero disk) per formati
             # in-memory-safe. Per fmt fs-only (gpkg/shp) il driver GDAL/OGR
             # richiede un path: usiamo TemporaryDirectory che garantisce
             # rmtree al __exit__ (no orphan su SIGKILL mid-run entro il
-            # cleanup OS-level del /tmp).
+            # cleanup OS-level del /tmp
             from app.core.eseguibili import storage as _eseg_storage
             from app.utils.dataframe import save_dataframe, save_dataframe_to_bytes
             fmt_lower = (final_format or "").lower()
@@ -1018,7 +1013,7 @@ def execute_enrichment_task(
                         df=final_df, output_path=tmp_path, format=final_format,
                     )
                     # Bytes → S3 put_object direct. La dir viene pulita
-                    # al __exit__ anche se save_bytes solleva.
+                    # al __exit__ anche se save_bytes solleva
                     data_bytes = saved_local.read_bytes()
                     _eseg_storage.save_bytes(
                         task_id, saved_local.name, data_bytes,
@@ -1029,7 +1024,7 @@ def execute_enrichment_task(
             saved_path = Path(final_filename)  # per metadata payload
             logger.info(f"[Task {task_id}] Output eseguibile (df) su storage: eseguibili-outputs/{task_id}/{final_filename}")
         else:
-            # Arricchisci standard: single entry-point save_pipeline_result.
+            # Arricchisci standard: single entry-point save_pipeline_result
             from app.utils.result_store import save_pipeline_result
             saved = save_pipeline_result(
                 project_id=project_id,
@@ -1042,11 +1037,11 @@ def execute_enrichment_task(
             saved_path = Path(saved["output_filename"])
             logger.info(f"[Task {task_id}] Risultato persistito: {result_id}")
 
-            # B-BE-39: salva columns_metadata nel progetto per uso come project_source.
+            # B-BE-39: salva columns_metadata nel progetto per uso come project_source
             # Helper condiviso (retry transient + raise non-transient): se fallisce
             # in modo permanente, ColumnsMetadataSaveError propaga al try/except
             # esterno di Celery che marca il task FAILED — pre-fix il warning
-            # silenzioso lasciava il task SUCCESS con metadata stale.
+            # silenzioso lasciava il task SUCCESS con metadata stale
             from app.services.project_service import ProjectService as _ProjSvc
             from app.shared.columns_metadata import save_columns_metadata_with_retry
             _col_meta = [{"name": col, "type": str(final_df[col].dtype)} for col in final_df.columns]
@@ -1066,9 +1061,9 @@ def execute_enrichment_task(
             "task_id": task_id,
             "project_id": project_id,
             # `result_id` propagato per il download via
-            # `/api/tasks/{task_id}/download` (orchestrator/router.py:580).
+            # `/api/tasks/{task_id}/download` (orchestrator/router.py:580
             # None nel ramo eseguibile: il frontend in quel caso usa
-            # `download_url` → `/api/eseguibili/.../download/{task_id}`.
+            # `download_url` → `/api/eseguibili/.../download/{task_id}`
             "result_id": result_id,
             "rows_processed": len(final_df),
             "columns": list(final_df.columns),
@@ -1085,17 +1080,17 @@ def execute_enrichment_task(
 
         logger.info(f"[Task {task_id}] Completato in {elapsed_time:.2f}s - {len(final_df)} righe", project_id=_log_pid)
 
-        # Snapshot result node ARRICCHISCI.
-        # Phase 6 Batch 3B (2026-04-28): passa per `record_final_snapshot`
+        # Snapshot result node ARRICCHISCI
+        # passa per `record_final_snapshot`
         # con module="arricchisci". La policy globale
         # `INTERMEDIATE_PERSISTENCE_MODE` decide il dimensionamento
-        # (default `preview_only` -> 500 righe + hash + meta).
+        # default `preview_only` -> 500 righe + hash + meta
         # Pre-fix: thread daemon che materializzava `final_df.to_dict(full)`
         # nel thread principale prima del dispatch -> double memory peak
-        # sui DataFrame grandi.
+        # sui DataFrame grandi
         # Post-fix: chiamata sync. Hash via pandas_hash_v1 senza
         # materializzare. Lo skip-path o il preview-cap rendono il
-        # costo trascurabile rispetto al df.to_dict(full) precedente.
+        # costo trascurabile rispetto al df.to_dict(full) precedente
         if _run_id and result_node and not is_eseguibile:
             try:
                 from app.core.intermediate.snapshot import record_final_snapshot
@@ -1142,7 +1137,7 @@ def execute_enrichment_task(
 
         # ── CARICA: lancia task carica se presenti nodi collegati all'output ──
         # Stessa logica di OrchestratorService._execute_carica_if_present ma qui
-        # perché execute_enrichment_task non passa per l'orchestrator.
+        # perché execute_enrichment_task non passa per l'orchestrator
         try:
             carica_info = _trigger_carica_if_present(
                 project_id=project_id,
@@ -1165,11 +1160,11 @@ def execute_enrichment_task(
 
     except Exception as e:
         # Catch dei _EarlyTaskReturn sollevati dalla closure _run_single_node
-        # (anche da thread worker paralleli). Questi portano un payload gia'
+        # anche da thread worker paralleli). Questi portano un payload gia'
         # pronto per il return del task: niente logging CRASH, niente close_run
-        # in failure mode, niente debug_payload — e' un fallimento "gestito".
-        # Nota: _EarlyTaskReturn e' definita come classe locale dentro il try,
-        # quindi qui la riconosciamo via name matching sul __class__.
+        # in failure mode, niente debug_payload — e' un fallimento "gestito"
+        # Nota: _EarlyTaskReturn e' definita come classe locale dentro il try
+        # quindi qui la riconosciamo via name matching sul __class__
         if type(e).__name__ == "_EarlyTaskReturn" and hasattr(e, "payload"):
             if _run_id and not is_eseguibile:
                 try:
@@ -1242,7 +1237,7 @@ def execute_enrichment_task(
         # ── Cleanup risorse temporanee anche in caso di errore ──
         _cleanup_temp_file_sources(cleanup_file_source_ids, task_id)
 
-        # Ritorna dict con errore (serializzabile)
+        # Ritorna dict con errore (serializzabile
         return {
             "success": False,
             "task_id": task_id,
@@ -1325,11 +1320,10 @@ def update_task_progress(
 # `_get_execution_order` / `_load_source_project` / `_load_file_source` /
 # `_load_static_values` su di essa. Questo garantisce isolamento del
 # tenant binding (`_current_group_id`) fra task concorrenti sullo stesso
-# worker process Celery (prefork riusa i fork).
-#
+# worker process Celery (prefork riusa i fork
 # `find_latest_output_file` e `load_dataframe_from_file` erano gia'
 # semplici alias di `app.utils.dataframe`: i call site usano direttamente
-# l'import canonico.
+# l'import canonico
 
 
 def _trigger_carica_if_present(project_id: str, canvas: Dict, output_format: str = "csv") -> Optional[Dict[str, Any]]:
@@ -1344,7 +1338,7 @@ def _trigger_carica_if_present(project_id: str, canvas: Dict, output_format: str
     nodes = canvas.get("nodes", []) or []
     edges = canvas.get("edges", []) or []
 
-    # Trova nodo Output (result)
+    # Trova nodo Output (result
     output_node_id = next((n["id"] for n in nodes if n.get("type") == "result"), None)
     if not output_node_id:
         return None
@@ -1385,7 +1379,7 @@ def _trigger_carica_if_present(project_id: str, canvas: Dict, output_format: str
     tasks = []
     for carica_node in carica_nodes:
         try:
-            # Merge node root + node['data'] (stesso pattern dell'orchestratore)
+            # Merge node root + node['data'] (stesso pattern dell'orchestratore
             node_dict = dict(carica_node)
             nested_data = node_dict.get("data") or {}
             carica_node_data = {**node_dict, **nested_data}

@@ -1,7 +1,7 @@
 """
-Comparison keys DAL — estratto da `config_db_service.py` (scope micro Batch G #9,
+Comparison Keys DAL helpers.
 
-invariants §6 commit `58d98a0`).
+Keeps config-table persistence isolated behind a narrow database module.
 """
 
 from app.db.pg_connection import execute

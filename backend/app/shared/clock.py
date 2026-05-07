@@ -37,7 +37,7 @@ class WallClock:
         return stop_event.wait(timeout)
 
 
-# Singleton di produzione. Importato come default da chi adotta il seam.
+# Singleton di produzione. Importato come default da chi adotta il seam
 WALL_CLOCK = WallClock()
 
 
@@ -46,23 +46,23 @@ class FakeClock:
 
     Uso tipico (heartbeat thread):
 
-        fc = FakeClock()
+        fc = FakeClock
         hb = LockHeartbeat(..., interval=10.0, clock=fc)
-        hb.start()
-        fc.wait_for_pending_waiters(1)  # thread parked al primo wait
-        fc.advance(11.0)                # libera il wait -> il loop ticka
-        fc.wait_for_pending_waiters(1)  # thread parked di nuovo
-        hb.stop()
+        hb.start
+        fc.wait_for_pending_waiters(1) # thread parked al primo wait
+        fc.advance(11.0) # libera il wait -> il loop ticka
+        fc.wait_for_pending_waiters(1) # thread parked di nuovo
+        hb.stop
 
     Semantica:
-      - `now()`            : ritorna il tempo virtuale corrente.
-      - `advance(s)`       : avanza il virtual time, sbloccando tutti i
+      - `now` : ritorna il tempo virtuale corrente.
+      - `advance(s)` : avanza il virtual time, sbloccando tutti i
                               waiters con deadline <= now.
-      - `wait(stop, t)`    : registra un waiter con deadline=now+t e
-                              blocca finche' (a) advance() libera la
+      - `wait(stop, t)` : registra un waiter con deadline=now+t e
+                              blocca finche' (a) advance libera la
                               deadline -> ritorna False, oppure (b)
                               `stop` si setta -> ritorna True.
-      - `pending_waiters`  : numero di waiters parked correntemente.
+      - `pending_waiters` : numero di waiters parked correntemente.
       - `wait_for_pending_waiters(n, timeout=2.0)`: blocca (wall-clock)
                               finche' almeno `n` waiters sono parked,
                               cosi' il test puo' sincronizzarsi col
@@ -72,15 +72,15 @@ class FakeClock:
     notify cross-thread.
 
     Notifier daemon (nota implementativa):
-      Ogni `wait()` spawna un piccolo daemon thread che fa
-      `stop_event.wait()` e poi setta il per-call event. Serve a
-      sbloccare immediatamente la wait() quando il chiamante setta
-      lo stop_event (es. `LockHeartbeat.stop()`). Il daemon vive
-      fino a quando stop_event viene settato; se la wait() viene
-      liberata da `advance()` e lo stop_event NON viene mai
+      Ogni `wait` spawna un piccolo daemon thread che fa
+      `stop_event.wait` e poi setta il per-call event. Serve a
+      sbloccare immediatamente la wait quando il chiamante setta
+      lo stop_event (es. `LockHeartbeat.stop`). Il daemon vive
+      fino a quando stop_event viene settato; se la wait viene
+      liberata da `advance` e lo stop_event NON viene mai
       settato, il daemon resta parked finche' il processo non
       termina (pytest cleanup). Innocuo per i test heartbeat
-      (sempre chiamano hb.stop() -> stop_event.set()), comportamento
+      (sempre chiamano hb.stop -> stop_event.set), comportamento
       noto e accettabile per gli smoke standalone (~ms a fine test).
     """
 
@@ -88,7 +88,7 @@ class FakeClock:
         self._lock = threading.Lock()
         self._cond = threading.Condition(self._lock)
         self._now = float(start)
-        # (deadline_virtuale, per_call_event)
+        # deadline_virtuale, per_call_event
         self._waiters: list[tuple[float, threading.Event]] = []
 
     def now(self) -> float:
@@ -112,12 +112,12 @@ class FakeClock:
             self._waiters.append((self._now + max(0.0, timeout), local))
             self._cond.notify_all()
 
-        # Notifier daemon: se stop_event si setta durante l'attesa virtuale,
-        # libera `local` per uscire subito. La stop e' idempotente:
-        # `stop_event.wait()` ritorna immediatamente se gia' settato.
-        # NB: se la wait() viene liberata da advance() e stop_event non viene
-        # mai settato, il notifier resta parked sul stop_event.wait() fino a
-        # fine processo (vedi docstring della class). Innocuo per heartbeat.
+        # Notifier daemon: se stop_event si setta durante l'attesa virtuale
+        # libera `local` per uscire subito. La stop e' idempotente
+        # `stop_event.wait` ritorna immediatamente se gia' settato
+        # NB: se la wait viene liberata da advance e stop_event non viene
+        # mai settato, il notifier resta parked sul stop_event.wait fino a
+        # fine processo (vedi docstring della class). Innocuo per heartbeat
         notifier = threading.Thread(
             target=lambda: (stop_event.wait(), local.set()),
             daemon=True,
@@ -128,7 +128,7 @@ class FakeClock:
 
         with self._lock:
             # Drena: rimuovi il proprio waiter se ancora pendente
-            # (caso stop_event ha sbloccato prima di advance).
+            # caso stop_event ha sbloccato prima di advance
             self._waiters = [w for w in self._waiters if w[1] is not local]
             self._cond.notify_all()
         return stop_event.is_set()

@@ -1,7 +1,6 @@
 """
 Minimal ArcGIS provider protocol - read operations used by IMDF validation.
 
-ADR-0023 / BE-GO-READY-ARCH-058-W5.
 """
 
 from __future__ import annotations

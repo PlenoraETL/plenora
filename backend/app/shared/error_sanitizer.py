@@ -1,7 +1,7 @@
 """
 Sanitizer per messaggi di errore esposti al client HTTP.
 
-Batch Fix 6.2 (error-handling-governance, Phase 2 Hardening).
+6.2 (error-handling-governance, Hardening).
 """
 
 from __future__ import annotations
@@ -13,21 +13,21 @@ _DEFAULT_MAX_LEN = 500
 _TRUNCATE_SUFFIX = "...[troncato]"
 _FALLBACK_EMPTY = "Errore non specificato"
 
-# URL completi di qualsiasi schema usato dal backend (ArcGIS, upstream REST,
-# SFTP, ecc.). Il ``\S+`` greedy cattura anche query string con token.
+# URL completi di qualsiasi schema usato dal backend (ArcGIS, upstream REST
+# SFTP, ecc.). Il ``\S+`` greedy cattura anche query string con token
 _URL_RE = re.compile(
     r"\b(?:https?|ftps?|sftp|ssh)://\S+",
     flags=re.IGNORECASE,
 )
 
 # JWT standalone: 3 sezioni base64url separate da ``.``. Il prefisso ``eyJ``
-# e' l'header Base64 di ``{"`` (inizio JSON) — marker stabile per JWT.
+# e' l'header Base64 di ``{"`` (inizio JSON) — marker stabile per JWT
 _JWT_RE = re.compile(
     r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b",
 )
 
-# Coppia ``<key><sep><value>`` dove key e' in blacklist e sep e' ``=`` o ``:``.
-# Cattura ``password=abc``, ``token: xyz``, ``Api-Key = foo``, ecc.
+# Coppia ``<key><sep><value>`` dove key e' in blacklist e sep e' ``=`` o ``:``
+# Cattura ``password=abc``, ``token: xyz``, ``Api-Key = foo``, ecc
 _SENSITIVE_KV_RE = re.compile(
     r"(?P<key>token|api[_-]?key|password|secret|auth|bearer|client[_-]?secret)"
     r"(?P<sep>\s*[=:]\s*)"
@@ -35,15 +35,15 @@ _SENSITIVE_KV_RE = re.compile(
     flags=re.IGNORECASE,
 )
 
-# Path Windows: drive letter + ``:\\`` + almeno un char non-whitespace.
+# Path Windows: drive letter + ``:\\`` + almeno un char non-whitespace
 _WIN_PATH_RE = re.compile(
     r"\b[A-Za-z]:\\[^\s'\"]+",
 )
 
-# Path POSIX assoluti in directory "sensibili" per un deploy Linux/Mac.
+# Path POSIX assoluti in directory "sensibili" per un deploy Linux/Mac
 # ``/projects/x`` NON matcha (nessuna directory sensibile). ``/home/...``
 # e simili si'. Match-case: senza IGNORECASE per evitare falsi positivi su
-# testo in italiano.
+# testo in italiano
 _POSIX_PATH_RE = re.compile(
     r"/(?:home|Users|usr|var|tmp|etc|opt|root|mnt)/[^\s'\"]*",
 )
@@ -74,21 +74,21 @@ def sanitize_http_detail(
     if not text:
         return _FALLBACK_EMPTY
 
-    # 1. URL completi (mangia eventuali token in query string).
+    # 1. URL completi (mangia eventuali token in query string
     text = _URL_RE.sub("[URL]", text)
-    # 2. JWT standalone.
+    # 2. JWT standalone
     text = _JWT_RE.sub("[REDACTED]", text)
-    # 3. Key=value sensibili (preserva la chiave, redige il valore).
+    # 3. Key=value sensibili (preserva la chiave, redige il valore
     text = _SENSITIVE_KV_RE.sub(
         lambda m: f"{m.group('key')}{m.group('sep')}[REDACTED]",
         text,
     )
-    # 4. Path Windows.
+    # 4. Path Windows
     text = _WIN_PATH_RE.sub("[PATH]", text)
-    # 5. Path POSIX sensibili.
+    # 5. Path POSIX sensibili
     text = _POSIX_PATH_RE.sub("[PATH]", text)
 
-    # 6. Truncate dopo sanitization per non spezzare i marker a meta'.
+    # 6. Truncate dopo sanitization per non spezzare i marker a meta'
     if len(text) > max_len:
         cut = max(0, max_len - len(_TRUNCATE_SUFFIX))
         text = text[:cut] + _TRUNCATE_SUFFIX

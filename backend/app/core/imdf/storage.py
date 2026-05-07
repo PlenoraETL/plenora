@@ -22,16 +22,16 @@ logger = get_logger(__name__)
 
 # Prefix S3 condiviso (distinto da urby_*.dump dei backup +
 # eseguibili-outputs/). Alias modulare verso
-# `app.shared.storage_layout.IMDF_BUNDLES_PREFIX` (BE-DATA-PLANE-001A):
+# `app.shared.storage_layout.IMDF_BUNDLES_PREFIX` (BE-DATA-PLANE-001A
 # single source-of-truth per i prefix object storage. Esposto come
-# `PREFIX` per backward-compat dei call site interni e dei test.
+# `PREFIX` per backward-compat dei call site interni e dei test
 PREFIX = IMDF_BUNDLES_PREFIX
 META_SUFFIX = ".meta.json"
 ZIP_SUFFIX = ".zip"
 
 
 def _storage():
-    """Lazy load della factory cloud (Batch 1.5).
+    """Lazy load della factory cloud runtime.
 
     Solleva `ObjectStorageDisabledError` se la capability globale e' off:
     i caller list/get_meta_only/list_task_ids degradano graceful
@@ -54,7 +54,6 @@ def _local_dir(task_id: str) -> Path:
     return _settings.IMDF_BUNDLES_DIR / task_id
 
 
-# Upload (worker side, post-extract)
 
 
 def save_bundle(task_id: str, local_dir: Path, meta: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
@@ -81,7 +80,7 @@ def save_bundle(task_id: str, local_dir: Path, meta: Optional[Dict[str, Any]] = 
     if not local_dir.exists() or not local_dir.is_dir():
         raise FileNotFoundError(f"Bundle dir non trovata: {local_dir}")
 
-    # Leggi meta se non fornito (usa file scritto dal persist step precedente).
+    # Leggi meta se non fornito (usa file scritto dal persist step precedente
     if meta is None:
         meta_path = local_dir / "plenora_metadata.json"
         if meta_path.exists():
@@ -93,7 +92,7 @@ def save_bundle(task_id: str, local_dir: Path, meta: Optional[Dict[str, Any]] = 
 
     storage = _storage()
 
-    # Zip su tempfile sul worker (safe: worker ha il suo filesystem).
+    # Zip su tempfile sul worker (safe: worker ha il suo filesystem
     with tempfile.NamedTemporaryFile(
         prefix=f"imdf_{task_id}_", suffix=".zip", delete=False
     ) as tmp:
@@ -134,7 +133,7 @@ def save_bundle(task_id: str, local_dir: Path, meta: Optional[Dict[str, Any]] = 
     return {"zip_key": _zip_key(task_id), "meta_key": mk}
 
 
-# Read (endpoint side)
+# Read (endpoint side
 
 
 def ensure_local_bundle(task_id: str) -> Path:
@@ -160,11 +159,11 @@ def ensure_local_bundle(task_id: str) -> Path:
     if local.exists() and any(local.iterdir()):
         return local
 
-    # Cache miss: tentativo di hydration da S3.
+    # Cache miss: tentativo di hydration da S3
     storage = _storage()
     zk = _zip_key(task_id)
 
-    # Download zip su tempfile locale, poi extract.
+    # Download zip su tempfile locale, poi extract
     with tempfile.NamedTemporaryFile(
         prefix=f"imdf_hydrate_{task_id}_", suffix=".zip", delete=False
     ) as tmp:
@@ -174,17 +173,17 @@ def ensure_local_bundle(task_id: str) -> Path:
         try:
             storage.download(zk, tmp_zip)
         except Exception as e:
-            # Tipicamente NoSuchKey dal client S3 → bundle inesistente.
+            # Tipicamente NoSuchKey dal client S3 → bundle inesistente
             logger.warning(f"[{task_id}] imdf storage hydration failed: {e}")
             raise FileNotFoundError(f"Bundle {task_id} non presente su storage: {e}")
 
         local.mkdir(parents=True, exist_ok=True)
         from app.utils.zip_safe import safe_extractall
         with zipfile.ZipFile(tmp_zip, "r") as zf:
-            # safe_extractall: zip slip + zip bomb pre-extract.
+            # safe_extractall: zip slip + zip bomb pre-extract
             # I bundle IMDF tipici sono ~20-100MB, ben sotto i 500MB
             # default. Override possibile via ZIP_MAX_UNCOMPRESSED_BYTES
-            # se in futuro emergono bundle "grandi venue" (aeroporti).
+            # se in futuro emergono bundle "grandi venue" (aeroporti
             safe_extractall(zf, local)
 
         logger.info(f"[{task_id}] imdf bundle hydrated from storage -> {local}")
@@ -221,7 +220,7 @@ def list_task_ids() -> List[str]:
     """Elenca task_id dei bundle presenti su S3 (via meta.json).
 
     Usato dal list endpoint per vedere bundle da tutti i nodi (non solo
-    quelli cached sul nodo corrente). Batch 1.5: ritorna [] se la
+    quelli cached sul nodo corrente). ritorna [] se la
     capability object storage e' disabilitata (router fallback su
     cache locale only)."""
     from app.shared.cloud_backends import object_storage_enabled
@@ -232,7 +231,7 @@ def list_task_ids() -> List[str]:
     task_ids = []
     for o in objs:
         key = o["key"]
-        # Filtra solo i meta.json per dedup (evita doppio-conteggio zip+meta)
+        # Filtra solo i meta.json per dedup (evita doppio-conteggio zip+meta
         if key.endswith(META_SUFFIX):
             # Estrai task_id: "imdf-bundles/task-abc.meta.json" -> "task-abc"
             basename = key[len(PREFIX) + 1:]  # strip "imdf-bundles/"
@@ -252,7 +251,7 @@ def delete_bundle(task_id: str) -> int:
         except Exception as e:
             logger.warning(f"delete {key} fallito (non-fatal): {e}")
 
-    # Cleanup cache locale sul nodo corrente (se presente).
+    # Cleanup cache locale sul nodo corrente (se presente
     local = _local_dir(task_id)
     if local.exists():
         try:

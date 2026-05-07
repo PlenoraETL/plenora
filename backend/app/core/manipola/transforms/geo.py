@@ -16,7 +16,7 @@ DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
 
 
 # GEOMETRIA DA COORDINATE
-# Crea colonna geometry Point da colonne latitudine/longitudine.
+# Crea colonna geometry Point da colonne latitudine/longitudine
 
 def op_geo_from_coords(
     df: DataFrame,
@@ -82,8 +82,8 @@ def op_geo_from_coords(
                 try:
                     return wkt.loads(str(val))
                 except Exception as _wkt_err:
-                    # Parse WKT fallito per riga singola — debug (row-loop:
-                    # NOTE: causerebbe flood su dataset con WKT malformati).
+                    # Parse WKT fallito per riga singola — debug (row-loop
+                    # NOTE: causerebbe flood su dataset con WKT malformati
                     logger.debug(f"safe_wkt_parse fallita: {_wkt_err}")
                     return None
 

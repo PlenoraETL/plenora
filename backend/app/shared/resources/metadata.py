@@ -1,7 +1,6 @@
 """
 Resource metadata contract - typed envelope for schema and CRS.
 
-BE-GO-READY-ARCH-055-W4-SCHEMA-CRS-METADATA-STRATEGY.
 """
 
 from __future__ import annotations
@@ -63,11 +62,11 @@ class ResourceMetadata:
 
     Replaces the implicit CRS/geometry encoding that today lives inside
     type strings like ``geometry:polygon:4326`` (persisted in
-    ``projects.canvas.columns_metadata``).  Explicit fields let callers
+    ``projects.canvas.columns_metadata``). Explicit fields let callers
     do a plain attribute read instead of parsing a string.
 
     The envelope is a pure value object: no I/O, no DB, no framework
-    imports.  It can be constructed at the point of schema inference and
+    imports. It can be constructed at the point of schema inference and
     passed through the pipeline without re-guessing.
     """
 

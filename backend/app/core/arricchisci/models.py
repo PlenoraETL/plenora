@@ -17,14 +17,14 @@ class RowStatus(str, Enum):
     SUCCESS = "success"
     ERROR = "error"
     SKIPPED = "skipped"           # Input non valido / nullo
-    CACHED = "cached"             # Risultato da cache (deduplicazione)
+    CACHED = "cached"             # Risultato da cache (deduplicazione
     RETRY_EXHAUSTED = "retry_exhausted"  # Max retry raggiunto
 
 
 class BatchInputFormat(str, Enum):
     """Formato input per batch API native."""
-    ARRAY = "array"               # [{"q": "addr1"}, {"q": "addr2"}]
-    FLAT_ARRAY = "flat_array"     # ["addr1", "addr2"] (singolo parametro)
+    ARRAY = "array"               # {"q": "addr1"}, {"q": "addr2"}
+    FLAT_ARRAY = "flat_array"     # "addr1", "addr2"] (singolo parametro
     OBJECT = "object"             # {"items": [{"q": "addr1"}, ...]}
 
 
@@ -33,7 +33,7 @@ class BatchInputFormat(str, Enum):
 @dataclass
 class BatchConfig:
     """
-    Configurazione per API che supportano batch nativo.
+    Configurazione per API che supportano
     
     Esempio config JSON:
     "batch": {
@@ -48,9 +48,9 @@ class BatchConfig:
     max_size: int = 100                              # Max righe per singola chiamata batch
     input_key: str = "items"                         # Chiave array nella request
     input_format: BatchInputFormat = BatchInputFormat.ARRAY
-    output_path: str = ""                            # Path all'array di risultati (vuoto = root)
+    output_path: str = ""                            # Path all'array di risultati (vuoto = root
     endpoint_override: Optional[str] = None          # Endpoint diverso per batch
-    method_override: Optional[str] = None            # Metodo diverso (es. POST invece di GET)
+    method_override: Optional[str] = None            # Metodo diverso (es. POST invece di GET
     
     @classmethod
     def from_dict(cls, data: Dict) -> "BatchConfig":
@@ -117,7 +117,7 @@ class EnrichmentStats:
     retry_exhausted: int = 0
     
     # Performance
-    api_calls_made: int = 0       # Chiamate effettive (dopo deduplicazione)
+    api_calls_made: int = 0       # Chiamate effettive (dopo deduplicazione
     api_calls_saved: int = 0      # Chiamate risparmiate da cache
     avg_response_time_ms: float = 0
     total_time_ms: float = 0
@@ -155,13 +155,13 @@ class EnrichmentOptions:
     
     # Gestione errori
     continue_on_error: bool = True        # Continua anche se righe falliscono
-    stop_on_error_threshold: int = 0      # Ferma se errori > N (0 = mai)
+    stop_on_error_threshold: int = 0      # Ferma se errori > N (0 = mai
     save_partial_results: bool = True     # Salva anche se non completato
     generate_error_report: bool = True    # Genera CSV con errori
     
     # Deduplicazione
     enable_deduplication: bool = True     # Usa cache per valori duplicati
-    cache_ttl_seconds: int = 3600         # TTL cache (1 ora default)
+    cache_ttl_seconds: int = 3600         # TTL cache (1 ora default
     
     # Preview
     preview_mode: bool = False            # Se True, esegue solo su campione
@@ -177,11 +177,11 @@ class EnrichmentOptions:
     respect_retry_after: bool = True      # Rispetta header Retry-After
     
     # Parallelismo
-    parallel_workers: int = 1             # Numero worker paralleli (1 = sequenziale)
+    parallel_workers: int = 1             # Numero worker paralleli (1 = sequenziale
     
     # Timeout
-    request_timeout: int = 30             # Timeout lettura risposta (read timeout)
-    connect_timeout: float = 5.0          # Timeout connessione TCP (connect timeout)
+    request_timeout: int = 30             # Timeout lettura risposta (read timeout
+    connect_timeout: float = 5.0          # Timeout connessione TCP (connect timeout
     # requests accetta (connect, read) come tupla — separare i due timeout evita
     # di aspettare request_timeout secondi su host irraggiungibili
 

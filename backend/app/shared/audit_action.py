@@ -19,17 +19,16 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-# METRICHE (contatori in-process, pattern token_blacklist)
-#
-# Counters sincroni protetti da lock. Azzerati a ogni restart del backend.
-# Esposti via get_metrics() per integrazione futura con admin_system_status.
+# METRICHE (contatori in-process, pattern token_blacklist
+# Counters sincroni protetti da lock. Azzerati a ogni restart del backend
+# Esposti via get_metrics per integrazione futura con admin_system_status
 
 _metrics_lock = threading.Lock()
 _metrics: Dict[str, int] = {
     "write_ok":   0,  # INSERT su plenora.audit_actions riuscito
-    "write_fail": 0,  # INSERT sollevato (DB down, pool exhausted, ...)
+    "write_fail": 0,  # INSERT sollevato (DB down, pool exhausted
     "skipped":    0,  # chiamate dove il decorator non ha tentato la write
-                      # (reservato per ramo opt-out futuro; oggi sempre 0)
+                      # reservato per ramo opt-out futuro; oggi sempre 0
 }
 _last_ok_epoch: Optional[float] = None
 
@@ -46,7 +45,7 @@ def _record_metric(name: str, mark_ok: bool = False) -> None:
 def get_metrics() -> Dict[str, Any]:
     """Snapshot contatori + timestamp ultima write riuscita.
 
-    Mirror del pattern `token_blacklist.get_metrics()`; consumabile da
+    Mirror del pattern `token_blacklist.get_metrics`; consumabile da
     una dashboard admin o da uno script di health probe.
     """
     with _metrics_lock:
@@ -153,7 +152,7 @@ def _execute_write(sql: str, params: Tuple[Any, ...]) -> None:
     Isolato in funzione dedicata cosi' i test possono monkeypatch-are
     il write punto senza triggerare il check `DATABASE_URL` che
     `app.db.pg_connection` esegue al top-level. Pattern coerente con
-    `token_blacklist._get_client()` (lazy import interna a funzione).
+    `token_blacklist._get_client` (lazy import interna a funzione).
     """
     from app.db import pg_connection
 
@@ -183,9 +182,9 @@ def _write_audit_row(
         _record_metric("write_ok", mark_ok=True)
     except Exception as exc:
         # Fail-open: mai far saltare la request business per un problema
-        # sulla write di audit. Il warning e' il segnale osservabile:
+        # sulla write di audit. Il warning e' il segnale osservabile
         # una cascata di `audit_action_write_failed` su piu' endpoint
-        # indica PG pool exhaustion / down / schema drift.
+        # indica PG pool exhaustion / down / schema drift
         logger.warning(
             "audit_action_write_failed action=%s user_id=%s status=%s: %s: %s",
             action,

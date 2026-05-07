@@ -1,7 +1,6 @@
 """
 File-source blob loader — second Resource Engine kind.
 
-BE-GO-READY-RESOURCE-ENGINE-020-FILE-SOURCE-BLOB-LOADER.
 """
 
 from __future__ import annotations
@@ -27,17 +26,17 @@ from app.core.resources.loaders._shared import (
 # Cap resolution — single source of truth shared with
 # ``result_blob.py`` via
 # ``app.core.resources.resource_caps.resolve_resource_max_bytes``
-# (BE-GO-READY-MEMORY-ENGINE-006). Both loaders agree on the
+# Both loaders agree on the
 # 200 MB default + the invalid/non-positive env fallback in one
 # place; the source-bound contract in
 # ``tests2/shared/test_resource_caps_centralization_contract.py``
-# bans local env parsing here.
+# bans local env parsing here
 
 
-# BE-GO-READY-MEMORY-ENGINE-007: the loader-local
+# the loader-local
 # ``_resolve_max_bytes`` compat alias was removed. The canonical
 # entry point is ``resolve_resource_max_bytes`` from
-# ``app.core.resources.resource_caps`` (already imported above).
+# ``app.core.resources.resource_caps`` (already imported above
 
 
 # Internal helpers — log key abbreviation + SQL row fetch
@@ -77,7 +76,7 @@ def _fetch_row(
         where_params.append(group_id_filter)
 
     # Single-line SELECT projection so source-bound contract tests
-    # can grep the canonical token as one literal substring.
+    # can grep the canonical token as one literal substring
     sql = (
         "SELECT storage_key, length(data) AS data_size, "
         "CASE "
@@ -87,10 +86,10 @@ def _fetch_row(
         "END AS data "
         "FROM file_sources WHERE " + " AND ".join(clauses)
     )
-    # Parameter order matches placeholder order:
-    #   1. CASE WHEN length(data) > ?  -> max_bytes
-    #   2. WHERE id = ?                -> file_source_id
-    #   3. AND group_id = ?            -> group_id_filter (if set)
+    # Parameter order matches placeholder order
+    # 1. CASE WHEN length(data) > ? -> max_bytes
+    # 2. WHERE id = ? -> file_source_id
+    # 3. AND group_id = ? -> group_id_filter (if set
     params = (max_bytes, *where_params)
     return fetchone(sql, params)
 
@@ -100,7 +99,7 @@ def _download_object_storage(storage_key: str) -> Optional[bytes]:
 
     Delegates to ``_download_object_storage_impl`` with the
     kind-specific log prefix ``[FS-BLOB]`` and stage
-    ``"file_source_blob_oversize"``.  Kept as a module-level name so
+    ``"file_source_blob_oversize"``. Kept as a module-level name so
     existing monkeypatch targets on
     ``file_source_blob._download_object_storage`` work unchanged.
     """
@@ -127,7 +126,7 @@ def _dispatch_by_id(
     logger = get_logger(__name__)
     _t0 = time.monotonic()
     # Resolve once and pass through; the SQL preflight + the
-    # downstream cap enforcement MUST agree on the same cap value.
+    # downstream cap enforcement MUST agree on the same cap value
     max_bytes = resolve_resource_max_bytes()
 
     row = _fetch_row(
@@ -150,10 +149,10 @@ def _dispatch_by_id(
         )
         return data, "object_storage"
 
-    # BYTEA preflight already nulled out oversize via SQL CASE.
+    # BYTEA preflight already nulled out oversize via SQL CASE
     # If the data_size exceeds the cap, raise loudly (same contract
     # as result_blob): the caller can then decide whether to
-    # surface a 413 or downgrade to fail-soft.
+    # surface a 413 or downgrade to fail-soft
     data_size = row.get("data_size")
     if data_size is not None and data_size > max_bytes:
         duration_ms = round((time.monotonic() - _t0) * 1000, 1)
@@ -193,15 +192,15 @@ class FileSourceBlobLoader:
     ``mode="stream"`` raise ``ValueError`` -- the file-source
     consumers that need a filesystem path use
     ``FileSourceService._temp_file_for`` which fetches the bytes
-    via this loader and owns its SHP/GDB ZIP-extraction lifecycle
-    inline (post BE-GO-READY-RESOURCE-ENGINE-024 the legacy
+    via this loader and owns its SHP/GDB ZIP-separation lifecycle
+    inline (post the legacy
     ``app.services.file_blob_materialization`` helper module was
     retired).
 
     Tenant binding (mirror of ``ResultBlobLoader``):
       - ``is_superadmin=False`` -> SQL ``WHERE group_id = ?``
         filter; row owned by another group does not return.
-      - ``is_superadmin=True``  -> SQL filter skipped; bypass
+      - ``is_superadmin=True`` -> SQL filter skipped; bypass
         recorded in the audit log. Used by
         ``FileSourceService._get_blob_from_db`` for the
         shared-via-table case where ``_assert_visible`` already
@@ -224,11 +223,11 @@ class FileSourceBlobLoader:
                 f"(got {ref.file_source_id!r})."
             )
         if mode != "bytes":
-            # path / stream are deferred. v1 keeps the surface narrow:
+            # path / stream are deferred. v1 keeps the surface narrow
             # the file-source consumers that need a path (SHP/GDB
-            # extraction) call FileSourceService._temp_file_for at
+            # separation) call FileSourceService._temp_file_for at
             # the service layer, which fetches via this loader and
-            # owns its own zip-aware lifecycle.
+            # owns its own zip-aware lifecycle
             raise ValueError(
                 f"FileSourceBlobLoader.load: mode={mode!r} not supported. "
                 "v1 supports mode='bytes' only; path/stream are deferred. "
@@ -237,11 +236,11 @@ class FileSourceBlobLoader:
                 "inline in the service, not in a separate module)."
             )
 
-        # Tenant binding:
-        #   - is_superadmin=False -> SQL filter on group_id (fail-closed:
-        #     a row owned by another group does not return).
-        #   - is_superadmin=True  -> SQL filter skipped; the bypass is
-        #     recorded in the audit log for symmetry.
+        # Tenant binding
+        # is_superadmin=False -> SQL filter on group_id (fail-closed
+        # a row owned by another group does not return
+        # is_superadmin=True -> SQL filter skipped; the bypass is
+        # recorded in the audit log for symmetry
         if ref.is_superadmin:
             from app.utils.logger import get_logger
 
@@ -267,7 +266,7 @@ class FileSourceBlobLoader:
 
         # data may legitimately be None when object storage is
         # disabled or download failed. Surface as size_bytes=0 with
-        # data=None so the caller can branch (mirrors result_blob).
+        # data=None so the caller can branch (mirrors result_blob
         size = len(data) if data else 0
         return Resource(
             kind="file_source_blob",

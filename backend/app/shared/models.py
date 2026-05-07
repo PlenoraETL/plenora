@@ -165,19 +165,19 @@ class Node(BaseModel):
     endpoint: Optional[Any] = None
     parameters: Optional[Any] = None
     # rest_file (Processore File): config multipart in/binary out propagato
-    # dalla connection al nodo del canvas (cosi' il runner conosce file_fields,
-    # static_fields, output_extension senza dover rifetcharli al runtime).
+    # dalla connection al nodo del canvas (cosi' il runner conosce file_fields
+    # static_fields, output_extension senza dover rifetcharli al runtime
     request: Optional[Any] = None
     response: Optional[Any] = None
     # File aggiuntivi caricati inline sul nodo (per connector rest_file con
-    # file_fields source='extra_input'). Struttura:
-    #   {field_name: {file_source_id, original_filename, size} | file_source_id}
+    # file_fields source='extra_input'). Struttura
+    # {field_name: {file_source_id, original_filename, size} | file_source_id}
     extra_files: Optional[Dict[str, Any]] = None
     # output_kind: tag esplicito sul nodo api_enrich (canvas-side) per indicare
     # che lo zip prodotto dall'upstream Processor File ha una struttura
     # riconosciuta. Il nodo `result` downstream legge questo tag e si specializza
-    # (es. modalita' "Pubblicazione IMDF"). La connection resta generica.
-    # Valori: 'generic' (default), 'imdf', ... (estendibile in futuro)
+    # es. modalita' "Pubblicazione IMDF"). La connection resta generica
+    # Valori: 'generic' (default), 'imdf', ... (estendibile in futuro
     output_kind: Optional[str] = None
     from_catalog: Optional[bool] = False
     model_id: Optional[str] = None
@@ -200,9 +200,9 @@ class Node(BaseModel):
     # Prende in ingresso un api_enrich con output_kind='imdf', legge il bundle
     # IMDF prodotto dal Processor File e chiama l'uploader (estrazione GDB +
     # creazione FeatureService ArcGIS + apply renderers). I campi sono sul Node
-    # base perche' Pydantic non supporta variante di schema per type literal.
+    # base perche' Pydantic non supporta variante di schema per type literal
     # La pubblicazione NON e' piu' automatica: l'utente la triggera dal nodo
-    # dopo aver verificato il risultato dell'arricchimento.
+    # dopo aver verificato il risultato dell'arricchimento
     imdf_arcgis_connection_id: Optional[str] = None
     imdf_arcgis_folder: Optional[str] = None
     imdf_fs_name_template: Optional[str] = None
@@ -297,7 +297,7 @@ class Edge(BaseModel):
     # impliciti (edge mancante) ma suggerisce all'utente di esplicitarlo
     # via join_type="cross" — che senza questo valore nella Literal
     # sarebbe impossibile da configurare (ValidationError a costruzione
-    # dell'Edge). Ora il contract runtime-message e' coerente col model.
+    # dell'Edge). Ora il contract runtime-message e' coerente col model
     join_type: Optional[Literal[
         "left", "inner", "right", "outer", "cross",
         "output", "carica", "carica_arcgis", "imdf_publisher",
@@ -305,9 +305,9 @@ class Edge(BaseModel):
     source_column: Optional[str] = ""
     target_column: Optional[str] = ""
 
-    # C11: metadata ReactFlow tipicamente presenti negli edge del frontend.
-    # Dichiariamoli esplicitamente (invece di lasciarli come extra silent-dropped)
-    # cosi' passano la validazione typed senza perdite informative.
+    # C11: metadata ReactFlow tipicamente presenti negli edge del frontend
+    # Dichiariamoli esplicitamente (invece di lasciarli come extra silent-dropped
+    # cosi' passano la validazione typed senza perdite informative
     sourceHandle: Optional[str] = None
     targetHandle: Optional[str] = None
 

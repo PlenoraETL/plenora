@@ -18,12 +18,12 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# Issuer label mostrato nell'authenticator app (Google Authenticator ecc.).
+# Issuer label mostrato nell'authenticator app (Google Authenticator ecc
 TOTP_ISSUER = "URBY-ETL"
 
-# Tolleranza drift orologio: accetta codice precedente/successivo (+/- 30s).
+# Tolleranza drift orologio: accetta codice precedente/successivo (+/- 30s
 # RFC 6238 §5.2 permette max 1 step di drift. Valori >1 aumentano la finestra
-# di replay e non sono raccomandati.
+# di replay e non sono raccomandati
 TOTP_WINDOW = 1
 
 
@@ -86,7 +86,7 @@ def generate_enrollment(user_id: str, username: str) -> MFAEnrollment:
     provisioning_uri = totp.provisioning_uri(name=username, issuer_name=TOTP_ISSUER)
 
     # QR generato server-side come convenienza. Il client puo' ignorare
-    # il PNG e generare il proprio QR dal provisioning_uri (piu' leggero).
+    # il PNG e generare il proprio QR dal provisioning_uri (piu' leggero
     qr = qrcode.QRCode()
     qr.add_data(provisioning_uri)
     qr.make(fit=True)
@@ -109,7 +109,7 @@ def verify_code(user_id: str, code: str) -> bool:
     - Codice errato → False.
     - Codice corretto → True + aggiorna `last_verified_at`.
     - NON modifica `enabled`: l'attivazione dell'enrollment e' gestita
-      da `verify_enrollment()`. Questa funzione e' il verificatore
+      da `verify_enrollment`. Questa funzione e' il verificatore
       comune usato anche dal /login (dove la riga deve gia' essere
       enabled=TRUE, verificato dal caller).
     """
@@ -122,7 +122,7 @@ def verify_code(user_id: str, code: str) -> bool:
     if not secret:
         # decrypt fallito (chiave cambiata, valore corrotto): non
         # confermiamo. No crash: fail-closed sull'MFA e' preferibile
-        # a un errore 500 che leak informazione.
+        # a un errore 500 che leak informazione
         logger.warning(f"MFA decrypt failed for user {user_id}", op="mfa_decrypt_fail")
         return False
     totp = pyotp.TOTP(secret)
@@ -175,7 +175,7 @@ def disable(user_id: str, code: str) -> bool:
 
 def _iso(value) -> Optional[str]:
     # psycopg2 puo' restituire colonne timestamp come datetime o come str a
-    # seconda del cursor/adapter; normalizziamo a ISO string (o None).
+    # seconda del cursor/adapter; normalizziamo a ISO string (o None
     if value is None:
         return None
     if isinstance(value, str):

@@ -110,7 +110,7 @@ class DestinationWriter(ABC):
         La scrittura avviene in batch (self.config.batch_size) con
         strategia transazionale (self.config.transaction_mode).
 
-        Ad ogni batch completato, chiama self.report_progress() per
+        Ad ogni , chiama self.report_progress per
         aggiornare il frontend in tempo reale.
 
         Args:

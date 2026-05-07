@@ -18,7 +18,7 @@ logger = get_logger(__name__)
 class ColumnSchema:
     """Schema di una singola colonna"""
     name: str
-    type: str  # int, real, str, bool, date, geometry:point:4326, etc.
+    type: str  # int, real, str, bool, date, geometry:point:4326, etc
     source_node: Optional[str] = None  # ID del nodo da cui proviene
     is_calculated: bool = False  # True se è una colonna calcolata/formula
     
@@ -69,7 +69,7 @@ class SchemaInferenceService:
         nodes_by_id = {n.id: n for n in canvas.nodes}
         edges_by_target = self._group_edges_by_target(canvas.edges)
         
-        # Calcola schema per ogni nodo (ordine topologico implicito nella ricorsione)
+        # Calcola schema per ogni nodo (ordine topologico implicito nella ricorsione
         result = {}
         for node in canvas.nodes:
             schema = self._infer_node_schema(
@@ -209,7 +209,7 @@ class SchemaInferenceService:
             logger.warning(f"Nodo {node.id} senza source_project_id")
             return []
         
-        # Carica metadata dal DB (canvas.columns_metadata)
+        # Carica metadata dal DB (canvas.columns_metadata
         from app.db.config.projects import get_project as _get_project
         row = _get_project(source_project_id)
         if not row:
@@ -237,11 +237,11 @@ class SchemaInferenceService:
 
             # Fonte primaria: `result_node.columns` del canvas sorgente, scritto
             # autorevolmente al PUT /canvas dal C9 fix
-            # (app/shared/canvas_columns.compute_result_columns -> mutate
-            # canvas.nodes[result].columns prima della persistenza).
+            # app/shared/canvas_columns.compute_result_columns -> mutate
+            # canvas.nodes[result].columns prima della persistenza
             # Fallback: `canvas.columns_metadata` (legacy / canvas mai salvato
             # post-C9 / progetti pre-fix). Niente chiamata a
-            # compute_result_columns qui per evitare import/costo/ricorsione.
+            # compute_result_columns qui per evitare import/costo/ricorsione
             primary_columns = []
             for n in canvas.get("nodes", []) or []:
                 if not isinstance(n, dict):
@@ -327,12 +327,12 @@ class SchemaInferenceService:
             logger.warning(f"Transform {node.id} senza transform_op")
             return input_schemas[0] if input_schemas else []
 
-        # Dispatch via registry (BE-PHASE2-SCHEMA-INFER-008-FINAL):
-        # sostituisce l'if/elif chain di 65 branch con un map lookup.
+        # Dispatch via registry (BE-PHASE2-SCHEMA-INFER-008-FINAL
+        # sostituisce l'if/elif chain di 65 branch con un map lookup
         # Comportamento invariato: gli adapter lambda nel registry
         # adattano gli handler con signature non-standard
-        # (`_schema_join` richiede `edges_by_target`, `_schema_geo_overlay`
-        # richiede `overlay_type`, alcuni handler ignorano `config`).
+        # `_schema_join` richiede `edges_by_target`, `_schema_geo_overlay`
+        # richiede `overlay_type`, alcuni handler ignorano `config`
         handlers = self._build_transform_handlers(edges_by_target)
         handler = handlers.get(transform_op)
         if handler is None:
@@ -364,7 +364,6 @@ class SchemaInferenceService:
         - `geo_to_crs` -> `_schema_passthrough` (alias legacy per
           `geo_reproject`)
 
-        Coverage: i parser source-bound del parity test estraggono
         i transform_op tra i marker `# DISPATCH-REGISTRY:start` e
         `# DISPATCH-REGISTRY:end` qui sotto.
         """
@@ -446,9 +445,9 @@ class SchemaInferenceService:
             "melt": lambda i, c, n: self._schema_melt(i, c, n),
             "statistics": lambda i, c, n: self._schema_statistics(i, c, n),
             "window_function": lambda i, c, n: self._schema_window_function(i, c, n),
-            # batch 7 (BE-PHASE2-SCHEMA-INFER-009-ZERO-RESIDUALS) —
+            # —
             # config-explicit schema contracts; safe deterministic
-            # fallback (passthrough) when `output_columns` is absent.
+            # fallback (passthrough) when `output_columns` is absent
             "flatten_json": lambda i, c, n: self._schema_flatten_json(i, c, n),
             "transpose": lambda i, c, n: self._schema_transpose(i, c, n),
             # DISPATCH-REGISTRY:end
@@ -475,7 +474,7 @@ class SchemaInferenceService:
         # Campi output dall'API: chiave canonica `output_mapping` (con fallback
         # tolleranti su nomi storici/varianti FE). `output_fields` non e' mai
         # stato popolato in produzione — sostituito qui per allineamento al
-        # resto del codebase (api_connector / enrichment_response_processing).
+        # resto del codebase (api_connector / enrichment_response_processing
         output_mapping = node.data.get("output_mapping", []) if node.data else []
         existing = {col.name for col in result}
         for mapping in output_mapping:
@@ -498,10 +497,10 @@ class SchemaInferenceService:
 
         return result
     
-    # SCHEMA PER OPERAZIONI SPECIFICHE (base)
-    # Ogni metodo _schema_xxx() simula l'effetto della trasformazione sullo
+    # SCHEMA PER OPERAZIONI SPECIFICHE (base
+    # Ogni metodo _schema_xxx simula l'effetto della trasformazione sullo
     # schema, senza eseguire l'operazione. Questo permette al frontend di
-    # conoscere le colonne output PRIMA dell'esecuzione della pipeline.
+    # conoscere le colonne output PRIMA dell'esecuzione della pipeline
     
     def _schema_join(
         self, 
@@ -534,16 +533,16 @@ class SchemaInferenceService:
                 is_calculated=col.is_calculated
             ))
         
-        # Colonne da destra con suffisso _R, ESCLUSA la join key:
-        #   - se left_on == right_on: la join key di destra e' un duplicato
-        #     della sinistra (gia' inclusa senza suffisso) → skip
-        #   - se left_on != right_on: la join key di destra resta nel
-        #     risultato col suo nome originale (senza _R) — e' una colonna
-        #     significativa, non un attributo collaterale.
+        # Colonne da destra con suffisso _R, ESCLUSA la join key
+        # se left_on == right_on: la join key di destra e' un duplicato
+        # della sinistra (gia' inclusa senza suffisso) → skip
+        # se left_on != right_on: la join key di destra resta nel
+        # risultato col suo nome originale (senza _R) — e' una colonna
+        # significativa, non un attributo collaterale
         # Pre-fix bug: la condizione ternaria aveva entrambi i rami uguali
-        # (`f"{col.name}_R" if ... else f"{col.name}_R"`), quindi la join
+        # `f"{col.name}_R" if ... else f"{col.name}_R"`), quindi la join
         # key di destra finiva sempre come `id_right_R`, confondendo il
-        # downstream sul nome reale della colonna.
+        # downstream sul nome reale della colonna
         for col in right_schema:
             if col.name == right_on and left_on == right_on:
                 continue  # Skip duplicato join key
@@ -583,7 +582,7 @@ class SchemaInferenceService:
                 is_calculated=col.is_calculated
             ))
         
-        # Colonne da destra (con suffisso per evitare conflitti)
+        # Colonne da destra (con suffisso per evitare conflitti
         left_names = {col.name for col in left_schema}
         for col in right_schema:
             new_name = col.name
@@ -626,7 +625,7 @@ class SchemaInferenceService:
         
         result = []
         
-        # Colonne group by (mantengono tipo originale)
+        # Colonne group by (mantengono tipo originale
         for col_name in group_by:
             if col_name in input_by_name:
                 col = input_by_name[col_name]
@@ -882,8 +881,8 @@ class SchemaInferenceService:
     
     # SCHEMA PER OPERAZIONI GEOMETRICHE
     # Le operazioni geometriche possono cambiare il tipo della colonna geometry
-    # (es: buffer punto → poligono, centroid poligono → punto) e aggiungere
-    # colonne metriche (area_m2, length_m, distance_m).
+    # es: buffer punto → poligono, centroid poligono → punto) e aggiungere
+    # colonne metriche (area_m2, length_m, distance_m
     
     def _schema_geo_buffer(
         self, 
@@ -1134,10 +1133,10 @@ class SchemaInferenceService:
                 is_calculated=col.is_calculated
             ))
         
-        # Colonne da destra (con suffisso per evitare conflitti)
+        # Colonne da destra (con suffisso per evitare conflitti
         left_names = {col.name for col in left_schema}
         for col in right_schema:
-            # Skip geometry columns from right (result uses combined geometry)
+            # Skip geometry columns from right (result uses combined geometry
             if col.type.startswith("geometry"):
                 continue
             new_name = col.name
@@ -1153,8 +1152,8 @@ class SchemaInferenceService:
         return result
     
     # TRASFORMAZIONI PRIVACY
-    # Operazioni di anonimizzazione: hash MD5 e mascheramento dati.
-    # Non cambiano il tipo colonna, ma possono aggiungere nuove colonne hash.
+    # Operazioni di anonimizzazione: hash MD5 e mascheramento dati
+    # Non cambiano il tipo colonna, ma possono aggiungere nuove colonne hash
     
     def _schema_md5_hash(
         self,
@@ -1219,8 +1218,8 @@ class SchemaInferenceService:
         return result
     
     # TRASFORMAZIONI BASE AGGIUNTIVE
-    # Operazioni aggiunte successivamente: cast tipi, condizionali,
-    # normalizzazione testo, creazione geometria da coordinate.
+    # Operazioni aggiunte successivamente: cast tipi, condizionali
+    # normalizzazione testo, creazione geometria da coordinate
     
     def _schema_type_cast(
         self,
@@ -1535,9 +1534,9 @@ class SchemaInferenceService:
         if not input_schemas:
             return []
 
-        # left schema (primo input). Se manca anche un secondo input,
+        # left schema (primo input). Se manca anche un secondo input
         # il runtime degrada graziosamente; lo schema FE annunciato resta
-        # comunque coerente col success-path canonico (left + distance).
+        # comunque coerente col success-path canonico (left + distance
         result = self._copy_schema(input_schemas[0], node_id)
         output_col = config.get("output_column") or "distance_m"
         if output_col and output_col not in {c.name for c in result}:
@@ -1719,7 +1718,7 @@ class SchemaInferenceService:
 
         named_groups = compiled.groupindex
         if named_groups:
-            # Ordine pattern: ordina per indice di gruppo (1-based).
+            # Ordine pattern: ordina per indice di gruppo (1-based
             ordered_names = sorted(named_groups, key=named_groups.get)
             for name in ordered_names:
                 if name and name not in existing:
@@ -1987,7 +1986,7 @@ class SchemaInferenceService:
         if not group_col:
             return self._copy_schema(input_schemas[0], node_id)
 
-        # Preserva il tipo originale di group_column se presente.
+        # Preserva il tipo originale di group_column se presente
         input_by_name = {c.name: c for c in input_schemas[0]}
         group_type = input_by_name[group_col].type if group_col in input_by_name else "str"
 
@@ -2018,7 +2017,7 @@ class SchemaInferenceService:
         (geometry:point), oppure sostituisce la geometria sorgente.
 
         Runtime: `op_geo_point_on_surface` (spatial.py) chiama
-        `representative_point()` e lo scrive in `output_column`
+        `representative_point` e lo scrive in `output_column`
         (default `"point_on_surface"`). Se `output_column` coincide
         con `geom_column` la sorgente viene sovrascritta a
         `geometry:point`. Stesso pattern del `_schema_geo_centroid`
@@ -2097,12 +2096,12 @@ class SchemaInferenceService:
                     break
         return result
 
-    # BATCH 4 — BE-PHASE2-SCHEMA-INFER-005
+    # — BE-PHASE2-SCHEMA-INFER-005
     # Handler dedicati per il riordino colonne (`reorder_columns`) e per
-    # `geo_voronoi`. Le altre 4 candidati (dedup_advanced,
-    # geo_clean_topology, geo_make_valid, geo_explode) sono rows-only:
+    # `geo_voronoi`. Le altre 4 candidati (dedup_advanced
+    # geo_clean_topology, geo_make_valid, geo_explode) sono rows-only
     # rimangono in fallback passthrough e vengono riclassificate come
-    # PASSTHROUGH_OK_GAP nel test di parity (non richiedono codice).
+    # PASSTHROUGH_OK_GAP nel test di parity (non richiedono codice
 
     def _schema_reorder_columns(
         self,
@@ -2158,7 +2157,7 @@ class SchemaInferenceService:
         geometria a `geometry:polygon`.
 
         Runtime: `op_geo_voronoi` (spatial.py) preserva tutte le colonne
-        di input (`result = gdf.copy()`) e sovrascrive `result['geometry']`
+        di input (`result = gdf.copy`) e sovrascrive `result['geometry']`
         con poligoni di Voronoi. Il numero di righe non cambia (1
         polygon per punto input).
 
@@ -2396,7 +2395,7 @@ class SchemaInferenceService:
         if not all(k in right_by_name for k in right_keys):
             return self._copy_schema(left_schema, node_id)
 
-        # Apply key-rename to RIGHT (rk → lk where lk != rk).
+        # Apply key-rename to RIGHT (rk → lk where lk != rk
         key_rename = {
             rk: lk for lk, rk in zip(left_keys, right_keys) if lk != rk
         }
@@ -2556,7 +2555,7 @@ class SchemaInferenceService:
         - prefix default = `f"{column}_"` (se `output_prefix` vuoto)
         - col name = `f"{prefix}{stat}"`
         - Tipo:
-          - `count` → `int` (count() pandas)
+          - `count` → `int` (count pandas)
           - tutti gli altri (`min`, `max`, `sum`, `mean`, `median`,
             `std`, `var`, `q25`, `q75`) → `real` (numerici).
         - Stats unknown ignorate (allineato al `if stat_name in
@@ -2667,20 +2666,19 @@ class SchemaInferenceService:
         ))
         return result
 
-    # BATCH 7 — BE-PHASE2-SCHEMA-INFER-009-ZERO-RESIDUALS
+    # — BE-PHASE2-SCHEMA-INFER-009-ZERO-RESIDUALS
     # Handler dedicati per i 2 transform precedentemente classificati
-    # `MIGRATE_NEXT_NEEDS_RUNTIME_CONTRACT` (output dipendente dai dati).
+    # `MIGRATE_NEXT_NEEDS_RUNTIME_CONTRACT` (output dipendente dai dati
     # La direzione e' config-explicit: l'utente dichiara lo schema atteso
     # via `output_columns`. Quando il contratto e' assente, fallback
-    # deterministico a passthrough (NON sampling, NON I/O).
-    #
+    # deterministico a passthrough (NON sampling, NON I/O
     # Forma del contratto `output_columns` (accettata in entrambe le
-    # forme, mixed allowed):
-    # - `List[str]`     : ogni stringa diventa una colonna `str`;
-    # - `List[{name, type}]`: tipo letto da `type`, default `str` se
-    #   vuoto/missing.
-    # Entry malformate (None, dict senza `name`, non-str/non-dict)
-    # vengono saltate (mirror della no-throw policy degli altri handler).
+    # forme, mixed allowed
+    # `List[str]` : ogni stringa diventa una colonna `str`
+    # `List[{name, type}]`: tipo letto da `type`, default `str` se
+    # vuoto/missing
+    # Entry malformate (None, dict senza `name`, non-str/non-dict
+    # vengono saltate (mirror della no-throw policy degli altri handler
 
     def _schema_flatten_json(
         self,
@@ -2926,7 +2924,7 @@ class SchemaInferenceService:
 
 # VALIDAZIONE CONNESSIONI TRA NODI
 # Verifica che i nodi collegati abbiano schemi compatibili
-# (es: la colonna di join esiste in entrambi i lati).
+# es: la colonna di join esiste in entrambi i lati
 
 class ConnectionValidator:
     """

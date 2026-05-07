@@ -47,7 +47,7 @@ logger = get_logger(__name__)
 
 router = APIRouter(prefix="/features", tags=["features"])
 
-# Istanza del servizio (singleton a livello di modulo)
+# Istanza del servizio (singleton a livello di modulo
 _service: Optional[FeaturesService] = None
 
 
@@ -170,7 +170,7 @@ async def delete_connection(connection_id: str, current_user: CurrentUser = Depe
     deleted = get_service().delete_connection(connection_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Connessione non trovata")
-    # F2-B2 (2026-04-24): DELETE risponde 204 No Content, body vuoto.
+    # F2-B2 (2026-04-24): DELETE risponde 204 No Content, body vuoto
 
 
 @router.post("/connections/{connection_id}/test", response_model=ArcGISTestResult)
@@ -279,7 +279,7 @@ async def get_layer_schema(
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
-# QUERY (lettura dati)
+# QUERY (lettura dati
 
 @router.post("/query/preview")
 async def query_preview(
@@ -319,12 +319,12 @@ async def query_preview(
 class WriteRequest(BaseModel):
     """Request per scrittura su layer esistente."""
     connection_id: str
-    layer_url: str  # URL completo del layer (es. .../FeatureServer/0)
+    layer_url: str  # URL completo del layer (es. .../FeatureServer/0
     operation: str = "add"  # add, update, delete
-    input_path: str = ""  # Path file sorgente (per add/update)
+    input_path: str = ""  # Path file sorgente (per add/update
     project_id: str = ""  # Alternativa: cerca output in RESULTS_DIR/{project_id}
     geometry_column: str = "geometry"
-    source_srid: Optional[int] = None  # SRID sorgente (dal nodo pipeline)
+    source_srid: Optional[int] = None  # SRID sorgente (dal nodo pipeline
     object_ids: Optional[List[int]] = None  # Per delete
     where: Optional[str] = None  # Per delete
 
@@ -337,7 +337,7 @@ class CreateServiceRequest(BaseModel):
     input_path: str = ""  # Path file sorgente
     project_id: str = ""  # Alternativa: cerca output in RESULTS_DIR/{project_id}
     geometry_column: str = "geometry"
-    source_srid: Optional[int] = None  # SRID sorgente (dal nodo pipeline)
+    source_srid: Optional[int] = None  # SRID sorgente (dal nodo pipeline
 
 
 def _resolve_input_path(
@@ -372,11 +372,11 @@ def _resolve_input_path(
     `/etc/passwd` o `/proc/self/environ` passando il path come parametro.
 
     Contratto eccezioni:
-      - `input_path UNC non consentito`         (UNC paths)
-      - `input_path non consentito: ...`        (fuori whitelist)
-      - `input_path non valido: ...`            (malformed)
-      - `Specificare input_path o project_id`   (entrambi vuoti)
-      - `FileNotFoundError`                     (project_id valido, no output)
+      - `input_path UNC non consentito` (UNC paths)
+      - `input_path non consentito: ...` (fuori whitelist)
+      - `input_path non valido: ...` (malformed)
+      - `Specificare input_path o project_id` (entrambi vuoti)
+      - `FileNotFoundError` (project_id valido, no output)
     """
     if not expected_group_id:
         raise ValueError(
@@ -399,7 +399,7 @@ def _resolve_input_path(
 
         # Validazione delegata a `assert_path_within`. Catturiamo
         # ValueError e re-raise con i messaggi specifici di questo
-        # endpoint per preservare il contratto observable.
+        # endpoint per preservare il contratto observable
         try:
             candidate = assert_path_within(input_path, _allowed_roots)
         except ValueError as e:
@@ -417,11 +417,11 @@ def _resolve_input_path(
     if not project_id:
         raise ValueError("Specificare input_path o project_id")
 
-    # Defense-in-depth: l'ACL a livello router (assert_project_visible)
+    # Defense-in-depth: l'ACL a livello router (assert_project_visible
     # gia' garantisce la visibilita', ma passare expected_group_id al
     # resolver mantiene l'invariante cross-tenant uniforme anche se in
     # futuro questa funzione venisse richiamata da un path che salta
-    # il check HTTP.
+    # il check HTTP
     materialized = ArtifactResolver().materialize_latest(
         LatestProjectArtifactRef(project_id=project_id),
         expected_group_id=expected_group_id,
@@ -435,7 +435,7 @@ def _resolve_input_path(
 @router.post("/write", response_model=WriteFeaturesResponse)
 # target_param non disponibile: `connection_id` e' dentro al body Pydantic
 # `request: WriteRequest`, l'extractor accetta solo str/int (vedi
-# audit_action.py:190). Audit registra action+user+status, non il target.
+# audit_action.py:190). Audit registra action+user+status, non il target
 @audit_action(action="arcgis.feature.write")
 async def write_features(request: WriteRequest, current_user: CurrentUser = Depends(require_not_esecutore)):
     """Scrittura su Feature Service esistente (add/update/delete)."""
@@ -444,16 +444,16 @@ async def write_features(request: WriteRequest, current_user: CurrentUser = Depe
     # `input_path`, verifichiamo l'accesso al progetto prima di
     # caricarne l'output: senza questo check, chi ha accesso alla
     # connessione ArcGIS potrebbe scrivere su un Feature Service
-    # usando i dati di un progetto di un altro tenant conoscendone l'id.
+    # usando i dati di un progetto di un altro tenant conoscendone l'id
     if request.project_id:
         from app.shared.authz_helpers import assert_project_visible
         assert_project_visible(request.project_id, current_user)
     try:
         # `with` garantisce cleanup del tempfile quando il resolver
-        # materializza l'ultimo output dal blob DB: senza questo,
+        # materializza l'ultimo output dal blob DB: senza questo
         # ogni chiamata con project_id lascerebbe un file orfano in
         # TEMP_DIR perche' `_resolve_input_path` perdeva il riferimento
-        # al MaterializedArtifact.
+        # al MaterializedArtifact
         with _resolve_input_path(
             request.input_path,
             request.project_id,
@@ -501,15 +501,15 @@ async def create_service(request: CreateServiceRequest, current_user: CurrentUse
     Restituisce URL del nuovo servizio e conteggio features caricate.
     """
     _check_arcgis_access(request.connection_id, current_user)
-    # Stesso check di write_features: se l'input arriva via project_id,
-    # validiamo l'accesso al progetto prima di leggerne l'output.
+    # Stesso check di write_features: se l'input arriva via project_id
+    # validiamo l'accesso al progetto prima di leggerne l'output
     if request.project_id:
         from app.shared.authz_helpers import assert_project_visible
         assert_project_visible(request.project_id, current_user)
     try:
         # Stesso pattern di write_features: `with` garantisce cleanup
         # del tempfile sul branch project_id (materialize_latest puo'
-        # ritornare is_temporary=True).
+        # ritornare is_temporary=True
         with _resolve_input_path(
             request.input_path,
             request.project_id,

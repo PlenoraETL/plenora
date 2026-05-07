@@ -64,7 +64,7 @@ class TransactionMode(str, Enum):
 
     PER_BATCH: commit ogni N righe (batch_size).
         Pro: più performante, meno memoria.
-        Contro: in caso di errore, i batch già committati rimangono.
+        Contro: in caso di errore, i à committati rimangono.
     """
     ALL_OR_NOTHING = "all_or_nothing"
     PER_BATCH = "per_batch"
@@ -161,7 +161,7 @@ class WriteConfig:
         mappings = []
         for m in data.get("column_mappings", []):
             if isinstance(m, dict):
-                # Supporta sia formato frontend (source, dest) che backend (source_column, dest_column)
+                # Supporta sia formato frontend (source, dest) che backend (source_column, dest_column
                 normalized = {
                     "source_column": m.get("source_column") or m.get("source", ""),
                     "dest_column": m.get("dest_column") or m.get("dest", ""),
@@ -193,7 +193,7 @@ class WriteConfig:
             # settare esplicitamente il boolean True per opt-in alla combo
             # unsafe. Strict identity check: stringhe come "true"/"false"/
             # "0"/"1" restano False, perche' `bool("false")` e' True in
-            # Python e abiliterebbe silently la modalita' unsafe.
+            # Python e abiliterebbe silently la modalita' unsafe
             allow_unsafe_append=data.get("allow_unsafe_append") is True,
         )
 
@@ -339,8 +339,8 @@ class WriteResult:
         conflict_report: report conflitti (se modalità APPEND)
         started_at: timestamp inizio operazione
         completed_at: timestamp fine operazione
-        batches_completed: numero batch completati
-        batches_total: numero batch totali
+        batches_completed: numero
+        batches_total: numero
     """
     status: WriteStatus = WriteStatus.SUCCESS
     rows_written: int = 0

@@ -14,9 +14,9 @@ logger = get_logger(__name__)
 def _expand_mapping_columns(mapping_value: Any) -> List[str]:
     """Espande il valore di un param_mapping nelle colonne df che richiede.
 
-    - "nome_colonna"   → ["nome_colonna"]
-    - "{X},{Y}"        → ["X", "Y"]
-    - ""/None/non str  → []
+    - "nome_colonna" → ["nome_colonna"]
+    - "{X},{Y}" → ["X", "Y"]
+    - ""/None/non str → []
     """
     if not mapping_value or not isinstance(mapping_value, str):
         return []
@@ -48,7 +48,7 @@ def extract_expected_columns(canvas: Dict[str, Any]) -> List[Dict[str, Any]]:
     nodes = canvas.get("nodes", []) or []
     edges = canvas.get("edges", []) or []
 
-    # Carica tutte le config API una volta (1 query, gia masked)
+    # Carica tutte le config API una volta (1 query, gia masked
     api_configs: Dict[str, Dict[str, Any]] = {}
     try:
         for cfg in api_connection_service.list_api_connections():
@@ -57,7 +57,7 @@ def extract_expected_columns(canvas: Dict[str, Any]) -> List[Dict[str, Any]]:
     except Exception as e:
         logger.warning(f"Scanner: impossibile caricare API configs: {e}")
 
-    # Calcola quali colonne sono "prodotte" da ogni api_enrich (output)
+    # Calcola quali colonne sono "prodotte" da ogni api_enrich (output
     produced_by_nodes: Dict[str, Set[str]] = {}
     for node in nodes:
         if node.get("type") == "api_enrich":
@@ -72,7 +72,7 @@ def extract_expected_columns(canvas: Dict[str, Any]) -> List[Dict[str, Any]]:
             produced_by_nodes[nid] = produced_cols
 
     # Costruisci grafo di adiacenza inversa: per ogni nodo, l'insieme dei nodi
-    # da cui è raggiungibile (cioè i suoi antenati nel DAG).
+    # da cui è raggiungibile (cioè i suoi antenati nel DAG
     # adj_in[target] = lista di source_id collegati a target
     adj_in: Dict[str, List[str]] = {}
     for e in edges:
@@ -118,7 +118,7 @@ def extract_expected_columns(canvas: Dict[str, Any]) -> List[Dict[str, Any]]:
         api_params = api_cfg.get("parameters", []) or []
         param_cfg_map = {p.get("name"): p for p in api_params if isinstance(p, dict) and p.get("name")}
 
-        # Colonne prodotte dagli ANTENATI di questo nodo (=upstream nel DAG)
+        # Colonne prodotte dagli ANTENATI di questo nodo (=upstream nel DAG
         upstream_produced: Set[str] = set()
         for anc_id in _ancestors(nid):
             upstream_produced.update(produced_by_nodes.get(anc_id, set()))
@@ -129,8 +129,8 @@ def extract_expected_columns(canvas: Dict[str, Any]) -> List[Dict[str, Any]]:
                 continue
 
             # Espandi mapping in colonne effettive
-            # - "X" → ["X"]
-            # - "{X},{Y}" → ["X", "Y"]
+            # "X" → ["X"
+            # "{X},{Y}" → ["X", "Y"
             cols = _expand_mapping_columns(mapping_value)
             if not cols:
                 continue
@@ -141,7 +141,7 @@ def extract_expected_columns(canvas: Dict[str, Any]) -> List[Dict[str, Any]]:
 
             for file_col in cols:
                 # Se la colonna viene prodotta da un nodo upstream è un "collegamento
-                # interno" della catena → non è una colonna che l'utente deve fornire.
+                # interno" della catena → non è una colonna che l'utente deve fornire
                 if file_col in upstream_produced:
                     continue
 
@@ -158,7 +158,7 @@ def extract_expected_columns(canvas: Dict[str, Any]) -> List[Dict[str, Any]]:
                         "name": file_col,
                         # Per colonne da template (multiple) usiamo str come tipo
                         # generico — il tipo del parametro API non corrisponde
-                        # 1:1 al tipo della singola colonna.
+                        # 1:1 al tipo della singola colonna
                         "type": param_type if len(cols) == 1 else "str",
                         "required": param_required,
                         "used_by": nid,

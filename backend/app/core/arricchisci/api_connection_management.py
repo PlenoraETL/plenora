@@ -26,7 +26,7 @@ import app.db.db_service as db_svc
 # `"app.core.arricchisci.api_connector"`). Singleton stdlib per nome →
 # record indistinguibili dai consumer che attaccano handler / filtrano
 # per nome canonico (incluso il test B3-B.2a-modernizzato che usa
-# handler stdlib agganciato a `"app.core.arricchisci.api_connector"`).
+# handler stdlib agganciato a `"app.core.arricchisci.api_connector"`
 logger = get_logger("app.core.arricchisci.api_connector")
 
 
@@ -81,7 +81,7 @@ class ApiConnectionManagementMixin:
             if connection_type and config.get('connection_type') != connection_type:
                 continue
             # Inietta id, group_id, created_by dalle colonne DB dentro il dict
-            # esposto (servono per ownership checks e can_edit nel router).
+            # esposto (servono per ownership checks e can_edit nel router
             config["id"] = row.get("id") or config.get("id")
             config["group_id"] = row.get("group_id", "")
             config["created_by"] = row.get("created_by")
@@ -148,7 +148,7 @@ class ApiConnectionManagementMixin:
         config = row.get('config') or {}
         if isinstance(config, str):
             config = json.loads(config)
-        # Inietta id, group_id, created_by dalle colonne DB (non sono nel config JSON)
+        # Inietta id, group_id, created_by dalle colonne DB (non sono nel config JSON
         config["id"] = row.get("id") or config.get("id") or api_id
         config["group_id"] = row.get("group_id", "")
         config["created_by"] = row.get("created_by")
@@ -204,7 +204,7 @@ class ApiConnectionManagementMixin:
             created_by=data.get('created_by'),
         )
         logger.info(f"Creata API connection: {api_id}")
-        # Restituisci la versione mascherata al client (mai esporre cifrato/chiaro al caller)
+        # Restituisci la versione mascherata al client (mai esporre cifrato/chiaro al caller
         return self.get_api_connection(api_id, include_token=False)
 
     def update_api_connection(self, api_id: str, data: Dict) -> Optional[Dict]:
@@ -243,7 +243,7 @@ class ApiConnectionManagementMixin:
             # client (es. password mascherata non modificata) mantengono
             # il valore esistente nel DB. I campi inviati come "***"
             # dal client sono mascherati e vanno IGNORATI, altrimenti
-            # sovrascriviamo il valore reale con la maschera.
+            # sovrascriviamo il valore reale con la maschera
             existing_auth = config.get("auth", {})
             incoming_auth = {
                 k: v for k, v in (data["auth"] or {}).items()
@@ -268,9 +268,9 @@ class ApiConnectionManagementMixin:
         return True
 
     # TEST CONNESSIONE API
-    # Test singola chiamata con parsing risposta JSON per validazione.
+    # Test singola chiamata con parsing risposta JSON per validazione
     # Estrae automaticamente i campi disponibili dalla risposta per
-    # permettere la configurazione dell'output mapping nel frontend.
+    # permettere la configurazione dell'output mapping nel frontend
 
     @staticmethod
     def _build_test_call_params(config: Dict, test_params: Optional[Dict]) -> Dict:
@@ -343,7 +343,7 @@ class ApiConnectionManagementMixin:
 
         Alcuni server (ArcGIS REST con `f=json/pjson`) ritornano JSON
         valido con `Content-Type=text/plain`. Tentiamo prima
-        `response.json()` standard; se fallisce, fallback al parsing
+        `response.json` standard; se fallisce, fallback al parsing
         manuale del testo grezzo (preserva il caso text/plain).
 
         Ritorna `(json_data, parse_error)`:
@@ -384,7 +384,7 @@ class ApiConnectionManagementMixin:
         if api_id:
             # FIXME: #2 (2026-04-23): strict=True → se un campo auth cifrato non
             # e' decifrabile, CredentialUnavailableError propagato al router
-            # per HTTP 422 invece di eseguire la chiamata HTTP con auth None.
+            # per HTTP 422 invece di eseguire la chiamata HTTP con auth None
             config = self.get_api_connection(api_id, include_token=True, strict=True)
             if not config:
                 return {"success": False, "error": "API connection non trovata"}
@@ -412,7 +412,7 @@ class ApiConnectionManagementMixin:
         # Anti-SSRF: valida URL prima di eseguire la richiesta. Il
         # messaggio di `validate_external_url` include gia' il prefisso
         # "URL bloccato:" / "URL non valido:", quindi NON wrappare
-        # ulteriormente o si ottiene il prefisso doppio.
+        # ulteriormente o si ottiene il prefisso doppio
         from app.shared.api_utils import validate_external_url
         try:
             validate_external_url(url)
@@ -459,8 +459,8 @@ class ApiConnectionManagementMixin:
             # di test delle API connection. Eccezioni inattese (bug
             # interno di _prepare_headers, TypeError su parsing custom
             # headers, ecc.) NON devono leakare str(e) nella response
-            # JSON esposta al form di setup. Messaggio safe generico,
-            # dettaglio tecnico solo nel log.
+            # JSON esposta al form di setup. Messaggio safe generico
+            # dettaglio tecnico solo nel log
             logger.error(
                 f"[GESTITO] Errore test_api_connection: {e}",
                 exc_info=True,

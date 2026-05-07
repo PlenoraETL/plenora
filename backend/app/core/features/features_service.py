@@ -36,7 +36,7 @@ logger = get_logger(__name__)
 # CRUD STORAGE — tabella arcgis_connections su PostgreSQL
 # Merged da features_service_db.py (S4 consolidation). Le 5 funzioni
 # pubbliche *_db e i 3 helper privati sono mantenuti come module-level
-# per preservare la superficie importata dai test.
+# per preservare la superficie importata dai test
 
 import app.db.pg_connection as db
 from app.shared.crypto import encrypt as _encrypt, decrypt as _decrypt
@@ -47,7 +47,7 @@ DEFAULT_GROUP = "default"
 # client_secret verrebbero scritti in chiaro su arcgis_connections e
 # chiunque leggesse il DB avrebbe le credenziali live. Usiamo lo stesso
 # pattern di ConnectionService (app.shared.crypto Fernet, prefisso
-# "enc:", idempotente).
+# "enc:", idempotente
 _SENSITIVE_FIELDS = ("password", "client_secret")
 
 
@@ -58,8 +58,8 @@ def _ensure_default_group():
 
 
 def _row_to_connection(row: dict) -> ArcGISConnection:
-    # decrypt() e' idempotente su valori legacy in chiaro (nessun prefisso
-    # "enc:"): li restituisce tal quali, permettendo una migrazione lazy.
+    # decrypt e' idempotente su valori legacy in chiaro (nessun prefisso
+    # "enc:"): li restituisce tal quali, permettendo una migrazione lazy
     return ArcGISConnection(
         id=row["id"],
         group_id=row.get("group_id") or DEFAULT_GROUP,
@@ -104,7 +104,7 @@ def create_connection_db(data: ArcGISCreate, group_id: str = DEFAULT_GROUP,
         else:
             server_type = "arcgis_server"
 
-    # Cifra i campi sensibili prima dell'INSERT. encrypt() e' idempotente.
+    # Cifra i campi sensibili prima dell'INSERT. encrypt e' idempotente
     enc_password = _encrypt(data.password or "") or ""
     enc_client_secret = _encrypt(data.client_secret or "") or ""
 
@@ -126,8 +126,8 @@ def create_connection_db(data: ArcGISCreate, group_id: str = DEFAULT_GROUP,
 def list_connections_db(group_id: Optional[str] = None) -> ArcGISList:
     """
     Lista connessioni ArcGIS.
-    - group_id None     -> tutte (uso superadmin)
-    - group_id "abc"    -> solo del gruppo
+    - group_id None -> tutte (uso superadmin)
+    - group_id "abc" -> solo del gruppo
     """
     if group_id is None:
         rows = db.fetchall("SELECT * FROM arcgis_connections ORDER BY updated_at DESC")
@@ -156,8 +156,8 @@ def update_connection_db(connection_id: str, data: ArcGISUpdate) -> Optional[Arc
     now = datetime.now(timezone.utc).isoformat()
 
     # Bugfix: il frontend riceve i campi sensibili mascherati come "***" nelle
-    # list/get e li rispedisce inalterati se l'utente non li modifica.
-    # Skipparli per non sovrascrivere i valori reali con la maschera.
+    # list/get e li rispedisce inalterati se l'utente non li modifica
+    # Skipparli per non sovrascrivere i valori reali con la maschera
     _SENSITIVE = {"password", "client_secret"}
     for sf in list(update_data.keys()):
         if sf in _SENSITIVE and update_data.get(sf) in (None, "", "***"):
@@ -177,7 +177,7 @@ def update_connection_db(connection_id: str, data: ArcGISUpdate) -> Optional[Arc
             val = update_data[pf]
             # Cifratura at-rest per i campi sensibili (idempotente su valori
             # gia' cifrati grazie al prefisso "enc:" riconosciuto dal modulo
-            # crypto).
+            # crypto
             if pf in _SENSITIVE_FIELDS and isinstance(val, str) and val:
                 val = _encrypt(val)
             params.append(val)
@@ -389,7 +389,7 @@ class FeaturesService:
         """
         Recupera lo schema di un layer (campi + metadata).
         
-        Equivalente a DatabaseInspector.get_tables_and_columns() per un
+        Equivalente a DatabaseInspector.get_tables_and_columns per un
         singolo layer.
         
         Args:
@@ -406,7 +406,7 @@ class FeaturesService:
         conn_info = self._to_connection_info(connection)
         return self._client.get_layer_schema(conn_info, layer_url)
     
-    # QUERY (lettura dati)
+    # QUERY (lettura dati
     
     def query_layer(
         self,
@@ -421,7 +421,7 @@ class FeaturesService:
         """
         Query features da un layer — formato (righe, colonne).
         
-        Interfaccia identica a QueryExecutor.execute_raw() per
+        Interfaccia identica a QueryExecutor.execute_raw per
         compatibilità con il sistema ESTRAI.
         
         Args:
@@ -468,7 +468,7 @@ class FeaturesService:
         """
         Query completa con salvataggio file.
         
-        Interfaccia identica a QueryExecutor.execute_query() per
+        Interfaccia identica a QueryExecutor.execute_query per
         compatibilità con il pipeline ESTRAI.
         
         Args:
@@ -495,7 +495,7 @@ class FeaturesService:
             project_dir = self._results_dir / project_id
             project_dir.mkdir(parents=True, exist_ok=True)
             
-            # Fase 0: Recupera CRS dal layer (per salvataggio geo corretto)
+            # Fase 0: Recupera CRS dal layer (per salvataggio geo corretto
             layer_crs = self._get_layer_crs(connection_id, layer_url, out_sr)
             
             # Fase 1: Query
@@ -516,7 +516,7 @@ class FeaturesService:
             df = pd.DataFrame(rows, columns=columns)
             timings["dataframe"] = time.time() - t_df
             
-            # Fase 3: Salvataggio su blob DB (single entry, dispatch interno)
+            # Fase 3: Salvataggio su blob DB (single entry, dispatch interno
             t_save = time.time()
             filename_stem = Path(output_filename).stem or "result"
             saved = save_pipeline_result(
@@ -708,7 +708,7 @@ class FeaturesService:
         df = self._load_dataframe(input_path)
         logger.info(f"Caricato file {input_path}: {len(df)} righe, colonne: {list(df.columns)}")
         
-        # Imposta CRS se fornito (dal nodo sorgente della pipeline)
+        # Imposta CRS se fornito (dal nodo sorgente della pipeline
         if source_srid and hasattr(df, 'set_crs') and (df.crs is None):
             import geopandas as gpd
             df = df.set_crs(epsg=source_srid)
@@ -758,7 +758,7 @@ class FeaturesService:
     ) -> dict:
         """
         Scrive features su un layer ArcGIS partendo da un DataFrame.
-        Alternativa a write_features() che evita il round-trip su file.
+        Alternativa a write_features che evita il round-trip su file.
 
         Args:
             connection_id: ID connessione ArcGIS
@@ -905,7 +905,7 @@ class FeaturesService:
         df = self._load_dataframe(input_path)
         logger.info(f"Caricato file {input_path}: {len(df)} righe per nuovo servizio '{service_name}'")
         
-        # Imposta CRS se fornito (dal nodo sorgente della pipeline)
+        # Imposta CRS se fornito (dal nodo sorgente della pipeline
         if source_srid and hasattr(df, 'set_crs') and (df.crs is None):
             import geopandas as gpd
             df = df.set_crs(epsg=source_srid)
@@ -1033,7 +1033,7 @@ class FeaturesService:
                 f["attributes"]["OBJECTID"] = oid
                 to_update.append(f)
             else:
-                # Rimuovi OBJECTID se presente (per add)
+                # Rimuovi OBJECTID se presente (per add
                 f["attributes"].pop("OBJECTID", None)
                 f["attributes"].pop("objectid", None)
                 to_add.append(f)
@@ -1182,10 +1182,10 @@ class FeaturesService:
         elif suffix in (".xlsx", ".xls"):
             return pd.read_excel(path)
         else:
-            # Estensione non riconosciuta: prova come GeoJSON via geopandas.
+            # Estensione non riconosciuta: prova come GeoJSON via geopandas
             # Fallback a CSV solo se l'estensione e' plausibilmente CSV-like
-            # (.tsv, .txt). Altrimenti fail-fast: un .gpkg corrotto o un
-            # binario mislabel-ato non deve essere letto silenziosamente come CSV.
+            # tsv, .txt). Altrimenti fail-fast: un .gpkg corrotto o un
+            # binario mislabel-ato non deve essere letto silenziosamente come CSV
             try:
                 import geopandas as gpd
                 return gpd.read_file(path)

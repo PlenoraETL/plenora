@@ -1,5 +1,5 @@
 """
-Go-ready read/preview orchestration for FileSourceService.
+portable read/preview orchestration for FileSourceService.
 
 This module keeps DB/security-bound read workflows out of the large
 """
@@ -50,7 +50,7 @@ def load_dataframe(
     """Load a persisted file source into a DataFrame.
 
     Visibility remains fail-closed: callers inject the same
-    FileSourceService._assert_visible callback used before extraction.
+    FileSourceService._assert_visible callback used before separation.
     """
     assert_visible(file_id, expected_group_id or "")
     file_source = get_file_source(file_id)

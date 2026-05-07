@@ -48,7 +48,7 @@ class AutoMappingRequest(BaseModel):
     project_id: str = ""
     srid: int = 4326
     # Le colonne del DataFrame vengono passate come lista
-    # (il DataFrame vero non è serializzabile via API)
+    # il DataFrame vero non è serializzabile via API
     source_columns: List[Dict[str, str]] = []
 
 
@@ -106,8 +106,8 @@ async def get_schemas(connection_id: str, current_user: CurrentUser = Depends(re
     Per MySQL/MariaDB: database
     """
     # SECURITY: verifica che l'utente possa vedere questa connessione
-    # (owned dal suo gruppo o shared). Senza questo check un utente di
-    # gruppoA potrebbe enumerare schemi/tabelle del DB di gruppoB.
+    # owned dal suo gruppo o shared). Senza questo check un utente di
+    # gruppoA potrebbe enumerare schemi/tabelle del DB di gruppoB
     from app.services.connection_service import ConnectionService as _CS
     _conn_obj = _CS().get_connection(connection_id)
     assert_resource_visible(_conn_obj, "connections", current_user, "Connessione")
@@ -208,9 +208,9 @@ async def auto_mapping(request: AutoMappingRequest, current_user: CurrentUser = 
         )
 
         # Ricostruisci un DataFrame vuoto con le colonne sorgente
-        # (per il mapping servono solo i nomi e i tipi). La dispatch
+        # per il mapping servono solo i nomi e i tipi). La dispatch
         # canvas-type -> pandas dtype vive in app.shared.column_types
-        # (fonte unica: alias, geometry, fallback object).
+        # fonte unica: alias, geometry, fallback object
         columns_data = {
             col_info.get("name", ""): pd.Series(
                 dtype=canvas_type_to_pandas_dtype(col_info.get("type", "str"))
@@ -220,9 +220,9 @@ async def auto_mapping(request: AutoMappingRequest, current_user: CurrentUser = 
 
         df = pd.DataFrame(columns_data)
 
-        # Canvas types (dict form del tipo semantico) per rilevare geometrie.
+        # Canvas types (dict form del tipo semantico) per rilevare geometrie
         # `source_columns` arriva gia' come list[{"name","type"}] (columns_metadata
-        # shape) — l'adapter fa la sola conversione di forma.
+        # shape) — l'adapter fa la sola conversione di forma
         canvas_types = metadata_to_dict(request.source_columns)
 
         # Recupera colonne esistenti se la tabella è specificata
@@ -328,7 +328,7 @@ async def check_conflicts(request: ConflictCheckRequest, current_user: CurrentUs
                 rows = result_proxy.fetchall()
                 col_names = list(result_proxy.keys())
             df = pd.DataFrame(rows, columns=col_names)
-            # Rinomina colonne sorgente → nomi DB destinazione (match_columns)
+            # Rinomina colonne sorgente → nomi DB destinazione (match_columns
             if request.source_match_columns and request.source_match_columns != request.match_columns:
                 rename_map = dict(zip(request.source_match_columns, request.match_columns))
                 df = df.rename(columns=rename_map)
@@ -337,14 +337,14 @@ async def check_conflicts(request: ConflictCheckRequest, current_user: CurrentUs
             # Authz: verifica che l'utente abbia accesso al progetto prima
             # di leggerne il result blob. Senza questo check, chiunque con
             # accesso a una connection di destinazione potrebbe leggere
-            # l'output di un progetto di un altro gruppo conoscendone l'id.
+            # l'output di un progetto di un altro gruppo conoscendone l'id
             from app.shared.authz_helpers import assert_project_visible
             assert_project_visible(request.project_id, current_user)
 
             # Defense-in-depth core-level: il SourceLoader propaga
             # expected_group_id al resolver, che applica il check
             # cross-tenant fail-closed anche se l'ACL HTTP a monte
-            # venisse bypassata da chiamate interne future.
+            # venisse bypassata da chiamate interne future
             from app.core.artifacts import (
                 LatestProjectArtifactRef,
                 SourceLoader,
@@ -416,7 +416,7 @@ def _get_connection(connection_id: str) -> Dict[str, Any]:
     if _connection_service:
         conn = _connection_service.get_connection(connection_id)
         if conn:
-            # ConnectionService restituisce sempre un DatabaseConnection (Pydantic v2)
+            # ConnectionService restituisce sempre un DatabaseConnection (Pydantic v2
             return conn.model_dump()
         raise HTTPException(
             status_code=404,

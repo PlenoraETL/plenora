@@ -23,7 +23,7 @@ class CredentialUnavailableError(Exception):
 
     Scenari coperti:
       - valore None nel DB ma obbligatorio per il consumer
-      - prefisso ``enc:`` presente ma ``decrypt()`` ritorna None (chiave
+      - prefisso ``enc:`` presente ma ``decrypt`` ritorna None (chiave
         mancante/sbagliata o token Fernet corrotto)
 
     Uso: i path di "test" (test_connection, test_api_connection,
@@ -32,21 +32,21 @@ class CredentialUnavailableError(Exception):
     """
 
 
-#: Prefisso che marca un valore come cifrato. Sceglie ``enc:`` (no versione)
-#: per coerenza con il formato già presente in connection_service.py legacy.
+# Prefisso che marca un valore come cifrato. Sceglie ``enc:`` (no versione
+# per coerenza con il formato già presente in connection_service.py legacy
 ENC_PREFIX = "enc:"
 
-#: Chiave di default usata SOLO in sviluppo se nessuna env var è impostata.
-#: NON usare in produzione: l'app fa fail-fast quando ENVIRONMENT=production.
+# Chiave di default usata SOLO in sviluppo se nessuna env var è impostata
+# NON usare in produzione: l'app fa fail-fast quando ENVIRONMENT=production
 _DEV_DEFAULT_KEY = "urby-etl-default-key-change-in-production"
 
-#: Cache del Fernet istanziato. Evita di ricalcolare la derivazione SHA-256
-#: a ogni chiamata. Resettabile per i test via ``_reset_cache_for_tests()``.
+# Cache del Fernet istanziato. Evita di ricalcolare la derivazione SHA-256
+# a ogni chiamata. Resettabile per i test via ``_reset_cache_for_tests``
 _FERNET_CACHE: Optional[Fernet] = None
 
 
-#: Lunghezza minima accettabile per una chiave (in caratteri).
-#: Chiavi più corte sono troppo deboli e probabilmente errori di configurazione.
+# Lunghezza minima accettabile per una chiave (in caratteri
+# Chiavi più corte sono troppo deboli e probabilmente errori di configurazione
 _MIN_KEY_LENGTH = 16
 
 
@@ -55,7 +55,6 @@ def _get_raw_key() -> str:
 
     Legge la env var canonical PLENORA_ENCRYPTION_KEY. Gli alias legacy
     URBY_ENCRYPTION_KEY e CONN_ENCRYPT_KEY non sono piu' supportati
-    (D4 chiuso 2026-04-23, vedi invariants.md §6). Nessun fallback su
     SECRET_KEY / JWT_SECRET_KEY: quei nomi appartengono al dominio auth JWT,
     tenerli separati rompe l'accoppiamento rotazione-JWT ↔ decifratura-at-rest.
     Se nessuna è valorizzata e ci troviamo in produzione,
@@ -73,7 +72,6 @@ def _get_raw_key() -> str:
     """
     # Unica env crypto supportata: PLENORA_ENCRYPTION_KEY. Gli alias legacy
     # URBY_ENCRYPTION_KEY e CONN_ENCRYPT_KEY sono stati rimossi il 2026-04-23
-    # (D4 chiuso, vedi invariants.md §6).
     env_name = "PLENORA_ENCRYPTION_KEY"
     val = os.getenv(env_name)
     found = (env_name, val) if val else None
@@ -81,7 +79,7 @@ def _get_raw_key() -> str:
     env = os.getenv("ENVIRONMENT", os.getenv("ENV", "development")).lower()
     # Simmetrico a _DOTENV_DISABLED_ENVS di config.py:26 — entrambi gli
     # ambienti "hardened" (prod + staging) devono fail-fast su missing
-    # key / dev-default. Chiude S1 runtime_config_audit.md.
+    # key / dev-default. Chiude S1 runtime_config_audit.md
     is_prod = env in ("production", "prod", "staging", "stage")
 
     if found:
@@ -112,7 +110,7 @@ def _get_raw_key() -> str:
             "prima di avviare in produzione."
         )
 
-    # Opt-in per developer che vogliono replicare il fail-fast di prod.
+    # Opt-in per developer che vogliono replicare il fail-fast di prod
     if os.getenv("PLENORA_DISABLE_DEFAULT_KEY") == "1":
         raise RuntimeError(
             "[PLENORA-ETL] Nessuna chiave di cifratura e PLENORA_DISABLE_DEFAULT_KEY=1. "
@@ -219,7 +217,7 @@ def decrypt_dict_fields(d: dict, fields: list[str], *, strict: bool = False) -> 
     """Decifra in-place i campi specificati di un dict (utility per load).
 
     Se ``strict=True``, per ogni campo con prefisso ``enc:`` il cui
-    ``decrypt()`` ritorna None la funzione solleva ``CredentialUnavailableError``.
+    ``decrypt`` ritorna None la funzione solleva ``CredentialUnavailableError``.
     Usato nei path di test per non propagare silenziosamente stato invalido
     (vedi Bug #1 + #2 del 2026-04-23).
     """

@@ -14,8 +14,8 @@ from pydantic import BaseModel
 class LoginRequest(BaseModel):
     username: str
     password: str
-    # MFA opt-in: None per utenti senza MFA (comportamento invariato).
-    # Per utenti con MFA attiva: richiesto, altrimenti 403 mfa_required.
+    # MFA opt-in: None per utenti senza MFA (comportamento invariato
+    # Per utenti con MFA attiva: richiesto, altrimenti 403 mfa_required
     mfa_code: Optional[str] = None
 
 

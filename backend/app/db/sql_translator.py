@@ -237,9 +237,9 @@ class SQLFunctionTranslator:
         Sostituisce i placeholder nel template SQL con i valori dei parametri.
 
         Placeholder supportati:
-        - {param}              → sostituzione semplice del valore
-        - {param}  con lista   → join con virgola (es. "val1, val2, val3")
-        - {param:join:SEP}     → join con separatore custom (es. {values:join:' || '})
+        - {param} → sostituzione semplice del valore
+        - {param} con lista → join con virgola (es. "val1, val2, val3")
+        - {param:join:SEP} → join con separatore custom (es. {values:join:' || '})
 
         Esempio:
             template = "CONCAT({values:join:' || '})"
@@ -298,9 +298,9 @@ class SQLFunctionTranslator:
 
         Esempio:
             >>> translator.translate_expression(
-            ...     "ST_Area(ST_Buffer(t.geom, 100)) > 1000", "mssql"
+            ... "ST_Area(ST_Buffer(t.geom, 100)) > 1000", "mssql"
             ... )
-            't.geom.STBuffer(100).STArea() > 1000'
+            't.geom.STBuffer(100).STArea > 1000'
         """
         result = expression
 
@@ -411,12 +411,12 @@ class SQLFunctionTranslator:
 
         Predicati supportati:
         - intersects → ST_Intersects
-        - contains   → ST_Contains
-        - within     → ST_Within
-        - dwithin    → ST_DWithin (richiede parametro distance)
-        - touches    → ST_Touches
-        - crosses    → ST_Crosses
-        - overlaps   → ST_Overlaps
+        - contains → ST_Contains
+        - within → ST_Within
+        - dwithin → ST_DWithin (richiede parametro distance)
+        - touches → ST_Touches
+        - crosses → ST_Crosses
+        - overlaps → ST_Overlaps
 
         Args:
             predicate: nome del predicato (case-insensitive)

@@ -132,7 +132,7 @@ async def async_request_with_retry(
             response = await client.request(method, url, **req_kwargs)
 
             if response.status_code in retryable_status and attempt < max_retries:
-                # Rispetta Retry-After se presente (cap a 60s)
+                # Rispetta Retry-After se presente (cap a 60s
                 retry_after_hdr = response.headers.get("Retry-After", "")
                 try:
                     wait = min(60.0, float(retry_after_hdr)) if retry_after_hdr else None
@@ -167,4 +167,4 @@ async def async_request_with_retry(
     if last_exc:
         raise last_exc
     # Se arriviamo qui, tutti i retry hanno dato 5xx senza sollevare
-    return response  # type: ignore[return-value]
+    return response  # type: ignore[return-value

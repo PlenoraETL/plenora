@@ -16,24 +16,22 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# TTL del lock scheduler (C3 fix 4).
-#
+# TTL del lock scheduler (C3 fix 4
 # Strategia heartbeat: il lock ha TTL breve (10 min default), ma
-# ExecutionManager.execute() avvia un thread daemon che refresha il
-# TTL ogni HEARTBEAT_INTERVAL secondi finche' la pipeline e' attiva.
+# ExecutionManager.execute avvia un thread daemon che refresha il
+# TTL ogni HEARTBEAT_INTERVAL secondi finche' la pipeline e' attiva
 # Se il worker muore HARD (SIGKILL/OOM) il thread daemon muore con lui
-# -> niente piu' refresh -> lock scade entro LOCK_TTL_SECONDS (10 min)
-# invece di restare appeso fino al hard limit Celery (65 min).
-#
+# > niente piu' refresh -> lock scade entro LOCK_TTL_SECONDS (10 min
+# invece di restare appeso fino al hard limit Celery (65 min
 # Il valore e' configurabile via `settings.SCHEDULE_LOCK_TTL_SECONDS`
 # per deployment con pipeline eccezionalmente lunghe o heartbeat
-# meno frequente.
+# meno frequente
 LOCK_TTL_SECONDS = settings.SCHEDULE_LOCK_TTL_SECONDS
 
-# Intervallo del thread di heartbeat dentro ExecutionManager.execute().
+# Intervallo del thread di heartbeat dentro ExecutionManager.execute
 # Deve essere << LOCK_TTL_SECONDS / 2 per lasciare almeno un refresh
-# di margine se il primo fallisce per transient. Default: 180s (3 min)
-# = 3 refresh nel TTL 10 min, margine 3x.
+# di margine se il primo fallisce per transient. Default: 180s (3 min
+# = 3 refresh nel TTL 10 min, margine 3x
 LOCK_HEARTBEAT_INTERVAL_SECONDS = settings.SCHEDULE_LOCK_HEARTBEAT_INTERVAL_SECONDS
 
 
@@ -43,10 +41,10 @@ class ConcurrencyManager:
     """
 
     def __init__(self):
-        # NOTE: inizializzo _available=True PRIMA di _ensure_table()
-        # e non DOPO. Se _ensure_table() fallisce e setta _available=False,
+        # NOTE: inizializzo _available=True PRIMA di _ensure_table
+        # e non DOPO. Se _ensure_table fallisce e setta _available=False
         # un eventuale `self._available = True` posizionato dopo lo
-        # sovrascriverebbe, mascherando la degraded mode.
+        # sovrascriverebbe, mascherando la degraded mode
         self._available = True
         self._ensure_table()
 
@@ -107,8 +105,8 @@ class ConcurrencyManager:
         expires_at = None
         if ttl_seconds:
             expires_at = (datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)).isoformat()
-        # intent: exception-as-control-flow tipizzata (UNIQUE -> False)
-        # outcome: fail-closed sugli errori non-UNIQUE (propagano)
+        # intent: exception-as-control-flow tipizzata (UNIQUE -> False
+        # outcome: fail-closed sugli errori non-UNIQUE (propagano
         try:
             db.execute(
                 "INSERT INTO scheduler_locks (key, value, expires_at) VALUES (?,?,?)",
@@ -219,7 +217,7 @@ class ConcurrencyManager:
             return "acquired"
 
         # Lock occupato. Incrementiamo PRIMA, poi verifichiamo: se siamo oltre
-        # il limite, decrementiamo e skip. Questo elimina la race read+check+incr.
+        # il limite, decrementiamo e skip. Questo elimina la race read+check+incr
         new_size = self._incr(queue_key)
         if new_size > max_queue_size:
             self._decr(queue_key)
@@ -250,7 +248,7 @@ class ConcurrencyManager:
         """
         lock_key = f"scheduler:lock:{schedule_id}"
         # _get fa anche auto-cleanup se scaduto: se ritorna None, il
-        # lock e' morto e non dobbiamo ri-crearlo da zero.
+        # lock e' morto e non dobbiamo ri-crearlo da zero
         if self._get(lock_key) is None:
             return False
 

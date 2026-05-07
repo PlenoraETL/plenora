@@ -1,7 +1,6 @@
 """
 Auth groups admin CRUD router — typed boundary.
 
-BE-GO-READY-AUTH-ENGINE-004-GROUPS-ROUTER-EXTRACTION.
 """
 
 from __future__ import annotations
@@ -37,7 +36,7 @@ def _get_current_user_proxy(
     credentials: HTTPAuthorizationCredentials | None = Depends(_security),
 ) -> CurrentUser:
     """Lazy proxy to avoid `groups_router -> auth.py -> groups_router` cycle.
-    BE-GO-READY-AUTH-ENGINE-019: import moved to `dependencies` leaf.
+     import moved to `dependencies` leaf.
     """
     from app.core.auth.dependencies import get_current_user
 
@@ -67,7 +66,7 @@ def list_groups(current_user: CurrentUser = Depends(require_admin)):
     """
     Lista gruppi.
     superadmin → tutti i gruppi (cross-tenant)
-    admin      → solo il proprio gruppo (l'admin non può fare sharing
+    admin → solo il proprio gruppo (l'admin non può fare sharing
                   cross-gruppo, quindi non ha bisogno di vedere gli altri)
     """
     if current_user.role == "superadmin":
@@ -75,9 +74,9 @@ def list_groups(current_user: CurrentUser = Depends(require_admin)):
     else:
         g = _groups.get_group(current_user.group_id)
         groups = [g] if g else []
-    # FIXME: #3 (2026-04-23): description=NULL nel DB ritorna None da dict.get,
-    # non la stringa default; GroupResponse.description: str alza ValidationError.
-    # Stesso pattern null-safe applicato su name per robustezza.
+    # FIXME: #3 (2026-04-23): description=NULL nel DB ritorna None da dict.get
+    # non la stringa default; GroupResponse.description: str alza ValidationError
+    # Stesso pattern null-safe applicato su name per robustezza
     return [GroupResponse(
                 group_id=g["id"],
                 name=g.get("name") or "",

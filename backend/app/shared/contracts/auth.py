@@ -1,7 +1,6 @@
 """
 Auth shared contract — pure types + pure policy.
 
-BE-GO-READY-AUTH-ENGINE-012-SHARED-CONTRACT-BOUNDARY.
 """
 
 from __future__ import annotations
@@ -64,15 +63,9 @@ def group_filter(current_user: CurrentUser) -> Optional[str]:
       - superadmin → ``None`` (nessun filtro, vede tutto);
       - altri → ``current_user.group_id``.
 
-    Canonical home: this contract module. `app.core.auth.ownership`
-    re-exports for KEEP_COMPAT (ownership cannot define it directly
-    without dragging `app.db.db_service` into the contract chain).
-    `app.core.auth.auth` re-exports for KEEP_COMPAT through
-    ownership. Identity preserved across all three surfaces:
-    `auth.group_filter is ownership.group_filter is
-    contract.group_filter` — locked by
-    `tests2/security/unit/test_auth_facade_strangler_contract.py::
-    test_group_filter_leaf_canonical_home`.
+    Canonical home: this contract module. Compatibility exports keep
+    older import paths working without moving DB-bound ownership logic
+    into the shared contract package.
     """
     if current_user.role == "superadmin":
         return None

@@ -1,7 +1,6 @@
 """
 Leaf Parquet preview parser.
 
-BE-GO-READY-RESOURCE-ENGINE-016-ARTIFACT-PREVIEW-PARSER-BOUNDARY.
 """
 
 from __future__ import annotations
@@ -15,7 +14,7 @@ class ParquetPreview:
     """Parsed Parquet preview.
 
     ``rows`` is at most ``limit`` rows materialized via
-    ``RecordBatch.to_pandas().to_dict(orient='records')``.
+    ``RecordBatch.to_pandas.to_dict(orient='records')``.
     ``col_schema`` maps ``{col_name: dtype_str}`` for the FULL
     frame schema (derived from the parquet footer's arrow
     schema, not just the first batch — so a wide-but-empty file
@@ -37,10 +36,10 @@ class ParquetPreviewParseError(Exception):
 
       - ``"read_parquet"``: opening the parquet file, reading
         its footer, deriving the schema, or decoding the first
-        batch failed; no schema or row count is available
+        ; no schema or row count is available
         (partial fields are empty).
       - ``"to_dict"``: the parquet decoded fine but converting
-        the head batch to a list-of-dicts failed (e.g. a
+        the head a list-of-dicts failed (e.g. a
         column with an unhashable nested type).
         ``partial_schema`` and ``partial_row_count`` carry the
         known-good schema + full row count so the caller can
@@ -73,7 +72,7 @@ def parse_parquet_preview(
     limit: int,
 ) -> ParquetPreview:
     """Decode a Parquet byte buffer into a typed preview using
-    pyarrow row-group streaming (BE-GO-READY-RESOURCE-ENGINE-
+    pyarrow row-group streaming (
     018).
 
     Caller contract:
@@ -86,7 +85,7 @@ def parse_parquet_preview(
 
     Failure surface:
       - ``read_parquet`` failure (file open / footer parse /
-        schema derive / batch decode) ->
+        schema derive / ) ->
         ``ParquetPreviewParseError(stage='read_parquet',
         cause=<original>)`` with empty partial fields.
       - ``to_dict`` failure -> ``ParquetPreviewParseError(
@@ -101,9 +100,8 @@ def parse_parquet_preview(
     # module). Keeping the imports inside the call site means
     # a process that imports ``preview_parser`` but never
     # invokes the parser does not pay the import cost. The
-    # source-bound import-boundary tests can lock that NO
     # sibling module under ``app/core/intermediate/`` references
-    # pyarrow/pandas anymore.
+    # pyarrow/pandas anymore
     import pandas as pd
     import pyarrow as pa
     import pyarrow.parquet as pq
@@ -111,8 +109,8 @@ def parse_parquet_preview(
     try:
         # ``pa.BufferReader`` is a zero-copy seekable view over
         # ``body_bytes``. ``ParquetFile`` parses only the file
-        # footer here (a few KB at the tail of the file),
-        # regardless of the file's data size.
+        # footer here (a few KB at the tail of the file
+        # regardless of the file's data size
         reader = pa.BufferReader(body_bytes)
         pf = pq.ParquetFile(reader)
         row_count = int(pf.metadata.num_rows)
@@ -121,7 +119,7 @@ def parse_parquet_preview(
         # mapping that ``pd.read_parquet`` would produce on a
         # fully-decoded frame. Using the footer schema (not the
         # first batch) means a wide schema with a row-group
-        # that happens to be empty still surfaces every column.
+        # that happens to be empty still surfaces every column
         empty_df = pf.schema_arrow.empty_table().to_pandas()
         col_schema: Dict[str, str] = {
             str(c): str(empty_df[c].dtype) for c in empty_df.columns
@@ -132,19 +130,19 @@ def parse_parquet_preview(
             cause=e,
         ) from e
 
-    # ---- Stage 2: stream first batch(es) up to ``limit`` rows --
+    # Stage 2: stream first batch(es) up to ``limit`` rows
     try:
         target = int(limit)
         collected: List[pa.RecordBatch] = []
         gathered = 0
-        # ``iter_batches(batch_size=target)`` is the row-group-
+        # ``iter_batches(batch_size=target)`` is the row-group
         # streaming primitive. pyarrow may emit batches smaller
-        # than ``batch_size`` when a row-group's tail is hit;
+        # than ``batch_size`` when a row-group's tail is hit
         # we therefore loop until we have ``>= target`` rows or
         # the file is exhausted. Critically, the loop ``break``s
         # on the first satisfaction — subsequent row-groups are
         # never read, so files with N >> limit rows pay only
-        # the first row-group's decode cost.
+        # the first row-group's decode cost
         for batch in pf.iter_batches(batch_size=target):
             collected.append(batch)
             gathered += batch.num_rows
@@ -158,7 +156,7 @@ def parse_parquet_preview(
             head_df = head_table.to_pandas().head(target)
         else:
             # Zero-row file: head_df is the same empty-schema
-            # frame we already built for col_schema.
+            # frame we already built for col_schema
             head_df = empty_df
     except Exception as e:
         raise ParquetPreviewParseError(

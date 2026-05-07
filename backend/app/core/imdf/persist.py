@@ -1,7 +1,7 @@
 """
-persist.py — Persistenza di un ImdfBundle estratto su disco.
+persist.py — Persistenza di un ImdfBundle estratto su disco
 
-Estratto da workers.tasks.enrichment_task per isolare la logica di move
+Keeps this module's responsibility explicit and isolated from adjacent code.
 """
 from __future__ import annotations
 
@@ -50,10 +50,10 @@ def persist_imdf_bundle_to_disk(
       geojson, validation_summary, timestamp `saved_at`.
 
     Args:
-        bundle:      ImdfBundle (da `extract_imdf_zip`)
-        task_id:     id univoco che nomina la cartella di destinazione
-        project_id:  project_id del canvas (per filtering lato list)
-        dest_root:   override del root di destinazione (per test)
+        bundle: ImdfBundle (da `extract_imdf_zip`)
+        task_id: id univoco che nomina la cartella di destinazione
+        project_id: project_id del canvas (per filtering lato list)
+        dest_root: override del root di destinazione (per test)
 
     Returns:
         dict con chiavi:
@@ -76,9 +76,9 @@ def persist_imdf_bundle_to_disk(
         root.mkdir(parents=True, exist_ok=True)
 
         if bundle.tmp_dir and bundle.tmp_dir.exists():
-            # Materializzo la lista perche' `iterdir` e' un generator lazy:
+            # Materializzo la lista perche' `iterdir` e' un generator lazy
             # se modifichiamo la directory durante l'iterazione (con
-            # shutil.move) potremmo saltare elementi o ricevere OSError.
+            # shutil.move) potremmo saltare elementi o ricevere OSError
             for item in list(bundle.tmp_dir.iterdir()):
                 target = root / item.name
                 shutil.move(str(item), str(target))
@@ -96,7 +96,7 @@ def persist_imdf_bundle_to_disk(
 
         # Validation summary: leggiamo dalla DESTINAZIONE perché il move
         # ha già trasferito validation.json (i path dentro `bundle`
-        # puntavano alla vecchia tmp_dir, ormai vuota).
+        # puntavano alla vecchia tmp_dir, ormai vuota
         try:
             val_path = root / "validation.json"
             if val_path.exists():
@@ -110,7 +110,7 @@ def persist_imdf_bundle_to_disk(
             logger.warning(f"[{task_id}] validation_summary read: {ve}")
 
         # Counts layer (fallback per il list endpoint se il bundle li ha
-        # in formato geojson riconoscibile). Cerca in {site_id}/*.geojson.
+        # in formato geojson riconoscibile). Cerca in {site_id}/*.geojson
         if bundle.site_id:
             site_dir = root / bundle.site_id
             if site_dir.is_dir():
@@ -128,9 +128,9 @@ def persist_imdf_bundle_to_disk(
         except Exception as me:
             # D3 commit 5 (§9.6): invariant "meta sempre presente nel dest
             # dir" enforcement. Senza meta la dir e' inaccessibile per ACL
-            # (router._assert_bundle_group_access fail-closed 403). Rollback
+            # router._assert_bundle_group_access fail-closed 403). Rollback
             # della dest dir e re-raise: il worker (enrichment_task) gia'
-            # cattura persist failure e logga warning senza bloccare il task.
+            # cattura persist failure e logga warning senza bloccare il task
             logger.warning(
                 f"[{task_id}] plenora_metadata.json write fallito, "
                 f"rollback dest: {me}"
@@ -147,15 +147,15 @@ def persist_imdf_bundle_to_disk(
         # rimossa da qui. L'orchestrazione "persist locale + push remoto" vive
         # nel worker (enrichment_task) come passi espliciti: dopo questa
         # funzione, il caller chiama storage.save_bundle. Persist resta local
-        # materializer puro, non conosce S3 ne' object storage.
+        # materializer puro, non conosce S3 ne' object storage
 
         return {"path": str(root), "meta": meta}
 
     finally:
         # Cleanup SEMPRE garantito: se il happy path ha già svuotato
-        # tmp_dir via shutil.move, bundle.cleanup() è un no-op. Se è
+        # tmp_dir via shutil.move, bundle.cleanup è un no-op. Se è
         # fallito a metà, rimuoviamo quel che resta. Previene gli
-        # orfani /tmp/imdf_XXXX/ storici.
+        # orfani /tmp/imdf_XXXX/ storici
         try:
             bundle.cleanup()
         except Exception as ce:

@@ -11,7 +11,7 @@ from typing import Optional, List
 
 
 # Nomi file riservati che NON devono mai diventare il filename finale
-# (anche se sopravvivono a Path(name).name).
+# anche se sopravvivono a Path(name).name
 _FORBIDDEN_BASENAMES = {"", ".", ".."}
 
 
@@ -28,15 +28,15 @@ def _sanitize_upload_filename(raw: Optional[str]) -> str:
         raise HTTPException(status_code=400, detail="Nome file non valido")
     # Normalizza backslash -> forward slash PRIMA di Path(raw).name. Su
     # POSIX (CI Linux runner, container backend) pathlib.PosixPath non
-    # riconosce '\' come separatore: senza questa pre-normalizzazione,
+    # riconosce '\' come separatore: senza questa pre-normalizzazione
     # input Windows-style come "..\\nested\\report.csv" sopravvivrebbero
-    # intatti come basename, bypassando il filtro path traversal. Cross-
-    # platform safe: input gia' POSIX ('/') resta invariato dopo replace.
+    # intatti come basename, bypassando il filtro path traversal. Cross
+    # platform safe: input gia' POSIX ('/') resta invariato dopo replace
     name = Path(raw.replace("\\", "/")).name
-    # Anche dopo Path().name, certi input strani sopravvivono (es. ".." → "..")
+    # Anche dopo Path.name, certi input strani sopravvivono (es. ".." → ".."
     if name in _FORBIDDEN_BASENAMES:
         raise HTTPException(status_code=400, detail="Nome file non valido")
-    # NUL byte: alcuni filesystem lo trattano come terminator (path injection)
+    # NUL byte: alcuni filesystem lo trattano come terminator (path injection
     if "\x00" in name:
         raise HTTPException(status_code=400, detail="Nome file contiene caratteri non validi")
     # Strip aggressivo di whitespace + separatori di path
@@ -50,7 +50,7 @@ def _enforce_upload_size_limit(file: "UploadFile") -> int:
     """Wrapper locale al cap di upload: delega a `app.shared.upload_guards`.
 
     L'implementazione canonica vive in `app/shared/upload_guards.py`
-    (T-04 + B1 Phase 4: riuso da `eseguibili/router.py`).
+    (T-04 + B1 riuso da `eseguibili/router.py`).
 
     Risolviamo `MAX_FILE_SIZE` dal `settings` di QUESTO modulo prima di
     invocare l'helper, cosi' i test che monkeypatchano `files_router.settings`
@@ -69,8 +69,8 @@ def _assert_path_within(child: Path, parent: Path, label: str = "Percorso") -> P
 
     Contratto:
       - path malformato (UNC, resolve fallito) → HTTPException 400
-      - path resolved fuori dalla sandbox       → HTTPException 403
-      - successo                                 → ritorna il Path resolved
+      - path resolved fuori dalla sandbox → HTTPException 403
+      - successo → ritorna il Path resolved
 
     `label` viene incluso nel messaggio response (es. "Percorso file
     non valido", "Upload fuori dalla directory consentita") per dare
@@ -161,15 +161,15 @@ def preview_file_temp(
     - sheet: foglio specifico per XLSX
     Se nessuno e' specificato su file multi-layer/sheet, restituisce la lista disponibile.
     """
-    # Size cap PRIMA del MIME read: senza questo guard, file.file.read()
+    # Size cap PRIMA del MIME read: senza questo guard, file.file.read
     # qui sotto carica N GB in RAM su qualsiasi POST autenticato (DoS
-    # interno credenziato).
+    # interno credenziato
     _enforce_upload_size_limit(file)
 
     # Block-only MIME validation: blocca eseguibili anche in preview
-    # (no persist ma evita di passare un binario al parser, riducendo
+    # no persist ma evita di passare un binario al parser, riducendo
     # superficie RCE da parser bug). Allowlist stretta romperebbe i
-    # passthrough_extensions documentati sotto.
+    # passthrough_extensions documentati sotto
     from app.utils.mime_validator import (
         MimeMismatchError, validate_no_executable,
     )
@@ -196,7 +196,7 @@ def preview_file_temp(
         )
         return result
     except (ValueError, Exception) as e:
-        # File non parsabile (es. ZIP con DXF, archivi generici)
+        # File non parsabile (es. ZIP con DXF, archivi generici
         # Ritorna preview vuota — il file può ancora essere usato da executable
         file_ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
         passthrough_extensions = ['zip', 'gz', 'tar', '7z', 'rar', 'dxf']
@@ -234,17 +234,17 @@ def upload_file(
     import json, uuid
     from datetime import datetime
     try:
-        # Sanitizza filename con helper centralizzato (path traversal, NUL,
-        # nomi riservati ".."/"."/"" )
+        # Sanitizza filename con helper centralizzato (path traversal, NUL
+        # nomi riservati ".."/"."/""
         filename = _sanitize_upload_filename(file.filename)
 
-        # Size cap pre-read (helper centralizzato, vedi `_enforce_upload_size_limit`).
+        # Size cap pre-read (helper centralizzato, vedi `_enforce_upload_size_limit`
         _enforce_upload_size_limit(file)
 
-        # MIME validation content-based: rifiuta eseguibili rinominati,
+        # MIME validation content-based: rifiuta eseguibili rinominati
         # polyglot, content-extension mismatch. Sostituisce la heuristic
         # pure-Python con `filetype` (zero dep sistema, ~200 MIME noti
-        # coprono tutti i formati Plenora).
+        # coprono tutti i formati Plenora
         from app.utils.mime_validator import MimeMismatchError, validate_upload
 
         _ALLOWED_UPLOAD_EXTENSIONS = {
@@ -267,10 +267,10 @@ def upload_file(
             )
             raise HTTPException(status_code=400, detail=str(e))
         
-        # File binari/archivio: salva senza parsing (usati da executable)
+        # File binari/archivio: salva senza parsing (usati da executable
         binary_extensions = ['.zip', '.gz', '.tar', '.7z', '.rar', '.dxf']
         if any(filename.lower().endswith(ext) for ext in binary_extensions):
-            # Prima prova il parsing normale (es. ZIP con shapefile)
+            # Prima prova il parsing normale (es. ZIP con shapefile
             try:
                 file.file.seek(0)
                 
@@ -306,8 +306,8 @@ def upload_file(
             except Exception as _bin_exc:
                 # Parsing fallito per formato non supportato (es. ZIP con
                 # DXF interno, .dxf diretto). Fallback: salva blob raw nel
-                # DB senza inferire colonne/layer. Il downstream (es.
-                # eseguibili workflow) legge il blob come bytes.
+                # DB senza inferire colonne/layer. Il downstream (es
+                # eseguibili workflow) legge il blob come bytes
                 logger.warning(
                     f"create_from_upload fallito, fallback raw DB: "
                     f"{type(_bin_exc).__name__}: {_bin_exc}"
@@ -387,12 +387,12 @@ def upload_multi_layer(
         if not filename:
             raise HTTPException(status_code=400, detail="Nome file non valido")
 
-        # Size cap pre-read (helper centralizzato, vedi `_enforce_upload_size_limit`).
-        # Senza questo, il `file.file.read()` per il MIME check sotto carica
-        # in RAM N GB su qualsiasi POST autenticato user_or_above.
+        # Size cap pre-read (helper centralizzato, vedi `_enforce_upload_size_limit`
+        # Senza questo, il `file.file.read` per il MIME check sotto carica
+        # in RAM N GB su qualsiasi POST autenticato user_or_above
         _enforce_upload_size_limit(file)
 
-        # MIME validation content-based (stessa difesa di /upload).
+        # MIME validation content-based (stessa difesa di /upload
         from app.utils.mime_validator import MimeMismatchError, validate_upload
         _ALLOWED_MULTI_LAYER_EXTENSIONS = {"gpkg", "gdb", "zip", "xlsx", "xls"}
         file.file.seek(0)
@@ -459,10 +459,10 @@ def list_files(current_user: CurrentUser = Depends(require_not_esecutore)):
     """
     is_super = current_user.role == "superadmin"
 
-    # Carica TUTTI i file (senza filter) — il superadmin vede tutto.
+    # Carica TUTTI i file (senza filter) — il superadmin vede tutto
     all_files = file_source_service.list_file_sources(group_id=None)
 
-    # Filtro file_source temporanei degli eseguibili (sempre, anche per superadmin).
+    # Filtro file_source temporanei degli eseguibili (sempre, anche per superadmin
     def _is_temp(f):
         name = getattr(f, "name", "") or ""
         return name.startswith("__exec_temp_")
@@ -513,7 +513,7 @@ def delete_file(file_id: str, current_user: CurrentUser = Depends(require_file_o
                 "message": f"File source '{file_id}' non trovato",
             },
         )
-    # F2-B3 (2026-04-24): DELETE risponde 204 No Content, body vuoto.
+    # F2-B3 (2026-04-24): DELETE risponde 204 No Content, body vuoto
 
 
 def _svc_group(current_user: CurrentUser) -> str:

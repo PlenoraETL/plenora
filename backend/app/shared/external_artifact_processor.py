@@ -1,7 +1,7 @@
 """
 Shared protocol per i processor di artifact esterni HTTP file-to-file.
 
-Source-of-truth go-ready per il pattern "spedisco un blob (file/bytes)
+Source-of-truth portable per il pattern "spedisco un blob (file/bytes)
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ class ArtifactSource:
     `_build_rest_file_multipart` che oggi accetta `List[Dict]` di
     `file_fields` con `name`/`data`/`filename`/`content_type`. Il
     Protocol futuro accetta un singolo `ArtifactSource` (single-file
-    upload) — l'eventuale multi-file batch va come `tuple[ArtifactSource, ...]`.
+    upload) — l'eventuale multi-file come `tuple[ArtifactSource, ...]`.
     """
     data: bytes
     filename: str

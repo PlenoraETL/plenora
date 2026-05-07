@@ -27,13 +27,13 @@ from app.utils.logger import get_logger, get_request_id, get_user_id
 # Stesso logger name di `database_writer.py`: i record sono
 # indistinguibili dai consumer che attaccano handler / filtrano per
 # "app.core.carica.writer". Il `StructuredLogger` wrapper delega a
-# `_logger.log(...)` sul logger stdlib omonimo (singleton per nome).
+# `_logger.log(...)` sul logger stdlib omonimo (singleton per nome
 logger = get_logger("app.core.carica.writer")
 
 # Telemetry emits (event=stage_swap.dispatched, ecc.) vanno via stdlib
 # logger con stesso name: i campi `extra` diventano attributi del
-# LogRecord, cosa che StructuredLogger (wrapper) non supporta di default.
-# Identico al pattern di `database_writer.py:64`.
+# LogRecord, cosa che StructuredLogger (wrapper) non supporta di default
+# Identico al pattern di `database_writer.py:64`
 _telemetry_logger = logging.getLogger("app.core.carica.writer")
 
 
@@ -43,9 +43,9 @@ class ReplaceStrategiesMixin:
     intra-cluster (`_mssql_replicate_schema_to_shadow`,
     `_generate_single_rename`).
 
-    Le transaction boundaries (`engine.begin()` per swap/INSERT batch,
-    `engine.connect()` per cleanup/DDL singoli) sono incapsulate qui
-    IDENTICHE al pre-extraction.
+    Le transaction boundaries (`engine.begin` per swap/INSERT batch,
+    `engine.connect` per cleanup/DDL singoli) sono incapsulate qui
+    IDENTICHE al previous implementation.
     """
 
     def _truncate_insert_atomic(
@@ -56,17 +56,17 @@ class ReplaceStrategiesMixin:
     ) -> WriteResult:
         """TRUNCATE + INSERT in UNA transazione (ALL_OR_NOTHING).
 
-        Necessario su Oracle: pre-fix, `truncate_table()` committava la
+        Necessario su Oracle: pre-fix, `truncate_table` committava la
         sua transazione e poi il `_batch_insert` apriva una nuova
         transazione. Se l'INSERT falliva, il rollback copriva solo
         l'INSERT e la tabella restava vuota → perdita dati.
 
         Qui usiamo:
         - una sola connection
-        - generate_truncate() che su Oracle emette DELETE FROM (DML,
+        - generate_truncate che su Oracle emette DELETE FROM (DML,
           transazionale) invece di TRUNCATE TABLE (DDL auto-commit)
-        - commit finale solo se tutti i batch passano
-        - rollback implicito on exception (conn.close() senza commit)
+        - commit finale solo se tutti i
+        - rollback implicito on exception (conn.close senza commit)
         """
         trunc_sql = self.ddl.generate_truncate(
             self.config.schema_name, self.config.table_name
@@ -130,7 +130,7 @@ class ReplaceStrategiesMixin:
 
         return result
 
-    # STAGE + SWAP (C5 fix 3 — UNDO safety su dataset grandi)
+    # STAGE + SWAP (C5 fix 3 — UNDO safety su dataset grandi
 
     def _truncate_insert_stage_swap(
         self,
@@ -143,14 +143,14 @@ class ReplaceStrategiesMixin:
         Pattern:
         1. Cleanup shadow/backup orfani da run precedenti crashati
         2. CREATE TABLE shadow LIKE target (vuota)
-        3. INSERT batch nella shadow (zero pressione su target)
+        3. INSERT shadow (zero pressione su target)
         4. SWAP: target→backup, shadow→target
         5. DROP backup
 
         Vantaggi:
         - Niente DELETE da milioni di righe → UNDO/log non saturano
         - Target resta intatto fino allo swap → lettori concorrenti OK
-        - Rollback naturale: se PHASE 2/3 falliscono, target non e'
+        - Rollback naturale: se /3 falliscono, target non e'
           mai stato toccato
 
         Fallback automatico ad atomic se CREATE TABLE fallisce per
@@ -194,7 +194,7 @@ class ReplaceStrategiesMixin:
             f"shadow={stg_table}, backup={backup_table}"
         )
 
-        mssql_name_mapping: Dict[str, Tuple[str, str]] = {}  # constraint/index suffixed→original (MSSQL only)
+        mssql_name_mapping: Dict[str, Tuple[str, str]] = {}  # constraint/index suffixed→original (MSSQL only
         try:
             with self.engine.connect() as conn:
                 if self.db_type == "oracle":
@@ -254,12 +254,12 @@ class ReplaceStrategiesMixin:
                     self._oracle_setup(conn)
 
                 def _process_batch(batch_df, batch_num, _conn=conn):
-                    # NOTE: target_table=stg_table per il bulk path.
+                    # NOTE: target_table=stg_table per il bulk path
                     # insert_sql qui punta alla shadow `<src>__stg`, non
                     # alla tabella target. Senza questo override il bulk
-                    # caricherebbe i dati direttamente sul target,
+                    # caricherebbe i dati direttamente sul target
                     # rompendo la semantica stage+swap (che esiste apposta
-                    # per non toccare il target finche' lo shadow e' completo).
+                    # per non toccare il target finche' lo shadow e' completo
                     rows_in_batch = self._execute_batch(
                         _conn, batch_df, active_cols, insert_sql, "insert",
                         target_table=stg_table,
@@ -298,10 +298,10 @@ class ReplaceStrategiesMixin:
             return result
 
         try:
-            # Postgres/MSSQL: multi-statement DDL in UNA txn.
-            # MySQL: singola RENAME TABLE atomica.
+            # Postgres/MSSQL: multi-statement DDL in UNA txn
+            # MySQL: singola RENAME TABLE atomica
             # Oracle: 2 ALTER RENAME DDL (ciascuno auto-commit) → finestra
-            # sub-secondo di inconsistenza, documentata.
+            # sub-secondo di inconsistenza, documentata
             if self.db_type in ("postgres", "mssql"):
                 with self.engine.begin() as conn:
                     for stmt in swap_stmts:
@@ -317,7 +317,7 @@ class ReplaceStrategiesMixin:
             )
             # Recovery su Oracle: se il primo rename (src→backup) e' passato
             # ma il secondo (stg→src) no, il target e' SPARITO. Tentiamo
-            # di rinominare backup→src per ripristinare lo stato.
+            # di rinominare backup→src per ripristinare lo stato
             if self.db_type == "oracle":
                 try:
                     restore_sql = (
@@ -353,18 +353,18 @@ class ReplaceStrategiesMixin:
                 f"(orfano lasciato, verra' rimosso alla prossima run): {e}"
             )
 
-        # Dopo il DROP bak i nomi costraint/indice originali sono liberi,
+        # Dopo il DROP bak i nomi costraint/indice originali sono liberi
         # quindi usiamo sp_rename per spogliare il suffisso __stg e
-        # ottenere uno schema identico a quello pre-swap.
-        # Qualifier diverso per OBJECT (schema.name) vs INDEX (schema.table.name):
-        # i constraint sono schema-level objects, gli indici sono table-level.
+        # ottenere uno schema identico a quello pre-swap
+        # Qualifier diverso per OBJECT (schema.name) vs INDEX (schema.table.name
+        # i constraint sono schema-level objects, gli indici sono table-level
         if self.db_type == "mssql" and mssql_name_mapping:
             try:
                 with self.engine.connect() as conn:
                     for suffixed, (original, kind) in mssql_name_mapping.items():
                         if kind == "INDEX":
                             qualified_old = f"{schema}.{src_table}.{suffixed}"
-                        else:  # OBJECT (constraint)
+                        else:  # OBJECT (constraint
                             qualified_old = f"{schema}.{suffixed}"
                         conn.execute(text(
                             f"EXEC sp_rename '{qualified_old}', "
@@ -385,7 +385,7 @@ class ReplaceStrategiesMixin:
         )
         return result
 
-    # REPLACE ATOMICO (C6 critical fix: drop+create+insert → stage+swap)
+    # REPLACE ATOMICO (C6 critical fix: drop+create+insert → stage+swap
 
     def _replace_atomic(
         self,
@@ -397,7 +397,7 @@ class ReplaceStrategiesMixin:
     ) -> WriteResult:
         """REPLACE via stage+swap atomico.
 
-        Pre-fix: drop_table() + create_table() + _batch_insert() sono
+        Pre-fix: drop_table + create_table + _batch_insert sono
         3 operazioni non-atomic. Se l'INSERT fallisce, il target del
         cliente non esiste piu' (DROP gia' committato) → data loss
         deterministica, peggiore di TRUNCATE_INSERT pre-C5.
@@ -438,7 +438,7 @@ class ReplaceStrategiesMixin:
                 cleanup_err,
             )
 
-        # Check se target esiste (decide se swap vs single rename)
+        # Check se target esiste (decide se swap vs single rename
         target_exists = self._table_exists_for(schema, src_table)
 
         try:
@@ -473,7 +473,7 @@ class ReplaceStrategiesMixin:
 
                 def _process_batch(batch_df, batch_num, _conn=conn):
                     # target_table=stg_table: insert_sql punta alla shadow
-                    # `__stg`, il bulk path deve scrivere lì, non sul target.
+                    # `__stg`, il bulk path deve scrivere lì, non sul target
                     rows = self._execute_batch(
                         _conn, batch_df, active_cols, insert_sql, "insert",
                         target_table=stg_table,
@@ -605,7 +605,7 @@ class ReplaceStrategiesMixin:
             f"{self.db_type}"
         )
 
-    # MSSQL schema introspection + replay (C6 fix: schema preservation)
+    # MSSQL schema introspection + replay (C6 fix: schema preservation
 
     def _mssql_replicate_schema_to_shadow(
         self, conn, schema: str, src_table: str, stg_table: str,
@@ -617,7 +617,7 @@ class ReplaceStrategiesMixin:
         fino al rename swap finale).
 
         Ritorna un mapping {suffixed_name → (original_name, object_kind)}
-        usato da PHASE 6 post-swap per spogliare i suffissi via
+        usato da post-swap per spogliare i suffissi via
         sp_rename e ottenere uno schema identico a quello pre-swap.
 
         Scope di preservazione (scelta pragmatica):
@@ -736,7 +736,7 @@ class ReplaceStrategiesMixin:
 
         return mapping
 
-    # ORACLE DBMS_REDEFINITION (C6 fix: atomicity + schema preservation)
+    # ORACLE DBMS_REDEFINITION (C6 fix: atomicity + schema preservation
 
     def _truncate_insert_oracle_redef(
         self,
@@ -759,7 +759,7 @@ class ReplaceStrategiesMixin:
         2. CREATE interim AS SELECT * WHERE 1=0 — shell vuota
         3. START_REDEF_TABLE — Oracle copia baseline (cost 2-3x, ma
            garantisce consistency tracking via mview log)
-        4. DELETE interim + INSERT batch dati nuovi
+        4. DELETE interim + INSERT nuovi
         5. COPY_TABLE_DEPENDENTS — replica indici, constraint, trigger
         6. FINISH_REDEF_TABLE — swap atomico
         7. DROP interim (ora contiene i dati vecchi, swap gia' fatto)
@@ -791,7 +791,7 @@ class ReplaceStrategiesMixin:
             },
         )
 
-        # Insert SQL targeting the interim table (columns match src)
+        # Insert SQL targeting the interim table (columns match src
         insert_sql, _ = self.ddl.generate_insert(schema, interim, columns)
 
         active_cols = [c for c in columns if not c.skip]
@@ -909,7 +909,7 @@ END;"""))
                     # interim `__RDF`. Bulk path su Oracle non e'
                     # implementato (dispatcher solleva NotSupported →
                     # fallback executemany), ma passiamo target_table
-                    # comunque per safety futura.
+                    # comunque per safety futura
                     rows = self._execute_batch(
                         _conn, batch_df, active_cols, insert_sql, "insert",
                         target_table=interim,

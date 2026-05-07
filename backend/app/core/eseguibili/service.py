@@ -69,7 +69,7 @@ def create_from_project(
     expected_columns = extract_expected_columns(cloned_canvas)
 
     # Verifica che ci sia almeno una sorgente sostituibile
-    # (file_source, project_source, staticValues — tutti "input entry point" validi)
+    # file_source, project_source, staticValues — tutti "input entry point" validi
     source_nodes = [
         n for n in cloned_canvas.get("nodes", [])
         if n.get("type") in ("file_source", "project_source", "staticValues")
@@ -81,7 +81,7 @@ def create_from_project(
         )
     if len(source_nodes) > 1:
         raise ValueError(
-            f"Phase 1: sono supportate solo catene con 1 sola sorgente. "
+            f"Versione corrente: sono supportate solo catene con 1 sola sorgente. "
             f"Trovate {len(source_nodes)} sorgenti. Riduci a 1 per pubblicare come eseguibile."
         )
 
@@ -114,7 +114,7 @@ def analyze_file_upload(
     """Carica un file temporaneo e ritorna colonne rilevate + auto-mapping.
 
     Non crea ancora il FileSource definitivo nel DB; il file è su disco temp.
-    Il file_id ritornato identifica il file temp per la successiva execute().
+    Il file_id ritornato identifica il file temp per la successiva execute.
 
     Args:
         eseguibile: record eseguibile (per expected_columns)
@@ -160,7 +160,7 @@ def analyze_file_upload(
     for exp_name in expected_names:
         if not exp_name:
             continue
-        # 1. Match esatto (case-sensitive)
+        # 1. Match esatto (case-sensitive
         if exp_name in df.columns:
             auto_mapping[exp_name] = exp_name
             continue
@@ -175,7 +175,7 @@ def analyze_file_upload(
                 auto_mapping[exp_name] = fc_original
                 break
 
-    # Preview prime 10 righe (serializzabili)
+    # Preview prime 10 righe (serializzabili
     preview_df = df.head(10)
     # Converti a dict JSON-safe: NaN → None
     import math
@@ -235,7 +235,7 @@ def execute(
     if df is None or df.empty:
         raise ValueError("File sorgente vuoto o illeggibile")
 
-    # 2. Rinomina colonne secondo il mapping (solo quelle presenti)
+    # 2. Rinomina colonne secondo il mapping (solo quelle presenti
     # column_mapping è [{chain_column, file_column}]: inverto in {file_col: chain_col}
     rename_map: Dict[str, str] = {}
     for m in column_mapping:
@@ -302,7 +302,7 @@ def execute(
     original_type = source_node.get("type")
     source_node["type"] = "file_source"
     source_node["file_source_id"] = temp_file_source_id
-    # Azzera campi delle altre tipologie (project_source, staticValues)
+    # Azzera campi delle altre tipologie (project_source, staticValues
     source_node.pop("source_project_id", None)
     source_node.pop("fields", None)  # staticValues
     # Aggiorna anche in data{}
@@ -320,8 +320,8 @@ def execute(
     # 6. Lancia task enrichment
     final_format = output_format or eseguibile.get("default_output_format") or "xlsx"
 
-    # Determina il nome file finale (priorità: utente > default eseguibile > nome eseguibile)
-    # Strippa eventuale estensione: il task la riaggiunge con `final_format`.
+    # Determina il nome file finale (priorità: utente > default eseguibile > nome eseguibile
+    # Strippa eventuale estensione: il task la riaggiunge con `final_format`
     raw_name = (
         (output_name or "").strip()
         or (eseguibile.get("default_output_name") or "").strip()
@@ -329,10 +329,10 @@ def execute(
     )
     # Sanitizza: rimuovi estensione, caratteri pericolosi per filesystem
     import re
-    base_name = re.sub(r"\.[a-zA-Z0-9]{1,5}$", "", raw_name)  # togli .xlsx, .csv, etc.
+    base_name = re.sub(r"\.[a-zA-Z0-9]{1,5}$", "", raw_name)  # togli .xlsx, .csv, etc
     base_name = re.sub(r'[\\/:*?"<>|]', "_", base_name).strip() or "risultato"
 
-    # Applica al result node (sempre, non solo se l'utente ha specificato qualcosa)
+    # Applica al result node (sempre, non solo se l'utente ha specificato qualcosa
     for n in nodes:
         if n.get("type") == "result":
             if "data" not in n or n["data"] is None:
@@ -355,7 +355,7 @@ def execute(
         output_format=final_format,
         force_recalculate=True,        # sempre True: ogni esecuzione è una nuova run
         # Cleanup automatico al termine del task: rimuove il FileSource temporaneo
-        # creato sopra (sia in caso di successo sia in caso di errore).
+        # creato sopra (sia in caso di successo sia in caso di errore
         cleanup_file_source_ids=[temp_file_source_id],
         is_eseguibile=True,
     )

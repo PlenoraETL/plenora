@@ -16,7 +16,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 # sia stato caricato via python-dotenv PRIMA che leggiamo JWT_SECRET_KEY a
 # livello di modulo. Senza questo, se auth.py venisse importato prima di
 # app.config, la lettura di os.getenv("JWT_SECRET_KEY") sotto sarebbe fatta
-# su un environment in cui il .env non è ancora stato applicato.
+# su un environment in cui il .env non è ancora stato applicato
 import app.config  # noqa: F401
 from app.config import settings as _settings
 import app.db.db_service as db
@@ -27,7 +27,7 @@ from app.shared.error_envelope import raise_typed_http
 from app.utils.logger import get_logger
 
 
-from app.core.auth.roles import (  # noqa: F401  (public compat re-export)
+from app.core.auth.roles import (  # noqa: F401 (public compat compatibility export
     VALID_ROLES,
     ROLES_ABOVE_VIEWER,
     ROLES_ADMIN_OR_ABOVE,
@@ -37,31 +37,26 @@ from app.core.auth.roles import (  # noqa: F401  (public compat re-export)
 logger = get_logger(__name__)
 
 # RATE LIMITING
-#
-# R-01: backend Redis-backed cluster-safe con fallback in-memory.
+# R-01: backend Redis-backed cluster-safe con fallback in-memory
 # La logica Redis vive in `app.shared.login_rate_limiter`; qui restano
-# i wrapper che il login() chiama. Lo store + algoritmo del fallback
+# i wrapper che il login chiama. Lo store + algoritmo del fallback
 # in-memory vivono in `app.core.auth.rate_limit_fallback`
-# (BE-GO-READY-AUTH-ENGINE-002-RATE-LIMIT-FALLBACK-EXTRACTION).
-#
 # Le costanti LOGIN_MAX_ATTEMPTS / LOGIN_WINDOW_SECONDS / LOGIN_LOCKOUT_SECONDS
 # restano modulo-level e vengono lette al volo dai wrapper, cosi' i test
-# possono ancora monkeypatcharle (vedi tests2/security/unit/test_login_rate_limit_per_ip.py).
-#
-# KEEP_COMPAT: gli alias `_rate_lock`, `_failed_attempts`,
-# `_check_rate_limit_in_memory`, `_record_failed_login_in_memory`,
+# possono ancora monkeypatcharle (vedi tests2/security/unit/test_login_rate_limit_per_ip.py
+# KEEP_COMPAT: gli alias `_rate_lock`, `_failed_attempts`
+# `_check_rate_limit_in_memory`, `_record_failed_login_in_memory`
 # `_clear_failed_logins_in_memory` restano qui come thin pointer al
 # modulo estratto. Test esistenti che fanno
-# `auth_mod._failed_attempts.clear()` / `with auth_mod._rate_lock:` /
+# `auth_mod._failed_attempts.clear` / `with auth_mod._rate_lock:` /
 # `monkeypatch.setattr(auth_mod, "_check_rate_limit_in_memory", ...)`
-# continuano a funzionare invariati.
+# continuano a funzionare invariati
 
-# BE-GO-READY-AUTH-ENGINE-018-FACADE-DEATH-AUDIT-SAFE-DELETIONS:
-# `InMemoryRateLimitFallback` re-export removed (proven dead — zero
+# `InMemoryRateLimitFallback` compatibility export removed (proven dead — zero
 # callsites in `backend/app`, `backend/workers`, `backend/tests2`
 # verified by exhaustive grep + AST scan). The class remains the
-# canonical implementation in `app.core.auth.rate_limit_fallback`;
-# importers should pull it from there if they ever need the type.
+# canonical implementation in `app.core.auth.rate_limit_fallback`
+# importers should pull it from there if they ever need the type
 from app.core.auth.rate_limit_fallback import (
     RateLimitFallbackTriggered,
     _STORE as _rate_limit_fallback_store,
@@ -72,11 +67,11 @@ from app.core.auth.rate_limit_fallback import (
 _rate_lock = _rate_limit_fallback_store.lock
 _failed_attempts = _rate_limit_fallback_store.failed_attempts
 
-# BE-CONFIG-001C: default tipati in `Settings.DEFAULTS` (10 / 60 / 300).
+# BE-CONFIG-001C: default tipati in `Settings.DEFAULTS` (10 / 60 / 300
 # Override env continua a funzionare via `Settings._converti_tipo_env`
-# (coercion `int`). Le costanti restano modulo-level perche' i test
+# coercion `int`). Le costanti restano modulo-level perche' i test
 # `tests2/security/unit/test_login_rate_limit_per_ip.py` le
-# monkeypatch-ano direttamente.
+# monkeypatch-ano direttamente
 LOGIN_MAX_ATTEMPTS    = int(_settings.get("LOGIN_MAX_ATTEMPTS"))
 LOGIN_WINDOW_SECONDS  = int(_settings.get("LOGIN_WINDOW_SECONDS"))
 LOGIN_LOCKOUT_SECONDS = int(_settings.get("LOGIN_LOCKOUT_SECONDS"))
@@ -137,17 +132,15 @@ def _clear_failed_logins(ip: str):
 
 
 # CONFIGURAZIONE JWT + UTILS
-#
-# STRUCT-005 Seam D: la logica vive in `app.shared.jwt_token`.
-# Qui restano i re-export per backward-compat con i test
-# (`auth_mod.SECRET_KEY`, `auth_mod.create_access_token`, ...) e con
-# i consumer legacy che importano ancora JWT helpers dalla facade.
-#
-# Payload contract invariato: sub/username/group_id/role/exp/iat/jti.
-# Algoritmo: HS256. Policy SECRET_KEY invariata (RuntimeError prod/staging,
-# random dev). Nessun cambio comportamentale.
+# STRUCT-005 Seam D: la logica vive in `app.shared.jwt_token`
+# Qui restano i compatibility export per backward-compat con i test
+# `auth_mod.SECRET_KEY`, `auth_mod.create_access_token`, ...) e con
+# i consumer legacy che importano ancora JWT helpers dalla compatibility module
+# Payload contract invariato: sub/username/group_id/role/exp/iat/jti
+# Algoritmo: HS256. Policy SECRET_KEY invariata (RuntimeError prod/staging
+# random dev). Nessun cambio comportamentale
 
-from app.shared.jwt_token import (  # noqa: F401  (re-export pubblico)
+from app.shared.jwt_token import (  # noqa: F401 (compatibility export pubblico)
     ALGORITHM,
     ACCESS_TOKEN_EXPIRE_HOURS,
     SECRET_KEY,
@@ -156,7 +149,7 @@ from app.shared.jwt_token import (  # noqa: F401  (re-export pubblico)
 )
 
 
-from app.core.auth.models import (  # noqa: F401  (re-export pubblico)
+from app.core.auth.models import (  # noqa: F401 (compatibility export pubblico)
     LoginRequest,
     TokenResponse,
     CurrentUser,
@@ -170,7 +163,7 @@ from app.core.auth.models import (  # noqa: F401  (re-export pubblico)
 )
 
 
-from app.shared.password_hashing import (  # noqa: F401  (re-export pubblico)
+from app.shared.password_hashing import (  # noqa: F401 (compatibility export pubblico)
     _ph,
     hash_password,
     verify_password,
@@ -180,25 +173,10 @@ from app.shared.password_hashing import (  # noqa: F401  (re-export pubblico)
 
 # DEPENDENCIES FASTAPI
 #
-# BE-GO-READY-AUTH-ENGINE-013-ROUTER-IMPORTS-OFF-AUTH-FACADE:
-# the five FastAPI dependency functions
-# (`get_current_user`, `require_user_or_above`,
-# `require_not_esecutore`, `require_admin`, `require_superadmin`)
-# now live in the canonical leaf
-# `app.core.auth.dependencies`. They are re-exported here for
-# KEEP_COMPAT so any router / test still doing
-# `from app.core.auth.auth import get_current_user, ...`
-# continues to resolve the same callables byte-for-byte
-# (identity preserved -- locked by source-bound test in
-# `tests2/security/unit/test_auth_facade_strangler_contract.py`).
-#
-# New routers should import from
-# `app.core.auth.dependencies` directly. The shared contract
-# `app.shared.contracts.auth` keeps owning `CurrentUser` and
-# `group_filter`; the dependencies leaf keeps owning the
-# Depends callables.
+# Compatibility exports for legacy callers. New code should import
+# FastAPI auth dependencies from `app.core.auth.dependencies` directly.
 
-from app.core.auth.dependencies import (  # noqa: F401  (re-export pubblico)
+from app.core.auth.dependencies import (  # noqa: F401 (compatibility export pubblico)
     _bearer_scheme,
     get_current_user,
     require_admin,
@@ -207,25 +185,10 @@ from app.core.auth.dependencies import (  # noqa: F401  (re-export pubblico)
     require_user_or_above,
 )
 
-# BE-GO-READY-AUTH-ENGINE-011-GROUP-FILTER-LEAF-EXTRACTION +
-# BE-GO-READY-AUTH-ENGINE-014-AUTH-FACADE-REEXPORT-DEATHMAP-DTO-CUT:
-# `group_filter` canonical home is `app.core.auth.ownership` (pure
-# policy helper, zero side effects). The 9 app routers using it
-# already consume the leaf directly per the Phase-6 strangler ban
-# (`tests2/security/unit/test_auth_facade_strangler_contract.py`).
-#
-# AUTH-ENGINE-014 cut: the KEEP_COMPAT re-export
-# (`from app.core.auth.ownership import group_filter`) was deleted
-# from this module. There are zero production `from app.core.auth.auth
-# import group_filter` callers in `backend/app/+workers/`; the only
-# 2 callers were facade-identity lock tests, which have been
-# migrated to either drop the facade leg or assert the cut
-# (negative lock at
-# `tests2/security/unit/test_auth_models_and_ownership_module_contract.py
-# ::test_auth_no_longer_reexports_group_filter`).
+# Owner dependencies remain available here for compatibility. New code
+# should import them from `app.core.auth.owner_dependencies` directly.
 
-
-from app.core.auth.owner_dependencies import (  # noqa: F401  (re-export KEEP_COMPAT)
+from app.core.auth.owner_dependencies import (  # noqa: F401 (compatibility export KEEP_COMPAT)
     require_file_owner,
     require_project_owner,
     require_schedule_owner,
@@ -249,7 +212,7 @@ def login(data: LoginRequest, request: Request):
     # non esiste. Evita short-circuit che permetterebbe a un attaccante
     # di enumerare gli username misurando il tempo di risposta (bcrypt
     # richiede ~200-400ms; la differenza con la risposta 401 immediata
-    # rendeva banale l'enumeration).
+    # rendeva banale l'enumeration
     password_hash = user["password_hash"] if user else _DUMMY_PASSWORD_HASH
     password_ok = verify_password(data.password, password_hash)
     if not user or not password_ok:
@@ -258,11 +221,11 @@ def login(data: LoginRequest, request: Request):
     if not user.get("is_active"):
         _disclosure.raise_disclosure(_disclosure.account_disabled())
 
-    # MFA opt-in: se l'utente ha MFA attiva, il codice TOTP e' richiesto.
-    # Se MFA non e' attiva, il comportamento e' invariato (nessun impatto).
+    # MFA opt-in: se l'utente ha MFA attiva, il codice TOTP e' richiesto
+    # Se MFA non e' attiva, il comportamento e' invariato (nessun impatto
     # Trade-off noto (vedi mfa.py): 403 mfa_required dopo password OK
     # differisce da 401 password errata, quindi rivela "utente con MFA
-    # attiva". Mitigazione: rate limit su client_ip (gia' attivo).
+    # attiva". Mitigazione: rate limit su client_ip (gia' attivo
     from app.core.auth import mfa as _mfa
     if _mfa.is_enabled(user["id"]):
         if not data.mfa_code:
@@ -274,7 +237,7 @@ def login(data: LoginRequest, request: Request):
     _clear_failed_logins(client_ip)
 
     # Rehash progressivo bcrypt → Argon2id (best-effort: un fallimento del DB
-    # non deve negare il login, al prossimo login riproveremo).
+    # non deve negare il login, al prossimo login riproveremo
     if needs_rehash(user["password_hash"]):
         try:
             db.update_user_password(user["id"], hash_password(data.password))
@@ -328,7 +291,7 @@ def logout(
     ttl = int(exp) - now_ts
     if ttl <= 0:
         # Token gia' scaduto: nessuna revoca serve (decode_token l'avrebbe
-        # gia' rifiutato, ma tecnicamente potrebbe accadere in race).
+        # gia' rifiutato, ma tecnicamente potrebbe accadere in race
         return {"ok": True, "blacklisted": False}
 
     from app.shared.token_blacklist import blacklist_jti

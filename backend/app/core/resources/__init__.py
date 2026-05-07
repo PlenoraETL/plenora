@@ -1,7 +1,6 @@
 """
 Resource Engine — capability registry, NOT god-engine.
 
-BE-GO-READY-RESOURCE-ENGINE-002-RESULT-BLOB-LOADER-PILOT.
 """
 
 from app.core.resources.types import (

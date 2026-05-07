@@ -27,23 +27,23 @@ def _extract_file_source_group_id(
     self_obj,
     ctx: Optional[ArricchisciExecutionContext],
 ) -> Optional[str]:
-    """BE-GO-READY-TRANSFORMATION-ENGINE-024 +
-    BE-GO-READY-ORCHESTRATION-ENGINE-010: variante ctx-strict
+    """+
+     variante ctx-strict
     per la catena di risoluzione `file_source` (chiamata da
     `_assert_file_source_group_access` → `_resolve_file_source_id_path`).
 
     Storia:
-      - batch -019: helper `_resolve_rest_file_group_id` (legacy
+      - helper `_resolve_rest_file_group_id` (legacy
         uniforme: ctx.group_id se ctx, altrimenti singleton).
-      - batch -024: `_extract_file_source_group_id` ctx-strict
+      - `_extract_file_source_group_id` ctx-strict
         sostituisce il legacy helper nei 2 path
         file_source/project_source.
-      - batch -027: `_resolve_rest_file_group_id` rimosso come
+      - `_resolve_rest_file_group_id` rimosso come
         dead code (zero callsite attivi).
-      - batch ORCHESTRATION-ENGINE-009: `_extract_project_source_group_id`
+      - `_extract_project_source_group_id`
         cut del fallback singleton (ctx None → ritorno None,
         fail-closed esplicito) — gemella di questa funzione.
-      - **batch ORCHESTRATION-ENGINE-010 (questa modifica)**: cut
+      - ****: cut
         del fallback singleton anche qui. I 2 callsite di
         produzione (`_build_rest_file_multipart` linea 536,
         `_resolve_file_source_path` linea 1144) propagano sempre
@@ -83,8 +83,8 @@ def _extract_project_source_group_id(
     self_obj,
     ctx: Optional[ArricchisciExecutionContext],
 ) -> Optional[str]:
-    """BE-GO-READY-TRANSFORMATION-ENGINE-026 +
-    BE-GO-READY-ORCHESTRATION-ENGINE-009: variante ctx-strict
+    """+
+     variante ctx-strict
     per il branch `project_source` di `_resolve_file_source_path`
     (chiama `SourceLoader.resolve_project_path` con
     `expected_group_id`).
@@ -129,7 +129,7 @@ def _extract_project_source_group_id(
 # Stesso logger name di `api_connector.py` (`__name__` valuta a
 # `"app.core.arricchisci.api_connector"`). Singleton stdlib per nome →
 # record indistinguibili dai consumer che attaccano handler / filtrano
-# per nome canonico (identico al pattern B3-B.2b/B3-B.3/B3-B.4b).
+# per nome canonico (identico al pattern B3-B.2b/B3-B.3/B3-B.4b
 logger = get_logger("app.core.arricchisci.api_connector")
 
 
@@ -142,8 +142,8 @@ class ApiConnectionRestFileMixin:
 
     # REST_FILE PIPELINE
     # Pipeline: parse_config → prepare_headers → resolve_input → build_multipart
-    # → requests.post(stream=True) → download_binary (dual-timeout) → cleanup.
-    # Error taxonomy via `_rest_file_error` (F5 primo batch, 2026-04-24).
+    # → requests.post(stream=True) → download_binary (dual-timeout) → cleanup
+    # Error taxonomy via `_rest_file_error` (F5 primo batch, 2026-04-24
 
     @staticmethod
     def _parse_http_error_body(response) -> str:
@@ -255,12 +255,12 @@ class ApiConnectionRestFileMixin:
                         )
                     continue
                 # FS-5: input_path puo' essere str (path su disco) OPPURE
-                # tuple(bytes, filename) dal materialize in-memory.
+                # tuple(bytes, filename) dal materialize in-memory
                 if isinstance(input_path, tuple):
                     data_bytes, filename = input_path
                     fh = io.BytesIO(data_bytes)
-                    # Nessun opened_handle: BytesIO viene GC'd al return,
-                    # non serve close esplicito (diversamente da file handle).
+                    # Nessun opened_handle: BytesIO viene GC'd al return
+                    # non serve close esplicito (diversamente da file handle
                     files[name] = (filename, fh, 'application/octet-stream')
                 else:
                     ip = Path(input_path)
@@ -385,8 +385,8 @@ class ApiConnectionRestFileMixin:
         # campo è il timeout "richieste API generiche" (default 30s nel
         # form frontend) e per rest_file è fuorviante: un'operazione
         # file-to-file può durare minuti (es. imdf.plenora.it/api/process
-        # che genera IMDF da un DXF). Il canonico è `request.timeout`;
-        # se assente, default 600s (10 min).
+        # che genera IMDF da un DXF). Il canonico è `request.timeout`
+        # se assente, default 600s (10 min
         timeout = int(request_cfg.get('timeout') or 600)
 
         return {
@@ -404,10 +404,10 @@ class ApiConnectionRestFileMixin:
         `error_kind` (F5 primo batch, 2026-04-24).
 
         error_kind validi:
-          - 'file_source_not_found'   — file_source_id referenziato non esiste in DB
-          - 'file_source_forbidden'   — cross-tenant access denied
-          - 'remote_processor_error'  — HTTP 4xx/5xx, timeout, connessione upstream
-          - 'internal'                — bug o catch-all inatteso (user_error=False)
+          - 'file_source_not_found' — file_source_id referenziato non esiste in DB
+          - 'file_source_forbidden' — cross-tenant access denied
+          - 'remote_processor_error' — HTTP 4xx/5xx, timeout, connessione upstream
+          - 'internal' — bug o catch-all inatteso (user_error=False)
         """
         return {
             "success": False,
@@ -431,16 +431,16 @@ class ApiConnectionRestFileMixin:
         lavora file->file via HTTP.
 
         Config attesa in ``api_config``:
-            endpoint: { url, method }                        # POST
-            auth: {...}                                      # usa _prepare_headers
+            endpoint: { url, method } # POST
+            auth: {...} # usa _prepare_headers
             request:
-              body_type: "multipart"                         # fisso per ora
-              file_fields: [ { name, source, required } ]    # source='node_input'
+              body_type: "multipart" # fisso per ora
+              file_fields: [ { name, source, required } ] # source='node_input'
               static_fields: [ { name, value, content_type } ]
-              timeout: 600                                   # override opzionale
+              timeout: 600 # override opzionale
             response:
-              format: "binary_file"                          # fisso per ora
-              output_extension: ".zip"                       # estensione file output
+              format: "binary_file" # fisso per ora
+              output_extension: ".zip" # estensione file output
 
         Il campo file con ``source='node_input'`` riceve il file dal file_source
         collegato in input al nodo del canvas (``_resolve_file_source_path``).
@@ -470,13 +470,13 @@ class ApiConnectionRestFileMixin:
         output_ext = parsed['output_ext']
 
         # Fix-D narrow #20: clausola ristretta alle classi domain-safe
-        # sollevate da `_prepare_headers`:
-        #  - KeyError: campo auth mancante (es. api_key, client_secret)
-        #  - ValueError: formato auth invalido / auth_type non riconosciuto
-        #  - requests.RequestException: fallimento del fetch OAuth2 token
+        # sollevate da `_prepare_headers`
+        # KeyError: campo auth mancante (es. api_key, client_secret
+        # ValueError: formato auth invalido / auth_type non riconosciuto
+        # requests.RequestException: fallimento del fetch OAuth2 token
         # Eccezioni fuori tupla (bug interno) fluiscono al safety-net
         # outer di _execute_rest_file (catch #22c, ancora broad in
-        # questo commit).
+        # questo commit
         try:
             headers = self._prepare_headers(api_config.get('auth', {}) or {}, {})
         except (KeyError, ValueError, requests.RequestException) as e:
@@ -485,9 +485,9 @@ class ApiConnectionRestFileMixin:
                 f"Preparazione auth fallita: {e}",
             )
 
-        # Formato di materializzazione per input da upstream DataFrame.
+        # Formato di materializzazione per input da upstream DataFrame
         # Default xlsx; override via node_data.materialize_format o
-        # api_config.request.materialize_format.
+        # api_config.request.materialize_format
         _req_cfg = api_config.get('request', {}) or {}
         materialize_format = (
             node_data.get('materialize_format')
@@ -495,15 +495,15 @@ class ApiConnectionRestFileMixin:
             or 'xlsx'
         )
         # Fix-D narrow #21: clausola ristretta alle classi domain-safe
-        # prodotte dalla catena di risoluzione input:
-        #  - ValueError: messaggi domain gia' safe ("Accesso negato:",
-        #    "Contesto di sicurezza...", "Errore progetto sorgente...")
-        #  - SourceLoadingError: errore dal SourceLoader cross-tenant
-        #    (tecnicamente gia' wrappato in ValueError da
-        #    _resolve_file_source_path, incluso come belt-and-suspenders)
-        #  - FileSourceResolutionError: da Fix-A (lookup DB o scrittura
-        #    cache fallita), messaggio safe-by-construction
-        # Eccezioni fuori tupla fluiscono al safety-net outer (#22c).
+        # prodotte dalla catena di risoluzione input
+        # ValueError: messaggi domain gia' safe ("Accesso negato:"
+        # "Contesto di sicurezza...", "Errore progetto sorgente..."
+        # SourceLoadingError: errore dal SourceLoader cross-tenant
+        # tecnicamente gia' wrappato in ValueError da
+        # _resolve_file_source_path, incluso come belt-and-suspenders
+        # FileSourceResolutionError: da Fix-A (lookup DB o scrittura
+        # cache fallita), messaggio safe-by-construction
+        # Eccezioni fuori tupla fluiscono al safety-net outer (#22c
         from app.core.artifacts import SourceLoadingError
         try:
             input_path, _owns_materialized_input = self._resolve_input_path_for_file_processor(
@@ -523,13 +523,13 @@ class ApiConnectionRestFileMixin:
 
         # `extra_files` e' il dict {field_name: file_source_id} salvato sul
         # nodo api_enrich quando l'utente carica inline file aggiuntivi
-        # (es. Excel di arricchimento per il servizio IMDF). Separato dal
-        # file principale che arriva via edge.
+        # es. Excel di arricchimento per il servizio IMDF). Separato dal
+        # file principale che arriva via edge
         extra_files_cfg = node_data.get('extra_files') or {}
         opened_handles: List = []
 
         # Pre-dichiarazione per il finally: se l'eccezione capita prima
-        # del mkdtemp queste variabili devono comunque esistere.
+        # del mkdtemp queste variabili devono comunque esistere
         tmp_exec_dir: Optional[Path] = None
         _cleanup_tmp = True
 
@@ -549,7 +549,7 @@ class ApiConnectionRestFileMixin:
             # tmp_exec_dir viene cleanup dal `finally` se _cleanup_tmp
             # resta True. Sul ramo success lo settiamo a False perche'
             # restituiamo un output_path al suo interno e il chiamante
-            # e' responsabile del cleanup downstream.
+            # e' responsabile del cleanup downstream
             tmp_exec_dir = Path(tempfile.mkdtemp(prefix="plenora_exec_"))
             _cleanup_tmp = True
             output_filename = f"output{output_ext}"
@@ -623,10 +623,10 @@ class ApiConnectionRestFileMixin:
         except ValueError as e:
             # F5 primo batch (2026-04-24): un ValueError con prefisso
             # "Accesso negato" arriva da `_assert_file_source_group_access`
-            # (chiamato da `_resolve_file_source_id_path` in
+            # chiamato da `_resolve_file_source_id_path` in
             # `_build_rest_file_multipart` per extra_input). Senza questo
             # catch specifico cadrebbe nel safety-net sotto e risulterebbe
-            # "internal" opaco — ma e' un denial cross-tenant semantico.
+            # "internal" opaco — ma e' un denial cross-tenant semantico
             msg = str(e)
             if "Accesso negato" in msg or "non appartiene al tuo gruppo" in msg:
                 return self._rest_file_error("file_source_forbidden", msg)
@@ -639,17 +639,16 @@ class ApiConnectionRestFileMixin:
             )
         except Exception as e:
             # Fix-D safety-net #22c: copre eccezioni inattese dentro il
-            # main try (build multipart, mkdtemp, download response,
+            # main try (build multipart, mkdtemp, download response
             # HTTP path oltre Timeout/RequestException). Messaggio safe
             # generico per il FE; il dettaglio tecnico resta nel log
-            # (logger.error + exc_info=True).
-            # NOTA: i catch narrow #20 (auth prep) e #21 (input resolve)
+            # logger.error + exc_info=True
+            # NOTA: i catch narrow #20 (auth prep) e #21 (input resolve
             # sono FUORI da questo try. Eccezioni inattese in quei due
             # step propagano fuori dalla funzione e vengono raccolte
-            # dal boundary top-level di `execute_enrichment` (Fix-C,
-            # commit a10774f) con messaggio "Errore interno durante
+            # dal boundary top-level di `execute_enrichment` (Fix-C
             # l'arricchimento". Un'eventuale estensione della safety-net
-            # locale a #20/#21 e' debito separato (vedi checkpoint).
+            # locale a #20/#21 e' debito separato (vedi checkpoint
             logger.error(f"[CRASH] rest_file: {e}", exc_info=True)
             return self._rest_file_error(
                 "internal",
@@ -665,8 +664,8 @@ class ApiConnectionRestFileMixin:
                         f"rest_file: fh.close() best-effort fallito: {_fh_err}"
                     )
             # Cleanup tmp_exec_dir su tutti i rami errore: senza questo
-            # ogni exception lascerebbe una dir `plenora_exec_*` su disco,
-            # con leak progressivo nei worker Celery long-running.
+            # ogni exception lascerebbe una dir `plenora_exec_*` su disco
+            # con leak progressivo nei worker Celery long-running
             try:
                 if _cleanup_tmp and tmp_exec_dir is not None and tmp_exec_dir.exists():
                     import shutil as _shutil_cleanup
@@ -678,10 +677,10 @@ class ApiConnectionRestFileMixin:
             # Cleanup del file temporaneo creato per materializzare un
             # DataFrame upstream (branch api_enrich → rest_file). Solo se
             # e' stato creato qui; non tocchiamo path provenienti da
-            # file_source o da un altro file-processor a monte.
-            # FS-5: per il branch in-memory (input_path e' tuple bytes+filename)
+            # file_source o da un altro file-processor a monte
+            # FS-5: per il branch in-memory (input_path e' tuple bytes+filename
             # _owns_materialized_input e' sempre False. Guardia contro
-            # un unlink su tuple (che fallirebbe) in caso di future evoluzioni.
+            # un unlink su tuple (che fallirebbe) in caso di future evoluzioni
             try:
                 if _owns_materialized_input and input_path and not isinstance(input_path, tuple):
                     Path(input_path).unlink(missing_ok=True)
@@ -692,9 +691,9 @@ class ApiConnectionRestFileMixin:
                 )
 
     # FILE_SOURCE RESOLUTION
-    # Materializzazione file_source dal DB blob (cache filesystem atomica),
+    # Materializzazione file_source dal DB blob (cache filesystem atomica
     # cross-tenant fail-closed, edge-based input path resolution per
-    # file-processor nodes.
+    # file-processor nodes
 
     def _assert_file_source_group_access(
         self,
@@ -705,11 +704,10 @@ class ApiConnectionRestFileMixin:
         """Defense-in-depth: verifica che `file_source_id` sia visibile al
         gruppo del progetto corrente. Fail-closed se il contesto non e' noto.
 
-        BE-GO-READY-TRANSFORMATION-ENGINE-019: accetta `ctx` come
+         accetta `ctx` come
         kwarg opzionale.
 
-        BE-GO-READY-TRANSFORMATION-ENGINE-024 +
-        BE-GO-READY-ORCHESTRATION-ENGINE-010: la catena di
+         la catena di
         risoluzione `file_source` usa `_extract_file_source_group_id`
         (ctx-strict, NO fallback singleton). Se `ctx` e' fornito,
         `ctx.group_id` vince in modo assoluto. Se `ctx is None`
@@ -729,7 +727,7 @@ class ApiConnectionRestFileMixin:
         if not current_group_id:
             # Se non conosciamo il gruppo corrente meglio rifiutare che
             # rischiare un leak (schedule/task context mancante e' gia' un
-            # segnale sospetto di per se').
+            # segnale sospetto di per se'
             raise ValueError(
                 "Contesto di sicurezza non determinabile per file_source"
             )
@@ -795,7 +793,7 @@ class ApiConnectionRestFileMixin:
         # outer e' eliminato. Errori tecnici (DB / FS) sono ora
         # classificati e sollevati come `FileSourceResolutionError`
         # con chain preservata. `return None` resta solo sui rami
-        # dati legittimi (metadata assente / blob vuoto).
+        # dati legittimi (metadata assente / blob vuoto
         try:
             row_meta = db_svc.get_file_source(file_source_id, include_data=False)
         except psycopg2.Error as e:
@@ -818,7 +816,7 @@ class ApiConnectionRestFileMixin:
 
         # Cache hit: se il file gia' materializzato esiste con il
         # nome atteso, riuso (evita I/O ripetuto tra task che usano
-        # lo stesso file_source nello stesso nodo).
+        # lo stesso file_source nello stesso nodo
         target = source_dir / expected_name
         if target.is_file():
             return str(target.resolve())
@@ -882,9 +880,9 @@ class ApiConnectionRestFileMixin:
         Se è un file_source, trova il file originale nel file system.
         Se è un project_source, trova l'ultimo output del progetto.
 
-        BE-GO-READY-TRANSFORMATION-ENGINE-019: accetta `ctx` come
+         accetta `ctx` come
         kwarg opzionale; il `group_id` viene letto da `ctx` se
-        fornito (Phase 2), altrimenti fallback a singleton state
+        fornito , altrimenti fallback a singleton state
         (KEEP_COMPAT).
         """
         # Trova edge in ingresso
@@ -906,17 +904,16 @@ class ApiConnectionRestFileMixin:
                 return None
 
             # Tenant binding fail-closed via SourceLoader: tutto il
-            # source loading di api_connector passa per il loader unico,
+            # source loading di api_connector passa per il loader unico
             # niente accesso diretto ad ArtifactResolver. Senza
             # group_id rifiutiamo esplicitamente: meglio errore
-            # visibile che leak silente.
-            #
-            # BE-GO-READY-TRANSFORMATION-ENGINE-026: ctx-strict per
-            # il branch project_source. Quando `ctx` e' fornito,
+            # visibile che leak silente
+            # ctx-strict per
+            # il branch project_source. Quando `ctx` e' fornito
             # `ctx.group_id` vince sempre — anche se None — e lo
             # stato singleton legacy NON viene mai consultato. Chiude
             # il residual TE24-R1 (project_source path migrato a
-            # strict helper).
+            # strict helper
             executing_group_id = _extract_project_source_group_id(self, ctx)
             if not executing_group_id:
                 logger.error(
@@ -941,7 +938,7 @@ class ApiConnectionRestFileMixin:
             except SourceLoadingError as e:
                 # Cross-tenant block o progetto inesistente: hard fail
                 # con messaggio che preserva il dettaglio originale del
-                # loader, coerente con _load_source_project.
+                # loader, coerente con _load_source_project
                 logger.error(
                     f"[SECURITY] _resolve_file_source_path cross-tenant: "
                     f"{source_project_id} per group={executing_group_id}: {e}"
@@ -1001,8 +998,8 @@ class ApiConnectionRestFileMixin:
                 upstream_type = source_node.get('type') if source_node else None
                 upstream_result = node_results.get(source_id)
 
-                # Branch 1: upstream e' un altro file-processor (rest_file)
-                # il cui risultato e' gia' un file su disco.
+                # Branch 1: upstream e' un altro file-processor (rest_file
+                # il cui risultato e' gia' un file su disco
                 if isinstance(upstream_result, dict) and upstream_result.get('is_file_result'):
                     out_path = upstream_result.get('output_path')
                     if out_path and Path(out_path).exists():
@@ -1012,11 +1009,11 @@ class ApiConnectionRestFileMixin:
                         )
                         return str(out_path), False
 
-                # Branch 2: upstream ha prodotto un DataFrame (api_enrich o simili).
-                # FS-5: serializzazione in-memory → bytes. Nessun tempfile.
+                # Branch 2: upstream ha prodotto un DataFrame (api_enrich o simili
+                # FS-5: serializzazione in-memory → bytes. Nessun tempfile
                 # Il caller (`_build_rest_file_multipart`) wrappa i bytes in
                 # io.BytesIO per requests multipart — requests accetta ogni
-                # file-like object che implementa read().
+                # file-like object che implementa read
                 if isinstance(upstream_result, pd.DataFrame) and upstream_type != 'file_source':
                     from app.utils.dataframe import save_dataframe_to_bytes
                     fmt = (materialize_format or 'xlsx').lower()
@@ -1043,7 +1040,7 @@ class ApiConnectionRestFileMixin:
                     )
                     return (data_bytes, filename), False
 
-        # Fallback: comportamento classico (file_source / project_source)
+        # Fallback: comportamento classico (file_source / project_source
         return self._resolve_file_source_path(
             nodes, edges, target_node_id, ctx=ctx,
         ), False

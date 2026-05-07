@@ -1,7 +1,6 @@
 """
 Best-effort compensating-delete helper per object storage.
 
-BE-GO-READY-STORAGE-ENGINE-002-COMPENSATING-DELETE.
 """
 
 from __future__ import annotations
@@ -9,7 +8,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Literal, Mapping, Optional
 
-# Type alias public — caller possono lockare il valore di ritorno.
+# Type alias public — caller possono lockare il valore di ritorno
 CompensateOutcome = Literal["ok", "failed", "skipped"]
 
 
@@ -56,12 +55,12 @@ def compensating_delete(
 
     Contract:
       - mai solleva verso il caller (nemmeno su fail della delete);
-      - se la capability `object_storage_enabled()` e' off, skip
+      - se la capability `object_storage_enabled` e' off, skip
         silente con outcome `"skipped"`;
       - se `storage` e' fornito (caller gia' ha l'istanza in mano,
         es. dopo un upload riuscito), usa quello e salta la
         risoluzione runtime; se `storage` e' `None`, risolve via
-        `get_runtime_object_storage()`;
+        `get_runtime_object_storage`;
       - su `ObjectStorageDisabledError` durante la risoluzione (race
         capability-off fra dispatch e cleanup), tratta come
         skipped + log debug;
@@ -71,19 +70,19 @@ def compensating_delete(
 
     Log shape (3 stati):
 
-      event=storage_compensating_delete_ok        \\
+      event=storage_compensating_delete_ok \\
         domain=<d> storage_key=<k> reason=<r> [extras...]
         (level=info)
 
-      event=storage_compensating_delete_failed    \\
-        domain=<d> storage_key=<k> reason=<r>     \\
+      event=storage_compensating_delete_failed \\
+        domain=<d> storage_key=<k> reason=<r> \\
         cleanup_error=<ExcType> cleanup_error_msg=<repr> [extras...]
         (level=warning — orphan accepted, ADR-0011 contract; non-fatal
         ai sensi del caller. Allerta osservabilita' tramite filtro su
         `event=storage_compensating_delete_failed` o domain.)
 
-      event=storage_compensating_delete_skipped   \\
-        domain=<d> storage_key=<k> reason=<r>     \\
+      event=storage_compensating_delete_skipped \\
+        domain=<d> storage_key=<k> reason=<r> \\
         skip_reason=<capability_disabled|capability_disabled_race> [extras...]
         (level=debug — configurazione legittima, non e' un errore.)
 
@@ -98,7 +97,7 @@ def compensating_delete(
             `"row_delete_post_commit"`,
             `"batch_save_rollback"`, ...). Non interpretato; passato al log.
         storage: opzionale `ObjectStorage` instance. Se `None`,
-            viene risolto via `get_runtime_object_storage()`.
+            viene risolto via `get_runtime_object_storage`.
         extras: campi opzionali per il log (`project_id`,
             `result_id`, `file_id`, `batch_id`, ...). Non interpretati.
         logger: logger custom. Se `None`, viene usato il logger del
@@ -150,7 +149,7 @@ def compensating_delete(
         except ObjectStorageDisabledError as e:
             # Race teorica: capability era ON al check sopra, OFF
             # qui. Trattiamo come skipped (non e' un fallimento di
-            # delete: nulla da cancellare).
+            # delete: nulla da cancellare
             log.debug(
                 "event=storage_compensating_delete_skipped "
                 "domain=%s storage_key=%s reason=%s "

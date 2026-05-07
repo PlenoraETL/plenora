@@ -15,13 +15,13 @@ from app.shared.exceptions import ColumnsMetadataSaveError
 # Costanti retry/backoff
 
 # 4 tentativi totali, 3 sleep tra i retry. Sequenza copre transient
-# DB fino a ~1.7s di recovery — oltre, non e' transient.
+# DB fino a ~1.7s di recovery — oltre, non e' transient
 _BACKOFF_SEC = (0.2, 0.5, 1.0)
 _MAX_ATTEMPTS = 4  # = len(_BACKOFF_SEC) + 1
 
 
 # Lazy-init: import psycopg2 solo all'uso (evita penalty in dev/test
-# senza driver installato).
+# senza driver installato
 _TRANSIENT_EXCEPTIONS: Optional[tuple] = None
 
 

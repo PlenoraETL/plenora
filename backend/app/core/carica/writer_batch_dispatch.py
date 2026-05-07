@@ -1,7 +1,7 @@
 """
 Mixin BATCH_DISPATCH — dispatch per write mode (insert/update/upsert)
 
-verso il batch executor di TransactionExecutionMixin.
+verso il di TransactionExecutionMixin.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from app.utils.logger import get_logger
 # Stesso logger name di `database_writer.py`: i record sono
 # indistinguibili dai consumer che attaccano handler / filtrano per
 # "app.core.carica.writer". Il `StructuredLogger` wrapper delega a
-# `_logger.log(...)` sul logger stdlib omonimo (singleton per nome).
+# `_logger.log(...)` sul logger stdlib omonimo (singleton per nome
 logger = get_logger("app.core.carica.writer")
 
 
@@ -25,10 +25,9 @@ class BatchDispatchMixin:
     """Mixin per `DatabaseWriter`: build SQL template per write mode +
     delegate a `_execute_in_batches`. Livello d'astrazione tra
     `_dispatch_write_mode` (decide write mode) e `_execute_in_batches`
-    (gestisce batch execution loop + transaction strategies).
+    (gestisce loop + transaction strategies).
     """
 
-    # BATCH INSERT
 
     def _batch_insert(
         self,
@@ -45,7 +44,6 @@ class BatchDispatchMixin:
 
         return self._execute_in_batches(df, columns, sql_template, result, "insert")
 
-    # BATCH UPDATE
 
     def _batch_update(
         self,
@@ -73,7 +71,6 @@ class BatchDispatchMixin:
 
         return self._execute_in_batches(df, columns, sql_template, result, "update")
 
-    # BATCH UPSERT
 
     def _batch_upsert(
         self,
@@ -83,7 +80,7 @@ class BatchDispatchMixin:
     ) -> WriteResult:
         """Esegue UPSERT in batch."""
         # B-BE-61: verifica che esista un UNIQUE/PK constraint sulle match_columns
-        # Se non esiste, lo crea automaticamente (CREATE UNIQUE INDEX IF NOT EXISTS)
+        # Se non esiste, lo crea automaticamente (CREATE UNIQUE INDEX IF NOT EXISTS
         if self.db_type == 'postgres' and self.config.match_columns:
             with self.engine.begin() as check_conn:
                 for mc in self.config.match_columns:

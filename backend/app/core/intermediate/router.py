@@ -23,13 +23,13 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/runs", tags=["intermediate"])
 
 
-# FIXME: #23 (2026-04-28): JSON spec non ammette NaN / +Inf / -Inf.
+# FIXME: #23 (2026-04-28): JSON spec non ammette NaN / +Inf / -Inf
 # `db.get_node_table_rows` ricostruisce questi valori dai sentinel
 # JSONB persistiti (`_from_jsonable_value`) per garantire hash
-# roundtrip-safe. Sul boundary HTTP non serve quella semantica:
+# roundtrip-safe. Sul boundary HTTP non serve quella semantica
 # FastAPI/json.dumps(allow_nan=False) solleva ValueError. Mappiamo
 # qui i non-finite float a None *solo nella response*. Niente
-# mutazione di node_rows, niente impatto sull'hash.
+# mutazione di node_rows, niente impatto sull'hash
 import math
 
 
@@ -157,23 +157,22 @@ def get_node_data(
         # superadmin puo' leggere run di qualsiasi gruppo (access check
         # passa). Per evitare che `get_node_table_rows` applichi comunque
         # `group_id=current_user.group_id` come filtro (rendendo il
-        # fetch vuoto per run di altri gruppi):
-        #   - superadmin → None (nessun filtro, vede tutto)
-        #   - altri       → group della RUN (post-check), non dell'utente
+        # fetch vuoto per run di altri gruppi
+        # superadmin → None (nessun filtro, vede tutto
+        # altri → group della RUN (post-check), non dell'utente
         if current_user.role == "superadmin":
             effective_group = None
         else:
             effective_group = (run or {}).get("group_id") or current_user.group_id
         node = idb.get_node_meta(run_id, node_id)
-        # Phase 6 batch API preview da artifact (2026-04-28): dispatch
-        # per `persistence_mode`:
-        #   - full_artifact + status=complete  -> read parquet (object storage)
-        #   - full_artifact + altri status     -> 200 con rows=[] + warning
-        #   - metadata_only                    -> 200 con rows=[] + warning
-        #   - full_pg / preview_only / NULL    -> read da node_rows (legacy)
-        #
+        # preview da artifact (2026-04-28): dispatch
+        # per `persistence_mode`
+        # full_artifact + status=complete -> read parquet (object storage
+        # full_artifact + altri status -> 200 con rows=[] + warning
+        # metadata_only -> 200 con rows=[] + warning
+        # full_pg / preview_only / NULL -> read da node_rows (legacy
         # Tutti i path sanitizzano NaN/Inf via `_sanitize_for_json`
-        # (Bug #23) prima del JSONResponse.
+        # Bug #23) prima del JSONResponse
         from app.core.intermediate.policy import (
             persistence_mode_for_record,
             MODE_FULL_ARTIFACT,
@@ -211,7 +210,7 @@ def get_node_data(
                     artifact_uri, limit=limit,
                 )
                 if preview.error:
-                    # 200 operativo: niente 500 sul boundary HTTP.
+                    # 200 operativo: niente 500 sul boundary HTTP
                     rows = []
                     message = (
                         f"Preview da artifact non disponibile: {preview.error}"
@@ -219,16 +218,16 @@ def get_node_data(
                 else:
                     rows = preview.rows
                     # Aggiorna col_schema dal Parquet (autorevole sui
-                    # tipi reali post-roundtrip) se il meta era vuoto.
+                    # tipi reali post-roundtrip) se il meta era vuoto
                     if not col_schema:
                         col_schema = preview.col_schema
                     # row_count autorevole resta da node_meta; il
-                    # parquet conferma se il meta era stale.
+                    # parquet conferma se il meta era stale
                     if not row_count:
                         row_count = preview.row_count
             else:
                 rows = []
-                # Stati possibili: pending, failed, none, missing.
+                # Stati possibili: pending, failed, none, missing
                 msg_status = artifact_status or "none"
                 if msg_status == "failed":
                     artifact_error = node_dict.get("artifact_error") or "errore non specificato"
@@ -254,7 +253,7 @@ def get_node_data(
                 "node_meta + node_hash sono comunque disponibili."
             )
         else:
-            # full_pg / preview_only / legacy NULL -> legge node_rows.
+            # full_pg / preview_only / legacy NULL -> legge node_rows
             rows = idb.get_node_table_rows(
                 run_id=run_id,
                 node_id=node_id,
@@ -262,8 +261,8 @@ def get_node_data(
                 limit=limit,
             )
 
-        # FIXME: #23: NaN / +Inf / -Inf non sono JSON compliant.
-        # Vale per tutte le sorgenti (node_rows, artifact, fallback).
+        # FIXME: #23: NaN / +Inf / -Inf non sono JSON compliant
+        # Vale per tutte le sorgenti (node_rows, artifact, fallback
         rows = _sanitize_for_json(rows)
         col_schema = _sanitize_for_json(col_schema)
 
@@ -353,7 +352,7 @@ def compare_runs_l2(
     Ritorna righe aggiunte in B (non presenti in A) e rimosse da A (non
     presenti in B), confrontando tramite row_hash.
 
-    Phase 6 batch L2 semantics (2026-04-28): dispatch su
+    semantics (2026-04-28): dispatch su
     `persistence_mode` di entrambe le run. L'endpoint NON finge un
     diff completo se i dati non sono entrambi su `node_rows`:
       - full_pg + full_pg (o legacy NULL): 200, diff completo come prima.
@@ -362,7 +361,7 @@ def compare_runs_l2(
       - metadata_only su almeno un lato: 422 "diff_available=false,
         reason=metadata_only_no_rows".
       - full_artifact + complete: 501 "non ancora implementato"
-        (diff completo da artifact = batch successivo).
+        (diff completo da artifact = ).
       - full_artifact pending/failed/missing: 422 "non pronto".
       - mode mismatch (preview_only vs full_pg): 422 conservativo.
 
@@ -385,8 +384,8 @@ def compare_runs_l2(
         )
 
         # Verifica che il nodo esista in entrambe le run via node_meta
-        # (piu' robusto che controllare la presenza di righe in node_rows:
-        # un nodo potrebbe essere stato eseguito con 0 righe di output).
+        # piu' robusto che controllare la presenza di righe in node_rows
+        # un nodo potrebbe essere stato eseguito con 0 righe di output
         meta_a = idb.get_node_meta(run_id_a, node_id)
         meta_b = idb.get_node_meta(run_id_b, node_id)
         if not meta_a:
@@ -400,7 +399,7 @@ def compare_runs_l2(
                 detail=f"Dati nodo '{node_id}' non trovati per run {run_id_b}"
             )
 
-        # Classifica le mode (legacy NULL -> "full_pg" via helper).
+        # Classifica le mode (legacy NULL -> "full_pg" via helper
         mode_a = persistence_mode_for_record(meta_a)
         mode_b = persistence_mode_for_record(meta_b)
 
@@ -417,10 +416,10 @@ def compare_runs_l2(
             }
 
 
-        # full_artifact e' supportato in scrittura (parquet+manifest)
+        # full_artifact e' supportato in scrittura (parquet+manifest
         # ma il diff completo da artifact richiede download + set-diff
         # cross-run. Out of scope di questo batch: rispondiamo 501
-        # esplicito invece di silently fallback su node_rows vuoti.
+        # esplicito invece di silently fallback su node_rows vuoti
         if MODE_FULL_ARTIFACT in (mode_a, mode_b):
             # Se uno dei due e' artifact, distinguiamo "complete vs altro"
             def _artifact_status(meta):
@@ -473,8 +472,8 @@ def compare_runs_l2(
             )
 
         # Mode mismatch fra full_pg e preview_only: il diff sarebbe
-        # asimmetrico (full vs preview-cap) e darebbe falsi positivi.
-        # Rispondiamo conservativo invece di mascherarlo.
+        # asimmetrico (full vs preview-cap) e darebbe falsi positivi
+        # Rispondiamo conservativo invece di mascherarlo
         if {mode_a, mode_b} == {MODE_FULL_PG, MODE_PREVIEW_ONLY}:
             raise HTTPException(
                 status_code=422,
@@ -491,12 +490,12 @@ def compare_runs_l2(
                 ),
             )
 
-        # Solo full_pg+full_pg e preview_only+preview_only arrivano qui.
+        # Solo full_pg+full_pg e preview_only+preview_only arrivano qui
         is_partial = (mode_a == MODE_PREVIEW_ONLY and mode_b == MODE_PREVIEW_ONLY)
 
-        # Righe rimosse: in A ma non in B (confronto su row_hash).
+        # Righe rimosse: in A ma non in B (confronto su row_hash
         # L'indice idx_node_rows_hash su (run_id, node_id, row_hash) rende
-        # il NOT EXISTS O(n log m) anche per dataset grandi.
+        # il NOT EXISTS O(n log m) anche per dataset grandi
         removed_raw = fetchall(
             """
             SELECT a.row_hash, a.row_data
@@ -544,7 +543,7 @@ def compare_runs_l2(
 
         # Shape del response identico a prima: gli elementi sono dict con
         # le colonne "piatte" della riga. Espandiamo row_data (jsonb) e
-        # aggiungiamo _row_hash per retrocompatibilita' col frontend.
+        # aggiungiamo _row_hash per retrocompatibilita' col frontend
         def _expand(r):
             data = r.get("row_data") or {}
             if isinstance(data, str):
@@ -557,8 +556,8 @@ def compare_runs_l2(
 
         # Sanitize NaN/+Inf/-Inf nelle righe espanse: i record possono
         # contenere sentinel JSONB ricostruiti come float speciali (vedi
-        # `_from_jsonable_value` nei branch consumer di `node_rows`).
-        # Sul boundary HTTP non sono JSON-compliant. Bug #23 invariato.
+        # `_from_jsonable_value` nei branch consumer di `node_rows`
+        # Sul boundary HTTP non sono JSON-compliant. Bug #23 invariato
         removed_list = _sanitize_for_json(removed_list)
         added_list = _sanitize_for_json(added_list)
 
@@ -605,9 +604,9 @@ def pin_run(
         # run di qualsiasi gruppo (access check passa); senza questa
         # branch, `idb.pin_run` filtrerebbe per `current_user.group_id`
         # e fallirebbe con un falso 404 quando la run appartiene a un
-        # altro gruppo. Quindi:
-        #   - superadmin  → usa il group_id della run stessa (post-check)
-        #   - altri       → group della run validato da _check_run_access
+        # altro gruppo. Quindi
+        # superadmin → usa il group_id della run stessa (post-check
+        # altri → group della run validato da _check_run_access
         run = _check_run_access(run_id, current_user)
         effective_group = (run or {}).get("group_id") or current_user.group_id
         ok = idb.pin_run(run_id, effective_group, pinned=body.pinned)

@@ -1,5 +1,5 @@
 """
-Intermediate full artifact reader — Batch API preview da artifact (2026-04-28).
+Intermediate full artifact reader — preview da artifact (2026-04-28).
 
 Legge preview da `data.parquet` su runtime object storage per il modo
 """
@@ -104,17 +104,17 @@ def load_preview_from_artifact(
             error=f"object storage non risolvibile: {type(e).__name__}: {e}",
         )
 
-    # Streaming download: la preview e' piccola (limit << dataset),
+    # Streaming download: la preview e' piccola (limit << dataset
     # ma il boundary object-storage ci consegna chunks bytes; la
     # materializzazione del buffer e' BOUNDED e il decode resta nel
     # parser leaf (`preview_parser.parse_parquet_preview`, pyarrow
-    # iter_batches), non in questo orchestrator.
+    # iter_batches), non in questo orchestrator
     # L'iteratore viene abortito al
     # primo chunk che supererebbe ``ARTIFACT_PREVIEW_MAX_BYTES``
-    # (default 25 MB — preview-specific cap, separato da
+    # default 25 MB — preview-specific cap, separato da
     # ``RESOURCE_MAX_BYTES``). Oversize NON viene mascherato da error
     # best-effort: ``MemoryLimitExceededError`` propaga al boundary
-    # handler (HTTP 413 con stage ``intermediate_artifact_preview``).
+    # handler (HTTP 413 con stage ``intermediate_artifact_preview``
     max_bytes = resolve_artifact_preview_max_bytes()
     try:
         stream = storage.get_object_stream(artifact_uri)
@@ -142,10 +142,10 @@ def load_preview_from_artifact(
             oversize.observed_bytes,
             oversize.limit_bytes,
         )
-        # Typed/controlled propagation: boundary handler maps to HTTP 413.
+        # Typed/controlled propagation: boundary handler maps to HTTP 413
         # NOT degraded to best-effort `error=...`: silently returning
         # empty rows on a 50-GB artifact would hide the resource cap
-        # signal from the operator and from the client.
+        # signal from the operator and from the client
         raise
     except Exception as e:
         logger.warning(
@@ -156,15 +156,15 @@ def load_preview_from_artifact(
             error=f"download artifact fallito: {type(e).__name__}: {e}",
         )
 
-    # BE-GO-READY-RESOURCE-ENGINE-016: parsing the bounded byte
+    # parsing the bounded byte
     # buffer is delegated to the leaf parser module. Pandas lives
-    # ONLY inside ``preview_parser.parse_parquet_preview``;
+    # ONLY inside ``preview_parser.parse_parquet_preview``
     # ``artifact_reader`` (this file) is a pure I/O orchestrator
     # and contains zero pandas references at any indentation
     # level. The error envelope shape -- ``read_parquet
-    # fallito: ...`` and ``to_dict fallito: ...`` strings --
+    # fallito: ...`` and ``to_dict fallito: ...`` strings
     # is preserved verbatim so router callers and existing
-    # contract tests do not regress.
+    # contract tests do not regress
     try:
         parsed = parse_parquet_preview(body_bytes, limit=limit)
     except ParquetPreviewParseError as e:
@@ -181,7 +181,7 @@ def load_preview_from_artifact(
             )
         # stage == "to_dict": preserve the partial schema +
         # row_count so the caller learns the dataset shape even
-        # when individual rows could not be materialized.
+        # when individual rows could not be materialized
         return ArtifactPreviewResult(
             row_count=e.partial_row_count,
             col_schema=e.partial_schema,

@@ -41,7 +41,7 @@ def _classify_path_for_multi_host(path: str) -> str:
 
     p = path.strip()
 
-    # UNC path (Windows) — \\server\share\...
+    # UNC path (Windows) — \\server\share\
     if p.startswith(("\\\\", "//")) and len(p) > 2:
         return "network"
 
@@ -50,7 +50,7 @@ def _classify_path_for_multi_host(path: str) -> str:
     if any(p.startswith(prefix) for prefix in linux_network_prefixes):
         return "network"
 
-    # Windows drive letter (C:\, D:\, ...)
+    # Windows drive letter (C:\, D:\
     if len(p) >= 2 and p[1] == ":":
         return "local"
 
@@ -66,7 +66,7 @@ class LocalDataSource(DataSourceInterface):
     """
     Backend per cartelle locali e cartelle di rete montate (UNC path).
 
-    Non richiede connessione vera: connect() verifica semplicemente
+    Non richiede connessione vera: connect verifica semplicemente
     che la root_path esista e sia leggibile.
     """
 
@@ -97,10 +97,10 @@ class LocalDataSource(DataSourceInterface):
             except PermissionError:
                 file_count = None
 
-            # Multi-host advisory: avvisa se il path sembra local-only.
+            # Multi-host advisory: avvisa se il path sembra local-only
             # Non blocca — solo informativo. Utile in setup con Celery
             # worker distribuiti: su un nodo diverso questo path NON sara'
-            # raggiungibile e task che usano questo datasource falliranno.
+            # raggiungibile e task che usano questo datasource falliranno
             path_class = _classify_path_for_multi_host(root)
             advisory = None
             if path_class == "local":
@@ -154,7 +154,7 @@ class LocalDataSource(DataSourceInterface):
                         if not self._matches_pattern(filename, pattern):
                             continue
                         entry_path = os.path.join(dirpath, filename)
-                        # intent: optional feature / outcome: fail-open (entry skip su stat inaccessibile)
+                        # intent: optional feature / outcome: fail-open (entry skip su stat inaccessibile
                         try:
                             st = os.stat(entry_path)
                         except OSError as e:
@@ -186,7 +186,7 @@ class LocalDataSource(DataSourceInterface):
                             continue
                         if entry.is_dir(follow_symlinks=True):
                             # Aggiungi cartella
-                            # intent: optional feature / outcome: fail-open (folder skip su stat inaccessibile)
+                            # intent: optional feature / outcome: fail-open (folder skip su stat inaccessibile
                             try:
                                 st = entry.stat(follow_symlinks=True)
                             except OSError as e:
@@ -207,7 +207,7 @@ class LocalDataSource(DataSourceInterface):
                         elif entry.is_file(follow_symlinks=True):
                             if not self._matches_pattern(entry.name, pattern):
                                 continue
-                            # intent: optional feature / outcome: fail-open (file skip su stat inaccessibile)
+                            # intent: optional feature / outcome: fail-open (file skip su stat inaccessibile
                             try:
                                 st = entry.stat(follow_symlinks=True)
                             except OSError as e:
@@ -218,7 +218,7 @@ class LocalDataSource(DataSourceInterface):
                                 continue
                             hash_val = None
                             if include_hash:
-                                # intent: optional feature / outcome: fail-open (hash opzionale)
+                                # intent: optional feature / outcome: fail-open (hash opzionale
                                 try:
                                     hash_val = self._compute_hash(self._raw_read(entry.path))
                                 except OSError as e:
@@ -327,7 +327,7 @@ class LocalDataSource(DataSourceInterface):
 
         # Blocca path assoluti Unix, Windows e UNC (il helper centralizzato
         # rifiuta solo UNC: gli altri check restano qui perche' specifici
-        # di local datasource).
+        # di local datasource
         if relative.startswith(('/', '\\')):
             raise DataSourcePermissionError(
                 f"Path assoluto non consentito: {relative!r}"
@@ -340,7 +340,7 @@ class LocalDataSource(DataSourceInterface):
         # Containment check: compone candidato e delega a
         # assert_path_within per resolve + relative_to. Traduciamo
         # ValueError in DataSourcePermissionError per uniformare il
-        # tipo di eccezione che esce da questa datasource.
+        # tipo di eccezione che esce da questa datasource
         try:
             resolved = assert_path_within(root_abs / relative, [root_abs])
         except ValueError as e:

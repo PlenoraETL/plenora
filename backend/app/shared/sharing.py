@@ -21,7 +21,7 @@ from app.db.pg_connection import (
 
 MAGIC_ALL = "*"
 
-# Mapping resource_table -> (share_table, fk_column)
+# Mapping resource_table -> (share_table, fk_column
 _SHAREABLE: dict[str, tuple[str, str]] = {
     "connections":        ("connection_shares",         "connection_id"),
     "datasources":        ("datasource_shares",         "datasource_id"),
@@ -155,7 +155,7 @@ def is_resource_visible(
     conn = _conn()
     try:
         with conn.cursor() as cur:
-            # Owner check (se non già fornito)
+            # Owner check (se non già fornito
             if resource_owner_group_id is None:
                 cur.execute(
                     f"SELECT group_id FROM {resource_table} WHERE id = %s",

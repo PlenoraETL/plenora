@@ -25,7 +25,7 @@ from app.utils.logger import get_logger
 def _preview_limit_from_ctx(
     ctx: Optional[ArricchisciExecutionContext],
 ) -> Optional[int]:
-    """BE-GO-READY-TRANSFORMATION-ENGINE-025: helper strict per
+    """helper strict per
     `preview_limit`.
 
     Ritorna `ctx.preview_limit` se il caller passa un context tipato,
@@ -55,7 +55,7 @@ def _preview_limit_from_ctx(
 def _group_id_from_ctx(
     ctx: Optional[ArricchisciExecutionContext],
 ) -> Optional[str]:
-    """BE-GO-READY-TRANSFORMATION-ENGINE-023: helper strict.
+    """helper strict
 
     Ritorna `ctx.group_id` se il caller passa un context tipato,
     altrimenti `None`. **Non legge** `_current_group_id` dal
@@ -72,7 +72,7 @@ def _group_id_from_ctx(
     Decisione di slice (audit -021):
       `_load_static_values` non ha tenant binding semantico
       (processing puro di template variables come `{{NOW}}`,
-      `{{TODAY}}`). La sua dipendenza pre-batch dal singleton era
+      `{{TODAY}}`). La sua dipendenza pre-singleton era
       un side effect del helper legacy, non del contract della
       funzione. La rimozione del fallback per il branch static
       elimina lo stale-state coupling al singleton (un eventuale
@@ -87,7 +87,7 @@ def _group_id_from_ctx(
 # `"app.core.arricchisci.api_connector"`). Singleton stdlib per nome →
 # record indistinguibili dai consumer che attaccano handler / filtrano
 # per nome canonico (identico al pattern B3-B.2b/B3-B.3). StructuredLogger
-# wrapper supporta kwarg `op=` usato da `_assert_source_project_in_tenant`.
+# wrapper supporta kwarg `op=` usato da `_assert_source_project_in_tenant`
 logger = get_logger("app.core.arricchisci.api_connector")
 
 
@@ -99,10 +99,10 @@ class ApiConnectionSourceLoadingMixin:
 
     # SOURCE_LOADING / TENANCY
     # Wrapper sopra `app.core.artifacts.SourceLoader`. I wrapper di
-    # api_connector aggiungono solo cio' che e' specifico al modulo:
-    #   - `_load_source_project`: recompute upstream + fallback filesystem
-    #   - `_load_file_source`: preview_limit
-    #   - tutti: `filter_visible_columns` sul DataFrame ritornato
+    # api_connector aggiungono solo cio' che e' specifico al modulo
+    # `_load_source_project`: recompute upstream + fallback filesystem
+    # `_load_file_source`: preview_limit
+    # tutti: `filter_visible_columns` sul DataFrame ritornato
 
     def _assert_source_project_in_tenant(
         self, source_project_id: str, executing_group_id: str
@@ -118,10 +118,10 @@ class ApiConnectionSourceLoadingMixin:
         l'esecuzione del pipeline di un altro tenant verrebbe triggerata
         prima del block.
         """
-        # BE-GO-READY-DB-ENGINE-005: imported from canonical leaf
+        # imported from canonical leaf
         # `app.db.config.projects` (lazy to avoid surfacing `pg_connection`
         # at module import time — `validate_resource_visible` is the only
-        # cross-tenant guard before any DB read).
+        # cross-tenant guard before any DB read
         from app.db.config.projects import get_project as _get_project
         src_proj = _get_project(source_project_id)
         if not src_proj or src_proj.get("group_id") != executing_group_id:
@@ -233,7 +233,7 @@ class ApiConnectionSourceLoadingMixin:
         filesystem restano qui perche' sono specifici di api_connector
         (manipola usa orchestrator_callback).
 
-        BE-GO-READY-TRANSFORMATION-ENGINE-032: `ctx` e' ora un
+         `ctx` e' ora un
         keyword-only **required** parameter (no default). Tutti i 3
         production callsite (`canvas_orchestrator`, `executor.preview`,
         `enrichment_task`) e tutti i test callsite passano `ctx=ctx`
@@ -250,9 +250,9 @@ class ApiConnectionSourceLoadingMixin:
         )
         from app.utils.dataframe import load_dataframe_from_file
 
-        # RB.#19 Step A: timing log totale del source project load.
-        # Aggrega tutti i sub-step (DB lookup, S3/blob fetch, temp write,
-        # parse) gia' loggati individualmente downstream.
+        # RB.#19 Step A: timing log totale del source project load
+        # Aggrega tutti i sub-step (DB lookup, S3/blob fetch, temp write
+        # parse) gia' loggati individualmente downstream
         import time as _time_mod
         _t0 = _time_mod.monotonic()
 
@@ -270,29 +270,29 @@ class ApiConnectionSourceLoadingMixin:
         loader = SourceLoader()
 
         df = None
-        # Tentativo 1: latest output dal blob DB (skip se force_recalculate)
+        # Tentativo 1: latest output dal blob DB (skip se force_recalculate
         if not force_recalculate:
             try:
                 df = loader.load(ref, expected_group_id=executing_group_id)
             except SourceLoadingError as e:
-                # I caller di api_connector si aspettano ValueError;
+                # I caller di api_connector si aspettano ValueError
                 # propaghiamo il messaggio originale del loader cosi'
                 # che la distinzione fra cross-tenant, progetto
-                # inesistente ed errore DB resti leggibile lato caller.
+                # inesistente ed errore DB resti leggibile lato caller
                 raise ValueError(
                     f"Accesso negato: progetto sorgente "
                     f"'{source_project_id}': {e}"
                 ) from e
 
         # Path su disco usato sia per il check "directory esistente"
-        # sia per il fallback filesystem. Calcolato solo se serve.
+        # sia per il fallback filesystem. Calcolato solo se serve
         output_dir = (
             self.results_dir / source_project_id
             if self.results_dir is not None
             else None
         )
 
-        # Tentativo 2: recompute upstream (orchestrator standalone)
+        # Tentativo 2: recompute upstream (orchestrator standalone
         if df is None and (
             force_recalculate or output_dir is None or not output_dir.exists()
         ):
@@ -301,7 +301,7 @@ class ApiConnectionSourceLoadingMixin:
             )
             self._recompute_upstream_project(source_project_id, force_recalculate)
 
-            # Re-tenta load via SourceLoader dopo recompute.
+            # Re-tenta load via SourceLoader dopo recompute
             try:
                 df = loader.load(ref, expected_group_id=executing_group_id)
             except SourceLoadingError as e:
@@ -310,7 +310,7 @@ class ApiConnectionSourceLoadingMixin:
                     f"'{source_project_id}': {e}"
                 ) from e
 
-        # Tentativo 3: fallback filesystem (retention DB scaduta ecc.)
+        # Tentativo 3: fallback filesystem (retention DB scaduta ecc
         if df is None:
             df = self._filesystem_fallback_load_project(
                 source_project_id, output_dir
@@ -341,7 +341,7 @@ class ApiConnectionSourceLoadingMixin:
         CRS lungo le trasformazioni downstream) sono garantiti dal
         loader unico.
 
-        BE-GO-READY-TRANSFORMATION-ENGINE-032: `ctx` e' ora un
+         `ctx` e' ora un
         keyword-only **required** parameter (no default). Tutti i 3
         production callsite e tutti i test callsite passano
         `ctx=ctx` esplicito. Il `group_id` viene letto
@@ -350,7 +350,7 @@ class ApiConnectionSourceLoadingMixin:
         loader fail-closes con `ValueError("Contesto di sicurezza
         non determinabile...")`.
 
-        BE-GO-READY-TRANSFORMATION-ENGINE-025 (slice migration):
+         (slice migration):
         `preview_limit` viene letto ESCLUSIVAMENTE da
         `ctx.preview_limit` via `_preview_limit_from_ctx(ctx)`. Lo
         `svc._preview_limit` legacy non e' piu' consultato —
@@ -365,8 +365,8 @@ class ApiConnectionSourceLoadingMixin:
         )
 
         # RB.#19 Step A: timing log totale del file source load (analogo
-        # a _load_source_project). Sub-step (DB blob fetch, temp write,
-        # parse) gia' loggati downstream individualmente.
+        # a _load_source_project). Sub-step (DB blob fetch, temp write
+        # parse) gia' loggati downstream individualmente
         import time as _time_mod
         _t0 = _time_mod.monotonic()
 
@@ -385,16 +385,16 @@ class ApiConnectionSourceLoadingMixin:
             df = SourceLoader().load(ref, expected_group_id=executing_group_id)
         except SourceLoadingError as e:
             # I caller di api_connector si aspettano ValueError; il
-            # messaggio originale del loader viene propagato come-is.
+            # messaggio originale del loader viene propagato come-is
             raise ValueError(str(e)) from e
 
-        # Tronca per preview (opzionale).
-        # BE-GO-READY-TRANSFORMATION-ENGINE-025/-030B (slice migration):
-        # sia il `preview_limit` (TE-025) sia il `group_id` (TE-030B)
+        # Tronca per preview (opzionale
+        # slice migration
+        # sia il `preview_limit` (TE-025) sia il `group_id` (TE-030B
         # vengono ora letti SOLO dal `ctx` (typed boundary). I legacy
         # state `svc._preview_limit` / `svc._current_group_id` non
-        # sono piu' consultati — eliminato lo stale-state cross-
-        # execution leak.
+        # sono piu' consultati — eliminato lo stale-state cross
+        # execution leak
         _plimit = _preview_limit_from_ctx(ctx)
         if _plimit and isinstance(_plimit, int) and _plimit > 0:
             df = df.head(_plimit)
@@ -422,7 +422,6 @@ class ApiConnectionSourceLoadingMixin:
         Le variabili template ({{NOW}}, {{TODAY}}, ecc.) vengono
         processate dentro il loader.
 
-        BE-GO-READY-TRANSFORMATION-ENGINE-032: `ctx` resta
         **Optional** (a differenza di `_load_source_project` /
         `_load_file_source` migrati a required in -032).
 
@@ -440,7 +439,7 @@ class ApiConnectionSourceLoadingMixin:
              - `tests2/arricchisci/unit/test_mixin_ctx_migration_contract.py::test_load_static_values_uses_static_sentinel_when_ctx_none`
              Cambiare la signature a required romperebbe il contract.
 
-        BE-GO-READY-TRANSFORMATION-ENGINE-023 (slice migration):
+         (slice migration):
         questa funzione NON legge piu' `_current_group_id` dal
         singleton. Usa il helper strict `_group_id_from_ctx(ctx)`
         che ritorna esclusivamente `ctx.group_id` (o `None`); il
@@ -460,7 +459,7 @@ class ApiConnectionSourceLoadingMixin:
         # solo dalla guardia del loader. Passiamo il group_id dal
         # context tipato se disponibile, oppure un placeholder
         # costante (lo static non ha tenant binding semantico, e'
-        # processing puro di template variables).
+        # processing puro di template variables
         executing_group_id = _group_id_from_ctx(ctx) or "_static_"
         return SourceLoader().load(ref, expected_group_id=executing_group_id)
 

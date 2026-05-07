@@ -20,15 +20,15 @@ class ZipBombError(ValueError):
 
 
 # Cap defaults (lazy-read from env ad ogni chiamata: no import-time
-# freeze, cosi' test + tuning operational senza restart del processo)
+# freeze, cosi' test + tuning operational senza restart del processo
 
 _DEFAULT_MAX_UNCOMPRESSED_BYTES = 500 * 1024 * 1024  # 500 MB
 _DEFAULT_MAX_FILES = 5000
 _DEFAULT_MAX_COMPRESSION_RATIO = 100  # file_size / compress_size
 
 # Soglia sotto la quale non applichiamo il ratio check: file piccoli
-# con ratio alto (es. un .txt di 10 byte che comprime a 1 byte → ratio 10)
-# sono rumore statistico, non attacco. Sopra 1MB il ratio significativo.
+# con ratio alto (es. un .txt di 10 byte che comprime a 1 byte → ratio 10
+# sono rumore statistico, non attacco. Sopra 1MB il ratio significativo
 _RATIO_CHECK_MIN_UNCOMPRESSED = 1 * 1024 * 1024  # 1 MB
 
 
@@ -104,10 +104,10 @@ def _validate_bomb_limits(zf: zipfile.ZipFile) -> None:
     for member in infolist:
         size = member.file_size
         comp = member.compress_size or 1  # evita div-by-zero su dir entries
-        # Cap singolo file: utile in scenari "molti file piccoli" (es.
+        # Cap singolo file: utile in scenari "molti file piccoli" (es
         # IMDF venue: ~50 GeoJSON da pochi KB ciascuno) per rifiutare
         # un member sospetto da gigabyte anche se il totale starebbe
-        # nel cap.
+        # nel cap
         if size > max_single:
             raise ZipBombError(
                 f"Zip bomb: file {member.filename!r} troppo grande "
@@ -122,7 +122,7 @@ def _validate_bomb_limits(zf: zipfile.ZipFile) -> None:
                 f"Override via env ZIP_MAX_UNCOMPRESSED_BYTES se legittimo."
             )
         # Ratio check solo per file sopra la soglia minima — un file
-        # piccolo con ratio alto non rappresenta mai un vero attacco.
+        # piccolo con ratio alto non rappresenta mai un vero attacco
         if size > _RATIO_CHECK_MIN_UNCOMPRESSED:
             ratio = size / comp
             if ratio > max_ratio:
@@ -143,8 +143,8 @@ def safe_extractall(zf: zipfile.ZipFile, dest_dir: Union[str, Path]) -> None:
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest_root = dest_dir.resolve()
     # Controllo bomb PRIMA di toccare il disco — se fallisce, dest_dir
-    # resta vuota (il caller la crea solo qui dentro via mkdir sopra,
-    # ma se preesisteva non la tocchiamo).
+    # resta vuota (il caller la crea solo qui dentro via mkdir sopra
+    # ma se preesisteva non la tocchiamo
     _validate_bomb_limits(zf)
     for member in zf.infolist():
         _validate_member(member.filename, dest_root, dest_dir)

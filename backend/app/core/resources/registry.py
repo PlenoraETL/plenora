@@ -1,7 +1,6 @@
 """
 Default in-process resource registry.
 
-BE-GO-READY-RESOURCE-ENGINE-002-RESULT-BLOB-LOADER-PILOT.
 """
 
 from __future__ import annotations
@@ -49,7 +48,7 @@ class _DefaultResourceRegistry:
 
 
 # Module-level singleton + builder. Tests that need isolation
-# build their own via `build_default_registry()`.
+# build their own via `build_default_registry`
 _REGISTRY_LOCK = Lock()
 _REGISTRY: Optional[_DefaultResourceRegistry] = None
 
@@ -68,7 +67,7 @@ def build_default_registry() -> _DefaultResourceRegistry:
     `BE_RESOURCE_ENGINE_AUDIT.md`).
 
     Used directly by tests that want isolation. Production code
-    consumes the module-level singleton via `default_registry()`.
+    consumes the module-level singleton via `default_registry`.
     """
     from app.core.resources.loaders.result_blob import ResultBlobLoader
     from app.core.resources.loaders.file_source_blob import (

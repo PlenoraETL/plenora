@@ -13,13 +13,13 @@ def require_service(service, name: str):
     Verifica che un service module-level sia stato inizializzato.
 
     Da chiamare all'inizio degli endpoint che dipendono da servizi
-    iniettati via init_*() da main.py. Solleva HTTP 503 con codice
+    iniettati via init_* da main.py. Solleva HTTP 503 con codice
     `service_not_initialized` invece di un generico AttributeError
     su NoneType.
 
     Args:
         service: il valore del global (_service, _executor, etc.)
-        name:    nome leggibile del servizio (per il messaggio di errore)
+        name: nome leggibile del servizio (per il messaggio di errore)
 
     Raises:
         HTTPException(503): se il service è None, con `error =

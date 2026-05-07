@@ -21,18 +21,8 @@ def _extract_group_and_id(resource):
     return getattr(resource, "group_id", None), getattr(resource, "id", None)
 
 
-# BE-GO-READY-AUTH-ENGINE-012-SHARED-CONTRACT-BOUNDARY: canonical
-# home for `group_filter` moved to the pure `app.shared.contracts.auth`
-# module. `ownership.py` re-exports for KEEP_COMPAT so the
-# `app.core.auth.auth` facade chain (auth → ownership → contract)
-# still resolves the symbol. Reason for the move: `ownership.py`
-# imports `app.db.db_service` for `compute_can_edit` /
-# `assert_can_modify`, which would violate the contract module's
-# purity rule (no DB-bound transitive deps on a contract). Identity
-# preserved: `auth.group_filter is ownership.group_filter is
-# contract.group_filter` — locked by
-# `tests2/security/unit/test_auth_facade_strangler_contract.py::
-# test_group_filter_leaf_canonical_home`.
+# `group_filter` lives in the pure shared auth contract. This module
+# keeps a compatibility export while DB-bound ownership helpers remain here.
 from app.shared.contracts.auth import group_filter  # noqa: F401
 
 
@@ -46,7 +36,7 @@ def assert_group_access(
 
     Sostituisce il pattern duplicato:
         if current_user.role != "superadmin" and resource.group_id != current_user.group_id:
-            disclosure.raise_disclosure(disclosure.access_denied())
+            disclosure.raise_disclosure(disclosure.access_denied)
 
     - 404 se `resource` è None.
     - 403 se l'utente non è superadmin e il gruppo della risorsa non combacia.
@@ -184,7 +174,7 @@ def assert_resource_visible(
 
     resource_group, resource_id = _extract_group_and_id(resource)
 
-    # Owned dal proprio gruppo: ok subito (no DB query)
+    # Owned dal proprio gruppo: ok subito (no DB query
     if resource_group == current_user.group_id:
         return
 
@@ -221,7 +211,7 @@ def _check_ownership(
     is_super = current_user.role == "superadmin"
     is_admin_plus = current_user.role in ROLES_ADMIN_OR_ABOVE
 
-    # Filtro gruppo (superadmin bypassa)
+    # Filtro gruppo (superadmin bypassa
     if not is_super and resource.get("group_id") != current_user.group_id:
         _disclosure.raise_disclosure(_disclosure.access_denied())
 

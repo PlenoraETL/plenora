@@ -1,7 +1,7 @@
 """
 Entry point dell'applicazione FastAPI PLENORA-ETL.
 
-Architettura (post-rework)
+Compone bootstrap, middleware, dependency wiring, router e health endpoints.
 """
 
 import os
@@ -12,17 +12,12 @@ from app.config import settings
 from app.utils.logger import get_logger
 from app.utils.dataframe import save_dataframe
 
-# Bootstrap esplicito: una sola boundary tipata che esegue, in ordine:
-#   1. settings.validate_startup()
-#   2. validate_storage_config()
-#   3. init_all_dbs()
-#   4. _repair_psycopg2_ssl_env()  (pop dei 3 SSL env var dopo init PG)
-# Vedi `app/bootstrap.py` per il contratto.
+# Bootstrap esplicito: valida config, storage e DB prima di creare l'app.
+# Vedi `app/bootstrap.py` per il contratto completo.
 from app.bootstrap import bootstrap as _bootstrap, teardown as _teardown
 _bootstrap()
 
 # Auth JWT
-# BE-GO-READY-AUTH-ENGINE-019: removed unused `get_current_user` dep-import.
 from app.core.auth.auth import router as auth_router
 from app.core.auth.users_router import users_router
 from app.core.auth.groups_router import groups_router
@@ -33,8 +28,7 @@ from app.db.cleanup_middleware import DBConnectionCleanupMiddleware
 logger = get_logger(__name__)
 
 
-# In produzione (ENVIRONMENT=production) disabilita /docs e /openapi.json
-# per non esporre lo schema API pubblicamente. In sviluppo restano attivi.
+# In produzione disabilita /docs e /openapi.json per non esporre lo schema API.
 _is_prod = os.getenv("ENVIRONMENT", os.getenv("ENV", "development")).lower() in ("production", "prod")
 
 from contextlib import asynccontextmanager
@@ -59,36 +53,25 @@ app.add_middleware(
     allow_origins=settings.CORS_ORIGINS_LIST,
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    # X-Request-ID (C8): accettato in preflight cosi' il frontend puo'
-    # mandare il proprio correlation ID (es. da un distributed trace)
-    # e noi lo riusiamo nel ContextVar invece di generarne uno nuovo.
+    # Accetta il correlation ID del frontend e lo riusa nei log server-side.
     allow_headers=[
         "Authorization", "Content-Type", "Accept", "X-Requested-With",
         "X-Request-ID",
     ],
-    # Headers che il browser e' autorizzato a leggere dal JS client.
-    # - Content-Disposition: usato da downloadBlob.js per filename
-    # - X-Request-ID (C8): consente al frontend di correlare log
-    #   client-side con log server-side sullo stesso request_id.
+    # Espone filename dei download e correlation ID al client.
     expose_headers=["Content-Disposition", "X-Request-ID"],
 )
 app.add_middleware(JWTMiddleware)
-# DB cleanup deve essere il middleware più ESTERNO (FastAPI esegue in LIFO),
-# così le connessioni thread-local vengono chiuse DOPO che tutto il request
-# processing è terminato. Previene leak di file descriptor nei thread riusati
-# dal pool uvicorn.
+# DB cleanup deve essere il middleware piu' esterno: FastAPI esegue in LIFO,
+# quindi le connessioni thread-local vengono chiuse dopo il request processing.
 app.add_middleware(DBConnectionCleanupMiddleware)
-# C8: RequestIdMiddleware e' il piu' esterno assoluto. Setta ContextVar
-# request_id PRIMA che qualunque altro middleware logghi (JWT errors,
-# DBConn errors) cosi' ogni riga di log di quella richiesta e'
-# correlata. Legge X-Request-ID se il client lo manda, altrimenti
-# genera uuid4. Echo della stessa ID nella response.
+# RequestIdMiddleware deve essere ultimo in registrazione per essere eseguito
+# per primo: setta il request_id prima che JWT/DB cleanup possano loggare.
 app.add_middleware(RequestIdMiddleware)
 
 
-# Global exception handlers — garantiscono shape envelope go-ready
-# (BE-GO-READY-ERROR-CONTRACT-002) e header CORS anche su eccezioni
-# non gestite.
+# Global exception handlers: garantiscono envelope uniforme e header CORS
+# anche su eccezioni non gestite.
 from fastapi import Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -105,9 +88,8 @@ _CORS_ORIGINS = set(settings.CORS_ORIGINS_LIST)
 
 
 def _cors_headers_for(request: Request) -> dict:
-    """Costruisce gli header CORS per la response di errore se
-    l'origin matcha la whitelist. Replica esatta della logica
-    pre-pilot.
+    """Costruisce gli header CORS per la response di errore se l'origin
+    matcha la whitelist.
     """
     origin = request.headers.get("origin", "")
     if origin in _CORS_ORIGINS:
@@ -138,17 +120,13 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
-# Handler per HTTPException (sia FastAPI che Starlette): normalizza
-# il `detail` legacy nelle 3 chiavi canoniche `error`/`message`/
-# `details` e wrap-pa in dual-shape envelope. Lascia intatto il
-# comportamento status code esistente. NESSUN router viene migrato:
-# l'envelope viene applicato centralmente.
+# Handler per HTTPException: normalizza `detail` e applica l'envelope centrale.
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(
     request: Request, exc: StarletteHTTPException,
 ):
     norm = normalize_http_exception_detail(exc.status_code, exc.detail)
-    # Header passati dall'eccezione (es. WWW-Authenticate) preservati.
+    # Preserva header passati dall'eccezione, ad esempio WWW-Authenticate.
     base_headers = _cors_headers_for(request)
     if exc.headers:
         base_headers.update(exc.headers)
@@ -165,10 +143,7 @@ async def http_exception_handler(
 async def validation_exception_handler(
     request: Request, exc: RequestValidationError,
 ):
-    # Sanifica le entry: tieni solo `loc`, `msg`, `type` (campi
-    # gia' presenti nella shape FastAPI default). Scarta `ctx` e
-    # `input` per evitare di echo-are valori potenzialmente
-    # sensibili (PII, secrets, payload utente) nella response.
+    # Scarta `ctx` e `input` per non echo-are PII, secret o payload utente.
     errors_list = [
         {
             "loc": list(err.get("loc", [])),
@@ -222,27 +197,9 @@ async def canvas_corrupted_handler(request: Request, exc: CanvasCorruptedError):
     )
 
 
-# Handler per MemoryLimitExceededError:
-# Mappa l'eccezione pura sollevata dai guard OOM nel dual-shape
-# envelope. Status code dipende dallo stage:
-# - file preflight (load_dataframe_from_file): 413 Payload Too Large
-#   (il client ha inviato un input troppo grande).
-# - worker RSS (pipeline_execute, ecc.): 503 Service Unavailable
-#   (il worker e' sovraccaricato, riprovare dopo).
-#
-# Stable details shape: stage / limit_bytes / observed_bytes /
-# limit_mb / observed_mb / suggested_action / resource. Permette
-# al FE di mostrare un messaggio uniforme. NESSUN absolute path.
-#
-# BE-GO-READY-TRANSFORMATION-ENGINE-001-CROSS-JOIN-GUARD: lo stage
-# `manipola_cross_join` riusa lo stesso contratto ma carries row
-# counts (non bytes) in observed/limit_bytes. Il messaggio e'
-# row-count-aware; details aggiunge `limit_rows`/`observed_rows`
-# per FE convenience (le 7 chiavi base restano stabili).
-# BE-GO-READY-TRANSFORMATION-ENGINE-002-MULTI-JOIN-ROW-ESTIMATE:
-# stage `manipola_multi_join` aggiunto al row-count set per il
-# guard pre-merge del multi-join sequenziale (executor.py).
-# Il messaggio differenzia la remediation multi-join via stage.
+# Handler per MemoryLimitExceededError.
+# Mappa i guard OOM su 413 per input troppo grandi e 503 per worker saturi.
+# Gli stage row-count riusano lo stesso envelope senza esporre path assoluti.
 _RSS_STAGES = frozenset({"pipeline_execute", "worker_rss"})
 _ROW_COUNT_STAGES = frozenset({"manipola_cross_join", "manipola_multi_join"})
 
@@ -255,9 +212,7 @@ async def memory_limit_exceeded_handler(
     suggested_action = "retry_later_or_contact_admin" if is_rss else "split_file_or_contact_admin"
     is_row_count = exc.stage in _ROW_COUNT_STAGES
     if is_row_count:
-        # Row-count stages (cross-join): observed/limit_bytes carry
-        # row counts. Override action label to reflect the user
-        # remediation (split/filter inputs, not "split file").
+        # Gli stage row-count chiedono riduzione input o cap dedicato.
         suggested_action = "reduce_inputs_or_raise_cap"
     logger.warning(
         "Memory limit exceeded in stage=%s resource=%s observed=%d limit=%d status=%d",
@@ -271,9 +226,7 @@ async def memory_limit_exceeded_handler(
             f"{limit_mb} MB). Riprova piu' tardi o contatta l'amministratore."
         )
     elif is_row_count:
-        # Stage-specific narrative: i numeri rappresentano row counts
-        # (osservato vs limite), MB nei _mb fields non rilevanti per
-        # il branch row-count.
+        # Qui observed/limit rappresentano righe, non byte.
         if exc.stage == "manipola_multi_join":
             _verb = "genererebbe"
             _hint = (
@@ -282,7 +235,7 @@ async def memory_limit_exceeded_handler(
                 "su chiavi non-unique a monte, oppure alza il cap."
             )
         else:
-            # cross-join (default row-count narrative).
+            # Cross-join: narrativa row-count standard.
             _verb = "genererebbe"
             _hint = (
                 "Riduci la dimensione degli input (filtri/aggregazioni "
@@ -310,7 +263,7 @@ async def memory_limit_exceeded_handler(
         "resource": exc.path_basename,
     }
     if is_row_count:
-        # Additive keys, the 7 base keys above remain stable.
+        # Chiavi additive: le chiavi base dell'envelope restano stabili.
         details["limit_rows"] = exc.limit_bytes
         details["observed_rows"] = exc.observed_bytes
     return build_error_response(
@@ -379,31 +332,31 @@ bind_router_services(_runtime_services, ARRICCHISCI_BINDING)
 bind_router_services(_runtime_services, DATASOURCES_BINDING)
 bind_router_services(_runtime_services, CARICA_BINDING)
 bind_router_services(_runtime_services, ORCHESTRATOR_BINDING)
-# features: usa lazy init interno, nessuna init_* necessaria
+# Features usa lazy init interno.
 
 
-# Auth (auth in signature di ogni endpoint)
+# Auth.
 app.include_router(auth_router, prefix="/api")
 app.include_router(users_router, prefix="/api")
 app.include_router(groups_router, prefix="/api")
 app.include_router(shares_router, prefix="/api")
 
-# Connections (auth dichiarata in signature di ogni endpoint)
+# Connections.
 app.include_router(connections_router, prefix="/api")
 
-# Projects (CRUD + canvas + schema)
+# Projects: CRUD, canvas e schema.
 app.include_router(projects_router, prefix="/api")
 
 # Files
 app.include_router(files_router, prefix="/api")
 
-# Estrai (functions catalog + translate)
+# Estrai: catalogo funzioni e traduzione query.
 app.include_router(functions_router, prefix="/api")
 
-# Manipola (transforms registry)
+# Manipola: registry trasformazioni.
 app.include_router(transforms_router, prefix="/api")
 
-# Arricchisci (enrichment + api-connections + templates)
+# Arricchisci: enrichment, api-connections e template.
 app.include_router(enrichment_router, prefix="/api")
 app.include_router(api_connections_router, prefix="/api")
 app.include_router(templates_router, prefix="/api")
@@ -412,17 +365,17 @@ app.include_router(enrich_router, prefix="/api")
 # Carica
 app.include_router(carica_router, prefix="/api")
 
-# Features (ArcGIS Feature Service: connessioni, browse, query, write)
+# Features: ArcGIS Feature Service, browse, query e write.
 app.include_router(features_router, prefix="/api")
 
 # Scheduler
 app.include_router(schedules_router, prefix="/api")
 
-# Orchestrator (execute + preview + download + tasks)
+# Orchestrator: execute, preview, download e task.
 app.include_router(pipeline_router, prefix="/api")
 app.include_router(tasks_router, prefix="/api")
 
-# Logs (consultazione dal frontend)
+# Logs: consultazione dal frontend.
 app.include_router(logs_router, prefix="/api")
 app.include_router(runs_router, prefix="/api")
 
@@ -430,19 +383,19 @@ app.include_router(runs_router, prefix="/api")
 app.include_router(datasources_router, prefix="/api")
 app.include_router(intermediate_router, prefix="/api")
 
-# Eseguibili (catene on-demand)
+# Eseguibili: catene on-demand.
 app.include_router(eseguibili_router, prefix="/api")
 
-# IMDF (publish async su ArcGIS)
+# IMDF: publish async su ArcGIS.
 app.include_router(imdf_router, prefix="/api")
 
-# Admin Backups (superadmin only)
+# Admin Backups: superadmin only.
 app.include_router(admin_backups_router, prefix="/api")
 
-# Admin System Status dashboard (superadmin only)
+# Admin System Status dashboard: superadmin only.
 app.include_router(admin_system_status_router, prefix="/api")
 
-# Tickets (tech_debt + user_support, RBAC nel router)
+# Tickets: tech debt e user support, RBAC nel router.
 app.include_router(tickets_router, prefix="/api")
 
 
@@ -452,17 +405,13 @@ def root():
     return {"status": "ok", "service": "PLENORA-ETL API"}
 
 
-# BE-GO-READY-BOOTSTRAP-ENGINE-009-HEALTH-EXTRACTION:
-# Le 4 funzioni `_check_*` + payload composer sono state estratte in
-# `app/observability/health.py`. Le route restano qui per preservare
-# il routing wiring FastAPI; delegano a `gather_liveness` /
-# `gather_readiness` che restituiscono `HealthPayload` typed.
+# Le route health restano nel composition root e delegano a observability.
 from app.observability.health import gather_liveness, gather_readiness
 
 
 @app.get("/health")
 def health():
-    """C8: liveness + dependency check (PG SELECT 1 + Redis PING).
+    """Liveness check con dipendenze critiche PG e Redis.
 
     Ritorna 200 se entrambe le dipendenze critiche rispondono, 503
     altrimenti. Pensato per load balancer / K8s readinessProbe.
@@ -473,7 +422,7 @@ def health():
 
 @app.get("/ready")
 def ready():
-    """C8: readiness check rigoroso. Include:
+    """Readiness check rigoroso. Include:
     - /health checks (PG + Redis)
     - headroom sul pool PG (non saturo)
     - migrations allineate al codice committato

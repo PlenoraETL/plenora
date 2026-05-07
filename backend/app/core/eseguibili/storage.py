@@ -17,17 +17,17 @@ logger = get_logger(__name__)
 
 
 # Prefix condiviso con la convenzione: separato dal backup bucket pattern
-# (urby_*.dump) cosi' le lifecycle rule possono essere distinte. Alias
+# urby_*.dump) cosi' le lifecycle rule possono essere distinte. Alias
 # modulare verso `app.shared.storage_layout.ESEGUIBILI_OUTPUTS_PREFIX`
-# (BE-DATA-PLANE-001A): single source-of-truth per i prefix object
-# storage.
+# BE-DATA-PLANE-001A): single source-of-truth per i prefix object
+# storage
 PREFIX = ESEGUIBILI_OUTPUTS_PREFIX
 
 
 def _storage():
     """Lazy load della factory cloud (evita hard dep su boto3 ai test unit).
 
-    Batch 1.5: passa per `get_runtime_object_storage`. Solleva
+    passa per `get_runtime_object_storage`. Solleva
     `ObjectStorageDisabledError` se la capability globale e' off; il
     caller (write/upload eseguibili output) deve trattarlo come
     "feature non disponibile" (eseguibili senza storage non possono
@@ -71,11 +71,11 @@ def save(task_id: str, src_path: Path) -> str:
     storage.upload(src_path, key)
 
     # Delete eager del local file dopo upload riuscito. Se l'upload fallisce
-    # (exception sopra), il file resta su disco per retry manuale.
+    # exception sopra), il file resta su disco per retry manuale
     try:
         src_path.unlink()
         # Cleanup parent directory se vuota (evita accumulo di dir orfane
-        # tipo DATA_DIR/temp/urby_<pid>_<hash>/ che non servono piu').
+        # tipo DATA_DIR/temp/urby_<pid>_<hash>/ che non servono piu'
         parent = src_path.parent
         if parent.exists() and not any(parent.iterdir()):
             parent.rmdir()

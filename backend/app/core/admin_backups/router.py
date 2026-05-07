@@ -28,15 +28,15 @@ def list_backups_endpoint(
 ) -> Dict[str, Any]:
     """Lista dei dump presenti nel bucket S3."""
     # FIXME: #4 (2026-04-23): dep runtime mancante (botocore[crt]) -> 503
-    # esplicito invece di lista vuota fuorviante.
+    # esplicito invece di lista vuota fuorviante
     # RB.2 (2026-04-27): credenziali AWS scadute -> 503 strutturato con
     # messaggio operativo (cattura LoginRefreshRequired / NoCredentialsError /
-    # TokenRetrievalError / AccessDenied refresh-token, vedi service.py).
+    # TokenRetrievalError / AccessDenied refresh-token, vedi service.py
     try:
         items = service.list_backups()
     except AdminBackupDisabledError as e:
-        # Batch 1.5: capability object storage off -> feature non
-        # disponibile. NON e' lo stesso di "credenziali scadute".
+        # capability object storage off -> feature non
+        # disponibile. NON e' lo stesso di "credenziali scadute"
         raise HTTPException(
             status_code=503,
             detail={
@@ -95,8 +95,8 @@ def backup_trigger_endpoint(
     # `audit_action` legge il `user_id` dal kwarg `current_user` (vedi
     # audit_action.py:147). Senza il rename, l'audit row registrava
     # `user_id=NULL` proprio sul trigger super-admin, dove la forensics
-    # "chi ha lanciato il backup" e' la sola informazione interessante.
-    # RBAC invariato: la dependency e' sempre `require_superadmin`.
+    # "chi ha lanciato il backup" e' la sola informazione interessante
+    # RBAC invariato: la dependency e' sempre `require_superadmin`
     current_user: CurrentUser = Depends(require_superadmin),
 ) -> Dict[str, Any]:
     """Lancia un backup manuale on-demand. Rifiuta se gia' in corso."""

@@ -15,9 +15,9 @@ from datetime import datetime
 ScheduleStatus = Literal[
     "idle",         # ⚪ In attesa del prossimo trigger
     "running",      # 🔵 Pipeline in esecuzione
-    "queued",       # 🟡 In coda (precedente in corso)
+    "queued",       # 🟡 In coda (precedente in corso
     "completed",    # 🟢 Ultimo run OK
-    "partial",      # 🟠 Ultimo run con warning (righe skipped)
+    "partial",      # 🟠 Ultimo run con warning (righe skipped
     "failed",       # 🔴 Ultimo run fallito
     "disabled",     # ⏸️ Disabilitato dall'utente
     "orphan"        # 💀 Progetto eliminato, schedule disabilitato
@@ -86,14 +86,14 @@ class ScheduleDestination(BaseModel):
 
     I campi rispecchiano la configurazione del nodo CARICA nel canvas.
     """
-    connection_id: str                  # ID connessione database (riusa quelle di ESTRAI)
-    schema_name: Optional[str] = None   # Schema destinazione (public, dbo, afm...)
+    connection_id: str                  # ID connessione database (riusa quelle di ESTRAI
+    schema_name: Optional[str] = None   # Schema destinazione (public, dbo, afm
     table_name: str                     # Nome tabella destinazione
     write_mode: Literal[
         "create", "replace", "append", "upsert", "update", "truncate_insert"
     ] = "create"
     match_columns: List[str] = []       # Colonne per UPSERT/UPDATE match
-    update_columns: List[str] = []      # Colonne da aggiornare (vuoto = tutte)
+    update_columns: List[str] = []      # Colonne da aggiornare (vuoto = tutte
     geometry_srid: Optional[int] = None # SRID per colonne geometriche
     batch_size: int = 1000              # Righe per batch
 
@@ -156,7 +156,7 @@ class LastExecution(BaseModel):
     status: Literal["completed", "partial", "failed"]
     rows_written: int = 0
     duration_ms: int = 0
-    log_file: str = ""                  # Percorso relativo al log (es. "2026-02-07/sched_abc_030000.json")
+    log_file: str = ""                  # Percorso relativo al log (es. "2026-02-07/sched_abc_030000.json"
 
 
 class ScheduleRuntime(BaseModel):
@@ -218,7 +218,7 @@ class ScheduleConfig(BaseModel):
     # Modalità esecuzione
     execution: ScheduleExecution = ScheduleExecution()
 
-    # Destinazione CARICA (opzionale — null = solo file)
+    # Destinazione CARICA (opzionale — null = solo file
     destination: Optional[ScheduleDestination] = None
 
     # Policy
@@ -227,10 +227,10 @@ class ScheduleConfig(BaseModel):
     on_error: ScheduleErrorPolicy = ScheduleErrorPolicy()
     conflict_policy: ScheduleConflictPolicy = ScheduleConflictPolicy()
 
-    # Dipendenze (previste, non implementate v1)
+    # Dipendenze (previste, non implementate v1
     depends_on_pipeline: Optional[str] = None
 
-    # Stato runtime (gestito internamente)
+    # Stato runtime (gestito internamente
     runtime: ScheduleRuntime = ScheduleRuntime()
 
 
@@ -268,7 +268,7 @@ class ScheduleCreate(BaseModel):
     log_skipped_rows: bool = True
     concurrency_max_queue: int = Field(3, ge=1, le=20)
 
-    # Campi flat opzionali dal frontend (usati dal validator sotto)
+    # Campi flat opzionali dal frontend (usati dal validator sotto
     connection_id: Optional[str] = Field(None, max_length=100)
     schema_name: Optional[str] = Field(None, max_length=255)
     table_name: Optional[str] = Field(None, max_length=255)
@@ -308,7 +308,7 @@ class ScheduleCreate(BaseModel):
             if "use_cache" in exe and "use_cache" not in data:
                 data["use_cache"] = exe["use_cache"]
             # concurrency_max_queue arriva da execution.concurrency_max_queue oppure
-            # da concurrency.max_queue_size (i due wizard step)
+            # da concurrency.max_queue_size (i due wizard step
             if "concurrency_max_queue" in exe and "concurrency_max_queue" not in data:
                 data["concurrency_max_queue"] = exe["concurrency_max_queue"]
 
@@ -319,7 +319,7 @@ class ScheduleCreate(BaseModel):
                 if k in on_err and k not in data:
                     data[k] = on_err[k]
 
-        # concurrency.max_queue_size → concurrency_max_queue (top level)
+        # concurrency.max_queue_size → concurrency_max_queue (top level
         conc = data.get("concurrency")
         if isinstance(conc, dict) and "max_queue_size" in conc and "concurrency_max_queue" not in data:
             data["concurrency_max_queue"] = conc["max_queue_size"]

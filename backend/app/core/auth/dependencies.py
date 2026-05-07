@@ -1,7 +1,6 @@
 """
 FastAPI auth dependencies - canonical leaf.
 
-BE-GO-READY-AUTH-ENGINE-013-ROUTER-IMPORTS-OFF-AUTH-FACADE.
 """
 
 from __future__ import annotations
@@ -43,11 +42,11 @@ def get_current_user(
     payload = decode_token(credentials.credentials)
     if payload is None:
         _disclosure.raise_disclosure(_disclosure.token_invalid())
-    # Blacklist check: se il jti e' stato revocato via /auth/logout,
+    # Blacklist check: se il jti e' stato revocato via /auth/logout
     # rifiuta anche se la signature+exp sarebbero valide. Precede la
-    # query DB (piu' economico di un SELECT users).
+    # query DB (piu' economico di un SELECT users
     # Backward compat: token pre-rollout jti non hanno la claim -> None
-    # -> `is_jti_blacklisted(None)` False -> passa, come prima.
+    # > `is_jti_blacklisted(None)` False -> passa, come prima
     from app.shared.token_blacklist import is_jti_blacklisted
     if is_jti_blacklisted(payload.get("jti")):
         _disclosure.raise_disclosure(_disclosure.token_revoked())

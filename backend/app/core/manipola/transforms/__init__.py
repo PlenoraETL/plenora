@@ -42,7 +42,7 @@ from .base import (
     op_string_extract,
 )
 
-# Alias: op_concat e' sinonimo di op_union (unione verticale di DataFrame)
+# Alias: op_concat e' sinonimo di op_union (unione verticale di DataFrame
 from .base import op_union as op_concat  # noqa: F401
 
 # ── Trasformazioni spaziali ──────────────────────────────────────────────────

@@ -135,8 +135,8 @@ class FTPDataSource(DataSourceInterface):
             }
         except DataSourceConnectionError as e:
             # F5-B2: `e` qui e' il nostro wrapper con messaggio gia' canonico
-            # (vedi connect() + _sanitize_ftp_error), quindi str(e) e' safe.
-            # Log dettaglio tecnico dell'eventuale original cause.
+            # vedi connect + _sanitize_ftp_error), quindi str(e) e' safe
+            # Log dettaglio tecnico dell'eventuale original cause
             logger.warning(
                 f"[GESTITO] FTP test_connection fallita: {type(e).__name__}: {e} "
                 f"(cause: {type(e.__cause__).__name__ if e.__cause__ else 'none'})",
@@ -202,7 +202,7 @@ class FTPDataSource(DataSourceInterface):
             name = full_name.split("/")[-1]
             if not self._matches_pattern(name, pattern):
                 continue
-            # intent: optional feature / outcome: fail-open (entry skip su NLST metadata)
+            # intent: optional feature / outcome: fail-open (entry skip su NLST metadata
             try:
                 size = self._ftp.size(full_name) or 0
                 mdtm = self._ftp.sendcmd(f"MDTM {full_name}")
@@ -320,7 +320,7 @@ class FTPDataSource(DataSourceInterface):
     def _maybe_hash(self, path: str, include_hash: bool) -> Optional[str]:
         if not include_hash:
             return None
-        # intent: optional feature / outcome: fail-open (hash opzionale)
+        # intent: optional feature / outcome: fail-open (hash opzionale
         try:
             return self._compute_hash(self.read_file(path))
         except Exception as e:
@@ -336,7 +336,7 @@ class FTPDataSource(DataSourceInterface):
         current = ""
         for part in parts:
             current = f"{current}/{part}" if current else part
-            # intent: optional feature / outcome: fail-open (mkdir idempotent — dir esistente)
+            # intent: optional feature / outcome: fail-open (mkdir idempotent — dir esistente
             try:
                 self._ftp.mkd(current)
             except ftplib.error_perm as e:

@@ -1,5 +1,5 @@
 """
-Mixin BATCH_MODE — esecuzione batch native API per
+Mixin BATCH_MODE — esecuzione API per
 
 `EnrichmentExecutor`: invio array di input + processing risultati
 """
@@ -25,14 +25,14 @@ from app.core.arricchisci.models import (
 # Stesso logger name di `enrichment_service.py` (`__name__` valuta a
 # `"app.core.arricchisci.enrichment_service"`). Singleton stdlib per
 # nome → record indistinguibili dai consumer che attaccano handler /
-# filtrano per nome canonico.
+# filtrano per nome canonico
 logger = get_logger("app.core.arricchisci.enrichment_service")
 
 
 class EnrichmentBatchModeMixin:
     """Mixin per `EnrichmentExecutor`: batch native API path. Sync.
     Zero cache, zero async. Retry chain HTTP completo + 429 +
-    fallback row-by-row su batch fail.
+    fallback row-by-row su
     """
 
     def _execute_batch_native(
@@ -40,10 +40,10 @@ class EnrichmentBatchModeMixin:
         df: pd.DataFrame
     ) -> Tuple[pd.DataFrame, EnrichmentStats, List[RowError]]:
         """
-        Esecuzione con batch API native.
+        Esecuzione con native.
 
         Per API che supportano array di input in singola chiamata:
-        - Raggruppa righe in batch di max_size
+        - Raggruppa righe in max_size
         - Invia singola richiesta per batch
         - Mappa risposte alle righe originali
         """
@@ -93,9 +93,9 @@ class EnrichmentBatchModeMixin:
             stats.api_calls_made += 1
 
             if batch_error:
-                # Errore su tutto il batch: se continue_on_error e batch>1,
+                # Errore su tutto il batch: se continue_on_error e batch>1
                 # fallback a chiamate row-by-row per isolare le righe buone
-                # dalle cattive (es. 1 riga malformata che rompe un batch da 100).
+                # dalle cattive (es. 1 riga malformata che rompe un 100
                 if self.options.continue_on_error and len(batch) > 1:
                     logger.warning(
                         f"Batch di {len(batch)} fallito ({batch_error.error_type}), "
@@ -130,7 +130,7 @@ class EnrichmentBatchModeMixin:
                             ))
                             stats.errors += 1
                 else:
-                    # Errore bloccante o batch singolo: conta tutto come errore
+                    # Errore bloccante o conta tutto come errore
                     for idx in batch_indices:
                         errors.append(RowError(
                             row_index=idx,
@@ -158,7 +158,7 @@ class EnrichmentBatchModeMixin:
                             ))
                             stats.errors += 1
                     else:
-                        # Risposta batch più corta dell'input
+                        # Risposta ù corta dell'input
                         errors.append(RowError(
                             row_index=idx,
                             status=RowStatus.ERROR,
@@ -186,7 +186,7 @@ class EnrichmentBatchModeMixin:
         batch_indices: List[int]
     ) -> Tuple[Optional[List[Dict]], Optional[RowError]]:
         """
-        Chiama API batch con retry.
+        Chiama API retry.
 
         Args:
             batch_params: Lista di parametri per ogni riga
@@ -198,7 +198,7 @@ class EnrichmentBatchModeMixin:
         # Costruisci payload batch
         payload = self._build_batch_payload(batch_params)
 
-        # URL e metodo (con possibile override)
+        # URL e metodo (con possibile override
         url = self.batch_config.endpoint_override or self.url
         method = (self.batch_config.method_override or self.method).upper()
 
@@ -375,7 +375,7 @@ class EnrichmentBatchModeMixin:
                 for mapping in self.output_mapping:
                     path = mapping.get("path", "")
                     col_name = mapping.get("column", path)
-                    # Per batch, il path è relativo all'elemento (senza [0])
+                    # Per batch, il path è relativo all'elemento (senza [0
                     clean_path = path.lstrip("[0].")
                     result[col_name] = self._extract_json_value(item, clean_path)
                 extracted.append(result)

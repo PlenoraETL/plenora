@@ -29,11 +29,11 @@ class QueryGenerator:
     """
 
     def __init__(self, db_type: str = 'postgres'):
-        # Contatore incrementale per generare nomi parametri unici (:p_0, :p_1, ...)
+        # Contatore incrementale per generare nomi parametri unici (:p_0, :p_1
         self._param_counter = 0
         # Tipo database per la traduzione di funzioni SQL
         self.db_type = db_type
-        # Schema database (es. dbo per SQL Server, public per PostgreSQL)
+        # Schema database (es. dbo per SQL Server, public per PostgreSQL
         self.db_schema = None
 
     # METODO PRINCIPALE
@@ -69,7 +69,7 @@ class QueryGenerator:
         if db_type:
             self.db_type = db_type
         
-        # Imposta lo schema (con default per database type)
+        # Imposta lo schema (con default per database type
         self.db_schema = db_schema
         if not self.db_schema:
             self.db_schema = self._get_default_schema()
@@ -85,7 +85,7 @@ class QueryGenerator:
         table_nodes = self._trova_tabelle_connesse(nodes, edges, result_node_id)
         table_nodes.reverse()
         
-        # Riordina i nodi per rispettare le dipendenze dei JOIN:
+        # Riordina i nodi per rispettare le dipendenze dei JOIN
         # ogni tabella JOINata deve referenziare solo tabelle già presenti nel FROM
         table_nodes = self._riordina_per_dipendenze_join(table_nodes, edges)
 
@@ -133,7 +133,7 @@ class QueryGenerator:
         
         if db in ('mssql', 'sqlserver'):
             return 'dbo'
-        # PostgreSQL non richiede obbligatoriamente lo schema public.
+        # PostgreSQL non richiede obbligatoriamente lo schema public
         else:
             return None
 
@@ -311,7 +311,7 @@ class QueryGenerator:
                 continue
             visited.add(current_id)
 
-            # Trova edges entranti (target = nodo corrente)
+            # Trova edges entranti (target = nodo corrente
             incoming_edges = [e for e in edges if e.target == current_id]
 
             for edge in incoming_edges:
@@ -348,7 +348,7 @@ class QueryGenerator:
         node_ids = {n.id for n in table_nodes}
         
         # Trova la root: nodo che non è target di nessun edge tra nodi tabella
-        # (escludi edges verso resultNode, carica, ecc.)
+        # escludi edges verso resultNode, carica, ecc
         target_ids_of_table_edges = set()
         for e in edges:
             if e.source in node_ids and e.target in node_ids:
@@ -411,17 +411,17 @@ class QueryGenerator:
         """
         Genera la clausola SELECT con colonne visibili, alias e colonne calcolate.
 
-        Se GROUP BY è attivo, delega a _genera_select_con_groupby().
+        Se GROUP BY è attivo, delega a _genera_select_con_groupby.
         Altrimenti genera un SELECT normale con:
         - Colonne visibili (con eventuale alias)
-        - Colonne geometriche wrappate in ST_AsText()
+        - Colonne geometriche wrappate in ST_AsText
         - Colonne calcolate tradotte tramite sql_functions
         """
         # Se GROUP BY è attivo, usa il generatore specifico
         if group_by_config and group_by_config.get("enabled"):
             return self._genera_select_con_groupby(table_nodes, group_by_config)
 
-        # SELECT normale (senza GROUP BY)
+        # SELECT normale (senza GROUP BY
         columns = []
 
         for node in table_nodes:
@@ -463,7 +463,7 @@ class QueryGenerator:
                         # SQL manuale: usa l'espressione così com'è
                         sql_expr = calc_col['sql']
                     elif calc_col.get('function_name') and calc_col.get('params'):
-                        # Formato preferito: function_name + params (database-agnostic)
+                        # Formato preferito: function_name + params (database-agnostic
                         sql_expr = translate_calculated_column(
                             db_type=self.db_type,
                             column_name=calc_col['name'],
@@ -474,7 +474,7 @@ class QueryGenerator:
                             table_alias=table_alias
                         )
                     elif calc_col.get('expression') and isinstance(calc_col['expression'], dict):
-                        # Fallback: expression come dizionario (formato legacy)
+                        # Fallback: expression come dizionario (formato legacy
                         sql_expr = translate_calculated_column(
                             db_type=self.db_type,
                             column_name=calc_col['name'],
@@ -590,9 +590,9 @@ class QueryGenerator:
         if not columns:
             return ""
 
-        # Costruisci mappa colonna → alias tabella per qualificare.
-        # Filtra per visible=True, stesso criterio di _genera_select_con_groupby,
-        # così SELECT e GROUP BY usano sempre la stessa tabella per ogni colonna.
+        # Costruisci mappa colonna → alias tabella per qualificare
+        # Filtra per visible=True, stesso criterio di _genera_select_con_groupby
+        # così SELECT e GROUP BY usano sempre la stessa tabella per ogni colonna
         table_map = {}
         if table_nodes:
             for node in table_nodes:
@@ -660,7 +660,7 @@ class QueryGenerator:
                         if col_alias:
                             table_map[col_alias] = table_alias
 
-        # Set delle funzioni aggregate valide (per ORDER BY con GROUP BY)
+        # Set delle funzioni aggregate valide (per ORDER BY con GROUP BY
         aggregate_functions = {"COUNT", "SUM", "AVG", "MIN", "MAX"}
 
         parti = []
@@ -673,14 +673,14 @@ class QueryGenerator:
             if direction not in ("ASC", "DESC"):
                 direction = "ASC"
 
-            # Controlla se è un'espressione aggregata (es. "COUNT(*)", "SUM(area)")
+            # Controlla se è un'espressione aggregata (es. "COUNT(*)", "SUM(area)"
             col_upper = col.upper().strip()
             is_aggregate = any(col_upper.startswith(f"{fn}(") for fn in aggregate_functions)
 
             if is_aggregate:
-                # Espressione aggregata: valida la struttura base prima dell'interpolazione.
-                # Pattern atteso: FUNC(identifier) — es. COUNT(*), SUM(area), AVG(col1)
-                # Rifiuta input che contengono SQL injection keywords.
+                # Espressione aggregata: valida la struttura base prima dell'interpolazione
+                # Pattern atteso: FUNC(identifier) — es. COUNT(*), SUM(area), AVG(col1
+                # Rifiuta input che contengono SQL injection keywords
                 import re as _re
                 if not _re.match(r'^[A-Z_]+\([a-zA-Z0-9_.*\s,]+\)$', col.strip()):
                     raise ValueError(f"Espressione aggregata ORDER BY non valida: {col}")
@@ -798,18 +798,18 @@ class QueryGenerator:
         if not table_nodes:
             raise ValueError("Nessuna tabella selezionata")
 
-        # Prima tabella → FROM (qualificata con schema)
+        # Prima tabella → FROM (qualificata con schema
         first_node = table_nodes[0]
         raw_name = self._get_node_table_name(first_node)
         qualified_table_name = self._qualify_table_name(raw_name) if first_node.type != 'datasource_node' else raw_name
         from_clause = qualified_table_name
         if first_node.alias:
-            # SECURITY: alias viene dal canvas (utente). Senza validazione,
-            # un utente potrebbe iniettare SQL via alias (es. "t1 WHERE 1=2--").
+            # SECURITY: alias viene dal canvas (utente). Senza validazione
+            # un utente potrebbe iniettare SQL via alias (es. "t1 WHERE 1=2--"
             self._safe_identifier(first_node.alias, "Alias tabella FROM")
             # Oracle (ORA-03048) vieta ` AS ` per alias di tabella; gli altri
             # DBMS supportati (postgres/mysql/mssql/sqlite) accettano anche
-            # la forma space-separated standard, quindi la usiamo ovunque.
+            # la forma space-separated standard, quindi la usiamo ovunque
             from_clause += f" {first_node.alias}"
 
         # Traccia nodi già nel FROM per scegliere l'edge corretto
@@ -886,10 +886,10 @@ class QueryGenerator:
             # C11: pre-fix qui emettevamo un CROSS JOIN silente, con rischio
             # di query cartesiane accidentali (3 tabelle da 1M righe senza
             # relazione → 10^18 righe richieste al DB). Ora rifiutiamo
-            # esplicitamente: se il cliente vuole davvero un CROSS JOIN,
+            # esplicitamente: se il cliente vuole davvero un CROSS JOIN
             # deve configurarlo in modo esplicito aggiungendo un edge
             # tra i due nodi con `join_type='cross'`. L'assenza totale di
-            # edge e' sempre un bug del canvas (nodo orfano).
+            # edge e' sempre un bug del canvas (nodo orfano
             raise ValueError(
                 f"Nodo tabella '{self._get_node_table_name(node)}' "
                 f"(id={node.id}) non ha alcun edge di relazione con le "
@@ -905,14 +905,14 @@ class QueryGenerator:
 
         if join_type not in ('LEFT', 'RIGHT', 'INNER', 'OUTER', 'FULL', 'FULL OUTER', 'CROSS'):
             join_type = 'LEFT'
-        # Normalizza FULL e OUTER → FULL OUTER (sintassi SQL standard)
+        # Normalizza FULL e OUTER → FULL OUTER (sintassi SQL standard
         if join_type in ('FULL', 'OUTER'):
             join_type = 'FULL OUTER'
 
         # C11-nit: CROSS JOIN esplicito e' gestito subito — SQL standard
         # rifiuta `CROSS JOIN t ON ...` (il CROSS non ha condizione di
         # join), quindi ritorniamo la clausola senza ON prima di
-        # calcolare on_clause (che per CROSS sarebbe vuoto/errato).
+        # calcolare on_clause (che per CROSS sarebbe vuoto/errato
         if join_type == 'CROSS':
             join_str = f"CROSS JOIN {qualified_table_name}"
             if node.alias:
@@ -922,7 +922,7 @@ class QueryGenerator:
 
         table_alias = node.alias or self._get_node_table_name(node)
 
-        # Determina il nodo "altro" (quello già nel FROM / JOIN precedenti)
+        # Determina il nodo "altro" (quello già nel FROM / JOIN precedenti
         # e se l'edge è invertito rispetto alla direzione del JOIN
         if edge.target == node.id:
             # Caso normale: edge punta VERSO questo nodo
@@ -952,7 +952,7 @@ class QueryGenerator:
         # Assembla la clausola JOIN
         join_str = f"{join_type} JOIN {qualified_table_name}"
         if node.alias:
-            # SECURITY: alias validato come identifier (anti SQL injection)
+            # SECURITY: alias validato come identifier (anti SQL injection
             self._safe_identifier(node.alias, "Alias tabella JOIN")
             join_str += f" {node.alias}"
         join_str += f" ON {on_clause}"
@@ -964,8 +964,8 @@ class QueryGenerator:
         Genera la condizione ON per un join spaziale.
 
         Usa sql_translator per produrre la sintassi corretta per ogni database:
-        - Con distanza: build_buffer_join() → ST_Intersects(a.geom, ST_Buffer(b.geom, dist))
-        - Senza distanza: get_spatial_predicate() → ST_Intersects(a.geom, b.geom)
+        - Con distanza: build_buffer_join → ST_Intersects(a.geom, ST_Buffer(b.geom, dist))
+        - Senza distanza: get_spatial_predicate → ST_Intersects(a.geom, b.geom)
         """
         spatial_predicate = getattr(edge, 'spatial_predicate', 'ST_Intersects')
         source_geom = getattr(edge, 'source_geom_column', 'geom')
@@ -986,7 +986,7 @@ class QueryGenerator:
 
             if predicate_key == 'dwithin':
                 # ST_DWithin: la distanza è il terzo parametro, non un buffer
-                # ST_DWithin(geom1, geom2, distance) ≠ ST_Intersects(geom1, ST_Buffer(geom2, dist))
+                # ST_DWithin(geom1, geom2, distance) ≠ ST_Intersects(geom1, ST_Buffer(geom2, dist
                 dist = spatial_distance or 0
                 return sql_translator.get_spatial_predicate(
                     predicate='dwithin',
@@ -995,7 +995,7 @@ class QueryGenerator:
                     distance=dist
                 )
             else:
-                # Tutti gli altri predicati (intersects, contains, within, touches, overlaps)
+                # Tutti gli altri predicati (intersects, contains, within, touches, overlaps
                 # non usano distanza — spatial_distance viene ignorato se presente
                 return sql_translator.get_spatial_predicate(
                     predicate=predicate_key,
@@ -1003,9 +1003,9 @@ class QueryGenerator:
                     geom1=geom1, geom2=geom2
                 )
         except (ValueError, KeyError, AttributeError):
-            # Fallback: sintassi PostGIS standard.
+            # Fallback: sintassi PostGIS standard
             # SECURITY: spatial_distance e spatial_predicate vengono dal canvas
-            # (utente) → vanno sanitizzati prima dell'interpolazione nel SQL.
+            # utente) → vanno sanitizzati prima dell'interpolazione nel SQL
             _VALID_SPATIAL_PREDICATES = {
                 'ST_Intersects', 'ST_Contains', 'ST_Within', 'ST_Touches',
                 'ST_Overlaps', 'ST_Crosses', 'ST_DWithin', 'ST_Equals',
@@ -1060,8 +1060,8 @@ class QueryGenerator:
             
             for cond in valid_conditions:
                 if is_reversed:
-                    # Edge invertito: source_column dell'edge si riferisce al nodo corrente (table_alias)
-                    # e target_column si riferisce al nodo già processato (source_alias)
+                    # Edge invertito: source_column dell'edge si riferisce al nodo corrente (table_alias
+                    # e target_column si riferisce al nodo già processato (source_alias
                     src_col = cond['target_column']
                     tgt_col = cond['source_column']
                     src_func = cond.get('target_func', '')
@@ -1096,9 +1096,9 @@ class QueryGenerator:
                 parts.append(f"{source_alias}.{source_col} = {table_alias}.{target_col}")
 
         # Filtri ON aggiuntivi
-        # I filtri sono configurati sulle colonne della tabella TARGET dell'edge.
-        # Se l'edge è invertito, la tabella target dell'edge è il nodo "altro" (source_alias),
-        # non il nodo corrente (table_alias).
+        # I filtri sono configurati sulle colonne della tabella TARGET dell'edge
+        # Se l'edge è invertito, la tabella target dell'edge è il nodo "altro" (source_alias
+        # non il nodo corrente (table_alias
         on_filters = getattr(edge, 'on_filters', None)
         if on_filters and len(on_filters) > 0:
             filter_table_alias = source_alias if is_reversed else table_alias
@@ -1117,9 +1117,9 @@ class QueryGenerator:
                 # Costruisci espressione colonna con funzione opzionale
                 col_expr = self._wrap_col_with_func(f"{filter_table_alias}.{col}", func)
                 
-                # Validazione operatore: whitelist strict.
+                # Validazione operatore: whitelist strict
                 # Senza whitelist, un utente potrebbe iniettare un operatore
-                # arbitrario (es. "= '1'; DROP TABLE --") nel canvas.
+                # arbitrario (es. "= '1'; DROP TABLE --") nel canvas
                 _VALID_ON_OPERATORS = {
                     '=', '!=', '<>', '>', '<', '>=', '<=',
                     'LIKE', 'IN', 'IS NULL', 'IS NOT NULL',
@@ -1127,12 +1127,12 @@ class QueryGenerator:
                 if operator not in _VALID_ON_OPERATORS:
                     raise ValueError(f"Operatore ON filter non valido: {operator}")
 
-                # Costruisci condizione con escaping SQL strict.
+                # Costruisci condizione con escaping SQL strict
                 # NOTA: idealmente i filtri ON dovrebbero usare parametri
                 # preparati come i filtri WHERE (_crea_condizione). Ma i
                 # JOIN ON oggi sono assemblati come stringa pura: il
                 # replace ("'","''") e' il metodo standard SQL per
-                # escaping degli apici singoli e previene injection base.
+                # escaping degli apici singoli e previene injection base
                 if operator in ('IS NULL', 'IS NOT NULL'):
                     parts.append(f"{col_expr} {operator}")
                 elif operator == 'IN':
@@ -1219,12 +1219,12 @@ class QueryGenerator:
         Operatori supportati: =, !=, >, <, >=, <=, LIKE, IN, IS NULL, IS NOT NULL
 
         Gestione speciale per Oracle:
-        - Colonne CLOB/NCLOB vengono wrappate con TO_CHAR() perché Oracle
+        - Colonne CLOB/NCLOB vengono wrappate con TO_CHAR perché Oracle
           non permette confronti diretti su tipi LOB.
         """
         col_ref = f"{table_alias}.{column}"
 
-        # Oracle: wrappa colonne LOB con TO_CHAR() per permettere confronti
+        # Oracle: wrappa colonne LOB con TO_CHAR per permettere confronti
         db = self.db_type.lower() if self.db_type else 'postgres'
         col_type_upper = (column_type or '').upper()
         is_oracle_lob = (
@@ -1253,18 +1253,18 @@ class QueryGenerator:
             return f"{col_ref} LIKE :{param_name}"
 
 
-        # Se il valore è una funzione SQL nativa (es. GETDATE(), DATEADD(...), NOW())
+        # Se il valore è una funzione SQL nativa (es. GETDATE, DATEADD(...), NOW
         # lo inietta inline invece di parametrizzarlo — i parametri bind non supportano
-        # espressioni SQL, solo valori scalari.
+        # espressioni SQL, solo valori scalari
         if isinstance(value, str) and self._is_sql_function(value):
             translated = self._translate_date_function(value)
             return f"{col_ref} {operator} {translated}"
 
         param_name = self._prossimo_nome_param()
-        # Converti il valore al tipo Python corretto in base al tipo colonna.
+        # Converti il valore al tipo Python corretto in base al tipo colonna
         # I valori arrivano sempre come stringa dal frontend — senza conversione
         # PostgreSQL riceve '50' come stringa e fa confronto lessicografico invece
-        # che numerico (es. id < '50' esclude '6','7',... che sono > '50' come str).
+        # che numerico (es. id < '50' esclude '6','7',... che sono > '50' come str
         col_type_norm = (column_type or 'str').lower().split(':')[0]
         typed_value = value
         if col_type_norm in ('int', 'integer', 'bigint', 'smallint'):
@@ -1320,17 +1320,17 @@ class QueryGenerator:
                 re.IGNORECASE
             )
         # SECURITY: fullmatch (non match) per evitare che un prefisso valido
-        # seguito da SQL injection passi il check.
-        # Prima: match() matchava solo l'inizio → "GETDATE(); DROP TABLE--" passava.
-        # Ora: fullmatch() richiede che TUTTA la stringa sia una funzione valida.
-        # Per le funzioni con argomenti (DATEADD, etc.) il pattern termina con \(
-        # che non matcha con fullmatch. Usiamo match() + lunghezza safe check.
+        # seguito da SQL injection passi il check
+        # Prima: match matchava solo l'inizio → "GETDATE; DROP TABLE--" passava
+        # Ora: fullmatch richiede che TUTTA la stringa sia una funzione valida
+        # Per le funzioni con argomenti (DATEADD, etc.) il pattern termina con \
+        # che non matcha con fullmatch. Usiamo match + lunghezza safe check
         stripped = value.strip()
         if not cls._SQL_FUNCTION_RE.match(stripped):
             return False
         # Dopo il match del prefisso, verifica che il resto sia solo caratteri
-        # safe per argomenti di funzione SQL (digits, spazi, virgole, parentesi,
-        # apici singoli, nomi colonna). Rifiuta ; -- UNION SELECT ecc.
+        # safe per argomenti di funzione SQL (digits, spazi, virgole, parentesi
+        # apici singoli, nomi colonna). Rifiuta ; -- UNION SELECT ecc
         import re as _re
         _UNSAFE_SQL_PATTERN = _re.compile(
             r'(;|--|\bUNION\b|\bSELECT\b|\bDROP\b|\bINSERT\b|\bUPDATE\b|\bDELETE\b'
@@ -1350,16 +1350,16 @@ class QueryGenerator:
         indipendentemente da quale funzione ha generato Claude.
 
         Mapping astratto → per-DB:
-            NOW()                 → GETDATE() / NOW() / SYSDATE / NOW()
-            NOW + N months        → DATEADD / NOW()+INTERVAL / ADD_MONTHS / DATE_ADD
-            TODAY (date only)     → CAST(GETDATE() AS DATE) / CURRENT_DATE / TRUNC(SYSDATE)
+            NOW → GETDATE / NOW / SYSDATE / NOW
+            NOW + N months → DATEADD / NOW+INTERVAL / ADD_MONTHS / DATE_ADD
+            TODAY (date only) → CAST(GETDATE AS DATE) / CURRENT_DATE / TRUNC(SYSDATE)
         """
         import re
 
         v = value.strip()
         db = (self.db_type or 'postgres').lower()
 
-        # Mappa db_type → (now_fn, today_fn, add_months_fn_template)
+        # Mappa db_type → (now_fn, today_fn, add_months_fn_template
         _DIALECTS = {
             'mssql':    {
                 'now':       'GETDATE()',
@@ -1409,17 +1409,17 @@ class QueryGenerator:
         if m:
             return dialect['add_months'](m.group(1))
 
-        # DATE_ADD(NOW(), INTERVAL N MONTH) → add_months
+        # DATE_ADD(NOW, INTERVAL N MONTH) → add_months
         m = re.match(r'DATE_ADD\s*\(.*?INTERVAL\s+(\d+)\s+MONTH', v, re.IGNORECASE)
         if m:
             return dialect['add_months'](m.group(1))
 
-        # NOW() + INTERVAL 'N months' (PostgreSQL) → add_months
+        # NOW + INTERVAL 'N months' (PostgreSQL) → add_months
         m = re.match(r"NOW\s*\(\s*\)\s*\+\s*INTERVAL\s+'(\d+)\s+months?'", v, re.IGNORECASE)
         if m:
             return dialect['add_months'](m.group(1))
 
-        # CURRENT_DATE / CURDATE() / TRUNC(SYSDATE) → today
+        # CURRENT_DATE / CURDATE / TRUNC(SYSDATE) → today
         if re.match(r'CURRENT_DATE|CURDATE\s*\(\s*\)|TRUNC\s*\(\s*SYSDATE', v, re.IGNORECASE):
             return dialect['today']
 
@@ -1428,9 +1428,9 @@ class QueryGenerator:
             return dialect['now']
 
         # Fallback SICURO: rifiuta funzioni SQL non riconosciute invece di
-        # iniettarle raw. Prima: "return v" iniettava il valore intero nel SQL.
+        # iniettarle raw. Prima: "return v" iniettava il valore intero nel SQL
         # Se _is_sql_function ha matchato il prefisso ma nessun translate
-        # pattern lo riconosce, è meglio errore che injection.
+        # pattern lo riconosce, è meglio errore che injection
         raise ValueError(
             f"Funzione SQL '{v[:50]}' riconosciuta come funzione ma non traducibile "
             f"per il dialetto '{db}'. Usare una funzione supportata."
@@ -1483,7 +1483,7 @@ class QueryGenerator:
         """
         query = "SELECT "
 
-        # DISTINCT (non applicato se c'è GROUP BY)
+        # DISTINCT (non applicato se c'è GROUP BY
         if sql_parts.get('distinct') and not sql_parts.get('group_by'):
             query += "DISTINCT "
 

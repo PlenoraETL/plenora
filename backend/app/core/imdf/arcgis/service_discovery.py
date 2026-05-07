@@ -190,7 +190,7 @@ def _search_user_items(client, conn, fs_name: str) -> List[dict]:
         logger.info(f"_search_user_items: {len(matching)} match per title case-insensitive")
         return matching
 
-    # 3. name esatto (es. se fs_name e' il service name non il title)
+    # 3. name esatto (es. se fs_name e' il service name non il title
     matching = [it for it in fs_items
                 if (it.get("name") or "") == fs_name
                 or (it.get("name") or "").lower() == fs_name_lower]
@@ -198,7 +198,7 @@ def _search_user_items(client, conn, fs_name: str) -> List[dict]:
         logger.info(f"_search_user_items: {len(matching)} match per name")
         return matching
 
-    # 4. URL contiene fs_name (/services/{fs_name}/FeatureServer)
+    # 4. URL contiene fs_name (/services/{fs_name}/FeatureServer
     matching = [it for it in fs_items
                 if f"/services/{fs_name}/" in (it.get("url") or "")]
     if matching:

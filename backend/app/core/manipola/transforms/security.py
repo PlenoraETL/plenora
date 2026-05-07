@@ -16,8 +16,8 @@ logger = get_logger("app.core.manipola.transforms.base")
 DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
 
 
-# HASH MD5 (Rilevamento modifiche)
-# Calcola hash MD5 di colonne selezionate per change detection e anonimizzazione.
+# HASH MD5 (Rilevamento modifiche
+# Calcola hash MD5 di colonne selezionate per change detection e anonimizzazione
 
 def op_md5_hash(
     df: DataFrame,
@@ -59,12 +59,12 @@ def op_md5_hash(
     separator = "\x1f"  # Unit Separator — non appare nei dati reali
 
     try:
-        # Per-column prep vettoriale (pandas-native, non e' l'hotspot).
-        # Hotspot storico: il doppio passaggio .agg(join, axis=1) + .map(md5)
+        # Per-column prep vettoriale (pandas-native, non e' l'hotspot
+        # Hotspot storico: il doppio passaggio .agg(join, axis=1) + .map(md5
         # — due row-iter Python consecutivi. Qui li fondiamo in un singolo
-        # list-comp su numpy arrays: zip() itera in C, separator.join/
+        # list-comp su numpy arrays: zip itera in C, separator.join/
         # hashlib.md5/encode sono tutti C-impl nativi. Speedup tipico ~10x
-        # su 10k righe vs il legacy "agg+map".
+        # su 10k righe vs il legacy "agg+map"
         col_arrs: List[np.ndarray] = []
         for col in valid_columns:
             s = result[col]
@@ -97,7 +97,7 @@ def op_md5_hash(
 
 
 # MASCHERAMENTO DATI SENSIBILI
-# Nasconde dati sensibili con pattern (es: Mario Rossi → M**** R*****).
+# Nasconde dati sensibili con pattern (es: Mario Rossi → M**** R*****
 
 def _mask_cf(value: str) -> str:
     """Maschera codice fiscale: RSSMRA80A01H501Z → RSS***********01Z"""
@@ -146,18 +146,17 @@ def _mask_custom(value: str, chars_start: int = 3, chars_end: int = 3, mask_char
 
 
 # Mappa tipo mascheramento → funzione
-#
-# NOTE: questo dict viene re-exported da `base.py` via
+# NOTE: questo dict viene compatibility export da `base.py` via
 # `from .security import MASK_FUNCTIONS`. Il test contract
 # `tests2/manipola/unit/test_op_mask_data_fail_closed.py:69,110`
 # patcha `"app.core.manipola.transforms.base.MASK_FUNCTIONS"` con
 # `patch.dict` (NON `patch.object`). `patch.dict` muta il dict
 # in-place; poiche' `base.MASK_FUNCTIONS is security.MASK_FUNCTIONS`
-# (stesso oggetto), la mutazione e' visibile da `op_mask_data` qui
-# sotto che legge `MASK_FUNCTIONS` via module-level name lookup.
+# stesso oggetto), la mutazione e' visibile da `op_mask_data` qui
+# sotto che legge `MASK_FUNCTIONS` via module-level name lookup
 # NON convertire in `MASK_FUNCTIONS = MappingProxyType({...})` o
 # rebindare a un nuovo dict in qualunque punto della catena: il
-# patch contract dipende dall'identita' oggetto preservata.
+# patch contract dipende dall'identita' oggetto preservata
 MASK_FUNCTIONS = {
     'cf': _mask_cf,
     'email': _mask_email,

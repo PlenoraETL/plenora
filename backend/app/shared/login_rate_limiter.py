@@ -24,7 +24,7 @@ _TTL_BUFFER_SECONDS = 60
 _client_lock = threading.Lock()
 _client: Optional[Any] = None
 _client_explicit: bool = False
-# NOTE: emit-once: evita rumore su ogni request quando Redis e' giu'.
+# NOTE: emit-once: evita rumore su ogni request quando Redis e' giu'
 _warned_fallback: bool = False
 
 
@@ -48,13 +48,13 @@ def _get_client() -> Optional[Any]:
         except ImportError:
             return None
         try:
-            # Import locale per evitare import circolare con app.shared.
+            # Import locale per evitare import circolare con app.shared
             from app.config import settings
             # BE-CONFIG-001C: default tipato in `Settings.DEFAULTS`
-            # (`LOGIN_RL_REDIS_TIMEOUT_SEC=1`). `_converti_tipo_env`
+            # `LOGIN_RL_REDIS_TIMEOUT_SEC=1`). `_converti_tipo_env`
             # rifiuta env non numeriche tornando il default; il guard
             # `<= 0` resta come safety per valori legali ma non sensati
-            # (`0`, negativi).
+            # `0`, negativi
             try:
                 timeout = int(settings.get("LOGIN_RL_REDIS_TIMEOUT_SEC"))
                 if timeout <= 0:

@@ -218,7 +218,7 @@ async def update_schedule(schedule_id: str, data: ScheduleUpdate, current_user: 
 
         # Se cambia progetto, verifica che esista E appartenga al gruppo
         # dell'utente (altrimenti un owner di uno schedule del gruppo A
-        # puo' ricollegarlo a un progetto del gruppo B).
+        # puo' ricollegarlo a un progetto del gruppo B
         if data.project_id:
             from app.shared.authz_helpers import assert_project_access
             assert_project_access(data.project_id, current_user)
@@ -251,7 +251,7 @@ async def delete_schedule(schedule_id: str, current_user: CurrentUser = Depends(
     try:
         service = ScheduleService()
         service.delete_schedule(schedule_id)
-        # F2-B1 (2026-04-24): DELETE risponde 204 No Content, body vuoto.
+        # F2-B1 (2026-04-24): DELETE risponde 204 No Content, body vuoto
     except HTTPException:
         raise
     except Exception as e:
@@ -439,7 +439,7 @@ async def download_schedule_output(
         # Branch 2: senza parametro `run` → latest run archiviata di
         # QUESTO schedule. Niente `get_latest_result(project_id)`, che
         # ritornerebbe l'ultimo del progetto includendo anche altri
-        # schedule o esecuzioni manuali (race cross-schedule).
+        # schedule o esecuzioni manuali (race cross-schedule
         latest_run = catalog.latest_run_dir(project_id, schedule_id)
         if latest_run is None:
             raise HTTPException(
@@ -504,7 +504,7 @@ async def list_schedule_runs(schedule_id: str, current_user: CurrentUser = Depen
         runs = catalog.list_runs(project_id, schedule_id)
 
         # Serializza in JSON HTTP-friendly. `_format_size` resta nel router
-        # perche' e' un dettaglio di presentazione, non logica core.
+        # perche' e' un dettaglio di presentazione, non logica core
         return {
             "schedule_id": schedule_id,
             "project_id": project_id,

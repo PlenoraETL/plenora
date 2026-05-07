@@ -12,8 +12,8 @@ from typing import Literal
 PayloadTarget = Literal["db", "object_storage"]
 
 
-# Costanti policy: il caller normalizza l'env value e ce la passa.
-# Valori normalizzati ammessi (post-`strip().lower()`).
+# Costanti policy: il caller normalizza l'env value e ce la passa
+# Valori normalizzati ammessi (post-`strip.lower`
 POLICY_DB = "db"
 POLICY_OBJECT_STORAGE = "object_storage"
 POLICY_HYBRID = "hybrid"
@@ -33,7 +33,7 @@ def resolve_payload_target(
 
     Behavior bit-per-bit preservato:
 
-    - `policy == "db"`             -> sempre `"db"` (il caller applica
+    - `policy == "db"` -> sempre `"db"` (il caller applica
                                      l'eventuale hard cap come guard
                                      post-decisione separata).
     - `policy == "object_storage"` -> sempre `"object_storage"` (il caller
@@ -45,7 +45,7 @@ def resolve_payload_target(
                                      `"db"`.
 
     Il match policy e' case-insensitive con strip difensivo: replica il
-    `(settings.get(...) or "hybrid").strip().lower()` che i caller
+    `(settings.get(...) or "hybrid").strip.lower` che i caller
     esistenti gia' applicavano. Cosi' chiamate con `"DB"`/`" db "` non
     cadono silenziosamente nel ramo `else`.
 
@@ -75,7 +75,7 @@ def resolve_payload_target(
         return "db"
     if normalized == POLICY_OBJECT_STORAGE:
         return "object_storage"
-    # hybrid + qualunque altro valore (preserva il fallback pre-001B)
+    # hybrid + qualunque altro valore (preserva il fallback pre-001B
     if size_bytes >= threshold_bytes:
         return "object_storage"
     return "db"

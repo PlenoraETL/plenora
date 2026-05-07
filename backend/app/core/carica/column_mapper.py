@@ -12,7 +12,7 @@ import pandas as pd
 from app.core.carica.models import ColumnMapping
 
 
-# Nomi colonna che indicano una geometria (case-insensitive)
+# Nomi colonna che indicano una geometria (case-insensitive
 GEOMETRY_COLUMN_NAMES = {
     "geometry", "geom", "the_geom", "shape", "wkb_geometry",
     "geo", "spatial", "location", "coordinates",
@@ -77,7 +77,7 @@ class ColumnMapper:
                 col_name, df[col_name], canvas_types.get(col_name, "")
             )
 
-            # Estrai SRID dal tipo canvas (es. "geometry:point:4326" → 4326)
+            # Estrai SRID dal tipo canvas (es. "geometry:point:4326" → 4326
             col_srid = self._extract_srid(canvas_types.get(col_name, ""), srid)
 
             # Nome destinazione: match per nome o sanitizzato
@@ -221,7 +221,7 @@ class ColumnMapper:
         if col_name.lower() in GEOMETRY_COLUMN_NAMES:
             return True
 
-        # 3. GeoSeries (GeoPandas)
+        # 3. GeoSeries (GeoPandas
         try:
             import geopandas as gpd
             if isinstance(series, gpd.GeoSeries):
@@ -310,7 +310,7 @@ class ColumnMapper:
         - Converte in lowercase (tranne Oracle che usa uppercase)
         - Tronca a 30 caratteri (limite Oracle)
         """
-        # Rimuovi caratteri non alfanumerici (tranne underscore)
+        # Rimuovi caratteri non alfanumerici (tranne underscore
         sanitized = re.sub(r'[^\w]', '_', name)
         # Rimuovi underscore multipli
         sanitized = re.sub(r'_+', '_', sanitized)
@@ -323,7 +323,7 @@ class ColumnMapper:
         else:
             sanitized = sanitized.lower()
 
-        # Tronca (Oracle ha limite 30, altri 128+)
+        # Tronca (Oracle ha limite 30, altri 128+
         max_len = 30 if self.db_type == "oracle" else 128
         if len(sanitized) > max_len:
             sanitized = sanitized[:max_len]

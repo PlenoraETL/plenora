@@ -21,7 +21,7 @@ class BulkInsertNotSupportedError(Exception):
     (`_execute_batch`) catcha e fa fallback a executemany."""
 
 
-# Dispatch factory (post-rimozione: raise sempre dialect_not_supported)
+# Dispatch factory (post-rimozione: raise sempre dialect_not_supported
 
 
 def bulk_insert(
@@ -88,7 +88,7 @@ def is_bulk_enabled() -> bool:
     """
     # BE-CONFIG-001D: default tipato in
     # `Settings.DEFAULTS["CARICA_BULK_INSERT"]="auto"`. Override env
-    # continua a funzionare via Settings.
+    # continua a funzionare via Settings
     from app.config import settings as _settings
     raw = (_settings.get("CARICA_BULK_INSERT") or "auto").strip().lower()
     return raw not in ("off", "false", "0", "no", "disabled")

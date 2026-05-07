@@ -1,7 +1,6 @@
 """
 Runtime composition boundary.
 
-BE-GO-READY-BOOTSTRAP-ENGINE-011-RUNTIME-CONTAINER-FIRST-SLICE.
 """
 
 from app.runtime.services import RuntimeServices, build_runtime_services

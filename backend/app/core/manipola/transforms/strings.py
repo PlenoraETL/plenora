@@ -16,7 +16,7 @@ DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
 
 
 # STRING PAD — Riempimento stringa a larghezza fissa
-# Aggiunge caratteri di riempimento a sinistra o a destra.
+# Aggiunge caratteri di riempimento a sinistra o a destra
 
 def op_string_pad(
     df: DataFrame,
@@ -69,7 +69,7 @@ def op_string_pad(
 
 
 # STRING LENGTH — Calcola la lunghezza delle stringhe
-# Aggiunge una colonna con la lunghezza di ogni valore.
+# Aggiunge una colonna con la lunghezza di ogni valore
 
 def op_string_length(
     df: DataFrame,
@@ -109,7 +109,7 @@ def op_string_length(
 
 
 # STRING EXTRACT — StringSearcher
-# Estrae testo da una colonna tramite espressione regolare.
+# Estrae testo da una colonna tramite espressione regolare
 
 def op_string_extract(
     df: DataFrame,
@@ -178,7 +178,7 @@ def op_string_extract(
                 f"StringExtract (extractall) completato: output='{out_col}'"
             )
         else:
-            # Singola estrazione (primo match, primo gruppo)
+            # Singola estrazione (primo match, primo gruppo
             out_col = output_column if output_column else f"{column}_extracted"
             extracted = text_series.str.extract(pattern, expand=True)
             if not extracted.empty:
@@ -197,7 +197,7 @@ def op_string_extract(
 
 
 # NORMALIZZAZIONE TESTO
-# Operazioni su testo: upper, lower, trim, title, strip accenti.
+# Operazioni su testo: upper, lower, trim, title, strip accenti
 
 def op_text_normalize(
     df: DataFrame,

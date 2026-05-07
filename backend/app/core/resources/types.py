@@ -1,7 +1,6 @@
 """
 Typed contracts for the Resource Engine.
 
-BE-GO-READY-RESOURCE-ENGINE-002-RESULT-BLOB-LOADER-PILOT.
 """
 
 from __future__ import annotations
@@ -12,13 +11,12 @@ from typing import Iterator, Literal, Optional, Protocol, runtime_checkable
 
 
 # ResourceKind
-#
 # v1 ships two kinds (`result_blob`, `file_source_blob`). Other
 # kinds remain in the audit (sec. 2.1) and join only after their
 # tenant binding is plumbed through. Adding a kind to this Literal
 # without adding the matching loader registration in `registry.py`
-# is a regression (the registry's `get()` raises `KeyError` for
-# unregistered kinds).
+# is a regression (the registry's `get` raises `KeyError` for
+# unregistered kinds
 
 ResourceKind = Literal[
     "result_blob",
@@ -49,7 +47,7 @@ class ResourceRef:
     in the loader's structured log for audit symmetry).
 
     ``expected_project_id`` is OPTIONAL (default ``None``).
-    BE-GO-READY-RESOURCE-ENGINE-007: when set to a non-empty
+     when set to a non-empty
     string, the loader applies a SECONDARY row-level filter on
     the resource's `project_id` column (in addition to the
     primary `group_id` filter). When ``None``, no project-level
@@ -70,7 +68,7 @@ class ResourceRef:
     kind: ResourceKind
     expected_group_id: str
 
-    # mutually-exclusive id fields. Exactly one MUST be set.
+    # mutually-exclusive id fields. Exactly one MUST be set
     result_id: Optional[str] = None
     file_source_id: Optional[str] = None
     artifact_uri: Optional[str] = None
@@ -79,7 +77,7 @@ class ResourceRef:
 
     # Optional project-level binding (RESOURCE-ENGINE-007). None
     # means no project-level filter. Non-empty string adds an
-    # AND filter on the resource row's `project_id` column.
+    # AND filter on the resource row's `project_id` column
     expected_project_id: Optional[str] = None
 
     def __post_init__(self) -> None:
@@ -126,12 +124,12 @@ class Resource:
     path: Optional[Path] = None
     # streams are not frozen-friendly (Iterator is consumed). The
     # frozen=True keeps the metadata immutable; the iterator handle
-    # itself is single-shot and the caller owns its lifecycle.
+    # itself is single-shot and the caller owns its lifecycle
     stream: Optional[Iterator[bytes]] = field(default=None, compare=False)
     format_hint: Optional[str] = None
     # path-mode only: the loader has materialized to a temp file
     # that the caller MUST clean up. False means the path is
-    # caller-managed (e.g. pre-existing local FS path).
+    # caller-managed (e.g. pre-existing local FS path
     is_temporary: bool = False
 
 
@@ -194,8 +192,8 @@ class ResourceRegistry(Protocol):
     backing dispatch; it just routes a `ResourceRef` to the
     kind-specific loader. Each loader owns its own checks.
 
-    Anti-god-engine: the registry MUST NOT grow `parse()`,
-    `delete()`, `save()`, `list()`, or any other capability beyond
+    Anti-god-engine: the registry MUST NOT grow `parse`,
+    `delete`, `save`, `list`, or any other capability beyond
     `register` + `get`. Adding methods here is the canonical
     god-engine failure mode.
     """

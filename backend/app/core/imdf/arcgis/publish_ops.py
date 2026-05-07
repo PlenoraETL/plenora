@@ -31,7 +31,7 @@ def _add_layer_to_service(
 
     1. preservare il dict shape `{success, feature_count, errors}`
        atteso dai caller IMDF (`upload_imdf_layers`);
-    2. preservare il facade re-export
+    2. preservare il compatibility module compatibility export
        `from app.core.imdf.arcgis_uploader import _add_layer_to_service`;
     3. mantenere il path di monkeypatch usato dai test contract
        (`tests2/imdf/unit/test_add_layer_to_service_contract.py`
@@ -56,14 +56,14 @@ def _publish_mode_existing(
 
     Per ogni layer IMDF presente:
       - append: `add_features` soltanto (no controllo duplicati)
-      - upsert: per ogni batch di business-key chiama `delete_features` con
+      - upsert: per ogni business-key chiama `delete_features` con
                 WHERE IN (...) e poi `add_features` delle nuove feature
       - update: `update_features` con OBJECTID risolto tramite match column.
                 Le feature del bundle senza match → skipped (niente insert).
     """
     import pandas as _pd
 
-    # 1. Lista i layer del FS esistente (per risolvere name → url+id)
+    # 1. Lista i layer del FS esistente (per risolvere name → url+id
     try:
         existing_layers = client.list_layers(conn, service_url) or []
     except Exception as e:
@@ -102,12 +102,12 @@ def _publish_mode_existing(
         skipped_count = 0
 
         # ── UPDATE: STRICT — updateFeatures per match column → OBJECTID
-        # Pre-condizioni bloccanti:
-        #   1. match_col esiste nel bundle
-        #   2. nessun NULL in match_col
-        #   3. nessun duplicato in match_col
-        #   4. TUTTI i valori del bundle hanno un OBJECTID sul FS (no skip)
-        # Se una fallisce → errore, nessuna chiamata a updateFeatures per il layer.
+        # Pre-condizioni bloccanti
+        # 1. match_col esiste nel bundle
+        # 2. nessun NULL in match_col
+        # 3. nessun duplicato in match_col
+        # 4. TUTTI i valori del bundle hanno un OBJECTID sul FS (no skip
+        # Se una fallisce → errore, nessuna chiamata a updateFeatures per il layer
         if mode == "update":
             match_col = match_columns.get(name)
             strict_fail = False
@@ -166,7 +166,7 @@ def _publish_mode_existing(
                     # e la costruzione Esri features devono partire dallo
                     # STESSO sottoinsieme di righe altrimenti l'index i
                     # tra la lista features e i keys si disallinea e si
-                    # iniettano OBJECTID sulle feature sbagliate (data loss).
+                    # iniettano OBJECTID sulle feature sbagliate (data loss
                     gdf_valid = gdf[gdf[match_col].apply(
                         lambda v: v is not None and not _pd.isna(v) and str(v) in oid_by_key
                     )]
@@ -255,8 +255,8 @@ def _publish_mode_existing(
                 errors_this_layer.append(f"add_features: {e}")
 
         # feature_count nel result significa "feature processate con successo"
-        # (added per append/upsert, updated per update). Il frontend lo mostra
-        # come "feat." con eventuali colonne extra deleted/skipped.
+        # added per append/upsert, updated per update). Il frontend lo mostra
+        # come "feat." con eventuali colonne extra deleted/skipped
         primary_count = updated_count if mode == "update" else added_count
 
         result["layers"].append({
@@ -279,11 +279,11 @@ def _publish_mode_existing(
 
     # ── Esito finale ────────────────────────────────────────────────
     # Success = nessun errore E almeno un layer ha avuto attivita' REALE
-    # sul FS (add/update/delete). `skipped_count` NON conta come attivita':
+    # sul FS (add/update/delete). `skipped_count` NON conta come attivita'
     # se tutti i layer sono skipped, l'operazione non ha prodotto modifiche
     # e success=False (il frontend mostra "Errori presenti"). Questo evita
     # il falso positivo "✓ Pubblicato" quando in update strict tutti i
-    # pre-check falliscono e ogni layer viene skippato integralmente.
+    # pre-check falliscono e ogni layer viene skippato integralmente
     real_activity = any(
         (l.get("added_count", 0) or 0)
         + (l.get("updated_count", 0) or 0)

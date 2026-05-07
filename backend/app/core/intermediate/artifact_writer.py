@@ -1,5 +1,5 @@
 """
-Intermediate full artifact writer — Batch object storage intermedi (2026-04-28).
+Intermediate full artifact writer — storage intermedi (2026-04-28).
 
 Persiste lo snapshot completo di un nodo come `data.parquet` +
 """
@@ -18,7 +18,7 @@ from app.shared.storage_layout import INTERMEDIATE_PREFIX
 logger = logging.getLogger(__name__)
 
 
-# Manifest version. Bump quando cambia lo schema del manifest.
+# Manifest version. Bump quando cambia lo schema del manifest
 MANIFEST_VERSION = 1
 
 
@@ -28,9 +28,9 @@ class ArtifactPersistResult:
 
     `artifact_status` allinea i valori a `node_meta.artifact_status`:
       - "complete": data.parquet + manifest.json caricati
-      - "failed":   serialize/upload fallito; `error` popolato,
+      - "failed": serialize/upload fallito; `error` popolato,
                     `artifact_uri=None` salvo manifest gia' uploadato
-      - "none":     non applicabile (caller non chiama questo modulo)
+      - "none": non applicabile (caller non chiama questo modulo)
     """
     artifact_uri: Optional[str]
     artifact_format: str
@@ -175,7 +175,7 @@ def persist_full_artifact(
 
     # Lazy import: cloud_backends potrebbe non essere installato in
     # ambienti unit-test ridotti. La snapshot path resta safe: in caso
-    # di import error registriamo "failed" e proseguiamo.
+    # di import error registriamo "failed" e proseguiamo
     try:
         from app.shared.cloud_backends import (
             ObjectStorageDisabledError,
@@ -194,7 +194,7 @@ def persist_full_artifact(
     except ObjectStorageDisabledError as e:
         # Capability off: il caller dovrebbe averlo gia' bloccato in
         # validate_intermediate_settings. Se arriviamo qui
-        # (env mutato a runtime?), failed esplicito.
+        # env mutato a runtime?), failed esplicito
         logger.warning(
             "[ARTIFACT] runtime object storage non disponibile per "
             "node=%s run=%s: %s",
@@ -222,13 +222,13 @@ def persist_full_artifact(
 
     # Layout key. `INTERMEDIATE_ARTIFACT_PREFIX` env override resta per
     # ops flexibility; il default e' la constant centralizzata. BE-CONFIG-001E
-    # (DEDUP): la chiave era letta sia via `Settings.DEFAULTS` (default
+    # DEDUP): la chiave era letta sia via `Settings.DEFAULTS` (default
     # `"intermediate"`) sia direttamente da `os.getenv` qui. Migrato a
     # `settings.get(...)` per single source-of-default. La lettura tramite
     # Settings include eventuali override env via `_converti_tipo_env`
-    # (str pass-through). `or INTERMEDIATE_PREFIX` resta come safety net
+    # str pass-through). `or INTERMEDIATE_PREFIX` resta come safety net
     # se Settings ritornasse None per qualche motivo (e.g. test che
-    # rimuove la default key); il default reale ora vive in Settings.DEFAULTS.
+    # rimuove la default key); il default reale ora vive in Settings.DEFAULTS
     from app.config import settings as _settings
     prefix_env = _settings.get("INTERMEDIATE_ARTIFACT_PREFIX") or INTERMEDIATE_PREFIX
     try:
@@ -305,9 +305,9 @@ def persist_full_artifact(
         ).encode("utf-8")
         storage.upload_bytes(manifest_bytes, manifest_key)
     except Exception as e:
-        # data.parquet gia' caricato: l'artifact e' parzialmente persistito.
+        # data.parquet gia' caricato: l'artifact e' parzialmente persistito
         # Marcare status="failed" per visibilita' operativa; l'orphan
-        # Parquet e' meno grave del silent success.
+        # Parquet e' meno grave del silent success
         logger.error(
             "[ARTIFACT] upload manifest.json fallito per node=%s run=%s "
             "(data.parquet gia' uploadato come %s): %s",

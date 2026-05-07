@@ -1,7 +1,6 @@
 """
 Persistent reconciliation log for storage compensating-delete intent.
 
-BE-GO-READY-STORAGE-ENGINE-005-RECONCILIATION-LOG-FOUNDATION.
 """
 
 from __future__ import annotations
@@ -61,7 +60,7 @@ class ReconciliationEntryRef:
 class PendingReconciliationRow:
     """Tipato snapshot di una riga `pending` ritornata dal reconciler.
 
-    BE-GO-READY-STORAGE-ENGINE-006: shape minima necessaria al beat
+     shape minima necessaria al beat
     hook per decidere cosa fare. NON e' un mirror completo della
     tabella; espone solo i campi che il reconciler legge:
       - `id`: per le transizioni `mark_*`;
@@ -100,7 +99,7 @@ def record_pending(
 ) -> ReconciliationEntryRef:
     """INSERT pending entry inside the caller's transaction.
 
-    The caller MUST be inside a `transaction()` context manager (or
+    The caller MUST be inside a `transaction` context manager (or
     equivalent psycopg2 cursor). The INSERT shares the cursor's
     transaction so the commit/rollback is atomic with the caller's
     DB change.
@@ -112,7 +111,7 @@ def record_pending(
         storage_key: object-storage key targeted by the future
             cleanup (e.g. "file-sources/<id>/<filename>").
         operation: "delete" today; "upload_intent" reserved for
-            batch 008 (W2 race coverage, not implemented here).
+            .
         reason: free-text reason persisted alongside the row
             ("row_delete_post_commit", ...). Not interpreted.
         extras: optional `Mapping[str, Any]` serialized to JSONB.
@@ -193,7 +192,7 @@ def mark_done(reconciliation_id: str) -> None:
 def mark_orphan_deleted(reconciliation_id: str) -> None:
     """Autocommit terminal `pending -> orphan_deleted`.
 
-    Used by the future reconciler beat hook (batch 006) after a
+    Used by the future reconciler beat hook  after a
     successful catch-up delete. Best-effort: never raises.
     """
     _autocommit_update(
@@ -216,7 +215,7 @@ def mark_failed_attempt(
     `next_retry_at`.
 
     Does NOT auto-promote to `lost`: that's the reconciler's
-    responsibility (batch 006), informed by a `MAX_RETRIES` policy
+    responsibility , informed by a `MAX_RETRIES` policy
     enforced at the call site (see `mark_lost`). Best-effort:
     never raises.
 
@@ -243,7 +242,7 @@ def mark_failed_attempt(
 def mark_lost(reconciliation_id: str, *, error: str) -> None:
     """Autocommit terminal `pending -> lost`.
 
-    BE-GO-READY-STORAGE-ENGINE-006: used by the reconciler beat hook
+     used by the reconciler beat hook
     when `attempts` has reached the `STORAGE_RECONCILE_MAX_ATTEMPTS`
     cap and the storage delete still failed. The row stays for
     forensic / dashboard inspection; no further retry is attempted
@@ -271,7 +270,7 @@ def mark_lost(reconciliation_id: str, *, error: str) -> None:
     )
 
 
-# Reconciler boundary (BE-GO-READY-STORAGE-ENGINE-006)
+# Reconciler boundary
 
 
 _FETCH_DUE_PENDING_DELETES_SQL = (
@@ -306,7 +305,7 @@ def fetch_due_pending_deletes(
         far enough.
 
     Order: `next_retry_at NULLS FIRST, created_at ASC`. Ensures
-    fresh failures (NULL `next_retry_at` after batch 005 INSERT) and
+    fresh failures (NULL `next_retry_at` after INSERT) and
     earliest-due retries are processed before later ones. Stable.
 
     Args:
@@ -345,7 +344,7 @@ def fetch_due_pending_deletes(
 
     out: list[PendingReconciliationRow] = []
     for row in rows or ():
-        # Tolerant to dict-row (psycopg2 RealDictCursor) and tuple-row.
+        # Tolerant to dict-row (psycopg2 RealDictCursor) and tuple-row
         if isinstance(row, dict):
             row_id = row["id"]
             domain = row["domain"]
@@ -359,7 +358,7 @@ def fetch_due_pending_deletes(
                 id=str(row_id),
                 domain=str(domain),
                 storage_key=str(storage_key),
-                operation=str(operation),  # type: ignore[arg-type]
+                operation=str(operation),  # type: ignore[arg-type
                 attempts=int(attempts) if attempts is not None else 0,
             )
         )
@@ -416,22 +415,20 @@ def compute_next_retry_at(
     return base_now + timedelta(seconds=delta_seconds)
 
 
-# Operational guardrails (BE-GO-READY-STORAGE-ENGINE-008)
-#
+# Operational guardrails
 # Goal: prevent `plenora.storage_reconciliation_log` from becoming a
 # silent landfill. Two minimal, additive helpers — NO new transitions
-# on existing states, NO new operations, NO new migration:
-#
-#   1. `count_active_by_state_domain` — read-only aggregation of
-#      `pending` and `lost` rows by `(state, domain)` for periodic
-#      summary logs. Terminal `done`/`orphan_deleted` are intentionally
-#      excluded from "active" because they are the audit trail, not
-#      operator concern.
-#   2. `prune_terminal_older_than` — bounded DELETE of `done` /
-#      `orphan_deleted` rows older than a retention window. Caller
-#      supplies cap; helper enforces single batched DELETE with
-#      `LIMIT` semantics emulated via subquery (PG doesn't support
-#      `DELETE ... LIMIT` directly).
+# on existing states, NO new operations, NO new migration
+# 1. `count_active_by_state_domain` — read-only aggregation of
+# `pending` and `lost` rows by `(state, domain)` for periodic
+# summary logs. Terminal `done`/`orphan_deleted` are intentionally
+# excluded from "active" because they are the audit trail, not
+# operator concern
+# 2. `prune_terminal_older_than` — bounded DELETE of `done` /
+# `orphan_deleted` rows older than a retention window. Caller
+# supplies cap; helper enforces single batched DELETE with
+# `LIMIT` semantics emulated via subquery (PG doesn't support
+# `DELETE ... LIMIT` directly
 
 
 @dataclass(frozen=True)
@@ -463,7 +460,7 @@ _COUNT_ACTIVE_BY_STATE_DOMAIN_SQL = (
 def count_active_by_state_domain() -> list["ReconciliationStateCount"]:
     """Read-only count di righe `pending` e `lost` per `(state, domain)`.
 
-    BE-GO-READY-STORAGE-ENGINE-008: alimenta il summary log per beat
+     alimenta il summary log per beat
     run cosi' ops puo' notare orphan accumulation senza ispezionare
     il DB direttamente. Solo `pending` (lavoro non ancora finito) e
     `lost` (richiede review) — i terminali `done`/`orphan_deleted`
@@ -500,7 +497,7 @@ def count_active_by_state_domain() -> list["ReconciliationStateCount"]:
             state, domain, count = row
         out.append(
             ReconciliationStateCount(
-                state=str(state),  # type: ignore[arg-type]
+                state=str(state),  # type: ignore[arg-type
                 domain=str(domain),
                 count=int(count) if count is not None else 0,
             )
@@ -528,7 +525,7 @@ def prune_terminal_older_than(
     """Bounded DELETE di righe terminali `done` / `orphan_deleted`
     con `updated_at < older_than`, fino a `limit` righe.
 
-    BE-GO-READY-STORAGE-ENGINE-008: la tabella e' append-only nel
+     la tabella e' append-only nel
     runtime; senza prune i terminali (success path + reconciler
     success path) crescono indefinitamente. Questo helper rimuove
     SOLO i terminali — pending/lost non vengono mai toccati.
@@ -575,28 +572,25 @@ def prune_terminal_older_than(
         return 0
 
 
-# Upload-intent lifecycle (BE-GO-READY-STORAGE-ENGINE-008-UPLOAD-INTENT-PATTERN)
-#
+# Upload-intent lifecycle
 # Closes R-021.1: `app/services/file_storage_dispatch.py` had an
-# upload-then-DB-save W2 orphan race. Pattern is "self-clearing":
-#
-#   1. Caller (`dispatch_blob_storage`) records `operation='upload_intent'`
-#      autocommit BEFORE the upload. No caller-side transaction
-#      coupling: callers are not in scope for this stream and are not
-#      modified.
-#   2. On upload exception, caller invokes `mark_done(intent_id)` —
-#      no orphan exists because nothing was uploaded.
-#   3. On upload success, the intent row stays `pending`. The
-#      reconciler beat hook closes it after a grace window:
-#        - if `plenora.file_sources.storage_key` already references the
-#          key → caller's DB save committed → `mark_done`;
-#        - otherwise → `compensating_delete` + `mark_orphan_deleted`
-#          (or backoff + `mark_failed_attempt`, eventually `mark_lost`).
-#
+# upload-then-DB-save W2 orphan race. Pattern is "self-clearing"
+# 1. Caller (`dispatch_blob_storage`) records `operation='upload_intent'`
+# autocommit BEFORE the upload. No caller-side transaction
+# coupling: callers are not in scope for this stream and are not
+# modified
+# 2. On upload exception, caller invokes `mark_done(intent_id)` —
+# no orphan exists because nothing was uploaded
+# 3. On upload success, the intent row stays `pending`. The
+# reconciler beat hook closes it after a grace window
+# if `plenora.file_sources.storage_key` already references the
+# key → caller's DB save committed → `mark_done`
+# otherwise → `compensating_delete` + `mark_orphan_deleted`
+# or backoff + `mark_failed_attempt`, eventually `mark_lost`
 # Boundedness: pending upload_intents transition to terminal within
 # `grace_seconds + max_attempts * backoff` of creation. Terminal
 # rows are pruned by `prune_terminal_older_than` (already wired into
-# the beat hook). No state can accumulate forever.
+# the beat hook). No state can accumulate forever
 
 
 _INSERT_UPLOAD_INTENT_SQL = (
@@ -616,7 +610,7 @@ def record_upload_intent(
 ) -> Optional[str]:
     """Autocommit INSERT di una pending `upload_intent` row.
 
-    BE-GO-READY-STORAGE-ENGINE-008: cattura l'intento di upload
+     cattura l'intento di upload
     PRIMA che il blob venga effettivamente caricato sull'object
     storage, cosi' una process death tra upload e caller-side DB
     save (W2 race) lascia comunque una traccia che il reconciler
@@ -647,9 +641,9 @@ def record_upload_intent(
       righe pending in tabella senza closure path. Le ops devono
       sapere che il "self-clearing" pattern dipende dal beat hook
       attivo. Visibilita' via:
-        - `count_pending_by_operation()` (per-operation counter
+        - `count_pending_by_operation` (per-operation counter
           dedicato a questo gap);
-        - `gather_readiness().checks.reconciliation_backlog.detail`
+        - `gather_readiness.checks.reconciliation_backlog.detail`
           (espone il breakdown per-operation).
     - L'engine alignment (STORAGE_ARTIFACT_ENGINE) e' "compensating
       reconciliation log" — non "outbox/saga framework". L'audit
@@ -721,7 +715,7 @@ def fetch_due_stale_upload_intents(
 ) -> list["PendingReconciliationRow"]:
     """Read-only fetch di `upload_intent` pending stantii.
 
-    BE-GO-READY-STORAGE-ENGINE-008: il reconciler beat hook chiama
+     il reconciler beat hook chiama
     questo helper DOPO il fetch dei delete-pending. Solo le righe
     `created_at < now - grace_seconds` sono candidate, cosi' un
     upload "in volo" (ancora dentro la finestra normale di
@@ -794,7 +788,7 @@ def fetch_due_stale_upload_intents(
                 id=str(row_id),
                 domain=str(domain),
                 storage_key=str(storage_key),
-                operation=str(operation),  # type: ignore[arg-type]
+                operation=str(operation),  # type: ignore[arg-type
                 attempts=int(attempts) if attempts is not None else 0,
             )
         )
@@ -811,12 +805,12 @@ def is_storage_key_referenced(storage_key: str) -> Optional[bool]:
     """Verifica se `storage_key` e' referenziato da una row in
     `plenora.file_sources` (idx_file_sources_storage_key_notnull).
 
-    BE-GO-READY-STORAGE-ENGINE-008: il reconciler usa questo helper
+     il reconciler usa questo helper
     per decidere se un upload_intent stantio rappresenta:
-      - `True`  → caller's DB save committed; intent va `mark_done`;
+      - `True` → caller's DB save committed; intent va `mark_done`;
       - `False` → orphan candidate; intent va `compensating_delete`
         + `mark_orphan_deleted`;
-      - `None`  → read-error; il caller DEVE NON procedere alla
+      - `None` → read-error; il caller DEVE NON procedere alla
         delete (rischio data loss su key live). Il beat hook
         tratta questo caso come `mark_failed_attempt` + retry.
 
@@ -848,34 +842,31 @@ def is_storage_key_referenced(storage_key: str) -> Optional[bool]:
     return bool(rows)
 
 
-# Per-operation visibility (BE-GO-READY-STORAGE-ENGINE-023)
-#
+# Per-operation visibility
 # `count_active_by_state_domain` aggregates by `(state, domain)` —
 # it does NOT differentiate between `operation='delete'` and
 # `operation='upload_intent'` rows. Two failure modes were
-# previously invisible:
-#
-#   1. The upload_intent self-clearing pattern depends on the beat
-#      hook running. If the reconciler is disabled
-#      (STORAGE_RECONCILE_INTERVAL_SECONDS<=0) or the upload_intent
-#      branch is disabled (STORAGE_RECONCILE_UPLOAD_INTENT_GRACE_SECONDS<=0
-#      or STORAGE_RECONCILE_UPLOAD_INTENT_BATCH_SIZE<=0), pending
-#      upload_intent rows accumulate without closure. The total
-#      `pending` count from `count_active_by_state_domain` masks
-#      this: a backlog of 100 pending upload_intents looks like
-#      100 pending deletes.
-#   2. A growing upload_intent backlog signals a different incident
-#      than a growing delete backlog. Delete backlog ⇒ object
-#      storage / network problem; upload_intent backlog ⇒
-#      reconciler disabled OR `is_storage_key_referenced` chronic
-#      read-error OR mass DB-save rollback storm. Operators need
-#      to differentiate.
-#
-# This helper is read-only, swallow-on-error (best-effort),
+# previously invisible
+# 1. The upload_intent self-clearing pattern depends on the beat
+# hook running. If the reconciler is disabled
+# STORAGE_RECONCILE_INTERVAL_SECONDS<=0) or the upload_intent
+# branch is disabled (STORAGE_RECONCILE_UPLOAD_INTENT_GRACE_SECONDS<=0
+# or STORAGE_RECONCILE_UPLOAD_INTENT_BATCH_SIZE<=0), pending
+# upload_intent rows accumulate without closure. The total
+# `pending` count from `count_active_by_state_domain` masks
+# this: a backlog of 100 pending upload_intents looks like
+# 100 pending deletes
+# 2. A growing upload_intent backlog signals a different incident
+# than a growing delete backlog. Delete backlog ⇒ object
+# storage / network problem; upload_intent backlog ⇒
+# reconciler disabled OR `is_storage_key_referenced` chronic
+# read-error OR mass DB-save rollback storm. Operators need
+# to differentiate
+# This helper is read-only, swallow-on-error (best-effort
 # zero behaviour change to existing callers. The readiness check
 # `check_reconciliation_backlog` consumes it to surface the
 # breakdown in its detail string and (optionally) trigger a 503
-# on a per-operation threshold.
+# on a per-operation threshold
 
 
 _COUNT_PENDING_BY_OPERATION_SQL = (
@@ -891,7 +882,6 @@ def count_pending_by_operation() -> dict[str, int]:
     """Read-only count di righe `state='pending'` raggruppate per
     `operation` (today: `'delete'` | `'upload_intent'`).
 
-    BE-GO-READY-STORAGE-ENGINE-023-UPLOAD-INTENT-READINESS-GUARD:
     visibility helper dedicato al gap tra il counter generico
     `count_active_by_state_domain` (per state+domain) e l'esigenza
     operativa di distinguere delete-side W1 backlog da upload_intent-

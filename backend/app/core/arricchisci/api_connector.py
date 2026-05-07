@@ -12,20 +12,20 @@ from app.shared.api_utils import (
     prepare_headers as _shared_prepare_headers,
 )
 
-import app.db.db_service as db_svc  # noqa: F401  (test-monkeypatch surface)
+import app.db.db_service as db_svc  # noqa: F401 (test-monkeypatch surface
 
 # B3-B.9 cleanup (2026-04-27): rimossi 3 import back-compat fragili
-# (`save_dataframe`, `save_result_blob`, `get_temp_output_path`) dopo
+# `save_dataframe`, `save_result_blob`, `get_temp_output_path`) dopo
 # modernization delle 3 patch dead in
 # `tests2/arricchisci/unit/test_api_connector_execute_enrichment_lock.py`
-# (linee 137, 141, 156 pre-B3-B.9). Le patch erano inattive post-B3-B
-# extraction (`_save_and_build_dataframe_response` +
+# linee 137, 141, 156 pre-B3-B.9). Le patch erano inattive post-B3-B
+# separation (`_save_and_build_dataframe_response` +
 # `_build_file_result_response` vivono nel SupportMixin con import
 # lazy diversi). Test ora patchano solo il source canonico
 # `app.utils.result_store.save_result_blob_from_bytes` per il code path
 # in-memory; eventuali test path-based futuri devono patchare il
 # canonical `app.utils.result_store.save_result_blob`, NON l'alias
-# api_connector ormai rimosso.
+# api_connector ormai rimosso
 
 
 from app.core.arricchisci.api_connection_management import (
@@ -38,56 +38,53 @@ from app.core.arricchisci.api_connection_support import (
 )
 
 
-# Phase 5 B3-B.4b cutover: cluster SOURCE_LOADING / TENANCY (6 metodi:
-# `_assert_source_project_in_tenant`, `_recompute_upstream_project`,
-# `_filesystem_fallback_load_project`, `_load_source_project`,
-# `_load_file_source`, `_load_static_values`) + SSRF (1 metodo:
+# B3-B.4b boundary: cluster SOURCE_LOADING / TENANCY (6 metodi
+# `_assert_source_project_in_tenant`, `_recompute_upstream_project`
+# `_filesystem_fallback_load_project`, `_load_source_project`
+# `_load_file_source`, `_load_static_values`) + SSRF (1 metodo
 # `_validate_outbound_url`, `@staticmethod`) spostato in
-# `app.core.arricchisci.api_connection_source_loading.ApiConnectionSourceLoadingMixin`.
-# Pre-extraction B3-B.4a ha modernizzato
+# `app.core.arricchisci.api_connection_source_loading.ApiConnectionSourceLoadingMixin`
+# previous implementation B3-B.4a ha modernizzato
 # `tests2/security/unit/test_api_connector_source_loading_core.py`
 # da `patch("app.core.arricchisci.api_connector.filter_visible_columns", ...)`
-# source-bound a `patch("app.utils.dataframe.filter_visible_columns", ...)`
 # canonical. Logger canonico
 # `get_logger("app.core.arricchisci.api_connector")` (StructuredLogger
-# wrapper supporta kwarg `op=` usato in `_assert_source_project_in_tenant`).
+# wrapper supporta kwarg `op=` usato in `_assert_source_project_in_tenant`
 # State refs `self.results_dir` / `self._current_group_id` /
-# `self._preview_limit` accessibili via MRO. Cross-cluster forward refs:
+# `self._preview_limit` accessibili via MRO. Cross-cluster forward refs
 # `_validate_outbound_url` chiamato da `_execute_rest_file` core (futuro
 # B3-B.5/B3-B.6) → MRO trasparente. `_load_*` chiamati da
 # `executor.py:170,173,176` instance-level → MRO trasparente. Pattern
 # mixin ratificato in B2 + B3-A + B3-B.2b + B3-B.3. Vedi
-# `orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B3-B.
 from app.core.arricchisci.api_connection_source_loading import (
     ApiConnectionSourceLoadingMixin,
 )
 
 
-# Phase 5 B3-B.5b cutover: cluster REST_FILE PIPELINE (6 metodi:
-# `_parse_http_error_body`, `_download_binary_response`,
-# `_build_rest_file_multipart`, `_parse_rest_file_config`,
+# B3-B.5b boundary: cluster REST_FILE PIPELINE (6 metodi
+# `_parse_http_error_body`, `_download_binary_response`
+# `_build_rest_file_multipart`, `_parse_rest_file_config`
 # `_rest_file_error`, `_execute_rest_file`) + FILE_SOURCE RESOLUTION
-# (4 metodi: `_assert_file_source_group_access`,
-# `_resolve_file_source_id_path`, `_resolve_file_source_path`,
+# 4 metodi: `_assert_file_source_group_access`
+# `_resolve_file_source_id_path`, `_resolve_file_source_path`
 # `_resolve_input_path_for_file_processor`) spostato in
-# `app.core.arricchisci.api_connection_rest_file.ApiConnectionRestFileMixin`.
-# Pre-extraction B3-B.5a ha modernizzato 3 patch sites
+# `app.core.arricchisci.api_connection_rest_file.ApiConnectionRestFileMixin`
+# previous implementation B3-B.5a ha modernizzato 3 patch sites
 # `patch("app.core.arricchisci.api_connector.requests.post", ...)` →
 # `patch("requests.post", ...)` canonical (in
 # `tests2/arricchisci/unit/test_api_connector_rest_file_error_taxonomy.py`
-# e `tests2/security/unit/test_temp_lifecycle_core.py`).
+# e `tests2/security/unit/test_temp_lifecycle_core.py`
 # Behavior-equivalent rewrite dichiarato: 8 forward-ref classe
 # `ApiConnectionService._rest_file_error(...)` → `self._rest_file_error(...)`
-# in `_build_rest_file_multipart` (×4) e `_parse_rest_file_config` (×4).
-# Necessario per evitare import circolare nel mixin module; runtime-
+# in `_build_rest_file_multipart` (×4) e `_parse_rest_file_config` (×4
+# Necessario per evitare import circolare nel mixin module; runtime
 # identico per staticmethod (descriptor protocol). Vedi docstring del
 # mixin per dettagli completi. 3 `@staticmethod` preservati. Logger
-# canonico `get_logger("app.core.arricchisci.api_connector")`. Cross-
+# canonico `get_logger("app.core.arricchisci.api_connector")`. Cross
 # cluster forward refs risolti via MRO: `_validate_outbound_url` ←
 # `_parse_rest_file_config` (B3-B.4b mixin), `_prepare_headers` ←
 # `_execute_rest_file` (core). Pattern mixin ratificato in B2 + B3-A +
 # B3-B.2b + B3-B.3 + B3-B.4b. Vedi
-# `orchestrate/PHASE_5_ENTRY_PLAN.md` §3 P5-B3-B.
 from app.core.arricchisci.api_connection_rest_file import (
     ApiConnectionRestFileMixin,
 )
@@ -188,7 +185,7 @@ class ApiConnectionService(
     # `_shared_get_oauth2_token` / `_shared_get_oauth2_cc_token` di
     # `app.shared.api_utils`, importati ma mai chiamati dal namespace
     # `ApiConnectionService`. Vedi B3-B.3 mini-scan `_get_oauth2_*`
-    # dead-code candidate flag.
+    # dead-code candidate flag
 
 
 # Usato da api/enrichment.py e main.py per accedere al servizio

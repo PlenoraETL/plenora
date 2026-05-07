@@ -25,10 +25,10 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/tickets", tags=["tickets"])
 
 
-# MIME ALLOWLIST — solo immagini + log (da scelta deliberata)
+# MIME ALLOWLIST — solo immagini + log (da scelta deliberata
 
 # Chiavi: estensione normalizzata (lowercase, no punto). Valori: MIME type
-# atteso o None se non vincolato.
+# atteso o None se non vincolato
 _ALLOWED_EXTENSIONS = {
     # immagini
     "png": "image/png",
@@ -40,14 +40,14 @@ _ALLOWED_EXTENSIONS = {
     "log": None,
     "txt": None,
 }
-# Cap configurabile via env. Default 10MB; alzare richiede valutare:
-# - throughput rete (upload sincrono nel request handler)
-# - dimensione del blob in DB se sotto soglia FILE_SOURCE_S3_THRESHOLD_BYTES
-# Calcolato a import-time: per cambiare serve riavvio del processo.
-# BE-CONFIG-001D: default tipato in
-# `Settings.DEFAULTS["TICKET_ATTACHMENT_MAX_BYTES"]=10 * 1024 * 1024`.
+# Cap configurabile via env. Default 10MB; alzare richiede valutare
+# throughput rete (upload sincrono nel request handler
+# dimensione del blob in DB se sotto soglia FILE_SOURCE_S3_THRESHOLD_BYTES
 # Calcolato a import-time: per cambiare serve riavvio del processo
-# (comportamento invariato pre-001D).
+# BE-CONFIG-001D: default tipato in
+# `Settings.DEFAULTS["TICKET_ATTACHMENT_MAX_BYTES"]=10 * 1024 * 1024`
+# Calcolato a import-time: per cambiare serve riavvio del processo
+# comportamento invariato pre-001D
 from app.config import settings as _settings_cfg
 _MAX_ATTACHMENT_SIZE_BYTES = int(_settings_cfg.get("TICKET_ATTACHMENT_MAX_BYTES"))
 
@@ -76,10 +76,10 @@ class TicketUpdateRequest(BaseModel):
     status: Optional[str] = None
     severity: Optional[str] = None
     category: Optional[str] = None
-    # Sentinel: None = unassign, field missing = no change.
+    # Sentinel: None = unassign, field missing = no change
     # Pydantic non distingue naturalmente "missing" vs "null", quindi
     # usiamo una str sentinel. Il client passa "__UNSET__" per non
-    # toccare, oppure omette la chiave (→ dict.get() ritorna il sentinel).
+    # toccare, oppure omette la chiave (→ dict.get ritorna il sentinel
     assignee: Any = "__UNSET__"
     title: Optional[str] = None
     description: Optional[str] = None
@@ -257,13 +257,13 @@ async def upload_attachment_endpoint(
       - Estensione: png, jpg, jpeg, gif, webp, log, txt
       - Size max: 10MB
     """
-    # Accesso al ticket (raise 404/403)
+    # Accesso al ticket (raise 404/403
     ticket = svc.check_access(tdb.get_ticket(ticket_id), current_user)
 
     filename = file.filename or "attachment"
 
     # Read + size check (PRIMA della validazione MIME per evitare di
-    # leggere file giganti di cui poi rifiutiamo l'estensione)
+    # leggere file giganti di cui poi rifiutiamo l'estensione
     content = await file.read()
     if len(content) > _MAX_ATTACHMENT_SIZE_BYTES:
         raise HTTPException(
@@ -274,10 +274,10 @@ async def upload_attachment_endpoint(
     if not content:
         raise HTTPException(400, "File allegato vuoto")
 
-    # Validazione MIME content-based (filetype):
-    # rifiuta eseguibili rinominati, polyglot, content-extension mismatch.
+    # Validazione MIME content-based (filetype
+    # rifiuta eseguibili rinominati, polyglot, content-extension mismatch
     # Pre-fix: solo allowlist estensione + warning su content_type del client
-    # (ignorabile da chiunque controlli il browser).
+    # ignorabile da chiunque controlli il browser
     from app.utils.mime_validator import MimeMismatchError, validate_upload
     try:
         ext = validate_upload(
@@ -293,7 +293,7 @@ async def upload_attachment_endpoint(
         )
         raise HTTPException(400, str(e))
 
-    # Salva via file_service (riusa storage dispatch DB/S3)
+    # Salva via file_service (riusa storage dispatch DB/S3
     from app.services.file_service import FileSourceService
     fs = FileSourceService()
     file_source = fs.create_raw_from_upload(
@@ -360,7 +360,7 @@ def delete_ticket_endpoint(
     )
     # F2-B3 (2026-04-24): DELETE risponde 204 No Content. La semantica
     # soft/hard resta visibile via `?hard=true` query param + logger op
-    # "ticket_delete" (PURGED vs soft-deleted); non e' piu' echoed nel body.
+    # "ticket_delete" (PURGED vs soft-deleted); non e' piu' echoed nel body
 
 
 @router.get("/{ticket_id}/attachments/{attachment_id}/download")
@@ -399,12 +399,12 @@ def download_attachment_endpoint(
     filename = fs_row.get("original_filename") or "attachment"
     fmt = (fs_row.get("format") or "").lower()
 
-    # Content-Type dall'allowlist (resta autoritativa anche in download)
+    # Content-Type dall'allowlist (resta autoritativa anche in download
     mime = _ALLOWED_EXTENSIONS.get(fmt) or "application/octet-stream"
     # Immagini inline, log/txt forzati come download
     disposition = "inline" if mime.startswith("image/") else "attachment"
 
-    # filename sanitizzato per header (virgolette + no newline)
+    # filename sanitizzato per header (virgolette + no newline
     safe_name = filename.replace('"', "").replace("\r", "").replace("\n", "")
     headers = {
         "Content-Disposition": f'{disposition}; filename="{safe_name}"',
@@ -433,7 +433,7 @@ def delete_attachment_endpoint(
 
     tdb.delete_attachment(attachment_id)
 
-    # Best-effort: elimina anche il file_source sottostante (pulizia storage)
+    # Best-effort: elimina anche il file_source sottostante (pulizia storage
     try:
         from app.services.file_service import FileSourceService
         FileSourceService().delete_file_source(attachment["file_source_id"])
@@ -443,4 +443,4 @@ def delete_attachment_endpoint(
             f"{attachment['file_source_id']} fallito (orfano): {e}"
         )
 
-    # F2-B3 (2026-04-24): DELETE risponde 204 No Content, body vuoto.
+    # F2-B3 (2026-04-24): DELETE risponde 204 No Content, body vuoto

@@ -27,10 +27,10 @@ router = APIRouter(prefix="/imdf", tags=["imdf"])
 # ══════════════════════════════════════════════════════════════════════
 # VALIDAZIONE PATH TRAVERSAL
 # ══════════════════════════════════════════════════════════════════════
-# Regex + path-traversal guard centralizzati in `app.shared.path_policy.
+# Regex + path-traversal guard centralizzati in `app.shared.path_policy
 # validate_imdf_task_id` (D3 commit 1). Il wrapper locale resta per
 # tradurre `ValueError` in `HTTPException 400` preservando la signature
-# attesa dai call site interni del router.
+# attesa dai call site interni del router
 
 
 def _safe_bundle_dir(bundle_task_id: str) -> Path:
@@ -206,7 +206,7 @@ class ImdfBundleSummary(BaseModel):
     saved_at:    Optional[str] = None
     validation_summary: Optional[Dict[str, Any]] = None
     # Conteggi layer IMDF (da plenora_metadata.json o fallback dal
-    # counting dei .geojson). None se non determinabili.
+    # counting dei .geojson). None se non determinabili
     building_count: Optional[int] = None
     level_count:    Optional[int] = None
     unit_count:     Optional[int] = None
@@ -218,7 +218,7 @@ class ImdfBundleSummary(BaseModel):
 
 @router.post("/publish", response_model=ImdfPublishResponse)
 # bundle_task_id e' nel body Pydantic, l'extractor accetta solo str/int da
-# kwarg diretto (vedi audit_action.py:190): target=NULL.
+# kwarg diretto (vedi audit_action.py:190): target=NULL
 @audit_action(action="imdf.publish")
 def publish_imdf(
     request: ImdfPublishRequest,
@@ -252,7 +252,7 @@ def publish_imdf(
             },
         )
     # Verifica group ownership: l'utente deve avere accesso al progetto
-    # che ha generato questo bundle.
+    # che ha generato questo bundle
     _assert_bundle_group_access(bundle_dir, current_user)
 
     publisher_config = {
@@ -301,18 +301,18 @@ def validate_publish_endpoint(
             status_code=400,
             detail=f"mode non valido: {request.mode}. Valori validi: replace, append, upsert, update",
         )
-    # Validazione path traversal (l'helper solleva 400 se malformato).
+    # Validazione path traversal (l'helper solleva 400 se malformato
     # Non serve verificare exists qui: il validator gestisce il caso bundle
-    # mancante come BUNDLE_MISSING nel report.
+    # mancante come BUNDLE_MISSING nel report
     _val_bundle_dir = _safe_bundle_dir(request.bundle_task_id)
-    # R2 multi-host: hydrate cache locale da S3 se necessario (D3 commit 2,
+    # R2 multi-host: hydrate cache locale da S3 se necessario (D3 commit 2
     # parita' con /publish e /bundles/{id}). Fix bundle solo-S3 ->
     # BUNDLE_MISSING falso-positivo. Hydrate failure resta silent (warning
     # in _hydrate_local_cache); il report mantiene BUNDLE_MISSING come
-    # error code unico (R5: nessun HYDRATE_FAILED).
+    # error code unico (R5: nessun HYDRATE_FAILED
     _hydrate_local_cache(request.bundle_task_id)
     # Verifica group ownership (skip se il bundle non esiste ancora: in
-    # quel caso il validator restituira' BUNDLE_MISSING nel report).
+    # quel caso il validator restituira' BUNDLE_MISSING nel report
     if _val_bundle_dir.exists() and _val_bundle_dir.is_dir():
         _assert_bundle_group_access(_val_bundle_dir, current_user)
     try:
@@ -346,7 +346,7 @@ def get_bundle_metadata(
     """
     import json as _json
     bundle_dir = _safe_bundle_dir(bundle_task_id)
-    # R2 multi-host: hydrate cache locale da S3 se necessario.
+    # R2 multi-host: hydrate cache locale da S3 se necessario
     _hydrate_local_cache(bundle_task_id)
     if not bundle_dir.exists() or not bundle_dir.is_dir():
         raise HTTPException(
@@ -359,10 +359,10 @@ def get_bundle_metadata(
     # Group ownership check
     _assert_bundle_group_access(bundle_dir, current_user)
 
-    # D3 commit 3 (R3): site_id letto esclusivamente da plenora_metadata.json,
-    # scritto da persist dal valore autoritativo di `loader.ImdfBundle.site_id`.
+    # D3 commit 3 (R3): site_id letto esclusivamente da plenora_metadata.json
+    # scritto da persist dal valore autoritativo di `loader.ImdfBundle.site_id`
     # Nessuna scansione dir per derivarlo. Bundle senza meta o con meta senza
-    # site_id (legacy malformati) -> response site_id=None, FE gestisce.
+    # site_id (legacy malformati) -> response site_id=None, FE gestisce
     meta_path = bundle_dir / "plenora_metadata.json"
     site_id: Optional[str] = None
     if meta_path.exists():
@@ -379,8 +379,8 @@ def get_bundle_metadata(
     gdb_path = None
     ifc_path = None
 
-    # Scan residuo solo per gdb_path/ifc_path (nomi file non nel meta come Path).
-    # Branch site_id/imdf_dir rimossa: derivati da meta (D3 commit 3).
+    # Scan residuo solo per gdb_path/ifc_path (nomi file non nel meta come Path
+    # Branch site_id/imdf_dir rimossa: derivati da meta (D3 commit 3
     for entry in bundle_dir.iterdir():
         if entry.is_dir() and entry.suffix == ".gdb":
             gdb_path = entry
@@ -398,7 +398,7 @@ def get_bundle_metadata(
     validation = _read_json(validation_path)
     renderers  = _read_json(renderers_path)
 
-    # Carica geojson IMDF (ogni layer in un dict)
+    # Carica geojson IMDF (ogni layer in un dict
     geojson_layers: Dict[str, Any] = {}
     if imdf_dir and imdf_dir.exists():
         for gj in sorted(imdf_dir.glob("*.geojson")):
@@ -407,7 +407,7 @@ def get_bundle_metadata(
             except Exception as e:
                 logger.warning(f"geojson {gj.name}: {e}")
 
-    # Lista file del bundle (come nel task result)
+    # Lista file del bundle (come nel task result
     files_list = []
     for f in sorted(bundle_dir.rglob("*")):
         if f.is_file():
@@ -418,7 +418,7 @@ def get_bundle_metadata(
                 })
             except Exception as _fe:
                 # File sparito tra rglob e stat (cleanup concorrente) o
-                # permessi: skippa il singolo entry, non-fatal per la response.
+                # permessi: skippa il singolo entry, non-fatal per la response
                 logger.debug(f"files_list skip {f.name}: {type(_fe).__name__}: {_fe}")
 
     return {
@@ -451,12 +451,11 @@ def list_bundles(
     bundles_dir = settings.IMDF_BUNDLES_DIR
 
     # Precarico i progetti visibili all'utente (per filtrare i bundle di
-    # altri gruppi). superadmin vede tutto → skip del check.
-    #
+    # altri gruppi). superadmin vede tutto → skip del check
     # Fail-CLOSED: in caso di errore ACL rispondiamo 500 senza servire
     # dati. Un fallback `visible_project_ids = None` disabiliterebbe
     # del tutto il filtro al loop successivo, esponendo i bundle di
-    # tutti i gruppi a chi non e' superadmin.
+    # tutti i gruppi a chi non e' superadmin
     visible_project_ids: Optional[set] = None
     if current_user.role != "superadmin":
         try:
@@ -474,8 +473,8 @@ def list_bundles(
                 detail="Errore verifica ACL bundle IMDF",
             )
 
-    # R2 multi-host: union task_id da local cache + S3 (fonte di verita').
-    # Un nodo senza cache locale vede comunque i bundle generati da altri nodi.
+    # R2 multi-host: union task_id da local cache + S3 (fonte di verita'
+    # Un nodo senza cache locale vede comunque i bundle generati da altri nodi
     task_ids_set: set = set()
     if bundles_dir.exists():
         for entry in bundles_dir.iterdir():
@@ -491,7 +490,7 @@ def list_bundles(
         return []
 
     # Ordino: prima per mtime local (veloce), fallback per nome. I bundle solo-S3
-    # senza local cache finiscono in coda ordinati per nome.
+    # senza local cache finiscono in coda ordinati per nome
     def _sort_key(tid: str) -> tuple:
         local_path = bundles_dir / tid
         try:
@@ -508,8 +507,8 @@ def list_bundles(
         entry = bundles_dir / task_id
         entry_local_exists = entry.is_dir()
         try:
-            # Leggi plenora_metadata.json: prima da local cache (fast),
-            # poi fallback a S3 (multi-host: bundle generato su altro nodo).
+            # Leggi plenora_metadata.json: prima da local cache (fast
+            # poi fallback a S3 (multi-host: bundle generato su altro nodo
             meta: Dict[str, Any] = {}
             meta_path = entry / "plenora_metadata.json"
             if meta_path.exists():
@@ -529,7 +528,7 @@ def list_bundles(
             bundle_pid = meta.get("project_id")
 
             # ACL: escludi bundle di progetti non visibili all'utente
-            # (eccetto legacy senza project_id, che non possiamo valutare).
+            # eccetto legacy senza project_id, che non possiamo valutare
             if visible_project_ids is not None and bundle_pid:
                 if bundle_pid not in visible_project_ids:
                     acl_skipped += 1
@@ -538,7 +537,7 @@ def list_bundles(
             # Filtro project_id — se il filtro e' attivo, richiediamo che
             # il bundle abbia un project_id noto e matchi. Bundle legacy
             # senza plenora_metadata.json (project_id=None) vengono skippati
-            # e il conteggio finale viene loggato una sola volta.
+            # e il conteggio finale viene loggato una sola volta
             if project_id:
                 if not bundle_pid:
                     legacy_skipped += 1
@@ -547,14 +546,14 @@ def list_bundles(
                     continue
 
             # Size: calcolabile solo se in cache locale. Altrimenti None
-            # (mostrato come "—" dal frontend).
+            # mostrato come "—" dal frontend
             size_bytes = (
                 sum(f.stat().st_size for f in entry.rglob("*") if f.is_file())
                 if entry_local_exists else None
             )
 
             # Fallback per bundle senza plenora_metadata (vecchi). Le euristiche
-            # richiedono accesso locale ai file; su S3-only resta il valore meta.
+            # richiedono accesso locale ai file; su S3-only resta il valore meta
             has_gdb = meta.get("has_gdb")
             if has_gdb is None and entry_local_exists:
                 has_gdb = any(p.is_dir() and p.suffix == ".gdb" for p in entry.iterdir())
@@ -562,12 +561,12 @@ def list_bundles(
             # D3 commit 3 (R3): site_id letto solo da meta (scritto da persist
             # dal valore autoritativo di loader.ImdfBundle.site_id). Fallback
             # iterdir rimosso: nessuna scansione cross-node; bundle senza
-            # site_id in meta -> site_id=None nella response.
+            # site_id in meta -> site_id=None nella response
             site_id = meta.get("site_id")
 
             # Counts layer IMDF: preferenza ai valori scritti in metadata
-            # (al save time — disponibili anche su S3-only). Fallback counting
-            # lazy dei .geojson solo se local cache c'e'.
+            # al save time — disponibili anche su S3-only). Fallback counting
+            # lazy dei .geojson solo se local cache c'e'
             building_count = meta.get("building_count")
             level_count    = meta.get("level_count")
             unit_count     = meta.get("unit_count")
@@ -592,7 +591,7 @@ def list_bundles(
                     if unit_count is None:
                         unit_count = _count_features(site_dir / "unit.geojson")
 
-            # age_hours: da mtime locale se c'e', altrimenti None.
+            # age_hours: da mtime locale se c'e', altrimenti None
             age_hours = (
                 round((now - entry.stat().st_mtime) / 3600, 2)
                 if entry_local_exists else None
@@ -644,7 +643,7 @@ def delete_bundle(
     import shutil
     bundle_dir = _safe_bundle_dir(bundle_task_id)
     # R2 multi-host: hydrate per check metadata group-access
-    # (se il bundle e' solo su S3 e non nella cache locale del nodo corrente).
+    # se il bundle e' solo su S3 e non nella cache locale del nodo corrente
     _hydrate_local_cache(bundle_task_id)
     if not bundle_dir.exists() or not bundle_dir.is_dir():
         raise HTTPException(
@@ -665,8 +664,8 @@ def delete_bundle(
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
     # R2 multi-host: cancella anche da S3 (best-effort, separato dal delete
-    # locale). Se fallisce (config mancante in test / network error in prod),
-    # logghiamo ma non failiamo il 200 — il bundle locale e' gia' rimosso.
+    # locale). Se fallisce (config mancante in test / network error in prod
+    # logghiamo ma non failiamo il 200 — il bundle locale e' gia' rimosso
     try:
         from app.core.imdf import storage as _imdf_storage
         _imdf_storage.delete_bundle(bundle_task_id)
@@ -679,4 +678,4 @@ def delete_bundle(
     logger.info(
         f"[User {current_user.username}] IMDF bundle '{bundle_task_id}' cancellato"
     )
-    # F2-B3 (2026-04-24): DELETE risponde 204 No Content, body vuoto.
+    # F2-B3 (2026-04-24): DELETE risponde 204 No Content, body vuoto

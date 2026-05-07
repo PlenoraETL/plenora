@@ -37,7 +37,7 @@ class SnapshotHandle:
       - `node_hash` e' presente (salvo errore di compute);
       - `row_count` e' la lunghezza reale del DataFrame;
       - `persisted_rows_count` e':
-          0  in mode `metadata_only`;
+          0 in mode `metadata_only`;
           min(N, row_count) in `preview_only`;
           row_count in `full_pg`.
     """
@@ -58,7 +58,7 @@ class SnapshotHandle:
 class FlushResult:
     """Esito di `flush_snapshots`.
 
-    Batch 1: stub. Le scritture sono sync, quindi `pending=0` e
+    stub. Le scritture sono sync, quindi `pending=0` e
     `errors=[]` sempre.
     """
     run_id: str
@@ -96,9 +96,9 @@ def _compute_dataframe_fingerprint_full(df: Any) -> str:
     Costo O(n*cols) — su DF da 275k righe e 56 colonne 1.0–1.5 s.
     Esatto: ogni cambio in qualunque riga produce hash diverso.
 
-    1. Schema payload:    `<col>=<dtype>|<col>=<dtype>|...` ordinato.
+    1. Schema payload: `<col>=<dtype>|<col>=<dtype>|...` ordinato.
     2. Row count payload: stringa decimale.
-    3. Row hash payload:  `pd.util.hash_pandas_object(df[ordered_cols],
+    3. Row hash payload: `pd.util.hash_pandas_object(df[ordered_cols],
        index=False, categorize=True)` -> ndarray uint64 -> bytes raw.
     4. SHA256 di (schema || rowcount || rowhashes).
     """
@@ -132,7 +132,7 @@ def _compute_dataframe_fingerprint_sample(df: Any, sample_rows: int) -> str:
     """
     if sample_rows <= 0:
         # Difensivo: validate dovrebbe gia' aver bloccato. Restiamo
-        # deterministici fallback.
+        # deterministici fallback
         sample_rows = 1
     digest, ordered_cols, row_count = _init_digest_with_schema(df)
     digest.update(f"sample={sample_rows}".encode("ascii"))
@@ -184,13 +184,13 @@ def compute_dataframe_fingerprint(df: Any) -> tuple[str, str]:
         rilevati anche con sample.
       - `df.head(N)` e' deterministico (no shuffle, no random seed).
     """
-    # Risoluzione mode + sample size dalla policy (lazy lettura env).
+    # Risoluzione mode + sample size dalla policy (lazy lettura env
     cfg = _policy._read_settings()
     mode = (cfg.get("fingerprint_mode") or _policy.FINGERPRINT_MODE_SAMPLE)
     sample_rows = int(cfg.get("fingerprint_sample_rows") or 1000)
 
     if df is None:
-        # None DF: stesso digest legacy, ma algo riflette la mode.
+        # None DF: stesso digest legacy, ma algo riflette la mode
         digest_hex = hashlib.sha256(b"none-df").hexdigest()
         algo = (
             _policy.HASH_ALGO_PANDAS_SAMPLE_V1
@@ -228,13 +228,13 @@ def compute_dataframe_fingerprint(df: Any) -> tuple[str, str]:
     )
 
 
-# Preview & row-hash helpers (interni)
+# Preview & row-hash helpers (interni
 
 def _build_preview_rows(df: Any, n_rows: int) -> List[Dict]:
     """Ritorna `df.head(n_rows).to_dict(orient='records')` con
     `_row_hash` per ogni riga.
 
-    Per Batch 1 riusa `writer.compute_row_hash` per garantire che
+    Per riusa `writer.compute_row_hash` per garantire che
     il `row_hash` di una riga preview sia identico a quello legacy
     `full_pg` (cosi' diff L2 fra una run preview_only e una full_pg
     sullo stesso dataset combacia sulle prime N righe).
@@ -250,7 +250,7 @@ def _build_preview_rows(df: Any, n_rows: int) -> List[Dict]:
     cols_sorted = sorted(map(str, df.columns.tolist()))
     out: List[Dict] = []
     # `to_dict(orient="records")` sulle prime N righe: O(N), accettabile
-    # con N=500 anche su DataFrame grandi.
+    # con N=500 anche su DataFrame grandi
     for row in head.to_dict(orient="records"):
         out.append({
             "_row_hash": compute_row_hash(row, cols_sorted),
@@ -313,8 +313,8 @@ def _record_snapshot(
       3. compute_dataframe_fingerprint(df) -> node_hash.
       4. preview/full rows secondo `policy.persistence_mode`:
          - metadata_only -> rows_to_persist = []
-         - preview_only  -> rows_to_persist = head(N) + _row_hash
-         - full_pg       -> rows_to_persist = full to_dict + _row_hash
+         - preview_only -> rows_to_persist = head(N) + _row_hash
+         - full_pg -> rows_to_persist = full to_dict + _row_hash
       5. write_node_snapshot_atomic(...) -> persiste meta + rows.
 
     `mode_override` (R-25 PR-B2): kwarg per-call che sostituisce
@@ -348,7 +348,7 @@ def _record_snapshot(
 
     # Lazy len/schema/hash: arriviamo qui solo se la policy ha deciso
     # di registrare. Hash sempre calcolato sul full DataFrame; le righe
-    # da scrivere variano per mode.
+    # da scrivere variano per mode
     row_count = 0 if df is None else int(len(df))
     col_schema = _col_schema_from_df(df)
 
@@ -365,7 +365,7 @@ def _record_snapshot(
         elif persistence_mode == _policy.MODE_PREVIEW_ONLY:
             rows_to_persist = _build_preview_rows(df, policy.preview_rows)
         # mode metadata_only / full_artifact non entrano in questo branch
-        # (should_record_rows=False -> zero node_rows).
+        # should_record_rows=False -> zero node_rows
 
     persisted_rows_count = len(rows_to_persist)
     preview_truncated = (
@@ -373,10 +373,10 @@ def _record_snapshot(
         and persisted_rows_count < row_count
     )
 
-    # Batch object storage intermedi (2026-04-28): in mode full_artifact
+    # storage intermedi (2026-04-28): in mode full_artifact
     # serializziamo data.parquet + manifest.json su runtime object
     # storage. Il caller persistera' artifact_uri / _status / _format
-    # in `node_meta`. Best-effort: errori tornano `failed` e proseguono.
+    # in `node_meta`. Best-effort: errori tornano `failed` e proseguono
     artifact_uri: Optional[str] = None
     artifact_format: Optional[str] = None
     artifact_status: str = _policy.ARTIFACT_STATUS_NONE
@@ -385,7 +385,7 @@ def _record_snapshot(
 
     if persistence_mode == _policy.MODE_FULL_ARTIFACT and df is not None:
         _t_art = time.monotonic()
-        # Lookup group_id + project_id dalla run intermediate.
+        # Lookup group_id + project_id dalla run intermediate
         run_meta = _db.get_run(run_id) or {}
         run_project_id = run_meta.get("canvas_id") or ""
         run_group_id = run_meta.get("group_id") or ""
@@ -531,7 +531,7 @@ def record_checkpoint_snapshot(
     """Registra uno snapshot intermedio (per-nodo) di un modulo.
 
     La policy decide se questo specifico nodo va salvato:
-      - ESTRAI / ARRICCHISCI in Batch 1: sempre skip.
+      - ESTRAI / ARRICCHISCI in sempre skip.
       - MANIPOLA: dipende da `MANIPOLA_INTERMEDIATE_CHECKPOINTS` +
         classificazione critical/marked.
 
@@ -569,9 +569,9 @@ def flush_snapshots(
 ) -> FlushResult:
     """Drena gli snapshot pending per la run.
 
-    Batch 1: stub. Le scritture in Batch 1 sono sync (nessuna queue
+    stub. Le scritture in sono sync (nessuna queue
     async), quindi non c'e' nulla da drenare. La firma esiste per
-    permettere agli executor di Batch 2 di chiamare
+    permettere agli executor di di chiamare
     `flush_snapshots(run_id)` prima di `close_run` senza aspettare
     refactor sequenziali.
     """

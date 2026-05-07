@@ -1,7 +1,7 @@
 """
-Groups DAL — estratto da `config_db_service.py`
+Groups DAL helpers.
 
-(BE-GO-READY-DB-ENGINE-002-GROUPS-CLUSTER-EXTRACTION).
+Keeps config-table persistence isolated behind a narrow database module.
 """
 
 from typing import Dict, List, Optional
@@ -64,11 +64,11 @@ def get_group_summary(group_id: str) -> dict:
 def delete_group_cascade(group_id: str) -> dict:
     """
     Cascade delete completo di un gruppo e di tutti i suoi dati:
-      config.db   → schedules, api_connections, datasources, file_sources,
+      config.db → schedules, api_connections, datasources, file_sources,
                     connections, comparison_keys, projects, users, group
-      results.db  → results per ogni progetto del gruppo
+      results.db → results per ogni progetto del gruppo
       intermediate.db → runs + tabelle dinamiche per ogni progetto del gruppo
-      log.db      → log_runs per group_id
+      log.db → log_runs per group_id
 
     Ritorna un dict con i conteggi di ciò che è stato eliminato.
     Non solleva eccezioni — ogni step è non bloccante e logga i warning.
@@ -85,7 +85,7 @@ def delete_group_cascade(group_id: str) -> dict:
         "log_runs": 0,
     }
 
-    # 1-5: Batch DELETE per tabelle con group_id
+    # 1-5: per tabelle con group_id
     for table in ["schedules", "api_connections", "datasources", "file_sources", "connections"]:
         try:
             cur = execute(f"DELETE FROM {table} WHERE group_id = ?", (group_id,))
@@ -114,7 +114,7 @@ def delete_group_cascade(group_id: str) -> dict:
             except Exception as e:
                 _log.warning(f"Cascade delete intermediate progetto {pid}: {e}")
 
-        # Comparison keys: batch delete via subquery (O(1) query invece di O(n))
+        # Comparison keys: via subquery (O(1) query invece di O(n
         if project_ids:
             try:
                 execute(
@@ -125,7 +125,7 @@ def delete_group_cascade(group_id: str) -> dict:
             except Exception as e:
                 _log.warning(f"Cascade batch delete comparison_keys fallito: {e}")
 
-            # Progetti: batch delete
+            # Progetti
             try:
                 cur = execute("DELETE FROM projects WHERE group_id = ?", (group_id,))
                 report["projects"] = cur.rowcount if hasattr(cur, 'rowcount') else len(project_ids)
@@ -141,7 +141,7 @@ def delete_group_cascade(group_id: str) -> dict:
     except Exception as e:
         _log.warning(f"Cascade delete users fallito: {e}")
 
-    # 8. log_runs (ora su PostgreSQL, stessa connessione)
+    # 8. log_runs (ora su PostgreSQL, stessa connessione
     try:
         cur = execute("DELETE FROM log_runs WHERE group_id = ?", (group_id,))
         report["log_runs"] = cur.rowcount

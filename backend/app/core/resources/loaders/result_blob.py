@@ -1,7 +1,6 @@
 """
 Result-blob loader — pilot Resource Engine kind.
 
-BE-GO-READY-RESOURCE-ENGINE-002-RESULT-BLOB-LOADER-PILOT.
 """
 
 from __future__ import annotations
@@ -27,36 +26,32 @@ from app.core.resources.loaders._shared import (
 )
 
 
-# BE-GO-READY-RESOURCE-ENGINE-010-RESULT-BLOB-BOUNDED-BYTES:
-# bound the previously unbounded `b"".join(list(stream["body"]))` read.
-#
+# bound the previously unbounded `b"".join(list(stream["body"]))` read
 # The pre-010 path materialized the entire object-storage iterator into
-# memory before the loader knew whether the blob was 100 KB or 100 GB.
+# memory before the loader knew whether the blob was 100 KB or 100 GB
 # That made the engine an OOM amplifier: any caller of
 # ``mode='bytes'`` / ``mode='path'`` could be DoS'd by an oversized
-# result row.
-#
+# result row
 # 010 inverts the read: chunks are accumulated into a `bytearray` with
 # a per-chunk pre-check; the iterator is aborted as soon as the cap
 # would be exceeded. The cap is read from
 # ``RESOURCE_MAX_BYTES`` env via the shared
 # ``app.core.resources.resource_caps.resolve_resource_max_bytes``
-# helper (BE-GO-READY-MEMORY-ENGINE-006); the helper handles the
+# helper ; the helper handles the
 # 200 MB default + invalid / non-positive fallback in one place so
 # this loader and ``file_source_blob.py`` cannot drift on the
-# resolution rules.
-#
+# resolution rules
 # Anti-god-engine note: NO ``app.config`` import (the helper is
 # stdlib-only too). The loader continues to read env via the helper
-# rather than importing ``app.config`` from a leaf module.
+# rather than importing ``app.config`` from a leaf module
 
 
-# BE-GO-READY-MEMORY-ENGINE-007: the loader-local
+# the loader-local
 # ``_resolve_max_bytes`` compat alias was removed. The canonical
 # entry point is ``resolve_resource_max_bytes`` from
-# ``app.core.resources.resource_caps`` (already imported above).
+# ``app.core.resources.resource_caps`` (already imported above
 # Tests and the legacy ``app.db.results_db_service`` shim now call
-# the helper directly.
+# the helper directly
 
 
 # Internal helpers — log key abbreviation + SQL row fetch
@@ -71,7 +66,7 @@ def _fetch_row(
 ) -> Optional[dict]:
     """SELECT row metadata + bounded BYTEA via SQL preflight.
 
-    BE-GO-READY-RESOURCE-ENGINE-013 (R-010.1 closure): the BYTEA
+     (R-010.1 closure): the BYTEA
     cap is enforced **inside the SQL** via a CASE expression that
     NULLs out ``data`` when ``length(data) > max_bytes``. The
     oversized BYTEA payload therefore never crosses the PG/Python
@@ -125,10 +120,10 @@ def _fetch_row(
 
     # SQL fragment layout note: the SELECT projection is kept on
     # a single source line so source-bound contract tests
-    # (anti-god-engine lock) can grep the canonical token
+    # anti-god-engine lock) can grep the canonical token
     # ``storage_key, project_id, length(data) AS data_size`` as
     # one literal substring. The CASE / WHERE / FROM clauses span
-    # multiple lines for readability.
+    # multiple lines for readability
     sql = (
         "SELECT storage_key, project_id, length(data) AS data_size, "
         "CASE "
@@ -138,11 +133,11 @@ def _fetch_row(
         "END AS data "
         "FROM results WHERE " + " AND ".join(clauses)
     )
-    # Parameter order matches placeholder order in the SQL text:
-    #   1. CASE WHEN length(data) > ?  -> max_bytes
-    #   2. WHERE id = ?                -> result_id
-    #   3. AND group_id = ?            -> group_id_filter (if set)
-    #   4. AND project_id = ?          -> project_id_filter (if set)
+    # Parameter order matches placeholder order in the SQL text
+    # 1. CASE WHEN length(data) > ? -> max_bytes
+    # 2. WHERE id = ? -> result_id
+    # 3. AND group_id = ? -> group_id_filter (if set
+    # 4. AND project_id = ? -> project_id_filter (if set
     params = (max_bytes, *where_params)
     return fetchone(sql, params)
 
@@ -152,7 +147,7 @@ def _download_object_storage(storage_key: str) -> Optional[bytes]:
 
     Delegates to ``_download_object_storage_impl`` with the
     kind-specific log prefix ``[FS-4]`` and stage
-    ``"result_blob_oversize"``.  Kept as a module-level name so
+    ``"result_blob_oversize"``. Kept as a module-level name so
     existing monkeypatch targets (tests that patch
     ``app.core.resources.loaders.result_blob._download_object_storage``)
     continue to work unchanged.
@@ -177,7 +172,7 @@ def _dispatch_by_id(
     row).
 
     This is the canonical de-duplicated dispatch. Both the
-    Protocol-compliant ``ResultBlobLoader.load()`` and the
+    Protocol-compliant ``ResultBlobLoader.load`` and the
     back-compat shim in ``results_db_service.get_result_data``
     funnel through here.
 
@@ -194,8 +189,8 @@ def _dispatch_by_id(
     # Resolve once and pass through; the SQL preflight + the
     # downstream cap enforcement MUST agree on the same cap value
     # for a given dispatch (a runtime env mutation between two
-    # `resolve_resource_max_bytes()` calls would otherwise create a
-    # tiny window of disagreement that would be hard to reason about).
+    # `resolve_resource_max_bytes` calls would otherwise create a
+    # tiny window of disagreement that would be hard to reason about
     max_bytes = resolve_resource_max_bytes()
 
     row = _fetch_row(
@@ -218,13 +213,13 @@ def _dispatch_by_id(
         )
         return data, "object_storage"
 
-    # BE-GO-READY-RESOURCE-ENGINE-013 (R-010.1 closure): BYTEA cap
+    # R-010.1 closure): BYTEA cap
     # is now SQL preflight. ``data_size`` carries the authoritative
     # ``length(data)`` projection; the SQL CASE has already nulled
     # out ``data`` if oversize, so the BYTEA payload never crossed
     # the PG/Python wire. Pre-013 the cap was post-fetch (PG had
     # already loaded the bytes into the driver before any check
-    # could run).
+    # could run
     data_size = row.get("data_size")
     if data_size is not None and data_size > max_bytes:
         duration_ms = round((time.monotonic() - _t0) * 1000, 1)
@@ -256,23 +251,22 @@ def _dispatch_by_id(
 # Path-mode helper: write bytes to a stdlib tempfile (anti-god-engine: no
 # settings imports, no domain-specific tempdir resolution; the engine
 # returns a raw stdlib tempfile path and the caller owns its lifecycle
-# via Resource.is_temporary=True).
-#
+# via Resource.is_temporary=True
 # Path mode is FALLBACK-ONLY. The default for new consumers is bytes mode
-# (in-memory, no tempfile). Path mode exists for callers that
+# in-memory, no tempfile). Path mode exists for callers that
 # unavoidably need a filesystem path (e.g. legacy parsers that take
 # `str` paths only). The temp materialization is idempotent and
 # narrowly scoped: every materialized file carries the
 # ``plenora-result-blob-`` prefix so cleanup helpers can identify and
-# safely target only files this engine produced.
+# safely target only files this engine produced
 
 
 # Explicit prefix for every tempfile this engine writes. The prefix
 # is the audit/cleanup hook: a cleanup helper that refuses to touch
 # files NOT bearing this prefix is safe even when given an arbitrary
 # Path argument (defense-in-depth against accidental
-# `cleanup_temp_path("/etc/passwd")` calls). Stable string contract:
-# changing this prefix is a contract break.
+# `cleanup_temp_path("/etc/passwd")` calls). Stable string contract
+# changing this prefix is a contract break
 _RESULT_BLOB_TEMP_PREFIX = "plenora-result-blob-"
 
 
@@ -286,7 +280,7 @@ def _materialize_to_temp_path(data: bytes) -> Path:
     helper to do it).
 
     The ``plenora-result-blob-`` prefix makes every materialized file
-    identifiable in `tempfile.gettempdir()` listings (operator audit)
+    identifiable in `tempfile.gettempdir` listings (operator audit)
     and acts as the narrow guard for ``cleanup_temp_path``.
 
     Cleanup on write failure: the partial tempfile is closed and
@@ -295,7 +289,7 @@ def _materialize_to_temp_path(data: bytes) -> Path:
     exception, never as a leaked half-written tempfile. (This
     helper is the typed replacement for the pre-019 resolver
     shim ``ArtifactResolver._write_temp_blob``, which was deleted
-    in BE-GO-READY-RESOURCE-ENGINE-023 once production callers
+    in once production callers
     had all migrated to the registry's path mode.)
 
     The loader does NOT honor a domain-specific TEMP_DIR (e.g.
@@ -334,14 +328,13 @@ def cleanup_temp_path(path: Path) -> bool:
     :func:`_materialize_to_temp_path`.
 
     Narrow, stdlib-only cleanup helper. Refuses to delete anything
-    that does NOT match the engine's invariants:
 
     1. The path's basename MUST start with ``plenora-result-blob-``.
        Without this guard, an accidental
        ``cleanup_temp_path(Path("/etc/passwd"))`` call could destroy
        arbitrary files.
     2. The path's resolved parent MUST be (or be inside) the stdlib
-       tempfile root (``tempfile.gettempdir()``). Without this guard,
+       tempfile root (``tempfile.gettempdir``). Without this guard,
        a malicious / drifted prefix on a path outside `/tmp` would
        still be deletable. The combination of (1) AND (2) is the
        defense-in-depth contract.
@@ -361,14 +354,14 @@ def cleanup_temp_path(path: Path) -> bool:
         SCOPE here — see the audit § "future cleanup sweep".
     """
     try:
-        # Defense 1: prefix check on basename.
+        # Defense 1: prefix check on basename
         name = path.name
         if not name.startswith(_RESULT_BLOB_TEMP_PREFIX):
             return False
 
         # Defense 2: resolved parent must be inside the stdlib
         # tempdir. We resolve both paths so symlinked tempdirs
-        # (macOS uses /private/var/folders) compare correctly.
+        # macOS uses /private/var/folders) compare correctly
         try:
             resolved_parent = path.resolve(strict=False).parent
         except OSError:
@@ -380,10 +373,10 @@ def cleanup_temp_path(path: Path) -> bool:
         try:
             resolved_parent.relative_to(tempdir_resolved)
         except ValueError:
-            # Parent is NOT under the tempdir — refuse.
+            # Parent is NOT under the tempdir — refuse
             return False
 
-        # Both guards passed; delete (idempotent).
+        # Both guards passed; delete (idempotent
         if not path.exists():
             return False
         _os.unlink(path)
@@ -418,24 +411,24 @@ class ResultBlobLoader:
                 f"(got {ref.result_id!r})."
             )
         if mode not in ("bytes", "path"):
-            # bytes (RESOURCE-ENGINE-002) + path (RESOURCE-ENGINE-004).
+            # bytes (RESOURCE-ENGINE-002) + path (RESOURCE-ENGINE-004
             # `stream` stays unsupported — adding it requires a
             # safe Iterator[bytes] passthrough for both BYTEA (already
             # fully read into memory) and object storage (we currently
-            # consume the stream into a list inside _download_object_storage).
+            # consume the stream into a list inside _download_object_storage
             # Implementing it without re-reading or losing seekability
-            # is non-trivial; deferred to a follow-up stream.
+            # is non-trivial; deferred to a follow-up stream
             raise ValueError(
                 f"ResultBlobLoader.load: mode={mode!r} not supported. "
                 "v1 supports mode='bytes' and mode='path'; stream is "
                 "deferred to a follow-up stream."
             )
 
-        # Tenant binding (shared between bytes and path modes):
-        #   - is_superadmin=False -> SQL filter on group_id (fail-closed:
-        #     a row owned by another group does not return).
-        #   - is_superadmin=True  -> SQL filter skipped; the bypass is
-        #     recorded in the audit log for symmetry.
+        # Tenant binding (shared between bytes and path modes
+        # is_superadmin=False -> SQL filter on group_id (fail-closed
+        # a row owned by another group does not return
+        # is_superadmin=True -> SQL filter skipped; the bypass is
+        # recorded in the audit log for symmetry
         if ref.is_superadmin:
             from app.utils.logger import get_logger
 
@@ -455,14 +448,14 @@ class ResultBlobLoader:
         # = ?`. is_superadmin does NOT bypass project filter when
         # the caller explicitly opts in: the audit-bypass semantic
         # only applies to the primary group filter; project
-        # binding is a row-level invariant the caller asked for.
+        # binding is a row-level invariant the caller asked for
         project_id_filter: Optional[str] = ref.expected_project_id or None
 
         # Single dispatch site: bytes and path modes share the SAME
-        # fail-closed lookup + tenant filter + BYTEA/S3 branch.
+        # fail-closed lookup + tenant filter + BYTEA/S3 branch
         # No second SQL query; no second tenant check; no parallel
         # dispatch path. The mode only affects the materialization
-        # step (in-memory bytes vs tempfile path).
+        # step (in-memory bytes vs tempfile path
         data, backend = _dispatch_by_id(
             ref.result_id,
             group_id_filter=group_id_filter,
@@ -482,13 +475,8 @@ class ResultBlobLoader:
             )
 
         if mode == "bytes":
-            # data may legitimately be None when object storage is
-            # disabled or download failed. The pre-pilot caller
-            # treated this as "blob not available"; we surface it as
-            # size_bytes=0 with data=None so the caller can branch.
-            # The Resource envelope always carries size_bytes; a
-            # None-data Resource is a signal "row exists but blob
-            # unavailable".
+            # data=None indica una row visibile ma blob non disponibile
+            # per storage remoto disabilitato o download fallito.
             size = len(data) if data else 0
             return Resource(
                 kind="result_blob",
@@ -503,7 +491,7 @@ class ResultBlobLoader:
         # asking for a path want a file they can open. Surface the
         # "row exists but blob unavailable" case as FileNotFoundError
         # rather than silently materializing a zero-byte tempfile
-        # (that would hide object-storage outages from the caller).
+        # that would hide object-storage outages from the caller
         if data is None:
             raise FileNotFoundError(
                 f"ResultBlobLoader.load: result_id={ref.result_id!r} "

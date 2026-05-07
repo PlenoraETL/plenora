@@ -1,7 +1,6 @@
 """
 Auth disclosure policy — typed boundary.
 
-BE-GO-READY-AUTH-ENGINE-001-DISCLOSURE-POLICY-EXTRACTION.
 """
 
 from __future__ import annotations
@@ -24,8 +23,7 @@ class DisclosureDecision:
             mirror).
         status_code: HTTP status preserved by ADR-0022.
         message: italian user-facing text exactly as historically
-            emitted. Preserves anti-enumeration invariants and
-            ADR-0018 / batch 014 disclosure decisions.
+            ADR-0018 / disclosure decisions.
         headers: optional response headers. Used for
             `WWW-Authenticate: Bearer` (token-related 401s) and
             `Retry-After` (429 rate-limit). `None` means no custom
@@ -38,7 +36,7 @@ class DisclosureDecision:
     headers: Optional[Mapping[str, str]] = None
 
 
-# Pre-auth — token presence/validity disclosure (401, WWW-Authenticate: Bearer)
+# Pre-auth — token presence/validity disclosure (401, WWW-Authenticate: Bearer
 
 
 _BEARER_HEADER: Mapping[str, str] = {"WWW-Authenticate": "Bearer"}
@@ -78,7 +76,7 @@ def token_revoked() -> DisclosureDecision:
     )
 
 
-# Post-token user state — anti-enumeration #2 (UNIFORM 401)
+# Post-token user state — anti-enumeration #2 (UNIFORM 401
 
 
 def user_not_found_or_disabled() -> DisclosureDecision:
@@ -172,7 +170,7 @@ def revocation_unavailable() -> DisclosureDecision:
     )
 
 
-# Post-authz — role-based disclosure (403, LEAKY_BY_DESIGN UI-friendly)
+# Post-authz — role-based disclosure (403, LEAKY_BY_DESIGN UI-friendly
 
 
 def role_insufficient_for_write() -> DisclosureDecision:
@@ -257,7 +255,7 @@ def self_delete_denied() -> DisclosureDecision:
 def access_denied() -> DisclosureDecision:
     """403 access_denied. Used as the UNIFORM 403 in the
     anti-enumeration #3 invariant (admin path) and elsewhere
-    (group-ACL, path-traversal denial — batch 014 scope)."""
+    group-ACL, path-traversal denial — batch 014 scope"""
     return DisclosureDecision(
         code=error_codes.ACCESS_DENIED,
         status_code=403,
@@ -328,7 +326,7 @@ def group_default_not_deletable() -> DisclosureDecision:
     )
 
 
-# Ownership disclosure (403 LEAKY_BY_DESIGN, label-driven)
+# Ownership disclosure (403 LEAKY_BY_DESIGN, label-driven
 
 
 def hierarchical_owner_required(label: str) -> DisclosureDecision:
@@ -365,7 +363,7 @@ def raise_disclosure(decision: DisclosureDecision) -> NoReturn:
     consumed by the central `app.main` handler.
 
     All call sites use `raise_typed_http` (which now supports
-    `headers=...` post-Codex review of batch 016). Status code,
+    `headers=...` post-Codex review of ). Status code,
     italian message and any custom headers are preserved exactly.
 
     The pure `DisclosureDecision` value object remains the unit of

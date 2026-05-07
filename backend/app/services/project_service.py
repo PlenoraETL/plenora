@@ -86,7 +86,7 @@ class ProjectService:
         """Lista progetti.
 
         - group_id=None → no filter (usato dal superadmin per vedere tutti i gruppi)
-        - group_id="X"  → solo progetti del gruppo X
+        - group_id="X" → solo progetti del gruppo X
         """
         self._ensure_default_group()
         rows = db.list_projects(group_id)  # NB: il db.list_projects deve supportare None
@@ -98,7 +98,7 @@ class ProjectService:
 
         - group_id=None → no filter (qualsiasi gruppo); il check di accesso
           spetta al chiamante (es. assert_group_access nel router).
-        - group_id="X"  → solo se appartiene al gruppo X.
+        - group_id="X" → solo se appartiene al gruppo X.
         """
         row = db.get_project(project_id, group_id=group_id)
         return self._row_to_metadata(row)
@@ -108,7 +108,7 @@ class ProjectService:
 
         Ritorna:
           - `None` se il progetto non esiste.
-          - `CanvasState()` vuoto se il canvas e' `None`/`{}` in DB
+          - `CanvasState` vuoto se il canvas e' `None`/`{}` in DB
             (caso legittimo: progetto appena creato, mai salvato).
 
         Solleva `CanvasCorruptedError` se il canvas e' presente ma
@@ -127,11 +127,11 @@ class ProjectService:
 
         canvas_data = row.get("canvas")
 
-        # Canvas mancante / vuoto → progetto nuovo, non corruzione.
+        # Canvas mancante / vuoto → progetto nuovo, non corruzione
         if canvas_data is None or canvas_data == {} or canvas_data == "":
             return CanvasState()
 
-        # JSON string: tentativo di parse. Fallimento = corruzione.
+        # JSON string: tentativo di parse. Fallimento = corruzione
         if isinstance(canvas_data, str):
             import json
             try:
@@ -146,12 +146,12 @@ class ProjectService:
                     reason=f"JSON malformato ({e.msg} at line {e.lineno})",
                     original_error=e,
                 )
-            # Dopo decode: se e' il literal null/vuoto, canvas legittimo.
+            # Dopo decode: se e' il literal null/vuoto, canvas legittimo
             if canvas_data is None or canvas_data == {}:
                 return CanvasState()
 
         # Tipo inatteso dopo parse: non e' un dict ne' un valore vuoto
-        # riconosciuto → strutturalmente corrotto.
+        # riconosciuto → strutturalmente corrotto
         if not isinstance(canvas_data, dict):
             got_type = type(canvas_data).__name__
             logger.error(
@@ -170,7 +170,7 @@ class ProjectService:
                 f"Canvas con schema non valido per {project_id}: {e}",
                 op="get_project_canvas",
             )
-            # Tronchiamo il reason: ValidationError e' verboso.
+            # Tronchiamo il reason: ValidationError e' verboso
             reason_str = str(e)
             if len(reason_str) > 300:
                 reason_str = reason_str[:297] + "..."
@@ -185,7 +185,7 @@ class ProjectService:
 
         - group_id=None → no filter (qualsiasi gruppo); il check di accesso
           spetta al chiamante.
-        - group_id="X"  → solo se appartiene al gruppo X.
+        - group_id="X" → solo se appartiene al gruppo X.
         """
         row = db.get_project(project_id, group_id=group_id)
         if not row:
@@ -293,7 +293,7 @@ class ProjectService:
             if isinstance(canvas, str):
                 import json as _json
                 # intent: optional feature — canvas corrotto del candidato non blocca la
-                # scansione. Narrow difensivo come in _assert_no_lineage_cycle.get_sources.
+                # scansione. Narrow difensivo come in _assert_no_lineage_cycle.get_sources
                 try:
                     canvas = _json.loads(canvas)
                 except (_json.JSONDecodeError, TypeError, AttributeError) as e:
@@ -322,7 +322,7 @@ class ProjectService:
         """Elimina progetto e tutti i risultati collegati.
 
         - group_id=None → no filter (chiamante è superadmin o ha già fatto il check)
-        - group_id="X"  → solo se appartiene al gruppo X
+        - group_id="X" → solo se appartiene al gruppo X
 
         Solleva ProjectHasDependenciesError se esistono eseguibili pubblicati
         a partire da questo progetto: vanno eliminati prima.
@@ -333,7 +333,7 @@ class ProjectService:
 
         # Blocco: non eliminare progetti con eseguibili collegati o progetti
         # downstream che lo usano come sorgente. Si raccolgono entrambi e si
-        # solleva un'unica eccezione per dare all'utente il quadro completo.
+        # solleva un'unica eccezione per dare all'utente il quadro completo
         from app.core.eseguibili.db import list_eseguibili_by_source
         from app.shared.exceptions import ProjectHasDependenciesError
         linked_eseguibili = list_eseguibili_by_source(project_id)
@@ -350,18 +350,18 @@ class ProjectService:
         # Accumulatori cascade cleanup. `critical_failures` contiene step
         # che, se falliti, invalidano il claim "progetto cancellato" (orfani
         # cross-DB con dati utente). `derived_failures` contiene step il cui
-        # fallimento e' tollerato (metadata/config derivata, recuperabile).
+        # fallimento e' tollerato (metadata/config derivata, recuperabile
         # Se `critical_failures` e' non vuoto al termine, la row `config.projects`
         # NON viene rimossa (fail-closed) e si solleva RuntimeError con lista
-        # step falliti: il caller deve ritentare o escalare.
+        # step falliti: il caller deve ritentare o escalare
         critical_failures: list[str] = []
         derived_failures: list[str] = []
 
         # intent: cascade step derived — mark_as_orphan e' idempotente, un
-        # fallimento e' recuperabile via UI scheduler.
-        # outcome: fail-open con breadcrumb (exc_info per diagnosi).
+        # fallimento e' recuperabile via UI scheduler
+        # outcome: fail-open con breadcrumb (exc_info per diagnosi
         # Non cancelliamo gli schedule: lo storico (log esecuzioni) resta
-        # visibile e l'utente decide se rimuoverli manualmente dalla UI.
+        # visibile e l'utente decide se rimuoverli manualmente dalla UI
         try:
             from app.core.scheduler.schedule_service import ScheduleService
             schedule_service = ScheduleService()
@@ -385,8 +385,8 @@ class ProjectService:
             derived_failures.append("schedules_orphan")
 
         # intent: cascade step CRITICAL — intermediate tables + tabelle
-        # dinamiche contengono dati utente (volume potenzialmente grande).
-        # outcome: fail-closed via aggregazione (vedi gate sotto).
+        # dinamiche contengono dati utente (volume potenzialmente grande
+        # outcome: fail-closed via aggregazione (vedi gate sotto
         try:
             from app.core.intermediate.db import delete_all_runs_for_canvas
             deleted_runs = delete_all_runs_for_canvas(project_id)
@@ -404,8 +404,8 @@ class ProjectService:
             critical_failures.append("intermediate_runs")
 
         # intent: cascade step CRITICAL — results tables/blob contengono output
-        # utente esportati (GDPR-sensitive).
-        # outcome: fail-closed via aggregazione.
+        # utente esportati (GDPR-sensitive
+        # outcome: fail-closed via aggregazione
         try:
             from app.db.results_db_service import delete_results_for_project
             deleted_results = delete_results_for_project(project_id)
@@ -422,11 +422,11 @@ class ProjectService:
             )
             critical_failures.append("results_blobs")
 
-        # intent: cascade step derived — comparison_keys e' config derivata,
-        # volume minimo e nessun dato utente sensibile. Orfano innocuo.
-        # outcome: fail-open con breadcrumb.
+        # intent: cascade step derived — comparison_keys e' config derivata
+        # volume minimo e nessun dato utente sensibile. Orfano innocuo
+        # outcome: fail-open con breadcrumb
         # Cleanup comparison_keys (config tables) — chiavi di confronto associate
-        # ai nodi del canvas, identificate da canvas_id == project_id.
+        # ai nodi del canvas, identificate da canvas_id == project_id
         try:
             from app.db.config.comparison_keys import delete_comparison_keys
             delete_comparison_keys(project_id)
@@ -507,7 +507,7 @@ class ProjectService:
             project_id, "columns_metadata", columns_metadata
         )
 
-    # RISULTATI (file output pipeline)
+    # RISULTATI (file output pipeline
 
     def save_result(self, project_id: str, filename: str, fmt: str,
                     data: bytes, rows_count: int = None,

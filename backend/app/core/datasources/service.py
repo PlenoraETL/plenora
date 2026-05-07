@@ -31,7 +31,7 @@ logger = get_logger(__name__)
 
 # Campi sensibili. Usati sia per la redaction in UI (_to_model) sia per la
 # cifratura at-rest (encrypt_dict_fields/decrypt_dict_fields). encrypt_dict_fields
-# vuole una list, _to_model itera sul set: list() lo accetta entrambi.
+# vuole una list, _to_model itera sul set: list lo accetta entrambi
 _SENSITIVE_FIELDS = ["password", "private_key", "private_key_passphrase", "client_secret"]
 
 
@@ -42,16 +42,15 @@ class DataSourceService:
     """
 
     def __init__(self):
-        # Solo per scan_state (runtime)
+        # Solo per scan_state (runtime
         self._scan_dir: Path = settings.DATA_DIR / "datasources_scan"
 
     # ── CRUD ──────────────────────────────────────────────────────────────
 
     def list_datasources(self, group_id: str = None) -> DataSourceList:
-        # group_id=None → no filter (superadmin o path allowed_groups)
+        # group_id=None → no filter (superadmin o path allowed_groups
         # Fix N+1: fetch tutte le row in una query, parse config in memoria
-        # BE-GO-READY-DB-ENGINE-005: migrato off facade
-        # `config_db_service.fetchall` (re-export di pg_connection).
+        # Usa il helper DB canonico invece della superficie aggregata.
         from app.db.pg_connection import fetchall as _fetchall
         if group_id is None:
             rows = _fetchall(
@@ -72,7 +71,7 @@ class DataSourceService:
     def _row_to_config(self, row: dict) -> Optional[dict]:
         """Estrae il config dict da una row già fetchata (no re-query).
 
-        Equivalente in-memory di _get_full_config() ma senza re-fetch dal DB.
+        Equivalente in-memory di _get_full_config ma senza re-fetch dal DB.
         Usato da list_datasources per evitare N+1 query.
         """
         if not row:
@@ -88,7 +87,7 @@ class DataSourceService:
             return None
         # Decifra campi sensibili at-rest
         _decrypt_dict_fields(config, _SENSITIVE_FIELDS)
-        # Inietta group_id e created_by dal record DB (stesso logic di _get_full_config)
+        # Inietta group_id e created_by dal record DB (stesso logic di _get_full_config
         config["group_id"] = row.get("group_id", "")
         config["created_by"] = row.get("created_by")
         return config
@@ -131,9 +130,9 @@ class DataSourceService:
         }
         config = {k: v for k, v in config.items() if v is not None}
 
-        # Cifra at-rest i campi sensibili (password, private_key, ...) prima del save.
+        # Cifra at-rest i campi sensibili (password, private_key, ...) prima del save
         # NOTA: passiamo una COPIA per non mutare il dict che restituiamo al caller
-        # (_to_model si aspetta plaintext per fare redaction, non valori cifrati).
+        # _to_model si aspetta plaintext per fare redaction, non valori cifrati
         config_to_save = dict(config)
         _encrypt_dict_fields(config_to_save, _SENSITIVE_FIELDS)
 
@@ -147,7 +146,7 @@ class DataSourceService:
         )
 
         # Inietta created_by nel config in-memory per il _to_model che popola
-        # la response (il re-read dal DB avrebbe lo stesso effetto, ma costa un round trip).
+        # la response (il re-read dal DB avrebbe lo stesso effetto, ma costa un round trip
         config["group_id"] = group_id or settings.DEFAULT_GROUP
         config["created_by"] = created_by
 
@@ -162,7 +161,7 @@ class DataSourceService:
 
         updates = data.model_dump(exclude_none=True)
         # Filtra i campi sensibili mascherati: il client invia "***" per i
-        # campi non modificati e quel valore non deve sovrascrivere il reale.
+        # campi non modificati e quel valore non deve sovrascrivere il reale
         for sf in _SENSITIVE_FIELDS:
             if sf in updates and updates[sf] == "***":
                 del updates[sf]
@@ -170,9 +169,9 @@ class DataSourceService:
         config["updated_at"] = datetime.now(timezone.utc).isoformat()
 
         # Re-cifra i campi sensibili prima di salvare. Lavoro su una copia
-        # per non mutare il dict che _to_model deve usare per la redaction.
-        # Rimuovi group_id/created_by dal blob config: sono colonne DB separate,
-        # non vanno duplicate nel JSON.
+        # per non mutare il dict che _to_model deve usare per la redaction
+        # Rimuovi group_id/created_by dal blob config: sono colonne DB separate
+        # non vanno duplicate nel JSON
         config_to_save = dict(config)
         config_to_save.pop("group_id", None)
         config_to_save.pop("created_by", None)
@@ -198,7 +197,7 @@ class DataSourceService:
     def test_connection(self, ds_id: str) -> DataSourceTestResult:
         # FIXME: #2 (2026-04-23): strict=True → se un campo auth cifrato non e'
         # decifrabile, CredentialUnavailableError propagato al router per
-        # HTTP 422. Evita 200-OK fasullo con secret silent-None.
+        # HTTP 422. Evita 200-OK fasullo con secret silent-None
         config = self._get_full_config(ds_id, strict=True)
         if not config:
             return DataSourceTestResult(
@@ -213,10 +212,10 @@ class DataSourceService:
                 message=result.get("message", ""),
                 details=result.get("details"),
             )
-        # intent: boundary / outcome: fail-closed (success=False sanitizzato)
-        # Non propagare str(e) nella response: gli SDK di provider (Office365,
-        # paramiko, ftplib) possono includere URL autenticati, token OAuth,
-        # credenziali parziali o path interni. Stacktrace preservato lato log.
+        # intent: boundary / outcome: fail-closed (success=False sanitizzato
+        # Non propagare str(e) nella response: gli SDK di provider (Office365
+        # paramiko, ftplib) possono includere URL autenticati, token OAuth
+        # credenziali parziali o path interni. Stacktrace preservato lato log
         except Exception as e:
             logger.error(
                 f"[GESTITO] Errore test connessione {ds_id}: {e}",
@@ -277,11 +276,10 @@ class DataSourceService:
             # Prima: warning + fallback silenzioso → ogni chiamata successiva
             # ritrova il file corrotto e ritorna ScanState vuoto, ma il file
             # corrotto NON viene mai sostituito → "scan rotto fino al reset
-            # manuale dell'admin".
-            #
+            # manuale dell'admin"
             # Ora: log a ERROR + rinomina il file corrotto in `.broken.<ts>`
-            # così la prossima chiamata vede "no scan state" e riparte pulita.
-            # L'admin trova il file corrotto sul disco se vuole investigare.
+            # così la prossima chiamata vede "no scan state" e riparte pulita
+            # L'admin trova il file corrotto sul disco se vuole investigare
             ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
             broken_path = path.with_name(f"{path.name}.broken.{ts}")
             try:
@@ -345,7 +343,7 @@ class DataSourceService:
             state.processed.append(ProcessedEntry(
                 name=filename, processed_at=now, pipeline_id=pipeline_id,
             ))
-        # intent: optional feature / outcome: fail-open (snapshot entry derivata, non critica)
+        # intent: optional feature / outcome: fail-open (snapshot entry derivata, non critica
         try:
             fi = self.file_info(ds_id, filename)
             if filename not in snapshot_names:
@@ -399,7 +397,7 @@ class DataSourceService:
                 f"{type(config).__name__}. Datasource trattata come non trovata."
             )
             return None
-        # Decifra at-rest i campi sensibili (strict propagato)
+        # Decifra at-rest i campi sensibili (strict propagato
         _decrypt_dict_fields(config, _SENSITIVE_FIELDS, strict=strict)
         # Inietta group_id e created_by dal record DB nel config dict
         config["group_id"] = row.get("group_id", "")

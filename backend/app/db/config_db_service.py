@@ -8,7 +8,7 @@ import json
 from typing import Any, Dict, List, Optional
 from app.utils.logger import get_logger
 
-# Importa tutto da pg_connection (rimpiazza sqlite3 thread-local)
+# Importa tutto da pg_connection (rimpiazza sqlite3 thread-local
 from app.db.pg_connection import (
     fetchone, fetchall, execute, executemany,
     transaction, get_connection, put_connection,
@@ -31,7 +31,7 @@ _ALLOWED_UPDATE_FIELDS = {
                     "cron_expression", "last_run", "last_status", "next_run"},
     # Schema reale: id, group_id, name, ds_type, config, created_at, updated_at, created_by
     # In pratica il service aggiorna solo `config` (blob JSON), ma teniamo
-    # name/ds_type per future operazioni di rename.
+    # name/ds_type per future operazioni di rename
     "datasources": {"name", "ds_type", "config", "updated_at"},
 }
 
@@ -44,8 +44,8 @@ def _safe_set_clause(table: str, fields: dict) -> tuple:
             f"Campi non consentiti per UPDATE {table}: {invalid}. "
             f"Consentiti: {allowed}"
         )
-    # PostgreSQL usa %s come placeholder (pg_connection._adapt_params converte ? → %s,
-    # ma qui costruiamo direttamente con %s per chiarezza)
+    # PostgreSQL usa %s come placeholder (pg_connection._adapt_params converte ? → %s
+    # ma qui costruiamo direttamente con %s per chiarezza
     set_clause = ", ".join(f"{k} = %s" for k in fields)
     return set_clause, tuple(fields.values())
 
@@ -93,7 +93,7 @@ from app.db.config.projects import (  # noqa: F401,E402
 )
 
 
-# COMPARISON KEYS (per confronto L3 su intermediate.db)
+# COMPARISON KEYS (per confronto L3 su intermediate.db
 
 from app.db.config.comparison_keys import delete_comparison_keys  # noqa: F401,E402
 

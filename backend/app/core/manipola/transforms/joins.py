@@ -16,12 +16,12 @@ from app.utils.logger import get_logger
 logger = get_logger("app.core.manipola.transforms.base")
 
 # Stesso alias dtype-union usato in base.py: copre sia pandas DataFrame
-# sia geopandas GeoDataFrame (op_join supporta entrambi via copy + merge).
+# sia geopandas GeoDataFrame (op_join supporta entrambi via copy + merge
 DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
 
 
 # JOIN — Unione tabelle per colonna chiave
-# Supporta: inner, left, right, outer, cross. Gestisce suffissi per colonne omonime.
+# Supporta: inner, left, right, outer, cross. Gestisce suffissi per colonne omonime
 
 def op_join(
     inputs: List[DataFrame],
@@ -51,12 +51,12 @@ def op_join(
     left_df = inputs[0].copy()
     right_df = inputs[1].copy()
 
-    # La chiave deve esistere PRIMA di qualsiasi manipolazione (dedup,
+    # La chiave deve esistere PRIMA di qualsiasi manipolazione (dedup
     # conversione tipi, rename suffissi). Senza questo, la KeyError
-    # arriverebbe post-safe_rename con colonne _L / _R fuorvianti:
+    # arriverebbe post-safe_rename con colonne _L / _R fuorvianti
     # l'utente vedrebbe nomi suffissati che non esistevano nel config
     # e interpreterebbe il problema come bug del rename, mentre la
-    # chiave non era presente nemmeno nel DataFrame originale.
+    # chiave non era presente nemmeno nel DataFrame originale
     if left_on not in left_df.columns:
         raise KeyError(
             f"Colonna join sinistra '{left_on}' non esiste nel DataFrame di sinistra. "
@@ -70,9 +70,9 @@ def op_join(
             f"Colonne disponibili nel right (prime 20): {list(right_df.columns)[:20]}"
         )
 
-    # Se ci sono colonne duplicate, pandas merge fallisce con KeyError.
-    # Strategia: se la chiave è duplicata tieni solo la prima occorrenza,
-    # per le altre colonne aggiungi suffisso progressivo.
+    # Se ci sono colonne duplicate, pandas merge fallisce con KeyError
+    # Strategia: se la chiave è duplicata tieni solo la prima occorrenza
+    # per le altre colonne aggiungi suffisso progressivo
     def dedup_columns(df, key_col):
         seen = {}
         new_cols = []
@@ -98,30 +98,30 @@ def op_join(
     left_df = dedup_columns(left_df, left_on)
     right_df = dedup_columns(right_df, right_on)
 
-    # Se i tipi delle chiavi non corrispondono, prova a convertire.
+    # Se i tipi delle chiavi non corrispondono, prova a convertire
     if left_on in left_df.columns and right_on in right_df.columns:
         left_dtype = left_df[left_on].dtype
         right_dtype = right_df[right_on].dtype
 
         if left_dtype != right_dtype:
 
-            # Strategia: converti entrambi a stringa se uno è object, altrimenti a numerico.
+            # Strategia: converti entrambi a stringa se uno è object, altrimenti a numerico
             if left_dtype == 'object' or right_dtype == 'object':
                 def clean_to_str(series):
                     null_mask = series.isna()
                     if pd.api.types.is_numeric_dtype(series):
-                        # Numeric -> stringa pulita (1.0 -> "1") via Int64 nullable.
+                        # Numeric -> stringa pulita (1.0 -> "1") via Int64 nullable
                         try:
                             str_series = series.astype('Int64').astype(str)
                         except (ValueError, TypeError):
-                            # Fallback per float non-integer (es. 1.5): astype(str)
-                            # diretto, produce "1.5" / "2.0" / "nan".
+                            # Fallback per float non-integer (es. 1.5): astype(str
+                            # diretto, produce "1.5" / "2.0" / "nan"
                             str_series = series.astype(str)
                     else:
                         str_series = series.astype(str).str.strip()
-                    # Riapplica la mask: i veri NaN/None/pd.NA tornano pd.NA,
+                    # Riapplica la mask: i veri NaN/None/pd.NA tornano pd.NA
                     # qualunque cosa abbia scritto astype(str) in quelle posizioni
-                    # (es. "<NA>" da Int64, "nan" da float, "None" da object con None).
+                    # es. "<NA>" da Int64, "nan" da float, "None" da object con None
                     return str_series.mask(null_mask, other=pd.NA)
 
                 left_df[left_on] = clean_to_str(left_df[left_on])
@@ -130,14 +130,14 @@ def op_join(
             else:
                 # Converti entrambi a numerico. errors='coerce' produce NaN reali
                 # per i valori non parsabili, gestiti correttamente da pandas merge
-                # (no NaN==NaN). Niente downstream cleanup serve qui.
+                # no NaN==NaN). Niente downstream cleanup serve qui
                 try:
                     left_df[left_on] = pd.to_numeric(left_df[left_on], errors='coerce')
                     right_df[right_on] = pd.to_numeric(right_df[right_on], errors='coerce')
                 except Exception as e:
                     logger.warning(f"Join: impossibile convertire a numerico: {e}")
 
-    # Rinomina colonne con suffissi (tranne chiavi join)
+    # Rinomina colonne con suffissi (tranne chiavi join
     # NOTA: usiamo enumerate per gestire colonne duplicate in modo sicuro
     def safe_rename(df, key_col, suffix):
         cols = list(df.columns)
@@ -168,7 +168,7 @@ def op_join(
     # op_join, la chiave DEVE esistere qui. Se raggiungiamo questo raise
     # significa che safe_rename ha un bug (ha rinominato/perso la chiave
     # nonostante la pre-validation). Non e' un errore utente, e' una
-    # regressione interna: diagnosticarla come tale.
+    # regressione interna: diagnosticarla come tale
     if left_on not in left_df.columns:
         raise KeyError(
             f"[internal] chiave join sinistra '{left_on}' scomparsa dopo safe_rename "
@@ -182,17 +182,17 @@ def op_join(
             f"Colonne dopo rename: {list(right_df.columns)}"
         )
 
-    # pandas non considera "NaN==NaN" in linea generale, MA:
-    #  - how='outer' con NaN su entrambi i lati: pandas fonde le due righe
-    #    NaN in un'unica riga di output (regression vs policy "righe
-    #    separate, no cross-NaN match").
-    #  - dtype mismatch + roundtrip stringa: i null possono finire come
-    #    stringhe "<NA>" / "nan" / "None" e collidere con stringhe
-    #    legittime omonime sull'altro lato.
+    # pandas non considera "NaN==NaN" in linea generale, MA
+    # how='outer' con NaN su entrambi i lati: pandas fonde le due righe
+    # NaN in un'unica riga di output (regression vs policy "righe
+    # separate, no cross-NaN match"
+    # dtype mismatch + roundtrip stringa: i null possono finire come
+    # stringhe "<NA>" / "nan" / "None" e collidere con stringhe
+    # legittime omonime sull'altro lato
     # Soluzione: ogni NaN viene rimpiazzato con una sentinel univoca per
-    # riga e lato. Nessuna sentinel collide con un'altra (left vs right),
-    # ne con valori reali (sentinel string casuale). Dopo il merge,
-    # ripristiniamo NaN nelle posizioni dei sentinel.
+    # riga e lato. Nessuna sentinel collide con un'altra (left vs right
+    # ne con valori reali (sentinel string casuale). Dopo il merge
+    # ripristiniamo NaN nelle posizioni dei sentinel
     left_null_mask = left_df[left_on].isna()
     right_null_mask = right_df[right_on].isna()
     left_null_keys = int(left_null_mask.sum())
@@ -214,10 +214,10 @@ def op_join(
     _right_sentinel_prefix = f"__JOIN_NULL_R_{_join_nan_token}_"
 
     if left_null_keys or right_null_keys:
-        # Forza object dtype su ENTRAMBE le key (anche quella senza null):
+        # Forza object dtype su ENTRAMBE le key (anche quella senza null
         # se ne casta una sola, pandas merge solleva "trying to merge object
         # and float64 columns". L'object dtype ospita le sentinel string
-        # accanto ai valori originali; ripristineremo NaN dopo il merge.
+        # accanto ai valori originali; ripristineremo NaN dopo il merge
         left_df[left_on] = left_df[left_on].astype(object)
         right_df[right_on] = right_df[right_on].astype(object)
         if left_null_keys:
@@ -238,7 +238,7 @@ def op_join(
         suffixes=('', '_dup')
     )
 
-    # Ripristina NaN nelle posizioni dei sentinel sulle key di output.
+    # Ripristina NaN nelle posizioni dei sentinel sulle key di output
     if left_null_keys or right_null_keys:
         def _restore_join_nans(series):
             if series.dtype != object:
@@ -264,7 +264,7 @@ def op_join(
 
 
 # UNIONE / CONCATENAZIONE VERTICALE
-# Impila righe di più DataFrame. Allinea automaticamente colonne per nome.
+# Impila righe di più DataFrame. Allinea automaticamente colonne per nome
 
 def op_union(
     inputs: List[DataFrame],
@@ -292,7 +292,7 @@ def op_union(
 
 
 # CROSS JOIN — Prodotto cartesiano di due DataFrame
-# Genera tutte le combinazioni possibili di righe tra due tabelle.
+# Genera tutte le combinazioni possibili di righe tra due tabelle
 
 CROSS_JOIN_STAGE = "manipola_cross_join"
 
@@ -320,26 +320,25 @@ def op_cross_join(
     right_df = dfs[1]
 
     # Cross-join produce |left| * |right| righe. Inputs anche modesti
-    # (10k x 10k = 100M righe) generano un DataFrame che certamente
+    # 10k x 10k = 100M righe) generano un DataFrame che certamente
     # sfora la memoria del worker (1.5 GB cap RSS, vedi
     # WORKER_RSS_MAX_BYTES). Stimiamo l'output PRIMA di
     # materializzare via pd.merge: lookup costante O(1) (gia'
-    # disponibile via len()), zero costo IO/memoria aggiuntivo.
-    #
-    # Reuse del contratto Memory/OOM (BE-GO-READY-MEMORY-OOM-001/002):
-    # - eccezione PURA condivisa `MemoryLimitExceededError`;
-    # - codice envelope `memory_limit_exceeded`;
-    # - status 413 (Payload Too Large: gli input sono troppo grandi
-    #   per un cross-join sostenibile);
-    # - stage `manipola_cross_join` distingue il caller dal file-
-    #   preflight e dal worker RSS sampling.
-    # Cap configurabile via `CROSS_JOIN_MAX_OUTPUT_ROWS` (settings).
-    # Cap <= 0 disabilita il guard (escape hatch testing/admin).
+    # disponibile via len), zero costo IO/memoria aggiuntivo
+    # Reuse del contratto Memory/OOM
+    # eccezione PURA condivisa `MemoryLimitExceededError`
+    # codice envelope `memory_limit_exceeded`
+    # status 413 (Payload Too Large: gli input sono troppo grandi
+    # per un cross-join sostenibile
+    # stage `manipola_cross_join` distingue il caller dal file
+    # preflight e dal worker RSS sampling
+    # Cap configurabile via `CROSS_JOIN_MAX_OUTPUT_ROWS` (settings
+    # Cap <= 0 disabilita il guard (escape hatch testing/admin
     try:
         from app.config import settings as _settings
         _cap_rows = int(_settings.get("CROSS_JOIN_MAX_OUTPUT_ROWS", 50_000_000))
     except Exception:
-        # Contesto pure-test senza Settings inizializzato: guard off.
+        # Contesto pure-test senza Settings inizializzato: guard off
         _cap_rows = 0
 
     if _cap_rows > 0:

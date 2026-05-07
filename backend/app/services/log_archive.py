@@ -1,7 +1,7 @@
 """
 log_archive.py — writer isolato PG-agnostic per archive+purge di
 
-`plenora.logs` e `plenora.audit_actions` (O-ARC Batch 1, ADR-0014).
+`plenora.logs` e `plenora.audit_actions` (O-ARC , ADR-0014).
 """
 
 from __future__ import annotations
@@ -14,10 +14,10 @@ from typing import Callable, Literal, TypedDict
 from app.shared.cloud_backends import ObjectStorage
 
 
-# Canonical NDJSON shapes (O-ARC §5.1)
+# Canonical NDJSON shapes (O-ARC §5.1
 # Ordine vincolante: garantisce output deterministico byte-level in
 # combinazione con gzip(mtime=0). Un'eventuale aggiunta di colonna al
-# DB (migration futura) richiede aggiornamento coordinato qui + ADR.
+# DB (migration futura) richiede aggiornamento coordinato qui + ADR
 
 _LOGS_FIELDS: tuple[str, ...] = (
     "id", "ts", "level", "module", "op", "msg",
@@ -76,8 +76,8 @@ def _normalize_datetime(value: datetime) -> str:
             f"naive datetime is not allowed in log archive rows: {value!r}"
         )
     utc_value = value.astimezone(timezone.utc)
-    # isoformat() su un datetime UTC produce "...+00:00"; il contratto
-    # O-ARC §5.1 prescrive il suffisso `Z`.
+    # isoformat su un datetime UTC produce "...+00:00"; il contratto
+    # O-ARC §5.1 prescrive il suffisso `Z`
     return utc_value.isoformat().replace("+00:00", "Z")
 
 
@@ -134,18 +134,17 @@ def _serialize_rows(rows: list[dict], table: str) -> bytes:
     return gzip.compress(payload, compresslevel=6, mtime=0)
 
 
-# Helpers (private) — object key naming (O-ARC §5.2)
-# Pattern deterministico:
-#   <prefix><table>/<YYYY-MM>/<table>-<YYYY-MM-DD>-<NNN>.ndjson.gz
-#
-# - Il partitioning YYYY-MM / YYYY-MM-DD e' derivato dal `run_date`
-#   convertito in UTC (coerente con la normalizzazione `Z` del payload).
-# - `seq` e' zero-padded a 3 cifre (cap 999): ordinamento lessicografico
-#   delle key rispecchia l'ordine di emissione all'interno dello stesso
-#   giorno. Il cap 999 e' un invariante del pattern, non un limite di
-#   policy: superarlo significa che il sizing batch a monte e' mal tarato
-#   e va alzato via `LOG_ARCHIVE_BATCH_ROWS` (Batch 2) piuttosto che
-#   estendere il padding.
+# Helpers (private) — object key naming (O-ARC §5.2
+# Pattern deterministico
+# <prefix><table>/<YYYY-MM>/<table>-<YYYY-MM-DD>-<NNN>.ndjson.gz
+# Il partitioning YYYY-MM / YYYY-MM-DD e' derivato dal `run_date`
+# convertito in UTC (coerente con la normalizzazione `Z` del payload
+# `seq` e' zero-padded a 3 cifre (cap 999): ordinamento lessicografico
+# delle key rispecchia l'ordine di emissione all'interno dello stesso
+# giorno. Il cap 999 e' un invariante del pattern, non un limite di
+# policy: superarlo significa che il sizing monte e' mal tarato
+# e va alzato via `LOG_ARCHIVE_BATCH_ROWS` piuttosto che
+# estendere il padding
 
 _MAX_BATCH_SEQ: int = 999
 
@@ -223,9 +222,9 @@ class LogArchiveWriter:
     `plenora.audit_actions`.
 
     L'istanza e' riutilizzabile tra run: non tiene stato mutabile oltre
-    ai parametri ricevuti dal costruttore. In Batch 1 il writer non ha
+    ai parametri ricevuti dal costruttore. In il writer non ha
     chiamanti di produzione; il costruttore e' modellato per essere
-    invocato dal beat in Batch 3 tramite closure che incapsula le
+    invocato dal beat in tramite closure che incapsula le
     transazioni PG autorizzate.
     """
 
@@ -331,7 +330,7 @@ class LogArchiveWriter:
         # Dry-run su `_build_object_key` con seq=0: valida in un colpo solo
         # prefix, table e run_date PRIMA di invocare `select_rows`. Se
         # `run_date` e' naive o `key_prefix` e' mal formato, l'errore esce
-        # qui, non a meta' iterazione.
+        # qui, non a meta' iterazione
         _build_object_key(self._key_prefix, table, effective_run_date, 0)
 
         archived_rows_total = 0
@@ -362,10 +361,10 @@ class LogArchiveWriter:
                     f"retry with the same deterministic key."
                 )
 
-            # DELETE scoped: `<ts_col> < cutoff_ts AND id <= max(batch_ids)`.
+            # DELETE scoped: `<ts_col> < cutoff_ts AND id <= max(batch_ids)`
             # Il bound su `id` garantisce che non cancelliamo righe inserite
             # nella stessa finestra temporale da tx concorrenti (append-only
-            # su id crescente -> id fuori dal batch = riga piu' recente).
+            # su id crescente -> id fuori dal batch = riga piu' recente
             max_id = max(row["id"] for row in rows)
             sql = (
                 f"DELETE FROM plenora.{table} "

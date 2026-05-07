@@ -23,7 +23,7 @@ from app.core.arricchisci.models import RowError, RowStatus
 # Stesso logger name di `enrichment_service.py` (`__name__` valuta a
 # `"app.core.arricchisci.enrichment_service"`). Singleton stdlib per
 # nome → record indistinguibili dai consumer che attaccano handler /
-# filtrano per nome canonico.
+# filtrano per nome canonico
 logger = get_logger("app.core.arricchisci.enrichment_service")
 
 
@@ -52,7 +52,7 @@ class EnrichmentRetryHttpMixin:
 
                 ssl_verify = not getattr(self.options, 'disable_ssl_verify', False)
 
-                # Sostituisci path params nell'URL ({ip}, {coordinates}, ecc.)
+                # Sostituisci path params nell'URL ({ip}, {coordinates}, ecc
                 import re
                 from urllib.parse import quote as _quote
                 call_url = self.url
@@ -62,9 +62,9 @@ class EnrichmentRetryHttpMixin:
                         encoded = _quote(str(call_params.pop(pname)), safe='-._~:@!$&\'()*+,=;/')
                         call_url = call_url.replace(f'{{{pname}}}', encoded)
 
-                # Iniezione token ArcGIS in query string (auth_type=arcgis_token)
-                # Il token va come ?token=xxx, NON come Authorization header.
-                # La cache su (token_url, username) gestisce l'auto-renewal.
+                # Iniezione token ArcGIS in query string (auth_type=arcgis_token
+                # Il token va come ?token=xxx, NON come Authorization header
+                # La cache su (token_url, username) gestisce l'auto-renewal
                 if self.auth.get("type") == "arcgis_token":
                     from app.shared.api_utils import get_arcgis_token
                     arcgis_tok = get_arcgis_token(self.auth)
@@ -72,8 +72,8 @@ class EnrichmentRetryHttpMixin:
                         call_params["token"] = arcgis_tok
 
                 # DEBUG level: per un job di 300 righe × 11 nodi questo produce
-                # ~3300 righe di log. A INFO satura journald e rallenta ~400ms per run.
-                # Chi deve fare troubleshooting abilita DEBUG sul logger.
+                # ~3300 righe di log. A INFO satura journald e rallenta ~400ms per run
+                # Chi deve fare troubleshooting abilita DEBUG sul logger
                 logger.debug(
                     f"API call: {self.method} {sanitize_url_for_log(call_url)} | "
                     f"params={sanitize_for_log(call_params, self.auth)}"

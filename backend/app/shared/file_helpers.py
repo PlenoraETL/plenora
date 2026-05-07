@@ -16,12 +16,12 @@ import pandas as pd
 
 # Logger stdlib: file_helpers e' un leaf module e non deve dipendere da
 # `app.utils.logger`. I 4 helper sono pure functions; il logger e' usato
-# solo per il debug-log non critico in `ColumnInfoBuilder._extract_geometry_columns`.
+# solo per il debug-log non critico in `ColumnInfoBuilder._extract_geometry_columns`
 _logger = logging.getLogger(__name__)
 
 
 # ColumnInfo: model di app.models (Pydantic in produzione) oppure dataclass
-# fallback. Stesso pattern di file_service.py.
+# fallback. Stesso pattern di file_service.py
 try:
     from app.models import ColumnInfo  # noqa: F401
     _USE_APP_MODELS = True
@@ -30,7 +30,7 @@ except ImportError:  # pragma: no cover
 
 if not _USE_APP_MODELS:
     @dataclass
-    class ColumnInfo:  # type: ignore[no-redef]
+    class ColumnInfo:  # type: ignore[no-redef
         """Informazioni su una colonna (fallback dataclass)."""
         name: str
         type: str
@@ -103,19 +103,17 @@ class TypeInferrer:
 
     # RB.#11 (2026-04-28): formati esplicitamente accettati per la
     # detection del tipo `date` durante upload. Cascata in ordine di
-    # preferenza, ISO prima (universale, non-ambiguo) poi italiano.
-    #
+    # preferenza, ISO prima (universale, non-ambiguo) poi italiano
     # NON includiamo `%m/%d/%Y` (US): collide con `%d/%m/%Y` su date
-    # come `"03/04/2025"` e su utenza italiana invertirebbe la scelta.
+    # come `"03/04/2025"` e su utenza italiana invertirebbe la scelta
     # Se in futuro serve, va aggiunto un setting locale/date policy
-    # esplicito, non un fallback ambiguo.
-    #
+    # esplicito, non un fallback ambiguo
     # Pre-fix: `pd.to_datetime(series.head(10))` senza format usava il
-    # fallback dateutil interno di pandas 3.x, che:
-    #   - emette `UserWarning: Could not infer format ...` ad ogni upload
-    #   - sceglie month-first come default -> mm/dd US su utenza IT
-    #   - parsa anche stringhe semi-numeriche tipo `"42-3-1"` -> falsi
-    #     positivi tipo `date` su colonne che dovrebbero essere `str`.
+    # fallback dateutil interno di pandas 3.x, che
+    # emette `UserWarning: Could not infer format ...` ad ogni upload
+    # sceglie month-first come default -> mm/dd US su utenza IT
+    # parsa anche stringhe semi-numeriche tipo `"42-3-1"` -> falsi
+    # positivi tipo `date` su colonne che dovrebbero essere `str`
     _DATE_FORMATS = (
         "%Y-%m-%d %H:%M:%S",       # ISO con time
         "%Y-%m-%dT%H:%M:%S",       # ISO8601 strict
@@ -168,8 +166,8 @@ class TypeInferrer:
         if any(sample_upper.startswith(prefix) for prefix in cls.WKT_PREFIXES):
             return 'geometry'
 
-        # Check date - RB.#11: cascata di formati espliciti + soglia,
-        # niente piu' fallback dateutil ambiguo / warning pandas.
+        # Check date - RB.#11: cascata di formati espliciti + soglia
+        # niente piu' fallback dateutil ambiguo / warning pandas
         if len(sample) >= 8 and any(c in sample for c in ['-', '/']):
             if cls._looks_like_date_column(series):
                 return 'date'
@@ -220,7 +218,7 @@ class FileIdGenerator:
         return safe.replace(' ', '_')[:max_length]
 
 
-# Analizza un DataFrame e costruisce la lista di ColumnInfo con tipo inferito.
+# Analizza un DataFrame e costruisce la lista di ColumnInfo con tipo inferito
 
 
 class ColumnInfoBuilder:
@@ -282,7 +280,7 @@ class ColumnInfoBuilder:
                         geom_columns[col] = geom_type
             except Exception as _e:
                 # Rilevamento geometria fallito (non critico): il fallback e'
-                # TypeInferrer.infer_column_type() sulla colonna a valle.
+                # TypeInferrer.infer_column_type sulla colonna a valle
                 _logger.debug(f"geometry detect fallita per colonna '{col}': {_e}")
 
         return geom_columns

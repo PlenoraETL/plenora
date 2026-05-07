@@ -104,7 +104,7 @@ class ResponseParser:
         path = config_livello.get("path", "")
         alias = config_livello.get("as", f"level_{livello}")
 
-        # Naviga al path relativo (o usa i dati correnti se path è vuoto)
+        # Naviga al path relativo (o usa i dati correnti se path è vuoto
         elementi = self._naviga_path(data, path) if path else data
 
         # Normalizza: garantisci che sia una lista
@@ -205,20 +205,20 @@ class ResponseParser:
             if corrente is None:
                 return None
 
-            # Verifica se il segmento contiene accesso a bracket [...]
+            # Verifica se il segmento contiene accesso a bracket
             match_bracket = re.match(r"^(\w*)\[(.+)\]$", segmento)
 
             if match_bracket:
                 nome_campo = match_bracket.group(1)
                 contenuto_bracket = match_bracket.group(2)
 
-                # Prima naviga al campo (se presente prima del bracket)
+                # Prima naviga al campo (se presente prima del bracket
                 if nome_campo:
                     corrente = self._ottieni_campo(corrente, nome_campo)
                     if corrente is None:
                         return None
 
-                # Poi applica l'accesso bracket (indice o filtro)
+                # Poi applica l'accesso bracket (indice o filtro
                 corrente = self._applica_bracket(corrente, contenuto_bracket)
             else:
                 # Semplice accesso a campo
@@ -292,7 +292,7 @@ class ResponseParser:
             idx = int(contenuto)
             return data[idx] if abs(idx) <= len(data) else None
 
-        # Filtro chiave=valore (restituisce il primo match)
+        # Filtro chiave=valore (restituisce il primo match
         if "=" in contenuto:
             chiave, valore = contenuto.split("=", 1)
             for elemento in data:
@@ -302,7 +302,7 @@ class ResponseParser:
 
         return None
 
-    # ESTRAZIONE SEMPLICE (senza iterate_on)
+    # ESTRAZIONE SEMPLICE (senza iterate_on
 
     def _estrazione_semplice(self, data: Any) -> List[Dict]:
         """

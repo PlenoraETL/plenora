@@ -14,12 +14,12 @@ from celery.utils.log import get_logger
 
 logger = get_logger(__name__)
 
-# Intervallo minimo tra due check (secondi)
+# Intervallo minimo tra due check (secondi
 DEFAULT_MAX_INTERVAL = 60.0
 
-# Leader election: chiave Redis, TTL del lock, ID processo corrente.
+# Leader election: chiave Redis, TTL del lock, ID processo corrente
 # TTL=120s + refresh a ogni tick (~60s) → margine 2x per sopravvivere
-# a un tick lento o a un transient di rete senza perdere leadership.
+# a un tick lento o a un transient di rete senza perdere leadership
 _LEADER_LOCK_KEY = "scheduler:beat:leader"
 _LEADER_LOCK_TTL_SECONDS = 120
 
@@ -27,7 +27,7 @@ _LEADER_LOCK_TTL_SECONDS = 120
 # attuale pubblicato su Redis per osservabilita' cross-processo. Il beat
 # gira in processo separato dalla FastAPI → no memoria condivisa per
 # metriche prometheus in-process, uso Redis come backbone. Transition
-# types: acquired / lost / released / standby / degraded_open.
+# types: acquired / lost / released / standby / degraded_open
 _LEADER_METRICS_HASH = "scheduler:beat:leader:transitions"
 _LEADER_METRICS_CURRENT_ID = "scheduler:beat:leader:current_leader_id"
 _LEADER_METRICS_LAST_TRANSITION_AT = "scheduler:beat:leader:last_transition_at"
@@ -52,7 +52,7 @@ class PlenoraBeatScheduler(Scheduler):
         # Leader election state. `_leader_id` identifica questa istanza
         # all'interno del cluster (pid@hostname). `_is_leader` tracciato
         # per loggare le transizioni. `_redis_client` lazy — inizializzato
-        # al primo tick via _get_redis().
+        # al primo tick via _get_redis
         self._leader_id = f"{os.getpid()}@{socket.gethostname()}"
         self._is_leader = False
         self._redis_client = None
@@ -75,7 +75,7 @@ class PlenoraBeatScheduler(Scheduler):
             client = redis.Redis.from_url(settings.CELERY_BROKER_URL)
             # Ping per verificare che sia raggiungibile: se fallisce
             # trattiamo Redis come down invece di avere eccezioni
-            # random al primo set().
+            # random al primo set
             client.ping()
             self._redis_client = client
             return client
@@ -238,7 +238,7 @@ class PlenoraBeatScheduler(Scheduler):
         1. Leader election (SETNX Redis). Se non-leader → standby.
         2. Se leader: sync schedule dal DB + heartbeat + cleanup jobs
            + catchup dei missed runs (opt-in per schedule).
-        3. Delega a super().tick() che emette i task scaduti.
+        3. Delega a super.tick che emette i task scaduti.
 
         In standby il beat ritorna `max_interval` senza toccare il DB
         ne' la coda Celery: zero enqueue duplicati con un secondo
@@ -263,19 +263,19 @@ class PlenoraBeatScheduler(Scheduler):
             return super().tick(event_t=event_t, **kwargs)
         return super().tick(**kwargs)
 
-    # Catchup dei missed run (C3 fix 3)
+    # Catchup dei missed run (C3 fix 3
 
     # Cap anti-runaway: se uno schedule emette piu' di N catchup nei
     # `_CATCHUP_RUNAWAY_WINDOW_MIN` minuti precedenti, il beat skippa
     # ulteriori emit + logga WARNING. Protegge da loop dovuti a bug in
-    # update di last_run o cron expression degenerate.
+    # update di last_run o cron expression degenerate
     _CATCHUP_RUNAWAY_MAX = 5
     _CATCHUP_RUNAWAY_WINDOW_MIN = 10
 
     # Dedupe window: se lo stesso scheduled_for e' stato gia' emesso nelle
     # ultime N ore, NON ri-emettiamo (evita spam duplicati finche' il primo
     # task e' in volo nella coda Celery). Dopo la finestra, un eventuale
-    # task morto viene re-emesso al prossimo detect.
+    # task morto viene re-emesso al prossimo detect
     _CATCHUP_DEDUPE_WINDOW_HOURS = 2
 
     def _emit_catchup_runs(self):
@@ -285,7 +285,7 @@ class PlenoraBeatScheduler(Scheduler):
 
         Step:
         1. Query schedule enabled (parse config JSON per leggere flag).
-        2. Per ciascuno: detect_missed_run() -> None se nulla da recuperare.
+        2. Per ciascuno: detect_missed_run -> None se nulla da recuperare.
         3. Se c'e' missed:
            a. Check cap anti-runaway su schedule_catchup_history.
            b. Emit schedule_pipeline_task con triggered_by='catchup' +
@@ -338,7 +338,7 @@ class PlenoraBeatScheduler(Scheduler):
 
                 # Dedupe: se lo stesso scheduled_for e' stato gia' emesso
                 # nelle ultime N ore, il task precedente e' probabilmente
-                # in volo o in coda — non ri-emettiamo un duplicato.
+                # in volo o in coda — non ri-emettiamo un duplicato
                 if self._catchup_already_emitted_recently(sid, expected_last, now):
                     logger.info(
                         f"[CATCHUP] Skip re-emit per schedule={sid} "
@@ -416,7 +416,7 @@ class PlenoraBeatScheduler(Scheduler):
             return count >= self._CATCHUP_RUNAWAY_MAX
         except Exception as e:
             # Degraded: senza history check, permetti l'emit (meglio
-            # recuperare un run che perderlo per un glitch DB).
+            # recuperare un run che perderlo per un glitch DB
             logger.warning(f"[CATCHUP] Errore lookup runaway history: {e}")
             return False
 
@@ -440,7 +440,7 @@ class PlenoraBeatScheduler(Scheduler):
             },
         )
 
-        # C3 follow-up fix 2: NON aggiorniamo last_run qui.
+        # C3 follow-up fix 2: NON aggiorniamo last_run qui
         # Aggiornare last_run all'emit significa: se il task fallisce
         # o crasha prima del completamento, al tick successivo
         # detect_missed_run non vede piu' il missed (dato che last_run
@@ -448,16 +448,16 @@ class PlenoraBeatScheduler(Scheduler):
         # resta aggiornato dal task stesso quando completa con
         # successo (via ExecutionManager); il dedupe anti-duplicato
         # tra un tick e il successivo e' garantito da
-        # _catchup_already_emitted_recently() sopra, che legge la
-        # history dell'audit.
+        # _catchup_already_emitted_recently sopra, che legge la
+        # history dell'audit
 
         # intent: optional feature beat-safe / outcome: fail-open con
         # diagnostica elevata. Il tick beat continua (nessuna propagazione
         # — romperebbe altri catchup dello stesso tick), ma il fallimento
-        # e' loggato a severity CRASH per essere captato da alerting:
+        # e' loggato a severity CRASH per essere captato da alerting
         # se l'audit history resta incompleta, il prossimo tick potrebbe
         # ri-emettere il catchup duplicato (dedupe history-based non
-        # trovera' la riga pertinente).
+        # trovera' la riga pertinente
         try:
             db.execute(
                 "INSERT INTO schedule_catchup_history "
@@ -506,13 +506,13 @@ class PlenoraBeatScheduler(Scheduler):
                     )
                     logger.info(f"Schedule aggiunto: '{row.get('name', sid)}' cron={row['cron_expression']}")
                 else:
-                    # Aggiorna schedule se cambiato. `ScheduleEntry.update()`
+                    # Aggiorna schedule se cambiato. `ScheduleEntry.update`
                     # non accetta `schedule=` come kwarg (signature Celery e'
                     # `update(other: ScheduleEntry)`), quindi ricreiamo l'entry
                     # preservando `last_run_at`. Senza questo fix il cambio
                     # di cron a caldo veniva swallowed come crash silenzioso
-                    # (loggato "[CRASH] Errore sync") e lo schedule continuava
-                    # con la vecchia cron finche' il beat non veniva riavviato.
+                    # loggato "[CRASH] Errore sync") e lo schedule continuava
+                    # con la vecchia cron finche' il beat non veniva riavviato
                     entry = self.data[entry_name]
                     if str(entry.schedule) != str(schedule):
                         logger.info(f"Schedule modificato: '{row.get('name', sid)}' cron={row['cron_expression']} (era {entry.schedule})")
@@ -622,7 +622,7 @@ class PlenoraBeatScheduler(Scheduler):
                 hard_limit = 3600
             # `INTERVAL '%s seconds'` con placeholder DENTRO il literal
             # SQL e' invalid PostgreSQL syntax. Usiamo `make_interval`
-            # che accetta placeholder standard.
+            # che accetta placeholder standard
             stuck = db.fetchall(
                 "SELECT id, name FROM schedules "
                 "WHERE last_status = 'running' "
@@ -722,17 +722,17 @@ class PlenoraBeatScheduler(Scheduler):
         vecchi di TTL (default 24h, env TEMP_ORPHAN_CLEANUP_HOURS).
 
         Copre i pattern noti di temp naming:
-          - plenora_cached_* / plenora_cached_*   (result_store.get_result_as_file)
-          - plenora_{pid}_{hash}/                 (result_store.get_temp_output_path)
-          - tmp*                               (NamedTemporaryFile/mkdtemp generici
+          - plenora_cached_* / plenora_cached_* (result_store.get_result_as_file)
+          - plenora_{pid}_{hash}/ (result_store.get_temp_output_path)
+          - tmp* (NamedTemporaryFile/mkdtemp generici
                                                 in file_service, artifacts, ecc.)
-          - eseguibili_uploads/*               (cross-worker upload staging,
+          - eseguibili_uploads/* (cross-worker upload staging,
                                                 router.eseguibili)
 
         La dir `eseguibili_uploads/` resta (container fisso della cache),
         i file dentro vengono puliti individualmente.
 
-        Motivazione: senza questo, un task che crasha fra mkdtemp/open()
+        Motivazione: senza questo, un task che crasha fra mkdtemp/open
         e il finally cleanup lascia residui accumulanti. Il volume temp
         per-worker e' effimero al restart del pod, ma in setup host-fisso
         (oggi `lab.plenora.it`) senza restart, il temp cresce indefinitamente.
@@ -752,8 +752,8 @@ class PlenoraBeatScheduler(Scheduler):
             if not temp_dir.exists():
                 return
             # BE-CONFIG-001B: TTL temp orfani migrato a Settings (default
-            # tipato 24h in `Settings.DEFAULTS["TEMP_ORPHAN_CLEANUP_HOURS"]`).
-            # Override env continua a funzionare via type coercion `int`.
+            # tipato 24h in `Settings.DEFAULTS["TEMP_ORPHAN_CLEANUP_HOURS"]`
+            # Override env continua a funzionare via type coercion `int`
             get_setting = getattr(settings, "get", None)
             if callable(get_setting):
                 raw_ttl_hours = settings.get("TEMP_ORPHAN_CLEANUP_HOURS")
@@ -761,7 +761,7 @@ class PlenoraBeatScheduler(Scheduler):
                 # Tests patch app.config.settings with lightweight stubs that
                 # only expose DATA_DIR. Preserve the historical env override
                 # path for those stubs without weakening the real Settings
-                # boundary used in production.
+                # boundary used in production
                 raw_ttl_hours = _os.environ.get("TEMP_ORPHAN_CLEANUP_HOURS", 24)
             ttl_hours = int(raw_ttl_hours)
             ttl_seconds = ttl_hours * 3600
@@ -770,7 +770,7 @@ class PlenoraBeatScheduler(Scheduler):
             for entry in temp_dir.iterdir():
                 try:
                     # eseguibili_uploads e' cache permanente: scan ricorsivo
-                    # dei file dentro, pulizia individuale per age.
+                    # dei file dentro, pulizia individuale per age
                     if entry.is_dir() and entry.name == "eseguibili_uploads":
                         for child in entry.iterdir():
                             try:
@@ -832,7 +832,7 @@ class PlenoraBeatScheduler(Scheduler):
             from app.config import settings
             # Niente `or 90` per non collassare 0 → 90 (l'utente che imposta
             # esplicitamente 0 vuole disabilitare). Il fallback al default
-            # avviene solo se l'attributo manca o non e' int.
+            # avviene solo se l'attributo manca o non e' int
             raw = getattr(settings, "SCHEDULE_LOGS_RETENTION_DAYS", 90)
             try:
                 days = int(raw)
@@ -854,7 +854,7 @@ class PlenoraBeatScheduler(Scheduler):
 
     def _archive_old_logs(self):
         """Ogni 24h archivia+purga plenora.logs via LogArchiveWriter
-        (O-ARC Batch 3, ADR-0014).
+        (O-ARC , ADR-0014).
 
         Gate sequenziali:
         1. 24h temporal gate (_last_logs_archive).
@@ -888,7 +888,7 @@ class PlenoraBeatScheduler(Scheduler):
         except (TypeError, ValueError):
             days = 30
         if days <= 0:
-            return  # retention disabilitata (0 o negativo)
+            return  # retention disabilitata (0 o negativo
 
         try:
             from datetime import timedelta
@@ -906,9 +906,9 @@ class PlenoraBeatScheduler(Scheduler):
 
             def select_rows(cutoff_ts, batch_size):
                 # Schema-agnostic: search_path del pool risolve `logs` a
-                # plenora.logs (stesso pattern di _cleanup_old_logs).
+                # plenora.logs (stesso pattern di _cleanup_old_logs
                 # ORDER BY stabile (ts, id) richiesto dal writer per non
-                # saltare righe fra iterazioni successive.
+                # saltare righe fra iterazioni successive
                 return fetchall(
                     "SELECT * FROM logs WHERE ts < %s "
                     "ORDER BY ts ASC, id ASC LIMIT %s",
@@ -918,7 +918,7 @@ class PlenoraBeatScheduler(Scheduler):
             def retention_bypass_execute(sql, params):
                 # Una nuova tx per batch: SET LOCAL + DELETE sullo stesso
                 # cursor (pattern _cleanup_old_logs), altrimenti il trigger
-                # plenora.block_log_modifications scatta sulla DELETE.
+                # plenora.block_log_modifications scatta sulla DELETE
                 with transaction() as conn:
                     with conn.cursor() as cur:
                         cur.execute(
@@ -940,7 +940,7 @@ class PlenoraBeatScheduler(Scheduler):
             # INSERT diretta via pg_execute. Shape colonne identica al
             # handler canonico (utils/logger.py:340-344). Ratificata in
             # ADR-0014 §B. Best-effort: un fallimento observability non
-            # contamina lo stato "archive ok" (slot gia' aggiornato sopra).
+            # contamina lo stato "archive ok" (slot gia' aggiornato sopra
             try:
                 import json as _json
                 from app.db.pg_connection import execute as pg_execute
@@ -997,16 +997,16 @@ class PlenoraBeatScheduler(Scheduler):
             # connessioni con `search_path=<_DB_SCHEMA>,public`, quindi
             # ci riferiamo alla tabella `logs` senza prefisso e PostgreSQL
             # la risolve nello schema corrente. Cosi' se DB_SCHEMA punta
-            # a `plenora_staging`, la retention lavora sullo schema giusto.
+            # a `plenora_staging`, la retention lavora sullo schema giusto
             before = fetchall(
                 "SELECT COUNT(*) AS c FROM logs WHERE ts < now() - make_interval(days => %s)",
                 (days,),
             )[0]["c"]
             if before:
-                # SET LOCAL + DELETE devono stare nella stessa transazione:
-                # `execute()` apre/committa una tx per call, azzerando SET LOCAL.
+                # SET LOCAL + DELETE devono stare nella stessa transazione
+                # `execute` apre/committa una tx per call, azzerando SET LOCAL
                 # Il flag consente a policy/trigger PG di distinguere il
-                # cleanup schedulato dalle DELETE applicative.
+                # cleanup schedulato dalle DELETE applicative
                 from app.db.pg_connection import transaction
                 with transaction() as conn:
                     with conn.cursor() as cur:
@@ -1021,7 +1021,7 @@ class PlenoraBeatScheduler(Scheduler):
 
     def _archive_old_audit_actions(self):
         """Ogni 24h archivia+purga plenora.audit_actions via LogArchiveWriter
-        (O-ARC Batch 3, ADR-0014).
+        (O-ARC , ADR-0014).
 
         Primo path di DELETE autorizzato su audit_actions: con
         LOG_ARCHIVE_ENABLED=False (default) la tabella continua a crescere
@@ -1062,7 +1062,7 @@ class PlenoraBeatScheduler(Scheduler):
         except (TypeError, ValueError):
             days = 365
         if days <= 0:
-            return  # retention disabilitata (0 o negativo)
+            return  # retention disabilitata (0 o negativo
 
         try:
             from datetime import timedelta
@@ -1081,7 +1081,7 @@ class PlenoraBeatScheduler(Scheduler):
             def select_rows(cutoff_ts, batch_size):
                 # Schema-agnostic: search_path del pool risolve
                 # `audit_actions` a plenora.audit_actions. Colonna
-                # temporale = `timestamp` (O-ARC assunzione #4).
+                # temporale = `timestamp` (O-ARC assunzione #4
                 return fetchall(
                     "SELECT * FROM audit_actions WHERE timestamp < %s "
                     "ORDER BY timestamp ASC, id ASC LIMIT %s",
@@ -1090,9 +1090,9 @@ class PlenoraBeatScheduler(Scheduler):
 
             def retention_bypass_execute(sql, params):
                 # Una nuova tx per batch: SET LOCAL + DELETE sullo stesso
-                # cursor (pattern _cleanup_old_logs / _archive_old_logs),
+                # cursor (pattern _cleanup_old_logs / _archive_old_logs
                 # altrimenti il trigger plenora.block_log_modifications
-                # scatta sulla DELETE.
+                # scatta sulla DELETE
                 with transaction() as conn:
                     with conn.cursor() as cur:
                         cur.execute(
@@ -1109,10 +1109,10 @@ class PlenoraBeatScheduler(Scheduler):
                 f"in {len(result['object_keys'])} oggetti "
                 f"(cutoff={cutoff.isoformat()}, days={days})"
             )
-            # B4: observability circolare su plenora.logs (tabella logs,
+            # B4: observability circolare su plenora.logs (tabella logs
             # non audit_actions: la chiusura del cerchio log-del-log
             # va sempre su plenora.logs). Shape identica al handler
-            # canonico (utils/logger.py:340-344). ADR-0014 §B.
+            # canonico (utils/logger.py:340-344). ADR-0014 §B
             try:
                 import json as _json
                 from app.db.pg_connection import execute as pg_execute
@@ -1145,14 +1145,14 @@ class PlenoraBeatScheduler(Scheduler):
         except Exception as e:
             logger.warning(f"Errore archive audit_actions: {e}", exc_info=True)
 
-    # Storage reconciliation — BE-GO-READY-STORAGE-ENGINE-006
+    # Storage reconciliation —
 
     def _reconcile_storage(self):
         """Beat-driven reconciler per `plenora.storage_reconciliation_log`.
 
         Cadence-gated da `RECONCILIATION_BEAT_INTERVAL_MIN` (default 15
         minuti). Supporta solo `operation="delete"` in questa fase
-        (BE-GO-READY-STORAGE-ENGINE-006). Upload-intent (W2 race),
+        . Upload-intent (W2 race),
         storage-side scan e intermediate artifact pair restano fuori
         scope.
 
@@ -1183,7 +1183,7 @@ class PlenoraBeatScheduler(Scheduler):
             return  # config non disponibile: skip silente
 
         # Tutti i tunables via Settings.get (ADR-0021); fallback a
-        # default difensivi se i test usano un SimpleNamespace stub.
+        # default difensivi se i test usano un SimpleNamespace stub
         get_setting = getattr(settings, "get", None)
 
         def _read_int(key: str, default: int) -> int:
@@ -1234,7 +1234,7 @@ class PlenoraBeatScheduler(Scheduler):
             # Continue to the operational guardrails section: summary
             # + prune are independent of the fetch result. A fetch
             # failure must NOT silence the backlog visibility — that
-            # is precisely the scenario where ops needs to see counts.
+            # is precisely the scenario where ops needs to see counts
             rows = []
 
         ok_count = 0
@@ -1243,7 +1243,7 @@ class PlenoraBeatScheduler(Scheduler):
         for row in rows:
             try:
                 # Stream supporta solo "delete". `fetch_due_pending_deletes`
-                # gia' filtra a SQL-level; questa e' una belt-and-suspenders.
+                # gia' filtra a SQL-level; questa e' una belt-and-suspenders
                 if row.operation != "delete":
                     continue
 
@@ -1290,19 +1290,18 @@ class PlenoraBeatScheduler(Scheduler):
                 ok_count, failed_count, lost_count, len(rows),
             )
 
-        # BE-GO-READY-STORAGE-ENGINE-008-UPLOAD-INTENT-PATTERN:
-        # second branch of the reconciler — chiude R-021.1.
+        # second branch of the reconciler — chiude R-021.1
         # Processa righe `operation='upload_intent'` stantie (older than
-        # grace window). Per ciascuna:
-        #   - se `is_storage_key_referenced(storage_key)` is True →
-        #     caller's DB save committed → `mark_done`;
-        #   - se False → orphan candidate → `compensating_delete` +
-        #     `mark_orphan_deleted`;
-        #   - se None → read-error → `mark_failed_attempt` (skip questa
-        #     row, riprova al prossimo tick); promuovi a `lost` dopo
-        #     max_attempts.
-        # Cap <= 0 su grace o batch disabilita il branch (escape hatch
-        # ops; il delete branch sopra resta attivo).
+        # grace window). Per ciascuna
+        # se `is_storage_key_referenced(storage_key)` is True →
+        # caller's DB save committed → `mark_done`
+        # se False → orphan candidate → `compensating_delete` +
+        # `mark_orphan_deleted`
+        # se None → read-error → `mark_failed_attempt` (skip questa
+        # row, riprova al prossimo tick); promuovi a `lost` dopo
+        # max_attempts
+        # Cap <= 0 su grace o il branch (escape hatch
+        # ops; il delete branch sopra resta attivo
         ui_grace_s = _read_int("STORAGE_RECONCILE_UPLOAD_INTENT_GRACE_SECONDS", 600)
         ui_batch_size = _read_int("STORAGE_RECONCILE_UPLOAD_INTENT_BATCH_SIZE", 50)
         if ui_grace_s > 0 and ui_batch_size > 0:
@@ -1335,8 +1334,8 @@ class PlenoraBeatScheduler(Scheduler):
                         ui_done_count += 1
                         continue
                     if referenced is None:
-                        # read-error: skip delete (data-loss risk).
-                        # Increment attempts + backoff -> retry next tick.
+                        # read-error: skip delete (data-loss risk
+                        # Increment attempts + backoff -> retry next tick
                         new_attempts = row.attempts + 1
                         if new_attempts >= max_attempts:
                             _recon.mark_lost(
@@ -1403,18 +1402,18 @@ class PlenoraBeatScheduler(Scheduler):
                     ui_lost_count, len(ui_rows),
                 )
 
-        # BE-GO-READY-STORAGE-ENGINE-008: operational guardrails.
+        # operational guardrails
         # Eseguiti DOPO la passa di reconcile per non interferire con il
         # set di righe lette da `fetch_due_pending_deletes`. Entrambi
-        # best-effort: errori loggati, il tick non crasha.
-        # 1. Summary log: count righe `pending`/`lost` per (state,domain).
-        #    Lascia traccia osservabile per ops anche quando non c'e'
-        #    lavoro nel batch corrente (es. backlog di `lost` accumulato).
+        # best-effort: errori loggati, il tick non crasha
+        # 1. Summary log: count righe `pending`/`lost` per (state,domain
+        # Lascia traccia osservabile per ops anche quando non c'e'
+        # lavoro nel
         try:
             counts = _recon.count_active_by_state_domain()
             if counts:
                 # Aggregato totale per livello (utile per alerting su
-                # threshold) + per-row breakdown per dashboard manuale.
+                # threshold) + per-row breakdown per dashboard manuale
                 pending_total = sum(c.count for c in counts if c.state == "pending")
                 lost_total = sum(c.count for c in counts if c.state == "lost")
                 breakdown = " ".join(
@@ -1432,8 +1431,8 @@ class PlenoraBeatScheduler(Scheduler):
             )
 
         # 2. Prune dei terminali `done`/`orphan_deleted` oltre la
-        #    retention window. Boundary helper applica `LIMIT` server-
-        #    side; qui il caller decide cap + cutoff.
+        # retention window. Boundary helper applica `LIMIT` server
+        # side; qui il caller decide cap + cutoff
         retention_days = _read_int(
             "STORAGE_RECONCILE_TERMINAL_RETENTION_DAYS", 30,
         )
@@ -1465,7 +1464,7 @@ class PlenoraBeatScheduler(Scheduler):
     def setup_schedule(self):
         """Inizializza schedule vuoto — verrà popolato dal DB al primo tick.
 
-        BE-GO-READY-INSTALLATION-021: dopo il sync DB, merge anche le
+         dopo il sync DB, merge anche le
         entry config-based `celery_app.conf.beat_schedule` (env-gated
         cleanroom opt-in). DB-driven schedules vivono nel namespace
         `urby:schedule:<id>`; le config entry usano nomi qualunque
@@ -1479,7 +1478,6 @@ class PlenoraBeatScheduler(Scheduler):
     def _merge_config_beat_schedule(self):
         """Merge `self.app.conf.beat_schedule` entries into `self.data`.
 
-        BE-GO-READY-INSTALLATION-021-CELERY-BEAT-TICK-SMOKE-IMPL.
 
         PlenoraBeatScheduler caricava SOLO schedule dal DB via
         `_sync_from_db`; config-based `beat_schedule` (la API
@@ -1512,10 +1510,10 @@ class PlenoraBeatScheduler(Scheduler):
                 continue
             if name.startswith("urby:schedule:"):
                 # Riservato a `_sync_from_db` — un'eventuale collisione
-                # tra config + DB favorisce il DB (sorgente di verita').
+                # tra config + DB favorisce il DB (sorgente di verita'
                 continue
             if name in self.data:
-                # Idempotente: gia' caricato.
+                # Idempotente: gia' caricato
                 continue
             try:
                 if not isinstance(entry, dict):

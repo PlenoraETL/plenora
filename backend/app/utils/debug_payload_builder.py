@@ -18,21 +18,21 @@ class DebugPayloadBuilder:
 
         from app.utils.debug_payload_builder import DebugPayloadBuilder
 
-        payload = DebugPayloadBuilder().build(
+        payload = DebugPayloadBuilder.build(
             run_id=run_id,
             project_id=project_id,
             steps=run_steps,
             failure={
-                "node_id":      "node_7",
-                "node_type":    "api_connector",
-                "node_label":   "Arricchimento OMI",
-                "module":       "arricchisci",
-                "error_type":   type(e).__name__,
+                "node_id": "node_7",
+                "node_type": "api_connector",
+                "node_label": "Arricchimento OMI",
+                "module": "arricchisci",
+                "error_type": type(e).__name__,
                 "error_message": str(e),
-                "traceback":    traceback_str,
+                "traceback": traceback_str,
                 "occurred_at_ms": elapsed_ms,
             },
-            input_sample=input_sample,   # opzionale
+            input_sample=input_sample, # opzionale
         )
     """
 
@@ -48,15 +48,15 @@ class DebugPayloadBuilder:
         Costruisce il payload completo.
 
         Args:
-            run_id:        ID della run fallita
-            project_id:    ID del progetto
-            steps:         lista di step raccolti durante l'esecuzione
+            run_id: ID della run fallita
+            project_id: ID del progetto
+            steps: lista di step raccolti durante l'esecuzione
                            [{"step": 1, "module": "estrai", "status": "success",
                              "rows_out": 1847, "duration_ms": 340}, ...]
-            failure:       dizionario con info sul fallimento
+            failure: dizionario con info sul fallimento
                            (node_id, node_type, node_label, module,
                             error_type, error_message, traceback, occurred_at_ms)
-            input_sample:  opzionale — sample dei dati in ingresso al nodo fallito
+            input_sample: opzionale — sample dei dati in ingresso al nodo fallito
                            {"rows": N, "columns": [...], "sample": [...],
                             "null_counts": {...}}
 
@@ -134,14 +134,14 @@ class DebugPayloadBuilder:
                 label = (data or {}).get("label") or ntype or nid
                 node_labels[nid] = label
 
-            # Ordina i nodi seguendo gli edge (topological order approssimativo)
+            # Ordina i nodi seguendo gli edge (topological order approssimativo
             edge_map = {}
             for e in edges:
                 src = e.source if hasattr(e, "source") else e.get("source", "")
                 tgt = e.target if hasattr(e, "target") else e.get("target", "")
                 edge_map[src] = tgt
 
-            # Trova il nodo radice (nessuno punta a lui)
+            # Trova il nodo radice (nessuno punta a lui
             targets = set(edge_map.values())
             sources = set(edge_map.keys())
             roots = sources - targets

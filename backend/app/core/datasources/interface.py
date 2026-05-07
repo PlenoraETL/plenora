@@ -36,7 +36,7 @@ class FileInfo:
     path: str
     size: int                       # bytes
     modified_date: datetime
-    type: str                       # estensione senza punto, lowercase (es. "csv")
+    type: str                       # estensione senza punto, lowercase (es. "csv"
     hash: Optional[str] = None      # md5, solo se include_hash=True
 
     def to_dict(self) -> dict:
@@ -105,7 +105,7 @@ class DataSourceInterface(ABC):
         Testa la connessione e ritorna un report strutturato.
 
         Returns:
-            {"ok": True,  "message": "...", "details": {...}}
+            {"ok": True, "message": "...", "details": {...}}
             {"ok": False, "message": "...", "details": {...}}
         """
 

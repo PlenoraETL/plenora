@@ -70,7 +70,7 @@ class HttpClientProtocol(Protocol):
     def post(self, url: str, data: dict = None, timeout: int = 30, headers: dict = None) -> Any: ...
 
 
-# HTTP CLIENT (default — usa requests)
+# HTTP CLIENT (default — usa requests
 
 class DefaultHttpClient:
     """
@@ -101,7 +101,7 @@ class EsriJsonConverter:
     Esri JSON features hanno struttura:
     {
         "attributes": {"FIELD1": "val1", "FIELD2": 42},
-        "geometry": {"x": 11.0, "y": 44.0}  // o rings/paths per polygon/line
+        "geometry": {"x": 11.0, "y": 44.0} // o rings/paths per polygon/line
     }
     
     La conversione a GeoDataFrame usa shapely per le geometrie.
@@ -129,7 +129,7 @@ class EsriJsonConverter:
         if not features:
             return [], []
         
-        # Nomi colonne attributi (escludi campo geometria Esri)
+        # Nomi colonne attributi (escludi campo geometria Esri
         attr_columns = [f["name"] for f in fields if f.get("type") != "esriFieldTypeGeometry"]
         
         # Colonne output: attributi + eventuale geometry
@@ -317,14 +317,14 @@ class ArcGISClient:
     - http_client: sostituibile con mock per test (evita chiamate HTTP reali)
     
     Uso in produzione:
-        client = ArcGISClient()
+        client = ArcGISClient
         
     Uso nei test:
-        mock_http = MockHttpClient()
+        mock_http = MockHttpClient
         client = ArcGISClient(http_client=mock_http)
     """
     
-    # Batch size per operazioni di scrittura (limite Esri: max 2000)
+    # per operazioni di scrittura (limite Esri: max 2000
     WRITE_BATCH_SIZE = 1000
     
     # Timeout per richieste HTTP
@@ -374,7 +374,7 @@ class ArcGISClient:
             max_retries_429: max ritentativi su 429. Default 3.
 
         Returns:
-            Oggetto requests.Response. Il caller chiama `.json()`.
+            Oggetto requests.Response. Il caller chiama `.json`.
 
         NB: questo helper DOES NOT raise su 498/499 ritornati dal body
         — il caller deve fare `if "error" in data` come prima. Il
@@ -385,7 +385,7 @@ class ArcGISClient:
 
         # Difesa in profondita': rimuovi token da params/data se qualche
         # caller ha ancora passato la vecchia forma. L'header e' l'unica
-        # fonte autoritativa.
+        # fonte autoritativa
         if params and "token" in params:
             params = {k: v for k, v in params.items() if k != "token"}
         if data and "token" in data:
@@ -450,7 +450,7 @@ class ArcGISClient:
                 continue
 
             # Caso 2: HTTP 401 → token rifiutato lato HTTP layer
-            # (alcuni endpoint ArcGIS rispondono 401 invece che 200+error)
+            # alcuni endpoint ArcGIS rispondono 401 invece che 200+error
             if response.status_code == 401 and not retry_on_401_done:
                 logger.info(
                     f"[ARCGIS] 401 sul token corrente, invalido cache e "
@@ -461,7 +461,7 @@ class ArcGISClient:
                 continue
 
             # Caso 3: response 200 con body `error.code` in {498, 499}
-            # (il pattern Esri standard per token scaduti/invalidi)
+            # il pattern Esri standard per token scaduti/invalidi
             if response.status_code == 200 and not retry_on_401_done:
                 try:
                     body = response.json()
@@ -517,7 +517,7 @@ class ArcGISClient:
         if conn.auth_type == "oauth2":
             return self._authenticate_oauth2(conn, cache_key)
         
-        # Token classico (username/password)
+        # Token classico (username/password
         return self._authenticate_token(conn, cache_key)
     
     def _authenticate_oauth2(self, conn: ArcGISConnectionInfo, cache_key: str) -> str:
@@ -643,12 +643,12 @@ class ArcGISClient:
         base = conn.server_url.rstrip("/")
         
         # Auto-detect ArcGIS Online dall'URL
-        # Usa il dominio dell'organizzazione (es. orgname.maps.arcgis.com)
+        # Usa il dominio dell'organizzazione (es. orgname.maps.arcgis.com
         # invece di forzare www.arcgis.com
         if "arcgis.com" in base.lower():
             from urllib.parse import urlparse
             parsed = urlparse(base)
-            # Usa il dominio originale per il token (supporta portali org-specifici)
+            # Usa il dominio originale per il token (supporta portali org-specifici
             return f"{parsed.scheme}://{parsed.netloc}/sharing/rest/generateToken"
         
         if conn.server_type == "arcgis_online":
@@ -783,7 +783,7 @@ class ArcGISClient:
             logger.info("Nessun username — uso Search API per l'organizzazione")
             return self.search_services_online(conn, query="", scope="org")
         
-        # Usa il dominio dell'organizzazione (non www.arcgis.com)
+        # Usa il dominio dell'organizzazione (non www.arcgis.com
         from urllib.parse import urlparse
         parsed = urlparse(conn.server_url)
         base_url = f"{parsed.scheme}://{parsed.netloc}/sharing/rest"
@@ -833,7 +833,7 @@ class ArcGISClient:
                         "modified": item.get("modified", 0),
                     })
             
-            # Ricorsione sui folder (solo dal root)
+            # Ricorsione sui folder (solo dal root
             if not folder:
                 for sub_folder in data.get("folders", []):
                     folder_id = sub_folder.get("id", "")
@@ -1057,7 +1057,7 @@ class ArcGISClient:
                         "service_type": "FeatureServer",
                     })
             
-            # Scansiona sotto-folder ricorsivamente (con limite profondità)
+            # Scansiona sotto-folder ricorsivamente (con limite profondità
             if _depth < _max_depth:
                 for sub_folder in data.get("folders", []):
                     folder_path = f"{folder}/{sub_folder}" if folder else sub_folder
@@ -1186,7 +1186,7 @@ class ArcGISClient:
             # Fallback: MapServer
             urls.append(url.replace("/FeatureServer", "/MapServer"))
         elif url.endswith("/MapServer"):
-            # Prova prima FeatureServer (preferibile per query)
+            # Prova prima FeatureServer (preferibile per query
             urls.append(url.replace("/MapServer", "/FeatureServer"))
             urls.append(url)
         else:
@@ -1196,7 +1196,7 @@ class ArcGISClient:
         
         return urls
     
-    # BROWSE: SCHEMA LAYER (campi e metadata)
+    # BROWSE: SCHEMA LAYER (campi e metadata
     
     def get_layer_schema(
         self,
@@ -1206,7 +1206,7 @@ class ArcGISClient:
         """
         Recupera lo schema completo di un layer (campi, tipi, capabilities).
         
-        Equivalente a DatabaseInspector.get_tables_and_columns() ma per un
+        Equivalente a DatabaseInspector.get_tables_and_columns ma per un
         singolo layer. Restituisce campi con tipo PLENORA mappato.
         
         Args:
@@ -1242,9 +1242,9 @@ class ArcGISClient:
                     "editable": f.get("editable", True),
                 })
             
-            # Feature count (richiede query separata se non disponibile).
-            # C12: token non piu' passato (gestito internamente dal helper);
-            # lasciamo None per retrocompatibilita' della signature.
+            # Feature count (richiede query separata se non disponibile
+            # C12: token non piu' passato (gestito internamente dal helper
+            # lasciamo None per retrocompatibilita' della signature
             feature_count = data.get("count", None)
             if feature_count is None:
                 feature_count = self._get_feature_count(conn, layer_url, None)
@@ -1256,12 +1256,12 @@ class ArcGISClient:
                                      data.get("sourceSpatialReference", {}))
             wkid = spatial_ref.get("latestWkid") or spatial_ref.get("wkid")
             
-            # Tipo geometria PLENORA con SRID (es. "geometry:polygon:3857")
+            # Tipo geometria PLENORA con SRID (es. "geometry:polygon:3857"
             urby_geom = EsriTypeMapper.map_geometry_type(geometry_type)
             if wkid and urby_geom != "geometry":
                 urby_geom = f"{urby_geom}:{wkid}"
             
-            # Mappa le relazioni (Related Tables)
+            # Mappa le relazioni (Related Tables
             relationships = []
             base_service_url = layer_url.rsplit("/", 1)[0]  # rimuovi /N → .../FeatureServer
             for rel in data.get("relationships", []):
@@ -1290,7 +1290,7 @@ class ArcGISClient:
                     "composite": rel.get("composite", False),
                 })
             
-            # Colonne in formato canvas-ready (come DatabaseInspector)
+            # Colonne in formato canvas-ready (come DatabaseInspector
             # Mappa field_type Esri → tipo PLENORA per ogni campo
             columns = []
             for f in fields:
@@ -1441,7 +1441,7 @@ class ArcGISClient:
         """
         Query features da un layer — restituisce (righe, colonne).
         
-        Formato output identico a QueryExecutor.execute_raw() per
+        Formato output identico a QueryExecutor.execute_raw per
         compatibilità con il resto del sistema ESTRAI.
         
         Gestisce la paginazione automatica se i risultati superano
@@ -1535,7 +1535,7 @@ class ArcGISClient:
             except requests.RequestException as e:
                 raise ConnectionError(f"Errore query: {e}")
         
-        # Filtra fields_def in base a out_fields (se specificati)
+        # Filtra fields_def in base a out_fields (se specificati
         if out_fields and out_fields != "*":
             requested_fields = set(f.strip() for f in out_fields.split(","))
             fields_def_filtered = [
@@ -1545,7 +1545,7 @@ class ArcGISClient:
         else:
             fields_def_filtered = fields_def
         
-        # Converti in formato (righe, colonne)
+        # Converti in formato (righe, colonne
         return EsriJsonConverter.features_to_rows(
             all_features, fields_def_filtered, 
             include_geometry=return_geometry,
@@ -1575,7 +1575,7 @@ class ArcGISClient:
         """
         Aggiunge features a un layer.
         
-        Le features vengono inviate in batch di WRITE_BATCH_SIZE per
+        Le features vengono inviate in WRITE_BATCH_SIZE per
         rispettare i limiti del server.
         
         Args:
@@ -1694,9 +1694,9 @@ class ArcGISClient:
         Returns:
             {success, count, errors}
         """
-        # C12: auth avviene dentro _request_with_token per-batch.
+        # C12: auth avviene dentro _request_with_token per-batch
         # Rimosso il `token = self.authenticate(conn)` pre-loop: non
-        # serviva piu' (il helper gestisce token + refresh mid-batch).
+        # serviva piu' (il helper gestisce token + refresh mid-batch
         referer_headers = {"Referer": conn.server_url}
 
         total_success = 0
@@ -1716,10 +1716,10 @@ class ArcGISClient:
                 batch_num = i // _batch_size + 1
                 logger.debug(f"Batch {batch_num}: invio {len(batch)} features a {layer_url}/{operation}")
 
-                # C12: ogni batch via _request_with_token → refresh token
-                # mid-batch automatico su 498/499, backoff su 429.
-                # Pre-fix il token era autenticato UNA volta fuori loop,
-                # scadenza a meta' batch = tutto il resto falliva.
+                # C12: ogni _request_with_token → refresh token
+                # mid-su 498/499, backoff su 429
+                # Pre-fix il token era autenticato UNA volta fuori loop
+                # scadenza a meta' batch = tutto il resto falliva
                 response = self._request_with_token(
                     "POST", f"{layer_url}/{operation}", conn,
                     data=data, timeout=60,
@@ -1817,11 +1817,11 @@ class ArcGISClient:
         for idx, row in df.iterrows():
             feature = {"attributes": {}}
             
-            # Attributi (tutto tranne geometria e campi auto-generati da ArcGIS)
-            # Per update/delete: OBJECTID serve come chiave, non va escluso.
+            # Attributi (tutto tranne geometria e campi auto-generati da ArcGIS
+            # Per update/delete: OBJECTID serve come chiave, non va escluso
             # BE-IMDF-001: il subset OID/GLOBALID e' canonizzato in
             # `app.shared.esri_system_fields.ESRI_OID_FIELDS_LITERAL`
-            # (5 varianti casing). Behavior bit-per-bit invariato.
+            # 5 varianti casing). Behavior bit-per-bit invariato
             from app.shared.esri_system_fields import ESRI_OID_FIELDS_LITERAL
             skip_cols = {geometry_column, "geometry"}
             if operation in ("add", "create_service"):
@@ -1991,7 +1991,7 @@ class ArcGISClient:
                 }
             }
 
-        # Polygon (default)
+        # Polygon (default
         return {
             "renderer": {
                 "type": "simple",
@@ -2009,7 +2009,7 @@ class ArcGISClient:
             }
         }
 
-    # CREAZIONE FEATURE SERVICE (ArcGIS Online)
+    # CREAZIONE FEATURE SERVICE (ArcGIS Online
 
     def create_service(
         self,
@@ -2118,12 +2118,12 @@ class ArcGISClient:
             raise ConnectionError(f"Errore creazione servizio: {e}")
         
         
-        # Determina tipo geometria dal DataFrame.
+        # Determina tipo geometria dal DataFrame
         # Usiamo il tipo MAGGIORITARIO (value_counts) invece della prima
         # feature: se il df ha una feature stray di tipo diverso (es. 1
-        # Point in mezzo a migliaia di Polygon per errore di caricamento),
+        # Point in mezzo a migliaia di Polygon per errore di caricamento
         # usare la prima potrebbe creare il servizio col tipo sbagliato →
-        # tutte le altre fallirebbero in addFeatures.
+        # tutte le altre fallirebbero in addFeatures
         geom_type = "esriGeometryPolygon"  # default
         try:
             import geopandas as gpd
@@ -2132,7 +2132,7 @@ class ArcGISClient:
                 if len(geom_types) > 0:
                     majority_type = geom_types.value_counts().idxmax()
                     geom_type = self._esri_geometry_type(majority_type)
-                    # NOTE: se c'e' mix di tipi (ArcGIS non li supporta)
+                    # NOTE: se c'e' mix di tipi (ArcGIS non li supporta
                     unique_types = set(geom_types)
                     if len(unique_types) > 1:
                         logger.warning(
@@ -2174,7 +2174,7 @@ class ArcGISClient:
         try:
             import geopandas as gpd
             if isinstance(df, gpd.GeoDataFrame) and df.geometry is not None and len(df) > 0:
-                bounds = df.geometry.dropna().total_bounds  # [minx, miny, maxx, maxy]
+                bounds = df.geometry.dropna().total_bounds  # minx, miny, maxx, maxy
                 if len(bounds) == 4 and all(abs(b) < 1e15 for b in bounds):
                     extent = {
                         "xmin": float(bounds[0]),
@@ -2192,7 +2192,7 @@ class ArcGISClient:
                     from shapely.geometry import box as _box
                     from shapely.ops import unary_union as _union
                     combined = _union(geoms)
-                    b = combined.bounds  # (minx, miny, maxx, maxy)
+                    b = combined.bounds  # minx, miny, maxx, maxy
                     extent = {
                         "xmin": float(b[0]), "ymin": float(b[1]),
                         "xmax": float(b[2]), "ymax": float(b[3]),
@@ -2305,7 +2305,7 @@ class ArcGISClient:
             "errors": write_result.get("errors", []),
         }
 
-    # ADD LAYER TO EXISTING SERVICE (BE-IMDF-006B)
+    # ADD LAYER TO EXISTING SERVICE (BE-IMDF-006B
 
     def add_layer_to_service(
         self,
@@ -2335,13 +2335,13 @@ class ArcGISClient:
             gdf: GeoDataFrame con feature da aggiungere.
             layer_name: nome del nuovo layer.
             layer_id: id del nuovo layer.
-            srid: SRID di default. Sovrascritto da `gdf.crs.to_epsg()`
+            srid: SRID di default. Sovrascritto da `gdf.crs.to_epsg`
                 se il GeoDataFrame ha CRS.
 
         Returns:
             `AddLayerResult` tipato. Il wrapper IMDF
             `_add_layer_to_service(client, ...)` continua a ritornare
-            il dict legacy via `result.to_compat_dict()`.
+            il dict legacy via `result.to_compat_dict`.
         """
         import geopandas as gpd
 
@@ -2351,8 +2351,8 @@ class ArcGISClient:
 
         # ── Determina geom_type dal GeoDataFrame (tipo maggioritario) ─────
         # Uso value_counts invece della prima feature: feature stray di tipo
-        # diverso (es. 1 Point in mezzo a Polygon per errore di caricamento)
-        # non deve determinare il tipo del layer — tutte le altre fallirebbero.
+        # diverso (es. 1 Point in mezzo a Polygon per errore di caricamento
+        # non deve determinare il tipo del layer — tutte le altre fallirebbero
         geom_type = "esriGeometryPolygon"
         if isinstance(gdf, gpd.GeoDataFrame) and len(gdf) > 0 and gdf.geometry is not None:
             geom_types = gdf.geometry.dropna().geom_type
@@ -2524,7 +2524,7 @@ class ArcGISClient:
         # Ricava admin URL dal layer URL
         admin_url = layer_url.replace("/rest/services/", "/rest/admin/services/")
 
-        # Estrai layer ID dall'URL (ultimo segmento numerico)
+        # Estrai layer ID dall'URL (ultimo segmento numerico
         parts = layer_url.rstrip("/").split("/")
         layer_id = int(parts[-1]) if parts[-1].isdigit() else 0
 

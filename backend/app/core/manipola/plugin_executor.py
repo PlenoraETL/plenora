@@ -46,14 +46,14 @@ class PluginExecutor:
             # app/core/manipola/. Il registry JSON definisce quali
             # funzioni Python il plugin executor importera' via
             # importlib.import_module: e' il vero input-sensitive del
-            # modulo, non il codice delle transform. Senza questo guard,
+            # modulo, non il codice delle transform. Senza questo guard
             # un call site futuro che accettasse un path da request body
             # farebbe caricare un JSON arbitrario dal filesystem e
             # aprirebbe la catena: JSON controllato → function name
             # controllato → importlib su dotted path (confinato al
             # namespace app.core.manipola.transforms, ma comunque
             # indesiderato). Il check e' fail-closed: fuori perimetro
-            # → ValueError, niente fallback silenzioso.
+            # → ValueError, niente fallback silenzioso
             registry_path = Path(registry_path).resolve()
             if not registry_path.is_relative_to(_allowed_root):
                 raise ValueError(
@@ -105,7 +105,7 @@ class PluginExecutor:
                 logger.warning(f"Trasformazione '{transform_id}' senza funzione definita")
                 continue
 
-            # Separa "modulo.funzione" → ("modulo", "funzione")
+            # Separa "modulo.funzione" → ("modulo", "funzione"
             parts = func_path.rsplit('.', 1)
             if len(parts) != 2:
                 logger.warning(f"Path funzione invalido per '{transform_id}': {func_path}")
@@ -193,14 +193,14 @@ class PluginExecutor:
         if not func:
             raise ValueError(f"Funzione per '{transform_id}' non caricata")
 
-        # Estrai configurazione dal nodo canvas (formato flat o legacy data wrapper)
+        # Estrai configurazione dal nodo canvas (formato flat o legacy data wrapper
         node_config = node.config or (node.data.get('config', {}) if node.data else {})
         kwargs = self._prepara_kwargs(config, node_config)
 
 
         try:
             # Le trasformazioni 'multi' ricevono la lista completa di input
-            # (es. join tra due tabelle). Le 'single' ricevono solo il primo DataFrame.
+            # es. join tra due tabelle). Le 'single' ricevono solo il primo DataFrame
             if config.get('inputs') == 'multi':
                 return func(inputs, **kwargs)
             else:
@@ -258,7 +258,7 @@ class PluginExecutor:
         4. Se è obbligatorio e mancante → log warning, usa None
         5. Se è opzionale e mancante → salta
 
-        Tutti i valori vengono convertiti al tipo corretto tramite _converti_valore().
+        Tutti i valori vengono convertiti al tipo corretto tramite _converti_valore.
         """
         kwargs = {}
         parameters = transform_config.get('parameters', [])
@@ -466,7 +466,7 @@ def get_executor() -> PluginExecutor:
     Uso:
         from app.core.manipola.plugin_executor import get_executor
 
-        executor = get_executor()
+        executor = get_executor
         result = executor.execute('geo_buffer', [df], node)
     """
     global _executor_instance
@@ -495,7 +495,7 @@ class PluginExecutorCompatibility:
     nel registry, viene eseguita dal PluginExecutor; altrimenti si usa
     il fallback al vecchio sistema.
 
-    Uso nel ManipolaExecutor._dispatch_transform():
+    Uso nel ManipolaExecutor._dispatch_transform:
 
         def _dispatch_transform(self, node, inputs):
             transform_op = node.transform_op or node.data.get('transform_op')

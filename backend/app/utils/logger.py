@@ -10,13 +10,13 @@ from contextvars import ContextVar
 from typing import List, Optional
 
 # C8: contesto via ContextVar (non threading.local). ContextVar propaga
-# attraverso asyncio: `asyncio.create_task()`, `asyncio.gather()`, e
-# `asyncio.to_thread()` copiano il Context corrente nel task figlio,
-# quindi run_id/request_id/group_id restano visibili nel codice async.
+# attraverso asyncio: `asyncio.create_task`, `asyncio.gather`, e
+# `asyncio.to_thread` copiano il Context corrente nel task figlio
+# quindi run_id/request_id/group_id restano visibili nel codice async
 # threading.Thread NON copia Context — per scenari multi-thread
-# espliciti serve contextvars.copy_context() esplicito, ma nei nostri
-# path (FastAPI handler + Celery worker + thread pool arricchimenti)
-# funziona out-of-the-box.
+# espliciti serve contextvars.copy_context esplicito, ma nei nostri
+# path (FastAPI handler + Celery worker + thread pool arricchimenti
+# funziona out-of-the-box
 _group_id_var: ContextVar[str] = ContextVar("log_group_id", default="")
 _run_id_var: ContextVar[str] = ContextVar("log_run_id", default="")
 _project_id_var: ContextVar[str] = ContextVar("log_project_id", default="")
@@ -88,20 +88,20 @@ from typing import Optional
 from app.config import settings
 
 
-# SANIFICAZIONE LOG (difesa in profondità contro leak credenziali)
+# SANIFICAZIONE LOG (difesa in profondità contro leak credenziali
 # Anche se i call site dovrebbero sanificare a monte (vedi
 # app/shared/api_utils.sanitize_for_log / sanitize_url_for_log), il logger
 # applica un secondo passaggio sui campi di output per intercettare casi come
-# `requests.HTTPError` la cui __str__ contiene "for url: https://.../?token=XYZ".
+# `requests.HTTPError` la cui __str__ contiene "for url: https://.../?token=XYZ"
 
-# Pattern di chiavi sensibili (case-insensitive)
+# Pattern di chiavi sensibili (case-insensitive
 _SENSITIVE_KEY_NAMES = (
     "token", "api_key", "apikey", "password", "passwd", "secret",
     "authorization", "auth_key", "access_key", "client_secret",
     "private_key", "x-api-key",
 )
-# Regex: catch "key=value" dove value non contiene & o spazi.
-# Costruita per matchare anche varianti come "ApiKey", "API_KEY", "x-api-key".
+# Regex: catch "key=value" dove value non contiene & o spazi
+# Costruita per matchare anche varianti come "ApiKey", "API_KEY", "x-api-key"
 _QS_REDACT_RE = re.compile(
     r"(?i)([?&]|^)((?:" + "|".join(re.escape(k) for k in _SENSITIVE_KEY_NAMES) + r")=)[^&\s'\"]+",
 )
@@ -131,12 +131,12 @@ class SanitizingFilter(logging.Filter):
 
     Si applica a TUTTI gli handler (console + DB + future destinazioni),
     quindi è il punto unico di difesa contro leak via log. Idempotente con
-    la sanificazione esplicita in PostgresLogHandler.emit().
+    la sanificazione esplicita in PostgresLogHandler.emit.
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
         # Sanifica il messaggio interpolato. Mettiamo il risultato in record.msg
-        # e azzeriamo args perché getMessage() farebbe di nuovo msg % args.
+        # e azzeriamo args perché getMessage farebbe di nuovo msg % args
         try:
             interpolated = record.getMessage()
             record.msg = _sanitize_log_text(interpolated)
@@ -144,7 +144,7 @@ class SanitizingFilter(logging.Filter):
         except Exception:
             pass
         # Pre-formatta e sanifica la traceback in exc_text. I Formatter standard
-        # usano exc_text se presente invece di rifare format_exception.
+        # usano exc_text se presente invece di rifare format_exception
         if record.exc_info and not record.exc_text:
             try:
                 record.exc_text = _sanitize_log_text(
@@ -164,7 +164,7 @@ CONSOLE_FORMAT = "%(asctime)s | %(levelname)-5s | %(name)s | %(message)s"
 DATE_FORMAT    = "%H:%M:%S"
 
 # COLORED CONSOLE FORMATTER
-# Colori ANSI — applicati solo su stdout, non su log.db (zero impatto sul DB)
+# Colori ANSI — applicati solo su stdout, non su log.db (zero impatto sul DB
 
 _ANSI_RESET  = "[0m"
 _ANSI_BOLD   = "[1m"
@@ -179,17 +179,17 @@ _LEVEL_COLORS = {
 # Colori specifici per i tag dentro ERROR
 _TAG_COLORS = {
     "[CRASH]":   "[1;31m",   # rosso bold
-    "[GESTITO]": "[33m",     # arancione/giallo (stesso di WARNING — errore atteso)
+    "[GESTITO]": "[33m",     # arancione/giallo (stesso di WARNING — errore atteso
 }
 
 
 class ColoredFormatter(logging.Formatter):
     """
     Formatter con colori ANSI per la console.
-    - INFO    -> ciano
+    - INFO -> ciano
     - WARNING -> giallo
     - ERROR [GESTITO] -> giallo/arancione (errore gestito, sistema stabile)
-    - ERROR [CRASH]   -> rosso bold (bug imprevisto, da investigare)
+    - ERROR [CRASH] -> rosso bold (bug imprevisto, da investigare)
     - Il DB log NON è impattato: il PostgresLogHandler riceve il LogRecord
       grezzo prima che questo formatter entri in gioco.
     """
@@ -197,7 +197,7 @@ class ColoredFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         # C8: prefisso request_id abbreviato (8 char) se presente nel
         # contesto — rende ogni riga correlata a una richiesta HTTP
-        # senza cambiare il formato CONSOLE_FORMAT del logger.
+        # senza cambiare il formato CONSOLE_FORMAT del logger
         req_id = get_request_id()
         if req_id:
             record.msg = f"[req={req_id[:8]}] {record.msg}"
@@ -243,13 +243,13 @@ MODULE_MAP = {
 _configured_loggers: set[str] = set()
 _db_handler: Optional["PostgresLogHandler"] = None
 
-# Batch 3.10 — Aggregator pre-condizione §9.2/§9.3.
+# — Aggregator pre-condizione §9.2/§9.3
 # Insieme chiuso di logger che emettono telemetria strutturata bulk
-# (bulk.fallback, bulk.success, stage_swap.dispatched). Solo i record
+# bulk.fallback, bulk.success, stage_swap.dispatched). Solo i record
 # INFO di questi logger bypassano il filtro WARNING del PostgresLogHandler
-# default (via _bulk_telemetry_filter + _bulk_telemetry_db_handler).
+# default (via _bulk_telemetry_filter + _bulk_telemetry_db_handler
 # I record WARNING gia' passano via handler default, quindi il filtro
-# INFO-only evita duplicazione.
+# INFO-only evita duplicazione
 _BULK_TELEMETRY_LOGGERS: frozenset[str] = frozenset({
     "app.core.carica.bulk_writers",
     "app.core.carica.writer",
@@ -258,7 +258,7 @@ _BULK_TELEMETRY_LOGGERS: frozenset[str] = frozenset({
 _BULK_TELEMETRY_EXTRA_WHITELIST: tuple[str, ...] = (
     "event",       # 3.1/3.2/3.4/3.5 — label primaria di aggregazione
     "reason",      # 3.1 — classificazione fallback
-    "dialect",     # 3.1/3.2/3.4/3.5 — postgres|mysql|mariadb|...
+    "dialect",     # 3.1/3.2/3.4/3.5 — postgres|mysql|mariadb|
     "schema",      # 3.1/3.2/3.4/3.5
     "table",       # 3.1/3.2/3.4/3.5
     "rows",        # 3.1/3.2/3.4/3.5
@@ -289,8 +289,8 @@ class PostgresLogHandler(logging.Handler):
     """Handler logging che scrive su PostgreSQL via pg_connection pool."""
 
     def __init__(self):
-        # Livello configurabile via settings.LOG_LEVEL_DB (default WARNING).
-        # Lazy import per evitare cicli al bootstrap.
+        # Livello configurabile via settings.LOG_LEVEL_DB (default WARNING
+        # Lazy import per evitare cicli al bootstrap
         try:
             from app.config import settings as _s
             lvl = _resolve_level(_s.LOG_LEVEL_DB, logging.WARNING)
@@ -314,7 +314,7 @@ class PostgresLogHandler(logging.Handler):
             details_raw = getattr(record, "details", None)
             # C8: injetta request_id + user_id dal contesto nel payload
             # details (evita schema migration). Se details ha gia' questi
-            # campi, non li sovrascriviamo.
+            # campi, non li sovrascriviamo
             req_id = get_request_id()
             uid = get_user_id()
             if req_id or uid:
@@ -430,7 +430,7 @@ def _get_db_handler() -> PostgresLogHandler:
 
 
 def _bulk_telemetry_filter(record: logging.LogRecord) -> bool:
-    """Batch 3.10 — filter per `_bulk_telemetry_db_handler`.
+    """Filtro per `_bulk_telemetry_db_handler`.
 
     Accetta SOLO record INFO provenienti dai logger in
     `_BULK_TELEMETRY_LOGGERS`. I record WARNING (es. `bulk.fallback`
@@ -448,7 +448,7 @@ def _get_bulk_telemetry_db_handler() -> PostgresLogHandler:
 
     Secondo handler attaccato al logger `app` (via
     `_install_bulk_telemetry_handler`). Livello INFO + filter che
-    restringe ai 2 logger bulk. Convive con `_get_db_handler()` senza
+    restringe ai 2 logger bulk. Convive con `_get_db_handler` senza
     duplicare perche' il filter accetta solo `levelno == INFO` (i
     WARNING stessi di bulk transitano via handler default)."""
     global _bulk_telemetry_db_handler
@@ -515,10 +515,10 @@ class StructuredLogger:
         self._logger.log(level, msg, *args, exc_info=exc_info, extra=extra, **kwargs)
 
     def debug(self, msg: str, *args, **kwargs):
-        # Nota: se il metodo manca, qualunque logger.debug() in giro solleva
-        # AttributeError. Era successo con il fix del log volume di aprile 2026:
+        # Nota: se il metodo manca, qualunque logger.debug in giro solleva
+        # AttributeError. Era successo con il fix del log volume di aprile 2026
         # enrichment_service.py passato da logger.info a logger.debug →
-        # AttributeError → catturato dal catch-all async → fallimento silente.
+        # AttributeError → catturato dal catch-all async → fallimento silente
         self._log(logging.DEBUG, msg, *args, **kwargs)
 
     def info(self, msg: str, *args, **kwargs):
@@ -561,7 +561,7 @@ def get_logger(name: str, level: int = None) -> StructuredLogger:
     _install_bulk_telemetry_handler()
 
     if name not in _configured_loggers:
-        # Lazy import per evitare cicli durante il bootstrap di config.
+        # Lazy import per evitare cicli durante il bootstrap di config
         try:
             from app.config import settings as _s
             console_lvl = _resolve_level(_s.LOG_LEVEL_CONSOLE, logging.INFO)
@@ -571,13 +571,13 @@ def get_logger(name: str, level: int = None) -> StructuredLogger:
             db_lvl      = logging.WARNING
 
         # Il logger lascia passare tutto quello che almeno uno degli handler
-        # potrebbe voler emettere.
+        # potrebbe voler emettere
         effective = level if level is not None else min(console_lvl, db_lvl)
         logger.setLevel(effective)
         logger.propagate = False
 
-        # Filter di sanificazione (applicato PRIMA degli handler).
-        # Sanifica msg + traceback per oscurare credentials/token nei log.
+        # Filter di sanificazione (applicato PRIMA degli handler
+        # Sanifica msg + traceback per oscurare credentials/token nei log
         logger.addFilter(_sanitizing_filter)
 
         # Console
@@ -586,7 +586,7 @@ def get_logger(name: str, level: int = None) -> StructuredLogger:
         console.setFormatter(ColoredFormatter(CONSOLE_FORMAT, DATE_FORMAT))
         logger.addHandler(console)
 
-        # PostgreSQL (il livello e' gia' settato nel __init__ di PostgresLogHandler)
+        # PostgreSQL (il livello e' gia' settato nel __init__ di PostgresLogHandler
         logger.addHandler(_get_db_handler())
 
         _configured_loggers.add(name)

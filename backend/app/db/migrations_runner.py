@@ -17,14 +17,14 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-# Directory relativa al backend root (parent di app/)
+# Directory relativa al backend root (parent di app/
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 MIGRATIONS_DIR = _BACKEND_ROOT / "migrations"
 
 
 # Identifier safety: lo schema name viene da env (DB_SCHEMA), quindi non e'
 # input utente, ma applichiamo comunque whitelist + psycopg2 identifier
-# quoting per non string-formattare mai identifier SQL.
+# quoting per non string-formattare mai identifier SQL
 _SCHEMA_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
@@ -139,8 +139,8 @@ def list_applied_migrations() -> List[str]:
             conn.rollback()
         except Exception:
             pass
-        # Se la tabella non esiste ancora (primo bootstrap), ritorna [].
-        # Il runner la creera' subito dopo.
+        # Se la tabella non esiste ancora (primo bootstrap), ritorna
+        # Il runner la creera' subito dopo
         logger.warning(
             f"schema_migrations non leggibile (primo bootstrap?): {e}"
         )
@@ -165,15 +165,15 @@ def apply_pending_migrations() -> List[str]:
         Exception se una migration fallisce (l'app non deve partire
         con schema inconsistente).
     """
-    # Import locale (pg_connection potrebbe non essere init-ato al module load)
+    # Import locale (pg_connection potrebbe non essere init-ato al module load
     from app.db.pg_connection import get_connection, put_connection
 
     # Bootstrap clean-install: lo schema applicativo deve esistere prima
     # del CREATE TABLE schema_migrations (che e' schema-qualified). Su DB
-    # vuoto senza questo step il runner fallisce con InvalidSchemaName.
+    # vuoto senza questo step il runner fallisce con InvalidSchemaName
     schema = ensure_schema()
 
-    # Crea la tabella di tracking se non esiste (idempotente)
+    # Crea la tabella di tracking se non esiste (idempotente
     conn = get_connection()
     try:
         with conn.cursor() as cur:
@@ -205,9 +205,9 @@ def apply_pending_migrations() -> List[str]:
 
         logger.info(f"[MIGRATIONS] Applico: {filename}")
         # Eseguiamo la migration + l'INSERT di tracking in UNA sola
-        # connection con commit atomico. Se la migration fallisce,
+        # connection con commit atomico. Se la migration fallisce
         # il rollback copre anche il tracking (non marchiamo come
-        # applicata una migration che ha fallito).
+        # applicata una migration che ha fallito
         conn = get_connection()
         try:
             conn.autocommit = False

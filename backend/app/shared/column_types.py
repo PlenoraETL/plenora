@@ -44,7 +44,7 @@ def is_canonical_type(t: str) -> bool:
     """True se `t` e' un tipo logico canonico (case-sensitive).
 
     `geometry` accetta sub-type/SRID opzionali via `:` (es. `geometry:Point:4326`).
-    Gli alias (`integer`, `float`, ...) NON sono canonici: servono normalize().
+    Gli alias (`integer`, `float`, ...) NON sono canonici: servono normalize.
     """
     if not isinstance(t, str) or not t:
         return False
@@ -94,7 +94,7 @@ def canvas_type_to_pandas_dtype(canvas_type: Optional[str]) -> str:
         return "bool"
     if canonical == "date":
         return "datetime64[ns]"
-    # "geometry" / "str" / "" / unknown -> object (opaque)
+    # "geometry" / "str" / "" / unknown -> object (opaque
     return "object"
 
 
@@ -141,7 +141,7 @@ def pandas_series_to_canvas_type(series: "pd.Series") -> str:
     return "str"
 
 
-# Adapter di shape (list <-> dict)
+# Adapter di shape (list <-> dict
 
 
 def metadata_to_dict(rows: Iterable[Mapping[str, Any]] | None) -> Dict[str, str]:

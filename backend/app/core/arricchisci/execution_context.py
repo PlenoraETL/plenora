@@ -1,7 +1,6 @@
 """
 Arricchisci execution context — typed boundary.
 
-BE-GO-READY-TRANSFORMATION-ENGINE-015-ARRICCHISCI-EXECUTION-CONTEXT.
 """
 
 from __future__ import annotations

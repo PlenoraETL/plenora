@@ -59,15 +59,14 @@ def load_dataframe_from_file(
     if not file_path.exists():
         raise FileNotFoundError(f"File non trovato: {file_path}")
 
-    # BE-GO-READY-MEMORY-OOM-001-LOAD-FILE-PREFLIGHT-GUARD: preflight
     # check sul file size per evitare di materializzare in memoria
-    # file che eccedono `settings.LOAD_FILE_MAX_BYTES` (default 200 MB).
-    # Lazy import di `settings` e `MemoryLimitExceededError` per:
-    #   - evitare cicli di import al bootstrap del modulo dataframe;
-    #   - mantenere `dataframe.py` pure (nessuna dep FastAPI / web).
+    # file che eccedono `settings.LOAD_FILE_MAX_BYTES` (default 200 MB
+    # Lazy import di `settings` e `MemoryLimitExceededError` per
+    # evitare cicli di import al bootstrap del modulo dataframe
+    # mantenere `dataframe.py` pure (nessuna dep FastAPI / web
     # Eccezione tipata pura: il caller HTTP la mappa a 413 envelope
     # nel boundary handler `app/main.py`. Caller worker / CLI la
-    # cattura allo stesso modo.
+    # cattura allo stesso modo
     try:
         _preflight_size = file_path.stat().st_size
     except OSError:
@@ -86,10 +85,10 @@ def load_dataframe_from_file(
 
     estensione = file_path.suffix.lower()
 
-    # RB.#19 Step A: timing log per quantificare il parse pandas/geopandas.
+    # RB.#19 Step A: timing log per quantificare il parse pandas/geopandas
     # Misurato indipendentemente da S3 download / temp blob write per
     # poter isolare il bottleneck reale (parser CSV vs I/O temp file vs
-    # download remoto).
+    # download remoto
     import time as _time_mod
     _t0 = _time_mod.monotonic()
     try:
@@ -105,7 +104,7 @@ def load_dataframe_from_file(
 
         elif estensione == ".json":
             # Leggi JSON con json.load per preservare stringhe con underscore
-            # (pd.read_json converte "119_00074" in 11900074.0 perché _ è separatore migliaia)
+            # pd.read_json converte "119_00074" in 11900074.0 perché _ è separatore migliaia
             import json
             try:
                 with open(file_path, 'r', encoding='utf-8') as f:
@@ -118,7 +117,7 @@ def load_dataframe_from_file(
             # Applica inferenza tipi selettiva: converti a numerico solo colonne "pure"
             for col in df.columns:
                 if df[col].dtype == 'object':
-                    # Controlla se i valori contengono underscore (probabile codice/ID)
+                    # Controlla se i valori contengono underscore (probabile codice/ID
                     sample = df[col].dropna().head(100).astype(str)
                     has_underscore = sample.str.contains('_', na=False).any()
                     
@@ -127,7 +126,7 @@ def load_dataframe_from_file(
                         converted = pd.to_numeric(df[col], errors='coerce')
                         original_count = df[col].notna().sum()
                         converted_count = converted.notna().sum()
-                        # Accetta solo se TUTTI i non-null sono convertiti (no data loss)
+                        # Accetta solo se TUTTI i non-null sono convertiti (no data loss
                         if original_count > 0 and converted_count == original_count:
                             df[col] = converted
             
@@ -169,7 +168,7 @@ def load_dataframe_from_file(
 
     except Exception as e:
         # Logga solo il filename, NON il path completo (info disclosure: il
-        # path completo può rivelare struttura del filesystem server).
+        # path completo può rivelare struttura del filesystem server
         logger.error(f"[CRASH] Errore caricamento {file_path.name}: {e}", exc_info=True)
         raise
 
@@ -190,9 +189,9 @@ def _read_csv_safe(file_path: Path) -> pd.DataFrame:
             last_err = e
             continue
         except Exception:
-            # Errori non-encoding: rilancia subito (es. file vuoto)
+            # Errori non-encoding: rilancia subito (es. file vuoto
             raise
-    # Tutti gli encoding hanno fallito (improbabile dato che latin-1 accetta qualsiasi byte)
+    # Tutti gli encoding hanno fallito (improbabile dato che latin-1 accetta qualsiasi byte
     raise UnicodeDecodeError(
         last_err.encoding, last_err.object, last_err.start, last_err.end,
         f"Impossibile decodificare {file_path.name} con nessuno di {encodings_to_try}"
@@ -366,7 +365,7 @@ def save_dataframe(
             final_path = base_path.with_suffix(".csv")
             # UTF-8 esplicito: pandas ha utf-8 come default ma il contratto
             # deve essere leggibile. Il reader in _read_csv_safe prova prima
-            # utf-8 -> coerenza write/read a prova di locale di sistema.
+            # utf-8 -> coerenza write/read a prova di locale di sistema
             df.to_csv(final_path, index=False, encoding="utf-8")
 
         elif formato == "xlsx":
@@ -407,7 +406,7 @@ def save_dataframe(
         return final_path
 
     except ValueError as e:
-        # ValueError = errore logico atteso (es. nessuna geometria, formato non supportato)
+        # ValueError = errore logico atteso (es. nessuna geometria, formato non supportato
         # → WARNING, non ERROR: è una condizione gestita da _salva_risultato
         logger.warning(f"Salvataggio non riuscito {output_path}: {e}")
         raise
@@ -426,8 +425,8 @@ def save_dataframe_to_bytes(
 
     Formati supportati in-memory: csv, xlsx, json, parquet, geojson.
     Formati NON supportati (richiedono filesystem per tool binari):
-      - gpkg  (SQLite-based, il driver OGR vuole un path)
-      - shp   (multi-file .shp/.shx/.dbf/.prj zippati)
+      - gpkg (SQLite-based, il driver OGR vuole un path)
+      - shp (multi-file .shp/.shx/.dbf/.prj zippati)
     Per questi formati usa la versione path-based `save_dataframe`.
 
     Complementare a `save_dataframe`: stesso contract output (bytes che
@@ -454,9 +453,9 @@ def save_dataframe_to_bytes(
     if formato == "csv":
         buf = io.StringIO()
         # encoding='utf-8' esplicito per coerenza col contract checker
-        # (AST test cerca il kwarg su qualsiasi to_csv con arg positional).
+        # AST test cerca il kwarg su qualsiasi to_csv con arg positional
         # Nel caso StringIO pandas ignora l'encoding effettivo (il buf e'
-        # text-mode), noi lo applichiamo a getvalue().encode() sotto.
+        # text-mode), noi lo applichiamo a getvalue.encode sotto
         df.to_csv(buf, index=False, encoding="utf-8")
         return buf.getvalue().encode("utf-8")
 
@@ -464,7 +463,7 @@ def save_dataframe_to_bytes(
         buf = io.BytesIO()
         # Engine di default (openpyxl) supporta BytesIO. Per file >MAX zip
         # standard (rarissimo in pipeline tabulari) il path-based ha il
-        # fallback xlsxwriter+zip64; qui se emerge errore lo propaghiamo.
+        # fallback xlsxwriter+zip64; qui se emerge errore lo propaghiamo
         df.to_excel(buf, index=False)
         return buf.getvalue()
 
@@ -479,7 +478,7 @@ def save_dataframe_to_bytes(
 
     if formato == "geojson":
         # Converti a GeoDataFrame se necessario (stesso pattern del
-        # path-based `_salva_formato_geo`).
+        # path-based `_salva_formato_geo`
         if geom_column is None:
             geom_column = detect_geometry_column(df)
         try:
@@ -494,7 +493,7 @@ def save_dataframe_to_bytes(
             gdf = df
             if geom_column and gdf.geometry.name != geom_column:
                 gdf = gdf.set_geometry(geom_column)
-        # GeoDataFrame.to_json() ritorna stringa GeoJSON ottimizzata.
+        # GeoDataFrame.to_json ritorna stringa GeoJSON ottimizzata
         return gdf.to_json().encode("utf-8")
 
     if formato in ("gpkg", "shp"):
@@ -566,7 +565,7 @@ def _salva_formato_geo(
             gdf = _switch_colonna_geometria(gdf, geom_column)
 
         # Converti le colonne geometria secondarie in WKT per l'export
-        # (GeoPandas non supporta colonne geometria multiple in un singolo file)
+        # GeoPandas non supporta colonne geometria multiple in un singolo file
         gdf = _converti_geometrie_secondarie_in_wkt(gdf)
 
         if gdf.crs is None:
@@ -757,7 +756,7 @@ def _salva_shapefile_zippato(
             for f in Path(tmpdir).glob(f"{nome_shp}.*"):
                 zf.write(f, f.name)
 
-        # NOTE: per colonne con nomi lunghi (limite Shapefile: 10 caratteri)
+        # NOTE: per colonne con nomi lunghi (limite Shapefile: 10 caratteri
         colonne_lunghe = [c for c in colonne_originali if len(str(c)) > 10]
         if colonne_lunghe:
             logger.warning(
@@ -801,10 +800,10 @@ def filter_visible_columns(
     if not visibili:
         return df
 
-    # Seleziona colonne disponibili nel DataFrame (per nome raw)
+    # Seleziona colonne disponibili nel DataFrame (per nome raw
     # Gestisce duplicati: se lo stesso nome appare più volte, prendi solo la prima
     seen_names = set()
-    colonne_da_selezionare = []  # (nome_raw, alias_finale)
+    colonne_da_selezionare = []  # nome_raw, alias_finale
     for col in visibili:
         raw_name = col.get("name", "")
         alias = col.get("alias") or raw_name

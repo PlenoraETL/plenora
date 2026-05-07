@@ -16,8 +16,8 @@ from app.utils.logger import get_logger
 # Stesso logger name di `database_writer.py`: i record sono
 # indistinguibili dai consumer che attaccano handler / filtrano per
 # "app.core.carica.writer". Il `StructuredLogger` wrapper delega a
-# `_logger.log(...)` sul logger stdlib omonimo (singleton per nome),
-# quindi handler agganciati nei test B2.0 catturano gli emit dal mixin.
+# `_logger.log(...)` sul logger stdlib omonimo (singleton per nome
+# quindi handler agganciati nei test B2.0 catturano gli emit dal mixin
 logger = get_logger("app.core.carica.writer")
 
 
@@ -51,10 +51,10 @@ class DataPrepMixin:
                     )
         except ImportError:
             # geopandas e' dependency opzionale: se manca, le eventuali
-            # GeoSeries nel DataFrame non vengono pre-convertite a WKT,
-            # ma _geometry_to_wkt a valle gestisce comunque il caso.
+            # GeoSeries nel DataFrame non vengono pre-convertite a WKT
+            # ma _geometry_to_wkt a valle gestisce comunque il caso
             # Pre-fix: `pass` silenzioso — impossibile sapere in prod se
-            # la conversione GeoSeries e' stata saltata.
+            # la conversione GeoSeries e' stata saltata
             logger.debug(
                 "[_prepare_dataframe] geopandas non disponibile, "
                 "skip pre-conversione GeoSeries → WKT"
@@ -78,7 +78,7 @@ class DataPrepMixin:
             if len(non_null) == 0:
                 continue
 
-            # Campiona per performance (max 1000 righe)
+            # Campiona per performance (max 1000 righe
             sample = non_null.head(1000)
             has_numeric = False
             has_string = False
@@ -92,7 +92,7 @@ class DataPrepMixin:
                     break
 
             if has_numeric and has_string:
-                # Colonna mista: converti tutto a str per sicurezza (vectorized)
+                # Colonna mista: converti tutto a str per sicurezza (vectorized
                 logger.info(
                     f"Colonna '{col}' contiene tipi misti (numeri + stringhe), "
                     f"conversione a TEXT"
@@ -122,10 +122,10 @@ class DataPrepMixin:
                     from shapely.geometry import shape
                     return shape(_json.loads(value)).wkt
                 except Exception as e:
-                    # Usa il logger di modulo (prima: getLogger(__name__)
-                    # ad hoc — inconsistente col resto del file).
-                    # Il `pass` morto dopo il warning e' stato rimosso:
-                    # era dead statement, cade naturalmente al ramo WKB.
+                    # Usa il logger di modulo (prima: getLogger(__name__
+                    # ad hoc — inconsistente col resto del file
+                    # Il `pass` morto dopo il warning e' stato rimosso
+                    # era dead statement, cade naturalmente al ramo WKB
                     logger.warning(f"GeoJSON->WKT fallito, provo WKB: {e}")
             # Potrebbe essere WKB hex
             try:
@@ -136,7 +136,7 @@ class DataPrepMixin:
                 # Fallback esaurito: ritorna il valore raw (contratto
                 # pubblico invariato — il DB sollevera' su geometria
                 # malformata, ma almeno la causa originale e' tracciata
-                # nel log. Pre-fix: nessun log.
+                # nel log. Pre-fix: nessun log
                 logger.debug(
                     "[_geometry_to_wkt] parse WKB fallito dopo GeoJSON, "
                     "restituisco valore raw: %s: %s",
@@ -188,7 +188,7 @@ class DataPrepMixin:
             if hasattr(value, 'item'):
                 value = value.item()
 
-            # Timestamp/datetime -> ISO string (per compatibilità cross-DB)
+            # Timestamp/datetime -> ISO string (per compatibilità cross-DB
             if hasattr(value, 'isoformat'):
                 value = value.isoformat()
 

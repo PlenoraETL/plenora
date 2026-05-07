@@ -17,15 +17,14 @@ class MimeMismatchError(ValueError):
 # MIME consentiti per estensione
 # Per ciascuna estensione: insieme di MIME che `filetype` puo' tornare
 # legittimamente. None significa "formato testuale, nessun magic byte
-# atteso" (validato via fallback `_is_textual`).
-#
-# Note sui formati "wrapper":
-#   - xlsx e' un container OOXML zippato → filetype puo' tornare
-#     'application/zip' o il MIME OOXML specifico a seconda della
-#     versione/struttura. Accettiamo entrambi.
-#   - xls (vecchio Office) e' OLE2 compound → 'application/x-cfb'
-#   - gpkg e' un container SQLite → 'application/x-sqlite3'
-#   - shp/gdb arrivano sempre zippati → 'application/zip'
+# atteso" (validato via fallback `_is_textual`
+# Note sui formati "wrapper"
+# xlsx e' un container OOXML zippato → filetype puo' tornare
+# 'application/zip' o il MIME OOXML specifico a seconda della
+# versione/struttura. Accettiamo entrambi
+# xls (vecchio Office) e' OLE2 compound → 'application/x-cfb'
+# gpkg e' un container SQLite → 'application/x-sqlite3'
+# shp/gdb arrivano sempre zippati → 'application/zip'
 
 _EXPECTED_MIMES: dict[str, Optional[Set[str]]] = {
     # Immagini
@@ -49,7 +48,7 @@ _EXPECTED_MIMES: dict[str, Optional[Set[str]]] = {
     "gdb":  {"application/zip"},
     "dxf":  None,  # DXF e' testo (ASCII format) — filetype non riconosce
 
-    # Testuali (no magic, validati via _is_textual)
+    # Testuali (no magic, validati via _is_textual
     "csv":     None,
     "json":    None,
     "geojson": None,
@@ -58,10 +57,10 @@ _EXPECTED_MIMES: dict[str, Optional[Set[str]]] = {
 }
 
 
-# MIME bloccati ESPLICITAMENTE, sempre, qualunque estensione il file dichiari.
-# `filetype` puo' tornare uno di questi se il file e' un eseguibile.
+# MIME bloccati ESPLICITAMENTE, sempre, qualunque estensione il file dichiari
+# `filetype` puo' tornare uno di questi se il file e' un eseguibile
 # Difesa contro: evil.exe rinominato in .png passa l'allowlist estensione
-# ma `filetype` lo riconosce come binario eseguibile → rifiuta.
+# ma `filetype` lo riconosce come binario eseguibile → rifiuta
 _ALWAYS_BLOCKED_MIMES = {
     "application/x-msdownload",     # Windows PE/EXE/DLL
     "application/x-executable",     # Linux ELF
@@ -70,15 +69,15 @@ _ALWAYS_BLOCKED_MIMES = {
 }
 
 
-# Magic bytes per signature non sempre coperte da filetype (shebang,
-# script). Check prima di ogni cosa.
+# Magic bytes per signature non sempre coperte da filetype (shebang
+# script). Check prima di ogni cosa
 _BLOCKED_SIGNATURES = (
     b"\x7fELF",            # Linux ELF
     b"MZ",                 # Windows PE/EXE/DLL
     b"\xca\xfe\xba\xbe",   # Mach-O fat binary
     b"\xcf\xfa\xed\xfe",   # Mach-O 64-bit
     b"\xce\xfa\xed\xfe",   # Mach-O 32-bit
-    b"#!",                 # shebang (bash, python, perl, ...)
+    b"# !", # shebang (bash, python, perl
 )
 
 
@@ -99,7 +98,7 @@ def _is_textual(content: bytes, sample_size: int = 4096) -> bool:
     if b"\x00" in sample:
         return False
 
-    # Tentativo decode (UTF-8 → latin-1 fallback). Se entrambi falliscono → binary.
+    # Tentativo decode (UTF-8 → latin-1 fallback). Se entrambi falliscono → binary
     try:
         sample.decode("utf-8")
     except UnicodeDecodeError:
@@ -109,8 +108,8 @@ def _is_textual(content: bytes, sample_size: int = 4096) -> bool:
             return False
 
     # Ratio control chars: indipendente dall'encoding, applichiamo
-    # sempre. Sono "stampabili": tab (0x09), newline (0x0A), CR (0x0D),
-    # tutto da 0x20 (space) in su.
+    # sempre. Sono "stampabili": tab (0x09), newline (0x0A), CR (0x0D
+    # tutto da 0x20 (space) in su
     control = sum(
         1 for b in sample
         if b < 0x20 and b not in (0x09, 0x0A, 0x0D)
@@ -207,7 +206,7 @@ def validate_upload(
             f"(allowed: {sorted(allowed_extensions)})"
         )
 
-    # 1) Blocco eseguibili PRIMA di tutto, qualunque sia l'estensione.
+    # 1) Blocco eseguibili PRIMA di tutto, qualunque sia l'estensione
     head = content[:16]
     for sig in _BLOCKED_SIGNATURES:
         if head.startswith(sig):
@@ -223,11 +222,11 @@ def validate_upload(
             f"(eseguibile)"
         )
 
-    # 2) L'estensione richiede MIME testuale → fallback heuristic.
+    # 2) L'estensione richiede MIME testuale → fallback heuristic
     expected = _EXPECTED_MIMES.get(ext)
     if expected is None:
         # Formato testuale (csv/json/geojson/log/txt/dxf): se filetype
-        # riconosce comunque qualcosa di binario, c'e' mismatch.
+        # riconosce comunque qualcosa di binario, c'e' mismatch
         if detected_mime is not None:
             raise MimeMismatchError(
                 f"File '{filename}': estensione '{ext}' attesa testuale "
@@ -241,7 +240,7 @@ def validate_upload(
         return ext
 
     # 3) Estensione binaria: filetype DEVE riconoscere e MIME DEVE
-    #    matchare la lista attesa.
+    # matchare la lista attesa
     if detected_mime is None:
         raise MimeMismatchError(
             f"File '{filename}': estensione '{ext}' richiede contenuto "

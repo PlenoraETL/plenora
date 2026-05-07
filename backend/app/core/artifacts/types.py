@@ -79,14 +79,14 @@ class PipelineArtifact(dict):
     (`result["success"]`, `**result`, `result["carica"] = ...`) e
     contemporaneamente accedere alle proprieta' tipizzate
     (`artifact.project_id`, `artifact.artifact_kind`,
-    `artifact.to_run_artifact_ref()`). La forma dict resta necessaria
+    `artifact.to_run_artifact_ref`). La forma dict resta necessaria
     per la serializzazione cross-process via Celery.
 
     `artifact_kind` (proprieta' derivata):
     - "inline" → c'e' un DataFrame in process (path MANIPOLA inline)
-    - "blob"   → c'e' un result_id, blob persistito nel DB results
-    - "file"   → c'e' un output_path su disco (RESULTS_DIR o temp)
-    - "none"   → nessun artefatto (pipeline fallita o senza output)
+    - "blob" → c'e' un result_id, blob persistito nel DB results
+    - "file" → c'e' un output_path su disco (RESULTS_DIR o temp)
+    - "none" → nessun artefatto (pipeline fallita o senza output)
     """
 
     _ALLOWED_KINDS = ("inline", "blob", "file", "none")
@@ -96,7 +96,7 @@ class PipelineArtifact(dict):
         if not self.get("project_id"):
             raise ValueError("PipelineArtifact.project_id mancante")
 
-    # -- proprieta' tipizzate sopra il dict ----------------------------------
+    # proprieta' tipizzate sopra il dict
 
     @property
     def project_id(self) -> str:
@@ -148,7 +148,7 @@ class PipelineArtifact(dict):
             return "file"
         return "none"
 
-    # -- factory + conversione -----------------------------------------------
+    # factory + conversione
 
     @classmethod
     def from_executor_result(
@@ -161,7 +161,7 @@ class PipelineArtifact(dict):
         binding per il risultato: se il payload ne contiene gia' uno
         diverso (rewrap stale, scambio di artefatti cross-progetto)
         solleva `ValueError` fail-closed invece di propagare la
-        discrepanza in `to_run_artifact_ref()`.
+        discrepanza in `to_run_artifact_ref`.
 
         Input non-dict produce un artefatto "none" senza sollevare.
         """
@@ -195,12 +195,12 @@ class PipelineArtifact(dict):
     ) -> "PipelineArtifact":
         """Typed factory: constructs a PipelineArtifact from an ExecutionResult.
 
-        BE-GO-READY-ARCH-059-W3: typed payload boundary between executor and
+         typed payload boundary between executor and
         artifact. Delegates to ``from_executor_result`` via
-        ``exec_result.to_dict()`` so that the full backward-compatible dict
+        ``exec_result.to_dict`` so that the full backward-compatible dict
         shape is preserved. The typed boundary here is ``ExecutionResult``
         rather than the raw executor dict, enabling callers to reason about
-        ``exec_result.artifact_payload()`` before the artifact is constructed.
+        ``exec_result.artifact_payload`` before the artifact is constructed.
         """
         return cls.from_executor_result(exec_result.to_dict(), project_id=project_id)
 
@@ -311,7 +311,7 @@ class LatestProjectArtifactRef:
 
     Da usare SOLO per il caso "progetto upstream" (manipola consuma
     output di estrai, features/arricchisci consumano l'ultimo output
-    di un progetto). Non usare come fallback dopo `execute_pipeline()`
+    di un progetto). Non usare come fallback dopo `execute_pipeline`
     sullo stesso project: due esecuzioni parallele si scambierebbero
     l'output (race cross-task).
     """
@@ -345,7 +345,7 @@ class MaterializedArtifact:
     """Risultato della risoluzione di un Ref.
 
     Esattamente uno fra `path` (file su disco) e `df` (DataFrame
-    in memoria) e' valorizzato. Se `is_temporary` e' True, `cleanup()`
+    in memoria) e' valorizzato. Se `is_temporary` e' True, `cleanup`
     rimuove il file. Usare come context manager per garantire il
     cleanup anche su errore del caller.
     """

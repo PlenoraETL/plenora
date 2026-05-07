@@ -23,7 +23,7 @@ from app.utils.template_variables import process_static_fields
 # Stesso logger name di `api_connector.py` (`__name__` valuta a
 # `"app.core.arricchisci.api_connector"`). Singleton stdlib per nome →
 # record indistinguibili dai consumer che attaccano handler / filtrano
-# per nome canonico (identico al pattern B3-B.2b/B3-B.3/B3-B.4b/B3-B.5b).
+# per nome canonico (identico al pattern B3-B.2b/B3-B.3/B3-B.4b/B3-B.5b
 logger = get_logger("app.core.arricchisci.api_connector")
 
 
@@ -36,8 +36,8 @@ class ApiConnectionGeneratorEnricherMixin:
 
     # API GENERATOR
     # Pipeline: build_base_params → paginate → call_endpoint(path subst →
-    # SSRF guard → GET/POST → parse_response). Pagination 4 strategies:
-    # '' (no-pag), 'offset', 'cursor', 'link'.
+    # SSRF guard → GET/POST → parse_response). Pagination 4 strategies
+    # '' (no-pag), 'offset', 'cursor', 'link'
 
     def _paginate_generator_results(
         self, *, call_fn, pagination: Dict, base_params: Dict
@@ -142,7 +142,7 @@ class ApiConnectionGeneratorEnricherMixin:
                 if len(all_rows) >= max_rows:
                     all_rows = all_rows[:max_rows]
                     break
-                # Dopo prima pagina, non rimandare base_params (URL gia' completo)
+                # Dopo prima pagina, non rimandare base_params (URL gia' completo
                 link_base_params = {}
 
         else:
@@ -170,7 +170,7 @@ class ApiConnectionGeneratorEnricherMixin:
         querystring). I valori sostituiti nel path sono URL-encoded.
 
         `safe` controlla quali caratteri NON vengono percent-encodati:
-        - default `"-._~:@!$&'()*+,=;/"`: permissivo, preserva slash/virgola
+        - default `"-._~:@!$&'*+,=;/"`: permissivo, preserva slash/virgola
           (usato da `_execute_api_enricher` e `test_api_connection` —
           alcuni endpoint si aspettano `lat,lon` non encoded nel path).
         - `""`: stretto, encoda tutto (usato da `_execute_api_generator`).
@@ -216,7 +216,7 @@ class ApiConnectionGeneratorEnricherMixin:
 
         target_url = call_url or url
         # Generator: encoding stretto (safe='') — i path param vengono
-        # encoded interamente, niente eccezioni per slash/virgola.
+        # encoded interamente, niente eccezioni per slash/virgola
         target_url, query_params = self._substitute_url_path_params(
             target_url, call_params, safe=''
         )
@@ -248,7 +248,7 @@ class ApiConnectionGeneratorEnricherMixin:
         # `response_config` viene usato solo se ha mappings configurati
         # e senza wildcard `[*]` — i path con wildcard sono gestiti da
         # `_extract_rows_from_response` (specializzato per gli array
-        # generati dal wizard).
+        # generati dal wizard
         rc_mappings = response_config.get('mappings', []) if response_config else []
         has_wildcard = any('[*]' in m.get('path', '') for m in rc_mappings)
         if response_config and rc_mappings and not has_wildcard:
@@ -307,25 +307,25 @@ class ApiConnectionGeneratorEnricherMixin:
         Esegue API di tipo 'generator' — genera un DataFrame dalla risposta.
 
         Supporta paginazione automatica con tre strategie:
-            - offset:  aggiunge offset/limit ad ogni chiamata fino a risultati vuoti o max_rows
-            - cursor:  usa un token/cursor dalla risposta per la chiamata successiva
-            - link:    segue un URL 'next' nel body o nell'header Link della risposta
+            - offset: aggiunge offset/limit ad ogni chiamata fino a risultati vuoti o max_rows
+            - cursor: usa un token/cursor dalla risposta per la chiamata successiva
+            - link: segue un URL 'next' nel body o nell'header Link della risposta
 
         Configurazione paginazione (in api_config['pagination']):
-            type:            'offset' | 'cursor' | 'link'   (default: nessuna)
-            page_size:       righe per pagina               (default: 100)
-            max_rows:        limite totale righe             (default: 10000)
-            offset_param:    nome parametro offset          (default: 'offset')
-            limit_param:     nome parametro limit/page_size (default: 'limit')
-            cursor_param:    nome parametro cursor          (default: 'cursor')
-            cursor_path:     path JSON del cursor nella risposta (default: 'next_cursor')
-            link_path:       path JSON URL prossima pagina  (default: 'next')
-            start_page:      indice prima pagina (offset)   (default: 0)
+            type: 'offset' | 'cursor' | 'link' (default: nessuna)
+            page_size: righe per pagina (default: 100)
+            max_rows: limite totale righe (default: 10000)
+            offset_param: nome parametro offset (default: 'offset')
+            limit_param: nome parametro limit/page_size (default: 'limit')
+            cursor_param: nome parametro cursor (default: 'cursor')
+            cursor_path: path JSON del cursor nella risposta (default: 'next_cursor')
+            link_path: path JSON URL prossima pagina (default: 'next')
+            start_page: indice prima pagina (offset) (default: 0)
 
         Strategie di parsing risposta (in ordine di priorità):
             1. response_preset: preset predefinito (italiameteo_observations, geojson_features)
             2. response_config: configurazione custom per strutture JSON annidate
-            3. output_mapping:  mapping semplice path→colonna (retrocompatibilità)
+            3. output_mapping: mapping semplice path→colonna (retrocompatibilità)
         """
         endpoint = api_config.get('endpoint', {})
         url = endpoint.get('url', '')
@@ -365,7 +365,7 @@ class ApiConnectionGeneratorEnricherMixin:
     # API ENRICHER
     # Pipeline: per riga del df → build params → path subst → SSRF guard →
     # GET/POST → parse → estrai → scrivi colonne. Skip-on-row-error
-    # resilience pattern.
+    # resilience pattern
 
     def _extract_rows_from_response(self, data: Any, output_mapping: List[Dict]) -> List[Dict]:
         """
@@ -377,10 +377,10 @@ class ApiConnectionGeneratorEnricherMixin:
         rows = []
 
         # Path con wildcard `[*]` (es. `data[*].id`): estrai il root
-        # array e itera con path relativo all'item.
+        # array e itera con path relativo all'item
         wildcard_paths = [m.get('path', '') for m in output_mapping if '[*]' in m.get('path', '')]
         if wildcard_paths:
-            # Trova il prefisso comune prima di [*] (es. "data")
+            # Trova il prefisso comune prima di [*] (es. "data"
             first_path = wildcard_paths[0]
             array_root = first_path.split('[*]')[0].rstrip('.')  # es. "data"
             # Naviga all'array root
@@ -393,7 +393,7 @@ class ApiConnectionGeneratorEnricherMixin:
                     path = m.get('path', '')
                     col = m.get('column', path)
                     if '[*]' in path:
-                        # path relativo all'item (dopo [*].)
+                        # path relativo all'item (dopo [*
                         rel = path.split('[*]', 1)[1].lstrip('.')
                         row[col] = self._extract_json_value(item, rel) if rel else item
                     else:
@@ -414,7 +414,7 @@ class ApiConnectionGeneratorEnricherMixin:
                     row[col_name] = self._extract_json_value(feature, path)
                 rows.append(row)
 
-        # Array — controlla se i path sono assoluti sulla lista (es. [0].name.common)
+        # Array — controlla se i path sono assoluti sulla lista (es. [0].name.common
         # In questo caso produce UNA sola riga estraendo i valori dalla lista intera
         elif isinstance(data, list):
             all_absolute = output_mapping and all(
@@ -432,7 +432,7 @@ class ApiConnectionGeneratorEnricherMixin:
                            for m in output_mapping}
                     rows.append(row)
 
-        # Oggetto singolo con array "data" (auto-detect)
+        # Oggetto singolo con array "data" (auto-detect
         elif isinstance(data, dict) and 'data' in data and isinstance(data.get('data'), list):
             logger.info("Auto-detect: usando array 'data' come root")
             for item in data['data']:
@@ -547,9 +547,9 @@ class ApiConnectionGeneratorEnricherMixin:
             if col_name not in result_df.columns:
                 result_df[col_name] = None
 
-        # Token OAuth2 gestito via cache con expires_at (vedi api_utils.get_cached_oauth2_token).
+        # Token OAuth2 gestito via cache con expires_at (vedi api_utils.get_cached_oauth2_token
         # Il refresh avviene automaticamente solo quando il token sta per scadere — non serve
-        # piu il vecchio pattern "rinnova ogni N righe" basato su un counter arbitrario.
+        # piu il vecchio pattern "rinnova ogni N righe" basato su un counter arbitrario
         _is_oauth2 = auth.get('type') in ('oauth2_password', 'oauth2_client_credentials')
 
         def _get_fresh_headers():
@@ -590,9 +590,9 @@ class ApiConnectionGeneratorEnricherMixin:
 
             except Exception as _row_err:
                 # skip-on-row-error per design (vedi docstring
-                # `_enrich_one_row`): il loop continua sul batch.
-                # Log a `debug` per evitare flood su dataset grandi;
-                # il riassunto finale `info` mostra il counter aggregato.
+                # `_enrich_one_row`): il loop continua sul batch
+                # Log a `debug` per evitare flood su dataset grandi
+                # il riassunto finale `info` mostra il counter aggregato
                 logger.debug(
                     f"Riga {idx}: eccezione skippata "
                     f"({type(_row_err).__name__}: {_row_err})"

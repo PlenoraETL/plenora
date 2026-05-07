@@ -58,11 +58,11 @@ class EnrichExecutor:
         if result.get("success"):
             # `api_connector.execute_enrichment` ha gia' chiamato
             # `save_result_blob` internamente e ritorna `result_id`
-            # come riferimento canonico al blob nel DB results.
+            # come riferimento canonico al blob nel DB results
             # Propaghiamo `result_id` verso l'alto cosi' il
             # `PipelineArtifact.artifact_kind` risolve come `"blob"`
             # invece di tentare di leggere `output_path` stale (gia'
-            # unlink-ato dal save_result_blob inner).
+            # unlink-ato dal save_result_blob inner
             if result.get("output_type") == "file":
                 res = {
                     "success": True,
@@ -85,10 +85,10 @@ class EnrichExecutor:
                     "message": f"Arricchimento completato: {result.get('rows_processed', 0)} righe processate",
                 }
 
-                # Allinea columns_metadata del progetto allo schema reale del DataFrame finale.
+                # Allinea columns_metadata del progetto allo schema reale del DataFrame finale
                 # Fix desincronizzazione UI/DB del nodo result — il file xlsx era già corretto
-                # ma columns_metadata restava stale e rompeva il riuso come project_source.
-                # Helper condiviso: retry transient + raise non-transient (vedi shared/columns_metadata.py).
+                # ma columns_metadata restava stale e rompeva il riuso come project_source
+                # Helper condiviso: retry transient + raise non-transient (vedi shared/columns_metadata.py
                 cm = result.get("columns_metadata") or []
                 if cm:
                     save_columns_metadata_with_retry(
@@ -135,7 +135,7 @@ class EnrichExecutor:
 
             ctx = init_execution_context(api_connection_service, project_id, limit)
 
-            # Carica tutte le API connections con credenziali decifrate (1 query)
+            # Carica tutte le API connections con credenziali decifrate (1 query
             api_connections = api_connection_service.list_api_connections_decrypted()
 
             execution_order = get_execution_order(nodes, edges)
@@ -224,7 +224,7 @@ class EnrichExecutor:
                             options=exec_options
                         )
                         # Tronca a `limit` righe PRIMA dell'enrichment
-                        # (evita di chiamare l'API su tutto il dataset per una preview)
+                        # evita di chiamare l'API su tutto il dataset per una preview
                         preview_input = input_df.head(limit) if len(input_df) > limit else input_df
                         result_df, _ = executor.execute(preview_input)
 

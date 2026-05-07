@@ -19,7 +19,7 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-# HTTP Session pool condivisa (riuso connessioni TCP)
+# HTTP Session pool condivisa (riuso connessioni TCP
 
 _shared_session: Optional[requests.Session] = None
 _shared_session_lock = threading.Lock()
@@ -63,7 +63,7 @@ def _warn_urby_loopback_alias_once() -> None:
 
     Idempotente via ``functools.lru_cache(maxsize=1)``: chiamate successive
     sono cache hit silenti. Per i test, ``_warn_urby_loopback_alias_once.
-    cache_clear()`` permette di re-osservare l'emit (vedi fixture in
+    cache_clear`` permette di re-osservare l'emit (vedi fixture in
     ``tests2/security/unit/test_validate_external_url_contract.py``).
 
     R-21 (2026-05-01): emette anche un Python ``DeprecationWarning``
@@ -135,12 +135,12 @@ def _check_outbound_address(
         return "URL non valido: hostname mancante"
 
     # Determina allow_loopback effettivo. REST_FILE strict
-    # (`allow_loopback_opt_in=False`) salta interamente il blocco env:
-    # loopback resta bloccato.
+    # `allow_loopback_opt_in=False`) salta interamente il blocco env
+    # loopback resta bloccato
     if allow_loopback_opt_in:
         # Guard: in ambienti hardened il flag e' disabilitato by design
-        # (simmetrico a config.py:26 _DOTENV_DISABLED_ENVS e crypto.py
-        # guard).
+        # simmetrico a config.py:26 _DOTENV_DISABLED_ENVS e crypto.py
+        # guard
         _env = os.environ.get(
             "ENVIRONMENT", os.environ.get("ENV", "development")
         ).lower()
@@ -157,7 +157,7 @@ def _check_outbound_address(
             # A3: warning loud one-shot quando si usa SOLO l'alias
             # deprecato. Nessuna semantica cambia: l'alias resta
             # funzionante. Pattern functools.lru_cache → cache hit
-            # silente dalla 2a chiamata in poi.
+            # silente dalla 2a chiamata in poi
             if urby_set and not plenora_set:
                 _warn_urby_loopback_alias_once()
     else:
@@ -165,7 +165,7 @@ def _check_outbound_address(
 
     # B3-B.8: getaddrinfo copre IPv4 (A) + IPv6 (AAAA). Dedup via set —
     # uno stesso IP puo' apparire piu' volte (es. multipli protocolli
-    # SOCK_STREAM/SOCK_DGRAM/SOCK_RAW).
+    # SOCK_STREAM/SOCK_DGRAM/SOCK_RAW
     try:
         infos = socket.getaddrinfo(host, None)
     except socket.gaierror:
@@ -216,20 +216,18 @@ def validate_external_url_silent(url: str) -> Optional[str]:
     return _check_outbound_address(url, allow_loopback_opt_in=True)
 
 
-# Cache thread-safe per token ArcGIS (un token per (token_url, username))
+# Cache thread-safe per token ArcGIS (un token per (token_url, username
 _ARCGIS_TOKEN_CACHE: Dict[str, Dict[str, Any]] = {}
 _ARCGIS_TOKEN_LOCK = threading.Lock()
 
 
-# Cache thread-safe per token OAuth2 (lifecycle basato su expires_at)
-#
-# Sostituisce il pattern "rinnova ogni N righe" che era sbagliato:
-# il counter non ha nulla a che vedere con il tempo di vita reale del token.
-#
-# Pattern: double-checked locking con refresh se expires_at - now < 60s.
-# Thread-safe per uso da thread pool (sync).
+# Cache thread-safe per token OAuth2 (lifecycle basato su expires_at
+# Sostituisce il pattern "rinnova ogni N righe" che era sbagliato
+# il counter non ha nulla a che vedere con il tempo di vita reale del token
+# Pattern: double-checked locking con refresh se expires_at - now < 60s
+# Thread-safe per uso da thread pool (sync
 # Per uso async, threading.Lock funziona comunque perche e non-bloccante
-# nel fast path (token valido); si blocca solo durante il refresh.
+# nel fast path (token valido); si blocca solo durante il refresh
 
 _OAUTH2_TOKEN_CACHE: Dict[str, Dict[str, Any]] = {}
 _OAUTH2_TOKEN_LOCK = threading.Lock()
@@ -311,7 +309,7 @@ def invalidate_oauth2_token(auth: Dict) -> None:
 
 # Sanificazione log per evitare leak di credenziali
 
-# Pattern di chiavi che indicano valori sensibili (case-insensitive, match parziale)
+# Pattern di chiavi che indicano valori sensibili (case-insensitive, match parziale
 _SENSITIVE_KEY_PATTERNS = (
     "token", "api_key", "apikey", "password", "passwd", "secret",
     "authorization", "auth_key", "access_key", "client_secret",
@@ -400,12 +398,12 @@ def geojson_to_wkt(geom: dict) -> str:
         from shapely.geometry import shape
         return shape(geom).wkt
     except Exception:
-        # Fallback: JSON string (compatibile con _geometry_to_wkt di CARICA)
+        # Fallback: JSON string (compatibile con _geometry_to_wkt di CARICA
         return json.dumps(geom, ensure_ascii=False)
 
 
 _DOT_PLACEHOLDER = "\x01"  # Marker interno per proteggere i `.` dentro `[...]`
-                           # dalla successiva .split(".")
+                           # dalla successiva .split("."
 
 
 def _tokenize_path(path: str) -> list:
@@ -444,13 +442,13 @@ def extract_json_value(data: Any, path: str) -> Any:
     Estrae un valore da strutture JSON/dict usando dot notation annidata.
 
     Sintassi path:
-      - "field.nested.value"                        → accesso annidato
-      - "array[0].field"                            → indice array
-      - "list[*].field"                             → wildcard: primo elemento
-      - "list[key=value].field"                     → filtro top-level
-      - "list[nested.key=value].field"              → filtro con chiave annidata
+      - "field.nested.value" → accesso annidato
+      - "array[0].field" → indice array
+      - "list[*].field" → wildcard: primo elemento
+      - "list[key=value].field" → filtro top-level
+      - "list[nested.key=value].field" → filtro con chiave annidata
                                                        (es. features[properties.origine=asc3_2021])
-      - ""  oppure  None                            → ritorna data intero
+      - "" oppure None → ritorna data intero
 
     **Filtri con chiavi annidate**: la chiave del filtro può essere un path dotted
     (es. `properties.origine`) e viene risolta ricorsivamente su ogni elemento
@@ -489,9 +487,9 @@ def extract_json_value(data: Any, path: str) -> Any:
                 return None
             i += 1
         elif "=" in part:
-            # Filtro "key=value": primo elem della lista con elem[key]==value.
-            # La chiave può essere un path annidato (es. "properties.origine")
-            # risolta ricorsivamente tramite extract_json_value.
+            # Filtro "key=value": primo elem della lista con elem[key]==value
+            # La chiave può essere un path annidato (es. "properties.origine"
+            # risolta ricorsivamente tramite extract_json_value
             if not isinstance(current, list):
                 return None
             key, _, expected = part.partition("=")
@@ -508,7 +506,7 @@ def extract_json_value(data: Any, path: str) -> Any:
                 if str(val) == expected:
                     found = item
                     break
-                # Fallback numerico: gestisce layerId=0 (int) vs expected="0" (str)
+                # Fallback numerico: gestisce layerId=0 (int) vs expected="0" (str
                 try:
                     if float(val) == float(expected):
                         found = item
@@ -526,8 +524,8 @@ def extract_json_value(data: Any, path: str) -> Any:
             i += 1
         elif isinstance(current, dict):
             # Longest-first greedy match: prova a unire con le parti successive
-            # per gestire chiavi con punti nel nome (es. "Raster.Value",
-            # "UniqueValue.Pixel Value" tipiche dei layer raster ArcGIS).
+            # per gestire chiavi con punti nel nome (es. "Raster.Value"
+            # "UniqueValue.Pixel Value" tipiche dei layer raster ArcGIS
             matched = False
             for j in range(n, i, -1):
                 joined = ".".join(parts[i:j])
@@ -631,9 +629,9 @@ def _fetch_oauth2_client_credentials_token(auth: Dict) -> Optional[Dict]:
         return None
 
 
-# Wrapper legacy: API pubbliche che ritornano solo la stringa del token.
+# Wrapper legacy: API pubbliche che ritornano solo la stringa del token
 # Usano get_cached_oauth2_token per beneficiare automaticamente del
-# lifecycle tracking e del refresh on-demand. Backward compatible.
+# lifecycle tracking e del refresh on-demand. Backward compatible
 
 @functools.lru_cache(maxsize=1)
 def _warn_get_oauth2_token_deprecated_once() -> None:
@@ -641,7 +639,7 @@ def _warn_get_oauth2_token_deprecated_once() -> None:
 
     Cache LRU per non spammare il logger ops in caller hot-path
     (enrichment service usa il wrapper via alias). Per i test:
-    ``_warn_get_oauth2_token_deprecated_once.cache_clear()``.
+    ``_warn_get_oauth2_token_deprecated_once.cache_clear``.
     """
     import warnings as _warnings
     msg = (
@@ -728,13 +726,13 @@ def get_arcgis_token(auth: Dict) -> Optional[str]:
 
     Args:
         auth: dict con chiavi:
-            - token_url:  URL completo del generateToken endpoint
-            - username:   utente
-            - password:   password
-            - client:     'requestip' (default), 'referer', o 'ip'
+            - token_url: URL completo del generateToken endpoint
+            - username: utente
+            - password: password
+            - client: 'requestip' (default), 'referer', o 'ip'
             - expiration: minuti (default 60, max impostato dal server)
-            - referer:    obbligatorio se client='referer'
-            - ip:         obbligatorio se client='ip'
+            - referer: obbligatorio se client='referer'
+            - ip: obbligatorio se client='ip'
 
     Returns:
         Il token, oppure None in caso di errore. Il token è cachato per
@@ -750,7 +748,7 @@ def get_arcgis_token(auth: Dict) -> Optional[str]:
 
     cache_key = f"{token_url}|{username}"
 
-    # Check cache (con margine di 60s per evitare token "appena scaduti")
+    # Check cache (con margine di 60s per evitare token "appena scaduti"
     with _ARCGIS_TOKEN_LOCK:
         cached = _ARCGIS_TOKEN_CACHE.get(cache_key)
         if cached and cached.get("expires_at", 0) > time.time() + 60:
@@ -771,14 +769,14 @@ def get_arcgis_token(auth: Dict) -> Optional[str]:
         payload["ip"] = auth.get("ip", "")
 
     # SECURITY: default cambiato da False a True. Prima, il default disabilitava
-    # SSL, permettendo MITM su richieste ArcGIS token (username+password in chiaro).
+    # SSL, permettendo MITM su richieste ArcGIS token (username+password in chiaro
     # Gli utenti con server ArcGIS self-signed possono ancora impostare
-    # verify_ssl=false nella configurazione del connettore.
+    # verify_ssl=false nella configurazione del connettore
     verify_ssl = auth.get("verify_ssl", True)
     try:
         # Silenzia l'InsecureRequestWarning quando l'utente disabilita
         # esplicitamente la verifica SSL (alcuni server ArcGIS interni hanno
-        # certificati self-signed o catene non riconosciute).
+        # certificati self-signed o catene non riconosciute
         if not verify_ssl:
             try:
                 from urllib3.exceptions import InsecureRequestWarning
@@ -811,7 +809,7 @@ def get_arcgis_token(auth: Dict) -> Optional[str]:
             logger.warning("ArcGIS token: nessun token nella risposta")
             return None
 
-        # `expires` è un timestamp in millisecondi (può essere stringa o int)
+        # `expires` è un timestamp in millisecondi (può essere stringa o int
         try:
             expires_at = int(expires_raw) / 1000.0
         except (TypeError, ValueError):
@@ -839,16 +837,16 @@ def prepare_headers(auth: Dict, custom_headers: Dict = None) -> Dict:
     Prepara headers HTTP per chiamata API REST.
 
     Tipi auth supportati:
-      - none                      → solo Accept + User-Agent
-      - api_key                   → chiave in header (location='header')
-      - basic_auth                → Authorization: Basic base64(user:pass)
-      - oauth2_password           → Bearer token (password grant)
+      - none → solo Accept + User-Agent
+      - api_key → chiave in header (location='header')
+      - basic_auth → Authorization: Basic base64(user:pass)
+      - oauth2_password → Bearer token (password grant)
       - oauth2_client_credentials → Bearer token (client_credentials grant)
-      - arcgis_token              → token NON in header (va in query string,
+      - arcgis_token → token NON in header (va in query string,
                                     iniettato dal connector che chiama l'API)
 
     Args:
-        auth:           dict configurazione autenticazione
+        auth: dict configurazione autenticazione
         custom_headers: headers aggiuntivi da mergiare (sovrascrivono i default)
     """
     headers: Dict = {
@@ -888,9 +886,9 @@ def prepare_headers(auth: Dict, custom_headers: Dict = None) -> Dict:
         headers["Authorization"] = f"Basic {credentials}"
 
     elif auth_type == "arcgis_token":
-        # Il token ArcGIS viene iniettato come query param (?token=...)
-        # direttamente dal chiamante (enrichment_service._call_api_with_retry).
-        # Qui non aggiungiamo nulla agli headers — lasciamo solo i default.
+        # Il token ArcGIS viene iniettato come query param (?token=
+        # direttamente dal chiamante (enrichment_service._call_api_with_retry
+        # Qui non aggiungiamo nulla agli headers — lasciamo solo i default
         pass
 
     return headers

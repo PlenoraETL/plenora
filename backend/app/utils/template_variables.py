@@ -12,8 +12,8 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# Espressione regolare per riconoscere le variabili template.
-# Cattura: gruppo 1 = nome variabile (es. NOW), gruppo 2 = offset opzionale (es. +2h)
+# Espressione regolare per riconoscere le variabili template
+# Cattura: gruppo 1 = nome variabile (es. NOW), gruppo 2 = offset opzionale (es. +2h
 TEMPLATE_REGEX = r"\{\{([A-Z]+)([+-]\d+[hdmsMHDMS])?\}\}"
 
 
@@ -219,7 +219,7 @@ def process_static_fields(
     return risultato
 
 
-# CATALOGO VARIABILI (per documentazione e autocomplete frontend)
+# CATALOGO VARIABILI (per documentazione e autocomplete frontend
 
 AVAILABLE_VARIABLES = [
     {"name": "{{NOW}}",       "description": "Data/ora corrente",    "example": "2026-02-02 11:30"},

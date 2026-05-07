@@ -1,7 +1,6 @@
 """
 Typed payload value objects for canvas execution results.
 
-BE-GO-READY-ARCH-060-W3-EXECUTION-PAYLOAD-MODULE-SPLIT.
 """
 
 from __future__ import annotations
@@ -13,10 +12,10 @@ from typing import Any, Dict, Optional
 __all__ = ["ArtifactPayload"]
 
 
-# Payload safety guard (used by ExecutionResult.__post_init__)
+# Payload safety guard (used by ExecutionResult.__post_init__
 
-# Module-name prefixes that signal a heavy DataFrame runtime.
-# Checked by string comparison - no import of these libraries.
+# Module-name prefixes that signal a heavy DataFrame runtime
+# Checked by string comparison - no import of these libraries
 _UNSAFE_PAYLOAD_MODULES = frozenset({"pandas", "geopandas", "polars"})
 
 
@@ -68,15 +67,15 @@ class ArtifactPayload:
 
     Boundary: leaf contract - no Pandas, DB, FastAPI, or ArcGIS imports.
 
-    Go-ready mapping::
+    portable mapping::
 
         type ArtifactPayload struct {
-            ResultID   *string
+            ResultID *string
             OutputPath *string
-            Filename   *string
-            Format     *string
-            RowsCount  *int
-            RunID      *string
+            Filename *string
+            Format *string
+            RowsCount *int
+            RunID *string
         }
     """
 

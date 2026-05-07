@@ -18,7 +18,7 @@ from app.utils.result_store import save_result_blob
 # Stesso logger name di `api_connector.py` (`__name__` valuta a
 # `"app.core.arricchisci.api_connector"`). Singleton stdlib per nome →
 # record indistinguibili dai consumer che attaccano handler / filtrano
-# per nome canonico (identico al pattern B3-B.2b).
+# per nome canonico (identico al pattern B3-B.2b
 logger = get_logger("app.core.arricchisci.api_connector")
 
 
@@ -58,7 +58,7 @@ class ApiConnectionSupportMixin:
                         return self._extract_geojson_fields(data)
                     # Path senza prefisso [0]: `_extract_rows_from_response`
                     # itera gia' su ogni item, quindi i path devono
-                    # essere relativi all'item.
+                    # essere relativi all'item
                     fields.extend(self._extract_available_fields(first_item, "", max_depth - 1))
                 else:
                     fields.extend(self._extract_available_fields(first_item, f"{prefix}[0]", max_depth - 1))
@@ -90,7 +90,7 @@ class ApiConnectionSupportMixin:
                         fields.extend(self._extract_available_fields(value[0], f"{field_path}[0]", max_depth - 1))
                     else:
                         # Array di primitivi (es. latlng: [42.83, 12.83]) —
-                        # espandi tutti gli indici presenti (max 10)
+                        # espandi tutti gli indici presenti (max 10
                         for idx, item in enumerate(value[:10]):
                             item_path = f"{field_path}[{idx}]"
                             fields.append({
@@ -188,7 +188,7 @@ class ApiConnectionSupportMixin:
 
     # RESULT_BUILDING — orchestration helpers per `execute_enrichment`
     # Pipeline: carica sorgenti → esegui nodi in ordine topologico →
-    # arricchisci via API → salva output finale.
+    # arricchisci via API → salva output finale
     # Supporta nodi: project_source, file_source, staticValues, api_enrich, result
 
     def _find_final_result(
@@ -240,8 +240,8 @@ class ApiConnectionSupportMixin:
         src_path = Path(final_result['output_path'])
         src_name = src_path.name
         # Leggi la size PRIMA del save: save_result_blob cancella il
-        # file temp nel finally su success, quindi src_path.stat()
-        # dopo la chiamata solleverebbe FileNotFoundError.
+        # file temp nel finally su success, quindi src_path.stat
+        # dopo la chiamata solleverebbe FileNotFoundError
         size_bytes = src_path.stat().st_size
 
         result_id = save_result_blob(
@@ -265,7 +265,7 @@ class ApiConnectionSupportMixin:
         }
 
         # Cleanup dir tmp dell'executable (solo se il nome combacia con
-        # il pattern `plenora_exec_*`: niente rimozioni di cartelle altrui).
+        # il pattern `plenora_exec_*`: niente rimozioni di cartelle altrui
         try:
             import shutil
             tmp_dir = src_path.parent
@@ -330,7 +330,7 @@ class ApiConnectionSupportMixin:
     ) -> None:
         """Best-effort snapshot del DataFrame del nodo arricchisci.
 
-        Phase 6 Batch 3B (2026-04-28): instradato attraverso la nuova
+        instradato attraverso la nuova
         `record_checkpoint_snapshot(module="arricchisci")`. La policy
         globale `ARRICCHISCI_INTERMEDIATE_CHECKPOINTS=final_only` (default)
         esclude i nodi `api_enrich` dagli snapshot intermedi: il

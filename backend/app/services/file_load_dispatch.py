@@ -1,7 +1,7 @@
 """
-Parser dispatch per file source (STRUCT-001 Seam D-B).
+Parser dispatch per file source (STRUCT-001 Seam D-B
 
-Estratto da `FileSourceService._load_by_format` + duplicato di
+Keeps this module's responsibility explicit and isolated from adjacent code.
 """
 
 from __future__ import annotations
@@ -28,13 +28,13 @@ def load_by_format(
     """Carica dati in base al formato.
 
     Args:
-        loader:      DataLoaderProtocol-like (load_csv/load_excel/load_json/
+        loader: DataLoaderProtocol-like (load_csv/load_excel/load_json/
                      load_geospatial).
-        file_path:   Path del file da caricare (tipicamente un temp file).
+        file_path: Path del file da caricare (tipicamente un temp file).
         format_type: 'csv'|'xlsx'|'json'|'geojson'|'gpkg'|'shp'|'gdb'.
-        layer:       layer geo-spaziale (se applicabile).
-        sheet:       foglio Excel (se applicabile).
-        logger:      LoggerProtocol-like (info/warning/error/debug). Logger
+        layer: layer geo-spaziale (se applicabile).
+        sheet: foglio Excel (se applicabile).
+        logger: LoggerProtocol-like (info/warning/error/debug). Logger
                      per il messaggio post-load di righe/colonne.
 
     Returns:

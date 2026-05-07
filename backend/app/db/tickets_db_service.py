@@ -87,7 +87,7 @@ def list_tickets(
     Ordine: updated_at DESC (cosa e' cambiato di recente sta sopra).
     """
     # Filtro soft-delete sempre attivo: chi vuole vedere i cancellati
-    # passa per get_ticket(include_deleted=True) puntuale.
+    # passa per get_ticket(include_deleted=True) puntuale
     clauses: List[str] = ["deleted_at IS NULL"]
     params: List[Any] = []
 
@@ -147,7 +147,7 @@ def update_ticket(
     if category is not None:
         fields["category"] = category
     if assignee != "__UNSET__":
-        fields["assignee"] = assignee  # anche None e' valido (unassign)
+        fields["assignee"] = assignee  # anche None e' valido (unassign
     if title is not None:
         fields["title"] = title
     if description is not None:
@@ -159,9 +159,9 @@ def update_ticket(
     now = datetime.now(timezone.utc).isoformat()
     fields["updated_at"] = now
 
-    # resolved_at: popolato solo alla PRIMA transizione verso 'resolved',
+    # resolved_at: popolato solo alla PRIMA transizione verso 'resolved'
     # preservato poi (anche se il ticket viene riaperto e richiuso, il
-    # primo resolved_at e' sufficiente per metriche time-to-first-resolution).
+    # primo resolved_at e' sufficiente per metriche time-to-first-resolution
     if status == "resolved" and not current.get("resolved_at"):
         fields["resolved_at"] = now
 
@@ -334,7 +334,7 @@ def get_attachment(attachment_id: str) -> Optional[Dict[str, Any]]:
     )
 
 
-# DELETE TICKET (cascade su comments/attachments via FK ON DELETE CASCADE)
+# DELETE TICKET (cascade su comments/attachments via FK ON DELETE CASCADE
 
 
 def soft_delete_ticket(ticket_id: str) -> bool:

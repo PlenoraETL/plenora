@@ -16,7 +16,7 @@ DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
 
 
 # RIEMPIMENTO VALORI NULLI
-# Riempie NULL con: valore costante, media, mediana, moda, ffill, bfill.
+# Riempie NULL con: valore costante, media, mediana, moda, ffill, bfill
 
 def _is_strict_numeric_series(s: "pd.Series") -> bool:
     """True se la Series ha dtype numerico (int/float) ma NON booleano.
@@ -34,7 +34,7 @@ def _is_strict_numeric_series(s: "pd.Series") -> bool:
 def _coerce_fill_value_for_numeric(value: Any, col_name: str, dtype: Any) -> Any:
     """Valida un fill `value` contro una colonna numerica.
 
-    Policy C2 Phase 4 (no upcast a object silenzioso):
+    Policy C2
       - None / NaN / numerici (int, float esclusi bool) -> accept as-is.
       - Stringa numericamente coercibile ("0", "1.5", "-3e2") -> coerce.
       - Tutto il resto (bool, "N/A", "", date string, dict, ...) -> ValueError.
@@ -43,13 +43,13 @@ def _coerce_fill_value_for_numeric(value: Any, col_name: str, dtype: Any) -> Any
     quasi sempre un bug del canvas (fill flag invece che fill numero); il
     cast 0/1 silenzioso nasconderebbe la confusione.
     """
-    # None: pandas semantics consentono None su colonna float (diventa NaN).
+    # None: pandas semantics consentono None su colonna float (diventa NaN
     if value is None:
         return value
-    # NaN float: idem, nessun upcast.
+    # NaN float: idem, nessun upcast
     if isinstance(value, float) and pd.isna(value):
         return value
-    # Bool e' un sottotipo di int in Python: gestiamolo PRIMA del check int.
+    # Bool e' un sottotipo di int in Python: gestiamolo PRIMA del check int
     if isinstance(value, bool):
         raise ValueError(
             f"op_fill_na: colonna numerica '{col_name}' (dtype={dtype}) "
@@ -60,9 +60,9 @@ def _coerce_fill_value_for_numeric(value: Any, col_name: str, dtype: Any) -> Any
     if isinstance(value, (int, float)):
         return value
     if isinstance(value, str):
-        # Stringa vuota e whitespace-only NON sono coercibili: rifiutali.
-        # Senza questo check pd.to_numeric("") solleverebbe (gia' coperto),
-        # ma vogliamo un messaggio chiaro che cita anche il fix tipico.
+        # Stringa vuota e whitespace-only NON sono coercibili: rifiutali
+        # Senza questo check pd.to_numeric("") solleverebbe (gia' coperto
+        # ma vogliamo un messaggio chiaro che cita anche il fix tipico
         if not value.strip():
             raise ValueError(
                 f"op_fill_na: colonna numerica '{col_name}' (dtype={dtype}) "
@@ -81,10 +81,10 @@ def _coerce_fill_value_for_numeric(value: Any, col_name: str, dtype: Any) -> Any
                 f"semantica numerica downstream. Fornire un numero (es. 0) "
                 f"o una stringa numericamente coercibile (es. '0', '1.5')."
             )
-        # pd.to_numeric su scalar puo' ritornare numpy scalar: estrai .item()
-        # per consistenza tipo-Python (float/int nativo).
+        # pd.to_numeric su scalar puo' ritornare numpy scalar: estrai .item
+        # per consistenza tipo-Python (float/int nativo
         return coerced.item() if hasattr(coerced, "item") else coerced
-    # Dict, list, tuple, datetime, ecc.: niente upcast accettabile.
+    # Dict, list, tuple, datetime, ecc.: niente upcast accettabile
     raise ValueError(
         f"op_fill_na: colonna numerica '{col_name}' (dtype={dtype}) "
         f"non puo' essere riempita con valore di tipo {type(value).__name__} "
@@ -114,7 +114,7 @@ def op_fill_na(
     Raises:
         ValueError: se `method='value'` e `value` non e' compatibile con
             il dtype numerico di una colonna target. Senza questo guard
-            (Phase 4 C2), `fillna("N/A")` su colonna float demoteva
+            (C2), `fillna("N/A")` su colonna float demoteva
             silenziosamente la colonna a object/testo, rompendo le
             aggregazioni e i join numerici a valle.
     """
@@ -122,8 +122,8 @@ def op_fill_na(
 
     try:
         if method in ['ffill', 'bfill']:
-            # FIX: fillna(method=) è deprecato in pandas 2.0+.
-            # Usare ffill()/bfill() direttamente.
+            # FIX: fillna(method=) è deprecato in pandas 2.0+
+            # Usare ffill/bfill direttamente
             fill_func = 'ffill' if method == 'ffill' else 'bfill'
             if column and column in result.columns:
                 result[column] = getattr(result[column], fill_func)()
@@ -153,7 +153,7 @@ def op_fill_na(
 
 
 # SOSTITUZIONE VALORI
-# Sostituisce valori in colonna. Supporta regex opzionale.
+# Sostituisce valori in colonna. Supporta regex opzionale
 
 def op_replace(
     df: DataFrame,
@@ -197,7 +197,7 @@ def op_replace(
 
 
 # CONVERSIONE TIPI
-# Converte colonne tra tipi: int, float, str, bool, date/datetime.
+# Converte colonne tra tipi: int, float, str, bool, date/datetime
 
 def op_type_cast(
     df: DataFrame,

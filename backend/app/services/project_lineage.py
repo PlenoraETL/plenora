@@ -44,7 +44,7 @@ def detect_project_lineage_cycle(
     pattern (A → B → D, A → C → D) non genera falsi positivi.
     """
     # Stack di tuple (node_id, iterator_figli). L'iterator consuma i
-    # figli uno alla volta: quando finisce, pop del nodo dal path.
+    # figli uno alla volta: quando finisce, pop del nodo dal path
     path: List[str] = [root_id]
     on_path: set = {root_id}
     visited: set = set()
@@ -57,7 +57,7 @@ def detect_project_lineage_cycle(
         try:
             child = next(children_iter)
         except StopIteration:
-            # Finito di esplorare i figli del nodo corrente: pop.
+            # Finito di esplorare i figli del nodo corrente: pop
             finished = stack.pop()[0]
             path.pop()
             on_path.discard(finished)
@@ -66,12 +66,12 @@ def detect_project_lineage_cycle(
 
         if child in on_path:
             # Ciclo! Ricostruisci la catena dal primo incontro di `child`
-            # fino al nodo corrente, poi chiudi tornando su `child`.
+            # fino al nodo corrente, poi chiudi tornando su `child`
             cycle_start_idx = path.index(child)
             return path[cycle_start_idx:] + [child]
 
         if child in visited:
-            # Sottografo gia' esplorato senza cicli — skip.
+            # Sottografo gia' esplorato senza cicli — skip
             continue
 
         # Espandi child

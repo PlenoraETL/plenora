@@ -74,7 +74,7 @@ def compute_result_columns(
         result_node corrente sono preservate per nome.
     """
     # Lazy import per evitare cicli (schema_inference importa project_service
-    # per infer_project_source_schema)
+    # per infer_project_source_schema
     from app.services.schema_inference import SchemaInferenceService
 
     service = SchemaInferenceService(project_service)
@@ -99,7 +99,7 @@ def compute_result_columns(
         # Best-effort: se l'inferenza esplode (canvas malformato, node
         # type sconosciuto, ecc.), logga ma non rompiamo la persistenza
         # del canvas. Il chiamante puo' decidere di non sovrascrivere
-        # i valori attuali.
+        # i valori attuali
         logger.warning(
             f"compute_result_columns: inferenza fallita per result_id={result_id}: {e}",
             exc_info=True,

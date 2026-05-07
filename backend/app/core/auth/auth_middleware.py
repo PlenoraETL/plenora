@@ -26,8 +26,8 @@ PUBLIC_PATHS = {
 class JWTMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         # Imposta group_id / user_id nei ContextVar del logger se il
-        # token e' presente e valido (non blocca su assenza/invalidita':
-        # quel ruolo e' della dependency `get_current_user`).
+        # token e' presente e valido (non blocca su assenza/invalidita'
+        # quel ruolo e' della dependency `get_current_user`
         auth_header = request.headers.get("Authorization", "")
         if auth_header.startswith("Bearer "):
             token = auth_header[7:]
@@ -36,9 +36,9 @@ class JWTMiddleware(BaseHTTPMiddleware):
                 set_log_group(payload.get("group_id", ""))
                 set_user_id(payload.get("sub", ""))  # C8: correlation user_id
             else:
-                # Token presente ma decoda fallita (scaduto/invalido/firma errata).
+                # Token presente ma decoda fallita (scaduto/invalido/firma errata
                 # Logghiamo per visibility — utile per detection di replay
-                # attacks o token stale persistenti nei client.
+                # attacks o token stale persistenti nei client
                 logger.warning(
                     "Bearer token invalido o scaduto",
                     op="auth_middleware",

@@ -1,7 +1,7 @@
 """
 ArcGIS connection info - lightweight provider-neutral dataclass.
 
-ADR-0023 / BE-GO-READY-ARCH-058-W5: moved from
+ADR-0023 / moved from
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ class ArcGISConnectionInfo:
     """Lightweight connection config consumed by the ArcGIS HTTP client.
 
     No metadata fields (name, creation date) - those live in the DB
-    model (``ArcGISConnection``).  Analogous to ``DatabaseConnection``
+    model (``ArcGISConnection``). Analogous to ``DatabaseConnection``
     in ``query_executor.py``.
     """
 

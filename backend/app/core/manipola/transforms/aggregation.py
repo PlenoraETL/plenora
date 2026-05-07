@@ -15,8 +15,8 @@ logger = get_logger("app.core.manipola.transforms.base")
 DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
 
 
-# AGGREGAZIONE (GROUP BY)
-# Raggruppa per colonne e applica funzioni: count, sum, mean, min, max, first, last.
+# AGGREGAZIONE (GROUP BY
+# Raggruppa per colonne e applica funzioni: count, sum, mean, min, max, first, last
 
 def op_aggregate(
     df: DataFrame,
@@ -48,10 +48,10 @@ def op_aggregate(
         return df
 
     try:
-        # Se nessuna aggregazione, solo count.
+        # Se nessuna aggregazione, solo count
         # dropna=False: includiamo i gruppi con NaN nelle chiavi per non
         # perdere righe silenziosamente (default pandas e' dropna=True che
-        # le scarta — comportamento sorprendente per chi aggrega).
+        # le scarta — comportamento sorprendente per chi aggrega
         if not aggregations:
             result = df.groupby(group_by, dropna=False).size().reset_index(name='count')
             logger.info(f"Aggregate (count): {len(df)} -> {len(result)} righe")
@@ -126,7 +126,7 @@ def op_aggregate(
 
 
 # ORDINAMENTO
-# Ordina DataFrame per una o più colonne (asc/desc).
+# Ordina DataFrame per una o più colonne (asc/desc
 
 def op_sort(
     df: DataFrame,
@@ -161,7 +161,7 @@ def op_sort(
 
 
 # DEDUPLICAZIONE
-# Rimuove righe duplicate su colonne selezionate. Default: tutte le colonne.
+# Rimuove righe duplicate su colonne selezionate. Default: tutte le colonne
 
 def op_distinct(
     df: DataFrame,
@@ -195,7 +195,7 @@ def op_distinct(
 
 
 # DEDUP ADVANCED — Deduplicazione avanzata con ordinamento prioritario
-# Rimuove duplicati con possibilità di ordinare prima per priorità.
+# Rimuove duplicati con possibilità di ordinare prima per priorità
 
 def op_dedup_advanced(
     df: DataFrame,
@@ -252,8 +252,8 @@ def op_dedup_advanced(
         raise
 
 
-# WINDOW FUNCTION — Funzioni finestra: rank, cumsum, lag, lead, etc.
-# Calcola funzioni analitiche per gruppo con ordinamento.
+# WINDOW FUNCTION — Funzioni finestra: rank, cumsum, lag, lead, etc
+# Calcola funzioni analitiche per gruppo con ordinamento
 
 def op_window_function(
     df: DataFrame,
@@ -304,7 +304,7 @@ def op_window_function(
         result = df.copy()
         out_col = output_column if output_column else f"{column}_{function}"
 
-        # Ordina se specificato (importante per rank, lag, lead)
+        # Ordina se specificato (importante per rank, lag, lead
         if order_column and order_column in result.columns:
             result.sort_values(by=order_column, inplace=True)
             result.reset_index(drop=True, inplace=True)

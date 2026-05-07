@@ -24,10 +24,10 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
     """Genera/propaga un request_id per ogni richiesta HTTP."""
 
     async def dispatch(self, request: Request, call_next) -> Response:
-        # Legge il request_id dal client se presente, altrimenti genera.
+        # Legge il request_id dal client se presente, altrimenti genera
         # Trust-but-verify: accettiamo qualsiasi stringa fornita dal
         # client (consente correlation con sistemi upstream) ma la
-        # tronchiamo a 64 char per evitare log bombing.
+        # tronchiamo a 64 char per evitare log bombing
         incoming = request.headers.get(_HEADER, "").strip()
         req_id = incoming[:64] if incoming else str(uuid.uuid4())
 
@@ -39,13 +39,13 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
         except Exception:
             # Anche su eccezione vogliamo reset ContextVar (evita leak
             # all'ambiente successivo via recycling worker). Starlette
-            # comunque rigenera il contesto per la prossima request,
-            # ma esplicitare e' difensivo.
+            # comunque rigenera il contesto per la prossima request
+            # ma esplicitare e' difensivo
             set_request_id("")
             raise
 
         response.headers[_HEADER] = req_id
         # Non resetto la ContextVar qui: la prossima request fara'
-        # set_request_id() sovrascrivendo. Il reset esplicito sopra
-        # copre solo il caso eccezione propagata.
+        # set_request_id sovrascrivendo. Il reset esplicito sopra
+        # copre solo il caso eccezione propagata
         return response

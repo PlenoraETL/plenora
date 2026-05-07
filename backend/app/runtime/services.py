@@ -1,7 +1,6 @@
 """
 Typed runtime composition factory — first slice.
 
-BE-GO-READY-BOOTSTRAP-ENGINE-011-RUNTIME-CONTAINER-FIRST-SLICE.
 """
 
 from __future__ import annotations
@@ -34,7 +33,7 @@ class RuntimeServices:
     silently rebinding.
 
     Field roles:
-      - `project_service`: project CRUD facade.
+      `project_service`: project CRUD compatibility module
       - `connection_service`: external DB connection registry.
       - `database_inspector`: introspection over DB connections.
       - `query_generator`: ESTRAI SQL generation pipeline.
@@ -43,7 +42,7 @@ class RuntimeServices:
       - `orchestrator`: pipeline orchestrator (depends on the above 5,
         excluding `database_inspector`).
       - `api_connection_service`: arricchisci API connection
-        singleton (added by BE-GO-READY-BOOTSTRAP-ENGINE-016).
+        singleton (added by ).
         IMPORTANT: this field is the SAME object as the canonical
         module-level singleton
         `app.core.arricchisci.api_connector.api_connection_service`.
@@ -54,9 +53,9 @@ class RuntimeServices:
         (`patch("app.core.arricchisci.api_connector.api_connection_service.<method>", ...)`)
         are preserved. Identity invariant locked by contract test.
       - `datasource_service`: datasources singleton (added by
-        BE-GO-READY-BOOTSTRAP-ENGINE-017). Same "wrap, don't move"
+        ). Same "wrap, don't move"
         strategy as `api_connection_service`: identity-preserving
-        re-export of the canonical
+        compatibility export of the canonical
         `app.core.datasources.service.datasource_service` singleton.
         Construction stays at the module level
         (`service.py:440`); the container exposes the SAME object.
@@ -105,7 +104,7 @@ def build_runtime_services(
         invariant.
     """
     # Lazy imports keep this module cheap to load (e.g. for tests
-    # that import only the typed dataclass to assert shape).
+    # that import only the typed dataclass to assert shape
     from app.core.estrai.database_inspector import DatabaseInspector
     from app.core.estrai.query_generator import QueryGenerator
     from app.core.features.features_service import FeaturesService

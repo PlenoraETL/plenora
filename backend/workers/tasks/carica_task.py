@@ -23,12 +23,12 @@ logger = get_logger("workers.carica_task")
     bind=True,
     base=BaseTaskWithRetry,
     name="carica.execute",
-    # C4: fail-fast su write verso DB cliente, NO retry automatico.
+    # C4: fail-fast su write verso DB cliente, NO retry automatico
     # Motivazione: in modalita' append + per_batch (senza unique
     # constraints) un retry dopo fallimento parziale duplica le
     # righe gia' scritte. Meglio task fallito visibile che duplica
-    # silenziosa — l'operatore verifica il batch writeen e rilancia
-    # manualmente. Allineato a pipeline_task.max_retries=0 per coerenza.
+    # silenziosa — l'operatore verifica il e rilancia
+    # manualmente. Allineato a pipeline_task.max_retries=0 per coerenza
     max_retries=0,
     soft_time_limit=settings.CELERY_TASK_TIMEOUT,
     time_limit=settings.CELERY_TASK_HARD_LIMIT,
@@ -71,12 +71,12 @@ def execute_carica_task(
             fresh. Se passato e gia' completato → task skippato.
 
     Returns:
-        Dict con risultato dell'esecuzione (WriteResult.to_dict())
+        Dict con risultato dell'esecuzione (WriteResult.to_dict)
         o status='skipped_idempotent' se il run_id era gia' completo.
     """
     task_id = self.request.id
     # C4 round 2: idempotency guard. Se run_id e' passato e gia'
-    # completato, ritorna subito senza ri-eseguire (no duplicate writes).
+    # completato, ritorna subito senza ri-eseguire (no duplicate writes
     if run_id is not None:
         from app.core.carica.idempotency import is_already_completed
         if is_already_completed(run_id):
@@ -98,7 +98,7 @@ def execute_carica_task(
 
     logger.info(f"Task CARICA {task_id} avviato per progetto {project_id} (run_id={run_id})")
 
-    # N9: re-check permessi user al pickup (helper condiviso)
+    # N9: re-check permessi user al pickup (helper condiviso
     from app.shared.async_user_recheck import recheck_user_authorized
     _revoked = recheck_user_authorized(
         user_id=user_id, project_id=project_id,
@@ -203,15 +203,15 @@ def execute_carica_task(
         return result
 
     except Exception as e:
-        # error_msg_internal: canale admin/diagnostics (log_runs DB via close_run,
-        # progress UI via _update_progress, log_service.create_log_entry).
-        # Contiene str(e) intenzionalmente per postmortem admin.
+        # error_msg_internal: canale admin/diagnostics (log_runs DB via close_run
+        # progress UI via _update_progress, log_service.create_log_entry
+        # Contiene str(e) intenzionalmente per postmortem admin
         error_msg_internal = f"Errore task CARICA: {str(e)}"
         error_trace = traceback.format_exc()
         elapsed_ms = int((_time.time() - _run_start) * 1000)
         logger.error(f"[CRASH] {error_msg_internal}\n{error_trace}")
 
-        # --- debug_payload --- (diagnostic canonico, str(e) intenzionale)
+        # debug_payload --- (diagnostic canonico, str(e) intenzionale
         try:
             from app.utils.debug_payload_builder import DebugPayloadBuilder
             debug_payload = DebugPayloadBuilder().build(
@@ -233,7 +233,7 @@ def execute_carica_task(
             logger.debug(f"DebugPayloadBuilder fallito: {type(e).__name__}: {e}")
             debug_payload = None
 
-        # Canali admin preservano str(e) per postmortem (log_runs DB / progress UI)
+        # Canali admin preservano str(e) per postmortem (log_runs DB / progress UI
         close_run(
             run_id=run_id,
             status="failure",
@@ -244,8 +244,8 @@ def execute_carica_task(
         )
         _update_progress(self, -1, error_msg_internal)
         # intent: boundary top-level task Celery / outcome: fail-closed sanitizzato
-        # Il return dict finisce in Redis via AsyncResult → FE: niente str(e).
-        # error_details=error_trace preservato come canale diagnostic separato.
+        # Il return dict finisce in Redis via AsyncResult → FE: niente str(e
+        # error_details=error_trace preservato come canale diagnostic separato
         return {
             "status": "write_error",
             "success": False,
@@ -257,15 +257,15 @@ def execute_carica_task(
             "total_rows": 0,
         }
     finally:
-        # FIX: chiudi le connessioni PostgreSQL thread-local del worker Celery.
+        # FIX: chiudi le connessioni PostgreSQL thread-local del worker Celery
         # Storia: la migrazione SQLite -> PostgreSQL (vedi
         # `app/db/config_db_service.py` docstring) ha mantenuto lo stesso
         # pattern thread-local, quindi il cleanup resta necessario. Senza
         # questa pulizia, ogni esecuzione lascia 2 connessioni aperte
-        # (config DB + intermediate DB) nel thread.local, che vengono
+        # config DB + intermediate DB) nel thread.local, che vengono
         # riusate dal worker pool finche' il file descriptor si esaurisce
         # o il pool resta saturo. Pre-migrazione si manifestava come
-        # SQLITE_BUSY; post-migrazione come PG pool exhaustion.
+        # SQLITE_BUSY; post-migrazione come PG pool exhaustion
         try:
             from app.core.intermediate.db import close_connection as _close_idb
             _close_idb()
@@ -382,7 +382,7 @@ def _execute_db_write(task, df, carica_node_data, project_id, task_id, triggered
         project_id=project_id,
         progress_callback=progress_callback,
         triggered_by=triggered_by,
-        run_id=run_id,  # N15: defense-in-depth (task-level guard gia' corto-circuita prima, ma questo protegge sync caller futuri)
+        run_id=run_id,  # N15: defense-in-depth (task-level guard gia' corto-circuita prima, ma questo protegge sync caller futuri
     )
 
     result_dict = result.to_dict()
@@ -425,7 +425,7 @@ def _execute_arcgis_write(task, df, carica_node_data, project_id, task_id):
         }
 
     # Usa write_features_from_df che accetta DataFrame direttamente
-    # evitando il round-trip su file (il blob è già stato consumato da _load_upstream_data)
+    # evitando il round-trip su file (il blob è già stato consumato da _load_upstream_data
 
     features_service = FeaturesService(save_function=save_dataframe)
 
@@ -560,11 +560,11 @@ def _load_upstream_data(
             SourceRef,
         )
 
-        # Pre-cache check: se il blob e' gia' presente, salta execute_pipeline.
+        # Pre-cache check: se il blob e' gia' presente, salta execute_pipeline
         # Il group_id viene letto dal progetto per chiudere il check
         # cross-tenant del resolver (defense-in-depth: il task CARICA
         # opera su un project_id arrivato dal payload Celery, garantito
-        # dal layer HTTP a monte ma comunque verificato qui).
+        # dal layer HTTP a monte ma comunque verificato qui
         if not force_recalculate:
             try:
                 import app.db.db_service as _db
@@ -613,7 +613,7 @@ def _load_upstream_data(
         project_service = ProjectService()
         connection_service = ConnectionService()
         # FIX: passa save_function=save_dataframe altrimenti il blob non viene salvato
-        # e get_result_as_tempfile() restituisce None dopo il ricalcolo
+        # e get_result_as_tempfile restituisce None dopo il ricalcolo
         executor = create_executor(save_function=save_dataframe)
         generator = QueryGenerator()
         features_service = FeaturesService(save_function=save_dataframe)
@@ -642,9 +642,9 @@ def _load_upstream_data(
             return None
 
         # Risoluzione artefatto centralizzata via PipelineArtifact +
-        # ArtifactResolver: inline_df → result_id (verify project_id,
+        # ArtifactResolver: inline_df → result_id (verify project_id
         # hard fail su mismatch). Niente latest-by-project: due esecuzioni
-        # parallele sullo stesso project si scambierebbero l'output.
+        # parallele sullo stesso project si scambierebbero l'output
         from app.core.artifacts import (
             ArtifactResolver,
             ArtifactResolutionError,
@@ -672,11 +672,11 @@ def _load_upstream_data(
             return load_dataframe_from_file(m.path)
 
     except ImportError as e:
-        # Qualunque errore nel risolvere l'artefatto upstream e' fatale:
+        # Qualunque errore nel risolvere l'artefatto upstream e' fatale
         # meglio un task CARICA fallito e visibile che un caricamento
         # silente di un dataset sbagliato sul DB di destinazione (i due
         # `except` NON devono rifallback su latest-by-project del
-        # progetto, sarebbe lo stesso race che il path principale evita).
+        # progetto, sarebbe lo stesso race che il path principale evita
         logger.error(f"[CRASH] Import error in _load_upstream_data: {e}", exc_info=True)
         return None
 

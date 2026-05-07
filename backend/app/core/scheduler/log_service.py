@@ -119,13 +119,13 @@ class ScheduleLogService:
         Con l'indice `idx_schedule_logs_schedule_ts`, la query e' O(page_size)
         anche su anni di log (LIMIT/OFFSET su index scan).
         """
-        # Validazione input (stesso comportamento della versione FS)
+        # Validazione input (stesso comportamento della versione FS
         page = max(1, page)
         page_size = max(1, min(page_size, 100))
         offset = (page - 1) * page_size
 
-        # Filtro opzionale: la vecchia API acceptava status="success" etc.
-        # → matchava `event == f"PIPELINE_{status.upper()}"`. Preserviamo.
+        # Filtro opzionale: la vecchia API acceptava status="success" etc
+        # → matchava `event == f"PIPELINE_{status.upper}"`. Preserviamo
         event_filter = None
         if status_filter:
             event_filter = f"PIPELINE_{status_filter.upper()}"

@@ -1,7 +1,7 @@
 """
-API Connections DAL — estratto da `config_db_service.py` (scope micro Batch G #9,
+Api Connections DAL helpers.
 
-invariants §6 commit `b8b3396` — sesta riapertura hard-escalation governance).
+Keeps config-table persistence isolated behind a narrow database module.
 """
 
 import json

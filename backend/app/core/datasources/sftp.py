@@ -147,7 +147,7 @@ class SFTPDataSource(DataSourceInterface):
     def disconnect(self) -> None:
         for obj in (self._sftp, self._ssh):
             if obj:
-                # intent: optional feature / outcome: fail-open (close best-effort)
+                # intent: optional feature / outcome: fail-open (close best-effort
                 try:
                     obj.close()
                 except Exception as e:
@@ -176,7 +176,7 @@ class SFTPDataSource(DataSourceInterface):
             }
         except DataSourceConnectionError as e:
             # F5-B2: `e` qui e' il nostro wrapper con messaggio gia' canonico
-            # (vedi connect() + _sanitize_sftp_error), quindi str(e) e' safe.
+            # vedi connect + _sanitize_sftp_error), quindi str(e) e' safe
             logger.warning(
                 f"[GESTITO] SFTP test_connection fallita: {type(e).__name__}: {e} "
                 f"(cause: {type(e.__cause__).__name__ if e.__cause__ else 'none'})",
@@ -212,7 +212,7 @@ class SFTPDataSource(DataSourceInterface):
             file_path = self._join_path(path, entry.filename)
             hash_val = None
             if include_hash:
-                # intent: optional feature / outcome: fail-open (hash opzionale)
+                # intent: optional feature / outcome: fail-open (hash opzionale
                 try:
                     hash_val = self._compute_hash(self.read_file(file_path))
                 except Exception as e:
@@ -300,7 +300,7 @@ class SFTPDataSource(DataSourceInterface):
         current = ""
         for part in parts:
             current = f"{current}/{part}" if current else part
-            # intent: optional feature / outcome: fail-open (mkdir idempotent — dir esistente)
+            # intent: optional feature / outcome: fail-open (mkdir idempotent — dir esistente
             try:
                 self._sftp.mkdir(current)
             except IOError as e:

@@ -35,9 +35,9 @@ def _try_cleanup_zombie_service(client, conn, fs_name: str) -> Tuple[bool, str]:
     portal_base = f"{parsed.scheme}://{parsed.netloc}/sharing/rest"
     referer = {"Referer": conn.server_url}
 
-    # 1. Trova l'admin hosted server URL per questa org.
+    # 1. Trova l'admin hosted server URL per questa org
     # Per ArcGIS Online: https://services-eu{N}.arcgis.com/{orgId}/arcgis/admin/services
-    # Il base e' scoperto via `/portals/self` che ritorna i service URL.
+    # Il base e' scoperto via `/portals/self` che ritorna i service URL
     try:
         pr = client._http.get(
             f"{portal_base}/portals/self",
@@ -47,7 +47,7 @@ def _try_cleanup_zombie_service(client, conn, fs_name: str) -> Tuple[bool, str]:
         portal_info = pr.json()
         # `urlKey` + `customBaseUrl` costruiscono l'URL pubblico, ma per
         # i servizi hosted dobbiamo leggere `helperServices` o
-        # `defaultHostingServerUrl`. La sezione utile e' `helperServices`.
+        # `defaultHostingServerUrl`. La sezione utile e' `helperServices`
         hosting_url = None
         for srv in (portal_info.get("helperServices") or {}).get("hostingServers", []) or []:
             if srv.get("admin"):
@@ -96,12 +96,12 @@ def _try_cleanup_zombie_service(client, conn, fs_name: str) -> Tuple[bool, str]:
     except Exception as e:
         return (False, f"admin describe failed: {e}")
 
-    # 3. Cancella il portal item via user delete endpoint (permanentDelete)
+    # 3. Cancella il portal item via user delete endpoint (permanentDelete
     # Nota: usiamo il path `/users/{username}/items/{id}/delete` che richiede
     # che l'utente sia il proprietario dell'item. Se l'item appartiene a un
     # altro utente dell'org, questa chiamata fallisce con 403 — in quel caso
     # l'utente corrente non ha modo di rimuovere lo zombie senza intervento
-    # admin, e il caller deve mostrare il messaggio di errore originale.
+    # admin, e il caller deve mostrare il messaggio di errore originale
     del_url = f"{portal_base}/content/users/{conn.username}/items/{service_item_id}/delete"
     del_data = {"f": "json", "permanentDelete": "true"}
     if token:
@@ -146,8 +146,8 @@ def _delete_existing_service(client, conn, fs_name: str, folder_id: str = "") ->
     # Bugfix B4.3: i contatori erano referenziati con `+= 1` senza
     # init esplicito — `UnboundLocalError` non appena `matching` era
     # non-vuoto. Il path early-return sopra mascherava il bug nei test
-    # esistenti. Init esplicito qui prima del loop. Test di copertura:
-    # `tests2/imdf/unit/test_delete_existing_service_counters.py`.
+    # esistenti. Init esplicito qui prima del loop. Test di copertura
+    # `tests2/imdf/unit/test_delete_existing_service_counters.py`
     attempted = 0
     succeeded = 0
 
@@ -158,9 +158,9 @@ def _delete_existing_service(client, conn, fs_name: str, folder_id: str = "") ->
         attempted += 1
 
         # `permanentDelete=true` bypassa il recycle bin di ArcGIS Online
-        # (introdotto nel 2024). Senza questo flag l'item finisce nel
-        # cestino e il service NAME rimane RISERVATO per ~14 giorni,
-        # impedendo `createService` di ricrearlo con lo stesso nome.
+        # introdotto nel 2024). Senza questo flag l'item finisce nel
+        # cestino e il service NAME rimane RISERVATO per ~14 giorni
+        # impedendo `createService` di ricrearlo con lo stesso nome
         del_url = f"{base_url}/content/users/{conn.username}/items/{item_id}/delete"
         del_data = {"f": "json", "permanentDelete": "true"}
         if token:
@@ -178,8 +178,8 @@ def _delete_existing_service(client, conn, fs_name: str, folder_id: str = "") ->
             else:
                 logger.warning(f"delete item {item_id} risposta: {dres}")
                 # Fallback: se il parametro permanentDelete non e' supportato
-                # (Enterprise vecchie), prova senza flag + chiamata esplicita
-                # a /permanentDelete come secondo step.
+                # Enterprise vecchie), prova senza flag + chiamata esplicita
+                # a /permanentDelete come secondo step
                 dr2 = client._http.post(
                     del_url, data={"f": "json", **({"token": token} if token else {})},
                     timeout=30, headers=referer,

@@ -18,8 +18,8 @@ DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
 
 
 # CAMPIONAMENTO RIGHE
-# Estrae un campione casuale di righe (per numero o per frazione).
-# Supporta campionamento stratificato proporzionale.
+# Estrae un campione casuale di righe (per numero o per frazione
+# Supporta campionamento stratificato proporzionale
 
 def op_sample(
     df: DataFrame,
@@ -78,7 +78,7 @@ def op_sample(
 
 
 # LOOKUP — Mappatura valori tramite dizionario
-# Sostituisce valori di una colonna secondo una mappa chiave→valore.
+# Sostituisce valori di una colonna secondo una mappa chiave→valore
 
 def op_lookup(
     df: DataFrame,
@@ -130,8 +130,8 @@ def op_lookup(
         raise
 
 
-# DISCRETIZZAZIONE (BINNING)
-# Suddivide una colonna numerica in intervalli (bin) discreti.
+# DISCRETIZZAZIONE (BINNING
+# Suddivide una colonna numerica in intervalli (bin) discreti
 
 def op_bin(
     df: DataFrame,
@@ -181,7 +181,7 @@ def op_bin(
 
 
 # FLATTEN JSON
-# Espande una colonna contenente JSON/dict in colonne separate.
+# Espande una colonna contenente JSON/dict in colonne separate
 
 def op_flatten_json(
     df: DataFrame,
@@ -248,7 +248,7 @@ def op_flatten_json(
 
 
 # STATISTICS — StatisticsCalculator
-# Calcola statistiche descrittive per colonna, con raggruppamento opzionale.
+# Calcola statistiche descrittive per colonna, con raggruppamento opzionale
 
 def op_statistics(
     df: DataFrame,

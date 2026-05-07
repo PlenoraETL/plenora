@@ -1,5 +1,5 @@
 """
-PLENORA-ETL — Global API error envelope (BE-GO-READY-ERROR-CONTRACT-002).
+PLENORA-ETL — Global API error envelope .
 
 Helper centrale per costruire risposte di errore con shape standard
 """
@@ -118,9 +118,9 @@ def normalize_http_exception_detail(
             if "details" in detail and isinstance(detail["details"], dict):
                 details = detail["details"]
             else:
-                # Estrarre i campi extra (escluso error/message/details)
-                # in `details` per uniformita'. Se non ce ne sono,
-                # `details` resta None.
+                # Estrarre i campi extra (escluso error/message/details
+                # in `details` per uniformita'. Se non ce ne sono
+                # `details` resta None
                 extras = {
                     k: v for k, v in detail.items()
                     if k not in ("error", "message", "details")
@@ -160,7 +160,7 @@ def raise_typed_http(
     Solleva `HTTPException(status_code=<status_code>, detail={...})`
     dove `detail` e' la dict-shape `{error, message, details}`
     che il central `StarletteHTTPException` handler in `app/main.py`
-    sa normalizzare via `normalize_http_exception_detail()` nello
+    sa normalizzare via `normalize_http_exception_detail` nello
     stesso envelope dual-shape dei call site dict-detail manuali.
 
     Adoption strategy:
@@ -169,7 +169,6 @@ def raise_typed_http(
       del catalog (`error_codes.<CONST>`) + del round-trip
       envelope.
     - La migrazione dei call site esistenti e' debito separato
-      (vedi BE-GO-READY-ERROR-CODES-007-DOMAIN-MIGRATION).
 
     Args:
         code: codice machine-readable. Convenzione snake_case.

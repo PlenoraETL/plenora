@@ -46,7 +46,7 @@ logger = get_logger(__name__)
 
 router = APIRouter(prefix="/datasources", tags=["datasources"])
 
-# Servizio inizializzato da main.py tramite init_datasources()
+# Servizio inizializzato da main.py tramite init_datasources
 _service: Optional[DataSourceService] = None
 
 
@@ -165,10 +165,10 @@ def delete_datasource(ds_id: str, current_user: CurrentUser = Depends(require_ad
     existing = _svc().get_datasource(ds_id)
     assert_can_modify(existing, current_user, "Data Source")
 
-    # Check dipendenze: progetti il cui canvas usa questo datasource.
-    # Batch Fix 6.3: se il helper segnala che tutte le rows sono non
+    # Check dipendenze: progetti il cui canvas usa questo datasource
+    # 6.3: se il helper segnala che tutte le rows sono non
     # checkabili (RuntimeError sentinel), fail-closed 500 invece di
-    # procedere silent con la delete.
+    # procedere silent con la delete
     try:
         using_projects = _find_projects_using_datasource(ds_id)
     except RuntimeError as _check_err:
@@ -181,7 +181,7 @@ def delete_datasource(ds_id: str, current_user: CurrentUser = Depends(require_ad
             detail="Impossibile verificare dipendenze: riprova piu' tardi",
         )
     if using_projects:
-        # PR-δ: filtrare dependencies per visibility lato chiamante.
+        # PR-δ: filtrare dependencies per visibility lato chiamante
         is_super = current_user.role == "superadmin"
         if is_super:
             visible = list(using_projects)
@@ -190,8 +190,8 @@ def delete_datasource(ds_id: str, current_user: CurrentUser = Depends(require_ad
             visible = [p for p in using_projects if p.get("group_id") == current_user.group_id]
             hidden_count = len(using_projects) - len(visible)
 
-        # Shape 409 cascade canonica (Batch Fix 6.1): dependencies con kind.
-        # PR-δ: aggiunto `hidden_count` opzionale (FE backward-compatible).
+        # Shape 409 cascade canonica (6.1): dependencies con kind
+        # PR-δ: aggiunto `hidden_count` opzionale (FE backward-compatible
         raise HTTPException(
             status_code=409,
             detail={
@@ -229,7 +229,7 @@ def _find_projects_using_datasource(ds_id: str) -> List[Dict[str, str]]:
     Fix N+1: era 1 + N query (list + get_project per ognuno). Ora fa UNA sola
     query che carica id, name, project_type, canvas in un solo colpo.
 
-    Batch Fix 6.3: ogni per-row skip (JSON malformato, eccezione inattesa)
+    6.3: ogni per-row skip (JSON malformato, eccezione inattesa)
     emette un ``logger.warning`` breadcrumb con ``project_id`` (vincolo
     §5.1.4 kickoff: optional feature + breadcrumb identificante). Se
     *tutte* le rows falliscono il check, il helper solleva ``RuntimeError``
@@ -240,7 +240,7 @@ def _find_projects_using_datasource(ds_id: str) -> List[Dict[str, str]]:
     import app.db.pg_connection as _db
     # PR-δ: includere group_id nella SELECT per consentire al caller di
     # filtrare le dipendenze visibili al chiamante (no leak nomi
-    # cross-tenant nell'errore 409).
+    # cross-tenant nell'errore 409
     rows = _db.fetchall("SELECT id, name, project_type, canvas, group_id FROM projects")
     using = []
     check_failures = 0
@@ -284,7 +284,7 @@ def _find_projects_using_datasource(ds_id: str) -> List[Dict[str, str]]:
 
     # Fail-closed se TUTTE le rows hanno fallito il check: in quel caso
     # il helper non puo' dire se il datasource e' usato o no, e il caller
-    # deve rifiutare la delete con 500 invece di procedere silent.
+    # deve rifiutare la delete con 500 invece di procedere silent
     if rows and check_failures == len(rows):
         raise RuntimeError(
             f"Impossibile verificare dipendenze datasource: "
@@ -299,8 +299,8 @@ def test_connection(ds_id: str, current_user: CurrentUser = Depends(require_not_
     """Testa la connessione di un Data Source. Read-only su risorsa visibile."""
     existing = _svc().get_datasource(ds_id)
     assert_resource_visible(existing, "datasources", current_user, "Data Source")
-    # FIXME: #2 (2026-04-23): credenziale cifrata non decriptabile → 422,
-    # non 200-OK fasullo ne' 500 ASGI.
+    # FIXME: #2 (2026-04-23): credenziale cifrata non decriptabile → 422
+    # non 200-OK fasullo ne' 500 ASGI
     from app.shared.crypto import CredentialUnavailableError
     try:
         return _svc().test_connection(ds_id)
@@ -344,10 +344,10 @@ def download_file(
     assert_resource_visible(_svc().get_datasource(ds_id), "datasources", current_user, "Data Source")
     try:
         content = _svc().read_file(ds_id, path)
-        # Sanitizza il filename per il Content-Disposition:
-        # - basename only (no full path leak)
-        # - rimuove caratteri non sicuri per il header HTTP (quote, CRLF)
-        # - fallback "download" se vuoto
+        # Sanitizza il filename per il Content-Disposition
+        # basename only (no full path leak
+        # rimuove caratteri non sicuri per il header HTTP (quote, CRLF
+        # fallback "download" se vuoto
         raw_basename = path.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
         safe_filename = "".join(
             c for c in raw_basename
@@ -384,8 +384,8 @@ def upload_file(
         content = file.file.read()
         # Difesa malware: il file finisce su SharePoint/SFTP/FS esterno
         # condiviso e persistente. Block-only mode: qualsiasi formato
-        # business legittimo passa, eseguibili (PE/ELF/Mach-O/shebang)
-        # sono rifiutati con 400.
+        # business legittimo passa, eseguibili (PE/ELF/Mach-O/shebang
+        # sono rifiutati con 400
         from app.utils.mime_validator import (
             MimeMismatchError, validate_no_executable,
         )

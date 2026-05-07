@@ -1,7 +1,7 @@
 """
-File sources DAL — estratto da `config_db_service.py` (scope micro Batch G #9,
+File Sources DAL helpers.
 
-invariants §6 commit `093d22b`).
+Keeps config-table persistence isolated behind a narrow database module.
 """
 
 import json
@@ -17,7 +17,7 @@ class FileSourceRow(TypedDict, total=False):
     """Riga tipizzata per la persistenza di un FileSource (BE-SHAPE-001).
 
     Shape unica usata sia da `save_file_source` (single-row) che da
-    `save_file_sources_batch` (batch atomic). Tutte le chiavi sono
+    `save_file_sources_batch` . Tutte le chiavi sono
     dichiarate `total=False` per consentire ai caller di omettere i
     campi opzionali; la presenza degli obbligatori e' verificata da
     `_validate_row` prima di qualunque side effect DB.
@@ -25,26 +25,26 @@ class FileSourceRow(TypedDict, total=False):
     Chiavi obbligatorie:
         file_id, group_id, name, original_filename, fmt
     Chiavi opzionali (con default):
-        data         (Optional[bytes])    blob in BYTEA path
-        storage_key  (Optional[str])      key in object_storage path
-        size_bytes   (int)                derivato da len(data) se assente
-        metadata     (dict)               serializzato a JSON dentro la fn
-        created_by   (Optional[str])
+        data (Optional[bytes]) blob in BYTEA path
+        storage_key (Optional[str]) key in object_storage path
+        size_bytes (int) derivato da len(data) se assente
+        metadata (dict) serializzato a JSON dentro la fn
+        created_by (Optional[str])
 
     Invariante app-level: ALMENO uno tra `data` e `storage_key` deve
     essere non-None (il DB non lo enforce).
 
-    Go-ready mapping:
+    portable mapping:
         type FileSourceRow struct {
             FileID, GroupID, Name, OriginalFilename, Format string
-            Data       []byte
+            Data []byte
             StorageKey *string
-            SizeBytes  int64
-            Metadata   map[string]any
-            CreatedBy  *string
+            SizeBytes int64
+            Metadata map[string]any
+            CreatedBy *string
         }
-        Repository.Save(ctx, FileSourceRow)         error
-        Repository.SaveBatch(ctx, []FileSourceRow)  error
+        Repository.Save(ctx, FileSourceRow) error
+        Repository.SaveBatch(ctx, []FileSourceRow) error
     """
 
     file_id: str
@@ -67,7 +67,7 @@ def _validate_row(row: Dict[str, Any], *, context: str) -> None:
     message; nessun side effect.
 
     Args:
-        row:     dict-shape FileSourceRow.
+        row: dict-shape FileSourceRow.
         context: tag prefix per il messaggio di errore (nome funzione
                  caller, es. "save_file_source" o "save_file_sources_batch").
     """
@@ -160,10 +160,10 @@ def save_file_sources_batch(rows: List[FileSourceRow]) -> None:
                 - name (str)
                 - original_filename (str)
                 - fmt (str)
-                - data (Optional[bytes])         shared blob in BYTEA path
-                - storage_key (Optional[str])    shared key in S3 path
+                - data (Optional[bytes]) shared blob in BYTEA path
+                - storage_key (Optional[str]) shared key in S3 path
                 - size_bytes (int)
-                - metadata (dict)                serialized to JSON dentro
+                - metadata (dict) serialized to JSON dentro
                 - created_by (Optional[str])
 
     Pre-transaction validation (fail-fast, zero side effect DB):
@@ -176,11 +176,11 @@ def save_file_sources_batch(rows: List[FileSourceRow]) -> None:
         SELECT post-insert (risparmio N round-trip rispetto a save_file_source
         legacy).
 
-    Go-ready boundary:
+    portable boundary:
         FileSourceRepository.SaveBatch(ctx, []FileSourceRow) error
         - input shape esplicita (no kwargs);
         - errori espliciti via raise;
-        - transaction boundary visibile (un solo `with transaction()`).
+        - transaction boundary visibile (un solo `with transaction`).
     """
     from datetime import datetime, timezone
     if not rows:
@@ -232,7 +232,7 @@ def delete_file_source(file_id: str) -> bool:
 
     Flow (BE-HARDEN-001C E4 / BE-DELETE-002):
 
-      1. Apre `transaction()` (single conn, autocommit off).
+      1. Apre `transaction` (single conn, autocommit off).
       2. `SELECT storage_key WHERE id=? FOR UPDATE` - lock pessimistico
          sulla row da cancellare.
       3. Se `storage_key` valorizzato:
@@ -268,11 +268,11 @@ def delete_file_source(file_id: str) -> bool:
     """
     storage_key_to_clean = None
     deleted = False
-    # BE-GO-READY-STORAGE-ENGINE-005: reconciliation entry handle.
+    # reconciliation entry handle
     # Set only when we are about to commit a "last reference" delete
     # that triggers post-commit storage cleanup. Stays None on the
     # shared-blob path (siblings exist) and on the BYTEA path
-    # (storage_key None) — neither needs reconciliation.
+    # storage_key None) — neither needs reconciliation
     reconciliation_ref = None
 
     with transaction() as conn:
@@ -301,12 +301,12 @@ def delete_file_source(file_id: str) -> bool:
                     )
                 else:
                     storage_key_to_clean = storage_key
-                    # BE-GO-READY-STORAGE-ENGINE-005: record cleanup
+                    # record cleanup
                     # intent inside the same transaction as the
                     # DELETE. Commit advances both atomically; if a
                     # process death follows the commit before the
                     # post-commit storage call, the pending row is
-                    # the only application-side trace of the orphan.
+                    # the only application-side trace of the orphan
                     from app.shared.storage_reconciliation import (
                         record_pending,
                     )
@@ -325,9 +325,9 @@ def delete_file_source(file_id: str) -> bool:
             deleted = cur.rowcount > 0
 
     # Storage cleanup AFTER DB commit (ADR-0011 contract: orphan accepted
-    # on storage failure, DB row stays deleted).
-    # BE-GO-READY-STORAGE-ENGINE-002: delegato all'helper unificato.
-    # BE-GO-READY-STORAGE-ENGINE-005: outcome -> reconciliation transition.
+    # on storage failure, DB row stays deleted
+    # delegato all'helper unificato
+    # outcome -> reconciliation transition
     if storage_key_to_clean:
         from app.shared.storage_compensation import compensating_delete
         outcome = compensating_delete(

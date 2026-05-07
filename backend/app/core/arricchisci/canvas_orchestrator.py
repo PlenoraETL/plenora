@@ -1,7 +1,6 @@
 """
 Canvas-based enrichment orchestrator.
 
-BE-GO-READY-TRANSFORMATION-ENGINE-011-API-CONNECTOR-ORCHESTRATOR-EXTRACTION.
 """
 
 from __future__ import annotations
@@ -10,10 +9,7 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 import pandas as pd
 
-import app.db.db_service as db_svc  # noqa: F401  (test-monkeypatch surface preserved)
-from app.shared.execution.canvas_node import CanvasNode  # BE-GO-READY-ARCH-056-W3
-from app.shared.execution.canvas_graph import CanvasGraph  # BE-GO-READY-ARCH-058-W3
-from app.shared.execution.graph import kahn_topological_order  # BE-GO-READY-ARCH-060-W4
+import app.db.db_service as db_svc  # noqa: F401 (test-monkeypatch surface preserved
 from app.core.arricchisci.execution_context import (
     ArricchisciExecutionContext,
     build_execution_context,
@@ -52,7 +48,6 @@ def get_execution_order(
     `ApiConnectionService._get_execution_order`. Behavior preservato
     byte-per-byte.
 
-    BE-GO-READY-GRAPH-ENGINE-001-SHARED-TOPOLOGICAL-SORT: the
     Kahn implementation moved to the shared leaf
     ``app.shared.execution.graph.kahn_topological_order``. This wrapper
     is the canvas-arricchisci adapter: it pulls ``id`` /
@@ -109,7 +104,6 @@ def init_execution_context(
 
     Storia:
 
-    - **BE-GO-READY-TRANSFORMATION-ENGINE-015 (Phase 1)**:
       l'implementazione era spezzata in due step espliciti:
       `build_execution_context(...)` (costruzione del typed
       immutabile) + `apply_to_legacy_state(svc, ctx)` (mirror
@@ -117,7 +111,6 @@ def init_execution_context(
       `svc._preview_limit` per i mixin che ancora leggevano dal
       singleton).
 
-    - **BE-GO-READY-TRANSFORMATION-ENGINE-019/020/023/024/025/
       026/030B + ORCHESTRATION-ENGINE-009/010**: tutti i mixin
       reader site sono stati migrati a CTX-STRICT
       (`_extract_file_source_group_id`,
@@ -127,7 +120,7 @@ def init_execution_context(
       / `svc._preview_limit` (verificato da AST scan: zero read
       sites in `app/core/arricchisci/`).
 
-    - **BE-GO-READY-ORCHESTRATION-ENGINE-011 (this cut)**: il
+    - ** (this cut)**: il
       mirror `apply_to_legacy_state(svc, ctx)` in questa
       funzione era diventato dead-write: scriveva attributi che
       nessuno leggeva. Removed. Il `svc` parametro non e' piu'
@@ -198,7 +191,7 @@ def execute_canvas_enrichment(
     """Orchestra l'esecuzione del canvas arricchisci.
 
     Estratta byte-per-byte da
-    `ApiConnectionService.execute_enrichment` (BE-GO-READY-
+    `ApiConnectionService.execute_enrichment` (BE-portable-
     TRANSFORMATION-ENGINE-011). Il metodo originale resta sulla
     classe come wrapper thin per KEEP_COMPAT.
 
@@ -231,7 +224,7 @@ def execute_canvas_enrichment(
 
         ctx = init_execution_context(svc, project_id, preview_limit)
 
-        # Carica tutte le API connections con credenziali decifrate (1 query)
+        # Carica tutte le API connections con credenziali decifrate (1 query
         api_connections = svc.list_api_connections_decrypted()
 
         # Ordine di esecuzione topologico
@@ -306,13 +299,12 @@ def execute_canvas_enrichment(
                     # settato → `_find_final_result` cadeva su un
                     # fallback upstream → task ritornava success=True
                     # mascherando errori HTTP del generator (regression
-                    # di copertura del fix RB.#15 group_error).
-                    #
+                    # di copertura del fix RB.#15 group_error
                     # `run_single_enricher` fa il dispatch su
                     # api_type=generator vs enricher e propaga
                     # ValueError sollevato da `_call_generator_endpoint`
                     # su HTTP error. Catturato dal boundary qui sotto
-                    # come {"success": False, "user_error": True, ...}.
+                    # come {"success": False, "user_error": True, ...}
                     input_edge = next(
                         (e for e in edges if e["target"] == node_id), None
                     )
@@ -323,7 +315,7 @@ def execute_canvas_enrichment(
                     result = run_single_enricher(
                         svc, node_data, api_connections, input_df
                     )
-                    # Propaga dict di errore senza convertirlo in success.
+                    # Propaga dict di errore senza convertirlo in success
                     if isinstance(result, dict) and not result.get("success", True):
                         return result
                     node_results[node_id] = result
@@ -359,8 +351,8 @@ def execute_canvas_enrichment(
                         ),
                     }
 
-                # Filtra nodi file-processor (rest_file) dal gruppo:
-                # non sono parallelizzabili col meccanismo degli enricher.
+                # Filtra nodi file-processor (rest_file) dal gruppo
+                # non sono parallelizzabili col meccanismo degli enricher
                 parallel_ids = []
                 for nid in step_node_ids:
                     nd = graph.raw(nid)
@@ -370,10 +362,9 @@ def execute_canvas_enrichment(
                     if ctype == "rest_file":
                         # Esegui in sequenza prima del gruppo parallelo
                         if should_execute_node(nd, input_df):
-                            # BE-GO-READY-TRANSFORMATION-ENGINE-019:
                             # typed ctx threaded through il rest-file
                             # pipeline (group_id letto da `ctx` invece
-                            # di singleton).
+                            # di singleton
                             result = svc._execute_rest_file(
                                 nd, api_cfg, nodes, edges, nid, project_id,
                                 node_results=node_results, ctx=ctx,
@@ -408,12 +399,12 @@ def execute_canvas_enrichment(
                     # Se il gruppo ha prodotto un errore, la pipeline
                     # fallisce: inghiottire il group_error portava a
                     # task "success" con output passthrough del nodo
-                    # upstream (es. solo la colonna seed di staticValues),
+                    # upstream (es. solo la colonna seed di staticValues
                     # mascherando errori upstream come HTTP 422 sul
                     # generator API. Non esiste un caso legittimo in cui
-                    # un'eccezione dentro run_one debba essere ignorata:
-                    # le skip via execute_if ritornano (None, None),
-                    # non (None, errore).
+                    # un'eccezione dentro run_one debba essere ignorata
+                    # le skip via execute_if ritornano (None, None
+                    # non (None, errore
                     if group_error:
                         logger.error(
                             f"[GESTITO] Errore api_enrich in gruppo "
@@ -470,8 +461,8 @@ def execute_canvas_enrichment(
 
     except ValueError as e:
         # boundary: i ValueError sollevati dentro api_connector portano
-        # messaggi gia' user-safe (es. "Accesso negato:", "URL bloccato:",
-        # "Contesto di sicurezza ..."). Li propaghiamo come user_error.
+        # messaggi gia' user-safe (es. "Accesso negato:", "URL bloccato:"
+        # "Contesto di sicurezza ..."). Li propaghiamo come user_error
         logger.error(
             f"[GESTITO] Errore esecuzione enrichment {project_id}: {e}",
             exc_info=True,

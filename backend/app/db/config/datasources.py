@@ -1,7 +1,7 @@
 """
-Datasources DAL — estratto da `config_db_service.py` (scope micro Batch G #9,
+Datasources DAL helpers.
 
-invariants §6 commit `86ea1c5`).
+Keeps config-table persistence isolated behind a narrow database module.
 """
 
 import json
@@ -56,7 +56,7 @@ def update_datasource(ds_id: str, **kwargs) -> None:
     from app.db.config_db_service import _safe_set_clause
     if not kwargs:
         return
-    # Serializza il blob `config` se passato come dict (convenienza per i caller)
+    # Serializza il blob `config` se passato come dict (convenienza per i caller
     fields = dict(kwargs)
     if "config" in fields and isinstance(fields["config"], dict):
         fields["config"] = json.dumps(fields["config"])

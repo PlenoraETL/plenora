@@ -1,7 +1,7 @@
 """
 ArcGIS connection resolver - thin adapter for IMDF validation.
 
-BE-GO-READY-ARCH-059-W4: narrows the Features domain surface that
+ narrows the Features domain surface that
 """
 
 from __future__ import annotations
@@ -22,14 +22,14 @@ def resolve_arcgis_connection(
 ) -> Optional[Tuple[ArcGISConnectionInfo, ArcGISProviderProtocol]]:
     """Resolve a connection_id to (ArcGISConnectionInfo, client).
 
-    Returns ``None`` if the connection is not found in the DB.  The
+    Returns ``None`` if the connection is not found in the DB. The
     client is typed against ``ArcGISProviderProtocol`` so callers
     (validator.py) remain decoupled from the concrete ``ArcGISClient``
     class.
 
     Token cache: each call creates a fresh ``ArcGISClient`` instance.
     The validator is a short-lived read-only path; the minor extra
-    token acquisition is acceptable.  If token-cache sharing becomes
+    token acquisition is acceptable. If token-cache sharing becomes
     a concern, the caller can inject an existing client via the
     ``ArcGISProviderProtocol`` type directly.
     """

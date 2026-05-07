@@ -80,7 +80,7 @@ def assert_canvas_resources_access(canvas: dict, current_user: CurrentUser) -> N
         return
 
     def _get(n, key):
-        # I nodi possono avere campi sia flat sia dentro `data`.
+        # I nodi possono avere campi sia flat sia dentro `data`
         if not isinstance(n, dict):
             return None
         return n.get(key) or (n.get("data") or {}).get(key)

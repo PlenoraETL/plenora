@@ -23,7 +23,7 @@ def get_project(project_id: str, group_id: str = None) -> Optional[Dict]:
         row = fetchone("SELECT * FROM projects WHERE id = ?", (project_id,))
     if row and row.get("canvas"):
         # Su canvas corrotto: log warning + fallback a dict vuoto. Il caller
-        # (ProjectService.get_project_canvas) ha la sua difesa aggiuntiva.
+        # ProjectService.get_project_canvas) ha la sua difesa aggiuntiva
         try:
             row["canvas"] = json.loads(row["canvas"])
         except (json.JSONDecodeError, TypeError) as e:
@@ -105,10 +105,10 @@ def list_owned_project_ids(
     group_id = ?` in `projects/router._visible_project_ids_strict`.
 
     Contract:
-      - input vuoto → `set()`;
-      - `owner_group_id` falsy → `set()` (caller deve pre-filtrare i
+      - input vuoto → `set`;
+      - `owner_group_id` falsy → `set` (caller deve pre-filtrare i
         casi `is_superadmin` / no group);
-      - batch single-query (1 `WHERE id IN (...)`), N-safe;
+      - `), N-safe;
       - return SEMPRE `set[str]` (deduplicato, ordine non garantito).
 
     Args:
@@ -140,7 +140,7 @@ def list_project_ids_for_group(group_id: str) -> Set[str]:
     `visible_project_ids`.
 
     Contract:
-      - `group_id` falsy → `set()` (caller deve gestire il caso
+      - `group_id` falsy → `set` (caller deve gestire il caso
         anonymous / superadmin separatamente — superadmin in
         particolare deve saltare questo lookup, non passargli
         `None`);
@@ -163,13 +163,12 @@ def list_project_ids_for_group(group_id: str) -> Set[str]:
     return {r["id"] for r in rows}
 
 
-# ATOMIC CANVAS-KEY UPDATE (BE-GO-READY-DB-ENGINE-007)
-#
+# ATOMIC CANVAS-KEY UPDATE
 # Moved verbatim from `app.db.config_db_service` (the 7th projects-cluster
-# function the original scope-split kept in the facade). Production callers
+# function the original scope-split kept in the compatibility module). Production callers
 # now import from this leaf directly (`app.services.project_service`); the
-# facade keeps a re-export for back-compat with the 8 dedicated test files
-# that still patch via `cfg_db.<name>` for non-production-path scenarios.
+# compatibility module keeps a compatibility export for back-compat with the 8 dedicated test files
+# that still patch via `cfg_db.<name>` for non-production-path scenarios
 
 
 def update_project_canvas_key_atomic(project_id: str, key: str, value) -> bool:
@@ -181,8 +180,8 @@ def update_project_canvas_key_atomic(project_id: str, key: str, value) -> bool:
     (cross-process: worker Celery + uvicorn handler + altri worker).
 
     Senza questo, due write concorrenti facevano lost-update:
-      - A: canvas = get(); canvas["columns_metadata"] = X; update()
-      - B: canvas = get(); canvas["nodes"] = Y;            update()
+      - A: canvas = get; canvas["columns_metadata"] = X; update
+      - B: canvas = get; canvas["nodes"] = Y; update
     Se B lo pone dopo A ma legge prima, X va perso. Ora il 2°
     SELECT FOR UPDATE aspetta il 1° COMMIT → vede il canvas gia'
     aggiornato e fa merge sopra.
@@ -212,8 +211,8 @@ def update_project_canvas_key_atomic(project_id: str, key: str, value) -> bool:
                     canvas_obj = json.loads(canvas_raw) if canvas_raw else {}
                 except json.JSONDecodeError:
                     # Canvas corrotto: non vogliamo sovrascriverlo silent
-                    # (come documentato in project_service.get_project_canvas).
-                    # Solleva → rollback automatico del lock.
+                    # come documentato in project_service.get_project_canvas
+                    # Solleva → rollback automatico del lock
                     raise ValueError(
                         f"Canvas corrotto per progetto {project_id}: JSON non parsabile. "
                         f"Rifiuto di sovrascrivere — ripristinare da backup."

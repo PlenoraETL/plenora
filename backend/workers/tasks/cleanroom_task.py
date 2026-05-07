@@ -1,7 +1,6 @@
 """
 Pure no-op cleanroom smoke task.
 
-BE-GO-READY-INSTALLATION-019-CELERY-WORKER-ENQUEUE-SMOKE-IMPL.
 """
 
 from workers.celery_app import celery_app

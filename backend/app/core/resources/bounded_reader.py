@@ -1,7 +1,6 @@
 """
 Bounded stream reader — single shared helper.
 
-BE-GO-READY-RESOURCE-ENGINE-009-BOUNDED-STREAM-READER.
 """
 
 from __future__ import annotations
@@ -16,7 +15,7 @@ __all__ = ["read_stream_bounded"]
 
 # Bytes-like types accepted as chunks. `memoryview` and `bytearray`
 # are accepted because requests / object-storage backends can
-# return either; we normalize via `bytes(chunk)` on append.
+# return either; we normalize via `bytes(chunk)` on append
 _BYTES_LIKE = (bytes, bytearray, memoryview)
 
 
@@ -87,7 +86,7 @@ def read_stream_bounded(
         # Pre-append size check: the over-limit chunk does NOT
         # enlarge the buffer. Memory bound: peak is
         # `running + chunk_len` for the brief moment between
-        # this check and the raise.
+        # this check and the raise
         if running + chunk_len > max_bytes:
             raise MemoryLimitExceededError(
                 observed_bytes=running + chunk_len,
@@ -96,7 +95,7 @@ def read_stream_bounded(
                 stage=stage,
             )
         # Normalize bytearray / memoryview to bytes via the
-        # buffer's `extend` (zero-copy for bytes-like objects).
+        # buffer's `extend` (zero-copy for bytes-like objects
         buffer.extend(chunk)
         running += chunk_len
 

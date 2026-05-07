@@ -55,8 +55,8 @@ def _build_orchestrator():
 def _get_project_info(project_id: str) -> dict:
     """Legge metadata progetto da PostgreSQL.
 
-    BE-GO-READY-DB-ENGINE-004: import diretto del leaf
-    `app.db.config.projects.get_project`; il facade
+     import diretto del leaf
+    `app.db.config.projects.get_project`; il compatibility module
     `config_db_service` non e' piu' un canale richiesto. Funzione
     invariata behaviorally — ritorna `{}` su errore o se il
     progetto non esiste.
@@ -111,7 +111,7 @@ def execute_pipeline_task(
     task_id = self.request.id
 
     # C4 round 4: idempotency guard. Se run_id e' passato ed e' gia'
-    # completato, ritorna subito senza ri-eseguire la pipeline.
+    # completato, ritorna subito senza ri-eseguire la pipeline
     if run_id is not None:
         from app.shared.idempotency import is_already_completed
         if is_already_completed(run_id):
@@ -132,8 +132,8 @@ def execute_pipeline_task(
     _run_start = _time.time()
 
     # Helper centralizzato in app.shared.async_user_recheck — single source
-    # of truth condivisa fra tutti i worker Celery (pipeline, preview,
-    # carica, enrichment). user_id=None -> skip legittimo (cron/scheduled).
+    # of truth condivisa fra tutti i worker Celery (pipeline, preview
+    # carica, enrichment). user_id=None -> skip legittimo (cron/scheduled
     from app.shared.async_user_recheck import recheck_user_authorized
     _revoked = recheck_user_authorized(
         user_id=user_id, project_id=project_id,
@@ -143,8 +143,8 @@ def execute_pipeline_task(
         _revoked.update({"run_id": run_id, "task_id": task_id})
         return _revoked
 
-    # Raccolta step in itinere — popolata dagli executor tramite append_step()
-    # Non usiamo una lista locale: get_steps() legge dal RunContext thread-local
+    # Raccolta step in itinere — popolata dagli executor tramite append_step
+    # Non usiamo una lista locale: get_steps legge dal RunContext thread-local
 
     logger.info(
         f"Task PIPELINE {task_id} avviato per progetto {project_id}",
@@ -167,8 +167,8 @@ def execute_pipeline_task(
 
     set_run_context(run_id=run_id, project_id=project_id)
 
-    # --- Apri run su intermediate storage (PostgreSQL via
-    #     `app.core.intermediate.db` module — non bloccante) ---
+    # Apri run su intermediate storage (PostgreSQL via
+    # `app.core.intermediate.db` module — non bloccante
     try:
         from app.core.intermediate import db as idb
         idb.create_run(run_id=run_id, canvas_id=project_id, group_id=group_id, user_id=user_id)
@@ -290,7 +290,7 @@ def execute_pipeline_task(
             steps=get_steps(),
         )
 
-        # Chiudi run intermediate storage (PostgreSQL via writer module)
+        # Chiudi run intermediate storage (PostgreSQL via writer module
         try:
             from app.core.intermediate.writer import close_run as idb_close_run
             idb_close_run(
@@ -352,7 +352,7 @@ def execute_pipeline_task(
             debug_payload=debug_payload,
         )
 
-        # Chiudi run intermediate storage (PostgreSQL via writer module)
+        # Chiudi run intermediate storage (PostgreSQL via writer module
         try:
             from app.core.intermediate.writer import close_run as idb_close_run
             idb_close_run(
@@ -362,10 +362,10 @@ def execute_pipeline_task(
         except Exception as e:
             logger.debug(f"close_run intermediate fallito post-crash: {type(e).__name__}: {e}")
 
-        # Chiudi connessione PostgreSQL del thread Celery: senza questo,
-        # ogni task lascia aperto un handle che si accumula nel pool.
-        # (Pattern ereditato dalla migrazione SQLite -> PG, vedi
-        # `app/db/config_db_service.py` docstring.)
+        # Chiudi connessione PostgreSQL del thread Celery: senza questo
+        # ogni task lascia aperto un handle che si accumula nel pool
+        # Pattern ereditato dalla migrazione SQLite -> PG, vedi
+        # `app/db/config_db_service.py` docstring
         try:
             from app.core.intermediate.db import close_connection
             close_connection()
@@ -394,7 +394,7 @@ def preview_pipeline_task(
     logger.info(f"Task PREVIEW {task_id} avviato per progetto {project_id}")
     _update_progress(self, 0, "Inizializzazione preview...")
 
-    # N9: re-check permessi al pickup (helper condiviso)
+    # N9: re-check permessi al pickup (helper condiviso
     from app.shared.async_user_recheck import recheck_user_authorized
     _revoked = recheck_user_authorized(
         user_id=user_id, project_id=project_id,

@@ -1,7 +1,7 @@
 """
-Upload multi-layer/multi-sheet (STRUCT-001 Seam D-G).
+Upload multi-layer/multi-sheet (STRUCT-001 Seam D-G
 
-Estratto da `FileSourceService.create_multi_layer_from_upload` senza
+Keeps this module's responsibility explicit and isolated from adjacent code.
 """
 
 from __future__ import annotations
@@ -62,13 +62,13 @@ def create_multi_layer_from_upload(
     Raises:
         ValueError: layers_config vuoto/None, MIME block, ZIP malformato
                     o path traversal.
-        Exception:  dispatch_blob_storage / db_save_file_sources_batch
-                    propagano la loro eccezione. Batch save e' atomico
+        Exception: dispatch_blob_storage / db_save_file_sources_batch
+                    propagano la loro eccezione. e' atomico
                     (E3): rollback DB + cleanup compensativo del shared
                     storage_key best-effort.
     """
     # MIME validator default: lazy import per preservare "sempre attivo"
-    # del comportamento originale (NON opzionale come create_from_upload).
+    # del comportamento originale (NON opzionale come create_from_upload
     if mime_validate is None:
         from app.utils.mime_validator import validate_no_executable
         mime_validate = validate_no_executable
@@ -79,7 +79,7 @@ def create_multi_layer_from_upload(
     file_content.seek(0)
     raw_data = file_content.read()
 
-    # MIME defense-in-depth: PRIMA di qualsiasi side effect.
+    # MIME defense-in-depth: PRIMA di qualsiasi side effect
     try:
         mime_validate(content=raw_data, filename=filename or name)
     except Exception as e:
@@ -116,7 +116,7 @@ def create_multi_layer_from_upload(
                 f for f in zip_tmp_dir.rglob("*")
                 if f.is_file() or (f.is_dir() and f.suffix.lower() == ".gdb")
             ]
-            # NB: SOLO .gpkg / .gdb (NO SHP/CSV come create_from_upload).
+            # NB: SOLO .gpkg / .gdb (NO SHP/CSV come create_from_upload
             for ext in ['.gpkg', '.gdb']:
                 match = next(
                     (f for f in extracted_files if f.suffix.lower() == ext), None,
@@ -125,28 +125,28 @@ def create_multi_layer_from_upload(
                     tmp_path = match
                     format_type = detect_format(match.name)
                     filename = match.name
-                    # MULTI-GDB-001 fix: per .gdb (directory) `read_bytes()`
+                    # MULTI-GDB-001 fix: per .gdb (directory) `read_bytes`
                     # solleverebbe IsADirectoryError. Conserviamo il ZIP
-                    # originale come blob (analogo a create_from_upload).
-                    # Per .gpkg (file), leggiamo i bytes del path estratto.
+                    # originale come blob (analogo a create_from_upload
+                    # Per .gpkg (file), leggiamo i bytes del path estratto
                     if format_type == 'gdb':
                         raw_data = zip_raw_data
                     else:
                         raw_data = tmp_path.read_bytes()
                     break
 
-        # Determina se stiamo lavorando con layer (gpkg/gdb) o sheet (xlsx)
+        # Determina se stiamo lavorando con layer (gpkg/gdb) o sheet (xlsx
         is_sheet_based = format_type in ['xlsx', 'xls']
 
         now = time_now()
 
-        # BE-HARDEN-001C E1 - shared blob dispatch:
+        # BE-HARDEN-001C E1 - shared blob dispatch
         # 1 chiamata a dispatch_blob_storage PRIMA del loop con
         # `storage_key_id=batch_id`. Le N row in object_storage path
         # condividono lo stesso storage_key. In BYTEA path le N row
-        # hanno gli stessi `data` bytes.
+        # hanno gli stessi `data` bytes
         # Failure pre-loop -> nessuna row, nessun cleanup necessario
-        # (orphan guard interno al dispatch).
+        # orphan guard interno al dispatch
         batch_id = f"batch_{uuid.uuid4().hex}"
         shared_blob_kwargs = dispatch_blob_storage(
             batch_id, raw_data, filename,
@@ -155,7 +155,7 @@ def create_multi_layer_from_upload(
 
         # Loop di staging: parse + DTO build per ogni layer, ZERO side
         # effect DB. La persistenza avviene UNA volta sola dopo il loop
-        # via db_save_file_sources_batch (E3 atomic transaction).
+        # via db_save_file_sources_batch (E3 atomic transaction
         created: List[Any] = []
         rows: List[FileSourceRow] = []
         for layer_cfg in layers_config:
@@ -167,10 +167,10 @@ def create_multi_layer_from_upload(
             file_source_name = f"{name}_{safe_layer}"
             file_id = generate_file_id(file_source_name)
 
-            # Inferenza colonne / row_count / CRS - BEST EFFORT PER-LAYER.
-            # Se fallisce, logger.warning + columns=[] / row_count=0 / crs=None,
+            # Inferenza colonne / row_count / CRS - BEST EFFORT PER-LAYER
+            # Se fallisce, logger.warning + columns=[] / row_count=0 / crs=None
             # il loop CONTINUA sui successivi layer (soft-preserve, E3
-            # decision documentata nello scope).
+            # decision documentata nello scope
             columns: List[Any] = []
             row_count = 0
             crs: Optional[str] = None
@@ -180,7 +180,7 @@ def create_multi_layer_from_upload(
                 else:
                     df, gdf = load_by_format(tmp_path, format_type, layer, None)
                 if selected_columns:
-                    # Filter inline: 3 LOC pure, evita callback dedicato.
+                    # Filter inline: 3 LOC pure, evita callback dedicato
                     valid_cols = [c for c in selected_columns if c in df.columns]
                     if valid_cols:
                         df = df[valid_cols]
@@ -237,13 +237,13 @@ def create_multi_layer_from_upload(
             })
             created.append(file_source)
 
-        # BE-HARDEN-001C E3 - all-or-nothing batch save.
+        # BE-HARDEN-001C E3 - all-or-nothing
         # Una sola transazione DB attorno alle N INSERT (via
         # save_file_sources_batch). Se solleva, cleanup compensativo
         # del shared storage_key (best-effort) prima che la eccezione
         # DB propaghi. Un eventuale fail del cleanup -> log strutturato
         # `event=orphan_blob_cleanup_failed` SENZA mascherare la cause
-        # root.
+        # root
         committed = False
         try:
             db_save_file_sources_batch(rows)
@@ -272,9 +272,9 @@ def create_multi_layer_from_upload(
         return created
 
     finally:
-        # Cleanup ASIMMETRICO (preservato verbatim):
-        # - tmp file: cleanup_file (in produzione = os.unlink)
-        # - zip_tmp_dir: cleanup_dir (in produzione = rmtree_safe)
+        # Cleanup ASIMMETRICO (preservato verbatim
+        # tmp file: cleanup_file (in produzione = os.unlink
+        # zip_tmp_dir: cleanup_dir (in produzione = rmtree_safe
         try:
             cleanup_file(tmp.name)
         except Exception as e:

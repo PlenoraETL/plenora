@@ -1,7 +1,7 @@
 """
-Preview di un file caricato senza persistenza DB (STRUCT-001 Seam D-A).
+Preview di un file caricato senza persistenza DB (STRUCT-001 Seam D-A
 
-Estratto da `FileSourceService.preview_file_temp` senza alcun cambio
+Keeps this module's responsibility explicit and isolated from adjacent code.
 """
 
 from __future__ import annotations
@@ -14,10 +14,10 @@ from typing import BinaryIO, Optional
 _logger_module = logging.getLogger(__name__)
 
 
-# STRUCT-001 Seam D-C: la logica vive in `app.shared.file_cleanup.rmtree_safe`.
+# STRUCT-001 Seam D-C: la logica vive in `app.shared.file_cleanup.rmtree_safe`
 # Alias locale per minimizzare il diff al body di preview_file_temp che chiama
 # _rmtree_safe(path). Stessa firma originale; logger=_logger_module passato
-# esplicito cosi' i debug log restano nel namespace del modulo preview.
+# esplicito cosi' i debug log restano nel namespace del modulo preview
 
 def _rmtree_safe(path, _retries: int = 3) -> None:
     """Wrapper compat: delega a `app.shared.file_cleanup.rmtree_safe`."""
@@ -49,16 +49,16 @@ def preview_file_temp(
     non possono assumere quella protezione).
 
     Args:
-        file_content:    BinaryIO del file caricato (rewind-able).
-        filename:        nome file originale (per detect_format + MIME hint).
-        fs:              FileSystemProtocol (extract_zip/iterdir/is_dir).
-        loader:          DataLoaderProtocol (load_csv/excel/json/geospatial,
+        file_content: BinaryIO del file caricato (rewind-able).
+        filename: nome file originale (per detect_format + MIME hint).
+        fs: FileSystemProtocol (extract_zip/iterdir/is_dir).
+        loader: DataLoaderProtocol (load_csv/excel/json/geospatial,
                          list_layers/list_sheets).
         format_detector: classe FormatDetector (detect classmethod).
-        column_builder:  classe ColumnInfoBuilder (from_dataframe staticmethod).
-        logger:          LoggerProtocol-like (warning/debug usato qui).
-        layer:           layer GPKG/GDB da caricare (opzionale).
-        sheet:           foglio XLSX da caricare (opzionale).
+        column_builder: classe ColumnInfoBuilder (from_dataframe staticmethod).
+        logger: LoggerProtocol-like (warning/debug usato qui).
+        layer: layer GPKG/GDB da caricare (opzionale).
+        sheet: foglio XLSX da caricare (opzionale).
 
     Returns:
         dict con `columns`, `row_count`, `format`, `layers`, `sheets`.
@@ -71,9 +71,9 @@ def preview_file_temp(
         MimeMismatchError, validate_no_executable,
     )
 
-    # Letti i bytes per il MIME check, poi rewind per il caller.
+    # Letti i bytes per il MIME check, poi rewind per il caller
     # NB: per file molto grandi questo accumula in RAM una volta in
-    # piu'; e' OK per preview che e' bounded a pochi MB tipici.
+    # piu'; e' OK per preview che e' bounded a pochi MB tipici
     file_content.seek(0)
     _peek = file_content.read()
     file_content.seek(0)

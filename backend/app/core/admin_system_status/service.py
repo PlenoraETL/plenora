@@ -16,7 +16,7 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-# Soglie (documentate qui per review esplicita)
+# Soglie (documentate qui per review esplicita
 _BACKUP_WARN_HOURS = 26      # cron daily 02:00, tolleranza 2h jitter/retry
 _BACKUP_ERROR_HOURS = 48
 
@@ -24,7 +24,7 @@ _VERIFY_WARN_DAYS = 8        # cron weekly Sun 03:00, tolleranza 1 giorno
 _VERIFY_ERROR_DAYS = 14
 
 
-# Backup (ultimo dump su S3)
+# Backup (ultimo dump su S3
 
 
 def get_backup_status() -> Dict[str, Any]:
@@ -104,9 +104,9 @@ def get_backup_status() -> Dict[str, Any]:
     }
 
 
-# Verify restore (ultima esecuzione plenora-backup-test via DB)
+# Verify restore (ultima esecuzione plenora-backup-test via DB
 # Fonte di verita': plenora.verify_runs. Scritta da scripts/test_restore.py
-# a fine job. Container-safe: nessuna dipendenza da systemctl/journalctl.
+# a fine job. Container-safe: nessuna dipendenza da systemctl/journalctl
 
 
 def get_verify_restore_status() -> Dict[str, Any]:
@@ -193,14 +193,14 @@ def get_verify_restore_status() -> Dict[str, Any]:
     }
 
 
-# Schedules (DB query: attivi, failing recenti)
+# Schedules (DB query: attivi, failing recenti
 
 
 def get_schedules_status() -> Dict[str, Any]:
     """Count schedule attivi + count failing — cross-group (superadmin)."""
     try:
         from app.db.pg_connection import fetchall
-        # Query cross-group: superadmin vede TUTTI gli schedule.
+        # Query cross-group: superadmin vede TUTTI gli schedule
         rows = fetchall(
             "SELECT id, name, is_enabled, last_status FROM schedules"
         )
@@ -255,7 +255,7 @@ def get_schedules_status() -> Dict[str, Any]:
     }
 
 
-# Celery workers (inspect().active() via broker)
+# Celery workers (inspect.active via broker
 
 
 def get_workers_status() -> Dict[str, Any]:
@@ -294,9 +294,9 @@ def get_workers_status() -> Dict[str, Any]:
         nodes = len(active)
         active_tasks = sum(len(v or []) for v in active.values())
 
-        # Per-node detail: dove gira + capacita' + carico + contatore lifetime.
-        # Union delle chiavi da active() e stats() (robusto a ritardi di
-        # risposta di un endpoint dei due).
+        # Per-node detail: dove gira + capacita' + carico + contatore lifetime
+        # Union delle chiavi da active e stats (robusto a ritardi di
+        # risposta di un endpoint dei due
         all_nodes = set(active.keys()) | set(stats.keys())
         for worker_name in sorted(all_nodes):
             s = stats.get(worker_name, {}) or {}
@@ -304,7 +304,7 @@ def get_workers_status() -> Dict[str, Any]:
             max_conc = pool.get("max-concurrency") or 0
             processes = pool.get("processes") or []
             # `total` e' un dict {task_name: count}. Somma per ottenere il
-            # totale lifetime di task processati dal nodo.
+            # totale lifetime di task processati dal nodo
             total_payload = s.get("total") or {}
             if isinstance(total_payload, dict):
                 total_processed = sum(
@@ -315,8 +315,8 @@ def get_workers_status() -> Dict[str, Any]:
             else:
                 total_processed = None
 
-            # Hostname dal naming Celery: "celery@hostname" -> "hostname".
-            # Per pod Docker/K8s sara' es. "celery@plenora-worker-abc123".
+            # Hostname dal naming Celery: "celery@hostname" -> "hostname"
+            # Per pod Docker/K8s sara' es. "celery@plenora-worker-abc123"
             hostname = (
                 worker_name.split("@", 1)[1]
                 if "@" in worker_name else worker_name
@@ -325,8 +325,8 @@ def get_workers_status() -> Dict[str, Any]:
             if isinstance(max_conc, int) and max_conc > 0:
                 concurrency_slots += max_conc
 
-            # Code consumate dal nodo (utile se un giorno avremo queue multiple,
-            # es. "carica" dedicata o "priority").
+            # Code consumate dal nodo (utile se un giorno avremo queue multiple
+            # es. "carica" dedicata o "priority"
             queue_names = [
                 q.get("name") for q in (queues_info.get(worker_name) or [])
                 if q.get("name")
@@ -350,9 +350,9 @@ def get_workers_status() -> Dict[str, Any]:
             "error": str(e)[:200],
         }
 
-    # Queue depth via Redis diretto (best-effort).
+    # Queue depth via Redis diretto (best-effort
     # Usiamo settings.CELERY_BROKER_URL come unica variabile canonica
-    # Redis dell'app (stesso broker che Celery stesso consuma).
+    # Redis dell'app (stesso broker che Celery stesso consuma
     queue_depth: Optional[int] = None
     try:
         import redis as _redis
@@ -387,14 +387,14 @@ def get_workers_status() -> Dict[str, Any]:
         "active_tasks": active_tasks,
         "queue_depth": queue_depth,
         "details": details,
-        # Retrocompat per chiamanti legacy (la vecchia chiave era workers_online):
+        # Retrocompat per chiamanti legacy (la vecchia chiave era workers_online
         "workers_online": nodes,
     }
 
 
-# Host resources (psutil)
+# Host resources (psutil
 
-# Soglie host (documentate per review)
+# Soglie host (documentate per review
 _DISK_WARN_PCT = 80
 _DISK_ERROR_PCT = 92
 _MEM_WARN_PCT = 85
@@ -461,11 +461,11 @@ def get_host_resources() -> Dict[str, Any]:
         usage_path = _disk_usage_probe_path(data_dir_path)
         # R-2 (2026-04-27): psutil.disk_usage emette
         # `SystemError("argument 1 (impossible<bad format char>)")` su Windows
-        # locale (telemetria locale post-diagnostic patch). Causa probabile:
-        # FIXME: /edge case in psutil._psplatform (Windows) sulla `struct` C.
+        # locale (telemetria locale post-diagnostic patch). Causa probabile
+        # FIXME: /edge case in psutil._psplatform (Windows) sulla `struct` C
         # Fallback: `shutil.disk_usage` (stdlib) usa GetDiskFreeSpaceExW
         # diretto e non passa per psutil. Se anche shutil fallisce -> graceful
-        # con log enriched.
+        # con log enriched
         try:
             du = psutil.disk_usage(str(usage_path))
             total = du.total
@@ -479,7 +479,7 @@ def get_host_resources() -> Dict[str, Any]:
             total = su.total
             used = su.used
             free = su.free
-            # shutil.disk_usage non espone `percent`: lo calcoliamo.
+            # shutil.disk_usage non espone `percent`: lo calcoliamo
             pct = round((used / total * 100.0) if total > 0 else 0.0, 1)
             logger.info(
                 "host_resources disk: psutil.disk_usage fallito "
@@ -500,18 +500,18 @@ def get_host_resources() -> Dict[str, Any]:
             worst_status = "warn"
     except Exception as e:
         # Entrambi i path (psutil + shutil) hanno fallito, o errore early
-        # (Path/settings). Diagnostica enriched per ridiagnosi rapida.
+        # Path/settings). Diagnostica enriched per ridiagnosi rapida
         try:
             cwd_str = str(Path.cwd())
         except Exception:
             cwd_str = "<unavailable>"
         # Qualified type: alcune eccezioni famose hanno __name__ generico
-        # (es. struct.error.__name__ == 'error'), che da solo non aiuta.
-        # Includere il modulo rende il log azionabile a colpo d'occhio.
+        # es. struct.error.__name__ == 'error'), che da solo non aiuta
+        # Includere il modulo rende il log azionabile a colpo d'occhio
         exc_type = type(e)
         exc_qualname = f"{exc_type.__module__}.{exc_type.__name__}"
         # Se psutil aveva fallito prima di shutil, includi entrambi i tipi
-        # eccezione per debug.
+        # eccezione per debug
         psutil_part = ""
         if psutil_error is not None and psutil_error is not e:
             pet = type(psutil_error)
@@ -580,7 +580,7 @@ def get_host_resources() -> Dict[str, Any]:
     }
 
 
-# DB pool stats (Postgres)
+# DB pool stats (Postgres
 
 
 def get_db_pool_status() -> Dict[str, Any]:
@@ -717,7 +717,7 @@ def get_redis_status() -> Dict[str, Any]:
 def get_blacklist_status() -> Dict[str, Any]:
     """Status della blacklist JWT (revoca token via /auth/logout).
 
-    Wrapper su `app.shared.token_blacklist.get_blacklist_status()` che
+    Wrapper su `app.shared.token_blacklist.get_blacklist_status` che
     gestisce eventuali errori di import (es. test env senza il modulo).
     Soglia stale configurabile via env `JWT_BLACKLIST_STALE_THRESHOLD_SEC`
     (default 1800 = 30 min).
@@ -735,8 +735,8 @@ def get_blacklist_status() -> Dict[str, Any]:
         }
 
     # BE-CONFIG-001C: default tipato in `Settings.DEFAULTS`
-    # (`JWT_BLACKLIST_STALE_THRESHOLD_SEC=1800`). Guard `ValueError` resta
-    # safety per env malformata propagata dal type coercion.
+    # `JWT_BLACKLIST_STALE_THRESHOLD_SEC=1800`). Guard `ValueError` resta
+    # safety per env malformata propagata dal type coercion
     try:
         from app.config import settings as _settings
         threshold = int(_settings.get("JWT_BLACKLIST_STALE_THRESHOLD_SEC"))
@@ -746,7 +746,7 @@ def get_blacklist_status() -> Dict[str, Any]:
     try:
         return _probe(stale_threshold_seconds=threshold)
     except Exception as e:
-        # Safety net: get_blacklist_status e' gia' graceful, ma blindo.
+        # Safety net: get_blacklist_status e' gia' graceful, ma blindo
         logger.warning(f"get_blacklist_status wrapper fallito: {e}")
         return {
             "status": "unknown",
@@ -765,8 +765,8 @@ def get_tickets_status() -> Dict[str, Any]:
     waiting_user, reopened) cross-group + breakdown per severity.
 
     Soglie status:
-      - `ok`:    nessun critical + high <= 5
-      - `warn`:  high > 5 oppure 1-2 critical
+      - `ok`: nessun critical + high <= 5
+      - `warn`: high > 5 oppure 1-2 critical
       - `error`: >= 3 critical
 
     Graceful degradation: mai raise, ritorna sempre dict con status.
@@ -826,7 +826,7 @@ def get_tickets_status() -> Dict[str, Any]:
 
 # DB schema size + row counts tabelle critiche
 
-# Tabelle da tracciare per growth insights (oversize detection)
+# Tabelle da tracciare per growth insights (oversize detection
 _CRITICAL_TABLES = [
     "file_sources",
     "results",
@@ -887,11 +887,11 @@ def get_db_schema_size() -> Dict[str, Any]:
         for r in (table_rows or [])
     ]
 
-    # Soglie: dumping cresciute molto potrebbe indicare bytea bloat.
-    # Error a 5 GB, warn a 1 GB. Tweakable via env.
+    # Soglie: dumping cresciute molto potrebbe indicare bytea bloat
+    # Error a 5 GB, warn a 1 GB. Tweakable via env
     # BE-CONFIG-001D: default tipati `float` in `Settings.DEFAULTS`
-    # (`DB_SCHEMA_WARN_GB=1.0`, `DB_SCHEMA_ERROR_GB=5.0`). Override env
-    # via `Settings._converti_tipo_env` (coercion `float`).
+    # `DB_SCHEMA_WARN_GB=1.0`, `DB_SCHEMA_ERROR_GB=5.0`). Override env
+    # via `Settings._converti_tipo_env` (coercion `float`
     from app.config import settings as _settings_cfg
     warn_gb = float(_settings_cfg.get("DB_SCHEMA_WARN_GB"))
     error_gb = float(_settings_cfg.get("DB_SCHEMA_ERROR_GB"))

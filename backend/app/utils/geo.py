@@ -24,7 +24,7 @@ GEOMETRY_COLUMN_NAMES = [
     "geometry", "geom", "the_geom", "shape", "wkb_geometry", "wkt"
 ]
 
-# Prefissi validi per il formato WKT (Well-Known Text)
+# Prefissi validi per il formato WKT (Well-Known Text
 WKT_PREFIXES = (
     "POINT", "LINESTRING", "POLYGON",
     "MULTIPOINT", "MULTILINESTRING", "MULTIPOLYGON",
@@ -66,7 +66,7 @@ def parse_geometry(value: Any) -> Optional[Any]:
     if not value_str:
         return None
 
-    # 1. Tentativo GeoJSON (inizia con '{')
+    # 1. Tentativo GeoJSON (inizia con '{'
     if value_str.startswith("{"):
         try:
             geojson = json.loads(value_str)
@@ -82,13 +82,13 @@ def parse_geometry(value: Any) -> Optional[Any]:
                 elif geojson_type == "Feature":
                     geom = geojson.get("geometry")
                     return shape(geom) if geom else None
-                # Geometry diretta (Point, Polygon, ecc.)
+                # Geometry diretta (Point, Polygon, ecc
                 else:
                     return shape(geojson)
         except (json.JSONDecodeError, ValueError, Exception) as e:
             logger.debug("parse_geometry: GeoJSON parsing fallito per %r: %s", value_str[:80], e)
 
-    # 2. Tentativo WKT (inizia con nome tipo geometria)
+    # 2. Tentativo WKT (inizia con nome tipo geometria
     value_upper = value_str.upper()
     if any(value_upper.startswith(prefisso) for prefisso in WKT_PREFIXES):
         try:
@@ -96,13 +96,13 @@ def parse_geometry(value: Any) -> Optional[Any]:
         except Exception as e:
             logger.debug("parse_geometry: WKT parsing fallito per %r: %s", value_str[:80], e)
 
-    # 3. Tentativo WKB/EWKB hex (stringa esadecimale lunga che inizia con '0')
+    # 3. Tentativo WKB/EWKB hex (stringa esadecimale lunga che inizia con '0'
     if _sembra_wkb_hex(value_str):
         geom = _parsa_wkb_hex(value_str)
         if geom is not None:
             return geom
 
-    # 4. Tentativo WKB bytes (oggetto bytes o memoryview)
+    # 4. Tentativo WKB bytes (oggetto bytes o memoryview
     if isinstance(value, (bytes, memoryview)):
         try:
             return wkb.loads(bytes(value))
@@ -140,7 +140,7 @@ def _parsa_wkb_hex(value_str: str) -> Optional[Any]:
         byte_order (1 byte) + tipo_con_flag_srid (4 byte) + srid (4 byte) + geometria
         Il flag SRID è 0x20000000 (bit 5 nel terzo byte del tipo).
     """
-    # Tentativo 1: WKB/EWKB standard (Shapely gestisce EWKB nativamente)
+    # Tentativo 1: WKB/EWKB standard (Shapely gestisce EWKB nativamente
     try:
         return wkb.loads(value_str, hex=True)
     except Exception as e:
@@ -179,7 +179,7 @@ def extract_srid_from_ewkb(value_str: str) -> Optional[int]:
         return None
 
     try:
-        # Verifica presenza flag SRID (0x20 nel tipo geometria)
+        # Verifica presenza flag SRID (0x20 nel tipo geometria
         if value_str[8:10] == "20":
             srid_hex = value_str[10:18]
             srid_bytes = bytes.fromhex(srid_hex)
@@ -239,12 +239,12 @@ def to_geodataframe(
     # Parsing di tutte le geometrie nella colonna
     geometrie = df[geom_column].apply(parse_geometry)
 
-    # Validazione: almeno una geometria deve essere parsata con successo.
-    # Se fallisce, tenta di ricostruire WKT spezzato da CSV senza quoting.
+    # Validazione: almeno una geometria deve essere parsata con successo
+    # Se fallisce, tenta di ricostruire WKT spezzato da CSV senza quoting
     # pd.read_csv senza quoting spezza POLYGON ((lon lat, lon lat, ...)) su più
-    # colonne quando le virgole interne vengono interpretate come separatori.
+    # colonne quando le virgole interne vengono interpretate come separatori
     # Strategia: cerca colonne Unnamed adiacenti e le concatena alla colonna
-    # geom_column per ricostruire il WKT completo.
+    # geom_column per ricostruire il WKT completo
     conteggio_valide = geometrie.notna().sum()
     if conteggio_valide == 0:
         geom_col_idx = list(df.columns).index(geom_column)
@@ -268,7 +268,7 @@ def to_geodataframe(
                     f"{geometrie_ricostruite.notna().sum()} geometrie valide"
                 )
                 geometrie = geometrie_ricostruite
-                # Rimuovi le colonne Unnamed dal DataFrame (erano frammenti WKT)
+                # Rimuovi le colonne Unnamed dal DataFrame (erano frammenti WKT
                 df = df.drop(columns=unnamed_after)
                 conteggio_valide = geometrie.notna().sum()
 
@@ -294,7 +294,7 @@ def to_geodataframe(
         if srid:
             crs_rilevato = f"EPSG:{srid}"
 
-    # Creazione GeoDataFrame (rimuove la colonna geometria originale se non è 'geometry')
+    # Creazione GeoDataFrame (rimuove la colonna geometria originale se non è 'geometry'
     df_copia = df.drop(columns=[geom_column]) if geom_column != "geometry" else df.copy()
     gdf = gpd.GeoDataFrame(df_copia, geometry=geometrie.values, crs=crs_rilevato)
 
@@ -317,7 +317,7 @@ def detect_geometry_column(df: pd.DataFrame) -> Optional[str]:
     Returns:
         Nome della colonna geometria individuata, o None se non trovata.
     """
-    # 1. Ricerca per nomi comuni (case-insensitive)
+    # 1. Ricerca per nomi comuni (case-insensitive
     for nome_noto in GEOMETRY_COLUMN_NAMES:
         if nome_noto in df.columns:
             return nome_noto
@@ -325,12 +325,12 @@ def detect_geometry_column(df: pd.DataFrame) -> Optional[str]:
             if col.lower() == nome_noto.lower():
                 return col
 
-    # 2. Ricerca per pattern nel nome (contiene 'geom')
+    # 2. Ricerca per pattern nel nome (contiene 'geom'
     for col in df.columns:
         if "geom" in col.lower():
             return col
 
-    # 3. Ricerca per contenuto (analisi del primo valore non nullo)
+    # 3. Ricerca per contenuto (analisi del primo valore non nullo
     for col in df.columns:
         if df[col].dtype != "object":
             continue
@@ -409,10 +409,10 @@ def get_utm_crs_for_geometry(gdf: gpd.GeoDataFrame) -> str:
         lon, lat = centroide.x, centroide.y
 
         # Guard multi-zona: bbox che copre molto longitudine segnala che
-        # la singola zona UTM scelta sul centroide e' inaccurata ai bordi.
+        # la singola zona UTM scelta sul centroide e' inaccurata ai bordi
         # Soglie: 3 gradi = zona nominale ±1 zona adiacente (circa 0.04%
-        # distorsione scala); 6 gradi = fuori zona garantito.
-        bounds = gdf.total_bounds  # (minx, miny, maxx, maxy)
+        # distorsione scala); 6 gradi = fuori zona garantito
+        bounds = gdf.total_bounds  # minx, miny, maxx, maxy
         lon_range = bounds[2] - bounds[0]
         if lon_range > 6:
             logger.warning(
@@ -432,7 +432,7 @@ def get_utm_crs_for_geometry(gdf: gpd.GeoDataFrame) -> str:
         # Formula: zona UTM = floor((lon + 180) / 6) + 1
         zona_utm = int((lon + 180) / 6) + 1
 
-        # Emisfero Nord (326xx) o Sud (327xx)
+        # Emisfero Nord (326xx) o Sud (327xx
         if lat >= 0:
             return f"EPSG:326{zona_utm:02d}"
         else:
@@ -451,9 +451,9 @@ def extract_srid_from_column_type(col_type: str) -> Optional[int]:
 
     Esempi:
         "geometry:polygon:4326" → 4326
-        "geometry:point:3003"   → 3003
-        "geometry:polygon"      → None (SRID non specificato)
-        "str"                   → None (non è una geometria)
+        "geometry:point:3003" → 3003
+        "geometry:polygon" → None (SRID non specificato)
+        "str" → None (non è una geometria)
 
     Args:
         col_type: Stringa tipo colonna.

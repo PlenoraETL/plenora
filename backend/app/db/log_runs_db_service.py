@@ -1,7 +1,6 @@
 """
 log_runs DAL — single-purpose typed boundary for `plenora.log_runs`.
 
-BE-GO-READY-CONNECTION-ENGINE-006-ORCHESTRATOR-ROUTER-PG-EXTRACTION.
 """
 
 from __future__ import annotations
@@ -38,9 +37,9 @@ def delete_log_run_by_run_id(run_id: str) -> int:
         in `try/except → failed_steps.append("delete_log_runs")`.
     """
     # Lazy import: preserva la monkey-patch convention dei test
-    # esistenti che fanno `patch("app.db.pg_connection.execute", ...)`.
+    # esistenti che fanno `patch("app.db.pg_connection.execute", ...)`
     # Il modulo continua a essere leaf: zero side effect a import time
-    # del DAL.
+    # del DAL
     from app.db.pg_connection import execute as pg_execute
 
     cur = pg_execute("DELETE FROM log_runs WHERE run_id = ?", (run_id,))

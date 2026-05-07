@@ -14,8 +14,8 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# Numero default di risultati da conservare per progetto.
-# Sovrascrivibile per singolo progetto tramite projects.retention_n nelle config tables.
+# Numero default di risultati da conservare per progetto
+# Sovrascrivibile per singolo progetto tramite projects.retention_n nelle config tables
 DEFAULT_RESULTS_RETENTION = 10
 
 
@@ -37,18 +37,18 @@ def _apply_results_retention(project_id: str) -> None:
         from app.db.config.projects import get_project_retention_n
         import app.db.results_db_service as res_db
 
-        # Legge retention_n dal progetto (config tables)
+        # Legge retention_n dal progetto (config tables
         retention_n = get_project_retention_n(project_id)
         if retention_n is None:
             retention_n = DEFAULT_RESULTS_RETENTION
 
-        # Lista risultati ordinati dal più recente (results tables)
+        # Lista risultati ordinati dal più recente (results tables
         all_results = res_db.list_results(project_id)
 
         if len(all_results) <= retention_n:
             return  # Nulla da eliminare
 
-        # Elimina i risultati oltre retention_n (i più vecchi sono in fondo)
+        # Elimina i risultati oltre retention_n (i più vecchi sono in fondo
         to_delete = all_results[retention_n:]
         for r in to_delete:
             res_db.delete_result(r["id"])
@@ -83,7 +83,7 @@ class ResultSaveError(Exception):
     """
 
 
-# Storage policy dispatch helpers (A1)
+# Storage policy dispatch helpers (A1
 
 
 def _storage_policy() -> str:
@@ -116,7 +116,7 @@ def _should_use_object_storage(size: int, policy: str) -> bool:
 
     BE-DATA-PLANE-001B: la decisione e' delegata alla pure function
     `app.shared.storage_dispatch.resolve_payload_target`. Questo wrapper
-    legge la threshold env-bound (`_result_s3_threshold()`) e tiene
+    legge la threshold env-bound (`_result_s3_threshold`) e tiene
     invariata la signature legacy `(size, policy) -> bool` per i test
     esistenti che fanno `monkeypatch.setattr(result_store,
     "_should_use_object_storage", ...)`.
@@ -145,12 +145,11 @@ def _cleanup_uploaded_result_blob(
     row DB orfana lato opposto). Senza questo cleanup, il blob resta
     su object storage senza piu' alcuna row che lo punti -> orphan.
 
-    BE-GO-READY-STORAGE-ENGINE-002: delegato a
     `app.shared.storage_compensation.compensating_delete` per
     unificare log shape + capability handling con gli altri 3
     callsite. Mantiene la signature legacy (caller gia' ha
     `storage`); l'helper riusa l'istanza fornita ed evita un
-    secondo `get_runtime_object_storage()`.
+    secondo `get_runtime_object_storage`.
 
     Mai solleva: il caller sta gia' propagando un altro errore (DB
     save) e non deve essere mascherato.
@@ -186,13 +185,13 @@ def save_result_blob(project_id: str, path: Path, fmt: str,
     Salva il risultato (file su disco) come DB blob o object storage.
 
     Dispatch policy-aware (A1, STORAGE_POLICY):
-      - `db`             -> sempre DB BYTEA, fail se size > RESULT_DB_HARD_CAP_BYTES
+      - `db` -> sempre DB BYTEA, fail se size > RESULT_DB_HARD_CAP_BYTES
       - `object_storage` -> sempre object storage (streaming dal disk).
                             Nessun fallback BYTEA: capability off o bucket
                             mancante => ResultSaveError esplicito (fail-closed).
                             Validazione coerenza al boot in
                             cloud_backends.validate_storage_config.
-      - `hybrid`         -> threshold-based su RESULT_S3_THRESHOLD_BYTES;
+      - `hybrid` -> threshold-based su RESULT_S3_THRESHOLD_BYTES;
                             il ramo DB e' protetto dallo stesso hard cap.
                             Manutenuto per retro-compat dev/test.
 
@@ -237,7 +236,7 @@ def save_result_blob(project_id: str, path: Path, fmt: str,
         use_object_storage = _should_use_object_storage(file_size, policy)
 
         if not use_object_storage:
-            # DB blob path — hard cap guard (db sempre; hybrid ramo DB).
+            # DB blob path — hard cap guard (db sempre; hybrid ramo DB
             _enforce_db_hard_cap(file_size, ctx=f"save_result_blob/{policy}")
             blob = path.read_bytes()
             db.save_result(
@@ -250,8 +249,8 @@ def save_result_blob(project_id: str, path: Path, fmt: str,
                 rows_count=rows_count,
             )
         else:
-            # Object storage path: upload streaming dal disk (no RAM load).
-            # Ordine: upload prima (no row DB orfana se upload fallisce).
+            # Object storage path: upload streaming dal disk (no RAM load
+            # Ordine: upload prima (no row DB orfana se upload fallisce
             storage_key = f"{RESULTS_PREFIX}/{project_id}/{result_id}.bin"
             try:
                 from app.shared.cloud_backends import (
@@ -261,10 +260,10 @@ def save_result_blob(project_id: str, path: Path, fmt: str,
                 storage = get_runtime_object_storage()
                 storage.upload(path, storage_key)
             except Exception as _se:
-                # Nessun fallback silenzioso: se la policy/threshold dice S3,
+                # Nessun fallback silenzioso: se la policy/threshold dice S3
                 # un fallimento upload deve far fallire il job. Differenziamo
                 # solo il MESSAGGIO per dare all'operatore un'azione chiara
-                # quando la causa root sono credenziali AWS scadute.
+                # quando la causa root sono credenziali AWS scadute
                 hint = aws_credentials_error_message(_se)
                 if hint is not None:
                     raise ResultSaveError(
@@ -279,7 +278,7 @@ def save_result_blob(project_id: str, path: Path, fmt: str,
             # la save DB fallisce, il blob resta orfano. Triggera
             # compensating delete best-effort prima di propagare l'errore
             # cosi' il caller riceve sempre la root cause (DB save) e
-            # l'object storage non accumula orfani.
+            # l'object storage non accumula orfani
             try:
                 db.save_result(
                     result_id=result_id,
@@ -308,23 +307,23 @@ def save_result_blob(project_id: str, path: Path, fmt: str,
 
         _saved = True
 
-        # Applica retention dopo il salvataggio.
+        # Applica retention dopo il salvataggio
         _apply_results_retention(project_id)
 
         return result_id
 
     except ResultSaveError:
-        # I rami interni (hard cap, upload S3 con credenziali AWS scadute,
+        # I rami interni (hard cap, upload S3 con credenziali AWS scadute
         # ecc.) sollevano gia' un ResultSaveError con messaggio operativo
         # specifico. Non re-wrappare con prefisso generico, altrimenti il
         # messaggio diventa "Salvataggio risultato nel DB fallito ..." anche
         # quando la causa e' upload S3 + credenziali. Simmetrico a
-        # save_result_blob_from_bytes (vedi sotto, except ResultSaveError).
+        # save_result_blob_from_bytes (vedi sotto, except ResultSaveError
         raise
     except Exception as e:
         # Prima era un warning silenzioso -> il task Celery non se ne accorgeva
         # e ritornava success=True pur non avendo salvato nulla, lasciando
-        # l'utente a scaricare blob stantii. Ora failiamo esplicitamente.
+        # l'utente a scaricare blob stantii. Ora failiamo esplicitamente
         logger.error(
             f"[CRASH] save_result_blob fallito per project_id={project_id} "
             f"file={path.name}: {e}",
@@ -334,8 +333,8 @@ def save_result_blob(project_id: str, path: Path, fmt: str,
             f"Salvataggio risultato nel DB fallito per {project_id}: {e}"
         ) from e
     finally:
-        # Elimina il file temp SOLO se salvato con successo (DB BYTEA o S3).
-        # Se _saved=False il file resta in temp per ispezione/recovery manuale.
+        # Elimina il file temp SOLO se salvato con successo (DB BYTEA o S3
+        # Se _saved=False il file resta in temp per ispezione/recovery manuale
         if _saved:
             try:
                 if path.exists():
@@ -397,7 +396,7 @@ def save_result_blob_from_bytes(
         use_object_storage = _should_use_object_storage(size, policy)
 
         if not use_object_storage:
-            # DB blob path — hard cap guard (db sempre; hybrid ramo DB).
+            # DB blob path — hard cap guard (db sempre; hybrid ramo DB
             _enforce_db_hard_cap(size, ctx=f"save_result_blob_from_bytes/{policy}")
             db.save_result(
                 result_id=result_id,
@@ -410,7 +409,7 @@ def save_result_blob_from_bytes(
             )
         else:
             # Object storage path — upload prima, poi row con storage_key
-            # (ordine importante: no row DB orfana su upload failure).
+            # ordine importante: no row DB orfana su upload failure
             storage_key = f"{RESULTS_PREFIX}/{project_id}/{result_id}.bin"
             try:
                 from app.shared.cloud_backends import (
@@ -420,10 +419,10 @@ def save_result_blob_from_bytes(
                 storage = get_runtime_object_storage()
                 storage.upload_bytes(data, storage_key)
             except Exception as _se:
-                # Nessun fallback silenzioso: se la policy/threshold dice S3,
+                # Nessun fallback silenzioso: se la policy/threshold dice S3
                 # un fallimento upload deve far fallire il job. Differenziamo
                 # solo il MESSAGGIO per dare all'operatore un'azione chiara
-                # quando la causa root sono credenziali AWS scadute.
+                # quando la causa root sono credenziali AWS scadute
                 hint = aws_credentials_error_message(_se)
                 if hint is not None:
                     raise ResultSaveError(
@@ -435,7 +434,7 @@ def save_result_blob_from_bytes(
 
             # BE-DATA-PLANE-004: vedi save_result_blob (path-based) per
             # rationale: compensating delete best-effort se la DB save
-            # fallisce dopo upload riuscito.
+            # fallisce dopo upload riuscito
             try:
                 db.save_result(
                     result_id=result_id,
@@ -462,7 +461,7 @@ def save_result_blob_from_bytes(
                 f"(policy={policy}, {size // (1024*1024)} MB): {storage_key}"
             )
 
-        # Retention post-save (stesso pattern del path-based).
+        # Retention post-save (stesso pattern del path-based
         _apply_results_retention(project_id)
 
         return result_id
@@ -539,13 +538,13 @@ def save_pipeline_result(
 
     if fmt_lower in ("gpkg", "shp"):
         # Filesystem-only: serializzatori che richiedono path
-        # (driver OGR per gpkg, multi-file zip per shp).
+        # driver OGR per gpkg, multi-file zip per shp
         # Cleanup hardening: TemporaryDirectory context manager garantisce
-        # rmtree al `__exit__` indipendentemente da exception path,
+        # rmtree al `__exit__` indipendentemente da exception path
         # senza affidarsi a save_result_blob.finally. Directory in OS
-        # `/tmp` (auto-pulita a reboot) invece di DATA_DIR/temp.
+        # `/tmp` (auto-pulita a reboot) invece di DATA_DIR/temp
         # Upload via save_result_blob_from_bytes (bytes-based, no
-        # cleanup sovrapposto al nostro).
+        # cleanup sovrapposto al nostro
         import tempfile as _tf
         with _tf.TemporaryDirectory(
             prefix="urby_gpkg_shp_",
@@ -553,7 +552,7 @@ def save_pipeline_result(
         ) as tmp_dir:
             tmp_path = Path(tmp_dir) / filename
             saved_path = save_dataframe(df, tmp_path, output_format, geom_column, crs)
-            # Per shp `save_dataframe` ritorna .zip invece di .shp — allinea.
+            # Per shp `save_dataframe` ritorna .zip invece di .shp — allinea
             actual_fmt = saved_path.suffix.lstrip(".") if fmt_lower == "shp" else fmt_lower
             data = saved_path.read_bytes()
             result_id = save_result_blob_from_bytes(
@@ -565,10 +564,10 @@ def save_pipeline_result(
                 group_id=group_id,
             )
             output_filename = saved_path.name
-        # Context exit: tmp_dir + contenuto rimossi (idempotent, no-throw).
+        # Context exit: tmp_dir + contenuto rimossi (idempotent, no-throw
         return {"result_id": result_id, "output_filename": output_filename}
 
-    # In-memory path: zero touch su DATA_DIR/temp.
+    # In-memory path: zero touch su DATA_DIR/temp
     data = save_dataframe_to_bytes(df, fmt_lower, geom_column=geom_column, crs=crs)
     result_id = save_result_blob_from_bytes(
         project_id=project_id,

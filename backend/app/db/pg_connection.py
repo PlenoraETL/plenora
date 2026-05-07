@@ -83,11 +83,11 @@ def _read_int_env(name: str, default: int) -> int:
 _POOL_MIN = _read_int_env("DB_POOL_MIN", 2)
 _POOL_MAX = _read_int_env("DB_POOL_MAX", 12)
 
-# C7: idle_in_transaction timeout applicato tramite GUC per-connection.
+# C7: idle_in_transaction timeout applicato tramite GUC per-connection
 # Evita zombie da transazioni applicative leaked (codice che apre BEGIN
 # e non committa/rollbacka mai) senza richiedere modifiche a
-# postgresql.conf. Scope: solo le connessioni del nostro pool.
-# Default 300000ms = 5min. Imposta 0 per disabilitare.
+# postgresql.conf. Scope: solo le connessioni del nostro pool
+# Default 300000ms = 5min. Imposta 0 per disabilitare
 _IDLE_IN_TRANSACTION_MS = _read_int_env(
     "DB_IDLE_IN_TRANSACTION_TIMEOUT_MS", 300000
 )
@@ -95,8 +95,8 @@ _IDLE_IN_TRANSACTION_MS = _read_int_env(
 
 # C7 fix-nit: guardrail espliciti sui parametri del pool. Senza questi
 # check, valori malformati (MIN>MAX, negativi, 0) si propagano fino a
-# ThreadedConnectionPool dove falliscono con errori poco leggibili.
-# Fail fast all'import con messaggio diagnostico.
+# ThreadedConnectionPool dove falliscono con errori poco leggibili
+# Fail fast all'import con messaggio diagnostico
 def _validate_pool_params() -> None:
     errors = []
     if _POOL_MIN < 0:
@@ -139,9 +139,9 @@ def _get_pool() -> psycopg2.pool.ThreadedConnectionPool:
     if _pool is None or _pool.closed:
         with _pool_lock:
             if _pool is None or _pool.closed:
-                # C7: GUC per-connection via startup `options` parameter.
-                # -c search_path=...   → schema predefinito
-                # -c idle_in_transaction_session_timeout=Nms → zombie guard
+                # C7: GUC per-connection via startup `options` parameter
+                # c search_path=... → schema predefinito
+                # c idle_in_transaction_session_timeout=Nms → zombie guard
                 opts = [f"-c search_path={_DB_SCHEMA},public"]
                 if _IDLE_IN_TRANSACTION_MS > 0:
                     opts.append(
@@ -158,9 +158,9 @@ def _get_pool() -> psycopg2.pool.ThreadedConnectionPool:
                 # formula del docstring modulo: N_processi = uvicorn_workers
                 # + celery_concurrency + 1 (beat). Il parent celery NON
                 # viene conteggiato perche' non emette query PG in prod
-                # (e' solo coordinator; i query vanno attraverso le child
+                # e' solo coordinator; i query vanno attraverso le child
                 # prefork). Se UVICORN_WORKERS/CELERY_CONCURRENCY non sono
-                # in env, fallback conservativo a 1 uvicorn + 0 celery.
+                # in env, fallback conservativo a 1 uvicorn + 0 celery
                 try:
                     uvi = _read_int_env("UVICORN_WORKERS", 1)
                     cel = _read_int_env("CELERY_CONCURRENCY", 0)
@@ -212,7 +212,7 @@ def close_connection():
     """No-op per PostgreSQL: il pool gestisce le connessioni.
 
     Mantiene compatibilità con DBConnectionCleanupMiddleware che chiama
-    close_connection() dopo ogni request. Con il pool non serve chiudere
+    close_connection dopo ogni request. Con il pool non serve chiudere
     esplicitamente — la connessione viene restituita al pool automaticamente.
     """
     pass
@@ -222,7 +222,7 @@ def close_connection():
 class PoolHeadroom:
     """Snapshot tipato del pool psycopg2 per /ready diagnostic.
 
-    BE-GO-READY-BOOTSTRAP-ENGINE-010: incapsula i campi prima esposti
+     incapsula i campi prima esposti
     via accesso ai simboli privati `_get_pool` / `_POOL_MAX`. Il
     chiamante (`app.observability.health.check_pool_headroom`) consuma
     questo dataclass invece di toccare gli internals di psycopg2.
@@ -250,7 +250,7 @@ class PoolHeadroom:
 def get_pool_headroom() -> PoolHeadroom:
     """Public typed accessor sul pool headroom diagnostic.
 
-    Lazy-init del pool al primo uso (delegato a `_get_pool()`).
+    Lazy-init del pool al primo uso (delegato a `_get_pool`).
     Best-effort sull'introspezione: usa `getattr(...)` con default
     vuoto sui due attribute privati di `psycopg2.pool.ThreadedConnectionPool`
     (`_used`, `_pool`) — psycopg2 non espone API ufficiale per
@@ -330,9 +330,9 @@ def execute(sql: str, params: tuple = ()):
         with conn.cursor() as cur:
             cur.execute(sql, params)
             conn.commit()
-            # Wrapper minimale che espone solo `rowcount` + `fetchone()`
+            # Wrapper minimale che espone solo `rowcount` + `fetchone`
             # ai chiamanti che storicamente usavano un cursor
-            # post-commit. La connessione viene rilasciata dal `finally`.
+            # post-commit. La connessione viene rilasciata dal `finally`
             class _Result:
                 def __init__(self, rc):
                     self.rowcount = rc
@@ -366,7 +366,7 @@ def transaction():
     """Context manager per transazioni esplicite.
 
     Uso:
-        with transaction() as conn:
+        with transaction as conn:
             conn.execute("INSERT ...")
             conn.execute("UPDATE ...")
         # auto-commit alla fine, rollback su exception

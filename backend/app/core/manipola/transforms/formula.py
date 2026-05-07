@@ -19,8 +19,8 @@ DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
 
 # COLONNA CALCOLATA (FORMULA) — Validazione AST anti-RCE
 
-# Attributi pandas "safe" che le formule possono chiamare (es. col.str.upper()).
-# Tutto ciò che NON è in questa whitelist viene rifiutato dall'AST validator.
+# Attributi pandas "safe" che le formule possono chiamare (es. col.str.upper
+# Tutto ciò che NON è in questa whitelist viene rifiutato dall'AST validator
 _SAFE_PANDAS_ATTRS = frozenset({
     # Series.str.*
     "str", "upper", "lower", "strip", "lstrip", "rstrip", "replace", "contains",
@@ -39,28 +39,25 @@ _SAFE_PANDAS_ATTRS = frozenset({
     "concat", "cut", "qcut",
 })
 
-# Nomi AST ammessi (whitelist positiva).
-#
-# Ogni nodo che appare nell'AST di una formula deve essere in questo set,
+# Nomi AST ammessi (whitelist positiva
+# Ogni nodo che appare nell'AST di una formula deve essere in questo set
 # altrimenti la formula viene rifiutata. Whitelist e' piu' sicura di
 # blocklist: i nodi futuri/esotici (walrus, match-case, f-string con
 # expression embed, comprehension con gadget chain, lambda, ecc.) sono
-# rifiutati per default.
-#
-# Include:
-#   - wrapper (Expression, Load)
-#   - riferimenti (Constant, Name, Attribute, keyword per kwargs)
-#   - chiamate (Call)
-#   - operatori (BinOp, UnaryOp, BoolOp, Compare)
-#   - tutti gli operator types (Add, Sub, Mult, ..., Eq, Lt, ..., And, Or, Not)
-#
-# NON include (consapevolmente):
-#   - Lambda, FunctionDef, ClassDef, AsyncFunctionDef
-#   - ListComp, SetComp, DictComp, GeneratorExp
-#   - NamedExpr (walrus), JoinedStr/FormattedValue (f-string)
-#   - IfExp (ternary), Subscript, Slice
-#   - List, Tuple, Set, Dict literal
-#   - Import, ImportFrom, Global, Nonlocal, Delete, Yield, Await, Try
+# rifiutati per default
+# Include
+# wrapper (Expression, Load
+# riferimenti (Constant, Name, Attribute, keyword per kwargs
+# chiamate (Call
+# operatori (BinOp, UnaryOp, BoolOp, Compare
+# tutti gli operator types (Add, Sub, Mult, ..., Eq, Lt, ..., And, Or, Not
+# NON include (consapevolmente
+# Lambda, FunctionDef, ClassDef, AsyncFunctionDef
+# ListComp, SetComp, DictComp, GeneratorExp
+# NamedExpr (walrus), JoinedStr/FormattedValue (f-string
+# IfExp (ternary), Subscript, Slice
+# List, Tuple, Set, Dict literal
+# Import, ImportFrom, Global, Nonlocal, Delete, Yield, Await, Try
 _ALLOWED_AST_NODES = frozenset({
     # Wrappers / context
     "Expression", "Load",
@@ -77,7 +74,7 @@ _ALLOWED_AST_NODES = frozenset({
     "USub", "UAdd", "Not", "Invert",
     # BoolOp operators
     "And", "Or",
-    # Compare operators (Is/IsNot/In/NotIn esclusi consapevolmente)
+    # Compare operators (Is/IsNot/In/NotIn esclusi consapevolmente
     "Eq", "NotEq", "Lt", "LtE", "Gt", "GtE",
 })
 
@@ -91,7 +88,7 @@ _FORBIDDEN_ATTR_NAMES = frozenset({
 })
 
 # Nomi builtin vietati come ast.Name (aggirerebbero __builtins__={}
-# se l'utente avesse una colonna con lo stesso nome).
+# se l'utente avesse una colonna con lo stesso nome
 _FORBIDDEN_NAMES = frozenset({
     "__import__", "__builtins__", "eval", "exec",
     "compile", "open", "getattr", "setattr", "delattr",
@@ -112,7 +109,7 @@ def _validate_formula_ast(formula: str) -> None:
     colonne.
 
     Solleva ValueError se la formula contiene costrutti non sicuri.
-    Chiamata PRIMA di eval() in op_formula().
+    Chiamata PRIMA di eval in op_formula.
     """
     try:
         tree = _ast.parse(formula, mode="eval")
@@ -150,8 +147,8 @@ def _validate_formula_ast(formula: str) -> None:
             )
 
 
-# COLONNA CALCOLATA (FORMULA)
-# Aggiunge colonna con espressione Python/Pandas valutata per riga.
+# COLONNA CALCOLATA (FORMULA
+# Aggiunge colonna con espressione Python/Pandas valutata per riga
 
 def op_formula(
     df: DataFrame,
@@ -162,8 +159,8 @@ def op_formula(
     Crea una nuova colonna calcolata con un'espressione.
 
     Strategia di valutazione (in ordine):
-    1. pandas.eval() — veloce, sicuro, gestisce operazioni vettoriali
-    2. eval() con namespace colonne — fallback per espressioni pandas.eval non regge
+    1. pandas.eval — veloce, sicuro, gestisce operazioni vettoriali
+    2. eval con namespace colonne — fallback per espressioni pandas.eval non regge
        Le colonne vengono passate come variabili locali, non sostituite nel testo.
        Le colonne object vengono auto-convertite a numerico dove possibile.
 
@@ -187,7 +184,7 @@ def op_formula(
     # validator blocca gia' i builtin pericolosi come ast.Name, ma evitiamo
     # comunque di esporre nomi strani nel namespace: se un attacker riuscisse
     # a iniettare una colonna chiamata come un builtin o un dunder, non
-    # entrerebbe comunque nelle variabili dell'eval.
+    # entrerebbe comunque nelle variabili dell'eval
     unsafe_cols = [c for c in result.columns if isinstance(c, str) and c.startswith("_")]
     if unsafe_cols:
         logger.warning(
@@ -204,11 +201,11 @@ def op_formula(
         # configurazioni puo' valutare attribute access / call: senza gate AST
         # davanti, un payload malicioso potrebbe sfuggire al solo controllo
         # del fallback path. Spostando il validator qui copriamo entrambi i
-        # tentativi con la stessa whitelist.
+        # tentativi con la stessa whitelist
         _validate_formula_ast(formula)
 
-        # Gestisce espressioni matematiche e booleane vettoriali.
-        # Non regge per: metodi stringa (.str.upper()), concatenazioni con costanti stringa.
+        # Gestisce espressioni matematiche e booleane vettoriali
+        # Non regge per: metodi stringa (.str.upper), concatenazioni con costanti stringa
         try:
             result[new_column] = eval_df.eval(formula)
             logger.info(f"Formula (pandas.eval) ok: '{new_column}'")
@@ -219,19 +216,19 @@ def op_formula(
                 f"eval() con namespace colonne: {_pd_eval_err}"
             )
 
-        # Passa le colonne come variabili locali — nessuna sostituzione nel testo della formula.
-        # Auto-conversione a numerico per colonne object (es. CSV importato come stringa).
+        # Passa le colonne come variabili locali — nessuna sostituzione nel testo della formula
+        # Auto-conversione a numerico per colonne object (es. CSV importato come stringa
         local_vars = {}
         for col in eval_df.columns:
             series = eval_df[col]
             if series.dtype == 'object':
-                # Prova conversione a numerico (gestisce formato IT: 1.234,56)
+                # Prova conversione a numerico (gestisce formato IT: 1.234,56
                 converted = pd.to_numeric(series, errors='coerce')
                 nan_ratio = converted.isna().sum() / max(len(converted), 1)
                 original_na = series.isna().sum() / max(len(series), 1)
                 if nan_ratio - original_na > 0.3:
                     # Troppi NaN nuovi → prova formato italiano
-                    # Single-pass regex: rimuove €$ e separatori migliaia, converte , in .
+                    # Single-pass regex: rimuove €$ e separatori migliaia, converte , in
                     cleaned = (
                         series.astype(str)
                         .str.strip()
@@ -248,8 +245,8 @@ def op_formula(
             else:
                 local_vars[col] = series
 
-        # SECURITY: validazione AST gia' eseguita all'inizio del try (sopra),
-        # prima di qualsiasi engine eval. Niente da rifare qui.
+        # SECURITY: validazione AST gia' eseguita all'inizio del try (sopra
+        # prima di qualsiasi engine eval. Niente da rifare qui
         result[new_column] = eval(formula, {"__builtins__": {}, "pd": pd}, local_vars)
         logger.info(f"Formula (eval namespace) ok: '{new_column}'")
         return result
@@ -258,7 +255,7 @@ def op_formula(
     # bloccata per security, runtime error) solleva ValueError con
     # messaggio safe. Dettaglio tecnico preservato nel logger.warning
     # server-side. Security-win (audit §7.5): il blocco AST validator
-    # ora e' visibile all'utente invece di silent "non ha effetto".
+    # ora e' visibile all'utente invece di silent "non ha effetto"
     except Exception as e:
         logger.warning(f"[GESTITO] Formula '{formula}' non valida: {e}")
         raise ValueError(

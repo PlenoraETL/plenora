@@ -1,7 +1,6 @@
 """
 Auth in-memory rate-limit fallback — typed boundary.
 
-BE-GO-READY-AUTH-ENGINE-002-RATE-LIMIT-FALLBACK-EXTRACTION.
 """
 
 from __future__ import annotations
@@ -44,7 +43,7 @@ class InMemoryRateLimitFallback:
         lock: re-entrant-safe lock around `failed_attempts`. Tests
             acquire this directly via the auth.py alias to clear
             state cooperatively.
-        failed_attempts: per-IP list of `time.monotonic()`
+        failed_attempts: per-IP list of `time.monotonic`
             timestamps for failed login attempts within (or recently
             within) the sliding window. Pruned on every `check`.
 
@@ -105,17 +104,17 @@ class InMemoryRateLimitFallback:
 
 
 # Module-level singleton: shared across all callers, aliased in
-# `auth.py` for test compatibility.
+# `auth.py` for test compatibility
 _STORE = InMemoryRateLimitFallback()
 
 
 # Module-level functional wrappers
-# Useful when callers want a plain callable (e.g.
-# `login_rate_limiter.check_rate_limit(..., fallback=<callable>)`).
+# Useful when callers want a plain callable (e.g
+# `login_rate_limiter.check_rate_limit(..., fallback=<callable>)`
 # `record_failed_login_in_memory` and `clear_failed_logins_in_memory`
-# match the (ip: str) -> None signature expected by the limiter.
+# match the (ip: str) -> None signature expected by the limiter
 # `check_rate_limit_in_memory` requires thresholds: callers compose
-# a thin closure (or use the auth.py wrapper that already does).
+# a thin closure (or use the auth.py wrapper that already does
 
 
 def check_rate_limit_in_memory(

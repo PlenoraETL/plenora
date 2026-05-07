@@ -87,12 +87,12 @@ def _format_float_stable(v: float) -> str:
 
     Strategia: 6 decimali fissi, strip zeri trailing + punto.
     Esempi:
-        1.23           -> "1.23"
-        1.2300000001   -> "1.23"        (coerente con 1.23 — dedup ok)
-        1.0            -> "1"           (coerente con int 1)
-        0.0            -> "0"
-        1.234567891    -> "1.234568"    (tronca a 6 decimali)
-        -1.23          -> "-1.23"
+        1.23 -> "1.23"
+        1.2300000001 -> "1.23" (coerente con 1.23 — dedup ok)
+        1.0 -> "1" (coerente con int 1)
+        0.0 -> "0"
+        1.234567891 -> "1.234568" (tronca a 6 decimali)
+        -1.23 -> "-1.23"
 
     NaN/Inf gestiti esplicitamente (f"{nan:.6f}" darebbe "nan", ma
     meglio output espliciti per leggibilita' nei log).
@@ -113,13 +113,13 @@ def _normalize_value(v) -> str:
         return v.isoformat()
     import decimal
     if isinstance(v, decimal.Decimal):
-        # N10: Decimal -> float -> formato stabile. Prima era str(float(v))
-        # che e' sensibile a floating-point noise.
+        # N10: Decimal -> float -> formato stabile. Prima era str(float(v
+        # che e' sensibile a floating-point noise
         return _format_float_stable(float(v))
     if isinstance(v, (bytes, bytearray)):
         return f"bytes:{len(v)}"
     # Geometrie Shapely -> WKT (deve venire PRIMA dei check numerici per evitare
-    # che "int" in "Point" / "MultiPoint" triggeri il branch sbagliato)
+    # che "int" in "Point" / "MultiPoint" triggeri il branch sbagliato
     try:
         from shapely.geometry.base import BaseGeometry
         if isinstance(v, BaseGeometry):
@@ -127,7 +127,7 @@ def _normalize_value(v) -> str:
     except ImportError:
         pass
     # Usiamo isinstance invece di substring su __name__ per evitare falsi positivi
-    # es. "int" in "Point" -> True causava TypeError: int() on a Point object
+    # es. "int" in "Point" -> True causava TypeError: int on a Point object
     if isinstance(v, bool):
         return str(v)
     if isinstance(v, int):
@@ -135,7 +135,7 @@ def _normalize_value(v) -> str:
     if isinstance(v, float):
         # N10 (2026-04-17): format stabile via helper condiviso. Prima
         # era str(v) crudo che rompeva la dedup su floating-point noise
-        # (1.23 vs 1.2300000001 producevano hash diversi).
+        # 1.23 vs 1.2300000001 producevano hash diversi
         return _format_float_stable(v)
     return str(v)
 
@@ -172,17 +172,17 @@ def write_node(run_id: str, node_id: str, node_type: str,
         if status == "ok" and rows:
             # Calcola _row_hash per ogni riga. Non serve piu' sanitizzare
             # list/dict/geometry qui: db.write_node_atomic usa _to_jsonable
-            # che gestisce tutti i tipi per la serializzazione in JSONB.
+            # che gestisce tutti i tipi per la serializzazione in JSONB
             col_names_sorted = sorted(col_schema.keys())
             rows_with_hash = [
                 {"_row_hash": compute_row_hash(row, col_names_sorted), **row}
                 for row in rows
             ]
 
-            # A3 (Phase 4): scrittura node_rows + node_meta in singola
+            # A3 : scrittura node_rows + node_meta in singola
             # transazione. Idempotent (DELETE-then-INSERT) e atomic (qualsiasi
             # fallimento rollback-a entrambi). Pre-fix erano due tx separate
-            # con duplicati silenti su retry Celery.
+            # con duplicati silenti su retry Celery
             db.write_node_atomic(
                 run_id=run_id,
                 node_id=node_id,
@@ -198,7 +198,7 @@ def write_node(run_id: str, node_id: str, node_type: str,
             node_hash = compute_aggregate_hash(rows, col_schema)
         else:
             node_hash = hashlib.sha256(b"empty").hexdigest()
-            # Branch error/empty: nessuna riga da scrivere, solo meta.
+            # Branch error/empty: nessuna riga da scrivere, solo meta
             db.upsert_node_meta(
                 run_id=run_id,
                 node_id=node_id,
@@ -223,15 +223,15 @@ def write_node(run_id: str, node_id: str, node_type: str,
     # sintatticamente valido ma semanticamente fake, che contaminava
     # input_hash/output_hash del run e violava l'invariante di determinismo
     # di dedup/replay. I caller attuali wrappano in try/except e swallowano
-    # come "best-effort non bloccante" → effetto macroscopico invariato.
-    # outcome: fail-closed tipizzato.
+    # come "best-effort non bloccante" → effetto macroscopico invariato
+    # outcome: fail-closed tipizzato
     except Exception as e:
         logger.error(
             f"[CRASH] Errore scrittura nodo {node_id} run {run_id}: {e}",
             op="intermediate_write",
             exc_info=True,
         )
-        # Scrive comunque node_meta con errore (resource guard best-effort)
+        # Scrive comunque node_meta con errore (resource guard best-effort
         try:
             db.upsert_node_meta(
                 run_id=run_id,
@@ -290,13 +290,13 @@ def close_run(run_id: str, input_hash: str, output_hash: str,
             op="intermediate_write"
         )
 
-        # N8 (2026-04-17): applica retention FIFO subito dopo chiusura run.
+        # N8 (2026-04-17): applica retention FIFO subito dopo chiusura run
         # Pre-fix: apply_runs_retention era definita ma mai chiamata da
         # alcun callsite -> intermediate.runs + node_meta + node_rows
-        # crescevano indefinitamente causando disk fill nel tempo.
+        # crescevano indefinitamente causando disk fill nel tempo
         # Ora retention FIFO (N run piu' recenti non pinnate, N da
         # projects.retention_n o default 5) viene applicata a ogni
-        # chiusura run. Best-effort: un errore qui non rollbacka l'update.
+        # chiusura run. Best-effort: un errore qui non rollbacka l'update
         try:
             run = db.get_run(run_id)
             if run and run.get("canvas_id"):
@@ -308,12 +308,12 @@ def close_run(run_id: str, input_hash: str, output_hash: str,
                 op="intermediate_write",
             )
 
-    # intent: resource guard — cleanup best-effort (fallback update_run a status=failed)
+    # intent: resource guard — cleanup best-effort (fallback update_run a status=failed
     # + re-raise dell'eccezione originale. Il caller decide il proprio flusso
-    # (Celery task top-level gia' cattura via try/except attorno a idb_close_run).
+    # Celery task top-level gia' cattura via try/except attorno a idb_close_run
     # outcome: fail-closed (chiude il pattern resource guard che pre-fix
     # ingoiava l'errore lasciando la row intermediate.runs in stato ambiguo
-    # rispetto allo stato Celery task).
+    # rispetto allo stato Celery task
     except Exception as e:
         logger.error(
             f"[CRASH] Errore chiusura run {run_id}: {e}",

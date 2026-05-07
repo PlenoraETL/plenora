@@ -19,9 +19,9 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# I 5 layer dello standard IMDF prodotti dal servizio imdf.plenora.it.
+# I 5 layer dello standard IMDF prodotti dal servizio imdf.plenora.it
 # L'ordine e' significativo: Localita > OperaPrincipale > Livello > Locale > Details
-# corrisponde alla gerarchia spaziale (sito → edifici → piani → locali → dettagli).
+# corrisponde alla gerarchia spaziale (sito → edifici → piani → locali → dettagli
 EXPECTED_LAYERS: List[str] = [
     "Localita",
     "OperaPrincipale",
@@ -33,11 +33,11 @@ EXPECTED_LAYERS: List[str] = [
 # Campi gestiti automaticamente da ArcGIS (OBJECTID, GLOBALID, ecc.) e campi
 # calcolati da Esri (Shape_Length, Shape_Area). Vanno esclusi prima di creare
 # uno schema custom o di inviare features in addFeatures, altrimenti l'API
-# ArcGIS lancia errori.
-# BE-IMDF-001: definizione canonica in `app.shared.esri_system_fields`.
+# ArcGIS lancia errori
+# BE-IMDF-001: definizione canonica in `app.shared.esri_system_fields`
 # `ESRI_SYSTEM_FIELDS` resta come alias modulo-level per i caller interni
 # che importano `from app.core.imdf.loader import ESRI_SYSTEM_FIELDS` e
-# per i test che lo monkeypatchano.
+# per i test che lo monkeypatchano
 from app.shared.esri_system_fields import ESRI_SYSTEM_FIELDS_LITERAL as ESRI_SYSTEM_FIELDS
 
 
@@ -46,7 +46,7 @@ class ImdfBundle:
     """Indice dei file dentro uno zip IMDF estratto.
 
     `tmp_dir` e' la directory radice dove l'estrazione e' stata fatta. Il
-    chiamante e' responsabile di chiamare `cleanup()` quando finito.
+    chiamante e' responsabile di chiamare `cleanup` quando finito.
 
     Invariant site_id (D3, R4 — ratificato 2026-04-22):
       Il campo `site_id` e' popolato **esclusivamente** da
@@ -66,7 +66,7 @@ class ImdfBundle:
     """
 
     tmp_dir: Path
-    # Vedi class docstring "Invariant site_id" (D3, R4).
+    # Vedi class docstring "Invariant site_id" (D3, R4
     site_id: str
     gdb_path: Optional[Path] = None
     ifc_path: Optional[Path] = None
@@ -118,9 +118,9 @@ def extract_imdf_zip(zip_path: str | os.PathLike, dest_dir: Optional[str | os.Pa
     # Distinguiamo "abbiamo creato noi la tmp dir" da "il caller l'ha
     # passata": solo nel primo caso siamo noi responsabili del cleanup
     # in caso di errore. Sul path success la responsabilita' del cleanup
-    # passa al caller via `bundle.cleanup()`. Senza il try/except, una
+    # passa al caller via `bundle.cleanup`. Senza il try/except, una
     # eccezione (zipfile corrotto, ValueError IMDF non valido) dopo
-    # `mkdtemp` lascerebbe la tmp dir su disco.
+    # `mkdtemp` lascerebbe la tmp dir su disco
     _we_own_tmp = dest_dir is None
     tmp = Path(dest_dir) if dest_dir else Path(tempfile.mkdtemp(prefix="imdf_"))
     tmp.mkdir(parents=True, exist_ok=True)
@@ -150,21 +150,21 @@ def _build_bundle_index(tmp: Path, members: List[str]) -> "ImdfBundle":
     """
     bundle = ImdfBundle(tmp_dir=tmp, site_id="", raw_filelist=members)
 
-    # Indicizza i contenuti noti.
-    # Convenzione del servizio:
-    #   {SITE_ID}.gdb/             cartella File Geodatabase
-    #   {SITE_ID}.ifc              file IFC al root
-    #   {SITE_ID}/                 cartella IMDF (geojson + manifest IMDF)
-    #   manifest.json              manifest del processing (root)
-    #   validation.json            (root)
-    #   renderers.json             (root)
+    # Indicizza i contenuti noti
+    # Convenzione del servizio
+    # {SITE_ID}.gdb/ cartella File Geodatabase
+    # {SITE_ID}.ifc file IFC al root
+    # {SITE_ID}/ cartella IMDF (geojson + manifest IMDF
+    # manifest.json manifest del processing (root
+    # validation.json (root
+    # renderers.json (root
     site_id_candidates = set()
 
     for m in members:
         p = tmp / m
         # Il GDB e' una "cartella" dentro lo zip: i membri sono path tipo
         # "LO2244.gdb/a00000001.gdbtable". Estraggo il prefisso fino a `.gdb/`
-        # come cartella GDB.
+        # come cartella GDB
         if ".gdb/" in m:
             if bundle.gdb_path is None:
                 top = m.split(".gdb/", 1)[0] + ".gdb"
@@ -254,11 +254,11 @@ def load_imdf_layers(
                 if current and current != target_srid:
                     gdf = gdf.to_crs(epsg=target_srid)
             except Exception:
-                # CRS incompatibile o riproiezione fallita: lascia originale,
-                # il chiamante gestira'.
+                # CRS incompatibile o riproiezione fallita: lascia originale
+                # il chiamante gestira'
                 pass
 
-        # Drop Z (geometrie 3D → 2D)
+        # Drop Z (geometrie 3D → 2D
         if drop_z and len(gdf) > 0:
             def _drop_z(geom):
                 if geom is None or not geom.has_z:
@@ -269,7 +269,7 @@ def load_imdf_layers(
                 gdf = gdf.set_geometry(gdf.geometry.apply(_drop_z))
             except Exception as _ze:
                 # Geometria malformata o shapely senza has_z: lascia GDF
-                # invariato (2D o mix). Non-fatal per il caller.
+                # invariato (2D o mix). Non-fatal per il caller
                 logger.debug(
                     f"drop_z skipped for layer '{layer_name}': {type(_ze).__name__}: {_ze}"
                 )

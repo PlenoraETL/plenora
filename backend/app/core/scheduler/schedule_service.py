@@ -14,11 +14,10 @@ from app.config import settings
 from app.utils.logger import get_logger
 
 
-# FUNZIONE PURA — detect_missed_run (C3 fix 3)
-#
-# Estratta come funzione a livello-modulo (non metodo di ScheduleService)
+# FUNZIONE PURA — detect_missed_run (C3 fix 3
+# Estratta come funzione a livello-modulo (non metodo di ScheduleService
 # per essere banalmente testabile e riusabile dal beat scheduler senza
-# dover istanziare un service completo. Zero side-effect, solo logica.
+# dover istanziare un service completo. Zero side-effect, solo logica
 
 
 def detect_missed_run(
@@ -63,7 +62,7 @@ def detect_missed_run(
     if last_run >= expected_last:
         return None
 
-    # Grace window check: se l'expected_last e' troppo vecchio, skip.
+    # Grace window check: se l'expected_last e' troppo vecchio, skip
     if (now - expected_last).total_seconds() > grace_hours * 3600:
         return None
 
@@ -99,17 +98,15 @@ class ScheduleService:
 
     # LOCK PER-SCHEDULE — Race condition guard
     # mark_as_orphan, set_runtime_status e update_runtime fanno tutti
-    # read-modify-write sul blob `config` (lettura piena, modifica in memoria,
+    # read-modify-write sul blob `config` (lettura piena, modifica in memoria
     # write piena). Senza lock, due thread che operano sullo stesso schedule
     # possono perdere update (es. UI toggle disable mentre Celery fa update_runtime
-    # → la modifica dello UI viene sovrascritta).
-    #
+    # → la modifica dello UI viene sovrascritta
     # I lock sono CLASS-LEVEL: condivisi fra tutte le istanze di ScheduleService
-    # nello stesso processo. Cross-process (es. multi-worker Celery) NON copre,
-    # ma copre il caso comune FastAPI threads + un worker Celery.
-    #
+    # nello stesso processo. Cross-process (es. multi-worker Celery) NON copre
+    # ma copre il caso comune FastAPI threads + un worker Celery
     # RLock per permettere call annidate dallo stesso thread (es. mark_as_orphan
-    # chiamato da check_orphans).
+    # chiamato da check_orphans
     _schedule_locks_lock = threading.Lock()
     _schedule_locks: Dict[str, threading.RLock] = {}
 
@@ -401,7 +398,7 @@ class ScheduleService:
     def check_orphans(self) -> List[str]:
         """Verifica tutti gli schedule e segna come orfani quelli con progetto eliminato.
 
-        Fix N+1: era un loop con project_exists() per ogni schedule. Ora fa una
+        Fix N+1: era un loop con project_exists per ogni schedule. Ora fa una
         sola query per avere tutti i project_id esistenti.
         """
         import app.db.db_service as _db

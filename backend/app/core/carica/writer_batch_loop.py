@@ -1,7 +1,6 @@
 """
 Helper canonico per il loop batched-insert + progress reporting.
 
-BE-GO-READY-TRANSFORMATION-ENGINE-012-WRITER-BATCH-LOOP-EXTRACT.
 """
 
 from __future__ import annotations
@@ -37,24 +36,24 @@ def run_batched_inserts(
             `BatchProgress.rows_written` / `total_rows`. **Non mutato**
             dal helper — la mutation e' a carico del callback.
         batch_size: dimensione fissa di ogni batch (numero righe).
-        total_batches: numero totale di batch da iterare. Caller
+        total_batches: numero totale di iterare. Caller
             calcola tipicamente come `math.ceil(total_rows / batch_size)`
             (con `0` se `total_rows == 0`).
         start_time: epoch-time del momento di "avvio operazione" usato
             per `BatchProgress.elapsed_seconds`. Il caller possiede
-            il timer (es. `time.time()` raccolto prima di aprire la
+            il timer (es. `time.time` raccolto prima di aprire la
             transazione).
-        process_batch: callable invocato una volta per batch con
+        process_batch: callable invocato una volta per
             `(batch_df, batch_num)`. **Owns**:
               - esecuzione del SQL (tipicamente
                 `self._execute_batch(conn, batch_df, ...)`);
               - mutation di `result.rows_written` /
                 `result.batches_completed` / `result.rows_failed`;
-              - eventuale per-batch try/except (es.
+              - eventuale per-/except (es.
                 `_execute_per_batch` con rollback + reopen connection).
             Le exception propagano: il helper non le cattura.
         report_progress: callable invocato dopo ogni batch (anche
-            in caso di per-batch failure gestito dal callback) con
+            in caso di per-gestito dal callback) con
             `BatchProgress(batch_number, total_batches, rows_written,
             total_rows, elapsed_seconds)`. Tipicamente
             `self.report_progress` del writer.
@@ -66,13 +65,13 @@ def run_batched_inserts(
     Raises:
         Le exception sollevate dal callback `process_batch` propagano
         invariate (no wrapping). Cosi' i context manager dei caller
-        (`engine.begin()`, `engine.connect()`) mantengono il proprio
-        contratto di rollback automatico identico al pre-extraction.
+        (`engine.begin`, `engine.connect`) mantengono il proprio
+        contratto di rollback automatico identico al previous implementation.
 
     Note:
         Se `total_batches == 0` (DataFrame vuoto) il helper e' no-op
         (nessuna iterazione, nessun progress emesso) — coerente col
-        pre-extraction (nessuno dei 6 site originali emetteva
+        previous implementation (nessuno dei 6 site originali emetteva
         `BatchProgress` per zero righe).
     """
     total_rows = len(df)

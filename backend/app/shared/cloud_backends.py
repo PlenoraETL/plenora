@@ -16,7 +16,7 @@ from typing import List, Protocol, TypedDict, runtime_checkable
 logger = logging.getLogger(__name__)
 
 
-# Protocols (interface contract)
+# Protocols (interface contract
 
 
 class ObjectMeta(TypedDict):
@@ -87,12 +87,12 @@ class ObjectStorage(Protocol):
         ...
 
 
-# AWS credential error classification (helper boundary)
+# AWS credential error classification (helper boundary
 
 
 # Messaggio operativo unico per tutti i casi di credenziali AWS scadute o
 # non disponibili. Usato da result_store + admin_backups per uniformare
-# l'errore percepito dall'utente. Mantenere conciso e azionabile.
+# l'errore percepito dall'utente. Mantenere conciso e azionabile
 _AWS_CREDENTIALS_ERROR_HINT = (
     "AWS credentials expired/unavailable. "
     "Run 'aws sso login' or refresh AWS credentials, then retry."
@@ -132,7 +132,7 @@ def aws_credentials_error_message(exc: BaseException) -> "str | None":
         )
     except ImportError:
         # botocore non installato: il caller probabilmente non sta neanche
-        # entrando in questo path; nessuna classificazione possibile.
+        # entrando in questo path; nessuna classificazione possibile
         return None
 
     credential_error_types = (
@@ -146,12 +146,12 @@ def aws_credentials_error_message(exc: BaseException) -> "str | None":
     if isinstance(exc, credential_error_types):
         return _AWS_CREDENTIALS_ERROR_HINT
 
-    # AccessDeniedException con messaggio refresh-token-expired:
+    # AccessDeniedException con messaggio refresh-token-expired
     # botocore wrappa la risposta SSO in ClientError con Error.Code =
     # 'AccessDeniedException' e Message che cita 'refresh token has expired'
-    # o 'CreateOAuth2Token'. Riconosciamo solo questa combinazione:
-    # un AccessDenied "vero" su una API S3 (es. policy bucket sbagliata)
-    # NON deve essere mappato come credenziali scadute.
+    # o 'CreateOAuth2Token'. Riconosciamo solo questa combinazione
+    # un AccessDenied "vero" su una API S3 (es. policy bucket sbagliata
+    # NON deve essere mappato come credenziali scadute
     if isinstance(exc, ClientError):
         err = getattr(exc, "response", {}) or {}
         info = err.get("Error", {}) or {}
@@ -292,7 +292,6 @@ class AwsS3ObjectStorage:
     def _readiness_client(self, timeout_seconds: int):
         """Boto3 client con timeout bounded e retry singolo, per /ready.
 
-        BE-GO-READY-OPS-002-READINESS-PG-OBJECTSTORE-TIMEOUTS: il client
         runtime usa i default boto3 (60s connect, 60s read, 3 retry) che
         sommati possono superare i 6 minuti su un endpoint hung. Il
         readiness path usa invece un client one-shot bounded.
@@ -340,10 +339,10 @@ class MinioObjectStorage(AwsS3ObjectStorage):
     Riusa `AwsS3ObjectStorage` per tutti gli operatori S3 (list/upload/
     download/delete/stream). Override minimi:
 
-    - `_client()`: passa `endpoint_url` + credenziali esplicite +
+    - `_client`: passa `endpoint_url` + credenziali esplicite +
       `addressing_style=path` (MinIO non supporta virtual-hosted style
       per default).
-    - `_extra_args()`: rimuove `ServerSideEncryption` dal default. MinIO
+    - `_extra_args`: rimuove `ServerSideEncryption` dal default. MinIO
       vanilla non ha SSE configurato (richiede integrazione KES o
       auto-encryption abilitata lato bucket); forzarlo a livello client
       romperebbe l'upload su deploy minimi. Ops puo' abilitare SSE a
@@ -418,11 +417,11 @@ def get_secrets_backend() -> SecretsBackend:
       CLOUD_PROVIDER=aws (default)
         AWS_REGION (default eu-south-1)
 
-      CLOUD_PROVIDER=azure  (future)
+      CLOUD_PROVIDER=azure (future)
         AZURE_KEY_VAULT_URL
         AZURE_TENANT_ID / credenziali Managed Identity
 
-      CLOUD_PROVIDER=gcp    (future)
+      CLOUD_PROVIDER=gcp (future)
         GCP_PROJECT
         credenziali Service Account
     """
@@ -432,40 +431,37 @@ def get_secrets_backend() -> SecretsBackend:
             region=os.getenv("AWS_REGION", "eu-south-1"),
         )
     if provider == "minio":
-        # MinIO e' solo object storage: non fornisce un secrets backend.
+        # MinIO e' solo object storage: non fornisce un secrets backend
         # Il decoupling di secrets e object storage provider (SECRETS_PROVIDER
         # separato da CLOUD_PROVIDER) e' follow-up fuori A1-B2 (vedi
-        # a1_storage_policy.md §7.3). Per ora: errore esplicito.
+        # a1_storage_policy.md §7.3). Per ora: errore esplicito
         raise ValueError(
             "CLOUD_PROVIDER=minio non supporta SecretsBackend. MinIO e' "
             "solo object storage; secrets richiedono CLOUD_PROVIDER=aws. "
             "Decoupling secrets/object-storage provider e' follow-up A1."
         )
     # TODO: add Azure Key Vault / GCP Secret Manager backends when those
-    # providers are supported by deployment profiles.
+    # providers are supported by deployment profiles
     raise ValueError(f"CLOUD_PROVIDER non supportato: {provider!r}")
 
 
-# Object storage capability (Batch 1.5)
-#
-# Tre factory pubbliche, una per dominio:
-#   - get_runtime_object_storage(): result/file_source/eseguibili/IMDF/intermediate.
-#     Bucket = OBJECT_STORAGE_BUCKET / PLENORA_ARTIFACT_BUCKET / BACKUP_BUCKET (legacy).
-#   - get_backup_object_storage(): admin_backups + scripts/backup_db.py.
-#     Bucket = BACKUP_BUCKET (o legacy BACKUP_S3_BUCKET).
-#   - get_log_archive_storage(): log archive pipeline (gia' separato).
-#     Bucket = LOG_ARCHIVE_BUCKET.
-#
-# Capability globale `OBJECT_STORAGE_ENABLED=false`:
-#   - object_storage_enabled() -> False
-#   - get_runtime_object_storage() / get_backup_object_storage() sollevano
-#     ObjectStorageDisabledError con messaggio operativo
-#   - I caller con fallback locale (IMDF list_bundles cache, file_sources
-#     delete) controllano `object_storage_enabled()` PRIMA di chiamare la
-#     factory, oppure catturano l'eccezione e degradano.
-#
-# `get_object_storage()` legacy resta come wrapper deprecato verso
-# `get_runtime_object_storage()` per non rompere callsite gia' migrati.
+# Object storage capability
+# Tre factory pubbliche, una per dominio
+# get_runtime_object_storage: result/file_source/eseguibili/IMDF/intermediate
+# Bucket = OBJECT_STORAGE_BUCKET / PLENORA_ARTIFACT_BUCKET / BACKUP_BUCKET (legacy
+# get_backup_object_storage: admin_backups + scripts/backup_db.py
+# Bucket = BACKUP_BUCKET (o legacy BACKUP_S3_BUCKET
+# get_log_archive_storage: log archive pipeline (gia' separato
+# Bucket = LOG_ARCHIVE_BUCKET
+# Capability globale `OBJECT_STORAGE_ENABLED=false`
+# object_storage_enabled -> False
+# get_runtime_object_storage / get_backup_object_storage sollevano
+# ObjectStorageDisabledError con messaggio operativo
+# I caller con fallback locale (IMDF list_bundles cache, file_sources
+# delete) controllano `object_storage_enabled` PRIMA di chiamare la
+# factory, oppure catturano l'eccezione e degradano
+# `get_object_storage` legacy resta come wrapper deprecato verso
+# `get_runtime_object_storage` per non rompere callsite gia' migrati
 
 
 class ObjectStorageDisabledError(RuntimeError):
@@ -485,7 +481,7 @@ def _read_object_storage_capability() -> dict:
     Usa `os.getenv` direttamente (con default coerenti con
     `app.config.Settings.DEFAULTS`) per non dipendere dal singleton
     Settings: alcuni test patchano `app.config.settings` con stub
-    minimali che non implementano `.get()`. La capability deve restare
+    minimali che non implementano `.get`. La capability deve restare
     valutabile in quei contesti senza false positive.
 
     Fallback a CLOUD_PROVIDER quando `OBJECT_STORAGE_BACKEND` non e'
@@ -493,7 +489,7 @@ def _read_object_storage_capability() -> dict:
     """
     enabled_raw = os.getenv("OBJECT_STORAGE_ENABLED")
     if enabled_raw is None:
-        enabled = True  # Default DEFAULTS["OBJECT_STORAGE_ENABLED"]
+        enabled = True  # Default DEFAULTS["OBJECT_STORAGE_ENABLED"
     else:
         enabled = str(enabled_raw).strip().lower() in ("true", "1", "yes")
 
@@ -530,7 +526,7 @@ def _resolve_runtime_bucket() -> "str | None":
 
     Priorita':
       1. OBJECT_STORAGE_BUCKET (canonical, distinto da BACKUP_BUCKET)
-      2. PLENORA_ARTIFACT_BUCKET (alias, Batch 1 prep)
+      2. PLENORA_ARTIFACT_BUCKET (alias, prep)
       3. BACKUP_BUCKET / BACKUP_S3_BUCKET (retro-compat con WARNING:
          deployment legacy che usavano lo stesso bucket per backup e
          runtime artifact)
@@ -571,7 +567,7 @@ def _build_object_storage(bucket: str, *, region_default: str) -> ObjectStorage:
 
     Riusa la classificazione `_get_provider` esistente per backward
     compat: `aws -> AwsS3ObjectStorage`, `minio -> MinioObjectStorage`.
-    Caller assicura `object_storage_enabled()=True` prima di chiamare.
+    Caller assicura `object_storage_enabled=True` prima di chiamare.
     """
     provider = _get_provider()
     if provider == "aws":
@@ -607,7 +603,7 @@ def get_runtime_object_storage() -> ObjectStorage:
 
     Bucket:
       - OBJECT_STORAGE_BUCKET (canonical)
-      - PLENORA_ARTIFACT_BUCKET (alias, Batch 1)
+      - PLENORA_ARTIFACT_BUCKET (alias, )
       - BACKUP_BUCKET (legacy fallback con warning)
     """
     if not object_storage_enabled():
@@ -660,7 +656,7 @@ def _warn_get_object_storage_deprecated_once() -> None:
     """Emit-once warning per ``get_object_storage`` (R-22, 2026-05-01).
 
     Cache LRU per non spammare il logger ops in caller hot-path. Per i
-    test: ``_warn_get_object_storage_deprecated_once.cache_clear()``.
+    test: ``_warn_get_object_storage_deprecated_once.cache_clear``.
     """
     import warnings as _warnings
     msg = (
@@ -676,9 +672,9 @@ def get_object_storage() -> ObjectStorage:
     """[DEPRECATED] Alias di `get_runtime_object_storage`.
 
     Mantenuto come compat shim per i callsite gia' migrati nei batch
-    precedenti che non distinguevano runtime vs backup. Da Batch 1.5
-    in poi i nuovi callsite devono usare `get_runtime_object_storage()`
-    o `get_backup_object_storage()` esplicitamente. Behavior identico
+    precedenti che non distinguevano runtime vs backup. Da
+    in poi i nuovi callsite devono usare `get_runtime_object_storage`
+    o `get_backup_object_storage` esplicitamente. Behavior identico
     a `get_runtime_object_storage` (capability check + runtime bucket
     resolution con fallback BACKUP_BUCKET legacy).
 
@@ -691,11 +687,11 @@ def get_object_storage() -> ObjectStorage:
         AWS_REGION (default eu-south-1)
 
       CLOUD_PROVIDER=minio (A1-B2, ADR-0015)
-        BACKUP_BUCKET          — required
-        MINIO_ENDPOINT_URL     — required (es. http://minio.internal:9000)
-        MINIO_ACCESS_KEY       — required
-        MINIO_SECRET_KEY       — required
-        AWS_REGION             — default us-east-1 (MinIO ignora region)
+        BACKUP_BUCKET — required
+        MINIO_ENDPOINT_URL — required (es. http://minio.internal:9000)
+        MINIO_ACCESS_KEY — required
+        MINIO_SECRET_KEY — required
+        AWS_REGION — default us-east-1 (MinIO ignora region)
     """
     _warn_get_object_storage_deprecated_once()
     return get_runtime_object_storage()
@@ -718,9 +714,9 @@ def get_log_archive_storage() -> ObjectStorage:
 
     Config via env:
       CLOUD_PROVIDER=aws (default)
-        LOG_ARCHIVE_BUCKET  — required (nessun fallback legacy: per
+        LOG_ARCHIVE_BUCKET — required (nessun fallback legacy: per
                               design il bucket archive e' nuovo)
-        AWS_REGION          — default eu-south-1
+        AWS_REGION — default eu-south-1
     """
     provider = _get_provider()
     if provider == "aws":
@@ -734,19 +730,19 @@ def get_log_archive_storage() -> ObjectStorage:
             bucket=bucket,
             region=os.getenv("AWS_REGION", "eu-south-1"),
         )
-    # Estendere qui per Azure / GCP (stesso pattern di get_object_storage).
+    # Estendere qui per Azure / GCP (stesso pattern di get_object_storage
     raise ValueError(f"CLOUD_PROVIDER non supportato: {provider!r}")
 
 
-# Storage policy — boot-time validation (A1)
+# Storage policy — boot-time validation (A1
 
 
 VALID_STORAGE_POLICIES = ("db", "object_storage", "hybrid")
-# Provider effettivamente implementati in cloud_backends.
+# Provider effettivamente implementati in cloud_backends
 IMPLEMENTED_PROVIDERS = ("aws", "minio", "none")
 # Provider noti all'enum (inclusi quelli roadmap P1/P2): dichiararli e'
 # accettato in validate_storage_config solo se policy=db (= bucket non
-# consultato), altrimenti fail-fast perche' la factory non li costruisce.
+# consultato), altrimenti fail-fast perche' la factory non li costruisce
 KNOWN_PROVIDERS = ("aws", "minio", "azure", "gcp", "none")
 
 
@@ -765,7 +761,7 @@ def validate_storage_config() -> None:
 
     Verifica la sola **coerenza di config**, mai la raggiungibilita'
     del provider (nessun probe di rete). Chiamata da `app.main` subito
-    dopo `settings.validate_startup()`.
+    dopo `settings.validate_startup`.
 
     Controlli:
       1. STORAGE_POLICY in {db, object_storage, hybrid}
@@ -789,13 +785,13 @@ def validate_storage_config() -> None:
         # NOTA (BE-CONFIG-001E + ADR-0021 allowlist): `os.getenv` diretto
         # per design — questo helper e' un boot-time fail-fast validator
         # che deve distinguere "user ha settato l'env" da "user non l'ha
-        # settato". Settings.get() applicherebbe `_converti_tipo_env` che
-        # silently swallowa valori malformati e ritorna il default,
+        # settato". Settings.get applicherebbe `_converti_tipo_env` che
+        # silently swallowa valori malformati e ritorna il default
         # rompendo il fail-fast su typo (es. `LOG_ARCHIVE_BATCH_ROWS=abc`
         # passerebbe il boot, e in produzione l'archive userebbe 10000
         # invece di crashare loud al boot). Il runtime path consuma il
         # valore via `settings.LOG_ARCHIVE_BATCH_ROWS` property come da
-        # ADR-0021.
+        # ADR-0021
         raw = os.getenv(name)
         if raw is None:
             return
@@ -831,7 +827,7 @@ def validate_storage_config() -> None:
 
     if policy == "db":
         # NOTE: non-blocking: bucket + provider cloud settati ma policy=db
-        # probabilmente e' cut-paste da altro env. Policy rispettata.
+        # probabilmente e' cut-paste da altro env. Policy rispettata
         if bucket and provider != "none":
             logger.warning(
                 f"[BOOT] STORAGE_POLICY=db ma CLOUD_PROVIDER={provider!r} e "
@@ -853,10 +849,10 @@ def validate_storage_config() -> None:
                 "ma ne' BACKUP_BUCKET ne' BACKUP_S3_BUCKET (legacy) sono "
                 "configurati."
             )
-        # Policy `object_storage` richiede bucket runtime esplicito:
+        # Policy `object_storage` richiede bucket runtime esplicito
         # niente fallback silenzioso su BACKUP_BUCKET (semanticamente
         # diverso, IAM/lifecycle distinti). Con `hybrid` il fallback
-        # NOTE: legacy resta consentito per retro-compat dev/test.
+        # NOTE: legacy resta consentito per retro-compat dev/test
         if policy == "object_storage":
             runtime_bucket = (
                 os.getenv("OBJECT_STORAGE_BUCKET")
@@ -873,8 +869,8 @@ def validate_storage_config() -> None:
                     "cambia policy a hybrid."
                 )
             # OBJECT_STORAGE_ENABLED deve essere true: senza la capability
-            # i writer dei nuovi result fallirebbero comunque al primo upload,
-            # meglio fail-fast al boot con messaggio operativo.
+            # i writer dei nuovi result fallirebbero comunque al primo upload
+            # meglio fail-fast al boot con messaggio operativo
             enabled_raw = (os.getenv("OBJECT_STORAGE_ENABLED") or "true").strip().lower()
             if enabled_raw not in ("true", "1", "yes"):
                 _fail(
@@ -884,7 +880,7 @@ def validate_storage_config() -> None:
                     "IMDF/intermediate) non e' operativo. Abilita la "
                     "capability o cambia policy a db/hybrid."
                 )
-        # A1-B2: MinIO richiede credenziali esplicite + endpoint (no IAM chain).
+        # A1-B2: MinIO richiede credenziali esplicite + endpoint (no IAM chain
         if provider == "minio":
             for name in (
                 "MINIO_ENDPOINT_URL",
@@ -896,18 +892,18 @@ def validate_storage_config() -> None:
                         f"CLOUD_PROVIDER=minio richiede {name} configurato."
                     )
 
-    # Soglie dispatch: solo hybrid le consulta effettivamente.
+    # Soglie dispatch: solo hybrid le consulta effettivamente
     if policy == "hybrid":
         _check_positive_int("RESULT_S3_THRESHOLD_BYTES")
         _check_positive_int("FILE_SOURCE_S3_THRESHOLD_BYTES")
 
-    # Hard cap DB: attivo in db (primario) e in hybrid (guard ramo DB).
+    # Hard cap DB: attivo in db (primario) e in hybrid (guard ramo DB
     if policy in ("db", "hybrid"):
         _check_positive_int("RESULT_DB_HARD_CAP_BYTES")
 
     archive_enabled_raw = (os.getenv("LOG_ARCHIVE_ENABLED") or "false").strip().lower()
     if archive_enabled_raw in ("true", "1", "yes"):
-        # 1. STORAGE_POLICY deve essere object_storage o hybrid.
+        # 1. STORAGE_POLICY deve essere object_storage o hybrid
         if policy == "db":
             _fail(
                 "LOG_ARCHIVE_ENABLED=true incompatibile con STORAGE_POLICY=db: "
@@ -915,14 +911,14 @@ def validate_storage_config() -> None:
                 "STORAGE_POLICY=object_storage o hybrid, o disabilita "
                 "LOG_ARCHIVE_ENABLED."
             )
-        # 2. CLOUD_PROVIDER reale richiesto.
+        # 2. CLOUD_PROVIDER reale richiesto
         if provider == "none":
             _fail(
                 "LOG_ARCHIVE_ENABLED=true richiede un object storage "
                 "provider, ma CLOUD_PROVIDER=none."
             )
         # 3. LOG_ARCHIVE_BUCKET required (intenzionalmente fuori da
-        #    Settings.DEFAULTS, required-if-enabled per design A3).
+        # Settings.DEFAULTS, required-if-enabled per design A3
         log_archive_bucket = os.getenv("LOG_ARCHIVE_BUCKET")
         if not log_archive_bucket:
             _fail(
@@ -930,36 +926,36 @@ def validate_storage_config() -> None:
                 "configurato (bucket dedicato archive, distinto da "
                 "BACKUP_BUCKET)."
             )
-        # 4. Bucket archive distinto da BACKUP_BUCKET/BACKUP_S3_BUCKET:
-        #    IAM boundary (O-ARC §5.4, ADR-0014 §A3). A questo punto
-        #    `bucket` e' guaranteed truthy: regola 1 ha escluso policy=db,
-        #    e il ramo A1 else-branch (riga 395) fallisce gia' se bucket
-        #    e' unset con policy != db.
+        # 4. Bucket archive distinto da BACKUP_BUCKET/BACKUP_S3_BUCKET
+        # IAM boundary (O-ARC §5.4, ADR-0014 §A3). A questo punto
+        # `bucket` e' guaranteed truthy: regola 1 ha escluso policy=db
+        # e il ramo A1 else-branch (riga 395) fallisce gia' se bucket
+        # e' unset con policy != db
         if log_archive_bucket == bucket:
             _fail(
                 f"LOG_ARCHIVE_BUCKET={log_archive_bucket!r} coincide con "
                 "BACKUP_BUCKET/BACKUP_S3_BUCKET: IAM boundary richiesto "
                 "distinto per archive log vs backup DB (O-ARC §5.4)."
             )
-        # 5. Formato key prefix (se settata): vuoto o endswith "/".
-        #    Coerente con log_archive._build_object_key:206-209.
+        # 5. Formato key prefix (se settata): vuoto o endswith "/"
+        # Coerente con log_archive._build_object_key:206-209
         # NOTA (BE-CONFIG-001E + ADR-0021): `os.getenv` diretto per design
         # boot-time fail-fast (vedi `_check_positive_int`). Runtime via
-        # `settings.LOG_ARCHIVE_KEY_PREFIX` property.
+        # `settings.LOG_ARCHIVE_KEY_PREFIX` property
         log_archive_prefix = os.getenv("LOG_ARCHIVE_KEY_PREFIX")
         if log_archive_prefix and not log_archive_prefix.endswith("/"):
             _fail(
                 f"LOG_ARCHIVE_KEY_PREFIX={log_archive_prefix!r} non valido: "
                 "deve essere vuoto oppure terminare con '/'."
             )
-        # 6. Batch rows > 0 (riusa helper esistente).
+        # 6. > 0 (riusa helper esistente
         _check_positive_int("LOG_ARCHIVE_BATCH_ROWS")
         # 7. AUDIT_RETENTION_DAYS >= 0 (inline parse: _check_positive_int
-        #    rigetta 0, ma qui 0 = retention disabilitata e' legittimo,
-        #    simmetrico a SCHEDULE_LOGS_RETENTION_DAYS).
+        # rigetta 0, ma qui 0 = retention disabilitata e' legittimo
+        # simmetrico a SCHEDULE_LOGS_RETENTION_DAYS
         # NOTA (BE-CONFIG-001E + ADR-0021): `os.getenv` diretto per design
         # boot-time fail-fast (vedi `_check_positive_int`). Runtime via
-        # `settings.AUDIT_RETENTION_DAYS` property.
+        # `settings.AUDIT_RETENTION_DAYS` property
         audit_retention_raw = os.getenv("AUDIT_RETENTION_DAYS")
         if audit_retention_raw is not None:
             try:

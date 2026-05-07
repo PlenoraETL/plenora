@@ -25,16 +25,13 @@ from app.utils.template_variables import process_static_fields
 from .plugin_executor import get_executor
 from .source_loading import load_file_sources
 
-from app.shared.execution.graph import kahn_topological_order, GraphCycleError  # BE-GO-READY-ARCH-060-W4
-from app.shared.execution.canvas_graph import CanvasGraph  # BE-GO-READY-ARCH-059-W2
 
 logger = get_logger(__name__)
 
-# BE-GO-READY-TRANSFORMATION-ENGINE-002-MULTI-JOIN-ROW-ESTIMATE:
-# stage identifier per il guard OOM pre-merge del multi-join.
-# Estende la family `manipola_*` (cross-join: `manipola_cross_join`).
+# stage identifier per il guard OOM pre-merge del multi-join
+# Estende la family `manipola_*` (cross-join: `manipola_cross_join`
 # Il handler in app/main.py riconosce questo stage come row-count
-# stage e produce messaggio + suggested_action row-count-aware.
+# stage e produce messaggio + suggested_action row-count-aware
 MULTI_JOIN_STAGE = "manipola_multi_join"
 
 
@@ -84,20 +81,17 @@ def _estimate_merge_output_rows(
 
 
 # C3 round 3 fix 3: cycle detection runtime cross-project
-#
 # Thread-local chain di project_id attualmente in esecuzione. Usata come
 # defense-in-depth contro cicli nei project_source: se _carica_sorgenti_progetto
 # sta per invocare orchestrator_callback su un progetto gia' presente nella
 # chain, stiamo chiudendo un ciclo A→B→A → ProjectLineageCycleError con chain
-# readable.
-#
+# readable
 # Why threading.local: ogni worker Celery gira i suoi task in thread/processo
 # separato; il chain e' per-thread cosi' due esecuzioni parallele non si
-# vedono a vicenda.
-#
+# vedono a vicenda
 # Why runtime check in aggiunta al save-time check: ProjectService.update_canvas
 # blocca la creazione di canvas ciclici, ma non copre canvas legacy creati
-# prima del fix, bypass del service (direct DB edit), o race save-vs-execute.
+# prima del fix, bypass del service (direct DB edit), o race save-vs-execute
 _manipola_execution_chain = threading.local()
 
 
@@ -143,9 +137,9 @@ def _applica_crs_da_colonne(df, node_columns, meta=None):
     perdano il CRS perché il CSV non lo preserva.
 
     ``meta`` (optional): pre-built ``ResourceMetadata`` produced by the
-    source-loading path.  When provided the internal construction from
+    source-loading path. When provided the internal construction from
     ``node_columns`` is skipped — metadata travels from the loader rather
-    than being reconstructed here.  ``node_columns`` is still required for
+    than being reconstructed here. ``node_columns`` is still required for
     the legacy fallback path (callers that do not supply ``meta``).
     """
     import geopandas as gpd
@@ -158,7 +152,7 @@ def _applica_crs_da_colonne(df, node_columns, meta=None):
         from app.shared.resources.metadata import ResourceMetadata
         # Normalise alias → name before building ResourceMetadata: after
         # filter_visible_columns the DataFrame uses the alias as the actual
-        # column name, so the lookup must use the same key.
+        # column name, so the lookup must use the same key
         _meta_input = [
             {"name": c.get("alias") or c.get("name", ""), "type": c.get("type", "")}
             for c in (node_columns or [])
@@ -167,7 +161,7 @@ def _applica_crs_da_colonne(df, node_columns, meta=None):
         meta = ResourceMetadata.from_columns_list(_meta_input, source_kind="file")
 
     # Apply CRS only when the geometry column is present in the DataFrame
-    # and carries an explicit EPSG code in the type string.
+    # and carries an explicit EPSG code in the type string
     geom_col = meta.geometry_column if (meta.geometry_column and meta.geometry_column in df.columns) else None
     srid = meta.crs_epsg if geom_col else None
 
@@ -252,16 +246,16 @@ class ManipolaExecutor:
         # C3 round 3 fix 3: push del project_id sulla chain di
         # esecuzione corrente. _carica_sorgenti_progetto verifica la
         # chain prima di chiamare orchestrator_callback per rilevare
-        # cicli A → B → A (defense-in-depth contro canvas legacy).
+        # cicli A → B → A (defense-in-depth contro canvas legacy
         _push_to_execution_chain(project_id)
 
         _step_start = _time.time()
         dataframes = {}
 
         try:
-            # TE-007/008/009: tutti e 3 i loader sono ctx-strict;
+            # TE-007/008/009: tutti e 3 i loader sono ctx-strict
             # `executing_group_id` (da `_init_security_context`) e' l'unico
-            # canale tenant — nessuno stato di istanza coinvolto.
+            # canale tenant — nessuno stato di istanza coinvolto
             for loader in [
                 lambda: self._carica_sorgenti_progetto(canvas, dataframes, force_recalculate, run_id=run_id, group_id=executing_group_id),
                 lambda: self._carica_sorgenti_file(canvas, dataframes, group_id=executing_group_id),
@@ -279,7 +273,7 @@ class ManipolaExecutor:
                     return err
         except ProjectLineageCycleError as cycle_err:
             # Ciclo cross-project rilevato a runtime (defense-in-depth
-            # per canvas legacy che sfuggono al check di update_canvas).
+            # per canvas legacy che sfuggono al check di update_canvas
             logger.error(
                 f"[SECURITY] Ciclo project_source rilevato a runtime: {cycle_err}",
                 op="execute", project_id=project_id,
@@ -319,14 +313,14 @@ class ManipolaExecutor:
 
         current_df = self._applica_group_by(current_df, result_node)
 
-        # Snapshot intermediate.db per il nodo result.
-        # Phase 6 Batch 2 (2026-04-28): passa per `record_final_snapshot`,
+        # Snapshot intermediate.db per il nodo result
+        # passa per `record_final_snapshot`
         # che applica la policy globale `INTERMEDIATE_PERSISTENCE_MODE`
-        # (default `preview_only` -> prime 500 righe + hash + meta).
+        # default `preview_only` -> prime 500 righe + hash + meta
         # Pre-fix: cap fisso a 10.000 righe + write_node legacy che
-        # materializzava `df.head(10k).to_dict(records)` sempre.
+        # materializzava `df.head(10k).to_dict(records)` sempre
         # Post-fix: niente df.to_dict(full); l'hash del DataFrame e' calcolato
-        # via pandas_hash_v1 senza materializzare; preview cap dalla policy.
+        # via pandas_hash_v1 senza materializzare; preview cap dalla policy
         if run_id and current_df is not None:
             try:
                 from app.core.intermediate.snapshot import record_final_snapshot
@@ -348,11 +342,11 @@ class ManipolaExecutor:
 
         # Allinea columns_metadata del progetto allo schema reale del
         # DataFrame finale: senza, l'output file resta corretto ma il
-        # metadata stale rompe il riuso come project_source.
-        # Usa l'helper condiviso (retry transient + raise non-transient):
+        # metadata stale rompe il riuso come project_source
+        # Usa l'helper condiviso (retry transient + raise non-transient
         # i fallimenti propagano a Celery che marca FAILED. Pre-fix il
         # try/except warning rendeva impossibile distinguere "tutto ok"
-        # da "ok ma metadata stale" downstream.
+        # da "ok ma metadata stale" downstream
         if res.get("success"):
             from app.shared.columns_metadata import save_columns_metadata_with_retry
             _col_meta = [
@@ -380,16 +374,16 @@ class ManipolaExecutor:
         """Preview: stessa pipeline dell'execute ma senza salvataggio."""
         logger.info(f"Preview MANIPOLA: {project_id}", op="preview", project_id=project_id)
         try:
-            # Stesso tenant binding di execute(). `strict=False` perche'
+            # Stesso tenant binding di execute. `strict=False` perche'
             # preview non persiste output: se il lookup DB fallisce
-            # `executing_group_id` resta None e i loader fail-closed.
+            # `executing_group_id` resta None e i loader fail-closed
             executing_group_id = self._init_security_context(
                 project_id, strict=False
             )
 
             dataframes = {}
-            # BE-GO-READY-TRANSFORMATION-ENGINE-004: stesso tenant
-            # boundary esplicito di execute().
+            # stesso tenant
+            # boundary esplicito di execute
             self._carica_sorgenti_progetto(
                 canvas, dataframes, force_recalculate=False,
                 group_id=executing_group_id,
@@ -442,7 +436,7 @@ class ManipolaExecutor:
         inserire nel canvas un source_project_id di un altro tenant e
         esfiltrare i dati durante l'esecuzione della pipeline.
 
-        BE-GO-READY-TRANSFORMATION-ENGINE-007 (ctx-strict): il
+         (ctx-strict): il
         ``group_id`` esplicito e' OBBLIGATORIO. Il singleton fallback
         ``self._current_group_id`` e' stato rimosso da questa catena.
         Se ``group_id`` e' None o vuoto il metodo ritorna fail-closed
@@ -453,8 +447,8 @@ class ManipolaExecutor:
         source_nodes = [n for n in canvas.nodes if n.type == "project_source"]
 
         # Ctx-strict: no singleton fallback. Il group_id deve provenire
-        # da _init_security_context via execute()/preview(). Se manca,
-        # fail-closed immediato senza toccare il resolver.
+        # da _init_security_context via execute/preview. Se manca
+        # fail-closed immediato senza toccare il resolver
         executing_group_id = group_id
         if not executing_group_id:
             logger.error(
@@ -480,10 +474,10 @@ class ManipolaExecutor:
                 continue
 
             # Cross-tenant isolation delegata a `ArtifactResolver
-            # .materialize_latest`: il check fail-closed solleva
+            # materialize_latest`: il check fail-closed solleva
             # `ArtifactResolutionError` per progetto inesistente / gruppo
-            # diverso / errore DB. NON catturare con warn "non bloccante":
-            # sarebbe fail-OPEN, l'errore deve risalire al caller.
+            # diverso / errore DB. NON catturare con warn "non bloccante"
+            # sarebbe fail-OPEN, l'errore deve risalire al caller
             if not force_recalculate:
                 try:
                     materialized = ArtifactResolver().materialize_latest(
@@ -535,15 +529,15 @@ class ManipolaExecutor:
             if not self.orchestrator_callback:
                 return {"success": False, "message": "Orchestrator callback non configurato"}
 
-            # C3 round 3 fix 3: cycle detection PRIMA di riesegue upstream.
+            # C3 round 3 fix 3: cycle detection PRIMA di riesegue upstream
             # Se source_project_id e' gia' nella chain di esecuzione, stiamo
             # per chiudere un ciclo A→B→A invocando orchestrator_callback
             # ricorsivamente. Senza questo check, stack overflow garantito
             # su canvas legacy con dipendenze circolari che il check al save
-            # di update_canvas non ha intercettato.
+            # di update_canvas non ha intercettato
             _assert_no_lineage_cycle_on_chain(source_project_id)
 
-            # Genera un run_id fresco per il progetto upstream (ESTRAI),
+            # Genera un run_id fresco per il progetto upstream (ESTRAI
             # così i suoi dati intermedi vengono tracciati in intermediate.db
             import uuid as _uuid
             upstream_run_id = str(_uuid.uuid4())
@@ -569,11 +563,11 @@ class ManipolaExecutor:
                 upstream_run_id = None
 
             # `orchestrator_callback` e' `OrchestratorService.execute_pipeline`
-            # (vedi orchestrator/service.py:83) che ritorna `PipelineArtifact`
+            # vedi orchestrator/service.py:83) che ritorna `PipelineArtifact`
             # — dict-subclass con typed property. Usiamo le proprieta'
             # tipizzate (`upstream.success`/`upstream.message`/
-            # `upstream.rows_count`/`upstream.output_path`) invece di `.get()`
-            # raw per coerenza con il modello artifact unificato.
+            # `upstream.rows_count`/`upstream.output_path`) invece di `.get`
+            # raw per coerenza con il modello artifact unificato
             upstream = self.orchestrator_callback(source_project_id, force_recalculate=True, run_id=upstream_run_id)
 
             # Chiudi run upstream
@@ -601,17 +595,17 @@ class ManipolaExecutor:
                 # propagava un PipelineArtifact con project_id=
                 # source_project_id (canvas upstream). Saliva fino
                 # a `OrchestratorService.execute_pipeline` che lo
-                # passa a `PipelineArtifact.from_executor_result(
+                # passa a `PipelineArtifact.from_executor_result
                 # result, project_id=<corrente>)`. Il safety net
                 # rilevava il mismatch e sollevava ValueError
                 # "from_executor_result: project_id mismatch ..."
                 # — fuorviante: nascondeva la vera causa upstream
-                # (es. SSO scaduto) dietro un errore di consistenza.
+                # es. SSO scaduto) dietro un errore di consistenza
                 # Post-fix: ritorniamo un dict locale senza
                 # project_id, con messaggio diagnostico che cita il
                 # source_project_id colpevole + il messaggio
                 # upstream. `from_executor_result` populera' il
-                # project_id col valore corrente (caller-side).
+                # project_id col valore corrente (caller-side
                 return {
                     "success": False,
                     "message": (
@@ -621,10 +615,10 @@ class ManipolaExecutor:
                     ),
                 }
 
-            # Legge il risultato upstream via ArtifactResolver.
+            # Legge il risultato upstream via ArtifactResolver
             # Tenant binding fail-closed con expected_group_id: il check
             # cross-tenant viene applicato anche post-recompute, non solo
-            # nel ramo cached del primo blocco.
+            # nel ramo cached del primo blocco
             materialized = None
             raw_output_path = upstream.output_path or ""
             if raw_output_path and Path(raw_output_path).exists():
@@ -673,7 +667,6 @@ class ManipolaExecutor:
     ):
         """Carica DataFrame dai nodi file_source via SourceLoader.
 
-        BE-GO-READY-TRANSFORMATION-ENGINE-006-MANIPOLA-SOURCE-LOADING-SLICE:
         thin delegator. Il body vive in
         ``app.core.manipola.source_loading.load_file_sources`` —
         funzione pura con parametri espliciti, zero stato di
@@ -698,7 +691,6 @@ class ManipolaExecutor:
             un'esecuzione precedente nello stesso processo
             worker) NON puo' autorizzare un ``file_source``.
             Mirror della cut arricchisci
-            ``BE-GO-READY-ORCHESTRATION-ENGINE-010``.
 
         Il delegator NON passa ``self._current_group_id`` al
         helper: l'argomento ``group_id`` del helper e' l'**unico**
@@ -725,7 +717,7 @@ class ManipolaExecutor:
         processing (`process_static_fields`) vive nel loader unico;
         qui resta solo l'iterazione sui nodi del canvas.
 
-        BE-GO-READY-TRANSFORMATION-ENGINE-008 (ctx-strict cut): lo
+         (ctx-strict cut): lo
         static branch e' pure processing (no DB, no file I/O). Il
         ``group_id`` esplicito del caller e' l'unico canale tenant;
         ``self._current_group_id`` NON e' consultato. Se ``group_id``
@@ -739,8 +731,8 @@ class ManipolaExecutor:
 
         from app.core.artifacts import SourceLoader, SourceRef
 
-        # TE-008: pure processing — do NOT read self._current_group_id.
-        # Explicit group_id (production path) or non-authorizing sentinel.
+        # TE-008: pure processing — do NOT read self._current_group_id
+        # Explicit group_id (production path) or non-authorizing sentinel
         current_group_id = group_id or "_static_"
         loader = SourceLoader()
 
@@ -781,7 +773,7 @@ class ManipolaExecutor:
         current_df = None
         graph = CanvasGraph.from_nodes_edges(canvas.nodes, [])
 
-        # Helper per estrarre targetHandle dall'edge (da attributo o da ID)
+        # Helper per estrarre targetHandle dall'edge (da attributo o da ID
         def get_target_handle(edge):
             # Prima prova attributo diretto
             handle = getattr(edge, 'targetHandle', None)
@@ -800,13 +792,13 @@ class ManipolaExecutor:
 
             # Ordina edges per garantire ordine consistente left/right
             def edge_sort_key(edge):
-                # Prima prova targetHandle (da attributo o ID)
+                # Prima prova targetHandle (da attributo o ID
                 handle = get_target_handle(edge)
                 if handle:
                     return (0, handle)
-                # Fallback: posizione Y del nodo sorgente via CanvasGraph raw lookup.
-                # graph.raw() returns a plain dict (model_dump at intake), so
-                # position is always a dict — no isinstance dual-path needed.
+                # Fallback: posizione Y del nodo sorgente via CanvasGraph raw lookup
+                # graph.raw returns a plain dict (model_dump at intake), so
+                # position is always a dict — no isinstance dual-path needed
                 _raw_src = graph.raw(edge.source)
                 if _raw_src:
                     pos = _raw_src.get("position") or {}
@@ -859,7 +851,6 @@ class ManipolaExecutor:
     def _ordina_topologicamente(self, nodes, edges):
         """Ordina i nodi in ordine topologico (Kahn's algorithm). Rileva cicli.
 
-        BE-GO-READY-GRAPH-ENGINE-001-SHARED-TOPOLOGICAL-SORT: the
         Kahn implementation moved to the shared leaf
         ``app.shared.execution.graph.kahn_topological_order``. This method
         is the Manipola canvas adapter: it extracts ``.id`` from
@@ -871,7 +862,7 @@ class ManipolaExecutor:
         existing caller that catches ``ValueError`` keeps working
         and the message text is preserved verbatim.
 
-        BE-GO-READY-ARCH-058-W6: removed dead ``dataframes`` param.
+         removed dead ``dataframes`` param.
         Import moved to module level.
         """
         node_ids = [n.id for n in nodes]
@@ -879,7 +870,7 @@ class ManipolaExecutor:
         edge_pairs = [(edge.source, edge.target) for edge in edges]
 
         # ``on_cycle='raise'`` -> GraphCycleError (subclass of
-        # ValueError) with the verbatim Italian operator message.
+        # ValueError) with the verbatim Italian operator message
         sorted_ids = kahn_topological_order(
             node_ids, edge_pairs, on_cycle="raise",
         )
@@ -926,34 +917,32 @@ class ManipolaExecutor:
         result = inputs[0].copy()
 
         # Multi-join sequenziale: ogni step `pd.merge` puo' inflate
-        # l'output rispetto agli input se le chiavi non sono unique.
+        # l'output rispetto agli input se le chiavi non sono unique
         # Senza un guard, un'esplosione al merge step k si propaga ai
         # merge step k+1, k+2, ... saturando la memoria del worker
-        # (SIGKILL OS).
-        #
+        # SIGKILL OS
         # Strategia: pre-merge cardinality estimate. Prima di ogni
         # `pd.merge`, stimiamo le righe output dalle frequenze delle
-        # join key (`groupby(...).size()`). Se la stima supera il cap,
+        # join key (`groupby(...).size`). Se la stima supera il cap
         # solleviamo PRIMA della materializzazione del DataFrame. Reuse
-        # del contratto Memory/OOM (BE-GO-READY-MEMORY-OOM-001/002,
-        # cross-join 003): stessa eccezione `MemoryLimitExceededError`,
+        # del contratto Memory/OOM
+        # cross-join 003): stessa eccezione `MemoryLimitExceededError`
         # stesso codice envelope `memory_limit_exceeded`, stage
-        # `manipola_multi_join`, status 413.
-        #
+        # `manipola_multi_join`, status 413
         # Il costo e' O(N+M) per step, ma evita sia il falso positivo
         # del worst-case cartesian (`len(result) * len(next_df)`) sia
         # l'OOM del primo merge esplosivo. Il post-merge check resta
         # come safety net se pandas semantics o join_type non stimabile
-        # divergono.
+        # divergono
         try:
             _multi_cap = int(settings.get("MULTI_JOIN_MAX_OUTPUT_ROWS", 50_000_000))
         except Exception:
-            # Contesto pure-test senza Settings: guard off.
+            # Contesto pure-test senza Settings: guard off
             _multi_cap = 0
 
         # Sanity: input[0] da solo non deve superare il cap. Cattura
         # casi degenere (l'utente passa un DataFrame gia' troppo grande
-        # come base del multi-join).
+        # come base del multi-join
         if _multi_cap > 0 and len(result) > _multi_cap:
             from app.shared.exceptions import MemoryLimitExceededError
             logger.warning(
@@ -971,7 +960,7 @@ class ManipolaExecutor:
         for idx, df in enumerate(inputs[1:], start=2):
             df_copy = df.copy()
 
-            # Trova colonne duplicate (non-chiave)
+            # Trova colonne duplicate (non-chiave
             result_cols = set(result.columns) - set(join_keys)
             df_cols = set(df_copy.columns) - set(join_keys)
             duplicates = result_cols & df_cols
@@ -983,7 +972,7 @@ class ManipolaExecutor:
                 logger.info(f"Rinominate colonne: {list(rename_map.keys())}")
 
             # Pre-merge exact cardinality estimate. Runs before pandas
-            # materializes the merge output.
+            # materializes the merge output
             if _multi_cap > 0:
                 _estimated_rows = _estimate_merge_output_rows(
                     result, df_copy, join_keys, join_type
@@ -1015,7 +1004,7 @@ class ManipolaExecutor:
             # POST-merge cumulative guard: raise PRIMA del merge
             # successivo se il cumulative output ha sforato. Cattura
             # l'inflazione effettiva (incluso il caso di non-unique
-            # keys) prevenendo la propagazione N-step.
+            # keys) prevenendo la propagazione N-step
             if _multi_cap > 0 and len(result) > _multi_cap:
                 from app.shared.exceptions import MemoryLimitExceededError
                 logger.warning(
@@ -1073,15 +1062,15 @@ class ManipolaExecutor:
                 alias = agg.get('alias', f"{col}_{func}")
 
                 if func == 'count':
-                    # COUNT(*) via groupby().size() — non dipende da una
-                    # colonna specifica, non perde righe sul gruppo.
+                    # COUNT(*) via groupby.size — non dipende da una
+                    # colonna specifica, non perde righe sul gruppo
                     count_aliases.append(alias)
                 elif func in ['sum', 'mean', 'min', 'max', 'std']:
                     if col in df.columns:
                         agg_dict[col] = func
                         rename_dict[col] = alias
 
-            # Esegui aggregazioni colonna (solo se ci sono colonne valide)
+            # Esegui aggregazioni colonna (solo se ci sono colonne valide
             if agg_dict:
                 result = df.groupby(group_cols, as_index=False).agg(agg_dict)
                 result = result.rename(columns=rename_dict)
@@ -1131,7 +1120,7 @@ class ManipolaExecutor:
 
             # Single entry-point: in-memory per csv/xlsx/json/parquet/
             # geojson (zero temp), filesystem fallback interno per
-            # gpkg/shp. Nessun if/else duplicato caller-side.
+            # gpkg/shp. Nessun if/else duplicato caller-side
             saved = save_pipeline_result(
                 project_id=project_id,
                 df=df,
@@ -1157,9 +1146,9 @@ class ManipolaExecutor:
     def _estrai_srid_da_canvas(self, canvas):
         """Estrae primo SRID da tipi geometry nel canvas via ResourceMetadata.
 
-        BE-GO-READY-ARCH-060-W5: Parses canvas once through CanvasGraph so
+         Parses canvas once through CanvasGraph so
         node field access uses CanvasNode.get_field instead of ad-hoc
-        getattr/data.get dual-path.  CanvasGraph stays structural: no
+        getattr/data.get dual-path. CanvasGraph stays structural: no
         Manipola-specific logic added to it.
         """
         from app.shared.resources.metadata import ResourceMetadata

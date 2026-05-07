@@ -1,13 +1,13 @@
 """
-JWT access-token contract - emit/decode + env-loading policy.
+JWT access-token contract - emit/decode + env-loading policy
 
-Estratto da `app.core.auth.auth` (STRUCT-005 Seam D) senza alcun cambio
+Keeps this module's responsibility explicit and isolated from adjacent code.
 """
 
 from __future__ import annotations
 
 # Side-effect: caricamento di backend/.env via python-dotenv. Importato
-# prima di leggere JWT_SECRET_KEY/JWT_EXPIRE_HOURS qui sotto.
+# prima di leggere JWT_SECRET_KEY/JWT_EXPIRE_HOURS qui sotto
 import app.config  # noqa: F401
 
 import os
@@ -19,13 +19,13 @@ import jwt
 
 
 ALGORITHM = "HS256"
-# BE-CONFIG-001B: TTL token migrato a `Settings.DEFAULTS` (default 8h).
+# BE-CONFIG-001B: TTL token migrato a `Settings.DEFAULTS` (default 8h
 # Override env `JWT_EXPIRE_HOURS` continua a funzionare via type coercion
 # `int` in `Settings._converti_tipo_env`. Lettura a import-time: la
 # costante e' parte del contratto modulo (consumata da `auth.auth` e
 # da test-contract `test_jwt_token_module_contract`). `app.config` e'
 # gia' importato sopra dalla catena `app/main.py` -> `app/config.py`
-# (dotenv loaded), quindi `settings.get` qui legge gli override env.
+# dotenv loaded), quindi `settings.get` qui legge gli override env
 from app.config import settings as _settings
 ACCESS_TOKEN_EXPIRE_HOURS = int(_settings.get("JWT_EXPIRE_HOURS"))
 
@@ -37,7 +37,7 @@ else:
     _env = os.getenv("ENVIRONMENT", os.getenv("ENV", "development")).lower()
     if _env in ("production", "prod", "staging"):
         # RuntimeError invece di SystemExit: catturabile dai test, gestibile
-        # dal framework FastAPI/uvicorn invece di kill brutale del processo.
+        # dal framework FastAPI/uvicorn invece di kill brutale del processo
         raise RuntimeError(
             "[PLENORA-ETL] JWT_SECRET_KEY non configurata in ambiente "
             f"'{_env}'. Imposta la variabile d'ambiente JWT_SECRET_KEY "
@@ -48,7 +48,7 @@ else:
         )
     else:
         # In sviluppo: genera un secret random per sessione. Piu' sicuro di un
-        # default hardcoded perche' non e' committato e cambia ad ogni riavvio.
+        # default hardcoded perche' non e' committato e cambia ad ogni riavvio
         import secrets
         SECRET_KEY = secrets.token_hex(32)
         import warnings
@@ -63,7 +63,7 @@ else:
 def create_access_token(user_id: str, username: str, group_id: str, role: str) -> str:
     # jti: identificatore univoco del token, usato come chiave della
     # blacklist Redis per supportare revoca via /auth/logout. uuid4.hex
-    # e' 32 char esadecimali -> 128 bit di entropia, collision-free.
+    # e' 32 char esadecimali -> 128 bit di entropia, collision-free
     expire = datetime.now(timezone.utc) + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
     payload = {
         "sub":      user_id,

@@ -98,9 +98,9 @@ class ArtifactResolver:
         Ritorna `None` se il progetto esiste ma non ha alcun risultato
         (semantica compatibile con `get_result_as_tempfile`).
 
-        BE-GO-READY-RESOURCE-ENGINE-021 (R-019.1 closure): il blob
+         (R-019.1 closure): il blob
         fetch + tempfile materialization e' delegato a
-        ``default_registry().get(ref, mode='path')`` come in
+        ``default_registry.get(ref, mode='path')`` come in
         ``_materialize_from_result_id`` (019). Tenant binding:
         ``expected_group_id`` per ResourceRef arriva da
         ``row['group_id']`` (la riga `latest` per definizione e' del
@@ -139,12 +139,12 @@ class ArtifactResolver:
             return None
 
         # ResourceRef.expected_group_id is REQUIRED non-empty. The
-        # latest-row's `group_id` IS the resource tenant binding;
+        # latest-row's `group_id` IS the resource tenant binding
         # use it for the loader's SQL filter. is_superadmin is
         # threaded through so the project-level cross-group bypass
-        # (already enforced upstream via the project_id project
+        # already enforced upstream via the project_id project
         # check above) keeps its symmetric audit log entry on the
-        # loader side.
+        # loader side
         result_row_group_id = row.get("group_id")
         if not result_row_group_id:
             raise ArtifactResolutionError(
@@ -159,27 +159,27 @@ class ArtifactResolver:
             result_id=result_id,
             expected_group_id=result_row_group_id,
             # Pass project_id as the row-level project filter
-            # (RESOURCE-ENGINE-007). `get_latest_result` already
+            # RESOURCE-ENGINE-007). `get_latest_result` already
             # selected by project_id, but the second filter at
             # the SQL boundary closes any race window between
-            # the latest-row lookup and the blob load.
+            # the latest-row lookup and the blob load
             expected_project_id=ref.project_id,
             is_superadmin=bool(is_superadmin),
         )
 
-        # intent: boundary / outcome: fail-closed (broad→domain con chain preservata)
+        # intent: boundary / outcome: fail-closed (broad→domain con chain preservata
         try:
             resource = default_registry().get(result_ref, mode="path")
         except FileNotFoundError:
             # NOTE: legacy semantics: missing / unavailable blob -> None
-            # (NOT ArtifactResolutionError). The router/UI treats
+            # NOT ArtifactResolutionError). The router/UI treats
             # None as "no latest result available"; raising would
-            # 500 the request.
+            # 500 the request
             return None
         except MemoryLimitExceededError:
             # Preserve the typed exception so FastAPI maps it to the
             # memory-limit 413 envelope. Wrapping here would turn an
-            # operator cap into a generic artifact failure.
+            # operator cap into a generic artifact failure
             raise
         except Exception as e:
             logger.error(
@@ -210,10 +210,9 @@ class ArtifactResolver:
         materialize_run: result_id appartenente ad altro project_id
         solleva ArtifactResolutionError.
 
-        BE-GO-READY-RESOURCE-ENGINE-022-FETCH-RUN-BLOB-REGISTRY-MIGRATION
         (R-019.2 closure):
           La materializzazione bytes passa attraverso
-          `default_registry().get(ResourceRef(kind="result_blob", ...),
+          `default_registry.get(ResourceRef(kind="result_blob", ...),
           mode="bytes")` invece di `db_service.get_result_data`.
           Same row metadata lookup come prima (per filename / format /
           project_id verify); solo il fetch del payload BYTEA / object
@@ -224,7 +223,7 @@ class ArtifactResolver:
         """
         from app.db.results_db_service import get_result as _get_result
 
-        # intent: boundary / outcome: fail-closed (broad→domain con chain preservata)
+        # intent: boundary / outcome: fail-closed (broad→domain con chain preservata
         try:
             row = _get_result(result_id)
         except Exception as e:
@@ -247,9 +246,9 @@ class ArtifactResolver:
                 f"project_id '{expected_project_id}'"
             )
 
-        # ResourceRef requires a non-empty `expected_group_id`.
-        # The row's `group_id` IS the resource's tenant binding;
-        # mirror del defensive check in _materialize_from_result_id.
+        # ResourceRef requires a non-empty `expected_group_id`
+        # The row's `group_id` IS the resource's tenant binding
+        # mirror del defensive check in _materialize_from_result_id
         group_id = row.get("group_id")
         if not group_id:
             raise ArtifactResolutionError(
@@ -264,24 +263,24 @@ class ArtifactResolver:
             # Pass project_id again so the loader's row-level
             # project filter (RESOURCE-ENGINE-007) gives a second
             # check at the SQL boundary. Tautological vs the
-            # resolver-level check above but cheap.
+            # resolver-level check above but cheap
             expected_project_id=expected_project_id,
         )
 
-        # intent: boundary / outcome: fail-closed (broad→domain con chain preservata)
+        # intent: boundary / outcome: fail-closed (broad→domain con chain preservata
         try:
             resource = default_registry().get(ref, mode="bytes")
         except FileNotFoundError as e:
             # Loader fail-closed: row missing OR cross-tenant OR
             # blob unavailable. Translate to the canonical Italian
-            # message so existing operator log greps keep working.
+            # message so existing operator log greps keep working
             raise ArtifactResolutionError(
                 f"result_id '{result_id}' senza blob dati"
             ) from e
         except MemoryLimitExceededError:
-            # Preserve the typed exception for the FastAPI 413 handler.
+            # Preserve the typed exception for the FastAPI 413 handler
             # The HTTP download path is still a resource read and must not
-            # degrade an oversize signal into a generic artifact error.
+            # degrade an oversize signal into a generic artifact error
             raise
         except Exception as e:
             logger.error(
@@ -297,7 +296,7 @@ class ArtifactResolver:
         # `data` means "row exists but blob unavailable" (es. object
         # storage download returned None). Per il download HTTP
         # questa condizione deve essere un errore tipato come prima
-        # del migration: pre-022 ricadeva sul fail "senza blob dati".
+        # del migration: pre-022 ricadeva sul fail "senza blob dati"
         if not resource.data:
             raise ArtifactResolutionError(
                 f"result_id '{result_id}' senza blob dati"
@@ -318,9 +317,9 @@ class ArtifactResolver:
     ) -> MaterializedArtifact:
         """Resolve a `result_id` via the Resource Engine path mode.
 
-        BE-GO-READY-RESOURCE-ENGINE-019 (R-PILOT-017.A closure):
+         (R-PILOT-017.A closure):
         the blob fetch + tempfile materialization is delegated to
-        ``default_registry().get(ref, mode='path')`` -- the FIRST
+        ``default_registry.get(ref, mode='path')`` -- the FIRST
         real production caller of the registry surface. Pre-019
         the path was a two-step ``db_service.get_result_data`` +
         ``self._write_temp_blob`` shim; post-019 the loader owns
@@ -338,9 +337,9 @@ class ArtifactResolver:
         # this module (see header). That makes the symbols
         # patchable for tests AND keeps a single canonical lookup
         # point: production calls go through the same module-level
-        # `default_registry` reference the tests monkeypatch.
+        # `default_registry` reference the tests monkeypatch
 
-        # intent: boundary / outcome: fail-closed (broad→domain con chain preservata)
+        # intent: boundary / outcome: fail-closed (broad→domain con chain preservata
         try:
             row = _get_result(result_id)
         except Exception as e:
@@ -360,19 +359,19 @@ class ArtifactResolver:
 
         # Cross-tenant binding fail-closed: niente fallback "latest by
         # project" che produrrebbe race cross-task fra due esecuzioni
-        # parallele dello stesso progetto.
+        # parallele dello stesso progetto
         if row.get("project_id") != expected_project_id:
             raise ArtifactResolutionError(
                 f"result_id '{result_id}' non appartiene al "
                 f"project_id '{expected_project_id}'"
             )
 
-        # ResourceRef requires a non-empty `expected_group_id`.
-        # The row's `group_id` IS the resource's tenant binding:
+        # ResourceRef requires a non-empty `expected_group_id`
+        # The row's `group_id` IS the resource's tenant binding
         # the loader uses it for the SQL filter (already verified
         # by the row lookup above; passing it through preserves
         # the typed contract and gives defense-in-depth in the
-        # event of a row-mutation race between lookup and load).
+        # event of a row-mutation race between lookup and load
         group_id = row.get("group_id")
         if not group_id:
             raise ArtifactResolutionError(
@@ -388,11 +387,11 @@ class ArtifactResolver:
             # project filter (RESOURCE-ENGINE-007) gives a second
             # check at the SQL boundary. Tautological vs the
             # resolver-level check above, but cheap and keeps the
-            # typed contract honest.
+            # typed contract honest
             expected_project_id=expected_project_id,
         )
 
-        # intent: boundary / outcome: fail-closed (broad→domain con chain preservata)
+        # intent: boundary / outcome: fail-closed (broad→domain con chain preservata
         try:
             resource = default_registry().get(ref, mode="path")
         except FileNotFoundError as e:
@@ -400,12 +399,12 @@ class ArtifactResolver:
             # blob unavailable. Resolver translates to its own
             # typed exception with the canonical Italian message
             # so existing operator dashboards / log greps keep
-            # working bit-for-bit.
+            # working bit-for-bit
             raise ArtifactResolutionError(
                 f"result_id '{result_id}' senza blob dati"
             ) from e
         except MemoryLimitExceededError:
-            # Preserve the typed exception for the FastAPI 413 handler.
+            # Preserve the typed exception for the FastAPI 413 handler
             raise
         except Exception as e:
             logger.error(
@@ -420,7 +419,7 @@ class ArtifactResolver:
         # Format is row metadata; the loader is byte-level only and
         # does not learn the format. The resolver attaches it to
         # the MaterializedArtifact for downstream readers
-        # (load_dataframe_from_file dispatches on format/extension).
+        # load_dataframe_from_file dispatches on format/extension
         fmt = row.get("format") or "csv"
         return MaterializedArtifact(
             path=resource.path,
@@ -437,18 +436,18 @@ class ArtifactResolver:
         if not output_path:
             raise ArtifactResolutionError("output_path vuoto")
 
-        # Whitelist di root validi per output_path:
-        # - RESULTS_DIR/{project_id}: artifact persistito post-pipeline
-        # - DATA_DIR/temp e TEMP_DIR: tempfile fresh prima del transfer
-        #   nel DB blob (window in cui il path e' legittimo ma non
-        #   ancora dentro RESULTS_DIR)
+        # Whitelist di root validi per output_path
+        # RESULTS_DIR/{project_id}: artifact persistito post-pipeline
+        # DATA_DIR/temp e TEMP_DIR: tempfile fresh prima del transfer
+        # nel DB blob (window in cui il path e' legittimo ma non
+        # ancora dentro RESULTS_DIR
         # Path arbitrari dal client vengono sempre rifiutati: l'unico
-        # produttore di output_path e' il backend stesso.
+        # produttore di output_path e' il backend stesso
         # intent: resource guard (build path whitelist) / outcome: fail-closed
-        # esplicito se la lista finale e' vuota. Una lista parziale (≥1 root)
+        # esplicito se la lista finale e' vuota. Una lista parziale (≥1 root
         # e' ammessa — gli altri root sono tracciabili via warning log, cosi'
         # che config/FS issue siano diagnosticabili post-hoc senza confonderle
-        # con path client malicious al livello `assert_path_within` a valle.
+        # con path client malicious al livello `assert_path_within` a valle
         trusted_roots = []
         try:
             results_root = (Path(settings.RESULTS_DIR).resolve() / project_id).resolve()
@@ -476,7 +475,7 @@ class ArtifactResolver:
 
         # Gate fail-closed: lista vuota = config rotta o FS unmount, non un
         # path client malicious. Raise esplicito con messaggio diagnostico
-        # che distingue questo caso dal "fuori dai root" a valle.
+        # che distingue questo caso dal "fuori dai root" a valle
         if not trusted_roots:
             raise ArtifactResolutionError(
                 "trusted_roots build fallita: nessun root valido disponibile "
@@ -485,7 +484,7 @@ class ArtifactResolver:
 
         # Validazione delegata a `assert_path_within`. Convertiamo
         # `ValueError` in `ArtifactResolutionError` con messaggi
-        # specifici del resolver per uniformare il tipo eccezione.
+        # specifici del resolver per uniformare il tipo eccezione
         try:
             resolved = assert_path_within(
                 output_path, trusted_roots, must_exist=True

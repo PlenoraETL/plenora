@@ -1,7 +1,7 @@
 """
 Configurazione applicazione Celery — broker e backend su Redis.
 
-Broker:  redis://localhost:6379/0
+Broker: redis://localhost:6379/0
 """
 
 import os
@@ -107,16 +107,15 @@ celery_app.Task = BaseTaskWithRetry
 # deve seguire il task attraverso il broker Redis fino al worker child
 # che lo esegue. Senza questi signal handler, il task parte con
 # request_id vuoto nel worker (la ContextVar del parent non viene
-# serializzata).
-#
-# - before_task_publish: sender-side, legge request_id dal ContextVar
-#   corrente (del chiamante, es. request HTTP) e lo mette nei task
-#   headers.
-# - task_prerun: worker-side, legge il request_id dai task headers e lo
-#   setta nel ContextVar del worker prima che il task body esegua.
-# - task_postrun: worker-side, reset difensivo della ContextVar (evita
-#   che un task legga request_id di uno precedente se il worker non
-#   rigenera il contesto).
+# serializzata
+# before_task_publish: sender-side, legge request_id dal ContextVar
+# corrente (del chiamante, es. request HTTP) e lo mette nei task
+# headers
+# task_prerun: worker-side, legge il request_id dai task headers e lo
+# setta nel ContextVar del worker prima che il task body esegua
+# task_postrun: worker-side, reset difensivo della ContextVar (evita
+# che un task legga request_id di uno precedente se il worker non
+# rigenera il contesto
 
 from celery.signals import (
     before_task_publish,
@@ -128,38 +127,35 @@ from celery.signals import (
 )
 
 
-# BE-GO-READY-BOOTSTRAP-ENGINE-014: worker bootstrap parity
-# Web boot path (`app.main`) calls `app.bootstrap.bootstrap()` once
+# worker bootstrap parity
+# Web boot path (`app.main`) calls `app.bootstrap.bootstrap` once
 # before any router import. Workers and beat must cross the SAME
 # four-step boundary (validate_startup → validate_storage_config →
 # init_all_dbs → _repair_psycopg2_ssl_env) so they fail-fast on
 # config/storage/DB problems instead of discovering them at first
-# task execution.
-#
-# Coverage matrix:
-#   - `worker_init`: fires once in the worker MAIN process. Covers
-#     solo / threads / gevent pools (no fork). On prefork it ALSO
-#     fires in the parent — that bootstrap is harmless but the
-#     resulting psycopg2 pool is fork-unsafe; child workers re-init
-#     in `worker_process_init` (force_reset=True) post-fork.
-#   - `worker_process_init`: fires in EACH prefork child after
-#     fork. Forces re-bootstrap so the inherited (broken) pool is
-#     replaced with a child-local one.
-#   - `beat_init`: fires once on the beat scheduler process. Same
-#     boundary as the worker entry.
-#
-# Idempotency: `is_bootstrapped()` short-circuits a second call in
+# task execution
+# Coverage matrix
+# `worker_init`: fires once in the worker MAIN process. Covers
+# solo / threads / gevent pools (no fork). On prefork it ALSO
+# fires in the parent — that bootstrap is harmless but the
+# resulting psycopg2 pool is fork-unsafe; child workers re-init
+# in `worker_process_init` (force_reset=True) post-fork
+# `worker_process_init`: fires in EACH prefork child after
+# fork. Forces re-bootstrap so the inherited (broken) pool is
+# replaced with a child-local one
+# `beat_init`: fires once on the beat scheduler process. Same
+# boundary as the worker entry
+# Idempotency: `is_bootstrapped` short-circuits a second call in
 # the same process when no force_reset is requested. Combined with
-# the underlying steps' own idempotency (validate_startup,
+# the underlying steps' own idempotency (validate_startup
 # init_all_dbs are re-runnable), the handler is safe to fire
-# multiple times.
-#
-# Fail-closed: any exception from `bootstrap()` propagates out of
+# multiple times
+# Fail-closed: any exception from `bootstrap` propagates out of
 # the signal handler. Celery treats raised signal handler exceptions
 # as fatal → the worker / beat process exits → systemd / k8s
 # restart loop surfaces the misconfiguration. NEVER swallow the
 # exception here: bootstrap failure means config/storage/DB is
-# wrong and the worker MUST NOT start accepting tasks.
+# wrong and the worker MUST NOT start accepting tasks
 
 
 def _bootstrap_worker_process(*, force_reset: bool = False) -> None:
@@ -170,9 +166,9 @@ def _bootstrap_worker_process(*, force_reset: bool = False) -> None:
             before bootstrap so the four steps re-run. Required in
             prefork children whose inherited psycopg2 pool is not
             safe to use post-fork. Default False = idempotent
-            short-circuit on `is_bootstrapped()`.
+            short-circuit on `is_bootstrapped`.
 
-    Fail-closed: re-raises any exception from `bootstrap()`. Celery
+    Fail-closed: re-raises any exception from `bootstrap`. Celery
     propagates it out of the signal handler → process exit →
     supervisor restart. The `try/except` around the optional
     breadcrumb log is the ONLY swallowed boundary, and only for
@@ -182,18 +178,18 @@ def _bootstrap_worker_process(*, force_reset: bool = False) -> None:
 
     if force_reset:
         # Post-fork in prefork children: the parent's `_BOOT_COMPLETE`
-        # value is inherited but the underlying PG pool is broken.
+        # value is inherited but the underlying PG pool is broken
         # Reset the flag so the idempotent short-circuit does NOT skip
-        # the re-init.
+        # the re-init
         _bootstrap_mod._BOOT_COMPLETE = False
 
     if _bootstrap_mod.is_bootstrapped():
-        # Already bootstrapped in this process and force_reset=False:
+        # Already bootstrapped in this process and force_reset=False
         # nothing to do (e.g. worker_init firing on solo pool after
-        # an earlier programmatic bootstrap call).
+        # an earlier programmatic bootstrap call
         return
 
-    # bootstrap() raises on failure; let it propagate.
+    # bootstrap raises on failure; let it propagate
     _bootstrap_mod.bootstrap()
 
 
@@ -229,13 +225,13 @@ def _propagate_request_id_on_publish(sender=None, headers=None, **kwargs):
         from app.utils.logger import get_request_id
         req_id = get_request_id()
         if req_id and headers is not None:
-            # Celery usa headers dict "raw" — convenzione: chiave custom.
+            # Celery usa headers dict "raw" — convenzione: chiave custom
             headers["X-Request-ID"] = req_id
     except Exception as e:
         # Non bloccare mai la pubblicazione del task per un errore nel
         # propagate — il task stesso funziona comunque, solo perde il
         # correlation ID. Breadcrumb best-effort: se anche il log fallisce
-        # (hot path signal handler), non propagare.
+        # hot path signal handler), non propagare
         try:
             logger.warning(
                 f"[SIGNAL] before_task_publish: propagazione request_id "
@@ -255,11 +251,11 @@ def _set_request_id_from_task(task_id=None, task=None, **kwargs):
         # Fallback: se non c'e' un request_id propagato (task schedulato
         # da beat, o invocazione legacy), usa il task_id come correlation
         # cosi' c'e' sempre un id per correlare le righe di log di un
-        # singolo task.
+        # singolo task
         set_request_id(req_id or (task_id or ""))
     except Exception as e:
         # Breadcrumb best-effort: il worker continua (log del task perdera'
-        # correlation id, ma il task non deve crashare per questo).
+        # correlation id, ma il task non deve crashare per questo
         try:
             logger.warning(
                 f"[SIGNAL] task_prerun: set request_id fallito per "
@@ -279,7 +275,7 @@ def _clear_request_id_after_task(**kwargs):
     except Exception as e:
         # Breadcrumb best-effort: se il reset fallisce, il prossimo task
         # nello stesso worker potrebbe ereditare il request_id precedente
-        # — diagnosi utile per correlation leak cross-task.
+        # — diagnosi utile per correlation leak cross-task
         try:
             logger.warning(
                 f"[SIGNAL] task_postrun: reset request_id fallito: {e}"

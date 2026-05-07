@@ -20,14 +20,14 @@ from app.utils.logger import get_logger
 # Stesso logger name di `enrichment_service.py` (`__name__` valuta a
 # `"app.core.arricchisci.enrichment_service"`). Singleton stdlib per
 # nome → record indistinguibili dai consumer che attaccano handler /
-# filtrano per nome canonico.
+# filtrano per nome canonico
 logger = get_logger("app.core.arricchisci.enrichment_service")
 
 
-# Wrapper bit-per-bit del `_geojson_to_wkt` di `enrichment_service.py`:
+# Wrapper bit-per-bit del `_geojson_to_wkt` di `enrichment_service.py`
 # delega a `_shared_geojson_to_wkt`. Importato qui direttamente per
 # evitare import circolare mixin → service → mixin. Behavior identico
-# (il wrapper enrichment_service e' 1-line di delega).
+# il wrapper enrichment_service e' 1-line di delega
 def _geojson_to_wkt(geom: dict) -> str:
     """Converte un dict geometry GeoJSON in WKT. Delegato a shared/api_utils."""
     return _shared_geojson_to_wkt(geom)
@@ -59,7 +59,7 @@ class EnrichmentResponseProcessingMixin:
         def _norm(path: str) -> str:
             return path.replace("[*]", "[]") if path else path
 
-        # Trova il path più profondo (max numero di [])
+        # Trova il path più profondo (max numero di
         max_depth = 0
         normalized_mappings = []
         for mapping in self.output_mapping:
@@ -80,12 +80,12 @@ class EnrichmentResponseProcessingMixin:
 
             if result and all(v is None for v in result.values()):
                 # Tutti None è legittimo quando il punto non ha dati per questo
-                # servizio (es. Tiranti idrici NoData, Frana PAI fuori zona).
+                # servizio (es. Tiranti idrici NoData, Frana PAI fuori zona
                 # NON fare fallback ad auto_flatten: scaricherebbe le chiavi
-                # della struttura response (results, fields, fieldAliases, ecc.)
-                # come colonne fantasma nel DataFrame. Ritorna la riga con None.
-                # DEBUG level: e' un evento normale (punti fuori area di copertura)
-                # e si ripete per ogni riga senza dati → rumore inutile a INFO.
+                # della struttura response (results, fields, fieldAliases, ecc
+                # come colonne fantasma nel DataFrame. Ritorna la riga con None
+                # DEBUG level: e' un evento normale (punti fuori area di copertura
+                # e si ripete per ogni riga senza dati → rumore inutile a INFO
                 logger.debug(
                     f"output_mapping ha prodotto tutti None per path={[m['path'] for m in normalized_mappings]}. "
                     f"Risposta top-level keys: {list(data.keys()) if isinstance(data, dict) else type(data).__name__}"
@@ -94,7 +94,7 @@ class EnrichmentResponseProcessingMixin:
 
         # ── MULTI-ROW: esplora ricorsivamente i livelli di [] e costruisce righe ──
         # Per ogni livello k (1..max_depth) raccoglie il "contesto" (elemento corrente
-        # a quel livello), poi per ogni mapping estrae il valore dal contesto giusto.
+        # a quel livello), poi per ogni mapping estrae il valore dal contesto giusto
         rows = []
         self._explode_rows(data, normalized_mappings, contexts=[data], rows=rows, current_depth=0, max_depth=max_depth)
         return rows if rows else [{}]
@@ -112,8 +112,8 @@ class EnrichmentResponseProcessingMixin:
             for m in mappings:
                 path = m["path"]
                 depth = m["depth"]
-                # Il contesto da cui leggere il valore è contexts[depth]
-                # Il suffix è la porzione del path dopo l'ultimo []
+                # Il contesto da cui leggere il valore è contexts[depth
+                # Il suffix è la porzione del path dopo l'ultimo
                 if depth == 0:
                     suffix = path
                     ctx = contexts[0]
@@ -126,14 +126,14 @@ class EnrichmentResponseProcessingMixin:
             rows.append(row)
             return
 
-        # Trova la base del prossimo livello: prefix fino al (current_depth+1)-esimo []
+        # Trova la base del prossimo livello: prefix fino al (current_depth+1)-esimo
         # Usa il primo mapping che ha almeno quella profondità
         next_base = None
         for m in mappings:
             if m["depth"] > current_depth:
                 parts = m["path"].split("[]", current_depth + 1)
-                # parts[0..current_depth] sono i prefix separati da []
-                # Il segmento da applicare al contesto corrente è parts[current_depth]
+                # parts[0..current_depth] sono i prefix separati da
+                # Il segmento da applicare al contesto corrente è parts[current_depth
                 next_base = parts[current_depth].rstrip(".")
                 break
 
@@ -161,7 +161,7 @@ class EnrichmentResponseProcessingMixin:
                 row = {}
                 props = feature.get("properties") or {}
                 for k, v in props.items():
-                    # Fix: interi rimangono interi (pandas li upcastava a float con NaN)
+                    # Fix: interi rimangono interi (pandas li upcastava a float con NaN
                     row[k] = int(v) if isinstance(v, float) and v == int(v) else v
                 geom = feature.get("geometry")
                 if geom:
@@ -259,7 +259,7 @@ class EnrichmentResponseProcessingMixin:
         Accetta sia [] che [*] come marker di iterazione.
         Se non ci sono marker, applica extract_json_value normale.
         """
-        # Normalizza [*] → []
+        # Normalizza [*] →
         path = path.replace("[*]", "[]") if path else path
         if "[]" not in path:
             return self._extract_json_value(data, path)

@@ -18,7 +18,7 @@ DataFrame = Union[pd.DataFrame, gpd.GeoDataFrame]
 
 
 # NUMERAZIONE RIGHE
-# Aggiunge colonna con numero progressivo, opzionalmente partizionato e ordinato.
+# Aggiunge colonna con numero progressivo, opzionalmente partizionato e ordinato
 
 def op_add_row_number(
     df: DataFrame,
@@ -66,7 +66,7 @@ def op_add_row_number(
 
 
 # ESTRAZIONE PARTI DATA
-# Estrae componenti (anno, mese, giorno, ecc.) da una colonna datetime.
+# Estrae componenti (anno, mese, giorno, ecc.) da una colonna datetime
 
 def op_date_extract(
     df: DataFrame,
@@ -134,7 +134,7 @@ def op_date_extract(
 
 
 # UUID GENERATOR — Genera un UUID univoco per ogni riga
-# Utile per creare chiavi primarie sintetiche.
+# Utile per creare chiavi primarie sintetiche
 
 def op_uuid_generator(
     df: DataFrame,

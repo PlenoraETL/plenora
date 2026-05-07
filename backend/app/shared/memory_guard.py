@@ -1,7 +1,6 @@
 """
 Helper puri per RSS/memory sampling pre-stage.
 
-BE-GO-READY-MEMORY-OOM-002-WORKER-RSS-SAMPLING.
 """
 
 from __future__ import annotations

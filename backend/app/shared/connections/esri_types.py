@@ -1,7 +1,6 @@
 """
 Esri type mapping constants - provider-neutral shared module.
 
-BE-GO-READY-ARCH-056-W4-ARCGIS-PROVIDER-TYPES-CUT.
 """
 
 from __future__ import annotations
@@ -72,12 +71,12 @@ class EsriTypeMapper:
         Substring match, case-insensitive (preserves pre-IMDF-003 semantics
         of ``validator._coarse_type_from_esri``):
 
-        - ``string``, ``guid``, ``xml``       -> "string"
-        - ``integer``, ``oid``                -> "int"
-        - ``double``, ``single``, ``float``   -> "float"
-        - ``date``                            -> "date"
-        - ``geometry``, ``shape``             -> "geometry"
-        - other / empty / None               -> "other"
+        - ``string``, ``guid``, ``xml`` -> "string"
+        - ``integer``, ``oid`` -> "int"
+        - ``double``, ``single``, ``float`` -> "float"
+        - ``date`` -> "date"
+        - ``geometry``, ``shape`` -> "geometry"
+        - other / empty / None -> "other"
 
         BE-IMDF-003: this bucket scheme is **distinct** from
         ``map_field_type`` (Plenora-internal ``int``/``real``/``str``/...)
@@ -104,21 +103,21 @@ class EsriTypeMapper:
         Same bucket vocabulary as ``map_esri_field_to_schema_bucket`` so
         bundle (pandas) and Feature Service (Esri) fields compare cleanly.
 
-        Substring match, case-insensitive on ``str(dtype).lower()``:
+        Substring match, case-insensitive on ``str(dtype).lower``:
 
-        - ``str``, ``string``, ``object`` (exact)  -> "string"
-        - contains ``object`` or ``string``         -> "string"
-        - contains ``int``                          -> "int"
-        - contains ``float`` or ``double``          -> "float"
-        - contains ``datetime`` or ``date``         -> "date"
-        - contains ``geometry``                     -> "geometry"
-        - other                                     -> "other"
+        - ``str``, ``string``, ``object`` (exact) -> "string"
+        - contains ``object`` or ``string`` -> "string"
+        - contains ``int`` -> "int"
+        - contains ``float`` or ``double`` -> "float"
+        - contains ``datetime`` or ``date`` -> "date"
+        - contains ``geometry`` -> "geometry"
+        - other -> "other"
 
         Note: pandas 2.x uses ``'str'`` (StringDtype), pandas 1.x uses
         ``'object'``; both map to ``"string"``.
 
         The ``dtype`` parameter is typed as ``object`` to avoid importing
-        pandas here - any object that str()-converts to a recognisable
+        pandas here - any object that str-converts to a recognisable
         dtype name works.
         """
         s = str(dtype).lower()

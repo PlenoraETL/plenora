@@ -1,7 +1,7 @@
 """
-Upload "single-file" con parsing per file source (STRUCT-001 Seam D-F).
+Upload "single-file" con parsing per file source (STRUCT-001 Seam D-F
 
-Estratto da `FileSourceService.create_from_upload` senza alcun cambio
+Keeps this module's responsibility explicit and isolated from adjacent code.
 """
 
 from __future__ import annotations
@@ -51,9 +51,9 @@ def create_from_upload(
         L'istanza DTO costruita da `build_file_source`.
 
     Raises:
-        ValueError:    su MIME block (riemesso da MimeMismatchError)
+        ValueError: su MIME block (riemesso da MimeMismatchError)
                        o su ZIP malformato / path traversal.
-        Exception:     dispatch_blob_storage / db_save_file_source
+        Exception: dispatch_blob_storage / db_save_file_source
                        propagano le loro eccezioni (orphan guard).
     """
     file_id = generate_file_id(name)
@@ -69,8 +69,8 @@ def create_from_upload(
 
     # MIME defense-in-depth (opzionale): se fornito, eseguito DOPO la
     # scrittura del temp ma PRIMA di qualsiasi side effect persistente
-    # (parse / dispatch / DB). Cleanup garantito dal finally esterno
-    # qualunque sia l'esito (success o raise).
+    # parse / dispatch / DB). Cleanup garantito dal finally esterno
+    # qualunque sia l'esito (success o raise
     if mime_validate is not None:
         try:
             mime_validate(content=raw_data, filename=filename or name)
@@ -82,7 +82,7 @@ def create_from_upload(
                     f"name={name!r} filename={filename!r}: {e}"
                 )
                 # Cleanup temp prima di propagare (il finally esterno
-                # passa via lo zip_tmp_dir setting=None piu' tmp.name).
+                # passa via lo zip_tmp_dir setting=None piu' tmp.name
                 try:
                     cleanup(tmp.name)
                 except Exception as ce:
@@ -115,7 +115,7 @@ def create_from_upload(
                     tmp_path = match
                     format_type = detect_format(match.name)
                     filename = match.name
-                    # Per SHP teniamo il ZIP (ha bisogno di .shx, .dbf, ecc.)
+                    # Per SHP teniamo il ZIP (ha bisogno di .shx, .dbf, ecc
                     if format_type in ('shp', 'gdb'):
                         # GDB e' cartella, non leggibile come bytes -> ZIP nel blob
                         raw_data = zip_raw_data
@@ -132,16 +132,16 @@ def create_from_upload(
             if not sheet and len(sheets) == 1:
                 sheet = sheets[0]
 
-        # Inferenza colonne / row_count / CRS - BEST EFFORT.
-        # Se fallisce, logger.warning + columns=[] / row_count=0 / crs=None,
-        # il flusso PROSEGUE col DB save (comportamento preservato).
+        # Inferenza colonne / row_count / CRS - BEST EFFORT
+        # Se fallisce, logger.warning + columns=[] / row_count=0 / crs=None
+        # il flusso PROSEGUE col DB save (comportamento preservato
         columns: List[Any] = []
         row_count = 0
         crs: Optional[str] = None
         try:
             df, gdf = load_by_format(tmp_path, format_type, layer, sheet)
             if selected_columns:
-                # Filter inline: 3 LOC pure, evita callback dedicato.
+                # Filter inline: 3 LOC pure, evita callback dedicato
                 valid_cols = [c for c in selected_columns if c in df.columns]
                 if valid_cols:
                     df = df[valid_cols]
@@ -153,7 +153,7 @@ def create_from_upload(
                 if epsg:
                     crs = f"EPSG:{epsg}"
                 else:
-                    # Fallback: prova to_authority (es. ESRI:xxxxx)
+                    # Fallback: prova to_authority (es. ESRI:xxxxx
                     auth = gdf.crs.to_authority()
                     crs = f"{auth[0]}:{auth[1]}" if auth else str(gdf.crs)
             elif srid:
@@ -184,7 +184,7 @@ def create_from_upload(
             updated_at=now,
         )
 
-        # Metadata serialization duck-typed (Pydantic vs dataclass fallback)
+        # Metadata serialization duck-typed (Pydantic vs dataclass fallback
         metadata = (
             file_source.model_dump(mode='json')
             if hasattr(file_source, 'model_dump')
@@ -192,8 +192,8 @@ def create_from_upload(
         )
 
         # Dispatch policy-aware (BYTEA vs object_storage). Se solleva
-        # (es. S3 down), propaga al caller; il finally cleanup esegue,
-        # ma db_save_file_source NON viene chiamato (orphan guard).
+        # es. S3 down), propaga al caller; il finally cleanup esegue
+        # ma db_save_file_source NON viene chiamato (orphan guard
         blob_kwargs = dispatch_blob_storage(file_id, raw_data, filename)
 
         db_save_file_source(
@@ -210,7 +210,7 @@ def create_from_upload(
         return file_source
 
     finally:
-        # Pulisci zip_tmp_dir per prima (contiene il path estratto se ZIP).
+        # Pulisci zip_tmp_dir per prima (contiene il path estratto se ZIP
         if zip_tmp_dir is not None:
             try:
                 cleanup(zip_tmp_dir)

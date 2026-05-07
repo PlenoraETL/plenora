@@ -14,13 +14,13 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# Ordine canonico dei layer IMDF dentro il Feature Service.
-# NOTE: il layer 0 e' "Localita" (gerarchia top-down).
+# Ordine canonico dei layer IMDF dentro il Feature Service
+# NOTE: il layer 0 e' "Localita" (gerarchia top-down
 LAYER_ORDER = ["Localita", "OperaPrincipale", "Livello", "Locale", "Details"]
 
 # Colonne business-key per layer IMDF. Usate dalle modalita' `upsert` per
 # identificare le features esistenti da sostituire. I nomi sono ricavati
-# sperimentalmente dal GDB generato da imdf.plenora.it (pyogrio read_info).
+# sperimentalmente dal GDB generato da imdf.plenora.it (pyogrio read_info
 DEFAULT_MATCH_COLUMNS = {
     "Localita":       "SITE_ID",
     "OperaPrincipale":"FACILITY_ID",
@@ -29,7 +29,7 @@ DEFAULT_MATCH_COLUMNS = {
     "Details":        "DETAIL_ID",
 }
 
-# Modalita' supportate per la pubblicazione.
+# Modalita' supportate per la pubblicazione
 PUBLISH_MODES = ("replace", "append", "upsert", "update")
 
 
@@ -61,8 +61,8 @@ def upload_imdf_layers(
             dei GeoDataFrame in input (loader li riproietta a 4326).
         mode: modalita' di pubblicazione
             - 'replace': cancella eventuale FS esistente e ricrea da zero (default)
-            - 'append':  aggiunge features ai layer del FS esistente
-            - 'upsert':  per ogni layer cancella le features con match_col nei
+            - 'append': aggiunge features ai layer del FS esistente
+            - 'upsert': per ogni layer cancella le features con match_col nei
                          valori in ingresso, poi inserisce i nuovi. Equivale a
                          un "replace per business key".
         match_columns: override dei default DEFAULT_MATCH_COLUMNS (solo upsert)
@@ -124,7 +124,7 @@ def upload_imdf_layers(
         result["errors"].append("La connection ArcGIS non ha username (richiesto per createService)")
         return result
 
-    # Total steps for progress: folder + delete + N layers + (renderers?)
+    # Total steps for progress: folder + delete + N layers + (renderers?
     layers_present_preview = [n for n in LAYER_ORDER if n in layers and len(layers[n]) > 0]
     total_steps = 1 + 1 + len(layers_present_preview) + (1 if apply_renderers and renderers_data else 0)
     step = 0
@@ -144,8 +144,8 @@ def upload_imdf_layers(
 
     # ── 3. Dispatch per modalita' ─────────────────────────────────────
     # replace → cancella FS esistente e procede col path create_service
-    # append/upsert → trova FS esistente e delega a funzione dedicata,
-    #                 ritornando qui con il risultato gia' pronto.
+    # append/upsert → trova FS esistente e delega a funzione dedicata
+    # ritornando qui con il risultato gia' pronto
     if mode in ("append", "upsert"):
         _emit("find_service", step, total_steps,
               f"Ricerca FS esistente '{fs_name}'...")
@@ -185,11 +185,11 @@ def upload_imdf_layers(
     step += 1
 
     # Check anti-zombie: lo saltiamo SOLO se il delete e' stato totale
-    # (attempted == succeeded > 0), cioe' abbiamo effettivamente rimosso
-    # tutti gli item trovati. In caso di:
-    #   - nessun item trovato (attempted=0) → check necessario per zombie
-    #   - partial delete (attempted>succeeded) → check necessario, il nome
-    #     potrebbe essere ancora riservato sul hosted server
+    # attempted == succeeded > 0), cioe' abbiamo effettivamente rimosso
+    # tutti gli item trovati. In caso di
+    # nessun item trovato (attempted=0) → check necessario per zombie
+    # partial delete (attempted>succeeded) → check necessario, il nome
+    # potrebbe essere ancora riservato sul hosted server
     full_delete = del_attempted > 0 and del_attempted == del_succeeded
     if not full_delete:
         available, _err = _is_service_name_available(client, conn, fs_name)
@@ -198,7 +198,7 @@ def upload_imdf_layers(
             # hosted server ma non e' nell'enumerazione utente. Proviamo a
             # recuperare il serviceItemId via admin describe e cancellarlo
             # direttamente. Funziona se l'utente e' il proprietario
-            # dell'item (caso tipico di cancellazioni parziali).
+            # dell'item (caso tipico di cancellazioni parziali
             logger.info(
                 f"replace '{fs_name}': nome riservato non visibile, tentativo "
                 f"cleanup zombie via hosted admin fallback"
@@ -209,7 +209,7 @@ def upload_imdf_layers(
                 logger.info(f"zombie cleanup success: {cleanup_msg}")
             else:
                 # Re-check disponibilita' per sicurezza (il cleanup puo'
-                # avere effetti anche se la risposta non era chiara)
+                # avere effetti anche se la risposta non era chiara
                 available2, _ = _is_service_name_available(client, conn, fs_name)
                 if not available2:
                     result["errors"].append(
@@ -228,7 +228,7 @@ def upload_imdf_layers(
     missing = [n for n in LAYER_ORDER if n not in layers or len(layers[n]) == 0]
     if missing:
         # Non e' un errore bloccante: alcuni siti potrebbero non avere
-        # tutti i layer (es. solo Localita+Livelli). Logghiamo soltanto.
+        # tutti i layer (es. solo Localita+Livelli). Logghiamo soltanto
         logger.warning(f"Layer mancanti o vuoti, saltati: {missing}")
 
     layers_present = [n for n in LAYER_ORDER if n in layers and len(layers[n]) > 0]
@@ -309,11 +309,11 @@ def upload_imdf_layers(
             step += 1
 
     # ── 7. Applica renderers (opzionale) ───────────────────────────────
-    # Nota: NON usiamo client.update_renderer() perche' quel metodo posta
+    # Nota: NON usiamo client.update_renderer perche' quel metodo posta
     # su `service-level updateDefinition` con `{layers: [{id, drawingInfo}]}`
     # — Esri ritorna success=True ma in pratica non aggiorna nulla. Usiamo
     # invece il pattern layer-level: POST su `.../FeatureServer/<id>/updateDefinition`
-    # con payload `{drawingInfo: {renderer: ...}}` (verificato sperimentalmente).
+    # con payload `{drawingInfo: {renderer: ...}}` (verificato sperimentalmente
     if apply_renderers and renderers_data:
         _emit("renderers", step, total_steps, "Applicazione renderer ArcGIS...")
         token = client.authenticate(conn)
@@ -365,46 +365,45 @@ def upload_imdf_layers(
 # APPEND / UPSERT su FS esistente
 
 
-from .arcgis.sql_helpers import (  # noqa: F401  (re-export)
+from .arcgis.sql_helpers import (  # noqa: F401 (compatibility export
     _quote_sql_value,
     _chunked,
     _query_oid_by_key,
 )
 
-# Phase 5 B4.2 cutover: cluster SERVICE_DISCOVERY (6 helper di
+# B4.2 boundary: cluster SERVICE_DISCOVERY (6 helper di
 # folder/Feature Service discovery sul portal ArcGIS) spostato in
-# `app.core.imdf.arcgis.service_discovery`. Re-export per preservare
-# i path pubblici esistenti + il contract monkeypatch dei test:
-#   - `from app.core.imdf.arcgis_uploader import _list_user_folders`,
-#     `_ensure_folder`, `_is_service_name_available`,
-#     `_enumerate_all_user_items`, `_search_user_items`,
-#     `_find_existing_service` continua a funzionare.
-#   - `validator.py:130` lazy-import di `_find_existing_service` +
-#     `_is_service_name_available` + `_list_user_folders` continua a
-#     funzionare (lazy import legge l'attributo del modulo facade
-#     al call time, dopo eventuali monkeypatch).
-#   - `monkeypatch.setattr(uploader_mod, "<helper>", fake)` nei 3 test
-#     contract `tests2/security/unit/test_imdf_validate_publish_*.py`
-#     continua a propagare:
-#       * Path A — validator lazy import: legge l'attributo correntemente
-#         bindato sul facade dopo il rebind. ✓
-#       * Path B — `upload_imdf_layers` interno (uploader.py): name
-#         lookup nello scope di uploader, che re-exporta i 6 simboli
-#         come attributi. Rebind dell'attributo del facade visto dal
-#         chiamante locale. ✓
-#   - Path C — chiamate intra-cluster (`_ensure_folder` →
-#     `_list_user_folders`, `_find_existing_service` → `_search_user_items`,
-#     `_search_user_items` → `_enumerate_all_user_items`) avvengono
-#     all'interno di `service_discovery.py`: name lookup nello scope
-#     del modulo figlio, NON sul facade. Trade-off documentato
-#     esplicitamente nella docstring di `service_discovery.py` —
-#     nessun test contract attuale dipende da questo path.
+# `app.core.imdf.arcgis.service_discovery`. compatibility export per preservare
+# i path pubblici esistenti + il contract monkeypatch dei test
+# `from app.core.imdf.arcgis_uploader import _list_user_folders`
+# `_ensure_folder`, `_is_service_name_available`
+# `_enumerate_all_user_items`, `_search_user_items`
+# `_find_existing_service` continua a funzionare
+# `validator.py:130` lazy-import di `_find_existing_service` +
+# `_is_service_name_available` + `_list_user_folders` continua a
+# funzionare (lazy import legge l'attributo del modulo compatibility module
+# al call time, dopo eventuali monkeypatch
+# `monkeypatch.setattr(uploader_mod, "<helper>", fake)` nei 3 test
+# contract `tests2/security/unit/test_imdf_validate_publish_*.py`
+# continua a propagare
+# * Path A — validator lazy import: legge l'attributo correntemente
+# bindato sul compatibility module dopo il rebind. ✓
+# * Path B — `upload_imdf_layers` interno (uploader.py): name
+# lookup nello scope di uploader, che re-exporta i 6 simboli
+# come attributi. Rebind dell'attributo del compatibility module visto dal
+# chiamante locale. ✓
+# Path C — chiamate intra-cluster (`_ensure_folder` →
+# `_list_user_folders`, `_find_existing_service` → `_search_user_items`
+# `_search_user_items` → `_enumerate_all_user_items`) avvengono
+# all'interno di `service_discovery.py`: name lookup nello scope
+# del modulo figlio, NON sul compatibility module. Trade-off documentato
+# esplicitamente nella docstring di `service_discovery.py` —
+# nessun test contract attuale dipende da questo path
 # `_search_user_items` chiamato anche da `_delete_existing_service`
-# (lifecycle, resta in uploader): name lookup in uploader → facade
-# re-export → patch propagation safe.
-# Pattern §6.1 facade. Vedi `orchestrate/phase_5_b4/preflight.md` §3.2
-# (analisi semantica monkeypatch dettagliata).
-from .arcgis.service_discovery import (  # noqa: F401  (re-export)
+# lifecycle, resta in uploader): name lookup in uploader → compatibility module
+# compatibility export → patch propagation safe
+# analisi semantica monkeypatch dettagliata
+from .arcgis.service_discovery import (  # noqa: F401 (compatibility export
     _list_user_folders,
     _ensure_folder,
     _is_service_name_available,
@@ -413,12 +412,12 @@ from .arcgis.service_discovery import (  # noqa: F401  (re-export)
     _find_existing_service,
 )
 
-from .arcgis.service_lifecycle import (  # noqa: F401  (re-export)
+from .arcgis.service_lifecycle import (  # noqa: F401 (compatibility export
     _try_cleanup_zombie_service,
     _delete_existing_service,
 )
 
-from .arcgis.publish_ops import (  # noqa: F401  (re-export)
+from .arcgis.publish_ops import (  # noqa: F401 (compatibility export
     _add_layer_to_service,
     _publish_mode_existing,
 )

@@ -142,7 +142,7 @@ class ScheduleRunsCatalog:
 
         runs_root = self.runs_root_for(project_id, schedule_id)
         # Containment check delegato al path_policy: catturiamo
-        # ValueError e re-raise con il wording del catalog.
+        # ValueError e re-raise con il wording del catalog
         try:
             run_dir = assert_path_within(runs_root / run_token, [runs_root])
         except ValueError as e:

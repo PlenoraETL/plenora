@@ -80,7 +80,7 @@ PANDAS_TO_SQL = {
     },
 }
 
-# Alias per MariaDB (stessa sintassi MySQL)
+# Alias per MariaDB (stessa sintassi MySQL
 PANDAS_TO_SQL["mariadb"] = PANDAS_TO_SQL["mysql"]
 
 
@@ -202,21 +202,21 @@ class DDLGenerator:
         if mapping.is_geometry:
             return self._geometry_type(mapping.srid or 4326)
 
-        # Se il dtype reale del DataFrame è object (tipi misti: numeri + stringhe),
-        # forza TEXT/VARCHAR indipendentemente dal tipo dichiarato nel mapping.
+        # Se il dtype reale del DataFrame è object (tipi misti: numeri + stringhe
+        # forza TEXT/VARCHAR indipendentemente dal tipo dichiarato nel mapping
         # Caso tipico: colonna "numero" con valori 95, 100, "26A"
         dtype_str_check = str(pandas_dtype).lower().strip()
         if dtype_str_check == "object":
             type_map = PANDAS_TO_SQL.get(self.db_type, PANDAS_TO_SQL["postgres"])
             return type_map.get("object", "TEXT")
 
-        # Tipo esplicito dall'utente (già SQL)
+        # Tipo esplicito dall'utente (già SQL
         if mapping.dest_type and mapping.dest_type.upper() not in (
             "INT", "REAL", "STR", "BOOL", "DATE", "GEOMETRY", ""
         ):
             return mapping.dest_type
 
-        # Tipo PLENORA interno (dal canvas)
+        # Tipo PLENORA interno (dal canvas
         base_type = mapping.dest_type.split(":")[0].lower() if mapping.dest_type else ""
         if base_type in URBY_TO_SQL.get(self.db_type, {}):
             return URBY_TO_SQL[self.db_type][base_type]
@@ -232,7 +232,7 @@ class DDLGenerator:
             if key in dtype_str:
                 return val
 
-        # Default: TEXT/CLOB/NVARCHAR(MAX)
+        # Default: TEXT/CLOB/NVARCHAR(MAX
         return type_map.get("object", "TEXT")
 
     def _geometry_type(self, srid: int) -> str:
@@ -271,7 +271,7 @@ class DDLGenerator:
             columns: lista mappature colonne
             pandas_dtypes: dizionario {col_name: pandas_dtype} per fallback tipi
             max_lengths: dizionario {col_name: max_char_length} opzionale,
-                calcolato dal DataFrame sorgente (`df[col].str.len().max()`).
+                calcolato dal DataFrame sorgente (`df[col].str.len.max`).
                 Su Oracle, abilita l'auto-promozione VARCHAR2(4000) → CLOB
                 per colonne stringa con contenuto > 4000 char, evitando
                 `ORA-12899 value too large for column` (C5 fix 2).
@@ -295,7 +295,7 @@ class DDLGenerator:
 
             # C5 fix 2: auto-promote Oracle VARCHAR2(4000) → CLOB se la
             # colonna supera la soglia. Controlla sia source_column che
-            # dest_column per robustezza contro mapping con rename.
+            # dest_column per robustezza contro mapping con rename
             if self.db_type == "oracle" and "VARCHAR2(4000)" in sql_type.upper():
                 col_max = max(
                     int(max_lengths.get(col.source_column, 0) or 0),
@@ -327,7 +327,7 @@ class DDLGenerator:
             Lista di istruzioni SQL da eseguire in ordine.
         """
         # B-BE-60: strip spazi da table/schema/geometry_column per evitare
-        # nomi indice e tabella malformati (es. "idx_test_c01 _geometry_spatial")
+        # nomi indice e tabella malformati (es. "idx_test_c01 _geometry_spatial"
         table = table.strip()
         schema = schema.strip() if schema else schema
         geometry_column = geometry_column.strip()
@@ -343,7 +343,7 @@ class DDLGenerator:
         elif self.db_type == "oracle":
             # Oracle richiede: 1) INSERT metadata, 2) CREATE INDEX
             import re as _re
-            # Validazione identificatori Oracle (solo alfanumerico + underscore)
+            # Validazione identificatori Oracle (solo alfanumerico + underscore
             _ident = _re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
             schema_upper = schema.upper() if schema else "USER"
             table_upper = table.upper()
@@ -406,11 +406,11 @@ END;"""
 
     # Alias semantico: il writer per stage+swap vuole sottolineare
     # "drop defensivo di una shadow eventualmente orfana", non un
-    # drop generico. L'implementazione e' la stessa.
+    # drop generico. L'implementazione e' la stessa
     def generate_drop_if_exists(self, schema: str, table: str) -> str:
         return self.generate_drop_table(schema, table)
 
-    # GENERAZIONE STAGE+SWAP (C5 fix 3)
+    # GENERAZIONE STAGE+SWAP (C5 fix 3
 
     def generate_create_like(
         self, schema: str, src_table: str, stg_table: str
@@ -499,7 +499,7 @@ END;"""
             ]
 
         if self.db_type == "mssql":
-            # sp_rename: il nuovo nome e' unqualified (stesso schema)
+            # sp_rename: il nuovo nome e' unqualified (stesso schema
             src_qualified_str = f"{schema}.{src_table}" if schema else src_table
             stg_qualified_str = f"{schema}.{stg_table}" if schema else stg_table
             return [
@@ -528,11 +528,11 @@ END;"""
         """
         full_name = self.qualified_table_name(schema, table)
 
-        # Dialetti con TRUNCATE TABLE = DDL implicit-commit.
-        # Oracle: tutti i TRUNCATE sono DDL auto-commit.
-        # MySQL:  TRUNCATE su InnoDB = DDL con implicit commit
-        #         (vedi MySQL ref "TRUNCATE TABLE is classified as a
-        #         DDL statement rather than a DML statement").
+        # Dialetti con TRUNCATE TABLE = DDL implicit-commit
+        # Oracle: tutti i TRUNCATE sono DDL auto-commit
+        # MySQL: TRUNCATE su InnoDB = DDL con implicit commit
+        # vedi MySQL ref "TRUNCATE TABLE is classified as a
+        # DDL statement rather than a DML statement"
         if self.db_type in ("oracle", "mysql"):
             return f"DELETE FROM {full_name}"
 
@@ -550,7 +550,7 @@ END;"""
 
         Returns:
             Tupla (sql_template, param_names) dove sql_template contiene
-            placeholder (:param_name) per SQLAlchemy text().
+            placeholder (:param_name) per SQLAlchemy text.
         """
         full_name = self.qualified_table_name(schema, table)
 
@@ -594,7 +594,7 @@ END;"""
             return f"ST_GeomFromText(:{param_name}, {srid})"
         return f":{param_name}"
 
-    # GENERAZIONE UPSERT (multi-database)
+    # GENERAZIONE UPSERT (multi-database
 
     def generate_upsert(
         self,
@@ -626,7 +626,7 @@ END;"""
         col_names = [self.quote_column(c.dest_column) for c in active_cols]
         param_names = [c.dest_column for c in active_cols]
 
-        # Colonne da aggiornare (tutte tranne match, o lista esplicita)
+        # Colonne da aggiornare (tutte tranne match, o lista esplicita
         if update_columns:
             update_cols = [c for c in active_cols
                          if c.dest_column in update_columns]
@@ -854,8 +854,8 @@ WHEN NOT MATCHED THEN INSERT ({insert_cols}) VALUES ({src_cols});"""
                 ORDER BY table_name
             """, {"schema": schema})
         elif self.db_type in ("mysql", "mariadb"):
-            # MySQL SHOW TABLES non supporta parametri bind.
-            # Validazione strict del nome schema (solo alfanumerici + underscore).
+            # MySQL SHOW TABLES non supporta parametri bind
+            # Validazione strict del nome schema (solo alfanumerici + underscore
             import re
             if not re.match(r'^[a-zA-Z0-9_]+$', schema):
                 raise ValueError(f"Nome schema non valido per MySQL: {schema}")

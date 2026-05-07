@@ -1,7 +1,7 @@
 """
-Storage dispatch policy-aware per file source blob (STRUCT-001 Seam C).
+Storage dispatch policy-aware per file source blob (STRUCT-001 Seam C
 
-Estratto da `FileSourceService._dispatch_blob_storage` senza alcun
+Keeps this module's responsibility explicit and isolated from adjacent code.
 """
 
 from __future__ import annotations
@@ -12,9 +12,9 @@ from app.shared.storage_layout import FILE_SOURCES_PREFIX
 
 
 # Alias modulare verso `app.shared.storage_layout.FILE_SOURCES_PREFIX`
-# (BE-DATA-PLANE-001A): single source-of-truth per i prefix object
+# BE-DATA-PLANE-001A): single source-of-truth per i prefix object
 # storage. Mantenuto come name privato per backward-compat dei test
-# che leggono `_OBJECT_STORAGE_PREFIX`.
+# che leggono `_OBJECT_STORAGE_PREFIX`
 _OBJECT_STORAGE_PREFIX = FILE_SOURCES_PREFIX
 
 
@@ -25,14 +25,14 @@ class BlobDispatchResult(TypedDict):
     e da `db.save_file_sources_batch` (chiavi `data`, `storage_key`,
     `size_bytes`). Ritorna sempre tutti e tre i campi.
 
-    Path BYTEA  -> data=raw_bytes,  storage_key=None,  size_bytes=N
-    Path object -> data=None,       storage_key="..", size_bytes=N
+    Path BYTEA -> data=raw_bytes, storage_key=None, size_bytes=N
+    Path object -> data=None, storage_key="..", size_bytes=N
 
-    Go-ready mapping:
+    portable mapping:
         type BlobDispatchResult struct {
-            Data       []byte
+            Data []byte
             StorageKey *string
-            SizeBytes  int64
+            SizeBytes int64
         }
     Caller pattern attuale (`**blob_kwargs`) resta invariato a runtime:
     TypedDict e' un `dict` regolare.
@@ -54,9 +54,9 @@ def dispatch_blob_storage(
     """Dispatch policy-aware del blob (A1).
 
     Legge `STORAGE_POLICY` e ramifica:
-      - `db`             -> sempre DB BYTEA (niente object storage)
+      - `db` -> sempre DB BYTEA (niente object storage)
       - `object_storage` -> sempre object storage (niente BYTEA)
-      - `hybrid`         -> threshold-based su
+      - `hybrid` -> threshold-based su
                             `FILE_SOURCE_S3_THRESHOLD_BYTES`
                             (default 50 MB, comportamento attuale)
 
@@ -65,12 +65,12 @@ def dispatch_blob_storage(
     caller deve gestire (orphan guard: no row DB se upload fallisce).
 
     Args:
-        file_id:        identifier del file source. Usato per la storage_key
+        file_id: identifier del file source. Usato per la storage_key
                         SE `storage_key_id` non e' fornito (backward-compat
                         single-file). Sempre usato nei log per audit trail.
-        raw_data:       bytes del blob da persistere.
-        filename:       nome file originale (usato per la storage_key).
-        logger:         LoggerProtocol-like; warning/error/info sul path
+        raw_data: bytes del blob da persistere.
+        filename: nome file originale (usato per la storage_key).
+        logger: LoggerProtocol-like; warning/error/info sul path
                         object_storage. Passato dal caller per evitare
                         coupling con FileSourceService.
         storage_key_id: opzionale (BE-HARDEN-001C E1). Se valorizzato,
@@ -103,12 +103,12 @@ def dispatch_blob_storage(
     # quando policy=db/object_storage). BE-CONFIG-001B: default tipato in
     # `Settings.DEFAULTS["FILE_SOURCE_S3_THRESHOLD_BYTES"]`; override env
     # continua a funzionare via `Settings._converti_tipo_env` (coercion
-    # `int`).
+    # `int`
     threshold = int(settings.get("FILE_SOURCE_S3_THRESHOLD_BYTES"))
 
     # BE-DATA-PLANE-001B: decisione db vs object_storage delegata a
     # `app.shared.storage_dispatch.resolve_payload_target` (pure
-    # function). Comportamento bit-per-bit identico al pre-001B.
+    # function). Comportamento bit-per-bit identico al pre-001B
     use_object_storage = resolve_payload_target(
         policy=policy,
         size_bytes=size,
@@ -121,22 +121,21 @@ def dispatch_blob_storage(
     # Object storage path. BE-HARDEN-001C E1: il segmento path puo' essere
     # `file_id` (default, single-file) oppure `storage_key_id` (multi-layer
     # con shared blob). Pattern speculare a `eseguibili-outputs/` e
-    # `imdf-bundles/` nel naming bucket.
+    # `imdf-bundles/` nel naming bucket
     key_id = storage_key_id if storage_key_id is not None else file_id
     storage_key = f"{_OBJECT_STORAGE_PREFIX}/{key_id}/{filename}"
 
-    # BE-GO-READY-STORAGE-ENGINE-008: record upload_intent BEFORE the
+    # record upload_intent BEFORE the
     # upload. Self-clearing pattern (no caller-side mark_done): if the
     # caller's downstream `db.save_file_source` commits, the reconciler
     # beat hook observes `plenora.file_sources.storage_key` after the
     # grace window and marks the intent done. If the caller dies in
     # the W2 window (post-upload, pre-DB-save), the reconciler runs
-    # `compensating_delete` after the grace window expires.
-    #
+    # `compensating_delete` after the grace window expires
     # Best-effort: a record failure (autocommit error) does NOT block
     # the upload. The W2 race for that single dispatch reverts to
-    # current pre-008 behavior (orphan possible, ADR-0011 acceptable);
-    # logged so ops can spot the degradation.
+    # current pre-008 behavior (orphan possible, ADR-0011 acceptable
+    # logged so ops can spot the degradation
     intent_id: Optional[str] = None
     try:
         from app.shared.storage_reconciliation import record_upload_intent
@@ -149,7 +148,7 @@ def dispatch_blob_storage(
     except Exception as e:
         # `record_upload_intent` is itself best-effort. Anything
         # raised here is pathological (import failure). Log and
-        # continue — do not block the upload.
+        # continue — do not block the upload
         logger.warning(
             f"[FS-B1-large] upload_intent record fallito per {file_id}: {e}"
         )
@@ -166,7 +165,7 @@ def dispatch_blob_storage(
         # Upload failed -> no orphan possible. Close the intent so the
         # reconciler does not later attempt a delete on a key that was
         # never written. Best-effort: `mark_done` swallows its own DB
-        # errors.
+        # errors
         if intent_id is not None:
             try:
                 from app.shared.storage_reconciliation import mark_done
@@ -174,7 +173,7 @@ def dispatch_blob_storage(
             except Exception:
                 # Pathological (import failure). Reconciler will still
                 # close the intent eventually (compensating_delete on a
-                # non-existent key is a no-op on most backends).
+                # non-existent key is a no-op on most backends
                 pass
         raise
     logger.info(

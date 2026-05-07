@@ -18,7 +18,7 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-# ENUM APPLICATIVI (espandibili senza migration)
+# ENUM APPLICATIVI (espandibili senza migration
 
 TICKET_CATEGORIES: Tuple[str, ...] = (
     "auth",
@@ -39,12 +39,12 @@ TICKET_STATUSES_ACTIVE: Tuple[str, ...] = (
     "open", "in_progress", "waiting_user", "reopened",
 )
 
-# Ruoli che possono creare tech_debt (admin/superadmin, non utenti finali)
+# Ruoli che possono creare tech_debt (admin/superadmin, non utenti finali
 _ROLES_TECH_DEBT_CREATE = {"admin", "superadmin"}
 _ROLES_ADMIN = {"admin", "superadmin"}
 
 
-# NOTIFIER HOOK (email-ready)
+# NOTIFIER HOOK (email-ready
 
 
 class TicketNotifier:
@@ -86,7 +86,7 @@ class TicketNotifier:
         pass
 
 
-# Singleton default (no-op). Sostituibile a startup in main.py.
+# Singleton default (no-op). Sostituibile a startup in main.py
 _notifier: TicketNotifier = TicketNotifier()
 
 
@@ -177,7 +177,7 @@ def check_access(ticket: Optional[Dict[str, Any]], actor: CurrentUser) -> Dict[s
     if not _can_view(ticket, actor):
         # 404 per non leakare esistenza: stesso codice/message del
         # ticket realmente assente, l'access-denied resta indistinguibile
-        # dal not-found dal punto di vista del client.
+        # dal not-found dal punto di vista del client
         raise HTTPException(
             status_code=404,
             detail={
@@ -263,8 +263,8 @@ def list_tickets_for(
         created_by_filter = actor.user_id
 
     # `mine` restringe ulteriormente: se TRUE, l'utente chiede solo i propri
-    # (per admin filtra per assignee=me; per user e' gia' implicito da
-    # created_by_filter ma manteniamo coerenza esponendo il flag).
+    # per admin filtra per assignee=me; per user e' gia' implicito da
+    # created_by_filter ma manteniamo coerenza esponendo il flag
     if mine:
         if actor.role in _ROLES_ADMIN:
             assignee = actor.user_id
@@ -414,7 +414,7 @@ def delete_ticket(
     if hard:
         if actor.role != "superadmin":
             raise HTTPException(403, "Hard delete riservato a superadmin")
-        # Snapshot file_source_id PRIMA del delete (cascade rimuove i link).
+        # Snapshot file_source_id PRIMA del delete (cascade rimuove i link
         attachments = tdb.list_attachments(ticket_id)
         file_source_ids = [a["file_source_id"] for a in attachments]
         ok = tdb.delete_ticket(ticket_id)
@@ -429,7 +429,7 @@ def delete_ticket(
         return {"ok": True, "hard": True, "orphaned_file_source_ids": file_source_ids}
 
     # Soft delete (default): nessun cleanup blob (gli allegati restano
-    # accessibili per recovery/audit, file_source non orfanato).
+    # accessibili per recovery/audit, file_source non orfanato
     ok = tdb.soft_delete_ticket(ticket_id)
     if not ok:
         raise HTTPException(

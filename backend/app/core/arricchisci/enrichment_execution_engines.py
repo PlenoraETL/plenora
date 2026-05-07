@@ -20,13 +20,13 @@ from app.utils.logger import get_logger
 # Stesso logger name di `enrichment_service.py` (`__name__` valuta a
 # `"app.core.arricchisci.enrichment_service"`). Singleton stdlib per
 # nome → record indistinguibili dai consumer che attaccano handler /
-# filtrano per nome canonico.
+# filtrano per nome canonico
 logger = get_logger("app.core.arricchisci.enrichment_service")
 
 
 class EnrichmentExecutionEnginesMixin:
     """Mixin per `EnrichmentExecutor`: 3 path runtime engine.
-    Cuore esecuzione alternativo scelto da `execute()` dispatcher in
+    Cuore esecuzione alternativo scelto da `execute` dispatcher in
     base a feature flag (parallel_workers, ENABLE_ASYNC_ENRICHMENT).
     """
 
@@ -87,7 +87,7 @@ class EnrichmentExecutionEnginesMixin:
                 )
 
             if self.options.enable_deduplication:
-                # Prima lettura cache (senza lock — fast path)
+                # Prima lettura cache (senza lock — fast path
                 if cache_key in self._cache:
                     return cache_key, row_indices, self._cache[cache_key], None
 
@@ -106,7 +106,7 @@ class EnrichmentExecutionEnginesMixin:
             # Chiamata API
             api_result, error = self._call_api_with_retry(params, first_idx)
 
-            # Aggiorna cache con risultato reale (o rimuovi placeholder in caso di errore)
+            # Aggiorna cache con risultato reale (o rimuovi placeholder in caso di errore
             if self.options.enable_deduplication:
                 with self._cache_lock:
                     if api_result:
@@ -158,8 +158,8 @@ class EnrichmentExecutionEnginesMixin:
                             stats.api_calls_made += 1
                     else:
                         # Successo - api_result dovrebbe essere List[Dict] ma alcune
-                        # API restituiscono direttamente un dict (singolo risultato).
-                        # Normalizziamo per evitare TypeError su `api_result[0]`.
+                        # API restituiscono direttamente un dict (singolo risultato
+                        # Normalizziamo per evitare TypeError su `api_result[0]`
                         if isinstance(api_result, list):
                             first_row = api_result[0] if api_result else {}
                         elif isinstance(api_result, dict):
@@ -244,7 +244,7 @@ class EnrichmentExecutionEnginesMixin:
         total_rows = len(df)
         start_time = time.time()
 
-        # Deduplicazione: raggruppa per parametri unici (stessa logica di _execute_parallel)
+        # Deduplicazione: raggruppa per parametri unici (stessa logica di _execute_parallel
         if self.options.enable_deduplication:
             unique_groups = self._group_by_params(df)
             logger.info(
@@ -254,10 +254,10 @@ class EnrichmentExecutionEnginesMixin:
         else:
             unique_groups = {str(idx): [idx] for idx in df.index}
 
-        # Semaforo per limitare la concorrenza.
+        # Semaforo per limitare la concorrenza
         # BE-CONFIG-001D: default tipato in
         # `Settings.DEFAULTS["ENRICHMENT_POOL_SIZE"]=50`. Stesso clamp
-        # [5, 200] usato da `app.shared.async_http._get_pool_size`.
+        # 5, 200] usato da `app.shared.async_http._get_pool_size`
         from app.config import settings as _settings
         pool_size = int(_settings.get("ENRICHMENT_POOL_SIZE"))
         pool_size = max(5, min(pool_size, 200))
@@ -282,7 +282,7 @@ class EnrichmentExecutionEnginesMixin:
                 row = df.loc[first_idx]
                 # Inizializza params prima del try: in caso di eccezione in
                 # _build_params, il blocco except riesce comunque a citarli
-                # (anche vuoti) nel RowError.
+                # anche vuoti) nel RowError
                 params: dict = {}
 
                 try:
@@ -294,7 +294,7 @@ class EnrichmentExecutionEnginesMixin:
                             stats.skipped += len(row_indices)
                             return None
 
-                    # Cache lookup (deduplicazione tra task concorrenti)
+                    # Cache lookup (deduplicazione tra task concorrenti
                     api_result = None
                     if self.options.enable_deduplication:
                         cached = self._cache.get(cache_key)
@@ -303,11 +303,11 @@ class EnrichmentExecutionEnginesMixin:
                             stats.cached += len(row_indices)
                             self._cache_hits += len(row_indices)
 
-                    # Se non cached: chiamata API (sync via to_thread)
+                    # Se non cached: chiamata API (sync via to_thread
                     if api_result is None:
-                        # Rate limiting: parity con _execute_parallel sync.
-                        # RateLimiter.acquire() puo' bloccare via time.sleep:
-                        # esecuzione via to_thread evita di bloccare l'event loop.
+                        # Rate limiting: parity con _execute_parallel sync
+                        # RateLimiter.acquire puo' bloccare via time.sleep
+                        # esecuzione via to_thread evita di bloccare l'event loop
                         await asyncio.to_thread(self._rate_limiter.acquire)
 
                         api_result, err_obj = await asyncio.to_thread(
@@ -317,7 +317,7 @@ class EnrichmentExecutionEnginesMixin:
                         if err_obj is not None:
                             stats.errors += len(row_indices)
                             # Parity con sync: replica il RowError per ogni
-                            # riga del gruppo preservando http_status/retry_count.
+                            # riga del gruppo preservando http_status/retry_count
                             return [
                                 RowError(
                                     row_index=int(idx),
@@ -340,7 +340,7 @@ class EnrichmentExecutionEnginesMixin:
                                         self._cache.pop(k, None)
 
                     # Applica il risultato a tutte le righe del gruppo
-                    # (stessa logica del path sync _execute_parallel)
+                    # stessa logica del path sync _execute_parallel
                     if isinstance(api_result, list):
                         first_row = api_result[0] if api_result else {}
                     elif isinstance(api_result, dict):
@@ -369,7 +369,7 @@ class EnrichmentExecutionEnginesMixin:
                 except Exception as e:
                     logger.error(f"[ASYNC] Errore gruppo {cache_key}: {e}", exc_info=True)
                     stats.errors += len(row_indices)
-                    # Parity con sync: un RowError per riga del gruppo.
+                    # Parity con sync: un RowError per riga del gruppo
                     return [
                         RowError(
                             row_index=int(idx),
@@ -386,7 +386,7 @@ class EnrichmentExecutionEnginesMixin:
             _process_group(ck, indices)
             for ck, indices in unique_groups.items()
         ]
-        # Chunk i risultati se troppi task (evita di mantenere troppe coroutine in RAM)
+        # Chunk i risultati se troppi task (evita di mantenere troppe coroutine in RAM
         CHUNK = 1000
         for chunk_start in range(0, len(tasks), CHUNK):
             chunk = tasks[chunk_start:chunk_start + CHUNK]
@@ -446,12 +446,12 @@ class EnrichmentExecutionEnginesMixin:
 
         processed = 0
         _extra_rows: List[Dict] = []  # righe espanse da FeatureCollection o array
-        # Token OAuth2 gestito via cache con expires_at (api_utils.get_cached_oauth2_token).
-        # Il refresh avviene automaticamente quando serve — non piu counter arbitrario.
+        # Token OAuth2 gestito via cache con expires_at (api_utils.get_cached_oauth2_token
+        # Il refresh avviene automaticamente quando serve — non piu counter arbitrario
         _is_oauth2 = self.auth.get("type") in ("oauth2_password", "oauth2_client_credentials")
 
         for cache_key, row_indices in unique_groups.items():
-            # Per OAuth2: refresh headers (la cache evita HTTP se il token e ancora valido)
+            # Per OAuth2: refresh headers (la cache evita HTTP se il token e ancora valido
             if _is_oauth2:
                 self._headers = self._prepare_headers()
 
@@ -491,7 +491,7 @@ class EnrichmentExecutionEnginesMixin:
 
             # Controlla cache
             if self.options.enable_deduplication and cache_key in self._cache:
-                # Cache hit - cached_result è List[Dict]
+                # Cache hit - cached_result è List[Dict
                 cached_result = self._cache[cache_key]
                 for idx in row_indices:
                     self._apply_result(result_df, idx, cached_result[0] if cached_result else {})
@@ -527,7 +527,7 @@ class EnrichmentExecutionEnginesMixin:
                     processed += len(row_indices)
                     break
             else:
-                # Successo - api_result è ora una List[Dict]
+                # Successo - api_result è ora una List[Dict
                 # Se la lista ha >1 elementi (es. FeatureCollection), esplodi le righe
                 if self.options.enable_deduplication:
                     with self._cache_lock:
@@ -543,8 +543,8 @@ class EnrichmentExecutionEnginesMixin:
                         self._apply_result(result_df, idx, api_result[0])
                         stats.success += 1
                     elif len(api_result) > 1:
-                        # FeatureCollection o array: prima feature nella riga esistente,
-                        # le restanti come righe extra (con i parametri di input replicati)
+                        # FeatureCollection o array: prima feature nella riga esistente
+                        # le restanti come righe extra (con i parametri di input replicati
                         self._apply_result(result_df, idx, api_result[0])
                         input_row_data = result_df.loc[idx].to_dict()
                         for extra_dict in api_result[1:]:
@@ -568,7 +568,7 @@ class EnrichmentExecutionEnginesMixin:
                 logger.warning(f"Raggiunto threshold errori ({stats.errors}), interruzione")
                 break
 
-        # Concatena righe espanse (FeatureCollection explosion)
+        # Concatena righe espanse (FeatureCollection explosion
         if _extra_rows:
             extra_df = pd.DataFrame(_extra_rows)
             result_df = pd.concat([result_df, extra_df], ignore_index=True)

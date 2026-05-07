@@ -17,9 +17,9 @@ from app.shared.path_policy import validate_imdf_task_id
 from app.utils.logger import get_logger
 from workers.celery_app import celery_app
 
-# Regex + path-traversal guard centralizzati in `app.shared.path_policy.
+# Regex + path-traversal guard centralizzati in `app.shared.path_policy
 # validate_imdf_task_id` (D3 commit 1). Il wrapper locale preserva la
-# signature `Optional[Path]` attesa dal caller task (None su id malformato).
+# signature `Optional[Path]` attesa dal caller task (None su id malformato
 
 
 def _safe_bundle_dir(bundle_task_id: str) -> Optional[Path]:
@@ -61,12 +61,12 @@ def execute_imdf_publish_task(
             risolve la cartella `IMDF_BUNDLES_DIR/{bundle_task_id}/` e cerca
             il .gdb + renderers.json al suo interno.
         publisher_config: dict con:
-            - connection_id       (str, richiesto)
-            - folder              (str, opzionale)
-            - fs_name             (str, richiesto)
-            - mode                ('replace' | 'append' | 'upsert', default 'replace')
-            - apply_renderers     (bool, default False)
-            - match_columns       (dict, opzionale — override dei default per-layer)
+            - connection_id (str, richiesto)
+            - folder (str, opzionale)
+            - fs_name (str, richiesto)
+            - mode ('replace' | 'append' | 'upsert', default 'replace')
+            - apply_renderers (bool, default False)
+            - match_columns (dict, opzionale — override dei default per-layer)
 
     Returns:
         Dict con gli stessi campi di upload_imdf_layers, arricchiti di task_id,
@@ -100,7 +100,7 @@ def execute_imdf_publish_task(
             }
         # R2 multi-host: se il bundle non e' nella cache locale di questo
         # worker, prova a hydrate-lo da S3. Serve quando il publish gira su
-        # un nodo diverso da quello che ha generato il bundle.
+        # un nodo diverso da quello che ha generato il bundle
         if not bundle_dir.exists() or not bundle_dir.is_dir():
             try:
                 from app.core.imdf import storage as _imdf_storage
@@ -185,7 +185,7 @@ def execute_imdf_publish_task(
         match_columns = publisher_config.get("match_columns") or None
 
         # ── 6. Progress callback per upload ──────────────────────────
-        # L'uploader notifica step-by-step (0..N). Mappiamo nel range 15..95.
+        # L'uploader notifica step-by-step (0..N). Mappiamo nel range 15..95
         def _upload_progress(stage, current, total, message=""):
             base = 15
             span = 80
@@ -235,7 +235,7 @@ def execute_imdf_publish_task(
             "elapsed_time": elapsed,
             "completed_at": datetime.now(timezone.utc).isoformat(),
             # Campo "imdf.publish" per coerenza con la struttura del task
-            # di enrichment (il frontend lo legge dallo stesso path).
+            # di enrichment (il frontend lo legge dallo stesso path
             "imdf": {"publish": publish_result},
         }
 

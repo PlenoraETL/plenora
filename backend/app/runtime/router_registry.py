@@ -1,7 +1,6 @@
 """
 Typed router-init binding registry - first slice.
 
-BE-GO-READY-BOOTSTRAP-ENGINE-018-ROUTER-REGISTRY-FIRST-SLICE.
 """
 
 from __future__ import annotations
@@ -72,12 +71,11 @@ def bind_router_services(
 
 
 # Concrete bindings
-#
 # NOTE: bindings live here (not in ``main.py``) so that contract
 # tests can assert their typed shape without importing ``main.py``
-# (which has heavy module-load side effects). The router's
+# which has heavy module-load side effects). The router's
 # ``init_*`` is imported lazily inside the extract closure to keep
-# this module cheap to load.
+# this module cheap to load
 
 
 def _orchestrator_init(*args: Any, **kwargs: Any) -> None:
@@ -102,7 +100,7 @@ ORCHESTRATOR_BINDING = RouterBinding(
 def _connections_init(*args: Any, **kwargs: Any) -> None:
     """Lazy thunk: import + invoke ``init_connections``.
 
-    BE-GO-READY-BOOTSTRAP-ENGINE-019: 2-arg variant. The connections
+     2-arg variant. The connections
     router takes (connection_service, database_inspector). Both
     instances are owned by ``RuntimeServices`` and exposed by identity
     via the typed extract. The thunk pattern is identical to
@@ -127,7 +125,7 @@ CONNECTIONS_BINDING = RouterBinding(
 def _projects_init(*args: Any, **kwargs: Any) -> None:
     """Lazy thunk: import + invoke ``init_projects``.
 
-    BE-GO-READY-BOOTSTRAP-ENGINE-020: 1-arg slice consuming
+     1-arg slice consuming
     ``services.project_service``. Same lazy-thunk pattern as the
     orchestrator binding (keeps the registry module import-cheap).
     """
@@ -146,10 +144,9 @@ PROJECTS_BINDING = RouterBinding(
 def _arricchisci_init(*args: Any, **kwargs: Any) -> None:
     """Lazy thunk: import + invoke ``init_arricchisci``.
 
-    BE-GO-READY-BOOTSTRAP-ENGINE-021: 2-arg slice consuming
+     2-arg slice consuming
     ``services.project_service`` and ``services.api_connection_service``.
     The second arg is the wrap-don't-move singleton landed in
-    BOOTSTRAP-ENGINE-016 (identity invariant already locked by the
     runtime container contract test). Same lazy-thunk pattern as the
     other slices.
     """
@@ -171,10 +168,9 @@ ARRICCHISCI_BINDING = RouterBinding(
 def _datasources_init(*args: Any, **kwargs: Any) -> None:
     """Lazy thunk: import + invoke ``init_datasources``.
 
-    BE-GO-READY-BOOTSTRAP-ENGINE-022: 1-arg slice consuming
+     1-arg slice consuming
     ``services.datasource_service``. The ``datasource_service`` is
     the wrap-don't-move singleton landed in BOOTSTRAP-ENGINE-017
-    (identity invariant already locked by the runtime container
     contract test). Same lazy-thunk pattern as the other slices
     (keeps the registry module import-cheap).
     """
@@ -193,7 +189,7 @@ DATASOURCES_BINDING = RouterBinding(
 def _carica_init(*args: Any, **kwargs: Any) -> None:
     """Lazy thunk: import + invoke ``init_carica_service``.
 
-    BE-GO-READY-BOOTSTRAP-ENGINE-023: 1-arg slice consuming
+     1-arg slice consuming
     ``services.connection_service``. The carica router previously
     set its module-private ``_connection_service`` and built a
     ``CaricaExecutor`` from a positional ``init_carica_service(

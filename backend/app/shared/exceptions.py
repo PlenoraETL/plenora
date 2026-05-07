@@ -152,7 +152,7 @@ class ProjectCleanupPartialError(Exception):
     results_blobs). La row `config.projects` NON viene rimossa: invariante
     fail-closed "o progetto cancellato pulito, o ancora presente".
 
-    Contesto (reperto S1 Batch 9, audit `error_handling_batch9_orchestrator_cleanup_audit.md`):
+    Contesto (reperto S1 , audit `error_handling_batch9_orchestrator_cleanup_audit.md`):
       Pre-fix, `delete_project` aveva cascade a 5 step con 4 `except Exception:
       warning + continue`; lo step 5 (config DELETE) veniva eseguito SEMPRE,
       anche se intermediate runs / results blobs erano orfani cross-DB. La
@@ -203,11 +203,11 @@ class ProjectCleanupPartialError(Exception):
 class IntermediateWriteError(Exception):
     """Sollevata quando la scrittura intermediate di un nodo fallisce.
 
-    Contesto (reperto S2 Batch 8, audit `error_handling_batch8_storage_provider_audit.md`):
+    Contesto (reperto S2 , audit `error_handling_batch8_storage_provider_audit.md`):
       `intermediate/writer.write_node` e' chiamato dagli executor
       (estrai/manipola/arricchisci) a fine nodo per persistere righe e
       metadata nella intermediate.db (PG plenora schema). Pre-fix un
-      fallimento ritornava silenziosamente `sha256(b"error").hexdigest()`:
+      fallimento ritornava silenziosamente `sha256(b"error").hexdigest`:
       un hash sintatticamente valido (64 hex chars) ma semanticamente
       fake. Indistinguibile da un hash reale a valle → `input_hash` e
       `output_hash` del run potevano contenere marker "error" invisibile,
@@ -289,7 +289,7 @@ class ExecutionContextError(Exception):
     Attributi:
         project_id: id del progetto su cui l'init stava operando.
         reason: descrizione safe-to-show del problema (es. "errore
-            lettura progetto dal DB"). Non contiene str() dell'errore
+            lettura progetto dal DB"). Non contiene str dell'errore
             originale: il dettaglio tecnico resta nell'attributo
             `original_error` e nei log, non in questo messaggio.
         original_error: eccezione sottostante (tipicamente
@@ -371,7 +371,7 @@ class FileSourceResolutionError(Exception):
             diagnostica, non per decidere il comportamento del caller
             (entrambi sono fail-closed).
         reason: descrizione safe-to-show del problema (es. "errore
-            lettura file_source dal DB"). Non contiene str() dell'errore
+            lettura file_source dal DB"). Non contiene str dell'errore
             originale: il dettaglio tecnico resta nell'attributo
             `original_error` e nei log, non in questo messaggio.
         original_error: eccezione sottostante (`psycopg2.Error` o
@@ -402,9 +402,8 @@ class MemoryLimitExceededError(Exception):
     configurato per uno stage di processing prima di
     materializzare il risultato.
 
-    BE-GO-READY-MEMORY-OOM-001-LOAD-FILE-PREFLIGHT-GUARD:
         Prima di caricare un file via `load_dataframe_from_file`,
-        un preflight guard confronta `file_path.stat().st_size`
+        un preflight guard confronta `file_path.stat.st_size`
         con `settings.LOAD_FILE_MAX_BYTES` (default 200 MB). Se il
         file supera il cap, il guard solleva questa eccezione
         invece di tentare un parse Pandas/GeoPandas che potrebbe

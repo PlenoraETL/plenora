@@ -11,7 +11,7 @@ from psycopg2.extras import execute_values
 
 from app.utils.logger import get_logger
 
-# Importa da pg_connection (stesso pool di config/results)
+# Importa da pg_connection (stesso pool di config/results
 from app.db.pg_connection import (
     fetchone, fetchall, execute, executemany,
     get_connection, put_connection, close_connection as _pg_close,
@@ -25,7 +25,7 @@ def close_connection() -> None:
     """No-op per PostgreSQL: il pool gestisce le connessioni.
 
     Mantiene compatibilità con i task Celery che chiamano
-    close_connection() in finally.
+    close_connection in finally.
     """
     _pg_close()
 
@@ -35,7 +35,7 @@ def init_db():
     logger.info("Intermediate DB: PostgreSQL (tabelle già presenti)", op="init_db")
 
 
-# fetchone, fetchall, execute sono importati da pg_connection (top del file)
+# fetchone, fetchall, execute sono importati da pg_connection (top del file
 
 # RUNS
 
@@ -72,9 +72,9 @@ def list_runs(canvas_id: str, group_id: str, limit: int = 50) -> List[Dict]:
 
 
 # Whitelist campi aggiornabili sulla tabella `runs`. Anti-injection: impedisce
-# che kwargs arbitrari finiscano in un UPDATE dinamico (vedi update_run).
+# che kwargs arbitrari finiscano in un UPDATE dinamico (vedi update_run
 # Esclude run_id, canvas_id, group_id, timestamp, pinned (immutabili o gestiti
-# da operazioni dedicate come pin_run).
+# da operazioni dedicate come pin_run
 _ALLOWED_RUN_UPDATE_FIELDS = {
     "status",
     "input_hash", "output_hash",
@@ -186,7 +186,7 @@ def upsert_node_meta_extended(
     artifact_status: Optional[str] = None,
     artifact_error: Optional[str] = None,
 ) -> None:
-    """UPSERT node_meta con le colonne Phase 6 Batch 1.
+    """UPSERT node_meta con lo schema di persistenza corrente.
 
     Usata da `intermediate.snapshot.record_*_snapshot`. I caller legacy
     continuano a usare `upsert_node_meta` (le colonne nuove restano
@@ -225,7 +225,7 @@ def write_node_snapshot_atomic(
     artifact_status: Optional[str] = None,
     artifact_error: Optional[str] = None,
 ) -> None:
-    """Scrittura atomica node_rows + node_meta (estesa, Batch 1).
+    """Scrittura atomica node_rows + node_meta estesa.
 
     Differenze rispetto a `write_node_atomic` legacy:
       - separa `row_count` reale (passato esplicitamente dal writer
@@ -248,7 +248,7 @@ def write_node_snapshot_atomic(
     # row_count reale: se il caller non lo passa cadiamo sul fallback
     # NOTE: legacy (count = righe persistite). Per metadata_only il caller
     # DEVE passare row_count esplicito, altrimenti perdiamo l'invariante
-    # "row_count e' sempre la lunghezza reale del dataset".
+    # "row_count e' sempre la lunghezza reale del dataset"
     if row_count is None:
         row_count = persisted_rows_count
 
@@ -257,8 +257,8 @@ def write_node_snapshot_atomic(
             cur.execute(_SQL_DELETE_NODE_ROWS, (run_id, node_id))
             _bulk_insert_node_rows(cur, records)
             cur.execute(
-                # _adapt_params su execute() converte ? -> %s; qui usiamo
-                # la connessione PG nativa, quindi sostituiamo manualmente.
+                # _adapt_params su execute converte ? -> %s; qui usiamo
+                # la connessione PG nativa, quindi sostituiamo manualmente
                 _SQL_UPSERT_NODE_META_EXT.replace("?", "%s"),
                 (
                     run_id, node_id, node_type, row_count,
@@ -289,18 +289,16 @@ def list_node_meta(run_id: str) -> List[Dict]:
     return rows
 
 
-# NODE ROWS — tabella unificata JSONB (ex tabelle dinamiche)
-#
+# NODE ROWS — tabella unificata JSONB (ex tabelle dinamiche
 # Design precedente (rimosso): una tabella Postgres fisica per ogni nodo di
-# ogni run, naming convention run_{uuid}_{node_id}. Causava:
-#   - bloat del pg_catalog (una riga in pg_class / pg_attribute per ogni col)
-#   - AccessExclusiveLock su pg_class ad ogni CREATE/DROP → contesa
-#   - orphan tables se drop_run_tables falliva
-#   - impossibile query cross-run (schemi potenzialmente diversi)
-#
-# Design corrente: una singola tabella plenora.node_rows con row_data jsonb.
+# ogni run, naming convention run_{uuid}_{node_id}. Causava
+# bloat del pg_catalog (una riga in pg_class / pg_attribute per ogni col
+# AccessExclusiveLock su pg_class ad ogni CREATE/DROP → contesa
+# orphan tables se drop_run_tables falliva
+# impossibile query cross-run (schemi potenzialmente diversi
+# Design corrente: una singola tabella plenora.node_rows con row_data jsonb
 # La FK run_id → plenora.runs(run_id) ON DELETE CASCADE garantisce retention
-# atomica gratuita: basta DELETE FROM runs WHERE run_id = ? per pulire tutto.
+# atomica gratuita: basta DELETE FROM runs WHERE run_id = ? per pulire tutto
 
 
 _SPECIAL_FLOAT_KEY = "__plenora_special_float__"
@@ -336,7 +334,7 @@ def _to_jsonable(v):
     if isinstance(v, decimal.Decimal):
         return float(v)
     # Geometrie Shapely -> WKT (deve venire prima dei check numerici perche'
-    # "Point"/"Polygon" hanno __name__ che contengono "int")
+    # "Point"/"Polygon" hanno __name__ che contengono "int"
     try:
         from shapely.geometry.base import BaseGeometry
         if isinstance(v, BaseGeometry):
@@ -352,7 +350,7 @@ def _to_jsonable(v):
         # NaN / Inf non sono validi in JSON strict: usiamo dict-sentinel
         # namespaced invece di None, cosi' il reverse mapping ricostruisce
         # esattamente il float originale e l'hash recompute matcha lo
-        # stored (F-DATA-01).
+        # stored (F-DATA-01
         if v != v:  # NaN: distinto da +Inf/-Inf perche' nan != nan
             return _make_special_float_sentinel(_SPECIAL_FLOAT_TAG_NAN)
         if v == float("inf"):
@@ -386,7 +384,7 @@ def _from_jsonable_value(v):
 
     Compat: dati pre-fix scritti come `null` JSONB restano `None`.
     """
-    # Dict-sentinel: forma esatta, singola chiave, tag noto.
+    # Dict-sentinel: forma esatta, singola chiave, tag noto
     if (
         isinstance(v, dict)
         and len(v) == 1
@@ -400,7 +398,7 @@ def _from_jsonable_value(v):
         if tag == _SPECIAL_FLOAT_TAG_INF_NEG:
             return float("-inf")
         # Tag sconosciuto: NON consumiamo il dict, lo trattiamo come
-        # dato utente normale e ricorriamo (sotto).
+        # dato utente normale e ricorriamo (sotto
     if isinstance(v, list):
         return [_from_jsonable_value(x) for x in v]
     if isinstance(v, dict):
@@ -416,16 +414,16 @@ _SQL_INSERT_NODE_ROW = (
     "VALUES (%s, %s, %s, %s, %s::jsonb)"
 )
 
-# FIXME: #22 (perf, 2026-04-28): SQL e template per insert batch via
+# FIXME: #22 (perf, 2026-04-28): SQL e template per insert
 # `psycopg2.extras.execute_values`. Pre-fix: `cur.executemany(...)` su
-# 500 record preview faceva 500 round-trip al server (4–8s misurati).
-# Post-fix: 1 sola INSERT multi-VALUES, ~50–300ms.
-# - `_SQL_INSERT_NODE_ROWS_HEAD`: prefisso INSERT condiviso da
-#   execute_values; il placeholder `VALUES %s` viene espanso da
-#   psycopg2 nelle tuple del template.
-# - `_INSERT_NODE_ROW_TEMPLATE`: cast `::jsonb` esplicito preservato
-#   verbatim dal singolo-row pattern. Senza, psycopg2 manda `row_data`
-#   come stringa e PG la persiste come text non-jsonb.
+# 500 record preview faceva 500 round-trip al server (4–8s misurati
+# Post-fix: 1 sola INSERT multi-VALUES, ~50–300ms
+# `_SQL_INSERT_NODE_ROWS_HEAD`: prefisso INSERT condiviso da
+# execute_values; il placeholder `VALUES %s` viene espanso da
+# psycopg2 nelle tuple del template
+# `_INSERT_NODE_ROW_TEMPLATE`: cast `::jsonb` esplicito preservato
+# verbatim dal singolo-row pattern. Senza, psycopg2 manda `row_data`
+# come stringa e PG la persiste come text non-jsonb
 _SQL_INSERT_NODE_ROWS_HEAD = (
     "INSERT INTO node_rows (run_id, node_id, row_idx, row_hash, row_data) "
     "VALUES %s"
@@ -492,7 +490,7 @@ def insert_node_rows(run_id: str, node_id: str,
                      rows: List[Dict], col_schema: dict) -> None:
     """Bulk insert IDEMPOTENTE delle righe di un nodo in plenora.node_rows.
 
-    A3 (Phase 4) idempotency: la funzione DELETE pre-esistenti righe per
+    A3  idempotency: la funzione DELETE pre-esistenti righe per
     (run_id, node_id) PRIMA dell'INSERT, dentro una singola transazione.
     Pre-fix una doppia invocazione (es. retry Celery con `acks_late=True`)
     produceva duplicati silenti, perche' lo schema `node_rows` non ha
@@ -538,7 +536,7 @@ def write_node_atomic(
 ) -> None:
     """Scrittura atomica e idempotente di node_rows + node_meta.
 
-    A3 (Phase 4): unica transazione che:
+    A3 : unica transazione che:
       1. DELETE eventuali righe pre-esistenti per (run_id, node_id) — idempotency
       2. INSERT tutte le nuove righe (executemany)
       3. INSERT ... ON CONFLICT DO UPDATE su node_meta
@@ -549,7 +547,7 @@ def write_node_atomic(
     node_meta restava al valore della run precedente — divergenza permanente
     fra row_count meta e count effettivo di node_rows.
 
-    Post-fix: tutto succede su una singola conn dentro `transaction()`. Su
+    Post-fix: tutto succede su una singola conn dentro `transaction`. Su
     qualsiasi exception il rollback rimuove sia il DELETE che gli INSERT
     (incluso l'upsert meta), preservando lo stato pre-call.
 
@@ -594,7 +592,7 @@ def get_node_table_rows(run_id: str, node_id: str,
     branch il superadmin riceverebbe sempre lista vuota per run di altri
     gruppi perche' il WHERE group_id = ? non matcha.
     """
-    # Verifica ownership — skippata se group_id None (caller superadmin)
+    # Verifica ownership — skippata se group_id None (caller superadmin
     if group_id is None:
         run = fetchone("SELECT run_id FROM runs WHERE run_id = ?", (run_id,))
     else:
@@ -617,10 +615,10 @@ def get_node_table_rows(run_id: str, node_id: str,
     raw_rows = fetchall(sql, params)
 
     # Ricostruisci il formato originale: _row_hash + colonne row_data
-    # (row_data arriva già come dict da psycopg2 per JSONB).
+    # row_data arriva già come dict da psycopg2 per JSONB
     # F-DATA-01 / P1-04: applichiamo `_from_jsonable_value` per
-    # ricostruire NaN / +Inf / -Inf dai sentinel persistiti in JSONB.
-    # Hash recompute sui dati ricostruiti matcha l'hash originale stored.
+    # ricostruire NaN / +Inf / -Inf dai sentinel persistiti in JSONB
+    # Hash recompute sui dati ricostruiti matcha l'hash originale stored
     result = []
     for r in raw_rows:
         row_data = r.get("row_data") or {}
@@ -665,7 +663,7 @@ def apply_runs_retention(canvas_id: str, group_id: str) -> None:
         if len(unpinned) <= retention_n:
             return  # nulla da eliminare
 
-        # Le più vecchie sono in fondo (list_runs ordina DESC)
+        # Le più vecchie sono in fondo (list_runs ordina DESC
         to_delete = unpinned[retention_n:]
         for run in to_delete:
             _delete_run(run["run_id"])
@@ -693,10 +691,10 @@ def _delete_run(run_id: str) -> None:
     Prima il codice droppava tabelle dinamiche, poi DELETE node_meta,
     poi DELETE runs — tre statement non atomici che potevano lasciare orphan.
 
-    Flow (BE-GO-READY-STORAGE-ENGINE-016 — W1 race coverage per
+    Flow ( — W1 race coverage per
     intermediate full_artifact):
 
-      1. `transaction()`: SELECT artifact_uri da node_meta WHERE
+      1. `transaction`: SELECT artifact_uri da node_meta WHERE
          run_id=? AND artifact_uri IS NOT NULL AND
          artifact_status='complete'. Per ogni row, record_pending
          per (a) data.parquet (artifact_uri) + (b) manifest.json
@@ -722,13 +720,13 @@ def _delete_run(run_id: str) -> None:
     su un orphan da pochi KB di JSON manifest.
 
     ADR-0011 contract preservato: storage failure NON propaga; la
-    row DB resta cancellata. La differenza vs pre-batch 016 e' che
+    row DB resta cancellata. La differenza vs pre-e' che
     l'orphan e' ora **tracked** + retry-able dal reconciler.
     """
     # Pre-fetch artifact metadata fuori dalla transaction principale
-    # (read-only, niente lock pessimistico necessario: la run
+    # read-only, niente lock pessimistico necessario: la run
     # appartiene per costruzione al chiamante che ha gia' deciso
-    # di cancellarla).
+    # di cancellarla
     artifact_rows = fetchall(
         "SELECT node_id, artifact_uri "
         "FROM node_meta "
@@ -738,27 +736,27 @@ def _delete_run(run_id: str) -> None:
         (run_id,),
     )
 
-    # Filtra a path-shaped storage keys (no scheme). Defensive:
+    # Filtra a path-shaped storage keys (no scheme). Defensive
     # protegge contro un futuro writer che persistesse `s3://...`
     # o `file://...` come artifact_uri — quei shape non sono
-    # cleanable via runtime object storage delete.
+    # cleanable via runtime object storage delete
     pending_specs: List[tuple] = []
     for row in artifact_rows:
         node_id = row["node_id"]
         artifact_uri = row["artifact_uri"]
         if not artifact_uri or "://" in artifact_uri:
             continue
-        # Parquet (sempre presente per artifact_status="complete").
+        # Parquet (sempre presente per artifact_status="complete"
         pending_specs.append((node_id, artifact_uri, "data.parquet"))
-        # Manifest sibling (solo se la forma e' canonica).
+        # Manifest sibling (solo se la forma e' canonica
         if artifact_uri.endswith("/data.parquet"):
             manifest_uri = (
                 artifact_uri[: -len("data.parquet")] + "manifest.json"
             )
             pending_specs.append((node_id, manifest_uri, "manifest.json"))
 
-    # Apri transaction con record_pending atomico col DELETE.
-    # `pending_refs` accumula (storage_key, ref) per il post-commit.
+    # Apri transaction con record_pending atomico col DELETE
+    # `pending_refs` accumula (storage_key, ref) per il post-commit
     pending_refs: List[tuple] = []
     with transaction() as conn:
         with conn.cursor() as cur:
@@ -780,7 +778,7 @@ def _delete_run(run_id: str) -> None:
                     pending_refs.append((storage_key, ref))
             cur.execute("DELETE FROM runs WHERE run_id = %s", (run_id,))
 
-    # Post-commit: cleanup best-effort + reconciliation transition.
+    # Post-commit: cleanup best-effort + reconciliation transition
     if pending_refs:
         from app.shared.storage_compensation import compensating_delete
         from app.shared.storage_reconciliation import (
@@ -802,8 +800,8 @@ def _delete_run(run_id: str) -> None:
                 mark_done(ref.id)
             else:
                 # outcome == "failed": ADR-0011 posture preserved
-                # (orphan accepted, run row stays deleted), but now
-                # persisted for the reconciler beat hook.
+                # orphan accepted, run row stays deleted), but now
+                # persisted for the reconciler beat hook
                 mark_failed_attempt(
                     ref.id,
                     error=f"compensating_delete_outcome={outcome}",
@@ -816,7 +814,7 @@ def delete_all_runs_for_canvas(canvas_id: str) -> int:
     Rimuove tabelle dinamiche, node_meta e righe in runs.
     Ritorna il numero di run eliminate.
 
-    Contratto errori (Batch 8 C5):
+    Contratto errori (C5):
       - Happy path / 0 run / inner per-row fail: ritorna count successi.
         Un fail su singola run non blocca le altre (best-effort cascade) e
         viene loggato a warning con exc_info.
@@ -854,11 +852,11 @@ def delete_all_runs_for_canvas(canvas_id: str) -> int:
             op="delete_project"
         )
         return count
-    # intent: resource guard outer / outcome: fail-closed (scrittura dati)
-    # Il caller deve sapere se la cancellazione e' fallita catastroficamente:
+    # intent: resource guard outer / outcome: fail-closed (scrittura dati
+    # Il caller deve sapere se la cancellazione e' fallita catastroficamente
     # un return 0 silent sarebbe indistinguibile da "canvas senza run" e
     # garantirebbe orfani cross-DB se il caller procedesse alla rimozione
-    # della row config.projects.
+    # della row config.projects
     except Exception as e:
         logger.error(
             f"[CRASH] delete_all_runs_for_canvas: errore canvas={canvas_id}: {e}",

@@ -17,8 +17,8 @@ from app.utils.logger import get_logger
 
 # Stesso logger name di `enrichment_service.py` (`__name__` valuta a
 # `"app.core.arricchisci.enrichment_service"`): record indistinguibili
-# dai consumer che attaccano handler / filtrano per nome canonico.
-# Esplicito vs `__name__` per coerenza pattern B2.
+# dai consumer che attaccano handler / filtrano per nome canonico
+# Esplicito vs `__name__` per coerenza pattern B2
 logger = get_logger("app.core.arricchisci.enrichment_service")
 
 
@@ -64,7 +64,7 @@ class EnrichmentTemplateParamsMixin:
                 logger.debug(
                     f"pd.isna probe fallito per tipo {type(val).__name__}: {_isna_err}"
                 )
-            # Converti numpy → Python nativo per str()
+            # Converti numpy → Python nativo per str
             try:
                 import numpy as _np
                 if isinstance(val, (_np.integer,)):
@@ -95,9 +95,9 @@ class EnrichmentTemplateParamsMixin:
         3. API key in query string (se configurata come query param)
 
         Sintassi del param_mapping value:
-          - "nome_colonna"      → legge la colonna direttamente (default)
-          - "{X},{Y}"           → template: interpola colonne X e Y
-          - "address: {via}"    → template misto con prefisso fisso
+          - "nome_colonna" → legge la colonna direttamente (default)
+          - "{X},{Y}" → template: interpola colonne X e Y
+          - "address: {via}" → template misto con prefisso fisso
         """
         params = {}
 
@@ -128,9 +128,9 @@ class EnrichmentTemplateParamsMixin:
                 continue
             value = row[mapping_value]
             if pd.isna(value) if not isinstance(value, (list, dict)) else False:
-                # Parametro null: se è opzionale (e abbiamo definizioni dei parametri),
+                # Parametro null: se è opzionale (e abbiamo definizioni dei parametri
                 # NON lo aggiungiamo affatto — così l'API riceve solo i campi presenti
-                # e _has_null_params non lo segnala come bloccante.
+                # e _has_null_params non lo segnala come bloccante
                 if self._has_param_definitions and api_param not in self._required_param_names:
                     continue
                 params[api_param] = None

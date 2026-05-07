@@ -79,10 +79,9 @@ class OrchestratorService:
     def _executor_dispatch(self) -> Dict[str, CanvasExecutorProtocol]:
         """Typed dispatch table: module_type → CanvasExecutorProtocol.
 
-        BE-GO-READY-ARCH-056-W2-ORCHESTRATOR-TYPED-DISPATCH.
 
         Built as a property (not cached) so that tests replacing a concrete
-        executor attribute (e.g. ``svc.estrai_executor = MagicMock()``) see
+        executor attribute (e.g. ``svc.estrai_executor = MagicMock``) see
         the updated object without patching the dict separately.
 
         Consumers:
@@ -99,7 +98,7 @@ class OrchestratorService:
         }
 
     # PUNTI DI INGRESSO
-    # Metodi chiamati da main.py per eseguire o visualizzare in anteprima.
+    # Metodi chiamati da main.py per eseguire o visualizzare in anteprima
 
     def execute_pipeline(self, project_id: str, force_recalculate: bool = False, skip_carica: bool = False, run_id: str = None, intermediate_mode_override: Optional[str] = None) -> PipelineArtifact:
         """Punto di ingresso principale: decide se estrarre, manipolare o arricchire.
@@ -107,7 +106,7 @@ class OrchestratorService:
         Ritorna un `PipelineArtifact` (subclass di dict, dict-like
         compat con i consumer legacy che leggono `result["success"]`
         ecc.). I consumer nuovi possono usare le proprieta' tipizzate
-        `result.success`, `result.artifact_kind`, `result.to_run_artifact_ref()`.
+        `result.success`, `result.artifact_kind`, `result.to_run_artifact_ref`.
 
         Args:
             project_id: ID del progetto da eseguire
@@ -120,7 +119,7 @@ class OrchestratorService:
 
         # RSS guard pre-stage: se il worker e' gia' sovraccarico, fallisce
         # early con 503 invece di avviare una pipeline pesante che farebbe
-        # OOM kernel SIGKILL. Guard disabilitabile via cap <= 0.
+        # OOM kernel SIGKILL. Guard disabilitabile via cap <= 0
         try:
             from app.shared.memory_guard import check_worker_rss
             from app.config import settings as _settings
@@ -165,9 +164,9 @@ class OrchestratorService:
         artifact = PipelineArtifact.from_execution_result(exec_result, project_id=project_id)
 
         # Se la pipeline ha avuto successo, controlla se c'è un nodo CARICA
-        # (skip se chiamato dal task CARICA stesso per evitare loop).
+        # skip se chiamato dal task CARICA stesso per evitare loop
         # PipelineArtifact e' dict-like quindi `artifact["carica"] = ...`
-        # funziona come prima del refactor.
+        # funziona come prima del refactor
         if artifact.success and not skip_carica:
             carica_info = self._execute_carica_if_present(project_id, canvas)
             if carica_info:
@@ -214,7 +213,7 @@ class OrchestratorService:
             # merge con `data{}`. Se l'utente, per errore o malizia, mette
             # `id`/`type`/... dentro `data`, ignoriamo: cambierebbe l'identità
             # del nodo (es. far passare un nodo per un altro tipo, o cambiare
-            # l'id che è la chiave usata dal task carica).
+            # l'id che è la chiave usata dal task carica
             _NODE_RESERVED_FIELDS = {
                 'id', 'type', 'position', 'selected', 'dragging',
                 'measured', 'positionAbsolute', 'width', 'height',
@@ -223,7 +222,7 @@ class OrchestratorService:
                 node_dict = carica_node.model_dump() if hasattr(carica_node, 'model_dump') else vars(carica_node)
                 # data{} è il campo annidato nel nodo canvas con tutta la configurazione CARICA
                 # Merge: node_dict (top-level) + data{} (configurazione) — data{} ha priorità
-                # ma SOLO sui campi non riservati (vedi _NODE_RESERVED_FIELDS).
+                # ma SOLO sui campi non riservati (vedi _NODE_RESERVED_FIELDS
                 nested_data = node_dict.get('data') or carica_node.data or {}
                 if not isinstance(nested_data, dict):
                     nested_data = {}
@@ -231,7 +230,7 @@ class OrchestratorService:
                 carica_node_data = {**node_dict, **safe_nested}
                 # N11: arricchisci canvas_types da projects.columns_metadata
                 # per evitare che CARICA perda il tipo semantico quando MANIPOLA
-                # promuove silenziosamente int->float per NaN.
+                # promuove silenziosamente int->float per NaN
                 from app.shared.canvas_types_enricher import enrich_canvas_types_from_metadata
                 enrich_canvas_types_from_metadata(carica_node_data, project_id)
                 logger.info(
@@ -258,7 +257,7 @@ class OrchestratorService:
             }
 
         # intent: optional feature — pipeline success indipendente da launch CARICA
-        # outcome: fail-open sanitizzato (stringa opaca al FE, dettaglio tecnico solo nel log)
+        # outcome: fail-open sanitizzato (stringa opaca al FE, dettaglio tecnico solo nel log
         except Exception as e:
             logger.error(f"[CRASH] Errore avvio task CARICA: {e}", op="carica", project_id=project_id, exc_info=True)
             return {
