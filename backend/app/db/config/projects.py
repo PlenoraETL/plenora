@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, Iterable, List, Mapping, Optional, Set, cast
 
+from .safe_set import safe_set_clause
 from app.db.pg_connection import fetchone, fetchall, execute, transaction
 from app.utils.logger import get_logger
 
@@ -174,13 +175,12 @@ def create_project(project_id: str, group_id: str, name: str, project_type: str,
     return get_project(project_id)
 
 
-def update_project(project_id: str, **fields) -> Optional[Dict]:
+def update_project(project_id: str, **fields: object) -> Optional[Dict]:
     from datetime import datetime, timezone
-    from app.db.config_db_service import _safe_set_clause
     if "canvas" in fields and isinstance(fields["canvas"], dict):
         fields["canvas"] = json.dumps(fields["canvas"])
     fields["updated_at"] = datetime.now(timezone.utc).isoformat()
-    set_clause, vals = _safe_set_clause("projects", fields)
+    set_clause, vals = safe_set_clause("projects", fields)
     execute(f"UPDATE projects SET {set_clause} WHERE id = ?", vals + (project_id,))
     return get_project(project_id)
 

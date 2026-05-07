@@ -6,6 +6,7 @@ Keeps config-table persistence isolated behind a narrow database module.
 
 from typing import Dict, List, Optional
 
+from .safe_set import safe_set_clause
 from app.db.pg_connection import fetchone, fetchall, execute
 
 
@@ -49,11 +50,10 @@ def create_user(user_id: str, username: str, password_hash: str, group_id: str,
     return get_user(user_id)
 
 
-def update_user(user_id: str, **fields) -> Optional[Dict]:
+def update_user(user_id: str, **fields: object) -> Optional[Dict]:
     from datetime import datetime, timezone
-    from app.db.config_db_service import _safe_set_clause
     fields["updated_at"] = datetime.now(timezone.utc).isoformat()
-    set_clause, vals = _safe_set_clause("users", fields)
+    set_clause, vals = safe_set_clause("users", fields)
     execute(f"UPDATE users SET {set_clause} WHERE id = ?", vals + (user_id,))
     return get_user(user_id)
 

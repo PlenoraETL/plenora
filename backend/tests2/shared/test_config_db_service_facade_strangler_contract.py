@@ -28,8 +28,9 @@ _FACADE_LEAF = "config_db_service"
 # Paths are POSIX-style relative to the backend root.
 #
 # Entries:
-#   - `app/db/config/{users,projects,schedules,connections,datasources}.py`:
-#     lazy `_safe_set_clause` import — intentional cycle break.
+#   - BE Parallel Batch 085 Worker 1 removed the five config-leaf
+#     `_safe_set_clause` back-edges by moving the guard to
+#     `app.db.config.safe_set`.
 #   - `app/core/auth/auth.py`: removed by
 #     BE-GO-READY-AUTH-ENGINE-012. The three remaining `cfg_db.*`
 #     calls (`get_project` / `get_schedule` / `get_file_source`)
@@ -97,13 +98,12 @@ _FACADE_LEAF = "config_db_service"
 # Removed by BE Parallel Batch 084 Worker 1:
 #   - `app/db/db_service.py` was physically deleted. The stale
 #     `config_db_service` re-export edge is gone and must not return.
-_FACADE_PROD_ALLOWLIST: frozenset[str] = frozenset({
-    "app/db/config/users.py",
-    "app/db/config/projects.py",
-    "app/db/config/schedules.py",
-    "app/db/config/connections.py",
-    "app/db/config/datasources.py",
-})
+#
+# Removed by BE Parallel Batch 085:
+#   - `app/db/config/{users,projects,schedules,connections,datasources}.py`
+#     now import `app.db.config.safe_set.safe_set_clause`, so the facade
+#     production import allowlist is intentionally empty.
+_FACADE_PROD_ALLOWLIST: frozenset[str] = frozenset()
 
 
 def _imports_facade(tree: ast.AST) -> bool:

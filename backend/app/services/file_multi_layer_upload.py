@@ -13,8 +13,8 @@ from pathlib import Path
 from typing import Any, BinaryIO, Callable, Dict, List, Optional, Tuple
 
 from app.db.config.file_sources import FileSourceRow
-from app.services.file_storage_dispatch import BlobDispatchResult
-from app.services.file_upload import mkdtemp_writable
+from app.core.files.storage_dispatch import BlobDispatchResult
+from app.core.files.upload import mkdtemp_writable
 
 
 def create_multi_layer_from_upload(

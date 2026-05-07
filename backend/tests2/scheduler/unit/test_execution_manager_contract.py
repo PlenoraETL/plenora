@@ -60,7 +60,7 @@ def test_execute_carica_uses_result_id_artifact_before_output_path(schedule_conf
 
     with patch("app.utils.dataframe.load_dataframe_from_file", return_value=df) as mock_load, \
          patch("app.core.carica.executor.CaricaExecutor") as mock_executor, \
-         patch("app.db.results_db_service.get_result", return_value={"id": "res-1", "project_id": "proj-1", "group_id": "grp-1", "format": "csv"}), \
+         patch("app.core.results.db.get_result", return_value={"id": "res-1", "project_id": "proj-1", "group_id": "grp-1", "format": "csv"}), \
          patch("app.db.pg_connection.fetchone", return_value={"data": b"id\n1\n2\n", "storage_key": None, "project_id": "proj-1"}):
         mock_executor.return_value.execute.return_value = _make_write_result()
         result = manager._execute_carica(

@@ -82,7 +82,7 @@ def test_execute_carica_rejects_result_id_from_other_project_even_if_output_path
     # silente a output_path legacy.
     with patch("app.utils.dataframe.load_dataframe_from_file") as load_dataframe, \
          patch("app.core.results.db.get_result", return_value={"id": "res-1", "project_id": "proj-2", "group_id": "grp-1", "format": "csv"}), \
-         patch("app.db.results_db_service.get_result_data", return_value=b"id\n1\n"), \
+         patch("app.core.results.blob.get_result_data", return_value=b"id\n1\n"), \
          patch("app.core.carica.executor.CaricaExecutor") as executor_cls, \
          patch("pathlib.Path.exists", return_value=True):
         executor_cls.return_value.execute.return_value = _make_write_result()

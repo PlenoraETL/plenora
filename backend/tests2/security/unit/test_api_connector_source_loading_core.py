@@ -122,7 +122,7 @@ def test_load_source_project_blocks_cross_tenant_via_loader():
     Stale singleton prova che la cross-tenant block usa
     `ctx.group_id`, non il singleton legacy."""
     import app.db.config.projects as projects_db
-    import app.db.results_db_service as results_db
+    from app.core.results import db as results_db
 
     svc = _make_service_no_singleton()
     svc._current_group_id = "stale-grp-LEAK"
@@ -146,7 +146,7 @@ def test_load_source_project_does_not_leak_cross_tenant_detail_in_message():
     Stale singleton prova che il check usa `ctx.group_id`, non il
     singleton legacy."""
     import app.db.config.projects as projects_db
-    import app.db.results_db_service as results_db
+    from app.core.results import db as results_db
 
     svc = _make_service_no_singleton()
     svc._current_group_id = "stale-grp-LEAK"
@@ -242,7 +242,7 @@ def test_resolve_file_source_path_blocks_cross_tenant_project_source():
     Stale singleton prova che il check cross-tenant usa
     `ctx.group_id`, non il singleton legacy."""
     import app.db.config.projects as projects_db
-    import app.db.results_db_service as results_db
+    from app.core.results import db as results_db
 
     svc = _make_service_no_singleton()
     svc._current_group_id = "stale-grp-LEAK"

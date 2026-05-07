@@ -325,7 +325,7 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
     # The line is no longer a tempfile call site; the inventory
     # ratchet (`test_temp_materialization_inventory_is_complete`)
     # confirms it is no longer in the AST scan.
-    ("app/services/file_service.py", 576): (
+    ("app/core/files/service.py", 577): (
         "PATH_REQUIRED_FILE",
         "FileSourceService._temp_file_for caller contract returns "
         "Path for SHP/GDB downstream consumers (fiona/geopandas "
@@ -349,7 +349,7 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
         "geo). Multi-format dispatch easier with path than with "
         "MIME-sniffed BytesIO.",
     ),
-    ("app/services/file_upload.py", 82): (
+    ("app/core/files/upload.py", 82): (
         "STAGING_INGESTION",
         "File upload landing zone: writes chunked HTTP body to "
         "disk before persisting to DB BYTEA / object storage. "
@@ -415,13 +415,6 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
         "OGR driver requires path; multi-file zip not "
         "expressible as bytes-only.",
     ),
-    ("app/utils/result_store.py", 549): (
-        "PATH_REQUIRED_FILE",
-        "save_pipeline_result gpkg/shp branch: GDAL/OGR drivers "
-        "require a path argument; BytesIO not supported by fiona "
-        "writer. Tempdir wraps the path-required write + immediate "
-        "bytes read for upload via save_result_blob_from_bytes.",
-    ),
     ("workers/tasks/enrichment_task.py", 1012): (
         "PATH_REQUIRED_FILE",
         "Enrichment task gpkg/shp output (eseguibile): same "
@@ -429,7 +422,7 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
         "result_store.save_pipeline_result.",
     ),
 
-    ("app/services/file_upload.py", 22): (
+    ("app/core/files/upload.py", 22): (
         "DIR_MULTIFILE",
         "mkdtemp_writable helper for upload/service ZIP extraction "
         "tempdirs. Current callers use it for SHP/GDB/GPKG multi-file "

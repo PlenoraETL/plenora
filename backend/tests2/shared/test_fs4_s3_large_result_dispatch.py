@@ -55,7 +55,7 @@ def stub_storage(monkeypatch):
 def mock_db(monkeypatch):
     """DB mock che registra save_result calls."""
     import app.db.config.projects as projects_db
-    import app.db.results_db_service as results_db
+    from app.core.results import db as results_db
     import app.utils.result_store as result_store
 
     saved = []
@@ -191,7 +191,7 @@ def test_s3_upload_failure_no_db_row_orphan(mock_db, stub_storage, monkeypatch):
 def test_get_result_data_from_db_blob(monkeypatch):
     """storage_key=None -> ritorna data BYTEA."""
     import app.core.resources.loaders.result_blob as result_blob
-    import app.db.results_db_service as rds
+    from app.core.results import blob as results_blob
 
     monkeypatch.setattr(
         result_blob,
@@ -202,14 +202,14 @@ def test_get_result_data_from_db_blob(monkeypatch):
         ),
     )
 
-    result = rds.get_result_data("res-1")
+    result = results_blob.get_result_data("res-1")
     assert result == b"blob content"
 
 
 def test_get_result_data_from_s3(monkeypatch, stub_storage):
     """storage_key set -> scarica da S3 via stub."""
     import app.core.resources.loaders.result_blob as result_blob
-    import app.db.results_db_service as rds
+    from app.core.results import blob as results_blob
 
     monkeypatch.setattr(
         result_blob,
@@ -220,7 +220,7 @@ def test_get_result_data_from_s3(monkeypatch, stub_storage):
         ),
     )
 
-    result = rds.get_result_data("res-big")
+    result = results_blob.get_result_data("res-big")
     assert result == b"big data from s3"
 
 
@@ -228,7 +228,7 @@ def test_get_result_data_s3_download_failure_returns_none(monkeypatch):
     """Se S3 download fallisce, get_result_data ritorna None + log
     (non solleva: semantica invariata col path-based su errore)."""
     import app.core.resources.loaders.result_blob as result_blob
-    import app.db.results_db_service as rds
+    from app.core.results import blob as results_blob
 
     monkeypatch.setattr(
         result_blob,
@@ -239,7 +239,7 @@ def test_get_result_data_s3_download_failure_returns_none(monkeypatch):
         ),
     )
 
-    assert rds.get_result_data("res-missing") is None
+    assert results_blob.get_result_data("res-missing") is None
 
 
 # 4. Delete: cleanup S3 coerente
@@ -300,10 +300,10 @@ def test_delete_result_s3_backed_triggers_s3_delete(monkeypatch, stub_storage):
     `_s3_delete_best_effort`. Lo stub si sposta sulla nuova
     boundary (`compensating_delete` + `mark_done`).
     """
-    import app.db.results_db_service as rds
+    from app.core.results import cleanup as results_cleanup
 
     monkeypatch.setattr(
-        rds, "transaction",
+        results_cleanup, "transaction",
         _fake_transaction_factory(
             select_row={"storage_key": "results/p1/res-to-del.bin"}
         ),
@@ -322,7 +322,7 @@ def test_delete_result_s3_backed_triggers_s3_delete(monkeypatch, stub_storage):
         lambda rid, **_: None,
     )
 
-    result = rds.delete_result("res-to-del")
+    result = results_cleanup.delete_result("res-to-del")
     assert result is True
     assert calls == ["results/p1/res-to-del.bin"]
 
@@ -333,10 +333,10 @@ def test_delete_result_db_backed_does_not_touch_s3(monkeypatch):
     Post BE-GO-READY-STORAGE-ENGINE-007: stub spostato a
     `transaction()` + boundary `compensating_delete`.
     """
-    import app.db.results_db_service as rds
+    from app.core.results import cleanup as results_cleanup
 
     monkeypatch.setattr(
-        rds, "transaction",
+        results_cleanup, "transaction",
         _fake_transaction_factory(select_row={"storage_key": None}),
     )
 
@@ -346,7 +346,7 @@ def test_delete_result_db_backed_does_not_touch_s3(monkeypatch):
         lambda key, **_: s3_calls.append(key),
     )
 
-    rds.delete_result("res-small")
+    results_cleanup.delete_result("res-small")
     assert s3_calls == []
 
 
@@ -452,13 +452,13 @@ def test_delete_results_for_project_cleans_all_s3_keys(monkeypatch):
     `transaction()` + `record_pending` per ogni S3-backed row, poi
     chiama `compensating_delete` + `mark_done` per outcome.
     """
-    import app.db.results_db_service as rds
+    from app.core.results import cleanup as results_cleanup
     from contextlib import contextmanager
 
     # fetchall ritorna 2 row con (id, storage_key) — il bulk path
     # ora pre-fetcha anche `id` per l'extras del record_pending.
     monkeypatch.setattr(
-        rds, "fetchall",
+        results_cleanup, "fetchall",
         lambda sql, args: [
             {"id": "rA", "storage_key": "results/p1/a.bin"},
             {"id": "rB", "storage_key": "results/p1/b.bin"},
@@ -492,7 +492,7 @@ def test_delete_results_for_project_cleans_all_s3_keys(monkeypatch):
     def _fake_tx():
         yield _Conn()
 
-    monkeypatch.setattr(rds, "transaction", _fake_tx)
+    monkeypatch.setattr(results_cleanup, "transaction", _fake_tx)
 
     calls = []
     monkeypatch.setattr(
@@ -507,6 +507,6 @@ def test_delete_results_for_project_cleans_all_s3_keys(monkeypatch):
         lambda rid, **_: None,
     )
 
-    deleted = rds.delete_results_for_project("p1")
+    deleted = results_cleanup.delete_results_for_project("p1")
     assert deleted == 2
     assert set(calls) == {"results/p1/a.bin", "results/p1/b.bin"}

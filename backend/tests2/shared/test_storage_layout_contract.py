@@ -83,8 +83,8 @@ def test_all_prefixes_matches_declared_constants():
 # Call site usage — i moduli storage usano gli alias dichiarati qui
 
 def test_file_storage_dispatch_uses_shared_prefix():
-    from app.services import file_storage_dispatch
-    assert file_storage_dispatch._OBJECT_STORAGE_PREFIX == storage_layout.FILE_SOURCES_PREFIX
+    from app.core.files import storage_dispatch
+    assert storage_dispatch._OBJECT_STORAGE_PREFIX == storage_layout.FILE_SOURCES_PREFIX
 
 
 def test_imdf_storage_uses_shared_prefix():

@@ -7,6 +7,7 @@ Keeps config-table persistence isolated behind a narrow database module.
 import json
 from typing import Dict, List, Optional
 
+from .safe_set import safe_set_clause
 from app.db.pg_connection import fetchone, fetchall, execute
 
 
@@ -44,7 +45,7 @@ def save_datasource(ds_id: str, group_id: str, name: str, ds_type: str, config: 
     return get_datasource(ds_id)
 
 
-def update_datasource(ds_id: str, **kwargs) -> None:
+def update_datasource(ds_id: str, **kwargs: object) -> None:
     """Aggiorna i campi consentiti di una datasource.
 
     Solo i campi in `_ALLOWED_UPDATE_FIELDS["datasources"]` sono accettati.
@@ -53,7 +54,6 @@ def update_datasource(ds_id: str, **kwargs) -> None:
     created_by, ecc.).
     """
     from datetime import datetime, timezone
-    from app.db.config_db_service import _safe_set_clause
     if not kwargs:
         return
     # Serializza il blob `config` se passato come dict (convenienza per i caller
@@ -62,7 +62,7 @@ def update_datasource(ds_id: str, **kwargs) -> None:
         fields["config"] = json.dumps(fields["config"])
     # Forza updated_at lato server
     fields["updated_at"] = datetime.now(timezone.utc).isoformat()
-    set_clause, params = _safe_set_clause("datasources", fields)
+    set_clause, params = safe_set_clause("datasources", fields)
     execute(f"UPDATE datasources SET {set_clause} WHERE id = ?", params + (ds_id,))
 
 

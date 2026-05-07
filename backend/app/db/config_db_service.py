@@ -4,8 +4,6 @@ Config DB Service — accesso a PostgreSQL (ex SQLite config.db).
 Contiene: groups, users, projects, connections, file_sources,
 """
 
-import json
-from typing import Any, Dict, List, Optional
 from app.utils.logger import get_logger
 
 # Importa tutto da pg_connection (rimpiazza sqlite3 thread-local
@@ -16,38 +14,6 @@ from app.db.pg_connection import (
 )
 
 logger = get_logger(__name__)
-
-# Whitelist campi aggiornabili per tabella
-_ALLOWED_UPDATE_FIELDS = {
-    "users":       {"username", "email", "role", "is_active", "password_hash", "updated_at"},
-    "projects":    {"name", "description", "connection_id", "canvas", "columns_metadata",
-                    "updated_at", "retention_n"},
-    "connections": {"name", "db_type", "host", "port", "database", "username", "password",
-                    "db_schema", "extra", "is_active", "updated_at"},
-    "schedules":   {"name", "description", "config", "is_enabled", "cron_expr",
-                    "last_run_at", "last_run_status", "last_run_rows", "next_run_at",
-                    "run_count", "error_count", "updated_at",
-                    # nomi usati da save_schedule
-                    "cron_expression", "last_run", "last_status", "next_run"},
-    # Schema reale: id, group_id, name, ds_type, config, created_at, updated_at, created_by
-    # In pratica il service aggiorna solo `config` (blob JSON), ma teniamo
-    # name/ds_type per future operazioni di rename
-    "datasources": {"name", "ds_type", "config", "updated_at"},
-}
-
-
-def _safe_set_clause(table: str, fields: dict) -> tuple:
-    allowed = _ALLOWED_UPDATE_FIELDS.get(table, set())
-    invalid = set(fields) - allowed
-    if invalid:
-        raise ValueError(
-            f"Campi non consentiti per UPDATE {table}: {invalid}. "
-            f"Consentiti: {allowed}"
-        )
-    # PostgreSQL usa %s come placeholder (pg_connection._adapt_params converte ? → %s
-    # ma qui costruiamo direttamente con %s per chiarezza
-    set_clause = ", ".join(f"{k} = %s" for k in fields)
-    return set_clause, tuple(fields.values())
 
 
 def init_db():

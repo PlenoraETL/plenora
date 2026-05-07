@@ -57,6 +57,18 @@ _KEEP_COMPAT_WRAPPERS: tuple[KeepCompatWrapper, ...] = (
         canonical_target="app.core.files.service",
     ),
     KeepCompatWrapper(
+        rel_path="app/services/file_storage_dispatch.py",
+        wrapper="module",
+        owner="STORAGE_ARTIFACT_ENGINE",
+        canonical_target="app.core.files.storage_dispatch",
+    ),
+    KeepCompatWrapper(
+        rel_path="app/services/file_upload.py",
+        wrapper="module",
+        owner="STORAGE_ARTIFACT_ENGINE",
+        canonical_target="app.core.files.upload",
+    ),
+    KeepCompatWrapper(
         rel_path="app/services/project_domain.py",
         wrapper="module",
         owner="VERSIONING_SNAPSHOT_ENGINE",

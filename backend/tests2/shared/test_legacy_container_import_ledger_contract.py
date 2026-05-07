@@ -42,13 +42,7 @@ _LEGACY_IMPORT_BASELINES: dict[str, dict[str, frozenset[str]]] = {
             "app/core/files/service.py -> app.services.file_raw_upload",
             "app/core/files/service.py -> app.services.file_service_deps",
             "app/core/files/service.py -> app.services.file_source_read",
-            "app/core/files/service.py -> app.services.file_storage_dispatch",
-            "app/core/files/service.py -> app.services.file_upload",
-            "app/services/file_multi_layer_upload.py -> app.services.file_storage_dispatch",
-            "app/services/file_multi_layer_upload.py -> app.services.file_upload",
             "app/services/file_preview_temp.py -> app.services.file_load_dispatch",
-            "app/services/file_raw_upload.py -> app.services.file_storage_dispatch",
-            "app/services/file_upload.py -> app.services.file_storage_dispatch",
         }),
         "tasks_orchestration": frozenset(),
         "auth_datasources_other": frozenset(),
@@ -114,7 +108,7 @@ def _rel(path: Path) -> str:
 
 def _parse(path: Path) -> ast.AST | None:
     try:
-        return ast.parse(path.read_text(encoding="utf-8"))
+        return ast.parse(path.read_text(encoding="utf-8-sig"))
     except (OSError, SyntaxError, UnicodeDecodeError):
         return None
 

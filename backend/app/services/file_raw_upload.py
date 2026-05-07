@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, BinaryIO, Callable, Optional
 
-from app.services.file_storage_dispatch import BlobDispatchResult
+from app.core.files.storage_dispatch import BlobDispatchResult
 
 
 def create_raw_from_upload(

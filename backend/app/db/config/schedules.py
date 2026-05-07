@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, Iterable, List, Mapping, Optional, cast
 
+from .safe_set import safe_set_clause
 from app.db.pg_connection import fetchone, fetchall, execute
 
 
@@ -121,13 +122,12 @@ def update_schedule(
     **fields: object,
 ) -> Optional[Dict[str, object]]:
     from datetime import datetime, timezone
-    from app.db.config_db_service import _safe_set_clause
     if "config" in fields and isinstance(fields["config"], dict):
         fields["config"] = json.dumps(fields["config"])
     if "is_enabled" in fields:
         fields["is_enabled"] = bool(fields["is_enabled"])
     fields["updated_at"] = datetime.now(timezone.utc).isoformat()
-    set_clause, vals = _safe_set_clause("schedules", fields)
+    set_clause, vals = safe_set_clause("schedules", fields)
     execute(f"UPDATE schedules SET {set_clause} WHERE id = ?", vals + (schedule_id,))
     return get_schedule(schedule_id)
 

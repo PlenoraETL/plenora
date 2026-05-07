@@ -19,7 +19,7 @@ from typing import Any, BinaryIO, Dict, List, Optional, Tuple
 
 import pandas as pd
 
-from app.services.file_storage_dispatch import BlobDispatchResult
+from app.core.files.storage_dispatch import BlobDispatchResult
 from app.services.file_service_deps import (  # noqa: F401 (compatibility export pubblico
     LoggerProtocol,
     FileSystemProtocol,
@@ -339,7 +339,7 @@ class FileSourceService:
     # permettendo mock completi nei test unitari
     
     # STRUCT-001 Seam C: la logica policy-aware (db/object_storage/hybrid +
-    # threshold) vive in `app.services.file_storage_dispatch.dispatch_blob_storage`
+    # threshold) vive in `app.core.files.storage_dispatch.dispatch_blob_storage`
     # Qui resta un thin wrapper che inietta `self._logger`. I 3 call site
     # interni (`self._dispatch_blob_storage(...)` in upload methods) restano
     # invariati. Behavior byte-per-byte preservato
@@ -347,7 +347,7 @@ class FileSourceService:
     def _dispatch_blob_storage(
         self, file_id: str, raw_data: bytes, filename: str, **kwargs: Any,
     ) -> BlobDispatchResult:
-        """Wrapper compat: delega a `file_storage_dispatch.dispatch_blob_storage`.
+        """Wrapper compat: delega a `storage_dispatch.dispatch_blob_storage`.
 
         BE-HARDEN-001C E1: `**kwargs` pass-through propaga eventuali
         parametri opzionali (es. `storage_key_id` per shared blob in
@@ -358,10 +358,10 @@ class FileSourceService:
         storage_key, size_bytes). Compat 100% con i caller che usano
         `**blob_kwargs`: a runtime e' un dict.
 
-        Vedi `app.services.file_storage_dispatch.dispatch_blob_storage`
+        Vedi `app.core.files.storage_dispatch.dispatch_blob_storage`
         per la documentazione completa del policy dispatch.
         """
-        from app.services.file_storage_dispatch import dispatch_blob_storage
+        from app.core.files.storage_dispatch import dispatch_blob_storage
         return dispatch_blob_storage(
             file_id, raw_data, filename, logger=self._logger, **kwargs,
         )
@@ -506,7 +506,7 @@ class FileSourceService:
         ``_assert_visible`` invocato da ``_get_blob_from_db``).
         """
         from app.config import settings
-        from app.services.file_upload import mkdtemp_writable
+        from app.core.files.upload import mkdtemp_writable
         from app.shared.resources.file_cleanup import rmtree_safe
         from app.utils.zip_safe import safe_extractall
         import app.db.config.file_sources as db
@@ -662,14 +662,14 @@ class FileSourceService:
         srid: int = None,
         group_id: str = None,
     ) -> FileSource:
-        """Wrapper compat: delega a `file_upload.create_from_upload`.
+        """Wrapper compat: delega a `upload.create_from_upload`.
 
         STRUCT-001 Seam D-F: la logica vive in
-        `app.services.file_upload.create_from_upload` con collaborator
+        `app.core.files.upload.create_from_upload` con collaborator
         espliciti. Behavior byte-per-byte preservato (parse best-effort,
         orphan guard su dispatch, cleanup garantito in finally).
         """
-        from app.services.file_upload import create_from_upload as _impl
+        from app.core.files.upload import create_from_upload as _impl
         from app.config import settings
         from app.shared.resources.file_cleanup import rmtree_safe
         from app.utils.zip_safe import safe_extractall, ZipSlipError

@@ -91,7 +91,7 @@ def test_materialize_from_result_id_logs_error_before_raise_on_lookup_failure(
     """
     from app.core.artifacts.resolver import ArtifactResolver
     from app.core.artifacts.types import ArtifactResolutionError
-    import app.db.results_db_service as _rdb
+    from app.core.results import db as results_db
 
     class _UnderlyingDbError(RuntimeError):
         """Simula un errore dalla libreria PG (psycopg2 / SQLAlchemy / ...)."""
@@ -101,7 +101,7 @@ def test_materialize_from_result_id_logs_error_before_raise_on_lookup_failure(
             f"connection lost while fetching result {result_id}"
         )
 
-    monkeypatch.setattr(_rdb, "get_result", _raising_get_result)
+    monkeypatch.setattr(results_db, "get_result", _raising_get_result)
 
     resolver = ArtifactResolver()
 
@@ -152,7 +152,7 @@ def test_materialize_from_result_id_logs_error_before_raise_on_blob_read_failure
     from app.core.artifacts.resolver import ArtifactResolver
     from app.core.artifacts.types import ArtifactResolutionError
     import app.core.artifacts.resolver as resolver_mod
-    import app.db.results_db_service as _rdb
+    from app.core.results import db as results_db
     from types import SimpleNamespace
 
     class _UnderlyingBlobError(IOError):
@@ -166,7 +166,7 @@ def test_materialize_from_result_id_logs_error_before_raise_on_blob_read_failure
             "format": "csv",
         }
 
-    monkeypatch.setattr(_rdb, "get_result", _ok_get_result)
+    monkeypatch.setattr(results_db, "get_result", _ok_get_result)
 
     # 019: l'errore di lettura blob arriva dal registry, NON da
     # `db_service.get_result_data`. Mock il registry per simulare
@@ -222,11 +222,11 @@ def test_materialize_from_result_id_happy_path_unaffected_by_log_fix(
     from types import SimpleNamespace
     from app.core.artifacts.resolver import ArtifactResolver
     import app.core.artifacts.resolver as resolver_mod
-    import app.db.results_db_service as _rdb
+    from app.core.results import db as results_db
     from app.core.resources import Resource
 
     monkeypatch.setattr(
-        _rdb, "get_result",
+        results_db, "get_result",
         lambda rid: {
             "id": rid,
             "project_id": "proj-x",
@@ -300,10 +300,10 @@ def test_materialize_from_result_id_tenant_mismatch_does_not_log_gestito(
     """
     from app.core.artifacts.resolver import ArtifactResolver
     from app.core.artifacts.types import ArtifactResolutionError
-    import app.db.results_db_service as _rdb
+    from app.core.results import db as results_db
 
     monkeypatch.setattr(
-        _rdb, "get_result",
+        results_db, "get_result",
         lambda rid: {"id": rid, "project_id": "OTHER-tenant", "format": "csv"},
     )
 

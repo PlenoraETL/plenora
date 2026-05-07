@@ -7,6 +7,7 @@ Keeps config-table persistence isolated behind a narrow database module.
 import json
 from typing import Dict, List, Optional
 
+from .safe_set import safe_set_clause
 from app.db.pg_connection import fetchone, fetchall, execute
 
 
@@ -46,13 +47,12 @@ def create_connection(conn_id: str, group_id: str, name: str, db_type: str,
     return get_connection_config(conn_id)
 
 
-def update_connection(conn_id: str, **fields) -> Optional[Dict]:
+def update_connection(conn_id: str, **fields: object) -> Optional[Dict]:
     from datetime import datetime, timezone
-    from app.db.config_db_service import _safe_set_clause
     if "extra" in fields and isinstance(fields["extra"], dict):
         fields["extra"] = json.dumps(fields["extra"])
     fields["updated_at"] = datetime.now(timezone.utc).isoformat()
-    set_clause, vals = _safe_set_clause("connections", fields)
+    set_clause, vals = safe_set_clause("connections", fields)
     execute(f"UPDATE connections SET {set_clause} WHERE id = ?", vals + (conn_id,))
     return get_connection_config(conn_id)
 
