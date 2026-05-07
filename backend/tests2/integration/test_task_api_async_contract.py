@@ -13,7 +13,12 @@ def test_unknown_task_returns_404(integration_backend_server, integration_auth_h
         timeout=10.0,
     )
     assert status == 404
-    assert "Task" in body["detail"]
+    detail = body["detail"]
+    if isinstance(detail, dict):
+        assert detail["error"] == "task_not_found"
+        assert "Task" in detail["message"]
+    else:
+        assert "Task" in detail
 
 
 def test_task_status_progresses_with_real_worker(

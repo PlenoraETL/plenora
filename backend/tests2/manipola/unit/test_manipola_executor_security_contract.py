@@ -5,6 +5,7 @@ Locks backend contracts and regression boundaries for the current architecture.
 """
 
 from unittest.mock import patch
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -103,14 +104,19 @@ def test_load_file_sources_ignores_stale_singleton_post_005():
 
 
 def test_load_project_sources_blocks_cross_tenant_source_project():
+    from app.core.artifacts import ArtifactResolutionError
+
     executor = ManipolaExecutor(project_service=object())
-    executor.results_base_dir = None
+    executor.results_base_dir = Path("/tmp/plenora-results-unused")
     dataframes = {}
     canvas = build_canvas(
         build_node("project_source", source_project_id="proj-99", columns=[]),
     )
 
-    with patch("app.db.config.projects.get_project", return_value={"id": "proj-99", "group_id": "grp-2"}):
+    with patch(
+        "app.core.artifacts.ArtifactResolver.materialize_latest",
+        side_effect=ArtifactResolutionError("cross-tenant"),
+    ):
         result = executor._carica_sorgenti_progetto(
             canvas, dataframes, force_recalculate=False, group_id="grp-1",
         )

@@ -1,0 +1,5 @@
+# Optional external database provider drivers for full provider test lanes.
+# MSSQL still requires OS-level ODBC libraries plus a Microsoft ODBC driver.
+-r requirements-providers-mysql.txt
+-r requirements-providers-oracle.txt
+-r requirements-providers-mssql.txt

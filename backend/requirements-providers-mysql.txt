@@ -1,0 +1,4 @@
+# Optional MySQL/MariaDB provider driver.
+# Install only when running MySQL or MariaDB integration/provider lanes.
+-r requirements.txt
+pymysql>=1.1.0

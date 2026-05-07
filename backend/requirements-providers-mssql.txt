@@ -1,0 +1,5 @@
+# Optional Microsoft SQL Server provider driver.
+# Requires OS-level ODBC libraries plus a Microsoft ODBC driver.
+# Install only when running MSSQL integration/provider lanes.
+-r requirements.txt
+pyodbc>=5.2.0

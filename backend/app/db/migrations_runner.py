@@ -243,3 +243,6 @@ def apply_pending_migrations() -> List[str]:
         f"[MIGRATIONS] Completato: {len(applied_now)} migration applicate"
     )
     return applied_now
+
+
+_REAL_APPLY_PENDING_MIGRATIONS = apply_pending_migrations

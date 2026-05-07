@@ -240,7 +240,7 @@ def test_verify_restore_running_result():
 
 def test_schedules_status_when_db_raises_returns_unknown(monkeypatch):
     from app.core.admin_system_status import service
-    import app.db.db_service as db
+    import app.db.pg_connection as db
 
     def _boom(*a, **kw):
         raise ConnectionError("postgres unreachable")
@@ -257,7 +257,7 @@ def test_schedules_status_when_db_raises_returns_unknown(monkeypatch):
 def test_schedules_status_empty_table_returns_ok():
     from app.core.admin_system_status import service
 
-    with patch("app.db.db_service.fetchall", return_value=[]):
+    with patch("app.db.pg_connection.fetchall", return_value=[]):
         out = service.get_schedules_status()
 
     assert out["status"] == "ok"
@@ -272,7 +272,7 @@ def test_schedules_status_half_or_more_failing_is_error():
         {"id": "a", "name": "a", "is_enabled": True, "last_status": "failed"},
         {"id": "b", "name": "b", "is_enabled": True, "last_status": "success"},
     ]
-    with patch("app.db.db_service.fetchall", return_value=rows):
+    with patch("app.db.pg_connection.fetchall", return_value=rows):
         out = service.get_schedules_status()
 
     assert out["status"] == "error"
@@ -287,7 +287,7 @@ def test_schedules_status_ignores_disabled():
         {"id": "a", "name": "a", "is_enabled": False, "last_status": "failed"},
         {"id": "b", "name": "b", "is_enabled": True, "last_status": "success"},
     ]
-    with patch("app.db.db_service.fetchall", return_value=rows):
+    with patch("app.db.pg_connection.fetchall", return_value=rows):
         out = service.get_schedules_status()
 
     assert out["total_active"] == 1

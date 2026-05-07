@@ -1,0 +1,4 @@
+# Optional Oracle provider driver.
+# Install only when running Oracle integration/provider lanes.
+-r requirements.txt
+oracledb>=2.4.0

@@ -938,10 +938,10 @@ class Settings:
         self._ensure_redis(errors, warnings)
 
         for w in warnings:
-            print(f"⚠️  PLENORA-ETL: {w}")
+            print(f"[WARN] PLENORA-ETL: {w}")
 
         if errors:
-            print("\n❌ PLENORA-ETL — Configurazione non valida, avvio interrotto:\n")
+            print("\n[ERROR] PLENORA-ETL - Configurazione non valida, avvio interrotto:\n")
             for i, e in enumerate(errors, 1):
                 print(f"  {i}. {e}")
             raise SystemExit(1)

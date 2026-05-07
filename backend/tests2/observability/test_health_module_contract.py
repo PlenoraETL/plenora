@@ -831,12 +831,15 @@ def test_check_reconciliation_backlog_ok_when_empty():
     with patch(
         "app.shared.storage_reconciliation.count_active_by_state_domain",
         return_value=[],
+    ), patch(
+        "app.shared.storage_reconciliation.count_pending_by_operation",
+        return_value={"upload_intent": 0},
     ):
         from app.observability.health import check_reconciliation_backlog
 
         ok, detail = check_reconciliation_backlog()
     assert ok is True
-    assert detail == "pending=0 lost=0"
+    assert detail == "pending=0 (upload_intent=0) lost=0"
 
 
 def test_check_reconciliation_backlog_ok_when_below_thresholds():
@@ -849,12 +852,15 @@ def test_check_reconciliation_backlog_ok_when_below_thresholds():
     with patch(
         "app.shared.storage_reconciliation.count_active_by_state_domain",
         return_value=counts,
+    ), patch(
+        "app.shared.storage_reconciliation.count_pending_by_operation",
+        return_value={"upload_intent": 0},
     ):
         from app.observability.health import check_reconciliation_backlog
 
         ok, detail = check_reconciliation_backlog()
     assert ok is True
-    assert detail == "pending=15 lost=2"
+    assert detail == "pending=15 (upload_intent=0) lost=2"
 
 
 def test_check_reconciliation_backlog_failed_above_pending_threshold(monkeypatch):
@@ -878,13 +884,16 @@ def test_check_reconciliation_backlog_failed_above_pending_threshold(monkeypatch
     with patch(
         "app.shared.storage_reconciliation.count_active_by_state_domain",
         return_value=counts,
+    ), patch(
+        "app.shared.storage_reconciliation.count_pending_by_operation",
+        return_value={"upload_intent": 0},
     ):
         from app.observability.health import check_reconciliation_backlog
 
         ok, detail = check_reconciliation_backlog()
     assert ok is False
     assert "pending=200 over 100" in detail
-    assert "pending=200 lost=1" in detail
+    assert "pending=200 (upload_intent=0) lost=1" in detail
 
 
 def test_check_reconciliation_backlog_failed_above_lost_threshold(monkeypatch):

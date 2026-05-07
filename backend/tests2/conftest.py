@@ -215,6 +215,28 @@ def pytest_configure(config: object) -> None:
     _safe_prune_old_pytest_run_dirs()
 
 
+def pytest_collection_modifyitems(config, items):
+    run_doc_guards = os.getenv("URBY_RUN_DOC_GUARDS") == "1"
+    run_cleanroom_excluded = os.getenv("URBY_RUN_CLEANROOM_EXCLUDED") == "1"
+
+    skip_doc_guards = pytest.mark.skip(
+        reason="docs_guard lane esclusa dal gate runtime/install; set URBY_RUN_DOC_GUARDS=1"
+    )
+    skip_cleanroom_excluded = pytest.mark.skip(
+        reason="cleanroom_excluded lane esclusa dal gate runtime/install; set URBY_RUN_CLEANROOM_EXCLUDED=1"
+    )
+
+    for item in items:
+        if item.get_closest_marker("docs_guard") and not run_doc_guards:
+            item.add_marker(skip_doc_guards)
+            continue
+        if (
+            item.get_closest_marker("cleanroom_excluded")
+            and not run_cleanroom_excluded
+        ):
+            item.add_marker(skip_cleanroom_excluded)
+
+
 # DB-init isolation a session bootstrap (Phase 3 Batch B closeout, 3)
 #
 # Problema: `app/main.py:51` chiama `init_all_dbs()` AL TOP-LEVEL del

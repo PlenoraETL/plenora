@@ -6,7 +6,6 @@ Due superfici:
 
 from __future__ import annotations
 
-import builtins
 import os
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
@@ -22,16 +21,15 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 def test_list_backups_when_boto3_missing_returns_empty():
     """ImportError su boto3 → [] (non solleva)."""
-    real_import = builtins.__import__
-
-    def _fake_import(name, *args, **kwargs):
-        if name == "boto3":
-            raise ImportError("No module named 'boto3'")
-        return real_import(name, *args, **kwargs)
-
     from app.core.admin_backups import service
 
-    with patch("builtins.__import__", side_effect=_fake_import):
+    fake_storage = MagicMock()
+    fake_storage.list_objects.side_effect = ImportError("No module named 'boto3'")
+
+    with patch(
+        "app.shared.cloud_backends.get_backup_object_storage",
+        return_value=fake_storage,
+    ):
         out = service.list_backups()
 
     assert out == []
@@ -41,12 +39,13 @@ def test_list_backups_when_client_error_returns_empty():
     """boto3 presente ma il client solleva (403/404/etc) → [] (non solleva)."""
     from app.core.admin_backups import service
 
-    fake_boto3 = MagicMock()
-    fake_boto3.client.return_value.list_objects_v2.side_effect = RuntimeError(
-        "AccessDenied simulato"
-    )
+    fake_storage = MagicMock()
+    fake_storage.list_objects.side_effect = RuntimeError("AccessDenied simulato")
 
-    with patch.dict("sys.modules", {"boto3": fake_boto3}):
+    with patch(
+        "app.shared.cloud_backends.get_backup_object_storage",
+        return_value=fake_storage,
+    ):
         out = service.list_backups()
 
     assert out == []
@@ -60,12 +59,15 @@ def test_list_backups_raises_on_missing_dependency():
     from app.core.admin_backups.service import AdminBackupDependencyError
     from botocore.exceptions import MissingDependencyException
 
-    fake_boto3 = MagicMock()
-    fake_boto3.client.side_effect = MissingDependencyException(
+    fake_storage = MagicMock()
+    fake_storage.list_objects.side_effect = MissingDependencyException(
         msg="Using the login credential provider requires an additional dependency."
     )
 
-    with patch.dict("sys.modules", {"boto3": fake_boto3}):
+    with patch(
+        "app.shared.cloud_backends.get_backup_object_storage",
+        return_value=fake_storage,
+    ):
         with pytest.raises(AdminBackupDependencyError) as exc_info:
             service.list_backups()
 
@@ -180,10 +182,13 @@ def test_list_backups_raises_on_access_denied_refresh_token():
 def test_list_backups_empty_bucket_returns_empty():
     from app.core.admin_backups import service
 
-    fake_boto3 = MagicMock()
-    fake_boto3.client.return_value.list_objects_v2.return_value = {"Contents": []}
+    fake_storage = MagicMock()
+    fake_storage.list_objects.return_value = []
 
-    with patch.dict("sys.modules", {"boto3": fake_boto3}):
+    with patch(
+        "app.shared.cloud_backends.get_backup_object_storage",
+        return_value=fake_storage,
+    ):
         out = service.list_backups()
 
     assert out == []

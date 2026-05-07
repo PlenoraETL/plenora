@@ -345,13 +345,13 @@ def test_fullstack_transient_db_error_all_fail_raises_explicit(monkeypatch):
     from app.core.estrai.executor import EstraiExecutor
     from app.services.project_service import ProjectService
     from app.shared.exceptions import ColumnsMetadataSaveError
-    import app.db.config_db_service as cfg_db
+    from app.db.config import projects as projects_leaf
     import psycopg2
 
     def always_fail(project_id, key, value):
         raise psycopg2.OperationalError("pool persistently down")
 
-    monkeypatch.setattr(cfg_db, "update_project_canvas_key_atomic", always_fail)
+    monkeypatch.setattr(projects_leaf, "update_project_canvas_key_atomic", always_fail)
 
     executor = EstraiExecutor(
         project_service=ProjectService(),

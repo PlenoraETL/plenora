@@ -9,6 +9,8 @@ from unittest.mock import patch
 
 import pytest
 
+from app.core.artifacts.types import ArtifactResolutionError, RunBlob
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.orchestrator, pytest.mark.contract, pytest.mark.regression]
 
@@ -21,8 +23,16 @@ def test_download_task_result_sanitizes_filename_headers(client):
 
     with patch("app.core.orchestrator.router._assert_task_group"), \
          patch("app.services.task_service.task_service.get_task_status", return_value=task_info), \
-         patch("app.db.db_service.get_result", return_value={"id": "res-1", "project_id": "proj-1", "filename": 'evil\\r\\nname.csv', "format": "csv"}), \
-         patch("app.db.db_service.get_result_data", return_value=b"id\n1\n"):
+         patch(
+            "app.core.artifacts.ArtifactResolver.fetch_run_blob",
+            return_value=RunBlob(
+                data=b"id\n1\n",
+                filename='evil\\r\\nname.csv',
+                format="csv",
+                project_id="proj-1",
+                result_id="res-1",
+            ),
+         ):
         response = client.get("/api/tasks/task-1/download")
 
     assert response.status_code == 200
@@ -38,7 +48,10 @@ def test_download_task_result_rejects_project_result_mismatch(client):
 
     with patch("app.core.orchestrator.router._assert_task_group"), \
          patch("app.services.task_service.task_service.get_task_status", return_value=task_info), \
-         patch("app.db.db_service.get_result", return_value={"id": "res-1", "project_id": "proj-2", "filename": "out.csv", "format": "csv"}):
+         patch(
+            "app.core.artifacts.ArtifactResolver.fetch_run_blob",
+            side_effect=ArtifactResolutionError("mismatch"),
+         ):
         response = client.get("/api/tasks/task-1/download")
 
     assert response.status_code == 404
@@ -63,15 +76,15 @@ def test_download_task_result_streams_body_with_content_length(client):
             return_value=task_info,
          ), \
          patch(
-            "app.db.db_service.get_result",
-            return_value={
-                "id": "res-1",
-                "project_id": "proj-1",
-                "filename": "out.csv",
-                "format": "csv",
-            },
-         ), \
-         patch("app.db.db_service.get_result_data", return_value=payload):
+            "app.core.artifacts.ArtifactResolver.fetch_run_blob",
+            return_value=RunBlob(
+                data=payload,
+                filename="out.csv",
+                format="csv",
+                project_id="proj-1",
+                result_id="res-1",
+            ),
+         ):
         response = client.get("/api/tasks/task-1/download")
 
     assert response.status_code == 200

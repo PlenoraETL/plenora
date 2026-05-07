@@ -35,9 +35,14 @@ def test_get_task_status_detail_fixed_on_broad_exception(client):
 
     assert response.status_code == 404
     # detail canonico senza interpolazione dell'input utente
-    assert response.json()["detail"] == "Task non trovato"
+    detail = response.json()["detail"]
+    if isinstance(detail, dict):
+        assert detail["error"] == "task_not_found"
+        assert detail["message"] == "Task non trovato"
+    else:
+        assert detail == "Task non trovato"
     # il task_id NON deve comparire nel detail (no reflected input)
-    assert canary_task_id not in response.json()["detail"]
+    assert canary_task_id not in str(detail)
 
 
 # F6.1 — _assert_task_group breadcrumb su lookup fail
