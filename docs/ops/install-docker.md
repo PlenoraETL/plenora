@@ -42,6 +42,50 @@ Docker validation is green only when:
 - logs show no startup error;
 - frontend delivery is validated separately or added to compose.
 
+## Validation pack for the Linux PC test
+
+Stream: `BE-GO-READY-INSTALL-012-DOCKER-LINUX-VALIDATION-PACK`
+
+Status: **FIRST SCAFFOLD, NOT YET VALIDATED**.
+
+Preferred runner:
+
+```bash
+bash scripts/docker-validate.sh --dry-run
+bash scripts/docker-validate.sh
+```
+
+The script is non-destructive. It does not run `docker compose down`,
+`docker compose down -v`, remove volumes, or overwrite `.env.docker`.
+
+Paste back these host fingerprints with the validation output:
+
+```bash
+uname -a
+cat /etc/os-release
+docker --version
+docker compose version
+```
+
+Expected output checklist:
+
+1. **`docker compose config`**
+   Expected: compose resolves without missing env/file errors.
+2. **`docker compose build backend`**
+   Expected: backend image builds successfully.
+3. **`docker compose up -d --wait backend`**
+   Expected: Postgres, Redis, and backend become healthy enough for API probes.
+4. **`curl -fsS http://127.0.0.1:5004/health`**
+   Expected: HTTP 200 and backend dependency checks are green.
+5. **`docker compose up -d worker beat`**
+   Expected: worker and beat containers stay running.
+6. **`cleanroom.ping`**
+   Expected: Celery worker returns `pong`.
+7. **memory caps visibility**
+   Expected: runtime memory caps print from backend settings.
+8. **`docker compose stop`**
+   Expected: stack stops without deleting volumes or `.env.docker`.
+
 ## 1. Prerequisites
 
 ```bash

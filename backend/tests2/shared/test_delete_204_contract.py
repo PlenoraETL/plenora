@@ -1,50 +1,106 @@
 """
-Contract test F2-B1 (2026-04-24) — DELETE endpoints ritornano 204.
+Contract test F2 (2026-04-24) - DELETE endpoints ritornano 204.
 
-Blinda convenzione REST (RFC 9110): DELETE che elimina una risorsa
+Blinda convenzione REST (RFC 9110): DELETE che elimina una risorsa.
 """
 
 from __future__ import annotations
 
+from importlib import import_module
+
 import pytest
 
-# BE-GO-READY-TEST-INFRA-001: helper extracted to a shared module.
-# Body + assertion messages preserved byte-exact; the local copy that
-# used to live here now lives at tests2/shared/_route_status_helpers.py.
 from tests2.shared._route_status_helpers import _assert_delete_route_status_204
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
 
 
-def test_delete_connections_declares_204_on_route():
-    """F2-B1: DELETE /api/connections/{id} dichiara status_code=204."""
-    from app.core.connections.router import router as connections_router
-
-    _assert_delete_route_status_204(
-        connections_router,
+DELETE_204_ROUTE_CASES = [
+    pytest.param(
+        "app.core.connections.router",
+        "router",
         "/connections/{connection_id}",
         "DELETE /api/connections/{id}",
-    )
-
-
-def test_delete_api_connections_declares_204_on_route():
-    """F2-B1: DELETE /api/api-connections/{id} dichiara status_code=204."""
-    from app.core.arricchisci.router import api_connections_router
-
-    _assert_delete_route_status_204(
-        api_connections_router,
+        id="connections",
+    ),
+    pytest.param(
+        "app.core.arricchisci.router",
+        "api_connections_router",
         "/api-connections/{api_id}",
         "DELETE /api/api-connections/{id}",
-    )
-
-
-def test_delete_schedules_declares_204_on_route():
-    """F2-B1: DELETE /api/schedules/{id} dichiara status_code=204."""
-    from app.core.scheduler.router import router as scheduler_router
-
-    _assert_delete_route_status_204(
-        scheduler_router,
+        id="api-connections",
+    ),
+    pytest.param(
+        "app.core.scheduler.router",
+        "router",
         "/schedules/{schedule_id}",
         "DELETE /api/schedules/{id}",
-    )
+        id="schedules",
+    ),
+    pytest.param(
+        "app.core.projects.router",
+        "router",
+        "/projects/{project_id}",
+        "DELETE /api/projects/{id}",
+        id="projects",
+    ),
+    pytest.param(
+        "app.core.eseguibili.router",
+        "router",
+        "/eseguibili/{eseguibile_id}",
+        "DELETE /api/eseguibili/{id}",
+        id="eseguibili",
+    ),
+    pytest.param(
+        "app.core.features.routes",
+        "router",
+        "/features/connections/{connection_id}",
+        "DELETE /api/features/connections/{id}",
+        id="features-connections",
+    ),
+    pytest.param(
+        "app.core.tickets.router",
+        "router",
+        "/tickets/{ticket_id}",
+        "DELETE /api/tickets/{id}",
+        id="tickets",
+    ),
+    pytest.param(
+        "app.core.tickets.router",
+        "router",
+        "/tickets/{ticket_id}/attachments/{attachment_id}",
+        "DELETE /api/tickets/{id}/attachments/{aid}",
+        id="ticket-attachments",
+    ),
+    pytest.param(
+        "app.core.files.router",
+        "router",
+        "/files/{file_id}",
+        "DELETE /api/files/{id}",
+        id="files",
+    ),
+    pytest.param(
+        "app.core.imdf.router",
+        "router",
+        "/imdf/bundles/{bundle_task_id}",
+        "DELETE /api/imdf/bundles/{bundle_task_id}",
+        id="imdf-bundles",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    ("router_module", "router_name", "path", "label"),
+    DELETE_204_ROUTE_CASES,
+)
+def test_delete_declares_204_on_route(
+    router_module: str,
+    router_name: str,
+    path: str,
+    label: str,
+) -> None:
+    """F2: DELETE route contract dichiara status_code=204."""
+    router = getattr(import_module(router_module), router_name)
+
+    _assert_delete_route_status_204(router, path, label)

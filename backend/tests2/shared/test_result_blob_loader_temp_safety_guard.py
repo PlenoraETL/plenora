@@ -27,6 +27,15 @@ from tests2.shared._resource_loader_helpers import (
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 
+@pytest.fixture(autouse=True)
+def isolated_stdlib_tempdir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Route stdlib tempfile users in this file to a per-test temp root."""
+    temp_root = tmp_path / "stdlib-temp"
+    temp_root.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(temp_root))
+    return temp_root
+
+
 # 1. Prefix invariant
 
 

@@ -69,6 +69,10 @@ def test_validate_script_runs_eight_canonical_commands():
         "docker compose up -d --wait backend",
         "http://127.0.0.1:5004/health",
         "http://127.0.0.1:5004/ready",
+        "information_schema.schemata",
+        "schema_name = 'plenora'",
+        "to_regclass('plenora.schema_migrations') IS NOT NULL",
+        "SELECT count(*) FROM plenora.schema_migrations",
         "docker compose up -d worker beat",
         "cleanroom.ping",
         "LOAD_FILE_MAX_BYTES",
@@ -170,6 +174,63 @@ def test_validate_script_does_not_clobber_env_docker():
         "existence check on .env.docker (and exit 2 with a "
         "pointer to install-docker.md Step 2 if missing) — "
         "not silently regenerate the file."
+    )
+
+
+def test_validate_script_has_read_only_schema_postcondition_after_ready():
+    """The Docker validation pack must assert DB bootstrap directly after
+    `/ready`, without relying only on the HTTP readiness aggregation."""
+    text = _SCRIPT.read_text(encoding="utf-8")
+    required_markers = (
+        "run_schema_postcondition() {",
+        "Postgres schema + migrations postcondition",
+        "SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = 'plenora');",
+        "SELECT to_regclass('plenora.schema_migrations') IS NOT NULL;",
+        "SELECT count(*) FROM plenora.schema_migrations;",
+        "schema_migrations_rows=",
+    )
+    for marker in required_markers:
+        assert marker in text, (
+            f"scripts/docker-validate.sh must include read-only schema "
+            f"postcondition marker {marker!r}. The Docker cleanroom gate "
+            "needs direct proof that schema `plenora` exists and "
+            "`plenora.schema_migrations` has applied rows after `/ready`."
+        )
+
+    ready_pos = text.find('run_step 4b "GET /ready"')
+    schema_call_pos = text.find("\nrun_schema_postcondition\n")
+    worker_pos = text.find('run_step 5 "up worker + beat"')
+    assert ready_pos != -1, "The `/ready` validation step must exist."
+    assert schema_call_pos != -1, (
+        "`run_schema_postcondition` must be called as a standalone step."
+    )
+    assert worker_pos != -1, "The worker startup step must exist."
+    assert ready_pos < schema_call_pos < worker_pos, (
+        "The schema postcondition must run after `/ready` and before "
+        "worker/beat startup, so backend bootstrap/migrations are proven "
+        "before the Celery path is exercised."
+    )
+
+
+def test_validate_script_schema_postcondition_is_select_only():
+    """The schema postcondition is an observer, not a bootstrapper."""
+    text = _SCRIPT.read_text(encoding="utf-8")
+    start = text.find("run_schema_postcondition() {")
+    end = text.find("\n}\n\n# ---------------------------------------------------------------------------", start)
+    assert start != -1 and end != -1, (
+        "Could not isolate `run_schema_postcondition`; keep the helper "
+        "standalone so its read-only contract remains auditable."
+    )
+    helper = text[start:end]
+    for marker in ("CREATE ", "INSERT ", "UPDATE ", "DELETE ", "DROP ", "ALTER "):
+        assert marker not in helper.upper(), (
+            "The schema postcondition must stay read-only. Found a "
+            f"write/DDL marker in the helper: {marker!r}."
+        )
+    assert helper.count(" psql -U plenora -d plenora -tAc ") >= 3, (
+        "The schema postcondition should use explicit psql scalar SELECT "
+        "commands for schema existence, table existence, and applied-row "
+        "count."
     )
 
 

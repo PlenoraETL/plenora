@@ -1,23 +1,70 @@
 """
-Contract test F3-B1 (2026-04-24) — POST create endpoints ritornano 201.
+Contract test F3 (2026-04-24) - POST create endpoints ritornano 201.
 
-Blinda convenzione REST (RFC 9110): POST che crea una nuova risorsa
+Blinda convenzione REST (RFC 9110): POST che crea una nuova risorsa.
 """
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from importlib import import_module
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.shared.contracts.auth import CurrentUser
 from app.core.auth.auth import require_admin
+from app.shared.contracts.auth import CurrentUser
+from tests2.shared._route_status_helpers import _assert_post_route_status_201
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
+
+
+POST_201_ROUTE_CASES = [
+    pytest.param(
+        "app.core.scheduler.router",
+        "router",
+        "/schedules",
+        "POST /api/schedules",
+        id="schedules",
+    ),
+    pytest.param(
+        "app.core.projects.router",
+        "router",
+        "/projects",
+        "POST /api/projects",
+        id="projects",
+    ),
+    pytest.param(
+        "app.core.eseguibili.router",
+        "router",
+        "/eseguibili",
+        "POST /api/eseguibili",
+        id="eseguibili",
+    ),
+    pytest.param(
+        "app.core.features.routes",
+        "router",
+        "/features/connections",
+        "POST /api/features/connections",
+        id="features-connections",
+    ),
+    pytest.param(
+        "app.core.files.router",
+        "router",
+        "/files/upload",
+        "POST /api/files/upload",
+        id="files-upload",
+    ),
+    pytest.param(
+        "app.core.files.router",
+        "router",
+        "/files/upload-multi-layer",
+        "POST /api/files/upload-multi-layer",
+        id="files-upload-multi-layer",
+    ),
+]
 
 
 @pytest.fixture
@@ -30,14 +77,17 @@ def admin_user() -> CurrentUser:
     )
 
 
-def test_post_connections_returns_201_on_create(admin_user, monkeypatch):
-    """F3-B1: POST /api/connections → 201 Created (non 200 OK)."""
-    from app.core.connections import router as connections_router_module
-    from app.core.connections.router import router as connections_router
-    from app.core.connections.models import DatabaseConnection
-
+def test_post_connections_returns_201_on_create(
+    admin_user: CurrentUser,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """F3-B1: POST /api/connections -> 201 Created (non 200 OK)."""
     from datetime import datetime, timezone
-    # Mock del service per restituire una DatabaseConnection valida
+
+    from app.core.connections import router as connections_router_module
+    from app.core.connections.models import DatabaseConnection
+    from app.core.connections.router import router as connections_router
+
     mock_service = MagicMock()
     mock_service.create_connection.return_value = DatabaseConnection(
         id="conn-new-1",
@@ -55,7 +105,9 @@ def test_post_connections_returns_201_on_create(admin_user, monkeypatch):
         updated_at=datetime.now(timezone.utc),
     )
     monkeypatch.setattr(
-        connections_router_module, "_connection_service", mock_service,
+        connections_router_module,
+        "_connection_service",
+        mock_service,
     )
 
     app = FastAPI()
@@ -81,14 +133,16 @@ def test_post_connections_returns_201_on_create(admin_user, monkeypatch):
         f"POST /api/connections DEVE ritornare 201 Created su create, "
         f"ottenuto {response.status_code}: {response.text[:200]}"
     )
-    # Body invariato (Pydantic model serializzato)
     body = response.json()
     assert body["id"] == "conn-new-1"
     assert body["name"] == "demo"
 
 
-def test_post_api_connections_returns_201_on_create(admin_user, monkeypatch):
-    """F3-B1: POST /api/api-connections → 201 Created."""
+def test_post_api_connections_returns_201_on_create(
+    admin_user: CurrentUser,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """F3-B1: POST /api/api-connections -> 201 Created."""
     from app.core.arricchisci import router as arr_router_module
     from app.core.arricchisci.router import api_connections_router
 
@@ -99,7 +153,9 @@ def test_post_api_connections_returns_201_on_create(admin_user, monkeypatch):
         "connection_type": "rest_file",
     }
     monkeypatch.setattr(
-        arr_router_module, "_api_connection_service", mock_api_service,
+        arr_router_module,
+        "_api_connection_service",
+        mock_api_service,
     )
 
     app = FastAPI()
@@ -124,33 +180,17 @@ def test_post_api_connections_returns_201_on_create(admin_user, monkeypatch):
     assert body["id"] == "api-new-1"
 
 
-def test_post_schedules_declares_201_on_route():
-    """F3-B1: POST /api/schedules dichiara status_code=201 sul decoratore.
+@pytest.mark.parametrize(
+    ("router_module", "router_name", "path", "label"),
+    POST_201_ROUTE_CASES,
+)
+def test_post_create_declares_201_on_route(
+    router_module: str,
+    router_name: str,
+    path: str,
+    label: str,
+) -> None:
+    """F3: POST create-route contract dichiara status_code=201."""
+    router = getattr(import_module(router_module), router_name)
 
-    Introspection del router: ScheduleConfig ha schema Pydantic nested
-    (pipeline: SchedulePipeline, schedule: ScheduleFrequency) che rende
-    fragile costruire una fixture completa via TestClient. Il contract
-    da blindare e' che il decoratore `@router.post("", status_code=201)`
-    non regredisca a 200 in un refactor.
-    """
-    from app.core.scheduler.router import router as sched_router
-
-    # Il router scheduler e' mount-ato con prefix="/schedules";
-    # FastAPI expande `@router.post("")` a path "/schedules".
-    create_routes = [
-        r for r in sched_router.routes
-        if getattr(r, "path", None) == "/schedules"
-        and "POST" in getattr(r, "methods", set())
-    ]
-    assert len(create_routes) == 1, (
-        f"mi aspetto esattamente 1 route POST '/schedules' (create), "
-        f"trovato: {[(r.path, r.methods) for r in sched_router.routes if 'POST' in getattr(r, 'methods', set())]!r}"
-    )
-    create_route = create_routes[0]
-
-    # FastAPI espone status_code dichiarato nel decoratore come
-    # `APIRoute.status_code`; se None → default FastAPI (200).
-    assert create_route.status_code == 201, (
-        f"POST /schedules DEVE dichiarare status_code=201 nel decoratore; "
-        f"ottenuto {create_route.status_code!r} (None = default 200)"
-    )
+    _assert_post_route_status_201(router, path, label)

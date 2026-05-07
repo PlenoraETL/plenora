@@ -188,6 +188,66 @@ run_step() {
     fi
 }
 
+run_schema_postcondition() {
+    local n="4c"
+    local desc="Postgres schema + migrations postcondition"
+    local schema_sql="SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = 'plenora');"
+    local table_sql="SELECT to_regclass('plenora.schema_migrations') IS NOT NULL;"
+    local rows_sql="SELECT count(*) FROM plenora.schema_migrations;"
+    local value
+    local rc
+
+    echo
+    echo "=============================================================="
+    echo "STEP $n: $desc"
+    echo "    \$ docker compose exec -T postgres psql -U plenora -d plenora -tAc \"$schema_sql\""
+    echo "    \$ docker compose exec -T postgres psql -U plenora -d plenora -tAc \"$table_sql\""
+    echo "    \$ docker compose exec -T postgres psql -U plenora -d plenora -tAc \"$rows_sql\""
+    echo "=============================================================="
+
+    if [ "$DRY_RUN" -eq 1 ]; then
+        echo "(dry-run: not executing)"
+        return 0
+    fi
+
+    value="$(docker compose exec -T postgres psql -U plenora -d plenora -tAc "$schema_sql" | tr -d '[:space:]')"
+    rc=$?
+    if [ $rc -ne 0 ] || [ "$value" != "t" ]; then
+        echo
+        echo "STEP $n FAILED: schema 'plenora' was not found after /ready." >&2
+        echo "Inspect backend migration logs:" >&2
+        echo "  docker compose logs --tail 200 backend" >&2
+        exit 1
+    fi
+
+    value="$(docker compose exec -T postgres psql -U plenora -d plenora -tAc "$table_sql" | tr -d '[:space:]')"
+    rc=$?
+    if [ $rc -ne 0 ] || [ "$value" != "t" ]; then
+        echo
+        echo "STEP $n FAILED: table 'plenora.schema_migrations' was not found after /ready." >&2
+        echo "Inspect backend migration logs:" >&2
+        echo "  docker compose logs --tail 200 backend" >&2
+        exit 1
+    fi
+
+    value="$(docker compose exec -T postgres psql -U plenora -d plenora -tAc "$rows_sql" | tr -d '[:space:]')"
+    rc=$?
+    case "$value" in
+        ''|*[!0-9]*)
+            value=0
+            ;;
+    esac
+    if [ $rc -ne 0 ] || [ "$value" -le 0 ]; then
+        echo
+        echo "STEP $n FAILED: plenora.schema_migrations has no applied rows after /ready." >&2
+        echo "Inspect backend migration logs:" >&2
+        echo "  docker compose logs --tail 200 backend" >&2
+        exit 1
+    fi
+
+    echo "schema=plenora schema_migrations_rows=$value"
+}
+
 # ---------------------------------------------------------------------------
 # FE gap status report (BE-GO-READY-INSTALL-019-AUTOMATE-INSTALL-TRUTH-CHECKS)
 # ---------------------------------------------------------------------------
@@ -272,6 +332,8 @@ run_step 4b "GET /ready" -- \
     curl -fsS http://127.0.0.1:5004/ready
 
 [ "$DRY_RUN" -eq 0 ] && echo
+
+run_schema_postcondition
 
 run_step 5 "up worker + beat" -- \
     docker compose up -d worker beat
