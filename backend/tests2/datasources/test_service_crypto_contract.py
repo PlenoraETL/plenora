@@ -21,7 +21,8 @@ pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
 @pytest.fixture(autouse=True)
 def _ensure_database_url_for_module_import(monkeypatch):
     """Placeholder DATABASE_URL per permettere l'import di
-    ``app.db.db_service`` (che al top-level richiede la env var).
+    ``app.db.config.datasources`` (via ``pg_connection``, che al top-level
+    richiede la env var).
 
     Il valore è fittizio: il fixture `_mock_db` che segue monkeypatch-a
     tutte le funzioni usate dal service, quindi nessuna connessione
@@ -44,11 +45,11 @@ def service():
 def fake_db(monkeypatch):
     """Mock dei punti di accesso DB usati dal service.
 
-    Il service fa lazy import di ``app.db.db_service`` dentro i metodi,
+    Il service fa lazy import di ``app.db.config.datasources`` dentro i metodi,
     quindi il monkeypatch deve agire sul modulo reale (non sul namespace
     del service).
     """
-    import app.db.db_service as db
+    import app.db.config.datasources as datasource_db
 
     # Calls capture dicts
     captured = {"save": None, "update": None, "delete": [], "get": {}}
@@ -65,10 +66,10 @@ def fake_db(monkeypatch):
     def _delete(ds_id):
         captured["delete"].append(ds_id)
 
-    monkeypatch.setattr(db, "save_datasource", _save)
-    monkeypatch.setattr(db, "update_datasource", _update)
-    monkeypatch.setattr(db, "get_datasource", _get)
-    monkeypatch.setattr(db, "delete_datasource", _delete)
+    monkeypatch.setattr(datasource_db, "save_datasource", _save)
+    monkeypatch.setattr(datasource_db, "update_datasource", _update)
+    monkeypatch.setattr(datasource_db, "get_datasource", _get)
+    monkeypatch.setattr(datasource_db, "delete_datasource", _delete)
 
     return captured
 
@@ -124,7 +125,9 @@ def test_update_reencrypts_sensitive_fields_with_new_value(service, fake_db):
         DataSourceUpdate(password="pwd-NEW"),
     )
 
-    assert fake_db["update"] is not None, "update_datasource DEVE chiamare db.update_datasource"
+    assert fake_db["update"] is not None, (
+        "update_datasource DEVE chiamare datasource_db.update_datasource"
+    )
     saved_config = fake_db["update"]["config"]
     assert crypto.is_encrypted(saved_config["password"]), (
         "nuova password DEVE essere cifrata prima del save al DB"
@@ -286,7 +289,7 @@ def test_update_nonexistent_datasource_returns_none_no_db_write(service, fake_db
 
     assert result is None
     assert fake_db["update"] is None, (
-        "update_datasource NON DEVE chiamare db.update_datasource su id inesistente"
+        "update_datasource NON DEVE chiamare datasource_db.update_datasource su id inesistente"
     )
 
 
@@ -296,7 +299,7 @@ def test_update_nonexistent_datasource_returns_none_no_db_write(service, fake_db
 def test_get_full_config_strict_raises_on_undecryptable_field(service, monkeypatch):
     """Bug #2: _get_full_config(strict=True) con campo cifrato corrotto →
     CredentialUnavailableError invece di passare None al backend."""
-    import app.db.db_service as db
+    import app.db.config.datasources as datasource_db
 
     # Config con password cifrata ma non decriptabile (token random non valido)
     corrupted_config = {
@@ -309,7 +312,7 @@ def test_get_full_config_strict_raises_on_undecryptable_field(service, monkeypat
         "password": "enc:Z0FBQUFBQm5vdEF0b2tlbkNvcnJvdHRvQ2hlRmFsbGlzY2U=",  # token corrotto
     }
 
-    monkeypatch.setattr(db, "get_datasource", lambda _id: {
+    monkeypatch.setattr(datasource_db, "get_datasource", lambda _id: {
         "id": "ds-broken",
         "config": corrupted_config,
         "group_id": "grp-1",
@@ -326,7 +329,7 @@ def test_get_full_config_non_strict_returns_none_field_silently(service, monkeyp
     """Bug #2 guard: retro-compat — senza strict=True, decrypt fallito
     ritorna None nel campo (comportamento pre-fix per path NON-test).
     Serve per non rompere list_datasources / get_datasource / enrichment runtime."""
-    import app.db.db_service as db
+    import app.db.config.datasources as datasource_db
 
     corrupted_config = {
         "id": "ds-broken",
@@ -335,7 +338,7 @@ def test_get_full_config_non_strict_returns_none_field_silently(service, monkeyp
         "password": "enc:Z0FBQUFBQm5vdEF0b2tlbkNvcnJvdHRvQ2hlRmFsbGlzY2U=",
     }
 
-    monkeypatch.setattr(db, "get_datasource", lambda _id: {
+    monkeypatch.setattr(datasource_db, "get_datasource", lambda _id: {
         "id": "ds-broken",
         "config": corrupted_config,
         "group_id": "grp-1",

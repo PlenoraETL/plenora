@@ -92,7 +92,7 @@ def _assert_path_within(child: Path, parent: Path, label: str = "Percorso") -> P
             )
         raise HTTPException(status_code=400, detail=f"{label} non valido")
 
-from app.services.file_service import file_source_service
+from app.core.files.service import file_source_service
 from app.config import settings
 from app.utils.logger import get_logger
 from app.shared import error_codes
@@ -519,7 +519,7 @@ def delete_file(file_id: str, current_user: CurrentUser = Depends(require_file_o
 def _svc_group(current_user: CurrentUser) -> str:
     """N1: calcola il group_id da passare al service per fail-closed.
     Superadmin usa il bypass sentinel del FileSourceService."""
-    from app.services.file_service import FileSourceService
+    from app.core.files.service import FileSourceService
     if current_user.role == "superadmin":
         return FileSourceService.SUPERADMIN_BYPASS
     return current_user.group_id

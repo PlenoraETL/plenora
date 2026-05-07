@@ -70,17 +70,17 @@ def stub_storage_factory(monkeypatch):
 
 @pytest.fixture
 def mock_db_save_ok(monkeypatch):
-    import app.db.db_service as db_service
+    import app.db.config.projects as projects_db
+    import app.db.results_db_service as results_db
     import app.utils.result_store as result_store
 
     saved: list[dict] = []
     monkeypatch.setattr(
         result_store, "uuid", SimpleNamespace(uuid4=lambda: "res-orph")
     )
-    monkeypatch.setattr(
-        db_service, "get_project", lambda pid: {"id": pid, "group_id": "grp-1"}
+    monkeypatch.setattr(projects_db, "get_project", lambda pid: {"id": pid, "group_id": "grp-1"}
     )
-    monkeypatch.setattr(db_service, "save_result", lambda **kw: saved.append(kw))
+    monkeypatch.setattr(results_db, "save_result", lambda **kw: saved.append(kw))
     monkeypatch.setattr(
         result_store, "_apply_results_retention", lambda pid: None
     )
@@ -91,20 +91,20 @@ def mock_db_save_ok(monkeypatch):
 def mock_db_save_fails(monkeypatch):
     """Configura `db.save_result` perche' sollevi RuntimeError simulando
     una row DB rifiutata (vincolo FK, connection, ecc.)."""
-    import app.db.db_service as db_service
+    import app.db.config.projects as projects_db
+    import app.db.results_db_service as results_db
     import app.utils.result_store as result_store
 
     monkeypatch.setattr(
         result_store, "uuid", SimpleNamespace(uuid4=lambda: "res-orph")
     )
-    monkeypatch.setattr(
-        db_service, "get_project", lambda pid: {"id": pid, "group_id": "grp-1"}
+    monkeypatch.setattr(projects_db, "get_project", lambda pid: {"id": pid, "group_id": "grp-1"}
     )
 
     def _raise(**_kw):
         raise RuntimeError("DB save FK violation")
 
-    monkeypatch.setattr(db_service, "save_result", _raise)
+    monkeypatch.setattr(results_db, "save_result", _raise)
     monkeypatch.setattr(
         result_store, "_apply_results_retention", lambda pid: None
     )

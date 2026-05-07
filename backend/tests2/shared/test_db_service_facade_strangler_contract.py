@@ -76,7 +76,6 @@ _FACADE_FILE = "app/db/db_service.py"
 #       `app/core/carica/executor.py`,
 #       `app/core/connections/router.py`,
 #       `app/core/datasources/router.py`,
-#       `app/core/datasources/service.py`,
 #       `app/core/eseguibili/service.py`,
 #       `app/core/features/features_service.py`,
 #       `app/core/files/router.py`,
@@ -86,7 +85,8 @@ _FACADE_FILE = "app/db/db_service.py"
 #       `app/services/orphan_cleanup_service.py`,
 #       `app/services/schema_inference.py`,
 #       `app/shared/authz_helpers.py`,
-#       `app/utils/result_store.py`.
+#       `app/utils/result_store.py` was migrated by Batch 079 Worker 4
+#       to `app.db.config.projects` + `app.db.results_db_service`.
 #
 # Removed by BE-GO-READY-DB-ENGINE-011 (this batch):
 #   - `app/core/eseguibili/db.py` migrated `import app.db.db_service
@@ -110,6 +110,11 @@ _FACADE_FILE = "app/db/db_service.py"
 #     API-connection CRUD to `app.db.config.api_connections`.
 #   - `app/services/connection_service.py` migrated connection CRUD
 #     to `app.db.config.connections`.
+#
+# Removed by Batch 079 Worker 5:
+#   - `app/core/datasources/service.py` migrated datasource CRUD/config
+#     lookup to `app.db.config.datasources`. Direct list queries were
+#     already on `app.db.pg_connection`.
 _DB_SERVICE_PROD_ALLOWLIST: frozenset[str] = frozenset({
     # Bootstrap orchestrator — `init_all_dbs` lives on the facade.
     "app/bootstrap.py",
@@ -119,10 +124,6 @@ _DB_SERVICE_PROD_ALLOWLIST: frozenset[str] = frozenset({
     "app/core/arricchisci/canvas_orchestrator.py",
     # Auth sharing surface: generic shareable-resource lookup via raw SQL.
     "app/core/auth/shares_router.py",
-    # Datasources service — many cluster-specific calls; deferred.
-    "app/core/datasources/service.py",
-    # Services with many mixed usages; deferred.
-    "app/utils/result_store.py",
     # Worker cluster — deferred.
     "workers/beat_scheduler.py",
     "workers/tasks/carica_task.py",

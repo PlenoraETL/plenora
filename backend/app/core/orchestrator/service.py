@@ -10,7 +10,7 @@ from app.models import CanvasState
 from app.core.projects.service import ProjectService
 from app.db.query_executor import QueryExecutor
 from app.core.estrai.query_generator import QueryGenerator
-from app.services.connection_service import ConnectionService
+from app.core.connections.service import ConnectionService
 from app.config import settings
 from app.shared import error_codes
 from app.shared.execution.executor_protocol import CanvasExecutorProtocol, ExecutionResult

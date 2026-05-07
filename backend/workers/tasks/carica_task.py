@@ -113,7 +113,7 @@ def execute_carica_task(
 
     _group_id = ""
     try:
-        from app.services.project_service import ProjectService as _PS
+        from app.core.projects.service import ProjectService as _PS
         _meta = _PS().get_project_metadata(project_id)
         _group_id = getattr(_meta, "group_id", "") if _meta else ""
     except Exception as e:
@@ -367,7 +367,7 @@ def _execute_db_write(task, df, carica_node_data, project_id, task_id, triggered
             opt-in al guard quando hanno un run_id.
     """
     from app.core.carica.executor import CaricaExecutor
-    from app.services.connection_service import ConnectionService
+    from app.core.connections.service import ConnectionService
 
     def progress_callback(batch_progress):
         overall_percent = 10 + int(batch_progress.percent * 0.85)
@@ -603,8 +603,8 @@ def _load_upstream_data(
         # Nessun risultato in cache o force_recalculate → riesegui pipeline
 
         from app.core.orchestrator.service import OrchestratorService
-        from app.services.project_service import ProjectService
-        from app.services.connection_service import ConnectionService
+        from app.core.projects.service import ProjectService
+        from app.core.connections.service import ConnectionService
         from app.core.estrai.query_generator import QueryGenerator
         from app.db.query_executor import create_executor
         from app.core.features.features_service import FeaturesService

@@ -160,7 +160,7 @@ def test_load_file_sources_reapplies_crs_from_node_columns_metadata():
         return d  # sentinella, non importa il return
 
     with patch("app.shared.sharing.is_resource_visible", return_value=True), \
-         patch("app.services.file_service.file_source_service") as svc, \
+         patch("app.core.files.service.file_source_service") as svc, \
          patch("app.core.manipola.executor._applica_crs_da_colonne",
                side_effect=_fake_apply_crs):
         svc.load_dataframe.return_value = (df_flat, None)

@@ -108,7 +108,7 @@ async def get_schemas(connection_id: str, current_user: CurrentUser = Depends(re
     # SECURITY: verifica che l'utente possa vedere questa connessione
     # owned dal suo gruppo o shared). Senza questo check un utente di
     # gruppoA potrebbe enumerare schemi/tabelle del DB di gruppoB
-    from app.services.connection_service import ConnectionService as _CS
+    from app.core.connections.service import ConnectionService as _CS
     _conn_obj = _CS().get_connection(connection_id)
     assert_resource_visible(_conn_obj, "connections", current_user, "Connessione")
     try:
@@ -135,7 +135,7 @@ async def get_tables(connection_id: str, schema_name: str, current_user: Current
 
     Ritorna la lista delle tabelle nello schema specificato.
     """
-    from app.services.connection_service import ConnectionService as _CS
+    from app.core.connections.service import ConnectionService as _CS
     _conn_obj = _CS().get_connection(connection_id)
     assert_resource_visible(_conn_obj, "connections", current_user, "Connessione")
     try:
@@ -163,7 +163,7 @@ async def get_columns(connection_id: str, schema_name: str, table_name: str, cur
     Ritorna le colonne (nome + tipo) della tabella specificata.
     Usato dal frontend per popolare il form di mapping colonne.
     """
-    from app.services.connection_service import ConnectionService as _CS
+    from app.core.connections.service import ConnectionService as _CS
     _conn_obj = _CS().get_connection(connection_id)
     assert_resource_visible(_conn_obj, "connections", current_user, "Connessione")
     try:

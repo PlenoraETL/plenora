@@ -212,7 +212,7 @@ def execute_enrichment_task(
         _run_id = str(_uuid.uuid4())
         try:
             from app.core.intermediate import db as _idb
-            from app.services.project_service import ProjectService as _PS
+            from app.core.projects.service import ProjectService as _PS
             _meta = _PS().get_project_metadata(project_id)
             _group_id = getattr(_meta, 'group_id', 'unknown') if _meta else 'unknown'
             _idb.create_run(run_id=_run_id, canvas_id=project_id, group_id=_group_id, user_id=user_id)
@@ -1047,7 +1047,7 @@ def execute_enrichment_task(
             # in modo permanente, ColumnsMetadataSaveError propaga al try/except
             # esterno di Celery che marca il task FAILED — pre-fix il warning
             # silenzioso lasciava il task SUCCESS con metadata stale
-            from app.services.project_service import ProjectService as _ProjSvc
+            from app.core.projects.service import ProjectService as _ProjSvc
             from app.shared.columns_metadata import save_columns_metadata_with_retry
             _col_meta = [{"name": col, "type": str(final_df[col].dtype)} for col in final_df.columns]
             save_columns_metadata_with_retry(
@@ -1265,7 +1265,7 @@ def _cleanup_temp_file_sources(file_source_ids: Optional[List[str]], task_id: st
     if not file_source_ids:
         return
     try:
-        from app.services.file_service import file_source_service
+        from app.core.files.service import file_source_service
     except Exception as e:
         logger.warning(f"[Task {task_id}] Cleanup: import file_source_service fallito: {e}")
         return
@@ -1372,7 +1372,7 @@ def _trigger_carica_if_present(project_id: str, canvas: Dict, output_format: str
     )
 
     from app.services.task_service import task_service
-    from app.services.project_service import ProjectService
+    from app.core.projects.service import ProjectService
     try:
         metadata = ProjectService().get_project_metadata(project_id)
         group_id = getattr(metadata, 'group_id', None) if metadata else None

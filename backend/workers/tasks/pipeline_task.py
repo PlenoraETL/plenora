@@ -33,8 +33,8 @@ def _build_orchestrator() -> Any:
     con nodi ArcGIS Feature Service non riescono a risolvere il layer al
     task-time (mentre in modalita' sincrona via app/main.py funzionano).
     """
-    from app.services.project_service import ProjectService
-    from app.services.connection_service import ConnectionService
+    from app.core.projects.service import ProjectService
+    from app.core.connections.service import ConnectionService
     from app.core.estrai.query_generator import QueryGenerator
     from app.core.features.features_service import FeaturesService
     from app.db.query_executor import create_executor

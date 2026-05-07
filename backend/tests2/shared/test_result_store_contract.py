@@ -27,7 +27,8 @@ def test_save_result_blob_removes_temp_file_only_after_success(monkeypatch, tmp_
 
     saved = {}
 
-    import app.db.db_service as db_service
+    import app.db.config.projects as projects_db
+    import app.db.results_db_service as results_db
     import app.utils.result_store as result_store
 
     monkeypatch.setattr(
@@ -35,14 +36,10 @@ def test_save_result_blob_removes_temp_file_only_after_success(monkeypatch, tmp_
         "uuid",
         SimpleNamespace(uuid4=lambda: "res-1"),
     )
-    monkeypatch.setattr(
-        db_service,
-        "get_project",
+    monkeypatch.setattr(projects_db, "get_project",
         lambda project_id: {"id": project_id, "group_id": "grp-1"},
     )
-    monkeypatch.setattr(
-        db_service,
-        "save_result",
+    monkeypatch.setattr(results_db, "save_result",
         lambda **kwargs: saved.update(kwargs),
     )
     monkeypatch.setattr(
@@ -72,7 +69,8 @@ def test_save_result_blob_keeps_temp_file_when_db_save_fails(monkeypatch, tmp_pa
     result_file = temp_dir / "result.csv"
     result_file.write_text("id\n1\n", encoding="utf-8")
 
-    import app.db.db_service as db_service
+    import app.db.config.projects as projects_db
+    import app.db.results_db_service as results_db
     import app.utils.result_store as result_store
 
     monkeypatch.setattr(
@@ -80,14 +78,10 @@ def test_save_result_blob_keeps_temp_file_when_db_save_fails(monkeypatch, tmp_pa
         "uuid",
         SimpleNamespace(uuid4=lambda: "res-1"),
     )
-    monkeypatch.setattr(
-        db_service,
-        "get_project",
+    monkeypatch.setattr(projects_db, "get_project",
         lambda project_id: {"id": project_id, "group_id": "grp-1"},
     )
-    monkeypatch.setattr(
-        db_service,
-        "save_result",
+    monkeypatch.setattr(results_db, "save_result",
         lambda **kwargs: (_ for _ in ()).throw(RuntimeError("db down")),
     )
 
@@ -104,7 +98,8 @@ def test_save_result_blob_keeps_temp_file_when_db_save_fails(monkeypatch, tmp_pa
 
 def _force_object_storage(monkeypatch, tmp_path):
     """Setup minimo per portare save_result_blob nel ramo object_storage."""
-    import app.db.db_service as db_service
+    import app.db.config.projects as projects_db
+    import app.db.results_db_service as results_db
     import app.utils.result_store as result_store
     from types import SimpleNamespace
 
@@ -113,9 +108,7 @@ def _force_object_storage(monkeypatch, tmp_path):
         "uuid",
         SimpleNamespace(uuid4=lambda: "res-rb2"),
     )
-    monkeypatch.setattr(
-        db_service,
-        "get_project",
+    monkeypatch.setattr(projects_db, "get_project",
         lambda project_id: {"id": project_id, "group_id": "grp-1"},
     )
     # Forza policy=object_storage cosi' upload S3 e' obbligatorio.
@@ -245,7 +238,8 @@ def _wire_object_storage_writer(monkeypatch, *, fake_storage, saved):
     "happy path" che vogliono verificare il routing object_storage.
     Forza policy=object_storage, mock di db.save_result con cattura kwargs,
     e installa un fake runtime object storage che registra gli upload."""
-    import app.db.db_service as db_service
+    import app.db.config.projects as projects_db
+    import app.db.results_db_service as results_db
     import app.utils.result_store as result_store
 
     monkeypatch.setattr(
@@ -253,14 +247,10 @@ def _wire_object_storage_writer(monkeypatch, *, fake_storage, saved):
         "uuid",
         SimpleNamespace(uuid4=lambda: "res-os-1"),
     )
-    monkeypatch.setattr(
-        db_service,
-        "get_project",
+    monkeypatch.setattr(projects_db, "get_project",
         lambda project_id: {"id": project_id, "group_id": "grp-1"},
     )
-    monkeypatch.setattr(
-        db_service,
-        "save_result",
+    monkeypatch.setattr(results_db, "save_result",
         lambda **kwargs: saved.update(kwargs),
     )
     monkeypatch.setattr(result_store, "_apply_results_retention", lambda pid: None)

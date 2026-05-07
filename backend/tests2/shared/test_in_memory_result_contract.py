@@ -25,16 +25,17 @@ pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 @pytest.fixture
 def mock_db(monkeypatch):
     """Mock db_service minimale per save_result_blob* flows."""
-    import app.db.db_service as db_service
+    import app.db.config.projects as projects_db
+    import app.db.results_db_service as results_db
     import app.utils.result_store as result_store
 
     saved: dict = {}
 
     monkeypatch.setattr(result_store, "uuid",
                         SimpleNamespace(uuid4=lambda: "res-1"))
-    monkeypatch.setattr(db_service, "get_project",
+    monkeypatch.setattr(projects_db, "get_project",
                         lambda pid: {"id": pid, "group_id": "grp-1"})
-    monkeypatch.setattr(db_service, "save_result",
+    monkeypatch.setattr(results_db, "save_result",
                         lambda **kwargs: saved.update(kwargs))
     monkeypatch.setattr(result_store, "_apply_results_retention",
                         lambda pid: None)
@@ -68,7 +69,8 @@ def test_regression_path_based_save_preserves_bytes_exactly(mock_db, tmp_path):
 def test_regression_path_based_save_keeps_temp_on_db_error(monkeypatch, tmp_path):
     """Se il DB fallisce, il temp file NON deve essere cancellato (retry-friendly)."""
     from app.utils.result_store import save_result_blob, ResultSaveError
-    import app.db.db_service as db_service
+    import app.db.config.projects as projects_db
+    import app.db.results_db_service as results_db
     import app.utils.result_store as result_store
 
     def _boom(**kwargs):
@@ -76,9 +78,9 @@ def test_regression_path_based_save_keeps_temp_on_db_error(monkeypatch, tmp_path
 
     monkeypatch.setattr(result_store, "uuid",
                         SimpleNamespace(uuid4=lambda: "res-x"))
-    monkeypatch.setattr(db_service, "get_project",
+    monkeypatch.setattr(projects_db, "get_project",
                         lambda pid: {"id": pid, "group_id": "grp"})
-    monkeypatch.setattr(db_service, "save_result", _boom)
+    monkeypatch.setattr(results_db, "save_result", _boom)
 
     class _FakeSettings:
         @staticmethod
@@ -203,12 +205,13 @@ def test_save_result_blob_from_bytes_no_artificial_hard_cap(monkeypatch):
 def test_get_result_as_bytes_returns_raw_blob(monkeypatch):
     """get_result_as_bytes: DB blob -> bytes direttamente, zero tempfile."""
     from app.utils import result_store
-    import app.db.db_service as db_service
+    import app.db.config.projects as projects_db
+    import app.db.results_db_service as results_db
 
     expected = b"col1,col2\n1,a\n2,b\n"
-    monkeypatch.setattr(db_service, "get_latest_result",
+    monkeypatch.setattr(results_db, "get_latest_result",
                         lambda pid: {"id": "r1", "format": "csv"})
-    monkeypatch.setattr(db_service, "get_result_data",
+    monkeypatch.setattr(results_db, "get_result_data",
                         lambda rid: expected)
 
     result = result_store.get_result_as_bytes("proj-1")
@@ -217,8 +220,9 @@ def test_get_result_as_bytes_returns_raw_blob(monkeypatch):
 
 def test_get_result_as_bytes_returns_none_when_missing(monkeypatch):
     from app.utils import result_store
-    import app.db.db_service as db_service
-    monkeypatch.setattr(db_service, "get_latest_result", lambda pid: None)
+    import app.db.config.projects as projects_db
+    import app.db.results_db_service as results_db
+    monkeypatch.setattr(results_db, "get_latest_result", lambda pid: None)
     assert result_store.get_result_as_bytes("missing") is None
 
 
@@ -268,7 +272,8 @@ def test_get_result_as_bytes_creates_no_files_on_disk(
 ):
     """Stesso sentinel per la direzione di lettura."""
     from app.utils import result_store
-    import app.db.db_service as db_service
+    import app.db.config.projects as projects_db
+    import app.db.results_db_service as results_db
 
     temp_dir = tmp_path / "temp"
     temp_dir.mkdir()
@@ -277,9 +282,9 @@ def test_get_result_as_bytes_creates_no_files_on_disk(
         DATA_DIR = tmp_path
     monkeypatch.setattr(result_store, "settings", _FakeSettings, raising=False)
 
-    monkeypatch.setattr(db_service, "get_latest_result",
+    monkeypatch.setattr(results_db, "get_latest_result",
                         lambda pid: {"id": "r1", "format": "csv"})
-    monkeypatch.setattr(db_service, "get_result_data",
+    monkeypatch.setattr(results_db, "get_result_data",
                         lambda rid: b"payload")
 
     result_store.get_result_as_bytes("proj-1")

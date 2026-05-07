@@ -63,8 +63,8 @@ def test_load_upstream_data_does_not_fallback_to_latest_project_result_after_fai
     # via orchestrator stub).
     with patch("app.utils.result_store.get_result_as_tempfile", return_value=None), \
          patch("app.db.db_service.get_project", return_value=None), \
-         patch("app.services.project_service.ProjectService", return_value=object()), \
-         patch("app.services.connection_service.ConnectionService", return_value=object()), \
+         patch("app.core.projects.service.ProjectService", return_value=object()), \
+         patch("app.core.connections.service.ConnectionService", return_value=object()), \
          patch("app.core.estrai.query_generator.QueryGenerator", return_value=object()), \
          patch("app.db.query_executor.create_executor", return_value=object()), \
          patch("app.core.features.features_service.FeaturesService", return_value=object()), \

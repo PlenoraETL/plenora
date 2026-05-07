@@ -56,7 +56,7 @@ class ExecutionManager:
     def _get_connection_service(self):
         """ConnectionService lazy singleton per questa istanza di ExecutionManager."""
         if self._connection_service is None:
-            from app.services.connection_service import ConnectionService
+            from app.core.connections.service import ConnectionService
             self._connection_service = ConnectionService()
         return self._connection_service
 

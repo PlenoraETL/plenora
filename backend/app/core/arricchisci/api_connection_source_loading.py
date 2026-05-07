@@ -152,7 +152,7 @@ class ApiConnectionSourceLoadingMixin:
         try:
             from app.core.orchestrator.service import OrchestratorService
             from app.core.projects.service import ProjectService
-            from app.services.connection_service import ConnectionService
+            from app.core.connections.service import ConnectionService
             from app.core.estrai.query_generator import QueryGenerator
             from app.db.query_executor import QueryExecutor
             from app.core.features.features_service import FeaturesService

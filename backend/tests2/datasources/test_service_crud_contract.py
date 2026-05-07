@@ -136,11 +136,13 @@ def test_list_datasources_uses_single_fetchall_no_per_row_requery(monkeypatch):
     1 sola ``fetchall`` e parse in memoria — MAI ``get_datasource(id)`` per-row.
 
     Regressione: il pattern N+1 era presente prima del refactor
-    2026-04-17/18. Un merge futuro che riportasse ``for row: db.get_datasource(row.id)``
-    (magari per uniformare il decrypt path) distruggerebbe la garanzia
+    2026-04-17/18. Un merge futuro che riportasse un
+    ``get_datasource(row.id)`` per ogni riga (magari per uniformare il
+    decrypt path) distruggerebbe la garanzia
     di latenza O(1) query per M datasource.
 
-    Strategia: counter su ``fetchall`` (==1) e su ``db.get_datasource`` (==0).
+    Strategia: counter su ``fetchall`` (==1) e su
+    ``datasource_db.get_datasource`` (==0).
     Il counter 0 su get_datasource è il segnale discriminante: se sale,
     c'è un path di re-fetch che non deve esserci.
     """
@@ -149,7 +151,7 @@ def test_list_datasources_uses_single_fetchall_no_per_row_requery(monkeypatch):
     # `from app.db.pg_connection import fetchall as _fetchall`
     # at the lazy-import boundary.
     import app.db.pg_connection as pg
-    import app.db.db_service as db
+    import app.db.config.datasources as datasource_db
 
     rows = [_make_row(f"ds-{i}", "tenant-a", f"ds{i}") for i in range(5)]
 
@@ -165,7 +167,7 @@ def test_list_datasources_uses_single_fetchall_no_per_row_requery(monkeypatch):
         return rows[0]  # non dovrebbe mai essere chiamato
 
     monkeypatch.setattr(pg, "fetchall", fake_fetchall)
-    monkeypatch.setattr(db, "get_datasource", fake_get_datasource)
+    monkeypatch.setattr(datasource_db, "get_datasource", fake_get_datasource)
 
     service = DataSourceService()
     result = service.list_datasources(group_id="tenant-a")
@@ -184,8 +186,8 @@ def test_list_datasources_uses_single_fetchall_no_per_row_requery(monkeypatch):
 def test_delete_datasource_returns_false_for_nonexistent_no_db_delete(monkeypatch):
     """Blinda idempotenza delete: id inesistente → ``False`` SENZA side-effect.
 
-    Il check ``if not db.get_datasource(ds_id): return False`` È il punto
-    di idempotenza. Rimuoverlo farebbe partire DELETE SQL spurie che
+    Il check ``if not datasource_db.get_datasource(ds_id): return False`` è
+    il punto di idempotenza. Rimuoverlo farebbe partire DELETE SQL spurie che
     toccherebbero 0 row ma:
     - gonfierebbero le metriche ``rowcount = 0`` nei log
     - confonderebbero eventuali trigger audit (delete event per id ignoto)
@@ -195,12 +197,12 @@ def test_delete_datasource_returns_false_for_nonexistent_no_db_delete(monkeypatc
     operazione DB viene eseguita.
     """
     from app.core.datasources.service import DataSourceService
-    import app.db.db_service as db
+    import app.db.config.datasources as datasource_db
 
     delete_called_with = []
-    monkeypatch.setattr(db, "get_datasource", lambda ds_id: None)
+    monkeypatch.setattr(datasource_db, "get_datasource", lambda ds_id: None)
     monkeypatch.setattr(
-        db,
+        datasource_db,
         "delete_datasource",
         lambda ds_id: delete_called_with.append(ds_id),
     )
@@ -212,7 +214,7 @@ def test_delete_datasource_returns_false_for_nonexistent_no_db_delete(monkeypatc
         f"delete su id inesistente DEVE ritornare False, ottenuto {result!r}"
     )
     assert delete_called_with == [], (
-        f"db.delete_datasource NON DEVE essere chiamato se get_datasource è None. "
+        f"datasource_db.delete_datasource NON DEVE essere chiamato se get_datasource è None. "
         f"Chiamate osservate: {delete_called_with}"
     )
 
@@ -233,10 +235,10 @@ def test_create_datasource_generates_id_with_canonical_pattern(monkeypatch):
     """
     from app.core.datasources.service import DataSourceService
     from app.core.datasources.models import DataSourceCreate
-    import app.db.db_service as db
+    import app.db.config.datasources as datasource_db
 
     saved = []
-    monkeypatch.setattr(db, "save_datasource", lambda **kw: saved.append(kw))
+    monkeypatch.setattr(datasource_db, "save_datasource", lambda **kw: saved.append(kw))
 
     service = DataSourceService()
     data = DataSourceCreate(name="My Test DS", type="local", root_path="/tmp")

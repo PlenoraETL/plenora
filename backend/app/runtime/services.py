@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from app.core.features.features_service import FeaturesService
     from app.core.orchestrator.service import OrchestratorService
     from app.db.query_executor import QueryExecutor
-    from app.services.connection_service import ConnectionService
+    from app.core.connections.service import ConnectionService
     from app.core.projects.service import ProjectService
 
 
@@ -110,7 +110,7 @@ def build_runtime_services(
     from app.core.features.features_service import FeaturesService
     from app.core.orchestrator.service import OrchestratorService
     from app.db.query_executor import QueryExecutor
-    from app.services.connection_service import ConnectionService
+    from app.core.connections.service import ConnectionService
     from app.core.projects.service import ProjectService
 
     from app.core.arricchisci.api_connector import api_connection_service

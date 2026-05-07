@@ -14,7 +14,7 @@ from app.db.config.connections import delete_connection as db_delete_connection
 from app.db.config.connections import get_connection_config
 from app.db.config.connections import update_connection as db_update_connection
 from app.db.pg_connection import fetchall as db_fetchall
-from app.models import (
+from app.core.connections.models import (
     DatabaseConnection,
     ConnectionCreate,
     ConnectionUpdate,

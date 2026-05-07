@@ -1,7 +1,7 @@
 """
 PLENORA-ETL — Data Source Service
 
-CRUD configurazioni Data Source → PostgreSQL via app.db.db_service.
+CRUD configurazioni Data Source → PostgreSQL via app.db.config.datasources.
 """
 
 import json
@@ -105,7 +105,7 @@ class DataSourceService:
         group_id: Optional[str] = None,
         created_by: Optional[str] = None,
     ) -> DataSource:
-        import app.db.db_service as db
+        import app.db.config.datasources as datasource_db
         ds_id = self._generate_id(data.name)
         now = datetime.now(timezone.utc)
 
@@ -141,7 +141,7 @@ class DataSourceService:
         config_to_save = dict(config)
         _encrypt_dict_fields(config_to_save, _SENSITIVE_FIELDS)
 
-        db.save_datasource(
+        datasource_db.save_datasource(
             ds_id=ds_id,
             group_id=group_id or settings.DEFAULT_GROUP,
             name=data.name,
@@ -159,7 +159,7 @@ class DataSourceService:
         return self._to_model(config, redact=True)
 
     def update_datasource(self, ds_id: str, data: DataSourceUpdate) -> Optional[DataSource]:
-        import app.db.db_service as db
+        import app.db.config.datasources as datasource_db
         config = self._get_full_config(ds_id)  # già decifrato
         if not config:
             return None
@@ -181,15 +181,15 @@ class DataSourceService:
         config_to_save.pop("group_id", None)
         config_to_save.pop("created_by", None)
         _encrypt_dict_fields(config_to_save, _SENSITIVE_FIELDS)
-        db.update_datasource(ds_id, config=config_to_save)
+        datasource_db.update_datasource(ds_id, config=config_to_save)
         logger.info(f"Data Source aggiornato: {ds_id}")
         return self._to_model(config, redact=True)
 
     def delete_datasource(self, ds_id: str) -> bool:
-        import app.db.db_service as db
-        if not db.get_datasource(ds_id):
+        import app.db.config.datasources as datasource_db
+        if not datasource_db.get_datasource(ds_id):
             return False
-        db.delete_datasource(ds_id)
+        datasource_db.delete_datasource(ds_id)
         # Pulizia scan_state su filesystem
         scan_path = self._scan_state_path(ds_id)
         if scan_path.exists():
@@ -421,8 +421,8 @@ class DataSourceService:
         ``CredentialUnavailableError``. Usato dal path test_connection
         (Bug #2, 2026-04-23) per non rispondere 200-OK con secret silent-None.
         """
-        import app.db.db_service as db
-        row = db.get_datasource(ds_id)
+        import app.db.config.datasources as datasource_db
+        row = datasource_db.get_datasource(ds_id)
         if not row:
             return None
         config = row.get("config") or {}

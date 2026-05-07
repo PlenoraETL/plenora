@@ -226,7 +226,7 @@ def execute(
     """
     import io
     from app.utils.dataframe import load_dataframe_from_file
-    from app.services.file_service import file_source_service
+    from app.core.files.service import file_source_service
     from app.services.task_service import task_service
     from app.config import settings
 

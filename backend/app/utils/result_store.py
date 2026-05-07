@@ -216,13 +216,14 @@ def save_result_blob(project_id: str, path: Path, fmt: str,
     """
     _saved = False
     try:
-        import app.db.db_service as db
+        from app.db.config.projects import get_project
+        from app.db.results_db_service import save_result
         from app.config import settings
 
         # Risolvi group_id
         resolved_group_id = group_id
         if not resolved_group_id:
-            project = db.get_project(project_id)
+            project = get_project(project_id)
             resolved_group_id = (project.get("group_id") if project else None) or settings.DEFAULT_GROUP
 
         result_id = str(uuid.uuid4())
@@ -239,7 +240,7 @@ def save_result_blob(project_id: str, path: Path, fmt: str,
             # DB blob path — hard cap guard (db sempre; hybrid ramo DB
             _enforce_db_hard_cap(file_size, ctx=f"save_result_blob/{policy}")
             blob = path.read_bytes()
-            db.save_result(
+            save_result(
                 result_id=result_id,
                 project_id=project_id,
                 group_id=resolved_group_id,
@@ -280,7 +281,7 @@ def save_result_blob(project_id: str, path: Path, fmt: str,
             # cosi' il caller riceve sempre la root cause (DB save) e
             # l'object storage non accumula orfani
             try:
-                db.save_result(
+                save_result(
                     result_id=result_id,
                     project_id=project_id,
                     group_id=resolved_group_id,
@@ -379,7 +380,8 @@ def save_result_blob_from_bytes(
     Raises: ResultSaveError se fallisce DB/S3 o size supera hard cap.
     """
     try:
-        import app.db.db_service as db
+        from app.db.config.projects import get_project
+        from app.db.results_db_service import save_result
         from app.config import settings
 
         size = len(data)
@@ -387,7 +389,7 @@ def save_result_blob_from_bytes(
         # Risolvi group_id
         resolved_group_id = group_id
         if not resolved_group_id:
-            project = db.get_project(project_id)
+            project = get_project(project_id)
             resolved_group_id = (project.get("group_id") if project else None) or settings.DEFAULT_GROUP
 
         result_id = str(uuid.uuid4())
@@ -398,7 +400,7 @@ def save_result_blob_from_bytes(
         if not use_object_storage:
             # DB blob path — hard cap guard (db sempre; hybrid ramo DB
             _enforce_db_hard_cap(size, ctx=f"save_result_blob_from_bytes/{policy}")
-            db.save_result(
+            save_result(
                 result_id=result_id,
                 project_id=project_id,
                 group_id=resolved_group_id,
@@ -436,7 +438,7 @@ def save_result_blob_from_bytes(
             # rationale: compensating delete best-effort se la DB save
             # fallisce dopo upload riuscito
             try:
-                db.save_result(
+                save_result(
                     result_id=result_id,
                     project_id=project_id,
                     group_id=resolved_group_id,
@@ -540,16 +542,20 @@ def save_pipeline_result(
         # Filesystem-only: serializzatori che richiedono path
         # driver OGR per gpkg, multi-file zip per shp
         # Cleanup hardening: TemporaryDirectory context manager garantisce
-        # rmtree al `__exit__` indipendentemente da exception path
-        # senza affidarsi a save_result_blob.finally. Directory in OS
-        # `/tmp` (auto-pulita a reboot) invece di DATA_DIR/temp
+        # rmtree al `__exit__` indipendentemente da exception path.
+        # La root resta sotto DATA_DIR/temp: su Windows sandbox l'OS temp
+        # puo' essere non scrivibile/cancellabile dal processo test.
         # Upload via save_result_blob_from_bytes (bytes-based, no
-        # cleanup sovrapposto al nostro
-        import tempfile as _tf
-        with _tf.TemporaryDirectory(
-            prefix="urby_gpkg_shp_",
-            ignore_cleanup_errors=True,
-        ) as tmp_dir:
+        # cleanup sovrapposto al nostro).
+        import shutil
+        _settings = globals().get("settings")
+        if _settings is None:
+            from app.config import settings as _settings
+        temp_parent = Path(_settings.DATA_DIR) / "temp"
+        temp_parent.mkdir(parents=True, exist_ok=True)
+        tmp_dir = temp_parent / f"urby_gpkg_shp_{os.getpid()}_{os.urandom(4).hex()}"
+        tmp_dir.mkdir(parents=True, exist_ok=False)
+        try:
             tmp_path = Path(tmp_dir) / filename
             saved_path = save_dataframe(df, tmp_path, output_format, geom_column, crs)
             # Per shp `save_dataframe` ritorna .zip invece di .shp — allinea
@@ -564,7 +570,9 @@ def save_pipeline_result(
                 group_id=group_id,
             )
             output_filename = saved_path.name
-        # Context exit: tmp_dir + contenuto rimossi (idempotent, no-throw
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+        # tmp_dir + contenuto rimossi best-effort (idempotent, no-throw)
         return {"result_id": result_id, "output_filename": output_filename}
 
     # In-memory path: zero touch su DATA_DIR/temp
@@ -595,11 +603,11 @@ def get_result_as_bytes(project_id: str) -> Optional[bytes]:
     (o se il download S3 fallisce — log warning in quel caso).
     """
     try:
-        import app.db.db_service as db
-        row = db.get_latest_result(project_id)
+        from app.db.results_db_service import get_latest_result, get_result_data
+        row = get_latest_result(project_id)
         if not row:
             return None
-        return db.get_result_data(row["id"])
+        return get_result_data(row["id"])
     except Exception as e:
         logger.warning(f"Errore lettura blob result ({project_id}): {e}")
         return None
@@ -613,13 +621,13 @@ def get_result_as_tempfile(project_id: str) -> Optional[Path]:
     Returns: Path del file temp, o None se non trovato
     """
     try:
-        import app.db.db_service as db
+        from app.db.results_db_service import get_latest_result, get_result_data
 
-        row = db.get_latest_result(project_id)
+        row = get_latest_result(project_id)
         if not row:
             return None
 
-        data = db.get_result_data(row["id"])
+        data = get_result_data(row["id"])
         if not data:
             return None
 
@@ -638,8 +646,8 @@ def get_result_as_tempfile(project_id: str) -> Optional[Path]:
 def get_result_info(project_id: str) -> Optional[dict]:
     """Ritorna metadata dell'ultimo risultato (senza blob)."""
     try:
-        import app.db.db_service as db
-        return db.get_latest_result(project_id)
+        from app.db.results_db_service import get_latest_result
+        return get_latest_result(project_id)
     except Exception as e:
         logger.warning("get_result_info fallito per %s: %s", project_id, e)
         return None

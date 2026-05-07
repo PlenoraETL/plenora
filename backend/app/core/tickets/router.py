@@ -294,7 +294,7 @@ async def upload_attachment_endpoint(
         raise HTTPException(400, str(e))
 
     # Salva via file_service (riusa storage dispatch DB/S3
-    from app.services.file_service import FileSourceService
+    from app.core.files.service import FileSourceService
     fs = FileSourceService()
     file_source = fs.create_raw_from_upload(
         file_content=io.BytesIO(content),
@@ -342,7 +342,7 @@ def delete_ticket_endpoint(
     result = svc.delete_ticket(ticket_id, current_user, hard=hard)
 
     if result.get("hard") and result.get("orphaned_file_source_ids"):
-        from app.services.file_service import FileSourceService
+        from app.core.files.service import FileSourceService
         fs = FileSourceService()
         for fs_id in result["orphaned_file_source_ids"]:
             try:
@@ -382,7 +382,7 @@ def download_attachment_endpoint(
     if not attachment or attachment["ticket_id"] != ticket_id:
         raise HTTPException(404, "Allegato non trovato")
 
-    from app.services.file_service import FileSourceService
+    from app.core.files.service import FileSourceService
     fs = FileSourceService()
     blob = fs.get_blob_bytes(
         attachment["file_source_id"], expected_group_id=ticket["group_id"],
@@ -435,7 +435,7 @@ def delete_attachment_endpoint(
 
     # Best-effort: elimina anche il file_source sottostante (pulizia storage
     try:
-        from app.services.file_service import FileSourceService
+        from app.core.files.service import FileSourceService
         FileSourceService().delete_file_source(attachment["file_source_id"])
     except Exception as e:
         logger.warning(

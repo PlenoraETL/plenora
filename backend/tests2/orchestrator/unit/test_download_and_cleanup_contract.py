@@ -196,16 +196,17 @@ def test_save_pipeline_result_dict_shape(monkeypatch):
     """save_pipeline_result ritorna sempre {result_id, output_filename}."""
     from app.utils.result_store import save_pipeline_result
     import app.utils.result_store as result_store
-    import app.db.db_service as db_service
+    import app.db.config.projects as projects_db
+    import app.db.results_db_service as results_db
     from types import SimpleNamespace
 
     # Stub DB mock
     saved_calls = []
     monkeypatch.setattr(result_store, "uuid",
                         SimpleNamespace(uuid4=lambda: "res-xyz"))
-    monkeypatch.setattr(db_service, "get_project",
+    monkeypatch.setattr(projects_db, "get_project",
                         lambda pid: {"id": pid, "group_id": "grp"})
-    monkeypatch.setattr(db_service, "save_result",
+    monkeypatch.setattr(results_db, "save_result",
                         lambda **kw: saved_calls.append(kw))
     monkeypatch.setattr(result_store, "_apply_results_retention",
                         lambda pid: None)
@@ -242,7 +243,8 @@ def test_save_pipeline_result_fs_only_fallback_to_filesystem(monkeypatch, tmp_pa
     Deve comunque ritornare la stessa shape dict."""
     from app.utils.result_store import save_pipeline_result
     import app.utils.result_store as result_store
-    import app.db.db_service as db_service
+    import app.db.config.projects as projects_db
+    import app.db.results_db_service as results_db
     from types import SimpleNamespace
 
     # Intercetta il flusso path-based: mock save_dataframe per evitare
@@ -258,9 +260,9 @@ def test_save_pipeline_result_fs_only_fallback_to_filesystem(monkeypatch, tmp_pa
     saved_calls = []
     monkeypatch.setattr(result_store, "uuid",
                         SimpleNamespace(uuid4=lambda: "res-fs"))
-    monkeypatch.setattr(db_service, "get_project",
+    monkeypatch.setattr(projects_db, "get_project",
                         lambda pid: {"id": pid, "group_id": "grp"})
-    monkeypatch.setattr(db_service, "save_result",
+    monkeypatch.setattr(results_db, "save_result",
                         lambda **kw: saved_calls.append(kw))
     monkeypatch.setattr(result_store, "_apply_results_retention",
                         lambda pid: None)

@@ -358,7 +358,7 @@ class CaricaExecutor:
 
         # Fallback: leggi dal DB PostgreSQL con decriptazione password
         import app.db.pg_connection as db_svc
-        from app.services.connection_service import _decrypt_password
+        from app.core.connections.service import _decrypt_password
         row = db_svc.fetchone("SELECT * FROM connections WHERE id = ?", (connection_id,))
         if row:
             r = dict(row)

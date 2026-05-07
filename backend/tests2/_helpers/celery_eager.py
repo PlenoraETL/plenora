@@ -254,7 +254,7 @@ def install_enrichment_task_mocks(
             return _FakeProjectMeta(project_group_id)
 
     monkeypatch.setattr(
-        "app.services.project_service.ProjectService", _FakeProjectService,
+        "app.core.projects.service.ProjectService", _FakeProjectService,
     )
 
     # 8. Intermediate run creation (lazy)

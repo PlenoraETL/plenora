@@ -65,7 +65,7 @@ def mock_file_service():
     fake_fs = MagicMock()
     fake_fs.delete_file_source.return_value = True
     with patch(
-        "app.services.file_service.FileSourceService", return_value=fake_fs,
+        "app.core.files.service.FileSourceService", return_value=fake_fs,
     ):
         yield fake_fs
 

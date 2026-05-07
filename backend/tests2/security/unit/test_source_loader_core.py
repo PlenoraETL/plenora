@@ -192,7 +192,7 @@ def test_load_file_blocks_invisible_resource():
     ref = SourceRef(file_source_id="fs-99")
 
     with patch("app.shared.sharing.is_resource_visible", return_value=False) as visibility, \
-         patch("app.services.file_service.file_source_service") as svc:
+         patch("app.core.files.service.file_source_service") as svc:
         with pytest.raises(SourceLoadingError, match="non appartiene al tuo gruppo"):
             loader.load(ref, expected_group_id="grp-1")
 
@@ -230,7 +230,7 @@ def test_load_file_returns_geodataframe_when_available():
     gdf = object()  # sentinella, non importa il tipo concreto
 
     with patch("app.shared.sharing.is_resource_visible", return_value=True), \
-         patch("app.services.file_service.file_source_service") as svc:
+         patch("app.core.files.service.file_source_service") as svc:
         svc.load_dataframe.return_value = (df, gdf)
         out = loader.load(ref, expected_group_id="grp-1")
 
@@ -244,7 +244,7 @@ def test_load_file_returns_dataframe_when_no_geodataframe():
     df = pd.DataFrame({"id": [1, 2]})
 
     with patch("app.shared.sharing.is_resource_visible", return_value=True), \
-         patch("app.services.file_service.file_source_service") as svc:
+         patch("app.core.files.service.file_source_service") as svc:
         svc.load_dataframe.return_value = (df, None)
         out = loader.load(ref, expected_group_id="grp-1")
 
@@ -286,7 +286,7 @@ def test_load_static_does_not_touch_db_or_http():
     ref = SourceRef(static_fields=tuple([{"name": "x", "value": "1"}]))
 
     with patch("app.shared.sharing.is_resource_visible") as visibility, \
-         patch("app.services.file_service.file_source_service") as svc, \
+         patch("app.core.files.service.file_source_service") as svc, \
          patch("app.db.db_service.get_project") as get_project:
         loader.load(ref, expected_group_id="grp-1")
 

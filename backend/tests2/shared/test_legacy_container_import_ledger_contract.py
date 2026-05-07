@@ -1,7 +1,7 @@
 """
 Architecture ledger for remaining legacy import containers.
 
-Batch 078 Worker 6: keep `app.services`, `app.db.db_service`, and
+Batch 079 Worker 6: keep `app.services`, `app.db.db_service`, and
 `app.db.config` production import debt measurable by domain. These
 baselines are intentionally exact: new import edges fail, and removed
 edges fail until the baseline is trimmed.
@@ -38,39 +38,22 @@ _LEGACY_IMPORT_BASELINES: dict[str, dict[str, frozenset[str]]] = {
             "app/core/projects/router.py -> app.services.schema_inference",
             "app/core/projects/service.py -> app.services.project_lineage",
             "app/shared/execution/canvas_columns.py -> app.services.schema_inference",
-            "workers/tasks/carica_task.py -> app.services.project_service",
-            "workers/tasks/enrichment_task.py -> app.services.project_service",
-            "workers/tasks/pipeline_task.py -> app.services.project_service",
         }),
-        "connections": frozenset({
-            "app/core/arricchisci/api_connection_source_loading.py -> app.services.connection_service",
-            "app/core/carica/executor.py -> app.services.connection_service",
-            "app/core/carica/router.py -> app.services.connection_service",
-            "app/core/orchestrator/service.py -> app.services.connection_service",
-            "app/core/scheduler/execution_manager.py -> app.services.connection_service",
-            "app/runtime/services.py -> app.services.connection_service",
-            "workers/tasks/carica_task.py -> app.services.connection_service",
-            "workers/tasks/pipeline_task.py -> app.services.connection_service",
-        }),
+        "connections": frozenset(),
         "files_storage": frozenset({
-            "app/core/artifacts/source_loader.py -> app.services.file_service",
-            "app/core/eseguibili/service.py -> app.services.file_service",
-            "app/core/files/router.py -> app.services.file_service",
-            "app/core/tickets/router.py -> app.services.file_service",
+            "app/core/files/service.py -> app.services.file_load_dispatch",
+            "app/core/files/service.py -> app.services.file_multi_layer_upload",
+            "app/core/files/service.py -> app.services.file_preview_temp",
+            "app/core/files/service.py -> app.services.file_raw_upload",
+            "app/core/files/service.py -> app.services.file_service_deps",
+            "app/core/files/service.py -> app.services.file_source_read",
+            "app/core/files/service.py -> app.services.file_storage_dispatch",
+            "app/core/files/service.py -> app.services.file_upload",
             "app/services/file_multi_layer_upload.py -> app.services.file_storage_dispatch",
             "app/services/file_multi_layer_upload.py -> app.services.file_upload",
             "app/services/file_preview_temp.py -> app.services.file_load_dispatch",
             "app/services/file_raw_upload.py -> app.services.file_storage_dispatch",
-            "app/services/file_service.py -> app.services.file_load_dispatch",
-            "app/services/file_service.py -> app.services.file_multi_layer_upload",
-            "app/services/file_service.py -> app.services.file_preview_temp",
-            "app/services/file_service.py -> app.services.file_raw_upload",
-            "app/services/file_service.py -> app.services.file_service_deps",
-            "app/services/file_service.py -> app.services.file_source_read",
-            "app/services/file_service.py -> app.services.file_storage_dispatch",
-            "app/services/file_service.py -> app.services.file_upload",
             "app/services/file_upload.py -> app.services.file_storage_dispatch",
-            "workers/tasks/enrichment_task.py -> app.services.file_service",
         }),
         "tasks_orchestration": frozenset({
             "app/core/arricchisci/router.py -> app.services.task_service",
@@ -89,9 +72,7 @@ _LEGACY_IMPORT_BASELINES: dict[str, dict[str, frozenset[str]]] = {
         "connections": frozenset({
             "app/core/arricchisci/api_connection_rest_file.py -> app.db.db_service",
         }),
-        "files_storage": frozenset({
-            "app/utils/result_store.py -> app.db.db_service",
-        }),
+        "files_storage": frozenset(),
         "tasks_orchestration": frozenset({
             "workers/beat_scheduler.py -> app.db.db_service",
             "workers/tasks/carica_task.py -> app.db.db_service",
@@ -101,7 +82,6 @@ _LEGACY_IMPORT_BASELINES: dict[str, dict[str, frozenset[str]]] = {
             "app/bootstrap.py -> app.db.db_service",
             "app/core/arricchisci/api_connector.py -> app.db.db_service",
             "app/core/auth/shares_router.py -> app.db.db_service",
-            "app/core/datasources/service.py -> app.db.db_service",
         }),
     },
     "app.db.config": {
@@ -137,9 +117,9 @@ _LEGACY_IMPORT_BASELINES: dict[str, dict[str, frozenset[str]]] = {
             "app/core/auth/owner_dependencies.py -> app.db.config.file_sources",
             "app/core/files/router.py -> app.db.config.file_sources",
             "app/core/tickets/router.py -> app.db.config.file_sources",
+            "app/core/files/service.py -> app.db.config.file_sources",
             "app/db/config_db_service.py -> app.db.config.file_sources",
             "app/services/file_multi_layer_upload.py -> app.db.config.file_sources",
-            "app/services/file_service.py -> app.db.config.file_sources",
             "app/shared/authz_helpers.py -> app.db.config.file_sources",
         }),
         "tasks_orchestration": frozenset({
@@ -156,6 +136,7 @@ _LEGACY_IMPORT_BASELINES: dict[str, dict[str, frozenset[str]]] = {
             "app/core/auth/ownership.py -> app.db.config.users",
             "app/core/auth/users_router.py -> app.db.config.groups",
             "app/core/auth/users_router.py -> app.db.config.users",
+            "app/core/datasources/service.py -> app.db.config.datasources",
             "app/db/config_db_service.py -> app.db.config.comparison_keys",
             "app/db/config_db_service.py -> app.db.config.datasources",
             "app/db/config_db_service.py -> app.db.config.groups",
@@ -270,7 +251,7 @@ def test_legacy_container_import_ledger_by_domain(prefix: str):
 
 
 def test_legacy_container_import_ledger_current_counts_are_locked():
-    """Exact count snapshot for Batch 078 residual reporting."""
+    """Exact count snapshot for Batch 079 residual reporting."""
     counts = {
         prefix: {
             domain: len(edges)

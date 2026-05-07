@@ -158,7 +158,7 @@ class SourceLoader:
                 f"non appartiene al tuo gruppo"
             )
 
-        from app.services.file_service import (
+        from app.core.files.service import (
             file_source_service, FileSourceService,
         )
         try:
