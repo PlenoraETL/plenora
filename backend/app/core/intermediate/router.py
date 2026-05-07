@@ -4,7 +4,9 @@ Intermediate Router — endpoint FastAPI per feature inspection e confronto run.
 Endpoints:
 """
 
-from typing import List, Optional
+import json
+import math
+from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
@@ -30,10 +32,7 @@ router = APIRouter(prefix="/runs", tags=["intermediate"])
 # FastAPI/json.dumps(allow_nan=False) solleva ValueError. Mappiamo
 # qui i non-finite float a None *solo nella response*. Niente
 # mutazione di node_rows, niente impatto sull'hash
-import math
-
-
-def _sanitize_for_json(value):
+def _sanitize_for_json(value: Any) -> Any:
     """Mappa NaN/+Inf/-Inf a None ricorsivamente.
 
     Lascia invariato il resto (int, str, bool, None, datetime-as-str,
@@ -122,7 +121,7 @@ def list_runs(
     canvas_id: str,
     limit: int = Query(default=50, ge=1, le=200),
     current_user: CurrentUser = Depends(require_not_esecutore),
-):
+) -> List[RunSummary]:
     """Lista run per canvas, ordinate dalla più recente."""
     try:
         gid = group_filter(current_user)
@@ -147,7 +146,7 @@ def get_node_data(
     node_id: str,
     limit: int = Query(default=100, ge=1, le=5000),
     current_user: CurrentUser = Depends(require_not_esecutore),
-):
+) -> dict:
     """
     Righe del nodo da intermediate.db.
     Ritorna max `limit` righe (default 100).
@@ -295,7 +294,7 @@ def compare_runs_l1(
     run_id_a: str = Query(...),
     run_id_b: str = Query(...),
     current_user: CurrentUser = Depends(require_not_esecutore),
-):
+) -> CompareL1Result:
     """
     Confronto L1 tra due run — solo hash aggregati e contatori.
     Veloce, non legge le tabelle dinamiche.
@@ -346,7 +345,7 @@ def compare_runs_l2(
     run_id_b: str = Query(...),
     node_id: str = Query(...),
     current_user: CurrentUser = Depends(require_not_esecutore),
-):
+) -> dict:
     """
     Confronto L2 tra due run sullo stesso nodo.
     Ritorna righe aggiunte in B (non presenti in A) e rimosse da A (non
@@ -422,7 +421,7 @@ def compare_runs_l2(
         # esplicito invece di silently fallback su node_rows vuoti
         if MODE_FULL_ARTIFACT in (mode_a, mode_b):
             # Se uno dei due e' artifact, distinguiamo "complete vs altro"
-            def _artifact_status(meta):
+            def _artifact_status(meta: dict | None) -> Any:
                 return (meta or {}).get("artifact_status")
             status_a = _artifact_status(meta_a) if mode_a == MODE_FULL_ARTIFACT else None
             status_b = _artifact_status(meta_b) if mode_b == MODE_FULL_ARTIFACT else None
@@ -544,11 +543,10 @@ def compare_runs_l2(
         # Shape del response identico a prima: gli elementi sono dict con
         # le colonne "piatte" della riga. Espandiamo row_data (jsonb) e
         # aggiungiamo _row_hash per retrocompatibilita' col frontend
-        def _expand(r):
+        def _expand(r: dict) -> dict:
             data = r.get("row_data") or {}
             if isinstance(data, str):
-                import json as _json
-                data = _json.loads(data)
+                data = json.loads(data)
             return {"_row_hash": r.get("row_hash", ""), **data}
 
         removed_list = [_expand(r) for r in removed_raw]
@@ -597,7 +595,7 @@ def pin_run(
     run_id: str,
     body: PinRequest,
     current_user: CurrentUser = Depends(require_not_esecutore),
-):
+) -> dict:
     """Pinna o spinna una run — le run pinnate sono escluse dalla retention FIFO."""
     try:
         # Stessa logica di `get_node_data`. Il superadmin puo' pinnare

@@ -99,8 +99,15 @@ class EnrichmentResponseProcessingMixin:
         self._explode_rows(data, normalized_mappings, contexts=[data], rows=rows, current_depth=0, max_depth=max_depth)
         return rows if rows else [{}]
 
-    def _explode_rows(self, current_data: Any, mappings: List[Dict], contexts: List[Any],
-                       rows: List[Dict], current_depth: int, max_depth: int):
+    def _explode_rows(
+        self,
+        current_data: Any,
+        mappings: List[Dict],
+        contexts: List[Any],
+        rows: List[Dict],
+        current_depth: int,
+        max_depth: int,
+    ) -> None:
         """Esplora ricorsivamente i livelli di [] producendo una riga per ogni foglia.
 
         contexts[k] = elemento corrente al livello k (0 = root, 1 = primo []-iterator, ...)
@@ -200,7 +207,7 @@ class EnrichmentResponseProcessingMixin:
 
         return [{"_response": str(data)}]
 
-    def _detect_geometry_type(self, col_name: str, geom_type: str):
+    def _detect_geometry_type(self, col_name: str, geom_type: str) -> None:
         """Mappa tipo GeoJSON -> tipo sistema (geometry:point, geometry:polygon, ecc.)"""
         geo_map = {
             "point": "geometry:point",
@@ -243,7 +250,7 @@ class EnrichmentResponseProcessingMixin:
                 result[key] = value
         return result
 
-    def _apply_result(self, df: pd.DataFrame, idx: int, result: Dict):
+    def _apply_result(self, df: pd.DataFrame, idx: int, result: Dict) -> None:
         """Applica risultato API a una riga del DataFrame."""
         for col_name, value in result.items():
             df.at[idx, col_name] = value

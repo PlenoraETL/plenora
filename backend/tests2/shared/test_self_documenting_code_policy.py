@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
-from typing import Dict, Iterable, Tuple
+from typing import Dict, Iterable, Sequence, Tuple
 
 import pytest
 
@@ -23,9 +23,9 @@ _SCAN_ROOTS = (
     _BACKEND_ROOT / "workers",
 )
 
-MAX_MISSING_ARG_ANNOTATIONS = 315
-MAX_MISSING_RETURN_ANNOTATIONS = 338
-MAX_WEAK_NAME_REFERENCES = 307
+MAX_MISSING_ARG_ANNOTATIONS = 283
+MAX_MISSING_RETURN_ANNOTATIONS = 300
+MAX_WEAK_NAME_REFERENCES = 272
 
 WEAK_NAMES = {
     "df2",
@@ -48,7 +48,7 @@ def _iter_py_files() -> Iterable[Path]:
     @utils
     """
     for root in _SCAN_ROOTS:
-        yield from root.rglob("*.py")
+        yield from sorted(root.rglob("*.py"))
 
 
 def _relative(path: Path) -> str:
@@ -65,6 +65,31 @@ def _parse(path: Path) -> ast.AST:
     @utils
     """
     return ast.parse(path.read_text(encoding="utf-8"))
+
+
+def _format_annotation_offenders(
+    offenders: Sequence[Tuple[str, Tuple[int, int]]],
+) -> str:
+    """Formatta gli offender con colonne stabili e leggibili.
+
+    @utils
+    """
+    if not offenders:
+        return "  nessun offender"
+    return "\n".join(
+        f"  {path}: args={missing_args}, returns={missing_returns}"
+        for path, (missing_args, missing_returns) in offenders
+    )
+
+
+def _format_count_offenders(offenders: Sequence[Tuple[str, int]]) -> str:
+    """Formatta una classifica file -> conteggio.
+
+    @utils
+    """
+    if not offenders:
+        return "  nessun offender"
+    return "\n".join(f"  {path}: {count}" for path, count in offenders)
 
 
 def _function_annotation_debt(path: Path) -> Tuple[int, int]:
@@ -158,14 +183,18 @@ def test_runtime_type_hint_debt_does_not_increase() -> None:
     )[:20]
 
     assert missing_args <= MAX_MISSING_ARG_ANNOTATIONS, (
-        f"Parametri senza annotation aumentati: {missing_args} > "
-        f"{MAX_MISSING_ARG_ANNOTATIONS}.\n"
-        f"Top offenders: {top_offenders}"
+        "Parametri senza annotation oltre baseline.\n"
+        f"Observed: {missing_args}; baseline: {MAX_MISSING_ARG_ANNOTATIONS}.\n"
+        "La baseline puo' solo scendere dopo cleanup behavior-preserving.\n"
+        "Top offenders:\n"
+        f"{_format_annotation_offenders(top_offenders)}"
     )
     assert missing_returns <= MAX_MISSING_RETURN_ANNOTATIONS, (
-        f"Return type mancanti aumentati: {missing_returns} > "
-        f"{MAX_MISSING_RETURN_ANNOTATIONS}.\n"
-        f"Top offenders: {top_offenders}"
+        "Return type mancanti oltre baseline.\n"
+        f"Observed: {missing_returns}; baseline: {MAX_MISSING_RETURN_ANNOTATIONS}.\n"
+        "La baseline puo' solo scendere dopo cleanup behavior-preserving.\n"
+        "Top offenders:\n"
+        f"{_format_annotation_offenders(top_offenders)}"
     )
 
 
@@ -178,7 +207,9 @@ def test_weak_runtime_names_do_not_increase() -> None:
     top_offenders = sorted(offenders.items(), key=lambda item: (-item[1], item[0]))[:20]
 
     assert total <= MAX_WEAK_NAME_REFERENCES, (
-        f"Nomi deboli aumentati: {total} > {MAX_WEAK_NAME_REFERENCES}.\n"
+        "Nomi deboli oltre baseline.\n"
+        f"Observed: {total}; baseline: {MAX_WEAK_NAME_REFERENCES}.\n"
         f"Nomi monitorati: {sorted(WEAK_NAMES)}\n"
-        f"Top offenders: {top_offenders}"
+        "Top offenders:\n"
+        f"{_format_count_offenders(top_offenders)}"
     )

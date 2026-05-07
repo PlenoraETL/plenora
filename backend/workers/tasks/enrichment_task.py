@@ -30,11 +30,11 @@ logger = get_logger(__name__)
 
 
 def _merge_batch_parallel_node_results(
-    common_input_df,
-    node_results: dict,
-    node_ids: list,
+    common_input_df: object,
+    node_results: Dict[str, Any],
+    node_ids: List[str],
     task_id: str,
-):
+) -> None:
     """Merge dei DataFrame prodotti da un batch parallel di nodi enrichment.
 
     Invariante: ogni nodo del ritornare un DataFrame della stessa
@@ -311,11 +311,11 @@ def execute_enrichment_task(
             come return del task. E' l'equivalente async-safe del `return`
             diretto che il vecchio loop faceva in linea.
             """
-            def __init__(self, payload):
+            def __init__(self, payload: Dict[str, Any]) -> None:
                 self.payload = payload
 
         def _run_single_node(node_id: str, node_progress: int,
-                             input_override=None) -> None:
+                             input_override: object = None) -> None:
             """Esegue un singolo nodo del canvas.
 
             Chiamata sequenzialmente per gli step "single" o in parallelo
@@ -534,7 +534,12 @@ def execute_enrichment_task(
                     # Progress callback: usa default argument per catturare node_progress
                     # al momento della creazione (non riferimento mutabile
                     progress_range = 20
-                    def progress_callback(percent: int, message: str, _base=node_progress, _range=progress_range):
+                    def progress_callback(
+                        percent: int,
+                        message: str,
+                        _base: int = node_progress,
+                        _range: int = progress_range,
+                    ) -> None:
                         mapped_progress = _base + int((percent / 100) * _range)
                         update_task_progress(self, mapped_progress, message, task_id=task_id)
 
@@ -1110,7 +1115,7 @@ def execute_enrichment_task(
         if _run_id and not is_eseguibile:
             _exec_time = time.time() - _run_start
             _rid_c = _run_id
-            def _async_close(_r=_rid_c, _t=_exec_time):
+            def _async_close(_r: str = _rid_c, _t: float = _exec_time) -> None:
                 try:
                     from app.core.intermediate.writer import close_run as _cr
                     _cr(run_id=_r, input_hash="", output_hash="",
@@ -1277,13 +1282,13 @@ def _cleanup_temp_file_sources(file_source_ids: Optional[List[str]], task_id: st
 
 
 def update_task_progress(
-    task,
+    task: object,
     progress: int,
     message: str,
     is_error: bool = False,
     *,
     task_id: Optional[str] = None,
-):
+) -> None:
     """
     Aggiorna il progresso del task in Redis.
 

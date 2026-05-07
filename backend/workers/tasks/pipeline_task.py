@@ -5,7 +5,7 @@ Task Celery per esecuzione pipeline (ESTRAI / MANIPOLA / ARRICCHISCI).
 import time as _time
 import traceback as _traceback
 import uuid as _uuid
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Protocol
 
 from workers.celery_app import celery_app, BaseTaskWithRetry
 from app.utils.logger import get_logger, open_run, close_run, set_run_context, get_steps
@@ -14,14 +14,19 @@ from app.config import settings
 logger = get_logger("workers.pipeline_task")
 
 
-def _update_progress(task, percent: int, message: str):
+class _ProgressTask(Protocol):
+    def update_state(self, *, state: str, meta: Dict[str, Any]) -> None:
+        ...
+
+
+def _update_progress(task: _ProgressTask, percent: int, message: str) -> None:
     task.update_state(
         state="PROGRESS",
         meta={"percent": percent, "message": message, "type": "pipeline"},
     )
 
 
-def _build_orchestrator():
+def _build_orchestrator() -> Any:
     """Istanzia OrchestratorService con tutte le dipendenze.
 
     IMPORTANTE: passa anche `features_service` — senza, i progetti ESTRAI
@@ -52,7 +57,7 @@ def _build_orchestrator():
     )
 
 
-def _get_project_info(project_id: str) -> dict:
+def _get_project_info(project_id: str) -> Dict[str, Any]:
     """Legge metadata progetto da PostgreSQL.
 
      import diretto del leaf
@@ -421,13 +426,18 @@ def preview_pipeline_task(
 
         try:
             import numpy as _np
-            def _to_serializable(obj):
-                if isinstance(obj, _np.integer): return int(obj)
-                if isinstance(obj, _np.floating): return float(obj)
-                if isinstance(obj, _np.ndarray): return obj.tolist()
-                if isinstance(obj, dict): return {k: _to_serializable(v) for k, v in obj.items()}
-                if isinstance(obj, (list, tuple)): return [_to_serializable(v) for v in obj]
-                return obj
+            def _to_serializable(value: Any) -> Any:
+                if isinstance(value, _np.integer): return int(value)
+                if isinstance(value, _np.floating): return float(value)
+                if isinstance(value, _np.ndarray): return value.tolist()
+                if isinstance(value, dict):
+                    return {
+                        key: _to_serializable(nested_value)
+                        for key, nested_value in value.items()
+                    }
+                if isinstance(value, (list, tuple)):
+                    return [_to_serializable(nested_value) for nested_value in value]
+                return value
             result = _to_serializable(result)
         except ImportError:
             pass

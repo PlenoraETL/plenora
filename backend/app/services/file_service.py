@@ -7,15 +7,34 @@ Keeps this module's responsibility explicit and isolated from adjacent code.
 import json
 import os
 import re
+import io
+import tempfile
+import zipfile
 import warnings
-from pathlib import Path
+from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Optional, Tuple, BinaryIO, Dict, Any, Callable, TYPE_CHECKING
+from pathlib import Path
+from typing import Any, BinaryIO, Dict, List, Optional, Tuple
 
-if TYPE_CHECKING:
-    from app.services.file_storage_dispatch import BlobDispatchResult
-from dataclasses import dataclass, field
 import pandas as pd
+
+from app.services.file_storage_dispatch import BlobDispatchResult
+from app.services.file_service_deps import (  # noqa: F401 (compatibility export pubblico
+    LoggerProtocol,
+    FileSystemProtocol,
+    DataLoaderProtocol,
+    TimeProviderProtocol,
+    NullLogger,
+    DefaultTimeProvider,
+    DefaultFileSystem,
+    DefaultDataLoader,
+)
+from app.shared.file_helpers import (  # noqa: F401 (compatibility export pubblico
+    FormatDetector,
+    TypeInferrer,
+    FileIdGenerator,
+    ColumnInfoBuilder,
+)
 
 # Sopprimi warning GDAL per versioni GeoPackage più recenti della versione GDAL installata
 # Non bloccante — i file vengono letti correttamente nonostante il warning
@@ -117,26 +136,6 @@ if not _USE_APP_MODELS:
 # per `FileSourceService.__init__` che continua a istanziare i Default
 # come fallback (`self._fs = filesystem or DefaultFileSystem`
 
-from app.services.file_service_deps import (  # noqa: F401 (compatibility export pubblico
-    LoggerProtocol,
-    FileSystemProtocol,
-    DataLoaderProtocol,
-    TimeProviderProtocol,
-    NullLogger,
-    DefaultTimeProvider,
-    DefaultFileSystem,
-    DefaultDataLoader,
-)
-
-
-from app.shared.file_helpers import (  # noqa: F401 (compatibility export pubblico
-    FormatDetector,
-    TypeInferrer,
-    FileIdGenerator,
-    ColumnInfoBuilder,
-)
-
-
 # Classe FileService: CRUD completo per file source con DI
 # Gestisce il ciclo di vita dei file caricati dall'utente come sorgenti dati
 # Usa Dependency Injection per testabilità: ogni dipendenza esterna (filesystem
@@ -149,7 +148,7 @@ from app.shared.file_helpers import (  # noqa: F401 (compatibility export pubbli
 # il logger del modulo come fallback (best-effort silenzioso); qui passiamo
 # `_logger` del modulo file_service per preservare il naming dei log
 
-def _rmtree_safe(path, _retries: int = 3) -> None:
+def _rmtree_safe(path: Path | str, _retries: int = 3) -> None:
     """Wrapper compat: delega a `app.shared.file_cleanup.rmtree_safe`."""
     from app.shared.file_cleanup import rmtree_safe
     rmtree_safe(path, retries=_retries, logger=_logger)
@@ -179,11 +178,11 @@ class FileSourceService:
     
     def __init__(
         self,
-        filesystem: FileSystemProtocol = None,
-        data_loader: DataLoaderProtocol = None,
-        logger: LoggerProtocol = None,
-        time_provider: TimeProviderProtocol = None,
-    ):
+        filesystem: Optional[FileSystemProtocol] = None,
+        data_loader: Optional[DataLoaderProtocol] = None,
+        logger: Optional[LoggerProtocol] = None,
+        time_provider: Optional[TimeProviderProtocol] = None,
+    ) -> None:
         self._fs = filesystem or DefaultFileSystem()
         self._loader = data_loader or DefaultDataLoader()
         self._logger = logger or NullLogger()
@@ -345,8 +344,8 @@ class FileSourceService:
     # invariati. Behavior byte-per-byte preservato
 
     def _dispatch_blob_storage(
-        self, file_id: str, raw_data: bytes, filename: str, **kwargs,
-    ) -> "BlobDispatchResult":
+        self, file_id: str, raw_data: bytes, filename: str, **kwargs: Any,
+    ) -> BlobDispatchResult:
         """Wrapper compat: delega a `file_storage_dispatch.dispatch_blob_storage`.
 
         BE-HARDEN-001C E1: `**kwargs` pass-through propaga eventuali
@@ -506,9 +505,6 @@ class FileSourceService:
         N1: ``expected_group_id`` obbligatorio (fail-closed via
         ``_assert_visible`` invocato da ``_get_blob_from_db``).
         """
-        import io
-        import tempfile
-        import zipfile
         from app.config import settings
         from app.shared.file_cleanup import rmtree_safe
         from app.utils.zip_safe import safe_extractall
@@ -547,8 +543,8 @@ class FileSourceService:
         if fmt in ("shp", "gdb"):
             tmp_dir = Path(tempfile.mkdtemp(dir=settings.TEMP_DIR))
             try:
-                with zipfile.ZipFile(io.BytesIO(blob), "r") as z:
-                    safe_extractall(z, tmp_dir)
+                with zipfile.ZipFile(io.BytesIO(blob), "r") as zip_archive:
+                    safe_extractall(zip_archive, tmp_dir)
                 if fmt == "shp":
                     shp_files = (
                         list(tmp_dir.rglob("*.shp"))
@@ -577,19 +573,18 @@ class FileSourceService:
         # original filename's suffix so downstream readers can
         # dispatch by extension
         suffix = Path(original_filename).suffix or ".bin"
-        tmp = tempfile.NamedTemporaryFile(
+        temporary_file = tempfile.NamedTemporaryFile(
             delete=False, suffix=suffix, dir=settings.TEMP_DIR,
         )
-        tmp.write(blob)
-        tmp.close()
-        return Path(tmp.name)
+        temporary_file.write(blob)
+        temporary_file.close()
+        return Path(temporary_file.name)
 
 
     def get_file_source(self, file_id: str) -> Optional[FileSource]:
         """Ottieni file source specifico dal DB."""
         try:
             import app.db.db_service as db
-            import json
             row = db.get_file_source(file_id, include_data=False)
             if not row:
                 return None
@@ -760,7 +755,6 @@ class FileSourceService:
         from app.config import settings
         from app.shared.file_cleanup import rmtree_safe
         from app.utils.zip_safe import safe_extractall, ZipSlipError
-        import os as _os
         import app.db.db_service as db
 
         # BE-HARDEN-001C E3: callback `delete_blob` per cleanup compensativo
@@ -798,7 +792,7 @@ class FileSourceService:
             delete_blob=_delete_blob,
             build_file_source=lambda **kw: FileSource(**kw),
             cleanup_dir=rmtree_safe,
-            cleanup_file=_os.unlink,    # NON rmtree_safe - preserva asimmetria
+            cleanup_file=os.unlink,    # NON rmtree_safe - preserva asimmetria
             safe_extractall=safe_extractall,
             zip_slip_error=ZipSlipError,
             temp_dir=settings.TEMP_DIR,

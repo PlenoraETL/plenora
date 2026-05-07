@@ -26,6 +26,7 @@ from app.core.datasources.models import (
     ScanState,
 )
 from app.core.datasources.factory import create_backend
+from app.core.datasources.interface import DataSourceInterface
 
 logger = get_logger(__name__)
 
@@ -41,13 +42,13 @@ class DataSourceService:
     Configurazioni nel DB (PostgreSQL), scan_state su filesystem (runtime).
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         # Solo per scan_state (runtime
         self._scan_dir: Path = settings.DATA_DIR / "datasources_scan"
 
     # ── CRUD ──────────────────────────────────────────────────────────────
 
-    def list_datasources(self, group_id: str = None) -> DataSourceList:
+    def list_datasources(self, group_id: Optional[str] = None) -> DataSourceList:
         # group_id=None → no filter (superadmin o path allowed_groups
         # Fix N+1: fetch tutte le row in una query, parse config in memoria
         # Usa il helper DB canonico invece della superficie aggregata.
@@ -68,7 +69,7 @@ class DataSourceService:
                 result.append(self._to_model(config, redact=True))
         return DataSourceList(datasources=result)
 
-    def _row_to_config(self, row: dict) -> Optional[dict]:
+    def _row_to_config(self, row: dict[str, object]) -> Optional[dict[str, object]]:
         """Estrae il config dict da una row già fetchata (no re-query).
 
         Equivalente in-memory di _get_full_config ma senza re-fetch dal DB.
@@ -98,8 +99,12 @@ class DataSourceService:
             return None
         return self._to_model(config, redact=True)
 
-    def create_datasource(self, data: DataSourceCreate, group_id: str = None,
-                          created_by: str = None) -> DataSource:
+    def create_datasource(
+        self,
+        data: DataSourceCreate,
+        group_id: Optional[str] = None,
+        created_by: Optional[str] = None,
+    ) -> DataSource:
         import app.db.db_service as db
         ds_id = self._generate_id(data.name)
         now = datetime.now(timezone.utc)
@@ -228,20 +233,41 @@ class DataSourceService:
 
     # ── Operazioni file ───────────────────────────────────────────────────
 
-    def list_files(self, ds_id, path="", pattern=None, include_hash=False, recursive=False):
+    def list_files(
+        self,
+        ds_id: str,
+        path: str = "",
+        pattern: Optional[str] = None,
+        include_hash: bool = False,
+        recursive: bool = False,
+    ) -> list[FileInfoResponse]:
         backend = self._get_backend(ds_id)
         with backend as ds:
             files = ds.list_files(path=path, pattern=pattern, include_hash=include_hash, recursive=recursive)
-        return [FileInfoResponse(name=f.name, path=f.path, size=f.size,
-                                  modified_date=f.modified_date, type=f.type, hash=f.hash)
-                for f in files]
+        return [
+            FileInfoResponse(
+                name=datasource_file.name,
+                path=datasource_file.path,
+                size=datasource_file.size,
+                modified_date=datasource_file.modified_date,
+                type=datasource_file.type,
+                hash=datasource_file.hash,
+            )
+            for datasource_file in files
+        ]
 
     def file_info(self, ds_id: str, path: str) -> FileInfoResponse:
         backend = self._get_backend(ds_id)
         with backend as ds:
-            f = ds.file_info(path)
-        return FileInfoResponse(name=f.name, path=f.path, size=f.size,
-                                 modified_date=f.modified_date, type=f.type, hash=f.hash)
+            datasource_file = ds.file_info(path)
+        return FileInfoResponse(
+            name=datasource_file.name,
+            path=datasource_file.path,
+            size=datasource_file.size,
+            modified_date=datasource_file.modified_date,
+            type=datasource_file.type,
+            hash=datasource_file.hash,
+        )
 
     def read_file(self, ds_id: str, path: str) -> bytes:
         backend = self._get_backend(ds_id)
@@ -311,25 +337,41 @@ class DataSourceService:
 
     # ── Rilevamento file nuovi ────────────────────────────────────────────
 
-    def find_new_files(self, ds_id, path="", pattern=None, strategy="modified_date"):
+    def find_new_files(
+        self,
+        ds_id: str,
+        path: str = "",
+        pattern: Optional[str] = None,
+        strategy: str = "modified_date",
+    ) -> list[FileInfoResponse]:
         state = self.get_scan_state(ds_id)
         files = self.list_files(ds_id, path=path, pattern=pattern)
         processed_names = {p.name for p in state.processed}
 
         if strategy == "modified_date":
             new_files = files if state.last_check is None else [
-                f for f in files if f.modified_date > state.last_check
+                datasource_file for datasource_file in files
+                if datasource_file.modified_date > state.last_check
             ]
         elif strategy == "inventory":
             snapshot_keys = {(s.name, s.size) for s in state.snapshot}
-            new_files = [f for f in files if (f.name, f.size) not in snapshot_keys]
+            new_files = [
+                datasource_file for datasource_file in files
+                if (datasource_file.name, datasource_file.size) not in snapshot_keys
+            ]
         elif strategy == "pattern":
-            new_files = [f for f in files if f.name not in processed_names]
+            new_files = [
+                datasource_file for datasource_file in files
+                if datasource_file.name not in processed_names
+            ]
         else:
             logger.warning(f"Strategia sconosciuta {strategy!r}, uso 'modified_date'")
             new_files = files
 
-        return [f for f in new_files if f.name not in processed_names]
+        return [
+            datasource_file for datasource_file in new_files
+            if datasource_file.name not in processed_names
+        ]
 
     def mark_as_processed(self, ds_id: str, filename: str, pipeline_id: str) -> None:
         from app.core.datasources.models import ProcessedEntry, SnapshotEntry
@@ -345,10 +387,12 @@ class DataSourceService:
             ))
         # intent: optional feature / outcome: fail-open (snapshot entry derivata, non critica
         try:
-            fi = self.file_info(ds_id, filename)
+            snapshot_file_info = self.file_info(ds_id, filename)
             if filename not in snapshot_names:
                 state.snapshot.append(SnapshotEntry(
-                    name=filename, size=fi.size, modified=fi.modified_date.isoformat(),
+                    name=filename,
+                    size=snapshot_file_info.size,
+                    modified=snapshot_file_info.modified_date.isoformat(),
                 ))
         except Exception as e:
             logger.debug(
@@ -361,7 +405,7 @@ class DataSourceService:
 
     # ── Helpers privati ───────────────────────────────────────────────────
 
-    def _get_full_config(self, ds_id: str, *, strict: bool = False) -> Optional[dict]:
+    def _get_full_config(self, ds_id: str, *, strict: bool = False) -> Optional[dict[str, object]]:
         """Recupera la config completa (con credenziali) dal DB.
 
         I campi sensibili (password, private_key, ...) sono cifrati at-rest
@@ -404,7 +448,7 @@ class DataSourceService:
         config["created_by"] = row.get("created_by")
         return config
 
-    def _get_backend(self, ds_id: str):
+    def _get_backend(self, ds_id: str) -> DataSourceInterface:
         config = self._get_full_config(ds_id)
         if not config:
             from app.core.datasources.interface import DataSourceError
@@ -417,23 +461,27 @@ class DataSourceService:
     def _generate_id(self, name: str) -> str:
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         short_uuid = str(uuid.uuid4())[:8]
-        safe = "".join(c for c in name if c.isalnum() or c in (" ", "_")).strip()
-        safe = safe.replace(" ", "_")[:30]
-        return f"ds_{safe}_{timestamp}_{short_uuid}"
+        safe_name = "".join(c for c in name if c.isalnum() or c in (" ", "_")).strip()
+        safe_name = safe_name.replace(" ", "_")[:30]
+        return f"ds_{safe_name}_{timestamp}_{short_uuid}"
 
-    def _to_model(self, data: dict, redact: bool = True) -> DataSource:
-        d = data.copy()
+    def _to_model(self, data: dict[str, object], redact: bool = True) -> DataSource:
+        datasource_data = data.copy()
         if redact:
             for field in _SENSITIVE_FIELDS:
-                if d.get(field):
-                    d[field] = "***"
+                if datasource_data.get(field):
+                    datasource_data[field] = "***"
         for ts_field in ("created_at", "updated_at"):
-            if isinstance(d.get(ts_field), str):
+            if isinstance(datasource_data.get(ts_field), str):
                 try:
-                    d[ts_field] = datetime.fromisoformat(d[ts_field])
+                    datasource_data[ts_field] = datetime.fromisoformat(datasource_data[ts_field])
                 except ValueError:
-                    d[ts_field] = datetime.now(timezone.utc)
-        return DataSource(**{k: v for k, v in d.items() if k in DataSource.model_fields})
+                    datasource_data[ts_field] = datetime.now(timezone.utc)
+        return DataSource(**{
+            key: value
+            for key, value in datasource_data.items()
+            if key in DataSource.model_fields
+        })
 
 
 # Singleton

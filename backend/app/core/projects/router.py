@@ -46,7 +46,7 @@ _schema_service = None
 _validator = None
 
 
-def init_projects(project_service):
+def init_projects(project_service: Any) -> None:
     """Inizializza il modulo. Chiamare da main.py dopo setup."""
     global _project_service, _schema_service, _validator
     _project_service = project_service
@@ -58,7 +58,10 @@ def init_projects(project_service):
 
 @router.post("", status_code=201)
 @audit_action(action="project.create")
-def create_project(data: ProjectCreateWithCanvas, current_user: CurrentUser = Depends(require_user_or_above)):
+def create_project(
+    data: ProjectCreateWithCanvas,
+    current_user: CurrentUser = Depends(require_user_or_above),
+) -> dict[str, Any]:
     """Crea nuovo progetto. Se canvas è presente lo salva direttamente. Viewer non può creare."""
     metadata = _project_service.create_project(
         data,
@@ -98,7 +101,9 @@ def create_project(data: ProjectCreateWithCanvas, current_user: CurrentUser = De
 
 
 @router.get("")
-def list_projects(current_user: CurrentUser = Depends(require_not_esecutore)):
+def list_projects(
+    current_user: CurrentUser = Depends(require_not_esecutore),
+) -> dict[str, Any]:
     """Lista tutti i progetti con source_project_ids per manipola"""
     gid = group_filter(current_user)
     project_list = _project_service.list_projects(group_id=gid)
@@ -155,10 +160,10 @@ def list_projects(current_user: CurrentUser = Depends(require_not_esecutore)):
 
 
 def _visible_project_ids_strict(
-    project_ids,
+    project_ids: Any,
     owner_group_id: Optional[str],
     is_superadmin: bool,
-) -> set:
+) -> set[str]:
     """RB.4.A.16 (2026-04-27): visibilita' progetti, ownership-only.
 
     I progetti NON hanno tabella `project_shares` (a differenza di
@@ -187,7 +192,7 @@ def _visible_project_ids_strict(
 
 
 def _annotate_inaccessible_canvas_refs(
-    canvas_dict: dict,
+    canvas_dict: dict[str, Any],
     owner_group_id: Optional[str],
     is_superadmin: bool,
 ) -> None:
@@ -313,7 +318,10 @@ def _annotate_inaccessible_canvas_refs(
 
 
 @router.get("/{project_id}")
-def get_project(project_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
+def get_project(
+    project_id: str,
+    current_user: CurrentUser = Depends(require_not_esecutore),
+) -> dict[str, Any]:
     """Ottieni progetto specifico (metadata + canvas + columns_metadata).
 
     Se il canvas in DB e' corrotto, `get_project_canvas` solleva
@@ -356,7 +364,10 @@ def get_project(project_id: str, current_user: CurrentUser = Depends(require_not
 
 @router.delete("/{project_id}", status_code=204)
 @audit_action(action="project.delete", target_param="project_id")
-def delete_project(project_id: str, current_user: CurrentUser = Depends(require_project_owner)):
+def delete_project(
+    project_id: str,
+    current_user: CurrentUser = Depends(require_project_owner),
+) -> None:
     """Elimina un progetto. Solo owner o admin/superadmin.
 
     Ritorna 409 Conflict se il progetto ha dipendenze che impediscono la
@@ -427,7 +438,7 @@ class CanvasWithPlugins(BaseModel):
     plugins: Optional[dict] = None   # ignorato — rimasto per compatibilità frontend
 
 
-def _collect_canvas_resource_refs(canvas: CanvasState) -> dict:
+def _collect_canvas_resource_refs(canvas: CanvasState) -> dict[str, set[str]]:
     """Estrae da `canvas` gli id di risorse cross-tenant referenziate dai
     nodi che le richiedono.
 
@@ -486,7 +497,7 @@ def update_project_canvas(
     project_id: str,
     body: CanvasWithPlugins,
     current_user: CurrentUser = Depends(require_user_or_above),
-):
+) -> dict[str, str]:
     """Aggiorna canvas di un progetto. Qualsiasi user/admin/superadmin del
     gruppo proprietario (non solo l'owner): in un team i membri lavorano
     sui progetti dei colleghi. L'eliminazione del progetto resta invece
@@ -662,7 +673,7 @@ def update_project_canvas(
     # Estrai e salva columns_metadata dal nodo Result
     columns_metadata = []
     try:
-        def _extract_cols(columns):
+        def _extract_cols(columns: Any) -> list[dict[str, str]]:
             out = []
             for col in (columns or []):
                 if isinstance(col, dict):
@@ -734,7 +745,10 @@ class ValidationRequest(BaseModel):
 
 
 @router.get("/{project_id}/schemas")
-def get_all_schemas(project_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
+def get_all_schemas(
+    project_id: str,
+    current_user: CurrentUser = Depends(require_not_esecutore),
+) -> dict[str, Any]:
     """Ottiene lo schema (colonne + tipi) per tutti i nodi del progetto."""
     if not _schema_service:
         raise_typed_http(
@@ -752,7 +766,11 @@ def get_all_schemas(project_id: str, current_user: CurrentUser = Depends(require
 
 
 @router.get("/{project_id}/schemas/{node_id}")
-def get_node_schema(project_id: str, node_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
+def get_node_schema(
+    project_id: str,
+    node_id: str,
+    current_user: CurrentUser = Depends(require_not_esecutore),
+) -> dict[str, Any]:
     """Ottiene lo schema per un singolo nodo."""
     if not _schema_service:
         raise_typed_http(
@@ -770,7 +788,11 @@ def get_node_schema(project_id: str, node_id: str, current_user: CurrentUser = D
 
 
 @router.post("/{project_id}/validate-connection")
-def validate_connection(project_id: str, request: ValidationRequest, current_user: CurrentUser = Depends(require_not_esecutore)):
+def validate_connection(
+    project_id: str,
+    request: ValidationRequest,
+    current_user: CurrentUser = Depends(require_not_esecutore),
+) -> dict[str, Any]:
     """Valida una connessione tra due nodi."""
     if not _validator:
         raise_typed_http(
@@ -793,7 +815,10 @@ def validate_connection(project_id: str, request: ValidationRequest, current_use
 
 
 @router.get("/{project_id}/validate-all")
-def validate_all_connections(project_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
+def validate_all_connections(
+    project_id: str,
+    current_user: CurrentUser = Depends(require_not_esecutore),
+) -> dict[str, Any]:
     """Valida tutte le connessioni del progetto."""
     if not _validator:
         raise_typed_http(
@@ -815,7 +840,7 @@ def validate_all_connections(project_id: str, current_user: CurrentUser = Depend
 def admin_cleanup_orphans(
     dry_run: bool = True,
     current_user: CurrentUser = Depends(require_superadmin),
-):
+) -> dict[str, Any]:
     """Cleanup degli orfani cross-DB (results.db / intermediate.db).
 
     Trova e cancella righe in `results.db` e `intermediate.db` che fanno

@@ -86,7 +86,10 @@ class ApiConnectionManagementMixin:
             config["group_id"] = row.get("group_id", "")
             config["created_by"] = row.get("created_by")
             connections.append(self._mask_credentials(config))
-        connections.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+        connections.sort(
+            key=lambda connection: connection.get('created_at', ''),
+            reverse=True,
+        )
         return connections
 
     def list_api_connections_decrypted(self, group_id: str = None) -> Dict[str, Dict]:
@@ -338,7 +341,9 @@ class ApiConnectionManagementMixin:
         return None
 
     @staticmethod
-    def _parse_test_response_json(response) -> tuple:
+    def _parse_test_response_json(
+        response: requests.Response,
+    ) -> tuple[Any | None, str | None]:
         """Parsa il body JSON di una `test_api_connection` response.
 
         Alcuni server (ArcGIS REST con `f=json/pjson`) ritornano JSON

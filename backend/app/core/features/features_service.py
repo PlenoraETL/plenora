@@ -51,7 +51,7 @@ DEFAULT_GROUP = "default"
 _SENSITIVE_FIELDS = ("password", "client_secret")
 
 
-def _ensure_default_group():
+def _ensure_default_group() -> None:
     now = datetime.now(timezone.utc).isoformat()
     db.execute("INSERT INTO groups (id, name, description, created_at, updated_at) VALUES (?,?,?,?,?) ON CONFLICT (id) DO NOTHING",
                (DEFAULT_GROUP, "Default", "Gruppo default", now, now))
@@ -88,7 +88,7 @@ def _generate_id(name: str) -> str:
 
 
 def create_connection_db(data: ArcGISCreate, group_id: str = DEFAULT_GROUP,
-                          created_by: str = None) -> ArcGISConnection:
+                          created_by: Optional[str] = None) -> ArcGISConnection:
     _ensure_default_group()
     connection_id = _generate_id(data.name)
     now = datetime.now(timezone.utc).isoformat()
@@ -171,16 +171,20 @@ def update_connection_db(connection_id: str, data: ArcGISUpdate) -> Optional[Arc
     }
 
     sets, params = [], []
-    for pf, col in field_map.items():
-        if pf in update_data:
-            sets.append(f"{col} = ?")
-            val = update_data[pf]
+    for payload_field, column_name in field_map.items():
+        if payload_field in update_data:
+            sets.append(f"{column_name} = ?")
+            field_value = update_data[payload_field]
             # Cifratura at-rest per i campi sensibili (idempotente su valori
             # gia' cifrati grazie al prefisso "enc:" riconosciuto dal modulo
             # crypto
-            if pf in _SENSITIVE_FIELDS and isinstance(val, str) and val:
-                val = _encrypt(val)
-            params.append(val)
+            if (
+                payload_field in _SENSITIVE_FIELDS
+                and isinstance(field_value, str)
+                and field_value
+            ):
+                field_value = _encrypt(field_value)
+            params.append(field_value)
 
     if not sets:
         return get_connection_db(connection_id)
@@ -236,7 +240,7 @@ class FeaturesService:
         save_function: SaveFunctionProtocol = None,
         arcgis_dir: Path = None,
         results_dir: Path = None,
-    ):
+    ) -> None:
         self._client = client or create_client()
         self._save = save_function or self._salvataggio_default
         self._arcgis_dir = arcgis_dir or settings.ARCGIS_CONNECTIONS_DIR
@@ -259,7 +263,7 @@ class FeaturesService:
         return self._arcgis_dir / f"{connection_id}.json"
     
     def create_connection(self, data: ArcGISCreate, group_id: str = "default",
-                          created_by: str = None) -> ArcGISConnection:
+                          created_by: Optional[str] = None) -> ArcGISConnection:
         """Crea nuova connessione ArcGIS nel DB (assegnata al group_id dato)."""
         return create_connection_db(data, group_id=group_id, created_by=created_by)
 
@@ -750,10 +754,10 @@ class FeaturesService:
         connection_id: str,
         layer_url: str,
         operation: str,
-        df,
+        df: pd.DataFrame,
         geometry_column: str = "geometry",
         source_srid: Optional[int] = None,
-        batch_size: int = None,
+        batch_size: Optional[int] = None,
         match_column: str = "",
     ) -> dict:
         """
@@ -927,7 +931,7 @@ class FeaturesService:
         connection_id: str,
         service_name: str,
         layer_name: str,
-        df,
+        df: pd.DataFrame,
         geometry_column: str = "geometry",
         source_srid: Optional[int] = None,
         folder_id: str = "",
@@ -965,11 +969,11 @@ class FeaturesService:
 
     def _split_upsert_features(
         self,
-        conn_info,
+        conn_info: ArcGISConnectionInfo,
         layer_url: str,
         features: List[dict],
         match_column: str,
-    ) -> tuple:
+    ) -> Tuple[List[dict], List[dict]]:
         """
         Separa features in (to_update, to_add) per operazione upsert.
 
@@ -979,10 +983,10 @@ class FeaturesService:
         import requests as _requests
 
         match_values = []
-        for f in features:
-            val = f.get("attributes", {}).get(match_column)
-            if val is not None:
-                match_values.append(val)
+        for feature in features:
+            match_value = feature.get("attributes", {}).get(match_column)
+            if match_value is not None:
+                match_values.append(match_value)
 
         if not match_values:
             return [], features
@@ -1015,8 +1019,8 @@ class FeaturesService:
                     headers=referer_headers,
                 )
                 data = resp.json()
-                for feat in data.get("features", []):
-                    attrs = feat.get("attributes", {})
+                for feature_data in data.get("features", []):
+                    attrs = feature_data.get("attributes", {})
                     oid = attrs.get("OBJECTID") or attrs.get("objectid")
                     match_val = attrs.get(match_column)
                     if oid is not None and match_val is not None:
@@ -1026,24 +1030,24 @@ class FeaturesService:
 
         to_update = []
         to_add = []
-        for f in features:
-            match_val = f.get("attributes", {}).get(match_column)
+        for feature in features:
+            match_val = feature.get("attributes", {}).get(match_column)
             oid = oid_map.get(match_val)
             if oid is not None:
-                f["attributes"]["OBJECTID"] = oid
-                to_update.append(f)
+                feature["attributes"]["OBJECTID"] = oid
+                to_update.append(feature)
             else:
                 # Rimuovi OBJECTID se presente (per add
-                f["attributes"].pop("OBJECTID", None)
-                f["attributes"].pop("objectid", None)
-                to_add.append(f)
+                feature["attributes"].pop("OBJECTID", None)
+                feature["attributes"].pop("objectid", None)
+                to_add.append(feature)
 
         logger.info(f"Upsert split: {len(to_update)} da aggiornare, {len(to_add)} da inserire")
         return to_update, to_add
 
     def _resolve_objectids_for_update(
         self,
-        conn_info,
+        conn_info: ArcGISConnectionInfo,
         layer_url: str,
         features: List[dict],
         match_column: str,
@@ -1062,10 +1066,10 @@ class FeaturesService:
 
         # Raccogli valori match dal payload
         match_values = []
-        for f in features:
-            val = f.get("attributes", {}).get(match_column)
-            if val is not None:
-                match_values.append(val)
+        for feature in features:
+            match_value = feature.get("attributes", {}).get(match_column)
+            if match_value is not None:
+                match_values.append(match_value)
 
         if not match_values:
             logger.warning(f"Nessun valore trovato per colonna match '{match_column}'")
@@ -1103,8 +1107,8 @@ class FeaturesService:
                     headers=referer_headers,
                 )
                 data = resp.json()
-                for feat in data.get("features", []):
-                    attrs = feat.get("attributes", {})
+                for feature_data in data.get("features", []):
+                    attrs = feature_data.get("attributes", {})
                     oid = attrs.get("OBJECTID") or attrs.get("objectid")
                     match_val = attrs.get(match_column)
                     if oid is not None and match_val is not None:
@@ -1117,12 +1121,12 @@ class FeaturesService:
         # Associa OBJECTID alle features
         resolved = []
         skipped = 0
-        for f in features:
-            match_val = f.get("attributes", {}).get(match_column)
+        for feature in features:
+            match_val = feature.get("attributes", {}).get(match_column)
             oid = oid_map.get(match_val)
             if oid is not None:
-                f["attributes"]["OBJECTID"] = oid
-                resolved.append(f)
+                feature["attributes"]["OBJECTID"] = oid
+                resolved.append(feature)
             else:
                 skipped += 1
 
@@ -1170,7 +1174,11 @@ class FeaturesService:
                 try:
                     import geopandas as gpd
                     from shapely import wkt
-                    df["geometry"] = df[geom_col].apply(lambda x: wkt.loads(x) if pd.notna(x) else None)
+                    df["geometry"] = df[geom_col].apply(
+                        lambda wkt_value: (
+                            wkt.loads(wkt_value) if pd.notna(wkt_value) else None
+                        )
+                    )
                     gdf = gpd.GeoDataFrame(df, geometry="geometry")
                     return gdf
                 except (ImportError, Exception) as e:

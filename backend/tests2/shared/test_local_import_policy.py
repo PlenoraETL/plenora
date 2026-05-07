@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
-from typing import Dict, Iterable
+from typing import Dict, Iterable, Sequence, Tuple
 
 import pytest
 
@@ -26,8 +26,8 @@ _SCAN_ROOTS = (
 
 # Baseline corrente: ogni nuovo import locale aumenta accoppiamento nascosto.
 # La soglia puo' solo scendere; se sale, il reviewer deve giustificare il caso.
-MAX_LOCAL_IMPORTS = 950
-MAX_LATE_MODULE_IMPORTS = 125
+MAX_LOCAL_IMPORTS = 943
+MAX_LATE_MODULE_IMPORTS = 119
 
 
 def _iter_py_files() -> Iterable[Path]:
@@ -36,7 +36,7 @@ def _iter_py_files() -> Iterable[Path]:
     @utils
     """
     for root in _SCAN_ROOTS:
-        yield from root.rglob("*.py")
+        yield from sorted(root.rglob("*.py"))
 
 
 def _relative(path: Path) -> str:
@@ -47,12 +47,30 @@ def _relative(path: Path) -> str:
     return path.relative_to(_BACKEND_ROOT).as_posix()
 
 
+def _parse(path: Path) -> ast.AST:
+    """Parsa un file Python con encoding repo-standard.
+
+    @utils
+    """
+    return ast.parse(path.read_text(encoding="utf-8"))
+
+
+def _format_count_offenders(offenders: Sequence[Tuple[str, int]]) -> str:
+    """Formatta una classifica file -> conteggio.
+
+    @utils
+    """
+    if not offenders:
+        return "  nessun offender"
+    return "\n".join(f"  {path}: {count}" for path, count in offenders)
+
+
 def _local_import_count(path: Path) -> int:
     """Conta import non top-level in un file Python.
 
     @logic
     """
-    tree = ast.parse(path.read_text(encoding="utf-8"))
+    tree = _parse(path)
     parents: Dict[ast.AST, ast.AST] = {}
     for node in ast.walk(tree):
         for child in ast.iter_child_nodes(node):
@@ -71,7 +89,7 @@ def _late_module_import_count(path: Path) -> int:
 
     @logic
     """
-    tree = ast.parse(path.read_text(encoding="utf-8"))
+    tree = _parse(path)
     first_code_line = None
     for statement in tree.body:
         if isinstance(statement, (ast.Import, ast.ImportFrom)):
@@ -122,7 +140,7 @@ def _scan_late_module_imports() -> Dict[str, int]:
     return counts
 
 
-def test_local_imports_do_not_increase():
+def test_local_imports_do_not_increase() -> None:
     """Blocca la crescita degli import locali nel backend.
 
     @logic
@@ -132,14 +150,16 @@ def test_local_imports_do_not_increase():
     top_offenders = sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:20]
 
     assert total <= MAX_LOCAL_IMPORTS, (
-        f"Import locali aumentati: {total} > {MAX_LOCAL_IMPORTS}.\n"
+        "Import locali oltre baseline.\n"
+        f"Observed: {total}; baseline: {MAX_LOCAL_IMPORTS}.\n"
         "Regola: import top-level di default. Import locali solo per cicli, "
         "dipendenze opzionali o bootstrap costoso, con motivazione esplicita.\n"
-        f"Top offenders: {top_offenders}"
+        "Top offenders:\n"
+        f"{_format_count_offenders(top_offenders)}"
     )
 
 
-def test_late_module_imports_do_not_increase():
+def test_late_module_imports_do_not_increase() -> None:
     """Blocca la crescita degli import top-level dopo codice eseguibile.
 
     @logic
@@ -149,9 +169,10 @@ def test_late_module_imports_do_not_increase():
     top_offenders = sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:20]
 
     assert total <= MAX_LATE_MODULE_IMPORTS, (
-        f"Import module-level tardivi aumentati: {total} > "
-        f"{MAX_LATE_MODULE_IMPORTS}.\n"
+        "Import module-level tardivi oltre baseline.\n"
+        f"Observed: {total}; baseline: {MAX_LATE_MODULE_IMPORTS}.\n"
         "Regola: import in cima al file. Le eccezioni devono essere boundary "
         "di bootstrap/wiring o moduli con ciclo reale.\n"
-        f"Top offenders: {top_offenders}"
+        "Top offenders:\n"
+        f"{_format_count_offenders(top_offenders)}"
     )
