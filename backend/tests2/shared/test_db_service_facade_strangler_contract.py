@@ -39,16 +39,12 @@ _FACADE_FILE = "app/db/db_service.py"
 # The 38 entries split into the categories documented in the
 # DB-ENGINE-011 audit (`.agent-temp/BE_DB_ENGINE_AUDIT.md`):
 #
-#   - Bootstrap-only consumer of `init_all_dbs` (1 file):
-#       `app/bootstrap.py`. The function is the facade's own
-#       orchestrator (not a re-export); migration target is a
-#       dedicated `app.db.bootstrap_init` module if/when the
-#       facade is finally retired.
+#   - Bootstrap-only consumer of `init_all_dbs`:
+#       none; migrated by BE Parallel Batch 082 Worker 1 to
+#       `app.core.runtime.db_init`.
 #
-#   - Beat / worker tasks (3 files):
-#       `workers/beat_scheduler.py` (7 lazy imports),
-#       `workers/tasks/schedule_task.py`,
-#       `workers/tasks/carica_task.py`.
+#   - Beat / worker tasks:
+#       none; beat_scheduler.py was migrated by BE Parallel Batch 082 Worker 2.
 #
 #   - Auth surface:
 #       none; `app/core/auth/shares_router.py` was migrated by
@@ -129,12 +125,13 @@ _FACADE_FILE = "app/db/db_service.py"
 #     test-monkeypatch-only facade imports; tests now patch canonical
 #     execution-context leaves or need no patch for the empty-canvas path.
 _DB_SERVICE_PROD_ALLOWLIST: frozenset[str] = frozenset({
-    # Bootstrap orchestrator — `init_all_dbs` lives on the facade.
-    "app/bootstrap.py",
+    # Removed by BE Parallel Batch 082 Worker 1:
+    #   app/bootstrap.py -> app.core.runtime.db_init.init_all_dbs
+    #
     # Worker cluster — deferred.
-    "workers/beat_scheduler.py",
-    "workers/tasks/carica_task.py",
-    "workers/tasks/schedule_task.py",
+    # Removed by BE Parallel Batch 082 Worker 3:
+    #   workers/tasks/carica_task.py   -> app.core.projects.db.get_project
+    #   workers/tasks/schedule_task.py -> app.db.pg_connection.execute
     #
     # Removed by BE-GO-READY-DB-ENGINE-013 (this batch):
     #   app/core/arricchisci/execution_context.py → app.db.config.projects.get_project

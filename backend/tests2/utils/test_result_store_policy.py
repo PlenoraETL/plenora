@@ -46,7 +46,7 @@ def stub_storage(monkeypatch):
 @pytest.fixture
 def mock_db(monkeypatch):
     import app.db.config.projects as projects_db
-    import app.db.results_db_service as results_db
+    import app.core.results.db as results_db
     import app.utils.result_store as result_store
 
     saved: list[dict] = []

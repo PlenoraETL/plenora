@@ -84,7 +84,7 @@ def test_bootstrap_invokes_four_steps_in_canonical_order(monkeypatch):
         _record_storage_validate,
     )
     monkeypatch.setattr(
-        "app.db.db_service.init_all_dbs", _record_init_all_dbs
+        "app.core.runtime.db_init.init_all_dbs", _record_init_all_dbs
     )
     monkeypatch.setattr(
         "app.bootstrap._repair_psycopg2_ssl_env", _record_ssl_repair
@@ -110,7 +110,7 @@ def test_bootstrap_signature_returns_none(monkeypatch):
     monkeypatch.setattr(
         "app.shared.cloud_backends.validate_storage_config", lambda: None
     )
-    monkeypatch.setattr("app.db.db_service.init_all_dbs", lambda: None)
+    monkeypatch.setattr("app.core.runtime.db_init.init_all_dbs", lambda: None)
     monkeypatch.setattr(
         "app.bootstrap._repair_psycopg2_ssl_env", lambda: None
     )
@@ -157,7 +157,7 @@ def test_ssl_env_cleanup_runs_after_init_all_dbs(monkeypatch):
     monkeypatch.setattr(
         "app.shared.cloud_backends.validate_storage_config", lambda: None
     )
-    monkeypatch.setattr("app.db.db_service.init_all_dbs", _record_init_all_dbs)
+    monkeypatch.setattr("app.core.runtime.db_init.init_all_dbs", _record_init_all_dbs)
     monkeypatch.setattr(
         "app.bootstrap._repair_psycopg2_ssl_env", _record_ssl_repair
     )
@@ -244,7 +244,7 @@ def test_bootstrap_is_idempotent(monkeypatch):
         _bump("validate_storage_config"),
     )
     monkeypatch.setattr(
-        "app.db.db_service.init_all_dbs", _bump("init_all_dbs")
+        "app.core.runtime.db_init.init_all_dbs", _bump("init_all_dbs")
     )
     monkeypatch.setattr(
         "app.bootstrap._repair_psycopg2_ssl_env", _bump("ssl_repair")
@@ -284,7 +284,7 @@ def test_bootstrap_propagates_validate_startup_systemexit(monkeypatch):
         "app.shared.cloud_backends.validate_storage_config",
         lambda: other_called.__setitem__("flag", True),
     )
-    monkeypatch.setattr("app.db.db_service.init_all_dbs", lambda: None)
+    monkeypatch.setattr("app.core.runtime.db_init.init_all_dbs", lambda: None)
     monkeypatch.setattr(
         "app.bootstrap._repair_psycopg2_ssl_env", lambda: None
     )
@@ -315,7 +315,7 @@ def test_bootstrap_propagates_storage_config_error(monkeypatch):
 
     init_called = {"flag": False}
     monkeypatch.setattr(
-        "app.db.db_service.init_all_dbs",
+        "app.core.runtime.db_init.init_all_dbs",
         lambda: init_called.__setitem__("flag", True),
     )
     monkeypatch.setattr(
@@ -346,7 +346,7 @@ def test_bootstrap_propagates_init_all_dbs_error(monkeypatch):
     monkeypatch.setattr(
         "app.shared.cloud_backends.validate_storage_config", lambda: None
     )
-    monkeypatch.setattr("app.db.db_service.init_all_dbs", _bad_init)
+    monkeypatch.setattr("app.core.runtime.db_init.init_all_dbs", _bad_init)
 
     ssl_called = {"flag": False}
     monkeypatch.setattr(
@@ -484,7 +484,7 @@ def test_bootstrap_module_uses_lazy_imports_for_heavy_modules():
     for forbidden in (
         "from app.config import settings",
         "from app.shared.cloud_backends import validate_storage_config",
-        "from app.db.db_service import init_all_dbs",
+        "from app.core.runtime.db_init import init_all_dbs",
     ):
         assert forbidden not in head, (
             f"`{forbidden}` must be a lazy import inside bootstrap(), "

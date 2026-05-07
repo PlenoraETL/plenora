@@ -68,9 +68,9 @@ def test_emit_catchup_does_not_update_last_run_to_expected(scheduler):
     def capture(query, params=None):
         executed_queries.append((query, params))
 
-    with patch("app.db.db_service.fetchall",
+    with patch("app.db.pg_connection.fetchall",
                side_effect=[[row], [{"count": 0}]]), \
-         patch("app.db.db_service.execute", side_effect=capture), \
+         patch("app.db.pg_connection.execute", side_effect=capture), \
          patch("workers.beat_scheduler.datetime") as mock_dt:
         mock_dt.now.return_value = _NOW_FIXED
         mock_dt.fromisoformat = datetime.fromisoformat
@@ -105,9 +105,9 @@ def test_skips_reemit_when_recent_catchup_for_same_scheduled_for_exists(schedule
         [{"count": 1}],                  # dedupe: gia' 1 emit per stesso scheduled_for
     ]
 
-    with patch("app.db.db_service.fetchall",
+    with patch("app.db.pg_connection.fetchall",
                side_effect=history_query_responses), \
-         patch("app.db.db_service.execute"), \
+         patch("app.db.pg_connection.execute"), \
          patch("workers.beat_scheduler.datetime") as mock_dt:
         mock_dt.now.return_value = _NOW_FIXED
         mock_dt.fromisoformat = datetime.fromisoformat
@@ -126,9 +126,9 @@ def test_reemits_when_previous_catchup_is_stale(scheduler):
         [{"count": 0}],    # dedupe: nessun emit recente per stesso scheduled_for
     ]
 
-    with patch("app.db.db_service.fetchall",
+    with patch("app.db.pg_connection.fetchall",
                side_effect=history_query_responses), \
-         patch("app.db.db_service.execute"), \
+         patch("app.db.pg_connection.execute"), \
          patch("workers.beat_scheduler.datetime") as mock_dt:
         mock_dt.now.return_value = _NOW_FIXED
         mock_dt.fromisoformat = datetime.fromisoformat
@@ -150,9 +150,9 @@ def test_emit_catchup_still_writes_audit_history_entry(scheduler):
     def capture(query, params=None):
         executed.append((query, params))
 
-    with patch("app.db.db_service.fetchall",
+    with patch("app.db.pg_connection.fetchall",
                side_effect=[[row], [{"count": 0}], [{"count": 0}]]), \
-         patch("app.db.db_service.execute", side_effect=capture), \
+         patch("app.db.pg_connection.execute", side_effect=capture), \
          patch("workers.beat_scheduler.datetime") as mock_dt:
         mock_dt.now.return_value = _NOW_FIXED
         mock_dt.fromisoformat = datetime.fromisoformat

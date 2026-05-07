@@ -90,7 +90,7 @@ def _patched_cleanup(
         "app.services.project_service.ProjectService.get_project_metadata",
         return_value={"id": "p1", "group_id": "grp-1"}
     ), patch(
-        "app.db.results_db_service.delete_result", **dr_patch
+        "app.core.results.cleanup.delete_result", **dr_patch
     ), patch(
         "app.db.pg_connection.execute", **pg_patch
     ), patch(

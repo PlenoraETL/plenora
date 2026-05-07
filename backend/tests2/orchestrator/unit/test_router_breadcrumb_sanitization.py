@@ -108,7 +108,7 @@ def test_full_cleanup_tenant_check_breadcrumb_on_project_lookup_fail(client, tmp
         "app.core.orchestrator.router.settings",
         new=SimpleNamespace(RESULTS_DIR=tmp_path)
     ), patch(
-        "app.db.results_db_service.delete_result", return_value=True
+        "app.core.results.cleanup.delete_result", return_value=True
     ), patch(
         "app.db.pg_connection.execute", return_value=SimpleNamespace(rowcount=0)
     ), patch(

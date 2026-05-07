@@ -103,9 +103,9 @@ def test_materialize_run_result_id_beats_output_path(resolver, monkeypatch):
     blob fetch + tempfile materialization to
     ``default_registry().get(ref, mode='path')``. The row metadata
     (format, group_id, project_id) is still fetched via
-    ``results_db_service.get_result``; only the BYTES branch was migrated.
+    ``app.core.results.db.get_result``.
     """
-    import app.db.results_db_service as _rdb
+    import app.core.results.db as _rdb
     import app.core.artifacts.resolver as resolver_mod
 
     monkeypatch.setattr(
@@ -155,7 +155,7 @@ def test_materialize_run_rejects_cross_tenant_result_id(resolver, monkeypatch):
     call; the loader is never invoked. Tripwire mock on the
     registry would AssertionError if the resolver delegated past
     the cross-tenant gate."""
-    import app.db.results_db_service as _rdb
+    import app.core.results.db as _rdb
     import app.core.artifacts.resolver as resolver_mod
 
     monkeypatch.setattr(
@@ -187,7 +187,7 @@ def test_materialize_run_rejects_cross_tenant_result_id(resolver, monkeypatch):
 
 
 def test_materialize_run_missing_result_id_is_hard_fail(resolver, monkeypatch):
-    import app.db.results_db_service as _rdb
+    import app.core.results.db as _rdb
 
     monkeypatch.setattr(_rdb, "get_result", lambda rid: None)
 
@@ -203,7 +203,7 @@ def test_materialize_run_missing_blob_is_hard_fail(resolver, monkeypatch):
     the canonical Italian operator string -- preserved verbatim
     from the pre-019 surface so log greps / tests downstream do
     not regress."""
-    import app.db.results_db_service as _rdb
+    import app.core.results.db as _rdb
     import app.core.artifacts.resolver as resolver_mod
 
     monkeypatch.setattr(
@@ -237,7 +237,7 @@ def test_materialize_run_missing_group_id_is_hard_fail(resolver, monkeypatch):
     ResourceRef -- the engine's typed contract requires a non-empty
     ``expected_group_id``, and the resolver gives a clearer
     operator message than the raw ResourceRef ValueError."""
-    import app.db.results_db_service as _rdb
+    import app.core.results.db as _rdb
     import app.core.artifacts.resolver as resolver_mod
 
     monkeypatch.setattr(
@@ -273,7 +273,7 @@ def test_materialize_run_propagates_loader_oversize_unchanged(
     413 handler, NOT be translated into the generic resolver
     ``ArtifactResolutionError(senza blob dati)``. This test
     pins that distinction."""
-    import app.db.results_db_service as _rdb
+    import app.core.results.db as _rdb
     import app.core.artifacts.resolver as resolver_mod
     from app.shared.exceptions import MemoryLimitExceededError
 
@@ -444,7 +444,7 @@ def test_materialize_run_rejects_unc_output_path(resolver):
 
 
 def test_materialize_latest_returns_none_when_no_result(resolver, monkeypatch):
-    import app.db.results_db_service as _rdb
+    import app.core.results.db as _rdb
 
     monkeypatch.setattr(_rdb, "get_latest_result", lambda pid: None)
 
@@ -459,8 +459,8 @@ def test_materialize_latest_writes_tempfile_with_format_suffix(
     `materialize_latest` now delegates blob fetch + tempfile
     materialization to ``default_registry().get(ref, mode='path')``.
     Row metadata (group_id, format) still comes from
-    ``results_db_service.get_latest_result``."""
-    import app.db.results_db_service as _rdb
+    ``app.core.results.db.get_latest_result``."""
+    import app.core.results.db as _rdb
     import app.core.artifacts.resolver as resolver_mod
 
     monkeypatch.setattr(
@@ -498,7 +498,7 @@ def test_materialize_latest_writes_tempfile_with_format_suffix(
 
 
 def test_materialize_latest_enforces_group_binding(resolver, monkeypatch):
-    import app.db.results_db_service as _rdb
+    import app.core.results.db as _rdb
     import app.db.config.projects as _projects_leaf
 
     def _tenant_scoped_project(pid, group_id=None):
@@ -547,9 +547,9 @@ def test_fetch_run_blob_returns_data_filename_format(resolver, monkeypatch):
     HTTP-download bytes path now uses
     ``default_registry().get(ref, mode='bytes')`` instead of
     ``db_service.get_result_data``. Row metadata (filename / format /
-    project_id / group_id) still comes from ``results_db_service.get_result``.
+    project_id / group_id) still comes from ``app.core.results.db.get_result``.
     """
-    import app.db.results_db_service as _rdb
+    import app.core.results.db as _rdb
     import app.core.artifacts.resolver as resolver_mod
 
     monkeypatch.setattr(
@@ -585,7 +585,7 @@ def test_fetch_run_blob_returns_data_filename_format(resolver, monkeypatch):
 
 
 def test_fetch_run_blob_rejects_cross_tenant(resolver, monkeypatch):
-    import app.db.results_db_service as _rdb
+    import app.core.results.db as _rdb
 
     monkeypatch.setattr(
         _rdb,
@@ -603,7 +603,7 @@ def test_fetch_run_blob_rejects_cross_tenant(resolver, monkeypatch):
 
 
 def test_fetch_run_blob_missing_result_is_hard_fail(resolver, monkeypatch):
-    import app.db.results_db_service as _rdb
+    import app.core.results.db as _rdb
 
     monkeypatch.setattr(_rdb, "get_result", lambda rid: None)
     with pytest.raises(ArtifactResolutionError, match="non trovato"):
@@ -615,7 +615,7 @@ def test_fetch_run_blob_translates_loader_filenotfound_to_typed_error(resolver, 
     cross-tenant SQL filter / blob unavailable) the resolver
     translates it to the canonical Italian message used by
     existing operator log greps."""
-    import app.db.results_db_service as _rdb
+    import app.core.results.db as _rdb
     import app.core.artifacts.resolver as resolver_mod
 
     monkeypatch.setattr(
@@ -645,7 +645,7 @@ def test_fetch_run_blob_translates_loader_filenotfound_to_typed_error(resolver, 
 def test_fetch_run_blob_row_without_group_id_is_hard_fail(resolver, monkeypatch):
     """A row without `group_id` is data corruption (or a
     pre-tenant-binding row); fail-closed before any registry call."""
-    import app.db.results_db_service as _rdb
+    import app.core.results.db as _rdb
 
     monkeypatch.setattr(
         _rdb,
@@ -666,7 +666,7 @@ def test_materialize_latest_passes_when_group_matches(resolver, monkeypatch):
     """BE-GO-READY-RESOURCE-ENGINE-021: when the upstream project
     group check passes, the resolver delegates to the registry
     with ``is_superadmin=False`` and the latest-row's group_id."""
-    import app.db.results_db_service as _rdb
+    import app.core.results.db as _rdb
     import app.db.config.projects as _projects_leaf
     import app.core.artifacts.resolver as resolver_mod
 
@@ -723,7 +723,7 @@ def test_materialize_latest_superadmin_bypass_cross_tenant(resolver, monkeypatch
     threads ``is_superadmin=True`` through to the ResourceRef so
     the loader's audit-bypass log entry mirrors the upstream
     project bypass."""
-    import app.db.results_db_service as _rdb
+    import app.core.results.db as _rdb
     import app.db.config.projects as _projects_leaf
     import app.core.artifacts.resolver as resolver_mod
 
@@ -773,7 +773,7 @@ def test_materialize_latest_non_superadmin_blocks_cross_tenant(resolver, monkeyp
     """Mirror del test sopra: senza `is_superadmin=True` il check
     cross-tenant deve scattare senza rivelare il tenant reale. Il
     default e' fail-closed."""
-    import app.db.results_db_service as _rdb
+    import app.core.results.db as _rdb
     import app.db.config.projects as _projects_leaf
 
     def _tenant_scoped_project(pid, group_id=None):
@@ -812,7 +812,7 @@ def test_materialize_latest_returns_none_on_loader_filenotfound(
     is preserved as the legacy ``return None`` semantic. The
     router/UI treats None as "no latest result"; raising would
     500 the request."""
-    import app.db.results_db_service as _rdb
+    import app.core.results.db as _rdb
     import app.core.artifacts.resolver as resolver_mod
 
     monkeypatch.setattr(
@@ -847,7 +847,7 @@ def test_materialize_latest_missing_group_id_is_hard_fail(
     Resolver fail-closes BEFORE constructing the ref so the
     operator sees a clearer message than the raw ResourceRef
     ValueError."""
-    import app.db.results_db_service as _rdb
+    import app.core.results.db as _rdb
     import app.core.artifacts.resolver as resolver_mod
 
     monkeypatch.setattr(
@@ -885,7 +885,7 @@ def test_materialize_latest_propagates_loader_oversize_unchanged(
     "ArtifactResolutionError" path. Pinned because the legacy
     `if not blob: return None` pattern would have masked oversize
     as `None`; the registry migration must NOT regress to that."""
-    import app.db.results_db_service as _rdb
+    import app.core.results.db as _rdb
     import app.core.artifacts.resolver as resolver_mod
     from app.shared.exceptions import MemoryLimitExceededError
 
@@ -930,7 +930,7 @@ def test_materialize_latest_translates_other_loader_faults(
     fallita") with [GESTITO] log + chained cause. Mirrors the
     019 broad-except contract on `_materialize_from_result_id`."""
     import logging
-    import app.db.results_db_service as _rdb
+    import app.core.results.db as _rdb
     import app.core.artifacts.resolver as resolver_mod
 
     monkeypatch.setattr(

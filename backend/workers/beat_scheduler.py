@@ -302,10 +302,10 @@ class PlenoraBeatScheduler(Scheduler):
         Robustezza: errori DB non crashano il tick (swallowed + loggati).
         """
         try:
-            import app.db.db_service as db
+            from app.db.pg_connection import fetchall
             from app.core.scheduler.schedule_service import detect_missed_run
 
-            rows = db.fetchall(
+            rows = fetchall(
                 "SELECT id, cron_expression, last_run, config "
                 "FROM schedules WHERE is_enabled = TRUE"
             )
@@ -391,9 +391,9 @@ class PlenoraBeatScheduler(Scheduler):
         un eventuale duplicato al drop di un catchup legittimo).
         """
         try:
-            import app.db.db_service as db
+            from app.db.pg_connection import fetchall
             window_start = now - timedelta(hours=self._CATCHUP_DEDUPE_WINDOW_HOURS)
-            rows = db.fetchall(
+            rows = fetchall(
                 "SELECT COUNT(*) AS count FROM schedule_catchup_history "
                 "WHERE schedule_id = %s AND scheduled_for = %s "
                 "AND emitted_at >= %s",
@@ -408,9 +408,9 @@ class PlenoraBeatScheduler(Scheduler):
     def _catchup_runaway_exceeded(self, schedule_id: str, now: datetime) -> bool:
         """True se lo schedule ha >= cap catchup emessi nella finestra."""
         try:
-            import app.db.db_service as db
+            from app.db.pg_connection import fetchall
             window_start = now - timedelta(minutes=self._CATCHUP_RUNAWAY_WINDOW_MIN)
-            rows = db.fetchall(
+            rows = fetchall(
                 "SELECT COUNT(*) AS count FROM schedule_catchup_history "
                 "WHERE schedule_id = %s AND emitted_at >= %s",
                 (schedule_id, window_start.isoformat()),
@@ -426,7 +426,7 @@ class PlenoraBeatScheduler(Scheduler):
     def _emit_single_catchup(self, schedule_id: str, expected_last: datetime,
                              now: datetime) -> None:
         """Emette il task di catchup + update last_run + audit insert."""
-        import app.db.db_service as db
+        from app.db.pg_connection import execute
         scheduled_for_iso = expected_last.isoformat()
 
         logger.info(
@@ -462,7 +462,7 @@ class PlenoraBeatScheduler(Scheduler):
         # ri-emettere il catchup duplicato (dedupe history-based non
         # trovera' la riga pertinente
         try:
-            db.execute(
+            execute(
                 "INSERT INTO schedule_catchup_history "
                 "(schedule_id, emitted_at, scheduled_for, leader_id) "
                 "VALUES (%s, %s, %s, %s)",
@@ -480,8 +480,8 @@ class PlenoraBeatScheduler(Scheduler):
     def _sync_from_db(self) -> None:
         """Carica/aggiorna gli schedule attivi dal DB."""
         try:
-            import app.db.db_service as db
-            rows = db.fetchall(
+            from app.db.pg_connection import fetchall
+            rows = fetchall(
                 "SELECT id, name, cron_expression, project_id, is_enabled, last_run FROM schedules WHERE is_enabled = TRUE"
             )
 
@@ -578,9 +578,9 @@ class PlenoraBeatScheduler(Scheduler):
     def _write_heartbeat(self) -> None:
         """Scrive il timestamp heartbeat nel DB (usato dall'healthcheck)."""
         try:
-            import app.db.db_service as db
+            from app.db.pg_connection import execute
             now = datetime.now(timezone.utc).isoformat()
-            db.execute(
+            execute(
                 "INSERT INTO beat_heartbeat (id, ts) VALUES ('beat', %s) "
                 "ON CONFLICT (id) DO UPDATE SET ts = EXCLUDED.ts",
                 (now,)
@@ -599,9 +599,9 @@ class PlenoraBeatScheduler(Scheduler):
         self._last_stuck_check = now
 
         try:
-            import app.db.db_service as db
+            from app.db.pg_connection import execute, fetchall
             # Lock con expires_at nel passato sono scaduti ma non puliti
-            rows = db.fetchall(
+            rows = fetchall(
                 "SELECT key, value, expires_at FROM scheduler_locks "
                 "WHERE expires_at IS NOT NULL AND expires_at < NOW()"
             )
@@ -612,7 +612,7 @@ class PlenoraBeatScheduler(Scheduler):
                         f"(valore={row['value']}, scaduto={row['expires_at']})"
                     )
                 # Pulisci lock scaduti
-                db.execute("DELETE FROM scheduler_locks WHERE expires_at IS NOT NULL AND expires_at < NOW()")
+                execute("DELETE FROM scheduler_locks WHERE expires_at IS NOT NULL AND expires_at < NOW()")
                 logger.info(f"[STUCK] Rimossi {len(rows)} lock scaduti")
 
             # Controlla schedule con last_status = 'running' da più del hard limit
@@ -626,7 +626,7 @@ class PlenoraBeatScheduler(Scheduler):
             # `INTERVAL '%s seconds'` con placeholder DENTRO il literal
             # SQL e' invalid PostgreSQL syntax. Usiamo `make_interval`
             # che accetta placeholder standard
-            stuck = db.fetchall(
+            stuck = fetchall(
                 "SELECT id, name FROM schedules "
                 "WHERE last_status = 'running' "
                 "AND last_run IS NOT NULL "

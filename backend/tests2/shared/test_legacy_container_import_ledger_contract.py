@@ -64,14 +64,8 @@ _LEGACY_IMPORT_BASELINES: dict[str, dict[str, frozenset[str]]] = {
         "projects": frozenset(),
         "connections": frozenset(),
         "files_storage": frozenset(),
-        "tasks_orchestration": frozenset({
-            "workers/beat_scheduler.py -> app.db.db_service",
-            "workers/tasks/carica_task.py -> app.db.db_service",
-            "workers/tasks/schedule_task.py -> app.db.db_service",
-        }),
-        "auth_datasources_other": frozenset({
-            "app/bootstrap.py -> app.db.db_service",
-        }),
+        "tasks_orchestration": frozenset(),
+        "auth_datasources_other": frozenset(),
     },
     "app.db.config": {
         "projects": frozenset({

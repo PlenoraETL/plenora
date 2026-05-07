@@ -304,12 +304,14 @@ def download_project_result(
         # Fallback post-R#1: i result blob vivono nel DB, il file temp è
         # già stato cancellato da `save_result_blob`. Recupera l'ultimo
         # result dal service DB e ritorna i bytes inline
-        from app.db import results_db_service
-        latest = results_db_service.get_latest_result(project_id)
+        from app.core.results import db as results_db
+        from app.db.results_db_service import get_result_data
+
+        latest = results_db.get_latest_result(project_id)
         if not latest:
             raise HTTPException(404, f"Nessun risultato trovato per progetto '{project_id}'")
 
-        blob = results_db_service.get_result_data(latest["id"])
+        blob = get_result_data(latest["id"])
         if blob is None:
             raise HTTPException(404, f"Blob risultato non disponibile per progetto '{project_id}'")
 
@@ -570,7 +572,7 @@ def cleanup_task_completely(
         resta silenziosamente violato.
     """
     from app.core.orchestrator.task_service import task_service
-    import app.db.results_db_service as _results_db
+    from app.core.results.cleanup import delete_result
 
     # 1. Estrai project_id + result_id dal task (se presenti
     project_id = None
@@ -631,7 +633,7 @@ def cleanup_task_completely(
     try:
         result_id = task_result_payload.get("result_id")
         if result_id:
-            deleted = _results_db.delete_result(result_id)
+            deleted = delete_result(result_id)
             if deleted:
                 logger.info(f"cleanup: result_id '{result_id}' eliminato (task {task_id})")
         else:

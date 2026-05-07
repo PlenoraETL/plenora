@@ -35,8 +35,8 @@ def _apply_results_retention(project_id: str) -> None:
     """
     try:
         from app.db.config.projects import get_project_retention_n
+        from app.core.results import cleanup as results_cleanup
         from app.core.results import db as results_db
-        from app.db.results_db_service import delete_result
 
         # Legge retention_n dal progetto (config tables
         retention_n = get_project_retention_n(project_id)
@@ -52,7 +52,7 @@ def _apply_results_retention(project_id: str) -> None:
         # Elimina i risultati oltre retention_n (i più vecchi sono in fondo
         to_delete = all_results[retention_n:]
         for r in to_delete:
-            delete_result(r["id"])
+            results_cleanup.delete_result(r["id"])
             logger.debug(
                 f"Retention: eliminato risultato {r['id']} del progetto {project_id}",
                 op="retention"

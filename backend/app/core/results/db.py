@@ -1,4 +1,4 @@
-"""Canonical bridge for result metadata persistence.
+"""Canonical result metadata persistence.
 
 Blob reads intentionally stay in ``app.db.results_db_service.get_result_data``
 until the Resource Engine compatibility surface is retired.
@@ -6,9 +6,10 @@ until the Resource Engine compatibility surface is retired.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Optional
 
-from app.db import results_db_service as _results_db
+from app.db.pg_connection import execute, fetchall, fetchone
 
 
 def save_result(
@@ -22,25 +23,48 @@ def save_result(
     created_by: Optional[str] = None,
     storage_key: Optional[str] = None,
     size_bytes: Optional[int] = None,
-) -> dict[str, object]:
-    """Persist result metadata through the legacy SQL implementation."""
-    return _results_db.save_result(
-        result_id=result_id,
-        project_id=project_id,
-        group_id=group_id,
-        filename=filename,
-        fmt=fmt,
-        data=data,
-        rows_count=rows_count,
-        created_by=created_by,
-        storage_key=storage_key,
-        size_bytes=size_bytes,
+) -> Optional[dict[str, object]]:
+    """Persist result metadata.
+
+    Supports both legacy BYTEA blobs and object-storage backed rows.
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    resolved_size_bytes = size_bytes
+    if resolved_size_bytes is None:
+        resolved_size_bytes = len(data) if data else 0
+
+    execute(
+        "INSERT INTO results (id, project_id, group_id, filename, format, data, "
+        "size_bytes, rows_count, created_at, created_by, storage_key) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?) "
+        "ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data, size_bytes=EXCLUDED.size_bytes, "
+        "rows_count=EXCLUDED.rows_count, created_at=EXCLUDED.created_at, "
+        "storage_key=EXCLUDED.storage_key",
+        (
+            result_id,
+            project_id,
+            group_id,
+            filename,
+            fmt,
+            data,
+            resolved_size_bytes,
+            rows_count,
+            now,
+            created_by,
+            storage_key,
+        ),
     )
+    return get_result(result_id)
 
 
 def get_result(result_id: str) -> Optional[dict[str, object]]:
     """Return result metadata by id."""
-    return _results_db.get_result(result_id)
+    return fetchone(
+        "SELECT id, project_id, group_id, filename, format, size_bytes, "
+        "rows_count, created_at, storage_key "
+        "FROM results WHERE id = ?",
+        (result_id,),
+    )
 
 
 def get_latest_result(
@@ -48,11 +72,23 @@ def get_latest_result(
     group_id: Optional[str] = None,
 ) -> Optional[dict[str, object]]:
     """Return latest result metadata for a project."""
-    if group_id is None:
-        return _results_db.get_latest_result(project_id)
-    return _results_db.get_latest_result(project_id, group_id)
+    if group_id:
+        return fetchone(
+            "SELECT id, project_id, group_id, filename, format, size_bytes, rows_count, created_at "
+            "FROM results WHERE project_id = ? AND group_id = ? ORDER BY created_at DESC LIMIT 1",
+            (project_id, group_id),
+        )
+    return fetchone(
+        "SELECT id, project_id, group_id, filename, format, size_bytes, rows_count, created_at "
+        "FROM results WHERE project_id = ? ORDER BY created_at DESC LIMIT 1",
+        (project_id,),
+    )
 
 
 def list_results(project_id: str) -> list[dict[str, object]]:
     """Return result metadata rows for a project, newest first."""
-    return _results_db.list_results(project_id)
+    return fetchall(
+        "SELECT id, project_id, filename, format, size_bytes, rows_count, created_at "
+        "FROM results WHERE project_id = ? ORDER BY created_at DESC",
+        (project_id,),
+    )

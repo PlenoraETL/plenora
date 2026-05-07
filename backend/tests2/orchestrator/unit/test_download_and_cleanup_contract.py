@@ -197,7 +197,7 @@ def test_save_pipeline_result_dict_shape(monkeypatch):
     from app.utils.result_store import save_pipeline_result
     import app.utils.result_store as result_store
     import app.db.config.projects as projects_db
-    import app.db.results_db_service as results_db
+    import app.core.results.db as results_db
     from types import SimpleNamespace
 
     # Stub DB mock
@@ -244,7 +244,7 @@ def test_save_pipeline_result_fs_only_fallback_to_filesystem(monkeypatch, tmp_pa
     from app.utils.result_store import save_pipeline_result
     import app.utils.result_store as result_store
     import app.db.config.projects as projects_db
-    import app.db.results_db_service as results_db
+    import app.core.results.db as results_db
     from types import SimpleNamespace
 
     # Intercetta il flusso path-based: mock save_dataframe per evitare

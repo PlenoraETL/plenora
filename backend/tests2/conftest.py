@@ -273,11 +273,13 @@ if os.getenv("URBY_TEST_REAL_DB_INIT") != "1":
         import app.db.db_service as _db_service
         import app.db.pg_connection as _pg_conn
         import app.core.intermediate.db as _idb
+        import app.core.runtime.db_init as _runtime_db_init
         import app.db.migrations_runner as _mig_runner
         import app.bootstrap as _bootstrap
 
         # Stash gli originali per chi voglia reinstallarli (test integration
-        # opt-in via `_db_service._original_init_all_dbs()`).
+        # opt-in via `_runtime_db_init._original_init_all_dbs()`).
+        _runtime_db_init._original_init_all_dbs = _runtime_db_init.init_all_dbs
         _db_service._original_init_all_dbs = _db_service.init_all_dbs
         _pg_conn._original_init_db = _pg_conn.init_db
         _idb._original_init_db = _idb.init_db
@@ -299,6 +301,7 @@ if os.getenv("URBY_TEST_REAL_DB_INIT") != "1":
             return None
 
         _db_service.init_all_dbs = _noop_init_all_dbs
+        _runtime_db_init.init_all_dbs = _noop_init_all_dbs
         _pg_conn.init_db = _noop_init_db
         _idb.init_db = _noop_init_db
         _mig_runner.apply_pending_migrations = _noop_apply_pending_migrations

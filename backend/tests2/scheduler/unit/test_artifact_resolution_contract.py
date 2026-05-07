@@ -58,7 +58,7 @@ def test_execute_carica_prefers_result_id_before_output_path():
         return SimpleNamespace(empty=False)
 
     with patch("app.utils.dataframe.load_dataframe_from_file", side_effect=_load_dataframe), \
-         patch("app.db.results_db_service.get_result", return_value={"id": "res-1", "project_id": "proj-1", "group_id": "grp-1", "format": "csv"}), \
+         patch("app.core.results.db.get_result", return_value={"id": "res-1", "project_id": "proj-1", "group_id": "grp-1", "format": "csv"}), \
          patch("app.db.pg_connection.fetchone", return_value={"data": b"id\n1\n", "storage_key": None, "project_id": "proj-1"}), \
          patch("app.core.carica.executor.CaricaExecutor") as executor_cls, \
          patch("pathlib.Path.exists", return_value=True):
@@ -81,7 +81,7 @@ def test_execute_carica_rejects_result_id_from_other_project_even_if_output_path
     # mismatched rispetto al project_id => hard-fail, nessun fallback
     # silente a output_path legacy.
     with patch("app.utils.dataframe.load_dataframe_from_file") as load_dataframe, \
-         patch("app.db.results_db_service.get_result", return_value={"id": "res-1", "project_id": "proj-2", "group_id": "grp-1", "format": "csv"}), \
+         patch("app.core.results.db.get_result", return_value={"id": "res-1", "project_id": "proj-2", "group_id": "grp-1", "format": "csv"}), \
          patch("app.db.results_db_service.get_result_data", return_value=b"id\n1\n"), \
          patch("app.core.carica.executor.CaricaExecutor") as executor_cls, \
          patch("pathlib.Path.exists", return_value=True):

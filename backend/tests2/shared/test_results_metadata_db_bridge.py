@@ -1,4 +1,4 @@
-"""Contract tests for the canonical result metadata DB bridge."""
+"""Contract tests for canonical result metadata SQL ownership."""
 
 from __future__ import annotations
 
@@ -10,35 +10,18 @@ from app.core.results import db as results_db
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-def test_result_metadata_bridge_delegates_to_legacy_sql_service(monkeypatch):
-    import app.db.results_db_service as legacy_results_db
+def test_result_metadata_sql_lives_in_core_results_db(monkeypatch):
+    calls: list[tuple[str, str, tuple[object, ...]]] = []
 
-    calls: list[tuple[str, tuple, dict]] = []
+    def _execute(sql: str, params: tuple[object, ...]) -> None:
+        calls.append(("execute", sql, params))
 
-    monkeypatch.setattr(
-        legacy_results_db,
-        "save_result",
-        lambda *args, **kwargs: calls.append(("save_result", args, kwargs))
-        or {"id": kwargs["result_id"]},
-    )
-    monkeypatch.setattr(
-        legacy_results_db,
-        "get_result",
-        lambda *args, **kwargs: calls.append(("get_result", args, kwargs))
-        or {"id": args[0]},
-    )
-    monkeypatch.setattr(
-        legacy_results_db,
-        "get_latest_result",
-        lambda *args, **kwargs: calls.append(("get_latest_result", args, kwargs))
-        or {"id": "latest"},
-    )
-    monkeypatch.setattr(
-        legacy_results_db,
-        "list_results",
-        lambda *args, **kwargs: calls.append(("list_results", args, kwargs))
-        or [{"id": "latest"}],
-    )
+    def _fetchone(sql: str, params: tuple[object, ...]) -> dict[str, object]:
+        calls.append(("fetchone", sql, params))
+        return {"id": params[0]}
+
+    monkeypatch.setattr(results_db, "execute", _execute)
+    monkeypatch.setattr(results_db, "fetchone", _fetchone)
 
     assert results_db.save_result(
         result_id="res-1",
@@ -48,19 +31,70 @@ def test_result_metadata_bridge_delegates_to_legacy_sql_service(monkeypatch):
         fmt="csv",
         data=b"id\n1\n",
         rows_count=1,
+        created_by="user-1",
     ) == {"id": "res-1"}
-    assert results_db.get_result("res-1") == {"id": "res-1"}
+
+    assert calls[0][0] == "execute"
+    assert "INSERT INTO results" in calls[0][1]
+    assert "ON CONFLICT (id) DO UPDATE" in calls[0][1]
+    assert calls[0][2][0:6] == (
+        "res-1",
+        "proj-1",
+        "grp-1",
+        "out.csv",
+        "csv",
+        b"id\n1\n",
+    )
+    assert calls[0][2][6] == 5
+    assert calls[0][2][7] == 1
+    assert calls[0][2][9:] == ("user-1", None)
+
+    assert calls[1] == (
+        "fetchone",
+        (
+            "SELECT id, project_id, group_id, filename, format, size_bytes, "
+            "rows_count, created_at, storage_key "
+            "FROM results WHERE id = ?"
+        ),
+        ("res-1",),
+    )
+
+
+def test_result_metadata_reads_use_core_sql(monkeypatch):
+    calls: list[tuple[str, str, tuple[object, ...]]] = []
+
+    def _fetchone(sql: str, params: tuple[object, ...]) -> dict[str, object]:
+        calls.append(("fetchone", sql, params))
+        return {"id": "latest"}
+
+    def _fetchall(sql: str, params: tuple[object, ...]) -> list[dict[str, object]]:
+        calls.append(("fetchall", sql, params))
+        return [{"id": "latest"}]
+
+    monkeypatch.setattr(results_db, "fetchone", _fetchone)
+    monkeypatch.setattr(results_db, "fetchall", _fetchall)
+
+    assert results_db.get_result("res-1") == {"id": "latest"}
     assert results_db.get_latest_result("proj-1", group_id="grp-1") == {
         "id": "latest"
     }
+    assert results_db.get_latest_result("proj-1") == {"id": "latest"}
     assert results_db.list_results("proj-1") == [{"id": "latest"}]
 
-    assert [name for name, _args, _kwargs in calls] == [
-        "save_result",
-        "get_result",
-        "get_latest_result",
-        "list_results",
-    ]
-    assert calls[0][2]["storage_key"] is None
-    assert calls[2][1] == ("proj-1", "grp-1")
-    assert calls[2][2] == {}
+    assert "FROM results WHERE id = ?" in calls[0][1]
+    assert calls[0][2] == ("res-1",)
+    assert "project_id = ? AND group_id = ?" in calls[1][1]
+    assert calls[1][2] == ("proj-1", "grp-1")
+    assert "WHERE project_id = ? ORDER BY created_at DESC" in calls[2][1]
+    assert calls[2][2] == ("proj-1",)
+    assert calls[3][0] == "fetchall"
+    assert "FROM results WHERE project_id = ? ORDER BY created_at DESC" in calls[3][1]
+
+
+def test_results_db_service_retains_metadata_compat_exports():
+    import app.db.results_db_service as legacy_results_db
+
+    assert legacy_results_db.save_result is results_db.save_result
+    assert legacy_results_db.get_result is results_db.get_result
+    assert legacy_results_db.get_latest_result is results_db.get_latest_result
+    assert legacy_results_db.list_results is results_db.list_results

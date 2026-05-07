@@ -567,8 +567,8 @@ def _load_upstream_data(
         # dal layer HTTP a monte ma comunque verificato qui
         if not force_recalculate:
             try:
-                import app.db.db_service as _db
-                _proj_row = _db.get_project(project_id)
+                from app.core.projects import db as _projects_db
+                _proj_row = _projects_db.get_project(project_id)
                 _project_group_id = (
                     _proj_row.get("group_id") if _proj_row else None
                 )

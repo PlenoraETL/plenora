@@ -1,22 +1,23 @@
 """
 Results DB Service — accesso a PostgreSQL (ex SQLite results.db).
 
-Contiene: results (output pipeline). Execution-log names are compatibility
-re-exports from app.core.orchestrator.execution_logs.
+Contiene: results (output pipeline). Execution-log ownership lives in
+app.core.orchestrator.execution_logs.
 """
 
-from typing import Dict, List, Optional
-from app.core.orchestrator.execution_logs import (
-    list_logs,
-    log_execution,
-    update_log,
+from typing import List, Optional
+from app.core.results.db import (
+    get_latest_result,
+    get_result,
+    list_results,
+    save_result,
 )
 from app.utils.logger import get_logger
 
 
 # Importa tutto da pg_connection
 from app.db.pg_connection import (
-    fetchone, fetchall, execute,
+    fetchall,
     transaction, close_connection,
 )
 
@@ -29,43 +30,8 @@ def init_db():
 
 
 # RESULTS
-
-def save_result(result_id: str, project_id: str, group_id: str,
-                filename: str, fmt: str, data: Optional[bytes] = None,
-                rows_count: int = None, created_by: str = None,
-                storage_key: Optional[str] = None,
-                size_bytes: Optional[int] = None) -> Dict:
-    """Salva metadata result. Due mode:
-      - DB blob: data=bytes, storage_key=None (size_bytes derivato)
-      - S3-backed: data=None, storage_key='results/...', size_bytes esplicito
-    """
-    from datetime import datetime, timezone
-    now = datetime.now(timezone.utc).isoformat()
-
-    # size_bytes: esplicito se S3 (caller lo conosce), altrimenti da len(data
-    if size_bytes is None:
-        size_bytes = len(data) if data else 0
-
-    execute(
-        "INSERT INTO results (id, project_id, group_id, filename, format, data, "
-        "size_bytes, rows_count, created_at, created_by, storage_key) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?) "
-        "ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data, size_bytes=EXCLUDED.size_bytes, "
-        "rows_count=EXCLUDED.rows_count, created_at=EXCLUDED.created_at, "
-        "storage_key=EXCLUDED.storage_key",
-        (result_id, project_id, group_id, filename, fmt,
-         data, size_bytes, rows_count, now, created_by, storage_key)
-    )
-    return get_result(result_id)
-
-
-def get_result(result_id: str) -> Optional[Dict]:
-    return fetchone(
-        "SELECT id, project_id, group_id, filename, format, size_bytes, "
-        "rows_count, created_at, storage_key "
-        "FROM results WHERE id = ?",
-        (result_id,)
-    )
+# KEEP_COMPAT: metadata names are re-exported from app.core.results.db.
+# Blob reads and cleanup remain here until their compatibility surfaces move.
 
 
 def _s3_download_bytes(storage_key: str) -> Optional[bytes]:
@@ -95,29 +61,6 @@ def get_result_data(result_id: str, group_id: str = None) -> Optional[bytes]:
 
     data, _backend = _dispatch_by_id(result_id, group_id_filter=group_id or None)
     return data
-
-
-def get_latest_result(project_id: str, group_id: str = None) -> Optional[Dict]:
-    """Recupera ultimo risultato per progetto. group_id=None → no filter."""
-    if group_id:
-        return fetchone(
-            "SELECT id, project_id, group_id, filename, format, size_bytes, rows_count, created_at "
-            "FROM results WHERE project_id = ? AND group_id = ? ORDER BY created_at DESC LIMIT 1",
-            (project_id, group_id)
-        )
-    return fetchone(
-        "SELECT id, project_id, group_id, filename, format, size_bytes, rows_count, created_at "
-        "FROM results WHERE project_id = ? ORDER BY created_at DESC LIMIT 1",
-        (project_id,)
-    )
-
-
-def list_results(project_id: str) -> List[Dict]:
-    return fetchall(
-        "SELECT id, project_id, filename, format, size_bytes, rows_count, created_at "
-        "FROM results WHERE project_id = ? ORDER BY created_at DESC",
-        (project_id,)
-    )
 
 
 def delete_result(result_id: str) -> bool:
@@ -293,7 +236,3 @@ def delete_results_for_project(project_id: str) -> int:
                 )
 
     return deleted_count
-
-
-# EXECUTION LOGS: KEEP_COMPAT re-exports from
-# app.core.orchestrator.execution_logs. Do not add new log DB behavior here.

@@ -356,7 +356,7 @@ def test_bootstrap_flips_completion_flag_only_on_success(monkeypatch):
         MagicMock(),
     )
     monkeypatch.setattr(
-        "app.db.db_service.init_all_dbs",
+        "app.core.runtime.db_init.init_all_dbs",
         MagicMock(),
     )
 
@@ -379,7 +379,7 @@ def test_bootstrap_flips_completion_flag_only_on_success(monkeypatch):
     def _raise_init():
         raise RuntimeError("DB unreachable")
 
-    monkeypatch.setattr("app.db.db_service.init_all_dbs", _raise_init)
+    monkeypatch.setattr("app.core.runtime.db_init.init_all_dbs", _raise_init)
 
     assert bootstrap_mod.is_bootstrapped() is False
     with pytest.raises(RuntimeError, match="DB unreachable"):

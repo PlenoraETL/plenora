@@ -67,7 +67,7 @@ def test_download_project_result_falls_back_to_db_blob(pipeline_client, tmp_path
     ), patch(
         "app.core.orchestrator.router._assert_project_group"
     ), patch(
-        "app.db.results_db_service.get_latest_result",
+        "app.core.results.db.get_latest_result",
         return_value={
             "id": "res-latest",
             "project_id": project_id,
@@ -107,7 +107,7 @@ def test_download_project_result_filesystem_wins_over_blob_when_present(
     ), patch(
         "app.core.orchestrator.router._assert_project_group"
     ), patch(
-        "app.db.results_db_service.get_latest_result"
+        "app.core.results.db.get_latest_result"
     ) as mock_latest:
         response = pipeline_client.get(f"/api/projects/{project_id}/download")
 
@@ -128,7 +128,7 @@ def test_download_project_result_404_when_nothing_exists(pipeline_client, tmp_pa
     ), patch(
         "app.core.orchestrator.router._assert_project_group"
     ), patch(
-        "app.db.results_db_service.get_latest_result",
+        "app.core.results.db.get_latest_result",
         return_value=None,
     ):
         response = pipeline_client.get(f"/api/projects/{project_id}/download")
@@ -149,7 +149,7 @@ def test_download_project_result_blob_fallback_preserves_mime_type(
     ), patch(
         "app.core.orchestrator.router._assert_project_group"
     ), patch(
-        "app.db.results_db_service.get_latest_result",
+        "app.core.results.db.get_latest_result",
         return_value={
             "id": "res-geo",
             "project_id": project_id,

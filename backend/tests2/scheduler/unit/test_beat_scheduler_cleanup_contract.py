@@ -377,10 +377,10 @@ def test_check_stuck_tasks_removes_expired_locks_and_checks_running_schedules():
         "app.config.settings",
         new=SimpleNamespace(CELERY_SCHEDULE_HARD_LIMIT=3600),
     ), patch(
-        "app.db.db_service.fetchall",
+        "app.db.pg_connection.fetchall",
         side_effect=fetchall_side_effect,
     ) as mock_fetchall, patch(
-        "app.db.db_service.execute"
+        "app.db.pg_connection.execute"
     ) as mock_execute:
         scheduler._check_stuck_tasks()
 

@@ -100,7 +100,7 @@ def test_sync_from_db_adds_entry_for_enabled_schedule(scheduler):
             "last_run": None,
         }
     ]
-    with patch("app.db.db_service.fetchall", return_value=rows):
+    with patch("app.db.pg_connection.fetchall", return_value=rows):
         scheduler._sync_from_db()
 
     assert "urby:schedule:sched-1" in scheduler.data
@@ -113,7 +113,7 @@ def test_sync_from_db_removes_disabled_schedule(scheduler):
     """Se uno schedule precedentemente in self.data non e' piu' nelle
     righe enabled del DB, deve essere rimosso da self.data."""
     # Prima pass: sched-1 enabled
-    with patch("app.db.db_service.fetchall", return_value=[
+    with patch("app.db.pg_connection.fetchall", return_value=[
         {"id": "sched-1", "name": "A", "cron_expression": "0 * * * *",
          "project_id": "p1", "is_enabled": True, "last_run": None}
     ]):
@@ -122,7 +122,7 @@ def test_sync_from_db_removes_disabled_schedule(scheduler):
     assert "urby:schedule:sched-1" in scheduler.data
 
     # Seconda pass: sched-1 NON e' piu' nelle righe enabled (disabilitato)
-    with patch("app.db.db_service.fetchall", return_value=[]):
+    with patch("app.db.pg_connection.fetchall", return_value=[]):
         scheduler._sync_from_db()
 
     assert "urby:schedule:sched-1" not in scheduler.data
@@ -134,7 +134,7 @@ def test_sync_from_db_skips_invalid_cron_expression(scheduler):
         {"id": "bad", "name": "Bad", "cron_expression": "not a cron",
          "project_id": "p", "is_enabled": True, "last_run": None}
     ]
-    with patch("app.db.db_service.fetchall", return_value=rows):
+    with patch("app.db.pg_connection.fetchall", return_value=rows):
         scheduler._sync_from_db()
 
     assert "urby:schedule:bad" not in scheduler.data
@@ -145,7 +145,7 @@ def test_sync_from_db_is_resilient_to_db_error(scheduler):
     swallowed). self.data resta inalterato."""
     scheduler.data["urby:schedule:pre-esistente"] = MagicMock()
 
-    with patch("app.db.db_service.fetchall", side_effect=RuntimeError("db down")):
+    with patch("app.db.pg_connection.fetchall", side_effect=RuntimeError("db down")):
         scheduler._sync_from_db()  # non deve sollevare
 
     assert "urby:schedule:pre-esistente" in scheduler.data
@@ -154,7 +154,7 @@ def test_sync_from_db_is_resilient_to_db_error(scheduler):
 def test_sync_from_db_updates_entry_when_cron_changes(scheduler):
     """Se la cron di uno schedule cambia tra due sync, l'entry in
     self.data deve essere aggiornata con la nuova schedule."""
-    with patch("app.db.db_service.fetchall", return_value=[
+    with patch("app.db.pg_connection.fetchall", return_value=[
         {"id": "s1", "name": "A", "cron_expression": "0 6 * * *",
          "project_id": "p", "is_enabled": True, "last_run": None}
     ]):
@@ -162,7 +162,7 @@ def test_sync_from_db_updates_entry_when_cron_changes(scheduler):
 
     old_schedule = scheduler.data["urby:schedule:s1"].schedule
 
-    with patch("app.db.db_service.fetchall", return_value=[
+    with patch("app.db.pg_connection.fetchall", return_value=[
         {"id": "s1", "name": "A", "cron_expression": "*/15 * * * *",
          "project_id": "p", "is_enabled": True, "last_run": None}
     ]):

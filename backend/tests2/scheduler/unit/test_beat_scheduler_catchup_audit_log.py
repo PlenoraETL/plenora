@@ -42,7 +42,7 @@ def test_emit_single_catchup_happy_path_no_error_log():
     instance = _make_beat_scheduler()
 
     with patch(
-        "app.db.db_service.execute"
+        "app.db.pg_connection.execute"
     ), patch(
         "workers.beat_scheduler.logger"
     ) as mock_logger:
@@ -68,7 +68,7 @@ def test_emit_single_catchup_audit_insert_fail_logs_crash_with_exc_info():
     instance = _make_beat_scheduler()
 
     with patch(
-        "app.db.db_service.execute",
+        "app.db.pg_connection.execute",
         side_effect=RuntimeError("db temporarily unreachable"),
     ), patch(
         "workers.beat_scheduler.logger"
@@ -103,7 +103,7 @@ def test_emit_single_catchup_beat_safe_no_propagation():
     instance = _make_beat_scheduler()
 
     with patch(
-        "app.db.db_service.execute",
+        "app.db.pg_connection.execute",
         side_effect=psycopg2.OperationalError("pool exhausted"),
     ), patch(
         "workers.beat_scheduler.logger"
@@ -126,7 +126,7 @@ def test_emit_single_catchup_error_message_mentions_duplicate_risk():
     instance = _make_beat_scheduler()
 
     with patch(
-        "app.db.db_service.execute",
+        "app.db.pg_connection.execute",
         side_effect=RuntimeError("test"),
     ), patch(
         "workers.beat_scheduler.logger"

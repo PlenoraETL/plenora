@@ -125,9 +125,9 @@ def beat_heartbeat():
     """
     from datetime import datetime, timezone
     try:
-        import app.db.db_service as db
+        from app.db.pg_connection import execute
         now = datetime.now(timezone.utc).isoformat()
-        db.execute(
+        execute(
             "INSERT INTO beat_heartbeat (id, ts) VALUES ('beat', %s) "
             "ON CONFLICT (id) DO UPDATE SET ts = EXCLUDED.ts",
             (now,)

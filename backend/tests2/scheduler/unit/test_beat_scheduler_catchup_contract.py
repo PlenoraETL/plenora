@@ -74,8 +74,8 @@ _NOW_FIXED = datetime(2026, 4, 16, 10, 0, tzinfo=timezone.utc)
 def test_skips_schedule_when_catchup_flag_disabled(scheduler):
     row = _schedule_row(catchup_enabled=False)
 
-    with patch("app.db.db_service.fetchall", return_value=[row]), \
-         patch("app.db.db_service.execute") as db_exec, \
+    with patch("app.db.pg_connection.fetchall", return_value=[row]), \
+         patch("app.db.pg_connection.execute") as db_exec, \
          patch("workers.beat_scheduler.datetime") as mock_dt:
         mock_dt.now.return_value = _NOW_FIXED
         mock_dt.fromisoformat = datetime.fromisoformat
@@ -89,8 +89,8 @@ def test_skips_schedule_when_disabled_globally(scheduler):
     row = _schedule_row(catchup_enabled=True)
     row["is_enabled"] = False
 
-    with patch("app.db.db_service.fetchall", return_value=[]) as ff, \
-         patch("app.db.db_service.execute"), \
+    with patch("app.db.pg_connection.fetchall", return_value=[]) as ff, \
+         patch("app.db.pg_connection.execute"), \
          patch("workers.beat_scheduler.datetime") as mock_dt:
         mock_dt.now.return_value = _NOW_FIXED
         mock_dt.fromisoformat = datetime.fromisoformat
@@ -114,8 +114,8 @@ def test_emits_task_with_triggered_by_catchup_and_scheduled_for(scheduler):
         last_run="2026-04-15T06:00:00+00:00",
     )
 
-    with patch("app.db.db_service.fetchall", return_value=[row]), \
-         patch("app.db.db_service.execute"), \
+    with patch("app.db.pg_connection.fetchall", return_value=[row]), \
+         patch("app.db.pg_connection.execute"), \
          patch("workers.beat_scheduler.datetime") as mock_dt:
         mock_dt.now.return_value = _NOW_FIXED
         mock_dt.fromisoformat = datetime.fromisoformat
@@ -154,8 +154,8 @@ def test_writes_audit_entry_in_schedule_catchup_history(scheduler):
     def capture_execute(query, params=None):
         executed_queries.append((query, params))
 
-    with patch("app.db.db_service.fetchall", return_value=[row]), \
-         patch("app.db.db_service.execute", side_effect=capture_execute), \
+    with patch("app.db.pg_connection.fetchall", return_value=[row]), \
+         patch("app.db.pg_connection.execute", side_effect=capture_execute), \
          patch("workers.beat_scheduler.datetime") as mock_dt:
         mock_dt.now.return_value = _NOW_FIXED
         mock_dt.fromisoformat = datetime.fromisoformat
@@ -190,8 +190,8 @@ def test_cap_exceeded_skips_emit_and_logs_warning(scheduler, caplog):
     def fake_fetchall(*args, **kwargs):
         return fetchall_responses.pop(0)
 
-    with patch("app.db.db_service.fetchall", side_effect=fake_fetchall), \
-         patch("app.db.db_service.execute"), \
+    with patch("app.db.pg_connection.fetchall", side_effect=fake_fetchall), \
+         patch("app.db.pg_connection.execute"), \
          patch("workers.beat_scheduler.datetime") as mock_dt, \
          caplog.at_level(logging.WARNING, logger="workers.beat_scheduler"):
         mock_dt.now.return_value = _NOW_FIXED
@@ -211,8 +211,8 @@ def test_cap_not_exceeded_still_emits(scheduler):
     def fake_fetchall(*args, **kwargs):
         return fetchall_responses.pop(0)
 
-    with patch("app.db.db_service.fetchall", side_effect=fake_fetchall), \
-         patch("app.db.db_service.execute"), \
+    with patch("app.db.pg_connection.fetchall", side_effect=fake_fetchall), \
+         patch("app.db.pg_connection.execute"), \
          patch("workers.beat_scheduler.datetime") as mock_dt:
         mock_dt.now.return_value = _NOW_FIXED
         mock_dt.fromisoformat = datetime.fromisoformat
@@ -228,7 +228,7 @@ def test_db_error_on_main_query_is_swallowed(scheduler, caplog):
     """Un errore DB nel fetch degli schedule non deve crashare il tick."""
     import logging
 
-    with patch("app.db.db_service.fetchall", side_effect=RuntimeError("db down")), \
+    with patch("app.db.pg_connection.fetchall", side_effect=RuntimeError("db down")), \
          caplog.at_level(logging.ERROR, logger="workers.beat_scheduler"):
         scheduler._emit_catchup_runs()  # non deve sollevare
 
@@ -240,8 +240,8 @@ def test_emits_nothing_when_no_missed_run_detected(scheduler):
     # last_run = oggi alle 06:00, now = oggi alle 10:00 → non c'e' missed
     row = _schedule_row(sid="s1", last_run="2026-04-16T06:00:00+00:00")
 
-    with patch("app.db.db_service.fetchall", return_value=[row]), \
-         patch("app.db.db_service.execute"), \
+    with patch("app.db.pg_connection.fetchall", return_value=[row]), \
+         patch("app.db.pg_connection.execute"), \
          patch("workers.beat_scheduler.datetime") as mock_dt:
         mock_dt.now.return_value = _NOW_FIXED
         mock_dt.fromisoformat = datetime.fromisoformat

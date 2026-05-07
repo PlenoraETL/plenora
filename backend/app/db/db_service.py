@@ -32,16 +32,8 @@ from app.core.orchestrator.execution_logs import (
 )
 
 
-def init_all_dbs():
-    """Inizializza PostgreSQL. Chiamato da main.py all'avvio."""
-    from app.db.pg_connection import init_db as pg_init
-    pg_init()
-    # intermediate.db: anche questo va su PostgreSQL
-    import app.core.intermediate.db as idb
-    idb.init_db()
-    # C8-nit: runner migration — applica i file in migrations/ non ancora
-    # registrati in <DB_SCHEMA>.schema_migrations. I file esistenti usano
-    # IF NOT EXISTS (idempotenti) quindi il primo run post-C8 li registra
-    # semplicemente come applicate senza side-effect
-    from app.db.migrations_runner import apply_pending_migrations
-    apply_pending_migrations()
+def init_all_dbs() -> None:
+    """Compatibility wrapper for the runtime DB init boundary."""
+    from app.core.runtime.db_init import init_all_dbs as runtime_init_all_dbs
+
+    runtime_init_all_dbs()

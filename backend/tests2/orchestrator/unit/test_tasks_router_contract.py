@@ -42,7 +42,7 @@ def test_cleanup_task_deletes_only_task_result_and_task_logs(client, tmp_path):
     with patch("app.core.orchestrator.router.settings", new=SimpleNamespace(RESULTS_DIR=tmp_path)), \
          patch("app.services.task_service.task_service.get_task_status", return_value=task_info), \
          patch("app.services.project_service.ProjectService.get_project_metadata", return_value={"id": project_id, "group_id": "grp-1"}), \
-         patch("app.db.results_db_service.delete_result", return_value=True) as delete_result, \
+         patch("app.core.results.cleanup.delete_result", return_value=True) as delete_result, \
          patch("app.db.pg_connection.execute", side_effect=_record_sql), \
          patch("celery.result.AsyncResult", return_value=SimpleNamespace(forget=lambda: None)):
         response = client.delete(f"/api/tasks/{task_id}/full-cleanup")

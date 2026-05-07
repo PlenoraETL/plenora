@@ -21,7 +21,8 @@ from app.models import (
 from app.db.config import groups as _groups
 from app.db.config import projects as project_db
 from app.db import pg_connection
-from app.db import results_db_service as results_db
+from app.core.results import db as results_db
+from app.db.results_db_service import get_result_data
 from app.core.projects.domain import build_project_id, resolve_project_group_id
 from app.core.projects.repository import (
     DbProjectCanvasKeyRepository,
@@ -613,7 +614,7 @@ class ProjectService:
 
     def get_result_data(self, result_id: str) -> Optional[bytes]:
         """Recupera il blob del risultato per download."""
-        return results_db.get_result_data(result_id)
+        return get_result_data(result_id)
 
     def list_results(self, project_id: str) -> List[dict]:
         """Lista risultati del progetto (senza blob)."""

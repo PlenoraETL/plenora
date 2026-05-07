@@ -116,10 +116,9 @@ def test_list_logs_applies_filters_and_bounds(monkeypatch):
     ]
 
 
-def test_results_db_service_keeps_execution_log_compat_exports():
+def test_results_db_service_does_not_export_execution_log_compat_names():
     import app.db.results_db_service as results_db
-    from app.core.orchestrator import execution_logs
 
-    assert results_db.log_execution is execution_logs.log_execution
-    assert results_db.update_log is execution_logs.update_log
-    assert results_db.list_logs is execution_logs.list_logs
+    assert not hasattr(results_db, "log_execution")
+    assert not hasattr(results_db, "update_log")
+    assert not hasattr(results_db, "list_logs")

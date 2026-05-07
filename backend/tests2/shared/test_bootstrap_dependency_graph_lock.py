@@ -236,7 +236,7 @@ def test_is_bootstrapped_flips_to_true_after_successful_bootstrap(
     monkeypatch.setattr(
         "app.shared.cloud_backends.validate_storage_config", lambda: None,
     )
-    monkeypatch.setattr("app.db.db_service.init_all_dbs", lambda: None)
+    monkeypatch.setattr("app.core.runtime.db_init.init_all_dbs", lambda: None)
     monkeypatch.setattr(
         "app.bootstrap._repair_psycopg2_ssl_env", lambda: None,
     )
@@ -264,7 +264,7 @@ def test_is_bootstrapped_stays_false_when_step_raises(
     def _raise():
         raise RuntimeError("simulated DB unreachable")
 
-    monkeypatch.setattr("app.db.db_service.init_all_dbs", _raise)
+    monkeypatch.setattr("app.core.runtime.db_init.init_all_dbs", _raise)
     monkeypatch.setattr(
         "app.bootstrap._repair_psycopg2_ssl_env", lambda: None,
     )
@@ -299,7 +299,7 @@ def test_is_bootstrapped_recovers_to_true_on_retry_after_transient_failure(
         if state["calls"] == 1:
             raise RuntimeError("transient")
 
-    monkeypatch.setattr("app.db.db_service.init_all_dbs", _flaky_init)
+    monkeypatch.setattr("app.core.runtime.db_init.init_all_dbs", _flaky_init)
     monkeypatch.setattr(
         "app.bootstrap._repair_psycopg2_ssl_env", lambda: None,
     )
