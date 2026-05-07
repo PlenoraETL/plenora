@@ -19,6 +19,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from app.core.results import cleanup as results_cleanup
 from app.db import results_db_service
 from app.shared.storage_reconciliation import ReconciliationEntryRef
 
@@ -127,7 +128,7 @@ def test_delete_result_records_pending_inside_transaction_and_marks_done(
         returning_ids=["recon-1"],
     )
     cm_factory, state = _patched_transaction(cursor)
-    monkeypatch.setattr(results_db_service, "transaction", cm_factory)
+    monkeypatch.setattr(results_cleanup, "transaction", cm_factory)
 
     comp_calls = []
     def _fake_comp(storage_key, *, domain, reason, extras=None, **_):
@@ -148,7 +149,7 @@ def test_delete_result_records_pending_inside_transaction_and_marks_done(
         lambda rid, *, error: mark_failed_calls.append((rid, error)),
     )
 
-    deleted = results_db_service.delete_result("r1")
+    deleted = results_cleanup.delete_result("r1")
 
     assert deleted is True
     assert state["committed"] is True
@@ -195,7 +196,7 @@ def test_delete_result_failed_compensation_marks_failed_attempt(monkeypatch):
         returning_ids=["recon-2"],
     )
     cm_factory, state = _patched_transaction(cursor)
-    monkeypatch.setattr(results_db_service, "transaction", cm_factory)
+    monkeypatch.setattr(results_cleanup, "transaction", cm_factory)
 
     mark_done_calls = []
     mark_failed_calls = []
@@ -212,7 +213,7 @@ def test_delete_result_failed_compensation_marks_failed_attempt(monkeypatch):
         lambda rid, *, error: mark_failed_calls.append((rid, error)),
     )
 
-    deleted = results_db_service.delete_result("r1")
+    deleted = results_cleanup.delete_result("r1")
 
     assert deleted is True
     assert state["committed"] is True
@@ -232,7 +233,7 @@ def test_delete_result_skipped_outcome_marks_done(monkeypatch):
         returning_ids=["recon-3"],
     )
     cm_factory, _ = _patched_transaction(cursor)
-    monkeypatch.setattr(results_db_service, "transaction", cm_factory)
+    monkeypatch.setattr(results_cleanup, "transaction", cm_factory)
 
     mark_done_calls = []
     mark_failed_calls = []
@@ -249,7 +250,7 @@ def test_delete_result_skipped_outcome_marks_done(monkeypatch):
         lambda rid, *, error: mark_failed_calls.append((rid, error)),
     )
 
-    deleted = results_db_service.delete_result("r1")
+    deleted = results_cleanup.delete_result("r1")
 
     assert deleted is True
     assert mark_done_calls == ["recon-3"]
@@ -264,14 +265,14 @@ def test_delete_result_legacy_bytea_row_skips_reconciliation(monkeypatch):
         delete_rowcount=1,
     )
     cm_factory, _ = _patched_transaction(cursor)
-    monkeypatch.setattr(results_db_service, "transaction", cm_factory)
+    monkeypatch.setattr(results_cleanup, "transaction", cm_factory)
 
     comp_called = MagicMock()
     monkeypatch.setattr(
         "app.shared.storage_compensation.compensating_delete", comp_called
     )
 
-    deleted = results_db_service.delete_result("r-legacy")
+    deleted = results_cleanup.delete_result("r-legacy")
 
     assert deleted is True
     # No INSERT into reconciliation log for BYTEA path.
@@ -290,14 +291,14 @@ def test_delete_result_row_not_found_skips_reconciliation(monkeypatch):
         delete_rowcount=0,
     )
     cm_factory, _ = _patched_transaction(cursor)
-    monkeypatch.setattr(results_db_service, "transaction", cm_factory)
+    monkeypatch.setattr(results_cleanup, "transaction", cm_factory)
 
     comp_called = MagicMock()
     monkeypatch.setattr(
         "app.shared.storage_compensation.compensating_delete", comp_called
     )
 
-    deleted = results_db_service.delete_result("r-gone")
+    deleted = results_cleanup.delete_result("r-gone")
 
     assert deleted is False
     sqls = [s for s, _ in cursor.executed]
@@ -320,7 +321,7 @@ def test_delete_results_for_project_records_pending_per_key_in_one_tx(
         {"id": "r2", "storage_key": "results/p1/r2.bin"},
     ]
     monkeypatch.setattr(
-        results_db_service, "fetchall", lambda *a, **kw: rows
+        results_cleanup, "fetchall", lambda *a, **kw: rows
     )
 
     cursor = _FakeCursor(
@@ -328,7 +329,7 @@ def test_delete_results_for_project_records_pending_per_key_in_one_tx(
         returning_ids=["recon-r1", "recon-r2"],
     )
     cm_factory, state = _patched_transaction(cursor)
-    monkeypatch.setattr(results_db_service, "transaction", cm_factory)
+    monkeypatch.setattr(results_cleanup, "transaction", cm_factory)
 
     comp_calls = []
     def _fake_comp(storage_key, *, domain, reason, extras=None, **_):
@@ -348,7 +349,7 @@ def test_delete_results_for_project_records_pending_per_key_in_one_tx(
         lambda rid, *, error: None,
     )
 
-    rowcount = results_db_service.delete_results_for_project("p1")
+    rowcount = results_cleanup.delete_results_for_project("p1")
 
     assert rowcount == 2
     assert state["committed"] is True
@@ -392,19 +393,19 @@ def test_delete_results_for_project_no_s3_rows_skips_reconciliation(
     """Project with only BYTEA legacy rows (or empty): pre-fetch
     returns []; no record_pending, no compensating_delete."""
     monkeypatch.setattr(
-        results_db_service, "fetchall", lambda *a, **kw: []
+        results_cleanup, "fetchall", lambda *a, **kw: []
     )
 
     cursor = _FakeCursor(delete_rowcount=3)
     cm_factory, _ = _patched_transaction(cursor)
-    monkeypatch.setattr(results_db_service, "transaction", cm_factory)
+    monkeypatch.setattr(results_cleanup, "transaction", cm_factory)
 
     comp_called = MagicMock()
     monkeypatch.setattr(
         "app.shared.storage_compensation.compensating_delete", comp_called
     )
 
-    rowcount = results_db_service.delete_results_for_project("p-empty")
+    rowcount = results_cleanup.delete_results_for_project("p-empty")
 
     # Still deletes legacy BYTEA rows (rowcount reflects the DELETE).
     assert rowcount == 3
@@ -424,14 +425,14 @@ def test_delete_results_for_project_per_key_failure_isolates_others(
         {"id": "rB", "storage_key": "results/p1/rB.bin"},
     ]
     monkeypatch.setattr(
-        results_db_service, "fetchall", lambda *a, **kw: rows
+        results_cleanup, "fetchall", lambda *a, **kw: rows
     )
 
     cursor = _FakeCursor(
         delete_rowcount=2, returning_ids=["recon-rA", "recon-rB"]
     )
     cm_factory, _ = _patched_transaction(cursor)
-    monkeypatch.setattr(results_db_service, "transaction", cm_factory)
+    monkeypatch.setattr(results_cleanup, "transaction", cm_factory)
 
     def _comp_dispatch(storage_key, **_):
         return "failed" if "rA" in storage_key else "ok"
@@ -450,7 +451,7 @@ def test_delete_results_for_project_per_key_failure_isolates_others(
         lambda rid, *, error: mark_failed_calls.append((rid, error)),
     )
 
-    rowcount = results_db_service.delete_results_for_project("p1")
+    rowcount = results_cleanup.delete_results_for_project("p1")
 
     assert rowcount == 2
     # rA failed: mark_failed_attempt; rB ok: mark_done.
@@ -458,3 +459,11 @@ def test_delete_results_for_project_per_key_failure_isolates_others(
     assert len(mark_failed_calls) == 1
     assert mark_failed_calls[0][0] == "recon-rA"
     assert "compensating_delete_outcome=failed" in mark_failed_calls[0][1]
+
+
+def test_results_db_service_retains_cleanup_compat_exports():
+    assert results_db_service.delete_result is results_cleanup.delete_result
+    assert (
+        results_db_service.delete_results_for_project
+        is results_cleanup.delete_results_for_project
+    )

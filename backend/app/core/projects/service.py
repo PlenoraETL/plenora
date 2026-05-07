@@ -19,7 +19,7 @@ from app.models import (
 )
 
 from app.db.config import groups as _groups
-from app.db.config import projects as project_db
+from app.core.projects import db as project_db
 from app.db import pg_connection
 from app.core.results import blob as results_blob
 from app.core.results import db as results_db

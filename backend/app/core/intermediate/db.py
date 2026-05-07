@@ -646,7 +646,7 @@ def apply_runs_retention(canvas_id: str, group_id: str) -> None:
     try:
         # Legge retention_n dal progetto in config.db
         try:
-            from app.db.config.projects import get_project_retention_n
+            from app.core.projects.db import get_project_retention_n
             retention_n = get_project_retention_n(canvas_id)
             if retention_n is None:
                 retention_n = DEFAULT_RUNS_RETENTION

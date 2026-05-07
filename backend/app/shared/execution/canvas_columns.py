@@ -55,8 +55,7 @@ def compute_result_columns(
 ) -> List[Dict[str, Any]]:
     """Computa le colonne autorevoli del result_node via BFS backward.
 
-    Delega la logica per-node-type a `SchemaInferenceService` (gia'
-    presente in app/services/schema_inference.py).
+    Delega la logica per-node-type a `SchemaInferenceService`.
 
     Args:
         canvas: CanvasState con .nodes e .edges (in-memory, NON caricato
@@ -73,9 +72,8 @@ def compute_result_columns(
         Le customizzazioni utente (alias, visible) presenti nel
         result_node corrente sono preservate per nome.
     """
-    # Lazy import per evitare cicli (schema_inference importa project_service
-    # per infer_project_source_schema
-    from app.services.schema_inference import SchemaInferenceService
+    # Lazy import per evitare cicli durante il bootstrap dei progetti.
+    from app.core.projects.schema_inference import SchemaInferenceService
 
     service = SchemaInferenceService(project_service)
     service._schema_cache = {}

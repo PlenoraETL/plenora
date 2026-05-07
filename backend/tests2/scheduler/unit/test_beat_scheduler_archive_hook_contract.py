@@ -112,7 +112,7 @@ def test_archive_old_logs_invokes_writer_when_enabled(monkeypatch):
         "app.shared.cloud_backends.get_log_archive_storage",
         return_value=mock_storage,
     ), patch(
-        "app.services.log_archive.LogArchiveWriter",
+        "app.core.scheduler.log_archive.LogArchiveWriter",
     ) as mock_writer_cls, patch(
         "app.db.pg_connection.fetchall", new=MagicMock(),
     ), patch(
@@ -166,7 +166,7 @@ def test_archive_old_logs_skips_when_disabled():
     ), patch(
         "app.shared.cloud_backends.get_log_archive_storage",
     ) as mock_get_storage, patch(
-        "app.services.log_archive.LogArchiveWriter",
+        "app.core.scheduler.log_archive.LogArchiveWriter",
     ) as mock_writer_cls, patch(
         "app.db.pg_connection.fetchall",
     ) as mock_fetchall, patch(
@@ -193,7 +193,7 @@ def test_archive_old_logs_skips_when_retention_zero():
     ), patch(
         "app.shared.cloud_backends.get_log_archive_storage",
     ) as mock_get_storage, patch(
-        "app.services.log_archive.LogArchiveWriter",
+        "app.core.scheduler.log_archive.LogArchiveWriter",
     ) as mock_writer_cls:
         scheduler._archive_old_logs()
 
@@ -216,7 +216,7 @@ def test_archive_old_logs_24h_gate(monkeypatch):
         "app.shared.cloud_backends.get_log_archive_storage",
         return_value=MagicMock(),
     ), patch(
-        "app.services.log_archive.LogArchiveWriter",
+        "app.core.scheduler.log_archive.LogArchiveWriter",
     ) as mock_writer_cls, patch(
         "app.db.pg_connection.fetchall", new=MagicMock(),
     ), patch(
@@ -256,7 +256,7 @@ def test_archive_old_logs_failure_swallowed(monkeypatch):
         "app.shared.cloud_backends.get_log_archive_storage",
         return_value=MagicMock(),
     ), patch(
-        "app.services.log_archive.LogArchiveWriter",
+        "app.core.scheduler.log_archive.LogArchiveWriter",
     ) as mock_writer_cls, patch(
         "app.db.pg_connection.fetchall", new=MagicMock(),
     ), patch(
@@ -359,7 +359,7 @@ def test_archive_old_audit_actions_invokes_writer_when_enabled(monkeypatch):
         "app.shared.cloud_backends.get_log_archive_storage",
         return_value=mock_storage,
     ), patch(
-        "app.services.log_archive.LogArchiveWriter",
+        "app.core.scheduler.log_archive.LogArchiveWriter",
     ) as mock_writer_cls, patch(
         "app.db.pg_connection.fetchall", new=MagicMock(),
     ), patch(
@@ -407,7 +407,7 @@ def test_archive_old_audit_actions_skips_when_retention_zero():
     ), patch(
         "app.shared.cloud_backends.get_log_archive_storage",
     ) as mock_get_storage, patch(
-        "app.services.log_archive.LogArchiveWriter",
+        "app.core.scheduler.log_archive.LogArchiveWriter",
     ) as mock_writer_cls:
         scheduler._archive_old_audit_actions()
 
@@ -428,7 +428,7 @@ def test_archive_old_audit_actions_24h_gate(monkeypatch):
         "app.shared.cloud_backends.get_log_archive_storage",
         return_value=MagicMock(),
     ), patch(
-        "app.services.log_archive.LogArchiveWriter",
+        "app.core.scheduler.log_archive.LogArchiveWriter",
     ) as mock_writer_cls, patch(
         "app.db.pg_connection.fetchall", new=MagicMock(),
     ), patch(
@@ -468,7 +468,7 @@ def test_select_rows_closure_builds_ordered_query_for_logs():
         "app.shared.cloud_backends.get_log_archive_storage",
         return_value=MagicMock(),
     ), patch(
-        "app.services.log_archive.LogArchiveWriter",
+        "app.core.scheduler.log_archive.LogArchiveWriter",
     ) as mock_writer_cls, patch(
         "app.db.pg_connection.fetchall", new=mock_fetchall,
     ), patch(
@@ -508,7 +508,7 @@ def test_select_rows_closure_builds_ordered_query_for_audit_actions():
         "app.shared.cloud_backends.get_log_archive_storage",
         return_value=MagicMock(),
     ), patch(
-        "app.services.log_archive.LogArchiveWriter",
+        "app.core.scheduler.log_archive.LogArchiveWriter",
     ) as mock_writer_cls, patch(
         "app.db.pg_connection.fetchall", new=mock_fetchall,
     ), patch(
@@ -560,7 +560,7 @@ def test_retention_bypass_execute_closure_sets_local_flag_on_same_cursor():
         "app.shared.cloud_backends.get_log_archive_storage",
         return_value=MagicMock(),
     ), patch(
-        "app.services.log_archive.LogArchiveWriter",
+        "app.core.scheduler.log_archive.LogArchiveWriter",
     ) as mock_writer_cls, patch(
         "app.db.pg_connection.fetchall", new=MagicMock(),
     ), patch(
@@ -630,7 +630,7 @@ def test_archive_old_logs_emits_observability_insert_on_success(monkeypatch):
         "app.shared.cloud_backends.get_log_archive_storage",
         return_value=MagicMock(),
     ), patch(
-        "app.services.log_archive.LogArchiveWriter",
+        "app.core.scheduler.log_archive.LogArchiveWriter",
     ) as mock_writer_cls, patch(
         "app.db.pg_connection.fetchall", new=MagicMock(),
     ), patch(
@@ -721,7 +721,7 @@ def test_archive_old_audit_actions_emits_observability_insert_on_success(
         "app.shared.cloud_backends.get_log_archive_storage",
         return_value=MagicMock(),
     ), patch(
-        "app.services.log_archive.LogArchiveWriter",
+        "app.core.scheduler.log_archive.LogArchiveWriter",
     ) as mock_writer_cls, patch(
         "app.db.pg_connection.fetchall", new=MagicMock(),
     ), patch(
@@ -783,7 +783,7 @@ def test_archive_old_logs_skips_observability_when_gate_early_returns():
     ), patch(
         "app.shared.cloud_backends.get_log_archive_storage",
     ), patch(
-        "app.services.log_archive.LogArchiveWriter",
+        "app.core.scheduler.log_archive.LogArchiveWriter",
     ), patch(
         "app.db.pg_connection.execute", new=mock_pg_execute,
     ):
@@ -802,7 +802,7 @@ def test_archive_old_logs_skips_observability_when_gate_early_returns():
     ), patch(
         "app.shared.cloud_backends.get_log_archive_storage",
     ), patch(
-        "app.services.log_archive.LogArchiveWriter",
+        "app.core.scheduler.log_archive.LogArchiveWriter",
     ), patch(
         "app.db.pg_connection.execute", new=mock_pg_execute,
     ):
@@ -835,7 +835,7 @@ def test_archive_old_logs_skips_observability_when_archive_fails(monkeypatch):
         "app.shared.cloud_backends.get_log_archive_storage",
         return_value=MagicMock(),
     ), patch(
-        "app.services.log_archive.LogArchiveWriter",
+        "app.core.scheduler.log_archive.LogArchiveWriter",
     ) as mock_writer_cls, patch(
         "app.db.pg_connection.fetchall", new=MagicMock(),
     ), patch(
@@ -879,7 +879,7 @@ def test_archive_old_logs_observability_failure_does_not_regress_archive_ok(
         "app.shared.cloud_backends.get_log_archive_storage",
         return_value=MagicMock(),
     ), patch(
-        "app.services.log_archive.LogArchiveWriter",
+        "app.core.scheduler.log_archive.LogArchiveWriter",
     ) as mock_writer_cls, patch(
         "app.db.pg_connection.fetchall", new=MagicMock(),
     ), patch(

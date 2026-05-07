@@ -63,7 +63,7 @@ _CALLSITE_CLASSIFICATION: dict[str, tuple[Classification, str]] = {
         "pending entries pre-commit.",
     ),
 
-    "app/services/log_archive.py": (
+    "app/core/scheduler/log_archive.py": (
         "safe_no_persistent_artifact",
         "ADR-0014 contract: post-upload verify "
         "(list_objects(prefix=key) size>0) BEFORE DELETE of source "

@@ -884,7 +884,7 @@ class PlenoraBeatScheduler(Scheduler):
 
         try:
             from app.shared.cloud_backends import get_log_archive_storage
-            from app.services.log_archive import LogArchiveWriter
+            from app.core.scheduler.log_archive import LogArchiveWriter
             from app.db.pg_connection import fetchall, transaction
 
             cutoff = datetime.now(timezone.utc) - timedelta(days=days)
@@ -1054,7 +1054,7 @@ class PlenoraBeatScheduler(Scheduler):
 
         try:
             from app.shared.cloud_backends import get_log_archive_storage
-            from app.services.log_archive import LogArchiveWriter
+            from app.core.scheduler.log_archive import LogArchiveWriter
             from app.db.pg_connection import fetchall, transaction
 
             cutoff = datetime.now(timezone.utc) - timedelta(days=days)

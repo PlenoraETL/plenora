@@ -1,10 +1,12 @@
 """
-Architecture ledger for remaining legacy import containers.
+Architecture ledger for legacy import containers.
 
-Batch 081 Worker 6: keep `app.services`, `app.db.db_service`, and
-`app.db.config` production import debt measurable by domain. These
-baselines are intentionally exact: new import edges fail, and removed
-edges fail until the baseline is trimmed.
+Batch 081 Worker 6: keep `app.services` and `app.db.config`
+production import debt measurable by domain. Batch 084 Worker 1
+tombstoned `app.db.db_service`: it remains in this ledger only as a
+forbidden zero-baseline container. These baselines are intentionally
+exact: new import edges fail, and removed edges fail until the baseline
+is trimmed.
 """
 
 from __future__ import annotations
@@ -31,11 +33,7 @@ _DOMAINS = (
 
 _LEGACY_IMPORT_BASELINES: dict[str, dict[str, frozenset[str]]] = {
     "app.services": {
-        "projects": frozenset({
-            "app/core/projects/router.py -> app.services.orphan_cleanup_service",
-            "app/core/projects/router.py -> app.services.schema_inference",
-            "app/shared/execution/canvas_columns.py -> app.services.schema_inference",
-        }),
+        "projects": frozenset(),
         "connections": frozenset(),
         "files_storage": frozenset({
             "app/core/files/service.py -> app.services.file_load_dispatch",
@@ -52,9 +50,7 @@ _LEGACY_IMPORT_BASELINES: dict[str, dict[str, frozenset[str]]] = {
             "app/services/file_raw_upload.py -> app.services.file_storage_dispatch",
             "app/services/file_upload.py -> app.services.file_storage_dispatch",
         }),
-        "tasks_orchestration": frozenset({
-            "workers/beat_scheduler.py -> app.services.log_archive",
-        }),
+        "tasks_orchestration": frozenset(),
         "auth_datasources_other": frozenset(),
     },
     "app.db.db_service": {
@@ -66,12 +62,9 @@ _LEGACY_IMPORT_BASELINES: dict[str, dict[str, frozenset[str]]] = {
     },
     "app.db.config": {
         "projects": frozenset({
-            "app/core/intermediate/db.py -> app.db.config.projects",
             "app/core/projects/db.py -> app.db.config.projects",
-            "app/core/projects/repository.py -> app.db.config.projects",
             "app/core/projects/service.py -> app.db.config.comparison_keys",
             "app/core/projects/service.py -> app.db.config.groups",
-            "app/core/projects/service.py -> app.db.config.projects",
             "app/db/config_db_service.py -> app.db.config.projects",
         }),
         "connections": frozenset({
@@ -191,8 +184,9 @@ def test_legacy_container_import_ledger_by_domain(prefix: str):
     """Ratcheting ledger for legacy production import containers.
 
     Existing import edges remain listed to make the debt measurable.
-    New edges fail as new debt. Removed edges also fail so the
-    baseline gets trimmed and the count ratchets downward.
+    For tombstoned containers such as `app.db.db_service`, any edge is
+    forbidden debt. Removed edges also fail so the baseline gets
+    trimmed and the count ratchets downward.
     """
     expected = _LEGACY_IMPORT_BASELINES[prefix]
     found = _scan_legacy_imports(prefix)

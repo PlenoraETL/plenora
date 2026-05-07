@@ -45,13 +45,7 @@ def test_runtime_db_init_preserves_historical_order(monkeypatch):
     ]
 
 
-def test_db_service_init_all_dbs_wrapper_points_at_runtime_boundary():
-    source = (_BACKEND_ROOT / "app" / "db" / "db_service.py").read_text(
-        encoding="utf-8"
-    )
+def test_db_service_init_all_dbs_wrapper_is_tombstoned():
+    facade_path = _BACKEND_ROOT / "app" / "db" / "db_service.py"
 
-    assert (
-        "from app.core.runtime.db_init import init_all_dbs as runtime_init_all_dbs"
-        in source
-    )
-    assert "runtime_init_all_dbs()" in source
+    assert not facade_path.exists()

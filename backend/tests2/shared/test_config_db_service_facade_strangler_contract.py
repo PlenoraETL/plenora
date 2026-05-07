@@ -28,7 +28,6 @@ _FACADE_LEAF = "config_db_service"
 # Paths are POSIX-style relative to the backend root.
 #
 # Entries:
-#   - `app/db/db_service.py`: cross-engine bulk re-export — KEEP_COMPAT.
 #   - `app/db/config/{users,projects,schedules,connections,datasources}.py`:
 #     lazy `_safe_set_clause` import — intentional cycle break.
 #   - `app/core/auth/auth.py`: removed by
@@ -94,8 +93,11 @@ _FACADE_LEAF = "config_db_service"
 #     architecture-guard `pg_connection`-direct-import allowlist
 #     (the leaf owns the `pg_connection.fetchall` call now, so the
 #     router stays compliant with `test_pg_connection_not_imported_from_new_routers`).
+#
+# Removed by BE Parallel Batch 084 Worker 1:
+#   - `app/db/db_service.py` was physically deleted. The stale
+#     `config_db_service` re-export edge is gone and must not return.
 _FACADE_PROD_ALLOWLIST: frozenset[str] = frozenset({
-    "app/db/db_service.py",
     "app/db/config/users.py",
     "app/db/config/projects.py",
     "app/db/config/schedules.py",

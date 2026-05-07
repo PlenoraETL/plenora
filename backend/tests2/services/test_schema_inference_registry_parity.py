@@ -18,7 +18,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent  # .../backend
-_SCHEMA_INFER_PY = _BACKEND_ROOT / "app" / "services" / "schema_inference.py"
+_SCHEMA_INFER_PY = _BACKEND_ROOT / "app" / "core" / "projects" / "schema_inference.py"
 _REGISTRY_JSON = _BACKEND_ROOT / "app" / "core" / "manipola" / "transforms_registry.json"
 
 

@@ -729,7 +729,7 @@ class Settings:
     # Prefisso deterministico delle object key archive. Ops override in
     # env per separare prod/staging/dev (ADR-0014 §A2). Formato: vuoto
     # oppure terminante con "/" (invariante consumato da
-    # app/services/log_archive._build_object_key
+    # app/core/scheduler/log_archive._build_object_key
     @property
     def LOG_ARCHIVE_KEY_PREFIX(self) -> str:
         return self.get("LOG_ARCHIVE_KEY_PREFIX", "logs-archive/") or "logs-archive/"

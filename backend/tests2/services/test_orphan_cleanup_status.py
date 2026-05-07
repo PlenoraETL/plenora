@@ -19,13 +19,13 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 def test_cleanup_orphans_status_clean_when_no_orphans():
     """Scan ok, 0 orfani in entrambi i DB → status='clean', errors=[]."""
-    from app.services.orphan_cleanup_service import cleanup_orphans
+    from app.core.results.orphan_cleanup import cleanup_orphans
 
     with patch(
-        "app.services.orphan_cleanup_service.find_orphan_result_project_ids",
+        "app.core.results.orphan_cleanup.find_orphan_result_project_ids",
         return_value=[]
     ), patch(
-        "app.services.orphan_cleanup_service.find_orphan_run_canvas_ids",
+        "app.core.results.orphan_cleanup.find_orphan_run_canvas_ids",
         return_value=[]
     ):
         report = cleanup_orphans(dry_run=False)
@@ -38,16 +38,16 @@ def test_cleanup_orphans_status_clean_when_no_orphans():
 
 def test_cleanup_orphans_status_clean_when_all_deletes_succeed():
     """Scan trova orfani, delete tutti ok → status='clean'."""
-    from app.services.orphan_cleanup_service import cleanup_orphans
+    from app.core.results.orphan_cleanup import cleanup_orphans
 
     with patch(
-        "app.services.orphan_cleanup_service.find_orphan_result_project_ids",
+        "app.core.results.orphan_cleanup.find_orphan_result_project_ids",
         return_value=["p-orphan-1", "p-orphan-2"]
     ), patch(
-        "app.services.orphan_cleanup_service.find_orphan_run_canvas_ids",
+        "app.core.results.orphan_cleanup.find_orphan_run_canvas_ids",
         return_value=["c-orphan-1"]
     ), patch(
-        "app.db.results_db_service.delete_results_for_project",
+        "app.core.results.orphan_cleanup.delete_results_for_project",
         return_value=3
     ), patch(
         "app.core.intermediate.db.delete_all_runs_for_canvas",
@@ -67,7 +67,7 @@ def test_cleanup_orphans_status_clean_when_all_deletes_succeed():
 def test_cleanup_orphans_status_partial_when_per_pid_delete_fails():
     """Inner per-pid delete solleva su un orfano → status='partial',
     errors non vuoto, gli altri orfani comunque elaborati."""
-    from app.services.orphan_cleanup_service import cleanup_orphans
+    from app.core.results.orphan_cleanup import cleanup_orphans
 
     def flaky_delete_results(pid):
         if pid == "p-broken":
@@ -75,13 +75,13 @@ def test_cleanup_orphans_status_partial_when_per_pid_delete_fails():
         return 5
 
     with patch(
-        "app.services.orphan_cleanup_service.find_orphan_result_project_ids",
+        "app.core.results.orphan_cleanup.find_orphan_result_project_ids",
         return_value=["p-ok-1", "p-broken", "p-ok-2"]
     ), patch(
-        "app.services.orphan_cleanup_service.find_orphan_run_canvas_ids",
+        "app.core.results.orphan_cleanup.find_orphan_run_canvas_ids",
         return_value=[]
     ), patch(
-        "app.db.results_db_service.delete_results_for_project",
+        "app.core.results.orphan_cleanup.delete_results_for_project",
         side_effect=flaky_delete_results
     ):
         report = cleanup_orphans(dry_run=False)
@@ -96,13 +96,13 @@ def test_cleanup_orphans_status_partial_when_per_pid_delete_fails():
 def test_cleanup_orphans_status_partial_when_scan_fails():
     """Outer scan (find_orphan_result_project_ids) solleva → status='partial',
     scan intermediate procede comunque."""
-    from app.services.orphan_cleanup_service import cleanup_orphans
+    from app.core.results.orphan_cleanup import cleanup_orphans
 
     with patch(
-        "app.services.orphan_cleanup_service.find_orphan_result_project_ids",
+        "app.core.results.orphan_cleanup.find_orphan_result_project_ids",
         side_effect=RuntimeError("results DB unreachable")
     ), patch(
-        "app.services.orphan_cleanup_service.find_orphan_run_canvas_ids",
+        "app.core.results.orphan_cleanup.find_orphan_run_canvas_ids",
         return_value=[]
     ):
         report = cleanup_orphans(dry_run=False)
@@ -117,15 +117,15 @@ def test_cleanup_orphans_status_partial_when_scan_fails():
 def test_cleanup_orphans_status_partial_when_both_scans_fail():
     """Entrambi gli outer scan sollevano → status='partial', 2 errors
     distinti, `exc_info=True` sui log [CRASH] (sanity check)."""
-    from app.services.orphan_cleanup_service import cleanup_orphans
+    from app.core.results.orphan_cleanup import cleanup_orphans
 
     with patch(
-        "app.services.orphan_cleanup_service.logger"
+        "app.core.results.orphan_cleanup.logger"
     ) as mock_logger, patch(
-        "app.services.orphan_cleanup_service.find_orphan_result_project_ids",
+        "app.core.results.orphan_cleanup.find_orphan_result_project_ids",
         side_effect=RuntimeError("results DB down")
     ), patch(
-        "app.services.orphan_cleanup_service.find_orphan_run_canvas_ids",
+        "app.core.results.orphan_cleanup.find_orphan_run_canvas_ids",
         side_effect=RuntimeError("intermediate DB down")
     ):
         report = cleanup_orphans(dry_run=False)
@@ -149,18 +149,18 @@ def test_cleanup_orphans_status_partial_when_both_scans_fail():
 def test_cleanup_orphans_final_log_is_warning_when_partial():
     """Il log riassuntivo finale deve essere `logger.warning` quando lo
     status e' 'partial' — rende visibile in alerting un cleanup fallito."""
-    from app.services.orphan_cleanup_service import cleanup_orphans
+    from app.core.results.orphan_cleanup import cleanup_orphans
 
     with patch(
-        "app.services.orphan_cleanup_service.logger"
+        "app.core.results.orphan_cleanup.logger"
     ) as mock_logger, patch(
-        "app.services.orphan_cleanup_service.find_orphan_result_project_ids",
+        "app.core.results.orphan_cleanup.find_orphan_result_project_ids",
         return_value=["p-broken"]
     ), patch(
-        "app.services.orphan_cleanup_service.find_orphan_run_canvas_ids",
+        "app.core.results.orphan_cleanup.find_orphan_run_canvas_ids",
         return_value=[]
     ), patch(
-        "app.db.results_db_service.delete_results_for_project",
+        "app.core.results.orphan_cleanup.delete_results_for_project",
         side_effect=RuntimeError("delete failed")
     ):
         cleanup_orphans(dry_run=False)
@@ -179,15 +179,15 @@ def test_cleanup_orphans_final_log_is_warning_when_partial():
 def test_cleanup_orphans_final_log_is_info_when_clean():
     """Il log riassuntivo finale resta `logger.info` quando status='clean'
     — comportamento invariato rispetto al pre-fix per il caso happy path."""
-    from app.services.orphan_cleanup_service import cleanup_orphans
+    from app.core.results.orphan_cleanup import cleanup_orphans
 
     with patch(
-        "app.services.orphan_cleanup_service.logger"
+        "app.core.results.orphan_cleanup.logger"
     ) as mock_logger, patch(
-        "app.services.orphan_cleanup_service.find_orphan_result_project_ids",
+        "app.core.results.orphan_cleanup.find_orphan_result_project_ids",
         return_value=[]
     ), patch(
-        "app.services.orphan_cleanup_service.find_orphan_run_canvas_ids",
+        "app.core.results.orphan_cleanup.find_orphan_run_canvas_ids",
         return_value=[]
     ):
         cleanup_orphans(dry_run=False)
@@ -216,13 +216,13 @@ def test_cleanup_orphans_report_backward_compat_keys_present():
     """Sanity: chiavi del dict report pre-fix devono restare presenti
     con la stessa forma (dry_run, orphan_results, orphan_runs, errors).
     `status` e' additivo."""
-    from app.services.orphan_cleanup_service import cleanup_orphans
+    from app.core.results.orphan_cleanup import cleanup_orphans
 
     with patch(
-        "app.services.orphan_cleanup_service.find_orphan_result_project_ids",
+        "app.core.results.orphan_cleanup.find_orphan_result_project_ids",
         return_value=[]
     ), patch(
-        "app.services.orphan_cleanup_service.find_orphan_run_canvas_ids",
+        "app.core.results.orphan_cleanup.find_orphan_run_canvas_ids",
         return_value=[]
     ):
         report = cleanup_orphans(dry_run=True)
@@ -239,3 +239,19 @@ def test_cleanup_orphans_report_backward_compat_keys_present():
     assert "errors" in report
     # Chiave nuova additiva
     assert "status" in report
+
+
+def test_orphan_cleanup_service_is_compat_wrapper():
+    """Legacy service import remains a thin wrapper over the result owner."""
+    from app.core.results import orphan_cleanup
+    from app.services import orphan_cleanup_service
+
+    assert orphan_cleanup_service.cleanup_orphans is orphan_cleanup.cleanup_orphans
+    assert (
+        orphan_cleanup_service.find_orphan_result_project_ids
+        is orphan_cleanup.find_orphan_result_project_ids
+    )
+    assert (
+        orphan_cleanup_service.find_orphan_run_canvas_ids
+        is orphan_cleanup.find_orphan_run_canvas_ids
+    )

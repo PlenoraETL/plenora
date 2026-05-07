@@ -15,6 +15,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
+_RESULTS_CLEANUP = _BACKEND_ROOT / "app" / "core" / "results" / "cleanup.py"
 _RESULTS_DB_SERVICE = _BACKEND_ROOT / "app" / "db" / "results_db_service.py"
 _STORAGE_RECONCILIATION = (
     _BACKEND_ROOT / "app" / "shared" / "storage_reconciliation.py"
@@ -56,7 +57,7 @@ def _slice_function(source: str, marker: str) -> str:
 
 def test_delete_result_calls_record_pending_inside_transaction():
     body = _slice_function(
-        _read_source(_RESULTS_DB_SERVICE), "def delete_result("
+        _read_source(_RESULTS_CLEANUP), "def delete_result("
     )
 
     assert "with transaction() as conn:" in body, (
@@ -84,7 +85,7 @@ def test_delete_result_calls_record_pending_inside_transaction():
 
 def test_delete_result_record_pending_precedes_delete_statement():
     body = _slice_function(
-        _read_source(_RESULTS_DB_SERVICE), "def delete_result("
+        _read_source(_RESULTS_CLEANUP), "def delete_result("
     )
 
     record_pending_pos = body.find("record_pending(")
@@ -111,7 +112,7 @@ def test_delete_result_record_pending_precedes_delete_statement():
 
 def test_delete_results_for_project_calls_record_pending_inside_transaction():
     body = _slice_function(
-        _read_source(_RESULTS_DB_SERVICE),
+        _read_source(_RESULTS_CLEANUP),
         "def delete_results_for_project(",
     )
 
@@ -139,7 +140,7 @@ def test_delete_results_for_project_calls_record_pending_inside_transaction():
 
 def test_delete_results_for_project_record_pending_precedes_bulk_delete():
     body = _slice_function(
-        _read_source(_RESULTS_DB_SERVICE),
+        _read_source(_RESULTS_CLEANUP),
         "def delete_results_for_project(",
     )
 
@@ -163,7 +164,7 @@ def test_delete_results_for_project_record_pending_precedes_bulk_delete():
 
 
 def test_delete_result_paths_wire_compensating_delete_and_mark_outcomes():
-    source = _read_source(_RESULTS_DB_SERVICE)
+    source = _read_source(_RESULTS_CLEANUP)
 
     for fn in ("def delete_result(", "def delete_results_for_project("):
         body = _slice_function(source, fn)
@@ -195,6 +196,16 @@ def test_delete_result_paths_wire_compensating_delete_and_mark_outcomes():
 
 
 # 6. Boundary surface preserved
+
+
+def test_results_db_service_reexports_cleanup_delete_surface():
+    source = _read_source(_RESULTS_DB_SERVICE)
+
+    assert "from app.core.results.cleanup import (" in source
+    assert "delete_result," in source
+    assert "delete_results_for_project," in source
+    assert "def delete_result(" not in source
+    assert "def delete_results_for_project(" not in source
 
 
 def test_storage_reconciliation_exposes_record_pending_surface():

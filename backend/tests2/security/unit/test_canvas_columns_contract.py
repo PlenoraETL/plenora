@@ -74,7 +74,7 @@ def test_compute_delegates_to_schema_inference_and_formats_output():
     project_service = MagicMock()
 
     with patch(
-        "app.services.schema_inference.SchemaInferenceService"
+        "app.core.projects.schema_inference.SchemaInferenceService"
     ) as MockService:
         instance = MockService.return_value
         instance._schema_cache = {}
@@ -114,7 +114,7 @@ def test_compute_preserves_user_alias_and_visible_flags():
     project_service = MagicMock()
 
     with patch(
-        "app.services.schema_inference.SchemaInferenceService"
+        "app.core.projects.schema_inference.SchemaInferenceService"
     ) as MockService:
         instance = MockService.return_value
         instance._schema_cache = {}
@@ -145,7 +145,7 @@ def test_compute_handles_inference_exception_gracefully():
     project_service = MagicMock()
 
     with patch(
-        "app.services.schema_inference.SchemaInferenceService"
+        "app.core.projects.schema_inference.SchemaInferenceService"
     ) as MockService:
         instance = MockService.return_value
         instance._schema_cache = {}
@@ -178,7 +178,7 @@ def test_compute_reads_alias_visible_from_data_columns_fallback():
     project_service = MagicMock()
 
     with patch(
-        "app.services.schema_inference.SchemaInferenceService"
+        "app.core.projects.schema_inference.SchemaInferenceService"
     ) as MockService:
         instance = MockService.return_value
         instance._schema_cache = {}

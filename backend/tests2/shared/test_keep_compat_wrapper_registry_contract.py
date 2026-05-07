@@ -81,6 +81,18 @@ _KEEP_COMPAT_WRAPPERS: tuple[KeepCompatWrapper, ...] = (
         canonical_target="app.core.projects.lineage",
     ),
     KeepCompatWrapper(
+        rel_path="app/services/log_archive.py",
+        wrapper="module",
+        owner="ORCHESTRATION_ENGINE",
+        canonical_target="app.core.scheduler.log_archive",
+    ),
+    KeepCompatWrapper(
+        rel_path="app/services/schema_inference.py",
+        wrapper="module",
+        owner="VERSIONING_SNAPSHOT_ENGINE",
+        canonical_target="app.core.projects.schema_inference",
+    ),
+    KeepCompatWrapper(
         rel_path="app/services/task_service.py",
         wrapper="module",
         owner="ORCHESTRATION_ENGINE",

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from app.db.config import projects as project_db
+from app.core.projects import db as project_db
 
 
 class ProjectCanvasKeyRepository(Protocol):
@@ -20,7 +20,7 @@ class ProjectCanvasKeyRepository(Protocol):
 
 
 class DbProjectCanvasKeyRepository:
-    """Default adapter over the existing projects DB leaf."""
+    """Default adapter over the domain-owned projects DB bridge."""
 
     def update_canvas_key(
         self,

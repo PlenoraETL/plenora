@@ -1,47 +1,42 @@
 """
-Results DB Service — accesso a PostgreSQL (ex SQLite results.db).
+Results DB Service - accesso a PostgreSQL (ex SQLite results.db).
 
 Contiene: results (output pipeline). Execution-log ownership lives in
 app.core.orchestrator.execution_logs.
 """
 
-from typing import List, Optional
+from typing import Optional
+
+from app.core.results.cleanup import (
+    delete_result,
+    delete_results_for_project,
+)
 from app.core.results.db import (
     get_latest_result,
     get_result,
     list_results,
     save_result,
 )
-from app.utils.logger import get_logger
+from app.db.pg_connection import close_connection, transaction
 
 
-# Importa tutto da pg_connection
-from app.db.pg_connection import (
-    fetchall,
-    transaction, close_connection,
-)
-
-logger = get_logger(__name__)
-
-
-def init_db():
-    """No-op per PostgreSQL: tabelle già create."""
+def init_db() -> None:
+    """No-op per PostgreSQL: tabelle gia' create."""
     pass
 
 
 # RESULTS
 # KEEP_COMPAT: metadata names are re-exported from app.core.results.db.
-# Blob reads and cleanup remain here until their compatibility surfaces move.
+# Blob reads remain here until their compatibility surface moves.
+# KEEP_COMPAT: cleanup names are re-exported from app.core.results.cleanup.
 
 
 def _s3_download_bytes(storage_key: str) -> Optional[bytes]:
     """Scarica un oggetto S3-backed come bytes. None su errore loggato.
 
-     thin back-compat wrapper su
+    Thin back-compat wrapper su
     ``app.core.resources.loaders.result_blob._download_object_storage``.
-    Le firma e la semantica observable sono invariate (gli stessi log
-    "[PERF] s3_download op=get_bytes" + "[FS-4] S3 download skip"
-    vengono ora emessi dal modulo loader).
+    La firma e la semantica observable sono invariate.
     """
     from app.core.resources.loaders.result_blob import (
         _download_object_storage,
@@ -50,7 +45,9 @@ def _s3_download_bytes(storage_key: str) -> Optional[bytes]:
     return _download_object_storage(storage_key)
 
 
-def get_result_data(result_id: str, group_id: str = None) -> Optional[bytes]:
+def get_result_data(
+    result_id: str, group_id: Optional[str] = None
+) -> Optional[bytes]:
     """Compatibility wrapper for the canonical result blob boundary.
 
     Production callers should import
@@ -60,178 +57,3 @@ def get_result_data(result_id: str, group_id: str = None) -> Optional[bytes]:
     from app.core.results.blob import get_result_data as _get_result_data
 
     return _get_result_data(result_id, group_id=group_id)
-
-
-def delete_result(result_id: str) -> bool:
-    """Elimina result. Se S3-backed, pulisce anche l'oggetto S3 (best-effort).
-
-    Flow ( — W1 race coverage):
-
-      1. `transaction`: SELECT storage_key + DELETE row + (se
-         S3-backed) `record_pending` ⇒ tutto atomico.
-      2. Commit (uscita CM): row DB sparita + entry pending nel
-         reconciliation log.
-      3. `compensating_delete` (best-effort, fuori transazione).
-      4. Outcome:
-         - `ok`/`skipped` ⇒ `mark_done(reconciliation_ref.id)`;
-         - `failed` ⇒ `mark_failed_attempt(...)` ⇒ il reconciler
-           beat hook  re-tenterà
-           secondo backoff esponenziale, fino a `mark_lost`.
-
-    ADR-0011 contract preservato: storage failure NON propaga; la
-    row DB resta cancellata. La differenza vs pre-e' che
-    l'orphan e' ora **tracked** + retry-able.
-
-    Backward-compat: row con `storage_key=None` (BYTEA legacy) salta
-    `record_pending` e il post-commit cleanup — comportamento
-    invariato.
-    """
-    storage_key_to_clean = None
-    deleted = False
-    reconciliation_ref = None
-
-    with transaction() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT storage_key FROM results WHERE id = %s FOR UPDATE",
-                (result_id,),
-            )
-            row = cur.fetchone()
-            storage_key = row["storage_key"] if row else None
-
-            if storage_key:
-                storage_key_to_clean = storage_key
-                # record cleanup intent
-                # inside the same transaction as the DELETE. Commit
-                # advances both atomically; if a process death follows
-                # the commit before the post-commit storage call, the
-                # pending row is the only application-side trace of
-                # the orphan. Order canonical W1 (allineato a
-                # `delete_file_source`): record_pending PRECEDE DELETE
-                from app.shared.storage_reconciliation import (
-                    record_pending,
-                )
-                reconciliation_ref = record_pending(
-                    cur,
-                    domain="result_blob",
-                    storage_key=storage_key,
-                    operation="delete",
-                    reason="row_delete_post_commit",
-                    extras={"result_id": result_id},
-                )
-
-            cur.execute("DELETE FROM results WHERE id = %s", (result_id,))
-            deleted = cur.rowcount > 0
-
-    if deleted and storage_key_to_clean:
-        from app.shared.storage_compensation import compensating_delete
-        outcome = compensating_delete(
-            storage_key_to_clean,
-            domain="result_blob",
-            reason="row_delete_post_commit",
-            extras={"result_id": result_id},
-            logger=logger,
-        )
-        if reconciliation_ref is not None:
-            from app.shared.storage_reconciliation import (
-                mark_done,
-                mark_failed_attempt,
-            )
-            if outcome in ("ok", "skipped"):
-                mark_done(reconciliation_ref.id)
-            else:
-                mark_failed_attempt(
-                    reconciliation_ref.id,
-                    error=f"compensating_delete_outcome={outcome}",
-                )
-
-    return deleted
-
-
-def delete_results_for_project(project_id: str) -> int:
-    """Elimina tutti i risultati di un progetto. Ritorna il numero di
-    righe eliminate.
-
-    Flow : pattern bulk W1.
-      1. Pre-fetch `(id, storage_key)` di tutti gli S3-backed.
-      2. `transaction`: per ognuno `record_pending` + DELETE row.
-      3. Post-commit: per ogni reconciliation_ref, `compensating_delete`
-         + `mark_done`/`mark_failed_attempt` per outcome.
-
-    L'INSERT N pending + DELETE all WHERE project_id=? e' atomico: o
-    si committano TUTTE le pending entries con la cancellazione, o
-    nessuna (rollback). Cosi' il reconciler beat hook puo' coprire
-    la finestra "DB committed → process death → S3 orphan" anche
-    sulla bulk path.
-
-    ADR-0011 preservato: storage failure NON propaga. Il caller
-    riceve sempre il `rowcount` finale.
-    """
-    # Pre-fetch storage_keys + result_id prima del DELETE cascata
-    rows = [
-        r for r in fetchall(
-            "SELECT id, storage_key FROM results "
-            "WHERE project_id = ? AND storage_key IS NOT NULL",
-            (project_id,),
-        )
-        if r.get("storage_key")
-    ]
-
-    deleted_count = 0
-    # storage_key, result_id, reconciliation_id) per il post-commit
-    pending_cleanups: List[tuple] = []
-
-    with transaction() as conn:
-        with conn.cursor() as cur:
-            if rows:
-                from app.shared.storage_reconciliation import (
-                    record_pending,
-                )
-                for r in rows:
-                    ref = record_pending(
-                        cur,
-                        domain="result_blob",
-                        storage_key=r["storage_key"],
-                        operation="delete",
-                        reason="row_delete_post_commit",
-                        extras={
-                            "result_id": r["id"],
-                            "project_id": project_id,
-                        },
-                    )
-                    pending_cleanups.append(
-                        (r["storage_key"], r["id"], ref.id)
-                    )
-
-            cur.execute(
-                "DELETE FROM results WHERE project_id = %s", (project_id,)
-            )
-            deleted_count = cur.rowcount
-
-    # Cleanup S3 dopo DELETE ok (anche se uno fallisce, altri provano
-    if pending_cleanups:
-        from app.shared.storage_compensation import compensating_delete
-        from app.shared.storage_reconciliation import (
-            mark_done,
-            mark_failed_attempt,
-        )
-        for storage_key, result_id, reconciliation_id in pending_cleanups:
-            outcome = compensating_delete(
-                storage_key,
-                domain="result_blob",
-                reason="row_delete_post_commit",
-                extras={
-                    "result_id": result_id,
-                    "project_id": project_id,
-                },
-                logger=logger,
-            )
-            if outcome in ("ok", "skipped"):
-                mark_done(reconciliation_id)
-            else:
-                mark_failed_attempt(
-                    reconciliation_id,
-                    error=f"compensating_delete_outcome={outcome}",
-                )
-
-    return deleted_count

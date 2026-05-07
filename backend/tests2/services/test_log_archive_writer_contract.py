@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from app.services.log_archive import (
+from app.core.scheduler.log_archive import (
     _MAX_BATCH_SEQ,
     LogArchiveWriter,
     _build_object_key,
@@ -26,7 +26,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
 # Keyset canonici in ordine; devono combaciare con quelli privati in
-# `app.services.log_archive`. La duplicazione qui e' intenzionale: il
+# `app.core.scheduler.log_archive`. La duplicazione qui e' intenzionale: il
 # test e' un contratto pubblico dello shape, non deve importare la
 # costante interna (altrimenti il test si allinea automaticamente a
 # eventuali drift del modulo).

@@ -94,7 +94,7 @@ def _patch_cascade(
             "app.core.intermediate.db.delete_all_runs_for_canvas",
             **intermediate_patch
         ), patch(
-            "app.db.results_db_service.delete_results_for_project",
+            "app.core.results.cleanup.delete_results_for_project",
             **results_patch
         ), patch(
             "app.db.config.comparison_keys.delete_comparison_keys",

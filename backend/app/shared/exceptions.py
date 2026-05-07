@@ -169,7 +169,7 @@ class ProjectCleanupPartialError(Exception):
 
     Step critici (falliscono → fail-closed):
       - `intermediate_runs`: `app.core.intermediate.db.delete_all_runs_for_canvas`
-      - `results_blobs`: `app.db.results_db_service.delete_results_for_project`
+      - `results_blobs`: `app.core.results.cleanup.delete_results_for_project`
 
     Step derivati (falliscono → tolerati, non bloccano):
       - `schedules_orphan`: `ScheduleService.mark_as_orphan`

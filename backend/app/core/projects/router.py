@@ -51,7 +51,7 @@ def init_projects(project_service: Any) -> None:
     global _project_service, _schema_service, _validator
     _project_service = project_service
     # Inizializza anche schema inference
-    from app.services.schema_inference import SchemaInferenceService, ConnectionValidator
+    from app.core.projects.schema_inference import SchemaInferenceService, ConnectionValidator
     _schema_service = SchemaInferenceService(project_service)
     _validator = ConnectionValidator(_schema_service)
 
@@ -888,7 +888,7 @@ def admin_cleanup_orphans(
 
     Returns: report dettagliato con conteggi e lista project_id rimossi.
     """
-    from app.services.orphan_cleanup_service import cleanup_orphans
+    from app.core.results.orphan_cleanup import cleanup_orphans
     logger.info(
         f"admin_cleanup_orphans avviato da {current_user.user_id} "
         f"(dry_run={dry_run})",
