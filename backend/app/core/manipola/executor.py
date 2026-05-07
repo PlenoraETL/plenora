@@ -25,7 +25,7 @@ from app.utils.dataframe import (
 from app.utils.geo import detect_geometry_column
 from app.utils.template_variables import process_static_fields
 from .plugin_executor import get_executor
-from .source_loading import load_file_sources
+from .source_loading import load_file_sources, load_project_source_artifact
 
 
 logger = get_logger(__name__)
@@ -248,6 +248,7 @@ class ManipolaExecutor:
         logger.info(f"Esecuzione MANIPOLA: {project_id}", op="execute", project_id=project_id)
 
         executing_group_id = self._init_security_context(project_id, strict=True)
+        canvas_graph = CanvasGraph.from_canvas(canvas)
 
         # C3 round 3 fix 3: push del project_id sulla chain di
         # esecuzione corrente. _carica_sorgenti_progetto verifica la
@@ -299,6 +300,7 @@ class ManipolaExecutor:
         try:
             current_df = self._applica_trasformazioni(
                 canvas, dataframes, run_id=run_id,
+                canvas_graph=canvas_graph,
                 intermediate_mode_override=intermediate_mode_override,
             )
         except ValueError as e:
@@ -344,7 +346,9 @@ class ManipolaExecutor:
             except Exception as _iex:
                 logger.warning(f"Intermediate write result node fallita (non bloccante): {_iex}")
 
-        save_result = self._salva_risultato(project_id, result_node, current_df, canvas)
+        save_result = self._salva_risultato(
+            project_id, result_node, current_df, canvas, canvas_graph=canvas_graph
+        )
 
         # Allinea columns_metadata del progetto allo schema reale del
         # DataFrame finale: senza, l'output file resta corretto ma il
@@ -386,6 +390,7 @@ class ManipolaExecutor:
             executing_group_id = self._init_security_context(
                 project_id, strict=False
             )
+            canvas_graph = CanvasGraph.from_canvas(canvas)
 
             dataframes = {}
             # stesso tenant
@@ -404,7 +409,9 @@ class ManipolaExecutor:
             if not dataframes:
                 return {"success": False, "message": "Nessun dato sorgente disponibile"}
 
-            current_df = self._applica_trasformazioni(canvas, dataframes)
+            current_df = self._applica_trasformazioni(
+                canvas, dataframes, canvas_graph=canvas_graph
+            )
             if current_df is None:
                 return {"success": False, "message": "Nessun dato prodotto dalla pipeline"}
 
@@ -416,7 +423,9 @@ class ManipolaExecutor:
             truncated = total_count > limit
             preview_df = current_df.head(limit)
 
-            canvas_type_map = self._costruisci_mappa_tipi_canvas(canvas)
+            canvas_type_map = self._costruisci_mappa_tipi_canvas(
+                canvas, canvas_graph=canvas_graph
+            )
             columns = self._costruisci_colonne_con_tipi(preview_df, canvas_type_map)
             rows = sanitize_for_json(preview_df.to_dict(orient='records'))
 
@@ -525,13 +534,15 @@ class ManipolaExecutor:
 
                 if materialized is not None:
                     try:
-                        with materialized as m:
-                            df = load_dataframe_from_file(m.path)
                         node_columns = _nf(node, 'columns', [])
-                        df = filter_visible_columns(df, node_columns)
-                        df = df.loc[:, ~df.columns.duplicated(keep='first')]
-                        df = _applica_crs_da_colonne(df, node_columns)
-                        dataframes[node.id] = df
+                        with materialized as m:
+                            loaded = load_project_source_artifact(
+                                m.path,
+                                node_columns,
+                                source_project_id=source_project_id,
+                                group_id=executing_group_id,
+                            )
+                        dataframes[node.id] = loaded.data
                         continue
                     except Exception as e:
                         logger.warning(f"Errore cache: {e}, procedo con ricalcolo")
@@ -659,13 +670,15 @@ class ManipolaExecutor:
                 return {"success": False, "message": f"Risultato upstream non trovato per: {source_project_id}"}
 
             try:
-                with materialized as m:
-                    df = load_dataframe_from_file(m.path)
                 node_columns = _nf(node, 'columns', [])
-                df = filter_visible_columns(df, node_columns)
-                df = df.loc[:, ~df.columns.duplicated(keep='first')]
-                df = _applica_crs_da_colonne(df, node_columns)
-                dataframes[node.id] = df
+                with materialized as m:
+                    loaded = load_project_source_artifact(
+                        m.path,
+                        node_columns,
+                        source_project_id=source_project_id,
+                        group_id=executing_group_id,
+                    )
+                dataframes[node.id] = loaded.data
             except Exception as e:
                 return {"success": False, "message": f"Errore progetto {source_project_id}: {e}"}
 
@@ -771,6 +784,7 @@ class ManipolaExecutor:
         canvas: CanvasState,
         dataframes: Dict[str, pd.DataFrame],
         run_id: Optional[str] = None,
+        canvas_graph: Optional[CanvasGraph] = None,
         intermediate_mode_override: Optional[str] = None,
     ) -> Optional[pd.DataFrame]:
         """
@@ -784,11 +798,16 @@ class ManipolaExecutor:
         if not process_nodes:
             return self._gestisci_join_default(dataframes)
         
-        # Ordina topologicamente i nodi
-        sorted_nodes = self._ordina_topologicamente(process_nodes, canvas.edges)
+        node_map = {node.id: node for node in process_nodes}
+        sorted_node_ids = kahn_topological_order(
+            [node.id for node in process_nodes],
+            [(edge.source, edge.target) for edge in canvas.edges],
+            on_cycle="raise",
+        )
+        sorted_nodes = [node_map[node_id] for node_id in sorted_node_ids]
         
         current_df = None
-        graph = CanvasGraph.from_nodes_edges(canvas.nodes, [])
+        graph = canvas_graph or CanvasGraph.from_canvas(canvas)
 
         # Helper per estrarre targetHandle dall'edge (da attributo o da ID
         def get_target_handle(edge: Edge) -> Optional[str]:
@@ -864,40 +883,7 @@ class ManipolaExecutor:
                     logger.warning(f"Intermediate write nodo {node.id} fallita (non bloccante): {_iex}")
 
         return current_df
-    
-    def _ordina_topologicamente(
-        self,
-        nodes: List[Node],
-        edges: List[Edge],
-    ) -> List[Node]:
-        """Ordina i nodi in ordine topologico (Kahn's algorithm). Rileva cicli.
 
-        Kahn implementation moved to the shared leaf
-        ``app.shared.execution.graph.kahn_topological_order``. This method
-        is the Manipola canvas adapter: it extracts ``.id`` from
-        the typed node objects + ``.source`` / ``.target`` from
-        the typed edge objects and forwards to the pure utility
-        with ``on_cycle='raise'`` (legacy shape: ``ValueError``
-        with the canonical Italian message). The shared utility's
-        :class:`GraphCycleError` subclasses ``ValueError`` so any
-        existing caller that catches ``ValueError`` keeps working
-        and the message text is preserved verbatim.
-
-         removed dead ``dataframes`` param.
-        Import moved to module level.
-        """
-        node_ids = [n.id for n in nodes]
-        node_map = {n.id: n for n in nodes}
-        edge_pairs = [(edge.source, edge.target) for edge in edges]
-
-        # ``on_cycle='raise'`` -> GraphCycleError (subclass of
-        # ValueError) with the verbatim Italian operator message
-        sorted_ids = kahn_topological_order(
-            node_ids, edge_pairs, on_cycle="raise",
-        )
-
-        return [node_map[nid] for nid in sorted_ids]
-    
     def _esegui_multi_join(self, node: Node, inputs: List[pd.DataFrame]) -> pd.DataFrame:
         """
         Esegue multi-join su N DataFrame.
@@ -1127,6 +1113,7 @@ class ManipolaExecutor:
         result_node: Node,
         df: pd.DataFrame,
         canvas: Optional[CanvasState] = None,
+        canvas_graph: Optional[CanvasGraph] = None,
     ) -> Dict[str, Any]:
         """Salva il risultato finale nel formato richiesto."""
         filename = _nf(result_node, 'fileName', 'output')
@@ -1138,7 +1125,7 @@ class ManipolaExecutor:
 
         crs = "EPSG:4326"
         if canvas:
-            srid = self._estrai_srid_da_canvas(canvas)
+            srid = self._estrai_srid_da_canvas(canvas, canvas_graph=canvas_graph)
             if srid:
                 crs = f"EPSG:{srid}"
 
@@ -1177,7 +1164,12 @@ class ManipolaExecutor:
         except Exception as e:
             return {"success": False, "message": f"Errore salvataggio: {e}"}
 
-    def _estrai_srid_da_canvas(self, canvas: CanvasState) -> Optional[int]:
+    def _estrai_srid_da_canvas(
+        self,
+        canvas: CanvasState,
+        *,
+        canvas_graph: Optional[CanvasGraph] = None,
+    ) -> Optional[int]:
         """Estrae primo SRID da tipi geometry nel canvas via ResourceMetadata.
 
          Parses canvas once through CanvasGraph so
@@ -1186,7 +1178,7 @@ class ManipolaExecutor:
         Manipola-specific logic added to it.
         """
         from app.shared.resources.metadata import ResourceMetadata
-        graph = CanvasGraph.from_nodes_edges(canvas.nodes, [])
+        graph = canvas_graph or CanvasGraph.from_canvas(canvas)
         for cn in graph.nodes:
             raw = cn.get_field('columns')
             if not raw:
@@ -1205,11 +1197,17 @@ class ManipolaExecutor:
 
     # MAPPA TIPI CANVAS
 
-    def _costruisci_mappa_tipi_canvas(self, canvas: CanvasState) -> Dict[str, str]:
+    def _costruisci_mappa_tipi_canvas(
+        self,
+        canvas: CanvasState,
+        *,
+        canvas_graph: Optional[CanvasGraph] = None,
+    ) -> Dict[str, str]:
         """Costruisce mappa colonna->tipo dal canvas. Include suffissi _L/_R per JOIN."""
         type_map: Dict[str, str] = {}
-        for node in canvas.nodes:
-            columns = getattr(node, 'columns', None) or (node.data.get('columns') if node.data else None)
+        graph = canvas_graph or CanvasGraph.from_canvas(canvas)
+        for node in graph.nodes:
+            columns = node.get_field('columns')
             if columns:
                 for col in columns:
                     if isinstance(col, dict):
@@ -1224,7 +1222,7 @@ class ManipolaExecutor:
                     if original_name and original_name != column_name:
                         type_map[original_name] = type_map[f"{original_name}_L"] = type_map[f"{original_name}_R"] = column_type
 
-            calculated = getattr(node, 'calculated_columns', None)
+            calculated = node.get_field('calculated_columns')
             if calculated:
                 for calc in calculated:
                     column_name = calc.get("name") if isinstance(calc, dict) else getattr(calc, 'name', None)

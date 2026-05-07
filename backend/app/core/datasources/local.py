@@ -308,7 +308,7 @@ class LocalDataSource(DataSourceInterface):
           - verifica che il risultato sia contenuto dentro root_path
 
         Il check di containment (resolve + relative_to) e' delegato a
-        `app.shared.path_policy.assert_path_within` (R#4 cleanup).
+        `app.shared.resources.path_policy.assert_path_within` (R#4 cleanup).
         I check su path assoluti / drive letter restano inline perche'
         sono regole specifiche di questa datasource (le altre whitelist
         accettano path assoluti dentro RESULTS_DIR/TEMP_DIR/etc).
@@ -317,7 +317,7 @@ class LocalDataSource(DataSourceInterface):
         di uscire dalla root configurata.
         """
         from pathlib import Path as _Path
-        from app.shared.path_policy import assert_path_within
+        from app.shared.resources.path_policy import assert_path_within
 
         root = self.config.root_path.rstrip("/\\")
         root_abs = _Path(root).resolve()

@@ -130,7 +130,7 @@ def test_reset_password_nonsuperadmin_user_not_found_returns_403(monkeypatch):
     from app.core.auth import users_router as users_mod
     from app.shared.contracts.auth import ResetPasswordRequest
 
-    monkeypatch.setattr(users_mod.db, "get_user", lambda uid: None)
+    monkeypatch.setattr(users_mod._users_dal, "get_user", lambda uid: None)
 
     data = ResetPasswordRequest(new_password="newsecret12345")
     with pytest.raises(HTTPException) as excinfo:
@@ -147,7 +147,7 @@ def test_reset_password_nonsuperadmin_user_other_group_returns_403(monkeypatch):
     from app.shared.contracts.auth import ResetPasswordRequest
 
     other_user = {"id": "x", "group_id": "g_other", "username": "x", "is_active": True}
-    monkeypatch.setattr(users_mod.db, "get_user", lambda uid: other_user)
+    monkeypatch.setattr(users_mod._users_dal, "get_user", lambda uid: other_user)
 
     data = ResetPasswordRequest(new_password="newsecret12345")
     with pytest.raises(HTTPException) as excinfo:
@@ -161,7 +161,7 @@ def test_reset_password_superadmin_user_not_found_returns_404(monkeypatch):
     from app.core.auth import users_router as users_mod
     from app.shared.contracts.auth import ResetPasswordRequest
 
-    monkeypatch.setattr(users_mod.db, "get_user", lambda uid: None)
+    monkeypatch.setattr(users_mod._users_dal, "get_user", lambda uid: None)
 
     data = ResetPasswordRequest(new_password="newsecret12345")
     with pytest.raises(HTTPException) as excinfo:
@@ -173,7 +173,7 @@ def test_delete_user_nonsuperadmin_user_not_found_returns_403(monkeypatch):
     """delete-user: stesso pattern di reset-password."""
     from app.core.auth import users_router as users_mod
 
-    monkeypatch.setattr(users_mod.db, "get_user", lambda uid: None)
+    monkeypatch.setattr(users_mod._users_dal, "get_user", lambda uid: None)
 
     with pytest.raises(HTTPException) as excinfo:
         users_mod.delete_user("nonexistent", _admin_user())
@@ -184,7 +184,7 @@ def test_delete_user_nonsuperadmin_user_other_group_returns_403(monkeypatch):
     from app.core.auth import users_router as users_mod
 
     other_user = {"id": "x", "group_id": "g_other", "username": "x", "is_active": True}
-    monkeypatch.setattr(users_mod.db, "get_user", lambda uid: other_user)
+    monkeypatch.setattr(users_mod._users_dal, "get_user", lambda uid: other_user)
 
     with pytest.raises(HTTPException) as excinfo:
         users_mod.delete_user("x", _admin_user())

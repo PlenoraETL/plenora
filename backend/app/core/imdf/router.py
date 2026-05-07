@@ -16,7 +16,7 @@ from app.core.auth.ownership import assert_resource_visible
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 from app.shared.audit_action import audit_action
-from app.shared.path_policy import validate_imdf_task_id
+from app.shared.resources.path_policy import validate_imdf_task_id
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -27,7 +27,7 @@ router = APIRouter(prefix="/imdf", tags=["imdf"])
 # ══════════════════════════════════════════════════════════════════════
 # VALIDAZIONE PATH TRAVERSAL
 # ══════════════════════════════════════════════════════════════════════
-# Regex + path-traversal guard centralizzati in `app.shared.path_policy
+# Regex + path-traversal guard centralizzati in `app.shared.resources.path_policy
 # validate_imdf_task_id` (D3 commit 1). Il wrapper locale resta per
 # tradurre `ValueError` in `HTTPException 400` preservando la signature
 # attesa dai call site interni del router

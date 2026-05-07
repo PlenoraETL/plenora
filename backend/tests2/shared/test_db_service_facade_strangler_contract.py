@@ -56,11 +56,12 @@ _FACADE_FILE = "app/db/db_service.py"
 #       `workers/tasks/schedule_task.py`,
 #       `workers/tasks/carica_task.py`.
 #
-#   - Auth surface (4 files):
-#       `app/core/auth/auth.py`,
-#       `app/core/auth/ownership.py`,
+#   - Auth surface (1 file):
 #       `app/core/auth/shares_router.py`,
-#       `app/core/auth/users_router.py`.
+#     `app/core/auth/auth.py`, `app/core/auth/ownership.py`, and
+#     `app/core/auth/users_router.py` were migrated by BE-ARCH-068-W5
+#     to the narrow `app.db.config.users` / `app.db.config.groups`
+#     leaves.
 #     `app/core/auth/dependencies.py` was migrated by Worker 3 of
 #     this batch (BE-GO-READY-AUTH-ENGINE-014 -- "Auth Dependencies
 #     Off db_service"); the AST scan confirms zero remaining
@@ -115,11 +116,8 @@ _DB_SERVICE_PROD_ALLOWLIST: frozenset[str] = frozenset({
     "app/core/arricchisci/api_connection_rest_file.py",
     "app/core/arricchisci/api_connector.py",
     "app/core/arricchisci/canvas_orchestrator.py",
-    # Auth surface — Worker 2 owns extraction.
-    "app/core/auth/auth.py",
-    "app/core/auth/ownership.py",
+    # Auth sharing surface: generic shareable-resource lookup via raw SQL.
     "app/core/auth/shares_router.py",
-    "app/core/auth/users_router.py",
     # Datasources service — many cluster-specific calls; deferred.
     "app/core/datasources/service.py",
     # Scheduler cluster — complex orchestration; deferred.

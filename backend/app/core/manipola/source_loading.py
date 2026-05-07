@@ -5,16 +5,67 @@ Manipola source-loading helpers — separation slice.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from pathlib import Path
+from typing import Any, Dict, Optional, Sequence
 
 from app.utils.dataframe import filter_visible_columns
 from app.utils.logger import get_logger
+from app.shared.resources.metadata import LoadedResource, ResourceMetadata
 
 
-__all__ = ["load_file_sources"]
+__all__ = ["load_file_sources", "load_project_source_artifact"]
 
 
 _DEFAULT_LOGGER = get_logger(__name__)
+
+
+def _metadata_columns_from_node_columns(
+    node_columns: Sequence[Any] | None,
+) -> list[dict[str, str]]:
+    columns: list[dict[str, str]] = []
+    for col in node_columns or []:
+        if isinstance(col, dict):
+            name = col.get("alias") or col.get("name", "")
+            col_type = col.get("type", "")
+        else:
+            name = getattr(col, "alias", None) or getattr(col, "name", "")
+            col_type = getattr(col, "type", "")
+        if name:
+            columns.append({"name": str(name), "type": str(col_type or "")})
+    return columns
+
+
+def load_project_source_artifact(
+    path: Path,
+    node_columns: Sequence[dict[str, Any]] | None,
+    *,
+    source_project_id: str,
+    group_id: str,
+) -> LoadedResource:
+    """Load one materialized ``project_source`` artifact with metadata.
+
+    The returned ``LoadedResource`` keeps the DataFrame paired with the
+    ``ResourceMetadata`` derived at the loader boundary. This preserves the
+    legacy DataFrame/CRS behavior while avoiding a second metadata guess in
+    ``_applica_crs_da_colonne``.
+    """
+    from app.core.manipola.executor import (
+        _applica_crs_da_colonne,
+        load_dataframe_from_file,
+    )
+
+    df = load_dataframe_from_file(path)
+    data = filter_visible_columns(df, node_columns)
+    data = data.loc[:, ~data.columns.duplicated(keep="first")]
+    metadata = ResourceMetadata.from_columns_list(
+        _metadata_columns_from_node_columns(node_columns),
+        source_kind="project",
+        row_count=len(data),
+        group_id=group_id,
+        project_id=source_project_id,
+    )
+    data = _applica_crs_da_colonne(data, node_columns, meta=metadata)
+    return LoadedResource(data=data, metadata=metadata)
 
 
 def load_file_sources(
@@ -113,11 +164,7 @@ def load_file_sources(
                     "type": getattr(c, "type", ""),
                     "visible": getattr(c, "visible", True),
                 })
-        _meta_input = [
-            {"name": c.get("alias") or c.get("name", ""), "type": c.get("type", "")}
-            for c in node_columns_normalized
-            if c.get("alias") or c.get("name")
-        ]
+        _meta_input = _metadata_columns_from_node_columns(node_columns_normalized)
 
         try:
             loaded = loader.load_with_metadata(

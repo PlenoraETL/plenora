@@ -60,7 +60,11 @@ class ExecutionResult:
 
         Non-dict input produces a failed result (mirrors
         ``PipelineArtifact.from_executor_result`` semantics for non-dict).
+        Native ``ExecutionResult`` input is returned unchanged so callers can
+        migrate executor/service boundaries without taking a dict detour.
         """
+        if isinstance(d, cls):
+            return d
         if not isinstance(d, dict):
             return cls(success=False, message="result non strutturato")
         return cls(
@@ -125,18 +129,18 @@ class CanvasExecutorProtocol(Protocol):
         result = executors[module_type].execute(project_id, canvas)
 
 
-    - ``execute`` returns ``{"success": bool, ...}`` dict and never
-      raises for domain failures (auth, validation, empty data). Only
-      infrastructure errors (OOM, unhandled crash) propagate as
-      exceptions.
+    - ``execute`` returns ``ExecutionResult`` or transitional
+      ``{"success": bool, ...}`` dict and never raises for domain failures
+      (auth, validation, empty data). Only infrastructure errors (OOM,
+      unhandled crash) propagate as exceptions.
     - ``preview`` never persists output; always truncates to
       ``limit`` rows.
     - Both methods are synchronous (Celery worker context).
     - Return dict shape: ``success``, ``message`` / ``error`` keys
       for failures. Engines differ on ``message`` vs ``error`` key
       name; ``ExecutionResult.from_executor_dict`` normalises both.
-    - Target return type is ``ExecutionResult``; current impls still
-      return ``Dict[str, Any]`` - wrap at the orchestrator boundary.
+    - Target return type is ``ExecutionResult``; current impls may still
+      return ``Dict[str, Any]`` - normalize at the orchestrator boundary.
     """
 
     def execute(
@@ -145,7 +149,7 @@ class CanvasExecutorProtocol(Protocol):
         canvas: "CanvasState",
         run_id: Optional[str] = None,
         intermediate_mode_override: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    ) -> "ExecutionResult | Dict[str, Any]":
         """Run the full pipeline: load sources -> process -> persist result.
 
         Returns ``{"success": True, ...}`` on success or

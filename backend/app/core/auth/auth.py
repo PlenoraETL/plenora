@@ -19,7 +19,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 # su un environment in cui il .env non è ancora stato applicato
 import app.config  # noqa: F401
 from app.config import settings as _settings
-import app.db.db_service as db
+import app.db.config.users as db
 from app.core.auth import disclosure as _disclosure
 from app.shared import error_codes
 from app.shared.audit_action import audit_action

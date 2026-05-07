@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from app.shared.path_policy import assert_path_within
+from app.shared.resources.path_policy import assert_path_within
 
 
 pytestmark = [

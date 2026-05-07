@@ -154,9 +154,10 @@ def test_load_file_sources_reapplies_crs_from_node_columns_metadata():
     })
     captured = {}
 
-    def _fake_apply_crs(d, cols):
+    def _fake_apply_crs(d, cols, meta=None):
         captured["called"] = True
         captured["columns"] = cols
+        captured["meta"] = meta
         return d  # sentinella, non importa il return
 
     with patch("app.shared.sharing.is_resource_visible", return_value=True), \
@@ -177,6 +178,8 @@ def test_load_file_sources_reapplies_crs_from_node_columns_metadata():
     assert any(
         c.get("type", "").startswith("geometry") for c in captured["columns"]
     )
+    assert captured["meta"] is not None
+    assert captured["meta"].geometry_column == "geom"
 
 
 # TE-007/008/009 — ctx-strict: explicit group_id is the only channel

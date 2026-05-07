@@ -142,6 +142,8 @@ def op_fill_na(
                     )
                 else:
                     fill_for_col = value
+                if fill_for_col is None:
+                    continue
                 result[col] = s.fillna(fill_for_col)
 
         logger.info(f"Fill NA: column={column}, method={method}, value={value}")

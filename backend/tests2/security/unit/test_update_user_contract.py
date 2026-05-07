@@ -55,15 +55,19 @@ def mock_db(monkeypatch):
     from app.core.auth import users_router as users_mod
 
     target = _target_user()
-    monkeypatch.setattr(users_mod.db, "get_user", lambda uid: target)
+    monkeypatch.setattr(users_mod._users_dal, "get_user", lambda uid: target)
     # update_user: echo dei campi modificati sul target
     def _upd(uid, **fields):
         result = dict(target)
         result.update(fields)
         return result
-    monkeypatch.setattr(users_mod.db, "update_user", _upd)
+    monkeypatch.setattr(users_mod._users_dal, "update_user", _upd)
     # get_group: sempre esistente
-    monkeypatch.setattr(users_mod.db, "get_group", lambda gid: {"id": gid, "name": "fake"})
+    monkeypatch.setattr(
+        users_mod._groups_dal,
+        "get_group",
+        lambda gid: {"id": gid, "name": "fake"},
+    )
     return users_mod
 
 
@@ -177,7 +181,11 @@ def test_update_user_denies_cross_group_access(monkeypatch):
     from app.core.auth import users_router as users_mod
 
     target_in_other_group = _target_user(group_id="gruppo_b", user_id="usr_b")
-    monkeypatch.setattr(users_mod.db, "get_user", lambda uid: target_in_other_group)
+    monkeypatch.setattr(
+        users_mod._users_dal,
+        "get_user",
+        lambda uid: target_in_other_group,
+    )
 
     admin_of_a = _admin_user(group_id="gruppo_a")
     with pytest.raises(HTTPException) as exc:

@@ -187,7 +187,7 @@ def test_helper_fail_closes_without_explicit_group_id():
 
 def test_helper_passes_explicit_group_id_to_source_loader():
     """End-to-end through the helper: the `group_id` argument is
-    passed verbatim to ``SourceLoader.load(... expected_group_id=...)``.
+    passed verbatim to ``SourceLoader.load_with_metadata(... expected_group_id=...)``.
     No transformation, no fallback. Patches the SourceLoader so
     we can capture the call without exercising the loader's full
     chain."""
@@ -201,13 +201,22 @@ def test_helper_passes_explicit_group_id_to_source_loader():
     captured: list[str] = []
 
     class _StubLoader:
-        def load(self, ref, expected_group_id):
+        def load_with_metadata(
+            self,
+            ref,
+            *,
+            expected_group_id,
+            columns_metadata=None,
+            is_superadmin=False,
+        ):
+            from app.shared.resources.metadata import LoadedResource
+
             captured.append(expected_group_id)
             # Return a tiny pandas DataFrame so the rest of the
             # helper's body does not blow up on the missing CRS
             # path.
             import pandas as pd
-            return pd.DataFrame({"a": [1]})
+            return LoadedResource(data=pd.DataFrame({"a": [1]}), metadata=None)
 
     # Patch BOTH the artifacts symbol the helper imports lazily AND
     # the executor-side helpers used by the helper. Substituting
@@ -223,7 +232,7 @@ def test_helper_passes_explicit_group_id_to_source_loader():
     assert result is None  # success
     assert captured == ["grp-explicit"], (
         "The helper must pass the caller's `group_id` verbatim to "
-        "`SourceLoader.load(expected_group_id=...)`. Got: "
+        "`SourceLoader.load_with_metadata(expected_group_id=...)`. Got: "
         f"{captured!r}."
     )
 

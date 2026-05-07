@@ -154,6 +154,44 @@ def test_orchestrator_execute_pipeline_passes_through_via_execution_result():
     assert artifact["format"] == "csv"
 
 
+def test_orchestrator_execute_pipeline_accepts_native_execution_result_without_to_dict(monkeypatch):
+    """execute_pipeline keeps native ExecutionResult through the service boundary."""
+    from app.core.orchestrator.service import OrchestratorService
+
+    def fail_to_dict(_result: ExecutionResult) -> dict[str, object]:
+        raise AssertionError("orchestrator service called ExecutionResult.to_dict()")
+
+    monkeypatch.setattr(ExecutionResult, "to_dict", fail_to_dict)
+
+    mock_ps = MagicMock()
+    mock_ps.get_project_metadata.return_value = MagicMock(project_type="estrai")
+    mock_ps.get_project_canvas.return_value = MagicMock()
+
+    native_result = ExecutionResult(
+        success=True,
+        message="ok",
+        payload={"result_id": "res-native-service", "rows_count": 11},
+    )
+
+    svc = OrchestratorService(
+        project_service=mock_ps,
+        executor=MagicMock(),
+        generator=MagicMock(),
+        connection_service=MagicMock(),
+    )
+    svc.estrai_executor = MagicMock()
+    svc.estrai_executor.execute.return_value = native_result
+    svc._find_all_carica_nodes = MagicMock(return_value=[])
+
+    artifact = svc.execute_pipeline("proj-native-service")
+
+    assert ExecutionResult.from_executor_dict(native_result) is native_result
+    assert artifact.success is True
+    assert artifact.message == "ok"
+    assert artifact.result_id == "res-native-service"
+    assert artifact["rows_count"] == 11
+
+
 def test_pipeline_artifact_consumes_execution_result_without_to_dict(monkeypatch):
     """Internal artifact factory consumes ExecutionResult natively."""
     from app.core.artifacts.types import PipelineArtifact

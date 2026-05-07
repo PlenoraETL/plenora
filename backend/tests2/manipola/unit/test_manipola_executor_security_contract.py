@@ -6,9 +6,11 @@ Locks backend contracts and regression boundaries for the current architecture.
 
 from unittest.mock import patch
 
+import pandas as pd
 import pytest
 
 from app.core.manipola.executor import ManipolaExecutor
+from app.models import CanvasState
 from tests2.helpers.builders import build_canvas, build_node
 
 
@@ -158,3 +160,64 @@ def test_preview_passes_group_id_explicitly_to_source_loaders():
         "to _carica_sorgenti_progetto (TE-009 ctx-strict). "
         f"Got: {captured['group_id']!r}"
     )
+
+
+def test_preview_builds_canvas_graph_once_at_intake_boundary():
+    """Preview parses the canvas once via CanvasGraph.from_canvas and passes
+    the parsed graph to local transform/type helpers."""
+    from app.shared.execution.canvas_graph import CanvasGraph
+
+    executor = ManipolaExecutor(project_service=object())
+    canvas = CanvasState(
+        nodes=[
+            {
+                "id": "src",
+                "type": "staticValues",
+                "position": {"x": 0, "y": 0},
+                "fields": [{"name": "a", "value": "1"}],
+                "columns": [{"name": "a", "type": "int"}],
+            },
+            {
+                "id": "res",
+                "type": "result",
+                "position": {"x": 200, "y": 0},
+                "format": "csv",
+            },
+        ],
+        edges=[],
+    )
+    parsed_graph = CanvasGraph.from_canvas(canvas)
+    df = pd.DataFrame({"a": [1]})
+
+    from_canvas_calls = {"count": 0}
+
+    def _from_canvas_once(arg):
+        from_canvas_calls["count"] += 1
+        assert arg is canvas
+        return parsed_graph
+
+    def _load_static(_canvas, dataframes, **_kwargs):
+        dataframes["src"] = df
+        return None
+
+    with patch(
+        "app.db.config.projects.get_project",
+        return_value={"id": "proj-cur", "group_id": "grp-A"},
+    ), patch(
+        "app.core.manipola.executor.CanvasGraph.from_canvas",
+        side_effect=_from_canvas_once,
+    ), patch.object(
+        executor, "_carica_sorgenti_progetto", return_value=None,
+    ), patch.object(
+        executor, "_carica_sorgenti_file", return_value=None,
+    ), patch.object(
+        executor, "_carica_sorgenti_statiche", side_effect=_load_static,
+    ), patch.object(
+        executor, "_applica_trasformazioni", return_value=df,
+    ) as transform_spy:
+        result = executor.preview("proj-cur", canvas, limit=10)
+
+    assert result["success"] is True
+    assert from_canvas_calls["count"] == 1
+    assert transform_spy.call_args.kwargs["canvas_graph"] is parsed_graph
+    assert result["columns"] == [{"name": "a", "type": "int"}]

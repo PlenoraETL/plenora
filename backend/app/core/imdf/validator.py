@@ -129,10 +129,10 @@ def validate_publish(
 
     # Validazione bundle_task_id contro path traversal. Il router chiama gia'
     # `_safe_bundle_dir`, ma difesa in profondita' nel modulo validator
-    # Utility condivisa in app.shared.path_policy (D3 commit 1): regex +
+    # Utility condivisa in app.shared.resources.path_policy (D3 commit 1): regex +
     # path-traversal guard centralizzati. Il validator traduce ValueError
     # in un issue con code INVALID_BUNDLE_ID (shape report preservata
-    from app.shared.path_policy import validate_imdf_task_id
+    from app.shared.resources.path_policy import validate_imdf_task_id
     _root = settings.IMDF_BUNDLES_DIR.resolve()
     try:
         bundle_dir: Path = validate_imdf_task_id(bundle_task_id, _root)

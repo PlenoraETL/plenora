@@ -320,3 +320,42 @@ def test_arricchisci_dict_adapter_matches_legacy_chain_behavior():
         node_ids, edge_pairs, on_cycle="truncate",
     )
     assert order == ["A", "B", "C"]
+
+
+def test_manipola_transform_path_uses_shared_graph_directly():
+    """Manipola must not reintroduce a private topological-sort wrapper for
+    transform execution ordering."""
+    import ast
+    from pathlib import Path
+
+    backend_root = Path(__file__).resolve().parent.parent.parent
+    src = (
+        backend_root / "app" / "core" / "manipola" / "executor.py"
+    ).read_text(encoding="utf-8")
+    tree = ast.parse(src)
+
+    method_names = {
+        node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)
+    }
+    assert "_ordina_topologicamente" not in method_names
+
+    transform_method = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_applica_trasformazioni"
+    )
+    graph_calls = [
+        node
+        for node in ast.walk(transform_method)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "kahn_topological_order"
+    ]
+    assert len(graph_calls) == 1
+    assert any(
+        keyword.arg == "on_cycle"
+        and isinstance(keyword.value, ast.Constant)
+        and keyword.value.value == "raise"
+        for keyword in graph_calls[0].keywords
+    )

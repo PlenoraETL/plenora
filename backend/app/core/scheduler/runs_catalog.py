@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from app.shared.path_policy import assert_path_within
+from app.shared.resources.path_policy import assert_path_within
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)

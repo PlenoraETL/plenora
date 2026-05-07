@@ -37,7 +37,7 @@ _ALLOWED_ROOT_MODULES: frozenset[str] = frozenset(
         "token_blacklist",    # JWT revocation store
         "upload_guards",      # upload size / MIME type enforcement
         "cloud_backends",          # object storage backend registry
-        "file_helpers",            # path / mime utilities
+        "file_helpers",            # pandas-backed file inspection helpers
         "memory_guard",            # per-tenant memory allocation guard
         "storage_compensation",    # object-storage failure compensation helpers
         "storage_dispatch",        # storage backend routing
@@ -49,7 +49,6 @@ _ALLOWED_ROOT_MODULES: frozenset[str] = frozenset(
         "clock",                       # wall-clock abstraction for testability
         "external_artifact_processor", # cross-domain artifact post-processing helpers
         "idempotency",                 # idempotency key helpers
-        "path_policy",                 # canonical path/slug policy
     }
 )
 

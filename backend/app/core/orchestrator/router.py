@@ -263,7 +263,7 @@ def download_project_result(
         if file:
             if not results_dir.exists():
                 raise HTTPException(404, f"File '{file}' non trovato per progetto '{project_id}'")
-            from app.shared.path_policy import assert_path_within
+            from app.shared.resources.path_policy import assert_path_within
             safe_name = Path(file).name
             try:
                 target = assert_path_within(

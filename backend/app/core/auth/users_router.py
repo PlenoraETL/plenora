@@ -21,7 +21,8 @@ from app.core.auth.roles import ROLES_ADMIN_OR_ABOVE, VALID_ROLES
 from app.shared.audit_action import audit_action
 from app.shared.password_hashing import hash_password
 
-import app.db.db_service as db
+from app.db.config import groups as _groups_dal
+from app.db.config import users as _users_dal
 
 
 __all__ = ["users_router"]
@@ -59,10 +60,9 @@ def list_users(current_user: CurrentUser = Depends(require_admin)):
     admin → solo utenti del proprio gruppo
     """
     if current_user.role == "superadmin":
-        from app.db.config.users import list_all_users
-        users = list_all_users()
+        users = _users_dal.list_all_users()
     else:
-        users = db.list_users(current_user.group_id)
+        users = _users_dal.list_users(current_user.group_id)
     return [UserResponse(**{k: u[k] for k in UserResponse.model_fields if k in u}) for u in users]
 
 
@@ -91,12 +91,12 @@ def create_user(data: UserCreate, current_user: CurrentUser = Depends(require_ad
     if len(data.password) < 12:
         raise HTTPException(status_code=400, detail="La password deve essere lunga almeno 12 caratteri")
 
-    existing = db.get_user_by_username(data.username)
+    existing = _users_dal.get_user_by_username(data.username)
     if existing:
         _disclosure.raise_disclosure(_disclosure.username_already_exists())
 
     user_id = f"usr_{uuid.uuid4().hex[:12]}"
-    user = db.create_user(
+    user = _users_dal.create_user(
         user_id=user_id, username=data.username,
         password_hash=hash_password(data.password),
         group_id=data.group_id, email=data.email, role=data.role,
@@ -121,7 +121,7 @@ def update_user(user_id: str, data: dict,
       - Verifica esistenza group_id se passato
       - Self-demotion: un utente non può modificare il proprio ruolo né disabilitare se stesso
     """
-    target = db.get_user(user_id)
+    target = _users_dal.get_user(user_id)
     if not target:
         _disclosure.raise_disclosure(_disclosure.user_not_found())
     if current_user.role != "superadmin" and target.get("group_id") != current_user.group_id:
@@ -171,7 +171,7 @@ def update_user(user_id: str, data: dict,
         if not isinstance(fields["group_id"], str) or not fields["group_id"]:
             raise HTTPException(status_code=400, detail="group_id deve essere una stringa non vuota")
         # Verifica che il gruppo esista — evita di mettere utenti in gruppi orfani
-        if not db.get_group(fields["group_id"]):
+        if not _groups_dal.get_group(fields["group_id"]):
             raise HTTPException(status_code=400, detail=f"Gruppo '{fields['group_id']}' non trovato")
 
     # Self-demotion guard: un utente non può abbassarsi i privilegi né disabilitarsi
@@ -181,7 +181,7 @@ def update_user(user_id: str, data: dict,
         if "is_active" in fields and fields["is_active"] is False:
             _disclosure.raise_disclosure(_disclosure.self_disable_denied())
 
-    updated = db.update_user(user_id, **fields)
+    updated = _users_dal.update_user(user_id, **fields)
     if not updated:
         _disclosure.raise_disclosure(_disclosure.user_not_found())
     return UserResponse(**{k: updated[k] for k in UserResponse.model_fields if k in updated})
@@ -196,7 +196,7 @@ def reset_password(user_id: str, data: ResetPasswordRequest,
     superadmin → qualsiasi utente
     admin → solo utenti del proprio gruppo
     """
-    target = db.get_user(user_id)
+    target = _users_dal.get_user(user_id)
     # C10: response uniforme 403 per admin non-superadmin, sia che
     # l'utente non esista sia che esista ma fuori dal gruppo. Evita
     # user enumeration (admin malevolo non puo' distinguere i due
@@ -218,7 +218,7 @@ def reset_password(user_id: str, data: ResetPasswordRequest,
     if len(data.new_password) < 12:
         raise HTTPException(status_code=400, detail="La password deve essere lunga almeno 12 caratteri")
 
-    db.update_user_password(user_id, hash_password(data.new_password))
+    _users_dal.update_user_password(user_id, hash_password(data.new_password))
     return {"ok": True}
 
 
@@ -233,7 +233,7 @@ def delete_user(user_id: str, current_user: CurrentUser = Depends(require_admin)
     if user_id == current_user.user_id:
         _disclosure.raise_disclosure(_disclosure.self_delete_denied())
 
-    target = db.get_user(user_id)
+    target = _users_dal.get_user(user_id)
     # C10: stesso pattern di reset-password — anti-enum #3 invariant
     if not target or (
         current_user.role != "superadmin"
@@ -245,5 +245,5 @@ def delete_user(user_id: str, current_user: CurrentUser = Depends(require_admin)
             )
         )
 
-    if not db.delete_user(user_id):
+    if not _users_dal.delete_user(user_id):
         _disclosure.raise_disclosure(_disclosure.user_not_found())

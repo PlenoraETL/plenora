@@ -145,22 +145,22 @@ class OrchestratorService:
             )
 
         if metadata.project_type == "estrai":
-            _raw = self.estrai_executor.execute(
+            executor_result = self.estrai_executor.execute(
                 project_id, canvas, run_id=run_id,
                 intermediate_mode_override=intermediate_mode_override,
             )
         elif metadata.project_type == "manipola":
-            _raw = self.manipola_executor.execute(
+            executor_result = self.manipola_executor.execute(
                 project_id, canvas, force_recalculate, run_id=run_id,
                 intermediate_mode_override=intermediate_mode_override,
             )
         else:  # "arricchisci" — already validated by dispatch guard above
-            _raw = self.enrich_executor.execute(
+            executor_result = self.enrich_executor.execute(
                 project_id, canvas, force_recalculate, run_id=run_id,
                 intermediate_mode_override=intermediate_mode_override,
             )
 
-        exec_result = ExecutionResult.from_executor_dict(_raw)
+        exec_result = ExecutionResult.from_executor_dict(executor_result)
         artifact = PipelineArtifact.from_execution_result(exec_result, project_id=project_id)
 
         # Se la pipeline ha avuto successo, controlla se c'è un nodo CARICA

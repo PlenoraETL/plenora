@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from fastapi import HTTPException
 
-import app.db.db_service as db
+import app.db.config.users as _users_dal
 from app.core.auth import disclosure as _disclosure
 from app.core.auth.roles import ROLES_ADMIN_OR_ABOVE
 from app.shared.contracts.auth import CurrentUser
@@ -92,7 +92,7 @@ def compute_can_edit(
         created_by = getattr(resource, "created_by", None)
 
     if created_by and created_by != current_user.user_id:
-        creator = db.get_user(created_by)
+        creator = _users_dal.get_user(created_by)
         if creator and creator.get("role") == "superadmin":
             return False
 
@@ -137,7 +137,7 @@ def assert_can_modify(
 
     if created_by and created_by != current_user.user_id:
         # Lookup live del ruolo del creator
-        creator = db.get_user(created_by)
+        creator = _users_dal.get_user(created_by)
         if creator and creator.get("role") == "superadmin":
             _disclosure.raise_disclosure(
                 _disclosure.hierarchical_owner_required(label)

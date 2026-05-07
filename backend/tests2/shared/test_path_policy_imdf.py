@@ -1,5 +1,5 @@
 """
-Contract test — app/shared/path_policy.validate_imdf_task_id (D3 commit 1).
+Contract test — app/shared/resources/path_policy.validate_imdf_task_id (D3 commit 1).
 
 Centralizza la validazione formato bundle_task_id + path traversal guard
 """
@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from app.shared.path_policy import validate_imdf_task_id
+from app.shared.resources.path_policy import validate_imdf_task_id
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]

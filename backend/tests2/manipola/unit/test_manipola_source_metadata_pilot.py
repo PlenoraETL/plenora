@@ -234,3 +234,54 @@ def test_metadata_map_accepts_object_columns():
     assert result is None
     assert metadata_map["node-1"].geometry_column == "geom_alias"
     assert metadata_map["node-1"].crs_epsg == 4326
+
+
+def test_project_source_artifact_loader_returns_resource_metadata():
+    """Project-source artifacts carry ResourceMetadata at the loader boundary."""
+    from pathlib import Path
+
+    from app.core.manipola import source_loading as sl
+    from app.shared.resources.metadata import LoadedResource, ResourceMetadata
+
+    df = pd.DataFrame({"geom_raw": ["POINT (0 0)"], "id": [1]})
+    node_columns = [
+        {
+            "name": "geom_raw",
+            "alias": "geom_alias",
+            "type": "geometry:point:32632",
+            "visible": True,
+        },
+        {"name": "id", "type": "int", "visible": True},
+    ]
+    captured: dict = {}
+
+    def _spy_apply(data, columns, meta=None):
+        captured["data_columns"] = list(data.columns)
+        captured["columns"] = columns
+        captured["meta"] = meta
+        return data
+
+    with patch(
+        "app.core.manipola.executor.load_dataframe_from_file",
+        return_value=df,
+    ), patch(
+        "app.core.manipola.executor._applica_crs_da_colonne",
+        side_effect=_spy_apply,
+    ):
+        loaded = sl.load_project_source_artifact(
+            Path("ignored.csv"),
+            node_columns,
+            source_project_id="proj-up",
+            group_id="grp-1",
+        )
+
+    assert isinstance(loaded, LoadedResource)
+    assert isinstance(loaded.metadata, ResourceMetadata)
+    assert loaded.metadata.source_kind == "project"
+    assert loaded.metadata.project_id == "proj-up"
+    assert loaded.metadata.group_id == "grp-1"
+    assert loaded.metadata.geometry_column == "geom_alias"
+    assert loaded.metadata.crs_epsg == 32632
+    assert loaded.metadata.row_count == 1
+    assert captured["meta"] is loaded.metadata
+    assert captured["data_columns"] == ["geom_alias", "id"]

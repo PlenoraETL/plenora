@@ -13,11 +13,11 @@ from typing import Any, Dict, Optional
 from celery import current_task
 
 from app.config import settings
-from app.shared.path_policy import validate_imdf_task_id
+from app.shared.resources.path_policy import validate_imdf_task_id
 from app.utils.logger import get_logger
 from workers.celery_app import celery_app
 
-# Regex + path-traversal guard centralizzati in `app.shared.path_policy
+# Regex + path-traversal guard centralizzati in `app.shared.resources.path_policy
 # validate_imdf_task_id` (D3 commit 1). Il wrapper locale preserva la
 # signature `Optional[Path]` attesa dal caller task (None su id malformato
 

@@ -180,9 +180,9 @@ def test_auth_module_imports_users_router_after_dependencies():
     assert idx_users_router_import > 0, (
         "Atteso: `from app.core.auth.users_router import ...` in auth.py."
     )
-    # `require_admin` definita come `def require_admin(...)`, deve
-    # apparire PRIMA dell'import del modulo nuovo.
-    idx_require_admin = src.find("def require_admin(")
+    # `require_admin` is re-exported from the dependencies leaf before
+    # importing the users router to avoid circular imports.
+    idx_require_admin = src.find("require_admin,")
     assert 0 < idx_require_admin < idx_users_router_import, (
         "REGRESSIONE: `require_admin` deve essere definita prima "
         "dell'import di `users_router` per evitare circular import."

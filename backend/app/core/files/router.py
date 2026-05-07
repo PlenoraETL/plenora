@@ -111,7 +111,7 @@ from app.core.auth.ownership import (
     compute_can_edit,
 )
 from app.shared.sharing import visible_resource_ids
-from app.shared.path_policy import assert_path_within as _core_assert
+from app.shared.resources.path_policy import assert_path_within as _core_assert
 from .models import (
     FileSource,
     FileSourceList,

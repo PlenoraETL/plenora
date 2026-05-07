@@ -431,7 +431,7 @@ class ArtifactResolver:
         self, *, output_path: str, project_id: str
     ) -> MaterializedArtifact:
         from app.config import settings
-        from app.shared.path_policy import assert_path_within
+        from app.shared.resources.path_policy import assert_path_within
 
         if not output_path:
             raise ArtifactResolutionError("output_path vuoto")
