@@ -1,0 +1,793 @@
+......s....s............................................................ [  4%]
+.........F...........................F..F.F..FFFF............FFF........ [  8%]
+...........................................................FFFFFF....... [ 12%]
+......FFFF......FFFFFF.................................................. [ 16%]
+........................................................................ [ 20%]
+........................................................................ [ 24%]
+........................................................................ [ 28%]
+.......................F.F.............................................F [ 32%]
+........................................................................ [ 36%]
+........................................................................ [ 40%]
+...FFFF..........................FF................................FFFFF [ 44%]
+F........................FFFFFFFFF.......F.F.FFFF.FFFFF..FFFFFFFF.FFFFFF [ 48%]
+FF.FF.......................FFF.FFFF.F.................................. [ 52%]
+........................................................................ [ 56%]
+........................................................................ [ 60%]
+..............................................................FFF....... [ 64%]
+......................................FF................................ [ 68%]
+........................................................................ [ 72%]
+........................................................................ [ 77%]
+........................................................................ [ 81%]
+........................................................................ [ 85%]
+................................................................FFFF.... [ 89%]
+.............F.......................................................... [ 93%]
+.......EEEEEEEE................F...F.................................... [ 97%]
+................................................                         [100%]
+==================================== ERRORS ====================================
+_______________ ERROR at setup of test_debt_section_22_1_exists ________________
+/app/tests2/shared/test_storage_upload_intent_debt_doc_guard.py:33: in audit_text
+    ???
+/usr/local/lib/python3.11/pathlib.py:1058: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/pathlib.py:1044: in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   FileNotFoundError: [Errno 2] No such file or directory: '/workspace/.agent-temp/BE_STORAGE_ENGINE_AUDIT.md'
+______ ERROR at setup of test_debt_section_names_upload_intent_canonical _______
+/app/tests2/shared/test_storage_upload_intent_debt_doc_guard.py:33: in audit_text
+    ???
+/usr/local/lib/python3.11/pathlib.py:1058: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/pathlib.py:1044: in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   FileNotFoundError: [Errno 2] No such file or directory: '/workspace/.agent-temp/BE_STORAGE_ENGINE_AUDIT.md'
+___ ERROR at setup of test_debt_section_documents_both_target_architectures ____
+/app/tests2/shared/test_storage_upload_intent_debt_doc_guard.py:33: in audit_text
+    ???
+/usr/local/lib/python3.11/pathlib.py:1058: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/pathlib.py:1044: in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   FileNotFoundError: [Errno 2] No such file or directory: '/workspace/.agent-temp/BE_STORAGE_ENGINE_AUDIT.md'
+____ ERROR at setup of test_debt_section_status_flag_is_accepted_mitigated _____
+/app/tests2/shared/test_storage_upload_intent_debt_doc_guard.py:33: in audit_text
+    ???
+/usr/local/lib/python3.11/pathlib.py:1058: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/pathlib.py:1044: in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   FileNotFoundError: [Errno 2] No such file or directory: '/workspace/.agent-temp/BE_STORAGE_ENGINE_AUDIT.md'
+________ ERROR at setup of test_debt_section_names_both_closure_streams ________
+/app/tests2/shared/test_storage_upload_intent_debt_doc_guard.py:33: in audit_text
+    ???
+/usr/local/lib/python3.11/pathlib.py:1058: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/pathlib.py:1044: in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   FileNotFoundError: [Errno 2] No such file or directory: '/workspace/.agent-temp/BE_STORAGE_ENGINE_AUDIT.md'
+_________ ERROR at setup of test_debt_section_preserves_hard_non_goal __________
+/app/tests2/shared/test_storage_upload_intent_debt_doc_guard.py:33: in audit_text
+    ???
+/usr/local/lib/python3.11/pathlib.py:1058: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/pathlib.py:1044: in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   FileNotFoundError: [Errno 2] No such file or directory: '/workspace/.agent-temp/BE_STORAGE_ENGINE_AUDIT.md'
+_______ ERROR at setup of test_debt_section_lists_concrete_debt_reasons ________
+/app/tests2/shared/test_storage_upload_intent_debt_doc_guard.py:33: in audit_text
+    ???
+/usr/local/lib/python3.11/pathlib.py:1058: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/pathlib.py:1044: in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   FileNotFoundError: [Errno 2] No such file or directory: '/workspace/.agent-temp/BE_STORAGE_ENGINE_AUDIT.md'
+______________ ERROR at setup of test_debt_section_is_ascii_only _______________
+/app/tests2/shared/test_storage_upload_intent_debt_doc_guard.py:33: in audit_text
+    ???
+/usr/local/lib/python3.11/pathlib.py:1058: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/pathlib.py:1044: in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   FileNotFoundError: [Errno 2] No such file or directory: '/workspace/.agent-temp/BE_STORAGE_ENGINE_AUDIT.md'
+=================================== FAILURES ===================================
+__________ test_assert_file_source_access_rejects_invisible_resource ___________
+/app/tests2/shared/test_authz_helpers_contract.py:123: in test_assert_file_source_access_rejects_invisible_resource
+    ???
+E   assert 404 == 403
+E    +  where 404 = HTTPException(status_code=404, detail="File source 'fs-1' non trovato").status_code
+E    +    where HTTPException(status_code=404, detail="File source 'fs-1' non trovato") = <ExceptionInfo HTTPException(status_code=404, detail="File source 'fs-1' non trovato") tblen=2>.value
+----------------------------- Captured stdout call -----------------------------
+[36m09:53:00 | INFO  | app.db.pg_connection | PG pool inizializzato: 2-12 conn (per-process), schema=plenora, idle_in_trans_timeout=300000ms, aggregato stimato ~24 conn (2 proc × 12) [uvicorn=1 + celery=0 + beat=1][0m
+___________________ test_blob_consumer_inventory_is_complete ___________________
+/app/tests2/shared/test_blob_consumer_memory_audit.py:166: in test_blob_consumer_inventory_is_complete
+    ???
+E   AssertionError: New blob-consumer call sites are not inventoried. Each MUST be classified explicitly:
+E       app/core/imdf/storage.py:212 (join_body_inline)
+E     Add to `_BLOB_CONSUMER_INVENTORY` with (risk, payload_class, user_controlled, cap_setting, rationale).
+E   assert not {('app/core/imdf/storage.py', 212)}
+_____________ test_bootstrap_invokes_four_steps_in_canonical_order _____________
+/app/tests2/shared/test_bootstrap_contract.py:97: in test_bootstrap_invokes_four_steps_in_canonical_order
+    ???
+E   AssertionError: Unexpected boot order: []
+E   assert [] == ['validate_st...opg2_ssl_env']
+E     
+E     Right contains 4 more items, first extra item: 'validate_startup'
+E     Use -v to get more diff
+_________________ test_ssl_env_cleanup_runs_after_init_all_dbs _________________
+/app/tests2/shared/test_bootstrap_contract.py:170: in test_ssl_env_cleanup_runs_after_init_all_dbs
+    ???
+E   ValueError: 'init_all_dbs:exit' is not in list
+_________________________ test_bootstrap_is_idempotent _________________________
+/app/tests2/shared/test_bootstrap_contract.py:260: in test_bootstrap_is_idempotent
+    ???
+E   AssertionError: assert {'init_all_db...ge_config': 0} == {'init_all_db...ge_config': 2}
+E     
+E     Differing items:
+E     {'validate_storage_config': 0} != {'validate_storage_config': 2}
+E     {'init_all_dbs': 0} != {'init_all_dbs': 2}
+E     {'validate_startup': 0} != {'validate_startup': 2}
+E     {'ssl_repair': 0} != {'ssl_repair': 2}
+E     Use -v to get more diff
+____________ test_bootstrap_propagates_validate_startup_systemexit _____________
+/app/tests2/shared/test_bootstrap_contract.py:294: in test_bootstrap_propagates_validate_startup_systemexit
+    ???
+E   Failed: DID NOT RAISE <class 'SystemExit'>
+________________ test_bootstrap_propagates_storage_config_error ________________
+/app/tests2/shared/test_bootstrap_contract.py:327: in test_bootstrap_propagates_storage_config_error
+    ???
+E   Failed: DID NOT RAISE <class 'app.shared.cloud_backends.StorageConfigError'>
+_________________ test_bootstrap_propagates_init_all_dbs_error _________________
+/app/tests2/shared/test_bootstrap_contract.py:359: in test_bootstrap_propagates_init_all_dbs_error
+    ???
+E   Failed: DID NOT RAISE <class 'shared.test_bootstrap_contract.test_bootstrap_propagates_init_all_dbs_error.<locals>._FakeDBError'>
+________ test_is_bootstrapped_flips_to_true_after_successful_bootstrap _________
+/app/tests2/shared/test_bootstrap_dependency_graph_lock.py:242: in test_is_bootstrapped_flips_to_true_after_successful_bootstrap
+    ???
+E   assert False is True
+E    +  where False = <function is_bootstrapped at 0x7f0fc9b43880>()
+E    +    where <function is_bootstrapped at 0x7f0fc9b43880> = bootstrap_module.is_bootstrapped
+______________ test_is_bootstrapped_stays_false_when_step_raises _______________
+/app/tests2/shared/test_bootstrap_dependency_graph_lock.py:269: in test_is_bootstrapped_stays_false_when_step_raises
+    ???
+E   Failed: DID NOT RAISE <class 'RuntimeError'>
+____ test_is_bootstrapped_recovers_to_true_on_retry_after_transient_failure ____
+/app/tests2/shared/test_bootstrap_dependency_graph_lock.py:303: in test_is_bootstrapped_recovers_to_true_on_retry_after_transient_failure
+    ???
+E   Failed: DID NOT RAISE <class 'RuntimeError'>
+_______________________ test_design_section_12_7_exists ________________________
+/app/tests2/shared/test_celery_beat_tick_smoke_design_guard.py:64: in test_design_section_12_7_exists
+    ???
+E   AssertionError: docs/ops/install-non-docker.md must contain section 12.7 with header '### 12.7 Real beat tick smoke (DESIGN, NOT IMPLEMENTED)'. The section is the contract surface for the (still-missing) beat tick smoke; deleting it without delivering the smoke silently closes the gap and leaves the cleanroom blind to beat scheduler regressions.
+E   assert '### 12.7 Real beat tick smoke (DESIGN, NOT IMPLEMENTED)' in '# Clean Install, Non-Docker\n\nThis is the canonical single-machine install path for Plenora.\n\nTarget: fresh Ubuntu...ails before `/health`;\n- `/ready` returns 503;\n- `cleanroom.ping` times out;\n- frontend cannot reach the backend.\n'
+________________ test_design_section_names_canonical_primitive _________________
+/app/tests2/shared/test_celery_beat_tick_smoke_design_guard.py:75: in test_design_section_names_canonical_primitive
+    ???
+E   AssertionError: Section 12.7 must name the canonical primitive 'cleanroom.beat_ping'. The future CI workflow step will send to this exact name; renaming the primitive in docs without coordinating INSTALLATION-021 breaks the closure path.
+E   assert 'cleanroom.beat_ping' in ''
+__________ test_design_section_calls_out_in_process_heartbeat_finding __________
+/app/tests2/shared/test_celery_beat_tick_smoke_design_guard.py:91: in test_design_section_calls_out_in_process_heartbeat_finding
+    ???
+E   AssertionError: Section 12.7 must reference _write_heartbeat - the audit finding that the production beat heartbeat runs in-process (not as a Celery task) is the reason the standard AsyncResult-based smoke pattern does not apply directly.
+E   assert '_write_heartbeat' in ''
+_____________ test_design_section_documents_bounded_smoke_pattern ______________
+/app/tests2/shared/test_celery_beat_tick_smoke_design_guard.py:126: in test_design_section_documents_bounded_smoke_pattern
+    ???
+E   AssertionError: Section 12.7 must require an env-gated opt-in to prevent production beat from firing the cleanroom task.
+E   assert 'PLENORA_CLEANROOM_BEAT_PING' in ''
+_______________ test_design_section_explains_why_separate_stream _______________
+/app/tests2/shared/test_celery_beat_tick_smoke_design_guard.py:132: in test_design_section_explains_why_separate_stream
+    ???
+E   AssertionError: Section 12.7 must explain WHY beat tick smoke cannot land in 019 (banned: broad production schedule seeding; banned: fragile sleep loops; the only available primitive is the in-process heartbeat which is not Celery-observable).
+E   assert ('broad production schedule seeding' in '' or 'schedules` table' in '' or 'separate stream' in '')
+___________ test_design_section_points_at_next_implementation_stream ___________
+/app/tests2/shared/test_celery_beat_tick_smoke_design_guard.py:145: in test_design_section_points_at_next_implementation_stream
+    ???
+E   AssertionError: Section 12.7 must reference the next implementation stream tag 'BE-GO-READY-INSTALLATION-021-CELERY-BEAT-TICK-SMOKE-IMPL' so the closure path is discoverable from the docs alone.
+E   assert 'BE-GO-READY-INSTALLATION-021-CELERY-BEAT-TICK-SMOKE-IMPL' in ''
+_______________________ test_design_section_12_6_exists ________________________
+/app/tests2/shared/test_celery_enqueue_smoke_design_guard.py:65: in test_design_section_12_6_exists
+    ???
+E   AssertionError: docs/ops/install-non-docker.md must contain section 12.6 with header '### 12.6 Real worker enqueue/dequeue smoke (IMPLEMENTED)'. The section is the contract surface for the implemented enqueue smoke; renaming or deleting it breaks the closure trail and leaves a future regression untriaged.
+E   assert '### 12.6 Real worker enqueue/dequeue smoke (IMPLEMENTED)' in '# Clean Install, Non-Docker\n\nThis is the canonical single-machine install path for Plenora.\n\nTarget: fresh Ubuntu...ails before `/health`;\n- `/ready` returns 503;\n- `cleanroom.ping` times out;\n- frontend cannot reach the backend.\n'
+________________ test_design_section_names_canonical_primitive _________________
+/app/tests2/shared/test_celery_enqueue_smoke_design_guard.py:75: in test_design_section_names_canonical_primitive
+    ???
+E   AssertionError: Section 12.6 must name the canonical primitive 'cleanroom.ping'. The CI workflow step sends to this exact name; renaming silently breaks the smoke.
+E   assert 'cleanroom.ping' in ''
+_____________ test_design_section_documents_bounded_smoke_pattern ______________
+/app/tests2/shared/test_celery_enqueue_smoke_design_guard.py:97: in test_design_section_documents_bounded_smoke_pattern
+    ???
+E   AssertionError: Section 12.6 must document the bounded AsyncResult.get(timeout=N) pattern.
+E   assert 'AsyncResult.get(timeout=' in ''
+______________ test_design_section_records_implementation_stream _______________
+/app/tests2/shared/test_celery_enqueue_smoke_design_guard.py:103: in test_design_section_records_implementation_stream
+    ???
+E   AssertionError: Section 12.6 must reference the implementation stream tag 'BE-GO-READY-INSTALLATION-019-CELERY-WORKER-ENQUEUE-SMOKE-IMPL' so the closure provenance is discoverable from the docs alone.
+E   assert 'BE-GO-READY-INSTALLATION-019-CELERY-WORKER-ENQUEUE-SMOKE-IMPL' in ''
+________________________ test_drift_section_12_8_exists ________________________
+/app/tests2/shared/test_cleanroom_celery_drift_doc_guard.py:48: in test_drift_section_12_8_exists
+    ???
+E   AssertionError: docs/ops/install-non-docker.md must contain section 12.8 with header '### 12.8 Cleanroom Celery smoke vs production drift (sanity check, NOT equivalence)'. The section is the contract that records cleanroom-vs-prod drift; deleting it lets reviewers misread a green cleanroom as production equivalence (which it is NOT).
+E   assert '### 12.8 Cleanroom Celery smoke vs production drift (sanity check, NOT equivalence)' in '# Clean Install, Non-Docker\n\nThis is the canonical single-machine install path for Plenora.\n\nTarget: fresh Ubuntu...ails before `/health`;\n- `/ready` returns 503;\n- `cleanroom.ping` times out;\n- frontend cannot reach the backend.\n'
+___________ test_drift_section_declares_sanity_check_not_equivalence ___________
+/app/tests2/shared/test_cleanroom_celery_drift_doc_guard.py:62: in test_drift_section_declares_sanity_check_not_equivalence
+    ???
+E   AssertionError: Section 12.8 must explicitly state the cleanroom smoke is a 'sanity check, not equivalence'. Without this wording the section is ambiguous about whether a green CI = green prod.
+E   assert ('sanity check, NOT equivalence' in '' or 'sanity check, not equivalence' in '')
+E    +  where '' = <built-in method lower of str object at 0x7f0fcbe7a960>()
+E    +    where <built-in method lower of str object at 0x7f0fcbe7a960> = ''.lower
+_______________ test_drift_section_lists_high_impact_drift_rows ________________
+/app/tests2/shared/test_cleanroom_celery_drift_doc_guard.py:104: in test_drift_section_lists_high_impact_drift_rows
+    ???
+E   AssertionError: Section 12.8 must enumerate the prefork vs solo pool drift.
+E   assert 'prefork' in ''
+_________________ test_drift_section_classifies_drift_severity _________________
+/app/tests2/shared/test_cleanroom_celery_drift_doc_guard.py:120: in test_drift_section_classifies_drift_severity
+    ???
+E   AssertionError: Section 12.8 must classify drift rows with **HIGH** for prefork/concurrency/real-task-body so reviewers can tell those apart from no-drift rows.
+E   assert '**HIGH**' in ''
+_______________ test_drift_section_names_future_closure_streams ________________
+/app/tests2/shared/test_cleanroom_celery_drift_doc_guard.py:141: in test_drift_section_names_future_closure_streams
+    ???
+E   AssertionError: Section 12.8 must name INSTALLATION-024 as the closure path for the HIGH prefork/concurrency drift.
+E   assert 'INSTALLATION-024-CELERY-PREFORK-WORKER-SMOKE' in ''
+___________________ test_drift_section_lists_hard_non_goals ____________________
+/app/tests2/shared/test_cleanroom_celery_drift_doc_guard.py:149: in test_drift_section_lists_hard_non_goals
+    ???
+E   AssertionError: Section 12.8 must contain a 'Hard non-goals' subsection so future closure streams cannot accidentally re-scope into soak / cluster / replacing the prod backup drill.
+E   assert 'Hard non-goals' in ''
+___________ test_install_docker_doc_advertises_first_scaffold_status ___________
+/app/tests2/shared/test_docker_scaffold_guard.py:353: in test_install_docker_doc_advertises_first_scaffold_status
+    ???
+E   AssertionError: install-docker.md must reference the BE-GO-READY-INSTALL-011 stream tag.
+E   assert 'BE-GO-READY-INSTALL-011-FIRST-DOCKER-SCAFFOLD' in '# Clean Install, Docker\n\nThis is the canonical Docker validation path for Plenora.\n\n## Status\n\nBackend Docker s...nd build served by the backend/reverse proxy;\n- separate but validated frontend container tied to the same backend.\n'
+______________ test_install_docker_doc_documents_validation_gaps _______________
+/app/tests2/shared/test_docker_scaffold_guard.py:382: in test_install_docker_doc_documents_validation_gaps
+    ???
+E   AssertionError: install-docker.md must contain a 'Known scaffold limitations' section. Without explicit gap enumeration, an operator may assume the scaffold is production-ready.
+E   assert 'Known scaffold limitations' in '# Clean Install, Docker\n\nThis is the canonical Docker validation path for Plenora.\n\n## Status\n\nBackend Docker s...nd build served by the backend/reverse proxy;\n- separate but validated frontend container tied to the same backend.\n'
+___________________ test_router_constant_refs_find_baseline ____________________
+/app/tests2/shared/test_error_codes_catalog.py:579: in test_router_constant_refs_find_baseline
+    ???
+E   AssertionError: Baseline costanti `error_codes.<CONST>` non referenziate nei router: ['CARICA_SCHEDULER_FAILED', 'SCHEDULE_EXECUTION_FATAL']. Probabile call site rimosso/rolled-back o regex parser rotto.
+E   assert {'CARICA_SCHE...CUTION_FATAL'} == set()
+E     
+E     Extra items in the left set:
+E     'CARICA_SCHEDULER_FAILED'
+E     'SCHEDULE_EXECUTION_FATAL'
+E     Use -v to get more diff
+__________________________ test_entry_section_exists ___________________________
+/app/tests2/shared/test_first_pc_execution_pack_doc_guard.py:53: in test_entry_section_exists
+    ???
+E   AssertionError: docs/ops/install-marco-dry-run.md must contain section 0 with header '## 0. First-PC handoff pack (entry point)'. Without the entry-point section, the first-PC handoff has no canonical entry; operators arriving on the dry-run page see only the command sequence and miss the report template.
+E   assert ''
+_____________________ test_entry_section_names_five_steps ______________________
+/app/tests2/shared/test_first_pc_execution_pack_doc_guard.py:89: in test_entry_section_names_five_steps
+    ???
+E   AssertionError: Section 0 must include step 1 'Clean clone + pinned commit hash' so the operator knows to record the exact commit being tested.
+E   assert 'Clean clone + pinned commit hash' in ''
+_____________ test_entry_section_keeps_docker_first_scaffold_label _____________
+/app/tests2/shared/test_first_pc_execution_pack_doc_guard.py:97: in test_entry_section_keeps_docker_first_scaffold_label
+    ???
+E   AssertionError: Section 0 must keep the 'FIRST SCAFFOLD' label on the Docker path. INSTALL-015 explicitly does NOT promote Docker to validated.
+E   assert 'FIRST SCAFFOLD' in ''
+___________________ test_entry_section_links_report_template ___________________
+/app/tests2/shared/test_first_pc_execution_pack_doc_guard.py:111: in test_entry_section_links_report_template
+    ???
+E   AssertionError: Section 0 must cross-link to `first-pc-validation-report-template.md` so the report template is one click from the entry point. Without the link, the template orphans.
+E   assert 'first-pc-validation-report-template.md' in ''
+______________________ test_get_result_data_from_db_blob _______________________
+/app/tests2/shared/test_fs4_s3_large_result_dispatch.py:198: in test_get_result_data_from_db_blob
+    ???
+E   AssertionError: assert None == b'blob content'
+_________________________ test_get_result_data_from_s3 _________________________
+/app/tests2/shared/test_fs4_s3_large_result_dispatch.py:217: in test_get_result_data_from_s3
+    ???
+E   AssertionError: assert None == b'big data from s3'
+_________________ test_doc_has_canonical_title_and_stream_tag __________________
+/app/tests2/shared/test_horizontal_engines_map_doc_guard.py:41: in test_doc_has_canonical_title_and_stream_tag
+    ???
+E   AssertionError: horizontal-engines.md must start with the canonical title '# Horizontal engines map'. Renaming silently breaks the cross-link from the README.
+E   assert False
+E    +  where False = <built-in method startswith of str object at 0x563080dd74e0>('# Horizontal engines map\n')
+E    +    where <built-in method startswith of str object at 0x563080dd74e0> = '# Horizontal Engines\n\nThis is the active backend boundary map. It is intentionally shorter than\nthe historical inv...d)\n- [Clean install, non-Docker](../ops/install-non-docker.md)\n- [Clean install, Docker](../ops/install-docker.md)\n'.startswith
+_________________ test_doc_has_six_canonical_sections_in_order _________________
+/app/tests2/shared/test_horizontal_engines_map_doc_guard.py:68: in test_doc_has_six_canonical_sections_in_order
+    ???
+E   AssertionError: horizontal-engines.md must contain section header '## 1. Auth / Ownership / Disclosure'. The six sections form the canonical horizontal map; dropping any of them lets the boundary discovery surface drift.
+E   assert -1 != -1
+_____________________ test_doc_lists_engine_alignment_tags _____________________
+/app/tests2/shared/test_horizontal_engines_map_doc_guard.py:94: in test_doc_lists_engine_alignment_tags
+    ???
+E   AssertionError: horizontal-engines.md must reference engine alignment tag 'AUTH_SECURITY_ENGINE' (one of the canonical tags in BE_RULES 'Horizontal Engine Alignment'). Missing the tag means a section is not anchored to its rule.
+E   assert 'AUTH_SECURITY_ENGINE' in '# Horizontal Engines\n\nThis is the active backend boundary map. It is intentionally shorter than\nthe historical inv...d)\n- [Clean install, non-Docker](../ops/install-non-docker.md)\n- [Clean install, Docker](../ops/install-docker.md)\n'
+__________________ test_doc_references_canonical_entry_points __________________
+/app/tests2/shared/test_horizontal_engines_map_doc_guard.py:118: in test_doc_references_canonical_entry_points
+    ???
+E   AssertionError: horizontal-engines.md must reference canonical path 'backend/app/core/auth/middleware.py' in the relevant section. Missing the path forces the reader to grep the codebase, defeating the navigation purpose.
+E   assert 'backend/app/core/auth/middleware.py' in '# Horizontal Engines\n\nThis is the active backend boundary map. It is intentionally shorter than\nthe historical inv...d)\n- [Clean install, non-Docker](../ops/install-non-docker.md)\n- [Clean install, Docker](../ops/install-docker.md)\n'
+______________________ test_doc_has_do_not_import_section ______________________
+/app/tests2/shared/test_horizontal_engines_map_doc_guard.py:130: in test_doc_has_do_not_import_section
+    ???
+E   AssertionError: horizontal-engines.md must contain a '## Do not import' section. The four anti-patterns it enumerates are the binding part of the page; dropping the section turns the map into a passive index.
+E   assert '## Do not import' in '# Horizontal Engines\n\nThis is the active backend boundary map. It is intentionally shorter than\nthe historical inv...d)\n- [Clean install, non-Docker](../ops/install-non-docker.md)\n- [Clean install, Docker](../ops/install-docker.md)\n'
+________________ test_do_not_import_lists_four_canonical_guards ________________
+/app/tests2/shared/test_horizontal_engines_map_doc_guard.py:140: in test_do_not_import_lists_four_canonical_guards
+    ???
+E   assert -1 != -1
+_______________________ test_checklist_section_13_exists _______________________
+/app/tests2/shared/test_install_checklist_doc_guard.py:44: in test_checklist_section_13_exists
+    ???
+E   AssertionError: docs/ops/install-non-docker.md must contain section 13 with header '## 13. Operator quick-reference checklist (real Linux PC test)'. The section is the operator-facing single-page checklist for a real Linux first-time install. Removing it forces operators to reconstruct the procedure from the detailed sections, which is error-prone.
+E   assert '## 13. Operator quick-reference checklist (real Linux PC test)' in '# Clean Install, Non-Docker\n\nThis is the canonical single-machine install path for Plenora.\n\nTarget: fresh Ubuntu...ails before `/health`;\n- `/ready` returns 503;\n- `cleanroom.ping` times out;\n- frontend cannot reach the backend.\n'
+_____________ test_checklist_documents_docker_path_not_installable _____________
+/app/tests2/shared/test_install_checklist_doc_guard.py:62: in test_checklist_documents_docker_path_not_installable
+    ???
+E   AssertionError: Section 13.1 must exist and be titled 'Path A: Docker / compose' so the Docker option is named explicitly.
+E   assert '13.1 Path A: Docker / compose' in ''
+_______________ test_checklist_covers_all_critical_install_steps _______________
+/app/tests2/shared/test_install_checklist_doc_guard.py:122: in test_checklist_covers_all_critical_install_steps
+    ???
+E   AssertionError: Section 13 must include Step 1 OS packages.
+E   assert 'Step 1 - OS packages' in ''
+_____________ test_checklist_documents_four_object_storage_options _____________
+/app/tests2/shared/test_install_checklist_doc_guard.py:148: in test_checklist_documents_four_object_storage_options
+    ???
+E   AssertionError: section 13.2.1 must mention 'disabled' (STORAGE_POLICY=db) as one of the four options.
+E   assert 'disabled' in ''
+______________ test_checklist_documents_celery_worker_beat_count _______________
+/app/tests2/shared/test_install_checklist_doc_guard.py:169: in test_checklist_documents_celery_worker_beat_count
+    ???
+E   AssertionError: Section 13.2.1 must call out 'Number of uvicorn workers' so the operator knows to size them for the PC.
+E   assert 'Number of uvicorn workers' in ''
+__________________ test_checklist_funnels_through_install_sh ___________________
+/app/tests2/shared/test_install_checklist_doc_guard.py:194: in test_checklist_funnels_through_install_sh
+    ???
+E   AssertionError: Section 13.2.2 must reference scripts/install.sh so the operator is funneled through the idempotent installer.
+E   assert 'scripts/install.sh' in ''
+______________________ test_checklist_documents_rollback _______________________
+/app/tests2/shared/test_install_checklist_doc_guard.py:206: in test_checklist_documents_rollback
+    ???
+E   AssertionError: Section 13.2.3 must exist with the rollback / troubleshooting heading. A first-PC test with no rollback leaves operators in a stuck state on first failure.
+E   assert '13.2.3 Rollback / troubleshooting' in ''
+__________________ test_checklist_documents_critical_gotchas ___________________
+/app/tests2/shared/test_install_checklist_doc_guard.py:251: in test_checklist_documents_critical_gotchas
+    ???
+E   AssertionError: Section 13.2.4 must call out the schema autocreate gotcha (do NOT pre-create plenora).
+E   assert 'Schema autocreate' in ''
+__________________ test_checklist_has_marco_command_sequence ___________________
+/app/tests2/shared/test_install_checklist_doc_guard.py:259: in test_checklist_has_marco_command_sequence
+    ???
+E   AssertionError: Section 13.4 must exist with Marco's command sequence so the operator has a copy/paste path.
+E   assert "13.4 Marco's first-PC-test command sequence" in ''
+_______________ test_install_docker_has_fe_gap_audit_subsection ________________
+/app/tests2/shared/test_install_docker_fe_gap_guard.py:210: in test_install_docker_has_fe_gap_audit_subsection
+    ???
+E   AssertionError: `docs/ops/install-docker.md` must keep the `BE-GO-READY-INSTALL-018-DOCKER-FE-GAP-AUDIT` stream tag so the audit trail back to the brief is preserved.
+E   assert 'BE-GO-READY-INSTALL-018-DOCKER-FE-GAP-AUDIT' in '# Clean Install, Docker\n\nThis is the canonical Docker validation path for Plenora.\n\n## Status\n\nBackend Docker s...nd build served by the backend/reverse proxy;\n- separate but validated frontend container tied to the same backend.\n'
+___________________ test_in_scope_docs_state_scaffold_exists ___________________
+/app/tests2/shared/test_install_docs_consistency_guard.py:126: in test_in_scope_docs_state_scaffold_exists
+    ???
+E   AssertionError: Install doc consistency drift:
+E     install-marco-dry-run.md: missing 'FIRST SCAFFOLD'
+E     install-marco-dry-run.md: missing 'NOT YET VALIDATED'
+E     install-non-docker.md: missing 'FIRST SCAFFOLD'
+E     install-non-docker.md: missing 'NOT YET VALIDATED'
+E   
+E   Each in-scope doc must carry both `FIRST SCAFFOLD` AND `NOT YET VALIDATED`. The two markers together are the load-bearing honesty signal: the scaffold exists (cannot be dropped quietly) AND the Linux validation gap is visible (cannot be claimed production-ready).
+____________ test_install_non_docker_remains_go_ready_first_pc_path ____________
+/app/tests2/shared/test_install_docs_consistency_guard.py:202: in test_install_non_docker_remains_go_ready_first_pc_path
+    ???
+E   AssertionError: install-non-docker.md must continue to identify itself as the go-ready first-PC path. None of the canonical phrasings ('go-ready first-pc', 'go-ready first-pc test path', 'go-ready install path') were found. Without this funnel, an operator with Docker installed has no signal that the scaffold is NOT the validated path.
+____________ test_install_marco_dry_run_funnels_back_to_non_docker _____________
+/app/tests2/shared/test_install_docs_consistency_guard.py:225: in test_install_marco_dry_run_funnels_back_to_non_docker
+    ???
+E   AssertionError: install-marco-dry-run.md must explicitly funnel operators back to the non-Docker path as the go-ready first-PC path. The funnel sentence is the operator-facing consistency signal between the two docs; without it, an operator who reads only the dry-run pack misses that the single-machine path is the validated route.
+E   assert ('the only go-ready path for the first pc test is this one' in "# first pc validation pack\n\nthis is the operator copy/paste pack for marco's first clean linux pc test.\n\nuse it a...stop\n```\n\ndestructive, only for disposable test state:\n\n```bash\ndocker compose down -v\nrm -f .env.docker\n```\n" or 'go-ready first-pc test path remains' in "# first pc validation pack\n\nthis is the operator copy/paste pack for marco's first clean linux pc test.\n\nuse it a...stop\n```\n\ndestructive, only for disposable test state:\n\n```bash\ndocker compose down -v\nrm -f .env.docker\n```\n" or 'go-ready first-pc path' in "# first pc validation pack\n\nthis is the operator copy/paste pack for marco's first clean linux pc test.\n\nuse it a...stop\n```\n\ndestructive, only for disposable test state:\n\n```bash\ndocker compose down -v\nrm -f .env.docker\n```\n")
+_________________________ test_rollback_section_exists _________________________
+/app/tests2/shared/test_install_execution_pack_doc_guard.py:65: in test_rollback_section_exists
+    ???
+E   AssertionError: docs/ops/install-marco-dry-run.md must contain section 4.8 with header '### 4.8 Non-destructive rollback (foreground smoke)'. The non-destructive rollback is the brief's explicit ask for INSTALL-010; section 4.7 is destructive-only and is the wrong tool when an operator iterates on a transient issue.
+E   assert ''
+____________ test_rollback_uses_signal_first_not_kill_dash_9_first _____________
+/app/tests2/shared/test_install_execution_pack_doc_guard.py:87: in test_rollback_uses_signal_first_not_kill_dash_9_first
+    ???
+E   AssertionError: Section 4.8 must use `pkill -INT` (SIGINT) as the first step. SIGINT triggers the standard FastAPI / Celery graceful shutdown path. Switching to `kill -9` first would leave broker state inconsistent on rerun.
+E   assert 'pkill -INT' in ''
+____________________ test_rollback_documents_what_it_skips _____________________
+/app/tests2/shared/test_install_execution_pack_doc_guard.py:149: in test_rollback_documents_what_it_skips
+    ???
+E   AssertionError: Section 4.8 must mention 'DROP SCHEMA' in the negative-list (does NOT do) so the operator knows the schema is preserved. The phrase appears in a 'does NOT' bullet, not as a command.
+E   assert 'DROP SCHEMA' in ''
+______________________ test_docker_status_section_exists _______________________
+/app/tests2/shared/test_install_execution_pack_doc_guard.py:164: in test_docker_status_section_exists
+    ???
+E   AssertionError: docs/ops/install-docker.md must contain a '## Status today (command-first, executable scaffold)' section. INSTALL-010 added this command-first table so an operator with Docker pre-installed has a one-screen answer to 'what do I do TODAY' instead of having to reverse-engineer the single-machine path.
+E   assert ''
+_____________ test_docker_status_section_marks_validation_pending ______________
+/app/tests2/shared/test_install_execution_pack_doc_guard.py:189: in test_docker_status_section_marks_validation_pending
+    ???
+E   AssertionError: The 'Status today' section must contain 'NO (scaffold)' at least 8 times (one per harness row). Found 0. Each row must mark the Docker side as 'NO (scaffold)' for the 'Validated on Linux PC' column so an operator does not mistake an executable scaffold command for a validated path.
+E   assert 0 >= 8
+_____________ test_docker_status_section_lists_eight_harness_items _____________
+/app/tests2/shared/test_install_execution_pack_doc_guard.py:223: in test_docker_status_section_lists_eight_harness_items
+    ???
+E   AssertionError: The 'Status today' section must include the harness item 'prereqs' to match the canonical 8-item harness in install-marco-dry-run.md section 5.1.
+E   assert 'prereqs' in ''
+____________ test_docker_status_section_points_back_to_dry_run_pack ____________
+/app/tests2/shared/test_install_execution_pack_doc_guard.py:237: in test_docker_status_section_points_back_to_dry_run_pack
+    ???
+E   AssertionError: The 'Status today' section must cross-link to install-marco-dry-run.md for the executable single-machine commands. Without the link, an operator with Docker pre-installed has to grep the docs tree.
+E   assert 'install-marco-dry-run.md' in ''
+_____________________ test_dry_run_doc_has_canonical_title _____________________
+/app/tests2/shared/test_install_marco_dry_run_doc_guard.py:38: in test_dry_run_doc_has_canonical_title
+    ???
+E   AssertionError: docs/ops/install-marco-dry-run.md must start with the canonical title "# Marco's first-PC clean-install dry-run pack\n". Renaming silently breaks the cross-link in install-non-docker.md section 13.4.
+E   assert False
+E    +  where False = <built-in method startswith of str object at 0x5630810128a0>("# Marco's first-PC clean-install dry-run pack\n")
+E    +    where <built-in method startswith of str object at 0x5630810128a0> = "# First PC Validation Pack\n\nThis is the operator copy/paste pack for Marco's first clean Linux PC test.\n\nUse it a...stop\n```\n\nDestructive, only for disposable test state:\n\n```bash\ndocker compose down -v\nrm -f .env.docker\n```\n".startswith
+_____________________ test_dry_run_doc_keeps_docker_honest _____________________
+/app/tests2/shared/test_install_marco_dry_run_doc_guard.py:53: in test_dry_run_doc_keeps_docker_honest
+    ???
+E   AssertionError: The Docker-status callout must keep the literal 'Docker status (honest, NOT the go-ready path)' header so an operator skimming the page cannot miss it.
+E   assert 'Docker status (honest, NOT the go-ready path)' in "# First PC Validation Pack\n\nThis is the operator copy/paste pack for Marco's first clean Linux PC test.\n\nUse it a...stop\n```\n\nDestructive, only for disposable test state:\n\n```bash\ndocker compose down -v\nrm -f .env.docker\n```\n"
+______________ test_dry_run_doc_documents_required_manual_choices ______________
+/app/tests2/shared/test_install_marco_dry_run_doc_guard.py:120: in test_dry_run_doc_documents_required_manual_choices
+    ???
+E   AssertionError: manual-choices table must include ENVIRONMENT.
+E   assert 'ENVIRONMENT' in "# First PC Validation Pack\n\nThis is the operator copy/paste pack for Marco's first clean Linux PC test.\n\nUse it a...stop\n```\n\nDestructive, only for disposable test state:\n\n```bash\ndocker compose down -v\nrm -f .env.docker\n```\n"
+__________________ test_dry_run_doc_uses_minimal_env_profile ___________________
+/app/tests2/shared/test_install_marco_dry_run_doc_guard.py:127: in test_dry_run_doc_uses_minimal_env_profile
+    ???
+E   AssertionError: Dry-run pack must use STORAGE_POLICY=db as the first-PC test profile (no buckets, no IAM, no MinIO server).
+E   assert 'STORAGE_POLICY=db' in "# First PC Validation Pack\n\nThis is the operator copy/paste pack for Marco's first clean Linux PC test.\n\nUse it a...stop\n```\n\nDestructive, only for disposable test state:\n\n```bash\ndocker compose down -v\nrm -f .env.docker\n```\n"
+__________ test_dry_run_doc_has_foreground_smoke_for_api_worker_beat ___________
+/app/tests2/shared/test_install_marco_dry_run_doc_guard.py:157: in test_dry_run_doc_has_foreground_smoke_for_api_worker_beat
+    ???
+E   AssertionError: Dry-run pack must show the foreground uvicorn smoke command for the API.
+E   assert 'uvicorn app.main:app' in "# First PC Validation Pack\n\nThis is the operator copy/paste pack for Marco's first clean Linux PC test.\n\nUse it a...stop\n```\n\nDestructive, only for disposable test state:\n\n```bash\ndocker compose down -v\nrm -f .env.docker\n```\n"
+_____________ test_dry_run_doc_documents_health_and_ready_outputs ______________
+/app/tests2/shared/test_install_marco_dry_run_doc_guard.py:198: in test_dry_run_doc_documents_health_and_ready_outputs
+    ???
+E   AssertionError: Dry-run pack must document the /ready check name 'pool_headroom'. The 6 checks are the contract surface for the readiness gate; renaming one means the docs are out of sync with `gather_readiness`.
+E   assert 'pool_headroom' in "# First PC Validation Pack\n\nThis is the operator copy/paste pack for Marco's first clean Linux PC test.\n\nUse it a...stop\n```\n\nDestructive, only for disposable test state:\n\n```bash\ndocker compose down -v\nrm -f .env.docker\n```\n"
+________________ test_dry_run_doc_has_failure_triage_checklist _________________
+/app/tests2/shared/test_install_marco_dry_run_doc_guard.py:221: in test_dry_run_doc_has_failure_triage_checklist
+    ???
+E   AssertionError: Dry-run pack must contain the literal 'Failure triage checklist' heading so the recovery procedure is discoverable.
+E   assert 'Failure triage checklist' in "# First PC Validation Pack\n\nThis is the operator copy/paste pack for Marco's first clean Linux PC test.\n\nUse it a...stop\n```\n\nDestructive, only for disposable test state:\n\n```bash\ndocker compose down -v\nrm -f .env.docker\n```\n"
+___________________ test_dry_run_doc_flags_destructive_reset ___________________
+/app/tests2/shared/test_install_marco_dry_run_doc_guard.py:246: in test_dry_run_doc_flags_destructive_reset
+    ???
+E   AssertionError: Dry-run pack must flag the total-reset as DESTRUCTIVE so an operator does not run it on a real DB.
+E   assert 'DESTRUCTIVE' in "# First PC Validation Pack\n\nThis is the operator copy/paste pack for Marco's first clean Linux PC test.\n\nUse it a...stop\n```\n\nDestructive, only for disposable test state:\n\n```bash\ndocker compose down -v\nrm -f .env.docker\n```\n"
+________________ test_install_non_docker_links_to_dry_run_pack _________________
+/app/tests2/shared/test_install_marco_dry_run_doc_guard.py:278: in test_install_non_docker_links_to_dry_run_pack
+    ???
+E   AssertionError: docs/ops/install-non-docker.md must link to install-marco-dry-run.md (section 13.4 callout AND/OR section 14 related-docs).
+E   assert 'install-marco-dry-run.md' in '# Clean Install, Non-Docker\n\nThis is the canonical single-machine install path for Plenora.\n\nTarget: fresh Ubuntu...ails before `/health`;\n- `/ready` returns 503;\n- `cleanroom.ping` times out;\n- frontend cannot reach the backend.\n'
+_______________________ test_native_deps_section_exists ________________________
+/app/tests2/shared/test_install_native_deps_verify_doc_guard.py:49: in test_native_deps_section_exists
+    ???
+E   AssertionError: docs/ops/install-marco-dry-run.md must contain section 3 'Native dependency verification' between the command sequence and the failure triage. Removing it leaves Marco without explicit verification commands.
+E   assert ''
+____________________ test_section_3_lists_os_binary_probes _____________________
+/app/tests2/shared/test_install_native_deps_verify_doc_guard.py:82: in test_section_3_lists_os_binary_probes
+    ???
+E   AssertionError: section 3.1 must include `python3.11 --version`.
+E   assert 'python3.11 --version' in ''
+_______________ test_section_3_includes_venv_python_import_probe _______________
+/app/tests2/shared/test_install_native_deps_verify_doc_guard.py:106: in test_section_3_includes_venv_python_import_probe
+    ???
+E   AssertionError: section 3.2 venv import probe must list 'psycopg2' as one of the modules whose import is asserted.
+E   assert ('"psycopg2"' in '' or "'psycopg2'" in '')
+___________ test_section_3_documents_fiona_transitive_via_geopandas ____________
+/app/tests2/shared/test_install_native_deps_verify_doc_guard.py:121: in test_section_3_documents_fiona_transitive_via_geopandas
+    ???
+E   AssertionError: section 3.2 must document that `fiona` is transitive via `geopandas` (NOT a direct requirements.txt entry). This matters for ABI-mismatch troubleshooting.
+E   assert ('fiona' in '')
+________________ test_section_3_excludes_libmagic_verification _________________
+/app/tests2/shared/test_install_native_deps_verify_doc_guard.py:152: in test_section_3_excludes_libmagic_verification
+    ???
+E   AssertionError: section 3 must explicitly note that `libmagic` is NOT verified because `filetype` is pure-Python. Without the explicit note, a future contributor may add a libmagic verification and create a fake runtime dep.
+E   assert ('libmagic' in '')
+E    +  where '' = <built-in method lower of str object at 0x7f0fcbe7a960>()
+E    +    where <built-in method lower of str object at 0x7f0fcbe7a960> = ''.lower
+____________________ test_section_3_includes_service_probes ____________________
+/app/tests2/shared/test_install_native_deps_verify_doc_guard.py:178: in test_section_3_includes_service_probes
+    ???
+E   AssertionError: section 3.3 must include the psql probe.
+E   assert 'psql ' in ''
+____________________ test_section_3_documents_distro_target ____________________
+/app/tests2/shared/test_install_native_deps_verify_doc_guard.py:182: in test_section_3_documents_distro_target
+    ???
+E   AssertionError: section 3 must document the Ubuntu 24.04 reference target AND explicitly say Fedora / RHEL are NOT in scope (their package names differ entirely). Without the distro note, an operator on RHEL might run the apt one-liner and fail without diagnostic context.
+E   assert ('Ubuntu 24.04' in '')
+________________ test_install_non_docker_mirrors_binary_probes _________________
+/app/tests2/shared/test_install_native_deps_verify_doc_guard.py:216: in test_install_non_docker_mirrors_binary_probes
+    ???
+E   AssertionError: install-non-docker.md must contain section 1.2 'Verify host packages (post-apt)' so the runbook itself contains the probe list, not only the dry-run pack.
+E   assert '### 1.2 Verify host packages' in '# Clean Install, Non-Docker\n\nThis is the canonical single-machine install path for Plenora.\n\nTarget: fresh Ubuntu...ails before `/health`;\n- `/ready` returns 503;\n- `cleanroom.ping` times out;\n- frontend cannot reach the backend.\n'
+____________ test_install_non_docker_documents_libmagic_precaution _____________
+/app/tests2/shared/test_install_native_deps_verify_doc_guard.py:255: in test_install_non_docker_documents_libmagic_precaution
+    ???
+E   AssertionError: install-non-docker.md must contain the precautionary-not-required note for libmagic1 with filetype identified as the pure-Python alternative actually in use.
+E   assert ('precautionary' in '# clean install, non-docker\n\nthis is the canonical single-machine install path for plenora.\n\ntarget: fresh ubuntu...ails before `/health`;\n- `/ready` returns 503;\n- `cleanroom.ping` times out;\n- frontend cannot reach the backend.\n')
+E    +  where '# clean install, non-docker\n\nthis is the canonical single-machine install path for plenora.\n\ntarget: fresh ubuntu...ails before `/health`;\n- `/ready` returns 503;\n- `cleanroom.ping` times out;\n- frontend cannot reach the backend.\n' = <built-in method lower of str object at 0x56308101b120>()
+E    +    where <built-in method lower of str object at 0x56308101b120> = '# Clean Install, Non-Docker\n\nThis is the canonical single-machine install path for Plenora.\n\nTarget: fresh Ubuntu...ails before `/health`;\n- `/ready` returns 503;\n- `cleanroom.ping` times out;\n- frontend cannot reach the backend.\n'.lower
+_________________________ test_harness_section_exists __________________________
+/app/tests2/shared/test_install_smoke_harness_doc_guard.py:46: in test_harness_section_exists
+    ???
+E   AssertionError: docs/ops/install-marco-dry-run.md must contain section 5 with header '## 5. Clean-install smoke harness (canonical sequence)'. Removing the canonical smoke harness leaves the eight verification items scattered across other docs and lets operators declare an install green while having skipped one of them.
+E   assert ''
+___________________ test_harness_lists_eight_canonical_items ___________________
+/app/tests2/shared/test_install_smoke_harness_doc_guard.py:96: in test_harness_lists_eight_canonical_items
+    ???
+E   AssertionError: Section 5.1 must include the 'clone + env setup' harness item.
+E   assert 'clone + env setup' in ''
+_________________ test_harness_5_2_lists_canonical_memory_caps _________________
+/app/tests2/shared/test_install_smoke_harness_doc_guard.py:113: in test_harness_5_2_lists_canonical_memory_caps
+    ???
+E   AssertionError: Section 5.2 must list memory cap 'LOAD_FILE_MAX_BYTES' so the operator can verify the runtime-effective value before the foreground smoke. Dropping a cap here means the corresponding guard is invisible to the operator at install time.
+E   assert 'LOAD_FILE_MAX_BYTES' in ''
+______________ test_harness_5_2_uses_canonical_settings_accessor _______________
+/app/tests2/shared/test_install_smoke_harness_doc_guard.py:154: in test_harness_5_2_uses_canonical_settings_accessor
+    ???
+E   AssertionError: Section 5.2 must import `settings` from `app.config` so the visibility one-liner reflects what the runtime will actually enforce (defaults + env override).
+E   assert 'from app.config import settings' in ''
+_____________________ test_harness_5_3_uses_cleanroom_ping _____________________
+/app/tests2/shared/test_install_smoke_harness_doc_guard.py:171: in test_harness_5_3_uses_cleanroom_ping
+    ???
+E   AssertionError: Section 5.3 must invoke the existing `cleanroom.ping` task (defined in backend/workers/tasks/cleanroom_task.py and registered via the `include=[...]` list of workers/celery_app.py). It is the canonical, deterministic, sleep-free smoke primitive shared with the cleanroom CI lane.
+E   assert 'cleanroom.ping' in ''
+___________________ test_harness_5_4_documents_docker_deltas ___________________
+/app/tests2/shared/test_install_smoke_harness_doc_guard.py:201: in test_harness_5_4_documents_docker_deltas
+    ???
+E   AssertionError: Section 5.4 must contain the Docker-vs-single-machine delta table. Without it, an operator with Docker on the PC has no map from the harness rows to the future Docker artifacts.
+E   assert ('Docker vs single-machine deltas' in '' or 'Docker path (target shape only)' in '')
+________ test_harness_section_5_referenced_canonical_install_locations _________
+/app/tests2/shared/test_install_smoke_harness_doc_guard.py:245: in test_harness_section_5_referenced_canonical_install_locations
+    ???
+E   AssertionError: Section 5 must cross-link to install-non-docker.md (specifically the recommended-values memory caps section) so the small-PC override values are reachable.
+E   assert 'install-non-docker.md' in ''
+_______________________ test_section_ordering_unchanged ________________________
+/app/tests2/shared/test_install_smoke_harness_doc_guard.py:290: in test_section_ordering_unchanged
+    ???
+E   AssertionError: docs/ops/install-marco-dry-run.md must contain section header '## 0. First-PC handoff pack (entry point)'. The seven sections form the canonical structure of the dry-run pack.
+E   assert -1 != -1
+_____________ test_audit_doc_contains_pilot_exit_criteria_section ______________
+/app/tests2/shared/test_resource_engine_pilot_exit_criteria_lock.py:95: in test_audit_doc_contains_pilot_exit_criteria_section
+    ???
+/usr/local/lib/python3.11/pathlib.py:1058: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/pathlib.py:1044: in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   FileNotFoundError: [Errno 2] No such file or directory: '/workspace/.agent-temp/BE_RESOURCE_ENGINE_AUDIT.md'
+_________________ test_audit_doc_documents_keep_kill_criteria __________________
+/app/tests2/shared/test_resource_engine_pilot_exit_criteria_lock.py:109: in test_audit_doc_documents_keep_kill_criteria
+    ???
+/usr/local/lib/python3.11/pathlib.py:1058: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/pathlib.py:1044: in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   FileNotFoundError: [Errno 2] No such file or directory: '/workspace/.agent-temp/BE_RESOURCE_ENGINE_AUDIT.md'
+__________________ test_audit_doc_records_kill_deadline_date ___________________
+/app/tests2/shared/test_resource_engine_pilot_exit_criteria_lock.py:132: in test_audit_doc_records_kill_deadline_date
+    ???
+/usr/local/lib/python3.11/pathlib.py:1058: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/pathlib.py:1044: in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   FileNotFoundError: [Errno 2] No such file or directory: '/workspace/.agent-temp/BE_RESOURCE_ENGINE_AUDIT.md'
+_________ test_no_literal_is_superadmin_true_in_app_outside_allowlist __________
+/app/tests2/shared/test_resource_superadmin_bypass_guardrails.py:109: in test_no_literal_is_superadmin_true_in_app_outside_allowlist
+    ???
+E   AssertionError: Forbidden literal `is_superadmin=True` in production code:
+E     - app/services/file_service.py
+E   
+E   Routers and services MUST compute the bypass from the authenticated principal (e.g. `is_superadmin=current_user.role == 'superadmin'`). A literal `True` reads as a convenience flag and bypasses the cross-tenant fail-closed.
+E   
+E   If this is a documented system-level caller (worker, admin CLI, reconciliation job), add the file path to `_PRIVILEGED_BYPASS_ALLOWLIST` in this test with a comment explaining the audit log site and the caller context. See `.agent-temp/BE_RESOURCE_ENGINE_AUDIT.md` (BE-GO-READY-RESOURCE-ENGINE-015).
+_____ test_no_router_constructs_resource_ref_with_literal_superadmin_true ______
+/app/tests2/shared/test_resource_superadmin_bypass_guardrails.py:159: in test_no_router_constructs_resource_ref_with_literal_superadmin_true
+    ???
+E   AssertionError: Router/service constructed a privileged ResourceRef or literal superadmin bypass:
+E     - app/services/file_service.py: ResourceRef(...)
+E     - app/services/file_service.py: is_superadmin=True
+E   
+E   Normal request entrypoints (routers, services) must:
+E     - compute `is_superadmin` from `current_user.role`;
+E     - go through the engine's registry rather than instantiate `ResourceRef` directly.
+E   Constructing the ref in the router re-creates the vertical-feature shape the Resource Engine pilot is horizontalizing away from.
+______________ test_reconcile_storage_marks_orphan_deleted_on_ok _______________
+/app/tests2/shared/test_storage_reconciliation_beat_hook_contract.py:368: in test_reconcile_storage_marks_orphan_deleted_on_ok
+    ???
+E   AssertionError: assert ['rec-1', 'aa...d8e30b9', ...] == ['rec-1']
+E     
+E     Left contains 13 more items, first extra item: 'aa4c394b-e360-45ca-9a8d-1790a1dbe566'
+E     Use -v to get more diff
+____________ test_reconcile_storage_marks_orphan_deleted_on_skipped ____________
+/app/tests2/shared/test_storage_reconciliation_beat_hook_contract.py:402: in test_reconcile_storage_marks_orphan_deleted_on_skipped
+    ???
+E   AssertionError: assert ['rec-skip', ...d8e30b9', ...] == ['rec-skip']
+E     
+E     Left contains 13 more items, first extra item: 'aa4c394b-e360-45ca-9a8d-1790a1dbe566'
+E     Use -v to get more diff
+_______ test_reconcile_storage_marks_failed_attempt_on_failure_below_cap _______
+/app/tests2/shared/test_storage_reconciliation_beat_hook_contract.py:439: in test_reconcile_storage_marks_failed_attempt_on_failure_below_cap
+    ???
+E   AssertionError: assert 14 == 1
+E    +  where 14 = len([('rec-fail', {'error': 'compensating_delete_failed', 'next_retry_at': datetime.datetime(2026, 5, 7, 9, 55, 9, 124818,..._delete_failed', 'next_retry_at': datetime.datetime(2026, 5, 7, 9, 54, 9, 125414, tzinfo=datetime.timezone.utc)}), ...])
+______________ test_reconcile_storage_marks_lost_on_max_attempts _______________
+/app/tests2/shared/test_storage_reconciliation_beat_hook_contract.py:481: in test_reconcile_storage_marks_lost_on_max_attempts
+    ???
+E   AssertionError: assert [('aa4c394b-e...e.utc)}), ...] == []
+E     
+E     Left contains 13 more items, first extra item: ('aa4c394b-e360-45ca-9a8d-1790a1dbe566', {'error': 'upload_intent_compensating_delete_failed', 'next_retry_at': datetime.datetime(2026, 5, 7, 9, 54, 9, 128412, tzinfo=datetime.timezone.utc)})
+E     Use -v to get more diff
+_________________ test_classification_map_has_no_stale_entries _________________
+/app/tests2/shared/test_storage_reconciliation_callsite_guard.py:252: in test_classification_map_has_no_stale_entries
+    ???
+E   AssertionError: Stale entries in `_CALLSITE_CLASSIFICATION` (file no longer contains storage callsites):
+E     ['app/shared/cloud_backends.py']
+E   
+E   Action: remove the entry. The guard is supposed to surface ACTIVE callsites only.
+_____________ test_resource_engine_canonical_usage_docs_bytes_mode _____________
+/app/tests2/shared/test_temp_usage_bytes_first_policy.py:154: in test_resource_engine_canonical_usage_docs_bytes_mode
+    ???
+E   AssertionError: app/core/resources/__init__.py canonical usage docstring must demonstrate mode="bytes" (preferred). Path mode is for downstream-required cases only.
+E   assert ('mode="bytes"' in '"""\nResource Engine — capability registry, NOT god-engine.\n\n"""\n\nfrom app.core.resources.types import (\n    Out...urceLoader",\n    "ResourceRef",\n    "ResourceRegistry",\n    "default_registry",\n    "build_default_registry",\n]\n' or "mode='bytes'" in '"""\nResource Engine — capability registry, NOT god-engine.\n\n"""\n\nfrom app.core.resources.types import (\n    Out...urceLoader",\n    "ResourceRef",\n    "ResourceRegistry",\n    "default_registry",\n    "build_default_registry",\n]\n')
+_______________ test_temp_materialization_inventory_is_complete ________________
+/app/tests2/shared/test_temp_usage_bytes_first_policy.py:525: in test_temp_materialization_inventory_is_complete
+    ???
+E   AssertionError: New temp materialization callsites are not in the inventory. Each MUST be classified explicitly:
+E       app/core/arricchisci/api_connection_rest_file.py:553
+E       app/core/eseguibili/router.py:308
+E       app/core/imdf/loader.py:125
+E       app/core/imdf/storage.py:96
+E       app/core/imdf/storage.py:167
+E       app/core/resources/loaders/result_blob.py:303
+E       app/services/file_multi_layer_upload.py:97
+E       app/services/file_preview_temp.py:96
+E       app/services/file_preview_temp.py:109
+E       app/services/file_service.py:577
+E       app/services/file_upload.py:22
+E       app/services/file_upload.py:82
+E       app/utils/dataframe.py:264
+E       app/utils/dataframe.py:277
+E       app/utils/dataframe.py:286
+E       app/utils/dataframe.py:749
+E       app/utils/result_store.py:549
+E       workers/tasks/enrichment_task.py:1012
+E     Add to `_TEMP_INVENTORY` with a (CATEGORY, rationale) tuple. Categories: PATH_REQUIRED_FILE, DIR_MULTIFILE, STAGING_INGESTION, MIGRATION_CANDIDATE.
+E   assert not {('app/core/arricchisci/api_connection_rest_file.py', 553), ('app/core/eseguibili/router.py', 308), ('app/core/imdf/lo...core/imdf/storage.py', 96), ('app/core/imdf/storage.py', 167), ('app/core/resources/loaders/result_blob.py', 303), ...}
+=========================== short test summary info ============================
+FAILED tests2/shared/test_authz_helpers_contract.py::test_assert_file_source_access_rejects_invisible_resource
+FAILED tests2/shared/test_blob_consumer_memory_audit.py::test_blob_consumer_inventory_is_complete
+FAILED tests2/shared/test_bootstrap_contract.py::test_bootstrap_invokes_four_steps_in_canonical_order
+FAILED tests2/shared/test_bootstrap_contract.py::test_ssl_env_cleanup_runs_after_init_all_dbs
+FAILED tests2/shared/test_bootstrap_contract.py::test_bootstrap_is_idempotent
+FAILED tests2/shared/test_bootstrap_contract.py::test_bootstrap_propagates_validate_startup_systemexit
+FAILED tests2/shared/test_bootstrap_contract.py::test_bootstrap_propagates_storage_config_error
+FAILED tests2/shared/test_bootstrap_contract.py::test_bootstrap_propagates_init_all_dbs_error
+FAILED tests2/shared/test_bootstrap_dependency_graph_lock.py::test_is_bootstrapped_flips_to_true_after_successful_bootstrap
+FAILED tests2/shared/test_bootstrap_dependency_graph_lock.py::test_is_bootstrapped_stays_false_when_step_raises
+FAILED tests2/shared/test_bootstrap_dependency_graph_lock.py::test_is_bootstrapped_recovers_to_true_on_retry_after_transient_failure
+FAILED tests2/shared/test_celery_beat_tick_smoke_design_guard.py::test_design_section_12_7_exists
+FAILED tests2/shared/test_celery_beat_tick_smoke_design_guard.py::test_design_section_names_canonical_primitive
+FAILED tests2/shared/test_celery_beat_tick_smoke_design_guard.py::test_design_section_calls_out_in_process_heartbeat_finding
+FAILED tests2/shared/test_celery_beat_tick_smoke_design_guard.py::test_design_section_documents_bounded_smoke_pattern
+FAILED tests2/shared/test_celery_beat_tick_smoke_design_guard.py::test_design_section_explains_why_separate_stream
+FAILED tests2/shared/test_celery_beat_tick_smoke_design_guard.py::test_design_section_points_at_next_implementation_stream
+FAILED tests2/shared/test_celery_enqueue_smoke_design_guard.py::test_design_section_12_6_exists
+FAILED tests2/shared/test_celery_enqueue_smoke_design_guard.py::test_design_section_names_canonical_primitive
+FAILED tests2/shared/test_celery_enqueue_smoke_design_guard.py::test_design_section_documents_bounded_smoke_pattern
+FAILED tests2/shared/test_celery_enqueue_smoke_design_guard.py::test_design_section_records_implementation_stream
+FAILED tests2/shared/test_cleanroom_celery_drift_doc_guard.py::test_drift_section_12_8_exists
+FAILED tests2/shared/test_cleanroom_celery_drift_doc_guard.py::test_drift_section_declares_sanity_check_not_equivalence
+FAILED tests2/shared/test_cleanroom_celery_drift_doc_guard.py::test_drift_section_lists_high_impact_drift_rows
+FAILED tests2/shared/test_cleanroom_celery_drift_doc_guard.py::test_drift_section_classifies_drift_severity
+FAILED tests2/shared/test_cleanroom_celery_drift_doc_guard.py::test_drift_section_names_future_closure_streams
+FAILED tests2/shared/test_cleanroom_celery_drift_doc_guard.py::test_drift_section_lists_hard_non_goals
+FAILED tests2/shared/test_docker_scaffold_guard.py::test_install_docker_doc_advertises_first_scaffold_status
+FAILED tests2/shared/test_docker_scaffold_guard.py::test_install_docker_doc_documents_validation_gaps
+FAILED tests2/shared/test_error_codes_catalog.py::test_router_constant_refs_find_baseline
+FAILED tests2/shared/test_first_pc_execution_pack_doc_guard.py::test_entry_section_exists
+FAILED tests2/shared/test_first_pc_execution_pack_doc_guard.py::test_entry_section_names_five_steps
+FAILED tests2/shared/test_first_pc_execution_pack_doc_guard.py::test_entry_section_keeps_docker_first_scaffold_label
+FAILED tests2/shared/test_first_pc_execution_pack_doc_guard.py::test_entry_section_links_report_template
+FAILED tests2/shared/test_fs4_s3_large_result_dispatch.py::test_get_result_data_from_db_blob
+FAILED tests2/shared/test_fs4_s3_large_result_dispatch.py::test_get_result_data_from_s3
+FAILED tests2/shared/test_horizontal_engines_map_doc_guard.py::test_doc_has_canonical_title_and_stream_tag
+FAILED tests2/shared/test_horizontal_engines_map_doc_guard.py::test_doc_has_six_canonical_sections_in_order
+FAILED tests2/shared/test_horizontal_engines_map_doc_guard.py::test_doc_lists_engine_alignment_tags
+FAILED tests2/shared/test_horizontal_engines_map_doc_guard.py::test_doc_references_canonical_entry_points
+FAILED tests2/shared/test_horizontal_engines_map_doc_guard.py::test_doc_has_do_not_import_section
+FAILED tests2/shared/test_horizontal_engines_map_doc_guard.py::test_do_not_import_lists_four_canonical_guards
+FAILED tests2/shared/test_install_checklist_doc_guard.py::test_checklist_section_13_exists
+FAILED tests2/shared/test_install_checklist_doc_guard.py::test_checklist_documents_docker_path_not_installable
+FAILED tests2/shared/test_install_checklist_doc_guard.py::test_checklist_covers_all_critical_install_steps
+FAILED tests2/shared/test_install_checklist_doc_guard.py::test_checklist_documents_four_object_storage_options
+FAILED tests2/shared/test_install_checklist_doc_guard.py::test_checklist_documents_celery_worker_beat_count
+FAILED tests2/shared/test_install_checklist_doc_guard.py::test_checklist_funnels_through_install_sh
+FAILED tests2/shared/test_install_checklist_doc_guard.py::test_checklist_documents_rollback
+FAILED tests2/shared/test_install_checklist_doc_guard.py::test_checklist_documents_critical_gotchas
+FAILED tests2/shared/test_install_checklist_doc_guard.py::test_checklist_has_marco_command_sequence
+FAILED tests2/shared/test_install_docker_fe_gap_guard.py::test_install_docker_has_fe_gap_audit_subsection
+FAILED tests2/shared/test_install_docs_consistency_guard.py::test_in_scope_docs_state_scaffold_exists
+FAILED tests2/shared/test_install_docs_consistency_guard.py::test_install_non_docker_remains_go_ready_first_pc_path
+FAILED tests2/shared/test_install_docs_consistency_guard.py::test_install_marco_dry_run_funnels_back_to_non_docker
+FAILED tests2/shared/test_install_execution_pack_doc_guard.py::test_rollback_section_exists
+FAILED tests2/shared/test_install_execution_pack_doc_guard.py::test_rollback_uses_signal_first_not_kill_dash_9_first
+FAILED tests2/shared/test_install_execution_pack_doc_guard.py::test_rollback_documents_what_it_skips
+FAILED tests2/shared/test_install_execution_pack_doc_guard.py::test_docker_status_section_exists
+FAILED tests2/shared/test_install_execution_pack_doc_guard.py::test_docker_status_section_marks_validation_pending
+FAILED tests2/shared/test_install_execution_pack_doc_guard.py::test_docker_status_section_lists_eight_harness_items
+FAILED tests2/shared/test_install_execution_pack_doc_guard.py::test_docker_status_section_points_back_to_dry_run_pack
+FAILED tests2/shared/test_install_marco_dry_run_doc_guard.py::test_dry_run_doc_has_canonical_title
+FAILED tests2/shared/test_install_marco_dry_run_doc_guard.py::test_dry_run_doc_keeps_docker_honest
+FAILED tests2/shared/test_install_marco_dry_run_doc_guard.py::test_dry_run_doc_documents_required_manual_choices
+FAILED tests2/shared/test_install_marco_dry_run_doc_guard.py::test_dry_run_doc_uses_minimal_env_profile
+FAILED tests2/shared/test_install_marco_dry_run_doc_guard.py::test_dry_run_doc_has_foreground_smoke_for_api_worker_beat
+FAILED tests2/shared/test_install_marco_dry_run_doc_guard.py::test_dry_run_doc_documents_health_and_ready_outputs
+FAILED tests2/shared/test_install_marco_dry_run_doc_guard.py::test_dry_run_doc_has_failure_triage_checklist
+FAILED tests2/shared/test_install_marco_dry_run_doc_guard.py::test_dry_run_doc_flags_destructive_reset
+FAILED tests2/shared/test_install_marco_dry_run_doc_guard.py::test_install_non_docker_links_to_dry_run_pack
+FAILED tests2/shared/test_install_native_deps_verify_doc_guard.py::test_native_deps_section_exists
+FAILED tests2/shared/test_install_native_deps_verify_doc_guard.py::test_section_3_lists_os_binary_probes
+FAILED tests2/shared/test_install_native_deps_verify_doc_guard.py::test_section_3_includes_venv_python_import_probe
+FAILED tests2/shared/test_install_native_deps_verify_doc_guard.py::test_section_3_documents_fiona_transitive_via_geopandas
+FAILED tests2/shared/test_install_native_deps_verify_doc_guard.py::test_section_3_excludes_libmagic_verification
+FAILED tests2/shared/test_install_native_deps_verify_doc_guard.py::test_section_3_includes_service_probes
+FAILED tests2/shared/test_install_native_deps_verify_doc_guard.py::test_section_3_documents_distro_target
+FAILED tests2/shared/test_install_native_deps_verify_doc_guard.py::test_install_non_docker_mirrors_binary_probes
+FAILED tests2/shared/test_install_native_deps_verify_doc_guard.py::test_install_non_docker_documents_libmagic_precaution
+FAILED tests2/shared/test_install_smoke_harness_doc_guard.py::test_harness_section_exists
+FAILED tests2/shared/test_install_smoke_harness_doc_guard.py::test_harness_lists_eight_canonical_items
+FAILED tests2/shared/test_install_smoke_harness_doc_guard.py::test_harness_5_2_lists_canonical_memory_caps
+FAILED tests2/shared/test_install_smoke_harness_doc_guard.py::test_harness_5_2_uses_canonical_settings_accessor
+FAILED tests2/shared/test_install_smoke_harness_doc_guard.py::test_harness_5_3_uses_cleanroom_ping
+FAILED tests2/shared/test_install_smoke_harness_doc_guard.py::test_harness_5_4_documents_docker_deltas
+FAILED tests2/shared/test_install_smoke_harness_doc_guard.py::test_harness_section_5_referenced_canonical_install_locations
+FAILED tests2/shared/test_install_smoke_harness_doc_guard.py::test_section_ordering_unchanged
+FAILED tests2/shared/test_resource_engine_pilot_exit_criteria_lock.py::test_audit_doc_contains_pilot_exit_criteria_section
+FAILED tests2/shared/test_resource_engine_pilot_exit_criteria_lock.py::test_audit_doc_documents_keep_kill_criteria
+FAILED tests2/shared/test_resource_engine_pilot_exit_criteria_lock.py::test_audit_doc_records_kill_deadline_date
+FAILED tests2/shared/test_resource_superadmin_bypass_guardrails.py::test_no_literal_is_superadmin_true_in_app_outside_allowlist
+FAILED tests2/shared/test_resource_superadmin_bypass_guardrails.py::test_no_router_constructs_resource_ref_with_literal_superadmin_true
+FAILED tests2/shared/test_storage_reconciliation_beat_hook_contract.py::test_reconcile_storage_marks_orphan_deleted_on_ok
+FAILED tests2/shared/test_storage_reconciliation_beat_hook_contract.py::test_reconcile_storage_marks_orphan_deleted_on_skipped
+FAILED tests2/shared/test_storage_reconciliation_beat_hook_contract.py::test_reconcile_storage_marks_failed_attempt_on_failure_below_cap
+FAILED tests2/shared/test_storage_reconciliation_beat_hook_contract.py::test_reconcile_storage_marks_lost_on_max_attempts
+FAILED tests2/shared/test_storage_reconciliation_callsite_guard.py::test_classification_map_has_no_stale_entries
+FAILED tests2/shared/test_temp_usage_bytes_first_policy.py::test_resource_engine_canonical_usage_docs_bytes_mode
+FAILED tests2/shared/test_temp_usage_bytes_first_policy.py::test_temp_materialization_inventory_is_complete
+ERROR tests2/shared/test_storage_upload_intent_debt_doc_guard.py::test_debt_section_22_1_exists
+ERROR tests2/shared/test_storage_upload_intent_debt_doc_guard.py::test_debt_section_names_upload_intent_canonical
+ERROR tests2/shared/test_storage_upload_intent_debt_doc_guard.py::test_debt_section_documents_both_target_architectures
+ERROR tests2/shared/test_storage_upload_intent_debt_doc_guard.py::test_debt_section_status_flag_is_accepted_mitigated
+ERROR tests2/shared/test_storage_upload_intent_debt_doc_guard.py::test_debt_section_names_both_closure_streams
+ERROR tests2/shared/test_storage_upload_intent_debt_doc_guard.py::test_debt_section_preserves_hard_non_goal
+ERROR tests2/shared/test_storage_upload_intent_debt_doc_guard.py::test_debt_section_lists_concrete_debt_reasons
+ERROR tests2/shared/test_storage_upload_intent_debt_doc_guard.py::test_debt_section_is_ascii_only

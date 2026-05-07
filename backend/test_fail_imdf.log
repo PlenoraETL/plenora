@@ -1,0 +1,89 @@
+..............................................F...........FFFFFFFFFFFFF. [ 96%]
+F..                                                                      [100%]
+=================================== FAILURES ===================================
+___________ test_init_module_docstring_mentions_real_modules_and_d3 ____________
+tests2/imdf/unit/test_plenora_metadata_schema.py:229: in test_init_module_docstring_mentions_real_modules_and_d3
+    assert mod in doc, f"__init__.py docstring non menziona modulo reale '{mod}'"
+E   AssertionError: __init__.py docstring non menziona modulo reale 'loader'
+E   assert 'loader' in '\nIMDF module — lettura ed elaborazione output del servizio imdf.plenora.it.\n\nLo zip IMDF prodotto contiene:\n'
+_________________ test_type_mismatch_emits_warning_in_replace __________________
+tests2/imdf/unit/test_validate_publish_issue_categories.py:268: in test_type_mismatch_emits_warning_in_replace
+    assert layer is not None
+E   assert None is not None
+______________ test_type_mismatch_on_non_match_column_is_warning _______________
+tests2/imdf/unit/test_validate_publish_issue_categories.py:305: in test_type_mismatch_on_non_match_column_is_warning
+    issues = [i for i in layer["schema_issues"] if i["code"] == "TYPE_MISMATCH"]
+                         ^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: 'NoneType' object is not subscriptable
+____________________ test_null_match_key_warning_in_replace ____________________
+tests2/imdf/unit/test_validate_publish_issue_categories.py:333: in test_null_match_key_warning_in_replace
+    issue = _find_issue(layer["data_issues"], "NULL_MATCH_KEY")
+                        ^^^^^^^^^^^^^^^^^^^^
+E   TypeError: 'NoneType' object is not subscriptable
+_____________________ test_null_match_key_error_in_upsert ______________________
+tests2/imdf/unit/test_validate_publish_issue_categories.py:364: in test_null_match_key_error_in_upsert
+    issue = _find_issue(layer["data_issues"], "NULL_MATCH_KEY")
+                        ^^^^^^^^^^^^^^^^^^^^
+E   TypeError: 'NoneType' object is not subscriptable
+__________________ test_duplicate_match_key_warning_in_upsert __________________
+tests2/imdf/unit/test_validate_publish_issue_categories.py:397: in test_duplicate_match_key_warning_in_upsert
+    issue = _find_issue(layer["data_issues"], "DUPLICATE_MATCH_KEY")
+                        ^^^^^^^^^^^^^^^^^^^^
+E   TypeError: 'NoneType' object is not subscriptable
+___________________ test_duplicate_match_key_error_in_update ___________________
+tests2/imdf/unit/test_validate_publish_issue_categories.py:432: in test_duplicate_match_key_error_in_update
+    issue = _find_issue(layer["data_issues"], "DUPLICATE_MATCH_KEY")
+                        ^^^^^^^^^^^^^^^^^^^^
+E   TypeError: 'NoneType' object is not subscriptable
+_______________ test_string_truncation_warning_for_normal_field ________________
+tests2/imdf/unit/test_validate_publish_issue_categories.py:470: in test_string_truncation_warning_for_normal_field
+    issue = _find_issue(layer["data_issues"], "STRING_TRUNCATION")
+                        ^^^^^^^^^^^^^^^^^^^^
+E   TypeError: 'NoneType' object is not subscriptable
+________________ test_string_truncation_error_for_match_column _________________
+tests2/imdf/unit/test_validate_publish_issue_categories.py:502: in test_string_truncation_error_for_match_column
+    issue = _find_issue(layer["data_issues"], "STRING_TRUNCATION")
+                        ^^^^^^^^^^^^^^^^^^^^
+E   TypeError: 'NoneType' object is not subscriptable
+_________________ test_null_on_non_nullable_warning_in_replace _________________
+tests2/imdf/unit/test_validate_publish_issue_categories.py:538: in test_null_on_non_nullable_warning_in_replace
+    issue = _find_issue(layer["data_issues"], "NULL_ON_NON_NULLABLE")
+                        ^^^^^^^^^^^^^^^^^^^^
+E   TypeError: 'NoneType' object is not subscriptable
+__________________ test_null_on_non_nullable_error_in_append ___________________
+tests2/imdf/unit/test_validate_publish_issue_categories.py:574: in test_null_on_non_nullable_error_in_append
+    issue = _find_issue(layer["data_issues"], "NULL_ON_NON_NULLABLE")
+                        ^^^^^^^^^^^^^^^^^^^^
+E   TypeError: 'NoneType' object is not subscriptable
+_____________________ test_missing_capabilities_for_append _____________________
+tests2/imdf/unit/test_validate_publish_issue_categories.py:608: in test_missing_capabilities_for_append
+    assert issue is not None
+E   assert None is not None
+_____________________ test_missing_capabilities_for_upsert _____________________
+tests2/imdf/unit/test_validate_publish_issue_categories.py:639: in test_missing_capabilities_for_upsert
+    assert issue is not None
+E   assert None is not None
+______________ test_folder_mismatch_warning_when_request_differs _______________
+tests2/imdf/unit/test_validate_publish_issue_categories.py:678: in test_folder_mismatch_warning_when_request_differs
+    assert issue is not None
+E   assert None is not None
+_____________ test_crs_mismatch_warning_when_bundle_and_fs_differ ______________
+tests2/imdf/unit/test_validate_publish_issue_categories.py:744: in test_crs_mismatch_warning_when_bundle_and_fs_differ
+    assert issue is not None
+E   assert None is not None
+=========================== short test summary info ============================
+FAILED tests2/imdf/unit/test_plenora_metadata_schema.py::test_init_module_docstring_mentions_real_modules_and_d3
+FAILED tests2/imdf/unit/test_validate_publish_issue_categories.py::test_type_mismatch_emits_warning_in_replace
+FAILED tests2/imdf/unit/test_validate_publish_issue_categories.py::test_type_mismatch_on_non_match_column_is_warning
+FAILED tests2/imdf/unit/test_validate_publish_issue_categories.py::test_null_match_key_warning_in_replace
+FAILED tests2/imdf/unit/test_validate_publish_issue_categories.py::test_null_match_key_error_in_upsert
+FAILED tests2/imdf/unit/test_validate_publish_issue_categories.py::test_duplicate_match_key_warning_in_upsert
+FAILED tests2/imdf/unit/test_validate_publish_issue_categories.py::test_duplicate_match_key_error_in_update
+FAILED tests2/imdf/unit/test_validate_publish_issue_categories.py::test_string_truncation_warning_for_normal_field
+FAILED tests2/imdf/unit/test_validate_publish_issue_categories.py::test_string_truncation_error_for_match_column
+FAILED tests2/imdf/unit/test_validate_publish_issue_categories.py::test_null_on_non_nullable_warning_in_replace
+FAILED tests2/imdf/unit/test_validate_publish_issue_categories.py::test_null_on_non_nullable_error_in_append
+FAILED tests2/imdf/unit/test_validate_publish_issue_categories.py::test_missing_capabilities_for_append
+FAILED tests2/imdf/unit/test_validate_publish_issue_categories.py::test_missing_capabilities_for_upsert
+FAILED tests2/imdf/unit/test_validate_publish_issue_categories.py::test_folder_mismatch_warning_when_request_differs
+FAILED tests2/imdf/unit/test_validate_publish_issue_categories.py::test_crs_mismatch_warning_when_bundle_and_fs_differ

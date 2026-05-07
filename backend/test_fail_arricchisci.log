@@ -1,0 +1,89 @@
+..........................F............................................. [ 26%]
+........................................................................ [ 52%]
+...................................................F.FFF................ [ 79%]
+....................................................FFFF                 [100%]
+=================================== FAILURES ===================================
+___ TestExecuteEnrichmentBasics.test_tenant_group_id_memorized_from_project ____
+tests2/arricchisci/unit/test_api_connector_execute_enrichment_lock.py:197: in test_tenant_group_id_memorized_from_project
+    assert env.svc._current_group_id == "grp-xyz"
+E   AssertionError: assert 'grp-1' == 'grp-xyz'
+E     
+E     - grp-xyz
+E     + grp-1
+----------------------------- Captured stdout call -----------------------------
+[36m09:52:29 | INFO  | app.core.arricchisci.canvas_orchestrator | Ordine esecuzione: ['src-1', 'r-1'][0m
+[36m09:52:29 | INFO  | app.core.arricchisci.canvas_orchestrator | Gruppi di esecuzione: [('single', 1), ('single', 1)][0m
+_____ test_init_execution_context_returns_ctx_with_group_id_on_happy_path ______
+tests2/arricchisci/unit/test_init_execution_context_fail_closed.py:44: in test_init_execution_context_returns_ctx_with_group_id_on_happy_path
+    assert ctx.group_id == "grp-A"
+E   AssertionError: assert None == 'grp-A'
+E    +  where None = ArricchisciExecutionContext(project_id='proj-1', group_id=None, preview_limit=100).group_id
+____ test_init_execution_context_raises_execution_context_error_on_db_error ____
+tests2/arricchisci/unit/test_init_execution_context_fail_closed.py:91: in test_init_execution_context_raises_execution_context_error_on_db_error
+    with pytest.raises(ExecutionContextError) as exc_info:
+E   Failed: DID NOT RAISE <class 'app.shared.exceptions.ExecutionContextError'>
+____ test_init_execution_context_does_not_write_singleton_state_on_db_error ____
+tests2/arricchisci/unit/test_init_execution_context_fail_closed.py:129: in test_init_execution_context_does_not_write_singleton_state_on_db_error
+    with pytest.raises(ExecutionContextError):
+E   Failed: DID NOT RAISE <class 'app.shared.exceptions.ExecutionContextError'>
+______ test_execute_enrichment_routes_db_error_to_safe_boundary_response _______
+tests2/arricchisci/unit/test_init_execution_context_fail_closed.py:166: in test_execute_enrichment_routes_db_error_to_safe_boundary_response
+    assert result == {
+E   assert {'error': 'Ne...ccess': False} == {'error': "Er...error': False}
+E     
+E     Omitting 1 identical items, use -vv to show
+E     Differing items:
+E     {'error': 'Nessun nodo nel canvas'} != {'error': "Errore interno durante l'arricchimento"}
+E     Right contains 1 more item:
+E     {'user_error': False}
+E     Use -v to get more diff
+__ test_infer_project_source_schema_prefers_result_node_columns_over_metadata __
+tests2/arricchisci/unit/test_schema_inference_api_enrich_and_project_source.py:221: in test_infer_project_source_schema_prefers_result_node_columns_over_metadata
+    assert names == ["id", "lat", "risk", "score"], names
+E   AssertionError: []
+E   assert [] == ['id', 'lat', 'risk', 'score']
+E     
+E     Right contains 4 more items, first extra item: 'id'
+E     Use -v to get more diff
+----------------------------- Captured stdout call -----------------------------
+[33m09:52:31 | WARNING | app.services.schema_inference | Metadata non trovato per progetto src-proj-1[0m
+_ test_infer_project_source_schema_fallback_to_columns_metadata_when_result_empty _
+tests2/arricchisci/unit/test_schema_inference_api_enrich_and_project_source.py:257: in test_infer_project_source_schema_fallback_to_columns_metadata_when_result_empty
+    assert names == ["id", "value"], names
+E   AssertionError: []
+E   assert [] == ['id', 'value']
+E     
+E     Right contains 2 more items, first extra item: 'id'
+E     Use -v to get more diff
+----------------------------- Captured stdout call -----------------------------
+[33m09:52:31 | WARNING | app.services.schema_inference | Metadata non trovato per progetto src-proj-1[0m
+______ test_infer_project_source_schema_does_not_rename_columns_via_alias ______
+tests2/arricchisci/unit/test_schema_inference_api_enrich_and_project_source.py:298: in test_infer_project_source_schema_does_not_rename_columns_via_alias
+    assert names == ["x", "y"], names
+E   AssertionError: []
+E   assert [] == ['x', 'y']
+E     
+E     Right contains 2 more items, first extra item: 'x'
+E     Use -v to get more diff
+----------------------------- Captured stdout call -----------------------------
+[33m09:52:31 | WARNING | app.services.schema_inference | Metadata non trovato per progetto src-proj-1[0m
+__ test_infer_project_source_schema_does_not_filter_by_intrinsic_visible_flag __
+tests2/arricchisci/unit/test_schema_inference_api_enrich_and_project_source.py:345: in test_infer_project_source_schema_does_not_filter_by_intrinsic_visible_flag
+    assert names == ["shown", "hidden_in_source"], names
+E   AssertionError: []
+E   assert [] == ['shown', 'hidden_in_source']
+E     
+E     Right contains 2 more items, first extra item: 'shown'
+E     Use -v to get more diff
+----------------------------- Captured stdout call -----------------------------
+[33m09:52:31 | WARNING | app.services.schema_inference | Metadata non trovato per progetto src-proj-1[0m
+=========================== short test summary info ============================
+FAILED tests2/arricchisci/unit/test_api_connector_execute_enrichment_lock.py::TestExecuteEnrichmentBasics::test_tenant_group_id_memorized_from_project
+FAILED tests2/arricchisci/unit/test_init_execution_context_fail_closed.py::test_init_execution_context_returns_ctx_with_group_id_on_happy_path
+FAILED tests2/arricchisci/unit/test_init_execution_context_fail_closed.py::test_init_execution_context_raises_execution_context_error_on_db_error
+FAILED tests2/arricchisci/unit/test_init_execution_context_fail_closed.py::test_init_execution_context_does_not_write_singleton_state_on_db_error
+FAILED tests2/arricchisci/unit/test_init_execution_context_fail_closed.py::test_execute_enrichment_routes_db_error_to_safe_boundary_response
+FAILED tests2/arricchisci/unit/test_schema_inference_api_enrich_and_project_source.py::test_infer_project_source_schema_prefers_result_node_columns_over_metadata
+FAILED tests2/arricchisci/unit/test_schema_inference_api_enrich_and_project_source.py::test_infer_project_source_schema_fallback_to_columns_metadata_when_result_empty
+FAILED tests2/arricchisci/unit/test_schema_inference_api_enrich_and_project_source.py::test_infer_project_source_schema_does_not_rename_columns_via_alias
+FAILED tests2/arricchisci/unit/test_schema_inference_api_enrich_and_project_source.py::test_infer_project_source_schema_does_not_filter_by_intrinsic_visible_flag
