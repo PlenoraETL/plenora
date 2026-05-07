@@ -64,6 +64,7 @@ def test_tasks_download_falls_back_to_db_blob_if_no_s3_key():
     """Se storage.find_keys ritorna [], salta al fallback DB blob."""
     from fastapi import BackgroundTasks
     from app.core.orchestrator.router import download_task_result
+    from app.core.resources.types import Resource
 
     fake_task_info = MagicMock()
     fake_task_info.status.value = "success"
@@ -72,16 +73,29 @@ def test_tasks_download_falls_back_to_db_blob_if_no_s3_key():
     bg = BackgroundTasks()
     fake_user = MagicMock(user_id="u1", role="superadmin", group_id="g1")
 
-    import app.db.db_service as db_mod
+    class _FakeRegistry:
+        def get(self, ref, *, mode):
+            assert ref.result_id == "res-abc"
+            assert ref.expected_group_id == "g1"
+            assert ref.expected_project_id == "p1"
+            assert mode == "bytes"
+            return Resource(
+                kind="result_blob",
+                size_bytes=8,
+                data=b"col\nval\n",
+                is_temporary=False,
+            )
 
     with patch("app.core.orchestrator.router._assert_task_group", return_value=None), \
          patch("app.services.task_service.task_service.get_task_status",
                return_value=fake_task_info), \
          patch("app.core.eseguibili.storage.find_keys", return_value=[]), \
-         patch.object(db_mod, "get_result",
-                      return_value={"id": "res-abc", "project_id": "p1",
-                                    "filename": "out.csv", "format": "csv"}), \
-         patch.object(db_mod, "get_result_data", return_value=b"col\nval\n"):
+         patch("app.core.results.db.get_result",
+               return_value={"id": "res-abc", "project_id": "p1",
+                             "group_id": "g1", "filename": "out.csv",
+                             "format": "csv"}), \
+         patch("app.core.artifacts.resolver.default_registry",
+               return_value=_FakeRegistry()):
         try:
             response = download_task_result(
                 task_id="t1",

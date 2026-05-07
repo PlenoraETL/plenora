@@ -34,7 +34,7 @@ def _apply_results_retention(project_id: str) -> None:
     N viene letto da projects.retention_n nelle config tables, default DEFAULT_RESULTS_RETENTION.
     """
     try:
-        from app.db.config.projects import get_project_retention_n
+        from app.core.projects.db import get_project_retention_n
         from app.core.results import cleanup as results_cleanup
         from app.core.results import db as results_db
 
@@ -196,7 +196,7 @@ def save_result_blob(project_id: str, path: Path, fmt: str,
                             il ramo DB e' protetto dallo stesso hard cap.
                             Manutenuto per retro-compat dev/test.
 
-    Reader (`results_db_service.get_result_data`) gestisce trasparente
+    Reader (`app.core.results.blob.get_result_data`) gestisce trasparente
     storage_key (object_storage) vs `data` BYTEA (db_legacy) — i nuovi
     result in policy=object_storage hanno sempre storage_key valorizzato
     e data=NULL. Le row legacy con data BYTEA continuano a essere lette.
@@ -217,7 +217,7 @@ def save_result_blob(project_id: str, path: Path, fmt: str,
     """
     _saved = False
     try:
-        from app.db.config.projects import get_project
+        from app.core.projects.db import get_project
         from app.core.results.db import save_result
         from app.config import settings
 
@@ -381,7 +381,7 @@ def save_result_blob_from_bytes(
     Raises: ResultSaveError se fallisce DB/S3 o size supera hard cap.
     """
     try:
-        from app.db.config.projects import get_project
+        from app.core.projects.db import get_project
         from app.core.results.db import save_result
         from app.config import settings
 
@@ -605,7 +605,7 @@ def get_result_as_bytes(project_id: str) -> Optional[bytes]:
     """
     try:
         from app.core.results.db import get_latest_result
-        from app.db.results_db_service import get_result_data
+        from app.core.results.blob import get_result_data
         row = get_latest_result(project_id)
         if not row:
             return None
@@ -624,7 +624,7 @@ def get_result_as_tempfile(project_id: str) -> Optional[Path]:
     """
     try:
         from app.core.results.db import get_latest_result
-        from app.db.results_db_service import get_result_data
+        from app.core.results.blob import get_result_data
 
         row = get_latest_result(project_id)
         if not row:

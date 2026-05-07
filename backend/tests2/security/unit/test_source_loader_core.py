@@ -78,7 +78,7 @@ def test_load_project_blocks_cross_tenant_via_resolver():
     """End-to-end con ArtifactResolver reale (mockando solo leaf DAL):
     cross-tenant solleva SourceLoadingError senza rivelare il tenant reale."""
     import app.db.config.projects as projects_db
-    import app.db.results_db_service as results_db
+    import app.core.results.db as results_db
 
     loader = SourceLoader()
     ref = SourceRef(project=LatestProjectArtifactRef(project_id="proj-1"))
@@ -93,7 +93,7 @@ def test_load_project_returns_none_when_no_latest_result():
     """Sanity: same-group, no result disponibile → None (semantica
     legacy di get_result_as_tempfile, non eccezione)."""
     import app.db.config.projects as projects_db
-    import app.db.results_db_service as results_db
+    import app.core.results.db as results_db
 
     loader = SourceLoader()
     ref = SourceRef(project=LatestProjectArtifactRef(project_id="proj-1"))
@@ -137,7 +137,7 @@ def test_resolve_project_path_blocks_cross_tenant_via_resolver():
     """End-to-end con resolver reale: cross-tenant solleva
     SourceLoadingError, NON ritorna silenziosamente un path."""
     import app.db.config.projects as projects_db
-    import app.db.results_db_service as results_db
+    import app.core.results.db as results_db
 
     loader = SourceLoader()
     ref = LatestProjectArtifactRef(project_id="proj-1")
@@ -151,7 +151,7 @@ def test_resolve_project_path_blocks_cross_tenant_via_resolver():
 def test_resolve_project_path_returns_none_when_no_latest_result():
     """Sanity: same-group, no result → None, niente eccezione."""
     import app.db.config.projects as projects_db
-    import app.db.results_db_service as results_db
+    import app.core.results.db as results_db
 
     loader = SourceLoader()
     ref = LatestProjectArtifactRef(project_id="proj-1")
@@ -287,7 +287,7 @@ def test_load_static_does_not_touch_db_or_http():
 
     with patch("app.shared.sharing.is_resource_visible") as visibility, \
          patch("app.core.files.service.file_source_service") as svc, \
-         patch("app.db.db_service.get_project") as get_project:
+         patch("app.core.projects.db.get_project") as get_project:
         loader.load(ref, expected_group_id="grp-1")
 
     visibility.assert_not_called()

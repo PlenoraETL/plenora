@@ -32,11 +32,8 @@ _DOMAINS = (
 _LEGACY_IMPORT_BASELINES: dict[str, dict[str, frozenset[str]]] = {
     "app.services": {
         "projects": frozenset({
-            "app/core/manipola/executor.py -> app.services.project_lineage",
             "app/core/projects/router.py -> app.services.orphan_cleanup_service",
-            "app/core/projects/router.py -> app.services.project_lineage",
             "app/core/projects/router.py -> app.services.schema_inference",
-            "app/core/projects/service.py -> app.services.project_lineage",
             "app/shared/execution/canvas_columns.py -> app.services.schema_inference",
         }),
         "connections": frozenset(),
@@ -69,7 +66,6 @@ _LEGACY_IMPORT_BASELINES: dict[str, dict[str, frozenset[str]]] = {
     },
     "app.db.config": {
         "projects": frozenset({
-            "app/core/connections/router.py -> app.db.config.projects",
             "app/core/intermediate/db.py -> app.db.config.projects",
             "app/core/projects/db.py -> app.db.config.projects",
             "app/core/projects/repository.py -> app.db.config.projects",
@@ -77,9 +73,6 @@ _LEGACY_IMPORT_BASELINES: dict[str, dict[str, frozenset[str]]] = {
             "app/core/projects/service.py -> app.db.config.groups",
             "app/core/projects/service.py -> app.db.config.projects",
             "app/db/config_db_service.py -> app.db.config.projects",
-            "app/services/schema_inference.py -> app.db.config.projects",
-            "app/utils/result_store.py -> app.db.config.projects",
-            "workers/tasks/pipeline_task.py -> app.db.config.projects",
         }),
         "connections": frozenset({
             "app/core/arricchisci/api_connection_management.py -> app.db.config.api_connections",

@@ -244,7 +244,26 @@ def test_load_returns_size_bytes_zero_when_object_storage_disabled():
     assert out.size_bytes == 0
 
 
-# Back-compat shim: get_result_data delegates correctly
+# Result blob read boundary + back-compat shim delegation
+
+
+def test_results_blob_boundary_with_group_id_filters_sql():
+    """Canonical get_result_data(result_id, group_id) delegates to the
+    Resource Engine dispatch with the same tenant filter semantics."""
+    from app.core.results import blob as results_blob
+    from app.core.resources.resource_caps import resolve_resource_max_bytes
+
+    captured, fake = fake_fetchone(
+        row={"data": b"x", "data_size": 1, "storage_key": None}
+    )
+
+    with patch("app.db.pg_connection.fetchone", fake):
+        out = results_blob.get_result_data("r1", group_id="g1")
+
+    assert out == b"x"
+    assert "AND group_id = ?" in captured["sql"]
+    expected_cap = resolve_resource_max_bytes()
+    assert captured["params"] == (expected_cap, "r1", "g1")
 
 
 def test_back_compat_shim_with_group_id_filters_sql():

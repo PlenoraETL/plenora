@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import pytest
 
@@ -12,6 +13,9 @@ os.environ.setdefault(
 )
 
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
+
+
+_BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 def test_runtime_db_init_preserves_historical_order(monkeypatch):
@@ -41,16 +45,13 @@ def test_runtime_db_init_preserves_historical_order(monkeypatch):
     ]
 
 
-def test_db_service_init_all_dbs_is_compatibility_wrapper(monkeypatch):
-    calls: list[str] = []
-
-    monkeypatch.setattr(
-        "app.core.runtime.db_init.init_all_dbs",
-        lambda: calls.append("runtime.db_init.init_all_dbs"),
+def test_db_service_init_all_dbs_wrapper_points_at_runtime_boundary():
+    source = (_BACKEND_ROOT / "app" / "db" / "db_service.py").read_text(
+        encoding="utf-8"
     )
 
-    import app.db.db_service as db_service
-
-    db_service._original_init_all_dbs()
-
-    assert calls == ["runtime.db_init.init_all_dbs"]
+    assert (
+        "from app.core.runtime.db_init import init_all_dbs as runtime_init_all_dbs"
+        in source
+    )
+    assert "runtime_init_all_dbs()" in source

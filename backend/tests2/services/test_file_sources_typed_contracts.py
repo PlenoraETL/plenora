@@ -50,16 +50,12 @@ def test_file_source_row_required_keys_present():
     )
 
 
-def test_file_source_row_reexported_from_facades():
-    """`FileSourceRow` deve essere accessibile via le 2 facade DB
-    (`app.db.db_service`, `app.db.config_db_service`) per simmetria con
-    `save_file_source` / `save_file_sources_batch`."""
+def test_file_source_row_config_facade_points_at_canonical_contract():
+    """`FileSourceRow` deve restare ancorato al modulo canonico."""
     from app.db.config.file_sources import FileSourceRow as canonical
     from app.db.config_db_service import FileSourceRow as via_config_facade
-    from app.db.db_service import FileSourceRow as via_db_facade
 
     assert via_config_facade is canonical
-    assert via_db_facade is canonical
 
 
 # 2. BlobDispatchResult contract

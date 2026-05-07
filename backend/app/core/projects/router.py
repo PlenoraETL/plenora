@@ -19,7 +19,7 @@ from app.shared.exceptions import (
     CanvasCorruptedError,
     ProjectCleanupPartialError,
 )
-from app.services.project_lineage import ProjectLineageCycleError
+from app.core.projects.lineage import ProjectLineageCycleError
 from app.core.auth.dependencies import (
     get_current_user,
     require_not_esecutore,

@@ -76,7 +76,7 @@ def test_download_project_result_falls_back_to_db_blob(pipeline_client, tmp_path
             "size_bytes": len(blob_bytes),
         },
     ), patch(
-        "app.db.results_db_service.get_result_data",
+        "app.core.results.blob.get_result_data",
         return_value=blob_bytes,
     ):
         response = pipeline_client.get(f"/api/projects/{project_id}/download")
@@ -158,7 +158,7 @@ def test_download_project_result_blob_fallback_preserves_mime_type(
             "size_bytes": len(blob_bytes),
         },
     ), patch(
-        "app.db.results_db_service.get_result_data",
+        "app.core.results.blob.get_result_data",
         return_value=blob_bytes,
     ):
         response = pipeline_client.get(f"/api/projects/{project_id}/download")

@@ -207,12 +207,12 @@ def test_get_result_as_bytes_returns_raw_blob(monkeypatch):
     from app.utils import result_store
     import app.db.config.projects as projects_db
     import app.core.results.db as results_db
-    import app.db.results_db_service as blob_results_db
+    import app.core.results.blob as result_blob
 
     expected = b"col1,col2\n1,a\n2,b\n"
     monkeypatch.setattr(results_db, "get_latest_result",
                         lambda pid: {"id": "r1", "format": "csv"})
-    monkeypatch.setattr(blob_results_db, "get_result_data",
+    monkeypatch.setattr(result_blob, "get_result_data",
                         lambda rid: expected)
 
     result = result_store.get_result_as_bytes("proj-1")
@@ -275,7 +275,7 @@ def test_get_result_as_bytes_creates_no_files_on_disk(
     from app.utils import result_store
     import app.db.config.projects as projects_db
     import app.core.results.db as results_db
-    import app.db.results_db_service as blob_results_db
+    import app.core.results.blob as result_blob
 
     temp_dir = tmp_path / "temp"
     temp_dir.mkdir()
@@ -286,7 +286,7 @@ def test_get_result_as_bytes_creates_no_files_on_disk(
 
     monkeypatch.setattr(results_db, "get_latest_result",
                         lambda pid: {"id": "r1", "format": "csv"})
-    monkeypatch.setattr(blob_results_db, "get_result_data",
+    monkeypatch.setattr(result_blob, "get_result_data",
                         lambda rid: b"payload")
 
     result_store.get_result_as_bytes("proj-1")

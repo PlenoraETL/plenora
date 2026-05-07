@@ -1,7 +1,6 @@
 """Canonical result metadata persistence.
 
-Blob reads intentionally stay in ``app.db.results_db_service.get_result_data``
-until the Resource Engine compatibility surface is retired.
+Blob reads live in ``app.core.results.blob.get_result_data``.
 """
 
 from __future__ import annotations

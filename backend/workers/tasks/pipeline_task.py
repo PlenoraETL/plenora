@@ -61,13 +61,13 @@ def _get_project_info(project_id: str) -> Dict[str, Any]:
     """Legge metadata progetto da PostgreSQL.
 
      import diretto del leaf
-    `app.db.config.projects.get_project`; il compatibility module
+    `app.core.projects.db.get_project`; il compatibility module
     `config_db_service` non e' piu' un canale richiesto. Funzione
     invariata behaviorally — ritorna `{}` su errore o se il
     progetto non esiste.
     """
     try:
-        from app.db.config.projects import get_project
+        from app.core.projects.db import get_project
         return get_project(project_id) or {}
     except Exception as e:
         logger.debug(f"project info lookup fallito: {type(e).__name__}: {e}")

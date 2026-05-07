@@ -49,7 +49,8 @@ def test_save_pipeline_result_gpkg_no_file_in_data_dir_temp(monkeypatch, tmp_pat
     """Sentinel: DATA_DIR/temp/ resta vuota dopo save_pipeline_result(gpkg)."""
     from app.utils.result_store import save_pipeline_result
     import app.utils.result_store as result_store
-    import app.db.db_service as db_service
+    import app.db.config.projects as projects_db
+    import app.core.results.db as results_db
 
     # Simula DATA_DIR su tmp_path per intercettare eventuali file residui
     data_dir = tmp_path / "data"
@@ -74,9 +75,9 @@ def test_save_pipeline_result_gpkg_no_file_in_data_dir_temp(monkeypatch, tmp_pat
     saved_db_calls = []
     monkeypatch.setattr(result_store, "uuid",
                         SimpleNamespace(uuid4=lambda: "res-gpkg"))
-    monkeypatch.setattr(db_service, "get_project",
+    monkeypatch.setattr(projects_db, "get_project",
                         lambda pid: {"id": pid, "group_id": "grp"})
-    monkeypatch.setattr(db_service, "save_result",
+    monkeypatch.setattr(results_db, "save_result",
                         lambda **kw: saved_db_calls.append(kw))
     monkeypatch.setattr(result_store, "_apply_results_retention",
                         lambda pid: None)
@@ -108,7 +109,8 @@ def test_save_pipeline_result_gpkg_uses_temporary_directory_prefix(monkeypatch, 
     con prefix urby_gpkg_shp_ (non DATA_DIR/temp/urby_<pid>_<hash>/)."""
     from app.utils.result_store import save_pipeline_result
     import app.utils.result_store as result_store
-    import app.db.db_service as db_service
+    import app.db.config.projects as projects_db
+    import app.core.results.db as results_db
 
     # Settings DATA_DIR
     class _FakeSettings:
@@ -128,9 +130,9 @@ def test_save_pipeline_result_gpkg_uses_temporary_directory_prefix(monkeypatch, 
 
     monkeypatch.setattr(result_store, "uuid",
                         SimpleNamespace(uuid4=lambda: "res-1"))
-    monkeypatch.setattr(db_service, "get_project",
+    monkeypatch.setattr(projects_db, "get_project",
                         lambda pid: {"id": pid, "group_id": "grp"})
-    monkeypatch.setattr(db_service, "save_result", lambda **kw: None)
+    monkeypatch.setattr(results_db, "save_result", lambda **kw: None)
     monkeypatch.setattr(result_store, "_apply_results_retention",
                         lambda pid: None)
 
@@ -153,7 +155,8 @@ def test_save_pipeline_result_gpkg_cleans_tmp_dir_on_upload_failure(monkeypatch,
     """Su upload failure, il context exit pulisce comunque la tmp_dir."""
     from app.utils.result_store import save_pipeline_result
     import app.utils.result_store as result_store
-    import app.db.db_service as db_service
+    import app.db.config.projects as projects_db
+    import app.core.results.db as results_db
 
     class _FakeSettings:
         DATA_DIR = tmp_path
@@ -173,11 +176,11 @@ def test_save_pipeline_result_gpkg_cleans_tmp_dir_on_upload_failure(monkeypatch,
     # save_result (DB) solleva
     monkeypatch.setattr(result_store, "uuid",
                         SimpleNamespace(uuid4=lambda: "res-fail"))
-    monkeypatch.setattr(db_service, "get_project",
+    monkeypatch.setattr(projects_db, "get_project",
                         lambda pid: {"id": pid, "group_id": "grp"})
     def _boom(**kw):
         raise RuntimeError("DB unavailable")
-    monkeypatch.setattr(db_service, "save_result", _boom)
+    monkeypatch.setattr(results_db, "save_result", _boom)
 
     df = pd.DataFrame({"a": [1]})
     with pytest.raises(Exception):

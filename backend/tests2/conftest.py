@@ -266,11 +266,10 @@ def pytest_collection_modifyitems(config, items):
 #   - Non interferisce con monkeypatch successivi: lo stub e' una
 #     sostituzione one-shot al modulo, non un fixture; un test che vuole
 #     reinstallare l'init reale puo' importare e chiamare la versione
-#     originale (stashata sotto `_original_init_all_dbs`).
+#     originale da `app.core.runtime.db_init._original_init_all_dbs`.
 
 if os.getenv("URBY_TEST_REAL_DB_INIT") != "1":
     try:
-        import app.db.db_service as _db_service
         import app.db.pg_connection as _pg_conn
         import app.core.intermediate.db as _idb
         import app.core.runtime.db_init as _runtime_db_init
@@ -280,7 +279,6 @@ if os.getenv("URBY_TEST_REAL_DB_INIT") != "1":
         # Stash gli originali per chi voglia reinstallarli (test integration
         # opt-in via `_runtime_db_init._original_init_all_dbs()`).
         _runtime_db_init._original_init_all_dbs = _runtime_db_init.init_all_dbs
-        _db_service._original_init_all_dbs = _db_service.init_all_dbs
         _pg_conn._original_init_db = _pg_conn.init_db
         _idb._original_init_db = _idb.init_db
         _mig_runner._original_apply_pending_migrations = (
@@ -300,7 +298,6 @@ if os.getenv("URBY_TEST_REAL_DB_INIT") != "1":
         def _noop_bootstrap():
             return None
 
-        _db_service.init_all_dbs = _noop_init_all_dbs
         _runtime_db_init.init_all_dbs = _noop_init_all_dbs
         _pg_conn.init_db = _noop_init_db
         _idb.init_db = _noop_init_db

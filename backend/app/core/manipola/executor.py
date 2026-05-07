@@ -13,7 +13,7 @@ from typing import Dict, Any, List, Optional
 
 from app.models import CanvasState, Edge, Node
 from app.config import settings
-from app.services.project_lineage import ProjectLineageCycleError
+from app.core.projects.lineage import ProjectLineageCycleError
 from app.shared.execution.canvas_graph import CanvasGraph
 from app.shared.execution.graph import kahn_topological_order
 from app.utils.logger import get_logger, append_step

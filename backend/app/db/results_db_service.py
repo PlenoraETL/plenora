@@ -51,16 +51,15 @@ def _s3_download_bytes(storage_key: str) -> Optional[bytes]:
 
 
 def get_result_data(result_id: str, group_id: str = None) -> Optional[bytes]:
-    """Recupera un blob risultato tramite il Resource Engine.
+    """Compatibility wrapper for the canonical result blob boundary.
 
-    Se `group_id` e' valorizzato, il loader applica il filtro tenant.
-    Se manca, mantiene la semantica dei caller interni che risolvono
-    l'autorizzazione a monte.
+    Production callers should import
+    ``app.core.results.blob.get_result_data`` directly. This shim remains for
+    legacy/test imports and preserves the same optional tenant filter.
     """
-    from app.core.resources.loaders.result_blob import _dispatch_by_id
+    from app.core.results.blob import get_result_data as _get_result_data
 
-    data, _backend = _dispatch_by_id(result_id, group_id_filter=group_id or None)
-    return data
+    return _get_result_data(result_id, group_id=group_id)
 
 
 def delete_result(result_id: str) -> bool:

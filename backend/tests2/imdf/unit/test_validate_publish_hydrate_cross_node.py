@@ -14,7 +14,6 @@ import pytest
 # Pre-import per evitare che monkeypatch di settings rompa init-time reads.
 import app.utils.logger  # noqa: F401
 import app.core.features.features_service  # noqa: F401
-import app.db.db_service  # noqa: F401
 import app.core.auth.auth  # noqa: F401
 import app.core.imdf.router as imdf_router
 

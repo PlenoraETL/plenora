@@ -319,7 +319,7 @@ def test_load_project_sources_fail_closed_when_check_raises_unexpectedly():
     def _boom(*_a, **_k):
         raise RuntimeError("DB esplode")
 
-    with patch("app.db.db_service.get_project", side_effect=_boom):
+    with patch("app.core.projects.db.get_project", side_effect=_boom):
         # Qualsiasi RuntimeError dal resolver risale al caller; manipola
         # NON lo deve degradare a warning. Il test verifica
         # che NON arriviamo a un return success-style: o fail-closed o

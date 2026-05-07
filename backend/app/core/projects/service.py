@@ -21,8 +21,8 @@ from app.models import (
 from app.db.config import groups as _groups
 from app.db.config import projects as project_db
 from app.db import pg_connection
+from app.core.results import blob as results_blob
 from app.core.results import db as results_db
-from app.db.results_db_service import get_result_data
 from app.core.projects.domain import build_project_id, resolve_project_group_id
 from app.core.projects.repository import (
     DbProjectCanvasKeyRepository,
@@ -300,7 +300,7 @@ class ProjectService:
         il canvas dal DB. Cosi' il check anticipa la validazione al save
         invece di scoprire il ciclo solo al prossimo run.
         """
-        from app.services.project_lineage import detect_project_lineage_cycle
+        from app.core.projects.lineage import detect_project_lineage_cycle
 
         new_sources = [
             n.source_project_id
@@ -335,7 +335,7 @@ class ProjectService:
 
         chain = detect_project_lineage_cycle(project_id, get_sources)
         if chain is not None:
-            from app.services.project_lineage import ProjectLineageCycleError
+            from app.core.projects.lineage import ProjectLineageCycleError
             raise ProjectLineageCycleError(chain)
 
     def _find_dependent_projects(self, project_id: str, group_id: str = None) -> List[dict]:
@@ -614,7 +614,7 @@ class ProjectService:
 
     def get_result_data(self, result_id: str) -> Optional[bytes]:
         """Recupera il blob del risultato per download."""
-        return get_result_data(result_id)
+        return results_blob.get_result_data(result_id)
 
     def list_results(self, project_id: str) -> List[dict]:
         """Lista risultati del progetto (senza blob)."""

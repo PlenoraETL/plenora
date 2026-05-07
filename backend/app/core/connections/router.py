@@ -149,7 +149,7 @@ def delete_connection(
     # progetti che la usano restano dipendenze legittime, ma admin del
     # gruppo proprietario non deve vederne i nomi). Superadmin: nessun
     # filtro
-    from app.db.config.projects import list_projects_using_connection
+    from app.core.projects.db import list_projects_using_connection
     using_projects = list_projects_using_connection(connection_id)
     if using_projects:
         is_super = current_user.role == "superadmin"

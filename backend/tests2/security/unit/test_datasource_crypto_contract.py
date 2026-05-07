@@ -18,12 +18,12 @@ def test_create_datasource_encrypts_sensitive_fields_before_save(monkeypatch):
     captured = {}
     service = DataSourceService()
 
-    import app.db.db_service as db_service
+    import app.db.config.datasources as datasource_db
     from app.core.datasources.models import DataSourceCreate
 
     monkeypatch.setattr(service, "_generate_id", lambda name: "ds_test")
     monkeypatch.setattr(
-        db_service,
+        datasource_db,
         "save_datasource",
         lambda **kwargs: captured.update(kwargs),
     )
@@ -61,7 +61,7 @@ def test_create_datasource_encrypts_sensitive_fields_before_save(monkeypatch):
 def test_get_full_config_decrypts_sensitive_fields_from_storage(monkeypatch):
     service = DataSourceService()
 
-    import app.db.db_service as db_service
+    import app.db.config.datasources as datasource_db
     from app.shared.crypto import encrypt_dict_fields
 
     row = {
@@ -85,7 +85,7 @@ def test_get_full_config_decrypts_sensitive_fields_from_storage(monkeypatch):
         row["config"],
         ["password", "private_key", "private_key_passphrase", "client_secret"],
     )
-    monkeypatch.setattr(db_service, "get_datasource", lambda ds_id: row)
+    monkeypatch.setattr(datasource_db, "get_datasource", lambda ds_id: row)
 
     config = service._get_full_config("ds_test")
 
