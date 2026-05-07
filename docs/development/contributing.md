@@ -51,6 +51,9 @@ Every change should answer these questions:
 - Do not add broad helpers at `app.shared` root. Use a thematic package.
 - Do not add new error codes unless an existing class cannot express the
   failure.
+- Keep Python imports at module top by default. Local imports are allowed only
+  for real circular imports, optional/heavy dependencies, or bootstrap/runtime
+  boundaries, and should carry a short `NOTE:` when the reason is not obvious.
 
 ## Code Comments
 

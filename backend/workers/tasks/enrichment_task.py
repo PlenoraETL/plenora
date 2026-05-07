@@ -4,12 +4,20 @@ Task Celery per arricchimento dati asincrono.
 Runs background execution while preserving backend runtime contracts.
 """
 
-import os
-import time
+import csv as csv_mod
 import json
+import json as json_mod
+import os
+import shutil as _shutil
+import tempfile as _tf
 import threading
-from typing import Dict, Any, Optional, List
+import time
+import traceback as _tb
+import uuid as _uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import Dict, Any, Optional, List
 from celery import current_task
 from workers.celery_app import celery_app
 from app.config import settings
@@ -187,7 +195,6 @@ def execute_enrichment_task(
     # tenant binding di `api_connection_service` piu' sotto: senza
     # `_load_*` / `_execute_rest_file` falliscono fail-closed con
     # "Contesto di sicurezza non determinabile (group_id mancante)"
-    import uuid as _uuid
     _run_start = time.time()
     _group_id = ""
     if is_eseguibile:
@@ -287,7 +294,6 @@ def execute_enrichment_task(
         # concorrentemente. I nodi di tipo source/static/result restano
         # "single" (eseguiti uno alla volta
         from app.core.arricchisci.parallel import compute_parallel_groups, should_execute_node
-        from concurrent.futures import ThreadPoolExecutor, as_completed
 
         parallel_groups = compute_parallel_groups(
             execution_order, nodes, edges,
@@ -742,7 +748,6 @@ def execute_enrichment_task(
         
         # ── EXECUTABLE FILE RESULT ──
         if isinstance(final_result, dict) and final_result.get("is_file_result"):
-            from pathlib import Path
 
             src_path = Path(final_result["output_path"]).resolve()
             elapsed_time = time.time() - start_time
@@ -766,7 +771,6 @@ def execute_enrichment_task(
                     raise ValueError("Il file di output è vuoto (0 bytes)")
 
                 if ext == '.csv':
-                    import csv as csv_mod
                     raw = src_path.read_bytes()
                     text = raw.decode('utf-8-sig')
                     rows_found = list(csv_mod.reader(text.splitlines()))
@@ -784,12 +788,10 @@ def execute_enrichment_task(
                         wb.close()
 
                 elif ext == '.json':
-                    import json as json_mod
                     data = json_mod.loads(src_path.read_bytes())
                     rows_count = len(data) if isinstance(data, list) else 1
 
                 elif ext in ('.geojson',):
-                    import json as json_mod
                     data = json_mod.loads(src_path.read_bytes())
                     features = data.get('features', []) if isinstance(data, dict) else []
                     rows_count = len(features)
@@ -899,7 +901,6 @@ def execute_enrichment_task(
                 # locale persistente: backend+worker multi-host safe. Il
                 # frontend scarica via GET /api/eseguibili/{id}/download/{task_id}
                 # che streamma da S3 e cancella l'oggetto dopo l'invio
-                import shutil as _shutil
                 from app.core.eseguibili import storage as _eseg_storage
                 _output_filename = src_path.name
                 _eseg_storage.save(task_id, src_path)
@@ -1003,7 +1004,6 @@ def execute_enrichment_task(
             from app.utils.dataframe import save_dataframe, save_dataframe_to_bytes
             fmt_lower = (final_format or "").lower()
             if fmt_lower in ("gpkg", "shp"):
-                import tempfile as _tf
                 with _tf.TemporaryDirectory(
                     prefix="urby_eseg_gpkg_shp_",
                     ignore_cleanup_errors=True,
@@ -1198,7 +1198,6 @@ def execute_enrichment_task(
         if not is_eseguibile:
             try:
                 from app.utils.debug_payload_builder import DebugPayloadBuilder
-                import traceback as _tb
                 _debug_payload = DebugPayloadBuilder().build(
                     run_id=_run_id or task_id,
                     project_id=project_id,

@@ -4,10 +4,16 @@ PlenoraBeatScheduler — subclass di celery.beat.Scheduler con:
 - schedule caricati dal DB Postgres (tabella `schedules`)
 """
 
+import json
 import os
+import os as _os
+import shutil as _shutil
 import socket
 import time
-from datetime import datetime, timezone
+import time as _t
+from datetime import datetime, timezone, timedelta
+from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+from pathlib import Path as _Path
 from typing import Optional
 from celery.beat import Scheduler, ScheduleEntry
 from celery.utils.log import get_logger
@@ -364,7 +370,6 @@ class PlenoraBeatScheduler(Scheduler):
         if isinstance(config_raw, dict):
             return config_raw
         try:
-            import json
             return json.loads(config_raw)
         except Exception:
             return None
@@ -387,7 +392,6 @@ class PlenoraBeatScheduler(Scheduler):
         """
         try:
             import app.db.db_service as db
-            from datetime import timedelta
             window_start = now - timedelta(hours=self._CATCHUP_DEDUPE_WINDOW_HOURS)
             rows = db.fetchall(
                 "SELECT COUNT(*) AS count FROM schedule_catchup_history "
@@ -405,7 +409,6 @@ class PlenoraBeatScheduler(Scheduler):
         """True se lo schedule ha >= cap catchup emessi nella finestra."""
         try:
             import app.db.db_service as db
-            from datetime import timedelta
             window_start = now - timedelta(minutes=self._CATCHUP_RUNAWAY_WINDOW_MIN)
             rows = db.fetchall(
                 "SELECT COUNT(*) AS count FROM schedule_catchup_history "
@@ -647,8 +650,6 @@ class PlenoraBeatScheduler(Scheduler):
         dopo l'invio, ma se l'utente abbandona il download o il frontend non fa
         mai la GET, il file resterebbe orfano — questo cleanup lo recupera.
         """
-        import time as _t
-        import shutil as _shutil
         now = _t.time()
         if now - self._last_eseguibili_cleanup < 1800:  # 30 minuti
             return
@@ -686,8 +687,6 @@ class PlenoraBeatScheduler(Scheduler):
         la pubblicazione ArcGIS on-demand (nodo imdf_publisher). Senza cleanup
         la cartella cresce indefinitamente (ogni bundle pesa ~10-50MB).
         """
-        import time as _t
-        import shutil as _shutil
         now = _t.time()
         if now - self._last_imdf_bundles_cleanup < 1800:  # 30 minuti
             return
@@ -737,9 +736,6 @@ class PlenoraBeatScheduler(Scheduler):
         per-worker e' effimero al restart del pod, ma in setup host-fisso
         (oggi `lab.plenora.it`) senza restart, il temp cresce indefinitamente.
         """
-        import os as _os
-        import time as _t
-        import shutil as _shutil
         now = _t.time()
         if now - self._last_temp_orphan_cleanup < 1800:  # 30 min
             return
@@ -747,7 +743,6 @@ class PlenoraBeatScheduler(Scheduler):
 
         try:
             from app.config import settings
-            from pathlib import Path as _Path
             temp_dir = _Path(settings.DATA_DIR) / "temp"
             if not temp_dir.exists():
                 return
@@ -822,7 +817,6 @@ class PlenoraBeatScheduler(Scheduler):
         (test coperto da test_log_service_db_contract.py): qui la
         chiamiamo periodicamente.
         """
-        import time as _t
         now = _t.time()
         if now - self._last_schedule_logs_retention < 86400:  # 24h
             return
@@ -840,7 +834,6 @@ class PlenoraBeatScheduler(Scheduler):
                 days = 90
             if days <= 0:
                 return  # retention disabilitata
-            from datetime import datetime, timezone, timedelta
             cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).date()
             from app.core.scheduler.log_service import ScheduleLogService
             deleted = ScheduleLogService().delete_logs_before(cutoff)
@@ -875,7 +868,6 @@ class PlenoraBeatScheduler(Scheduler):
         Il bypass PG `plenora.retention_cleanup` resta scoped alla DELETE
         callable (stesso cursor di SET LOCAL), mai esposto globalmente.
         """
-        import time as _t
         now = _t.time()
         if now - self._last_logs_archive < 86400:  # 24h
             return
@@ -891,7 +883,6 @@ class PlenoraBeatScheduler(Scheduler):
             return  # retention disabilitata (0 o negativo
 
         try:
-            from datetime import timedelta
             from app.shared.cloud_backends import get_log_archive_storage
             from app.services.log_archive import LogArchiveWriter
             from app.db.pg_connection import fetchall, transaction
@@ -942,12 +933,11 @@ class PlenoraBeatScheduler(Scheduler):
             # ADR-0014 §B. Best-effort: un fallimento observability non
             # contamina lo stato "archive ok" (slot gia' aggiornato sopra
             try:
-                import json as _json
                 from app.db.pg_connection import execute as pg_execute
                 obs_ts = datetime.now(timezone.utc).strftime(
                     "%Y-%m-%dT%H:%M:%S.%f"
                 )[:-3]
-                obs_details = _json.dumps({
+                obs_details = json.dumps({
                     "table": "logs",
                     "cutoff": cutoff.isoformat(),
                     "archived_rows": result["archived_rows"],
@@ -979,7 +969,6 @@ class PlenoraBeatScheduler(Scheduler):
         Senza retention la tabella cresce all'infinito. Il default (30 giorni)
         e' configurabile via settings.LOG_RETENTION_DAYS.
         """
-        import time as _t
         now = _t.time()
         if now - self._last_logs_retention < 86400:  # 24h
             return
@@ -1049,7 +1038,6 @@ class PlenoraBeatScheduler(Scheduler):
         Il bypass PG `plenora.retention_cleanup` resta scoped alla DELETE
         callable (stesso cursor di SET LOCAL), mai esposto globalmente.
         """
-        import time as _t
         now = _t.time()
         if now - self._last_audit_archive < 86400:  # 24h
             return
@@ -1065,7 +1053,6 @@ class PlenoraBeatScheduler(Scheduler):
             return  # retention disabilitata (0 o negativo
 
         try:
-            from datetime import timedelta
             from app.shared.cloud_backends import get_log_archive_storage
             from app.services.log_archive import LogArchiveWriter
             from app.db.pg_connection import fetchall, transaction
@@ -1114,12 +1101,11 @@ class PlenoraBeatScheduler(Scheduler):
             # va sempre su plenora.logs). Shape identica al handler
             # canonico (utils/logger.py:340-344). ADR-0014 §B
             try:
-                import json as _json
                 from app.db.pg_connection import execute as pg_execute
                 obs_ts = datetime.now(timezone.utc).strftime(
                     "%Y-%m-%dT%H:%M:%S.%f"
                 )[:-3]
-                obs_details = _json.dumps({
+                obs_details = json.dumps({
                     "table": "audit_actions",
                     "cutoff": cutoff.isoformat(),
                     "archived_rows": result["archived_rows"],
@@ -1174,7 +1160,6 @@ class PlenoraBeatScheduler(Scheduler):
         Cap <= 0 sull'interval o batch_size disabilita il hook (escape
         hatch ops).
         """
-        import time as _t
         now_ts = _t.time()
 
         try:
@@ -1441,7 +1426,6 @@ class PlenoraBeatScheduler(Scheduler):
         )
         if retention_days > 0 and prune_batch > 0:
             try:
-                from datetime import datetime as _dt, timedelta as _td, timezone as _tz
                 cutoff = _dt.now(_tz.utc) - _td(days=retention_days)
                 pruned = _recon.prune_terminal_older_than(
                     older_than=cutoff,

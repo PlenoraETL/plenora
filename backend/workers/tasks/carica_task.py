@@ -4,14 +4,17 @@ Task Celery per il modulo CARICA — esecuzione asincrona con progresso Redis.
 Runs background execution while preserving backend runtime contracts.
 """
 
-from app.utils.logger import get_logger, open_run, close_run, set_run_context, append_step
-from app.config import settings
+import io
 import os
 import sys
 import time as _time
 import traceback
 import uuid as _uuid
+from pathlib import PurePosixPath
 from typing import Any, Dict, Optional
+
+from app.utils.logger import get_logger, open_run, close_run, set_run_context, append_step
+from app.config import settings
 
 from workers.celery_app import celery_app, BaseTaskWithRetry
 
@@ -280,8 +283,6 @@ def execute_carica_task(
 
 def _execute_datasource_write(task, df, carica_node_data, project_id, task_id):
     """Scrive il DataFrame su un DataSource (local/FTP/SFTP/SharePoint)."""
-    import io
-
     datasource_id = carica_node_data.get('datasource_id', '')
     dest_folder = carica_node_data.get('dest_folder', '') or ''
     dest_filename = carica_node_data.get('dest_filename', '') or f'output_{project_id}'
@@ -321,7 +322,6 @@ def _execute_datasource_write(task, df, carica_node_data, project_id, task_id):
         # Componi path: dest_folder + dest_filename + .ext
         ext = f'.{dest_format}' if not dest_filename.endswith(f'.{dest_format}') else ''
         # Sanitizza per prevenire path traversal
-        from pathlib import PurePosixPath
         safe_folder = PurePosixPath(dest_folder).as_posix().replace('..', '').strip('/')
         safe_filename = PurePosixPath(dest_filename).name  # solo il nome, no directory
         path = f'{safe_folder}/{safe_filename}{ext}'.lstrip('/')

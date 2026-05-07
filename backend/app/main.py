@@ -5,12 +5,25 @@ Compone bootstrap, middleware, dependency wiring, router e health endpoints.
 """
 
 import os
+from contextlib import asynccontextmanager
+
 from fastapi import Depends, FastAPI
+from fastapi import Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.config import settings
 from app.utils.logger import get_logger
 from app.utils.dataframe import save_dataframe
+from app.shared import error_codes
+from app.shared.error_envelope import (
+    build_error_envelope_body,
+    build_error_response,
+    normalize_http_exception_detail,
+)
+from app.shared.exceptions import CanvasCorruptedError, MemoryLimitExceededError
 
 # Bootstrap esplicito: valida config, storage e DB prima di creare l'app.
 # Vedi `app/bootstrap.py` per il contratto completo.
@@ -30,8 +43,6 @@ logger = get_logger(__name__)
 
 # In produzione disabilita /docs e /openapi.json per non esporre lo schema API.
 _is_prod = os.getenv("ENVIRONMENT", os.getenv("ENV", "development")).lower() in ("production", "prod")
-
-from contextlib import asynccontextmanager
 
 @asynccontextmanager
 async def lifespan(app):
@@ -72,18 +83,6 @@ app.add_middleware(RequestIdMiddleware)
 
 # Global exception handlers: garantiscono envelope uniforme e header CORS
 # anche su eccezioni non gestite.
-from fastapi import Request
-from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
-from starlette.exceptions import HTTPException as StarletteHTTPException
-
-from app.shared import error_codes
-from app.shared.error_envelope import (
-    build_error_envelope_body,
-    build_error_response,
-    normalize_http_exception_detail,
-)
-
 _CORS_ORIGINS = set(settings.CORS_ORIGINS_LIST)
 
 
@@ -171,8 +170,6 @@ async def validation_exception_handler(
 # essere esplicito (non "errore interno") cosi' l'utente capisce che
 # serve un ripristino da backup, non un retry. Precede il catch-all
 # sopra perche' FastAPI matcha il piu' specifico.
-from app.shared.exceptions import CanvasCorruptedError, MemoryLimitExceededError
-
 
 @app.exception_handler(CanvasCorruptedError)
 async def canvas_corrupted_handler(request: Request, exc: CanvasCorruptedError):
