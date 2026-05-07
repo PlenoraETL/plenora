@@ -53,7 +53,7 @@ class PlenoraBeatScheduler(Scheduler):
 
     max_interval = DEFAULT_MAX_INTERVAL
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: object, **kwargs: object) -> None:
         self._db_loaded = False
         # Leader election state. `_leader_id` identifica questa istanza
         # all'interno del cluster (pid@hostname). `_is_leader` tracciato
@@ -70,7 +70,7 @@ class PlenoraBeatScheduler(Scheduler):
 
     # Leader election via Redis SETNX
 
-    def _get_redis(self):
+    def _get_redis(self) -> Optional[object]:
         """Lazy init del client Redis. Ritorna None se non raggiungibile
         (trigger del degraded fallback single-instance)."""
         if self._redis_client is not None:
@@ -239,7 +239,7 @@ class PlenoraBeatScheduler(Scheduler):
     _last_temp_orphan_cleanup: float = 0.0
     _last_storage_reconcile: float = 0.0
 
-    def tick(self, event_t=None, **kwargs):
+    def tick(self, event_t: Optional[object] = None, **kwargs: object) -> float:
         """Override tick:
         1. Leader election (SETNX Redis). Se non-leader → standby.
         2. Se leader: sync schedule dal DB + heartbeat + cleanup jobs
@@ -284,7 +284,7 @@ class PlenoraBeatScheduler(Scheduler):
     # task morto viene re-emesso al prossimo detect
     _CATCHUP_DEDUPE_WINDOW_HOURS = 2
 
-    def _emit_catchup_runs(self):
+    def _emit_catchup_runs(self) -> None:
         """Emette al piu' un task di catchup per ciascuno schedule con
         `catchup_missed_runs=True` che ha un missed run entro la grace
         window configurata.
@@ -363,7 +363,7 @@ class PlenoraBeatScheduler(Scheduler):
                 )
 
     @staticmethod
-    def _parse_config_json(config_raw):
+    def _parse_config_json(config_raw: object) -> Optional[dict[str, object]]:
         """Parsa il JSON `config` di uno schedule. Ritorna dict o None."""
         if not config_raw:
             return None
@@ -477,7 +477,7 @@ class PlenoraBeatScheduler(Scheduler):
 
     # Sincronizzazione DB → schedule entries
 
-    def _sync_from_db(self):
+    def _sync_from_db(self) -> None:
         """Carica/aggiorna gli schedule attivi dal DB."""
         try:
             import app.db.db_service as db
@@ -541,7 +541,7 @@ class PlenoraBeatScheduler(Scheduler):
         except Exception as e:
             logger.error(f"[CRASH] Errore sync schedule dal DB: {e}", exc_info=True)
 
-    def _parse_cron(self, cron_expr: str):
+    def _parse_cron(self, cron_expr: str) -> Optional[object]:
         """Parsa espressione cron in un oggetto schedule Celery."""
         try:
             from celery.schedules import crontab
@@ -575,7 +575,7 @@ class PlenoraBeatScheduler(Scheduler):
 
     # Heartbeat su DB
 
-    def _write_heartbeat(self):
+    def _write_heartbeat(self) -> None:
         """Scrive il timestamp heartbeat nel DB (usato dall'healthcheck)."""
         try:
             import app.db.db_service as db
@@ -590,7 +590,7 @@ class PlenoraBeatScheduler(Scheduler):
 
     # Monitoring task bloccate
 
-    def _check_stuck_tasks(self):
+    def _check_stuck_tasks(self) -> None:
         """Ogni 5 minuti verifica se ci sono lock scheduler scaduti o task bloccate."""
         import time
         now = time.time()
@@ -643,7 +643,7 @@ class PlenoraBeatScheduler(Scheduler):
 
     # Cleanup output eseguibili orfani
 
-    def _cleanup_eseguibili_outputs(self):
+    def _cleanup_eseguibili_outputs(self) -> None:
         """Ogni 30 minuti rimuove le directory di output eseguibili piu' vecchie di 2 ore.
 
         Il path /api/eseguibili/{id}/download/{task_id} cancella il file subito
@@ -679,7 +679,7 @@ class PlenoraBeatScheduler(Scheduler):
 
     # Cleanup bundle IMDF orfani
 
-    def _cleanup_imdf_bundles(self):
+    def _cleanup_imdf_bundles(self) -> None:
         """Ogni 30 minuti rimuove i bundle IMDF su disco piu' vecchi di
         settings.IMDF_BUNDLE_TTL_HOURS (default 48h).
 
@@ -716,7 +716,7 @@ class PlenoraBeatScheduler(Scheduler):
 
     # Cleanup orfani DATA_DIR/temp/
 
-    def _cleanup_orphan_temp_files(self):
+    def _cleanup_orphan_temp_files(self) -> None:
         """Ogni 30 min rimuove file/dir orfani in DATA_DIR/temp/ piu'
         vecchi di TTL (default 24h, env TEMP_ORPHAN_CLEANUP_HOURS).
 
@@ -802,7 +802,7 @@ class PlenoraBeatScheduler(Scheduler):
 
     # Retention tabella plenora.logs
 
-    def _cleanup_old_schedule_logs(self):
+    def _cleanup_old_schedule_logs(self) -> None:
         """Ogni 24h rimuove righe da plenora.schedule_logs piu' vecchie di
         SCHEDULE_LOGS_RETENTION_DAYS (default 90gg, configurabile via env).
 
@@ -845,7 +845,7 @@ class PlenoraBeatScheduler(Scheduler):
         except Exception as e:
             logger.warning(f"Errore retention schedule_logs: {e}")
 
-    def _archive_old_logs(self):
+    def _archive_old_logs(self) -> None:
         """Ogni 24h archivia+purga plenora.logs via LogArchiveWriter
         (O-ARC , ADR-0014).
 
@@ -895,7 +895,7 @@ class PlenoraBeatScheduler(Scheduler):
                 batch_size=settings.LOG_ARCHIVE_BATCH_ROWS,
             )
 
-            def select_rows(cutoff_ts, batch_size):
+            def select_rows(cutoff_ts: datetime, batch_size: int) -> object:
                 # Schema-agnostic: search_path del pool risolve `logs` a
                 # plenora.logs (stesso pattern di _cleanup_old_logs
                 # ORDER BY stabile (ts, id) richiesto dal writer per non
@@ -906,7 +906,7 @@ class PlenoraBeatScheduler(Scheduler):
                     (cutoff_ts, batch_size),
                 )
 
-            def retention_bypass_execute(sql, params):
+            def retention_bypass_execute(sql: str, params: object) -> None:
                 # Una nuova tx per batch: SET LOCAL + DELETE sullo stesso
                 # cursor (pattern _cleanup_old_logs), altrimenti il trigger
                 # plenora.block_log_modifications scatta sulla DELETE
@@ -963,7 +963,7 @@ class PlenoraBeatScheduler(Scheduler):
         except Exception as e:
             logger.warning(f"Errore archive logs: {e}", exc_info=True)
 
-    def _cleanup_old_logs(self):
+    def _cleanup_old_logs(self) -> None:
         """Ogni 24h rimuove righe da plenora.logs piu' vecchie di LOG_RETENTION_DAYS.
 
         Senza retention la tabella cresce all'infinito. Il default (30 giorni)
@@ -1008,7 +1008,7 @@ class PlenoraBeatScheduler(Scheduler):
         except Exception as e:
             logger.warning(f"Errore retention logs: {e}")
 
-    def _archive_old_audit_actions(self):
+    def _archive_old_audit_actions(self) -> None:
         """Ogni 24h archivia+purga plenora.audit_actions via LogArchiveWriter
         (O-ARC , ADR-0014).
 
@@ -1065,7 +1065,7 @@ class PlenoraBeatScheduler(Scheduler):
                 batch_size=settings.LOG_ARCHIVE_BATCH_ROWS,
             )
 
-            def select_rows(cutoff_ts, batch_size):
+            def select_rows(cutoff_ts: datetime, batch_size: int) -> object:
                 # Schema-agnostic: search_path del pool risolve
                 # `audit_actions` a plenora.audit_actions. Colonna
                 # temporale = `timestamp` (O-ARC assunzione #4
@@ -1075,7 +1075,7 @@ class PlenoraBeatScheduler(Scheduler):
                     (cutoff_ts, batch_size),
                 )
 
-            def retention_bypass_execute(sql, params):
+            def retention_bypass_execute(sql: str, params: object) -> None:
                 # Una nuova tx per batch: SET LOCAL + DELETE sullo stesso
                 # cursor (pattern _cleanup_old_logs / _archive_old_logs
                 # altrimenti il trigger plenora.block_log_modifications
@@ -1133,7 +1133,7 @@ class PlenoraBeatScheduler(Scheduler):
 
     # Storage reconciliation —
 
-    def _reconcile_storage(self):
+    def _reconcile_storage(self) -> None:
         """Beat-driven reconciler per `plenora.storage_reconciliation_log`.
 
         Cadence-gated da `RECONCILIATION_BEAT_INTERVAL_MIN` (default 15
@@ -1445,7 +1445,7 @@ class PlenoraBeatScheduler(Scheduler):
 
     # Persistenza — non usiamo file shelve, tutto su DB
 
-    def setup_schedule(self):
+    def setup_schedule(self) -> None:
         """Inizializza schedule vuoto — verrà popolato dal DB al primo tick.
 
          dopo il sync DB, merge anche le
@@ -1459,7 +1459,7 @@ class PlenoraBeatScheduler(Scheduler):
         self._merge_config_beat_schedule()
         logger.info(f"Beat avviato con {len(self.data)} schedule attivi")
 
-    def _merge_config_beat_schedule(self):
+    def _merge_config_beat_schedule(self) -> None:
         """Merge `self.app.conf.beat_schedule` entries into `self.data`.
 
 
@@ -1528,11 +1528,11 @@ class PlenoraBeatScheduler(Scheduler):
                     exc_info=True,
                 )
 
-    def sync(self):
+    def sync(self) -> None:
         """Sync periodico richiesto da Celery — già gestito in tick()."""
         pass
 
-    def close(self):
+    def close(self) -> None:
         """Cleanup alla chiusura.
 
         Rilascia il lock leader su Redis se e' ancora posseduto da questo

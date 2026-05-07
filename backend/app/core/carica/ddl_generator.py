@@ -133,7 +133,7 @@ class DDLGenerator:
         )
     """
 
-    def __init__(self, db_type: str):
+    def __init__(self, db_type: str) -> None:
         """
         Args:
             db_type: tipo database ("postgres", "oracle", "mssql", "mysql", "mariadb")
@@ -228,9 +228,9 @@ class DDLGenerator:
         # Prova match esatto, poi parziale
         if dtype_str in type_map:
             return type_map[dtype_str]
-        for key, val in type_map.items():
+        for key, sql_type_candidate in type_map.items():
             if key in dtype_str:
-                return val
+                return sql_type_candidate
 
         # Default: TEXT/CLOB/NVARCHAR(MAX
         return type_map.get("object", "TEXT")
@@ -653,7 +653,14 @@ END;"""
         else:
             raise ValueError(f"UPSERT non supportato per {self.db_type}")
 
-    def _upsert_postgres(self, full_name, cols, match_cols, update_cols, params):
+    def _upsert_postgres(
+        self,
+        full_name: str,
+        cols: List[ColumnMapping],
+        match_cols: List[str],
+        update_cols: List[ColumnMapping],
+        params: List[str],
+    ) -> Tuple[str, List[str]]:
         """INSERT ... ON CONFLICT (match) DO UPDATE SET ..."""
         col_names = ", ".join(self.quote_column(c.dest_column) for c in cols)
         placeholders = []
@@ -676,7 +683,14 @@ END;"""
         )
         return sql, params
 
-    def _upsert_oracle(self, full_name, cols, match_cols, update_cols, params):
+    def _upsert_oracle(
+        self,
+        full_name: str,
+        cols: List[ColumnMapping],
+        match_cols: List[str],
+        update_cols: List[ColumnMapping],
+        params: List[str],
+    ) -> Tuple[str, List[str]]:
         """MERGE INTO ... USING DUAL ON ... WHEN MATCHED/NOT MATCHED."""
         match_cond = " AND ".join(
             f"dest.{self.quote_column(m)} = :{m}" for m in match_cols
@@ -700,7 +714,14 @@ WHEN MATCHED THEN UPDATE SET {update_set}
 WHEN NOT MATCHED THEN INSERT ({insert_cols}) VALUES ({insert_vals_sql})"""
         return sql, params
 
-    def _upsert_mssql(self, full_name, cols, match_cols, update_cols, params):
+    def _upsert_mssql(
+        self,
+        full_name: str,
+        cols: List[ColumnMapping],
+        match_cols: List[str],
+        update_cols: List[ColumnMapping],
+        params: List[str],
+    ) -> Tuple[str, List[str]]:
         """MERGE INTO ... USING (VALUES ...) ON ... WHEN MATCHED/NOT MATCHED."""
         src_cols = ", ".join(f"src.{self.quote_column(c.dest_column)}" for c in cols)
         val_placeholders = []
@@ -729,7 +750,14 @@ WHEN MATCHED THEN UPDATE SET {update_set}
 WHEN NOT MATCHED THEN INSERT ({insert_cols}) VALUES ({src_cols});"""
         return sql, params
 
-    def _upsert_mysql(self, full_name, cols, match_cols, update_cols, params):
+    def _upsert_mysql(
+        self,
+        full_name: str,
+        cols: List[ColumnMapping],
+        match_cols: List[str],
+        update_cols: List[ColumnMapping],
+        params: List[str],
+    ) -> Tuple[str, List[str]]:
         """INSERT ... ON DUPLICATE KEY UPDATE ..."""
         col_names = ", ".join(self.quote_column(c.dest_column) for c in cols)
         placeholders = []

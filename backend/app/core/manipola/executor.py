@@ -11,9 +11,11 @@ import pandas as pd
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
-from app.models import CanvasState, Node
+from app.models import CanvasState, Edge, Node
 from app.config import settings
 from app.services.project_lineage import ProjectLineageCycleError
+from app.shared.execution.canvas_graph import CanvasGraph
+from app.shared.execution.graph import kahn_topological_order
 from app.utils.logger import get_logger, append_step
 from app.utils.result_store import save_pipeline_result
 from app.utils.dataframe import (
@@ -119,17 +121,21 @@ def _assert_no_lineage_cycle_on_chain(source_project_id: str) -> None:
         cycle_chain = chain[chain.index(source_project_id):] + [source_project_id]
         raise ProjectLineageCycleError(cycle_chain)
 
-def _nf(node, key, default=None):
+def _nf(node: Node, key: str, default: Any = None) -> Any:
     """Legge un campo flat dal nodo Pydantic, con fallback su node.data (backward compat)."""
-    val = getattr(node, key, None)
-    if val is not None and val != [] and val != {}:
-        return val
+    field_value = getattr(node, key, None)
+    if field_value is not None and field_value != [] and field_value != {}:
+        return field_value
     if node.data and isinstance(node.data, dict):
         return node.data.get(key, default)
     return default
 
 
-def _applica_crs_da_colonne(df, node_columns, meta=None):
+def _applica_crs_da_colonne(
+    df: pd.DataFrame,
+    node_columns: Optional[List[Dict[str, Any]]],
+    meta: Any = None,
+) -> pd.DataFrame:
     """
     Se il DataFrame contiene una colonna geometrica e node_columns ha il CRS
     (formato geometry:subtype:SRID), converte il DataFrame in GeoDataFrame
@@ -182,12 +188,12 @@ def _applica_crs_da_colonne(df, node_columns, meta=None):
 class ManipolaExecutor:
     """Executor MANIPOLA: orchestra la pipeline di trasformazione dati."""
 
-    def __init__(self, project_service, orchestrator_callback=None):
+    def __init__(self, project_service: object, orchestrator_callback: object = None) -> None:
         self.project_service = project_service
         self.orchestrator_callback = orchestrator_callback
         self.results_base_dir = settings.RESULTS_DIR
 
-    def set_orchestrator_callback(self, callback):
+    def set_orchestrator_callback(self, callback: object) -> None:
         """Imposta callback per esecuzione ricorsiva progetti upstream."""
         self.orchestrator_callback = callback
 
@@ -227,7 +233,7 @@ class ManipolaExecutor:
         project_id: str,
         canvas: CanvasState,
         force_recalculate: bool = False,
-        run_id: str = None,
+        run_id: Optional[str] = None,
         intermediate_mode_override: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Esegue la pipeline completa: carica sorgenti, trasforma, salva.
@@ -338,7 +344,7 @@ class ManipolaExecutor:
             except Exception as _iex:
                 logger.warning(f"Intermediate write result node fallita (non bloccante): {_iex}")
 
-        res = self._salva_risultato(project_id, result_node, current_df, canvas)
+        save_result = self._salva_risultato(project_id, result_node, current_df, canvas)
 
         # Allinea columns_metadata del progetto allo schema reale del
         # DataFrame finale: senza, l'output file resta corretto ma il
@@ -347,7 +353,7 @@ class ManipolaExecutor:
         # i fallimenti propagano a Celery che marca FAILED. Pre-fix il
         # try/except warning rendeva impossibile distinguere "tutto ok"
         # da "ok ma metadata stale" downstream
-        if res.get("success"):
+        if save_result.get("success"):
             from app.shared.columns_metadata import save_columns_metadata_with_retry
             _col_meta = [
                 {"name": c, "type": str(current_df[c].dtype)} for c in current_df.columns
@@ -361,12 +367,12 @@ class ManipolaExecutor:
 
         append_step({
             "module":      "manipola",
-            "status":      "success" if res.get("success") else "failure",
-            "rows_out":    res.get("rows_count", 0) or 0,
+            "status":      "success" if save_result.get("success") else "failure",
+            "rows_out":    save_result.get("rows_count", 0) or 0,
             "duration_ms": int((_time.time() - _step_start) * 1000),
-            "error":       res.get("message") if not res.get("success") else None,
+            "error":       save_result.get("message") if not save_result.get("success") else None,
         })
-        return res
+        return save_result
 
     # ANTEPRIMA
 
@@ -426,9 +432,13 @@ class ManipolaExecutor:
     # CARICAMENTO SORGENTI
 
     def _carica_sorgenti_progetto(
-        self, canvas, dataframes, force_recalculate, run_id: str = None,
+        self,
+        canvas: CanvasState,
+        dataframes: Dict[str, pd.DataFrame],
+        force_recalculate: bool,
+        run_id: Optional[str] = None,
         *, group_id: Optional[str] = None,
-    ):
+    ) -> Optional[Dict[str, Any]]:
         """Carica DataFrame dai progetti sorgente (type=project_source).
 
         SECURITY: verifica che ogni source_project_id appartenga allo stesso
@@ -662,9 +672,11 @@ class ManipolaExecutor:
         return None
 
     def _carica_sorgenti_file(
-        self, canvas, dataframes,
+        self,
+        canvas: CanvasState,
+        dataframes: Dict[str, pd.DataFrame],
         *, group_id: Optional[str] = None,
-    ):
+    ) -> Optional[Dict[str, Any]]:
         """Carica DataFrame dai nodi file_source via SourceLoader.
 
         thin delegator. Il body vive in
@@ -708,9 +720,11 @@ class ManipolaExecutor:
         )
 
     def _carica_sorgenti_statiche(
-        self, canvas, dataframes,
+        self,
+        canvas: CanvasState,
+        dataframes: Dict[str, pd.DataFrame],
         *, group_id: Optional[str] = None,
-    ):
+    ) -> Optional[Dict[str, Any]]:
         """Carica DataFrame dai nodi StaticValues via SourceLoader.
 
         Wrapper sottile sopra `SourceLoader._load_static`. Il template
@@ -753,9 +767,12 @@ class ManipolaExecutor:
     # TRASFORMAZIONI
 
     def _applica_trasformazioni(
-        self, canvas, dataframes, run_id: str = None,
+        self,
+        canvas: CanvasState,
+        dataframes: Dict[str, pd.DataFrame],
+        run_id: Optional[str] = None,
         intermediate_mode_override: Optional[str] = None,
-    ):
+    ) -> Optional[pd.DataFrame]:
         """
         Applica le trasformazioni del canvas in ordine topologico.
         Supporta sia nodi 'transform' che 'multi_join'.
@@ -774,7 +791,7 @@ class ManipolaExecutor:
         graph = CanvasGraph.from_nodes_edges(canvas.nodes, [])
 
         # Helper per estrarre targetHandle dall'edge (da attributo o da ID
-        def get_target_handle(edge):
+        def get_target_handle(edge: Edge) -> Optional[str]:
             # Prima prova attributo diretto
             handle = getattr(edge, 'targetHandle', None)
             if handle:
@@ -791,7 +808,7 @@ class ManipolaExecutor:
             incoming = [e for e in canvas.edges if e.target == node.id]
 
             # Ordina edges per garantire ordine consistente left/right
-            def edge_sort_key(edge):
+            def edge_sort_key(edge: Edge) -> tuple[int, object]:
                 # Prima prova targetHandle (da attributo o ID
                 handle = get_target_handle(edge)
                 if handle:
@@ -848,7 +865,11 @@ class ManipolaExecutor:
 
         return current_df
     
-    def _ordina_topologicamente(self, nodes, edges):
+    def _ordina_topologicamente(
+        self,
+        nodes: List[Node],
+        edges: List[Edge],
+    ) -> List[Node]:
         """Ordina i nodi in ordine topologico (Kahn's algorithm). Rileva cicli.
 
         Kahn implementation moved to the shared leaf
@@ -877,7 +898,7 @@ class ManipolaExecutor:
 
         return [node_map[nid] for nid in sorted_ids]
     
-    def _esegui_multi_join(self, node, inputs):
+    def _esegui_multi_join(self, node: Node, inputs: List[pd.DataFrame]) -> pd.DataFrame:
         """
         Esegue multi-join su N DataFrame.
 
@@ -1021,7 +1042,10 @@ class ManipolaExecutor:
 
         return result
 
-    def _gestisci_join_default(self, dataframes):
+    def _gestisci_join_default(
+        self,
+        dataframes: Dict[str, pd.DataFrame],
+    ) -> pd.DataFrame:
         """Singola sorgente: passthrough. Multiple sorgenti senza join: errore."""
         if not dataframes:
             raise ValueError("Nessun progetto sorgente configurato")
@@ -1029,7 +1053,11 @@ class ManipolaExecutor:
             return list(dataframes.values())[0]
         raise ValueError(f"{len(dataframes)} sorgenti ma nessun nodo Transform.")
 
-    def _esegui_trasformazione(self, node, inputs):
+    def _esegui_trasformazione(
+        self,
+        node: Node,
+        inputs: List[pd.DataFrame],
+    ) -> pd.DataFrame:
         """Delega al PluginExecutor. Rilancia l'eccezione in caso di errore (no silent fail)."""
         transform_op = _nf(node, 'transform_op')
         if not transform_op:
@@ -1038,7 +1066,7 @@ class ManipolaExecutor:
 
     # GROUP BY
 
-    def _applica_group_by(self, df, result_node):
+    def _applica_group_by(self, df: pd.DataFrame, result_node: Node) -> pd.DataFrame:
         """Applica GROUP BY dal nodo risultato (count, sum, mean, min, max, std)."""
         if not _nf(result_node, 'group_by_enabled', False):
             return df
@@ -1093,7 +1121,13 @@ class ManipolaExecutor:
 
     # SALVATAGGIO
 
-    def _salva_risultato(self, project_id, result_node, df, canvas=None):
+    def _salva_risultato(
+        self,
+        project_id: str,
+        result_node: Node,
+        df: pd.DataFrame,
+        canvas: Optional[CanvasState] = None,
+    ) -> Dict[str, Any]:
         """Salva il risultato finale nel formato richiesto."""
         filename = _nf(result_node, 'fileName', 'output')
         fmt      = _nf(result_node, 'format',   'csv')
@@ -1143,7 +1177,7 @@ class ManipolaExecutor:
         except Exception as e:
             return {"success": False, "message": f"Errore salvataggio: {e}"}
 
-    def _estrai_srid_da_canvas(self, canvas):
+    def _estrai_srid_da_canvas(self, canvas: CanvasState) -> Optional[int]:
         """Estrae primo SRID da tipi geometry nel canvas via ResourceMetadata.
 
          Parses canvas once through CanvasGraph so
@@ -1171,89 +1205,93 @@ class ManipolaExecutor:
 
     # MAPPA TIPI CANVAS
 
-    def _costruisci_mappa_tipi_canvas(self, canvas):
+    def _costruisci_mappa_tipi_canvas(self, canvas: CanvasState) -> Dict[str, str]:
         """Costruisce mappa colonna->tipo dal canvas. Include suffissi _L/_R per JOIN."""
-        m = {}
+        type_map: Dict[str, str] = {}
         for node in canvas.nodes:
             columns = getattr(node, 'columns', None) or (node.data.get('columns') if node.data else None)
             if columns:
                 for col in columns:
                     if isinstance(col, dict):
-                        cn = col.get('alias') or col.get('name')
-                        ct, on = col.get('type', 'str'), col.get('name')
+                        column_name = col.get('alias') or col.get('name')
+                        column_type, original_name = col.get('type', 'str'), col.get('name')
                     else:
-                        cn = col.alias if hasattr(col, 'alias') and col.alias else col.name
-                        ct = col.type if hasattr(col, 'type') and col.type else "str"
-                        on = col.name if hasattr(col, 'name') else None
-                    if cn:
-                        m[cn] = m[f"{cn}_L"] = m[f"{cn}_R"] = ct
-                    if on and on != cn:
-                        m[on] = m[f"{on}_L"] = m[f"{on}_R"] = ct
+                        column_name = col.alias if hasattr(col, 'alias') and col.alias else col.name
+                        column_type = col.type if hasattr(col, 'type') and col.type else "str"
+                        original_name = col.name if hasattr(col, 'name') else None
+                    if column_name:
+                        type_map[column_name] = type_map[f"{column_name}_L"] = type_map[f"{column_name}_R"] = column_type
+                    if original_name and original_name != column_name:
+                        type_map[original_name] = type_map[f"{original_name}_L"] = type_map[f"{original_name}_R"] = column_type
 
             calculated = getattr(node, 'calculated_columns', None)
             if calculated:
                 for calc in calculated:
-                    cn = calc.get("name") if isinstance(calc, dict) else getattr(calc, 'name', None)
-                    ct = (calc.get("output_type", "str") if isinstance(calc, dict)
-                          else getattr(calc, 'output_type', 'str'))
-                    if cn:
-                        m[cn] = m[f"{cn}_L"] = m[f"{cn}_R"] = ct
-        return m
+                    column_name = calc.get("name") if isinstance(calc, dict) else getattr(calc, 'name', None)
+                    column_type = (calc.get("output_type", "str") if isinstance(calc, dict)
+                                   else getattr(calc, 'output_type', 'str'))
+                    if column_name:
+                        type_map[column_name] = type_map[f"{column_name}_L"] = type_map[f"{column_name}_R"] = column_type
+        return type_map
 
-    def _costruisci_colonne_con_tipi(self, df, canvas_type_map):
+    def _costruisci_colonne_con_tipi(
+        self,
+        df: pd.DataFrame,
+        canvas_type_map: Dict[str, str],
+    ) -> List[Dict[str, str]]:
         """Costruisce lista colonne con tipi. Lookup: esatto → lower → base _L/_R → dtype → WKT."""
         columns = []
         lower_map = {k.lower(): v for k, v in canvas_type_map.items()}
         for col in df.columns:
-            ct = canvas_type_map.get(col) or lower_map.get(col.lower())
-            if ct is None and (col.endswith('_L') or col.endswith('_R')):
+            column_type = canvas_type_map.get(col) or lower_map.get(col.lower())
+            if column_type is None and (col.endswith('_L') or col.endswith('_R')):
                 base = col[:-2]
-                ct = canvas_type_map.get(base) or lower_map.get(base.lower())
+                column_type = canvas_type_map.get(base) or lower_map.get(base.lower())
             
             # Se il tipo è str ma il nome suggerisce geometry, verifica il contenuto
-            if ct == 'str' and col.lower() in ('geometry', 'geom', 'the_geom', 'shape'):
-                ct = self._rileva_geometria_da_contenuto(df, col)
+            if column_type == 'str' and col.lower() in ('geometry', 'geom', 'the_geom', 'shape'):
+                column_type = self._rileva_geometria_da_contenuto(df, col)
             
-            if ct is None:
+            if column_type is None:
                 dtype = str(df[col].dtype)
-                if 'int' in dtype: ct = 'int'
-                elif 'float' in dtype: ct = 'real'
-                elif 'bool' in dtype: ct = 'bool'
-                elif 'datetime' in dtype: ct = 'date'
-                elif 'geometry' in dtype.lower(): ct = 'geometry'  # GeoDataFrame dtype
-                else: ct = self._rileva_geometria_da_contenuto(df, col)
-            columns.append({'name': col, 'type': ct})
+                if 'int' in dtype: column_type = 'int'
+                elif 'float' in dtype: column_type = 'real'
+                elif 'bool' in dtype: column_type = 'bool'
+                elif 'datetime' in dtype: column_type = 'date'
+                elif 'geometry' in dtype.lower(): column_type = 'geometry'  # GeoDataFrame dtype
+                else: column_type = self._rileva_geometria_da_contenuto(df, col)
+            columns.append({'name': col, 'type': column_type})
         return columns
 
-    def _rileva_geometria_da_contenuto(self, df, col_name):
+    def _rileva_geometria_da_contenuto(self, df: pd.DataFrame, col_name: str) -> str:
         """Rileva geometria WKT o oggetti Shapely dal contenuto di una colonna."""
         try:
             # Check nome colonna comune per geometry
             if col_name.lower() in ('geometry', 'geom', 'the_geom', 'shape'):
                 sample = df[col_name].dropna().head(1)
                 if not sample.empty:
-                    val = sample.iloc[0]
+                    sample_value = sample.iloc[0]
                     # Se ha geom_type o è WKT, è geometry
-                    if hasattr(val, 'geom_type'):
+                    if hasattr(sample_value, 'geom_type'):
                         return 'geometry'
-                    val_str = str(val).upper().strip()
-                    if val_str and val_str[0] in 'PLMG':  # Quick check for WKT prefixes
+                    sample_text = str(sample_value).upper().strip()
+                    if sample_text and sample_text[0] in 'PLMG':  # Quick check for WKT prefixes
                         return 'geometry'
             
             sample = df[col_name].dropna().head(1)
             if sample.empty:
                 return 'str'
-            val = sample.iloc[0]
+            sample_value = sample.iloc[0]
             
             # Controlla se è un oggetto Shapely
-            if hasattr(val, 'geom_type'):
+            if hasattr(sample_value, 'geom_type'):
                 return 'geometry'
             
             # Controlla se è WKT string
-            val_str = str(val).upper().strip()
+            sample_text = str(sample_value).upper().strip()
             prefixes = ('POINT', 'LINESTRING', 'POLYGON', 'MULTIPOINT',
                         'MULTILINESTRING', 'MULTIPOLYGON', 'GEOMETRYCOLLECTION')
-            return 'geometry' if any(val_str.startswith(p) for p in prefixes) else 'str'
+            return 'geometry' if any(sample_text.startswith(p) for p in prefixes) else 'str'
         except Exception as _geo_probe_err:
             logger.debug(
                 f"Rilevamento geometria da contenuto fallito per "

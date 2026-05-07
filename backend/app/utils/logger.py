@@ -7,7 +7,7 @@ Architettura (v3)
 import json
 import logging
 from contextvars import ContextVar
-from typing import List, Optional
+from typing import Optional
 
 # C8: contesto via ContextVar (non threading.local). ContextVar propaga
 # attraverso asyncio: `asyncio.create_task`, `asyncio.gather`, e
@@ -20,12 +20,12 @@ from typing import List, Optional
 _group_id_var: ContextVar[str] = ContextVar("log_group_id", default="")
 _run_id_var: ContextVar[str] = ContextVar("log_run_id", default="")
 _project_id_var: ContextVar[str] = ContextVar("log_project_id", default="")
-_steps_var: ContextVar[Optional[List[dict]]] = ContextVar("log_steps", default=None)
+_steps_var: ContextVar[Optional[list[dict[str, object]]]] = ContextVar("log_steps", default=None)
 _request_id_var: ContextVar[str] = ContextVar("log_request_id", default="")
 _user_id_var: ContextVar[str] = ContextVar("log_user_id", default="")
 
 
-def set_log_group(group_id: str):
+def set_log_group(group_id: str) -> None:
     """Imposta il group_id nel contesto corrente (chiamato dal middleware)."""
     _group_id_var.set(group_id or "")
 
@@ -45,7 +45,7 @@ def get_run_id() -> str:
     return _run_id_var.get() or ""
 
 
-def append_step(step: dict) -> None:
+def append_step(step: dict[str, object]) -> None:
     """Appende uno step alla lista della run corrente. Chiamato dagli executor."""
     steps = _steps_var.get()
     if steps is None:
@@ -54,7 +54,7 @@ def append_step(step: dict) -> None:
     steps.append(step)
 
 
-def get_steps() -> list:
+def get_steps() -> list[dict[str, object]]:
     """Restituisce gli step raccolti finora nella run corrente."""
     steps = _steps_var.get()
     return list(steps) if steps else []
@@ -83,7 +83,6 @@ import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
-from typing import Optional
 
 from app.config import settings
 
@@ -281,32 +280,32 @@ def _resolve_level(name: str, default: int) -> int:
     al top-level per evitare cicli: i settings passano il nome come stringa."""
     if not name:
         return default
-    v = getattr(logging, str(name).upper(), None)
-    return v if isinstance(v, int) else default
+    resolved_level = getattr(logging, str(name).upper(), None)
+    return resolved_level if isinstance(resolved_level, int) else default
 
 
 class PostgresLogHandler(logging.Handler):
     """Handler logging che scrive su PostgreSQL via pg_connection pool."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         # Livello configurabile via settings.LOG_LEVEL_DB (default WARNING
         # Lazy import per evitare cicli al bootstrap
         try:
-            from app.config import settings as _s
-            lvl = _resolve_level(_s.LOG_LEVEL_DB, logging.WARNING)
+            from app.config import settings as config_settings
+            db_level = _resolve_level(config_settings.LOG_LEVEL_DB, logging.WARNING)
         except Exception:
-            lvl = logging.WARNING
-        super().__init__(lvl)
+            db_level = logging.WARNING
+        super().__init__(db_level)
         # Le tabelle logs e log_runs sono già create dallo schema PG
 
-    def emit(self, record: logging.LogRecord):
+    def emit(self, record: logging.LogRecord) -> None:
         try:
             from app.db.pg_connection import execute as pg_execute
-            ts = datetime.fromtimestamp(record.created).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]
-            level = record.levelname
+            timestamp = datetime.fromtimestamp(record.created).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]
+            level_name = record.levelname
             module = _resolve_module(record.name)
-            op = getattr(record, "op", "") or ""
-            msg = _sanitize_log_text(record.getMessage())
+            operation = getattr(record, "op", "") or ""
+            log_message = _sanitize_log_text(record.getMessage())
             project_id = getattr(record, "project_id", "") or ""
             group_id = getattr(record, "group_id", "") or get_log_group()
             run_id = getattr(record, "run_id", "") or get_run_id() or ""
@@ -315,40 +314,52 @@ class PostgresLogHandler(logging.Handler):
             # C8: injetta request_id + user_id dal contesto nel payload
             # details (evita schema migration). Se details ha gia' questi
             # campi, non li sovrascriviamo
-            req_id = get_request_id()
-            uid = get_user_id()
-            if req_id or uid:
+            request_id = get_request_id()
+            user_id = get_user_id()
+            if request_id or user_id:
                 if details_raw is None:
                     details_raw = {}
                 elif not isinstance(details_raw, dict):
                     details_raw = {"value": details_raw}
-                if req_id and "request_id" not in details_raw:
-                    details_raw["request_id"] = req_id
-                if uid and "user_id" not in details_raw:
-                    details_raw["user_id"] = uid
-            for _key in _BULK_TELEMETRY_EXTRA_WHITELIST:
-                _val = getattr(record, _key, None)
-                if _val is None:
+                if request_id and "request_id" not in details_raw:
+                    details_raw["request_id"] = request_id
+                if user_id and "user_id" not in details_raw:
+                    details_raw["user_id"] = user_id
+            for telemetry_key in _BULK_TELEMETRY_EXTRA_WHITELIST:
+                telemetry_value = getattr(record, telemetry_key, None)
+                if telemetry_value is None:
                     continue
                 if details_raw is None:
                     details_raw = {}
                 elif not isinstance(details_raw, dict):
                     details_raw = {"value": details_raw}
-                if _key not in details_raw:
-                    details_raw[_key] = _val
-            details = json.dumps(details_raw, ensure_ascii=False, default=str) if details_raw else None
-            if details:
-                details = _sanitize_log_text(details)
-            error = ""
+                if telemetry_key not in details_raw:
+                    details_raw[telemetry_key] = telemetry_value
+            details_json = json.dumps(details_raw, ensure_ascii=False, default=str) if details_raw else None
+            if details_json:
+                details_json = _sanitize_log_text(details_json)
+            error_text = ""
             if record.exc_info and record.exc_info[1]:
-                error = _sanitize_log_text(
+                error_text = _sanitize_log_text(
                     "".join(traceback.format_exception(*record.exc_info)).strip()
                 )
 
             pg_execute(
                 "INSERT INTO logs (ts, level, module, op, msg, project_id, group_id, run_id, node_id, details, error) "
                 "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
-                (ts, level, module, op, msg, project_id, group_id, run_id, node_id, details, error)
+                (
+                    timestamp,
+                    level_name,
+                    module,
+                    operation,
+                    log_message,
+                    project_id,
+                    group_id,
+                    run_id,
+                    node_id,
+                    details_json,
+                    error_text,
+                )
             )
         except Exception:
             self.handleError(record)
@@ -383,11 +394,11 @@ class PostgresLogHandler(logging.Handler):
         rows_in: int = 0,
         rows_out: int = 0,
         duration_ms: int = 0,
-        steps: list = None,
-        error_node_id: str = None,
-        error_module: str = None,
-        error_message: str = None,
-        debug_payload: dict = None,
+        steps: Optional[list[dict[str, object]]] = None,
+        error_node_id: Optional[str] = None,
+        error_module: Optional[str] = None,
+        error_message: Optional[str] = None,
+        debug_payload: Optional[dict[str, object]] = None,
     ) -> None:
         """Chiude una run aggiornando tutti i campi di esito."""
         from app.db.pg_connection import execute as pg_execute
@@ -453,10 +464,10 @@ def _get_bulk_telemetry_db_handler() -> PostgresLogHandler:
     WARNING stessi di bulk transitano via handler default)."""
     global _bulk_telemetry_db_handler
     if _bulk_telemetry_db_handler is None:
-        h = PostgresLogHandler()
-        h.setLevel(logging.INFO)
-        h.addFilter(_bulk_telemetry_filter)
-        _bulk_telemetry_db_handler = h
+        handler = PostgresLogHandler()
+        handler.setLevel(logging.INFO)
+        handler.addFilter(_bulk_telemetry_filter)
+        _bulk_telemetry_db_handler = handler
     return _bulk_telemetry_db_handler
 
 
@@ -496,13 +507,13 @@ class StructuredLogger:
         logger.error("[CRASH] Connessione fallita", op="connect", exc_info=True)
     """
 
-    def __init__(self, logger: logging.Logger):
+    def __init__(self, logger: logging.Logger) -> None:
         self._logger = logger
 
-    def _log(self, level: int, msg: str, *args,
+    def _log(self, level: int, msg: str, *args: object,
              op: str = "", project_id: str = "", run_id: str = "",
-             node_id: str = "", details: dict = None,
-             exc_info=None, **kwargs):
+             node_id: str = "", details: Optional[dict[str, object]] = None,
+             exc_info: object = None, **kwargs: object) -> None:
         extra = {"op": op}
         if project_id:
             extra["project_id"] = project_id
@@ -514,41 +525,48 @@ class StructuredLogger:
             extra["details"] = details
         self._logger.log(level, msg, *args, exc_info=exc_info, extra=extra, **kwargs)
 
-    def debug(self, msg: str, *args, **kwargs):
+    def debug(self, msg: str, *args: object, **kwargs: object) -> None:
         # Nota: se il metodo manca, qualunque logger.debug in giro solleva
         # AttributeError. Era successo con il fix del log volume di aprile 2026
         # enrichment_service.py passato da logger.info a logger.debug →
         # AttributeError → catturato dal catch-all async → fallimento silente
         self._log(logging.DEBUG, msg, *args, **kwargs)
 
-    def info(self, msg: str, *args, **kwargs):
+    def info(self, msg: str, *args: object, **kwargs: object) -> None:
         self._log(logging.INFO, msg, *args, **kwargs)
 
-    def warning(self, msg: str, *args, **kwargs):
+    def warning(self, msg: str, *args: object, **kwargs: object) -> None:
         self._log(logging.WARNING, msg, *args, **kwargs)
 
-    def error(self, msg: str, *args, **kwargs):
+    def error(self, msg: str, *args: object, **kwargs: object) -> None:
         self._log(logging.ERROR, msg, *args, **kwargs)
 
-    def exception(self, msg: str, *args, **kwargs):
+    def exception(self, msg: str, *args: object, **kwargs: object) -> None:
         kwargs.setdefault("exc_info", True)
         self._log(logging.ERROR, msg, *args, **kwargs)
 
     @property
-    def level(self):
+    def level(self) -> int:
         return self._logger.level
 
-    def setLevel(self, level):
+    def setLevel(self, level: int) -> None:
         self._logger.setLevel(level)
 
-    def isEnabledFor(self, level):
+    def isEnabledFor(self, level: int) -> bool:
         return self._logger.isEnabledFor(level)
 
-    def log(self, level: int, msg: str, *args, extra=None, **kwargs):
+    def log(
+        self,
+        level: int,
+        msg: str,
+        *args: object,
+        extra: Optional[dict[str, object]] = None,
+        **kwargs: object,
+    ) -> None:
         self._logger.log(level, msg, *args, extra=extra, **kwargs)
 
 
-def get_logger(name: str, level: int = None) -> StructuredLogger:
+def get_logger(name: str, level: Optional[int] = None) -> StructuredLogger:
     """
     Restituisce un StructuredLogger con 2 destinazioni:
         1. Console stdout (livello LOG_LEVEL_CONSOLE, default INFO)
@@ -563,9 +581,9 @@ def get_logger(name: str, level: int = None) -> StructuredLogger:
     if name not in _configured_loggers:
         # Lazy import per evitare cicli durante il bootstrap di config
         try:
-            from app.config import settings as _s
-            console_lvl = _resolve_level(_s.LOG_LEVEL_CONSOLE, logging.INFO)
-            db_lvl      = _resolve_level(_s.LOG_LEVEL_DB,      logging.WARNING)
+            from app.config import settings as config_settings
+            console_lvl = _resolve_level(config_settings.LOG_LEVEL_CONSOLE, logging.INFO)
+            db_lvl      = _resolve_level(config_settings.LOG_LEVEL_DB,      logging.WARNING)
         except Exception:
             console_lvl = logging.INFO
             db_lvl      = logging.WARNING
@@ -601,8 +619,8 @@ def log_event(
     msg: str,
     *,
     project_id: str = "",
-    details: dict = None,
-):
+    details: Optional[dict[str, object]] = None,
+) -> None:
     """Emette un evento di log strutturato."""
     logger = get_logger(f"app.core.{module}")
     numeric_level = getattr(logging, level.upper(), logging.INFO)
@@ -649,11 +667,11 @@ def close_run(
     rows_in: int = 0,
     rows_out: int = 0,
     duration_ms: int = 0,
-    steps: list = None,
-    error_node_id: str = None,
-    error_module: str = None,
-    error_message: str = None,
-    debug_payload: dict = None,
+    steps: Optional[list[dict[str, object]]] = None,
+    error_node_id: Optional[str] = None,
+    error_module: Optional[str] = None,
+    error_message: Optional[str] = None,
+    debug_payload: Optional[dict[str, object]] = None,
 ) -> None:
     """Chiude una run su log.db. Chiamare alla fine del task pipeline."""
     _get_db_handler().close_run(

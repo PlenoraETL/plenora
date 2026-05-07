@@ -51,6 +51,9 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 pytest-cache-files-*/
+backend/.pytest-run/
+backend/.pytest-basetemp/
+backend/backend/.pytest-run/
 cover/
 
 # Environments

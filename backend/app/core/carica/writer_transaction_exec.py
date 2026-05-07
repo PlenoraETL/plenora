@@ -12,6 +12,7 @@ from typing import List, Optional
 
 import pandas as pd
 from sqlalchemy import text
+from sqlalchemy.engine import Connection
 
 from app.core.carica.models import (
     BatchProgress,
@@ -91,8 +92,15 @@ class TransactionExecutionMixin:
         return result
 
     def _execute_all_or_nothing(
-        self, df, columns, sql, result, total_batches,
-        batch_size, start_time, operation
+        self,
+        df: pd.DataFrame,
+        columns: List[ColumnMapping],
+        sql: str,
+        result: WriteResult,
+        total_batches: int,
+        batch_size: int,
+        start_time: float,
+        operation: str,
     ) -> WriteResult:
         """Esecuzione con unica transazione — commit totale o rollback totale.
 
@@ -107,7 +115,11 @@ class TransactionExecutionMixin:
                 if self.db_type == "oracle":
                     self._oracle_setup(conn)
 
-                def _process_batch(batch_df, batch_num, _conn=conn):
+                def _process_batch(
+                    batch_df: pd.DataFrame,
+                    batch_num: int,
+                    _conn: Connection = conn,
+                ) -> None:
                     rows_in_batch = self._execute_batch(
                         _conn, batch_df, columns, sql, operation
                     )
@@ -142,8 +154,15 @@ class TransactionExecutionMixin:
         return result
 
     def _execute_per_batch(
-        self, df, columns, sql, result, total_batches,
-        batch_size, start_time, operation
+        self,
+        df: pd.DataFrame,
+        columns: List[ColumnMapping],
+        sql: str,
+        result: WriteResult,
+        total_batches: int,
+        batch_size: int,
+        start_time: float,
+        operation: str,
     ) -> WriteResult:
         """Esecuzione con commit per batch.
 
@@ -156,12 +175,12 @@ class TransactionExecutionMixin:
         # ogni
         # Lista a 1 elemento per consentire mutation dal closure
         # senza `nonlocal` esplicito
-        conn_holder = [self.engine.connect()]
+        conn_holder: List[Connection] = [self.engine.connect()]
         try:
             if self.db_type == "oracle":
                 self._oracle_setup(conn_holder[0])
 
-            def _process_batch(batch_df, batch_num):
+            def _process_batch(batch_df: pd.DataFrame, batch_num: int) -> None:
                 try:
                     rows_in_batch = self._execute_batch(
                         conn_holder[0], batch_df, columns, sql, operation
@@ -232,7 +251,7 @@ class TransactionExecutionMixin:
 
     def _execute_batch(
         self,
-        conn,
+        conn: Connection,
         batch_df: pd.DataFrame,
         columns: List[ColumnMapping],
         sql: str,

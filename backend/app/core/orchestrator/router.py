@@ -4,11 +4,15 @@ Router API per il modulo Orchestrator.
 Esecuzione pipeline, preview, download risultati e gestione task Celery.
 """
 
-from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Query
-from fastapi.responses import FileResponse
+from decimal import Decimal
+import math
 from pathlib import Path
+import time
+from typing import Literal, Optional, Dict, Any, List, Iterator
+
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Query
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, field_validator
-from typing import Literal, Optional, Dict, Any, List
 
 from app.config import settings
 from app.utils.logger import get_logger
@@ -44,7 +48,7 @@ def _mime_for_filename(filename: str) -> str:
 logger = get_logger(__name__)
 
 
-def _assert_project_group(project_id: str, current_user) -> None:
+def _assert_project_group(project_id: str, current_user: CurrentUser) -> None:
     """Verifica che il progetto appartenga al gruppo dell'utente corrente.
 
     Helper centralizzato per gli endpoint orchestrator che operano su
@@ -64,7 +68,7 @@ def _assert_project_group(project_id: str, current_user) -> None:
     assert_group_access(meta, current_user, f"Progetto '{project_id}'")
 
 
-def _assert_task_group(task_id: str, current_user) -> None:
+def _assert_task_group(task_id: str, current_user: CurrentUser) -> None:
     """Verifica che il task appartenga al gruppo dell'utente via project_id.
 
     Estrae project_id dal task, poi verifica ownership sul progetto.
@@ -143,7 +147,7 @@ tasks_router = APIRouter(prefix="/tasks", tags=["tasks"])
 _orchestrator = None
 
 
-def init_orchestrator(orchestrator):
+def init_orchestrator(orchestrator: object) -> None:
     """Inizializza il modulo. Chiamare da main.py dopo setup."""
     global _orchestrator
     _orchestrator = orchestrator
@@ -165,7 +169,7 @@ def execute_project_pipeline(
         ),
     ),
     current_user: CurrentUser = Depends(require_not_esecutore),
-):
+) -> Dict[str, Any]:
     """Avvia la pipeline come task Celery asincrono.
 
     SECURITY: assert_group_access verifica che il progetto appartenga al
@@ -210,7 +214,7 @@ def preview_project(
     project_id: str,
     limit: int = Query(100, ge=1, le=10000, description="Numero righe preview (cap 10k per evitare OOM worker)"),
     current_user: CurrentUser = Depends(require_not_esecutore),
-):
+) -> Dict[str, Any]:
     """Avvia preview come task Celery asincrono.
 
     SECURITY: assert_group_access per cross-tenant isolation.
@@ -236,7 +240,11 @@ def preview_project(
 
 
 @pipeline_router.get("/{project_id}/download")
-def download_project_result(project_id: str, file: Optional[str] = None, current_user: CurrentUser = Depends(require_not_esecutore)):
+def download_project_result(
+    project_id: str,
+    file: Optional[str] = None,
+    current_user: CurrentUser = Depends(require_not_esecutore),
+) -> Response:
     """
     Scarica il file risultato di un progetto.
 
@@ -279,9 +287,12 @@ def download_project_result(project_id: str, file: Optional[str] = None, current
         # mai migrati al result store moderno — DB BYTEA o S3), servi
         # il file più recente senza toccare il result store
         if results_dir.exists():
-            files = list(results_dir.glob("*.*"))
-            if files:
-                latest_file = max(files, key=lambda x: x.stat().st_mtime)
+            result_files = list(results_dir.glob("*.*"))
+            if result_files:
+                latest_file = max(
+                    result_files,
+                    key=lambda result_file: result_file.stat().st_mtime,
+                )
                 return FileResponse(
                     path=str(latest_file),
                     filename=latest_file.name,
@@ -292,8 +303,6 @@ def download_project_result(project_id: str, file: Optional[str] = None, current
         # già stato cancellato da `save_result_blob`. Recupera l'ultimo
         # result dal service DB e ritorna i bytes inline
         from app.db import results_db_service
-        from fastapi.responses import Response
-
         latest = results_db_service.get_latest_result(project_id)
         if not latest:
             raise HTTPException(404, f"Nessun risultato trovato per progetto '{project_id}'")
@@ -343,16 +352,19 @@ class TaskStatusResponse(BaseModel):
 
     @field_validator("progress", mode="before")
     @classmethod
-    def coerce_progress_to_int(cls, v) -> int:
+    def coerce_progress_to_int(cls, progress_value: object) -> int:
         """Pydantic v2 è strict: il worker Celery può salvare progress come float (es. 5.0)."""
         try:
-            return int(v) if v is not None else 0
+            return int(progress_value) if progress_value is not None else 0
         except (TypeError, ValueError):
             return 0
 
 
 @tasks_router.post("", response_model=TaskStatusResponse)
-def create_task(request: CreateTaskRequest, current_user: CurrentUser = Depends(require_not_esecutore)):
+def create_task(
+    request: CreateTaskRequest,
+    current_user: CurrentUser = Depends(require_not_esecutore),
+) -> TaskStatusResponse:
     """Crea e avvia un nuovo task asincrono.
 
     SECURITY: verifica che `request.project_id` appartenga al gruppo
@@ -415,46 +427,46 @@ def create_task(request: CreateTaskRequest, current_user: CurrentUser = Depends(
 
 
 @tasks_router.get("/{task_id}")
-def get_task_status(task_id: str, current_user: CurrentUser = Depends(get_current_user)):
+def get_task_status(
+    task_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> JSONResponse:
     """Stato attuale di un task.
 
     SECURITY: verifica ownership via project_id del task.
     """
     _assert_task_group(task_id, current_user)
     from app.services.task_service import task_service
-    from fastapi.responses import JSONResponse
-    from decimal import Decimal
-    import math
 
-    def _sanitize(obj):
+    def _sanitize(value: object) -> object:
         """Converte ricorsivamente tipi non-JSON-serializable in tipi Python nativi."""
-        if isinstance(obj, dict):
-            return {k: _sanitize(v) for k, v in obj.items()}
-        if isinstance(obj, (list, tuple)):
-            return [_sanitize(v) for v in obj]
-        if isinstance(obj, Decimal):
-            f = float(obj)
-            return int(f) if f == int(f) else f
-        if isinstance(obj, float):
-            if math.isnan(obj) or math.isinf(obj):
+        if isinstance(value, dict):
+            return {key: _sanitize(nested_value) for key, nested_value in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [_sanitize(nested_value) for nested_value in value]
+        if isinstance(value, Decimal):
+            number_value = float(value)
+            return int(number_value) if number_value == int(number_value) else number_value
+        if isinstance(value, float):
+            if math.isnan(value) or math.isinf(value):
                 return None
-            if obj == int(obj):
-                return int(obj)
-            return obj
+            if value == int(value):
+                return int(value)
+            return value
         # pandas NaT, Timestamp, date
-        t = type(obj).__name__
-        if t in ("NaTType", "NaT"):
+        type_name = type(value).__name__
+        if type_name in ("NaTType", "NaT"):
             return None
-        if t == "Timestamp":
-            return obj.isoformat()
-        if t == "date":
-            return obj.isoformat()
+        if type_name == "Timestamp":
+            return value.isoformat()
+        if type_name == "date":
+            return value.isoformat()
         # numpy integer/float types
-        if t.startswith("int") and t != "int":
-            return int(obj)
-        if t.startswith("float") and t != "float":
-            return float(obj)
-        return obj
+        if type_name.startswith("int") and type_name != "int":
+            return int(value)
+        if type_name.startswith("float") and type_name != "float":
+            return float(value)
+        return value
 
     try:
         task_info = task_service.get_task_status(task_id)
@@ -489,7 +501,10 @@ def get_task_status(task_id: str, current_user: CurrentUser = Depends(get_curren
 
 @tasks_router.delete("/{task_id}")
 @audit_action(action="task.cancel", target_param="task_id")
-def cancel_task(task_id: str, current_user: CurrentUser = Depends(get_current_user)):
+def cancel_task(
+    task_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> Dict[str, str]:
     """Annulla un task in esecuzione.
 
     SECURITY: verifica ownership via project_id del task.
@@ -513,6 +528,7 @@ def cancel_task(task_id: str, current_user: CurrentUser = Depends(get_current_us
 @tasks_router.delete(
     "/{task_id}/full-cleanup",
     status_code=204,
+    response_model=None,
     responses={
         204: {"description": "Cleanup completato — tutti gli step ok"},
         207: {
@@ -526,7 +542,10 @@ def cancel_task(task_id: str, current_user: CurrentUser = Depends(get_current_us
     },
 )
 @audit_action(action="task.cleanup_complete", target_param="task_id")
-def cleanup_task_completely(task_id: str, current_user: CurrentUser = Depends(get_current_user)):
+def cleanup_task_completely(
+    task_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> Optional[JSONResponse]:
     """
     Cleanup completo di un task: elimina result file/blob, log entries e revoca
     il record Celery. Pensato per il ruolo "esecutore" che richiede privacy
@@ -630,7 +649,6 @@ def cleanup_task_completely(task_id: str, current_user: CurrentUser = Depends(ge
     try:
         output_file = task_result_payload.get("output_file")
         if output_file:
-            from pathlib import Path as _P
             candidate = settings.RESULTS_DIR / project_id / output_file
             root = (settings.RESULTS_DIR / project_id).resolve()
             try:
@@ -669,7 +687,6 @@ def cleanup_task_completely(task_id: str, current_user: CurrentUser = Depends(ge
     # success (validateStatus default 200-299), quindi nessun breaking change
     # UX — il body e' leggibile dai caller futuri che vogliono differenziare
     if failed_steps:
-        from fastapi.responses import JSONResponse
         logger.warning(
             f"cleanup: task {task_id} partial — failed_steps={failed_steps}"
         )
@@ -686,7 +703,7 @@ def download_task_result(
     task_id: str,
     background_tasks: BackgroundTasks,
     current_user: CurrentUser = Depends(get_current_user),
-):
+) -> StreamingResponse:
     """Scarica il file risultato di un task.
 
     Per i task degli eseguibili (is_eseguibile=True) l'output vive su
@@ -699,21 +716,14 @@ def download_task_result(
 
     SECURITY: verifica ownership via project_id del task.
     """
-    import time as _time
-    _t_start = _time.perf_counter()
+    time_started = time.perf_counter()
 
     _assert_task_group(task_id, current_user)
     from app.services.task_service import task_service
-    from fastapi.responses import (
-        Response as _Response,
-        FileResponse,
-        StreamingResponse as _StreamingResponse,
-    )
-    from app.config import settings as _settings
 
     try:
         task_info = task_service.get_task_status(task_id)
-        _t_celery = _time.perf_counter()
+        time_celery_loaded = time.perf_counter()
 
         if task_info.status.value != "success":
             raise HTTPException(status_code=400, detail=f"Task non completato (stato: {task_info.status.value})")
@@ -726,47 +736,47 @@ def download_task_result(
             # intent: optional feature — fallback a DB blob se S3 lookup fallisce
             # outcome: fail-open con breadcrumb (exc_info per diagnosticare S3 down
             try:
-                _keys = _eseg_storage.find_keys(safe_task_id)
-            except Exception as _e:
-                logger.warning(f"lookup eseguibili storage fallito: {_e}", exc_info=True)
-                _keys = []
+                storage_keys = _eseg_storage.find_keys(safe_task_id)
+            except Exception as storage_error:
+                logger.warning(f"lookup eseguibili storage fallito: {storage_error}", exc_info=True)
+                storage_keys = []
 
-            if _keys:
+            if storage_keys:
                 # Tipicamente 1 file per task. Se multipli, primo e' OK
                 # convention: un solo output per task eseguibile
-                _key = _keys[0]
-                _filename = _key.rsplit("/", 1)[-1]
+                storage_key = storage_keys[0]
+                storage_filename = storage_key.rsplit("/", 1)[-1]
                 # intent: boundary broad→HTTP500 / outcome: fail-closed
                 try:
-                    _stream = _eseg_storage.open_stream(_key)
-                except Exception as _e:
-                    logger.error(f"[CRASH] open_stream eseguibile {_key}: {_e}", exc_info=True)
+                    storage_stream = _eseg_storage.open_stream(storage_key)
+                except Exception as storage_error:
+                    logger.error(f"[CRASH] open_stream eseguibile {storage_key}: {storage_error}", exc_info=True)
                     raise HTTPException(status_code=500, detail="Errore apertura stream output")
 
-                def _cleanup_after_send(_tid=safe_task_id):
+                def _cleanup_after_send(task_id_to_delete: str = safe_task_id) -> None:
                     try:
-                        _eseg_storage.delete_by_task(_tid)
-                    except Exception as _e:
-                        logger.warning(f"Cleanup post-download S3 fallito per {_tid}: {_e}")
+                        _eseg_storage.delete_by_task(task_id_to_delete)
+                    except Exception as storage_error:
+                        logger.warning(f"Cleanup post-download S3 fallito per {task_id_to_delete}: {storage_error}")
 
                 background_tasks.add_task(_cleanup_after_send)
-                _size = _stream.get("size") or 0
+                stream_size = storage_stream.get("size") or 0
                 logger.info(
                     f"download task {task_id}: fast-path eseguibile (S3 stream) "
-                    f"celery={_t_celery - _t_start:.3f}s "
-                    f"size={_size / (1024*1024):.2f}MB "
-                    f"key={_key}"
+                    f"celery={time_celery_loaded - time_started:.3f}s "
+                    f"size={stream_size / (1024*1024):.2f}MB "
+                    f"key={storage_key}"
                 )
-                _headers = {
+                response_headers = {
                     "Cache-Control": "no-store, no-cache, must-revalidate",
-                    "Content-Disposition": f'attachment; filename="{_filename}"',
+                    "Content-Disposition": f'attachment; filename="{storage_filename}"',
                 }
-                if _size:
-                    _headers["Content-Length"] = str(_size)
-                return _StreamingResponse(
-                    _stream["body"],
-                    media_type=_mime_for_filename(_filename),
-                    headers=_headers,
+                if stream_size:
+                    response_headers["Content-Length"] = str(stream_size)
+                return StreamingResponse(
+                    storage_stream["body"],
+                    media_type=_mime_for_filename(storage_filename),
+                    headers=response_headers,
                 )
 
         # ── FALLBACK: lettura dal result persistito (DB BYTEA o S3) ──
@@ -812,7 +822,7 @@ def download_task_result(
                 detail="Risultato del task non trovato (mismatch project_id)",
             )
 
-        _t_blob = _time.perf_counter()
+        time_blob_loaded = time.perf_counter()
 
         # Sanitizza filename per prevenire header injection (CRLF
         safe_filename = blob.filename.replace("\r", "").replace("\n", "").replace('"', "'")
@@ -828,19 +838,19 @@ def download_task_result(
         data = blob.data
         total = len(data)
 
-        def _stream_chunks():
-            for i in range(0, total, _CHUNK):
-                yield data[i:i + _CHUNK]
+        def _stream_chunks() -> Iterator[bytes]:
+            for chunk_start in range(0, total, _CHUNK):
+                yield data[chunk_start:chunk_start + _CHUNK]
 
-        _t_done = _time.perf_counter()
+        time_prepared = time.perf_counter()
         logger.info(
-            f"download task {task_id}: timing celery={_t_celery - _t_start:.3f}s "
-            f"blob_fetch={_t_blob - _t_celery:.3f}s "
-            f"prep={_t_done - _t_blob:.3f}s "
+            f"download task {task_id}: timing celery={time_celery_loaded - time_started:.3f}s "
+            f"blob_fetch={time_blob_loaded - time_celery_loaded:.3f}s "
+            f"prep={time_prepared - time_blob_loaded:.3f}s "
             f"size={total / (1024*1024):.2f}MB filename={safe_filename}"
         )
 
-        return _StreamingResponse(
+        return StreamingResponse(
             _stream_chunks(),
             media_type=_mime_for_filename(blob.filename),
             headers={

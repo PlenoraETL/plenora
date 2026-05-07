@@ -168,10 +168,10 @@ class EsriJsonConverter:
         try:
             # Point
             if "x" in geom and "y" in geom:
-                x, y = geom["x"], geom["y"]
-                if x is None or y is None:
+                point_x, point_y = geom["x"], geom["y"]
+                if point_x is None or point_y is None:
                     return None
-                return f"POINT({x} {y})"
+                return f"POINT({point_x} {point_y})"
             
             # Multipoint
             if "points" in geom:
@@ -239,14 +239,14 @@ class EsriJsonConverter:
             for col in gdf.columns:
                 if col == geometry_column:
                     continue
-                val = row[col]
+                attribute_value = row[col]
                 # Converti tipi numpy/pandas in tipi Python nativi
-                if pd.isna(val):
+                if pd.isna(attribute_value):
                     feature["attributes"][col] = None
-                elif hasattr(val, 'item'):
-                    feature["attributes"][col] = val.item()
+                elif hasattr(attribute_value, 'item'):
+                    feature["attributes"][col] = attribute_value.item()
                 else:
-                    feature["attributes"][col] = val
+                    feature["attributes"][col] = attribute_value
             
             # Converti geometria
             if geometry_column in gdf.columns and hasattr(gdf, 'geometry'):
@@ -330,7 +330,7 @@ class ArcGISClient:
     # Timeout per richieste HTTP
     DEFAULT_TIMEOUT = 30
     
-    def __init__(self, http_client: HttpClientProtocol = None):
+    def __init__(self, http_client: HttpClientProtocol = None) -> None:
         self._http = http_client or DefaultHttpClient()
         self._token_cache: Dict[str, dict] = {}  # url → {token, expires}
 
@@ -1829,14 +1829,14 @@ class ArcGISClient:
             for col in df.columns:
                 if col in skip_cols:
                     continue
-                val = row[col]
+                attribute_value = row[col]
                 # Converti tipi numpy/pandas a tipi Python nativi
-                if pd.isna(val):
+                if pd.isna(attribute_value):
                     feature["attributes"][col] = None
-                elif hasattr(val, 'item'):  # numpy scalar
-                    feature["attributes"][col] = val.item()
+                elif hasattr(attribute_value, 'item'):  # numpy scalar
+                    feature["attributes"][col] = attribute_value.item()
                 else:
-                    feature["attributes"][col] = val
+                    feature["attributes"][col] = attribute_value
             
             # Geometria
             if has_geometry:
